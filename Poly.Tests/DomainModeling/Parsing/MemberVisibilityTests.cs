@@ -63,13 +63,13 @@ public class MemberVisibilityTests {
         var poly = """
             domain Test
 
-            Money: value public {
+            public value Money {
               Amount: Number
             }
 
-            Order: entity public {
+            public entity Order {
               Total: Number
-              Pay: action (bill: Money) public {
+              public action Pay (bill: Money) {
               }
             }
             """;
@@ -81,9 +81,9 @@ public class MemberVisibilityTests {
         await Assert.That(order.Actions.Single().Visibility).IsEqualTo(Visibility.Public);
 
         var printed = new DomainDslPrinter().Print(first);
-        await Assert.That(printed.Contains("Order: entity public {", StringComparison.Ordinal)).IsTrue();
-        await Assert.That(printed.Contains("Money: value public {", StringComparison.Ordinal)).IsTrue();
-        await Assert.That(printed.Contains("Pay: action (bill: Money) public {", StringComparison.Ordinal)).IsTrue();
+        await Assert.That(printed.Contains("public entity Order {", StringComparison.Ordinal)).IsTrue();
+        await Assert.That(printed.Contains("public value Money {", StringComparison.Ordinal)).IsTrue();
+        await Assert.That(printed.Contains("public action Pay (bill: Money) {", StringComparison.Ordinal)).IsTrue();
 
         var second = Apply(printed);
         await Assert.That(EntityOf(second, "Order").Visibility).IsEqualTo(Visibility.Public);
@@ -106,7 +106,7 @@ public class MemberVisibilityTests {
             []) { Visibility = Visibility.Public };
         var domain = new Domain("Test", [new Entity("Order", [], [pay], [], [])]);
         var printed = new DomainDslPrinter().Print(domain);
-        await Assert.That(printed.Contains("Pay: action (bill: Money) -> Order public", StringComparison.Ordinal)).IsTrue();
+        await Assert.That(printed.Contains("public action Pay (bill: Money) -> Order", StringComparison.Ordinal)).IsTrue();
     }
 
     [Test]
@@ -116,7 +116,7 @@ public class MemberVisibilityTests {
 
             Customer: entity {
               orders: many Order
-              Place: action -> Order public {
+              public action Place -> Order {
                 create in orders { }
               }
             }
@@ -129,7 +129,7 @@ public class MemberVisibilityTests {
         var first = Apply(poly);
         await Assert.That(EntityOf(first, "Customer").Actions.Single().Visibility).IsEqualTo(Visibility.Public);
         var printed = new DomainDslPrinter().Print(first);
-        await Assert.That(printed.Contains("Place: action -> Order public", StringComparison.Ordinal)).IsTrue();
+        await Assert.That(printed.Contains("public action Place -> Order", StringComparison.Ordinal)).IsTrue();
         var second = Apply(printed);
         await Assert.That(EntityOf(second, "Customer").Actions.Single().Visibility).IsEqualTo(Visibility.Public);
         await Assert.That(new DomainDslPrinter().Print(second)).IsEqualTo(printed);
@@ -142,7 +142,7 @@ public class MemberVisibilityTests {
             domain Test
 
             Order: entity {
-              Pay: action public {
+              public action Pay {
               }
               Open: stage {
                 Pay: action {
@@ -165,7 +165,7 @@ public class MemberVisibilityTests {
               Total: Number
               Hidden: action {
               }
-              Shown: action public {
+              public action Shown {
               }
             }
             """;
@@ -183,7 +183,7 @@ public class MemberVisibilityTests {
             Order: entity {
               Total: Number
               Open: stage {
-                Close: action public {
+                public action Close {
                 }
                 Keep: action {
                 }
@@ -207,7 +207,7 @@ public class MemberVisibilityTests {
         var poly = """
             domain Test
 
-            Item: entity table("INVENTORY") public {
+            public entity Item table("INVENTORY") {
               Total: Number
             }
             """;
@@ -217,14 +217,14 @@ public class MemberVisibilityTests {
         await Assert.That(EntityOf(domain, "Item").Visibility).IsEqualTo(Visibility.Public);
 
         var printed = new DomainDslPrinter(ExtensionCatalog.Core.Authoring.Annotations).Print(domain);
-        await Assert.That(printed.Contains("Item: entity public table(\"INVENTORY\") {", StringComparison.Ordinal)).IsTrue();
+        await Assert.That(printed.Contains("public entity Item table(\"INVENTORY\") {", StringComparison.Ordinal)).IsTrue();
 
         var again = Apply(printed, session);
         await Assert.That(EntityOf(again, "Item").Visibility).IsEqualTo(Visibility.Public);
     }
 
     [Test]
-    public async Task ParameterNamedPublic_Parses() {
+    public async Task ParameterNamedPublic_IsRejected() {
         var poly = """
             domain Test
 
@@ -235,13 +235,11 @@ public class MemberVisibilityTests {
             }
             """;
 
-        var action = EntityOf(Apply(poly), "Order").Actions.Single();
-        await Assert.That(action.Visibility).IsEqualTo(Visibility.Internal);
-        await Assert.That(action.Parameters.Single().Name).IsEqualTo("public");
+        await Assert.That(() => new PolyDslParser(poly).Parse()).Throws<FormatException>();
     }
 
     [Test]
-    public async Task PropertyNamedPublic_Parses() {
+    public async Task PropertyNamedPublic_IsRejected() {
         var poly = """
             domain Test
 
@@ -250,9 +248,7 @@ public class MemberVisibilityTests {
             }
             """;
 
-        var order = EntityOf(Apply(poly), "Order");
-        await Assert.That(order.Visibility).IsEqualTo(Visibility.Internal);
-        await Assert.That(order.Properties.Single().Name).IsEqualTo("public");
+        await Assert.That(() => new PolyDslParser(poly).Parse()).Throws<FormatException>();
     }
 
     [Test]
@@ -284,7 +280,7 @@ public class MemberVisibilityTests {
 
             Order: entity {
               Total: Number
-              Pay: action (bill: Money) public {
+              public action Pay (bill: Money) {
               }
             }
             """;
@@ -312,7 +308,7 @@ public class MemberVisibilityTests {
         var poly = """
             domain Test
 
-            Order: entity public public {
+            Order: entity public {
               Total: Number
             }
             """;

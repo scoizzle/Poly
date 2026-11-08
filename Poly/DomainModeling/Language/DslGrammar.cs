@@ -29,6 +29,10 @@ public static class DslGrammar {
 
     /// <summary>Token-predicate wrappers (predicates see the full token).</summary>
     public static bool IsPrimitiveToken(DslToken t) => IsPrimitiveTypeKind(t.Kind);
+
+    /// <summary>The value-type kind word. It stays an identifier so <c>value</c> can still be a name.</summary>
+    public static bool IsValueWord(DslToken t) =>
+        t.Kind == DslTokenKind.Identifier && t.Text == "value";
     public static bool IsCompareToken(DslToken t) => IsCompareOpKind(t.Kind);
 
     /// <summary>
@@ -100,6 +104,8 @@ public static class DslGrammar {
         DslTokenKind.For => "for",
         DslTokenKind.Entry => "entry",
         DslTokenKind.Exit => "exit",
+        DslTokenKind.As => "as",
+        DslTokenKind.Public => "public",
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, $"No canonical text for DSL token kind '{kind}'"),
     };
 
@@ -141,7 +147,15 @@ public static class DslGrammar {
             .Pattern("header").Kind(DslTokenKind.Domain).Value(DslTokenKind.Identifier, "name").Commit()
         .Define("uses")
             .Pattern("id").Kind(DslTokenKind.Uses).Value(DslTokenKind.Identifier, "id").Commit()
+        .Define("visibility")
+            .Pattern("public").Kind(DslTokenKind.Public).Commit()
         .Define("top")
+            .Pattern("marked-entity", priority: 2)
+                .Ref("visibility").Kind(DslTokenKind.Entity).Value(DslTokenKind.Identifier, "name")
+                .Commit()
+            .Pattern("marked-value", priority: 2)
+                .Ref("visibility").Predicate(IsValueWord, "value").Value(DslTokenKind.Identifier, "name")
+                .Commit()
             .Pattern("enum")
                 .Value(DslTokenKind.Identifier).Kind(DslTokenKind.Colon).Kind(DslTokenKind.Enum)
                 .Commit()
@@ -154,6 +168,9 @@ public static class DslGrammar {
                 .Commit()
             .Pattern("stage")
                 .Value(DslTokenKind.Identifier).Kind(DslTokenKind.Colon).Kind(DslTokenKind.Stage)
+                .Commit()
+            .Pattern("marked-action", priority: 2)
+                .Ref("visibility").Kind(DslTokenKind.Action).Value(DslTokenKind.Identifier, "name")
                 .Commit()
             .Pattern("action")
                 .Value(DslTokenKind.Identifier).Kind(DslTokenKind.Colon).Kind(DslTokenKind.Action)
@@ -191,6 +208,9 @@ public static class DslGrammar {
                 .Commit()
             .Pattern("subscription")
                 .Kind(DslTokenKind.When).Value(DslTokenKind.Identifier)
+                .Commit()
+            .Pattern("marked-stage-action", priority: 2)
+                .Ref("visibility").Kind(DslTokenKind.Action).Value(DslTokenKind.Identifier, "name")
                 .Commit()
             .Pattern("stage-action")
                 .Value(DslTokenKind.Identifier)

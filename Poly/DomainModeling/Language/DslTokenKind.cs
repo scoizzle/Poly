@@ -71,4 +71,5 @@ public enum DslTokenKind {
     Entry,
     Exit,
     As,
+    Public,
 }

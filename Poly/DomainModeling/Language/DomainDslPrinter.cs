@@ -160,7 +160,11 @@ public sealed class DomainDslPrinter {
     }
 
     private void PrintValueType(ValueType valueType) {
-        _sb.AppendLine($"{valueType.Name}: value{(valueType.Visibility == Visibility.Public ? " public" : "")} {{");
+        if (valueType.Visibility == Visibility.Public)
+            _sb.Append("public value ").Append(valueType.Name);
+        else
+            _sb.Append(valueType.Name).Append(": value");
+        _sb.AppendLine(" {");
         foreach (var prop in valueType.Properties) {
             _sb.Append("  ");
             _sb.Append(prop.Name);
@@ -229,11 +233,14 @@ public sealed class DomainDslPrinter {
         DslTokenReader.IsIdentifier(value) ? value : $"\"{EscapeStringLiteral(value)}\"";
 
     private void PrintEntity(Entity entity) {
-        _sb.Append(entity.Name);
-        _sb.Append(": entity");
-
-        if (entity.Visibility == Visibility.Public)
-            _sb.Append(" public");
+        if (entity.Visibility == Visibility.Public) {
+            _sb.Append("public entity ");
+            _sb.Append(entity.Name);
+        }
+        else {
+            _sb.Append(entity.Name);
+            _sb.Append(": entity");
+        }
 
         foreach (var facet in entity.Facets) {
             _sb.Append(' ');
@@ -347,10 +354,16 @@ public sealed class DomainDslPrinter {
 
     private void PrintAction(Action action, string indent, string? stageName) {
         _sb.Append(indent);
-        _sb.Append(action.Name);
-        // Keep Name: kind consistency with properties/stages/policies.
-        // Params decorate the action after the kind: Name: action (p: Type, ...)
-        _sb.Append(": action");
+        if (action.Visibility == Visibility.Public) {
+            _sb.Append("public action ");
+            _sb.Append(action.Name);
+        }
+        else {
+            _sb.Append(action.Name);
+            // Keep Name: kind consistency with properties/stages/policies.
+            // Params decorate the action after the kind: Name: action (p: Type, ...)
+            _sb.Append(": action");
+        }
         if (action.Parameters.Count > 0) {
             _sb.Append(" (");
             var firstParam = true;
@@ -369,9 +382,6 @@ public sealed class DomainDslPrinter {
             _sb.Append(" -> ");
             _sb.Append(action.Result.Members[0].Type.TypeName);
         }
-
-        if (action.Visibility == Visibility.Public)
-            _sb.Append(" public");
 
         // Print require gates: positive + negated (skip internal when_* policies)
         var positiveRequires = action.Policies

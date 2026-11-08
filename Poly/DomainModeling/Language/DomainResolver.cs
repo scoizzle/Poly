@@ -55,6 +55,11 @@ public sealed class DomainResolver : DslCursor {
     // Explicit parse inputs / annotation support
     private readonly AnnotationRegistry? _annotations;
     private readonly DomainSession _session;
+    private readonly DslSyntaxTree _tree;
+
+    // Contract names seeded from a `uses` id, and names a body block already declared.
+    private readonly Dictionary<string, string> _seededContracts = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _authoredContracts = new(StringComparer.Ordinal);
 
     private readonly record struct PendingRequire(
         string ActionName,
@@ -71,7 +76,9 @@ public sealed class DomainResolver : DslCursor {
 
     public DomainResolver(DslSyntaxTree tree, DomainSession session)
         : base(TokenReaderFor(tree), reader => new Matcher<DslToken, DslTokenKind>(session.Language.Grammar, reader)) {
+        ArgumentNullException.ThrowIfNull(tree);
         ArgumentNullException.ThrowIfNull(session);
+        _tree = tree;
         _session = session;
         _annotations = session.Annotations;
         _expressions = new DslExpressionParser(this, session.ExpressionForms, session.Folds);
@@ -96,10 +103,26 @@ public sealed class DomainResolver : DslCursor {
         Expect(TokenKind.Domain);
         var domainName = ExpectIdentifier(TokenKind.Identifier, "domain name");
         changes.Add(new SetDomainNameChange(domainName));
-        while (Current.Kind == TokenKind.Uses) {
+
+        // The reader owns the header shape (including an optional same-line pin); the cursor
+        // only has to move past the tokens it consumed, so the two cannot disagree.
+        for (var headerIndex = 2; headerIndex < _tree.HeaderEnd; headerIndex++)
             Advance();
-            var extensionId = ExpectIdentifier(TokenKind.Identifier, "extension id");
+
+        for (var useIndex = 0; useIndex < _tree.Uses.Count; useIndex++) {
+            var extensionId = _tree.Uses[useIndex];
+            var pin = useIndex < _tree.UsesVersions.Count ? _tree.UsesVersions[useIndex] : null;
             changes.Add(new AddDomainExtensionChange(extensionId));
+
+            var contribution = _session.FindContractContribution(extensionId);
+            if (contribution is not null) {
+                _seededContracts[contribution.Surface.Name] = extensionId;
+                changes.AddRange(contribution.ToChanges(pin));
+            }
+            else if (pin is not null) {
+                throw ErrorAtUse(extensionId,
+                    $"Extension '{extensionId}' pins surface version '{pin}' but contributed no contract.");
+            }
         }
 
         // ── Enum type definitions + entity definitions ─────────
@@ -134,6 +157,19 @@ public sealed class DomainResolver : DslCursor {
 
         Expect(TokenKind.EndOfFile);
         return changes;
+    }
+
+    /// <summary>Positions a header finding on the <c>uses</c> id token for <paramref name="extensionId"/>.</summary>
+    private FormatException ErrorAtUse(string extensionId, string message) {
+        for (var i = 2; i + 1 < _tree.Tokens.Count && i < _tree.HeaderEnd; i++) {
+            if (_tree.Tokens[i].Kind != TokenKind.Uses
+                || _tree.Tokens[i + 1].Kind != TokenKind.Identifier
+                || !string.Equals(_tree.Tokens[i + 1].Text, extensionId, StringComparison.Ordinal))
+                continue;
+            var token = _tree.Tokens[i + 1];
+            return GrammarError.Error(message, token.Line, token.Col);
+        }
+        return GrammarError.Error(message);
     }
 
     private void EnsurePrimitivesOnce(List<DomainChange> changes) {
@@ -1247,7 +1283,16 @@ public sealed class DomainResolver : DslCursor {
     /// <c>Name: contract external|internal source version { Endpoint: inbound|outbound operation|event Type }</c>
     /// </summary>
     private void ParseContract(List<DomainChange> changes) {
+        var nameToken = Current;
         var name = ExpectIdentifier(TokenKind.Identifier, "contract name");
+        if (_seededContracts.TryGetValue(name, out var seededBy))
+            throw GrammarError.Error(
+                $"Contract '{name}' is contributed by `uses {seededBy}`. A hand-written contract block beside the seeded surface is a duplicate.",
+                nameToken.Line, nameToken.Col);
+        if (!_authoredContracts.Add(name))
+            throw GrammarError.Error(
+                $"Contract '{name}' is already declared. One contract block per name.",
+                nameToken.Line, nameToken.Col);
         Expect(TokenKind.Colon);
         ExpectWord("contract");
 

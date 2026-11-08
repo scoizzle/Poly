@@ -24,7 +24,7 @@ These things are **libraries**: a referenced assembly that **loads** into a sess
 
 Rules:
 
-1. **The domain record is statements of fact.** Types, relationships, contracts, and the ids it uses (`uses temporal`). It does not load libraries. Another unit is `ImportedContract`, not an extension id.
+1. **The domain record is statements of fact.** Types, relationships, contracts, and the ids it uses (`uses temporal`). It does not load libraries. Another unit is reached through `uses <id>`, which names the export package registered under that id and lands as an `ImportedContract`; Load never compiles the sibling domain. A surface pin rides on the `uses` line (`uses billing 2024-11-20`), separate from the package's version.
 2. **A domain session loads what the domain declared.** Given a `Domain` + a catalog, the session holds the resolved libraries and the parse/print/analysis tables they register. Parse, print, analyze, and emit go through the session — never `Domain.ResolveHost()`.
 3. **MCP session ≠ domain session.** MCP is the tool conversation (revision, instances, which unit you are editing). It *holds* a domain session. Do not name the library loader `DomainModelingSession`.
 4. **SDK seed is an additive fact** on the Domain (`temporal`; MCP also `storage`) when the source lists no `uses`. The session then loads those ids.

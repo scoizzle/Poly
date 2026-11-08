@@ -1086,8 +1086,17 @@ public sealed record AddImportedContractChange(
     string SourceIdentifier,
     string Version
 ) : DomainChange {
+    /// <summary>The <c>uses</c> id that seeded this contract; <c>null</c> for an authored block.</summary>
+    public string? UsesId { get; init; }
+
+    /// <summary>The surface version pinned on the seeding <c>uses</c> line, when one was written.</summary>
+    public string? Pin { get; init; }
+
     internal override void ApplyTo(DomainMutationContext context) {
-        var contract = new ImportedContract(Name, SourceKind, SourceIdentifier, Version, []);
+        var contract = new ImportedContract(Name, SourceKind, SourceIdentifier, Version, []) {
+            UsesId = UsesId,
+            Pin = Pin,
+        };
         context.ImportedContracts.Add(contract);
         context.ModifiedNodes.Add(contract);
     }

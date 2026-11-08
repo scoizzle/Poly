@@ -15,15 +15,24 @@ public static class DomainCompilation {
 
     /// <summary>
     /// If the change list already adds extensions, leave it. Otherwise append
-    /// <paramref name="seed"/> as additive extension facts.
+    /// <paramref name="seed"/> as additive extension facts. When <paramref name="session"/>
+    /// is supplied, a seed library that contributed a contract surface seeds it too,
+    /// exactly as an authored <c>uses</c> line would.
     /// </summary>
     public static IReadOnlyList<DomainChange> WithSeed(
         IReadOnlyList<DomainChange> changes,
-        IReadOnlyList<string> seed) {
+        IReadOnlyList<string> seed,
+        DomainSession? session = null) {
         ArgumentNullException.ThrowIfNull(changes);
         ArgumentNullException.ThrowIfNull(seed);
         if (changes.OfType<AddDomainExtensionChange>().Any())
             return changes;
-        return [.. changes, .. seed.Select(id => new AddDomainExtensionChange(id))];
+        var seeded = new List<DomainChange>();
+        foreach (var id in seed) {
+            seeded.Add(new AddDomainExtensionChange(id));
+            if (session?.FindContractContribution(id) is { } contribution)
+                seeded.AddRange(contribution.ToChanges(pin: null));
+        }
+        return [.. changes, .. seeded];
     }
 }

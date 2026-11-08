@@ -70,6 +70,15 @@ public class PolycCompileTests {
     }
 
     [Test]
+    public async Task Compile_DuplicatePinnedUses_ReportsDsl0003AtSecondOccurrence() {
+        var result = Compiler().Compile(
+            "domain D\nuses billing 2024-11-20\nuses billing v1\nA: entity {\n  X: Text\n}\n", "x.poly");
+        var only = result.Diagnostics.Single();
+        await Assert.That(only.Code).IsEqualTo("DSL0003");
+        await Assert.That(only.Line).IsEqualTo(3);
+    }
+
+    [Test]
     public async Task Compile_ParseError_ReportsDsl0001AtPosition() {
         var result = Compiler().Compile("domain D\nA: entity {\n  X: Text @\n}\n", "x.poly");
         var only = result.Diagnostics.Single();

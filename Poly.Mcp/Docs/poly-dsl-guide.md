@@ -194,10 +194,12 @@ Suspended: stage {
 ---
 
 Every valid `.poly` document starts with a domain name. Optional `uses` lines list
-**extensions** this compilation unit depends on (additive facts). Product `apply_dsl`
-seeds `storage` when none are listed. Temporal is implicit: Load always registers it,
-and the printer never writes `uses temporal`. Unknown or duplicate ids
-fail closed. Another Poly domain is a `contract`, not a `uses` line.
+**extension ids** this compilation unit depends on (additive facts). Product `apply_dsl`
+seeds `storage` when none are listed. Temporal is implicit: Load always registers it, and
+the printer never writes `uses temporal`. Unknown or duplicate ids fail closed.
+`uses <id>` loads the library's export package, never a sibling `.poly`. A package boundary
+pins the public surface with `uses billing 2024-11-20` (same-line token run after the id).
+A `contract` block remains for a surface no library contributes.
 
 `uses contradictions` changes no syntax. It marks the document as contradiction-tolerant:
 the platform binds data-flow claims (for example `Customer.Notes` into `Order.Notes`) on the
@@ -1165,6 +1167,21 @@ is a fragment probe: relationship/owned path-prefix and relationship `exists` fa
 | `event.Prop` / `event Prop` in `when` bodies | Use optional peer binder: `when Rel Stage as name { … name Prop … }` |
 
 ## 11. Additional Features
+
+### `uses` Contract Contributions
+
+A library may contribute a contract surface from `Register`. `uses <id>` loads the export
+package registered under that id; Load never compiles a sibling `.poly`. The surface lands
+on the domain as an imported contract, so `bind` resolves unchanged. A caller at a package
+boundary pins the surface version in source (`uses billing 2024-11-20`); the pin is the
+public surface only, never the implementation. The pin is the contiguous same-line token
+run after the id, so `2024-11-20`, `v1`, and `1.2.3` each read as one value. Within one
+workspace the pin is optional and the host resolves the current export.
+
+A hand-written `Name: contract ...` block beside a seeded surface fails closed, as does a
+second block with the same name. A version on an id whose library contributed no surface
+(`uses temporal v1`) also fails closed. `uses` does not change `contract` block syntax: a
+hand-authored block remains the form for a surface no library contributes.
 
 ### Action Parameters
 

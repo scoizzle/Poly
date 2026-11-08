@@ -147,6 +147,11 @@ public static class DslGrammar {
             .Pattern("header").Kind(DslTokenKind.Domain).Value(DslTokenKind.Identifier, "name").Commit()
         .Define("uses")
             .Pattern("id").Kind(DslTokenKind.Uses).Value(DslTokenKind.Identifier, "id").Commit()
+            // The pin is a raw same-line token run (DslSyntaxTree.TryReadUse), not one token;
+            // the Identifier position is this table's print hole, filled with the run's text.
+            .Pattern("pinned")
+                .Kind(DslTokenKind.Uses).Value(DslTokenKind.Identifier, "id")
+                .Value(DslTokenKind.Identifier, "version").Commit()
         .Define("visibility")
             .Pattern("public").Kind(DslTokenKind.Public).Commit()
         .Define("top")

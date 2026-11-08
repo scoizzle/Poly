@@ -112,9 +112,10 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
                     DomainModelDiagnosticCodes.EffectConstraintViolation);
             }
 
-            // #439: `optional` is the only way an entity property may hold null, so absence of it
-            // is requiredness. A copy from a nullable source may write null where the target cannot.
-            if (IsOptional(source.Value.Property) && !IsOptional(target.Value.Property)) {
+            // #439: `optional` is the only way an entity property may hold null, so a required
+            // target paired with a non-required source may write null where the target cannot.
+            if (EntityStructureAnalyzer.IsRequired(target.Value.Property)
+                && !EntityStructureAnalyzer.IsRequired(source.Value.Property)) {
                 var severity = ObservedFlowChecks.SeverityFor(
                     context, domain, target.Value.Property, DomainModelDiagnosticCodes.ObservedFlowNullability);
                 context.ReportDiagnostic(
@@ -126,9 +127,6 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
             }
         }
     }
-
-    private static bool IsOptional(Property property) =>
-        property.Constraints.Any(c => c is OptionalConstraint);
 
     /// <summary>
     /// DMEFF013: reject only unconditional cycles in the automatic transition graph

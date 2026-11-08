@@ -149,18 +149,27 @@ public class ObservedFlowNullabilityTests {
     }
 
     [Test]
-    public async Task OrdinaryParameterAssign_NullablePropertyToRequiredProperty_IsUnchanged() {
-        const string domain = """
-            domain Orders
-            Order: entity {
-              Note: Text
-              Memo: Text optional
-              Set: action { assign Note to Memo }
-            }
-            """;
+    public async Task OrdinaryNullableParameterAssign_ToRequiredProperty_IsUnchanged() {
+        var session = SessionBuilder.CreateEmpty().LoadCore().LoadTemporal().Build();
+        var analysis = session.Analyze(NullableParameterAssignDomain());
 
-        var (_, _, analysis) = Run(domain);
         await Assert.That(Of(analysis, "DMEFF014").Count()).IsEqualTo(0);
+        await Assert.That(analysis.HasErrors).IsFalse();
+    }
+
+    /// <summary>An optional parameter assigned into a required property: the ordinary assign path,
+    /// not a flow. The DSL cannot mark a parameter optional, so the shape is built directly
+    /// (#435's <c>ParameterAssignDomain</c> is the precedent).</summary>
+    private static Domain NullableParameterAssignDomain() {
+        var set = new Poly.DomainModeling.Ontology.Action("Set", InvocationResult.Void,
+            [new Property("note", new DomainTypeReference("Text"), [new OptionalConstraint()])],
+            [new AssignEffect(DomainExpression.Property("Note"), DomainExpression.Parameter("note"))],
+            []);
+        var order = new Entity("Order", [
+            new Property("Note", new DomainTypeReference("Text"), [new LengthConstraint(0, 50)])
+        ], [set], [], []);
+        return DomainTestFactory.Create(
+            "Orders", [new PrimitiveType("Text", PrimitiveSemantics.Text, []), order], []);
     }
 
     [Test]

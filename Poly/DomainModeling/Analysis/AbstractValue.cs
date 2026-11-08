@@ -28,21 +28,32 @@ public sealed class AbstractValue {
     public bool Unsatisfiable { get; }
 
     /// <summary>Builds an abstract value by merging same-type constraints; marks unsatisfiable
-    /// when a same-type merge returns null (empty intersection).</summary>
+    /// when a same-type merge is empty. A merge that cannot decide (unrepresentable, or a kind
+    /// with no rule) drops that axis rather than pretending it is empty.</summary>
     public static AbstractValue From(IEnumerable<Constraint> constraints) {
         var merged = new List<Constraint>();
         var unsatisfiable = false;
+        var dropped = new HashSet<Type>();
         foreach (var c in constraints) {
+            if (dropped.Contains(c.GetType()))
+                continue;
             var idx = merged.FindIndex(m => m.GetType() == c.GetType());
             if (idx < 0) {
                 merged.Add(c);
                 continue;
             }
-            if (merged[idx].Merge(c) is { } net) {
-                merged[idx] = net;
-            }
-            else {
-                unsatisfiable = true;
+            var merge = merged[idx].MergeResult(c);
+            switch (merge.Kind) {
+                case ConstraintMergeKind.Net:
+                    merged[idx] = merge.Net!;
+                    break;
+                case ConstraintMergeKind.Empty:
+                    unsatisfiable = true;
+                    break;
+                case ConstraintMergeKind.Unmergeable:
+                    merged.RemoveAt(idx);
+                    dropped.Add(c.GetType());
+                    break;
             }
         }
         return merged.Count == 0 && !unsatisfiable ? Unknown : new AbstractValue(merged, unsatisfiable);
@@ -61,11 +72,17 @@ public sealed class AbstractValue {
         var idx = list.FindIndex(c => c.GetType() == constraint.GetType());
         if (idx < 0)
             return From([.. list, constraint]);
-        if (list[idx].Merge(constraint) is { } net) {
-            list[idx] = net;
-            return new AbstractValue(list);
+        var merge = list[idx].MergeResult(constraint);
+        switch (merge.Kind) {
+            case ConstraintMergeKind.Net:
+                list[idx] = merge.Net!;
+                return new AbstractValue(list);
+            case ConstraintMergeKind.Empty:
+                return new AbstractValue(list, unsatisfiable: true);
+            default:
+                list.RemoveAt(idx);
+                return new AbstractValue(list);
         }
-        return new AbstractValue(list, unsatisfiable: true);
     }
 
     /// <summary>The RangeConstraint, if the value carries one.</summary>

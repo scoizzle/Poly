@@ -1,14 +1,7 @@
-using Poly.Analysis;
 using Poly.Ast.Nodes;
-using Poly.DomainModeling.Analysis;
-using Poly.DomainModeling.Evolution;
-using Poly.DomainModeling.Libraries.Http;
-using Poly.DomainModeling.Libraries.Storage;
-using Poly.DomainModeling.Lowering;
-using Poly.Interpretation.CSharp;
+using Poly.Compile;
+using Poly.DomainModeling.Compile;
 using Poly.Packs.Product;
-using Poly.Packs.Sqlite;
-using Poly.Packs.SqlServer;
 
 namespace Poly.DslCompiler;
 
@@ -41,11 +34,9 @@ public enum DbmsPack {
 }
 
 /// <summary>
-/// Compiles .poly DSL text into C# type definitions.
-///
-/// Uses <see cref="DomainSession.Emit"/> which projects the analyzed domain
-/// through <see cref="DomainProgramProjection"/> and <see cref="CSharpWriter"/>,
-/// the same pipeline behind the MCP <c>export_domain_to_csharp</c> tool.
+/// Compiles .poly DSL text into C# files. A thin facade over <see cref="PolyCompiler"/> and the
+/// product catalog for hosts that still pick a <see cref="CompileMode"/> and a <see cref="DbmsPack"/>;
+/// polyc does not.
 /// </summary>
 public sealed class DslCompiler {
     private readonly List<IDomainLibrary> _extraLibraries = [];
@@ -120,73 +111,43 @@ public sealed class DslCompiler {
         if (string.IsNullOrWhiteSpace(polyText))
             return Fail("DSL text is empty.");
 
-        DomainSession session;
-        List<DomainChange> changes;
+        // The compile is Poly.Compile over the product catalog. The DbmsPack always wins for the
+        // Minimal API provider, so it is the host vendor the catalog is built with.
+        var catalog = ProductCatalog.Create(dbms switch {
+            DbmsPack.Sqlite => "sqlite",
+            DbmsPack.SqlServer => "sqlserver",
+            _ => "generic",
+        });
+        foreach (var library in extraLibraries) {
+            if (!catalog.Contains(library.Id))
+                catalog = catalog.With(library);
+        }
+
+        var vendor = LinkedVendor(mode, dbms);
+        var hooks = new CompileHooks {
+            SessionExtensions = ids => SessionIds(ids, mode, vendor, extraLibraries),
+            DomainExtensions = ids => vendor is null ? ids : SwapPersistence(ids, vendor),
+        };
+        var compiled = new PolyCompiler(catalog, SeedFor(dbms, mode), hooks).Compile(polyText);
+        if (!compiled.Succeeded)
+            return Fail(compiled);
+
         try {
-            var tree = DslSyntaxTree.Parse(polyText);
-            session = OpenCompileSession(tree, mode, dbms, extraLibraries);
-            changes = DomainCompilation.WithSeed(DomainCompilation.Resolve(tree, session), SeedFor(dbms, mode)).ToList();
-        }
-        catch (FormatException ex) {
-            return Fail($"Parse error: {ex.Message}");
-        }
-        catch (InvalidOperationException ex) {
-            return Fail(ex.Message);
-        }
-
-        if (changes.Count == 0)
-            return Fail("No domain changes parsed from the DSL text.");
-
-        var nameChange = changes.OfType<SetDomainNameChange>().FirstOrDefault();
-        var domainName = nameChange?.Name ?? "PolyDomain";
-        var emptyDomain = new Domain(domainName, []);
-        // OpenCompileSession links sqlite/sqlserver in place of generic persistence.
-        // The domain must name that unit, or DomainEvolution.Apply throws on an id the
-        // session did not load.
-        if (LinkedVendor(mode, dbms) is { } vendor) {
-            changes = SwapPersistence(changes, vendor,
-                c => (c as AddDomainExtensionChange)?.ExtensionId,
-                new AddDomainExtensionChange(vendor));
-        }
-        EvolutionResult outcome;
-        try {
-            outcome = new DomainEvolution(emptyDomain).ApplyAndAnalyze(changes, session: session);
-        }
-        catch (Exception ex) {
-            return Fail($"Evolution failed: {ex.Message}");
-        }
-
-        if (!outcome.Succeeded) {
-            var errors = outcome.Analysis.Diagnostics
-                .Where(d => d.Severity == DiagnosticSeverity.Error)
-                .Take(10)
-                .Select(d => d.Message)
-                .ToList();
-
-            return new CompileResult(
-                Success: false,
-                Files: null,
-                Errors: errors.Count > 0
-                    ? errors
-                    : ["Analysis rejected the domain."]
-            );
-        }
-
-        var domain = outcome.Root;
-        try {
-            var files = session.Emit(domain, outcome.Analysis).ToList();
-            var catalog = session.ArtifactCatalog;
+            var domain = compiled.Domain!;
+            var session = compiled.Session!;
+            var files = compiled.Files.ToList();
+            var artifacts = session.ArtifactCatalog;
             // Emit already ran session.Artifacts. An extra that is that same instance
             // is skipped. Running it again would register the same artifact id.
             foreach (var contributor in _extraArtifacts) {
                 if (session.Artifacts.Contains(contributor))
                     continue;
-                foreach (var artifact in contributor.Contribute(domain, outcome.Analysis, catalog))
-                    catalog.Register(FromContributor(contributor, artifact));
+                foreach (var artifact in contributor.Contribute(domain, compiled.Analysis!, artifacts))
+                    artifacts.Register(FromContributor(contributor, artifact));
             }
             // Emit already returned its files. Appending the catalog copies would duplicate them.
             var seen = new HashSet<string>(files.Select(f => f.FileName), StringComparer.Ordinal);
-            foreach (var artifact in catalog.Artifacts) {
+            foreach (var artifact in artifacts.Artifacts) {
                 if (artifact.Descriptor.Id.Type != ContributedFile.Type)
                     continue;
                 var name = ContributedFile.FileName(artifact);
@@ -194,14 +155,12 @@ public sealed class DslCompiler {
                     continue;
                 files.Add((name, ContributedFile.Text(artifact)));
             }
-            return new CompileResult(Success: true, Files: files, Errors: null, Catalog: catalog);
+            return new CompileResult(Success: true, Files: files, Errors: null, Catalog: artifacts);
         }
         catch (Exception ex) {
             return Fail($"Code generation failed: {ex.Message}");
         }
     }
-
-    private static readonly ExtensionCatalog CompilerCatalog = ProductCatalog.Catalog;
 
     /// <summary>
     /// The vendor that Db and All link in place of generic <c>persistence</c>, so the host
@@ -218,21 +177,19 @@ public sealed class DslCompiler {
     }
 
     /// <summary>
-    /// Drops every <c>persistence</c> item from an ordered extension list and puts
-    /// <paramref name="vendorItem"/> where the first one was, unless the vendor is
-    /// already listed. Items with no extension id pass through unchanged.
+    /// Drops every <c>persistence</c> id from an ordered extension list and puts
+    /// <paramref name="vendor"/> where the first one was, unless the vendor is already listed.
     /// </summary>
-    private static List<T> SwapPersistence<T>(
-        IReadOnlyList<T> items, string vendor, Func<T, string?> extensionId, T vendorItem) {
-        var hasVendor = items.Any(item => extensionId(item) == vendor);
-        var swapped = new List<T>(items.Count);
-        foreach (var item in items) {
-            if (extensionId(item) != "persistence") {
-                swapped.Add(item);
+    private static List<string> SwapPersistence(IReadOnlyList<string> ids, string vendor) {
+        var hasVendor = ids.Contains(vendor);
+        var swapped = new List<string>(ids.Count);
+        foreach (var id in ids) {
+            if (id != "persistence") {
+                swapped.Add(id);
                 continue;
             }
             if (!hasVendor) {
-                swapped.Add(vendorItem);
+                swapped.Add(vendor);
                 hasVendor = true;
             }
         }
@@ -251,27 +208,23 @@ public sealed class DslCompiler {
     }
 
     /// <summary>
-    /// One session for parse, analyze, and artifacts. The document's <c>uses</c> wins
-    /// over the DBMS seed; <paramref name="extraLibraries"/> are always loaded.
-    /// CompileMode never seeds <c>http</c> — that id arrives via source <c>uses</c>
-    /// or an extra library with that catalog id.
+    /// The ids one session loads: the document's <c>uses</c> (or the seed), the extra
+    /// libraries, then the vendor in place of generic persistence. CompileMode never seeds
+    /// <c>http</c> — that id arrives via source <c>uses</c> or an extra library.
     /// </summary>
-    private static DomainSession OpenCompileSession(
-        DslSyntaxTree tree,
+    private static List<string> SessionIds(
+        IReadOnlyList<string> requested,
         CompileMode mode,
-        DbmsPack dbms,
+        string? vendor,
         IReadOnlyList<IDomainLibrary> extraLibraries) {
-        var ids = new List<string>(tree.Uses.Count > 0 ? tree.Uses : SeedFor(dbms, mode));
+        var ids = new List<string>(requested);
         var seen = new HashSet<string>(ids, StringComparer.Ordinal);
-        var catalog = CompilerCatalog;
         foreach (var library in extraLibraries) {
-            if (!catalog.Contains(library.Id))
-                catalog = catalog.With(library);
             if (seen.Add(library.Id))
                 ids.Add(library.Id);
         }
-        if (LinkedVendor(mode, dbms) is { } vendor) {
-            ids = SwapPersistence(ids, vendor, id => id, vendor);
+        if (vendor is not null) {
+            ids = SwapPersistence(ids, vendor);
             if (!ids.Contains(vendor))
                 ids.Add(vendor);
         }
@@ -279,31 +232,7 @@ public sealed class DslCompiler {
                  && !ids.Exists(id => id is "sqlite" or "sqlserver" or "mysql" or "persistence")) {
             ids.Add("persistence");
         }
-
-        // Load-time registration (not bag invent): host producers for loaded doors.
-        var builder = SessionBuilder.CreateEmpty();
-        builder.LoadCore();
-        if (!ids.Exists(id => string.Equals(id, ExtensionCatalog.TemporalId, StringComparison.Ordinal)))
-            builder.LoadTemporal();
-        var loaded = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var id in ids) {
-            if (string.IsNullOrWhiteSpace(id))
-                throw new InvalidOperationException("Domain extension id must be non-empty.");
-            if (!loaded.Add(id))
-                throw new InvalidOperationException($"Domain lists extension '{id}' more than once.");
-            if (id == "http")
-                builder.Load(new HttpLibrary(new MinimalApiHostArtifactContributor(dbms: dbms)));
-            else if (id == "persistence")
-                builder.Load(new PersistenceEmitLibrary(new DbContextArtifactContributor()));
-            else if (id == "sqlite")
-                builder.Load(new SqliteLibrary(new DbContextArtifactContributor()));
-            else if (id == "sqlserver")
-                builder.Load(new SqlServerLibrary(new DbContextArtifactContributor()));
-            else
-                builder.Load(catalog.Resolve(id));
-        }
-        StorageFacetLibrary.EnsureRegistered(builder);
-        return builder.Build();
+        return ids;
     }
 
     /// <summary>
@@ -339,6 +268,14 @@ public sealed class DslCompiler {
 
     private static CompileResult Fail(string message) =>
         new(Success: false, Files: null, Errors: [message]);
+
+    private static CompileResult Fail(Poly.Compile.CompileResult compiled) {
+        var errors = compiled.Diagnostics
+            .Where(d => d.IsError)
+            .Select(d => d.Code == DiagnosticCodes.Parse ? $"Parse error: {d.Message}" : d.Message)
+            .ToList();
+        return new CompileResult(Success: false, Files: null, Errors: errors.Count > 0 ? errors : ["Analysis rejected the domain."]);
+    }
 
     /// <summary>
     /// The catalog producer is the contributor that was registered, not a name it chose.

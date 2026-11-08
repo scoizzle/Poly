@@ -136,7 +136,15 @@ internal sealed class OracleTool(ISessionStore store, ILogger<OracleTool> logger
             // constraint-compiled module is the one consumers get, and binding a second session
             // here would evict it from RuntimeAnalysisCache (#387).
             execution = state.Execution;
-            var files = execution.Value.Session.Emit(state.Domain, execution.Value.Analysis);
+            // The shared produce gate (the one polyc build runs), on the compilation the executor
+            // runs. A refusal is a diagnostic, not an exception.
+            var produced = Poly.Compile.PolyCompiler.Produce(
+                execution.Value.Session, state.Domain, execution.Value.Analysis, "<workspace>");
+            if (!produced.Succeeded) {
+                var reasons = produced.Diagnostics.Where(d => d.IsError).Select(d => d.Message).ToList();
+                return new DomainToolResponse(Success: false, Message: $"Domain-to-C# export failed: {(reasons.Count > 0 ? reasons[0] : "the domain was refused")}", SessionId: sessionId, Data: new { error = reasons.FirstOrDefault() }, Diagnostics: reasons.Take(3).ToList() is { Count: > 0 } top ? top : null, Affordances: []);
+            }
+            var files = produced.Files;
             var csharp = string.Join("\n\n", files.Select(f => f.Source));
             return new DomainToolResponse(Success: true, Message: $"Domain exported to C#: {files.Count} file(s).", SessionId: sessionId, Data: new { csharp, fileCount = files.Count, files = files.Select(f => f.FileName).ToArray() }, Affordances: ["get_domain_overview", "get_entity_detail", "apply_dsl"]);
         }

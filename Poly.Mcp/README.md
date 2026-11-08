@@ -4,6 +4,8 @@
 
 Lock: [`docs/decisions/2026-08-15-domain-library-extensions-mcp-harness.md`](../docs/decisions/2026-08-15-domain-library-extensions-mcp-harness.md). Frozen core: [`docs/CORE.md`](../docs/CORE.md) §0. Mechanisms: [`docs/CORE.md`](../docs/CORE.md) §3.6.
 
+Launch: `polyc mcp` (stdio). `dotnet run --project Poly.Mcp` runs the same host entry for one release.
+
 ## Tool Surface
 
 Seven outcome tools. Server instructions carry the framing: use Poly when a task has a domain, write it down, prove it, then export or simulate.

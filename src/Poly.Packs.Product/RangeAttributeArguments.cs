@@ -5,7 +5,7 @@ using Poly.Ast.Nodes;
 
 using ClrPrimitive = Poly.Introspection.PrimitiveType;
 
-namespace Poly.DslCompiler;
+namespace Poly.Packs.Product;
 
 /// <summary>
 /// The two <c>[Range]</c> argument constants for a numeric DTO member, and the single place the

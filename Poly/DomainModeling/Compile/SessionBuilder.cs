@@ -1,4 +1,6 @@
 using Poly.Analysis;
+using Poly.DomainModeling.Contradictions;
+using Poly.DomainModeling.Libraries.Contradictions;
 using Poly.DomainModeling.Libraries.Temporal;
 using Poly.DomainModeling.Ontology;
 
@@ -22,6 +24,7 @@ public sealed class SessionBuilder {
     private readonly List<StageContribution> _contributions = [];
     private readonly HashSet<(PipelineStage Stage, string LibraryId)> _contributionKeys = [];
     private string? _registeringLibraryId;
+    private IReadOnlyList<ContradictionClaim> _contradictionClaims = [];
 
     public AnnotationRegistry Annotations { get; } = new();
     public ExpressionFormRegistry ExpressionForms { get; } = new();
@@ -29,6 +32,23 @@ public sealed class SessionBuilder {
     public IReadOnlyList<IStorageConvention> StorageConventions => _storageConventions;
     public IReadOnlyList<StageContribution> Contributions => _contributions;
     public ExpressionMeaning Meaning { get; } = new();
+
+    /// <summary>Flow claims bound before the <c>contradictions</c> library loads.</summary>
+    public IReadOnlyList<ContradictionClaim> ContradictionClaims => _contradictionClaims;
+
+    /// <summary>
+    /// Binds the platform's flow claims. Bind first, then load: a call after
+    /// <c>contradictions</c> is loaded throws, because its pass would have captured the old set.
+    /// </summary>
+    public SessionBuilder WithContradictionClaims(IReadOnlyList<ContradictionClaim>? claims) {
+        if (_loadedIdSet.Contains(ContradictionsLibrary.ExtensionId))
+            throw new InvalidOperationException(
+                $"Contradiction claims must be bound before library '{ContradictionsLibrary.ExtensionId}' is loaded.");
+        if (claims is not null && claims.Any(claim => claim is null))
+            throw new ArgumentException("Contradiction claims must not contain null.", nameof(claims));
+        _contradictionClaims = claims is null ? [] : [.. claims];
+        return this;
+    }
 
     /// <summary>
     /// Records one library's entry into <paramref name="stage"/>, once per stage and library.
@@ -151,6 +171,9 @@ public sealed class SessionBuilder {
 
     /// <summary>Freezes the loaded libraries into a session.</summary>
     public DomainSession Build(Domain? domain = null) {
+        if (_contradictionClaims.Count > 0 && !_loadedIdSet.Contains(ContradictionsLibrary.ExtensionId))
+            throw new InvalidOperationException(
+                $"{_contradictionClaims.Count} contradiction claim(s) are bound, but `uses {ContradictionsLibrary.ExtensionId}` is not loaded.");
         var annotations = new AnnotationRegistry(Annotations);
         var expressionForms = new ExpressionFormRegistry(ExpressionForms);
         var language = DslGrammar.LanguageFor(annotations, expressionForms);
@@ -168,6 +191,7 @@ public sealed class SessionBuilder {
             _analyzers,
             _contributions.ToArray(),
             _primitiveSeeds,
-            _constraintCompilers.ToArray());
+            _constraintCompilers.ToArray(),
+            _contradictionClaims);
     }
 }

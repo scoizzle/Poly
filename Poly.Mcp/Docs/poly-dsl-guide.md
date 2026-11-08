@@ -199,6 +199,14 @@ seeds `storage` when none are listed. Temporal is implicit: Load always register
 and the printer never writes `uses temporal`. Unknown or duplicate ids
 fail closed. Another Poly domain is a `contract`, not a `uses` line.
 
+`uses contradictions` changes no syntax. It marks the document as contradiction-tolerant:
+the platform binds data-flow claims (for example `Customer.Notes` into `Order.Notes`) on the
+session, and analysis records the incompatible ones (width, scale, nullability, type) in a
+bag instead of failing. An `open` entry stops Lower, Emit, and simulation, and names the
+entry; `resolved` and `withdrawn` entries stay in the bag and do not block. Standalone, with
+no claims bound, the bag is empty and nothing changes. Binding claims without the id is an
+error.
+
 ```poly
 domain MyDomain
 uses storage

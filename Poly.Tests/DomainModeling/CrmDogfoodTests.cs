@@ -64,7 +64,7 @@ public class CrmDogfoodTests {
         await Assert.That(cs).Contains("this.Lines.Count");
         await Assert.That(cs).Contains("CreateHq");
         await Assert.That(cs).Contains("Account? parent = null");
-        await Assert.That(cs).Contains("BillingAdapters");
+        await Assert.That(cs.Contains("BillingAdapters", StringComparison.Ordinal)).IsFalse();
 
         var tree = CSharpSyntaxTree.ParseText("#nullable enable\n" + cs);
         var references = ((string?)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES"))

@@ -242,7 +242,8 @@ public sealed partial class DomainToCSharpExporter {
         List<SubscriptionInfo>? subscriberSubs = null,
         IReadOnlyDictionary<SubscriptionInfo, string>? handlerNames = null,
         Dictionary<(string Entity, string Policy), Node>? policyBodies = null,
-        Dictionary<SubscriptionDispatchPlanEntry, Dictionary<string, Node>>? subscriptionBodies = null) {
+        Dictionary<SubscriptionDispatchPlanEntry, Dictionary<string, Node>>? subscriptionBodies = null,
+        ContractSplicePlan? splice = null) {
 
         ArgumentNullException.ThrowIfNull(metadata);
 
@@ -520,7 +521,7 @@ public sealed partial class DomainToCSharpExporter {
         // CurrentStage. Emitting one method per stage produced illegal duplicate members
         // (FieldService WorkOrder.Cancel on Draft/Scheduled/Blocked).
         AddActionMethods(entity, methods, stageEnumTypeName, postTransitionNotifyStages,
-            previousStageNotifyStages, domain, metadata);
+            previousStageNotifyStages, domain, metadata, splice);
 
         // ── Policies as bool methods ──────────────────────────────
         // One unqualified method per policy name. Entity, stage, and action-local

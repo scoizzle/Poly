@@ -248,7 +248,7 @@ public class ParityTests {
         await Assert.That(outcomes[0].Message).Contains("must be <= 10");
     }
 
-    const string UnboundAdapterDsl = """
+    const string SiblingContractDsl = """
         domain Shop
         Order: entity {
           Total: Number default(0)
@@ -257,7 +257,7 @@ public class ParityTests {
           }
         }
 
-        Stripe: contract external stripe v1 {
+        Stripe: contract internal stripe v1 {
           ChargeRequest: value {
             Amount: Number
             Currency: Text
@@ -269,8 +269,8 @@ public class ParityTests {
         """;
 
     [Test]
-    public async Task Invoke_WhenUnboundContractEndpoint_TracesAndSucceeds() {
-        var outcomes = await ParityScenario.FromDsl(UnboundAdapterDsl, "ParityUnboundAdapter")
+    public async Task Invoke_WhenSiblingContractEndpoint_ErasesAndSucceeds() {
+        var outcomes = await ParityScenario.FromDsl(SiblingContractDsl, "ParitySiblingContract")
             .AssertAgree(side => {
                 side.Create("Order");
                 side.Invoke("Pay", ("request", new Dictionary<string, object?> {

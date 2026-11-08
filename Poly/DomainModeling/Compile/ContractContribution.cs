@@ -1,7 +1,6 @@
+using Poly.Ast.Nodes;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Ontology.Contract;
-
-using SyntaxNode = Poly.Ast.Node;
 
 namespace Poly.DomainModeling.Compile;
 
@@ -14,13 +13,14 @@ namespace Poly.DomainModeling.Compile;
 /// <remarks>
 /// A surface-only contribution (empty <see cref="Bodies"/>) is an export package: a sibling
 /// domain's public contract, loaded by <c>uses &lt;id&gt;</c> and compiled away at a bind.
-/// A contribution with bodies is a library whose implementation Lower may splice later.
-/// The body is stored here; Load and Resolve never run it.
+/// A contribution with bodies is a library whose implementation Lower splices at a bind.
+/// Each body is a factory, called once per splice site: node id is VM metadata identity, so every
+/// splice must get fresh nodes. Load and Resolve never run a body.
 /// </remarks>
 public sealed record ContractContribution(
     string LibraryId,
     ImportedContract Surface,
-    IReadOnlyDictionary<string, IReadOnlyList<SyntaxNode>> Bodies) {
+    IReadOnlyDictionary<string, Func<Block>> Bodies) {
     /// <summary>
     /// The domain changes that seed <see cref="Surface"/> onto a domain declaring
     /// <c>uses &lt;LibraryId&gt;</c>. When the source wrote a surface pin, it is recorded

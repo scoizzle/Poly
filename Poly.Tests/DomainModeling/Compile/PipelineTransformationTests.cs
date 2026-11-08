@@ -202,7 +202,7 @@ public class PipelineTransformationTests {
     }
 
     [Test]
-    public async Task InvokeAction_ContractBound_TracesAndSucceeds() {
+    public async Task InvokeAction_ContractBound_ErasesAndSucceeds() {
         var (domain, analysis, session) = Evolve("""
             domain Shop
             Order: entity {
@@ -212,7 +212,7 @@ public class PipelineTransformationTests {
               }
             }
 
-            Stripe: contract external stripe v1 {
+            Stripe: contract internal stripe v1 {
               ChargeRequest: value {
                 Amount: Number
                 Currency: Text

@@ -179,11 +179,9 @@ public class DslCompilerCompileOracleTests {
 
     [Test]
     public async Task Compile_All_BoundContractDomain_EmitCompilableSolution() {
-        // pack-3c-3: a root action bound to a produced contract endpoint compiles end-to-end —
-        // entity file calls {Contract}Adapters.{Endpoint}(param); the fail-closed adapter class
-        // (DomainResult.Failure until an in-process adapter is registered) and the contract
-        // value type are emitted alongside. The child's Ledger entity never becomes a public
-        // route (composition root only).
+        // #421: a root action bound to a surface-only in-solution contract compiles away —
+        // no {Contract}Adapters type and no adapter invoke. The local action and the contract
+        // value type are emitted. The child's Ledger entity never becomes a public route.
         const string poly = """
             domain Shop
 
@@ -207,11 +205,11 @@ public class DslCompilerCompileOracleTests {
         await Assert.That(result.Success).IsTrue();
 
         var order = result.Files!.Single(f => f.FileName == "Order.cs").Source;
-        await Assert.That(order).Contains("adapterResult = BillingAdapters.Charge(request)");
+        await Assert.That(order.Contains("BillingAdapters", StringComparison.Ordinal)).IsFalse();
+        await Assert.That(order).Contains("public DomainResult Pay(ChargeRequest request)");
         var types = result.Files!.Single(f => f.FileName == "Poly.Types.cs").Source;
-        await Assert.That(types).Contains("class BillingAdapters");
-        await Assert.That(types).Contains("public static DomainResult Charge(");
-        await Assert.That(types).Contains("System.Diagnostics.Debug.WriteLine");
+        await Assert.That(types.Contains("class BillingAdapters", StringComparison.Ordinal)).IsFalse();
+        await Assert.That(types).Contains("ChargeRequest");
         var program = result.Files!.Single(f => f.FileName == "Program.cs").Source;
         await Assert.That(program.Contains("/api/ledgers")).IsFalse();
 

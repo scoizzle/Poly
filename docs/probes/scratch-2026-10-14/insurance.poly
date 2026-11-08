@@ -3,7 +3,8 @@ uses temporal
 
 ClaimStatus: enum { Filed, UnderReview, Approved, Rejected, Settled }
 
-Payments: contract external paygate v1 {
+// Surface-only sibling: Lower erases the bind and the local action still runs.
+Payments: contract internal paygate v1 {
   PayoutRequest: value {
     Amount: Number
     Reference: Text

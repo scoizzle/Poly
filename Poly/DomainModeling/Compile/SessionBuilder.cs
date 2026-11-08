@@ -1,10 +1,9 @@
 using Poly.Analysis;
+using Poly.Ast.Nodes;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Libraries.Temporal;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Ontology.Contract;
-
-using SyntaxNode = Poly.Ast.Node;
 
 namespace Poly.DomainModeling.Compile;
 
@@ -199,10 +198,14 @@ public sealed class SessionBuilder {
     /// contract name fails closed (one contributor per surface).
     /// </summary>
     /// <param name="surface">The exported surface. Its version is the package's, never a caller pin.</param>
-    /// <param name="bodies">Endpoint name to implementation AST. Stored for Lower; never run at Load.</param>
+    /// <param name="bodies">
+    /// Endpoint name to a factory that builds the implementation body. Lower calls it once per
+    /// splice site, so the factory must return a fresh <see cref="Block"/> with fresh node ids each time.
+    /// Never run at Load.
+    /// </param>
     public SessionBuilder AddContract(
         ImportedContract surface,
-        IReadOnlyDictionary<string, IReadOnlyList<SyntaxNode>>? bodies = null) {
+        IReadOnlyDictionary<string, Func<Block>>? bodies = null) {
         ArgumentNullException.ThrowIfNull(surface);
         if (_registeringLibraryId is null)
             throw new InvalidOperationException(
@@ -223,7 +226,7 @@ public sealed class SessionBuilder {
             throw new InvalidOperationException(
                 $"Contract '{surface.Name}' declares endpoint '{duplicateEndpoint.Key}' more than once.");
 
-        var bodyMap = bodies ?? new Dictionary<string, IReadOnlyList<SyntaxNode>>(StringComparer.Ordinal);
+        var bodyMap = bodies ?? new Dictionary<string, Func<Block>>(StringComparer.Ordinal);
         foreach (var (endpointName, body) in bodyMap) {
             if (body is null)
                 throw new ArgumentException(

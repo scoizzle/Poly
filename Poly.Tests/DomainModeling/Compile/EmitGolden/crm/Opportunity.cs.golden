@@ -219,11 +219,6 @@ public class Opportunity
         {
             return DomainResult.Failure("'Capture' requires stage 'Commit' on entity 'Opportunity'.");
         }
-        var adapterResult = BillingAdapters.Charge(request);
-        if (!adapterResult.IsSuccess)
-        {
-            return adapterResult;
-        }
         var assignValue0 = this.Amount;
         if (assignValue0 < 0m)
         {

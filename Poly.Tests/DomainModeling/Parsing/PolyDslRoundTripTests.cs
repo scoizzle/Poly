@@ -1464,13 +1464,19 @@ public class PolyDslRoundTripTests {
     public async Task ProduceFillPrintParse_FilledInternalContract_RoundTripsValueTypesAndEndpoints() {
         // pack-3b-3: a producer-filled `contract internal` body must print back as
         // hand-authored `contract internal` DSL that re-parses to the same types/endpoints.
-        var source = DomainFactory.Create("billing", b => b
-            .AddValueType("ChargeRequest",
-                new Property("Amount", new DomainTypeReference("Number"), []),
-                new Property("Currency", new DomainTypeReference("Text"), []))
-            .AddEntity("Ledger")
-            .AddActionWithParameters("Ledger", "Charge",
-                new Property("request", new DomainTypeReference("ChargeRequest"), [])));
+        var source = Apply("""
+            domain billing
+
+            public value ChargeRequest {
+              Amount: Number
+              Currency: Text
+            }
+
+            public entity Ledger {
+              public action Charge (request: ChargeRequest) {
+              }
+            }
+            """);
 
         var parent = Apply("""
             domain Parent

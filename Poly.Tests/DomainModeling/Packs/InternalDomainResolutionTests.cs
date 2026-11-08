@@ -12,14 +12,19 @@ namespace Poly.Tests.DomainModeling.Packs;
 /// clash/leak rules in <see cref="ContractIntegrationAnalyzer"/> still apply after fill.
 /// </summary>
 public sealed class InternalDomainResolutionTests {
-    private static Domain BillingSource() =>
-        DomainFactory.Create("billing", b => b
-            .AddValueType("ChargeRequest",
-                new Property("Amount", new DomainTypeReference("Number"), []),
-                new Property("Currency", new DomainTypeReference("Text"), []))
-            .AddEntity("Ledger")
-            .AddActionWithParameters("Ledger", "Charge",
-                new Property("request", new DomainTypeReference("ChargeRequest"), [])));
+    private static Domain BillingSource() => ParseParent("""
+        domain billing
+
+        public value ChargeRequest {
+          Amount: Number
+          Currency: Text
+        }
+
+        public entity Ledger {
+          public action Charge (request: ChargeRequest) {
+          }
+        }
+        """);
 
     private static Domain ParseParent(string poly) {
         var changes = new PolyDslParser(poly).Parse();

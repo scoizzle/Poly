@@ -23,10 +23,12 @@ Both are frozen on `DomainSession` and read by the analyzers from `RuntimeAnalys
 
 There is no second rules table. The flow is presented to the checks that already decide:
 `IsConstraintSubsumed` (length, range) gives `DMEFF008` on the target property;
-`CheckCompatible` gives `DMSEM003` on the target property; a path that does not resolve is
-`DMSEM005` on the domain and no allowance clears it. No node is inserted into the domain, so
-nothing lowers and a cross-entity copy is not a `DMEFF012`. Scale and nullability have no
-constraint diagnostic, so they are not checked here.
+`CheckCompatible` gives `DMSEM003` on the target property; an optional source into a required
+target gives `DMEFF014` on the target property (#439), because `optional` is the only way an
+entity property may hold null; a path that does not resolve is `DMSEM005` on the domain and no
+allowance clears it. No node is inserted into the domain, so nothing lowers and a cross-entity
+copy is not a `DMEFF012`. Scale has no constraint diagnostic, so it is not checked here (it is a
+platform mapping row).
 
 - No matching allowance: the diagnostic is an error and `ThrowIfHasErrors` (the only gate) refuses.
 - Matching allowance: the same diagnostic is a warning, kept in the report. Direct `session.Lower`

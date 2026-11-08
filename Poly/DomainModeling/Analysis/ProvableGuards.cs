@@ -94,11 +94,20 @@ internal static class ProvableGuards {
         HashSet<string> EntrySeed(Stage stage) =>
             entryProven.TryGetValue(stage.Name, out var proven) ? proven : [];
 
+        var validSeeds = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
+        HashSet<string> ValidSeed(Stage stage) {
+            if (!validSeeds.TryGetValue(stage.Name, out var valid)) {
+                valid = [.. EntrySeed(stage).Where(p => EntryCovers(stage, p))];
+                validSeeds[stage.Name] = valid;
+            }
+            return valid;
+        }
+
         void ReportViolations(Action action, Stage stage) {
             var required = StagePresence(action, stage);
             if (required.Count == 0)
                 return;
-            foreach (var (node, property) in Renulls(action, stage, entity, EntrySeed(stage))) {
+            foreach (var (node, property) in Renulls(action, stage, entity, ValidSeed(stage))) {
                 if (!required.Contains(property))
                     continue;
                 context.ReportError(

@@ -188,6 +188,23 @@ public class ProvableGuardTests {
     }
 
     [Test]
+    public async Task InvalidEntryGuard_DoesNotMaskStageInvariantViolation() {
+        var (session, domain, analysis) = Run(Doc("""
+            HasMemo: policy { Memo is not null }
+            Draft: stage {
+              Start: action require HasNote { transition to Open }
+            }
+            Open: stage {
+              require HasMemo
+              Wipe: action { assign Note to null }
+              Copy: action { assign Memo to Note }
+            }
+            """));
+        await Assert.That(Of(analysis, "DMEFF015").Count()).IsGreaterThan(0);
+        Assert.Throws<InvalidOperationException>(() => session.Lower(domain, analysis));
+    }
+
+    [Test]
     public async Task TransitionOut_DropsStageFacts_IsDMEFF014() {
         var (session, domain, analysis) = Run(Doc("""
             Draft: stage {

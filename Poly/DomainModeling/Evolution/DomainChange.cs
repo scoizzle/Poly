@@ -102,11 +102,12 @@ public abstract record DomainChange {
 /// </summary>
 public sealed record AddEntityChange(
     string Name,
-    IReadOnlyList<Property> InitialProperties
+    IReadOnlyList<Property> InitialProperties,
+    Visibility Visibility = Visibility.Internal
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
         TermFacetGuard.ValidateFacets(InitialProperties.SelectMany(p => p.Facets));
-        AddToTypes(context, new Entity(Name, InitialProperties, [], [], []));
+        AddToTypes(context, new Entity(Name, InitialProperties, [], [], []) { Visibility = Visibility });
     }
 
     internal override string GetDescription() => $"Add Entity '{Name}'";
@@ -190,12 +191,13 @@ public sealed record RemoveStageChange(
 
 public sealed record AddActionChange(
     string EntityName,
-    string Name
+    string Name,
+    Visibility Visibility = Visibility.Internal
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
         context.RequireUpdate(
             context.AppendChildToEntity(EntityName, e => e.Actions,
-                (e, actions) => e with { Actions = actions }, new Action(Name, InvocationResult.Void, [], [], [])),
+                (e, actions) => e with { Actions = actions }, new Action(Name, InvocationResult.Void, [], [], []) { Visibility = Visibility }),
             $"Entity '{EntityName}' not found — cannot add action '{Name}'");
     }
 
@@ -544,11 +546,12 @@ public sealed record SetActionResultChange(
 
 public sealed record AddValueTypeChange(
     string Name,
-    IReadOnlyList<Property> Properties
+    IReadOnlyList<Property> Properties,
+    Visibility Visibility = Visibility.Internal
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
         TermFacetGuard.ValidateFacets(Properties.SelectMany(p => p.Facets));
-        var newValueType = new ValueType(Name, Properties, []);
+        var newValueType = new ValueType(Name, Properties, []) { Visibility = Visibility };
         context.Types.Add(newValueType);
         context.ModifiedNodes.Add(newValueType);
     }
@@ -596,7 +599,8 @@ public sealed record RemovePrimitiveTypeChange(
 public sealed record AddActionToStageChange(
     string EntityName,
     string StageName,
-    string Name
+    string Name,
+    Visibility Visibility = Visibility.Internal
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
         // SA: Look for an entity-level action with the same name. If found,
@@ -617,8 +621,10 @@ public sealed record AddActionToStageChange(
                 Actions = s.Actions.Append(
                     source is not null
                         ? new Action(Name, source.Result, source.Parameters.ToArray(),
-                            source.Effects.ToArray(), source.Policies.ToArray())
-                        : new Action(Name, InvocationResult.Void, [], [], [])
+                            source.Effects.ToArray(), source.Policies.ToArray()) {
+                            Visibility = source.Visibility > Visibility ? source.Visibility : Visibility
+                        }
+                        : new Action(Name, InvocationResult.Void, [], [], []) { Visibility = Visibility }
                 ).ToList()
             }),
             $"Stage '{StageName}' on Entity '{EntityName}' not found — cannot add action '{Name}'");

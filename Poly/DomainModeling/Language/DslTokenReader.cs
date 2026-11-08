@@ -228,6 +228,7 @@ public sealed class DslTokenReader : BufferedTokenReader<DslToken, DslTokenKind>
         "entry" => DslTokenKind.Entry,
         "exit" => DslTokenKind.Exit,
         "as" => DslTokenKind.As,
+        "public" => DslTokenKind.Public,
         _ => DslTokenKind.Identifier,
     };
 }

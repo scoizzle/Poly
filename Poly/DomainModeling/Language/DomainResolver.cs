@@ -107,7 +107,11 @@ public sealed class DomainResolver : DslCursor {
         // that reference them for property type resolution.
         // Dispatch is matcher-driven over the "top" rule; unmodeled shapes get
         // the same targeted diagnostics ParseEntity would produce.
-        while (Current.Kind == TokenKind.Identifier) {
+        while (Current.Kind == TokenKind.Identifier || Current.Kind == TokenKind.Public) {
+            if (TryTakeVisibility(out var visibility)) {
+                ParseMarkedTop(changes, visibility);
+                continue;
+            }
             switch (MatchRule("top")?.PatternName) {
                 case "enum":
                     ParseEnumType(changes);
@@ -166,18 +170,22 @@ public sealed class DomainResolver : DslCursor {
 
     private void ParseEntity(List<DomainChange> changes) {
         var entityName = ExpectIdentifier(TokenKind.Identifier, "entity name");
-        _currentEntityName = entityName;
-        _entityPolicies.Clear();
-        _pendingRequires.Clear();
-        _entityIndex++;
         Expect(TokenKind.Colon);
 
         // The "top" rule guarantees this is 'entity'; unsupported-keyword and
         // removed-inheritance shapes never reach this method (TopLevelRejection).
         Expect(TokenKind.Entity);
+        ParseEntityAfterKind(changes, entityName, Visibility.Internal);
+    }
+
+    private void ParseEntityAfterKind(List<DomainChange> changes, string entityName, Visibility visibility) {
+        _currentEntityName = entityName;
+        _entityPolicies.Clear();
+        _pendingRequires.Clear();
+        _entityIndex++;
 
         _entityNames.Add(entityName);
-        changes.Add(new AddEntityChange(entityName, []));
+        changes.Add(new AddEntityChange(entityName, [], visibility));
 
         // ── Entity header facets (pack-registered annotations) ──
         var termKeywords = new HashSet<string>(StringComparer.Ordinal);
@@ -213,6 +221,14 @@ public sealed class DomainResolver : DslCursor {
                             var name = ExpectIdentifier(TokenKind.Identifier, "stage name");
                             Expect(TokenKind.Colon);
                             ParseStage(name, changes);
+                            continue;
+                        }
+
+                    case "marked-action": {
+                            Expect(TokenKind.Public);
+                            Expect(TokenKind.Action);
+                            var name = ExpectIdentifier(TokenKind.Identifier, "action name");
+                            ParseActionBody(name, changes, stageName: null, preParsedParams: null, Visibility.Public);
                             continue;
                         }
 
@@ -537,6 +553,13 @@ public sealed class DomainResolver : DslCursor {
                         // Subscription: when RelName TargetStage { ... }
                         ParseSubscription(name, changes);
                         continue;
+
+                    case "marked-stage-action":
+                        Expect(TokenKind.Public);
+                        Expect(TokenKind.Action);
+                        var markedName = ExpectIdentifier(TokenKind.Identifier, "action name");
+                        ParseActionBody(markedName, changes, name, preParsedParams: null, Visibility.Public);
+                        continue;
                 }
             }
 
@@ -556,12 +579,47 @@ public sealed class DomainResolver : DslCursor {
         Expect(TokenKind.RBrace);
     }
 
+    /// <summary>
+    /// The optional visibility slot. Absent means <see cref="Visibility.Internal"/>.
+    /// The grammar rule is the plug point for a later level.
+    /// </summary>
+    private bool TryTakeVisibility(out Visibility visibility) {
+        var match = MatchRule("visibility");
+        if (match is null) {
+            visibility = Visibility.Internal;
+            return false;
+        }
+        visibility = match.PatternName switch {
+            "public" => Visibility.Public,
+            _ => throw Error($"Unknown visibility '{match.PatternName}'."),
+        };
+        Consume(match);
+        return true;
+    }
+
+    /// <summary><c>public entity Name</c> or <c>public value Name</c>. The trailing mark is not accepted.</summary>
+    private void ParseMarkedTop(List<DomainChange> changes, Visibility visibility) {
+        if (Current.Kind == TokenKind.Entity) {
+            Advance();
+            var name = ExpectIdentifier(TokenKind.Identifier, "entity name");
+            ParseEntityAfterKind(changes, name, visibility);
+            return;
+        }
+        if (DslGrammar.IsValueWord(Current)) {
+            Advance();
+            var name = ExpectIdentifier(TokenKind.Identifier, "value type name");
+            FinishValueType(changes, name, visibility);
+            return;
+        }
+        throw Error($"Expected 'entity' or 'value' after '{visibility.ToString().ToLowerInvariant()}', got '{Current.Text}'");
+    }
+
     private void ParseStandaloneAction(string name, List<DomainChange> changes) {
         // standalone action declared at entity level
         if (Current.Kind == TokenKind.Action)
             Advance(); // consume optional 'action'
 
-        ParseActionBody(name, changes, stageName: null, preParsedParams: null);
+        ParseActionBody(name, changes, stageName: null, preParsedParams: null, Visibility.Internal);
     }
 
     /// <summary>
@@ -587,8 +645,9 @@ public sealed class DomainResolver : DslCursor {
         string actionName,
         List<DomainChange> changes,
         string? stageName,
-        List<(string Name, string TypeName)>? preParsedParams) {
-        // Optional 'action' keyword
+        List<(string Name, string TypeName)>? preParsedParams,
+        Visibility visibility = Visibility.Internal) {
+        // Optional 'action' keyword. The marked form already consumed it.
         if (Current.Kind == TokenKind.Action)
             Advance();
 
@@ -634,10 +693,10 @@ public sealed class DomainResolver : DslCursor {
         // Create the action BEFORE parameters or effects
         // (AddParameterToActionChange references the action by name, so it must exist first)
         if (stageName is not null) {
-            changes.Add(new AddActionToStageChange(_currentEntityName, stageName, actionName));
+            changes.Add(new AddActionToStageChange(_currentEntityName, stageName, actionName, visibility));
         }
         else {
-            changes.Add(new AddActionChange(_currentEntityName, actionName));
+            changes.Add(new AddActionChange(_currentEntityName, actionName, visibility));
         }
 
         if (paramList is not null) {
@@ -1143,9 +1202,13 @@ public sealed class DomainResolver : DslCursor {
         var name = ExpectIdentifier(TokenKind.Identifier, "value type name");
         Expect(TokenKind.Colon);
         ExpectWord("value");
+        FinishValueType(changes, name, Visibility.Internal);
+    }
+
+    private void FinishValueType(List<DomainChange> changes, string name, Visibility visibility) {
         var properties = ParseValueTypeProperties();
         _valueTypeNames.Add(name);
-        changes.Add(new AddValueTypeChange(name, properties));
+        changes.Add(new AddValueTypeChange(name, properties, visibility));
     }
 
     private IReadOnlyList<Property> ParseValueTypeProperties() {

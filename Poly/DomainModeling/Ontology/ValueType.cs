@@ -8,4 +8,9 @@ public sealed record ValueType(
     string Name,
     IReadOnlyList<Property> Properties,
     IReadOnlyList<Constraint> Constraints
-) : DomainType(Name, Properties, Constraints);
+) : DomainType(Name, Properties, Constraints) {
+    /// <summary>
+    /// Export visibility. <see cref="Visibility.Internal"/> unless marked <c>public</c>.
+    /// </summary>
+    public Visibility Visibility { get; init; } = Visibility.Internal;
+}

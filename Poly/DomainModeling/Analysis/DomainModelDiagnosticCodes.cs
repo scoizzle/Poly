@@ -40,6 +40,13 @@ internal static class DomainModelDiagnosticCodes {
 
     public const string ContractIntegration = "DMCON001";
 
+    /// <summary>
+    /// A public member's exported signature names a type that is internal to the declaring
+    /// domain. The exported contract must be closed (decision 12, #417): mark the named type
+    /// <c>public</c> rather than adding an exception.
+    /// </summary>
+    public const string PublicSurfaceNotClosed = "DMCON002";
+
     // Stage-subscription diagnostics (replaced retired DMEV* event codes)
     public const string SubscriptionCausalityCycle = "DMSS001";
     public const string SubscriptionIdempotencyReplay = "DMSS002";

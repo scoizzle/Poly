@@ -26,6 +26,14 @@ public sealed record ContractContribution(
     /// <c>uses &lt;LibraryId&gt;</c>. When the source wrote a surface pin, it is recorded
     /// beside the surface; the surface's own version is the package's.
     /// </summary>
+    /// <summary>
+    /// Host targets this package's implementation is for, by id (<c>posix</c>, <c>windows</c>).
+    /// Empty means the package declares no platform constraint. Implementation metadata, not
+    /// surface: it is deliberately not on <see cref="ImportedContract"/> and not in the surface
+    /// fingerprint, because swapping a package for another target must not move the pin.
+    /// </summary>
+    public IReadOnlyList<string> Targets { get; init; } = [];
+
     public IReadOnlyList<DomainChange> ToChanges(string? pin) {
         var changes = new List<DomainChange> {
             new AddImportedContractChange(

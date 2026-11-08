@@ -203,9 +203,15 @@ public sealed class SessionBuilder {
     /// splice site, so the factory must return a fresh <see cref="Block"/> with fresh node ids each time.
     /// Never run at Load.
     /// </param>
+    /// <param name="targets">
+    /// Host targets this package is for (<c>posix</c>, <c>windows</c>). Empty declares no
+    /// platform constraint. Analysis compares this with the host's target; <c>uses</c> never
+    /// chooses or implies one.
+    /// </param>
     public SessionBuilder AddContract(
         ImportedContract surface,
-        IReadOnlyDictionary<string, Func<Block>>? bodies = null) {
+        IReadOnlyDictionary<string, Func<Block>>? bodies = null,
+        IReadOnlyList<string>? targets = null) {
         ArgumentNullException.ThrowIfNull(surface);
         if (_registeringLibraryId is null)
             throw new InvalidOperationException(
@@ -237,7 +243,19 @@ public sealed class SessionBuilder {
                     $"Contract '{surface.Name}' has no endpoint '{endpointName}' for the contributed body.");
         }
 
-        _contracts.Add(new ContractContribution(_registeringLibraryId, surface, bodyMap));
+        var targetIds = targets ?? [];
+        foreach (var target in targetIds) {
+            if (string.IsNullOrWhiteSpace(target))
+                throw new ArgumentException(
+                    $"Contract '{surface.Name}' declares a blank host target.", nameof(targets));
+        }
+        if (targetIds.Distinct(StringComparer.Ordinal).Count() != targetIds.Count)
+            throw new ArgumentException(
+                $"Contract '{surface.Name}' declares a host target more than once.", nameof(targets));
+
+        _contracts.Add(new ContractContribution(_registeringLibraryId, surface, bodyMap) {
+            Targets = [.. targetIds],
+        });
         return this;
     }
 

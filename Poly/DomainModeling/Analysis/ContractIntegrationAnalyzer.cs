@@ -210,6 +210,8 @@ internal sealed class ContractIntegrationAnalyzer : INodeAnalyzer {
                 DomainModelDiagnosticCodes.ContractIntegration);
         }
 
+        ValidatePlatformTarget(context, domain, contract);
+
         foreach (var endpoint in contract.Endpoints) {
             if (!PayloadTypeExists(domain, contract, endpoint.PayloadType.TypeName)) {
                 context.ReportError(
@@ -218,6 +220,42 @@ internal sealed class ContractIntegrationAnalyzer : INodeAnalyzer {
                     DomainModelDiagnosticCodes.ContractIntegration);
             }
         }
+    }
+
+    /// <summary>
+    /// A seeded contract whose package declares host targets must match the host target named
+    /// on the session (spike #413 decision 3, #424). The target is a host fact: <c>uses posix</c>
+    /// names the package, never the OS it runs on. An absent host target is a refusal too, not a
+    /// skip: a platform package cannot be proven sound on an unnamed target. Read only for a
+    /// domain that has a seeded contract, so a standalone pass over a contract-free tree never
+    /// reaches the session fallback.
+    /// </summary>
+    private static void ValidatePlatformTarget(
+        AnalysisContext context, Domain domain, ImportedContract contract) {
+        if (contract.UsesId is null)
+            return;
+
+        var session = RuntimeAnalysisCache.Session(domain);
+        var targets = session.FindContractContribution(contract.UsesId)?.Targets;
+        if (targets is not { Count: > 0 })
+            return;
+
+        var declared = string.Join(", ", targets.Select(target => $"'{target}'"));
+        if (session.Target is null) {
+            context.ReportError(
+                contract,
+                $"Contract '{contract.Name}' comes from library '{contract.UsesId}', which is for host target {declared}, but the host named no target. Pass the host target for this compile; 'uses {contract.UsesId}' does not choose it.",
+                DomainModelDiagnosticCodes.PlatformTargetMismatch);
+            return;
+        }
+
+        if (targets.Contains(session.Target, StringComparer.Ordinal))
+            return;
+
+        context.ReportError(
+            contract,
+            $"Contract '{contract.Name}' comes from library '{contract.UsesId}', which is for host target {declared}; the host target is '{session.Target}'. Load the package for this target, or pass the matching target; 'uses {contract.UsesId}' does not choose it.",
+            DomainModelDiagnosticCodes.PlatformTargetMismatch);
     }
 
     private static void ValidateBinding(AnalysisContext context, Domain domain, ContractBinding binding) {

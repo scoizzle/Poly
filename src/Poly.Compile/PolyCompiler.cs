@@ -61,21 +61,29 @@ public sealed class PolyCompiler {
         _hooks = hooks;
     }
 
-    /// <summary>Compiles <paramref name="text"/>. Writes nothing; <see cref="CompileResult.Files"/> is in memory.</summary>
-    public CompileResult Compile(string text, string file = "<input>", CancellationToken cancel = default) {
+    /// <summary>
+    /// Compiles <paramref name="text"/>. Writes nothing; <see cref="CompileResult.Files"/> is in memory.
+    /// </summary>
+    /// <param name="target">
+    /// The host target (<c>posix</c>, <c>windows</c>), or null when the host names none. It is a
+    /// host fact: never read from the document's <c>uses</c> line.
+    /// </param>
+    public CompileResult Compile(
+        string text, string file = "<input>", string? target = null, CancellationToken cancel = default) {
         ArgumentNullException.ThrowIfNull(text);
         lock (_gate)
-            return CompileCore(text, file, cancel, produce: true);
+            return CompileCore(text, file, target, cancel, produce: true);
     }
 
     /// <summary>
     /// Header → Load → Parse → Evolve → Analyze, without Lower or Produce. For a host that keeps
     /// the analyzed domain (a workspace) and produces later through <see cref="Produce"/>.
     /// </summary>
-    public CompileResult Analyze(string text, string file = "<input>", CancellationToken cancel = default) {
+    public CompileResult Analyze(
+        string text, string file = "<input>", string? target = null, CancellationToken cancel = default) {
         ArgumentNullException.ThrowIfNull(text);
         lock (_gate)
-            return CompileCore(text, file, cancel, produce: false);
+            return CompileCore(text, file, target, cancel, produce: false);
     }
 
     /// <summary>
@@ -93,7 +101,8 @@ public sealed class PolyCompiler {
         return new CompileResult(file, domain.Name, diags, files, domain, analysis, session, session.ArtifactCatalog);
     }
 
-    private CompileResult CompileCore(string text, string file, CancellationToken cancel, bool produce) {
+    private CompileResult CompileCore(
+        string text, string file, string? target, CancellationToken cancel, bool produce) {
         var build = new DiagnosticBuilder(file, text);
         var diags = new List<CompileDiagnostic>();
         string? domainName = null;
@@ -128,7 +137,7 @@ public sealed class PolyCompiler {
         DomainSession session;
         List<DomainChange> changes;
         try {
-            session = SessionFor(tree, sessionIds);
+            session = SessionFor(tree, sessionIds, target);
             cancel.ThrowIfCancellationRequested();
             changes = DomainCompilation.WithSeed(DomainCompilation.Resolve(tree, session), _seed, session).ToList();
             if (_hooks?.DomainExtensions is { } rewrite)
@@ -244,8 +253,8 @@ public sealed class PolyCompiler {
         return refusal is null && !diags.Any(d => d.IsError) ? files : [];
     }
 
-    private DomainSession SessionFor(DslSyntaxTree tree, IReadOnlyList<string> ids) {
-        var key = string.Join('\n', ids);
+    private DomainSession SessionFor(DslSyntaxTree tree, IReadOnlyList<string> ids, string? target) {
+        var key = string.Join('\n', ids) + "\ntarget:" + (target ?? "");
         if (_session is not null && _sessionKey == key)
             return _session;
         // A session-extension hook may rewrite the ids. Keep an authored pin only where the
@@ -257,7 +266,7 @@ public sealed class PolyCompiler {
                 ? tree.UsesVersions[index]
                 : null).ToList();
         var session = DomainSession.ForAuthoringDocument(
-            tree with { Uses = ids, UsesVersions = versions }, _seed, _catalog);
+            tree with { Uses = ids, UsesVersions = versions }, _seed, _catalog).WithTarget(target);
         _session = session;
         _sessionKey = key;
         return session;

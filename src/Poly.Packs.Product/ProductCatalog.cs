@@ -1,5 +1,6 @@
 using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Libraries.Http;
+using Poly.DomainModeling.Libraries.Platform;
 using Poly.DomainModeling.Libraries.Storage;
 using Poly.DomainModeling.Libraries.Temporal;
 using Poly.Packs.Sqlite;
@@ -35,5 +36,6 @@ public static class ProductCatalog {
         .With(new PersistenceEmitLibrary(wired ? new DbContextArtifactContributor() : null))
         .With(new SqliteLibrary(wired ? new DbContextArtifactContributor() : null))
         .With(new SqlServerLibrary(wired ? new DbContextArtifactContributor() : null))
-        .With(new HttpLibrary(wired ? new MinimalApiHostArtifactContributor(vendor: hostVendor) : null));
+        .With(new HttpLibrary(wired ? new MinimalApiHostArtifactContributor(vendor: hostVendor) : null))
+        .With(new PosixLibrary());
 }

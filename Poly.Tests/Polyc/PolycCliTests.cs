@@ -167,6 +167,26 @@ public class PolycCliTests {
     }
 
     [Test]
+    public async Task Check_TargetFlag_ForwardsTheHostFact() {
+        var dir = PolycTestSupport.TempDir();
+        var path = Write(dir, "posix.poly", "domain Shop\nuses posix\n\nOrder: entity { Total: Number }\n");
+
+        var windows = Run(["check", path, "--target", "windows"]);
+        await Assert.That(windows.Exit).IsEqualTo(1);
+        await Assert.That(windows.Out).Contains("DMCON004");
+        await Assert.That(windows.Out).Contains("windows");
+
+        var posix = Run(["check", path, "--target", "posix"]);
+        await Assert.That(posix.Exit).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task Target_NeedsANonBlankValue() {
+        await Assert.That(Run(["check", "--target"]).Err).Contains("--target needs a value");
+        await Assert.That(Run(["check", "--target", " "]).Err).Contains("--target needs a value");
+    }
+
+    [Test]
     public async Task Check_UnknownUses_ReportsDsl0002() {
         var dir = PolycTestSupport.TempDir();
         var path = Write(dir, "x.poly", "domain D\nuses nope\nA: entity {\n  X: Text\n}\n");

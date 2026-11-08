@@ -43,19 +43,19 @@ public class MemberVisibilityTests {
 
         var first = Apply(poly);
         var order = EntityOf(first, "Order");
-        await Assert.That(order.Public).IsFalse();
-        await Assert.That(first.Types.OfType<ValueType>().Single().Public).IsFalse();
-        await Assert.That(order.Actions.Single().Public).IsFalse();
-        await Assert.That(order.Stages.Single().Actions.Single().Public).IsFalse();
+        await Assert.That(order.Visibility).IsEqualTo(Visibility.Internal);
+        await Assert.That(first.Types.OfType<ValueType>().Single().Visibility).IsEqualTo(Visibility.Internal);
+        await Assert.That(order.Actions.Single().Visibility).IsEqualTo(Visibility.Internal);
+        await Assert.That(order.Stages.Single().Actions.Single().Visibility).IsEqualTo(Visibility.Internal);
 
         var printed = new DomainDslPrinter().Print(first);
         await Assert.That(printed.Contains(" public", StringComparison.Ordinal)).IsFalse();
 
         var second = Apply(printed);
-        await Assert.That(EntityOf(second, "Order").Public).IsFalse();
-        await Assert.That(second.Types.OfType<ValueType>().Single().Public).IsFalse();
-        await Assert.That(EntityOf(second, "Order").Actions.Single().Public).IsFalse();
-        await Assert.That(EntityOf(second, "Order").Stages.Single().Actions.Single().Public).IsFalse();
+        await Assert.That(EntityOf(second, "Order").Visibility).IsEqualTo(Visibility.Internal);
+        await Assert.That(second.Types.OfType<ValueType>().Single().Visibility).IsEqualTo(Visibility.Internal);
+        await Assert.That(EntityOf(second, "Order").Actions.Single().Visibility).IsEqualTo(Visibility.Internal);
+        await Assert.That(EntityOf(second, "Order").Stages.Single().Actions.Single().Visibility).IsEqualTo(Visibility.Internal);
     }
 
     [Test]
@@ -76,9 +76,9 @@ public class MemberVisibilityTests {
 
         var first = Apply(poly);
         var order = EntityOf(first, "Order");
-        await Assert.That(order.Public).IsTrue();
-        await Assert.That(first.Types.OfType<ValueType>().Single().Public).IsTrue();
-        await Assert.That(order.Actions.Single().Public).IsTrue();
+        await Assert.That(order.Visibility).IsEqualTo(Visibility.Public);
+        await Assert.That(first.Types.OfType<ValueType>().Single().Visibility).IsEqualTo(Visibility.Public);
+        await Assert.That(order.Actions.Single().Visibility).IsEqualTo(Visibility.Public);
 
         var printed = new DomainDslPrinter().Print(first);
         await Assert.That(printed.Contains("Order: entity public {", StringComparison.Ordinal)).IsTrue();
@@ -86,9 +86,9 @@ public class MemberVisibilityTests {
         await Assert.That(printed.Contains("Pay: action (bill: Money) public {", StringComparison.Ordinal)).IsTrue();
 
         var second = Apply(printed);
-        await Assert.That(EntityOf(second, "Order").Public).IsTrue();
-        await Assert.That(second.Types.OfType<ValueType>().Single().Public).IsTrue();
-        await Assert.That(EntityOf(second, "Order").Actions.Single().Public).IsTrue();
+        await Assert.That(EntityOf(second, "Order").Visibility).IsEqualTo(Visibility.Public);
+        await Assert.That(second.Types.OfType<ValueType>().Single().Visibility).IsEqualTo(Visibility.Public);
+        await Assert.That(EntityOf(second, "Order").Actions.Single().Visibility).IsEqualTo(Visibility.Public);
         await Assert.That(new DomainDslPrinter().Print(second)).IsEqualTo(printed);
     }
 
@@ -103,7 +103,7 @@ public class MemberVisibilityTests {
             ]),
             [new Property("bill", new DomainTypeReference("Money"), [])],
             [],
-            []) { Public = true };
+            []) { Visibility = Visibility.Public };
         var domain = new Domain("Test", [new Entity("Order", [], [pay], [], [])]);
         var printed = new DomainDslPrinter().Print(domain);
         await Assert.That(printed.Contains("Pay: action (bill: Money) -> Order public", StringComparison.Ordinal)).IsTrue();
@@ -127,11 +127,11 @@ public class MemberVisibilityTests {
             """;
 
         var first = Apply(poly);
-        await Assert.That(EntityOf(first, "Customer").Actions.Single().Public).IsTrue();
+        await Assert.That(EntityOf(first, "Customer").Actions.Single().Visibility).IsEqualTo(Visibility.Public);
         var printed = new DomainDslPrinter().Print(first);
         await Assert.That(printed.Contains("Place: action -> Order public", StringComparison.Ordinal)).IsTrue();
         var second = Apply(printed);
-        await Assert.That(EntityOf(second, "Customer").Actions.Single().Public).IsTrue();
+        await Assert.That(EntityOf(second, "Customer").Actions.Single().Visibility).IsEqualTo(Visibility.Public);
         await Assert.That(new DomainDslPrinter().Print(second)).IsEqualTo(printed);
     }
 
@@ -152,8 +152,8 @@ public class MemberVisibilityTests {
             """;
 
         var order = EntityOf(Apply(poly), "Order");
-        await Assert.That(order.Actions.Single().Public).IsTrue();
-        await Assert.That(order.Stages.Single().Actions.Single().Public).IsTrue();
+        await Assert.That(order.Actions.Single().Visibility).IsEqualTo(Visibility.Public);
+        await Assert.That(order.Stages.Single().Actions.Single().Visibility).IsEqualTo(Visibility.Public);
     }
 
     [Test]
@@ -171,8 +171,8 @@ public class MemberVisibilityTests {
             """;
 
         var order = EntityOf(Apply(poly), "Order");
-        await Assert.That(order.Actions.Single(a => a.Name == "Hidden").Public).IsFalse();
-        await Assert.That(order.Actions.Single(a => a.Name == "Shown").Public).IsTrue();
+        await Assert.That(order.Actions.Single(a => a.Name == "Hidden").Visibility).IsEqualTo(Visibility.Internal);
+        await Assert.That(order.Actions.Single(a => a.Name == "Shown").Visibility).IsEqualTo(Visibility.Public);
     }
 
     [Test]
@@ -193,13 +193,13 @@ public class MemberVisibilityTests {
 
         var first = Apply(poly);
         var stage = EntityOf(first, "Order").Stages.Single();
-        await Assert.That(stage.Actions.Single(a => a.Name == "Close").Public).IsTrue();
-        await Assert.That(stage.Actions.Single(a => a.Name == "Keep").Public).IsFalse();
+        await Assert.That(stage.Actions.Single(a => a.Name == "Close").Visibility).IsEqualTo(Visibility.Public);
+        await Assert.That(stage.Actions.Single(a => a.Name == "Keep").Visibility).IsEqualTo(Visibility.Internal);
 
         var second = Apply(new DomainDslPrinter().Print(first));
         var stage2 = EntityOf(second, "Order").Stages.Single();
-        await Assert.That(stage2.Actions.Single(a => a.Name == "Close").Public).IsTrue();
-        await Assert.That(stage2.Actions.Single(a => a.Name == "Keep").Public).IsFalse();
+        await Assert.That(stage2.Actions.Single(a => a.Name == "Close").Visibility).IsEqualTo(Visibility.Public);
+        await Assert.That(stage2.Actions.Single(a => a.Name == "Keep").Visibility).IsEqualTo(Visibility.Internal);
     }
 
     [Test]
@@ -214,13 +214,13 @@ public class MemberVisibilityTests {
 
         var session = ExtensionCatalog.Core.Authoring;
         var domain = Apply(poly, session);
-        await Assert.That(EntityOf(domain, "Item").Public).IsTrue();
+        await Assert.That(EntityOf(domain, "Item").Visibility).IsEqualTo(Visibility.Public);
 
         var printed = new DomainDslPrinter(ExtensionCatalog.Core.Authoring.Annotations).Print(domain);
         await Assert.That(printed.Contains("Item: entity public table(\"INVENTORY\") {", StringComparison.Ordinal)).IsTrue();
 
         var again = Apply(printed, session);
-        await Assert.That(EntityOf(again, "Item").Public).IsTrue();
+        await Assert.That(EntityOf(again, "Item").Visibility).IsEqualTo(Visibility.Public);
     }
 
     [Test]
@@ -236,7 +236,7 @@ public class MemberVisibilityTests {
             """;
 
         var action = EntityOf(Apply(poly), "Order").Actions.Single();
-        await Assert.That(action.Public).IsFalse();
+        await Assert.That(action.Visibility).IsEqualTo(Visibility.Internal);
         await Assert.That(action.Parameters.Single().Name).IsEqualTo("public");
     }
 
@@ -251,7 +251,7 @@ public class MemberVisibilityTests {
             """;
 
         var order = EntityOf(Apply(poly), "Order");
-        await Assert.That(order.Public).IsFalse();
+        await Assert.That(order.Visibility).IsEqualTo(Visibility.Internal);
         await Assert.That(order.Properties.Single().Name).IsEqualTo("public");
     }
 
@@ -265,8 +265,8 @@ public class MemberVisibilityTests {
             """;
 
         var domain = Apply(poly);
-        await Assert.That(domain.Types.OfType<Entity>().Any(e => e.Public)).IsFalse();
-        await Assert.That(domain.Types.OfType<ValueType>().Any(v => v.Public)).IsFalse();
+        await Assert.That(domain.Types.OfType<Entity>().Any(e => e.Visibility == Visibility.Public)).IsFalse();
+        await Assert.That(domain.Types.OfType<ValueType>().Any(v => v.Visibility == Visibility.Public)).IsFalse();
 
         var printed = new DomainDslPrinter().Print(domain);
         await Assert.That(printed.Contains("contract internal", StringComparison.Ordinal)).IsTrue();
@@ -290,8 +290,8 @@ public class MemberVisibilityTests {
             """;
 
         var domain = Apply(poly);
-        await Assert.That(EntityOf(domain, "Order").Actions.Single().Public).IsTrue();
-        await Assert.That(domain.Types.OfType<ValueType>().Single().Public).IsFalse();
+        await Assert.That(EntityOf(domain, "Order").Actions.Single().Visibility).IsEqualTo(Visibility.Public);
+        await Assert.That(domain.Types.OfType<ValueType>().Single().Visibility).IsEqualTo(Visibility.Internal);
     }
 
     [Test]

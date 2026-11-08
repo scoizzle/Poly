@@ -300,7 +300,7 @@ never dropped by export.
 entity-name ":" "entity" ["public"] annotation* "{" property* stage* action* policy* "}"
 ```
 
-`public` is optional and omitted by default. It is stored and printed; export filtering is a later slice (`Order: entity public { … }`). The printer puts `public` before annotations. A property may still be named `public`.
+`public` is optional and omitted by default. It is stored as `Visibility.Public` (default `Visibility.Internal`) and printed; export filtering is a later slice (`Order: entity public { … }`). The printer puts `public` before annotations. A property may still be named `public`.
 
 | Constraint | Syntax | Example |
 |-----------|--------|---------|

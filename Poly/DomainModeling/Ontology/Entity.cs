@@ -26,9 +26,9 @@ public sealed record Entity(
     public IReadOnlyList<StageSubscription> Subscriptions { get; init; } = [];
 
     /// <summary>
-    /// True when the entity is marked <c>public</c> for the exported contract. Internal by default.
+    /// Export visibility. <see cref="Visibility.Internal"/> unless marked <c>public</c>.
     /// </summary>
-    public bool Public { get; init; }
+    public Visibility Visibility { get; init; } = Visibility.Internal;
 
     /// <summary>
     /// The navigation properties declared on this entity. A relationship is a

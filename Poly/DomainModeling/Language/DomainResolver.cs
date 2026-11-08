@@ -182,21 +182,21 @@ public sealed class DomainResolver : DslCursor {
 
         // ── Entity header facets (pack-registered annotations) and the bare `public` mark ──
         var termKeywords = new HashSet<string>(StringComparer.Ordinal);
-        var isPublic = false;
+        var visibility = Visibility.Internal;
         while (true) {
             if (TryParseRegisteredAnnotation(out var headerFacet)) {
                 ValidateTermFacet(headerFacet, termKeywords, $"entity '{entityName}'", allowTerm: false);
                 changes.Add(new AddFacetToDomainTypeChange(entityName, headerFacet));
                 continue;
             }
-            if (!isPublic && TryConsumePublicMark()) {
-                isPublic = true;
+            if (visibility == Visibility.Internal && TryConsumePublicMark()) {
+                visibility = Visibility.Public;
                 continue;
             }
             break;
         }
-        if (isPublic)
-            changes[addEntityIndex] = new AddEntityChange(entityName, [], Public: true);
+        if (visibility == Visibility.Public)
+            changes[addEntityIndex] = new AddEntityChange(entityName, [], Visibility.Public);
         if (LooksLikeAnnotationCall()) {
             throw Error(
                 $"Unknown or unregistered annotation '{Current.Text}'. " +
@@ -632,7 +632,7 @@ public sealed class DomainResolver : DslCursor {
             ]);
         }
 
-        var isPublic = TryConsumePublicMark();
+        var visibility = TryConsumePublicMark() ? Visibility.Public : Visibility.Internal;
 
         // Stage gates and require policies (collected — resolved after entity body)
         while (Current.Kind == TokenKind.When || Current.Kind == TokenKind.Require) {
@@ -659,10 +659,10 @@ public sealed class DomainResolver : DslCursor {
         // Create the action BEFORE parameters or effects
         // (AddParameterToActionChange references the action by name, so it must exist first)
         if (stageName is not null) {
-            changes.Add(new AddActionToStageChange(_currentEntityName, stageName, actionName, isPublic));
+            changes.Add(new AddActionToStageChange(_currentEntityName, stageName, actionName, visibility));
         }
         else {
-            changes.Add(new AddActionChange(_currentEntityName, actionName, isPublic));
+            changes.Add(new AddActionChange(_currentEntityName, actionName, visibility));
         }
 
         if (paramList is not null) {
@@ -1168,10 +1168,10 @@ public sealed class DomainResolver : DslCursor {
         var name = ExpectIdentifier(TokenKind.Identifier, "value type name");
         Expect(TokenKind.Colon);
         ExpectWord("value");
-        var isPublic = TryConsumePublicMark();
+        var visibility = TryConsumePublicMark() ? Visibility.Public : Visibility.Internal;
         var properties = ParseValueTypeProperties();
         _valueTypeNames.Add(name);
-        changes.Add(new AddValueTypeChange(name, properties, isPublic));
+        changes.Add(new AddValueTypeChange(name, properties, visibility));
     }
 
     private IReadOnlyList<Property> ParseValueTypeProperties() {

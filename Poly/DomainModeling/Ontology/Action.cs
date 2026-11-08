@@ -15,9 +15,9 @@ public sealed record Action(
     IReadOnlyList<Policy> Policies
 ) : DomainMember(Name) {
     /// <summary>
-    /// True when the action is marked <c>public</c> for the exported contract. Internal by default.
+    /// Export visibility. <see cref="Visibility.Internal"/> unless marked <c>public</c>.
     /// </summary>
-    public bool Public { get; init; }
+    public Visibility Visibility { get; init; } = Visibility.Internal;
 
     public sealed override IEnumerable<Node?> Children => [.. Parameters, Result, .. Policies, .. Effects];
 }

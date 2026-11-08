@@ -160,7 +160,7 @@ public sealed class DomainDslPrinter {
     }
 
     private void PrintValueType(ValueType valueType) {
-        _sb.AppendLine($"{valueType.Name}: value{(valueType.Public ? " public" : "")} {{");
+        _sb.AppendLine($"{valueType.Name}: value{(valueType.Visibility == Visibility.Public ? " public" : "")} {{");
         foreach (var prop in valueType.Properties) {
             _sb.Append("  ");
             _sb.Append(prop.Name);
@@ -232,7 +232,7 @@ public sealed class DomainDslPrinter {
         _sb.Append(entity.Name);
         _sb.Append(": entity");
 
-        if (entity.Public)
+        if (entity.Visibility == Visibility.Public)
             _sb.Append(" public");
 
         foreach (var facet in entity.Facets) {
@@ -370,7 +370,7 @@ public sealed class DomainDslPrinter {
             _sb.Append(action.Result.Members[0].Type.TypeName);
         }
 
-        if (action.Public)
+        if (action.Visibility == Visibility.Public)
             _sb.Append(" public");
 
         // Print require gates: positive + negated (skip internal when_* policies)

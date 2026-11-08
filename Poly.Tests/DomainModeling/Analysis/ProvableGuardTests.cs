@@ -173,6 +173,21 @@ public class ProvableGuardTests {
     }
 
     [Test]
+    public async Task StageRequireNot_Lowers_ToCompilableCSharp() {
+        var (_, domain, analysis) = Run(Doc("""
+            Open: stage {
+              require not HasNote
+              Copy: action { assign Memo to "x" }
+            }
+            """));
+        await Assert.That(analysis.HasErrors).IsFalse();
+        var cs = new Poly.Interpretation.CSharp.CSharpGenerator().Generate(
+            Poly.DomainModeling.Lowering.DomainProgramProjection.ToSyntax(domain, analysis));
+        await Assert.That(cs).DoesNotContain("not_HasNote");
+        Poly.Tests.TestHelpers.ExportedCSharp.CompileAndLoad(cs);
+    }
+
+    [Test]
     public async Task TransitionOut_DropsStageFacts_IsDMEFF014() {
         var (session, domain, analysis) = Run(Doc("""
             Draft: stage {

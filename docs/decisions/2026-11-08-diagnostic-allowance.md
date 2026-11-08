@@ -65,7 +65,7 @@ solver is added.
 
 - Guards: a dominating `if` presence check; an action `require` that proves presence; an entry
   policy on every transition into a non-initial stage (and no action in the stage can re-null the
-  source); a stage `require` of an entity policy, which is an invariant (`DMEFF015` on an assign
+  source); a stage `require` of an entity policy (written in the stage header, `Name: stage require P {`, like an action's), which is an invariant (`DMEFF015` on an assign
   that can null what the stage proves present). Entry, exit and subscription bodies are never
   cleared.
 - In-tree `DMEFF014` is reported on the assign. An observed flow has no action and no stage, so no

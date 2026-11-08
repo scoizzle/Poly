@@ -134,8 +134,7 @@ public class ProvableGuardTests {
     [Test]
     public async Task StageRequire_ClearsDMEFF014() {
         const string stage = """
-            Open: stage {
-              require HasNote
+            Open: stage require HasNote {
               Copy: action { assign Memo to Note }
             }
             """;
@@ -159,8 +158,7 @@ public class ProvableGuardTests {
     [Test]
     public async Task StageRequireNot_RoundTrips() {
         var (_, domain, analysis) = Run(Doc("""
-            Open: stage {
-              require not HasNote
+            Open: stage require not HasNote {
               Copy: action { assign Memo to "x" }
             }
             """));
@@ -175,8 +173,7 @@ public class ProvableGuardTests {
     [Test]
     public async Task StageRequireNot_Lowers_ToCompilableCSharp() {
         var (_, domain, analysis) = Run(Doc("""
-            Open: stage {
-              require not HasNote
+            Open: stage require not HasNote {
               Copy: action { assign Memo to "x" }
             }
             """));
@@ -194,8 +191,7 @@ public class ProvableGuardTests {
             Draft: stage {
               Start: action require HasNote { transition to Open }
             }
-            Open: stage {
-              require HasMemo
+            Open: stage require HasMemo {
               Wipe: action { assign Note to null }
               Copy: action { assign Memo to Note }
             }
@@ -249,9 +245,7 @@ public class ProvableGuardTests {
               Memo: Text optional
               HasNote: policy { Note is not null }
               HasMemo: policy { Memo is not null }
-              Open: stage {
-                require HasNote
-                require HasMemo
+              Open: stage require HasNote require HasMemo {
                 Copy: action { assign Note to Memo }
                 Refresh: action { assign Note to Note }
               }
@@ -277,14 +271,12 @@ public class ProvableGuardTests {
     [Test]
     public async Task StageRequire_SuppressedByRequireNot_IsDMEFF014() {
         await AssertCopyFinding("""
-            Open: stage {
-              require HasNote
+            Open: stage require HasNote {
               Copy: action require not HasNote { assign Memo to Note }
             }
             """);
         await AssertCopyFinding("""
-            Open: stage {
-              require HasNote
+            Open: stage require HasNote {
             }
             Copy: action require not HasNote { assign Memo to Note }
             """);
@@ -302,23 +294,56 @@ public class ProvableGuardTests {
     }
 
     [Test]
-    public async Task StageRequire_UnknownPolicy_IsPositionedError() {
+    public async Task StageRequire_HeaderForms_RoundTrip() {
+        var (_, domain, _) = Run(Doc("""
+            HasMemo: policy { Memo is not null }
+            IsBlocked: policy { Other is not null }
+            Open: stage require HasNote, HasMemo
+              require HasMemo
+              require not IsBlocked {
+              Copy: action { assign Memo to Note }
+            }
+            """));
+        var open = domain.Types.OfType<Entity>().Single().Stages.Single();
+        await Assert.That(open.Policies.Select(p => p.Name).Count(n => n == "HasNote")).IsEqualTo(1);
+        await Assert.That(open.Policies.Count).IsGreaterThanOrEqualTo(3);
+
+        var printed = new DomainDslPrinter().Print(domain);
+        await Assert.That(printed).Contains("Open: stage\n    require HasNote, HasMemo".Replace("\n", Environment.NewLine));
+        await Assert.That(printed).Contains("require not IsBlocked {");
+        await Assert.That(printed).DoesNotContain("stage {" + Environment.NewLine + "    require");
+        var reparsed = Run(printed).Domain;
+        await Assert.That(new DomainDslPrinter().Print(reparsed)).IsEqualTo(printed);
+    }
+
+    [Test]
+    public async Task InBodyStageRequire_IsPositionedError() {
         var ex = Assert.Throws<FormatException>(() => Run(Doc("""
             Open: stage {
-              require Nope
+              require HasNote
+              Copy: action { assign Memo to Note }
+            }
+            """)));
+        await Assert.That(ex.Message).Contains("'require' must appear before the stage's '{'");
+        await Assert.That(ex.Message).Contains("(line 8, col 3)");
+    }
+
+    [Test]
+    public async Task StageRequire_UnknownPolicy_IsPositionedError() {
+        var ex = Assert.Throws<FormatException>(() => Run(Doc("""
+            Open: stage require Nope {
             }
             """)));
         await Assert.That(ex.Message).Contains("Open");
         await Assert.That(ex.Message).Contains("Nope");
         await Assert.That(ex.Message).Contains("not defined");
-        await Assert.That(ex.Message).Contains("(line 8, col 3)");
+        await Assert.That(ex.Message).Contains("(line 7, col 13)");
     }
 
     [Test]
     public async Task StagePolicy_OnEntryCopy_StaysDMEFF014() {
         await AssertCopyFinding("""
-            Open: stage {
-              require HasNote
+            Open: stage require HasNote {
               entry { assign Memo to Note }
             }
             """);
@@ -327,8 +352,7 @@ public class ProvableGuardTests {
     [Test]
     public async Task StagePolicy_InStageNullAssign_IsDMEFF015() {
         var (session, domain, analysis) = Run(Doc("""
-            Open: stage {
-              require HasNote
+            Open: stage require HasNote {
               Copy: action { assign Memo to Note }
               Clear: action { assign Note to null }
             }
@@ -344,8 +368,7 @@ public class ProvableGuardTests {
     [Test]
     public async Task GuardedAssign_IsNotARennull() {
         var (_, _, analysis) = Run(Doc("""
-            Open: stage {
-              require HasNote
+            Open: stage require HasNote {
               Copy: action { assign Memo to Note }
               Refill: action { if (Other is not null) { assign Note to Other } }
               Fill: action { assign Note to "text" }
@@ -355,8 +378,7 @@ public class ProvableGuardTests {
         await Assert.That(Of(analysis, "DMEFF015").Count()).IsEqualTo(0);
 
         var (_, _, bad) = Run(Doc("""
-            Open: stage {
-              require HasNote
+            Open: stage require HasNote {
               Refill: action { assign Note to Other }
             }
             """));
@@ -392,7 +414,7 @@ public class ProvableGuardTests {
         await Assert.That(Of(analysis, "DMEFF014").Count()).IsEqualTo(1);
         await Assert.That(Of(analysis, "DMEFF015").Count()).IsEqualTo(0);
 
-        var withRequire = wipe.Replace("Open: stage {", "Open: stage {\n  require HasNote");
+        var withRequire = wipe.Replace("Open: stage {", "Open: stage require HasNote {");
         var (_, _, required) = Run(Doc(withRequire));
         await Assert.That(Of(required, "DMEFF015").Count()).IsEqualTo(1);
         await Assert.That(Of(required, "DMEFF014").Count()).IsEqualTo(0);
@@ -442,18 +464,16 @@ public class ProvableGuardTests {
     [Test]
     public async Task EntityLevelCopy_ClearedOnlyWhenEveryStageProvesPresence() {
         const string stages = """
-            Draft: stage {
-              %A%
+            Draft: stage %A%{
             }
-            Open: stage {
-              %B%
+            Open: stage %B%{
             }
             Copy: action { assign Memo to Note }
             """;
-        var (_, _, one) = Run(Doc(stages.Replace("%A%", "require HasNote").Replace("%B%", "")));
+        var (_, _, one) = Run(Doc(stages.Replace("%A%", "require HasNote ").Replace("%B%", "")));
         await Assert.That(Of(one, "DMEFF014").Count()).IsEqualTo(1);
 
-        var (_, _, both) = Run(Doc(stages.Replace("%A%", "require HasNote").Replace("%B%", "require HasNote")));
+        var (_, _, both) = Run(Doc(stages.Replace("%A%", "require HasNote ").Replace("%B%", "require HasNote ")));
         await Assert.That(Of(both, "DMEFF014").Count()).IsEqualTo(0);
     }
 

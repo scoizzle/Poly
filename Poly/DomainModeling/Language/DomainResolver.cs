@@ -570,6 +570,19 @@ public sealed class DomainResolver : DslCursor {
         }
         if (!stages.Add(name))
             throw Error($"Duplicate stage name '{name}' on entity '{_currentEntityName}'.");
+
+        // Stage require clauses sit before '{', like an action's (resolved after the entity body).
+        while (Current.Kind == TokenKind.Require) {
+            var requireToken = Current;
+            Advance(); // consume 'require'
+            var negated = false;
+            if (Current.Kind == TokenKind.Not) {
+                negated = true;
+                Advance();
+            }
+            foreach (var policy in ParseIdentifierList())
+                _pendingStageRequires.Add(new PendingStageRequire(name, policy, negated, requireToken));
+        }
         Expect(TokenKind.LBrace);
 
         // P2.4: Parse entry/exit effect blocks before actions and subscriptions
@@ -611,19 +624,6 @@ public sealed class DomainResolver : DslCursor {
                         ParseSubscription(name, changes);
                         continue;
 
-                    case "require": {
-                            var requireToken = Current;
-                            Advance(); // consume 'require'
-                            var negated = false;
-                            if (Current.Kind == TokenKind.Not) {
-                                negated = true;
-                                Advance();
-                            }
-                            foreach (var policy in ParseIdentifierList())
-                                _pendingStageRequires.Add(new PendingStageRequire(name, policy, negated, requireToken));
-                            continue;
-                        }
-
                     case "marked-stage-action":
                         Expect(TokenKind.Public);
                         Expect(TokenKind.Action);
@@ -634,6 +634,8 @@ public sealed class DomainResolver : DslCursor {
             }
 
             // Stage-local action (or unmodeled token — fail closed).
+            if (Current.Kind == TokenKind.Require)
+                throw Error("'require' must appear before the stage's '{', as in 'Name: stage require Policy {'.");
             if ((Current.Kind == TokenKind.Entry || Current.Kind == TokenKind.Exit) && Current.Kind != TokenKind.Identifier) {
                 throw Error($"'{Current.Text}' must appear at the beginning of the stage block, before actions and subscriptions.");
             }

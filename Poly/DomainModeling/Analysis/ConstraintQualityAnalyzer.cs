@@ -96,14 +96,21 @@ internal sealed class ConstraintQualityAnalyzer : INodeAnalyzer {
             if (group.Count() < 2) continue;
             Constraint? net = null;
             foreach (var c in group) {
-                net = net is null ? c : net.Merge(c);
                 if (net is null) {
+                    net = c;
+                    continue;
+                }
+                var merge = net.MergeResult(c);
+                if (merge.IsEmpty) {
                     context.ReportError(
                         property,
                         $"Property '{property.Name}' has contradictory {ConstraintValidation.Describe(group.First())} constraints — unsatisfiable.",
                         DomainModelDiagnosticCodes.ConstraintSatisfiability);
                     break;
                 }
+                if (!merge.IsNet)
+                    break; // cannot decide; never read it as empty
+                net = merge.Net;
             }
         }
 

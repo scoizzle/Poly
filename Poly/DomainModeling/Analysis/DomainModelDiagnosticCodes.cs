@@ -61,6 +61,14 @@ internal static class DomainModelDiagnosticCodes {
     /// </summary>
     public const string PublicMemberOnInternalOwner = "DMCON003";
 
+    /// <summary>
+    /// A <c>uses</c> id loaded a package that declares host targets, and the host target is
+    /// absent or not among them (spike #413 decisions 3 and 7, #424). The target is a host fact:
+    /// <c>uses posix</c> imports the package and never chooses the OS. The fix is to pass the
+    /// host target (or load the package for it), not to change the <c>uses</c> line.
+    /// </summary>
+    public const string PlatformTargetMismatch = "DMCON004";
+
     // Stage-subscription diagnostics (replaced retired DMEV* event codes)
     public const string SubscriptionCausalityCycle = "DMSS001";
     public const string SubscriptionIdempotencyReplay = "DMSS002";

@@ -46,6 +46,14 @@ public sealed class DomainSession {
     /// </summary>
     public IReadOnlyList<ContractContribution> ContractContributions { get; }
 
+    /// <summary>
+    /// The host target this compilation is for (<c>posix</c>, <c>windows</c>), or <c>null</c>
+    /// when the host named none. A host fact (spike #413 decision 3): not a <c>uses</c> id,
+    /// not a <see cref="Domain"/> fact, and never implied by the ids the source lists.
+    /// Analysis compares it with each target-declaring contract contribution.
+    /// </summary>
+    public string? Target { get; }
+
     public IReadOnlyList<IArtifactContributor> Artifacts { get; }
 
     internal IReadOnlyList<INodeAnalyzer> Analyzers { get; }
@@ -143,7 +151,8 @@ public sealed class DomainSession {
         IReadOnlyList<IConstraintCompiler>? constraintCompilers = null,
         IReadOnlyList<ObservedFlow>? observedFlows = null,
         IReadOnlyList<DiagnosticAllowance>? diagnosticAllowances = null,
-        IReadOnlyList<ContractContribution>? contractContributions = null) {
+        IReadOnlyList<ContractContribution>? contractContributions = null,
+        string? target = null) {
         Domain = domain;
         Extensions = extensions;
         Language = language;
@@ -161,7 +170,30 @@ public sealed class DomainSession {
         ObservedFlows = observedFlows ?? [];
         DiagnosticAllowances = diagnosticAllowances ?? [];
         ContractContributions = contractContributions ?? [];
+        Target = target;
     }
+
+    /// <summary>
+    /// Returns a session with the same language tables, contributions, and domain and the given
+    /// host target; the same session when the target is unchanged. The target must be non-blank
+    /// when present: an empty host fact is a caller bug, not "no target".
+    /// </summary>
+    public DomainSession WithTarget(string? target) {
+        if (target is not null)
+            ArgumentException.ThrowIfNullOrWhiteSpace(target);
+        if (string.Equals(Target, target, StringComparison.Ordinal))
+            return this;
+        return Clone(Domain, target);
+    }
+
+    /// <summary>
+    /// The one place a session copy is made. Every clone site (a changed domain, a new target)
+    /// goes through here so a new session fact cannot be dropped by one of them.
+    /// </summary>
+    private DomainSession Clone(Domain? domain, string? target) =>
+        new(domain, Extensions, Language, Annotations, ExpressionForms, TypeMaps, StorageConventions,
+            Folds, Meaning, Artifacts, Analyzers, Contributions, PrimitiveSeeds, ConstraintCompilers,
+            ObservedFlows, DiagnosticAllowances, ContractContributions, target);
 
     /// <summary>The contract the library with <paramref name="libraryId"/> contributed, or null.</summary>
     public ContractContribution? FindContractContribution(string libraryId) =>
@@ -260,9 +292,9 @@ public sealed class DomainSession {
     public DomainSession WithDomain(Domain domain) {
         ArgumentNullException.ThrowIfNull(domain);
         if (SameExtensions(Extensions, domain.Extensions))
-            return new DomainSession(domain, domain.Extensions, Language, Annotations, ExpressionForms, TypeMaps, StorageConventions, Folds, Meaning, Artifacts, Analyzers, Contributions, PrimitiveSeeds, ConstraintCompilers, ObservedFlows, DiagnosticAllowances, ContractContributions);
+            return Clone(domain, Target);
         var reloaded = ForExtensions(domain.Extensions, ExtensionCatalog.Core);
-        return new DomainSession(domain, reloaded.Extensions, reloaded.Language, reloaded.Annotations, reloaded.ExpressionForms, reloaded.TypeMaps, reloaded.StorageConventions, reloaded.Folds, reloaded.Meaning, reloaded.Artifacts, reloaded.Analyzers, reloaded.Contributions, reloaded.PrimitiveSeeds, reloaded.ConstraintCompilers, ObservedFlows, DiagnosticAllowances, reloaded.ContractContributions);
+        return new DomainSession(domain, reloaded.Extensions, reloaded.Language, reloaded.Annotations, reloaded.ExpressionForms, reloaded.TypeMaps, reloaded.StorageConventions, reloaded.Folds, reloaded.Meaning, reloaded.Artifacts, reloaded.Analyzers, reloaded.Contributions, reloaded.PrimitiveSeeds, reloaded.ConstraintCompilers, ObservedFlows, DiagnosticAllowances, reloaded.ContractContributions, Target);
     }
 
     /// <summary>

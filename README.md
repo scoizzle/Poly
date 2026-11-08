@@ -95,6 +95,12 @@ each its own compilation unit; with no path and piped stdin, stdin is one docume
 - **`uses` resolution:** the document's own `uses` wins. With none, `--seed authoring` (default,
   the storage annotations) or `--seed language` supplies the extension ids. An unknown id is
   `DSL0002` on its header token.
+- **`--target <id>`** is the host target (for example `posix` or `windows`) forwarded to the
+  compile. It is a host fact, never read from a `uses` line. A package that declares targets
+  (for example `uses posix`) is `DMCON004` when the host target is absent or not one the package
+  declares; the target does not change the surface fingerprint. `polyc build` and `polyc check`
+  are the only doors that carry a target in this slice; `polyc lsp` and the MCP tools name none,
+  so `uses posix` is refused there until they forward one.
 - **`polyc lsp`** serves diagnostics, hover, go-to-definition and document symbols over stdio;
   its diagnostics are the `check --format json` records. A malformed notification is reported and
   the server keeps serving; a broken frame exits 2. **`polyc mcp`** serves the seven tools below.

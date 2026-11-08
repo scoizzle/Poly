@@ -63,7 +63,7 @@ internal static class PolycApp {
         }
 
         var compiler = new PolyCompiler(ProductCatalog.Catalog, options.Seed);
-        var units = inputs.Select(i => compiler.Compile(i.Text, i.File)).ToList();
+        var units = inputs.Select(i => compiler.Compile(i.Text, i.File, target: options.Target)).ToList();
 
         var extra = new List<CompileDiagnostic>();
         var written = new List<string>();

@@ -122,9 +122,7 @@ internal sealed record DiagnosticFact(
     [property: JsonPropertyName("severity")] string Severity,
     [property: JsonPropertyName("code")] string? Code,
     [property: JsonPropertyName("elementPath")] string ElementPath,
-    [property: JsonPropertyName("message")] string Message,
-    [property: JsonPropertyName("line"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Line = null,
-    [property: JsonPropertyName("column"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Column = null
+    [property: JsonPropertyName("message")] string Message
 );
 
 internal sealed record ActionFact(
@@ -1393,8 +1391,8 @@ internal sealed class DslTool(ISessionStore store, ILogger<DslTool> logger) {
             return DslFailure(sessionId, "DSL text is empty. Provide a .poly document with at least a domain header.");
 
         var compile = CompileDsl(state, polyText);
-        if (compile.Error is not null)
-            return DslFailure(sessionId, compile.Error);
+        if (!compile.Succeeded)
+            return Rejected(sessionId, compile, state.Revision);
 
         var data = BuildValidationData(compile);
         return new DomainToolResponse(
@@ -1440,22 +1438,10 @@ internal sealed class DslTool(ISessionStore store, ILogger<DslTool> logger) {
 
         // ── 1. Parse and analyze a fresh domain (no session mutation yet) ──
         var compile = CompileDsl(parseState, polyText);
-        if (compile.Error is not null)
-            return DslFailure(sessionId, compile.Error);
+        if (!compile.Succeeded)
+            return Rejected(sessionId, compile, parseState.Revision);
 
         var domainName = compile.DomainName;
-
-        if (!compile.Succeeded) {
-            var data = BuildValidationData(compile);
-            return new DomainToolResponse(
-                Success: false,
-                Message: $"Evolution rolled back: {(compile.FailureSummary.Length > 0 ? compile.FailureSummary : "Analysis rejected the domain")}",
-                SessionId: sessionId,
-                Revision: parseState.Revision,
-                Data: data,
-                Diagnostics: data.Findings.Select(FormatFinding).ToList(),
-                Affordances: ["validate_dsl", "get_dsl_guide"]);
-        }
 
         // ── 2. Atomically replace the session domain ─────────────
         var applied = compile.Core;
@@ -1722,8 +1708,26 @@ internal sealed class DslTool(ISessionStore store, ILogger<DslTool> logger) {
     };
 
     /// <summary>
+    /// A rejected document. The summary is the flattened text; findings keep the core's code,
+    /// path, and span. Do not collapse those into the summary.
+    /// </summary>
+    private static DomainToolResponse Rejected(string sessionId, DslCompileResult compile, long revision) {
+        var data = BuildValidationData(compile);
+        var summary = compile.Error
+            ?? (compile.FailureSummary.Length > 0 ? compile.FailureSummary : "Analysis rejected the domain.");
+        return new DomainToolResponse(
+            Success: false,
+            Message: summary,
+            SessionId: sessionId,
+            Revision: revision,
+            Data: data,
+            Diagnostics: data.Findings.Select(FormatFinding).ToList(),
+            Affordances: ["get_dsl_guide", "validate_dsl"]);
+    }
+
+    /// <summary>
     /// Projects the core's diagnostics into the response payload, in severity order, with the
-    /// source line and column when the finding was placed. Nothing is dropped.
+    /// source line and column when the finding was placed. Every severity is included.
     /// </summary>
     private static DslValidationData BuildValidationData(DslCompileResult compile) {
         var core = compile.Core;
@@ -1733,8 +1737,9 @@ internal sealed class DslTool(ISessionStore store, ILogger<DslTool> logger) {
 
         var errors = core.Diagnostics.Where(d => d.IsError).ToList();
         var warnings = core.Diagnostics.Where(d => d.IsWarning).ToList();
+        var information = core.Diagnostics.Where(d => d.Severity == Severities.Information).ToList();
         var hints = core.Diagnostics.Where(d => d.Severity == Severities.Hint).ToList();
-        var findings = errors.Concat(warnings).Concat(hints).Select(Finding).ToList();
+        var findings = errors.Concat(warnings).Concat(information).Concat(hints).Select(Finding).ToList();
 
         // Fail closed: a rejected document must never read as "invalid with 0 errors".
         var rejectedWithoutError = !core.Succeeded && errors.Count == 0;

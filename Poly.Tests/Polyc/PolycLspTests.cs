@@ -1,4 +1,5 @@
 using System.IO.Pipes;
+using System.Text;
 using System.Text.Json.Nodes;
 
 using Poly.Compile;
@@ -75,8 +76,8 @@ public class PolycLspTests {
 
     private static List<CompileDiagnostic> CheckJson(string text) {
         var result = new PolyCompiler(ProductCatalog.Catalog, "authoring").Compile(text, File);
-        var json = JsonNode.Parse(DiagnosticFormat.Report("check", [result], []))!;
-        return [.. json["diagnostics"]!.AsArray().Select(n => DiagnosticFormat.FromJson(n!))];
+        var json = JsonNode.Parse(DiagnosticFormat.Report([result], []))!;
+        return [.. json.AsArray().Select(n => DiagnosticFormat.FromJson(n!))];
     }
 
     private static List<CompileDiagnostic> Published(JsonNode publish) =>
@@ -152,6 +153,33 @@ public class PolycLspTests {
         await Assert.That(names).Contains("Line");
         var product = symbols["result"]!.AsArray().Single(s => s!["name"]!.GetValue<string>() == "Product")!;
         await Assert.That(product["children"]!.AsArray().Single()!["name"]!.GetValue<string>()).IsEqualTo("Sku");
+    }
+
+    [Test]
+    public async Task ProtocolFailure_ExitsTwo() {
+        using var toServer = new AnonymousPipeServerStream(PipeDirection.Out);
+        using var fromServer = new AnonymousPipeServerStream(PipeDirection.In);
+        using var serverIn = new AnonymousPipeClientStream(PipeDirection.In, toServer.ClientSafePipeHandle);
+        using var serverOut = new AnonymousPipeClientStream(PipeDirection.Out, fromServer.ClientSafePipeHandle);
+        var server = new LspServer(serverIn, serverOut, stderr: TextWriter.Null);
+        var run = Task.Run(server.Run);
+        toServer.Write(Encoding.ASCII.GetBytes("\r\n"));
+        toServer.Flush();
+        var finished = run.Wait(TimeSpan.FromSeconds(10));
+        await Assert.That(finished).IsTrue();
+        await Assert.That(run.Result).IsEqualTo(2);
+    }
+
+    [Test]
+    public async Task MalformedNotification_KeepsServing() {
+        using var client = new Client();
+        client.Request("initialize", new JsonObject());
+        Open(client, PolycTestSupport.Orders);
+        client.NextPublish();
+        client.Notify("textDocument/didChange", new JsonObject {
+            ["textDocument"] = new JsonObject { ["uri"] = Uri, ["version"] = 2 },
+        });
+        await Assert.That(client.Stop()).IsEqualTo(0);
     }
 
     [Test]

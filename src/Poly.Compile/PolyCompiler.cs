@@ -31,10 +31,9 @@ public sealed record CompileResult(
     IReadOnlyList<(string FileName, string Source)> Files,
     Domain? Domain,
     AnalysisResult? Analysis,
-    DomainSession? Session) {
+    DomainSession? Session,
+    ArtifactCatalog? Catalog) {
     public bool Succeeded => !Diagnostics.Any(d => d.IsError);
-
-    public ArtifactCatalog? Catalog => Session?.ArtifactCatalog;
 }
 
 /// <summary>
@@ -91,14 +90,14 @@ public sealed class PolyCompiler {
         var build = new DiagnosticBuilder(file, "");
         var diags = new List<CompileDiagnostic>();
         var files = ProduceFiles(build, diags, session, domain, analysis);
-        return new CompileResult(file, domain.Name, diags, files, domain, analysis, session);
+        return new CompileResult(file, domain.Name, diags, files, domain, analysis, session, session.ArtifactCatalog);
     }
 
     private CompileResult CompileCore(string text, string file, CancellationToken cancel, bool produce) {
         var build = new DiagnosticBuilder(file, text);
         var diags = new List<CompileDiagnostic>();
         string? domainName = null;
-        CompileResult Fail() => new(file, domainName, diags, [], null, null, null);
+        CompileResult Fail() => new(file, domainName, diags, [], null, null, null, null);
 
         if (string.IsNullOrWhiteSpace(text)) {
             diags.Add(build.Unplaced(Severities.Error, DiagnosticCodes.Parse, "DSL text is empty."));
@@ -194,15 +193,15 @@ public sealed class PolyCompiler {
         if (!outcome.Succeeded) {
             if (!diags.Any(d => d.IsError))
                 diags.Add(build.Unplaced(Severities.Error, DiagnosticCodes.Refused, "Analysis rejected the domain.", domainName));
-            return new CompileResult(file, domainName, diags, [], null, outcome.Analysis, session);
+            return new CompileResult(file, domainName, diags, [], null, outcome.Analysis, session, null);
         }
 
         if (!produce)
-            return new CompileResult(file, domainName, diags, [], outcome.Root, outcome.Analysis, session);
+            return new CompileResult(file, domainName, diags, [], outcome.Root, outcome.Analysis, session, null);
 
         // A contributor never runs over an analysis that already has errors (returned above).
         var files = ProduceFiles(build, diags, session, outcome.Root, outcome.Analysis);
-        return new CompileResult(file, domainName, diags, files, outcome.Root, outcome.Analysis, session);
+        return new CompileResult(file, domainName, diags, files, outcome.Root, outcome.Analysis, session, session.ArtifactCatalog);
     }
 
     /// <summary>
@@ -284,10 +283,10 @@ public sealed class PolyCompiler {
                 continue;
             if (++count == occurrence) {
                 var token = tree.Tokens[i + 1];
-                return build.Span(token.Offset, token.Length, severity, code, message, id);
+                return build.Span(token.Offset, token.Length, severity, code, message, "");
             }
         }
-        return build.Unplaced(severity, code, message, id);
+        return build.Unplaced(severity, code, message, "");
     }
 
     private static CompileDiagnostic FromGrammar(DiagnosticBuilder build, GrammarException ex) {
@@ -319,7 +318,7 @@ public sealed class PolyCompiler {
             if (!seen.Add(tokens[i + 1].Text)) {
                 var token = tokens[i + 1];
                 return build.Span(token.Offset, token.Length, Severities.Error,
-                    DiagnosticCodes.DuplicateExtension, ex.Message, token.Text);
+                    DiagnosticCodes.DuplicateExtension, ex.Message, "");
             }
         }
         return build.Unplaced(Severities.Error, DiagnosticCodes.Parse, ex.Message);
@@ -330,7 +329,7 @@ public sealed class PolyCompiler {
         var severity = SeverityOf(diagnostic.Severity);
         var code = diagnostic.Code ?? DiagnosticCodes.AnalysisUncoded;
         if (root is null)
-            return build.Unplaced(severity, code, diagnostic.Message, domainName);
+            return build.Unplaced(severity, code, diagnostic.Message, "");
         var path = DomainElementPath.Resolve(root, diagnostic.Node);
         var node = SpanBridge.Locate(outline.Value, path);
         if (node is null)

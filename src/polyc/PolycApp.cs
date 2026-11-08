@@ -95,8 +95,9 @@ internal static class PolycApp {
         var errors = all.Count(d => d.IsError);
         var warnings = all.Count(d => d.IsWarning);
         if (options.Format == "json") {
-            stdout.WriteLine(DiagnosticFormat.Report(options.Command, units, extra,
-                options.Command == "build" ? written : null));
+            stdout.WriteLine(DiagnosticFormat.Report(units, extra));
+            foreach (var path in written)
+                stderr.WriteLine($"wrote {path}");
         }
         else {
             foreach (var line in DiagnosticFormat.TextLines(all, options.Verbosity))

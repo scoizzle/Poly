@@ -125,6 +125,28 @@ public class PolycMcpTests {
     }
 
     [Test]
+    public async Task PolyDefine_PreAnalysisFailuresKeepCheckCodes() {
+        using var host = new McpProcess(Dll("polyc"), "mcp");
+        host.Initialize();
+        var workspace = host.Tool("poly_workspace", new JsonObject { ["name"] = "Broken" })["state"]!["workspace"]!.GetValue<string>();
+
+        await AssertMatchesCheck(host, workspace, "domain X\nA: entity { X: Text @\n");
+        await AssertMatchesCheck(host, workspace, "domain X\nuses nope\n");
+    }
+
+    private static async Task AssertMatchesCheck(McpProcess host, string workspace, string text) {
+        var check = new PolyCompiler(ProductCatalog.Model, "authoring").Compile(text, "<workspace>");
+        var expected = check.Diagnostics.Single(d => d.IsError);
+        var define = host.Tool("poly_define", new JsonObject { ["workspace"] = workspace, ["poly"] = text, ["apply"] = false });
+        var finding = define["findings"]!.AsArray().Single(f =>
+            string.Equals(f!["severity"]!.GetValue<string>(), "Error", StringComparison.OrdinalIgnoreCase))!;
+        await Assert.That(finding["code"]?.GetValue<string>()).IsEqualTo(expected.Code);
+        await Assert.That(finding["line"]!.GetValue<int>()).IsEqualTo(expected.Line);
+        await Assert.That(finding["column"]!.GetValue<int>()).IsEqualTo(expected.Column);
+        await Assert.That(finding["path"]!.GetValue<string>()).IsEqualTo(expected.Path);
+    }
+
+    [Test]
     public async Task PolyMcpForwarder_StartsTheSameHost() {
         using var polyc = new McpProcess(Dll("polyc"), "mcp");
         using var forwarder = new McpProcess(Dll("Poly.Mcp"));

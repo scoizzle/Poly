@@ -16,33 +16,44 @@ public sealed class LspServer {
     private readonly Dictionary<string, Document> _documents = new(StringComparer.Ordinal);
     private readonly Dictionary<string, CancellationTokenSource> _running = new(StringComparer.Ordinal);
     private readonly List<Task> _tasks = [];
+    private readonly TextWriter _stderr;
     private readonly object _gate = new();
     private bool _shutdown;
 
     private sealed record Document(string Text, int Version);
 
-    public LspServer(Stream input, Stream output, string seed = "authoring") {
+    public LspServer(Stream input, Stream output, string seed = "authoring", TextWriter? stderr = null) {
         _transport = new LspTransport(input, output);
         _compiler = new PolyCompiler(ProductCatalog.Catalog, seed);
+        _stderr = stderr ?? Console.Error;
     }
 
     /// <summary>Runs until <c>exit</c> or end of input. Returns the process exit code.</summary>
     public int Run() {
-        while (_transport.Read() is { } message) {
-            var method = message["method"]?.GetValue<string>();
-            var id = message["id"];
-            if (method is null)
-                continue;
-            if (method == "exit") {
-                WaitForChecks();
-                return _shutdown ? 0 : 1;
+        try {
+            while (_transport.Read() is { } message) {
+                var method = message["method"]?.GetValue<string>();
+                var id = message["id"];
+                if (method is null)
+                    continue;
+                if (method == "exit") {
+                    WaitForChecks();
+                    return _shutdown ? 0 : 1;
+                }
+                try {
+                    Dispatch(method, id, message["params"]);
+                }
+                catch (Exception ex) when (id is not null) {
+                    Respond(id, error: new JsonObject { ["code"] = -32603, ["message"] = ex.Message });
+                }
+                catch (Exception ex) {
+                    _stderr.WriteLine($"polyc lsp: {ex.Message}");
+                }
             }
-            try {
-                Dispatch(method, id, message["params"]);
-            }
-            catch (Exception ex) when (id is not null) {
-                Respond(id, error: new JsonObject { ["code"] = -32603, ["message"] = ex.Message });
-            }
+        }
+        catch (Exception ex) {
+            _stderr.WriteLine($"polyc lsp: protocol failure: {ex.Message}");
+            return 2;
         }
         WaitForChecks();
         return _shutdown ? 0 : 1;

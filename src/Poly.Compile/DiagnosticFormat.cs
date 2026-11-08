@@ -46,28 +46,14 @@ public static class DiagnosticFormat {
         node["path"]!.GetValue<string>(),
         node["placed"]!.GetValue<bool>());
 
-    /// <summary>The whole run as one JSON document. Never filtered by verbosity.</summary>
+    /// <summary>
+    /// The diagnostics as a JSON array of records. Never filtered by verbosity. Written paths
+    /// are not in this document; the batch command prints them on stderr.
+    /// </summary>
     public static string Report(
-        string command,
         IReadOnlyList<CompileResult> units,
-        IReadOnlyList<CompileDiagnostic> extra,
-        IReadOnlyList<string>? written = null) {
-        var all = units.SelectMany(u => u.Diagnostics).Concat(extra).ToList();
-        var root = new JsonObject {
-            ["tool"] = "polyc",
-            ["command"] = command,
-            ["succeeded"] = !all.Any(d => d.IsError),
-            ["errors"] = all.Count(d => d.IsError),
-            ["warnings"] = all.Count(d => d.IsWarning),
-            ["units"] = new JsonArray([.. units.Select(u => (JsonNode?)new JsonObject {
-                ["file"] = u.File,
-                ["domain"] = u.DomainName,
-                ["succeeded"] = u.Succeeded,
-            })]),
-            ["diagnostics"] = ToJson(all),
-        };
-        if (written is not null)
-            root["written"] = new JsonArray([.. written.Select(w => (JsonNode?)JsonValue.Create(w))]);
-        return root.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
+        IReadOnlyList<CompileDiagnostic> extra) {
+        var all = units.SelectMany(u => u.Diagnostics).Concat(extra);
+        return ToJson(all).ToJsonString(new JsonSerializerOptions { WriteIndented = true });
     }
 }

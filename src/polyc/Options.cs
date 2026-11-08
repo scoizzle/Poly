@@ -27,6 +27,8 @@ internal sealed class Options {
         compilation unit. With no path and piped stdin, stdin is one document.
         Seeds: authoring (default), language. A document's own `uses` wins over the seed.
         Exit codes: 0 no errors, 1 errors or usage, 2 unexpected failure.
+        --format json prints a JSON array of diagnostic records. A build also prints each
+        written path on stderr as `wrote <path>`.
         """;
 
     /// <summary>Returns null with <paramref name="error"/> set on a usage problem.</summary>

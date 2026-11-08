@@ -55,8 +55,7 @@ public class PolycCliTests {
         var dir = PolycTestSupport.TempDir();
         var path = Write(dir, "broken.poly", PolycTestSupport.ManyErrors(12));
         var text = Run(["check", path]).Out;
-        var json = JsonNode.Parse(Run(["check", path, "--format", "json"]).Out)!;
-        var diagnostics = json["diagnostics"]!.AsArray();
+        var diagnostics = JsonNode.Parse(Run(["check", path, "--format", "json"]).Out)!.AsArray();
         await Assert.That(diagnostics.Count).IsGreaterThanOrEqualTo(12);
         // Text shows errors and warnings by default; JSON is never filtered.
         var shown = diagnostics.Select(d => DiagnosticFormat.FromJson(d!)).Where(d => d.IsError || d.IsWarning).ToList();
@@ -65,7 +64,7 @@ public class PolycCliTests {
         await Assert.That(diagnostics.Count).IsGreaterThan(shown.Count);
         for (var i = 0; i < shown.Count; i++)
             await Assert.That(textLines[i]).IsEqualTo(DiagnosticFormat.Text(shown[i]));
-        await Assert.That(json["succeeded"]!.GetValue<bool>()).IsFalse();
+        await Assert.That(shown.Any(d => d.IsError)).IsTrue();
     }
 
     [Test]
@@ -77,6 +76,36 @@ public class PolycCliTests {
         await Assert.That(exit).IsEqualTo(0);
         await Assert.That(File.Exists(Path.Combine(outDir, "Orders", "Order.cs"))).IsTrue();
         await Assert.That(File.Exists(Path.Combine(outDir, "Orders", "Poly.Types.cs"))).IsTrue();
+    }
+
+    [Test]
+    public async Task Build_ArtifactFilter_KeepsEachUnitsCatalog() {
+        var dir = PolycTestSupport.TempDir();
+        Write(dir, "alpha.poly", "domain Alpha\nuses sqlite\n\nWidget: entity {\n  Name: Text\n}\n");
+        Write(dir, "beta.poly", "domain Beta\nuses sqlite\n\nGadget: entity {\n  Name: Text\n}\n");
+        var outDir = Path.Combine(dir, "out");
+        var (exit, _, _) = Run(["build", dir, "--out", outDir, "--artifact", "file"]);
+        await Assert.That(exit).IsEqualTo(0);
+        var alpha = Directory.GetFiles(Path.Combine(outDir, "Alpha")).Select(Path.GetFileName).ToList();
+        await Assert.That(alpha).Contains("Widget.cs");
+        await Assert.That(alpha).DoesNotContain("Gadget.cs");
+        await Assert.That(alpha.Any(name => name!.Contains("Beta"))).IsFalse();
+        var beta = Directory.GetFiles(Path.Combine(outDir, "Beta")).Select(Path.GetFileName).ToList();
+        await Assert.That(beta).Contains("Gadget.cs");
+        await Assert.That(beta).DoesNotContain("Widget.cs");
+    }
+
+    [Test]
+    public async Task Json_IsAnArrayOfRecords_AndBuildWritesPathsToStderr() {
+        var dir = PolycTestSupport.TempDir();
+        var path = Write(dir, "orders.poly", PolycTestSupport.Orders);
+        var check = JsonNode.Parse(Run(["check", path, "--format", "json"]).Out);
+        await Assert.That(check).IsTypeOf<JsonArray>();
+
+        var outDir = Path.Combine(dir, "out");
+        var (exit, _, err) = Run(["build", path, "--out", outDir, "--format", "json"]);
+        await Assert.That(exit).IsEqualTo(0);
+        await Assert.That(err).Contains(Path.Combine(outDir, "Orders", "Order.cs"));
     }
 
     [Test]

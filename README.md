@@ -87,15 +87,21 @@ each its own compilation unit; with no path and piped stdin, stdin is one docume
 
 - **Exit codes:** `0` no errors, `1` errors or usage, `2` unexpected failure. Warnings do not fail
   unless `--warn-as-error`.
-- **`--format json`** prints every diagnostic (file, line, column, endLine, endColumn, severity,
-  code, message, path, placed); text shows errors and warnings, and `--verbosity info|hint` shows
-  more. Codes: `DSL0001` parse, `DSL0002` unknown extension, `DSL0003` duplicate extension,
-  `DSL0004` lower or emit refused; analyzer codes pass through.
+- **`--format json`** prints a JSON array of every diagnostic record (file, line, column,
+  endLine, endColumn, severity, code, message, path, placed). It is not filtered. A build also
+  prints each written path on stderr as `wrote <path>`. Text shows errors and warnings, and
+  `--verbosity info|hint` shows more. Codes: `DSL0001` parse, `DSL0002` unknown extension,
+  `DSL0003` duplicate extension, `DSL0004` lower or emit refused; analyzer codes pass through.
 - **`uses` resolution:** the document's own `uses` wins. With none, `--seed authoring` (default,
   the storage annotations) or `--seed language` supplies the extension ids. An unknown id is
   `DSL0002` on its header token.
 - **`polyc lsp`** serves diagnostics, hover, go-to-definition and document symbols over stdio;
-  its diagnostics are the `check --format json` records. **`polyc mcp`** serves the seven tools below.
+  its diagnostics are the `check --format json` records. A malformed notification is reported and
+  the server keeps serving; a broken frame exits 2. **`polyc mcp`** serves the seven tools below.
+- **Install:** `dotnet pack src/polyc/polyc.csproj` then
+  `dotnet tool install --tool-path .tools --add-source <nupkg-dir> Poly.Polyc`, or
+  `dotnet publish src/polyc/polyc.csproj -c Release -p:PublishSingleFile=true` for a single file.
+  Framework-dependent is enough; there is no native AOT build.
 
 ### Build and run
 

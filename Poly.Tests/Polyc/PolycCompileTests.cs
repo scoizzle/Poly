@@ -84,6 +84,30 @@ public class PolycCompileTests {
     }
 
     [Test]
+    public async Task Compile_UnknownUses_HasEmptyPath() {
+        var result = Compiler().Compile("domain D\nuses nope\n", "x.poly");
+        var diagnostic = result.Diagnostics.Single(d => d.Code == DiagnosticCodes.UnknownExtension);
+        await Assert.That(diagnostic.Path).IsEqualTo("");
+        await Assert.That(diagnostic.Message).Contains("nope");
+    }
+
+    [Test]
+    public async Task Compile_WiredCatalog_EmitsHostFilesForUses() {
+        var sqlite = Compiler().Compile("domain Shop\nuses sqlite\n\nItem: entity {\n  Sku: Text unique\n}\n", "shop.poly");
+        await Assert.That(sqlite.Succeeded).IsTrue();
+        await Assert.That(sqlite.Files.Select(f => f.FileName)).Contains("ShopDbContext.cs");
+
+        var http = Compiler().Compile(
+            "domain Shop\nuses storage\nuses sqlite\nuses http\n\nItem: entity {\n  Sku: Text unique\n}\n",
+            "shop.poly");
+        await Assert.That(http.Succeeded).IsTrue();
+        var names = http.Files.Select(f => f.FileName).ToList();
+        await Assert.That(names).Contains("Program.cs");
+        await Assert.That(names).Contains("demo.http");
+        await Assert.That(names).Contains("ShopDbContext.cs");
+    }
+
+    [Test]
     public async Task Compile_DocumentUses_WinsOverSeed() {
         var result = Compiler().Compile("domain D\nuses sqlite\nA: entity {\n  X: Text\n}\n", "x.poly");
         await Assert.That(result.Succeeded).IsTrue();

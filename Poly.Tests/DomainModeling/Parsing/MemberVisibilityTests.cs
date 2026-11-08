@@ -93,7 +93,7 @@ public class MemberVisibilityTests {
     }
 
     [Test]
-    public async Task ActionWithReturn_PrintsPublicAfterArrow() {
+    public async Task PublicActionWithReturn_PrintsModifierFirst() {
         // A value-type return is not the product path, so this locks the print order
         // without asking analysis to accept `-> Money`.
         var pay = new Action(
@@ -110,18 +110,18 @@ public class MemberVisibilityTests {
     }
 
     [Test]
-    public async Task ActionReturn_Public_RoundTripsAfterArrow() {
+    public async Task PublicActionWithReturn_RoundTripsModifierFirst() {
         var poly = """
             domain Test
 
-            Customer: entity {
+            public entity Customer {
               orders: many Order
               public action Place -> Order {
                 create in orders { }
               }
             }
 
-            Order: entity {
+            public entity Order {
               Draft: stage {}
             }
             """;
@@ -203,7 +203,7 @@ public class MemberVisibilityTests {
     }
 
     [Test]
-    public async Task AnnotationThenPublic_PrintsCanonical() {
+    public async Task PublicEntityWithAnnotation_PrintsCanonical() {
         var poly = """
             domain Test
 
@@ -270,27 +270,6 @@ public class MemberVisibilityTests {
     }
 
     [Test]
-    public async Task PublicAction_WithInternalParameterType_Parses() {
-        var poly = """
-            domain Test
-
-            Money: value {
-              Amount: Number
-            }
-
-            Order: entity {
-              Total: Number
-              public action Pay (bill: Money) {
-              }
-            }
-            """;
-
-        var domain = Apply(poly);
-        await Assert.That(EntityOf(domain, "Order").Actions.Single().Visibility).IsEqualTo(Visibility.Public);
-        await Assert.That(domain.Types.OfType<ValueType>().Single().Visibility).IsEqualTo(Visibility.Internal);
-    }
-
-    [Test]
     public async Task WrittenInternal_OnEntity_IsRejected() {
         var poly = """
             domain Test
@@ -304,12 +283,55 @@ public class MemberVisibilityTests {
     }
 
     [Test]
-    public async Task SecondPublic_IsRejected() {
+    public async Task TrailingPublic_OnEntity_IsRejected() {
         var poly = """
             domain Test
 
             Order: entity public {
               Total: Number
+            }
+            """;
+
+        await Assert.That(() => new PolyDslParser(poly).Parse()).Throws<FormatException>();
+    }
+
+    [Test]
+    public async Task TrailingPublic_OnValue_IsRejected() {
+        var poly = """
+            domain Test
+
+            Money: value public {
+              Amount: Number
+            }
+            """;
+
+        await Assert.That(() => new PolyDslParser(poly).Parse()).Throws<FormatException>();
+    }
+
+    [Test]
+    public async Task TrailingPublic_OnAction_IsRejected() {
+        var poly = """
+            domain Test
+
+            Order: entity {
+              Pay: action public {
+              }
+            }
+            """;
+
+        await Assert.That(() => new PolyDslParser(poly).Parse()).Throws<FormatException>();
+    }
+
+    [Test]
+    public async Task TrailingPublic_OnStageAction_IsRejected() {
+        var poly = """
+            domain Test
+
+            Order: entity {
+              Open: stage {
+                Close: action public {
+                }
+              }
             }
             """;
 

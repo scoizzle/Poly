@@ -301,7 +301,9 @@ never dropped by export.
 entity-name ":" "entity" annotation* "{" property* stage* action* policy* "}"
 ```
 
-`public` is an optional leading modifier before the kind keyword (`public entity Order { … }`). Omitting it is `Visibility.Internal` and keeps `Order: entity`. It is stored as `Visibility` and printed; export filtering is a later slice. `public` is a keyword, so it is not a property name.
+`public` is an optional leading modifier before the kind keyword (`public entity Order { … }`). Omitting it is `Visibility.Internal` and keeps `Order: entity`. It is stored as `Visibility` and printed; export filtering is a later slice. `public` is a keyword, so it is not a property name. The mark may appear anywhere among the header annotations; the printer writes it first.
+
+An exported signature must be closed. A `public` action's parameter and result types, and a `public` value type's field types, must themselves be `public`; primitives and enum payloads are always available, and a used contract's value types are already on that contract's surface. Analysis reports **`DMCON002`** and names the internal type. The fix is to mark the type `public`, not to add an exception.
 
 | Constraint | Syntax | Example |
 |-----------|--------|---------|

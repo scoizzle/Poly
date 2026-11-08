@@ -6,7 +6,10 @@ using ValueType = Poly.DomainModeling.Ontology.ValueType;
 
 namespace Poly.DomainModeling.Analysis;
 
-/// <summary>Lint-only: imported-contract / binding checks; writes no metadata others read.</summary>
+/// <summary>
+/// Lint-only: imported-contract / binding checks and exported-surface closure checks;
+/// writes no metadata others read.
+/// </summary>
 internal sealed class ContractIntegrationAnalyzer : INodeAnalyzer {
     public const string Id = "DomainContractIntegrationAnalyzer";
     public string PassName => Id;
@@ -41,7 +44,104 @@ internal sealed class ContractIntegrationAnalyzer : INodeAnalyzer {
         foreach (var binding in domain.ContractBindings) {
             ValidateBinding(context, domain, binding);
         }
+
+        ValidatePublicSurface(context, domain);
     }
+
+    /// <summary>
+    /// An exported signature must be closed (decision 12, #417): a public action's parameter
+    /// and result types and a public value type's field types may not name a type internal to
+    /// this domain. Not checked: a public entity's properties (decision 13 exports its name and
+    /// public actions only), an imported contract's ACL value types (that contract's surface),
+    /// primitives, and enums (no visibility mark; #418 owns their mark or digest entry).
+    /// </summary>
+    private static void ValidatePublicSurface(AnalysisContext context, Domain domain) {
+        foreach (var valueType in domain.Types.OfType<ValueType>()) {
+            if (valueType.Visibility != Visibility.Public)
+                continue;
+            foreach (var property in valueType.Properties) {
+                ReportUnclosedSignature(
+                    context, domain, valueType, property.Type,
+                    $"Public value type '{valueType.Name}'",
+                    $"in property '{property.Name}'");
+            }
+        }
+
+        foreach (var entity in domain.Types.OfType<Entity>()) {
+            foreach (var action in entity.Actions) {
+                if (action.Visibility == Visibility.Public)
+                    ValidatePublicAction(context, domain, entity, action);
+            }
+            foreach (var stage in entity.Stages) {
+                foreach (var action in stage.Actions) {
+                    if (action.Visibility == Visibility.Public)
+                        ValidatePublicAction(context, domain, entity, action);
+                }
+            }
+        }
+    }
+
+    private static void ValidatePublicAction(
+        AnalysisContext context,
+        Domain domain,
+        Entity entity,
+        Action action) {
+        var subject = $"Public action '{action.Name}' on entity '{entity.Name}'";
+
+        foreach (var parameter in action.Parameters) {
+            ReportUnclosedSignature(
+                context, domain, action, parameter.Type,
+                subject, $"in parameter '{parameter.Name}'");
+        }
+
+        foreach (var member in action.Result.Members) {
+            ReportUnclosedSignature(
+                context, domain, action, member.Type,
+                subject, "as its result");
+        }
+    }
+
+    /// <summary>
+    /// Reports one finding when <paramref name="typeReference"/> resolves to a type this
+    /// domain declares with <see cref="Visibility.Internal"/>. An unresolved reference is
+    /// skipped: <see cref="DomainCatalogPass"/> already reported the unknown type.
+    /// </summary>
+    private static void ReportUnclosedSignature(
+        AnalysisContext context,
+        Domain domain,
+        Node reportNode,
+        DomainTypeReference typeReference,
+        string subject,
+        string position) {
+        if (context.GetMetadata<ResolvedTypeReferenceMetadata>(typeReference)
+            is not ResolvedTypeReferenceMetadata resolved)
+            return;
+
+        if (!IsDeclaredInDomain(domain, resolved.Type))
+            return;
+
+        var isPublic = resolved.Type switch {
+            Entity entity => entity.Visibility == Visibility.Public,
+            ValueType valueType => valueType.Visibility == Visibility.Public,
+            _ => true
+        };
+        if (isPublic)
+            return;
+
+        var kind = resolved.Type is Entity ? "entity" : "value";
+        context.ReportError(
+            reportNode,
+            $"{subject} names internal {kind} type '{resolved.Type.Name}' {position}. " +
+            $"Mark '{resolved.Type.Name}' public, or remove the public mark.",
+            DomainModelDiagnosticCodes.PublicSurfaceNotClosed);
+    }
+
+    /// <summary>
+    /// Reference identity, not record equality: a contract ACL value type with the same shape
+    /// as a domain value type must not count as declared here.
+    /// </summary>
+    private static bool IsDeclaredInDomain(Domain domain, DomainType type) =>
+        domain.Types.Any(candidate => ReferenceEquals(candidate, type));
 
     private static void ReportTypeNameClashes(AnalysisContext context, Domain domain) {
         var seen = new Dictionary<string, string>(StringComparer.Ordinal);

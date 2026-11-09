@@ -79,6 +79,20 @@ public class AstShapeFuzzTests {
     }
 
     [Test]
+    public async Task Generate_EmitsStringComparisonsOfConcatenationsAndNestedConcatenations() {
+        var texts = AstShapeGenerator.Generate(AstShapeGenerator.DefaultSeed, AstShapeGenerator.MaxCount).Select(c => c.Text).ToList();
+
+        // String ==/!= prints without a <Type> suffix; an operand is Cat(...) or a leaf followed by Cat(...).
+        var comparison = new System.Text.RegularExpressions.Regex(@"\b(Eq|Ne)\((Cat\(|[a-z0-9]+,Cat\()");
+        var comparesConcat = texts.Count(t => comparison.IsMatch(t));
+        var nested = texts.Count(t => t.Contains("Cat(Cat(", StringComparison.Ordinal) || t.Contains(",Cat(Cat(", StringComparison.Ordinal)
+            || t.Contains("Cat(Cond(", StringComparison.Ordinal) || t.Contains(",Cat(Cond(", StringComparison.Ordinal));
+        await Assert.That(comparesConcat).IsGreaterThan(0).Because($"{comparesConcat} of {texts.Count} programs compare a concatenation");
+        await Assert.That(nested).IsGreaterThan(0).Because($"{nested} of {texts.Count} programs nest a concatenation");
+        await Assert.That(AstShapeGenerator.NotGenerated.Any(e => e.Shape.Contains("concatenation", StringComparison.Ordinal))).IsFalse();
+    }
+
+    [Test]
     public async Task DefaultSeed_PrintedCSharp_AgreesWithTheVm() {
         var rows = Run(DefaultSet);
 

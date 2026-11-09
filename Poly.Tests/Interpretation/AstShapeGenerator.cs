@@ -46,10 +46,6 @@ public static class AstShapeGenerator {
             "covered by hand-written corpus rows; shift-count masking and VM-only nodes need a per-kind semantic decision before they can be generated"),
         ("loops, try/catch, lambdas, member access, collections",
             "statement and heap shapes need a per-shape comparison rule (iteration bounds, ring state); AstParitySequence owns them"),
-        ("string ==/!= with a concatenation operand",
-            "FINDING: NotEqual(Add(s,\"c\"), Add(s,\"c\")) stack-overflows AbiEmitter at VM compile and kills the process; it cannot be a row, so comparison operands are concatenation-free until the VM is fixed"),
-        ("string concatenation nested in a concatenation or beside another in a conditional",
-            "FINDING: seed 374#103 (Cond(c, Cat(Cond(..Cat..), Cat(Cond,Cat)), ..)) stack-overflows AbiEmitter at VM compile; not minimised. String programs are a leaf, one concatenation of leaves, or a conditional of leaves/concatenations"),
         ("mixed-width comparison (int vs long vs double)",
             "needs a stated promotion rule; comparisons are generated same-type only"),
     ];
@@ -263,40 +259,28 @@ public static class AstShapeGenerator {
         }
     }
 
-    // Operand of a string ==/!=: no concatenation. NotEqual(Add(s,"c"), Add(s,"c")) stack-overflows the
-    // VM compiler (AbiEmitter), which kills the test process, so the shape is excluded (NotGenerated).
-    static Gen StrOperand(SplitMix rng, Dictionary<string, Variable> vars, int depth) {
-        if (depth == 0 || rng.Next(2) == 0)
-            return Leaf(rng, vars, Ty.Str);
-        var test = BoolExpr(rng, vars, depth - 1);
-        var a = Leaf(rng, vars, Ty.Str);
-        var b = Leaf(rng, vars, Ty.Str);
-        return new(new Conditional(test.Node, a.Node, b.Node), $"Cond({test.Text},{a.Text},{b.Text})", false);
-    }
+    // Operand of a string ==/!=: any string expression, concatenations included.
+    static Gen StrOperand(SplitMix rng, Dictionary<string, Variable> vars, int depth) =>
+        Expr(rng, vars, Ty.Str, depth);
 
-    // A string program is a leaf, one concatenation of two atoms, or a conditional of two atoms. A
-    // concatenation nested in a concatenation or a conditional branch beside another one crashes the VM
-    // compiler (NotGenerated), so atoms never nest.
+    // A string program is a leaf, a concatenation, or a conditional; operands recurse to the depth bound.
     static Gen StrExpr(SplitMix rng, Dictionary<string, Variable> vars, int depth) {
         if (depth == 0 || rng.Next(3) == 0)
             return Leaf(rng, vars, Ty.Str);
         if (rng.Next(2) == 0) {
             var test = BoolExpr(rng, vars, depth - 1);
-            var a = StrAtom(rng, vars);
-            var b = StrAtom(rng, vars);
+            var a = Expr(rng, vars, Ty.Str, depth - 1);
+            var b = Expr(rng, vars, Ty.Str, depth - 1);
             return new(new Conditional(test.Node, a.Node, b.Node), $"Cond({test.Text},{a.Text},{b.Text})", false);
         }
-        return StrConcat(rng, vars);
+        return StrConcat(rng, vars, depth);
     }
 
-    static Gen StrAtom(SplitMix rng, Dictionary<string, Variable> vars) =>
-        rng.Next(2) == 0 ? Leaf(rng, vars, Ty.Str) : StrConcat(rng, vars);
-
-    static Gen StrConcat(SplitMix rng, Dictionary<string, Variable> vars) {
-        var left = Leaf(rng, vars, Ty.Str);
+    static Gen StrConcat(SplitMix rng, Dictionary<string, Variable> vars, int depth) {
+        var left = Expr(rng, vars, Ty.Str, depth - 1);
         var right = rng.Next(3) == 0
             ? new Gen(new Constant(Pick(rng, StringBoundaries)), "C(str)", true)
-            : Leaf(rng, vars, Ty.Str);
+            : Expr(rng, vars, Ty.Str, depth - 1);
         return new(new Add(left.Node, right.Node), $"Cat({left.Text},{right.Text})", false);
     }
 

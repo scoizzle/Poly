@@ -681,6 +681,10 @@ public static partial class AbiEmitter {
         Type? sourceType = ctx.ClrTypeOf(t.Operand);
         if (sourceType is null && t.Operand is Constant c && c.Value is not null)
             sourceType = c.Value.GetType();
+        // `(T?)null` is absent. The operand's word is 0, and a bare 0 in a slot read at the
+        // underlying type is a present zero, so the cast writes the nullable's own absent value.
+        if (t.Operand is Constant { Value: null } && Nullable.GetUnderlyingType(targetType) is not null)
+            return Assign(ctx.HoldRing(targetType), Default(targetType));
         var ring = ctx.OpenRing();
         var slot = ring.AddValue(CompileNode(t.Operand, ctx));
         if (sourceType is null || sourceType == targetType || targetType.IsAssignableFrom(sourceType))

@@ -69,4 +69,65 @@ public class CastParityRegressionTests {
         await Assert.That(row.Agrees).IsTrue().Because(row.Describe());
         await Assert.That(row.VmOutcome).IsEqualTo("double:3");
     }
+
+    [Test]
+    public async Task Cast_OfNullConstantToNullableDouble_AssignedToLocal_StaysNull() {
+        var n = new Variable("n");
+        var body = new Block([new Assignment(n, new TypeCast(new Constant(null), TypeReference.To<double?>())), n], [n]);
+        var row = AstParity.Compare("null-cast-local", body);
+        await Assert.That(row.Agrees).IsTrue().Because(row.Describe());
+        await Assert.That(row.VmOutcome).IsEqualTo("null");
+    }
+
+    [Test]
+    public async Task Cast_OfNullConstantToNullableDouble_Coalesced_TakesTheRightArm() {
+        var n = new Variable("n");
+        var body = new Block([new Assignment(n, new TypeCast(new Constant(null), TypeReference.To<double?>())), new Coalesce(n, new Constant(2.5))], [n]);
+        var row = AstParity.Compare("null-cast-coalesce", body);
+        await Assert.That(row.Agrees).IsTrue().Because(row.Describe());
+        await Assert.That(row.VmOutcome).IsEqualTo("double:2.5");
+    }
+
+    [Test]
+    public async Task Cast_OfNullConstantToNullableDouble_CoalescedDirectly_TakesTheRightArm() {
+        var body = new Coalesce(new TypeCast(new Constant(null), TypeReference.To<double?>()), new Constant(2.5));
+        var row = AstParity.Compare("null-cast-direct-coalesce", body);
+        await Assert.That(row.Agrees).IsTrue().Because(row.Describe());
+        await Assert.That(row.VmOutcome).IsEqualTo("double:2.5");
+    }
+
+    [Test]
+    public async Task Cast_OfNullConstantToNullableInt_EqualsNull() {
+        var n = new Variable("n");
+        var body = new Block([new Assignment(n, new TypeCast(new Constant(null), TypeReference.To<int?>())), new Equal(n, new Constant(null))], [n]);
+        var row = AstParity.Compare("null-cast-int-eq-null", body);
+        await Assert.That(row.Agrees).IsTrue().Because(row.Describe());
+        await Assert.That(row.VmOutcome).IsEqualTo("bool:true");
+    }
+
+    [Test]
+    public async Task Cast_OfNullConstantToNullableInt_Coalesced_TakesTheRightArm() {
+        var n = new Variable("n");
+        var body = new Block([new Assignment(n, new TypeCast(new Constant(null), TypeReference.To<int?>())), new Coalesce(n, new Constant(7))], [n]);
+        var row = AstParity.Compare("null-cast-int-coalesce", body);
+        await Assert.That(row.Agrees).IsTrue().Because(row.Describe());
+    }
+
+    [Test]
+    public async Task Cast_OfValueToNullableDouble_AssignedToLocal_StaysPresent() {
+        var n = new Variable("n");
+        var body = new Block([new Assignment(n, new TypeCast(new Constant(0.0), TypeReference.To<double?>())), new Coalesce(n, new Constant(2.5))], [n]);
+        var row = AstParity.Compare("value-cast-present", body);
+        await Assert.That(row.Agrees).IsTrue().Because(row.Describe());
+        await Assert.That(row.VmOutcome).IsEqualTo("double:0");
+    }
+
+    [Test]
+    public async Task NullAssignedWithoutCast_ToNullableDouble_IsNull() {
+        var n = new Parameter("n", TypeReference.To<double?>());
+        var lambda = new Lambda([n], new Coalesce(n, new Constant(2.5)));
+        var row = AstParity.Compare("null-param-coalesce", lambda, new object?[] { null });
+        await Assert.That(row.Agrees).IsTrue().Because(row.Describe());
+        await Assert.That(row.VmOutcome).IsEqualTo("double:2.5");
+    }
 }

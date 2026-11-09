@@ -116,8 +116,70 @@ public static partial class AbiEmitter {
         /// <summary>Frame slot holding the word of the value last yielded.</summary>
         public int IteratorCurrentSlot { get; set; }
 
+        /// <summary>Frame slot <c>VmIterator&lt;T&gt;.Dispose</c> sets to 1 before it resumes a suspended
+        /// body: every yield then runs the outstanding cleanup chain instead of continuing.</summary>
+        public int IteratorDisposeSlot { get; set; }
+
         /// <summary>A fresh frame word that nothing else owns.</summary>
         public int AllocFrameSlot() => _nextFrameSlot++;
+
+        // ── Iterator cleanup: lowered try/finally, using and foreach (#338 slice 3) ──────
+
+        /// <summary>A try/finally, using or foreach of an iterator body that contains a yield. The CLR
+        /// cannot jump into a try, so the region is lowered: no CLR try, a frame flag that is 1 while
+        /// the region is entered, and a dispose label that runs the cleanup once and falls to the
+        /// enclosing region's.</summary>
+        internal sealed class ResumableCleanup {
+            public ResumableCleanup(int flagSlot, ResumableCleanup? parent) {
+                FlagSlot = flagSlot;
+                Parent = parent;
+                DisposeLabel = Label($"dispose_{flagSlot}");
+                Depth = (parent?.Depth ?? 0) + 1;
+            }
+
+            public int FlagSlot { get; }
+            public ResumableCleanup? Parent { get; }
+            public int Depth { get; }
+            public LabelTarget DisposeLabel { get; }
+        }
+
+        private ResumableCleanup? _currentCleanup;
+        private readonly List<Expression> _exceptionCleanups = new();
+        private bool _hasIteratorCleanup;
+
+        /// <summary>The innermost lowered cleanup region being compiled, or null.</summary>
+        internal ResumableCleanup? CurrentCleanup => _currentCleanup;
+
+        /// <summary>True once any lowered cleanup exists; the iterator shape records it so
+        /// <c>Dispose</c> knows whether resuming a suspended body can have an effect.</summary>
+        internal bool HasIteratorCleanup => _hasIteratorCleanup;
+
+        /// <summary>Where a <c>yield break</c> / <c>return</c> / disposed resume goes: through the
+        /// enclosing cleanups, then out.</summary>
+        internal LabelTarget IteratorLeaveLabel => _currentCleanup?.DisposeLabel ?? ExitLabel;
+
+        internal ResumableCleanup OpenCleanup(int flagSlot) {
+            _hasIteratorCleanup = true;
+            _currentCleanup = new ResumableCleanup(flagSlot, _currentCleanup);
+            return _currentCleanup;
+        }
+
+        internal void CloseCleanup() => _currentCleanup = _currentCleanup!.Parent;
+
+        /// <summary>A closed cleanup's exception-path copy. Regions close innermost first, so the
+        /// list is already in the order a thrown exception must unwind them.</summary>
+        internal void RegisterExceptionCleanup(Expression cleanup) => _exceptionCleanups.Add(cleanup);
+
+        /// <summary>The handler body that runs every still-entered cleanup, innermost first; an
+        /// outer cleanup runs even when an inner one throws.</summary>
+        internal Expression? EmitExceptionCleanups() {
+            if (_exceptionCleanups.Count == 0)
+                return null;
+            Expression chain = _exceptionCleanups[^1];
+            for (int i = _exceptionCleanups.Count - 2; i >= 0; i--)
+                chain = TryFinally(_exceptionCleanups[i], chain);
+            return chain;
+        }
 
         private readonly List<ResumeRegion> _regions = new();
         private readonly Stack<ResumeRegion> _openRegions = new();
@@ -874,10 +936,10 @@ public static partial class AbiEmitter {
 
         public bool HasInlineParameters => _inlineParameterDepth > 0;
 
-        private readonly Stack<(LabelTarget breakLabel, LabelTarget continueLabel, string? name)> _loopScopes = new();
+        private readonly Stack<(LabelTarget breakLabel, LabelTarget continueLabel, string? name, int cleanupDepth)> _loopScopes = new();
 
         public void PushLoopScope(LabelTarget breakLabel, LabelTarget continueLabel, string? name = null) {
-            _loopScopes.Push((breakLabel, continueLabel, name));
+            _loopScopes.Push((breakLabel, continueLabel, name, _currentCleanup?.Depth ?? 0));
         }
 
         public void PopLoopScope() => _loopScopes.Pop();
@@ -885,14 +947,29 @@ public static partial class AbiEmitter {
         public (LabelTarget breakLabel, LabelTarget continueLabel) ResolveLoopLabels(string? name) {
             if (_loopScopes.Count == 0)
                 throw new InvalidOperationException("VM compile rejected: break/continue outside an enclosing loop.");
-            if (name is null)
-                return (_loopScopes.Peek().breakLabel, _loopScopes.Peek().continueLabel);
+            int current = _currentCleanup?.Depth ?? 0;
+            if (name is null) {
+                var innermost = _loopScopes.Peek();
+                RejectCleanupCrossing(innermost.cleanupDepth, current);
+                return (innermost.breakLabel, innermost.continueLabel);
+            }
             foreach (var scope in _loopScopes) {
-                if (scope.name == name)
+                if (scope.name == name) {
+                    RejectCleanupCrossing(scope.cleanupDepth, current);
                     return (scope.breakLabel, scope.continueLabel);
+                }
             }
             throw new InvalidOperationException(
                 $"VM compile rejected: no enclosing loop with label '{name}'.");
+        }
+
+        /// <summary>A break or continue that leaves a lowered try/finally, using or foreach would skip its
+        /// cleanup: the region has no CLR finally to run. Fails closed (the analyzer reports it as
+        /// IT0008 first).</summary>
+        private static void RejectCleanupCrossing(int loopDepth, int currentDepth) {
+            if (currentDepth > loopDepth)
+                throw new InvalidOperationException(
+                    "VM compile rejected: break/continue leaves a try/finally, using or foreach that contains a yield (IT0008).");
         }
 
         private readonly Dictionary<string, LabelTarget> _labels = new();

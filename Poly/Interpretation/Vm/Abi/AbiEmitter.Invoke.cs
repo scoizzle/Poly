@@ -560,13 +560,18 @@ public static partial class AbiEmitter {
             fnCtx.IteratorRegionSlot = fnCtx.AllocFrameSlot();
             fnCtx.IteratorMovedSlot = fnCtx.AllocFrameSlot();
             fnCtx.IteratorCurrentSlot = fnCtx.AllocFrameSlot();
+            fnCtx.IteratorDisposeSlot = fnCtx.AllocFrameSlot();
             bodyExprs.Add(Assign(fnCtx.FrameSlotRead(fnCtx.IteratorMovedSlot), Constant(0L)));
             var rootRegion = fnCtx.BeginRegion();
             var iteratorBody = fnCtx.EndRegion(rootRegion, CompileNode(body, fnCtx).Code);
             // The outer dispatch: region id -> region entry. It sits before the body, which owns
             // the entry labels, and a fresh start (id 0) falls through into the body.
-            bodyExprs.Add(fnCtx.EmitRegionDispatch());
-            bodyExprs.Add(iteratorBody);
+            var resumable = Block(typeof(void), fnCtx.EmitRegionDispatch(), iteratorBody);
+            // A lowered try/finally, using or foreach has no CLR finally: an exception leaving the body
+            // runs every still-entered cleanup here, then continues unwinding.
+            bodyExprs.Add(fnCtx.EmitExceptionCleanups() is { } unwind
+                ? TryCatch(resumable, Catch(typeof(Exception), Block(typeof(void), unwind, Rethrow())))
+                : resumable);
         }
         else {
             // Compile body
@@ -593,7 +598,8 @@ public static partial class AbiEmitter {
         var compiledBody = delegateExpr.Compile();
         if (iteratorElement is not null)
             VmIteratorShape.Register(compiledBody, new VmIteratorShape(
-                fnCtx.FrameSlotHighWater, fnCtx.IteratorMovedSlot, fnCtx.IteratorCurrentSlot));
+                fnCtx.FrameSlotHighWater, fnCtx.IteratorMovedSlot, fnCtx.IteratorCurrentSlot,
+                fnCtx.IteratorDisposeSlot, fnCtx.HasIteratorCleanup));
         return compiledBody;
     }
 

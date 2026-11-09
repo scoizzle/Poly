@@ -10,6 +10,11 @@ namespace Poly.Interpretation.Analysis.Semantics;
 /// <item><c>IT0004</c> — <c>yield return</c> in a <c>try</c> block that has a <c>catch</c> clause.</item>
 /// <item><c>IT0005</c> — <c>yield return</c> in a <c>catch</c> clause.</item>
 /// <item><c>IT0006</c> — a yielded value with no implicit conversion to the element type.</item>
+/// <item><c>IT0008</c> — a <c>break</c> / <c>continue</c> that leaves a try/finally, <c>using</c> or
+/// <c>foreach</c> whose body contains a yield. Such a region is lowered to a frame flag and an explicit cleanup
+/// (the CLR cannot resume into a try), so a jump out of it would skip the cleanup. Fails closed rather than
+/// leaving the cleanup unrun.</item>
+/// <item><c>IT0009</c> — a <c>goto</c> inside such a region, whose target the pass does not prove stays inside it.</item>
 /// <item><c>IT0007</c> — a member or index access on a local that holds an iterator call result. The
 /// type provider spells <c>IEnumerable&lt;T&gt;</c> as <c>List&lt;T&gt;</c>, but the runtime value is a lazy
 /// iterator, so only enumeration (<c>foreach</c>) is sound; <c>e.Count</c> would otherwise type-check and
@@ -29,7 +34,9 @@ internal sealed class IteratorLegalityAnalyzer : INodeAnalyzer {
         Type? ElementType = null,
         bool InTryWithCatch = false,
         bool InCatch = false,
-        bool InFinally = false);
+        bool InFinally = false,
+        int Lowered = 0,
+        System.Collections.Immutable.ImmutableList<(string? Label, int Lowered)>? Loops = null);
 
     public void Analyze(AnalysisContext context, Node node) {
         Walk(context, node, new Scope());
@@ -103,7 +110,11 @@ internal sealed class IteratorLegalityAnalyzer : INodeAnalyzer {
 
             case TryCatchFinally tcf: {
                     var hasCatch = tcf.CatchClauses is { Count: > 0 };
-                    Walk(context, tcf.TryBlock, scope with { InTryWithCatch = scope.InTryWithCatch || hasCatch });
+                    var lowers = !hasCatch && tcf.FinallyBlock is not null && ContainsYield(tcf.TryBlock);
+                    Walk(context, tcf.TryBlock, scope with {
+                        InTryWithCatch = scope.InTryWithCatch || hasCatch,
+                        Lowered = scope.Lowered + (lowers ? 1 : 0),
+                    });
                     if (tcf.CatchClauses is not null) {
                         foreach (var clause in tcf.CatchClauses)
                             Walk(context, clause.Body, scope with { InCatch = true });
@@ -112,6 +123,42 @@ internal sealed class IteratorLegalityAnalyzer : INodeAnalyzer {
                         Walk(context, tcf.FinallyBlock, scope with { InFinally = true });
                     return;
                 }
+
+            case UsingStatement us when ContainsYield(us.Body):
+                Walk(context, us.Resource, scope);
+                Walk(context, us.Body, scope with { Lowered = scope.Lowered + 1 });
+                return;
+
+            case ForEachLoop fel: {
+                    // A foreach around a yield is lowered, and its loop is inside the region: a break
+                    // or continue aimed at it stays inside.
+                    var inner = ContainsYield(fel.Body) ? scope with { Lowered = scope.Lowered + 1 } : scope;
+                    inner = EnterLoop(inner, fel.Label);
+                    foreach (var child in node.Children)
+                        if (child is not null)
+                            Walk(context, child, inner);
+                    return;
+                }
+
+            case WhileLoop or DoWhileLoop or ForLoop: {
+                    var inner = EnterLoop(scope, LoopLabel(node));
+                    foreach (var child in node.Children)
+                        if (child is not null)
+                            Walk(context, child, inner);
+                    return;
+                }
+
+            case BreakStatement or ContinueStatement:
+                if (scope.IsIterator && !scope.InLambda && JumpLeavesRegion(scope, JumpLabel(node))) {
+                    Error(context, node, "IT0008",
+                        "break/continue cannot leave a try/finally, using or foreach that contains a yield; the cleanup would not run.");
+                }
+                return;
+
+            case GotoStatement when scope.IsIterator && !scope.InLambda && scope.Lowered > 0:
+                Error(context, node, "IT0009",
+                    "goto cannot appear inside a try/finally, using or foreach that contains a yield; the cleanup could be skipped.");
+                return;
 
             case YieldStatement yield:
                 Check(context, yield, scope);
@@ -126,6 +173,35 @@ internal sealed class IteratorLegalityAnalyzer : INodeAnalyzer {
                 }
                 return;
         }
+    }
+
+    private static string? LoopLabel(Node loop) => loop switch {
+        WhileLoop w => w.Label,
+        DoWhileLoop d => d.Label,
+        ForLoop f => f.Label,
+        _ => null,
+    };
+
+    private static string? JumpLabel(Node jump) => jump switch {
+        BreakStatement b => b.Label,
+        ContinueStatement c => c.Label,
+        _ => null,
+    };
+
+    private static Scope EnterLoop(Scope scope, string? label) =>
+        scope with {
+            Loops = (scope.Loops ?? System.Collections.Immutable.ImmutableList<(string? Label, int Lowered)>.Empty)
+                .Add((label, scope.Lowered)),
+        };
+
+    private static bool JumpLeavesRegion(Scope scope, string? label) {
+        if (scope.Loops is not { Count: > 0 } loops)
+            return false;
+        for (int i = loops.Count - 1; i >= 0; i--) {
+            if (label is null || loops[i].Label == label)
+                return scope.Lowered > loops[i].Lowered;
+        }
+        return false;
     }
 
     private static Scope MethodScope(AnalysisContext context, MethodDefinitionNode method) {

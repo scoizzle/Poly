@@ -256,6 +256,17 @@ switch (_slots[_fp + regionIdSlot]) {      // outer: region id -> region
 `VmIterator<T>` owns the frame (a private `long[]`). Each `MoveNext` copies it onto the stack above
 the stack pointer, runs the compiled step with `FramePos` there, and copies it back.
 
+A try/finally, `using` or `foreach` whose body contains a yield (#338 slice 3) is not a CLR try: the CLR
+cannot jump into one to resume. It is lowered to a frame flag (1 while entered) and plain cleanup code
+(`EmitLoweredFinally`). Four paths run the cleanup, and clearing the flag first makes each run it once:
+the body completing; `VmIterator<T>.Dispose` (sets the dispose word and resumes the suspended body, and
+every yield then jumps to its region's dispose label, which runs that cleanup and falls to the enclosing
+region's); `yield break` / `return` (the same label); and an exception, caught by a handler around the whole
+iterator body that runs every flagged cleanup, innermost first, then rethrows. A `using` resource handle
+and a `foreach` enumerator (heap-allocated) live in frame words so they survive each yield. Fail closed:
+`yield` in a try with a catch, in a catch or in a finally is IT0003-IT0005; a `break` / `continue` that
+leaves such a region is IT0008 and a `goto` inside one is IT0009, because the cleanup would be skipped.
+
 ## Pipeline
 
 ```text

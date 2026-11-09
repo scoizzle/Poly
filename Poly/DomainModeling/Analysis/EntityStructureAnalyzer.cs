@@ -120,7 +120,8 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
             isRoot, hasNaturalKey, keyPropName, keyClrType,
             hasStages, stageEnumTypeName, stageByName, constructorParameters,
             requiredPropertyNames, enumPropertyNames, entryAssignedPropertyNames,
-            lifecyclePropertyName, lifecycleEnumTypeName, assignOnlyPropertyNames
+            lifecyclePropertyName, lifecycleEnumTypeName, assignOnlyPropertyNames,
+            entity.KeyProperties
         );
     }
 
@@ -160,7 +161,7 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
         return names;
     }
 
-    private static IReadOnlySet<string> ComputeAssignOnlyPropertyNames(Entity entity) {
+    internal static IReadOnlySet<string> ComputeAssignOnlyPropertyNames(Entity entity) {
         var names = new HashSet<string>(StringComparer.Ordinal);
         void Walk(IEnumerable<Effect> effects) {
             foreach (var effect in effects) {

@@ -74,6 +74,102 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
         ReportReservedGeneratedNames(context, domain);
 
         ReportStoredValueTypeProperties(context, domain);
+
+        ReportKeyDesignations(context, domain);
+    }
+
+    /// <summary>
+    /// #405: an entity's <see cref="Entity.KeyProperties"/> is a designation over its own members, so
+    /// names are scoped to that entity (two entities may each key on <c>Code</c>). A malformed
+    /// designation fails closed: a repeated member is <see cref="DomainModelDiagnosticCodes.StructuralDuplicate"/>,
+    /// a navigation-key cycle is <see cref="DomainModelDiagnosticCodes.StructuralCycle"/>, and any other
+    /// violation of the admission rules is <see cref="DomainModelDiagnosticCodes.InvalidKeyDesignation"/>.
+    /// </summary>
+    private static void ReportKeyDesignations(AnalysisContext context, Domain domain) {
+        var entities = domain.Types.OfType<Entity>()
+            .GroupBy(static e => e.Name, StringComparer.Ordinal)
+            .ToDictionary(static g => g.Key, static g => g.First(), StringComparer.Ordinal);
+
+        foreach (var entity in domain.Types.OfType<Entity>()) {
+            if (entity.KeyProperties.Count == 0)
+                continue;
+
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            var assigned = EntityStructureAnalyzer.ComputeAssignOnlyPropertyNames(entity);
+            foreach (var member in entity.KeyProperties) {
+                if (string.IsNullOrWhiteSpace(member)) {
+                    ReportInvalidKey(context, entity, $"Entity '{entity.Name}' key names a blank member.");
+                    continue;
+                }
+                if (!seen.Add(member)) {
+                    context.ReportError(
+                        entity,
+                        $"Duplicate member name '{member}' in key of entity '{entity.Name}'.",
+                        DomainModelDiagnosticCodes.StructuralDuplicate);
+                    continue;
+                }
+
+                var property = entity.Properties.FirstOrDefault(p => string.Equals(p.Name, member, StringComparison.Ordinal));
+                if (property is not null) {
+                    if (!EntityStructureAnalyzer.IsRequired(property))
+                        ReportInvalidKey(context, entity,
+                            $"Entity '{entity.Name}' key member '{member}' is optional; a key member must be required.");
+                    else if (assigned.Contains(member))
+                        ReportInvalidKey(context, entity,
+                            $"Entity '{entity.Name}' key member '{member}' is assigned by an effect; a key member must be immutable.");
+                    continue;
+                }
+
+                var nav = entity.Navigations.FirstOrDefault(n => string.Equals(n.Name, member, StringComparison.Ordinal));
+                if (nav is null) {
+                    ReportInvalidKey(context, entity,
+                        $"Entity '{entity.Name}' key names '{member}', which is not a property or navigation of the entity.");
+                    continue;
+                }
+                if (nav.Cardinality is RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany) {
+                    ReportInvalidKey(context, entity,
+                        $"Entity '{entity.Name}' key member '{member}' is a collection navigation; a key navigation must be singular.");
+                    continue;
+                }
+                if (!entities.TryGetValue(nav.Target.TypeName, out var target)) {
+                    ReportInvalidKey(context, entity,
+                        $"Entity '{entity.Name}' key navigation '{member}' targets '{nav.Target.TypeName}', which is not an entity.");
+                    continue;
+                }
+                if (target.KeyProperties.Count == 0)
+                    ReportInvalidKey(context, entity,
+                        $"Entity '{entity.Name}' key navigation '{member}' targets '{target.Name}', which has no key.");
+            }
+
+            if (ReachesViaKeyNavigation(entity, entity, entities, new HashSet<string>(StringComparer.Ordinal))) {
+                context.ReportError(
+                    entity,
+                    $"Entity '{entity.Name}' key resolves through singular navigations back to itself; a key cannot be cyclic.",
+                    DomainModelDiagnosticCodes.StructuralCycle);
+            }
+        }
+    }
+
+    private static void ReportInvalidKey(AnalysisContext context, Entity entity, string message) =>
+        context.ReportError(entity, message, DomainModelDiagnosticCodes.InvalidKeyDesignation);
+
+    /// <summary>True when following key-member singular navigations from <paramref name="from"/> reaches <paramref name="goal"/>.</summary>
+    private static bool ReachesViaKeyNavigation(
+        Entity goal, Entity from, IReadOnlyDictionary<string, Entity> entities, HashSet<string> visited) {
+        foreach (var member in from.KeyProperties) {
+            if (from.Properties.Any(p => string.Equals(p.Name, member, StringComparison.Ordinal)))
+                continue;
+            var nav = from.Navigations.FirstOrDefault(n => string.Equals(n.Name, member, StringComparison.Ordinal));
+            if (nav is null || nav.Cardinality is RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany)
+                continue;
+            if (!entities.TryGetValue(nav.Target.TypeName, out var target))
+                continue;
+            if (ReferenceEquals(target, goal))
+                return true;
+            if (visited.Add(target.Name) && ReachesViaKeyNavigation(goal, target, entities, visited))
+                return true;
+        }
+        return false;
     }
 
     /// <summary>

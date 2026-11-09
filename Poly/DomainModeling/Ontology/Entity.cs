@@ -37,6 +37,16 @@ public sealed record Entity(
     /// </summary>
     public IReadOnlyList<Relationship> Navigations { get; init; } = [];
 
+    /// <summary>
+    /// The compile-time key designation (#405): the names of the entity's own properties, or of its
+    /// singular navigations, that together are its domain identity. Empty means the entity is unkeyed
+    /// — it has no domain identity and cannot be a key scope or foreign-key target. A designation is
+    /// metadata over existing members, not a member: nothing is lowered or printed for it, and
+    /// <c>Id</c> is an alias of this tuple (<see cref="Analysis.EntityStructureMetadata.Id"/>).
+    /// Names are scoped to this entity; analysis rejects a malformed designation.
+    /// </summary>
+    public IReadOnlyList<string> KeyProperties { get; init; } = [];
+
     public sealed override IEnumerable<Node?> Children =>
         [.. Properties, .. Constraints, .. Facets, .. Actions, .. Policies, .. Stages, .. Subscriptions, .. Navigations];
 }

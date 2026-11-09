@@ -109,7 +109,7 @@ public sealed class DomainSession {
     private CompiledDomain? _compiled;
 
     private const string ScaffoldingType = "scaffolding";
-    private const string EntityType = "entity";
+    internal const string EntityType = "entity";
     private const string AnalysisReportType = "analysis-report";
     private const string VmAnalysisReportType = "vm-analysis-report";
     private const string CatalogReferenceReportType = "catalog-reference-report";

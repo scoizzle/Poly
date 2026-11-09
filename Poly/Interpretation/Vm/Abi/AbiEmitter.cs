@@ -899,6 +899,12 @@ public static partial class AbiEmitter {
             // An IEEE arm keeps the value, so the arms must agree on one width before
             // Expression.Condition can take them.
             if (ifTrue.Type != ifFalse.Type) {
+                // A call or cast arm leaves an IEEE value as its bit-pattern word. Converting that
+                // long to double numerically would read the bits as a number, so decode it first.
+                ifTrue = DecodeIeeeWordArm(ifTrue, c.IfTrue, ctx);
+                ifFalse = DecodeIeeeWordArm(ifFalse, c.IfFalse, ctx);
+            }
+            if (ifTrue.Type != ifFalse.Type) {
                 var target = ValueTypeOf(ifTrue.Type, ifFalse.Type);
                 ifTrue = Convert(ifTrue, target);
                 ifFalse = Convert(ifFalse, target);
@@ -917,6 +923,11 @@ public static partial class AbiEmitter {
             ? Condition(test, Block(ifTrue, Expression.Default(ifFalse.Type)), ifFalse)
             : Condition(test, ifTrue, Block(ifFalse, Expression.Default(ifTrue.Type)));
     }
+
+    private static Expression DecodeIeeeWordArm(Expression arm, Node branch, Context ctx) =>
+        arm.Type == typeof(long) && ctx.ClrTypeOf(branch) is { } clr && RingCodec.IsIeee(clr)
+            ? RingCodec.FromFrame(arm, clr, clr, ctx.HeapLocal)
+            : arm;
 
     /// <summary>Compiles one arm of a <see cref="Conditional"/>. A literal <c>null</c>
     /// arm of a value-represented conditional — the null-receiver arm of a <c>?.</c>

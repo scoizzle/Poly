@@ -48,10 +48,6 @@ public static class AstShapeGenerator {
             "statement and heap shapes need a per-shape comparison rule (iteration bounds, ring state); AstParitySequence owns them"),
         ("string ==/!= with a concatenation operand",
             "FINDING: NotEqual(Add(s,\"c\"), Add(s,\"c\")) stack-overflows AbiEmitter at VM compile and kills the process; it cannot be a row, so comparison operands are concatenation-free until the VM is fixed"),
-        ("widening cast of a compound operand",
-            "FINDING: Cast<Long>(Add(Add(i2,i1),Mul(i1,i2))) prints as '(System.Int64)i2 + i1 + i1 * i2' - the cast binds to the first operand only, so the VM (int arithmetic then widen) and the printed C# (long arithmetic) disagree; seeds 374#67, #88, #91 reproduced it. Casts are generated over leaf operands until the writer parenthesizes"),
-        ("widening cast under a conditional branch",
-            "FINDING: Conditional(b, d, Cast<Double>(i)) returns the double's raw bit pattern when the cast branch is taken (VM 4.6139e18, printed 3); seeds 374#58, #97. Casts are generated outside conditional branches until the VM is fixed"),
         ("a compound subtree repeated within one program",
             "FINDING: NotEqual(Add(i,1), Add(i,1)) stack-overflows AbiEmitter at VM compile and kills the process (also reached by seed 374#103 and by string concatenation on both sides of !=). A program that repeats a compound subtree is regenerated; leaves (a local or a constant) may repeat freely"),
         ("string concatenation nested in a concatenation or beside another in a conditional",
@@ -156,13 +152,13 @@ public static class AstShapeGenerator {
         return new($"seed={seed}#{index}:{type}", program, header + body.Text);
     }
 
-    static Gen Expr(SplitMix rng, Dictionary<string, Variable> vars, Ty type, int depth, bool cast = true) {
+    static Gen Expr(SplitMix rng, Dictionary<string, Variable> vars, Ty type, int depth) {
         if (depth == 0 || rng.Next(5) == 0)
             return Leaf(rng, vars, type);
         return type switch {
-            Ty.Int => Numeric(rng, vars, Ty.Int, depth, cast),
-            Ty.Long => Numeric(rng, vars, Ty.Long, depth, cast),
-            Ty.Double => Numeric(rng, vars, Ty.Double, depth, cast),
+            Ty.Int => Numeric(rng, vars, Ty.Int, depth),
+            Ty.Long => Numeric(rng, vars, Ty.Long, depth),
+            Ty.Double => Numeric(rng, vars, Ty.Double, depth),
             Ty.Bool => BoolExpr(rng, vars, depth),
             _ => StrExpr(rng, vars, depth),
         };
@@ -179,24 +175,22 @@ public static class AstShapeGenerator {
         return new(vars[name], name, false);
     }
 
-    static Gen Numeric(SplitMix rng, Dictionary<string, Variable> vars, Ty type, int depth, bool cast) {
+    static Gen Numeric(SplitMix rng, Dictionary<string, Variable> vars, Ty type, int depth) {
         switch (rng.Next(8)) {
             case 0: {
-                    var operand = Expr(rng, vars, type, depth - 1, cast);
+                    var operand = Expr(rng, vars, type, depth - 1);
                     return new(new UnaryMinus(operand.Node), $"Neg({operand.Text})", operand.IsConstant);
                 }
             case 1: {
                     var test = BoolExpr(rng, vars, depth - 1);
-                    // No cast anywhere under a branch: b ? d : (double)i yields the double's bit pattern (NotGenerated).
-                    var a = Expr(rng, vars, type, depth - 1, cast: false);
-                    var b = Expr(rng, vars, type, depth - 1, cast: false);
+                    var a = Expr(rng, vars, type, depth - 1);
+                    var b = Expr(rng, vars, type, depth - 1);
                     return new(new Conditional(test.Node, a.Node, b.Node), $"Cond({test.Text},{a.Text},{b.Text})", false);
                 }
-            case 2 when type != Ty.Int && cast: {
+            case 2 when type != Ty.Int: {
                     // widen: a narrower numeric operand cast up. Narrowing casts are not generated.
                     var from = type == Ty.Long ? Ty.Int : (Ty)rng.Next(2);
-                    // Leaf operand only: Cast(compound) prints without parentheses and changes arithmetic width (NotGenerated).
-                    var operand = Leaf(rng, vars, from);
+                    var operand = Expr(rng, vars, from, depth - 1);
                     return new(new TypeCast(operand.Node, TypeRef(type)), $"Cast<{type}>({operand.Text})", operand.IsConstant);
                 }
             default: {
@@ -207,14 +201,14 @@ public static class AstShapeGenerator {
                         3 => ("Div", (l, r) => new Divide(l, r), true),
                         _ => ("Mod", (l, r) => new Modulo(l, r), true),
                     };
-                    var left = Expr(rng, vars, type, depth - 1, cast);
+                    var left = Expr(rng, vars, type, depth - 1);
                     Gen right;
                     if (divisor)
                         right = NonZeroDivisor(rng, vars, type, depth - 1, left.IsConstant);
                     else
                         right = rng.Next(3) == 0 && !left.IsConstant
                             ? ConstantOperand(rng, type)
-                            : Expr(rng, vars, type, depth - 1, cast);
+                            : Expr(rng, vars, type, depth - 1);
                     return new(make(left.Node, right.Node), $"{name}({left.Text},{right.Text})", left.IsConstant && right.IsConstant);
                 }
         }

@@ -279,6 +279,8 @@ public sealed class ContractToleranceTests {
             overloadDsl, Billing(ambiguous), [Allow("DMCON012", "Shop/ChargeOrder")]);
         await Assert.That(Single(ambiguousAnalysis, DomainModelDiagnosticCodes.ContractOverloadAmbiguous).Severity)
             .IsEqualTo(DiagnosticSeverity.Error);
+        await Assert.That(Single(ambiguousAnalysis, DomainModelDiagnosticCodes.UnusedDiagnosticAllowance).Severity)
+            .IsEqualTo(DiagnosticSeverity.Error);
         await Assert.That(Tolerance(ambiguousDomain, ambiguousAnalysis) is null).IsTrue();
         Assert.Throws<InvalidOperationException>(() => ambiguousSession.Lower(ambiguousDomain, ambiguousAnalysis));
 

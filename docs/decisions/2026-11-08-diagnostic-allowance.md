@@ -15,8 +15,9 @@ Two records, in `Poly/DomainModeling/Analysis/DiagnosticAllowance.cs`:
 - `ObservedFlow(SourcePath, TargetPath)`: a copy the platform's reader found, as dotted
   `Entity.Property` paths. Bound with `SessionBuilder.WithObservedFlows`; a null element or a
   repeated pair throws `ArgumentException` at bind.
-- `DiagnosticAllowance(Code, ElementPath, ProvenanceIds)`: acknowledges one diagnostic those checks
-  emit, keyed by code plus the finding's element path. Bound with `WithDiagnosticAllowances`.
+- `DiagnosticAllowance(Code, ElementPath, ProvenanceIds)`: acknowledges one diagnostic an analysis
+  arm emits — a flow finding, or a contract finding in the set below — keyed by code plus the
+  finding's element path. Bound with `WithDiagnosticAllowances`.
 
 Both are frozen on `DomainSession` and read by the analyzers from `RuntimeAnalysisCache.Session`;
 `WithDomain` carries them on both branches. No library, no keyword, no load-order rule.
@@ -31,12 +32,13 @@ allowance clears it. No node is inserted into the domain, so nothing lowers and 
 copy is not a `DMEFF012`. Scale has no constraint diagnostic, so it is not checked here (it is a
 platform mapping row).
 
-- No matching allowance: the diagnostic is an error and `ThrowIfHasErrors` (the only gate) refuses.
+- No matching allowance: the diagnostic is an error and `ThrowIfHasErrors` (the only **severity**
+  gate) refuses.
 - Matching allowance: the same diagnostic is a warning, kept in the report. Direct `session.Lower`
   of an acknowledged **flow** domain succeeds; an acknowledged contract finding still refuses
   (see "Contract findings" below).
-- An allowance no flow diagnostic consumed is `DMALW001` (error, not acknowledgeable): wrong code or
-  path, stale after the flow became compatible, or empty or blank provenance ids.
+- An allowance no analysis arm consumed is `DMALW001` (error, not acknowledgeable): wrong code or
+  path, stale after the finding stopped firing, or empty or blank provenance ids.
 
 Ordinary parameter assigns keep their own path and severity; the allowance is consulted only by the
 flow arms and the contract arm, never by a pass over the diagnostic list.

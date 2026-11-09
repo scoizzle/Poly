@@ -486,7 +486,7 @@ public sealed partial class DomainToCSharpExporter {
         if (analysis?.GetMetadata<ContractBindingMetadata>(binding) is { Status: not ContractBindingStatus.Bound } refused)
             throw new InvalidOperationException(
                 $"Contract binding '{binding.Name}' is recorded as '{refused.Status}' and cannot be lowered. " +
-                "Resolve the binding or remove the acknowledgement.");
+                "Resolve the finding (the contract, endpoint, parameter, or pin) or remove the acknowledgement.");
         var contract = domain.ImportedContracts.FirstOrDefault(c =>
             string.Equals(c.Name, binding.ContractName, StringComparison.Ordinal));
         if (contract is null) return effectsBody;

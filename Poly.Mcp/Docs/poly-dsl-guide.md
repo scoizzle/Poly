@@ -1225,6 +1225,27 @@ A contribution also declares the host targets its implementation is for. `uses p
 the POSIX header (`Open`, `Read`, `Write`, `Close`) and declares `posix`; the set is not on the
 contract and not in the fingerprint, so another target's package keeps the pin.
 
+**Boundary constraints.** At a bind, analysis checks the caller's argument against the
+endpoint's public payload property constraints. The caller must be at least as constrained as
+the endpoint. A proof is silent. A caller whose values are disjoint from an obligation is
+`DMCON014` and Lower refuses. Anything the constraint merge cannot decide — a caller wider
+than the obligation, or a constraint kind with no merge rule — is `DMCON015`, a warning that
+does not block Lower — for a `range`, `length` or `equals` obligation. A `required`, `pattern`
+or `default` obligation with no same-kind caller constraint keeps the ordinary incompatible
+refusal (`DMCON001`).
+
+Two limits keep the check from claiming more than it knows. First, a `require` precondition is
+written against the **entity** the exported action came from, so it constrains entity state,
+not the argument: a bare property access in one is never decided from the caller's payload and
+is reported `DMCON015` rather than `DMCON014`, even when the entity and the payload share a
+property name. Only a precondition that names the bound parameter of a primitive payload is
+decidable. Second, `Empty` from the constraint merge is a real disjointness proof only for
+`range`, `length` and `equals`; a `pattern` or `default` mismatch keeps the ordinary
+incompatible refusal (`DMCON001`) instead of being reported as disjoint. Library bodies are not
+walked: a contributed body is reported `unknown` on its postconditions with one `DMCON015`, and
+the domain still lowers. The note is not part of the surface fingerprint, and it never clears a
+pin mismatch (`DMCON010`).
+
 ### Action Parameters
 
 Actions can declare typed parameters. There is no `param` keyword: a parameter is a **bare identifier** — the product parser emits it as a property access, and analysis/lowering/invoke-bindings/runtime treat an identifier matching an in-scope action parameter as a **parameter**, not a property. `ParameterAccess` is internal IR, not an authoring form. Parameters are injected for the duration of the action call and do not persist on the instance.

@@ -343,13 +343,34 @@ internal sealed class ContractIntegrationAnalyzer : INodeAnalyzer {
         var resolution = ContractEndpointResolver.Resolve(
             contract, domain, binding.EndpointName, localParam.Type.TypeName);
         var pinMismatch = contract.Pin is not null && !ContractPin.Matches(contract, contract.Pin);
-        var status = pinMismatch && resolution.Endpoint is not null
+
+        // #425: a same-shape constraint mismatch is a boundary verdict, not a generic
+        // incompatibility. The resolver refuses a wider caller; the boundary check decides
+        // whether that is a violation (DMCON014) or cannot-decide (DMCON015). A shape
+        // mismatch stays Incompatible: there is no constraint pair to compare.
+        var boundaryEndpoint = resolution.Endpoint
+            ?? (resolution.Status == ContractBindingStatus.Incompatible && resolution.Candidates.Count == 1
+                ? resolution.Candidates[0]
+                : null);
+        var boundary = boundaryEndpoint is not null
+                       && ContractPayloadRelation.SameShape(
+                           contract, domain, localParam.Type.TypeName, boundaryEndpoint.PayloadType.TypeName)
+            ? ContractBoundaryCheck.Check(
+                context, binding, contract, domain, boundaryEndpoint, localParam,
+                HasContributedBody(domain, contract, boundaryEndpoint))
+            : null;
+
+        var resolvedByBoundary = boundary is not null
+                                 && resolution.Status == ContractBindingStatus.Incompatible;
+        var status = pinMismatch && boundaryEndpoint is not null
             ? ContractBindingStatus.PinMismatch
-            : resolution.Status;
-        RecordBinding(context, binding, contract, status, resolution.Endpoint?.Name);
+            : resolvedByBoundary ? ContractBindingStatus.Bound : resolution.Status;
+        RecordBinding(context, binding, contract, status, boundaryEndpoint?.Name);
+        if (boundary is not null)
+            context.SetMetadata(binding, boundary);
 
         switch (resolution.Status) {
-            case ContractBindingStatus.Incompatible:
+            case ContractBindingStatus.Incompatible when boundary is null:
                 context.ReportError(
                     binding,
                     $"Contract binding '{binding.Name}' parameter '{localParam.Name}' type '{localParam.Type.TypeName}' is incompatible with {DescribeCandidates(resolution.Candidates)} on contract '{contract.Name}'.",
@@ -371,11 +392,11 @@ internal sealed class ContractIntegrationAnalyzer : INodeAnalyzer {
                 break;
         }
 
-        if (resolution.Endpoint is { } endpoint
-            && !PayloadTypeExists(domain, contract, endpoint.PayloadType.TypeName)) {
+        if (boundaryEndpoint is { } payloadOwner
+            && !PayloadTypeExists(domain, contract, payloadOwner.PayloadType.TypeName)) {
             context.ReportError(
-                endpoint,
-                $"Contract '{contract.Name}' endpoint '{endpoint.Name}' payload type '{endpoint.PayloadType.TypeName}' is not a primitive or a value type on that contract (or the parent domain).",
+                payloadOwner,
+                $"Contract '{contract.Name}' endpoint '{payloadOwner.Name}' payload type '{payloadOwner.PayloadType.TypeName}' is not a primitive or a value type on that contract (or the parent domain).",
                 DomainModelDiagnosticCodes.ContractIntegration);
         }
 
@@ -387,6 +408,21 @@ internal sealed class ContractIntegrationAnalyzer : INodeAnalyzer {
                     DomainModelDiagnosticCodes.ContractIntegration);
             }
         }
+    }
+
+    /// <summary>
+    /// #425: whether the loaded library contributed an implementation body for this endpoint.
+    /// A surface-only contribution (a sibling export) has none. The body itself is not read:
+    /// Scot's 2026-11-08 ruling keeps every contributed body unknown on the postcondition half.
+    /// Reads the session the same way <see cref="ValidatePlatformTarget"/> does; a domain whose
+    /// <c>uses</c> id the catalog cannot load throws in <c>DomainEvolution.ResolveSession</c>
+    /// before either runs.
+    /// </summary>
+    private static bool HasContributedBody(Domain domain, ImportedContract contract, ContractEndpoint endpoint) {
+        if (contract.UsesId is null)
+            return false;
+        var contribution = RuntimeAnalysisCache.Session(domain).FindContractContribution(contract.UsesId);
+        return contribution is not null && contribution.Bodies.ContainsKey(endpoint.Name);
     }
 
     private static bool HasEndpointCandidate(ImportedContract contract, string authoredEndpoint) =>

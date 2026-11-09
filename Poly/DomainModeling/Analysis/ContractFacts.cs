@@ -64,6 +64,43 @@ public sealed record ContractBindingMetadata(
     ContractBindingStatus Status) : IAnalysisMetadata;
 
 /// <summary>
+/// #425 (decision 21): the three-way outcome of one boundary obligation. <see cref="Proven"/>
+/// and <see cref="Violated"/> are decided by the constraint merge; <see cref="Unknown"/> is
+/// cannot-decide, never a silent pass and never a violation (#442).
+/// </summary>
+public enum ContractBoundaryVerdict {
+    /// <summary>The caller sits inside the obligation.</summary>
+    Proven,
+    /// <summary>The caller's values are disjoint from the obligation.</summary>
+    Violated,
+    /// <summary>The merge cannot decide, or the obligation is not readable from the argument.</summary>
+    Unknown,
+}
+
+/// <summary>
+/// #425: the direction a boundary note records. <see cref="Satisfies"/> means the caller is at
+/// least as constrained as the endpoint; <see cref="Reverse"/> means it is looser (a tightened
+/// precondition or a loosened postcondition, the breaking direction); <see cref="Incomparable"/>
+/// means an obligation could not be read from the argument.
+/// </summary>
+public enum ContractCompatibility {
+    Satisfies,
+    Reverse,
+    Incomparable,
+}
+
+/// <summary>
+/// #425: the boundary note beside a bind's <see cref="ContractBindingMetadata"/>. Not part of
+/// the surface fingerprint, not a pin input, and not a source rewrite. <see cref="Postcondition"/>
+/// is <see cref="ContractBoundaryVerdict.Unknown"/> for every contributed body: Scot's
+/// 2026-11-08 ruling keeps library bodies out of this slice.
+/// </summary>
+public sealed record ContractBoundaryMetadata(
+    ContractBoundaryVerdict Precondition,
+    ContractBoundaryVerdict Postcondition,
+    ContractCompatibility Compatibility) : IAnalysisMetadata;
+
+/// <summary>
 /// #422 (epic #427, spike #413 decision 8): one acknowledged contract failure. Written only when
 /// a <see cref="DiagnosticAllowance"/> matched the finding at <see cref="ElementPath"/>; the
 /// finding itself stays a warning on the shared diagnostic record. <see cref="Message"/> is the

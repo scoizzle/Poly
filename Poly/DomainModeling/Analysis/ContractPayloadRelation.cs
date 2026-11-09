@@ -30,6 +30,38 @@ internal static class ContractPayloadRelation {
     }
 
     /// <summary>
+    /// #425: whether the two named types have the same property shape (same names and types),
+    /// ignoring their constraints. A boundary check can only compare constraints when the
+    /// shapes match; a shape mismatch is an <c>Incompatible</c> bind, not an unknown one.
+    /// </summary>
+    public static bool SameShape(
+        ImportedContract contract,
+        Domain domain,
+        string localTypeName,
+        string payloadTypeName) {
+        if (string.Equals(localTypeName, payloadTypeName, StringComparison.Ordinal))
+            return true;
+        if (FindValueType(contract, domain, localTypeName) is not { } local)
+            return false;
+        if (FindValueType(contract, domain, payloadTypeName) is not { } payload)
+            return false;
+        return SameShape(local, payload);
+    }
+
+    private static bool SameShape(ValueType local, ValueType payload) {
+        if (local.Properties.Count != payload.Properties.Count)
+            return false;
+        foreach (var property in payload.Properties) {
+            var candidate = local.Properties.FirstOrDefault(member =>
+                string.Equals(member.Name, property.Name, StringComparison.Ordinal));
+            if (candidate is null
+                || !string.Equals(candidate.Type.TypeName, property.Type.TypeName, StringComparison.Ordinal))
+                return false;
+        }
+        return true;
+    }
+
+    /// <summary>
     /// True when every value of <paramref name="narrower"/> is a value of
     /// <paramref name="wider"/>: same property shape and every wider constraint implied by a
     /// narrower one.

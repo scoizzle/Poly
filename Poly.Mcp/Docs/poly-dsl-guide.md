@@ -1210,6 +1210,17 @@ A contribution also declares the host targets its implementation is for. `uses p
 the POSIX header (`Open`, `Read`, `Write`, `Close`) and declares `posix`; the set is not on the
 contract and not in the fingerprint, so another target's package keeps the pin.
 
+**Boundary constraints.** At a bind, analysis checks the caller's argument against the
+endpoint's public payload property constraints and against `require` preconditions that reduce
+to a property-vs-literal comparison. The caller must be at least as constrained as the
+endpoint. A proof is silent. A caller whose values are disjoint from an obligation is
+`DMCON014` and Lower refuses. Anything the constraint merge cannot decide — a caller wider than
+the obligation, a constraint kind with no merge rule, or a precondition that names a property
+the argument does not carry — is `DMCON015`, a warning that does not block Lower. Library
+bodies are not walked: a contributed body is reported `unknown` on its postconditions with one
+`DMCON015`, and the domain still lowers. The note is not part of the surface fingerprint, and
+it never clears a pin mismatch (`DMCON010`).
+
 ### Action Parameters
 
 Actions can declare typed parameters. There is no `param` keyword: a parameter is a **bare identifier** — the product parser emits it as a property access, and analysis/lowering/invoke-bindings/runtime treat an identifier matching an in-scope action parameter as a **parameter**, not a property. `ParameterAccess` is internal IR, not an authoring form. Parameters are injected for the duration of the action call and do not persist on the instance.

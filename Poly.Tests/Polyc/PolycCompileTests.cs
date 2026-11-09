@@ -77,6 +77,17 @@ public class PolycCompileTests {
     }
 
     [Test]
+    public async Task Compile_UnresolvedNavigationTarget_ReportsDsl0001AtTargetToken() {
+        var result = Compiler().Compile("domain Shop\n\nProduct: entity {\n  Sku: Text\n  Price: Bogus\n}\n", "x.poly");
+        var only = result.Diagnostics.Single();
+        await Assert.That(only.Code).IsEqualTo("DSL0001");
+        await Assert.That(only.Placed).IsTrue();
+        await Assert.That(only.Line).IsEqualTo(5);
+        await Assert.That(only.Column).IsEqualTo(10);
+        await Assert.That(only.EndColumn).IsEqualTo(15);
+    }
+
+    [Test]
     public async Task Compile_AuthoringSeed_IsDefaultWhenNoUses() {
         var result = Compiler().Compile(PolycTestSupport.Orders, "orders.poly");
         await Assert.That(result.Succeeded).IsTrue();

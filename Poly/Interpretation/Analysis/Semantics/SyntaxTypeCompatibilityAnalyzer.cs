@@ -134,7 +134,7 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
     /// <summary>True when C# converts <paramref name="from"/> to <paramref name="to"/>
     /// implicitly: identity, reference/boxing, nullable lifting, or a built-in numeric
     /// conversion. This is a language rule, not a storage rule.</summary>
-    private static bool IsImplicitlyConvertible(Type from, Type to) {
+    internal static bool IsImplicitlyConvertible(Type from, Type to) {
         if (from == to)
             return true;
         if (Nullable.GetUnderlyingType(to) is { } targetUnderlying) {

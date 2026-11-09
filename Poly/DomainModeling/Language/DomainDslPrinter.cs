@@ -885,6 +885,9 @@ public sealed class DomainDslPrinter {
                 ? $"count {c.RelationshipName} where {Run(_printer, c.Body)}"
                 : $"count {c.RelationshipName}";
 
+        protected override string FunctionCall(FunctionCall f) =>
+            $"{f.Name}({string.Join(", ", f.Arguments.Select(a => Run(_printer, a)))})";
+
         protected override string SumExpr(SumExpr s) =>
             $"sum {s.RelationshipName} {s.PropertyName}";
     }

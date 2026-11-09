@@ -30,6 +30,32 @@ internal static class DomainModelDiagnosticCodes {
     public const string SemanticConstraintMismatch = "DMSEM004";
     public const string SemanticReferenceResolution = "DMSEM005";
 
+    // #406 function calls (DMFUN): a declared function is callable from a domain expression.
+
+    /// <summary>A call names a function the domain does not declare.</summary>
+    public const string FunctionUnknown = "DMFUN001";
+    /// <summary>A call passes a different number of arguments than the function declares.</summary>
+    public const string FunctionArity = "DMFUN002";
+    /// <summary>A call argument's type is not assignable to the declared parameter type.</summary>
+    public const string FunctionArgumentType = "DMFUN003";
+    /// <summary>
+    /// A function reaches itself through calls (directly or through other functions). v1 rejects
+    /// recursion (#406): a body is one expression with no base-case control flow, so every
+    /// recursive function would diverge, and lowering would inline without end.
+    /// </summary>
+    public const string FunctionRecursion = "DMFUN004";
+    /// <summary>
+    /// A function body names something other than its parameters (an entity property, a
+    /// relationship, a quantifier, a clock). Functions are pure: they have no subject entity.
+    /// </summary>
+    public const string FunctionImpureBody = "DMFUN005";
+    /// <summary>A function body's type is not assignable to the declared return type.</summary>
+    public const string FunctionReturnType = "DMFUN006";
+    /// <summary>Two functions declare the same name.</summary>
+    public const string FunctionDuplicate = "DMFUN007";
+    /// <summary>A call sits where lowering cannot place it (a property default).</summary>
+    public const string FunctionCallPosition = "DMFUN008";
+
     public const string EffectBinding = "DMEFF001";
     public const string EffectUnsatisfiedRequirement = "DMEFF002";
     public const string EffectPrePostCondition = "DMEFF003";

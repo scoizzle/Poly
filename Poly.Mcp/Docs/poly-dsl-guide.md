@@ -1258,16 +1258,58 @@ function Pi(): Number = 3
 ```
 
 - Functions sit at the top level, after the entities whose types they name.
-- The body is **one expression** (`a + b`, `3`, `Price * 2`, …). An identifier in that
-  expression that names a declared parameter is that parameter, not an entity property.
+- The body is **one expression** (`a + b`, `3`, `Add(a, 1) * 2`, …). An identifier in that
+  expression that names a declared parameter is that parameter. A function is **pure**: the
+  body may use parameters, literals, arithmetic, comparisons, `and`/`or`/`not`, and calls to
+  other functions. Naming an entity property, a relationship, a quantifier, or a clock is
+  `DMFUN005` (a function has no subject entity).
+- The body's type must be assignable to the declared return type (`DMFUN006`); two
+  functions with one name are `DMFUN007`.
 - `public function` is not part of the surface yet; a function has no visibility and
   prints without one.
 - A declaration missing its `=` or its body fails closed with a positioned error; the
-  parser never folds the following declaration into the body.
+  parser never folds the following declaration into the body. `function` is not a path hop
+  (`a b c` navigation), so an expression that ends in an identifier ends at the next
+  `function` declaration.
 
-Authoring stops at the declaration: call expressions in a function body, arity/type
-analysis, lowering to a tree artifact, and simulate/print parity for a call are later
-slices of #406. Value-type members and `require` guards are not part of this slice.
+#### Calling a function
+
+A call is `Name(arg, arg, …)` — the function name, `(`, comma-separated expressions, `)` —
+in policies, in `assign` values, and as arguments of other calls or in function bodies. Other
+expression positions share the same parser and lowering but are not covered by tests yet.
+
+```poly
+Cart: entity {
+  Total: Number default(0)
+  Compute: action { assign Total to Add(1, 2) }              // 3
+  Scale:   action { assign Total to Add(1, 2) * 10 }         // 30
+  Nest:    action { assign Total to Square(Add(1, 2)) }      // 9
+  IsThree: policy { Total is Add(1, 2) }
+}
+
+function Add(a: Number, b: Number): Number = a + b
+function Square(a: Number): Number = a * a
+```
+
+- A call needs the `(` directly after the name. A bare identifier, even one that equals a
+  function name, is still an ordinary property or parameter read.
+- Arguments are full expressions (including entity properties and other calls). A zero
+  argument call is `Seven()`. A leading, doubled, or trailing comma is a positioned parse
+  error.
+- A call evaluates to the function's declared return type. Simulation and printed C# agree:
+  lowering binds each argument to the parameter and lowers the body there.
+- Fail-closed diagnostics (all errors): `DMFUN001` unknown function, `DMFUN002` wrong number of
+  arguments, `DMFUN003` argument type not assignable to the parameter type, `DMFUN004`
+  recursion (direct or through other functions), `DMFUN005` impure body, `DMFUN006` body vs
+  return type, `DMFUN007` duplicate name, `DMFUN008` call in a position lowering cannot place
+  (the `default(…)` of a property — assign the call in an action or entry effect instead). A
+  call result of the wrong type for its use is the ordinary `DMSEM003`.
+- **Recursion is rejected**, not supported: a body is one expression with no base case, so a
+  recursive function never terminates, and lowering would expand it without end.
+
+Not yet part of the surface (later slices of #406): functions on `value` types and `require`
+guards, operator overloads, lowering a function to its own tree artifact with an invoke id,
+and function calls in contract payload constraints.
 
 ### Action Parameters
 

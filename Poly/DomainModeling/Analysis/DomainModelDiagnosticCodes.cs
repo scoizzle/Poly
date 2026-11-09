@@ -41,9 +41,9 @@ internal static class DomainModelDiagnosticCodes {
     public const string ContractIntegration = "DMCON001";
 
     /// <summary>
-    /// A <see cref="DiagnosticAllowance"/> that acknowledged no flow diagnostic this analysis emitted
-    /// (wrong code or path, the flow became compatible, or no non-blank provenance ids). An error,
-    /// and not itself acknowledgeable.
+    /// A <see cref="DiagnosticAllowance"/> that acknowledged no analysis diagnostic this analysis
+    /// emitted (wrong code or path, the finding stopped firing, or no non-blank provenance ids).
+    /// An error, and not itself acknowledgeable.
     /// </summary>
     public const string UnusedDiagnosticAllowance = "DMALW001";
 
@@ -69,7 +69,15 @@ internal static class DomainModelDiagnosticCodes {
     /// </summary>
     public const string PlatformTargetMismatch = "DMCON004";
 
-    // #420 takes 010-013 after #424's 004 (its PR merged first); 005-009 stay free.
+    /// <summary>
+    /// A bind names an imported contract that is not registered in the domain (no <c>uses</c> or
+    /// contract block seeded it). Split from <see cref="ContractIntegration"/> by #422 so the
+    /// unresolved-reference case is acknowledgeable as a tolerance fact without covering the
+    /// package-metadata, payload-type, and signature errors that share the old code.
+    /// </summary>
+    public const string ContractReferenceUnresolved = "DMCON005";
+
+    // #420 takes 010-013 after #424's 004; #422 takes 005; 006-009 stay free.
 
     /// <summary>
     /// A <c>uses</c> pin does not match the loaded surface: the author pinned a version the

@@ -92,12 +92,12 @@ internal sealed class ContractIntegrationAnalyzer : INodeAnalyzer {
         Entity entity,
         Action action) {
         if (entity.Visibility != Visibility.Public) {
-            context.ReportError(
-                action,
+            ReportContractFinding(
+                context, domain, action,
+                DomainModelDiagnosticCodes.PublicMemberOnInternalOwner,
                 $"Public action '{action.Name}' on entity '{entity.Name}' is not reachable: " +
                 $"entity '{entity.Name}' is internal. Mark '{entity.Name}' public, or remove " +
-                $"the public mark from '{action.Name}'.",
-                DomainModelDiagnosticCodes.PublicMemberOnInternalOwner);
+                $"the public mark from '{action.Name}'.");
             return;
         }
 
@@ -144,11 +144,11 @@ internal sealed class ContractIntegrationAnalyzer : INodeAnalyzer {
             return;
 
         var kind = resolved.Type is Entity ? "entity" : "value";
-        context.ReportError(
-            reportNode,
+        ReportContractFinding(
+            context, domain, reportNode,
+            DomainModelDiagnosticCodes.PublicSurfaceNotClosed,
             $"{subject} names internal {kind} type '{resolved.Type.Name}' {position}. " +
-            $"Mark '{resolved.Type.Name}' public, or remove the public mark.",
-            DomainModelDiagnosticCodes.PublicSurfaceNotClosed);
+            $"Mark '{resolved.Type.Name}' public, or remove the public mark.");
     }
 
     /// <summary>
@@ -230,12 +230,12 @@ internal sealed class ContractIntegrationAnalyzer : INodeAnalyzer {
 
         if (pin is not null && !pinMatched) {
             var pinnedBy = contract.UsesId is null ? "on the contract" : $"on `uses {contract.UsesId}`";
-            context.ReportError(
-                contract,
+            ReportContractFinding(
+                context, domain, contract,
+                DomainModelDiagnosticCodes.ContractPinMismatch,
                 $"Contract '{contract.Name}' is pinned to '{pin}' {pinnedBy}, but the loaded surface is " +
                 $"version '{contract.Version}' with fingerprint '{contract.Fingerprint}'. A pin is the " +
-                "public surface only; re-pin to the loaded surface.",
-                DomainModelDiagnosticCodes.ContractPinMismatch);
+                "public surface only; re-pin to the loaded surface.");
         }
 
         foreach (var endpoint in contract.Endpoints) {
@@ -268,20 +268,20 @@ internal sealed class ContractIntegrationAnalyzer : INodeAnalyzer {
 
         var declared = string.Join(", ", targets.Select(target => $"'{target}'"));
         if (session.Target is null) {
-            context.ReportError(
-                contract,
-                $"Contract '{contract.Name}' comes from library '{contract.UsesId}', which is for host target {declared}, but the host named no target. Pass the host target for this compile; 'uses {contract.UsesId}' does not choose it.",
-                DomainModelDiagnosticCodes.PlatformTargetMismatch);
+            ReportContractFinding(
+                context, domain, contract,
+                DomainModelDiagnosticCodes.PlatformTargetMismatch,
+                $"Contract '{contract.Name}' comes from library '{contract.UsesId}', which is for host target {declared}, but the host named no target. Pass the host target for this compile; 'uses {contract.UsesId}' does not choose it.");
             return;
         }
 
         if (targets.Contains(session.Target, StringComparer.Ordinal))
             return;
 
-        context.ReportError(
-            contract,
-            $"Contract '{contract.Name}' comes from library '{contract.UsesId}', which is for host target {declared}; the host target is '{session.Target}'. Pass the host target this compilation is for; 'uses {contract.UsesId}' does not choose it.",
-            DomainModelDiagnosticCodes.PlatformTargetMismatch);
+        ReportContractFinding(
+            context, domain, contract,
+            DomainModelDiagnosticCodes.PlatformTargetMismatch,
+            $"Contract '{contract.Name}' comes from library '{contract.UsesId}', which is for host target {declared}; the host target is '{session.Target}'. Pass the host target this compilation is for; 'uses {contract.UsesId}' does not choose it.");
     }
 
     private static void ValidateBinding(AnalysisContext context, Domain domain, ContractBinding binding) {
@@ -289,10 +289,10 @@ internal sealed class ContractIntegrationAnalyzer : INodeAnalyzer {
             string.Equals(c.Name, binding.ContractName, StringComparison.Ordinal));
         if (contract is null) {
             RecordBinding(context, binding, contract: null, ContractBindingStatus.Unresolved, endpoint: null);
-            context.ReportError(
-                binding,
-                $"Contract binding '{binding.Name}' references imported contract '{binding.ContractName}' that is not registered in the domain.",
-                DomainModelDiagnosticCodes.ContractIntegration);
+            ReportContractFinding(
+                context, domain, binding,
+                DomainModelDiagnosticCodes.ContractReferenceUnresolved,
+                $"Contract binding '{binding.Name}' references imported contract '{binding.ContractName}' that is not registered in the domain.");
             return;
         }
 
@@ -300,10 +300,10 @@ internal sealed class ContractIntegrationAnalyzer : INodeAnalyzer {
         // missing action in the diagnostic. The resolver repeats the same match below.
         if (!HasEndpointCandidate(contract, binding.EndpointName)) {
             RecordBinding(context, binding, contract, ContractBindingStatus.NotOnSurface, endpoint: null);
-            context.ReportError(
-                binding,
-                $"Contract binding '{binding.Name}' references endpoint '{binding.EndpointName}' that does not belong to contract '{binding.ContractName}'{PinSuffix(contract)}.",
-                DomainModelDiagnosticCodes.ContractEndpointNotOnSurface);
+            ReportContractFinding(
+                context, domain, binding,
+                DomainModelDiagnosticCodes.ContractEndpointNotOnSurface,
+                $"Contract binding '{binding.Name}' references endpoint '{binding.EndpointName}' that does not belong to contract '{binding.ContractName}'{PinSuffix(contract)}.");
             return;
         }
 
@@ -415,6 +415,24 @@ internal sealed class ContractIntegrationAnalyzer : INodeAnalyzer {
                 : null;
         }
         return null;
+    }
+
+    /// <summary>
+    /// Reports one #422 contract finding. A matching acknowledged allowance downgrades it to a
+    /// warning and stores the fact that makes Lower refuse; without a match it is an error. Only
+    /// the decision-8 set is routed here, never <see cref="DomainModelDiagnosticCodes.ContractIntegration"/>
+    /// metadata errors, <see cref="DomainModelDiagnosticCodes.ContractOverloadAmbiguous"/>, or a flow code.
+    /// </summary>
+    private static void ReportContractFinding(
+        AnalysisContext context, Domain domain, Node finding, string code, string message) {
+        if (!DiagnosticAllowanceMatch.TryConsume(context, domain, finding, code)) {
+            context.ReportError(finding, message, code);
+            return;
+        }
+
+        context.ReportWarning(finding, message, code);
+        context.GetOrAddMetadata(domain, () => new ContractToleranceMetadata())
+            .Add(new ContractToleranceFact(code, DomainElementPath.Resolve(domain, finding), message));
     }
 
     private static void RecordBinding(

@@ -10,6 +10,10 @@ namespace Poly.Interpretation.Analysis.Semantics;
 /// <item><c>IT0004</c> — <c>yield return</c> in a <c>try</c> block that has a <c>catch</c> clause.</item>
 /// <item><c>IT0005</c> — <c>yield return</c> in a <c>catch</c> clause.</item>
 /// <item><c>IT0006</c> — a yielded value with no implicit conversion to the element type.</item>
+/// <item><c>IT0007</c> — a member or index access on a local that holds an iterator call result. The
+/// type provider spells <c>IEnumerable&lt;T&gt;</c> as <c>List&lt;T&gt;</c>, but the runtime value is a lazy
+/// iterator, so only enumeration (<c>foreach</c>) is sound; <c>e.Count</c> would otherwise type-check and
+/// fail at run time. Applies to <c>var e = M()</c> and <c>IEnumerable&lt;T&gt; e = M()</c> alike.</item>
 /// </list>
 /// <c>yield break</c> is legal in a try-with-catch and in a catch, as in C#. Runs after type
 /// resolution, because the value check reads the resolved type of the yielded expression. An element
@@ -27,8 +31,64 @@ internal sealed class IteratorLegalityAnalyzer : INodeAnalyzer {
         bool InCatch = false,
         bool InFinally = false);
 
-    public void Analyze(AnalysisContext context, Node node) =>
+    public void Analyze(AnalysisContext context, Node node) {
         Walk(context, node, new Scope());
+        CheckIteratorResultUse(context, node);
+    }
+
+    private static void CheckIteratorResultUse(AnalysisContext context, Node root) {
+        var iteratorNames = new HashSet<string>();
+        CollectIteratorNames(root, iteratorNames);
+        if (iteratorNames.Count == 0)
+            return;
+        var holders = new HashSet<string>();
+        CollectHolders(root, iteratorNames, holders);
+        if (holders.Count == 0)
+            return;
+        ReportHolderUse(context, root, holders);
+    }
+
+    private static void CollectIteratorNames(Node node, HashSet<string> names) {
+        if (node is MethodDefinitionNode { Body: not null } method && !method.IsAsync && ContainsYield(method.Body))
+            names.Add(method.Name);
+        foreach (var child in node.Children)
+            if (child is not null)
+                CollectIteratorNames(child, names);
+    }
+
+    private static bool ContainsYield(Node node) {
+        if (node is YieldStatement)
+            return true;
+        foreach (var child in node.Children)
+            if (child is not null && ContainsYield(child))
+                return true;
+        return false;
+    }
+
+    private static void CollectHolders(Node node, HashSet<string> iteratorNames, HashSet<string> holders) {
+        // A typed declaration (IEnumerable<T> e = M()) folds to a cast of the initializer.
+        if (node is Assignment { Destination: Variable local } assignment
+            && (assignment.Value is TypeCast cast ? cast.Operand : assignment.Value) is Invoke { Delegate: Member call }
+            && iteratorNames.Contains(call.MemberName))
+            holders.Add(local.Name);
+        foreach (var child in node.Children)
+            if (child is not null)
+                CollectHolders(child, iteratorNames, holders);
+    }
+
+    private static void ReportHolderUse(AnalysisContext context, Node node, HashSet<string> holders) {
+        if (node is Member { Value: Variable holder } && holders.Contains(holder.Name)) {
+            Error(context, node, "IT0007",
+                $"'{holder.Name}' holds an iterator result, which can only be enumerated; '{node}' is not available on it.");
+        }
+        else if (node is IndexAccess { Value: Variable indexed } && holders.Contains(indexed.Name)) {
+            Error(context, node, "IT0007",
+                $"'{indexed.Name}' holds an iterator result, which can only be enumerated; it cannot be indexed.");
+        }
+        foreach (var child in node.Children)
+            if (child is not null)
+                ReportHolderUse(context, child, holders);
+    }
 
     private static void Walk(AnalysisContext context, Node node, Scope scope) {
         switch (node) {
@@ -137,7 +197,7 @@ internal sealed class IteratorLegalityAnalyzer : INodeAnalyzer {
 
 public static class IteratorLegalityExtensions {
     extension(AnalyzerBuilder builder) {
-        /// <summary>Adds the iterator legality pass (<c>IT0001</c>–<c>IT0006</c>) to the pipeline.</summary>
+        /// <summary>Adds the iterator legality pass (<c>IT0001</c>–<c>IT0007</c>) to the pipeline.</summary>
         public AnalyzerBuilder UseIteratorLegality() {
             builder.AddAnalyzer(new IteratorLegalityAnalyzer());
             return builder;

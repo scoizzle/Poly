@@ -60,6 +60,7 @@ public sealed class VmIterator<T> : IEnumerable<T>, IEnumerator<T> {
 
     /// <inheritdoc />
     public IEnumerator<T> GetEnumerator() {
+        ThrowIfStateDisposed();
         if (!_handedOut) {
             _handedOut = true;
             return this;
@@ -72,6 +73,7 @@ public sealed class VmIterator<T> : IEnumerable<T>, IEnumerator<T> {
     /// <summary>Runs the body from where it last yielded to the next <c>yield return</c>, or
     /// to its end. The body does not run before the first call, and not at all once finished.</summary>
     public bool MoveNext() {
+        ThrowIfStateDisposed();
         if (_done)
             return false;
         var step = _table[0] ?? throw new InvalidOperationException("VM: iterator body is not compiled.");
@@ -119,6 +121,15 @@ public sealed class VmIterator<T> : IEnumerable<T>, IEnumerator<T> {
         }
         _current = _decode(state.Heap, frame[shape.CurrentSlot]);
         return true;
+    }
+
+    /// <summary>The iterator runs on its creating state's stack and heap. Once that state is disposed
+    /// the stack's array is back in the shared pool, possibly rented by another owner, so running
+    /// the body would write into memory this iterator no longer owns.</summary>
+    private void ThrowIfStateDisposed() {
+        if (_state.Stack.IsDisposed)
+            throw new ObjectDisposedException(nameof(VmIterator<T>),
+                "VM: the execution that created this iterator has been disposed.");
     }
 
     private long[] NewFrame(VmIteratorShape shape) {

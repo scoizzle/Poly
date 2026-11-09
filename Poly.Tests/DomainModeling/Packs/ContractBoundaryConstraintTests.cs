@@ -1,3 +1,4 @@
+using Poly.Ast.Nodes;
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Compile;
@@ -324,7 +325,8 @@ public sealed class ContractBoundaryConstraintTests {
     }
 
     /// <summary>
-    /// Scot 2026-11-08: a contributed body is not walked. Its postcondition half is unknown,
+    /// The body is walked now: a contributed body that hands the whole payload object to a call
+    /// may have it mutated in place, so the postcondition half cannot be proved. It is unknown,
     /// named once, and Lower still runs.
     /// </summary>
     [Test]
@@ -345,6 +347,153 @@ public sealed class ContractBoundaryConstraintTests {
         await Assert.That(warning.Message).Contains("Charge");
         await Assert.That(session.Emit(domain, analysis).Count).IsGreaterThan(0);
     }
+
+    // ── The postcondition half walks the contributed body ───────────────────
+
+    /// <summary>
+    /// The body is the implementation of the surface: a write that provably leaves a declared
+    /// payload constraint is a violated postcondition, not an unknown. The value is a literal,
+    /// so the check decides it, names the member and the constraint, and Lower refuses.
+    /// </summary>
+    [Test]
+    public async Task BodyWritingOutsideDeclaredPayloadRange_IsViolatedAndRefusesLower() {
+        var bodies = new Dictionary<string, Func<Block>>(StringComparer.Ordinal) {
+            ["Charge"] = () => new Block([
+                new Assignment(new Member(new Parameter("request"), "Amount"), new Constant(1000L)),
+                new Return(new Invoke(new Member(new NamedTypeReference("DomainResult"), "Success"), [])),
+            ]),
+        };
+        var (domain, session, analysis) = Analyze(
+            CallerDsl("range(0, 50)"),
+            Surface(amountConstraints: [new RangeConstraint(0, 100)]),
+            bodies);
+
+        var finding = WithCode(analysis, "DMCON014").Single();
+        await Assert.That(finding.Message).Contains("Amount");
+        await Assert.That(finding.Message).Contains("range");
+        await Assert.That(Boundary(domain, analysis).Postcondition)
+            .IsEqualTo(ContractBoundaryVerdict.Violated);
+        await Assert.That(() => session.Lower(domain, analysis)).Throws<InvalidOperationException>();
+    }
+
+    /// <summary>
+    /// The presence invariant, the DMEFF015-class rule at the contract boundary: a payload
+    /// member is required unless marked optional (the DSL cannot mark one optional), so a body
+    /// that writes null into it violates the declared invariant even when no other constraint
+    /// names the member.
+    /// </summary>
+    [Test]
+    public async Task BodyNullingRequiredPayloadMember_IsViolatedAsAPresenceInvariant() {
+        var bodies = new Dictionary<string, Func<Block>>(StringComparer.Ordinal) {
+            ["Charge"] = () => new Block([
+                new Assignment(new Member(new Parameter("request"), "Currency"), new Constant(null)),
+                new Return(new Invoke(new Member(new NamedTypeReference("DomainResult"), "Success"), [])),
+            ]),
+        };
+        var (domain, session, analysis) = Analyze(
+            TwoMemberCallerDsl,
+            TwoMemberSurface(),
+            bodies);
+
+        var finding = WithCode(analysis, "DMCON014").Single();
+        await Assert.That(finding.Message).Contains("Currency");
+        await Assert.That(finding.Message).Contains("required");
+        await Assert.That(Boundary(domain, analysis).Postcondition)
+            .IsEqualTo(ContractBoundaryVerdict.Violated);
+        await Assert.That(() => session.Lower(domain, analysis)).Throws<InvalidOperationException>();
+    }
+
+    /// <summary>
+    /// A write whose value the walk cannot decide is unknown: a warning naming the member, not
+    /// a violation and not a silent pass. Lower is not blocked on unknown alone.
+    /// </summary>
+    [Test]
+    public async Task BodyWithUndecidableWrite_IsUnknownWarnsAndLowers() {
+        var bodies = new Dictionary<string, Func<Block>>(StringComparer.Ordinal) {
+            ["Charge"] = () => new Block([
+                new Assignment(
+                    new Member(new Parameter("request"), "Amount"),
+                    new Member(new Parameter("request"), "Amount")),
+                new Return(new Invoke(new Member(new NamedTypeReference("DomainResult"), "Success"), [])),
+            ]),
+        };
+        var (domain, session, analysis) = Analyze(
+            CallerDsl("range(0, 50)"),
+            Surface(amountConstraints: [new RangeConstraint(0, 100)]),
+            bodies);
+
+        await Assert.That(analysis.HasErrors).IsFalse();
+        var warning = WithCode(analysis, "DMCON015").Single();
+        await Assert.That(warning.Message).Contains("Amount");
+        await Assert.That(Boundary(domain, analysis).Postcondition)
+            .IsEqualTo(ContractBoundaryVerdict.Unknown);
+        await Assert.That(session.Lower(domain, analysis).Count).IsGreaterThan(0);
+    }
+
+    /// <summary>
+    /// A write that provably satisfies every declared constraint is proven, and a proven
+    /// postcondition half is silent: no <c>DMCON014</c> and no <c>DMCON015</c>.
+    /// </summary>
+    [Test]
+    public async Task BodyWritingInsideDeclaredPayloadRange_IsProvenAndLowers() {
+        var bodies = new Dictionary<string, Func<Block>>(StringComparer.Ordinal) {
+            ["Charge"] = () => new Block([
+                new Assignment(new Member(new Parameter("request"), "Amount"), new Constant(5L)),
+                new Return(new Invoke(new Member(new NamedTypeReference("DomainResult"), "Success"), [])),
+            ]),
+        };
+        var (domain, session, analysis) = Analyze(
+            CallerDsl("range(0, 50)"),
+            Surface(amountConstraints: [new RangeConstraint(0, 100)]),
+            bodies);
+
+        await Assert.That(analysis.HasErrors).IsFalse();
+        await Assert.That(WithCode(analysis, "DMCON014")).IsEmpty();
+        await Assert.That(WithCode(analysis, "DMCON015")).IsEmpty();
+        await Assert.That(Boundary(domain, analysis).Postcondition)
+            .IsEqualTo(ContractBoundaryVerdict.Proven);
+        await Assert.That(session.Lower(domain, analysis).Count).IsGreaterThan(0);
+    }
+
+    private const string TwoMemberCallerDsl = """
+        domain Shop
+        uses billing
+
+        SmallRequest: value {
+          Amount: Number range(0, 50)
+          Currency: Text
+        }
+
+        Order: entity {
+          Pay: action (request: SmallRequest) { }
+        }
+
+        ChargeOrder: bind Billing Charge to Pay request
+        """;
+
+    /// <summary>A payload whose second member carries no constraint object, only presence.</summary>
+    private static ImportedContract TwoMemberSurface() =>
+        new(
+            "Billing",
+            ContractSourceKind.ExternalProvider,
+            "billing",
+            "v1",
+            [
+                new ContractEndpoint(
+                    "Charge",
+                    ContractEndpointKind.Operation,
+                    ContractEndpointDirection.Outbound,
+                    new DomainTypeReference("ChargeRequest")) {
+                    SourceName = "Charge",
+                },
+            ]) {
+            Types = [
+                new ValueType("ChargeRequest", [
+                    new Property("Amount", new DomainTypeReference("Number"), [new RangeConstraint(0, 100)]),
+                    new Property("Currency", new DomainTypeReference("Text"), []),
+                ], []),
+            ],
+        };
 
     [Test]
     public async Task StaleFingerprintPin_StaysDmcon010AndTheNoteDoesNotClearIt() {

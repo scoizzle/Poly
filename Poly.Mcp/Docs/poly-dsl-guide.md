@@ -723,12 +723,13 @@ to execute today.
 
 - `name` binds each record; `Rel` is a relationship name (a `many` relationship once
   analysis ships); `where expr` is an **inline** expression (e.g. `where line Qty > 1`) —
-  unlike the fan-out form, not a named policy. The body is any effects.
+  unlike the fan-out form, not a named policy. The body is any effects except another `for` (a nested `for` is a parse error).
 - Distinct from fan-out: `for name in Rel …` (general) versus `for Rel as name …` (fan-out).
 - **Parse errors (positioned, with line and column):** missing `in` or `as` after the name;
   an empty collection name (`for x in where …`, `for x in {`); missing `{` after
-  the collection or condition; missing `}`; a malformed `where` expression; and a `for`
-  nested inside a `for` body (nested fan-out has no bound story yet).
+  the collection or condition; a malformed `where` expression; a `for` nested inside a
+  `for` body; and a missing `}`, which is reported at the end of the input rather than
+  at the `for`.
 - Still missing: effect legality (cross-entity writes are rejected by `DMEFF012` once body
   analysis ships), lowering, runtime, `match`, `first` / `filter`.
 

@@ -593,7 +593,7 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
             context.ReportError(
                 e,
                 $"'for {e.BinderName} in {e.RelationshipName} {{ … }}' on entity '{entity.Name}' parses but is not " +
-                "analyzable or lowerable yet (#409 slices 5–6); use 'for Rel as name … invoke name.Action'.",
+                "analyzable or lowerable yet; use 'for Rel as name … invoke name.Action'.",
                 DomainModelDiagnosticCodes.EffectForNotLowerable);
             return null;
         }

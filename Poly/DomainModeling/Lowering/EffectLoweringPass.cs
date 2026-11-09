@@ -179,6 +179,15 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
 
     protected override Node? Default() => null;
 
+    /// <summary>
+    /// The general <c>for x in Rel { … }</c> has no lowering yet. Fail loud: the inherited
+    /// <see cref="Default"/> would silently lower it to nothing.
+    /// </summary>
+    protected override Node? ForEach(ForEachEffect e) =>
+        throw new NotSupportedException(
+            $"The general 'for {e.BinderName} in {e.RelationshipName} {{ … }}' effect is not lowerable yet " +
+            $"({DomainModelDiagnosticCodes.EffectForNotLowerable}); use 'for Rel as name … invoke name.Action'.");
+
     protected override Node? Assign(AssignEffect a) {
         var target = _expressionPass.LowerExpression(a.Target, Subject);
         var value = _expressionPass.LowerExpression(a.Value, Subject);

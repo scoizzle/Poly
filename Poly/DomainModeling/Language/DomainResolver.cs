@@ -865,7 +865,7 @@ public sealed class DomainResolver : DslCursor {
 
             case "for":
                 if (_forBodyDepth > 0)
-                    throw Error("A 'for' inside a 'for' body is not supported (nested fan-out has no bound story yet)");
+                    throw Error("A 'for' inside a 'for' body is not supported");
                 Consume(match);
                 return ParseForEffect();
 

@@ -1081,7 +1081,9 @@ public static partial class AbiEmitter {
             return EmitCoalesceAcrossSuspend(n, ctx);
         var leftVal = ValueOf(n.LeftHandValue, ctx);
         if (Nullable.GetUnderlyingType(leftVal.Type) is { } underlying) {
-            var rightArm = ValueOf(n.RightHandValue, ctx);
+            // A call or cast arm leaves an IEEE value as its bit-pattern word; decode it before
+            // the numeric conversion below would read the bits as a number.
+            var rightArm = DecodeIeeeWordArm(ValueOf(n.RightHandValue, ctx), n.RightHandValue, ctx);
             // A temporal arm is its word, not a number: decode it, do not convert it.
             Expression right = rightArm.Type == underlying || rightArm.Type == leftVal.Type
                 ? rightArm

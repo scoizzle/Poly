@@ -56,4 +56,17 @@ public class CastParityRegressionTests {
         await Assert.That(row.Agrees).IsTrue().Because(row.Describe());
         await Assert.That(row.VmOutcome).IsEqualTo("double:3");
     }
+
+    [Test]
+    public async Task Coalesce_NullableDoubleLeft_WithWideningCastRight_YieldsTheValueNotTheBits() {
+        // A nullable-double left takes the Nullable<> coalesce arm; the cast right arm is an IEEE word.
+        var n = new Parameter("n", TypeReference.To<double?>());
+        var i = new Parameter("i", TypeReference.To<int>());
+        var lambda = new Lambda([n, i], new Coalesce(n, new TypeCast(i, TypeReference.To<double>())));
+
+        var row = AstParity.Compare("coalesce-cast-right", lambda, null, 3);
+
+        await Assert.That(row.Agrees).IsTrue().Because(row.Describe());
+        await Assert.That(row.VmOutcome).IsEqualTo("double:3");
+    }
 }

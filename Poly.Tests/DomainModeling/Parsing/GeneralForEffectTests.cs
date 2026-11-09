@@ -10,8 +10,7 @@ namespace Poly.Tests.DomainModeling.Parsing;
 
 /// <summary>
 /// #409 slice 4: the general <c>for x in Rel [where cond] { effects }</c> effect parses,
-/// prints and round-trips. Slices 5 (effect legality) and 6 (lower + runtime) are not
-/// shipped, so Analyze rejects the form with a positioned error rather than passing it.
+/// prints and round-trips; slices 5 (effect legality) and 6 (lower + runtime) make it analyzable and executable.
 /// </summary>
 public class GeneralForEffectTests {
     private const string Dsl = """
@@ -60,8 +59,6 @@ public class GeneralForEffectTests {
         return (ForEachEffect)add.Effect;
     }
 
-    // Mutation only: Analyze rejects the general `for` until slices 5-6, so the printed
-    // round trip cannot go through ApplyAndAnalyze.
     private static Domain Apply(string poly) {
         var changes = new PolyDslParser(poly).Parse();
         var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
@@ -118,12 +115,11 @@ public class GeneralForEffectTests {
     }
 
     [Test]
-    public async Task GeneralFor_Analyze_FailsClosed_UntilLowerable() {
+    public async Task GeneralFor_Analyze_NoLongerReportsNotLowerable() {
         var analysis = DomainModelAnalyzer.Analyze(Apply(Dsl));
 
         await Assert.That(analysis.Diagnostics.Any(d =>
-            d.Code == DomainModelDiagnosticCodes.EffectForNotLowerable
-            && d.Severity == DiagnosticSeverity.Error)).IsTrue();
+            d.Code == DomainModelDiagnosticCodes.EffectForNotLowerable)).IsFalse();
     }
 
     [Test]

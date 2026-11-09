@@ -960,8 +960,7 @@ public sealed class DomainResolver : DslCursor {
     /// Parses the general <c>for x in Rel [where cond] { effects }</c> (#409), with the cursor
     /// at the binder. The collection is a relationship name; the optional <c>where</c> is an
     /// inline expression; the body is any effects. A nested <c>for</c> is rejected (no bound
-    /// story for nested fan-out yet). Effect legality and lowering are later slices; Analyze
-    /// rejects the form (DMEFF016) until then.
+    /// story for nested fan-out yet).
     /// </summary>
     private Effect ParseGeneralForEffect() {
         var binderName = ExpectIdentifier(TokenKind.Identifier, "binder name");

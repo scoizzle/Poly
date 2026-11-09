@@ -7,8 +7,7 @@ namespace Poly.DomainModeling.Ontology.Effects;
 /// and runs <see cref="Body"/> per record. Distinct from <see cref="ForEachInvokeEffect"/>
 /// (<c>for Rel as x … invoke x.Action</c>), which stays the named-predicate fan-out.
 ///
-/// Slice 4 ships parse and print only. Effect legality (slice 5) and lowering plus runtime
-/// (slice 6) are not shipped, so Analyze rejects the form (DMEFF016) rather than passing it.
+/// Lowered to a fail-fast loop in <c>EffectLoweringPass.ForEach</c>; zero records is a no-op.
 /// </summary>
 public sealed record ForEachEffect(
     string BinderName,

@@ -602,17 +602,9 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
             return null;
         }
 
-        // #409: the general `for` parses, prints and (slice 5) has its body checked for effect
-        // legality, but lowering (slice 6) is not shipped. DMEFF016 stays (shipped ⊆ lowerable)
-        // and the body is validated in the same pass, so a cross-entity write is reported
-        // alongside it instead of being hidden behind it.
+        // #409: the general `for` lowers and executes (slice 6); its body is checked for effect
+        // legality here.
         protected override object? ForEach(ForEachEffect e) {
-            context.ReportError(
-                e,
-                $"'for {e.BinderName} in {e.RelationshipName} {{ … }}' on entity '{entity.Name}' parses but is not " +
-                "analyzable or lowerable yet; use 'for Rel as name … invoke name.Action'.",
-                DomainModelDiagnosticCodes.EffectForNotLowerable);
-
             // Legality: the body may write only the owning entity's own state. An assign
             // through a relationship or the loop binder is another entity's state (DMEFF012,
             // the same rule as actions and `when`); mutate that entity with `invoke binder.Action`.

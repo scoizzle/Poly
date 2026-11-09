@@ -11,8 +11,8 @@ namespace Poly.Tests.DomainModeling.Analysis;
 /// #409 slice 5: effect legality of the general <c>for x in Rel [where cond] { effects }</c>.
 /// The body may write only the owning entity's own state; an assign through a relationship
 /// or the loop binder is another entity's state (DMEFF012, the same rule as actions and
-/// <c>when</c>). The effect walkers descend into the body. Lowering stays unshipped, so
-/// DMEFF016 is still reported, and the legality error must be visible beside it.
+/// <c>when</c>). The effect walkers descend into the body. Lowering ships in slice 6, so
+/// DMEFF016 is no longer reported and a legal body analyzes clean.
 /// The parser writes only a bare property as an assign target, so a cross-entity write
 /// is planted through the model API.
 /// </summary>
@@ -120,7 +120,7 @@ public class GeneralForEffectLegalityTests {
         var errors = Errors(Apply(Dsl));
 
         await Assert.That(errors.Any(d => d.Code == DomainModelDiagnosticCodes.EffectCrossEntityMutation)).IsFalse();
-        await Assert.That(errors.All(d => d.Code == DomainModelDiagnosticCodes.EffectForNotLowerable)).IsTrue();
+        await Assert.That(errors.Count).IsEqualTo(0);
     }
 
     [Test]
@@ -130,16 +130,16 @@ public class GeneralForEffectLegalityTests {
 
         var errors = Errors(domain);
 
-        await Assert.That(errors.All(d => d.Code == DomainModelDiagnosticCodes.EffectForNotLowerable)).IsTrue();
+        await Assert.That(errors.Count).IsEqualTo(0);
     }
 
     [Test]
-    public async Task CrossEntityBody_ReportsLegalityAlongsideNotLowerable() {
+    public async Task CrossEntityBody_ReportsLegality_AndNoLongerNotLowerable() {
         var domain = WithForBody(Apply(Dsl), CrossEntityAssign);
 
         var codes = Errors(domain).Select(d => d.Code).ToList();
 
-        await Assert.That(codes).Contains(DomainModelDiagnosticCodes.EffectForNotLowerable);
+        await Assert.That(codes).DoesNotContain(DomainModelDiagnosticCodes.EffectForNotLowerable);
         await Assert.That(codes).Contains(DomainModelDiagnosticCodes.EffectCrossEntityMutation);
     }
 

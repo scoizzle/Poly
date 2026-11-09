@@ -631,7 +631,7 @@ Effects in an action body:
 | Self-invoke | `invoke ActionName` / `invoke ActionName(param: expr, ...)` |
 | Cross-entity invoke | `invoke RelName.ActionName` / `invoke RelName.ActionName(param: expr, ...)` — OneToOne source only |
 | Fan-out invoke | `for Rel as name [where name.PolicyName \| where name in StageName] invoke name.ActionName(param: expr, ...)` — OneToMany source only |
-| General for (parse/print only) | `for name in Rel [where expr] { effects }` — **not yet analyzable**: Analyze rejects it with `DMEFF016` (see "General `for`" below) |
+| General for | `for name in Rel [where expr] { effects }` — executable; fail-fast, zero records is a no-op (see "General `for`" below) |
 | Conditional | `if (expr) { effects } [else if (expr) { effects }]* [else { effects }]` |
 
 ```poly
@@ -713,13 +713,21 @@ and invokes the action on each. One fan-out mode, no `any`/`all`/`each` quantifi
   predicates are allowed and give the same answer in simulate and export. Use a **local policy over the record's own properties** instead of a
   path-prefix hop, and compare a property to a value instead of testing `exists`.
 
-### General `for` (parse and print only — #409)
+### General `for` (#409)
 
-`for name in Rel [where expr] { effects }` parses into one effect and prints back
-identically (`Write(Read(x))` is idempotent). **It does not run yet:** effect legality
-(which effects may appear per iteration) and lowering are later slices of #409, so Analyze
-rejects every use with **`DMEFF016`** — use the fan-out form above for anything you need
-to execute today.
+`for name in Rel [where expr] { effects }` parses, prints back identically
+(`Write(Read(x))` is idempotent), analyzes, lowers and **executes** in simulation and in
+generated C#: a loop over the relationship's records in storage order that runs the body
+once per record whose `where` holds.
+
+- **Zero records is a no-op:** an empty relationship, or a `where` that matches none,
+  runs nothing and the action still succeeds.
+- **Fail-fast:** the first failing body effect (for example an `invoke name.Action` that
+  fails) fails the whole `for` and no later record is visited. The simulator rolls back
+  the failed action; generated C# keeps what earlier records already did.
+- **Legal body effects:** an `assign` to the owning entity's own state, `invoke name.Action`
+  on the loop record. An `assign` through the binder or a relationship is another
+  entity's state and is rejected with `DMEFF012`; mutate that entity with `invoke name.Action`.
 
 - `name` binds each record; `Rel` is a relationship name (a `many` relationship once
   analysis ships); `where expr` is an **inline** expression (e.g. `where line Qty > 1`) —
@@ -730,8 +738,7 @@ to execute today.
   the collection or condition; a malformed `where` expression; a `for` nested inside a
   `for` body; and a missing `}`, which is reported at the end of the input rather than
   at the `for`.
-- Still missing: effect legality (cross-entity writes are rejected by `DMEFF012` once body
-  analysis ships), lowering, runtime, `match`, `first` / `filter`.
+- Still missing: `match`, `first` / `filter`; `create in` inside the body is not exercised yet.
 
 ```poly
 invoke Validate                              # self-only

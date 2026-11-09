@@ -43,9 +43,11 @@ public sealed record Entity(
     /// — it has no domain identity and cannot be a key scope or foreign-key target. A designation is
     /// metadata over existing members, not a member: nothing is lowered or printed for it, and
     /// <c>Id</c> is an alias of this tuple (<see cref="Analysis.EntityStructureMetadata.Id"/>).
-    /// Names are scoped to this entity; analysis rejects a malformed designation.
+    /// Names are scoped to this entity; analysis rejects a malformed designation. Internal until the
+    /// DSL surface lands: nothing enforces a key at runtime yet, so embedders must not set one. It is
+    /// independent of <c>HasNaturalKey</c>/<c>KeyPropertyName</c>; reconciling them belongs to the consuming slice.
     /// </summary>
-    public IReadOnlyList<string> KeyProperties { get; init; } = [];
+    internal IReadOnlyList<string> KeyProperties { get; init; } = [];
 
     public sealed override IEnumerable<Node?> Children =>
         [.. Properties, .. Constraints, .. Facets, .. Actions, .. Policies, .. Stages, .. Subscriptions, .. Navigations];

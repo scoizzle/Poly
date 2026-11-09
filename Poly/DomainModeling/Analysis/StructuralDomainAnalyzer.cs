@@ -91,12 +91,13 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
             .ToDictionary(static g => g.Key, static g => g.First(), StringComparer.Ordinal);
 
         foreach (var entity in domain.Types.OfType<Entity>()) {
-            if (entity.KeyProperties.Count == 0)
+            if (KeyOf(entity).Count == 0)
                 continue;
 
             var seen = new HashSet<string>(StringComparer.Ordinal);
+            // Reused to mean "assigned by any effect", not only constructor ordering.
             var assigned = EntityStructureAnalyzer.ComputeAssignOnlyPropertyNames(entity);
-            foreach (var member in entity.KeyProperties) {
+            foreach (var member in KeyOf(entity)) {
                 if (string.IsNullOrWhiteSpace(member)) {
                     ReportInvalidKey(context, entity, $"Entity '{entity.Name}' key names a blank member.");
                     continue;
@@ -136,7 +137,7 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
                         $"Entity '{entity.Name}' key navigation '{member}' targets '{nav.Target.TypeName}', which is not an entity.");
                     continue;
                 }
-                if (target.KeyProperties.Count == 0)
+                if (KeyOf(target).Count == 0)
                     ReportInvalidKey(context, entity,
                         $"Entity '{entity.Name}' key navigation '{member}' targets '{target.Name}', which has no key.");
             }
@@ -150,13 +151,16 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
         }
     }
 
+    /// <summary>Null-tolerant read of the key designation, matching <see cref="EntityStructureMetadata.Id"/>.</summary>
+    private static IReadOnlyList<string> KeyOf(Entity entity) => entity.KeyProperties ?? [];
+
     private static void ReportInvalidKey(AnalysisContext context, Entity entity, string message) =>
         context.ReportError(entity, message, DomainModelDiagnosticCodes.InvalidKeyDesignation);
 
     /// <summary>True when following key-member singular navigations from <paramref name="from"/> reaches <paramref name="goal"/>.</summary>
     private static bool ReachesViaKeyNavigation(
         Entity goal, Entity from, IReadOnlyDictionary<string, Entity> entities, HashSet<string> visited) {
-        foreach (var member in from.KeyProperties) {
+        foreach (var member in KeyOf(from)) {
             if (from.Properties.Any(p => string.Equals(p.Name, member, StringComparison.Ordinal)))
                 continue;
             var nav = from.Navigations.FirstOrDefault(n => string.Equals(n.Name, member, StringComparison.Ordinal));

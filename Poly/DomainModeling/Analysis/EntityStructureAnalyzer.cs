@@ -121,7 +121,7 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
             hasStages, stageEnumTypeName, stageByName, constructorParameters,
             requiredPropertyNames, enumPropertyNames, entryAssignedPropertyNames,
             lifecyclePropertyName, lifecycleEnumTypeName, assignOnlyPropertyNames,
-            entity.KeyProperties
+            entity.KeyProperties ?? []
         );
     }
 
@@ -161,6 +161,7 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
         return names;
     }
 
+    /// <summary>Also reused by key analysis (#405) to mean "assigned by any effect at all" for immutability, not only constructor ordering.</summary>
     internal static IReadOnlySet<string> ComputeAssignOnlyPropertyNames(Entity entity) {
         var names = new HashSet<string>(StringComparer.Ordinal);
         void Walk(IEnumerable<Effect> effects) {

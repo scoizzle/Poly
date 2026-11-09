@@ -1,8 +1,12 @@
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Language;
+using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Ontology.Constraints;
 using Poly.DomainModeling.Ontology.Effects;
+using Poly.DomainModeling.Queries;
+using Poly.Interpretation.CSharp;
 
 namespace Poly.Tests.DomainModeling.Analysis;
 
@@ -60,14 +64,19 @@ public sealed class EntityKeyDesignationTests {
     }
 
     [Test]
-    public async Task KeyDesignation_AddsNoSyntheticIdMember() {
-        var order = Keyed("Order", ["Number"], Text("Number"));
-        var domain = ValidDomain.Create("Test", [order]);
-        var analysis = DomainModelAnalyzer.Analyze(domain);
+    public async Task KeyedEntity_PrintsAndExportsByteIdenticallyToUnkeyedTwin() {
+        var keyed = ValidDomain.Create("Test", [Keyed("Order", ["Number"], Text("Number"))]);
+        var unkeyed = ValidDomain.Create("Test", [new Entity("Order", [Text("Number")], [], [], [])]);
 
-        await Assert.That(order.Properties.Select(p => p.Name)).IsEquivalentTo(new[] { "Number" });
-        await Assert.That(order.Children.OfType<Property>().Any(p => p.Name == "Id")).IsFalse();
-        await Assert.That(analysis.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error)).IsFalse();
+        await Assert.That(new DomainDslPrinter().Print(keyed)).IsEqualTo(new DomainDslPrinter().Print(unkeyed));
+        await Assert.That(JsonLdExporter.Export(keyed)).IsEqualTo(JsonLdExporter.Export(unkeyed));
+
+        var keyedAnalysis = DomainModelAnalyzer.Analyze(keyed);
+        var unkeyedAnalysis = DomainModelAnalyzer.Analyze(unkeyed);
+        await Assert.That(keyedAnalysis.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error)).IsFalse();
+        var keyedCs = new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(keyed, keyedAnalysis));
+        var unkeyedCs = new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(unkeyed, unkeyedAnalysis));
+        await Assert.That(keyedCs).IsEqualTo(unkeyedCs);
     }
 
     [Test]
@@ -171,5 +180,54 @@ public sealed class EntityKeyDesignationTests {
             [Nav("b", "A", "B"), Nav("a", "B", "A")]);
 
         await Assert.That(Errors(analysis, DomainModelDiagnosticCodes.StructuralCycle).Count).IsEqualTo(2);
+    }
+
+    [Test]
+    public async Task SelfNavigationKey_IsStructuralCycle() {
+        var analysis = Analyze(
+            [Keyed("A", ["parent"], Text("x"))],
+            [Nav("parent", "A", "A")]);
+
+        await Assert.That(Errors(analysis, DomainModelDiagnosticCodes.StructuralCycle).Count).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task ThreeEntityNavigationKeyCycle_IsStructuralCycleOnEachMember() {
+        var analysis = Analyze(
+            [Keyed("A", ["b"], Text("x")), Keyed("B", ["c"], Text("y")), Keyed("C", ["a"], Text("z"))],
+            [Nav("b", "A", "B"), Nav("c", "B", "C"), Nav("a", "C", "A")]);
+
+        var errors = Errors(analysis, DomainModelDiagnosticCodes.StructuralCycle);
+        await Assert.That(errors.Count).IsEqualTo(3);
+    }
+
+    [Test]
+    public async Task TwoHopKeyChain_EndingInScalarKey_IsNotACycle() {
+        var analysis = Analyze(
+            [Keyed("A", ["b"], Text("x")), Keyed("B", ["c"], Text("y")), Keyed("C", ["Code"], Text("Code"))],
+            [Nav("b", "A", "B"), Nav("c", "B", "C")]);
+
+        await Assert.That(Errors(analysis, DomainModelDiagnosticCodes.StructuralCycle)).IsEmpty();
+        await Assert.That(analysis.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error)).IsFalse();
+    }
+
+    [Test]
+    public async Task KeyProperty_AssignedByFirstStageEntryEffect_IsInvalidKey() {
+        var start = new Stage("Start", [], [],
+            [new AssignEffect(DomainExpression.Property("Code"), DomainExpression.Literal("X"))], []);
+        var order = new Entity("Order", [Text("Code")], [], [], []) { KeyProperties = ["Code"], Stages = [start] };
+
+        var errors = Errors(Analyze(order), DomainModelDiagnosticCodes.InvalidKeyDesignation);
+        await Assert.That(errors.Count).IsEqualTo(1);
+        await Assert.That(errors[0].Message).Contains("immutable");
+    }
+
+    [Test]
+    public async Task KeyProperty_WithCreateTimeDefault_IsLegal() {
+        var order = Keyed("Order", ["Code"],
+            Text("Code", new DefaultValueConstraint(DomainExpression.Literal("X"))));
+
+        var analysis = Analyze(order);
+        await Assert.That(Errors(analysis, DomainModelDiagnosticCodes.InvalidKeyDesignation)).IsEmpty();
     }
 }

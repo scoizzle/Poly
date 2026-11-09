@@ -21,8 +21,8 @@ namespace Poly.Tests.DomainModeling.Packs;
 /// #425 (epic #427, spike #413 decision 21): at a resolved bind, analysis checks the caller's
 /// argument against the endpoint's public payload constraints and the preconditions that reduce
 /// to a payload-property comparison. Proven lowers; violated is <c>DMCON014</c> and refuses;
-/// unknown is <c>DMCON015</c> and does not block. Scot's 2026-11-08 ruling: no library body is
-/// walked, and every contributed body is unknown on the postcondition half.
+/// unknown is <c>DMCON015</c> and does not block. The postcondition half walks the contributed
+/// body; a surface-only contribution has none and stays unknown and silent.
 /// </summary>
 public sealed class ContractBoundaryConstraintTests {
     private static ImportedContract Surface(
@@ -454,6 +454,174 @@ public sealed class ContractBoundaryConstraintTests {
             .IsEqualTo(ContractBoundaryVerdict.Proven);
         await Assert.That(session.Lower(domain, analysis).Count).IsGreaterThan(0);
     }
+
+    private static Invoke GatewayCharge() =>
+        new(new Member(new NamedTypeReference("Gateway"), "Charge"), [new Parameter("request")]);
+
+    private static async Task AssertUnknownOnce(Block body) {
+        var bodies = new Dictionary<string, Func<Block>>(StringComparer.Ordinal) { ["Charge"] = () => body };
+        var (domain, _, analysis) = Analyze(
+            CallerDsl("range(0, 50)"),
+            Surface(amountConstraints: [new RangeConstraint(0, 100)]),
+            bodies);
+
+        await Assert.That(analysis.HasErrors).IsFalse();
+        await Assert.That(Boundary(domain, analysis).Postcondition)
+            .IsEqualTo(ContractBoundaryVerdict.Unknown);
+        await Assert.That(WithCode(analysis, "DMCON015").Count).IsEqualTo(1);
+    }
+
+    /// <summary>Hole 1: the final return is the result, but its expression can still escape the payload.</summary>
+    [Test]
+    public async Task ReturnedCallTakingThePayload_IsUnknownNotProven() =>
+        await AssertUnknownOnce(new Block([new Return(GatewayCharge())]));
+
+    /// <summary>Hole 2: the right-hand side of a local assignment can escape the payload.</summary>
+    [Test]
+    public async Task LocalAssignedFromCallTakingThePayload_IsUnknownNotProven() =>
+        await AssertUnknownOnce(new Block([
+            new Assignment(new Variable("r"), GatewayCharge()),
+            new Return(new Variable("r")),
+        ]));
+
+    /// <summary>R1: a body that does not end in a return is not one Lower accepts; never Proven.</summary>
+    [Test]
+    public async Task BodyNotEndingInReturn_IsUnknownNotProven() {
+        var bodies = new Dictionary<string, Func<Block>>(StringComparer.Ordinal) {
+            ["Charge"] = () => new Block([
+                new Assignment(new Member(new Parameter("request"), "Amount"), new Constant(5L)),
+            ]),
+        };
+        var (domain, _, analysis) = Analyze(
+            CallerDsl("range(0, 50)"),
+            Surface(amountConstraints: [new RangeConstraint(0, 100)]),
+            bodies);
+
+        await Assert.That(Boundary(domain, analysis).Postcondition)
+            .IsEqualTo(ContractBoundaryVerdict.Unknown);
+        await Assert.That(WithCode(analysis, "DMCON015").Count).IsEqualTo(1);
+    }
+
+    /// <summary>R2: a throwing factory is a warning, not an exception out of Analyze.</summary>
+    [Test]
+    public async Task ThrowingBodyFactory_IsUnknownWarning() {
+        var bodies = new Dictionary<string, Func<Block>>(StringComparer.Ordinal) {
+            ["Charge"] = () => throw new InvalidOperationException("boom"),
+        };
+        var (domain, _, analysis) = Analyze(
+            CallerDsl("range(0, 50)"),
+            Surface(amountConstraints: [new RangeConstraint(0, 100)]),
+            bodies);
+
+        await Assert.That(Boundary(domain, analysis).Postcondition)
+            .IsEqualTo(ContractBoundaryVerdict.Unknown);
+        await Assert.That(WithCode(analysis, "DMCON015").Count).IsEqualTo(1);
+    }
+
+    private static Return Done() =>
+        new(new Invoke(new Member(new NamedTypeReference("DomainResult"), "Success"), []));
+
+    private static IfStatement IfCondition(Node then, Node? otherwise) =>
+        new(new Constant(true), then, otherwise);
+
+    private static Assignment Write(string member, object? value) =>
+        new(new Member(new Parameter("request"), member), new Constant(value));
+
+    /// <summary>F4a: both branches leave the member at the same in-range value, so the merge is proven.</summary>
+    [Test]
+    public async Task IfBranchesAgreeingOnInRangeValue_IsProven() {
+        var bodies = new Dictionary<string, Func<Block>>(StringComparer.Ordinal) {
+            ["Charge"] = () => new Block([
+                IfCondition(new Block([Write("Amount", 5L)]), new Block([Write("Amount", 5L)])),
+                Done(),
+            ]),
+        };
+        var (domain, _, analysis) = Analyze(
+            CallerDsl("range(0, 50)"), Surface(amountConstraints: [new RangeConstraint(0, 100)]), bodies);
+
+        await Assert.That(Boundary(domain, analysis).Postcondition).IsEqualTo(ContractBoundaryVerdict.Proven);
+        await Assert.That(WithCode(analysis, "DMCON015")).IsEmpty();
+    }
+
+    /// <summary>F4a: branches that disagree, or one that leaves the member alone, are unknown.</summary>
+    [Test]
+    public async Task IfBranchesDisagreeingOrOneSided_IsUnknown() {
+        var disagree = new Block([
+            IfCondition(new Block([Write("Amount", 5L)]), new Block([Write("Amount", 6L)])),
+            Done(),
+        ]);
+        var oneSided = new Block([
+            IfCondition(new Block([Write("Amount", 5L)]), null),
+            Done(),
+        ]);
+        await AssertUnknownOnce(disagree);
+        await AssertUnknownOnce(oneSided);
+    }
+
+    /// <summary>F4b: a length violation is DMCON014.</summary>
+    [Test]
+    public async Task BodyWritingOutsideLength_IsViolated() {
+        var surface = SurfaceWith(new Property("Code", new DomainTypeReference("Text"), [new LengthConstraint(1, 3)]));
+        var bodies = new Dictionary<string, Func<Block>>(StringComparer.Ordinal) {
+            ["Charge"] = () => new Block([Write("Code", "toolong"), Done()]),
+        };
+        var (_, _, analysis) = Analyze(CodeCallerDsl("length(1, 3)"), surface, bodies);
+
+        await Assert.That(WithCode(analysis, "DMCON014").Count).IsEqualTo(1);
+    }
+
+    /// <summary>F4b: a pattern violation is DMCON014.</summary>
+    [Test]
+    public async Task BodyWritingOutsidePattern_IsViolated() {
+        var surface = SurfaceWith(new Property("Code", new DomainTypeReference("Text"), [new PatternConstraint("^[0-9]+$")]));
+        var bodies = new Dictionary<string, Func<Block>>(StringComparer.Ordinal) {
+            ["Charge"] = () => new Block([Write("Code", "abc"), Done()]),
+        };
+        var (_, _, analysis) = Analyze(CodeCallerDsl("pattern(\"^[0-9]+$\")"), surface, bodies);
+
+        await Assert.That(WithCode(analysis, "DMCON014").Count).IsEqualTo(1);
+    }
+
+    /// <summary>F4b: a numeric equals violation is DMCON014.</summary>
+    [Test]
+    public async Task BodyWritingOutsideEquals_IsViolated() {
+        var bodies = new Dictionary<string, Func<Block>>(StringComparer.Ordinal) {
+            ["Charge"] = () => new Block([Write("Amount", 6L), Done()]),
+        };
+        var (_, _, analysis) = Analyze(
+            CallerDsl("equals(5)"), Surface(amountConstraints: [new EqualityConstraint(5L)]), bodies);
+
+        await Assert.That(WithCode(analysis, "DMCON014").Count).IsEqualTo(1);
+    }
+
+    /// <summary>F4c: null into an optional member is not a presence violation.</summary>
+    [Test]
+    public async Task BodyNullingOptionalMember_IsNotViolated() {
+        var surface = SurfaceWith(new Property("Code", new DomainTypeReference("Text"), [new OptionalConstraint()]));
+        var bodies = new Dictionary<string, Func<Block>>(StringComparer.Ordinal) {
+            ["Charge"] = () => new Block([Write("Code", null), Done()]),
+        };
+        var (_, _, analysis) = Analyze(CodeCallerDsl(""), surface, bodies);
+
+        // A value-type caller cannot be marked optional, so an optional payload member leaves the
+        // bind on the generic incompatibility path; the body is never judged a presence violation.
+        await Assert.That(WithCode(analysis, "DMCON014")).IsEmpty();
+    }
+
+    private static string CodeCallerDsl(string constraints) => $$"""
+        domain Shop
+        uses billing
+
+        SmallCode: value {
+          Code: Text {{constraints}}
+        }
+
+        Order: entity {
+          Pay: action (request: SmallCode) { }
+        }
+
+        ChargeOrder: bind Billing Charge to Pay request
+        """;
 
     private const string TwoMemberCallerDsl = """
         domain Shop

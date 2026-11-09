@@ -133,13 +133,15 @@ internal static class DomainModelDiagnosticCodes {
 
     /// <summary>
     /// #425: the caller's argument is provably disjoint from a public payload constraint or a
-    /// readable public precondition. An error: the call can never succeed, and Lower refuses.
+    /// readable public precondition, or the contributed body provably writes a payload member
+    /// outside a declared constraint or nulls a required one. An error: Lower refuses.
     /// </summary>
     public const string ContractBoundaryViolation = "DMCON014";
 
     /// <summary>
     /// #425: a boundary obligation the merge cannot decide, or one not readable from the
-    /// argument, and the postcondition half of every contributed body. A warning: Lower is not
+    /// argument, or a contributed-body write or payload escape the walk cannot decide (a surface-only
+    /// contribution has no body and is silent). A warning: Lower is not
     /// blocked, and an allowance is not a way to clear it (#422 owns tolerance).
     /// </summary>
     public const string ContractBoundaryUnknown = "DMCON015";

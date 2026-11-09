@@ -1240,9 +1240,12 @@ is reported `DMCON015` rather than `DMCON014`, even when the entity and the payl
 property name. Only a precondition that names the bound parameter of a primitive payload is
 decidable. Second, `Empty` from the constraint merge is a real disjointness proof only for
 `range`, `length` and `equals`; a `pattern` or `default` mismatch keeps the ordinary
-incompatible refusal (`DMCON001`) instead of being reported as disjoint. Library bodies are not
-walked: a contributed body is reported `unknown` on its postconditions with one `DMCON015`, and
-the domain still lowers. The note is not part of the surface fingerprint, and it never clears a
+incompatible refusal (`DMCON001`) instead of being reported as disjoint. A contributed
+body is walked on the postcondition half: a write outside a declared `range`, `length`, `pattern`
+or numeric `equals`, or a null into a required payload member, is `DMCON014` and Lower refuses; a
+write the walk cannot decide, or a payload handed to a call (including in the final `return` or a
+local assignment), is one `DMCON015` and the domain still lowers. A body that does not end in a
+`return`, or whose factory throws, is also `unknown`. A surface-only contribution is silent. The note is not part of the surface fingerprint, and it never clears a
 pin mismatch (`DMCON010`).
 
 ### Functions

@@ -92,8 +92,8 @@ public enum ContractCompatibility {
 /// <summary>
 /// #425: the boundary note beside a bind's <see cref="ContractBindingMetadata"/>. Not part of
 /// the surface fingerprint, not a pin input, and not a source rewrite. <see cref="Postcondition"/>
-/// is <see cref="ContractBoundaryVerdict.Unknown"/> for every contributed body: Scot's
-/// 2026-11-08 ruling keeps library bodies out of this slice.
+/// is decided by walking the contributed body; it stays <see cref="ContractBoundaryVerdict.Unknown"/>
+/// for a surface-only contribution (no body) and for any body the walk cannot read.
 /// </summary>
 public sealed record ContractBoundaryMetadata(
     ContractBoundaryVerdict Precondition,

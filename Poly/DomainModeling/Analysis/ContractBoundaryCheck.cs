@@ -71,9 +71,8 @@ internal static class ContractBoundaryCheck {
     // ── Postcondition half ──────────────────────────────────────
 
     /// <summary>
-    /// The body's obligations against the endpoint's declared payload. The final <c>return</c>
-    /// is the result, not an effect: only the leading statements can leave the payload outside
-    /// its declared constraints.
+    /// The body's obligations against the endpoint's declared payload. Every node is walked,
+    /// including the final <c>return</c> expression, which can still hand the payload to a call.
     /// </summary>
     private static ContractBoundaryVerdict Postcondition(
         AnalysisContext context,
@@ -133,9 +132,15 @@ internal static class ContractBoundaryCheck {
         if (contract.UsesId is null)
             return null;
         var contribution = RuntimeAnalysisCache.Session(domain).FindContractContribution(contract.UsesId);
-        return contribution is not null && contribution.Bodies.TryGetValue(endpoint.Name, out var factory)
-            ? factory()
-            : null;
+        if (contribution is null || !contribution.Bodies.TryGetValue(endpoint.Name, out var factory))
+            return null;
+        try {
+            return factory();
+        }
+        catch (Exception) {
+            // A throwing factory is a body analysis cannot read, not a crash in Analyze.
+            return null;
+        }
     }
 
     /// <summary>
@@ -148,8 +153,18 @@ internal static class ContractBoundaryCheck {
         if (payload is null)
             return obligations;
 
+        // Lower rejects a body that does not end in a return; analysis must not call it proven.
+        if (body.Nodes[^1] is not Return) {
+            obligations.Add(new Obligation(
+                $"payload '{payload.Name}' (the body does not end in a return)",
+                ContractBoundaryVerdict.Unknown,
+                Unreadable: true));
+            return obligations;
+        }
+
+        // The final return is walked too: its expression can hand the payload to a call.
         var state = new BodyState();
-        WalkBody(body.Nodes.Take(body.Nodes.Count - 1), state, payload);
+        WalkBody(body.Nodes, state, payload);
 
         if (state.PayloadMayChange) {
             obligations.Add(new Obligation(
@@ -330,14 +345,14 @@ internal static class ContractBoundaryCheck {
                 when IsPayload(parameter):
                 state.Properties[member.MemberName] = Wrote.Of(constant.Value);
                 break;
-            case Assignment { Destination: Member { Value: Parameter parameter } member }
+            case Assignment { Destination: Member { Value: Parameter parameter } member } assignment
                 when IsPayload(parameter):
                 state.Properties[member.MemberName] = Wrote.Unknown;
+                if (MayMutatePayload(assignment.Value, payload))
+                    state.PayloadMayChange = true;
                 break;
             case Assignment assignment:
-                if (RootedAtPayload(assignment.Destination)
-                    || assignment.Value is Parameter value && IsPayload(value)
-                    || RootedAtPayload(assignment.Value))
+                if (MayMutatePayload(assignment, payload) || RootedAtPayload(assignment.Value))
                     state.PayloadMayChange = true;
                 break;
             case IfStatement conditional: {

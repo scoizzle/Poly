@@ -1211,15 +1211,23 @@ the POSIX header (`Open`, `Read`, `Write`, `Close`) and declares `posix`; the se
 contract and not in the fingerprint, so another target's package keeps the pin.
 
 **Boundary constraints.** At a bind, analysis checks the caller's argument against the
-endpoint's public payload property constraints and against `require` preconditions that reduce
-to a property-vs-literal comparison. The caller must be at least as constrained as the
-endpoint. A proof is silent. A caller whose values are disjoint from an obligation is
-`DMCON014` and Lower refuses. Anything the constraint merge cannot decide — a caller wider than
-the obligation, a constraint kind with no merge rule, or a precondition that names a property
-the argument does not carry — is `DMCON015`, a warning that does not block Lower. Library
-bodies are not walked: a contributed body is reported `unknown` on its postconditions with one
-`DMCON015`, and the domain still lowers. The note is not part of the surface fingerprint, and
-it never clears a pin mismatch (`DMCON010`).
+endpoint's public payload property constraints. The caller must be at least as constrained as
+the endpoint. A proof is silent. A caller whose values are disjoint from an obligation is
+`DMCON014` and Lower refuses. Anything the constraint merge cannot decide — a caller wider
+than the obligation, or a constraint kind with no merge rule — is `DMCON015`, a warning that
+does not block Lower.
+
+Two limits keep the check from claiming more than it knows. First, a `require` precondition is
+written against the **entity** the exported action came from, so it constrains entity state,
+not the argument: a bare property access in one is never decided from the caller's payload and
+is reported `DMCON015` rather than `DMCON014`, even when the entity and the payload share a
+property name. Only a precondition that names the bound parameter of a primitive payload is
+decidable. Second, `Empty` from the constraint merge is a real disjointness proof only for
+`range`, `length` and `equals`; a `pattern` or `default` mismatch keeps the ordinary
+incompatible refusal (`DMCON001`) instead of being reported as disjoint. Library bodies are not
+walked: a contributed body is reported `unknown` on its postconditions with one `DMCON015`, and
+the domain still lowers. The note is not part of the surface fingerprint, and it never clears a
+pin mismatch (`DMCON010`).
 
 ### Action Parameters
 

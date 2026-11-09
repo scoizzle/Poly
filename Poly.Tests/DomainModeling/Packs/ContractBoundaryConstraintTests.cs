@@ -1,5 +1,7 @@
+using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Compile;
+using Poly.DomainModeling.ContractFill;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Ontology;
@@ -69,6 +71,28 @@ public sealed class ContractBoundaryConstraintTests {
         analysis.GetMetadata<ContractBoundaryMetadata>(domain.ContractBindings.Single())
         ?? throw new InvalidOperationException("No boundary facts were recorded.");
 
+    private static ContractBindingStatus BindStatus(Domain domain, AnalysisResult analysis) =>
+        (analysis.GetMetadata<ContractBindingMetadata>(domain.ContractBindings.Single())
+        ?? throw new InvalidOperationException("No binding facts were recorded.")).Status;
+
+    private static ImportedContract SurfaceWith(params Property[] properties) =>
+        new(
+            "Billing",
+            ContractSourceKind.ExternalProvider,
+            "billing",
+            "v1",
+            [
+                new ContractEndpoint(
+                    "Charge",
+                    ContractEndpointKind.Operation,
+                    ContractEndpointDirection.Outbound,
+                    new DomainTypeReference("ChargeRequest")) {
+                    SourceName = "Charge",
+                },
+            ]) {
+            Types = [new ValueType("ChargeRequest", properties, [])],
+        };
+
     private static string CallerDsl(string amountConstraints) => $$"""
         domain Shop
         uses billing
@@ -130,7 +154,9 @@ public sealed class ContractBoundaryConstraintTests {
 
     /// <summary>
     /// #442: a constraint pair the merge cannot decide is unknown, never a violation. An
-    /// equality cannot be shown to sit inside a range by the merge table, so it is unknown.
+    /// equality cannot be shown to sit inside a range by the merge table, so the
+    /// <c>Unmergeable</c> arm is what this reaches — not the "no constraint of this kind"
+    /// branch, and never <c>Empty</c>.
     /// </summary>
     [Test]
     public async Task CannotDecide_IsUnknownNotViolated() {
@@ -143,25 +169,75 @@ public sealed class ContractBoundaryConstraintTests {
             .IsEqualTo(ContractBoundaryVerdict.Unknown);
     }
 
+    /// <summary>
+    /// Bug 1 (blocking): an exported <c>require</c> is written against the <b>entity</b>, so a
+    /// bare <see cref="PropertyAccess"/> in it is entity state, not the argument. Reading it on
+    /// the caller's payload turned a legal call into <c>DMCON014</c>. A name collision between
+    /// the entity and the payload is undecidable at the bind seam, so it is unknown.
+    /// </summary>
     [Test]
-    public async Task CallerSatisfyingPayloadPrecondition_IsProven() {
-        var (domain, _, analysis) = Analyze(
-            CallerDsl("range(1, 10)"), Surface(preconditions: [AmountPositive()]));
+    public async Task EntityScopedPrecondition_IsUnknownNeverProvenOrViolated() {
+        var satisfying = Analyze(CallerDsl("range(1, 10)"), Surface(preconditions: [AmountPositive()]));
+        await Assert.That(WithCode(satisfying.Analysis, "DMCON014")).IsEmpty();
+        await Assert.That(Boundary(satisfying.Domain, satisfying.Analysis).Precondition)
+            .IsEqualTo(ContractBoundaryVerdict.Unknown);
 
-        await Assert.That(WithCode(analysis, "DMCON014")).IsEmpty();
-        await Assert.That(Boundary(domain, analysis).Precondition)
-            .IsEqualTo(ContractBoundaryVerdict.Proven);
+        var violating = Analyze(CallerDsl("range(-5, -1)"), Surface(preconditions: [AmountPositive()]));
+        await Assert.That(WithCode(violating.Analysis, "DMCON014")).IsEmpty();
+        await Assert.That(Boundary(violating.Domain, violating.Analysis).Precondition)
+            .IsEqualTo(ContractBoundaryVerdict.Unknown);
+        await Assert.That(violating.Analysis.HasErrors).IsFalse();
     }
 
+    /// <summary>
+    /// The same rule on real <see cref="InternalDomainProducer"/> output — the shape that
+    /// caught the bug. The producer exports <c>require Positive</c> where
+    /// <c>Positive: policy { Amount &gt; 0 }</c> is about <c>Ledger</c>, while the payload is
+    /// <c>ChargeRequest</c> and the caller passes <c>range(-5, -1)</c>. <c>origin/master</c>
+    /// reports nothing here; the check must not either.
+    /// </summary>
     [Test]
-    public async Task CallerViolatingPayloadPrecondition_IsViolatedAndNamesIt() {
-        var (domain, _, analysis) = Analyze(
-            CallerDsl("range(-5, -1)"), Surface(preconditions: [AmountPositive()]));
+    public async Task EntityScopedPrecondition_RealProducedContract_IsNeverViolated() {
+        var parsed = new DomainEvolution(DomainTestFactory.Create("_", [], []))
+            .ApplyAndAnalyze(new PolyDslParser("""
+                domain billing
 
-        var finding = WithCode(analysis, "DMCON014").Single();
-        await Assert.That(finding.Message).Contains("Positive");
+                public value ChargeRequest {
+                  Amount: Number
+                }
+
+                public entity Ledger {
+                  Amount: Number
+                  Positive: policy { Amount > 0 }
+                  public action Charge (line: ChargeRequest)
+                    require Positive
+                  {
+                  }
+                }
+                """).Parse());
+        await Assert.That(parsed.Succeeded).IsTrue();
+        var surface = new InternalDomainProducer().Produce(parsed.Root!);
+
+        var (domain, session, analysis) = Analyze("""
+            domain Shop
+            uses billing
+
+            SmallRequest: value {
+              Amount: Number range(-5, -1)
+            }
+
+            Order: entity {
+              Pay: action (request: SmallRequest) { }
+            }
+
+            ChargeOrder: bind Billing Charge to Pay request
+            """, surface);
+
+        await Assert.That(WithCode(analysis, "DMCON014")).IsEmpty();
+        await Assert.That(analysis.HasErrors).IsFalse();
         await Assert.That(Boundary(domain, analysis).Precondition)
-            .IsEqualTo(ContractBoundaryVerdict.Violated);
+            .IsEqualTo(ContractBoundaryVerdict.Unknown);
+        await Assert.That(session.Lower(domain, analysis).Count).IsGreaterThan(0);
     }
 
     [Test]
@@ -227,5 +303,195 @@ public sealed class ContractBoundaryConstraintTests {
         await Assert.That(analysis.HasErrors).IsTrue();
         await Assert.That(Boundary(domain, analysis).Precondition)
             .IsEqualTo(ContractBoundaryVerdict.Proven);
+    }
+
+    /// <summary>
+    /// Bug 2: <see cref="ConstraintMerge.MergeResult"/> returns <c>Empty</c> for two different
+    /// <c>pattern</c> strings, which is not a disjointness proof (both can accept the same
+    /// input). <c>origin/master</c> refused this input as <c>DMCON001</c>, so it stays on the
+    /// incompatibility path instead of gaining a false "disjoint" verdict.
+    /// </summary>
+    [Test]
+    public async Task PatternMismatch_StaysOnTheIncompatibilityPath() {
+        var surface = SurfaceWith(
+            new Property("Code", new DomainTypeReference("Text"), [new PatternConstraint("^[0-9]+$")]));
+        var (domain, _, analysis) = Analyze("""
+            domain Shop
+            uses billing
+
+            SmallCode: value {
+              Code: Text pattern("^[0-9]{1,6}$")
+            }
+
+            Order: entity {
+              Pay: action (request: SmallCode) { }
+            }
+
+            ChargeOrder: bind Billing Charge to Pay request
+            """, surface);
+
+        await Assert.That(WithCode(analysis, "DMCON014")).IsEmpty();
+        await Assert.That(WithCode(analysis, "DMCON001")).IsNotEmpty();
+        await Assert.That(BindStatus(domain, analysis)).IsEqualTo(ContractBindingStatus.Incompatible);
+        await Assert.That(analysis.GetMetadata<ContractBoundaryMetadata>(
+            domain.ContractBindings.Single()) is null).IsTrue();
+    }
+
+    /// <summary>
+    /// Bug 2, the <c>default</c> arm: two different defaults are not disjoint values either —
+    /// a default is not a restriction at all. Same outcome as the pattern arm: <c>DMCON001</c>,
+    /// as on <c>origin/master</c>.
+    /// </summary>
+    [Test]
+    public async Task DefaultMismatch_StaysOnTheIncompatibilityPath() {
+        var surface = SurfaceWith(
+            new Property("Amount", new DomainTypeReference("Number"),
+                [new DefaultValueConstraint(DomainExpression.Literal(5))]));
+        var (domain, _, analysis) = Analyze("""
+            domain Shop
+            uses billing
+
+            SmallRequest: value {
+              Amount: Number default(6)
+            }
+
+            Order: entity {
+              Pay: action (request: SmallRequest) { }
+            }
+
+            ChargeOrder: bind Billing Charge to Pay request
+            """, surface);
+
+        await Assert.That(WithCode(analysis, "DMCON014")).IsEmpty();
+        await Assert.That(WithCode(analysis, "DMCON001")).IsNotEmpty();
+        await Assert.That(BindStatus(domain, analysis)).IsEqualTo(ContractBindingStatus.Incompatible);
+        await Assert.That(analysis.GetMetadata<ContractBoundaryMetadata>(
+            domain.ContractBindings.Single()) is null).IsTrue();
+    }
+
+    /// <summary>
+    /// A shape mismatch is not a constraint question: <see cref="ContractPayloadRelation.SameShape"/>
+    /// is false, so no boundary verdict exists and the bind stays <c>Incompatible</c>.
+    /// </summary>
+    [Test]
+    public async Task ShapeMismatch_StaysIncompatible() {
+        var surface = SurfaceWith(
+            new Property("Amount", new DomainTypeReference("Number"), []),
+            new Property("Currency", new DomainTypeReference("Text"), []));
+        var (domain, _, analysis) = Analyze("""
+            domain Shop
+            uses billing
+
+            SmallRequest: value {
+              Amount: Number range(0, 10)
+            }
+
+            Order: entity {
+              Pay: action (request: SmallRequest) { }
+            }
+
+            ChargeOrder: bind Billing Charge to Pay request
+            """, surface);
+
+        await Assert.That(WithCode(analysis, "DMCON014")).IsEmpty();
+        await Assert.That(WithCode(analysis, "DMCON001")).IsNotEmpty();
+        await Assert.That(BindStatus(domain, analysis)).IsEqualTo(ContractBindingStatus.Incompatible);
+        await Assert.That(analysis.GetMetadata<ContractBoundaryMetadata>(
+            domain.ContractBindings.Single()) is null).IsTrue();
+    }
+
+    /// <summary>
+    /// A precondition is decided only when it names the bound argument. A strict bound is never
+    /// widened into a proof, a non-numeric literal is never a proof, and only a caller bound the
+    /// merge can decide is proven or violated.
+    /// </summary>
+    [Test]
+    public async Task ParameterScopedPrecondition_StrictBoundsAreNeverWidenedIntoAProof() {
+        static DomainExpression Request() => DomainExpression.Parameter("request");
+
+        static DomainExpression GreaterThan(object value) =>
+            DomainExpression.GreaterThan(Request(), DomainExpression.Literal(value));
+
+        var ten = new RangeConstraint(0, 10);
+
+        await Assert.That(ParameterVerdict(GreaterThan(0), [ten]))
+            .IsEqualTo(ContractBoundaryVerdict.Unknown);
+        await Assert.That(ParameterVerdict(
+            DomainExpression.LessThan(Request(), DomainExpression.Literal(10)), [ten]))
+            .IsEqualTo(ContractBoundaryVerdict.Unknown);
+        await Assert.That(ParameterVerdict(
+            DomainExpression.GreaterThanOrEqual(Request(), DomainExpression.Literal(10)), [ten]))
+            .IsEqualTo(ContractBoundaryVerdict.Unknown);
+        await Assert.That(ParameterVerdict(GreaterThan(0), []))
+            .IsEqualTo(ContractBoundaryVerdict.Unknown);
+        await Assert.That(ParameterVerdict(GreaterThan(0.5), [ten]))
+            .IsEqualTo(ContractBoundaryVerdict.Unknown);
+        await Assert.That(ParameterVerdict(
+            DomainExpression.Equal(Request(), DomainExpression.Literal(5)), [ten]))
+            .IsEqualTo(ContractBoundaryVerdict.Unknown);
+        await Assert.That(ParameterVerdict(GreaterThan("abc"), [ten]))
+            .IsEqualTo(ContractBoundaryVerdict.Unknown);
+
+        await Assert.That(ParameterVerdict(
+            DomainExpression.Equal(Request(), DomainExpression.Literal(5)),
+            [new RangeConstraint(5, 5)]))
+            .IsEqualTo(ContractBoundaryVerdict.Proven);
+
+        var violated = AnalyzeParameterPrecondition(GreaterThan(0), [new RangeConstraint(-5, -1)]);
+        await Assert.That(WithCode(violated.Analysis, "DMCON014")).IsNotEmpty();
+        await Assert.That(() => violated.Session.Lower(violated.Domain, violated.Analysis))
+            .Throws<InvalidOperationException>();
+
+        await Assert.That(ParameterVerdict(GreaterThan(10), [ten]))
+            .IsEqualTo(ContractBoundaryVerdict.Violated);
+        await Assert.That(ParameterVerdict(
+            DomainExpression.GreaterThanOrEqual(Request(), DomainExpression.Literal(11)), [ten]))
+            .IsEqualTo(ContractBoundaryVerdict.Violated);
+    }
+
+    /// <summary>
+    /// The DSL cannot author constraints on an action parameter, so this builds the caller's
+    /// argument with its own constraints the way a narrowed parameter would carry them.
+    /// </summary>
+    private static (Domain Domain, DomainSession Session, AnalysisResult Analysis) AnalyzeParameterPrecondition(
+        DomainExpression precondition,
+        IReadOnlyList<Constraint> callerConstraints) {
+        var surface = new ImportedContract(
+            "Billing",
+            ContractSourceKind.ExternalProvider,
+            "billing",
+            "v1",
+            [
+                new ContractEndpoint(
+                    "Charge",
+                    ContractEndpointKind.Operation,
+                    ContractEndpointDirection.Outbound,
+                    new DomainTypeReference("Number")) {
+                    SourceName = "Charge",
+                    Preconditions = [new Policy("Positive", precondition)],
+                },
+            ]) { Types = [] };
+
+        var tree = DslSyntaxTree.Parse("""
+            domain Shop
+            uses billing
+
+            Order: entity { Pay: action { } }
+            ChargeOrder: bind Billing Charge to Pay request
+            """);
+        var session = DomainSession.ForDocument(tree, [], Catalog(new ContractLibrary("billing", surface)));
+        var changes = new List<DomainChange>(new DomainResolver(tree, session).Resolve());
+        changes.Add(new AddParameterToActionChange(
+            "Order", "Pay", new Property("request", new DomainTypeReference("Number"), callerConstraints)));
+        var applied = new DomainEvolution(new Domain("_", [])).Apply(changes, session: session);
+        return (applied.Root, session, session.Analyze(applied.Root));
+    }
+
+    private static ContractBoundaryVerdict? ParameterVerdict(
+        DomainExpression precondition,
+        IReadOnlyList<Constraint> callerConstraints) {
+        var (domain, _, analysis) = AnalyzeParameterPrecondition(precondition, callerConstraints);
+        return analysis.GetMetadata<ContractBoundaryMetadata>(domain.ContractBindings.Single())
+            ?.Precondition;
     }
 }

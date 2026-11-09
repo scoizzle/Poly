@@ -11,23 +11,35 @@ namespace Poly.DomainModeling.Analysis;
 /// <summary>
 /// #425 (epic #427, spike #413 decision 21): the boundary check at a resolved bind. The
 /// caller's argument must sit inside the endpoint's public payload constraints and the
-/// preconditions that reduce to a payload-property comparison. A proof is silence; a
-/// contradiction is <c>DMCON014</c> and Lower refuses; anything the merge cannot decide, or
-/// that is not readable from the argument, is <c>DMCON015</c> and Lower is not blocked (#442).
+/// preconditions that name the bound argument. A proof is silence; a contradiction is
+/// <c>DMCON014</c> and Lower refuses; anything the merge cannot decide is <c>DMCON015</c> and
+/// Lower is not blocked (#442).
+/// <para>
+/// Two rules keep this from claiming more than it knows. A precondition is written against the
+/// <b>entity</b> the exported action came from, so a bare <see cref="PropertyAccess"/> is entity
+/// state and is never decided from the argument; only a <see cref="ParameterAccess"/> naming the
+/// bound parameter of a primitive payload is argument-scoped. And <c>Empty</c> is only a
+/// disjointness proof for <c>range</c>, <c>length</c> and <c>equals</c>: any other constraint kind
+/// the payload relation cannot satisfy leaves <c>null</c>, so the bind stays on the generic
+/// incompatibility path exactly as <c>origin/master</c> refused it.
+/// </para>
 /// <para>
 /// Scot's 2026-11-08 ruling: library bodies are not walked. Every contributed body is
-/// <see cref="ContractBoundaryVerdict.Unknown"/> on the postcondition half, named once. The
-/// caller half is the only thing this slice can decide.
+/// <see cref="ContractBoundaryVerdict.Unknown"/> on the postcondition half, named once.
 /// </para>
 /// </summary>
 internal static class ContractBoundaryCheck {
     /// <summary>One obligation, its verdict, and whether it is readable from the argument.</summary>
-    private readonly record struct Obligation(
+    private sealed record Obligation(
         string Name,
         ContractBoundaryVerdict Verdict,
         bool Unreadable);
 
-    public static ContractBoundaryMetadata Check(
+    /// <summary>
+    /// The boundary note, or <c>null</c> when the payload relation still refuses the caller and
+    /// the bind must stay <c>Incompatible</c>.
+    /// </summary>
+    public static ContractBoundaryMetadata? Check(
         AnalysisContext context,
         ContractBinding binding,
         ImportedContract contract,
@@ -35,7 +47,10 @@ internal static class ContractBoundaryCheck {
         ContractEndpoint endpoint,
         Property localParameter,
         bool hasBody) {
-        var obligations = Obligations(contract, domain, endpoint, localParameter).ToList();
+        var obligations = Obligations(contract, domain, endpoint, localParameter);
+        if (obligations is null)
+            return null;
+
         var precondition = Verdict(obligations);
         var compatibility = Compatibility(obligations, precondition);
         // Scot 2026-11-08: a contributed body is not walked, so its postcondition half is
@@ -105,92 +120,116 @@ internal static class ContractBoundaryCheck {
 
     // ── Obligations ─────────────────────────────────────────────
 
-    private static IEnumerable<Obligation> Obligations(
+    /// <summary>
+    /// Every obligation the argument must satisfy, or <c>null</c> when one of them leaves the
+    /// payload relation as the only judge (see <see cref="ConstraintObligation"/>).
+    /// </summary>
+    private static List<Obligation>? Obligations(
         ImportedContract contract,
         Domain domain,
         ContractEndpoint endpoint,
         Property localParameter) {
+        var obligations = new List<Obligation>();
         var payload = FindValueType(contract, domain, endpoint.PayloadType.TypeName);
         var local = FindValueType(contract, domain, localParameter.Type.TypeName);
 
         if (payload is not null && local is not null) {
-            foreach (var obligation in TypeConstraints(payload, local))
-                yield return obligation;
+            foreach (var constraint in payload.Constraints) {
+                var obligation = ConstraintObligation(payload.Name, constraint, local.Constraints);
+                if (obligation is null)
+                    return null;
+                obligations.Add(obligation);
+            }
 
             foreach (var property in payload.Properties) {
                 var localProperty = local.Properties.FirstOrDefault(candidate =>
                     string.Equals(candidate.Name, property.Name, StringComparison.Ordinal));
                 if (localProperty is null) {
-                    yield return new Obligation(
+                    obligations.Add(new Obligation(
                         $"{property.Name} on payload '{payload.Name}'",
                         ContractBoundaryVerdict.Unknown,
-                        Unreadable: true);
+                        Unreadable: true));
                     continue;
                 }
-                foreach (var constraint in property.Constraints)
-                    yield return ConstraintObligation(property.Name, constraint, localProperty.Constraints);
+                foreach (var constraint in property.Constraints) {
+                    var obligation = ConstraintObligation(property.Name, constraint, localProperty.Constraints);
+                    if (obligation is null)
+                        return null;
+                    obligations.Add(obligation);
+                }
             }
         }
 
         foreach (var policy in endpoint.Preconditions)
-            yield return PreconditionObligation(policy, local);
-    }
+            obligations.Add(PreconditionObligation(policy, localParameter, payload));
 
-    private static IEnumerable<Obligation> TypeConstraints(ValueType payload, ValueType local) {
-        foreach (var constraint in payload.Constraints)
-            yield return ConstraintObligation(payload.Name, constraint, local.Constraints);
+        return obligations;
     }
 
     /// <summary>
     /// The caller must imply the payload's constraint. Identity proves it; an empty
     /// intersection violates it; a net that is not the caller's own constraint (the caller is
-    /// wider) or a merge that cannot decide is unknown (#442).
+    /// wider) is unknown.
+    /// <para>
+    /// <c>Empty</c> is a disjointness proof only for <c>range</c>, <c>length</c> and
+    /// <c>equals</c>. Two different <c>pattern</c> strings or two different <c>default</c>s also
+    /// merge to <c>Empty</c> without being disjoint (#442 left those arms reading cannot-decide
+    /// as empty), so a mismatch there returns <c>null</c> and the bind keeps the generic
+    /// incompatibility refusal it had on <c>origin/master</c>.
+    /// </para>
     /// </summary>
-    private static Obligation ConstraintObligation(
+    private static Obligation? ConstraintObligation(
         string subject,
         Constraint obligation,
         IReadOnlyList<Constraint> caller) {
         var obligationText = Printer.PrintConstraintText(obligation);
         var name = $"{subject} {obligationText}";
+        var disjointIsProven = obligation is RangeConstraint or LengthConstraint or EqualityConstraint;
 
-        foreach (var candidate in caller.Where(c => c.GetType() == obligation.GetType())) {
-            var candidateText = Printer.PrintConstraintText(candidate);
-            if (string.Equals(candidateText, obligationText, StringComparison.Ordinal))
-                return new Obligation(name, ContractBoundaryVerdict.Proven, Unreadable: false);
-
-            var merge = candidate.MergeResult(obligation);
+        var sawSameKind = false;
+        foreach (var candidate in caller) {
+            var merge = obligation.MergeResult(candidate);
             if (merge.IsEmpty)
-                return new Obligation(name, ContractBoundaryVerdict.Violated, Unreadable: false);
-            if (merge.IsNet
-                && string.Equals(
-                    Printer.PrintConstraintText(merge.Net!), candidateText, StringComparison.Ordinal))
-                return new Obligation(name, ContractBoundaryVerdict.Proven, Unreadable: false);
+                return disjointIsProven
+                    ? new Obligation(name, ContractBoundaryVerdict.Violated, Unreadable: false)
+                    : null;
+            if (!merge.IsNet)
+                continue; // Unmergeable: this constraint says nothing about the obligation.
 
-            return new Obligation(name, ContractBoundaryVerdict.Unknown, Unreadable: false);
+            sawSameKind = true;
+            if (string.Equals(
+                    Printer.PrintConstraintText(merge.Net!),
+                    Printer.PrintConstraintText(candidate),
+                    StringComparison.Ordinal))
+                return new Obligation(name, ContractBoundaryVerdict.Proven, Unreadable: false);
         }
 
-        // No caller constraint of this kind: the caller is wider, so the obligation is undecided.
-        return new Obligation(name, ContractBoundaryVerdict.Unknown, Unreadable: false);
+        // A same-kind constraint that did not imply the obligation means the caller is wider.
+        if (sawSameKind || disjointIsProven)
+            return new Obligation(name, ContractBoundaryVerdict.Unknown, Unreadable: false);
+
+        // The caller carries no constraint of a kind master refused; keep refusing.
+        return null;
     }
 
     /// <summary>
-    /// A precondition is readable only when it is a comparison of a payload property against a
-    /// literal. A comparison against a symbol, a navigation, or a property the argument does not
-    /// carry is unknown, never a violation: failing it would reject a legal call.
+    /// A precondition is decided only when it names the bound argument: a parameter access on a
+    /// primitive payload, compared to a literal. A bare <see cref="PropertyAccess"/> comes from
+    /// an exported <c>require</c>, which is written against the source <b>entity</b>, so reading
+    /// it on the payload would judge entity state by the argument. That is undecidable here and
+    /// is unknown, never a violation.
     /// </summary>
-    private static Obligation PreconditionObligation(Policy policy, ValueType? local) {
-        var bounds = new List<(string Property, ComparisonKind Kind, object Value)>();
-        if (!TryReadBounds(policy.Expression, bounds))
+    private static Obligation PreconditionObligation(
+        Policy policy,
+        Property localParameter,
+        ValueType? payload) {
+        var bounds = new List<(ComparisonKind Kind, object Value)>();
+        if (!TryReadBounds(policy.Expression, localParameter.Name, payload, bounds))
             return new Obligation(policy.Name, ContractBoundaryVerdict.Unknown, Unreadable: true);
 
         var worst = ContractBoundaryVerdict.Proven;
-        foreach (var (propertyName, kind, value) in bounds) {
-            var localProperty = local?.Properties.FirstOrDefault(candidate =>
-                string.Equals(candidate.Name, propertyName, StringComparison.Ordinal));
-            if (localProperty is null)
-                return new Obligation(policy.Name, ContractBoundaryVerdict.Unknown, Unreadable: true);
-
-            var verdict = ComparisonVerdict(localProperty.Constraints, kind, value);
+        foreach (var (kind, value) in bounds) {
+            var verdict = ComparisonVerdict(localParameter.Constraints, kind, value);
             if (verdict == ContractBoundaryVerdict.Violated)
                 return new Obligation(policy.Name, ContractBoundaryVerdict.Violated, Unreadable: false);
             if (verdict == ContractBoundaryVerdict.Unknown)
@@ -201,19 +240,42 @@ internal static class ContractBoundaryCheck {
 
     private static bool TryReadBounds(
         DomainExpression expression,
-        List<(string Property, ComparisonKind Kind, object Value)> bounds) {
+        string parameterName,
+        ValueType? payload,
+        List<(ComparisonKind Kind, object Value)> bounds) {
+        // Only a primitive payload has a scalar argument to compare; a value-type payload is an
+        // object here, so `request > 0` says nothing about it.
+        if (payload is not null)
+            return false;
+
         switch (expression) {
             case And and:
-                return TryReadBounds(and.Left, bounds) && TryReadBounds(and.Right, bounds);
-            case Comparison { Left: PropertyAccess access, Right: Literal literal } comparison
-                when literal.Value is not null
+                return TryReadBounds(and.Left, parameterName, payload, bounds)
+                       && TryReadBounds(and.Right, parameterName, payload, bounds);
+            case Comparison { Left: ParameterAccess access, Right: Literal literal } comparison
+                when string.Equals(access.Name, parameterName, StringComparison.Ordinal)
+                     && literal.Value is not null
                      && comparison.Kind is not ComparisonKind.NotEqual:
-                bounds.Add((access.Name, comparison.Kind, literal.Value));
+                bounds.Add((comparison.Kind, literal.Value));
+                return true;
+            case Comparison { Left: Literal literal, Right: ParameterAccess access } comparison
+                when string.Equals(access.Name, parameterName, StringComparison.Ordinal)
+                     && literal.Value is not null
+                     && comparison.Kind is not ComparisonKind.NotEqual:
+                bounds.Add((Flip(comparison.Kind), literal.Value));
                 return true;
             default:
                 return false;
         }
     }
+
+    private static ComparisonKind Flip(ComparisonKind kind) => kind switch {
+        ComparisonKind.LessThan => ComparisonKind.GreaterThan,
+        ComparisonKind.LessThanOrEqual => ComparisonKind.GreaterThanOrEqual,
+        ComparisonKind.GreaterThan => ComparisonKind.LessThan,
+        ComparisonKind.GreaterThanOrEqual => ComparisonKind.LessThanOrEqual,
+        _ => kind,
+    };
 
     /// <summary>
     /// Numeric bounds only. The caller's range (or equality) must decide the comparison;

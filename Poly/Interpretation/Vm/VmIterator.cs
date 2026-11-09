@@ -81,37 +81,12 @@ public sealed class VmIterator<T> : IEnumerable<T>, IEnumerator<T> {
         var frame = _frame ??= NewFrame(shape);
 
         var state = _state;
-        var stack = state.Stack;
-        int callSp = stack.StackPointer;
-        int framePos = VmCall.FramePointer(callSp);
-        int need = framePos + frame.Length;
-        if (need > stack.RawSlots.Length)
-            throw new InvalidOperationException("VM: value stack overflow.");
-        stack.SetStackPointer(need);
-
-        var slots = stack.RawSlots;
-        slots[callSp] = state.FramePos;
-        slots[callSp + 1] = callSp;
-        // Copy-in: the private frame onto the shared stack, above the stack pointer.
-        Array.Copy(frame, 0, slots, framePos, frame.Length);
-
-        int savedFp = state.FramePos;
-        int savedClosure = state.ClosureHandle;
-        state.FramePos = framePos;
-        state.ClosureHandle = 0;
         try {
-            step(state);
-            // Copy-out: whatever the body spilled or advanced goes back to the private frame.
-            Array.Copy(slots, framePos, frame, 0, frame.Length);
+            VmResumableFrame.Run(state, step, frame);
         }
         catch {
             _done = true;
             throw;
-        }
-        finally {
-            state.FramePos = savedFp;
-            state.ClosureHandle = savedClosure;
-            stack.SetStackPointer(callSp);
         }
 
         if (frame[shape.MovedSlot] == 0L) {

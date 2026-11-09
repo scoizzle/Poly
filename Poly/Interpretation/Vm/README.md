@@ -256,6 +256,25 @@ switch (_slots[_fp + regionIdSlot]) {      // outer: region id -> region
 `VmIterator<T>` owns the frame (a private `long[]`). Each `MoveNext` copies it onto the stack above
 the stack pointer, runs the compiled step with `FramePos` there, and copies it back.
 
+An `IsAsync` method returning `Task` / `Task<T>` (#337) resumes through the same dispatch, the same
+regions, and the same private frame; `VmResumableFrame.Run` is the shared copy-in / run / copy-out.
+Where an iterator parks at a `yield return`, an async body parks at an `await` of an *incomplete*
+`Task` / `Task<T>`: the awaited task's handle, the region and step, and the live locals go to the frame,
+the frame word `AsyncStatusSlot` reports `suspended`, and the step exits. The call site constructs a
+`VmAsyncMachine<T>` over the arguments and returns the method's own task: `Start()` runs the body to its
+first incomplete await or its end. At a suspension the machine hooks the awaited task's continuation;
+when that task completes the same step runs again, enters the region by the dispatch, reloads, and
+finishes the `await` by reading the now-complete task, so a fault is thrown at the `await` and a throw
+out of any step faults the method's task. A completed task is read inline and never suspends.
+Resumption runs on the completing thread under a lock on the `VmState`; a continuation that fires after
+the state was disposed faults the task with `ObjectDisposedException`.
+
+An async method keeps the blocking `await` (per method) when any await sits outside a statement,
+assignment-value or return-value position, inside `try` / `catch` / `finally` / `using` / `foreach`,
+a loop body or a lambda, awaits something other than `Task` / `Task<T>`, or the body does not `return`
+a value on every path (`Task<T>`) or returns a value (`Task`). The root compilation-unit body also
+still blocks.
+
 ## Pipeline
 
 ```text

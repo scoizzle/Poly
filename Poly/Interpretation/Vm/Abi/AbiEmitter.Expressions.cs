@@ -598,6 +598,8 @@ public static partial class AbiEmitter {
     /// Ref-bound helpers; any other structurally awaitable type resolves
     /// <c>GetAwaiter</c> / <c>GetResult</c> through the type provider.</summary>
     private static Expression EmitAwait(Await await, Context ctx) {
+        if (ctx.IsAsyncBody)
+            return EmitResumableAwait(await, ctx);
         var operandType = ctx.Analysis?.GetResolvedType(await.Operand)?.GetRuntimeType();
         if (operandType is null)
             throw new InvalidOperationException(

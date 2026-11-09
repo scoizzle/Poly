@@ -163,9 +163,9 @@ public static partial class AbiEmitter {
     }
 
     private static Expression EmitBlock(Block block, Context ctx) {
-        // An iterator body's block is a resume region: the yields it owns directly resume
-        // through a switch of their own (see Context.EndRegion).
-        var region = ctx.IsIteratorBody ? ctx.BeginRegion() : null;
+        // A resumable (iterator or async) body's block is a resume region: the yields and
+        // awaits it owns directly resume through a switch of their own (see Context.EndRegion).
+        var region = ctx.IsResumableBody ? ctx.BeginRegion() : null;
         var emitted = EmitBlockBody(block, ctx);
         return region is null ? emitted : ctx.EndRegion(region, emitted);
     }
@@ -785,7 +785,7 @@ public static partial class AbiEmitter {
         var suspended = new List<Expression> {
             Assign(ctx.FrameSlotRead(ctx.IteratorCurrentSlot), word),
             Assign(ctx.FrameSlotRead(region.StepSlot), Constant((long)step)),
-            Assign(ctx.FrameSlotRead(ctx.IteratorRegionSlot), Constant((long)region.Id)),
+            Assign(ctx.FrameSlotRead(ctx.ResumeRegionSlot), Constant((long)region.Id)),
         };
         suspended.AddRange(spill);
         suspended.Add(Assign(ctx.FrameSlotRead(ctx.IteratorMovedSlot), Constant(1L)));
@@ -1103,6 +1103,101 @@ public static partial class AbiEmitter {
             : typeof(Exception);
     }
 
+    /// <summary>
+    /// <c>return</c> in a resumable async body: the value's frame word goes to the private
+    /// frame's result slot, the body reports <c>completed</c>, and control leaves through the exit.
+    /// <see cref="VmAsyncMachine{T}"/> turns that into the method task's result.
+    /// </summary>
+    private static Expression EmitAsyncReturn(Return ret, Context ctx) {
+        var status = ctx.FrameSlotRead(ctx.AsyncStatusSlot);
+        var complete = Block(Assign(status, Constant(AsyncCompleted)), Goto(ctx.ExitLabel));
+        if (ret.Value is null) {
+            if (ctx.AsyncReturn != typeof(Task))
+                throw new InvalidOperationException(
+                    $"VM compile rejected: async method returning '{ctx.AsyncReturn}' must return a value.");
+            return complete;
+        }
+        if (ctx.AsyncReturn == typeof(Task))
+            throw new InvalidOperationException(
+                "VM compile rejected: async method returning Task cannot return a value.");
+        var resultType = ctx.AsyncReturn!.GetGenericArguments()[0];
+        var ring = ctx.OpenRing();
+        var result = ring.AddValue(CompileNode(ret.Value, ctx));
+        var yieldedClr = ctx.Analysis?.GetResolvedType(ret.Value)?.GetRuntimeType();
+        if (!IsTaskLike(resultType) && IsTaskLike(yieldedClr))
+            throw new InvalidOperationException(
+                $"VM compile rejected: async method returning '{ctx.AsyncReturn}' yields '{yieldedClr}' — return the value, not the task.");
+        var word = RingCodec.ToFrame(
+            RingCodec.ToClr(result.Read, resultType, ret.Value, ctx.Analysis, ctx.HeapLocal),
+            resultType, ctx.HeapLocal);
+        return ring.Then(Block(
+            Assign(ctx.FrameSlotRead(ctx.AsyncResultSlot), word),
+            complete));
+    }
+
+    /// <summary>
+    /// <c>await</c> in a resumable async body. A completed task is read inline. An incomplete one
+    /// parks the task's handle, the region and step to resume at, and the live locals in the
+    /// private frame, reports <c>suspended</c> and leaves through the exit; the machine resumes the
+    /// body when the task completes. The resume label is followed by the reload and then the same
+    /// read of the (now complete) task, so a faulted task throws at the <c>await</c>.
+    /// </summary>
+    private static Expression EmitResumableAwait(Await await, Context ctx) {
+        if (ctx.InUnresumable)
+            throw new InvalidOperationException(
+                $"VM compile rejected: '{await}' cannot suspend inside try, catch, finally, using, or foreach.");
+        var operandType = ctx.Analysis?.GetResolvedType(await.Operand)?.GetRuntimeType()
+            ?? throw new InvalidOperationException(
+                $"VM compile rejected: Await operand '{await.Operand}' has no resolved CLR type.");
+        var region = ctx.CurrentRegion
+            ?? throw new InvalidOperationException($"VM compile rejected: '{await}' has no enclosing resume region.");
+
+        var ring = ctx.OpenRing();
+        var slot = ring.AddValue(CompileNode(await.Operand, ctx));
+        Expression Awaited(Expression handle) =>
+            Convert(Call(ctx.HeapLocal, HeapUnsafeGet, Convert(handle, typeof(int))), operandType);
+
+        Type? resultType = null;
+        MethodInfo helper;
+        if (operandType == typeof(Task)) {
+            helper = AwaitTaskVoidInfo;
+        }
+        else if (operandType.IsGenericType && operandType.GetGenericTypeDefinition() == typeof(Task<>)) {
+            resultType = operandType.GetGenericArguments()[0];
+            helper = AwaitTaskResultInfo.GetGenericMethodDefinition().MakeGenericMethod(resultType);
+        }
+        else {
+            throw new InvalidOperationException(
+                $"VM compile rejected: '{await}' awaits '{operandType}', which cannot suspend; only Task and Task<T> do.");
+        }
+
+        var (step, resumeLabel) = region.AddYield();
+        var spill = new List<Expression>();
+        var reload = new List<Expression>();
+        // The operand's own slot is parked below, so the barrier starts at it.
+        ctx.SpillBarrier(ring.Base, spill, reload);
+        var done = Label("await_done");
+        var parts = new List<Expression> {
+            IfThen(Property(Awaited(slot.Read), nameof(Task.IsCompleted)), Goto(done)),
+            Assign(ctx.FrameSlotRead(ctx.AsyncAwaitedSlot), slot.Read),
+            Assign(ctx.FrameSlotRead(region.StepSlot), Constant((long)step)),
+            Assign(ctx.FrameSlotRead(ctx.ResumeRegionSlot), Constant((long)region.Id)),
+        };
+        parts.AddRange(spill);
+        parts.Add(Assign(ctx.FrameSlotRead(ctx.AsyncStatusSlot), Constant(AsyncSuspended)));
+        parts.Add(Goto(ctx.ExitLabel));
+        parts.Add(Label(resumeLabel));
+        parts.AddRange(reload);
+        parts.Add(Assign(slot.Read, ctx.FrameSlotRead(ctx.AsyncAwaitedSlot)));
+        parts.Add(Label(done));
+
+        var call = Call(helper, Awaited(slot.Read));
+        parts.Add(resultType is null
+            ? Block(call, Assign(slot.Read, Constant(0L)))
+            : Assign(slot.Read, RingCodec.ToFrame(call, resultType, ctx.HeapLocal)));
+        return ring.Then(Block(parts));
+    }
+
     /// <summary>Return statement: write value to frame slot, set SP, jump to exit.
     /// A null <see cref="Return.Value"/> is a void return (no slot write).</summary>
     private static Expression EmitReturn(Return ret, Context ctx) {
@@ -1115,6 +1210,8 @@ public static partial class AbiEmitter {
                 Assign(ctx.FrameSlotRead(ctx.IteratorMovedSlot), Constant(0L)),
                 Goto(ctx.ExitLabel));
         }
+        if (ctx.IsAsyncBody)
+            return EmitAsyncReturn(ret, ctx);
         if (ret.Value is null) {
             if (ctx.AsyncReturn is not null)
                 return Block(

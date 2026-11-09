@@ -104,11 +104,29 @@ public static partial class AbiEmitter {
         /// <see cref="EmitPcDispatch"/>.</summary>
         public bool IsIteratorBody { get; set; }
 
+        /// <summary>True while emitting a resumable async method body (#337 slice 2). It resumes
+        /// through the same hierarchical region dispatch as an iterator: an <c>await</c> of an
+        /// incomplete task is the suspension point, <c>return</c> completes the body.</summary>
+        public bool IsAsyncBody { get; set; }
+
+        /// <summary>A body that resumes through the region dispatch: an iterator or an async method.</summary>
+        public bool IsResumableBody => IsIteratorBody || IsAsyncBody;
+
+        /// <summary>Frame slot the async body reports through: 1 = suspended at an await,
+        /// 2 = completed (<see cref="VmAsyncMachine{T}"/> reads it after every step).</summary>
+        public int AsyncStatusSlot { get; set; }
+
+        /// <summary>Frame slot holding the word of the value the async body returned.</summary>
+        public int AsyncResultSlot { get; set; }
+
+        /// <summary>Frame slot holding the handle of the task the body suspended on.</summary>
+        public int AsyncAwaitedSlot { get; set; }
+
         /// <summary>The CLR element type an iterator body yields.</summary>
         public Type? IteratorElement { get; set; }
 
         /// <summary>Frame slot holding the region id to resume into (0 = fresh start).</summary>
-        public int IteratorRegionSlot { get; set; }
+        public int ResumeRegionSlot { get; set; }
 
         /// <summary>Frame slot the body writes 1 to when it yielded and 0 when it finished.</summary>
         public int IteratorMovedSlot { get; set; }
@@ -169,7 +187,7 @@ public static partial class AbiEmitter {
                 cases[i] = System.Linq.Expressions.Expression.SwitchCase(
                     Goto(owned[i].EntryLabel), Constant(owned[i].Id));
             return System.Linq.Expressions.Expression.Switch(
-                Convert(FrameSlotRead(IteratorRegionSlot), typeof(int)),
+                Convert(FrameSlotRead(ResumeRegionSlot), typeof(int)),
                 Empty(), cases);
         }
 

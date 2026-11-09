@@ -94,12 +94,22 @@ internal static class ProvableGuards {
         HashSet<string> EntrySeed(Stage stage) =>
             entryProven.TryGetValue(stage.Name, out var proven) ? proven : [];
 
+        // Greatest fixed point: drop any entry proof some action in the stage may re-null when
+        // seeded with the current set, until stable. One invalid proof cannot vouch for another.
         var validSeeds = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
         HashSet<string> ValidSeed(Stage stage) {
-            if (!validSeeds.TryGetValue(stage.Name, out var valid)) {
-                valid = [.. EntrySeed(stage).Where(p => EntryCovers(stage, p))];
-                validSeeds[stage.Name] = valid;
-            }
+            if (validSeeds.TryGetValue(stage.Name, out var valid))
+                return valid;
+            valid = [.. EntrySeed(stage)];
+            bool changed;
+            do {
+                var renulled = stage.Actions.Concat(entity.Actions)
+                    .SelectMany(action => Renulls(action, stage, entity, valid))
+                    .Select(r => r.Property)
+                    .ToHashSet(StringComparer.Ordinal);
+                changed = valid.RemoveWhere(renulled.Contains) > 0;
+            } while (changed);
+            validSeeds[stage.Name] = valid;
             return valid;
         }
 
@@ -125,14 +135,6 @@ internal static class ProvableGuards {
                 ReportViolations(action, stage);
         }
 
-        bool EntryCovers(Stage stage, string property) {
-            if (!entryProven.TryGetValue(stage.Name, out var proven) || !proven.Contains(property))
-                return false;
-            var seed = EntrySeed(stage);
-            return !stage.Actions.Concat(entity.Actions).Any(action =>
-                Renulls(action, stage, entity, seed).Any(r => r.Property == property));
-        }
-
         void Check(IReadOnlyList<Effect> effects, FactSet facts, Action? action) =>
             Walk(effects, facts, action, entity,
                 (assign, current) => CheckCopy(context, domain, entity, action, assign, current));
@@ -154,9 +156,8 @@ internal static class ProvableGuards {
                 foreach (var property in StagePresence(action, stage))
                     facts.Borrow(Property + property);
                 if (i > 0) {
-                    foreach (var property in EntrySeed(stage))
-                        if (EntryCovers(stage, property))
-                            facts.Borrow(Property + property);
+                    foreach (var property in ValidSeed(stage))
+                        facts.Borrow(Property + property);
                 }
                 Check(action.Effects, facts, action);
             }

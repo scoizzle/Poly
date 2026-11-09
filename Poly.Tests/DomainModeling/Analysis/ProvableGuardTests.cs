@@ -200,6 +200,70 @@ public class ProvableGuardTests {
         Assert.Throws<InvalidOperationException>(() => session.Lower(domain, analysis));
     }
 
+    private const string ChainedEntryHead = """
+        domain Notes
+        Doc: entity {
+          Note: Text optional
+          Memo: Text optional
+          Target: Text
+          HasNote: policy { Note is not null }
+          HasMemo: policy { Memo is not null }
+          Draft: stage {
+            Start: action require HasNote, HasMemo { transition to Open }
+          }
+        """;
+
+    [Test]
+    public async Task InvalidEntryProof_DoesNotValidateAnotherEntryProof() {
+        var (session, domain, analysis) = Run(ChainedEntryHead + """
+
+              Open: stage {
+                Wipe: action { assign Note to null }
+                Copy: action { assign Memo to Note }
+                CopyM: action { assign Target to Memo }
+              }
+            }
+            """);
+        var finding = Of(analysis, "DMEFF014").Single();
+        await Assert.That(finding.Node).IsTypeOf<AssignEffect>();
+        Assert.Throws<InvalidOperationException>(() => session.Lower(domain, analysis));
+    }
+
+    [Test]
+    public async Task InvalidEntryProof_Controls() {
+        var literal = Run(ChainedEntryHead + """
+
+              Open: stage {
+                Copy: action { assign Memo to null }
+                CopyM: action { assign Target to Memo }
+              }
+            }
+            """);
+        await Assert.That(Of(literal.Analysis, "DMEFF014").Count()).IsGreaterThan(0);
+
+        var stageRequire = Run(ChainedEntryHead + """
+
+              Open: stage require HasMemo {
+                Wipe: action { assign Note to null }
+                Copy: action { assign Memo to Note }
+                CopyM: action { assign Target to Memo }
+              }
+            }
+            """);
+        await Assert.That(Of(stageRequire.Analysis, "DMEFF015").Count()).IsGreaterThan(0);
+
+        var valid = Run(ChainedEntryHead + """
+
+              Open: stage {
+                Copy: action { assign Memo to Note }
+                CopyM: action { assign Target to Memo }
+              }
+            }
+            """);
+        await Assert.That(Of(valid.Analysis, "DMEFF014").Count()).IsEqualTo(0);
+        await Assert.That(valid.Session.Lower(valid.Domain, valid.Analysis).Count).IsGreaterThan(0);
+    }
+
     [Test]
     public async Task TransitionOut_DropsStageFacts_IsDMEFF014() {
         var (session, domain, analysis) = Run(Doc("""
@@ -295,18 +359,20 @@ public class ProvableGuardTests {
 
     [Test]
     public async Task StageRequire_HeaderForms_RoundTrip() {
-        var (_, domain, _) = Run(Doc("""
+        var (_, domain, analysis) = Run(Doc("""
             HasMemo: policy { Memo is not null }
-            IsBlocked: policy { Other is not null }
+            HasOther: policy { Other is not null }
+            IsBlocked: policy { Other is null }
             Open: stage require HasNote, HasMemo
-              require HasMemo
+              require HasOther
               require not IsBlocked {
               Copy: action { assign Memo to Note }
             }
             """));
+        await Assert.That(analysis.HasErrors).IsFalse();
         var open = domain.Types.OfType<Entity>().Single().Stages.Single();
         await Assert.That(open.Policies.Select(p => p.Name).Count(n => n == "HasNote")).IsEqualTo(1);
-        await Assert.That(open.Policies.Count).IsGreaterThanOrEqualTo(3);
+        await Assert.That(open.Policies.Count).IsGreaterThanOrEqualTo(4);
 
         var printed = new DomainDslPrinter().Print(domain);
         await Assert.That(printed).Contains("Open: stage\n    require HasNote, HasMemo".Replace("\n", Environment.NewLine));

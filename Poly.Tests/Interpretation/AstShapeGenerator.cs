@@ -48,8 +48,6 @@ public static class AstShapeGenerator {
             "statement and heap shapes need a per-shape comparison rule (iteration bounds, ring state); AstParitySequence owns them"),
         ("string ==/!= with a concatenation operand",
             "FINDING: NotEqual(Add(s,\"c\"), Add(s,\"c\")) stack-overflows AbiEmitter at VM compile and kills the process; it cannot be a row, so comparison operands are concatenation-free until the VM is fixed"),
-        ("a compound subtree repeated within one program",
-            "FINDING: NotEqual(Add(i,1), Add(i,1)) stack-overflows AbiEmitter at VM compile and kills the process (also reached by seed 374#103 and by string concatenation on both sides of !=). A program that repeats a compound subtree is regenerated; leaves (a local or a constant) may repeat freely"),
         ("string concatenation nested in a concatenation or beside another in a conditional",
             "FINDING: seed 374#103 (Cond(c, Cat(Cond(..Cat..), Cat(Cond,Cat)), ..)) stack-overflows AbiEmitter at VM compile; not minimised. String programs are a leaf, one concatenation of leaves, or a conditional of leaves/concatenations"),
         ("UNMINIMISED FINDING, still generated: seed 4 index 28",
@@ -81,15 +79,8 @@ public static class AstShapeGenerator {
         var cases = new List<GeneratedCase>(count);
         for (var index = 0; index < count; index++) {
             // One independent stream per case, so a single case reproduces from (seed, index) alone.
-            // A program that repeats a compound subtree is regenerated from the next substream (NotGenerated).
-            GeneratedCase? built = null;
-            for (var attempt = 0; attempt < MaxAttempts && built is null; attempt++) {
-                var rng = new SplitMix(Mix(seed, (ulong)index + (ulong)attempt * 0x1_0000_0000UL));
-                var candidate = BuildCase(seed, index, rng, maxDepth);
-                if (!RepeatsACompoundSubtree(candidate.Text))
-                    built = candidate;
-            }
-            cases.Add(built ?? throw new InvalidOperationException($"no repeat-free program for seed {seed} index {index}"));
+            var rng = new SplitMix(Mix(seed, (ulong)index));
+            cases.Add(BuildCase(seed, index, rng, maxDepth));
         }
         return cases;
     }
@@ -98,11 +89,11 @@ public static class AstShapeGenerator {
     public static string Render(IReadOnlyList<GeneratedCase> cases) =>
         string.Join("\n", cases.Select(c => $"{c.Label} :: {c.Text}"));
 
-    const int MaxAttempts = 64;
-
-    // Node equality is not structural, so repetition is read off the canonical text: every Name(...) segment
-    // other than a constant C(...) is a compound subtree, and the same segment twice is a repeat.
-    static bool RepeatsACompoundSubtree(string text) {
+    /// <summary>
+    /// Node equality is not structural, so repetition is read off the canonical text: every Name(...) segment
+    /// other than a constant C(...) is a compound subtree, and the same segment twice is a repeat.
+    /// </summary>
+    public static bool RepeatsACompoundSubtree(string text) {
         var body = text[(text.LastIndexOf(';') + 1)..];
         var seen = new HashSet<string>(StringComparer.Ordinal);
         var starts = new Stack<int>();

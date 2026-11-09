@@ -71,6 +71,14 @@ public class AstShapeFuzzTests {
     }
 
     [Test]
+    public async Task Generate_EmitsProgramsThatRepeatACompoundSubtree() {
+        // The shape used to be regenerated away; a suite that passes because it never appears proves nothing.
+        var repeating = DefaultSet.Where(c => AstShapeGenerator.RepeatsACompoundSubtree(c.Text)).ToList();
+        await Assert.That(repeating.Count).IsGreaterThan(0).Because($"{repeating.Count} of {DefaultSet.Count} default programs repeat a compound subtree");
+        await Assert.That(AstShapeGenerator.NotGenerated.Any(e => e.Shape.Contains("repeated", StringComparison.Ordinal))).IsFalse();
+    }
+
+    [Test]
     public async Task DefaultSeed_PrintedCSharp_AgreesWithTheVm() {
         var rows = Run(DefaultSet);
 

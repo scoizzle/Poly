@@ -23,6 +23,40 @@ public class CSharpScriptTests {
     }
 
     [Test]
+    public async Task Run_TypeDeclaration_LocalReadTwiceInReturn_Compiles() {
+        var result = CSharpScript.Run(
+            "class C { C() { } long M() { long a = 1; return a * 10 + a * 10; } } new C().M();");
+        await Assert.That(result.Success).IsTrue();
+        await Assert.That(result.Value).IsEqualTo("20");
+    }
+
+    [Test]
+    public async Task Run_TypeDeclaration_LocalAddedToItself_Compiles() {
+        var result = CSharpScript.Run(
+            "class C { C() { } long M() { long a = 1; return a + a; } } new C().M();");
+        await Assert.That(result.Success).IsTrue();
+        await Assert.That(result.Value).IsEqualTo("2");
+    }
+
+    [Test]
+    public async Task Run_TypeDeclaration_LocalReadAcrossStatements_Compiles() {
+        var result = CSharpScript.Run(
+            "class C { C() { } long M() { long a = 1; long b = a * 10; return a * 10 + 1; } } new C().M();");
+        await Assert.That(result.Success).IsTrue();
+        await Assert.That(result.Value).IsEqualTo("11");
+    }
+
+    [Test]
+    public async Task Run_TypeDeclaration_LocalReadOnceControls_KeepValues() {
+        var once = CSharpScript.Run(
+            "class C { C() { } long M() { long a = 1; return a * 10 + 1; } } new C().M();");
+        await Assert.That(once.Value).IsEqualTo("11");
+        var viaTemp = CSharpScript.Run(
+            "class C { C() { } long M() { long a = 1; long b = a * 10; return b + 1; } } new C().M();");
+        await Assert.That(viaTemp.Value).IsEqualTo("11");
+    }
+
+    [Test]
     public async Task Run_TypeDeclaration_BoolResult_IsBool() {
         var result = CSharpScript.Run(
             "class C { C() { } bool N() { return true; } } new C().N();");

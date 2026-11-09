@@ -50,8 +50,6 @@ public static class AstShapeGenerator {
             "FINDING: NotEqual(Add(s,\"c\"), Add(s,\"c\")) stack-overflows AbiEmitter at VM compile and kills the process; it cannot be a row, so comparison operands are concatenation-free until the VM is fixed"),
         ("string concatenation nested in a concatenation or beside another in a conditional",
             "FINDING: seed 374#103 (Cond(c, Cat(Cond(..Cat..), Cat(Cond,Cat)), ..)) stack-overflows AbiEmitter at VM compile; not minimised. String programs are a leaf, one concatenation of leaves, or a conditional of leaves/concatenations"),
-        ("UNMINIMISED FINDING, still generated: seed 4 index 28",
-            "Add(Sub(Cond(Not(b1),Cond(b1,d1,d1),Neg(d1)),C(2.5)),Cond(Lt(..),d1,Cond(..))) with d1=5E-324 gives VM -9.223372036854776E+18 and printed -2.5 (a double read as its raw bits). Not in the default seed; seeds 1-6 x150 and 374 x150 otherwise agree. It is evidence, not a skip: file it before changing the default seed"),
         ("mixed-width comparison (int vs long vs double)",
             "needs a stated promotion rule; comparisons are generated same-type only"),
     ];

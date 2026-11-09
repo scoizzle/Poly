@@ -70,6 +70,8 @@ public static partial class AbiEmitter {
         Ref.Method((Expression<Func<VmManagedObjectHeap, object?, long>>)((h, v) => RingCodec.BoxToAbi(h, v)));
     private static readonly MethodInfo CastAbiInfo =
         Ref.Method((Expression<Func<VmManagedObjectHeap, long, Type, long>>)((h, r, t) => RingCodec.Cast(h, r, t)));
+    private static readonly MethodInfo CastToNullableAbiInfo =
+        Ref.Method((Expression<Func<VmManagedObjectHeap, long, Type, object?>>)((h, r, t) => RingCodec.CastToNullable(h, r, t)));
     private static readonly MethodInfo TypeAsAbiInfo =
         Ref.Method((Expression<Func<VmManagedObjectHeap, long, Type, long>>)((h, r, t) => RingCodec.TypeAs(h, r, t)));
     private static readonly MethodInfo UnboxNullableToLongInfo =
@@ -1050,9 +1052,12 @@ public static partial class AbiEmitter {
         var tmp = coal.Local;
         if (Nullable.GetUnderlyingType(tmp.Type) is { } underlying) {
             Expression stored = leftRead!.Type == tmp.Type ? leftRead : Convert(leftRead, tmp.Type);
-            Expression right = rightRead.Type == underlying || rightRead.Type == tmp.Type
-                ? rightRead
-                : Convert(rightRead, underlying);
+            // A call or cast arm leaves an IEEE value as its bit-pattern word; decode it before
+            // the numeric conversion would read the bits as a number.
+            var rightArm = DecodeIeeeWordArm(rightRead, n.RightHandValue, ctx);
+            Expression right = rightArm.Type == underlying || rightArm.Type == tmp.Type
+                ? rightArm
+                : Convert(rightArm, underlying);
             return Block(
                 leftCompiled.Code,
                 Assign(tmp, stored),

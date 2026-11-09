@@ -689,6 +689,15 @@ public static partial class AbiEmitter {
         var slot = ring.AddValue(CompileNode(t.Operand, ctx));
         if (sourceType is null || sourceType == targetType || targetType.IsAssignableFrom(sourceType))
             return Block(ring.Steps);
+        // A reference-typed operand (object, a call result) cast to T? may hold null at run time.
+        // The heap helper would throw for a value-type target, so a null handle is read here as the
+        // nullable's own absent value, in a Nullable<T> ring local, never as the word 0.
+        if (Nullable.GetUnderlyingType(targetType) is not null && !sourceType.IsValueType) {
+            var nullable = ctx.HoldRing(targetType);
+            return ring.Then(Assign(nullable,
+                Convert(Call(null, CastToNullableAbiInfo, ctx.HeapLocal, slot.Read,
+                    Constant(targetType, typeof(Type))), targetType)));
+        }
         // An unchecked integer cast wraps, the way `(short)32768` is -32768.
         // Convert.ToInt16 throws, so this is not that call. A reference cast
         // stays on the heap helper below.

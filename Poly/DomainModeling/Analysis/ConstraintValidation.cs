@@ -1,26 +1,45 @@
+using Poly.Analysis;
 using Poly.DomainModeling.Ontology;
 
 namespace Poly.DomainModeling.Analysis;
+
+/// <summary>Three-valued constraint check result (#367 D-1).</summary>
+internal enum ConstraintVerdict { Satisfied, Violated, Undecided }
 
 /// <summary>
 /// Static helpers for checking whether a value satisfies a constraint.
 /// Used at analysis time to validate literal assignments and parameter-propagation chains.
 /// </summary>
 internal static class ConstraintValidation {
-    public static bool IsSatisfiedBy(Constraint constraint, object? value) {
+    /// <summary>
+    /// Evaluates <paramref name="constraint"/> against a literal. A constraint kind this
+    /// validator does not model is <see cref="ConstraintVerdict.Undecided"/>, never
+    /// <see cref="ConstraintVerdict.Satisfied"/>: callers must decide what to do with it.
+    /// </summary>
+    public static ConstraintVerdict Evaluate(Constraint constraint, object? value) {
         ArgumentNullException.ThrowIfNull(constraint);
         return constraint switch {
-            RequiredConstraint => value is not null,
-            OptionalConstraint => true, // optional is the opt-out of requiredness; any value (incl. null) is legal
-            RangeConstraint r => IsInRange(value, r.Minimum, r.Maximum),
-            LengthConstraint l => IsValidLength(value, l.MinLength, l.MaxLength),
-            PatternConstraint p => IsValidPattern(value, p.Pattern),
-            EqualityConstraint eq => Equals(value, eq.ExpectedValue),
-            UniqueConstraint => true, // cannot validate statically; requires instance set
-            DefaultValueConstraint => true, // default-expression does not constrain assignment
-            _ => true  // unknown constraint type — pass
+            RequiredConstraint => Of(value is not null),
+            OptionalConstraint => ConstraintVerdict.Satisfied, // optional is the opt-out of requiredness; any value (incl. null) is legal
+            RangeConstraint r => Of(IsInRange(value, r.Minimum, r.Maximum)),
+            LengthConstraint l => Of(IsValidLength(value, l.MinLength, l.MaxLength)),
+            PatternConstraint p => Of(IsValidPattern(value, p.Pattern)),
+            EqualityConstraint eq => Of(Equals(value, eq.ExpectedValue)),
+            UniqueConstraint => ConstraintVerdict.Satisfied, // cannot validate statically; requires instance set
+            DefaultValueConstraint => ConstraintVerdict.Satisfied, // default-expression does not constrain assignment
+            _ => ConstraintVerdict.Undecided
         };
     }
+
+    /// <summary>Reports the shared DMCS003 warning for a constraint kind analysis does not model.</summary>
+    public static void ReportUndecided(AnalysisContext context, Node node, Constraint constraint, string where) =>
+        context.ReportWarning(
+            node,
+            $"Constraint {Describe(constraint)} {where} is not modelled by analysis, so it was not checked.",
+            DomainModelDiagnosticCodes.ConstraintUndecided);
+
+    private static ConstraintVerdict Of(bool satisfied) =>
+        satisfied ? ConstraintVerdict.Satisfied : ConstraintVerdict.Violated;
 
     public static string Describe(Constraint constraint) {
         return constraint switch {

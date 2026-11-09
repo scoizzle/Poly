@@ -333,6 +333,7 @@ An exported signature must be closed. A `public` action's parameter and result t
 | Range | `range(min, max)` | `Age: Number range(0, 150)` |
 | Length | `length(min, max)` | `Code: Text length(2, 10)` |
 | Pattern | `pattern(regex)` | `Zip: Text pattern("^\\d{5}$")` |
+| Equality | `equals(value)` | `Status: Text equals("Active")` |
 | Default | `default(value)` | `Status: MemberStatus default(Active)` |
 
 `Number` is a 64-bit integer (`long`). A fractional value such as `0.25` is rejected and is not stored as `0`. `1` and an integral JSON number such as `1.0` are accepted. `Decimal` is `decimal` and accepts a fraction. A fractional literal or bound on `Number` is an error that names `Decimal`.

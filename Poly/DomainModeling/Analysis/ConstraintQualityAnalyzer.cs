@@ -118,7 +118,12 @@ internal sealed class ConstraintQualityAnalyzer : INodeAnalyzer {
         if (equality is not null) {
             foreach (var c in constraints) {
                 if (c is EqualityConstraint or RangeConstraint) continue; // range covered elsewhere
-                if (!ConstraintValidation.IsSatisfiedBy(c, equality.ExpectedValue)) {
+                var verdict = ConstraintValidation.Evaluate(c, equality.ExpectedValue);
+                if (verdict == ConstraintVerdict.Undecided) {
+                    ConstraintValidation.ReportUndecided(context, property, c, $"on property '{property.Name}'");
+                    continue;
+                }
+                if (verdict == ConstraintVerdict.Violated) {
                     context.ReportError(
                         property,
                         $"Property '{property.Name}' EqualityConstraint value '{equality.ExpectedValue}' " +
@@ -131,7 +136,12 @@ internal sealed class ConstraintQualityAnalyzer : INodeAnalyzer {
         if (constraints.OfType<DefaultValueConstraint>().FirstOrDefault()?.Expression is Literal lit) {
             foreach (var c in constraints) {
                 if (c is DefaultValueConstraint or RangeConstraint or LengthConstraint) continue; // covered elsewhere
-                if (!ConstraintValidation.IsSatisfiedBy(c, lit.Value)) {
+                var verdict = ConstraintValidation.Evaluate(c, lit.Value);
+                if (verdict == ConstraintVerdict.Undecided) {
+                    ConstraintValidation.ReportUndecided(context, property, c, $"on property '{property.Name}'");
+                    continue;
+                }
+                if (verdict == ConstraintVerdict.Violated) {
                     context.ReportError(
                         property,
                         $"Property '{property.Name}' default value '{lit.Value}' violates {ConstraintValidation.Describe(c)}.",
@@ -165,7 +175,8 @@ internal sealed class ConstraintQualityAnalyzer : INodeAnalyzer {
         var equality = equalities.FirstOrDefault();
         var range = constraints.OfType<RangeConstraint>().FirstOrDefault();
         if (equality is not null && range is not null
-            && !ConstraintValidation.IsSatisfiedBy(range, equality.ExpectedValue)) {
+            // RangeConstraint is always modelled, so its verdict is never Undecided here.
+            && ConstraintValidation.Evaluate(range, equality.ExpectedValue) == ConstraintVerdict.Violated) {
             context.ReportError(
                 property,
                 $"Property '{property.Name}' EqualityConstraint ({equality.ExpectedValue}) is outside its " +

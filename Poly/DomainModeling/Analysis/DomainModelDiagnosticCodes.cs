@@ -37,6 +37,7 @@ internal static class DomainModelDiagnosticCodes {
 
     public const string ConstraintSatisfiability = "DMCS001";
     public const string ConstraintFixedPoint = "DMCS002";
+    public const string ConstraintUndecided = "DMCS003";
 
     public const string ContractIntegration = "DMCON001";
 

@@ -1373,7 +1373,13 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
     private static void ValidateLiteralAgainstConstraints(
         AnalysisContext context, Node errorNode, object? literalValue, Property targetProp) {
         foreach (var constraint in targetProp.Constraints) {
-            if (!ConstraintValidation.IsSatisfiedBy(constraint, literalValue)) {
+            var verdict = ConstraintValidation.Evaluate(constraint, literalValue);
+            if (verdict == ConstraintVerdict.Undecided) {
+                ConstraintValidation.ReportUndecided(
+                    context, errorNode, constraint, $"on property '{targetProp.Name}'");
+                continue;
+            }
+            if (verdict == ConstraintVerdict.Violated) {
                 var display = FormatValueForMessage(literalValue);
                 context.ReportError(
                     errorNode,

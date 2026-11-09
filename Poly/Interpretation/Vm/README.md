@@ -231,7 +231,7 @@ if (state.Status == InterpreterStatus.Resuming)
 An iterator method body (`yield return` / `yield break`, #338) uses the same spill and reload but
 resumes hierarchically, and the dispatch reads the iterator's private frame instead of
 `VmState.ProgramCounter`. An outer switch on the region id (a frame word) jumps to the entry label of
-the *region* that owns the yield: a block or loop body. The region's entry sits at its start, behind a
+the *region* that owns the yield: a block (every block is a region; a loop whose body is a bare statement has none of its own). The region's entry sits at its start, behind a
 `goto` that normal flow takes, and holds a small inner switch on a region-local step that jumps to the
 yield's own resume label:
 
@@ -419,3 +419,10 @@ was plumbing, not protocol.
 Inside a compiled function body, `FramePos` is the first argument slot: a
 parameter resolves at `FramePos + index` and `return` writes `slots[FramePos]`
 then sets `SP = FramePos + 1`.
+
+An iterator call returns a lazy `VmIterator<T>` that is enumerated, not a `List<T>`, though the type
+provider spells `IEnumerable<T>` as `List<T>`. Analysis therefore rejects (`IT0007`) a member or index
+access on a local holding an iterator call result, for `var e = M()` and `IEnumerable<T> e = M()` alike;
+`foreach` over it is the supported use. A `VmIterator<T>` also throws `ObjectDisposedException` from
+`MoveNext` / `GetEnumerator` once the execution that created it is disposed, because its stack array is
+back in the shared pool.

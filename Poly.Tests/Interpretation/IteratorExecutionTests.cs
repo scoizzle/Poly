@@ -6,7 +6,7 @@ namespace Poly.Tests.Interpretation;
 
 /// <summary>
 /// #338 slice 2: an iterator method runs lazily on a private, resumable frame. The body resumes
-/// through a hierarchical dispatch: an outer switch on the region id selects the block or loop
+/// through a hierarchical dispatch: an outer switch on the region id selects the block
 /// that owns the yield, and that region's own switch selects the yield to resume at.
 /// </summary>
 public class IteratorExecutionTests {
@@ -176,5 +176,110 @@ public class IteratorExecutionTests {
             + "new C().R();");
         // 111, 222 + 1, 111 + 222.
         await Assert.That(value).IsEqualTo("111223333");
+    }
+
+    /// <summary>The idiomatic form: an implicitly-typed local holding an iterator call result.</summary>
+    [Test]
+    public async Task Iterator_VarLocal_HoldsTheIteratorAndEnumerates() {
+        var value = await Run(
+            "class C { C() { } IEnumerable<long> M() { yield return 1L; yield return 2L; } "
+            + "long R() { var e = this.M(); long s = 0; foreach (var x in e) { s = s + x; } return s; } } "
+            + "new C().R();");
+        await Assert.That(value).IsEqualTo("3");
+    }
+
+    private static async Task<List<long>> Drain(string script) => await Host(script, s => s.Take(8).ToList());
+
+    private static async Task<string> FirstError(string script) {
+        var unit = CSharpScript.ReadUnit(script);
+        var analysis = Interpreter.Analyze(unit);
+        var errors = CSharpScript.Errors(analysis);
+        await Assert.That(errors).IsNotEmpty();
+        return errors.First();
+    }
+
+    /// <summary>Fix 1 chose fail-closed for list-only members: the provider spells IEnumerable&lt;T&gt; as
+    /// List&lt;T&gt;, so before this rule <c>var e = M(); e.Count</c> type-checked and threw
+    /// InvalidCastException (VmIterator to List) at run time. Enumeration through <c>var</c> stays legal.</summary>
+    [Test]
+    public async Task Iterator_VarLocal_MemberAccess_IsRejectedAtAnalysis() {
+        var code = await FirstError(
+            "class C { C() { } IEnumerable<long> M() { yield return 1L; } long R() { var e = this.M(); return e.Count; } } new C().R();");
+        await Assert.That(code).StartsWith("IT0007");
+    }
+
+    [Test]
+    public async Task Iterator_ExplicitLocal_MemberCall_IsRejectedAtAnalysis() {
+        var code = await FirstError(
+            "class C { C() { } IEnumerable<long> M() { yield return 1L; } long R() { IEnumerable<long> e = this.M(); e.Add(5L); return 0; } } new C().R();");
+        await Assert.That(code).StartsWith("IT0007");
+    }
+
+    [Test]
+    public async Task Iterator_MoveNextAfterExecDispose_Throws() {
+        var unit = CSharpScript.ReadUnit(
+            "class C { C() { } IEnumerable<long> M() { yield return 1L; yield return 2L; } } new C().M();");
+        var analysis = Interpreter.Analyze(unit);
+        var program = Interpreter.Compile(CSharpScript.ProgramBlock(unit), analysis, CompilationMode.Normal);
+        var exec = Interpreter.Execute(program);
+        var sequence = (IEnumerable<long>)exec.Result.Value!;
+        var en = sequence.GetEnumerator();
+        await Assert.That(en.MoveNext()).IsTrue();
+        exec.Dispose();
+        await Assert.That(() => en.MoveNext()).Throws<ObjectDisposedException>();
+        await Assert.That(() => sequence.GetEnumerator()).Throws<ObjectDisposedException>();
+    }
+
+    [Test]
+    public async Task Iterator_BareReturn_EndsLikeYieldBreak() {
+        var seen = await Drain(
+            "class C { C() { } IEnumerable<long> M() { yield return 1L; yield return 2L; return; yield return 3L; } } new C().M();");
+        await Assert.That(seen).IsEquivalentTo(new long[] { 1, 2 });
+    }
+
+    [Test]
+    public async Task Iterator_BareStatementYield_UnderIf() {
+        var seen = await Drain(
+            "class C { C() { } IEnumerable<long> M() { long i = 0; while (i < 4) { if (i % 2 == 0) yield return i; i = i + 1; } } } new C().M();");
+        await Assert.That(seen).IsEquivalentTo(new long[] { 0, 2 });
+    }
+
+    [Test]
+    public async Task Iterator_BareStatementYield_UnderWhile() {
+        var seen = await Drain(
+            "class C { C() { } IEnumerable<long> M() { long i = 0; while (i < 3) yield return 7L; yield return 9L; } } new C().M();");
+        // The bare-statement body re-yields while the condition holds; Drain stops at 8.
+        await Assert.That(seen).IsEquivalentTo(new long[] { 7, 7, 7, 7, 7, 7, 7, 7 });
+    }
+
+    [Test]
+    public async Task Iterator_ThrowMidBody_ThenMoveNext_FalseNoHang() {
+        var unit = CSharpScript.ReadUnit(
+            "class C { C() { } IEnumerable<long> M() { yield return 1L; throw new System.InvalidOperationException(); yield return 2L; } } new C().M();");
+        var analysis = Interpreter.Analyze(unit);
+        await Assert.That(CSharpScript.Errors(analysis)).IsEmpty();
+        var program = Interpreter.Compile(CSharpScript.ProgramBlock(unit), analysis, CompilationMode.Normal);
+        using var exec = Interpreter.Execute(program);
+        using var en = ((IEnumerable<long>)exec.Result.Value!).GetEnumerator();
+        await Assert.That(en.MoveNext()).IsTrue();
+        var threw = false;
+        try { en.MoveNext(); } catch (Exception) { threw = true; }
+        await Assert.That(threw).IsTrue();
+        await Assert.That(en.MoveNext()).IsFalse();
+    }
+
+    [Test]
+    public async Task Iterator_NonGenericIEnumerable_IsRejectedAtCompile() {
+        var result = CSharpScript.Run(
+            "class C { C() { } IEnumerable M() { yield return 1L; } } new C().M();");
+        await Assert.That(result.Success).IsFalse();
+        await Assert.That(string.Join("|", result.Diagnostics)).Contains("IEnumerable");
+    }
+
+    [Test]
+    public async Task Iterator_BlockLocal_InLoop_SurvivesYield() {
+        var seen = await Drain(
+            "class C { C() { } IEnumerable<long> M() { long i = 0; while (i < 3) { { long inner = i * 10; yield return inner; yield return inner + 1; } i = i + 1; } } } new C().M();");
+        await Assert.That(seen).IsEquivalentTo(new long[] { 0, 1, 10, 11, 20, 21 });
     }
 }

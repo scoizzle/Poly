@@ -900,6 +900,12 @@ public sealed class DomainDslPrinter {
                 ? $"count {c.RelationshipName} where {Run(_printer, c.Body)}"
                 : $"count {c.RelationshipName}";
 
+        protected override string MatchExpr(MatchExpr m) =>
+            "match { "
+            + string.Join(", ", m.Arms.Select(a => $"{Run(_printer, a.Condition)} -> {Run(_printer, a.Value)}")
+                .Append($"else -> {Run(_printer, m.Else)}"))
+            + " }";
+
         protected override string SumExpr(SumExpr s) =>
             $"sum {s.RelationshipName} {s.PropertyName}";
     }

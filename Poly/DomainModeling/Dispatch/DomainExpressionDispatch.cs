@@ -39,6 +39,7 @@ public abstract class DomainExpressionDispatch<TResult> {
     protected virtual TResult Add(Add e) => Default();
     protected virtual TResult Multiply(Multiply e) => Default();
     protected virtual TResult Divide(Divide e) => Default();
+    protected virtual TResult MatchExpr(MatchExpr e) => Default();
     protected virtual TResult RelationshipNavigation(RelationshipNavigation e) => Default();
     protected virtual TResult AnyExpr(AnyExpr e) => Default();
     protected virtual TResult AllExpr(AllExpr e) => Default();
@@ -73,6 +74,7 @@ public abstract class DomainExpressionDispatch<TResult> {
         Add e => Add(e),
         Multiply e => Multiply(e),
         Divide e => Divide(e),
+        MatchExpr e => MatchExpr(e),
         RelationshipNavigation e => RelationshipNavigation(e),
         AnyExpr e => AnyExpr(e),
         AllExpr e => AllExpr(e),

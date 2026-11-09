@@ -738,7 +738,7 @@ once per record whose `where` holds.
   the collection or condition; a malformed `where` expression; a `for` nested inside a
   `for` body; and a missing `}`, which is reported at the end of the input rather than
   at the `for`.
-- Still missing: `match`, `first` / `filter`; `create in` inside the body is not exercised yet.
+- Still missing: `first` / `filter`; `create in` inside the body is not exercised yet.
 
 ```poly
 invoke Validate                              # self-only
@@ -1188,10 +1188,35 @@ and lowering pipeline but are **not yet authorable in product DSL**:
 | Collection quantifiers (`any`/`all`/`none`/`count`) | ✅ | ✅ **Q3′ shipped** | `any items where Status is "Open"`; foreach over the collection in simulate and export. |
 | Arithmetic (`+`, `-`, `*`, `/`) | ✅ | ✅ **shipped** | `Total + 5 > 10`, `Total * 2 > 10` |
 | Action parameters | ✅ | ✅ **shipped** | `actionName: action (param: Text) { ... }` |
+| `match { cond -> value, …, else -> value }` | ✅ | ✅ **shipped** (#409) | Expression-level branching; see below. |
 
 **Expression bodies are DSL text only** — JSON expression bags were retired with the catalog minify.
 Named-policy evaluate runs on a session instance (`create_instance` + `evaluate_policy`). `oracle_expression`
 is a fragment probe: relationship/owned path-prefix and relationship `exists` fail closed without session instances.
+
+### `match` (#409)
+
+```
+assign Tier to match { Qty > 100 -> "big", Qty > 10 -> "mid", else -> "small" }
+```
+
+- A **guard chain with no scrutinee**: arms are tried in order and the first whose condition
+  is true supplies the value. Arms are separated by `,`; each is `condition -> value`.
+- **`else -> value` is required and must be the last arm**, so a match is always total. A missing,
+  repeated or non-final `else` is a positioned parse error. There is no implicit default.
+- Arms are **expressions**, never effects. It works wherever an expression does (assign RHS, `if`
+  conditions, policy bodies, `create` initializers, nested inside another `match`).
+- Conditions must be Boolean (**DMMAT001**). The arm values and the `else` must unify to one type
+  (**DMMAT002**; `Text` and an enum unify, `Text` and `Number` do not). Two arms with the same
+  condition are an error, the later arm is unreachable (**DMMAT003**); only identical conditions
+  are seen, overlapping ranges are the author's problem. A bare name that is no property, parameter or
+  enum member is an error (**DMMAT004**).
+- Malformed forms (`match { }`, an arm with no `->`, an empty condition or value, a stray or trailing
+  `,`) fail with a positioned parse error.
+- Lowers to a nested conditional; simulation and printed C# agree. Arms are lazy in the result
+  (only the chosen value is selected), but a quantifier inside an arm is evaluated up front.
+- Not shipped: matching on a scrutinee (`match X { "a" -> … }`), patterns, and constant-folding of
+  provably unreachable arms.
 
 ## 9. Supported Effect Summary
 

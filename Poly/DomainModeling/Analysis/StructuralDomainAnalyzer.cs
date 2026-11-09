@@ -203,9 +203,9 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
     /// <summary>
     /// Policy methods are unqualified on the entity type, next to the action methods.
     /// A policy named like an action is a collision; a second definition of the same
-    /// name is a redefinition. An action policy whose expression is the same instance
-    /// as an earlier definition is a use (<c>require</c>), not a definition. Any other
-    /// action policy, except a <c>not_</c> use, defines the name.
+    /// name is a redefinition. A stage or action policy whose expression is the same
+    /// instance as an earlier definition is a use (<c>require</c>), not a definition.
+    /// A <c>not_</c> policy is that use negated. Any other policy defines the name.
     /// </summary>
     private static void ReportPolicyNameClashes(AnalysisContext context, Entity entity) {
         var actions = entity.Actions.Concat(entity.Stages.SelectMany(s => s.Actions)).ToList();
@@ -226,22 +226,21 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
             }
         }
 
+        bool IsUse(Policy policy) =>
+            policy.Name.StartsWith("not_", StringComparison.Ordinal)
+            || (defined.TryGetValue(policy.Name, out var existing)
+                && ReferenceEquals(existing.Expression, policy.Expression));
+
         foreach (var policy in entity.Policies)
             Define(policy);
         foreach (var stage in entity.Stages)
             foreach (var policy in stage.Policies)
-                Define(policy);
-
-        foreach (var action in actions) {
-            foreach (var policy in action.Policies) {
-                if (policy.Name.StartsWith("not_", StringComparison.Ordinal))
-                    continue;
-                if (defined.TryGetValue(policy.Name, out var existing)
-                    && ReferenceEquals(existing.Expression, policy.Expression))
-                    continue;
-                Define(policy);
-            }
-        }
+                if (!IsUse(policy))
+                    Define(policy);
+        foreach (var action in actions)
+            foreach (var policy in action.Policies)
+                if (!IsUse(policy))
+                    Define(policy);
     }
 
     private static void AnalyzeStage(AnalysisContext context, Stage stage) {

@@ -233,10 +233,13 @@ public sealed partial class DomainToCSharpExporter {
         void EmitOne(Policy policy) {
             if (action.Policies.Any(p => string.Equals(p.Name, "not_" + policy.Name, StringComparison.Ordinal)))
                 return;
+            var negated = policy.Name.StartsWith("not_", StringComparison.Ordinal);
+            var realName = negated ? policy.Name[4..] : policy.Name;
+            Node call = new Invoke(new Member(new ThisReference(), realName));
             nodes.Add(new IfStatement(
-                new Syntactic.Not(new Invoke(new Member(new ThisReference(), policy.Name))),
+                negated ? call : new Syntactic.Not(call),
                 new Block([failureReturn(
-                    $"'{action.Name}' blocked by policy '{policy.Name}'.")])));
+                    $"'{action.Name}' blocked by policy '{realName}'.")])));
         }
 
         if (policyStageName is not null) {
@@ -470,8 +473,9 @@ public sealed partial class DomainToCSharpExporter {
     /// <c>adapterResult = &lt;final expression&gt;</c> and
     /// <c>if (!adapterResult.IsSuccess) return</c> that Failure (void <c>DomainResult</c>) or
     /// <c>DomainResult&lt;T&gt;.Failure(ErrorMessage)</c> (typed). A surface-only in-solution
-    /// contribution erases the call and leaves the local action body untouched. Unknown
-    /// contract/endpoint/binding are left untouched: analysis already rejected them.
+    /// contribution erases the call and leaves the local action body untouched. A hand-built
+    /// domain with no analysis falls back to the authored name; a recorded non-<c>Bound</c>
+    /// binding fact (#422) refuses instead of silently erasing the call.
     /// </summary>
     private static Node? SpliceContractBody(
         Domain? domain, Action action, Node? effectsBody, bool isVoid,
@@ -480,6 +484,12 @@ public sealed partial class DomainToCSharpExporter {
         var binding = domain.ContractBindings.FirstOrDefault(b =>
             string.Equals(b.ActionName, action.Name, StringComparison.Ordinal));
         if (binding is null) return effectsBody;
+        // #422: an acknowledged bind failure is stored, not hidden. This must precede the
+        // contract/endpoint early returns, which would otherwise erase the call silently.
+        if (analysis?.GetMetadata<ContractBindingMetadata>(binding) is { Status: not ContractBindingStatus.Bound } refused)
+            throw new InvalidOperationException(
+                $"Contract binding '{binding.Name}' is recorded as '{refused.Status}' and cannot be lowered. " +
+                "Resolve the finding (the contract, endpoint, parameter, or pin) or remove the acknowledgement.");
         var contract = domain.ImportedContracts.FirstOrDefault(c =>
             string.Equals(c.Name, binding.ContractName, StringComparison.Ordinal));
         if (contract is null) return effectsBody;

@@ -265,7 +265,7 @@ public sealed class ContractBindingFactsTests {
             """;
         var (domain, _, analysis) = Analyze(poly, BillingSurface());
 
-        await Assert.That(WithCode(analysis, "DMCON001").Single().Message).Contains("not registered");
+        await Assert.That(WithCode(analysis, DomainModelDiagnosticCodes.ContractReferenceUnresolved).Single().Message).Contains("not registered");
         var facts = BindFacts(domain, analysis);
         await Assert.That(facts.Status).IsEqualTo(ContractBindingStatus.Unresolved);
         await Assert.That(facts.Contract).IsEqualTo("Missing");

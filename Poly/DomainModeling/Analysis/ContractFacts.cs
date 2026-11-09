@@ -1,4 +1,5 @@
 using Poly.Analysis;
+using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Ontology.Contract;
 
 namespace Poly.DomainModeling.Analysis;
@@ -98,6 +99,49 @@ public sealed record ContractBoundaryMetadata(
     ContractBoundaryVerdict Precondition,
     ContractBoundaryVerdict Postcondition,
     ContractCompatibility Compatibility) : IAnalysisMetadata;
+
+/// <summary>
+/// #422 (epic #427, spike #413 decision 8): one acknowledged contract failure. Written only when
+/// a <see cref="DiagnosticAllowance"/> matched the finding at <see cref="ElementPath"/>; the
+/// finding itself stays a warning on the shared diagnostic record. <see cref="Message"/> is the
+/// finding's message, so a refusal names the same failure a reviewer acknowledged.
+/// </summary>
+public sealed record ContractToleranceFact(string Code, string ElementPath, string Message);
+
+/// <summary>
+/// #422: the domain's acknowledged contract findings, queryable from the analysis. One fact per
+/// (code, element path): one allowance can match several findings on the same node (a public
+/// action with two internal-typed parameters), and that is one acknowledged failure, not many.
+/// </summary>
+public sealed class ContractToleranceMetadata : IAnalysisMetadata {
+    private readonly List<ContractToleranceFact> _facts = [];
+
+    public IReadOnlyList<ContractToleranceFact> Facts => _facts;
+
+    internal void Add(ContractToleranceFact fact) {
+        if (_facts.Any(existing =>
+                string.Equals(existing.Code, fact.Code, StringComparison.Ordinal)
+                && string.Equals(existing.ElementPath, fact.ElementPath, StringComparison.Ordinal)))
+            return;
+        _facts.Add(fact);
+    }
+}
+
+/// <summary>
+/// #422: Lower, Emit, and the internal Compile refuse while a contract finding is acknowledged.
+/// This is not the deleted #430 flow-contradiction gate: it reads a fact written only by an
+/// acknowledged contract finding, covers contract findings only, and does not re-derive severity.
+/// <see cref="DomainModelAnalyzer.ThrowIfHasErrors"/> stays the only severity gate.
+/// </summary>
+internal static class ContractToleranceGate {
+    public static void ThrowIfAny(Domain domain, INodeMetadataProvider? metadata) {
+        var fact = metadata?.GetMetadata<ContractToleranceMetadata>(domain)?.Facts.FirstOrDefault();
+        if (fact is null)
+            return;
+        throw new InvalidOperationException(
+            $"Contract finding '{fact.Code}' at '{fact.ElementPath}' is acknowledged for review, but lowering refuses until the finding is resolved: {fact.Message}");
+    }
+}
 
 /// <summary>
 /// Exact pin matching (decision 5): a 64-lowercase-hex pin is the machine fingerprint; any

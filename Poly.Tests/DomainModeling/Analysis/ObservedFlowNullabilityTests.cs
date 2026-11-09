@@ -8,7 +8,8 @@ namespace Poly.Tests.DomainModeling.Analysis;
 
 /// <summary>
 /// #439: a reader-found copy from a property that may hold null (<c>optional</c>) into a required
-/// property is a flow diagnostic, acknowledged by the same allowance as width and type (#435).
+/// property is a flow diagnostic. No allowance acknowledges it (#444): only a provable guard clears a
+/// copy in the tree, and an observed flow has no guard site.
 /// </summary>
 public class ObservedFlowNullabilityTests {
     private const string NullabilityDomain = """
@@ -83,24 +84,17 @@ public class ObservedFlowNullabilityTests {
     }
 
     [Test]
-    public async Task OptionalSource_RequiredTarget_MatchingAllowance_IsWarning_AndLowerSucceeds() {
+    public async Task OptionalSource_RequiredTarget_MatchingAllowance_StaysError_IsDMALW002_AndLowerRefuses() {
         var (session, domain, analysis) = Run(
             NullabilityDomain, [NotesFlow()], [Allow("DMEFF014", NotePath)]);
 
-        await Assert.That(analysis.HasErrors).IsFalse();
         var finding = Of(analysis, "DMEFF014").Single();
-        await Assert.That(finding.Severity).IsEqualTo(DiagnosticSeverity.Warning);
+        await Assert.That(finding.Severity).IsEqualTo(DiagnosticSeverity.Error);
         await Assert.That(DomainElementPath.Resolve(domain, finding.Node)).IsEqualTo(NotePath);
+        await Assert.That(Of(analysis, "DMALW002").Single().Severity).IsEqualTo(DiagnosticSeverity.Error);
         await Assert.That(Of(analysis, "DMALW001").Count()).IsEqualTo(0);
 
-        await Assert.That(session.Lower(domain, analysis).Count).IsGreaterThan(0);
-        var report = session.ArtifactCatalog.Artifacts
-            .Select(a => a.Payload).OfType<AnalysisReport>()
-            .SelectMany(r => r.Findings)
-            .Where(f => f.Code == "DMEFF014").ToList();
-        await Assert.That(report.Count).IsEqualTo(1);
-        await Assert.That(report[0].Severity).IsEqualTo(DiagnosticSeverity.Warning);
-        await Assert.That(report[0].ElementPath).IsEqualTo(NotePath);
+        Assert.Throws<InvalidOperationException>(() => session.Lower(domain, analysis));
     }
 
     [Test]
@@ -132,9 +126,11 @@ public class ObservedFlowNullabilityTests {
 
         var (session, domain, both) = Run(
             WidthAndNullabilityDomain, [flow], [Allow("DMEFF008", NotePath), Allow("DMEFF014", NotePath)]);
-        await Assert.That(both.HasErrors).IsFalse();
+        await Assert.That(Of(both, "DMEFF008").Single().Severity).IsEqualTo(DiagnosticSeverity.Warning);
+        await Assert.That(Of(both, "DMEFF014").Single().Severity).IsEqualTo(DiagnosticSeverity.Error);
         await Assert.That(Of(both, "DMALW001").Count()).IsEqualTo(0);
-        await Assert.That(session.Lower(domain, both).Count).IsGreaterThan(0);
+        await Assert.That(Of(both, "DMALW002").Count()).IsEqualTo(1);
+        Assert.Throws<InvalidOperationException>(() => session.Lower(domain, both));
     }
 
     [Test]
@@ -149,12 +145,12 @@ public class ObservedFlowNullabilityTests {
     }
 
     [Test]
-    public async Task OrdinaryNullableParameterAssign_ToRequiredProperty_IsUnchanged() {
+    public async Task OrdinaryNullableParameterAssign_ToRequiredProperty_IsDMEFF014() {
         var session = SessionBuilder.CreateEmpty().LoadCore().LoadTemporal().Build();
         var analysis = session.Analyze(NullableParameterAssignDomain());
 
-        await Assert.That(Of(analysis, "DMEFF014").Count()).IsEqualTo(0);
-        await Assert.That(analysis.HasErrors).IsFalse();
+        await Assert.That(Of(analysis, "DMEFF014").Single().Severity).IsEqualTo(DiagnosticSeverity.Error);
+        await Assert.That(analysis.HasErrors).IsTrue();
     }
 
     /// <summary>An optional parameter assigned into a required property: the ordinary assign path,

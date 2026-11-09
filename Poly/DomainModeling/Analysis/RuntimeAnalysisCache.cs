@@ -155,6 +155,7 @@ internal static class RuntimeAnalysisCache {
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(analysis);
         DomainModelAnalyzer.ThrowIfHasErrors(analysis);
+        ContractToleranceGate.ThrowIfAny(domain, analysis);
         Bind(domain, session, analysis);
         var holder = GetHolder(domain);
         if (holder.Module is not null)

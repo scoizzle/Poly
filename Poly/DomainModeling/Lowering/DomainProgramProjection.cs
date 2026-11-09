@@ -45,6 +45,7 @@ public static class DomainProgramProjection {
         IReadOnlyList<ContractContribution>? contractContributions = null) {
         ArgumentNullException.ThrowIfNull(domain);
         ArgumentNullException.ThrowIfNull(metadata);
+        ContractToleranceGate.ThrowIfAny(domain, metadata);
         var domainRelationships = metadata.GetAllRelationships(domain);
         var entities = domain.Types.OfType<Entity>().ToList();
         var entityLookup = entities.ToDictionary(e => e.Name, StringComparer.Ordinal);

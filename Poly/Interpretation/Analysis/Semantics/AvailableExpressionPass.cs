@@ -226,7 +226,7 @@ public sealed class AvailableExpressionPass : INodeAnalyzer {
     }
 
     private static void Apply(AnalysisContext context, Region region, Node anchor, List<Variable>? extraTemps = null) {
-        var groups = region.Reusable();
+        var groups = DropUnrebuildable(region.Reusable(), anchor is Block anchorBlock ? anchorBlock.Nodes : new Node[] { anchor });
         extraTemps ??= [];
         if (groups.Count == 0 && extraTemps.Count == 0)
             return;
@@ -260,9 +260,50 @@ public sealed class AvailableExpressionPass : INodeAnalyzer {
                 context.SetNodeReplacement(anchor, new Block([existing], [.. extraTemps]));
             return;
         }
+        if (groups.Count == 0)
+            return;
 
         context.SetNodeReplacement(anchor, new Block([.. stores, Rebuild(context, anchor, subst)], temps));
     }
+
+    /// <summary>
+    /// <see cref="Rebuild"/> only descends the node kinds it lists; any other kind comes back as itself.
+    /// A replacement whose body is its own original node re-enters the emitter forever, and a
+    /// substitution beneath such a kind is silently lost. A group with an occurrence under one is
+    /// not rewritten, so every rewritten statement is rebuilt from nodes <see cref="Rebuild"/> can reach.
+    /// </summary>
+    private static List<List<Node>> DropUnrebuildable(List<List<Node>> groups, IReadOnlyList<Node> roots) {
+        var kept = groups;
+        while (kept.Count > 0) {
+            var targets = new HashSet<Node>(kept.SelectMany(group => group), ReferenceEqualityComparer.Instance);
+            var blocked = new HashSet<Node>(ReferenceEqualityComparer.Instance);
+            foreach (var root in roots)
+                FindBlocked(root, targets, blocked);
+            if (blocked.Count == 0)
+                return kept;
+            kept = kept.Where(group => !group.Any(blocked.Contains)).ToList();
+        }
+        return kept;
+    }
+
+    private static void FindBlocked(Node node, HashSet<Node> targets, HashSet<Node> blocked) {
+        if (targets.Contains(node) || !targets.Any(target => Contains(node, target)))
+            return;
+        if (!IsRebuildable(node)) {
+            foreach (var target in targets.Where(target => Contains(node, target)))
+                blocked.Add(target);
+            return;
+        }
+        foreach (var child in node.Children) {
+            if (child is not null)
+                FindBlocked(child, targets, blocked);
+        }
+    }
+
+    /// <summary>The kinds <see cref="Rebuild"/> reconstructs. Keep in step with its switch.</summary>
+    private static bool IsRebuildable(Node node) =>
+        node is Multiply or Add or Subtract or Divide or IndexAccess or And or LessThan or LessThanOrEqual
+            or ShiftRight or Assignment or Block;
 
     private static bool ReachesExternal(Node node) {
         if (node is Invoke or Await or New)

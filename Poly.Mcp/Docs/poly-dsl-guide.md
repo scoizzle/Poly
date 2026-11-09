@@ -520,6 +520,21 @@ Active: stage { }
 Done: stage { }
 ```
 
+### Stage require
+
+A stage may `require` an entity policy (identifier list; `require not` negates). The clause goes in the stage header, before the opening `{`, exactly where an action's `require` goes (`Name: stage require A, B {`; repeated `require` clauses are allowed). A `require` inside the stage body is a parse error. It is an invariant:
+every action that can run in the stage must keep it true. Policies are defined on the entity, never
+inside the stage. A `require` that proves a property present (`Note is not null`) also clears
+copies of that optional property into a required one (DMEFF014) in the stage's actions; an action
+that can assign null to it is DMEFF015.
+
+```poly
+HasNote: policy { Note is not null }
+Open: stage require HasNote {
+  Copy: action { assign Memo to Note }
+}
+```
+
 ### Entry/Exit Effects
 
 ```poly

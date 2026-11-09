@@ -169,11 +169,24 @@ internal static class DomainModelDiagnosticCodes {
     public const string UnconditionalAutomaticTransitionCycle = "DMEFF013";
 
     /// <summary>
-    /// A bound <see cref="ObservedFlow"/> copies an optional property into a required one: the
-    /// source may carry null where the target cannot. Reported on the target property; a matching
-    /// allowance makes it a warning.
+    /// A copy whose source may carry null (an optional property or an optional parameter) writes a
+    /// required target, and no provable guard clears it (#444). In the tree it sits on the assign;
+    /// an <see cref="ObservedFlow"/> has no guard site, so it sits on the target property. An
+    /// error that no <see cref="DiagnosticAllowance"/> acknowledges.
     /// </summary>
     public const string ObservedFlowNullability = "DMEFF014";
+
+    /// <summary>
+    /// An action assigns a value that may be null to a property a stage <c>require</c> proves present
+    /// (#444). The stage invariant holds only if no action that can run in the stage can null it.
+    /// </summary>
+    public const string StagePresenceInvalidated = "DMEFF015";
+
+    /// <summary>
+    /// A <see cref="DiagnosticAllowance"/> names a <see cref="ObservedFlowNullability"/> finding. That
+    /// finding cannot be acknowledged; only a provable guard clears it. An error.
+    /// </summary>
+    public const string UnacknowledgeableAllowance = "DMALW002";
 
     // ── Aggregate / ownership diagnostics (APM Phase B) ────────
 

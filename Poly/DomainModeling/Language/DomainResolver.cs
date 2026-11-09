@@ -30,6 +30,7 @@ public sealed class DomainResolver : DslCursor {
 
     // Pending requires that must be resolved after the full entity body is parsed
     private readonly List<PendingRequire> _pendingRequires = new();
+    private readonly List<PendingStageRequire> _pendingStageRequires = new();
 
     // Pending navigation properties (N1 form) resolved after all entities are known
     private readonly List<PendingNav> _pendingNavs = new();
@@ -66,6 +67,12 @@ public sealed class DomainResolver : DslCursor {
         string? StageName,
         string PolicyName,
         bool Negated);
+
+    private readonly record struct PendingStageRequire(
+        string StageName,
+        string PolicyName,
+        bool Negated,
+        DslToken At);
 
     private readonly record struct PendingNav(
         string SourceEntityName,
@@ -218,6 +225,7 @@ public sealed class DomainResolver : DslCursor {
         _currentEntityName = entityName;
         _entityPolicies.Clear();
         _pendingRequires.Clear();
+        _pendingStageRequires.Clear();
         _entityIndex++;
 
         _entityNames.Add(entityName);
@@ -404,6 +412,19 @@ public sealed class DomainResolver : DslCursor {
                     new Policy(pr.PolicyName, expr), StageName: pr.StageName));
             }
         }
+
+        foreach (var sr in _pendingStageRequires) {
+            if (!_entityPolicies.TryGetValue(sr.PolicyName, out var expr)) {
+                throw GrammarError.Error(
+                    $"Stage '{sr.StageName}' requires policy '{sr.PolicyName}' " +
+                    $"which is not defined on entity '{_currentEntityName}'.",
+                    sr.At.Line, sr.At.Col);
+            }
+            var policy = sr.Negated
+                ? new Policy($"not_{sr.PolicyName}", DomainExpression.Not(expr))
+                : new Policy(sr.PolicyName, expr);
+            changes.Add(new AddPolicyToStageChange(_currentEntityName, sr.StageName, policy));
+        }
     }
 
     private void ParseProperty(string name, TokenKind typeKind, List<DomainChange> changes) {
@@ -549,6 +570,19 @@ public sealed class DomainResolver : DslCursor {
         }
         if (!stages.Add(name))
             throw Error($"Duplicate stage name '{name}' on entity '{_currentEntityName}'.");
+
+        // Stage require clauses sit before '{', like an action's (resolved after the entity body).
+        while (Current.Kind == TokenKind.Require) {
+            var requireToken = Current;
+            Advance(); // consume 'require'
+            var negated = false;
+            if (Current.Kind == TokenKind.Not) {
+                negated = true;
+                Advance();
+            }
+            foreach (var policy in ParseIdentifierList())
+                _pendingStageRequires.Add(new PendingStageRequire(name, policy, negated, requireToken));
+        }
         Expect(TokenKind.LBrace);
 
         // P2.4: Parse entry/exit effect blocks before actions and subscriptions
@@ -600,6 +634,8 @@ public sealed class DomainResolver : DslCursor {
             }
 
             // Stage-local action (or unmodeled token — fail closed).
+            if (Current.Kind == TokenKind.Require)
+                throw Error("'require' must appear before the stage's '{', as in 'Name: stage require Policy {'.");
             if ((Current.Kind == TokenKind.Entry || Current.Kind == TokenKind.Exit) && Current.Kind != TokenKind.Identifier) {
                 throw Error($"'{Current.Text}' must appear at the beginning of the stage block, before actions and subscriptions.");
             }

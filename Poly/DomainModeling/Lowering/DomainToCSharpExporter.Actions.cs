@@ -233,10 +233,13 @@ public sealed partial class DomainToCSharpExporter {
         void EmitOne(Policy policy) {
             if (action.Policies.Any(p => string.Equals(p.Name, "not_" + policy.Name, StringComparison.Ordinal)))
                 return;
+            var negated = policy.Name.StartsWith("not_", StringComparison.Ordinal);
+            var realName = negated ? policy.Name[4..] : policy.Name;
+            Node call = new Invoke(new Member(new ThisReference(), realName));
             nodes.Add(new IfStatement(
-                new Syntactic.Not(new Invoke(new Member(new ThisReference(), policy.Name))),
+                negated ? call : new Syntactic.Not(call),
                 new Block([failureReturn(
-                    $"'{action.Name}' blocked by policy '{policy.Name}'.")])));
+                    $"'{action.Name}' blocked by policy '{realName}'.")])));
         }
 
         if (policyStageName is not null) {

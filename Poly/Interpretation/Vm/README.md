@@ -228,6 +228,34 @@ if (state.Status == InterpreterStatus.Resuming)
     }
 ```
 
+An iterator method body (`yield return` / `yield break`, #338) uses the same spill and reload but
+resumes hierarchically, and the dispatch reads the iterator's private frame instead of
+`VmState.ProgramCounter`. An outer switch on the region id (a frame word) jumps to the entry label of
+the *region* that owns the yield: a block or loop body. The region's entry sits at its start, behind a
+`goto` that normal flow takes, and holds a small inner switch on a region-local step that jumps to the
+yield's own resume label:
+
+```csharp
+switch (_slots[_fp + regionIdSlot]) {      // outer: region id -> region
+    case 1: goto region_1_entry;
+    case 2: goto region_2_entry;
+}
+...
+{                                          // a block that owns two yields
+    goto region_2_body;                    // fresh entry skips the dispatch
+    region_2_entry:
+    switch (_slots[_fp + region2StepSlot]) { // inner: step -> yield
+        case 1: goto region_2_resume_1;
+        case 2: goto region_2_resume_2;
+    }
+    region_2_body:
+    ...
+}
+```
+
+`VmIterator<T>` owns the frame (a private `long[]`). Each `MoveNext` copies it onto the stack above
+the stack pointer, runs the compiled step with `FramePos` there, and copies it back.
+
 ## Pipeline
 
 ```text

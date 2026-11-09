@@ -334,6 +334,11 @@ public static partial class AbiEmitter {
             result = Assign(slot.Read,
                 RingCodec.ToIeee(Negate(dbl)));
         }
+        else if (IntegerWidthOf(unaryMinus.Operand, ctx) == typeof(int)) {
+            // C# negates a 32-bit-width operand at 32 bits, so -int.MinValue wraps.
+            result = Assign(slot.Read, RingCodec.AsRepresentation(
+                Negate(RingCodec.AsRepresentation(slot.Read, typeof(int))), slot.Read.Type));
+        }
         else {
             result = Assign(slot.Read, Negate(slot.Read));
         }

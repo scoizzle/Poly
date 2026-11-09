@@ -38,8 +38,18 @@ public sealed class ParityScenario {
     /// domain it was given, and the simulator must not inherit that session. The storage library is
     /// what threads an <see cref="IStoragePort"/> into Create and the actions.
     /// </summary>
-    public static ParityScenario FromDsl(string dsl, string assemblyName) {
-        var simulate = EvolvedDomain.FromDsl(dsl).Domain;
+    public static ParityScenario FromDsl(string dsl, string assemblyName) => FromDsls(dsl, dsl, assemblyName);
+
+    /// <summary>
+    /// The interpreter runs <paramref name="simulateDsl"/> and the printed C# is lowered from
+    /// <paramref name="printedDsl"/>. They are the same text in <see cref="FromDsl"/>. A test passes a
+    /// deliberately different printed text to break the lowered module (a dropped guard, a dropped
+    /// transition) and require the differential to go red; the domain facts the scenario reads come
+    /// from <paramref name="simulateDsl"/>.
+    /// </summary>
+    public static ParityScenario FromDsls(string simulateDsl, string printedDsl, string assemblyName) {
+        var simulate = EvolvedDomain.FromDsl(simulateDsl).Domain;
+        var dsl = printedDsl;
         var builder = SessionBuilder.CreateEmpty();
         builder.LoadCore();
         foreach (var id in ExtensionCatalog.ProductAuthoring)

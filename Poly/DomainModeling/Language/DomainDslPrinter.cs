@@ -680,6 +680,21 @@ public sealed class DomainDslPrinter {
             return null;
         }
 
+        protected override object? ForEach(ForEachEffect fe) {
+            _sb.Append($"for {fe.BinderName} in {fe.RelationshipName}");
+            if (fe.Where is not null)
+                _sb.Append(" where ").Append(_printer.PrintExpression(fe.Where));
+            _sb.AppendLine(" {");
+            foreach (var sub in fe.Body) {
+                _sb.Append(_indent);
+                _sb.Append("    ");
+                _printer.PrintEffect(sub, _indent + "  ");
+            }
+            _sb.Append(_indent);
+            _sb.AppendLine("}");
+            return null;
+        }
+
         protected override object? ForEachInvoke(ForEachInvokeEffect efe) {
             _sb.Append($"for {efe.RelationshipName} as {efe.BinderName}");
             switch (efe.Predicate) {

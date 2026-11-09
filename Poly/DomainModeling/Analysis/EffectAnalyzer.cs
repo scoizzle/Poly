@@ -587,6 +587,17 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
             return null;
         }
 
+        // #409 slice 4: the general `for` parses and prints, but its effect legality
+        // (slice 5) and lowering (slice 6) are not shipped. Fail closed: shipped ⊆ lowerable.
+        protected override object? ForEach(ForEachEffect e) {
+            context.ReportError(
+                e,
+                $"'for {e.BinderName} in {e.RelationshipName} {{ … }}' on entity '{entity.Name}' parses but is not " +
+                "analyzable or lowerable yet (#409 slices 5–6); use 'for Rel as name … invoke name.Action'.",
+                DomainModelDiagnosticCodes.EffectForNotLowerable);
+            return null;
+        }
+
         protected override object? Assign(AssignEffect e) {
             ValidateAssign(context, e, action, entity, peerBinding);
             return null;

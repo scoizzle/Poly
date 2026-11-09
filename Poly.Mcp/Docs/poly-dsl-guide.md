@@ -1230,7 +1230,9 @@ endpoint's public payload property constraints. The caller must be at least as c
 the endpoint. A proof is silent. A caller whose values are disjoint from an obligation is
 `DMCON014` and Lower refuses. Anything the constraint merge cannot decide — a caller wider
 than the obligation, or a constraint kind with no merge rule — is `DMCON015`, a warning that
-does not block Lower.
+does not block Lower — for a `range`, `length` or `equals` obligation. A `required`, `pattern`
+or `default` obligation with no same-kind caller constraint keeps the ordinary incompatible
+refusal (`DMCON001`).
 
 Two limits keep the check from claiming more than it knows. First, a `require` precondition is
 written against the **entity** the exported action came from, so it constrains entity state,

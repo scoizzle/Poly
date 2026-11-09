@@ -41,9 +41,9 @@ internal static class DomainModelDiagnosticCodes {
     public const string ContractIntegration = "DMCON001";
 
     /// <summary>
-    /// A <see cref="DiagnosticAllowance"/> that acknowledged no flow diagnostic this analysis emitted
-    /// (wrong code or path, the flow became compatible, or no non-blank provenance ids). An error,
-    /// and not itself acknowledgeable.
+    /// A <see cref="DiagnosticAllowance"/> that acknowledged no analysis diagnostic this analysis
+    /// emitted (wrong code or path, the finding stopped firing, or no non-blank provenance ids).
+    /// An error, and not itself acknowledgeable.
     /// </summary>
     public const string UnusedDiagnosticAllowance = "DMALW001";
 
@@ -60,6 +60,50 @@ internal static class DomainModelDiagnosticCodes {
     /// through public; the export never projects an action through an internal owner.
     /// </summary>
     public const string PublicMemberOnInternalOwner = "DMCON003";
+
+    /// <summary>
+    /// A <c>uses</c> id loaded a package that declares host targets, and the host target is
+    /// absent or not among them (spike #413 decisions 3 and 7, #424). The target is a host fact:
+    /// <c>uses posix</c> imports the package and never chooses the OS. The fix is to pass the
+    /// host target (or load the package for it), not to change the <c>uses</c> line.
+    /// </summary>
+    public const string PlatformTargetMismatch = "DMCON004";
+
+    /// <summary>
+    /// A bind names an imported contract that is not registered in the domain (no <c>uses</c> or
+    /// contract block seeded it). Split from <see cref="ContractIntegration"/> by #422 so the
+    /// unresolved-reference case is acknowledgeable as a tolerance fact without covering the
+    /// package-metadata, payload-type, and signature errors that share the old code.
+    /// </summary>
+    public const string ContractReferenceUnresolved = "DMCON005";
+
+    // #420 takes 010-013 after #424's 004; #422 takes 005; 006-009 stay free.
+
+    /// <summary>
+    /// A <c>uses</c> pin does not match the loaded surface: the author pinned a version the
+    /// package does not publish, or a fingerprint the current export does not compute.
+    /// </summary>
+    public const string ContractPinMismatch = "DMCON010";
+
+    /// <summary>
+    /// A bind named the original action and more than one exported endpoint accepted the
+    /// parameter type; the unique most-constrained payload was chosen. Advisory: names the
+    /// choice so a reviewer sees it.
+    /// </summary>
+    public const string ContractOverloadSelected = "DMCON011";
+
+    /// <summary>
+    /// A bind named the original action and several exported endpoints accepted the parameter
+    /// type, but none was more constrained than the others. Naming one exported endpoint is
+    /// the only sound fix.
+    /// </summary>
+    public const string ContractOverloadAmbiguous = "DMCON012";
+
+    /// <summary>
+    /// A bind names an endpoint the loaded contract does not have (or an original action no
+    /// exported endpoint carries).
+    /// </summary>
+    public const string ContractEndpointNotOnSurface = "DMCON013";
 
     // Stage-subscription diagnostics (replaced retired DMEV* event codes)
     public const string SubscriptionCausalityCycle = "DMSS001";

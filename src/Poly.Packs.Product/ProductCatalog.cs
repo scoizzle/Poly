@@ -1,5 +1,6 @@
 using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Libraries.Http;
+using Poly.DomainModeling.Libraries.Platform;
 using Poly.DomainModeling.Libraries.Storage;
 using Poly.DomainModeling.Libraries.Temporal;
 using Poly.Packs.Sqlite;
@@ -8,9 +9,11 @@ using Poly.Packs.SqlServer;
 namespace Poly.Packs.Product;
 
 /// <summary>
-/// Core plus sqlite, sqlserver, and http. <see cref="Catalog"/> has the host-file contributors
-/// wired: persistence, sqlite and sqlserver emit the DbContext, http emits Program.cs and
-/// demo.http. polyc and the DslCompiler facade resolve from it.
+/// Core plus sqlite, sqlserver, http, and the posix platform header. <see cref="Catalog"/> has
+/// the host-file contributors wired: persistence, sqlite and sqlserver emit the DbContext, http
+/// emits Program.cs and demo.http. polyc and the DslCompiler facade resolve from it. The posix
+/// package is surface-only until the Lower splice door carries a syscall body, and only a caller
+/// that names a host target can load it.
 /// </summary>
 public static class ProductCatalog {
     public static ExtensionCatalog Catalog { get; } = Build(wired: true, hostVendor: null);
@@ -35,5 +38,6 @@ public static class ProductCatalog {
         .With(new PersistenceEmitLibrary(wired ? new DbContextArtifactContributor() : null))
         .With(new SqliteLibrary(wired ? new DbContextArtifactContributor() : null))
         .With(new SqlServerLibrary(wired ? new DbContextArtifactContributor() : null))
-        .With(new HttpLibrary(wired ? new MinimalApiHostArtifactContributor(vendor: hostVendor) : null));
+        .With(new HttpLibrary(wired ? new MinimalApiHostArtifactContributor(vendor: hostVendor) : null))
+        .With(new PosixLibrary());
 }

@@ -201,6 +201,11 @@ the printer never writes `uses temporal`. Unknown or duplicate ids fail closed.
 pins the public surface with `uses billing 2024-11-20` (same-line token run after the id).
 A `contract` block remains for a surface no library contributes.
 
+A package may declare the host targets it is for (target ids such as `posix`); the host passes
+its target on the compile (`polyc --target`). `uses posix` names the package, never the OS, and
+a package whose targets omit the host target (or a host with no target) is `DMCON004`.
+
+
 ```poly
 domain MyDomain
 uses storage
@@ -289,8 +294,9 @@ Lower rather than guessing an implementation.
 
 `external` / `internal`, `inbound` / `outbound`, `operation` / `event`. Analysis fails
 closed if the contract, endpoint, action, or parameter is missing, if the parameter
-type does not match the payload, if a payload type is unknown, or if two contracts
-(or the parent domain) share a value-type name.
+type the payload cannot accept, if a payload type is unknown, or if two contracts
+(or the parent domain) share a value-type name. A bind may name the original action
+instead of a suffixed exported endpoint; see §11.
 
 The `InternalDomain` producer fills a `contract internal`'s value types and endpoints
 from another loaded domain; it contributes no implementation body. A surface-only
@@ -300,8 +306,9 @@ A `bind` attaches the parent action to the endpoint. A library loaded by `uses` 
 contribute the endpoint's implementation AST; Lower **splices** it at the bind: the
 body's leading statements run, its final `return <DomainResult>;` becomes the call
 outcome, and `if (!adapterResult.IsSuccess)` returns the failure. The body reads its
-payload as `request`, so the bound action's parameter must be named `request`. No
-`{Contract}Adapters` type or adapter invoke is emitted.
+payload as the `Parameter("request")` node — there is no `Variable("request")` alias —
+so the bound action's parameter must be named `request`. No `{Contract}Adapters` type or
+adapter invoke is emitted.
 
 A **surface-only in-solution** contract (`InternalDomain`, no body) compiles the call
 away: no adapter, no invoke, and the local action still runs. An **external** contract
@@ -1192,15 +1199,31 @@ is a fragment probe: relationship/owned path-prefix and relationship `exists` fa
 A library may contribute a contract surface from `Register`. `uses <id>` loads the export
 package registered under that id; Load never compiles a sibling `.poly`. The surface lands
 on the domain as an imported contract, so `bind` resolves unchanged. A caller at a package
-boundary pins the surface version in source (`uses billing 2024-11-20`); the pin is the
-public surface only, never the implementation. The pin is the contiguous same-line token
-run after the id, so `2024-11-20`, `v1`, and `1.2.3` each read as one value. Within one
-workspace the pin is optional and the host resolves the current export.
+boundary pins the surface in source (`uses billing 2024-11-20`); the pin is the public
+surface only, never the implementation. The pin is the contiguous same-line token run after
+the id, so `2024-11-20`, `v1`, and `1.2.3` each read as one value. A 64-lowercase-hex pin is
+the machine **fingerprint**: it is compared to the loaded surface's `Fingerprint`; any other
+pin is compared to the package `Version`. Either is exact — a mismatch is `DMCON010` and
+Lower refuses. Within one workspace the pin is optional: no pin is not an error, and
+analysis records the resolved fingerprint in the bind's facts.
+
+A bind may name the exported endpoint (`Charge__Money`) or the original action (`Charge`).
+When the original name matches several exported endpoints, analysis keeps the endpoints
+whose payload type accepts the bound parameter (the same type, or a narrower value type with
+the same property shape and inside constraints). If one payload is more constrained than the
+others it wins and `DMCON011` names the choice; candidates that are not comparable are
+`DMCON012` with no guess. A name no endpoint carries is `DMCON013`. A bind covers every
+stage variant of the action: all variants must share one parameter list (name and type), or
+the bind fails closed rather than splicing into a stage that never accepted that payload.
 
 A hand-written `Name: contract ...` block beside a seeded surface fails closed, as does a
 second block with the same name. A version on an id whose library contributed no surface
 (`uses temporal v1`) also fails closed. `uses` does not change `contract` block syntax: a
 hand-authored block remains the form for a surface no library contributes.
+
+A contribution also declares the host targets its implementation is for. `uses posix` seeds
+the POSIX header (`Open`, `Read`, `Write`, `Close`) and declares `posix`; the set is not on the
+contract and not in the fingerprint, so another target's package keeps the pin.
 
 ### Action Parameters
 

@@ -99,11 +99,52 @@ internal static class DomainAnalysis {
 
     /// <summary>
     /// First action of <paramref name="actionName"/> on any entity (entity-level or stage).
+    /// Uses the current-stage dispatch: differing stage bodies fail closed.
     /// </summary>
     public static Action? FindActionOnAnyEntity(Domain domain, string actionName) {
         foreach (var type in domain.Types) {
             if (type is not Entity entity) continue;
             var action = FindAction(entity, actionName);
+            if (action is not null) return action;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Every action of <paramref name="actionName"/> declared on <paramref name="entity"/>:
+    /// entity-level first, then each stage in declaration order. A bind is one fact for the
+    /// whole name, so it must see all variants, not only the first.
+    /// </summary>
+    public static IReadOnlyList<Action> FindNamedActions(Entity entity, string actionName) {
+        var actions = new List<Action>();
+        foreach (var action in entity.Actions) {
+            if (string.Equals(action.Name, actionName, StringComparison.Ordinal))
+                actions.Add(action);
+        }
+        foreach (var stage in entity.Stages) {
+            foreach (var action in stage.Actions) {
+                if (string.Equals(action.Name, actionName, StringComparison.Ordinal))
+                    actions.Add(action);
+            }
+        }
+        return actions;
+    }
+
+    /// <summary>One action's parameter list as ordered <c>name:type</c> pairs.</summary>
+    public static string ParameterSignature(Action action) =>
+        string.Join(",", action.Parameters.Select(parameter =>
+            $"{parameter.Name}:{parameter.Type.TypeName}"));
+
+    /// <summary>
+    /// Existence lookup across entities: the first action of <paramref name="actionName"/>,
+    /// entity-level or any stage. Used by a signature check that has no current stage (a
+    /// contract bind): it needs a representative parameter list, not a body, so differing
+    /// stage bodies do not make the name unresolvable.
+    /// </summary>
+    public static Action? FindAnyNamedActionOnAnyEntity(Domain domain, string actionName) {
+        foreach (var type in domain.Types) {
+            if (type is not Entity entity) continue;
+            var action = FindAnyNamedAction(entity, actionName);
             if (action is not null) return action;
         }
         return null;

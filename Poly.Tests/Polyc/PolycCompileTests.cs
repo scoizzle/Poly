@@ -117,6 +117,36 @@ public class PolycCompileTests {
     }
 
     [Test]
+    public async Task Compile_UsesPosix_WindowsTarget_ReportsDmcon004() {
+        var result = Compiler().Compile(
+            "domain Shop\nuses posix\n\nOrder: entity { Total: Number }\n", "posix.poly", target: "windows");
+
+        var error = result.Diagnostics.Single(d => d.IsError);
+        await Assert.That(error.Code).IsEqualTo("DMCON004");
+        await Assert.That(error.Message).Contains("windows");
+        await Assert.That(result.Files.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task Compile_UsesPosix_PosixTarget_Succeeds() {
+        var result = Compiler().Compile(
+            "domain Shop\nuses posix\n\nOrder: entity { Total: Number }\n", "posix.poly", target: "posix");
+
+        await Assert.That(result.Succeeded).IsTrue();
+        await Assert.That(result.Domain!.Extensions).Contains("posix");
+    }
+
+    [Test]
+    public async Task Compile_UsesPosix_NoHostTarget_ReportsDmcon004() {
+        var result = Compiler().Compile(
+            "domain Shop\nuses posix\n\nOrder: entity { Total: Number }\n", "posix.poly");
+
+        var error = result.Diagnostics.Single(d => d.IsError);
+        await Assert.That(error.Code).IsEqualTo("DMCON004");
+        await Assert.That(error.Message).Contains("no target");
+    }
+
+    [Test]
     public async Task Compile_DocumentUses_WinsOverSeed() {
         var result = Compiler().Compile("domain D\nuses sqlite\nA: entity {\n  X: Text\n}\n", "x.poly");
         await Assert.That(result.Succeeded).IsTrue();

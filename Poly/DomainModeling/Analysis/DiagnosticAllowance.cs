@@ -28,9 +28,10 @@ internal sealed class AllowanceLedger : IAnalysisMetadata {
 }
 
 /// <summary>
-/// What the two flow arms (<see cref="EffectAnalyzer"/>, <see cref="ExpressionTypeAnalyzer"/>)
-/// share: path resolution, the allowance lookup that picks a flow diagnostic's severity, and the
-/// unused-allowance check. The compatibility decisions stay in those analyzers.
+/// What the flow arms (<see cref="EffectAnalyzer"/>, <see cref="ExpressionTypeAnalyzer"/>) and the
+/// contract arm (<see cref="ContractIntegrationAnalyzer"/>) share: path resolution, the allowance
+/// lookup that picks a finding's severity, and the unused-allowance check. The compatibility
+/// decisions stay in those analyzers.
 /// </summary>
 internal static class ObservedFlowChecks {
     /// <summary>Exactly two segments, the owner an Entity.</summary>
@@ -54,19 +55,9 @@ internal static class ObservedFlowChecks {
         AnalysisContext context, Domain domain, Property target, string code) {
         if (string.Equals(code, DomainModelDiagnosticCodes.ObservedFlowNullability, StringComparison.Ordinal))
             return DiagnosticSeverity.Error;
-        var allowances = RuntimeAnalysisCache.Session(domain).DiagnosticAllowances;
-        if (allowances.Count == 0)
-            return DiagnosticSeverity.Error;
-        var path = DomainElementPath.Resolve(domain, target);
-        foreach (var allowance in allowances) {
-            if (!string.Equals(allowance.Code, code, StringComparison.Ordinal)
-                || !string.Equals(allowance.ElementPath, path, StringComparison.Ordinal)
-                || !IsAcknowledged(allowance))
-                continue;
-            context.GetOrAddMetadata(domain, () => new AllowanceLedger()).Consumed.Add(allowance);
-            return DiagnosticSeverity.Warning;
-        }
-        return DiagnosticSeverity.Error;
+        return DiagnosticAllowanceMatch.TryConsume(context, domain, target, code)
+            ? DiagnosticSeverity.Warning
+            : DiagnosticSeverity.Error;
     }
 
     /// <summary>Records the element path of a DMEFF014 finding so an allowance naming it is DMALW002.</summary>
@@ -77,8 +68,8 @@ internal static class ObservedFlowChecks {
     }
 
     /// <summary>
-    /// DMALW001 for each allowance no flow diagnostic consumed, or DMALW002 when it names a
-    /// DMEFF014 finding that was reported. Run after both flow arms.
+    /// DMALW001 for each allowance no analysis arm consumed, or DMALW002 when it names a
+    /// DMEFF014 finding that was reported. Run after the flow and contract arms.
     /// </summary>
     public static void ReportUnusedAllowances(AnalysisContext context, Domain domain) {
         var allowances = RuntimeAnalysisCache.Session(domain).DiagnosticAllowances;
@@ -100,7 +91,7 @@ internal static class ObservedFlowChecks {
                 continue;
             }
             var why = IsAcknowledged(allowance)
-                ? "no flow diagnostic with that code was reported at that element path"
+                ? "no diagnostic with that code was reported at that element path"
                 : "it carries no non-blank provenance ids";
             context.ReportError(
                 domain,
@@ -109,6 +100,30 @@ internal static class ObservedFlowChecks {
         }
     }
 
-    private static bool IsAcknowledged(DiagnosticAllowance allowance) =>
+    internal static bool IsAcknowledged(DiagnosticAllowance allowance) =>
         allowance.ProvenanceIds is { Count: > 0 } ids && ids.All(id => !string.IsNullOrWhiteSpace(id));
+}
+
+/// <summary>
+/// The one allowance-match rule: exact code, the finding's element path, and non-blank provenance
+/// ids. A match is recorded in <see cref="AllowanceLedger"/> so the unused check does not report
+/// it. Code-agnostic by design: each arm asks only about the codes it owns and keeps its own
+/// code-specific rules outside this predicate.
+/// </summary>
+internal static class DiagnosticAllowanceMatch {
+    public static bool TryConsume(AnalysisContext context, Domain domain, Node finding, string code) {
+        var allowances = RuntimeAnalysisCache.Session(domain).DiagnosticAllowances;
+        if (allowances.Count == 0)
+            return false;
+        var path = DomainElementPath.Resolve(domain, finding);
+        foreach (var allowance in allowances) {
+            if (!string.Equals(allowance.Code, code, StringComparison.Ordinal)
+                || !string.Equals(allowance.ElementPath, path, StringComparison.Ordinal)
+                || !ObservedFlowChecks.IsAcknowledged(allowance))
+                continue;
+            context.GetOrAddMetadata(domain, () => new AllowanceLedger()).Consumed.Add(allowance);
+            return true;
+        }
+        return false;
+    }
 }

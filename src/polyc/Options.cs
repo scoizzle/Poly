@@ -14,11 +14,18 @@ internal sealed class Options {
     public bool WarnAsError { get; set; }
     public string Verbosity { get; set; } = Severities.Warning;
 
+    /// <summary>
+    /// The host target (<c>posix</c>, <c>windows</c>), or null when the driver names none.
+    /// Forwarded to the compile call; never defaulted from a document's <c>uses</c> line.
+    /// </summary>
+    public string? Target { get; set; }
+
     public const string Usage = """
         Usage:
-          polyc build [<file.poly|dir>...] [--out <dir>] [--seed <name>] [--artifact <type>]...
-                      [--format text|json] [--warn-as-error] [--verbosity info|hint]
-          polyc check [<file.poly|dir>...] [--seed <name>] [--format text|json]
+          polyc build [<file.poly|dir>...] [--out <dir>] [--seed <name>] [--target <id>]
+                      [--artifact <type>]... [--format text|json] [--warn-as-error]
+                      [--verbosity info|hint]
+          polyc check [<file.poly|dir>...] [--seed <name>] [--target <id>] [--format text|json]
                       [--warn-as-error] [--verbosity info|hint]
           polyc lsp
           polyc mcp
@@ -26,6 +33,8 @@ internal sealed class Options {
         A directory means every *.poly directly inside it (not recursive); each file is its own
         compilation unit. With no path and piped stdin, stdin is one document.
         Seeds: authoring (default), language. A document's own `uses` wins over the seed.
+        --target is the host target (for example posix or windows). It is a host fact the
+        driver forwards; `uses` never chooses it, and a platform package without it is an error.
         Exit codes: 0 no errors, 1 errors or usage, 2 unexpected failure.
         --format json prints a JSON array of diagnostic records. A build also prints each
         written path on stderr as `wrote <path>`.
@@ -38,7 +47,7 @@ internal sealed class Options {
         for (var i = 1; i < args.Length; i++) {
             var arg = args[i];
             switch (arg) {
-                case "--out" or "--seed" or "--artifact" or "--format" or "--verbosity":
+                case "--out" or "--seed" or "--artifact" or "--format" or "--verbosity" or "--target":
                     if (i + 1 >= args.Length) {
                         error = $"{arg} needs a value.";
                         return null;
@@ -48,6 +57,13 @@ internal sealed class Options {
                         case "--out": options.Out = value; break;
                         case "--seed": options.Seed = value; break;
                         case "--artifact": options.Artifacts.Add(value); break;
+                        case "--target":
+                            if (string.IsNullOrWhiteSpace(value)) {
+                                error = "--target needs a value.";
+                                return null;
+                            }
+                            options.Target = value;
+                            break;
                         case "--format":
                             if (value is not ("text" or "json")) {
                                 error = $"Unknown format '{value}'. Use text or json.";

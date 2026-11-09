@@ -488,6 +488,11 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
                 foreach (var binding in efe.ParameterBindings)
                     CollectFromExpression(binding.Expression, referenced, paramNames);
                 break;
+            case ForEachEffect fe:
+                if (fe.Where is not null)
+                    CollectFromExpression(fe.Where, referenced, paramNames);
+                foreach (var e in fe.Body) CollectFromEffect(e, referenced, paramNames);
+                break;
             case StageTransitionEffect:
                 break;
         }
@@ -558,9 +563,15 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
         Domain domain,
         DomainTypeLookupMetadata lookup,
         string? currentStage,
-        string? peerBinding)
+        string? peerBinding,
+        IReadOnlySet<string>? forBinders = null)
         : EffectDispatch<object?> {
         protected override object? Default() => null;
+
+        private void RouteAll(IEnumerable<Effect> effects) {
+            foreach (var effect in effects)
+                Route(effect);
+        }
 
         protected override object? CreateEntityInstance(CreateEntityInstance e) {
             ValidateCreateEntityInstance(context, e, entity, lookup, domain);
@@ -578,6 +589,10 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
         }
 
         protected override object? InvokeAction(InvokeActionEffect e) {
+            // `invoke line.Mark` inside `for line in …` targets the loop binder, not a
+            // relationship; resolving the binder's callee is slice 6 (lowering).
+            if (e.TargetRelationship is { } target && forBinders?.Contains(target) == true)
+                return null;
             ValidateInvokeAction(context, e, entity, domain, currentStage);
             return null;
         }
@@ -587,32 +602,50 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
             return null;
         }
 
-        // #409 slice 4: the general `for` parses and prints, but its effect legality
-        // (slice 5) and lowering (slice 6) are not shipped. Fail closed: shipped ⊆ lowerable.
+        // #409: the general `for` parses, prints and (slice 5) has its body checked for effect
+        // legality, but lowering (slice 6) is not shipped. DMEFF016 stays (shipped ⊆ lowerable)
+        // and the body is validated in the same pass, so a cross-entity write is reported
+        // alongside it instead of being hidden behind it.
         protected override object? ForEach(ForEachEffect e) {
             context.ReportError(
                 e,
                 $"'for {e.BinderName} in {e.RelationshipName} {{ … }}' on entity '{entity.Name}' parses but is not " +
                 "analyzable or lowerable yet; use 'for Rel as name … invoke name.Action'.",
                 DomainModelDiagnosticCodes.EffectForNotLowerable);
+
+            // Legality: the body may write only the owning entity's own state. An assign
+            // through a relationship or the loop binder is another entity's state (DMEFF012,
+            // the same rule as actions and `when`); mutate that entity with `invoke binder.Action`.
+            var binders = new HashSet<string>(forBinders ?? new HashSet<string>(), StringComparer.Ordinal) { e.BinderName };
+            new EffectValidationDispatch(context, action, entity, domain, lookup, currentStage, peerBinding, binders)
+                .RouteAll(e.Body);
             return null;
         }
 
         protected override object? Assign(AssignEffect e) {
+            if (e.Target is RelationshipNavigation { RelationshipName: var root } && forBinders?.Contains(root) == true) {
+                context.ReportError(
+                    e,
+                    $"Assign targets state of loop binder '{root}', which belongs to another entity. " +
+                    $"Only '{entity.Name}' may assign its own state; cross-entity access is read-only. " +
+                    $"Invoke an action on the other entity instead (e.g. 'invoke {root}.SomeAction').",
+                    DomainModelDiagnosticCodes.EffectCrossEntityMutation);
+                return null;
+            }
             ValidateAssign(context, e, action, entity, peerBinding);
             return null;
         }
 
         protected override object? Conditional(ConditionalEffect e) {
-            ValidateEffects(context, e.ThenEffects, action, entity, domain, lookup, currentStage, peerBinding);
+            RouteAll(e.ThenEffects);
             if (e.ElseEffects is not null) {
-                ValidateEffects(context, e.ElseEffects, action, entity, domain, lookup, currentStage, peerBinding);
+                RouteAll(e.ElseEffects);
             }
             return null;
         }
 
         protected override object? Composite(CompositeEffect e) {
-            ValidateEffects(context, e.Effects, action, entity, domain, lookup, currentStage, peerBinding);
+            RouteAll(e.Effects);
             return null;
         }
     }
@@ -1720,23 +1753,6 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
         return covered;
     }
 
-    private static IEnumerable<Effect> FlattenEffects(IEnumerable<Effect> effects) {
-        foreach (var effect in effects) {
-            yield return effect;
-            switch (effect) {
-                case ConditionalEffect ce:
-                    foreach (var nested in FlattenEffects(ce.ThenEffects))
-                        yield return nested;
-                    if (ce.ElseEffects is not null) {
-                        foreach (var nested in FlattenEffects(ce.ElseEffects))
-                            yield return nested;
-                    }
-                    break;
-                case CompositeEffect ce:
-                    foreach (var nested in FlattenEffects(ce.Effects))
-                        yield return nested;
-                    break;
-            }
-        }
-    }
+    private static IEnumerable<Effect> FlattenEffects(IEnumerable<Effect> effects) =>
+        EffectHelpers.FlattenEffects(effects);
 }

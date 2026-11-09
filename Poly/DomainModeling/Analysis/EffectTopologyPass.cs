@@ -107,6 +107,10 @@ internal sealed class EffectTopologyPass : INodeAnalyzer {
             foreach (var child in ce.Effects)
                 WalkEffects(child, visitor);
         }
+        if (effect is ForEachEffect fe) {
+            foreach (var child in fe.Body)
+                WalkEffects(child, visitor);
+        }
         if (effect is ConditionalEffect cond) {
             foreach (var e in cond.ThenEffects)
                 WalkEffects(e, visitor);

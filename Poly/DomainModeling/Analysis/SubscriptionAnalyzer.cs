@@ -155,6 +155,8 @@ internal sealed class SubscriptionAnalyzer : INodeAnalyzer {
             return true;
         if (effect is CompositeEffect ce)
             return ce.Effects.Any(e => EffectWalksToStage(e, stageName));
+        if (effect is ForEachEffect fe)
+            return fe.Body.Any(e => EffectWalksToStage(e, stageName));
         if (effect is ConditionalEffect cond)
             return cond.ThenEffects.Any(e => EffectWalksToStage(e, stageName))
                 || (cond.ElseEffects?.Any(e => EffectWalksToStage(e, stageName)) ?? false);
@@ -406,6 +408,12 @@ internal sealed class SubscriptionAnalyzer : INodeAnalyzer {
                 break;
             case CompositeEffect ce:
                 foreach (var e in ce.Effects)
+                    CollectPropertyAccesses(e, peerBinding, subscriberRelNames, flags);
+                break;
+            case ForEachEffect fe:
+                if (fe.Where is not null)
+                    CollectFromExpression(fe.Where, peerBinding, subscriberRelNames, flags);
+                foreach (var e in fe.Body)
                     CollectPropertyAccesses(e, peerBinding, subscriberRelNames, flags);
                 break;
         }

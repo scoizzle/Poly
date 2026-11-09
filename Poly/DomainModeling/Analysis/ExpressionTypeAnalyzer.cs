@@ -200,6 +200,11 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
                 CheckInvokeArgumentTypes(context, callerEntityName, invoke.TargetRelationship,
                     binderName: null, invoke.ActionName, invoke.ParameterBindings, props, parameters, enumTypes);
                 break;
+            case ForEachEffect fe:
+                // The body is checked in the caller's scope. `where` is binder-typed and is
+                // not type-checked until lowering (slice 6) gives the binder a type.
+                CheckEffectTree(context, fe.Body, callerEntityName, props, parameters, enumTypes);
+                break;
             case ForEachInvokeEffect efe:
                 CheckInvokeArgumentTypes(context, callerEntityName, efe.RelationshipName,
                     binderName: efe.BinderName, efe.ActionName, efe.ParameterBindings, props, parameters, enumTypes);

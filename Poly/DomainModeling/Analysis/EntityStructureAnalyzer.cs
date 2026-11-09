@@ -171,6 +171,9 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
                     case CompositeEffect composite:
                         Walk(composite.Effects);
                         break;
+                    case ForEachEffect forEach:
+                        Walk(forEach.Body);
+                        break;
                     case ConditionalEffect conditional:
                         Walk(conditional.ThenEffects);
                         if (conditional.ElseEffects is not null)
@@ -258,6 +261,7 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
                 StageTransitionEffect transition =>
                     string.Equals(transition.TargetStage.StageName, target, StringComparison.Ordinal),
                 CompositeEffect composite => In(composite.Effects, target),
+                ForEachEffect forEach => In(forEach.Body, target),
                 ConditionalEffect conditional =>
                     In(conditional.ThenEffects, target)
                     || (conditional.ElseEffects is not null && In(conditional.ElseEffects, target)),

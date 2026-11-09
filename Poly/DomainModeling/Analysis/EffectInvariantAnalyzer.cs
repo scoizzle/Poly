@@ -304,6 +304,11 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
                 case InvokeActionEffect invoke:
                     ApplyInvoke(invoke, entity, action, env, paramEnv, visited, result, domain, currentStage);
                     break;
+                case ForEachEffect fe:
+                    // Zero or more iterations: assigns join into the env (Merge), so the
+                    // pre-loop value still holds for zero iterations.
+                    ApplyEffects(fe.Body, entity, action, env, paramEnv, visited, result, domain, currentStage);
+                    break;
                 case ForEachInvokeEffect efe:
                     ApplyForEachInvoke(efe, entity, action, env, paramEnv, visited, result, domain);
                     break;

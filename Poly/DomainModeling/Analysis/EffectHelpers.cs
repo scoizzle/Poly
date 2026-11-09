@@ -67,6 +67,11 @@ internal static class EffectHelpers {
                         yield return nested;
                     }
                     break;
+                case ForEachEffect fe:
+                    foreach (var nested in FlattenEffects(fe.Body)) {
+                        yield return nested;
+                    }
+                    break;
             }
         }
     }

@@ -35,6 +35,20 @@ public class PolyDefineEditTests {
         }
         """;
 
+    private const string MarkedDoc = """
+        domain Shop
+
+        public value Money {
+          Amount: Number
+        }
+
+        public entity Order {
+          Total: Number
+          public action Pay {
+          }
+        }
+        """;
+
     private static PolySurfaceTools Surface() =>
         new(McpTestTools.Store, NullLogger<PolySurfaceTools>.Instance);
 
@@ -258,6 +272,54 @@ public class PolyDefineEditTests {
         await Assert.That(response.Ok).IsFalse();
         await Assert.That(State(workspace).Revision).IsEqualTo(1);
         await Assert.That(State(workspace).SourceText).IsEqualTo(UsedAmount);
+    }
+
+    [Test]
+    public async Task Edit_AddReplaceRemoveMarkedMembers() {
+        var surface = Surface();
+        var workspace = Defined(surface, MarkedDoc);
+
+        // Marked action: add, replace, remove inside the marked entity.
+        var actionAdded = surface.Define(workspace, edit: Edit(Add("Order", "public action Refund {\n}")));
+        await Assert.That(actionAdded.Ok).IsTrue();
+        await Assert.That(State(workspace).SourceText).Contains("public action Refund {");
+
+        var actionReplaced = surface.Define(workspace,
+            edit: Edit(Replace("Order.Refund", "public action Refund {\n    // reversed\n  }")));
+        await Assert.That(actionReplaced.Ok).IsTrue();
+        await Assert.That(State(workspace).SourceText).Contains("// reversed");
+
+        var actionRemoved = surface.Define(workspace, edit: Edit(Remove("Order.Refund")));
+        await Assert.That(actionRemoved.Ok).IsTrue();
+        await Assert.That(State(workspace).SourceText).DoesNotContain("Refund");
+
+        // Marked value type: add, replace, remove at top level.
+        var valueAdded = surface.Define(workspace, edit: Edit(Add("", "public value Fee {\n  Amount: Number\n}")));
+        await Assert.That(valueAdded.Ok).IsTrue();
+        await Assert.That(State(workspace).SourceText).Contains("public value Fee {");
+
+        var valueReplaced = surface.Define(workspace,
+            edit: Edit(Replace("Fee", "public value Fee {\n  Amount: Decimal\n}")));
+        await Assert.That(valueReplaced.Ok).IsTrue();
+        await Assert.That(State(workspace).SourceText).Contains("public value Fee {\n  Amount: Decimal");
+
+        var valueRemoved = surface.Define(workspace, edit: Edit(Remove("Fee")));
+        await Assert.That(valueRemoved.Ok).IsTrue();
+        await Assert.That(State(workspace).SourceText).DoesNotContain("Fee");
+
+        // Marked entity: add, replace, remove at top level.
+        var entityAdded = surface.Define(workspace, edit: Edit(Add("", "public entity Customer {\n  Name: Text\n}")));
+        await Assert.That(entityAdded.Ok).IsTrue();
+        await Assert.That(State(workspace).SourceText).Contains("public entity Customer {");
+
+        var entityReplaced = surface.Define(workspace,
+            edit: Edit(Replace("Customer", "public entity Client {\n  Name: Text\n}")));
+        await Assert.That(entityReplaced.Ok).IsTrue();
+        await Assert.That(State(workspace).SourceText).Contains("public entity Client {");
+
+        var entityRemoved = surface.Define(workspace, edit: Edit(Remove("Client")));
+        await Assert.That(entityRemoved.Ok).IsTrue();
+        await Assert.That(State(workspace).SourceText!.TrimEnd()).IsEqualTo(MarkedDoc.TrimEnd());
     }
 
     [Test]

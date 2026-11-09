@@ -50,6 +50,7 @@ public sealed class DslTokenReader : BufferedTokenReader<DslToken, DslTokenKind>
         if (ch == '>' && PeekChar(1) == '=') return TwoChar(">=", DslTokenKind.Gte);
         if (ch == '<' && PeekChar(1) == '=') return TwoChar("<=", DslTokenKind.Lte);
         if (ch == '=' && PeekChar(1) == '=') return TwoChar("==", DslTokenKind.Eq);
+        if (ch == '=') return Advance(DslTokenKind.SingleEq);
         if (ch == '!' && PeekChar(1) == '=') return TwoChar("!=", DslTokenKind.Neq);
 
         if (ch == '>') return Advance(DslTokenKind.Gt);

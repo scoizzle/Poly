@@ -1188,7 +1188,6 @@ is a fragment probe: relationship/owned path-prefix and relationship `exists` fa
 | Action `when Stage` | Not a runtime or emit gate. Place the action inside the stage body; subscriptions stay `when Rel Stage { … }` |
 
 | `relationship Name from A to B` | Use N1 nav properties instead |
-| `function` | Functions not supported |
 | Event/publish/subscribe | Event model retired — stage transitions are the observable |
 | `event.Prop` / `event Prop` in `when` bodies | Use optional peer binder: `when Rel Stage as name { … name Prop … }` |
 
@@ -1245,6 +1244,30 @@ incompatible refusal (`DMCON001`) instead of being reported as disjoint. Library
 walked: a contributed body is reported `unknown` on its postconditions with one `DMCON015`, and
 the domain still lowers. The note is not part of the surface fingerprint, and it never clears a
 pin mismatch (`DMCON010`).
+
+### Functions
+
+A top-level `function` declares a pure named member of the domain: parameters, a return
+type, and one expression body. The form is what `export_dsl` prints (spaces around `=`
+included), so parse → print → parse is lossless:
+
+```poly
+function Add(a: Number, b: Number): Number = a + b
+
+function Pi(): Number = 3
+```
+
+- Functions sit at the top level, after the entities whose types they name.
+- The body is **one expression** (`a + b`, `3`, `Price * 2`, …). An identifier in that
+  expression that names a declared parameter is that parameter, not an entity property.
+- `public function` is not part of the surface yet; a function has no visibility and
+  prints without one.
+- A declaration missing its `=` or its body fails closed with a positioned error; the
+  parser never folds the following declaration into the body.
+
+Authoring stops at the declaration: call expressions in a function body, arity/type
+analysis, lowering to a tree artifact, and simulate/print parity for a call are later
+slices of #406. Value-type members and `require` guards are not part of this slice.
 
 ### Action Parameters
 

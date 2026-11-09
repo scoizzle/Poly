@@ -58,6 +58,7 @@ public static class DslGrammar {
         DslTokenKind.Lte => "<=",
         DslTokenKind.Eq => "==",
         DslTokenKind.Neq => "!=",
+        DslTokenKind.SingleEq => "=",
         DslTokenKind.Plus => "+",
         DslTokenKind.Minus => "-",
         DslTokenKind.Star => "*",

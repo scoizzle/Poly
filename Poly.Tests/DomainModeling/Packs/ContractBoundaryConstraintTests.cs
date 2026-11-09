@@ -609,6 +609,35 @@ public sealed class ContractBoundaryConstraintTests {
     private static IfStatement IfCondition(Node then, Node? otherwise) =>
         new(new Constant(true), then, otherwise);
 
+    /// <summary>#425 early-return hole: Lower refuses a return before the final one, so analysis never says Proven.</summary>
+    [Test]
+    public async Task EarlyTopLevelReturn_IsUnknownNotProven() =>
+        await AssertUnknownOnce(new Block([Done(), Done()]));
+
+    [Test]
+    public async Task ReturnInsideIfBranchBeforeFinalReturn_IsUnknownNotProven() =>
+        await AssertUnknownOnce(new Block([IfCondition(new Block([Done()]), null), Done()]));
+
+    /// <summary>A return inside a lambda belongs to the lambda; Lower exempts it, so the body is judged normally.</summary>
+    [Test]
+    public async Task ReturnInsideLambdaBlock_IsExemptAndBodyJudgedOnOtherObligations() {
+        var bodies = new Dictionary<string, Func<Block>>(StringComparer.Ordinal) {
+            ["Charge"] = () => new Block([
+                Write("Amount", 5L),
+                new Assignment(new Variable("f"), new Lambda([], new Block([Done()]))),
+                Done(),
+            ]),
+        };
+        var (domain, _, analysis) = Analyze(
+            CallerDsl("range(0, 50)"),
+            Surface(amountConstraints: [new RangeConstraint(0, 100)]),
+            bodies);
+
+        await Assert.That(Boundary(domain, analysis).Postcondition)
+            .IsEqualTo(ContractBoundaryVerdict.Proven);
+        await Assert.That(WithCode(analysis, "DMCON015")).IsEmpty();
+    }
+
     private static Assignment Write(string member, object? value) =>
         new(new Member(new Parameter("request"), member), new Constant(value));
 

@@ -115,6 +115,7 @@ internal static class ContractBoundaryCheck {
                 ? $"Contract binding '{binding.Name}' endpoint '{contract.Name}.{endpoint.Name}' " +
                   $"cannot prove payload '{payloadName}' from the contributed body: " +
                   $"{obligation.Name}. " + (obligation.Name.StartsWith("the body does not end", StringComparison.Ordinal)
+                      || obligation.Name.StartsWith("the body returns before", StringComparison.Ordinal)
                       ? "Lower will refuse the body."
                       : "Lower is not blocked.")
                 : $"Contract binding '{binding.Name}' endpoint '{contract.Name}.{endpoint.Name}' " +
@@ -153,6 +154,19 @@ internal static class ContractBoundaryCheck {
     /// value on every path. Requiredness is implicit: a payload member is required unless it is
     /// marked optional, and the DSL cannot mark one optional.
     /// </summary>
+    // Mirrors ContractSplicePlan.ContainsReturn: a lambda's return belongs to the lambda.
+    private static bool ContainsReturn(Node node) {
+        if (node is Return)
+            return true;
+        if (node is Lambda)
+            return false;
+        foreach (var child in node.Children) {
+            if (child is not null && ContainsReturn(child))
+                return true;
+        }
+        return false;
+    }
+
     private static IReadOnlyList<Obligation> BodyObligations(ValueType? payload, Block body) {
         var obligations = new List<Obligation>();
         if (payload is null)
@@ -165,6 +179,17 @@ internal static class ContractBoundaryCheck {
                 ContractBoundaryVerdict.Unknown,
                 Unreadable: true));
             return obligations;
+        }
+
+        // Lower refuses a return before the final expression (ContractSplicePlan.ValidateShape).
+        for (var i = 0; i < body.Nodes.Count - 1; i++) {
+            if (ContainsReturn(body.Nodes[i])) {
+                obligations.Add(new Obligation(
+                    "the body returns before its final expression",
+                    ContractBoundaryVerdict.Unknown,
+                    Unreadable: true));
+                return obligations;
+            }
         }
 
         // The final return is walked too: its expression can hand the payload to a call.

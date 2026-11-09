@@ -86,14 +86,19 @@ internal static class ContractBoundaryCheck {
         }
 
         foreach (var obligation in obligations.Where(o => o.Verdict == ContractBoundaryVerdict.Unknown)) {
-            var why = obligation.Unreadable
-                ? "it is not decidable from the bound argument"
-                : "the caller's constraints do not decide it";
+            // An unreadable obligation is entity state, or a property the argument does not
+            // carry: the caller cannot clear it by tightening anything, so a fix-up hint would
+            // be unactionable. Only a decided-but-wider obligation gets one.
+            var message = obligation.Unreadable
+                ? $"Contract binding '{binding.Name}' cannot prove endpoint '{endpoint.Name}' public " +
+                  $"constraint '{obligation.Name}': it is not decidable from the bound argument. " +
+                  "Lower is not blocked."
+                : $"Contract binding '{binding.Name}' cannot prove endpoint '{endpoint.Name}' public " +
+                  $"constraint '{obligation.Name}': the caller's constraints do not decide it. " +
+                  "Lower is not blocked; tighten the caller's constraint to prove it.";
             context.ReportWarning(
                 binding,
-                $"Contract binding '{binding.Name}' cannot prove endpoint '{endpoint.Name}' public " +
-                $"constraint '{obligation.Name}': {why}. Lower is not blocked; tighten the caller's " +
-                "constraint to prove it.",
+                message,
                 DomainModelDiagnosticCodes.ContractBoundaryUnknown);
         }
     }

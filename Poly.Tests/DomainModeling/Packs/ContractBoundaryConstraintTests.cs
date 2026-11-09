@@ -120,6 +120,8 @@ public sealed class ContractBoundaryConstraintTests {
 
         await Assert.That(analysis.HasErrors).IsFalse();
         await Assert.That(WithCode(analysis, "DMCON014")).IsEmpty();
+        // S1: a proven bind is silent — no unprovable obligation, so no DMCON015 either.
+        await Assert.That(WithCode(analysis, "DMCON015")).IsEmpty();
         var boundary = Boundary(domain, analysis);
         await Assert.That(boundary.Precondition).IsEqualTo(ContractBoundaryVerdict.Proven);
         await Assert.That(boundary.Compatibility).IsEqualTo(ContractCompatibility.Satisfies);
@@ -154,9 +156,10 @@ public sealed class ContractBoundaryConstraintTests {
 
     /// <summary>
     /// #442: a constraint pair the merge cannot decide is unknown, never a violation. An
-    /// equality cannot be shown to sit inside a range by the merge table, so the
-    /// <c>Unmergeable</c> arm is what this reaches — not the "no constraint of this kind"
-    /// branch, and never <c>Empty</c>.
+    /// equality cannot be shown to sit inside a range, so <c>MergeResult</c> returns
+    /// <c>Unmergeable</c> from its different-types guard (<c>ConstraintMerge.cs:54</c>);
+    /// <c>ConstraintObligation</c> treats that exactly like "no constraint of this kind" and
+    /// reports unknown. Never <c>Empty</c>, never a violation.
     /// </summary>
     [Test]
     public async Task CannotDecide_IsUnknownNotViolated() {
@@ -198,27 +201,96 @@ public sealed class ContractBoundaryConstraintTests {
     /// </summary>
     [Test]
     public async Task EntityScopedPrecondition_RealProducedContract_IsNeverViolated() {
+        var (domain, session, analysis) = AnalyzeProducedBind(ProducerDslWithOneRequire);
+
+        await Assert.That(WithCode(analysis, "DMCON014")).IsEmpty();
+        await Assert.That(analysis.HasErrors).IsFalse();
+        await Assert.That(Boundary(domain, analysis).Precondition)
+            .IsEqualTo(ContractBoundaryVerdict.Unknown);
+        await Assert.That(session.Lower(domain, analysis).Count).IsGreaterThan(0);
+    }
+
+    /// <summary>
+    /// S1: an entity-scoped <c>require</c> cannot be cleared by the caller, so every one of
+    /// them is its own <c>DMCON015</c>, and an endpoint carrying none is silent. This is the
+    /// noise real models reach — the DSL cannot author a parameter-scoped precondition at all —
+    /// so it is pinned here rather than left to the reader.
+    /// </summary>
+    [Test]
+    public async Task EntityScopedPreconditions_AreReportedOncePerRequire() {
+        var (_, _, twoRequires) = AnalyzeProducedBind(ProducerDslWithTwoRequires);
+        await Assert.That(twoRequires.HasErrors).IsFalse();
+        await Assert.That(WithCode(twoRequires, "DMCON014")).IsEmpty();
+        await Assert.That(WithCode(twoRequires, "DMCON015").Count).IsEqualTo(2);
+
+        var (_, _, noRequires) = AnalyzeProducedBind(ProducerDslWithoutRequires);
+        await Assert.That(WithCode(noRequires, "DMCON015")).IsEmpty();
+        await Assert.That(noRequires.HasErrors).IsFalse();
+    }
+
+    private const string ProducerDslWithOneRequire = """
+        domain billing
+
+        public value ChargeRequest {
+          Amount: Number
+        }
+
+        public entity Ledger {
+          Amount: Number
+          Positive: policy { Amount > 0 }
+          public action Charge (line: ChargeRequest)
+            require Positive
+          {
+          }
+        }
+        """;
+
+    private const string ProducerDslWithTwoRequires = """
+        domain billing
+
+        public value ChargeRequest {
+          Amount: Number
+        }
+
+        public entity Ledger {
+          Amount: Number
+          Positive: policy { Amount > 0 }
+          UnderHundred: policy { Amount < 100 }
+          public action Charge (line: ChargeRequest)
+            require Positive, UnderHundred
+          {
+          }
+        }
+        """;
+
+    private const string ProducerDslWithoutRequires = """
+        domain billing
+
+        public value ChargeRequest {
+          Amount: Number
+        }
+
+        public entity Ledger {
+          Amount: Number
+          public action Charge (line: ChargeRequest) {
+          }
+        }
+        """;
+
+    /// <summary>
+    /// Produces the contract from a real source document and binds the standard caller to it,
+    /// so a test exercises <see cref="InternalDomainProducer"/> output rather than a hand-built
+    /// surface. The caller's payload does not share a property obligation with the export, so
+    /// the only diagnostics available are the precondition ones.
+    /// </summary>
+    private static (Domain Domain, DomainSession Session, AnalysisResult Analysis) AnalyzeProducedBind(
+        string sourceDsl) {
         var parsed = new DomainEvolution(DomainTestFactory.Create("_", [], []))
-            .ApplyAndAnalyze(new PolyDslParser("""
-                domain billing
+            .ApplyAndAnalyze(new PolyDslParser(sourceDsl).Parse());
+        if (!parsed.Succeeded)
+            throw new InvalidOperationException(parsed.FailureSummary ?? "source analysis failed");
 
-                public value ChargeRequest {
-                  Amount: Number
-                }
-
-                public entity Ledger {
-                  Amount: Number
-                  Positive: policy { Amount > 0 }
-                  public action Charge (line: ChargeRequest)
-                    require Positive
-                  {
-                  }
-                }
-                """).Parse());
-        await Assert.That(parsed.Succeeded).IsTrue();
-        var surface = new InternalDomainProducer().Produce(parsed.Root!);
-
-        var (domain, session, analysis) = Analyze("""
+        return Analyze("""
             domain Shop
             uses billing
 
@@ -231,13 +303,7 @@ public sealed class ContractBoundaryConstraintTests {
             }
 
             ChargeOrder: bind Billing Charge to Pay request
-            """, surface);
-
-        await Assert.That(WithCode(analysis, "DMCON014")).IsEmpty();
-        await Assert.That(analysis.HasErrors).IsFalse();
-        await Assert.That(Boundary(domain, analysis).Precondition)
-            .IsEqualTo(ContractBoundaryVerdict.Unknown);
-        await Assert.That(session.Lower(domain, analysis).Count).IsGreaterThan(0);
+            """, new InternalDomainProducer().Produce(parsed.Root!));
     }
 
     [Test]

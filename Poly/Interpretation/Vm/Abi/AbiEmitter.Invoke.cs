@@ -144,6 +144,7 @@ public static partial class AbiEmitter {
                     if (asyncReturn is null && ContainsAwait(astMethod.DefinitionNode.Body!))
                         throw new InvalidOperationException(
                             $"VM compile rejected: method '{astMethod.Name}' contains 'await' but is not an async method returning Task or Task<T>.");
+                    var iteratorElement = IteratorElementType(astMethod, ctx);
                     var table = TryCompileAstCallable(
                         astMethod.DefinitionNode,
                         astMethod.DefinitionNode.Body!,
@@ -151,9 +152,10 @@ public static partial class AbiEmitter {
                         ctx,
                         instanceSlot: !astMethod.IsStatic,
                         rejection: out var rejection,
-                        asyncReturn: asyncReturn);
+                        asyncReturn: asyncReturn,
+                        iteratorElement: iteratorElement);
                     if (table is not null)
-                        return EmitAstInvoke(invoke, member, astMethod, table, ctx);
+                        return EmitAstInvoke(invoke, member, astMethod, table, ctx, iteratorElement);
                     // The body exists and resolved to this AST method, so a name-dispatched
                     // fallback can only be right on an instance that is not ours to shape.
                     // `new T()` is the VM's own dictionary, which has no such method: emit
@@ -505,9 +507,14 @@ public static partial class AbiEmitter {
         AnalysisResult analysis,
         HashSet<object> capturedBindings,
         bool instanceSlot = false,
-        Type? asyncReturn = null) {
+        Type? asyncReturn = null,
+        Type? iteratorElement = null) {
 
         var fnCtx = new Context();
+        if (iteratorElement is not null) {
+            fnCtx.IsIteratorBody = true;
+            fnCtx.IteratorElement = iteratorElement;
+        }
         fnCtx.FunctionTableExpr = Constant(functionTable);
         fnCtx.Mode = mode;
         fnCtx.Analysis = analysis;
@@ -547,27 +554,47 @@ public static partial class AbiEmitter {
             fnCtx.DeclareParameter(param);
         fnCtx.ReserveFrameSlots(parameters.Count + (instanceSlot ? 1 : 0));
 
-        // Compile body
-        var bodyCompiled = CompileNode(body, fnCtx);
-        bodyExprs.Add(bodyCompiled);
+        if (iteratorElement is not null) {
+            // The iterator's private frame: the arguments, then the resume state and the answer
+            // the body leaves for VmIterator<T>.MoveNext.
+            fnCtx.IteratorRegionSlot = fnCtx.AllocFrameSlot();
+            fnCtx.IteratorMovedSlot = fnCtx.AllocFrameSlot();
+            fnCtx.IteratorCurrentSlot = fnCtx.AllocFrameSlot();
+            bodyExprs.Add(Assign(fnCtx.FrameSlotRead(fnCtx.IteratorMovedSlot), Constant(0L)));
+            var rootRegion = fnCtx.BeginRegion();
+            var iteratorBody = fnCtx.EndRegion(rootRegion, CompileNode(body, fnCtx).Code);
+            // The outer dispatch: region id -> region entry. It sits before the body, which owns
+            // the entry labels, and a fresh start (id 0) falls through into the body.
+            bodyExprs.Add(fnCtx.EmitRegionDispatch());
+            bodyExprs.Add(iteratorBody);
+        }
+        else {
+            // Compile body
+            var bodyCompiled = CompileNode(body, fnCtx);
+            bodyExprs.Add(bodyCompiled);
 
-        // Flush result: the callee always leaves its result word at _slots[_fp] — 0L for
-        // a body that yields none — so a caller never reads a slot the callee left
-        // untouched. An IsAsync method returns a completed Task / Task<T> instead.
-        Expression? resultValue = fnCtx.RingDepth > 0
-            ? fnCtx.RingWord(fnCtx.RingDepth - 1, bodyCompiled.ClrType)
-            : null;
-        if (asyncReturn is not null)
-            resultValue = WrapAsyncResult(resultValue, asyncReturn, fnCtx, YieldingNode(body));
-        bodyExprs.Add(Assign(ArrayAccess(fnCtx.SlotsLocal, fnCtx.FramePosLocal),
-            resultValue ?? Constant(0L)));
-        bodyExprs.Add(Assign(fnCtx.SlotsStackPointer,
-            Add(fnCtx.FramePosLocal, Constant(1))));
+            // Flush result: the callee always leaves its result word at _slots[_fp] — 0L for
+            // a body that yields none — so a caller never reads a slot the callee left
+            // untouched. An IsAsync method returns a completed Task / Task<T> instead.
+            Expression? resultValue = fnCtx.RingDepth > 0
+                ? fnCtx.RingWord(fnCtx.RingDepth - 1, bodyCompiled.ClrType)
+                : null;
+            if (asyncReturn is not null)
+                resultValue = WrapAsyncResult(resultValue, asyncReturn, fnCtx, YieldingNode(body));
+            bodyExprs.Add(Assign(ArrayAccess(fnCtx.SlotsLocal, fnCtx.FramePosLocal),
+                resultValue ?? Constant(0L)));
+            bodyExprs.Add(Assign(fnCtx.SlotsStackPointer,
+                Add(fnCtx.FramePosLocal, Constant(1))));
+        }
 
         bodyExprs.Add(Label(fnCtx.ExitLabel));
 
         var delegateExpr = Lambda<Action<VmState>>(Block(fnCtx.Locals, bodyExprs), fnCtx.State);
-        return delegateExpr.Compile();
+        var compiledBody = delegateExpr.Compile();
+        if (iteratorElement is not null)
+            VmIteratorShape.Register(compiledBody, new VmIteratorShape(
+                fnCtx.FrameSlotHighWater, fnCtx.IteratorMovedSlot, fnCtx.IteratorCurrentSlot));
+        return compiledBody;
     }
 
     /// <summary>
@@ -841,8 +868,41 @@ public static partial class AbiEmitter {
             typeof(long));
     }
 
+    /// <summary>
+    /// The element type <c>T</c> of an iterator method: a body that contains a
+    /// <see cref="YieldStatement"/> and is declared <c>IEnumerable&lt;T&gt;</c>. Null for any other
+    /// method. An iterator the VM cannot run (a non-generic <c>IEnumerable</c>, or a return type that
+    /// does not resolve) is rejected here rather than falling through to a name-dispatched call.
+    /// </summary>
+    private static Type? IteratorElementType(AstMethodDefinition method, Context ctx) {
+        if (!ContainsYield(method.DefinitionNode.Body!))
+            return null;
+        // The declared syntax, not MemberTypeDefinition.GetRuntimeType(): the type provider
+        // spells IEnumerable<T> as a concrete List<T>.
+        if (method.DefinitionNode.ReturnType is NamedTypeReference { TypeArguments: { Count: 1 } args } named
+            && named.FullName is "IEnumerable" or "System.Collections.Generic.IEnumerable") {
+            var element = args[0] is PrimitiveTypeReference { IsNullable: false } primitive
+                ? primitive.PrimitiveId.GetClrType()
+                : ctx.Analysis?.GetResolvedType(args[0])?.GetRuntimeType();
+            if (element is not null)
+                return element;
+        }
+        throw new InvalidOperationException(
+            $"VM compile rejected: iterator method '{method.Name}' must be declared IEnumerable<T> with a resolvable element type to execute.");
+    }
+
+    private static bool ContainsYield(Node node) {
+        if (node is YieldStatement)
+            return true;
+        foreach (var child in node.Children)
+            if (child is not null && ContainsYield(child))
+                return true;
+        return false;
+    }
+
     private static Expression EmitAstInvoke(
-        Invoke invoke, Member member, AstMethodDefinition method, Action<VmState>[] table, Context ctx) {
+        Invoke invoke, Member member, AstMethodDefinition method, Action<VmState>[] table, Context ctx,
+        Type? iteratorElement = null) {
         var definition = method.DefinitionNode;
         bool isStatic = method.IsStatic;
         var seq = new List<Expression>();
@@ -867,11 +927,31 @@ public static partial class AbiEmitter {
 
         int result = ctx.AllocSlot();
         ctx.RingDepth = result + 1;
+        if (iteratorElement is not null) {
+            // The call does not run the body: it returns the iterator that will, one MoveNext at a time.
+            seq.Add(Assign(ctx.RingVar(result), EmitIteratorCreation(table, inits, iteratorElement, ctx)));
+            return Block(seq);
+        }
         // The callee already left the ring word at slots[FramePos] (VmCall.Invoke's
         // contract, void included), so the caller only moves it into its own slot.
         seq.Add(Assign(ctx.RingVar(result), EmitCallFrame(
             ArrayIndex(Constant(table), Constant(0)), inits, ctx)));
         return Block(seq);
+    }
+
+    private static Expression EmitIteratorCreation(
+        Action<VmState>[] table, IReadOnlyList<Expression> words, Type element, Context ctx) {
+        var heapParameter = Parameter(typeof(VmManagedObjectHeap), "heap");
+        var wordParameter = Parameter(typeof(long), "word");
+        var decode = Lambda(
+            typeof(Func<,,>).MakeGenericType(typeof(VmManagedObjectHeap), typeof(long), element),
+            RingCodec.FromFrame(wordParameter, element, element, heapParameter),
+            heapParameter, wordParameter).Compile();
+        var iteratorType = typeof(VmIterator<>).MakeGenericType(element);
+        var constructor = iteratorType.GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)[0];
+        var iterator = New(constructor,
+            ctx.State, Constant(table), NewArrayInit(typeof(long), words), Constant(decode));
+        return RingCodec.ToFrame(iterator, typeof(IEnumerable<>).MakeGenericType(element), ctx.HeapLocal);
     }
 
     /// <param name="rejection">Why the body did not compile, when it did not. Callers that
@@ -894,7 +974,8 @@ public static partial class AbiEmitter {
         Context caller,
         bool instanceSlot,
         out string? rejection,
-        Type? asyncReturn = null) {
+        Type? asyncReturn = null,
+        Type? iteratorElement = null) {
         rejection = null;
         var mode = caller.Mode;
         lock (AstCallableGate) {
@@ -939,7 +1020,8 @@ public static partial class AbiEmitter {
                 unitAnalysis,
                 new HashSet<object>(ReferenceEqualityComparer.Instance),
                 instanceSlot,
-                asyncReturn);
+                asyncReturn,
+                iteratorElement);
         }
         catch (Exception ex) {
             // Drop this slot and everything compiled under it: those bodies may
@@ -951,7 +1033,7 @@ public static partial class AbiEmitter {
                 throw;
             // An IsAsync method's body must compile: falling back to a CLR lookup of the same
             // name would run a different method. Surface the body's compile reject instead.
-            if (asyncReturn is not null)
+            if (asyncReturn is not null || iteratorElement is not null)
                 throw;
             // A body that only forwards to a CLR static method (host jobs are built
             // this way) must not fall through to a CLR method of the same name.

@@ -347,8 +347,7 @@ public static partial class AbiEmitter {
             BreakStatement bs => Statement(ctx, () => EmitBreakStatement(bs, ctx)),
             ContinueStatement cs => Statement(ctx, () => EmitContinueStatement(cs, ctx)),
             GotoStatement gs => Statement(ctx, () => EmitGotoStatement(gs, ctx)),
-            YieldStatement ys => throw new UnresumableBodyRejection(
-                $"VM compile rejected: '{ys}' is not executable yet; a yield needs a resumable iterator body (#338 slice 2)."),
+            YieldStatement ys => Statement(ctx, () => EmitYield(ys, ctx)),
             // A label is a marker over its statement and answers with that statement's
             // result, so it adds no slot of its own.
             LabelDeclaration ld => EmitLabelDeclaration(ld, ctx),

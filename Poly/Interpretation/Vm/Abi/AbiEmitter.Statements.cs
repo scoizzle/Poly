@@ -163,6 +163,14 @@ public static partial class AbiEmitter {
     }
 
     private static Expression EmitBlock(Block block, Context ctx) {
+        // An iterator body's block is a resume region: the yields it owns directly resume
+        // through a switch of their own (see Context.EndRegion).
+        var region = ctx.IsIteratorBody ? ctx.BeginRegion() : null;
+        var emitted = EmitBlockBody(block, ctx);
+        return region is null ? emitted : ctx.EndRegion(region, emitted);
+    }
+
+    private static Expression EmitBlockBody(Block block, Context ctx) {
         ctx.PushScope();
         var varInitExprs = new List<Expression>();
         var releases = new List<Expression>();
@@ -740,6 +748,54 @@ public static partial class AbiEmitter {
         return Block(resumed);
     }
 
+    /// <summary>
+    /// <c>yield break</c> and <c>yield return</c> in an iterator body (#338 slice 2). A yield
+    /// stores the value's frame word, the owning region's id and its region-local step, spills
+    /// like a <see cref="SuspendNode"/>, marks the body as having yielded and leaves through the
+    /// exit. The resume label follows: the owning region's inner switch jumps to it, and the
+    /// reload is the first thing after it, because a resumed body starts with every CLR local zero.
+    /// </summary>
+    private static Expression EmitYield(YieldStatement ys, Context ctx) {
+        if (!ctx.IsIteratorBody)
+            throw new UnresumableBodyRejection(
+                $"VM compile rejected: '{ys}' is only executable in the body of an iterator method returning IEnumerable<T>.");
+        if (ys.Value is null)
+            return Block(
+                Assign(ctx.FrameSlotRead(ctx.IteratorMovedSlot), Constant(0L)),
+                Goto(ctx.ExitLabel));
+        if (ctx.InUnresumable)
+            throw new InvalidOperationException(
+                $"VM compile rejected: '{ys}' cannot resume inside try, catch, finally, using, or foreach (iterator exception semantics are a later slice).");
+        var region = ctx.CurrentRegion
+            ?? throw new InvalidOperationException($"VM compile rejected: '{ys}' has no enclosing resume region.");
+        var element = ctx.IteratorElement!;
+
+        var ring = ctx.OpenRing();
+        var value = ring.AddValue(CompileNode(ys.Value, ctx));
+        var (step, resumeLabel) = region.AddYield();
+        var word = RingCodec.ToFrame(
+            RingCodec.ToClr(value.Read, element, ys.Value, ctx.Analysis, ctx.HeapLocal),
+            element, ctx.HeapLocal);
+
+        var spill = new List<Expression>();
+        var reload = new List<Expression>();
+        // The yielded value's own slot is consumed by the store below, so the barrier starts at it.
+        ctx.SpillBarrier(ring.Base, spill, reload);
+
+        var suspended = new List<Expression> {
+            Assign(ctx.FrameSlotRead(ctx.IteratorCurrentSlot), word),
+            Assign(ctx.FrameSlotRead(region.StepSlot), Constant((long)step)),
+            Assign(ctx.FrameSlotRead(ctx.IteratorRegionSlot), Constant((long)region.Id)),
+        };
+        suspended.AddRange(spill);
+        suspended.Add(Assign(ctx.FrameSlotRead(ctx.IteratorMovedSlot), Constant(1L)));
+        suspended.Add(Goto(ctx.ExitLabel));
+        suspended.Add(Label(resumeLabel));
+        suspended.AddRange(reload);
+        suspended.Add(Empty());
+        return ring.Then(Block(suspended));
+    }
+
     private static Expression EmitParameter(Parameter p, Context ctx) {
         int slot = ctx.AllocSlot();
         if (ctx.TryGetCapture(p, out int capIndex)) {
@@ -1050,6 +1106,15 @@ public static partial class AbiEmitter {
     /// <summary>Return statement: write value to frame slot, set SP, jump to exit.
     /// A null <see cref="Return.Value"/> is a void return (no slot write).</summary>
     private static Expression EmitReturn(Return ret, Context ctx) {
+        if (ctx.IsIteratorBody) {
+            // C# rejects a value return in an iterator; a bare return finishes it, as yield break does.
+            if (ret.Value is not null)
+                throw new InvalidOperationException(
+                    "VM compile rejected: an iterator method cannot return a value; use yield return / yield break.");
+            return Block(
+                Assign(ctx.FrameSlotRead(ctx.IteratorMovedSlot), Constant(0L)),
+                Goto(ctx.ExitLabel));
+        }
         if (ret.Value is null) {
             if (ctx.AsyncReturn is not null)
                 return Block(

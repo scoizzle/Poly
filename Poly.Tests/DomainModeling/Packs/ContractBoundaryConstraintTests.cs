@@ -521,6 +521,91 @@ public sealed class ContractBoundaryConstraintTests {
     private static Return Done() =>
         new(new Invoke(new Member(new NamedTypeReference("DomainResult"), "Success"), []));
 
+    private static Invoke GatewayCall(string method, Node argument) =>
+        new(new Member(new NamedTypeReference("Gateway"), method), [argument]);
+
+    /// <summary>T1: a payload alias through a Conditional is undecidable, never proven and never violated.</summary>
+    [Test]
+    public async Task PayloadAliasedThroughConditional_IsUnknownNotViolated() {
+        var body = new Block([
+            new Assignment(
+                new Variable("p"),
+                new Conditional(new Constant(true), new Parameter("request"), new Parameter("request"))),
+            new Assignment(new Member(new Variable("p"), "Amount"), new Constant(-1L)),
+            Done(),
+        ]);
+        await AssertUnknownOnce(body);
+        var bodies = new Dictionary<string, Func<Block>>(StringComparer.Ordinal) { ["Charge"] = () => body };
+        var (_, _, analysis) = Analyze(
+            CallerDsl("range(0, 50)"), Surface(amountConstraints: [new RangeConstraint(0, 100)]), bodies);
+        await Assert.That(WithCode(analysis, "DMCON014")).IsEmpty();
+    }
+
+    /// <summary>T2: a lambda returning the payload, passed to a call, lets the callee mutate it.</summary>
+    [Test]
+    public async Task LambdaReturningPayloadPassedToCall_IsUnknown() =>
+        await AssertUnknownOnce(new Block([
+            new Assignment(new Variable("r"), GatewayCall("Run", new Lambda([], new Parameter("request")))),
+            Done(),
+        ]));
+
+    /// <summary>T3: a cast does not stop the payload object from escaping.</summary>
+    [Test]
+    public async Task CastPayloadPassedToCall_IsUnknown() =>
+        await AssertUnknownOnce(new Block([
+            new Assignment(
+                new Variable("r"),
+                GatewayCall("Charge", new TypeCast(new Parameter("request"), new NamedTypeReference("object")))),
+            Done(),
+        ]));
+
+    /// <summary>T4: a payload alias through a coalesce.</summary>
+    [Test]
+    public async Task PayloadAliasedThroughCoalesce_IsUnknown() =>
+        await AssertUnknownOnce(new Block([
+            new Assignment(new Variable("p"), new Coalesce(new Parameter("request"), new Parameter("other"))),
+            new Assignment(new Member(new Variable("p"), "Amount"), new Constant(-1L)),
+            Done(),
+        ]));
+
+    /// <summary>T5: a nested object taken inside a loop body and mutated.</summary>
+    [Test]
+    public async Task NestedAssignmentInsideLoop_IsUnknown() =>
+        await AssertUnknownOnce(new Block([
+            new WhileLoop(
+                new Constant(true),
+                new Block([
+                    new Assignment(new Variable("a"), new Member(new Parameter("request"), "Address")),
+                    new Assignment(new Member(new Variable("a"), "City"), new Constant("x")),
+                ])),
+            Done(),
+        ]));
+
+    /// <summary>T6: a payload-member assignment whose right-hand side is a call taking the payload.</summary>
+    [Test]
+    public async Task PayloadMemberAssignedFromCallTakingPayload_IsUnknown() =>
+        await AssertUnknownOnce(new Block([
+            new Assignment(new Member(new Parameter("request"), "Amount"), GatewayCharge()),
+            Done(),
+        ]));
+
+    /// <summary>T7: Lower requires a non-null return value, so Return(null) is the missing-return shape.</summary>
+    [Test]
+    public async Task FinalReturnWithoutValue_IsUnknownNotProven() =>
+        await AssertUnknownOnce(new Block([Write("Amount", 5L), new Return(null)]));
+
+    /// <summary>T8 (R6): an indexed member of the payload handed to a call can be mutated by the callee.</summary>
+    [Test]
+    public async Task IndexedPayloadMemberPassedToCall_IsUnknown() =>
+        await AssertUnknownOnce(new Block([
+            new Assignment(
+                new Variable("r"),
+                GatewayCall(
+                    "Charge",
+                    new IndexAccess(new Member(new Parameter("request"), "Items"), new Constant(0L)))),
+            Done(),
+        ]));
+
     private static IfStatement IfCondition(Node then, Node? otherwise) =>
         new(new Constant(true), then, otherwise);
 

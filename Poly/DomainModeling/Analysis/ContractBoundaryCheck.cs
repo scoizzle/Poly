@@ -92,8 +92,8 @@ internal static class ContractBoundaryCheck {
             context.ReportWarning(
                 binding,
                 $"Contract binding '{binding.Name}' endpoint '{contract.Name}.{endpoint.Name}' " +
-                "records a contributed body that analysis could not read. The postcondition half " +
-                "is unknown and Lower is not blocked.",
+                "records a contributed body that analysis could not read (missing, empty, or its " +
+                "factory threw). The postcondition half is unknown; Lower will refuse the body.",
                 DomainModelDiagnosticCodes.ContractBoundaryUnknown);
             return ContractBoundaryVerdict.Unknown;
         }
@@ -110,15 +110,17 @@ internal static class ContractBoundaryCheck {
         }
 
         foreach (var obligation in obligations.Where(o => o.Verdict == ContractBoundaryVerdict.Unknown)) {
+            var payloadName = payload?.Name ?? endpoint.PayloadType.TypeName;
             var message = obligation.Unreadable
                 ? $"Contract binding '{binding.Name}' endpoint '{contract.Name}.{endpoint.Name}' " +
-                  $"cannot prove payload '{payload?.Name ?? endpoint.PayloadType.TypeName}' constraint " +
-                  $"'{obligation.Name}' from the contributed body: the body may change the payload " +
-                  "in a way the walk cannot read. Lower is not blocked."
+                  $"cannot prove payload '{payloadName}' from the contributed body: " +
+                  $"{obligation.Name}. " + (obligation.Name.StartsWith("the body does not end", StringComparison.Ordinal)
+                      ? "Lower will refuse the body."
+                      : "Lower is not blocked.")
                 : $"Contract binding '{binding.Name}' endpoint '{contract.Name}.{endpoint.Name}' " +
-                  $"cannot prove payload '{payload?.Name ?? endpoint.PayloadType.TypeName}' constraint " +
-                  $"'{obligation.Name}' from the contributed body: the assigned value cannot be decided " +
-                  "by the walk. Lower is not blocked.";
+                  $"cannot prove payload '{payloadName}' constraint '{obligation.Name}' from the " +
+                  "contributed body: the assigned value cannot be decided by the walk. " +
+                  "Lower is not blocked.";
             context.ReportWarning(
                 binding,
                 message,
@@ -137,6 +139,9 @@ internal static class ContractBoundaryCheck {
         try {
             return factory();
         }
+        catch (OperationCanceledException) {
+            throw;
+        }
         catch (Exception) {
             // A throwing factory is a body analysis cannot read, not a crash in Analyze.
             return null;
@@ -153,10 +158,10 @@ internal static class ContractBoundaryCheck {
         if (payload is null)
             return obligations;
 
-        // Lower rejects a body that does not end in a return; analysis must not call it proven.
-        if (body.Nodes[^1] is not Return) {
+        // Lower requires a final `return <value>`; analysis must not call any other shape proven.
+        if (body.Nodes.Count == 0 || body.Nodes[^1] is not Return { Value: not null }) {
             obligations.Add(new Obligation(
-                $"payload '{payload.Name}' (the body does not end in a return)",
+                "the body does not end in `return <value>`",
                 ContractBoundaryVerdict.Unknown,
                 Unreadable: true));
             return obligations;
@@ -168,7 +173,7 @@ internal static class ContractBoundaryCheck {
 
         if (state.PayloadMayChange) {
             obligations.Add(new Obligation(
-                $"payload '{payload.Name}' may be mutated through a call",
+                "the body may mutate or alias the payload in a way the walk cannot read",
                 ContractBoundaryVerdict.Unknown,
                 Unreadable: true));
             return obligations;
@@ -348,11 +353,11 @@ internal static class ContractBoundaryCheck {
             case Assignment { Destination: Member { Value: Parameter parameter } member } assignment
                 when IsPayload(parameter):
                 state.Properties[member.MemberName] = Wrote.Unknown;
-                if (MayMutatePayload(assignment.Value, payload))
+                if (ContainsBarePayload(assignment.Value, payload) || MayMutatePayload(assignment.Value, payload))
                     state.PayloadMayChange = true;
                 break;
             case Assignment assignment:
-                if (MayMutatePayload(assignment, payload) || RootedAtPayload(assignment.Value))
+                if (MayMutatePayload(assignment, payload))
                     state.PayloadMayChange = true;
                 break;
             case IfStatement conditional: {
@@ -390,7 +395,7 @@ internal static class ContractBoundaryCheck {
                 return false;
             case Assignment assignment:
                 return RootedAtPayload(assignment.Destination)
-                       || assignment.Value is Parameter value && IsPayload(value)
+                       || ContainsBarePayload(assignment.Value, payload)
                        || MayMutatePayload(assignment.Value, payload);
             case IfStatement conditional:
                 return MayMutatePayload(conditional.Condition, payload)
@@ -398,11 +403,11 @@ internal static class ContractBoundaryCheck {
                        || conditional.ElseBranch is not null && MayMutatePayload(conditional.ElseBranch, payload);
             case Invoke invoke:
                 return invoke.Delegate is Member { Value: var receiver } && RootedAtPayload(receiver)
-                       || invoke.Arguments.Any(argument => EscapesPayload(argument, payload))
+                       || invoke.Arguments.Any(argument => ContainsBarePayload(argument, payload))
                        || MayMutatePayload(invoke.Delegate, payload)
                        || invoke.Arguments.Any(argument => MayMutatePayload(argument, payload));
             case New created:
-                return created.Arguments.Any(argument => EscapesPayload(argument, payload))
+                return created.Arguments.Any(argument => ContainsBarePayload(argument, payload))
                        || created.Arguments.Any(argument => MayMutatePayload(argument, payload));
             default:
                 return node.Children.Any(child => MayMutatePayload(child, payload));
@@ -410,22 +415,29 @@ internal static class ContractBoundaryCheck {
     }
 
     /// <summary>
-    /// An argument that is the payload object, or a member that could itself be an object,
-    /// leaves the body's control. A scalar primitive member is copied by value and is safe.
+    /// True when the tree holds a reference to the payload that a scalar member read does not
+    /// consume: the bare payload object, or a member or index of it that could itself be an
+    /// object. Such a reference leaves the body's control wherever it sits (a cast, a
+    /// conditional, a lambda, a call argument), so the walk cannot read the final payload.
     /// </summary>
-    private static bool EscapesPayload(Node argument, ValueType payload) {
-        if (argument is Parameter parameter)
-            return IsPayload(parameter);
-        if (argument is not Member member)
-            return false;
-        if (!RootedAtPayload(member))
-            return false;
-        // One level only: a nested member is an object the walk cannot see through.
-        if (member.Value is not Parameter)
-            return true;
-        var property = payload.Properties.FirstOrDefault(candidate =>
-            string.Equals(candidate.Name, member.MemberName, StringComparison.Ordinal));
-        return property is null || !IsScalar(property.Type.TypeName);
+    private static bool ContainsBarePayload(Node? node, ValueType payload) {
+        switch (node) {
+            case null:
+                return false;
+            case Parameter parameter:
+                return IsPayload(parameter);
+            case IndexAccess index when RootedAtPayload(index):
+                return true;
+            case Member member when RootedAtPayload(member):
+                // One level only: a nested member is an object the walk cannot see through.
+                if (member.Value is not Parameter)
+                    return true;
+                var property = payload.Properties.FirstOrDefault(candidate =>
+                    string.Equals(candidate.Name, member.MemberName, StringComparison.Ordinal));
+                return property is null || !IsScalar(property.Type.TypeName);
+            default:
+                return node.Children.Any(child => ContainsBarePayload(child, payload));
+        }
     }
 
     private static bool RootedAtPayload(Node? node) => node switch {

@@ -55,9 +55,7 @@ public static class ConstraintMerge {
             return ConstraintMergeResult.Unmergeable;
         return (self, other) switch {
             (RangeConstraint a, RangeConstraint b) =>
-                MergeRange(a, b) is { } range
-                    ? ConstraintMergeResult.Of(range)
-                    : ConstraintMergeResult.Empty,
+                MergeRangeResult(a, b),
             (LengthConstraint a, LengthConstraint b) =>
                 MergeLength(a, b) is { } length
                     ? ConstraintMergeResult.Of(length)
@@ -129,23 +127,31 @@ public static class ConstraintMerge {
 
     /// <summary>Intersection of two ranges (the tighter lower bound and the tighter upper bound).</summary>
     public static RangeConstraint? MergeRange(RangeConstraint a, RangeConstraint b) {
-        var min = (a.Minimum, b.Minimum) switch {
-            (not null, not null) when Compare(a.Minimum, b.Minimum) >= 0 => a.Minimum,
-            (not null, not null) => b.Minimum,
-            (not null, _) => a.Minimum,
-            (_, not null) => b.Minimum,
-            _ => null,
-        };
-        var max = (a.Maximum, b.Maximum) switch {
-            (not null, not null) when Compare(a.Maximum, b.Maximum) <= 0 => a.Maximum,
-            (not null, not null) => b.Maximum,
-            (not null, _) => a.Maximum,
-            (_, not null) => b.Maximum,
-            _ => null,
-        };
-        if (min is not null && max is not null && Compare(min, max) > 0)
-            return null; // min > max — unsatisfiable
-        return new RangeConstraint(min, max);
+        var result = MergeRangeResult(a, b);
+        if (result.Kind == ConstraintMergeKind.Unmergeable)
+            throw new InvalidOperationException(
+                "Range bounds are not comparable; use MergeResult to get an Unmergeable outcome.");
+        return result.Net as RangeConstraint;
+    }
+
+    private static ConstraintMergeResult MergeRangeResult(RangeConstraint a, RangeConstraint b) {
+        object? min = a.Minimum;
+        if (b.Minimum is not null) {
+            if (min is null) min = b.Minimum;
+            else if (TryCompare(min, b.Minimum) is not { } c) return ConstraintMergeResult.Unmergeable;
+            else if (c < 0) min = b.Minimum;
+        }
+        object? max = a.Maximum;
+        if (b.Maximum is not null) {
+            if (max is null) max = b.Maximum;
+            else if (TryCompare(max, b.Maximum) is not { } c) return ConstraintMergeResult.Unmergeable;
+            else if (c > 0) max = b.Maximum;
+        }
+        if (min is not null && max is not null) {
+            if (TryCompare(min, max) is not { } c) return ConstraintMergeResult.Unmergeable;
+            if (c > 0) return ConstraintMergeResult.Empty; // min > max — unsatisfiable
+        }
+        return ConstraintMergeResult.Of(new RangeConstraint(min, max));
     }
 
     /// <summary>Intersection of two length bounds.</summary>
@@ -155,6 +161,20 @@ public static class ConstraintMerge {
         return min > max ? null : new LengthConstraint(min, max);
     }
 
-    private static int Compare(object x, object y) =>
-        Convert.ToDouble(x).CompareTo(Convert.ToDouble(y));
+    /// <summary>
+    /// Orders two range bounds, or <c>null</c> when they cannot be ordered. Same-type bounds use
+    /// that type's own ordering (decimal, long, DateTime... never rounded through double).
+    /// Two different numeric types fall back to double, as before; a bound of any
+    /// non-numeric type against a different type is not comparable (cannot decide).
+    /// </summary>
+    private static int? TryCompare(object x, object y) {
+        if (x.GetType() == y.GetType())
+            return x is IComparable c ? c.CompareTo(y) : null;
+        if (IsNumeric(x) && IsNumeric(y))
+            return Convert.ToDouble(x).CompareTo(Convert.ToDouble(y));
+        return null;
+    }
+
+    private static bool IsNumeric(object v) => v is sbyte or byte or short or ushort or int
+        or uint or long or ulong or float or double or decimal;
 }

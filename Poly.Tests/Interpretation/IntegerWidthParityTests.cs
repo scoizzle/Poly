@@ -66,4 +66,55 @@ public class IntegerWidthParityTests {
             await Assert.That(row.Agrees).IsTrue().Because(row.Describe());
         }
     }
+
+    [Test]
+    public async Task ConstantFolded_NegOfIntMinValueConstant_WrapsAtIntWidth() {
+        // The operand is a Constant node, so ConstantFoldingPass folds -(int.MinValue) at analysis time
+        // (the emitter never sees a UnaryMinus). Roslyn rejects a literal -int.MinValue (CS0220), so the
+        // oracle is a hand-written C# value computed from a non-constant operand.
+        int operand = int.MinValue;
+        int expected = unchecked(-operand);
+        var row = AstParity.Compare("fold-neg-int-min", new Block([new UnaryMinus(new Constant(int.MinValue))], []));
+        await Assert.That(row.VmOutcome).IsEqualTo($"long:{expected}");
+    }
+
+    [Test]
+    public async Task ConstantFolded_NegOfIntMinValueConstant_FoldsToIntConstant() {
+        var node = new UnaryMinus(new Constant(int.MinValue));
+        using var exec = Interpreter.Execute(Interpreter.Compile(node));
+        int operand = int.MinValue;
+        await Assert.That(exec.GetValue<long>()).IsEqualTo((long)unchecked(-operand));
+    }
+
+    public static class NegProbe {
+        public static int ApplyInt(Func<int, int> f, int value) => f(value);
+    }
+
+    [Test]
+    public async Task PureLambda_NegOfIntMinValueParameter_WrapsAtIntWidth() {
+        var x = new Parameter("x", TypeReference.To<int>());
+        var lambda = new Lambda([x], new UnaryMinus(x));
+        using var exec = Interpreter.Execute(Interpreter.Compile(new Invoke(
+            new Member(new ClrTypeReference(typeof(NegProbe)), nameof(NegProbe.ApplyInt)),
+            lambda, new Constant(int.MinValue))));
+        int operand = int.MinValue;
+        await Assert.That(exec.GetValue<int>()).IsEqualTo(unchecked(-operand));
+    }
+
+    [Test]
+    public async Task ConstantFolded_ParentOfNegIntMinValue_SeesWrappedIntNotPromotedLong() {
+        // Every operand is a Constant, so the whole tree folds at analysis time and the parent reads the
+        // folded UnaryMinus value. C#: with a = int.MinValue, (-a == a) and (0 >= -a) are both true.
+        int a = int.MinValue;
+        await Assert.That(unchecked(-a) == a).IsTrue();
+        await Assert.That(0 >= unchecked(-a)).IsTrue();
+        var cases = new (string Label, Node Body)[] {
+            ("fold-neg-min-eq-min", new Equal(new UnaryMinus(new Constant(int.MinValue)), new Constant(int.MinValue))),
+            ("fold-zero-ge-neg-min", new GreaterThanOrEqual(new Constant(0), new UnaryMinus(new Constant(int.MinValue)))),
+        };
+        foreach (var (label, body) in cases) {
+            var row = AstParity.Compare(label, new Block([body], []));
+            await Assert.That(row.VmOutcome).IsEqualTo("bool:true").Because(row.Describe());
+        }
+    }
 }

@@ -431,13 +431,9 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
         return null;
     }
 
-    /// <summary>int * int can overflow 32 bits; promote to long and
-    /// return long when the result doesn't fit in int.</summary>
-    private static object NegateInt(int x) {
-        if (x == int.MinValue)
-            return -(long)x;
-        return -x;
-    }
+    /// <summary>C# negates a 32-bit-width operand at 32 bits: -int.MinValue wraps to
+    /// int.MinValue, the same width model EmitUnaryMinus uses.</summary>
+    private static object NegateInt(int x) => unchecked(-x);
 
     private static long? ToLong(object? value) => value switch {
         int i => i,
@@ -699,8 +695,6 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
     };
 
     private static object? Negate(object a) => a switch {
-        // int.MinValue overflows int negation; cast to long first.
-        // Use if/return to avoid ternary type-promoting int to long.
         int x => NegateInt(x),
         long x => -x,
         double x => -x,

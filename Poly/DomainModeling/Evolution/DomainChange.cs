@@ -1,5 +1,6 @@
 using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Ontology;
+using Poly.DomainModeling.Ontology.Constraints;
 using Poly.DomainModeling.Ontology.Contract;
 using Poly.DomainModeling.Runtime;
 
@@ -748,7 +749,9 @@ public sealed record RemovePropertyFromRelationshipChange(
 }
 
 /// <summary>
-/// Adds a Constraint to an Entity's Property by name.
+/// Adds a Constraint to an Entity's Property by name. Adding a constraint the property
+/// already carries identically is a no-op: the property stays canonical, so a later Lower
+/// does not compile the same guard twice.
 /// </summary>
 public sealed record AddConstraintToPropertyChange(
     string EntityName,
@@ -757,9 +760,10 @@ public sealed record AddConstraintToPropertyChange(
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
         context.RequireUpdate(
-            context.UpdateProperty(EntityName, PropertyName, p => p with {
-                Constraints = p.Constraints.Append(Constraint).ToList()
-            }),
+            context.UpdateProperty(EntityName, PropertyName, p =>
+                p.Constraints.Any(existing => ConstraintMerge.Identical(existing, Constraint))
+                    ? p
+                    : p with { Constraints = p.Constraints.Append(Constraint).ToList() }),
             $"Property '{PropertyName}' on Entity '{EntityName}' not found — cannot add constraint");
     }
 

@@ -107,21 +107,64 @@ public static class ConstraintMerge {
     }
 
     /// <summary>
-    /// Hull of two ranges. A bound missing on either side is unbounded in the hull; bounds that
-    /// cannot be ordered drop the whole axis (null) instead of throwing.
+    /// Join of two ranges: the normalised union of their intervals (#367 A-4), with the hull on
+    /// <see cref="RangeConstraint.Minimum"/>/<see cref="RangeConstraint.Maximum"/>. A bound missing
+    /// on either side is unbounded in the hull; a hull unbounded on both sides, or bounds that
+    /// cannot be ordered, drop the whole axis (null) instead of throwing.
     /// </summary>
     internal static RangeConstraint? JoinRange(RangeConstraint a, RangeConstraint b) {
-        object? min = null;
-        if (a.Minimum is not null && b.Minimum is not null) {
-            if (TryCompare(a.Minimum, b.Minimum) is not { } c) return null;
-            min = c <= 0 ? a.Minimum : b.Minimum;
+        var merged = NormaliseIntervals([.. IntervalsOf(a), .. IntervalsOf(b)]);
+        if (merged is null) return null;
+        var hull = FromIntervals(merged);
+        return hull.Minimum is null && hull.Maximum is null ? null : hull;
+    }
+
+    private static List<RangeInterval> IntervalsOf(RangeConstraint r) =>
+        r.Intervals is { } set ? [.. set] : [new RangeInterval(r.Minimum, r.Maximum)];
+
+    private static RangeConstraint FromIntervals(List<RangeInterval> normalised) {
+        var min = normalised[0].Minimum;
+        var max = normalised[^1].Maximum;
+        return normalised.Count == 1
+            ? new RangeConstraint(min, max)
+            : new RangeConstraint(min, max) { Intervals = new RangeIntervals(normalised) };
+    }
+
+    /// <summary>
+    /// Sorts by lower bound and merges overlapping or touching intervals. Null when two bounds
+    /// cannot be ordered. A null minimum sorts first; a null maximum absorbs everything after it.
+    /// </summary>
+    private static List<RangeInterval>? NormaliseIntervals(List<RangeInterval> items) {
+        var failed = false;
+        items.Sort((x, y) => {
+            if (x.Minimum is null) return y.Minimum is null ? 0 : -1;
+            if (y.Minimum is null) return 1;
+            if (TryCompare(x.Minimum, y.Minimum) is { } c) return c;
+            failed = true;
+            return 0;
+        });
+        if (failed) return null;
+        var result = new List<RangeInterval>();
+        var current = items[0];
+        for (var i = 1; i < items.Count; i++) {
+            var next = items[i];
+            bool overlaps;
+            if (current.Maximum is null || next.Minimum is null) overlaps = true;
+            else if (TryCompare(next.Minimum, current.Maximum) is { } c) overlaps = c <= 0;
+            else return null;
+            if (!overlaps) {
+                result.Add(current);
+                current = next;
+                continue;
+            }
+            object? max;
+            if (current.Maximum is null || next.Maximum is null) max = null;
+            else if (TryCompare(current.Maximum, next.Maximum) is { } c) max = c >= 0 ? current.Maximum : next.Maximum;
+            else return null;
+            current = new RangeInterval(current.Minimum, max);
         }
-        object? max = null;
-        if (a.Maximum is not null && b.Maximum is not null) {
-            if (TryCompare(a.Maximum, b.Maximum) is not { } c) return null;
-            max = c >= 0 ? a.Maximum : b.Maximum;
-        }
-        return min is null && max is null ? null : new RangeConstraint(min, max);
+        result.Add(current);
+        return result;
     }
 
     /// <summary>Intersection of two ranges (the tighter lower bound and the tighter upper bound).</summary>
@@ -134,6 +177,26 @@ public static class ConstraintMerge {
     }
 
     internal static ConstraintMergeResult MergeRangeResult(RangeConstraint a, RangeConstraint b) {
+        if (a.Intervals is null && b.Intervals is null)
+            return MergeSingleInterval(a, b);
+        // Meet distributes over the union: (u Ai) n (u Bj) = u (Ai n Bj). Exact emptiness: no
+        // surviving pair means no value satisfies both.
+        var survivors = new List<RangeInterval>();
+        foreach (var x in IntervalsOf(a)) {
+            foreach (var y in IntervalsOf(b)) {
+                var pair = MergeSingleInterval(new RangeConstraint(x.Minimum, x.Maximum), new RangeConstraint(y.Minimum, y.Maximum));
+                if (pair.Kind == ConstraintMergeKind.Unmergeable) return ConstraintMergeResult.Unmergeable;
+                if (pair.Net is RangeConstraint r)
+                    survivors.Add(new RangeInterval(r.Minimum, r.Maximum));
+            }
+        }
+        if (survivors.Count == 0) return ConstraintMergeResult.Empty;
+        return NormaliseIntervals(survivors) is { } normalised
+            ? ConstraintMergeResult.Of(FromIntervals(normalised))
+            : ConstraintMergeResult.Unmergeable;
+    }
+
+    private static ConstraintMergeResult MergeSingleInterval(RangeConstraint a, RangeConstraint b) {
         object? min = a.Minimum;
         if (b.Minimum is not null) {
             if (min is null) min = b.Minimum;

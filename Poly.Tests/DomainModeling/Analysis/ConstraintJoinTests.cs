@@ -20,8 +20,16 @@ public class ConstraintJoinTests {
 
     [Test]
     public async Task Join_DisjointRanges_IsTheHullNotEmpty() {
-        var joined = R(0, 10).Join(R(20, 30));
-        await Assert.That(Same(joined, R(0, 30))).IsTrue();
+        // #367 A-4 (authorised refinement): the join is the UNION {[0,10],[20,30]}; the hull is
+        // still on the record and the union is not identical to the hull.
+        var joined = (RangeConstraint)R(0, 10).Join(R(20, 30))!;
+        await Assert.That(joined.Minimum).IsEqualTo(0);
+        await Assert.That(joined.Maximum).IsEqualTo(30);
+        await Assert.That(Same(joined, R(0, 30))).IsFalse();
+        await Assert.That(joined.Intervals!.Count).IsEqualTo(2);
+        await Assert.That(ConstraintValidation.Evaluate(joined, 15)).IsEqualTo(ConstraintVerdict.Violated);
+        await Assert.That(ConstraintValidation.Evaluate(joined, 5)).IsEqualTo(ConstraintVerdict.Satisfied);
+        await Assert.That(ConstraintValidation.Evaluate(joined, 25)).IsEqualTo(ConstraintVerdict.Satisfied);
     }
 
     [Test]
@@ -57,7 +65,18 @@ public class ConstraintJoinTests {
         var d2 = new DateTime(2021, 1, 1);
         var d3 = new DateTime(2022, 1, 1);
         var d4 = new DateTime(2023, 1, 1);
-        await Assert.That(Same(R(d1, d2).Join(R(d3, d4)), R(d1, d4))).IsTrue();
+        // #367 A-4 (authorised refinement): union on the record, hull bounds still pinned.
+        var joined = (RangeConstraint)R(d1, d2).Join(R(d3, d4))!;
+        await Assert.That(joined.Minimum).IsEqualTo(d1);
+        await Assert.That(joined.Maximum).IsEqualTo(d4);
+        await Assert.That(Same(joined, R(d1, d4))).IsFalse();
+        await Assert.That(joined.Intervals!.Count).IsEqualTo(2);
+        // ConstraintValidation.Evaluate cannot rate DateTime values at all (Convert.ToDouble throws, so
+        // even a single-interval range is Violated for every DateTime); the exact union is pinned
+        // structurally instead: the gap (d2, d3) is in no interval, both intervals are kept whole.
+        await Assert.That(joined.Intervals![0]).IsEqualTo(new RangeInterval(d1, d2));
+        await Assert.That(joined.Intervals![1]).IsEqualTo(new RangeInterval(d3, d4));
+        await Assert.That(ConstraintValidation.IsInRangeUnion(new DateTime(2021, 6, 1), joined)).IsFalse();
     }
 
     [Test]
@@ -146,7 +165,14 @@ public class ConstraintJoinTests {
         var b = AbstractValue.From([R(20, 30)]);
         var joined = a.Join(b);
         await Assert.That(joined.Unsatisfiable).IsFalse();
-        await Assert.That(Same(joined.Range, R(0, 30))).IsTrue();
+        // #367 A-4 (authorised refinement): union on the record, hull still pinned.
+        var range = joined.Range!;
+        await Assert.That(range.Minimum).IsEqualTo(0);
+        await Assert.That(range.Maximum).IsEqualTo(30);
+        await Assert.That(Same(range, R(0, 30))).IsFalse();
+        await Assert.That(ConstraintValidation.Evaluate(range, 15)).IsEqualTo(ConstraintVerdict.Violated);
+        await Assert.That(ConstraintValidation.Evaluate(range, 5)).IsEqualTo(ConstraintVerdict.Satisfied);
+        await Assert.That(ConstraintValidation.Evaluate(range, 25)).IsEqualTo(ConstraintVerdict.Satisfied);
     }
 
     [Test]
@@ -193,7 +219,14 @@ public class ConstraintJoinTests {
         await Assert.That(R(0, 10).MergeResult(R(20, 30)).IsEmpty).IsTrue();
         var joined = a.Join(b);
         await Assert.That(joined.Unsatisfiable).IsFalse();
-        await Assert.That(Same(joined.Range, R(0, 30))).IsTrue();
+        // #367 A-4 (authorised refinement): union on the record, hull still pinned.
+        var range = joined.Range!;
+        await Assert.That(range.Minimum).IsEqualTo(0);
+        await Assert.That(range.Maximum).IsEqualTo(30);
+        await Assert.That(Same(range, R(0, 30))).IsFalse();
+        await Assert.That(ConstraintValidation.Evaluate(range, 15)).IsEqualTo(ConstraintVerdict.Violated);
+        await Assert.That(ConstraintValidation.Evaluate(range, 5)).IsEqualTo(ConstraintVerdict.Satisfied);
+        await Assert.That(ConstraintValidation.Evaluate(range, 25)).IsEqualTo(ConstraintVerdict.Satisfied);
     }
 
     [Test]

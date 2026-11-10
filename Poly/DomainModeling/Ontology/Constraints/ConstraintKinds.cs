@@ -103,9 +103,10 @@ internal static class ConstraintKinds {
             Row<RangeConstraint>(
                 merge: ConstraintMerge.MergeRangeResult,
                 join: ConstraintMerge.JoinRange,
-                identical: (x, y) => Equals(x.Minimum, y.Minimum) && Equals(x.Maximum, y.Maximum),
-                evaluate: (r, v) => ConstraintValidation.Of(ConstraintValidation.IsInRange(v, r.Minimum, r.Maximum)),
+                identical: (x, y) => Equals(x.Minimum, y.Minimum) && Equals(x.Maximum, y.Maximum) && Equals(x.Intervals, y.Intervals),
+                evaluate: (r, v) => ConstraintValidation.Of(ConstraintValidation.IsInRangeUnion(v, r)),
                 describe: ConstraintValidation.FormatRange,
+                // A union has no DSL word; it prints as its hull, a sound widening.
                 print: (r, _) => $"range({Convert.ToString(r.Minimum, CultureInfo.InvariantCulture)}, {Convert.ToString(r.Maximum, CultureInfo.InvariantCulture)})"),
             Row<LengthConstraint>(
                 merge: (a, b) => ConstraintMerge.MergeLength(a, b) is { } length

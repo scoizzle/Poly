@@ -36,9 +36,14 @@ internal static class ConstraintValidation {
         return ConstraintKinds.Of(constraint)?.Describe(constraint) ?? constraint.GetType().Name;
     }
 
-    internal static string FormatRange(RangeConstraint r) {
-        var lo = r.Minimum is not null ? FormatValue(r.Minimum) : "−∞";
-        var hi = r.Maximum is not null ? FormatValue(r.Maximum) : "+∞";
+    internal static string FormatRange(RangeConstraint r) =>
+        r.Intervals is { } set
+            ? string.Join(" ∪ ", set.Select(i => FormatInterval(i.Minimum, i.Maximum)))
+            : FormatInterval(r.Minimum, r.Maximum);
+
+    private static string FormatInterval(object? min, object? max) {
+        var lo = min is not null ? FormatValue(min) : "−∞";
+        var hi = max is not null ? FormatValue(max) : "+∞";
         return $"range({lo}, {hi})";
     }
 
@@ -48,6 +53,12 @@ internal static class ConstraintValidation {
     };
 
     // ── Individual constraint checks ──────────────────────────────────────
+
+    /// <summary>In any interval of a union (exact), or in the single interval of a plain range.</summary>
+    internal static bool IsInRangeUnion(object? value, RangeConstraint range) =>
+        range.Intervals is { } set
+            ? set.Any(i => IsInRange(value, i.Minimum, i.Maximum))
+            : IsInRange(value, range.Minimum, range.Maximum);
 
     internal static bool IsInRange(object? value, object? min, object? max) {
         if (value is null) return false; // null is never in range

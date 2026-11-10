@@ -69,6 +69,8 @@ public abstract class DomainExpressionRewriteBase : DomainExpressionDispatch<Dom
     protected override DomainExpression CountExpr(CountExpr e) =>
         e with { Body = e.Body is null ? null : Route(e.Body) };
     protected override DomainExpression SumExpr(SumExpr e) => e;
+    protected override DomainExpression FunctionCall(FunctionCall e) =>
+        e with { Arguments = e.Arguments.Select(Route).ToList() };
     protected override DomainExpression RelationshipNavigation(RelationshipNavigation e) =>
         e with { TargetProperty = Route(e.TargetProperty) };
 

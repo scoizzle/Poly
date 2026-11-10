@@ -1,6 +1,7 @@
 using System.Globalization;
 
 using Poly.DomainModeling.Evolution;
+using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Ontology.Bootstrap;
 using Poly.DomainModeling.Ontology.Contract;
@@ -141,6 +142,10 @@ public sealed class DomainResolver : DslCursor {
         while (Current.Kind == TokenKind.Identifier || Current.Kind == TokenKind.Public) {
             if (TryTakeVisibility(out var visibility)) {
                 ParseMarkedTop(changes, visibility);
+                continue;
+            }
+            if (IsFunctionDeclarationStart()) {
+                ParseFunction(changes);
                 continue;
             }
             switch (MatchRule("top")?.PatternName) {
@@ -1164,7 +1169,7 @@ public sealed class DomainResolver : DslCursor {
                     $"Define '{typeWord.Text}' properties directly on '{name}'.");
             }
         }
-        return Error($"Expected 'entity', 'enum', 'value', 'contract', or 'bind' definition, got '{Current.Text}'");
+        return Error($"Expected 'entity', 'enum', 'value', 'contract', 'function', or 'bind' definition, got '{Current.Text}'");
     }
 
     /// <summary>
@@ -1276,6 +1281,62 @@ public sealed class DomainResolver : DslCursor {
         Expect(TokenKind.Colon);
         ExpectWord("value");
         FinishValueType(changes, name, Visibility.Internal);
+    }
+
+    /// <summary>
+    /// A top-level <c>function</c> declaration starts with the word and is not the
+    /// legacy <c>function: entity</c> name form. A malformed <c>function (…)</c>
+    /// head still enters the parser so the error names the missing function name.
+    /// </summary>
+    private bool IsFunctionDeclarationStart() =>
+        Current.Kind == TokenKind.Identifier
+        && string.Equals(Current.Text, "function", StringComparison.Ordinal)
+        && !PeekIs(TokenKind.Colon);
+
+    /// <summary>
+    /// <c>function Name(p: T, …): T = expr</c> — one expression body. Parameter names
+    /// bind inside the body as <see cref="ParameterAccess"/>, so parse → print →
+    /// parse stays lossless beyond the text.
+    /// </summary>
+    private void ParseFunction(List<DomainChange> changes) {
+        Advance(); // 'function'
+        if (Current.Kind != TokenKind.Identifier)
+            throw Error($"Expected function name after 'function', got '{Current.Text}'");
+        var name = Current.Text;
+        Advance();
+
+        Expect(TokenKind.LParen);
+        var parameters = new List<Property>();
+        while (Current.Kind != TokenKind.RParen) {
+            var parameterName = ExpectIdentifier(TokenKind.Identifier, "parameter name");
+            Expect(TokenKind.Colon);
+            var parameterType = ParseTypeName();
+            parameters.Add(new Property(parameterName, new DomainTypeReference(parameterType), []));
+            if (Current.Kind == TokenKind.Comma) {
+                Advance();
+                if (Current.Kind == TokenKind.RParen)
+                    throw Error($"Trailing comma in function '{name}' parameter list");
+            }
+            else if (Current.Kind != TokenKind.RParen) {
+                throw Error($"Expected ',' or ')' in function '{name}' parameter list, got '{Current.Text}'");
+            }
+        }
+        Expect(TokenKind.RParen);
+        Expect(TokenKind.Colon);
+        var returnType = new DomainTypeReference(ParseTypeName());
+        if (Current.Kind != TokenKind.SingleEq)
+            throw Error($"Expected '=' after function '{name}' return type, got '{Current.Text}'");
+        Advance();
+
+        var parameterNames = parameters.Select(p => p.Name).ToHashSet(StringComparer.Ordinal);
+        var body = new ParameterBinder(parameterNames).Route(ParseExpression());
+        changes.Add(new AddFunctionChange(name, parameters, returnType, body));
+    }
+
+    /// <summary>Rewrites body identifiers that name a declared parameter to parameter access.</summary>
+    private sealed class ParameterBinder(ISet<string> parameterNames) : DomainExpressionRewriteBase {
+        protected override DomainExpression PropertyAccess(PropertyAccess e) =>
+            parameterNames.Contains(e.Name) ? DomainExpression.Parameter(e.Name) : e;
     }
 
     private void FinishValueType(List<DomainChange> changes, string name, Visibility visibility) {

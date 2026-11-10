@@ -70,8 +70,10 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
         var contexts = new List<ActionStageInvariant>();
         foreach (var (stageName, stage) in ValidStages(action, entity)) {
             var preconditions = CollectPreconditions(action, entity, stage);
-            var env = BuildInitialEnv(entity, preconditions);
-            ReportUnsatisfiablePreconditions(context, action, stageName, env);
+            var conflicts = new List<RelationConflict>();
+            var env = BuildInitialEnv(entity, preconditions, conflicts);
+            var scalarEnv = conflicts.Count == 0 ? env : BuildInitialEnv(entity, preconditions, relations: false);
+            ReportUnsatisfiablePreconditions(context, action, stageName, env, scalarEnv, conflicts);
             var narrowed = env.ToDictionary(kv => kv.Key, kv => kv.Value.NumericRange, StringComparer.Ordinal);
             var merged = env.ToDictionary(kv => kv.Key, kv => (IReadOnlyList<Constraint>)kv.Value.Constraints, StringComparer.Ordinal);
             var postconditions = new List<EffectPostcondition>();
@@ -107,22 +109,29 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
     /// <summary>The initial abstract environment: each property's declared constraints as an
     /// <see cref="AbstractValue"/>, refined by every precondition's bounds.</summary>
     private static Dictionary<string, AbstractValue> BuildInitialEnv(
-        Entity entity, IReadOnlyList<Policy> preconditions) {
+        Entity entity, IReadOnlyList<Policy> preconditions,
+        List<RelationConflict>? conflicts = null, bool relations = true) {
         var env = new Dictionary<string, AbstractValue>(StringComparer.Ordinal);
         foreach (var prop in entity.Properties)
             env[prop.Name] = AbstractValue.From(prop.Constraints);
         foreach (var policy in preconditions)
-            Refine(env, policy.Expression);
+            Refine(env, policy.Expression, conflicts, relations);
         return env;
     }
 
+    /// <summary>A relation (<c>Start &lt; End</c>) whose refinement is what made two previously
+    /// satisfiable properties unsatisfiable: one cause, reported once (#367 B-7).</summary>
+    private readonly record struct RelationConflict(string Left, string Right, RelationalOrdering Orderings);
+
     /// <summary>Narrows the symbols an environment mentions by a boolean condition's bounds
     /// (a guard, an if-branch, or a where-filter). Single-primitive refinement.</summary>
-    private static void Refine(Dictionary<string, AbstractValue> env, DomainExpression condition) {
+    private static void Refine(
+        Dictionary<string, AbstractValue> env, DomainExpression condition,
+        List<RelationConflict>? conflicts = null, bool relations = true) {
         foreach (var conjunct in FlattenAnds(condition)) {
             if (conjunct is not Comparison cmp) continue;
             if (TryGetRelation(cmp, out var left, out var right, out var orderings)) {
-                RefineRelation(env, left, right, orderings);
+                if (relations) RefineRelation(env, left, right, orderings, conflicts);
                 continue;
             }
             if (!TryGetComparisonBound(cmp, out var propName, out double value, out var bound)) continue;
@@ -168,8 +177,10 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
     /// properties' ranges decide it: a relation no value pair can satisfy makes the symbols
     /// unsatisfiable. An undecidable relation is only recorded, never assumed true or false.</summary>
     private static void RefineRelation(
-        Dictionary<string, AbstractValue> env, string left, string right, RelationalOrdering orderings) {
+        Dictionary<string, AbstractValue> env, string left, string right, RelationalOrdering orderings,
+        List<RelationConflict>? conflicts = null) {
         if (!env.TryGetValue(left, out var l) || !env.TryGetValue(right, out var r)) return;
+        var wasBottom = l.Unsatisfiable || r.Unsatisfiable;
         var relation = new RelationalConstraint(right, orderings);
         l = l.Narrow(relation);
         r = r.Narrow(relation.MirroredFrom(left));
@@ -178,6 +189,8 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
             l = l.AsUnsatisfiable();
             r = r.AsUnsatisfiable();
         }
+        if (!wasBottom && (l.Unsatisfiable || r.Unsatisfiable))
+            conflicts?.Add(new RelationConflict(left, right, orderings));
         env[left] = l;
         env[right] = r;
     }
@@ -572,14 +585,31 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
 
     private static void ReportUnsatisfiablePreconditions(
         AnalysisContext context, Action action, string? stageName,
-        IReadOnlyDictionary<string, AbstractValue> env) {
+        IReadOnlyDictionary<string, AbstractValue> env,
+        IReadOnlyDictionary<string, AbstractValue> scalarEnv,
+        IReadOnlyList<RelationConflict> conflicts) {
+        var prefix = $"Action '{action.Name}'{(stageName is null ? "" : $" in stage '{stageName}'")} has unsatisfiable preconditions: ";
+        // A property is reported by name only when its own (non-relational) constraints are empty;
+        // a property that only the relation emptied is covered by the relation's single report.
         foreach (var (prop, value) in env) {
             if (!value.Unsatisfiable) continue;
+            if (!(scalarEnv.TryGetValue(prop, out var scalar) && scalar.Unsatisfiable)
+                && conflicts.Any(c => c.Left == prop || c.Right == prop))
+                continue;
             context.ReportError(
                 action,
-                $"Action '{action.Name}'{(stageName is null ? "" : $" in stage '{stageName}'")} has unsatisfiable " +
-                $"preconditions: its guard policies narrow property '{prop}' to an empty admissible set " +
+                prefix + $"its guard policies narrow property '{prop}' to an empty admissible set " +
                 "given the property's declared constraint.",
+                DomainModelDiagnosticCodes.ConstraintSatisfiability);
+        }
+        var seen = new HashSet<(string, string)>();
+        foreach (var c in conflicts) {
+            var pair = string.CompareOrdinal(c.Left, c.Right) <= 0 ? (c.Left, c.Right) : (c.Right, c.Left);
+            if (!seen.Add(pair)) continue;
+            context.ReportError(
+                action,
+                prefix + $"the relation '{c.Left} {RelationalConstraint.Symbol(c.Orderings)} {c.Right}' between " +
+                $"properties '{c.Left}' and '{c.Right}' contradicts the other constraints on them.",
                 DomainModelDiagnosticCodes.ConstraintSatisfiability);
         }
     }

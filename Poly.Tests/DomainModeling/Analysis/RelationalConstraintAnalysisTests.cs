@@ -348,6 +348,107 @@ public class RelationalConstraintAnalysisTests {
         await Assert.That(bottom.Merge(AbstractValue.From([new EqualityConstraint("x")])).Unsatisfiable).IsTrue();
     }
 
+    private static List<Diagnostic> UnsatisfiableErrors(EvolutionResult r) => r.Analysis.Diagnostics
+        .Where(d => d.Severity == DiagnosticSeverity.Error && d.Message.Contains("unsatisfiable preconditions"))
+        .ToList();
+
+    [Test]
+    public async Task TwoContradictoryRelations_ReportOneErrorNamingTheRelation() {
+        // #367 B-7: one relation contradiction is one cause, so one report, and it names the relation.
+        var result = Parse("""
+            domain Test
+            Item: entity {
+              Start: Number
+              End: Number
+              Before: policy { Start < End }
+              After: policy { Start > End }
+              Run: action
+                require Before
+                require After
+              {
+                assign Start to Start + 0
+              }
+            }
+            """);
+        var errors = UnsatisfiableErrors(result);
+        await Assert.That(errors.Count).IsEqualTo(1);
+        await Assert.That(errors[0].Code).IsEqualTo(DomainModelDiagnosticCodes.ConstraintSatisfiability);
+        await Assert.That(errors[0].Message).IsEqualTo(
+            "Action 'Run' has unsatisfiable preconditions: the relation 'Start > End' between properties " +
+            "'Start' and 'End' contradicts the other constraints on them.");
+        await Assert.That(result.Succeeded).IsFalse();
+    }
+
+    [Test]
+    public async Task RelationContradictedByRanges_ReportOneErrorNamingTheRelation() {
+        var result = Parse("""
+            domain Test
+            Item: entity {
+              Start: Number range(10, 20)
+              End: Number range(0, 5)
+              Ordered: policy { Start < End }
+              Run: action
+                require Ordered
+              {
+                assign Start to Start + 0
+              }
+            }
+            """);
+        var errors = UnsatisfiableErrors(result);
+        await Assert.That(errors.Count).IsEqualTo(1);
+        await Assert.That(errors[0].Message).IsEqualTo(
+            "Action 'Run' has unsatisfiable preconditions: the relation 'Start < End' between properties " +
+            "'Start' and 'End' contradicts the other constraints on them.");
+    }
+
+    [Test]
+    public async Task SinglePropertyContradiction_StillReportsOneErrorNamingTheProperty() {
+        var result = Parse("""
+            domain Test
+            Item: entity {
+              Qty: Number range(0, 5)
+              Big: policy { Qty >= 10 }
+              Run: action
+                require Big
+              {
+                assign Qty to 1
+              }
+            }
+            """);
+        var errors = UnsatisfiableErrors(result);
+        await Assert.That(errors.Count).IsEqualTo(1);
+        await Assert.That(errors[0].Message).IsEqualTo(
+            "Action 'Run' has unsatisfiable preconditions: its guard policies narrow property 'Qty' to an " +
+            "empty admissible set given the property's declared constraint.");
+    }
+
+    [Test]
+    public async Task RelationContradictionPlusSeparateScalarContradiction_ReportTwoErrors() {
+        // One report per cause: the relation conflict and Qty's own range conflict are different causes.
+        var result = Parse("""
+            domain Test
+            Item: entity {
+              Start: Number
+              End: Number
+              Qty: Number range(0, 5)
+              Before: policy { Start < End }
+              After: policy { Start > End }
+              Big: policy { Qty >= 10 }
+              Run: action
+                require Before
+                require After
+                require Big
+              {
+                assign Qty to 1
+              }
+            }
+            """);
+        var errors = UnsatisfiableErrors(result);
+        await Assert.That(errors.Count).IsEqualTo(2);
+        await Assert.That(errors.Count(e => e.Message.Contains("the relation 'Start > End'"))).IsEqualTo(1);
+        await Assert.That(errors.Count(e => e.Message.Contains("property 'Qty'"))).IsEqualTo(1);
+    }
+
     [Test]
     public async Task ContradictionThenRestatement_IsStillUnsatisfiablePrecondition() {
         var result = Parse("""

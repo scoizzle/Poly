@@ -45,6 +45,7 @@ internal static class NodeFactCorpus {
         ("BreakStatement", "while (true) { break; }"),
         ("ContinueStatement", "while (true) { continue; }"),
         ("GotoStatement", "var x = 0L; goto done; done: x = 1L;"),
+        ("YieldStatement", "class C { IEnumerable<long> M() { yield return 1L; yield break; } }"),
         ("TryCatchFinally", "try { var y = 1L; } catch { var z = 2L; }"),
         ("UsingStatement", "using var d = new System.IO.MemoryStream();"),
         ("SwitchStatement", "switch (1L) { case 1L: break; default: break; }"),

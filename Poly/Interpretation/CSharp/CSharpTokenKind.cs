@@ -67,6 +67,7 @@ public enum CSharpTokenKind {
     KwGoto,
     KwBreak,
     KwContinue,
+    KwYield,
     KwGet,
     KwSet,
     KwInit,

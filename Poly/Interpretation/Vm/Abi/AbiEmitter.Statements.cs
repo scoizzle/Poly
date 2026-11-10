@@ -163,6 +163,14 @@ public static partial class AbiEmitter {
     }
 
     private static Expression EmitBlock(Block block, Context ctx) {
+        // A resumable (iterator or async) body's block is a resume region: the yields and
+        // awaits it owns directly resume through a switch of their own (see Context.EndRegion).
+        var region = ctx.IsResumableBody ? ctx.BeginRegion() : null;
+        var emitted = EmitBlockBody(block, ctx);
+        return region is null ? emitted : ctx.EndRegion(region, emitted);
+    }
+
+    private static Expression EmitBlockBody(Block block, Context ctx) {
         ctx.PushScope();
         var varInitExprs = new List<Expression>();
         var releases = new List<Expression>();
@@ -740,6 +748,54 @@ public static partial class AbiEmitter {
         return Block(resumed);
     }
 
+    /// <summary>
+    /// <c>yield break</c> and <c>yield return</c> in an iterator body (#338 slice 2). A yield
+    /// stores the value's frame word, the owning region's id and its region-local step, spills
+    /// like a <see cref="SuspendNode"/>, marks the body as having yielded and leaves through the
+    /// exit. The resume label follows: the owning region's inner switch jumps to it, and the
+    /// reload is the first thing after it, because a resumed body starts with every CLR local zero.
+    /// </summary>
+    private static Expression EmitYield(YieldStatement ys, Context ctx) {
+        if (!ctx.IsIteratorBody)
+            throw new UnresumableBodyRejection(
+                $"VM compile rejected: '{ys}' is only executable in the body of an iterator method returning IEnumerable<T>.");
+        if (ys.Value is null)
+            return Block(
+                Assign(ctx.FrameSlotRead(ctx.IteratorMovedSlot), Constant(0L)),
+                Goto(ctx.ExitLabel));
+        if (ctx.InUnresumable)
+            throw new InvalidOperationException(
+                $"VM compile rejected: '{ys}' cannot resume inside try, catch, finally, using, or foreach (iterator exception semantics are a later slice).");
+        var region = ctx.CurrentRegion
+            ?? throw new InvalidOperationException($"VM compile rejected: '{ys}' has no enclosing resume region.");
+        var element = ctx.IteratorElement!;
+
+        var ring = ctx.OpenRing();
+        var value = ring.AddValue(CompileNode(ys.Value, ctx));
+        var (step, resumeLabel) = region.AddYield();
+        var word = RingCodec.ToFrame(
+            RingCodec.ToClr(value.Read, element, ys.Value, ctx.Analysis, ctx.HeapLocal),
+            element, ctx.HeapLocal);
+
+        var spill = new List<Expression>();
+        var reload = new List<Expression>();
+        // The yielded value's own slot is consumed by the store below, so the barrier starts at it.
+        ctx.SpillBarrier(ring.Base, spill, reload);
+
+        var suspended = new List<Expression> {
+            Assign(ctx.FrameSlotRead(ctx.IteratorCurrentSlot), word),
+            Assign(ctx.FrameSlotRead(region.StepSlot), Constant((long)step)),
+            Assign(ctx.FrameSlotRead(ctx.ResumeRegionSlot), Constant((long)region.Id)),
+        };
+        suspended.AddRange(spill);
+        suspended.Add(Assign(ctx.FrameSlotRead(ctx.IteratorMovedSlot), Constant(1L)));
+        suspended.Add(Goto(ctx.ExitLabel));
+        suspended.Add(Label(resumeLabel));
+        suspended.AddRange(reload);
+        suspended.Add(Empty());
+        return ring.Then(Block(suspended));
+    }
+
     private static Expression EmitParameter(Parameter p, Context ctx) {
         int slot = ctx.AllocSlot();
         if (ctx.TryGetCapture(p, out int capIndex)) {
@@ -1047,9 +1103,115 @@ public static partial class AbiEmitter {
             : typeof(Exception);
     }
 
+    /// <summary>
+    /// <c>return</c> in a resumable async body: the value's frame word goes to the private
+    /// frame's result slot, the body reports <c>completed</c>, and control leaves through the exit.
+    /// <see cref="VmAsyncMachine{T}"/> turns that into the method task's result.
+    /// </summary>
+    private static Expression EmitAsyncReturn(Return ret, Context ctx) {
+        var status = ctx.FrameSlotRead(ctx.AsyncStatusSlot);
+        var complete = Block(Assign(status, Constant(AsyncCompleted)), Goto(ctx.ExitLabel));
+        if (ret.Value is null) {
+            if (ctx.AsyncReturn != typeof(Task))
+                throw new InvalidOperationException(
+                    $"VM compile rejected: async method returning '{ctx.AsyncReturn}' must return a value.");
+            return complete;
+        }
+        if (ctx.AsyncReturn == typeof(Task))
+            throw new InvalidOperationException(
+                "VM compile rejected: async method returning Task cannot return a value.");
+        var resultType = ctx.AsyncReturn!.GetGenericArguments()[0];
+        var ring = ctx.OpenRing();
+        var result = ring.AddValue(CompileNode(ret.Value, ctx));
+        var yieldedClr = ctx.Analysis?.GetResolvedType(ret.Value)?.GetRuntimeType();
+        if (!IsTaskLike(resultType) && IsTaskLike(yieldedClr))
+            throw new InvalidOperationException(
+                $"VM compile rejected: async method returning '{ctx.AsyncReturn}' yields '{yieldedClr}' — return the value, not the task.");
+        var word = RingCodec.ToFrame(
+            RingCodec.ToClr(result.Read, resultType, ret.Value, ctx.Analysis, ctx.HeapLocal),
+            resultType, ctx.HeapLocal);
+        return ring.Then(Block(
+            Assign(ctx.FrameSlotRead(ctx.AsyncResultSlot), word),
+            complete));
+    }
+
+    /// <summary>
+    /// <c>await</c> in a resumable async body. A completed task is read inline. An incomplete one
+    /// parks the task's handle, the region and step to resume at, and the live locals in the
+    /// private frame, reports <c>suspended</c> and leaves through the exit; the machine resumes the
+    /// body when the task completes. The resume label is followed by the reload and then the same
+    /// read of the (now complete) task, so a faulted task throws at the <c>await</c>.
+    /// </summary>
+    private static Expression EmitResumableAwait(Await await, Context ctx) {
+        if (ctx.InUnresumable)
+            throw new InvalidOperationException(
+                $"VM compile rejected: '{await}' cannot suspend inside try, catch, finally, using, or foreach.");
+        var operandType = ctx.Analysis?.GetResolvedType(await.Operand)?.GetRuntimeType()
+            ?? throw new InvalidOperationException(
+                $"VM compile rejected: Await operand '{await.Operand}' has no resolved CLR type.");
+        var region = ctx.CurrentRegion
+            ?? throw new InvalidOperationException($"VM compile rejected: '{await}' has no enclosing resume region.");
+
+        var ring = ctx.OpenRing();
+        var slot = ring.AddValue(CompileNode(await.Operand, ctx));
+        Expression Awaited(Expression handle) =>
+            Convert(Call(ctx.HeapLocal, HeapUnsafeGet, Convert(handle, typeof(int))), operandType);
+
+        Type? resultType = null;
+        MethodInfo helper;
+        if (operandType == typeof(Task)) {
+            helper = AwaitTaskVoidInfo;
+        }
+        else if (operandType.IsGenericType && operandType.GetGenericTypeDefinition() == typeof(Task<>)) {
+            resultType = operandType.GetGenericArguments()[0];
+            helper = AwaitTaskResultInfo.GetGenericMethodDefinition().MakeGenericMethod(resultType);
+        }
+        else {
+            throw new InvalidOperationException(
+                $"VM compile rejected: '{await}' awaits '{operandType}', which cannot suspend; only Task and Task<T> do.");
+        }
+
+        var (step, resumeLabel) = region.AddYield();
+        var spill = new List<Expression>();
+        var reload = new List<Expression>();
+        // The operand's own slot is parked below, so the barrier starts at it.
+        ctx.SpillBarrier(ring.Base, spill, reload);
+        var done = Label("await_done");
+        var parts = new List<Expression> {
+            IfThen(Property(Awaited(slot.Read), nameof(Task.IsCompleted)), Goto(done)),
+            Assign(ctx.FrameSlotRead(ctx.AsyncAwaitedSlot), slot.Read),
+            Assign(ctx.FrameSlotRead(region.StepSlot), Constant((long)step)),
+            Assign(ctx.FrameSlotRead(ctx.ResumeRegionSlot), Constant((long)region.Id)),
+        };
+        parts.AddRange(spill);
+        parts.Add(Assign(ctx.FrameSlotRead(ctx.AsyncStatusSlot), Constant(AsyncSuspended)));
+        parts.Add(Goto(ctx.ExitLabel));
+        parts.Add(Label(resumeLabel));
+        parts.AddRange(reload);
+        parts.Add(Assign(slot.Read, ctx.FrameSlotRead(ctx.AsyncAwaitedSlot)));
+        parts.Add(Label(done));
+
+        var call = Call(helper, Awaited(slot.Read));
+        parts.Add(resultType is null
+            ? Block(call, Assign(slot.Read, Constant(0L)))
+            : Assign(slot.Read, RingCodec.ToFrame(call, resultType, ctx.HeapLocal)));
+        return ring.Then(Block(parts));
+    }
+
     /// <summary>Return statement: write value to frame slot, set SP, jump to exit.
     /// A null <see cref="Return.Value"/> is a void return (no slot write).</summary>
     private static Expression EmitReturn(Return ret, Context ctx) {
+        if (ctx.IsIteratorBody) {
+            // C# rejects a value return in an iterator; a bare return finishes it, as yield break does.
+            if (ret.Value is not null)
+                throw new InvalidOperationException(
+                    "VM compile rejected: an iterator method cannot return a value; use yield return / yield break.");
+            return Block(
+                Assign(ctx.FrameSlotRead(ctx.IteratorMovedSlot), Constant(0L)),
+                Goto(ctx.ExitLabel));
+        }
+        if (ctx.IsAsyncBody)
+            return EmitAsyncReturn(ret, ctx);
         if (ret.Value is null) {
             if (ctx.AsyncReturn is not null)
                 return Block(

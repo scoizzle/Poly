@@ -292,6 +292,12 @@ public sealed class CSharpWriter {
                 sb.Append(Pad(indent));
                 sb.AppendLine(Render("statement", "continue"));
                 return;
+            case YieldStatement yieldStmt:
+                sb.Append(Pad(indent));
+                sb.AppendLine(yieldStmt.Value is null
+                    ? Render("statement", "yield-break")
+                    : Render("statement", "yield-return", " " + Expr(yieldStmt.Value)));
+                return;
             case GotoStatement gotoStmt:
                 sb.Append(Pad(indent));
                 sb.AppendLine(RenderFills("statement", "goto", Names(("target", gotoStmt.Target))));

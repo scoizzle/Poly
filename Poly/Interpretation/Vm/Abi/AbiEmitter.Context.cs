@@ -97,6 +97,123 @@ public static partial class AbiEmitter {
                     defaultBody, cases));
         }
 
+        // ── Iterator body: hierarchical resume (#338 slice 2) ──────────────────
+
+        /// <summary>True while emitting an iterator method body. A yield resumes through a
+        /// two-level dispatch kept in the iterator's private frame, not through
+        /// <see cref="EmitPcDispatch"/>.</summary>
+        public bool IsIteratorBody { get; set; }
+
+        /// <summary>True while emitting a resumable async method body (#337 slice 2). It resumes
+        /// through the same hierarchical region dispatch as an iterator: an <c>await</c> of an
+        /// incomplete task is the suspension point, <c>return</c> completes the body.</summary>
+        public bool IsAsyncBody { get; set; }
+
+        /// <summary>A body that resumes through the region dispatch: an iterator or an async method.</summary>
+        public bool IsResumableBody => IsIteratorBody || IsAsyncBody;
+
+        /// <summary>Frame slot the async body reports through: 1 = suspended at an await,
+        /// 2 = completed (<see cref="VmAsyncMachine{T}"/> reads it after every step).</summary>
+        public int AsyncStatusSlot { get; set; }
+
+        /// <summary>Frame slot holding the word of the value the async body returned.</summary>
+        public int AsyncResultSlot { get; set; }
+
+        /// <summary>Frame slot holding the handle of the task the body suspended on.</summary>
+        public int AsyncAwaitedSlot { get; set; }
+
+        /// <summary>The CLR element type an iterator body yields.</summary>
+        public Type? IteratorElement { get; set; }
+
+        /// <summary>Frame slot holding the region id to resume into (0 = fresh start).</summary>
+        public int ResumeRegionSlot { get; set; }
+
+        /// <summary>Frame slot the body writes 1 to when it yielded and 0 when it finished.</summary>
+        public int IteratorMovedSlot { get; set; }
+
+        /// <summary>Frame slot holding the word of the value last yielded.</summary>
+        public int IteratorCurrentSlot { get; set; }
+
+        /// <summary>A fresh frame word that nothing else owns.</summary>
+        public int AllocFrameSlot() => _nextFrameSlot++;
+
+        private readonly List<ResumeRegion> _regions = new();
+        private readonly Stack<ResumeRegion> _openRegions = new();
+
+        /// <summary>The region that owns a yield compiled now.</summary>
+        internal ResumeRegion? CurrentRegion => _openRegions.Count > 0 ? _openRegions.Peek() : null;
+
+        /// <summary>Open a region: a block (or the body itself) whose directly contained yields
+        /// resume through one switch of their own.</summary>
+        internal ResumeRegion BeginRegion() {
+            var region = new ResumeRegion(_regions.Count + 1, AllocFrameSlot());
+            _regions.Add(region);
+            _openRegions.Push(region);
+            return region;
+        }
+
+        /// <summary>Close <paramref name="region"/> around <paramref name="body"/>. With no
+        /// yield of its own the body is returned untouched. Otherwise the body is preceded by
+        /// the region's entry and its inner switch (region step to yield resume label); normal
+        /// flow jumps over both, so a stale step can never redirect a fresh entry.</summary>
+        internal Expression EndRegion(ResumeRegion region, Expression body) {
+            _openRegions.Pop();
+            if (region.Yields.Count == 0)
+                return body;
+            var bodyStart = Label($"region_{region.Id}_body");
+            var cases = new System.Linq.Expressions.SwitchCase[region.Yields.Count];
+            for (int i = 0; i < cases.Length; i++)
+                cases[i] = System.Linq.Expressions.Expression.SwitchCase(
+                    Goto(region.Yields[i]), Constant(i + 1));
+            var inner = System.Linq.Expressions.Expression.Switch(
+                Convert(FrameSlotRead(region.StepSlot), typeof(int)),
+                Empty(), cases);
+            return Block(
+                Goto(bodyStart),
+                Label(region.EntryLabel),
+                inner,
+                Label(bodyStart),
+                body);
+        }
+
+        /// <summary>The outer switch: the region id in the private frame selects the region
+        /// whose entry label the body resumes at. Fresh start (id 0) falls through.</summary>
+        internal Expression EmitRegionDispatch() {
+            var owned = _regions.Where(r => r.Yields.Count > 0).ToArray();
+            if (owned.Length == 0)
+                return Empty();
+            var cases = new System.Linq.Expressions.SwitchCase[owned.Length];
+            for (int i = 0; i < owned.Length; i++)
+                cases[i] = System.Linq.Expressions.Expression.SwitchCase(
+                    Goto(owned[i].EntryLabel), Constant(owned[i].Id));
+            return System.Linq.Expressions.Expression.Switch(
+                Convert(FrameSlotRead(ResumeRegionSlot), typeof(int)),
+                Empty(), cases);
+        }
+
+        /// <summary>A region of an iterator body: the yields it owns directly, each with the
+        /// resume label that region's inner switch jumps to. The yield's index plus one is the
+        /// region-local step stored in <see cref="StepSlot"/>.</summary>
+        internal sealed class ResumeRegion {
+            public ResumeRegion(int id, int stepSlot) {
+                Id = id;
+                StepSlot = stepSlot;
+                EntryLabel = Label($"region_{id}_entry");
+            }
+
+            public int Id { get; }
+            public int StepSlot { get; }
+            public LabelTarget EntryLabel { get; }
+            public List<LabelTarget> Yields { get; } = new();
+
+            /// <summary>Register a yield; returns its step (1-based) and resume label.</summary>
+            public (int Step, LabelTarget Label) AddYield() {
+                var label = Label($"region_{Id}_resume_{Yields.Count + 1}");
+                Yields.Add(label);
+                return (Yields.Count, label);
+            }
+        }
+
         public Expression StatePcFlush => Property(_stateParam, "ProgramCounter");
         public CompilationMode Mode { get; set; }
         public Expression? FunctionTableExpr { get; set; }

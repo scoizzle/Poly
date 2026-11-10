@@ -144,6 +144,9 @@ public static partial class AbiEmitter {
                     if (asyncReturn is null && ContainsAwait(astMethod.DefinitionNode.Body!))
                         throw new InvalidOperationException(
                             $"VM compile rejected: method '{astMethod.Name}' contains 'await' but is not an async method returning Task or Task<T>.");
+                    var iteratorElement = IteratorElementType(astMethod, ctx);
+                    bool asyncResumable = asyncReturn is not null
+                        && IsResumableAsync(astMethod.DefinitionNode.Body!, asyncReturn, ctx);
                     var table = TryCompileAstCallable(
                         astMethod.DefinitionNode,
                         astMethod.DefinitionNode.Body!,
@@ -151,9 +154,12 @@ public static partial class AbiEmitter {
                         ctx,
                         instanceSlot: !astMethod.IsStatic,
                         rejection: out var rejection,
-                        asyncReturn: asyncReturn);
+                        asyncReturn: asyncReturn,
+                        iteratorElement: iteratorElement,
+                        asyncResumable: asyncResumable);
                     if (table is not null)
-                        return EmitAstInvoke(invoke, member, astMethod, table, ctx);
+                        return EmitAstInvoke(invoke, member, astMethod, table, ctx, iteratorElement,
+                            asyncResumable ? asyncReturn : null);
                     // The body exists and resolved to this AST method, so a name-dispatched
                     // fallback can only be right on an instance that is not ours to shape.
                     // `new T()` is the VM's own dictionary, which has no such method: emit
@@ -505,9 +511,16 @@ public static partial class AbiEmitter {
         AnalysisResult analysis,
         HashSet<object> capturedBindings,
         bool instanceSlot = false,
-        Type? asyncReturn = null) {
+        Type? asyncReturn = null,
+        Type? iteratorElement = null,
+        bool asyncResumable = false) {
 
         var fnCtx = new Context();
+        if (iteratorElement is not null) {
+            fnCtx.IsIteratorBody = true;
+            fnCtx.IteratorElement = iteratorElement;
+        }
+        fnCtx.IsAsyncBody = asyncResumable;
         fnCtx.FunctionTableExpr = Constant(functionTable);
         fnCtx.Mode = mode;
         fnCtx.Analysis = analysis;
@@ -547,28 +560,133 @@ public static partial class AbiEmitter {
             fnCtx.DeclareParameter(param);
         fnCtx.ReserveFrameSlots(parameters.Count + (instanceSlot ? 1 : 0));
 
-        // Compile body
-        var bodyCompiled = CompileNode(body, fnCtx);
-        bodyExprs.Add(bodyCompiled);
+        if (iteratorElement is not null) {
+            // The iterator's private frame: the arguments, then the resume state and the answer
+            // the body leaves for VmIterator<T>.MoveNext.
+            fnCtx.ResumeRegionSlot = fnCtx.AllocFrameSlot();
+            fnCtx.IteratorMovedSlot = fnCtx.AllocFrameSlot();
+            fnCtx.IteratorCurrentSlot = fnCtx.AllocFrameSlot();
+            bodyExprs.Add(Assign(fnCtx.FrameSlotRead(fnCtx.IteratorMovedSlot), Constant(0L)));
+            var rootRegion = fnCtx.BeginRegion();
+            var iteratorBody = fnCtx.EndRegion(rootRegion, CompileNode(body, fnCtx).Code);
+            // The outer dispatch: region id -> region entry. It sits before the body, which owns
+            // the entry labels, and a fresh start (id 0) falls through into the body.
+            bodyExprs.Add(fnCtx.EmitRegionDispatch());
+            bodyExprs.Add(iteratorBody);
+        }
+        else if (asyncResumable) {
+            // The async method's private frame: the arguments, then the resume state and the
+            // answer the body leaves for VmAsyncMachine<T>. Resume is the iterator's own
+            // hierarchical dispatch; an incomplete await is the suspension point.
+            fnCtx.ResumeRegionSlot = fnCtx.AllocFrameSlot();
+            fnCtx.AsyncStatusSlot = fnCtx.AllocFrameSlot();
+            fnCtx.AsyncResultSlot = fnCtx.AllocFrameSlot();
+            fnCtx.AsyncAwaitedSlot = fnCtx.AllocFrameSlot();
+            var rootRegion = fnCtx.BeginRegion();
+            var asyncBody = fnCtx.EndRegion(rootRegion, CompileNode(body, fnCtx).Code);
+            bodyExprs.Add(fnCtx.EmitRegionDispatch());
+            bodyExprs.Add(asyncBody);
+            // Falling off the end completes a Task method; a Task<T> method returns on every path.
+            bodyExprs.Add(Assign(fnCtx.FrameSlotRead(fnCtx.AsyncStatusSlot), Constant(AsyncCompleted)));
+        }
+        else {
+            // Compile body
+            var bodyCompiled = CompileNode(body, fnCtx);
+            bodyExprs.Add(bodyCompiled);
 
-        // Flush result: the callee always leaves its result word at _slots[_fp] — 0L for
-        // a body that yields none — so a caller never reads a slot the callee left
-        // untouched. An IsAsync method returns a completed Task / Task<T> instead.
-        Expression? resultValue = fnCtx.RingDepth > 0
-            ? fnCtx.RingWord(fnCtx.RingDepth - 1, bodyCompiled.ClrType)
-            : null;
-        if (asyncReturn is not null)
-            resultValue = WrapAsyncResult(resultValue, asyncReturn, fnCtx, YieldingNode(body));
-        bodyExprs.Add(Assign(ArrayAccess(fnCtx.SlotsLocal, fnCtx.FramePosLocal),
-            resultValue ?? Constant(0L)));
-        bodyExprs.Add(Assign(fnCtx.SlotsStackPointer,
-            Add(fnCtx.FramePosLocal, Constant(1))));
+            // Flush result: the callee always leaves its result word at _slots[_fp] — 0L for
+            // a body that yields none — so a caller never reads a slot the callee left
+            // untouched. An IsAsync method returns a completed Task / Task<T> instead.
+            Expression? resultValue = fnCtx.RingDepth > 0
+                ? fnCtx.RingWord(fnCtx.RingDepth - 1, bodyCompiled.ClrType)
+                : null;
+            if (asyncReturn is not null)
+                resultValue = WrapAsyncResult(resultValue, asyncReturn, fnCtx, YieldingNode(body));
+            bodyExprs.Add(Assign(ArrayAccess(fnCtx.SlotsLocal, fnCtx.FramePosLocal),
+                resultValue ?? Constant(0L)));
+            bodyExprs.Add(Assign(fnCtx.SlotsStackPointer,
+                Add(fnCtx.FramePosLocal, Constant(1))));
+        }
 
         bodyExprs.Add(Label(fnCtx.ExitLabel));
 
         var delegateExpr = Lambda<Action<VmState>>(Block(fnCtx.Locals, bodyExprs), fnCtx.State);
-        return delegateExpr.Compile();
+        var compiledBody = delegateExpr.Compile();
+        if (iteratorElement is not null)
+            VmIteratorShape.Register(compiledBody, new VmIteratorShape(
+                fnCtx.FrameSlotHighWater, fnCtx.IteratorMovedSlot, fnCtx.IteratorCurrentSlot));
+        if (asyncResumable)
+            VmAsyncShape.Register(compiledBody, new VmAsyncShape(
+                fnCtx.FrameSlotHighWater, fnCtx.AsyncStatusSlot, fnCtx.AsyncResultSlot, fnCtx.AsyncAwaitedSlot));
+        return compiledBody;
     }
+
+    private const long AsyncSuspended = 1L;
+    private const long AsyncCompleted = 2L;
+
+    /// <summary>
+    /// True when an <c>IsAsync</c> body can suspend at its awaits and so runs on the resumable
+    /// frame. Anything else keeps the blocking <c>await</c>, per method: no <c>await</c> at all, an
+    /// <c>await</c> inside <c>try</c>/<c>catch</c>/<c>finally</c>, <c>using</c>, <c>foreach</c> or a
+    /// lambda (#337 slice 3), an operand that is not a <c>Task</c> / <c>Task&lt;T&gt;</c> (ValueTask and
+    /// custom awaitables, a later slice), a <c>Task&lt;T&gt;</c> body that does not <c>return</c> a value
+    /// on every path, or a <c>Task</c> body that returns a value.
+    /// </summary>
+    private static bool IsResumableAsync(Node body, Type asyncReturn, Context ctx) {
+        if (!ContainsAwait(body) || !AwaitsSuspendable(body, ctx))
+            return false;
+        return asyncReturn == typeof(Task) ? !HasValueReturn(body) : AlwaysReturns(body);
+    }
+
+    /// <summary>
+    /// Every <c>await</c> sits at a statement position the resume label can be jumped into: a
+    /// statement of its own, the value of an assignment, or the value of a <c>return</c>, reached
+    /// through blocks and <c>if</c> branches. An <c>await</c> deeper inside an expression needs the
+    /// hoisting of #337 slice 2's expression-position work, and a loop body, an exception region or a
+    /// lambda are later slices; each of those keeps the method blocking.
+    /// </summary>
+    private static bool AwaitsSuspendable(Node node, Context ctx) {
+        switch (node) {
+            case Await await:
+                return SuspendableOperand(await, ctx);
+            case Assignment { Value: Await await } assignment:
+                return !ContainsAwait(assignment.Destination) && SuspendableOperand(await, ctx);
+            case Return { Value: Await await }:
+                return SuspendableOperand(await, ctx);
+            case Block block:
+                return block.Nodes.All(child => AwaitsSuspendable(child, ctx));
+            case IfStatement branch:
+                return !ContainsAwait(branch.Condition)
+                    && AwaitsSuspendable(branch.ThenBranch, ctx)
+                    && (branch.ElseBranch is null || AwaitsSuspendable(branch.ElseBranch, ctx));
+            default:
+                return !ContainsAwait(node);
+        }
+    }
+
+    private static bool SuspendableOperand(Await await, Context ctx) {
+        if (ContainsAwait(await.Operand))
+            return false;
+        var operand = ctx.Analysis?.GetResolvedType(await.Operand)?.GetRuntimeType();
+        return operand == typeof(Task)
+            || (operand is { IsGenericType: true } && operand.GetGenericTypeDefinition() == typeof(Task<>));
+    }
+
+    private static bool HasValueReturn(Node node) {
+        if (node is Return { Value: not null })
+            return true;
+        foreach (var child in node.Children)
+            if (child is not null && HasValueReturn(child))
+                return true;
+        return false;
+    }
+
+    private static bool AlwaysReturns(Node node) => node switch {
+        Return { Value: not null } or ThrowStatement => true,
+        Block block => block.Nodes.Any(AlwaysReturns),
+        IfStatement { ElseBranch: { } other } branch => AlwaysReturns(branch.ThenBranch) && AlwaysReturns(other),
+        _ => false,
+    };
 
     /// <summary>
     /// The declared CLR return type of an <c>IsAsync</c> AST method when it is one the VM wraps:
@@ -841,8 +959,41 @@ public static partial class AbiEmitter {
             typeof(long));
     }
 
+    /// <summary>
+    /// The element type <c>T</c> of an iterator method: a body that contains a
+    /// <see cref="YieldStatement"/> and is declared <c>IEnumerable&lt;T&gt;</c>. Null for any other
+    /// method. An iterator the VM cannot run (a non-generic <c>IEnumerable</c>, or a return type that
+    /// does not resolve) is rejected here rather than falling through to a name-dispatched call.
+    /// </summary>
+    private static Type? IteratorElementType(AstMethodDefinition method, Context ctx) {
+        if (!ContainsYield(method.DefinitionNode.Body!))
+            return null;
+        // The declared syntax, not MemberTypeDefinition.GetRuntimeType(): the type provider
+        // spells IEnumerable<T> as a concrete List<T>.
+        if (method.DefinitionNode.ReturnType is NamedTypeReference { TypeArguments: { Count: 1 } args } named
+            && named.FullName is "IEnumerable" or "System.Collections.Generic.IEnumerable") {
+            var element = args[0] is PrimitiveTypeReference { IsNullable: false } primitive
+                ? primitive.PrimitiveId.GetClrType()
+                : ctx.Analysis?.GetResolvedType(args[0])?.GetRuntimeType();
+            if (element is not null)
+                return element;
+        }
+        throw new InvalidOperationException(
+            $"VM compile rejected: iterator method '{method.Name}' must be declared IEnumerable<T> with a resolvable element type to execute.");
+    }
+
+    private static bool ContainsYield(Node node) {
+        if (node is YieldStatement)
+            return true;
+        foreach (var child in node.Children)
+            if (child is not null && ContainsYield(child))
+                return true;
+        return false;
+    }
+
     private static Expression EmitAstInvoke(
-        Invoke invoke, Member member, AstMethodDefinition method, Action<VmState>[] table, Context ctx) {
+        Invoke invoke, Member member, AstMethodDefinition method, Action<VmState>[] table, Context ctx,
+        Type? iteratorElement = null, Type? resumableAsync = null) {
         var definition = method.DefinitionNode;
         bool isStatic = method.IsStatic;
         var seq = new List<Expression>();
@@ -867,11 +1018,57 @@ public static partial class AbiEmitter {
 
         int result = ctx.AllocSlot();
         ctx.RingDepth = result + 1;
+        if (iteratorElement is not null) {
+            // The call does not run the body: it returns the iterator that will, one MoveNext at a time.
+            seq.Add(Assign(ctx.RingVar(result), EmitIteratorCreation(table, inits, iteratorElement, ctx)));
+            return Block(seq);
+        }
+        if (resumableAsync is not null) {
+            // The call runs the body to its first incomplete await and returns the method's task.
+            seq.Add(Assign(ctx.RingVar(result), EmitAsyncStart(table, inits, resumableAsync, ctx)));
+            return Block(seq);
+        }
         // The callee already left the ring word at slots[FramePos] (VmCall.Invoke's
         // contract, void included), so the caller only moves it into its own slot.
         seq.Add(Assign(ctx.RingVar(result), EmitCallFrame(
             ArrayIndex(Constant(table), Constant(0)), inits, ctx)));
         return Block(seq);
+    }
+
+    private static Expression EmitAsyncStart(
+        Action<VmState>[] table, IReadOnlyList<Expression> words, Type asyncReturn, Context ctx) {
+        // A Task method completes through a Task<VmAsyncVoid>, which is a Task.
+        var result = asyncReturn == typeof(Task) ? typeof(VmAsyncVoid) : asyncReturn.GetGenericArguments()[0];
+        var decodeType = typeof(Func<,,>).MakeGenericType(typeof(VmManagedObjectHeap), typeof(long), result);
+        Delegate? decode = null;
+        if (asyncReturn != typeof(Task)) {
+            var heapParameter = Parameter(typeof(VmManagedObjectHeap), "heap");
+            var wordParameter = Parameter(typeof(long), "word");
+            decode = Lambda(decodeType,
+                RingCodec.FromFrame(wordParameter, result, result, heapParameter),
+                heapParameter, wordParameter).Compile();
+        }
+        var machineType = typeof(VmAsyncMachine<>).MakeGenericType(result);
+        var constructor = machineType.GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)[0];
+        var machine = New(constructor,
+            ctx.State, Constant(table), NewArrayInit(typeof(long), words), Constant(decode, decodeType));
+        var start = Call(machine, machineType.GetMethod(nameof(VmAsyncMachine<int>.Start))!);
+        return RingCodec.ToFrame(Convert(start, asyncReturn), asyncReturn, ctx.HeapLocal);
+    }
+
+    private static Expression EmitIteratorCreation(
+        Action<VmState>[] table, IReadOnlyList<Expression> words, Type element, Context ctx) {
+        var heapParameter = Parameter(typeof(VmManagedObjectHeap), "heap");
+        var wordParameter = Parameter(typeof(long), "word");
+        var decode = Lambda(
+            typeof(Func<,,>).MakeGenericType(typeof(VmManagedObjectHeap), typeof(long), element),
+            RingCodec.FromFrame(wordParameter, element, element, heapParameter),
+            heapParameter, wordParameter).Compile();
+        var iteratorType = typeof(VmIterator<>).MakeGenericType(element);
+        var constructor = iteratorType.GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)[0];
+        var iterator = New(constructor,
+            ctx.State, Constant(table), NewArrayInit(typeof(long), words), Constant(decode));
+        return RingCodec.ToFrame(iterator, typeof(IEnumerable<>).MakeGenericType(element), ctx.HeapLocal);
     }
 
     /// <param name="rejection">Why the body did not compile, when it did not. Callers that
@@ -894,7 +1091,9 @@ public static partial class AbiEmitter {
         Context caller,
         bool instanceSlot,
         out string? rejection,
-        Type? asyncReturn = null) {
+        Type? asyncReturn = null,
+        Type? iteratorElement = null,
+        bool asyncResumable = false) {
         rejection = null;
         var mode = caller.Mode;
         lock (AstCallableGate) {
@@ -939,7 +1138,9 @@ public static partial class AbiEmitter {
                 unitAnalysis,
                 new HashSet<object>(ReferenceEqualityComparer.Instance),
                 instanceSlot,
-                asyncReturn);
+                asyncReturn,
+                iteratorElement,
+                asyncResumable);
         }
         catch (Exception ex) {
             // Drop this slot and everything compiled under it: those bodies may
@@ -951,7 +1152,7 @@ public static partial class AbiEmitter {
                 throw;
             // An IsAsync method's body must compile: falling back to a CLR lookup of the same
             // name would run a different method. Surface the body's compile reject instead.
-            if (asyncReturn is not null)
+            if (asyncReturn is not null || iteratorElement is not null)
                 throw;
             // A body that only forwards to a CLR static method (host jobs are built
             // this way) must not fall through to a CLR method of the same name.

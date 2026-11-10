@@ -228,6 +228,53 @@ if (state.Status == InterpreterStatus.Resuming)
     }
 ```
 
+An iterator method body (`yield return` / `yield break`, #338) uses the same spill and reload but
+resumes hierarchically, and the dispatch reads the iterator's private frame instead of
+`VmState.ProgramCounter`. An outer switch on the region id (a frame word) jumps to the entry label of
+the *region* that owns the yield: a block (every block is a region; a loop whose body is a bare statement has none of its own). The region's entry sits at its start, behind a
+`goto` that normal flow takes, and holds a small inner switch on a region-local step that jumps to the
+yield's own resume label:
+
+```csharp
+switch (_slots[_fp + regionIdSlot]) {      // outer: region id -> region
+    case 1: goto region_1_entry;
+    case 2: goto region_2_entry;
+}
+...
+{                                          // a block that owns two yields
+    goto region_2_body;                    // fresh entry skips the dispatch
+    region_2_entry:
+    switch (_slots[_fp + region2StepSlot]) { // inner: step -> yield
+        case 1: goto region_2_resume_1;
+        case 2: goto region_2_resume_2;
+    }
+    region_2_body:
+    ...
+}
+```
+
+`VmIterator<T>` owns the frame (a private `long[]`). Each `MoveNext` copies it onto the stack above
+the stack pointer, runs the compiled step with `FramePos` there, and copies it back.
+
+An `IsAsync` method returning `Task` / `Task<T>` (#337) resumes through the same dispatch, the same
+regions, and the same private frame; `VmResumableFrame.Run` is the shared copy-in / run / copy-out.
+Where an iterator parks at a `yield return`, an async body parks at an `await` of an *incomplete*
+`Task` / `Task<T>`: the awaited task's handle, the region and step, and the live locals go to the frame,
+the frame word `AsyncStatusSlot` reports `suspended`, and the step exits. The call site constructs a
+`VmAsyncMachine<T>` over the arguments and returns the method's own task: `Start()` runs the body to its
+first incomplete await or its end. At a suspension the machine hooks the awaited task's continuation;
+when that task completes the same step runs again, enters the region by the dispatch, reloads, and
+finishes the `await` by reading the now-complete task, so a fault is thrown at the `await` and a throw
+out of any step faults the method's task. A completed task is read inline and never suspends.
+Resumption runs on the completing thread under a lock on the `VmState`; a continuation that fires after
+the state was disposed faults the task with `ObjectDisposedException`.
+
+An async method keeps the blocking `await` (per method) when any await sits outside a statement,
+assignment-value or return-value position, inside `try` / `catch` / `finally` / `using` / `foreach`,
+a loop body or a lambda, awaits something other than `Task` / `Task<T>`, or the body does not `return`
+a value on every path (`Task<T>`) or returns a value (`Task`). The root compilation-unit body also
+still blocks.
+
 ## Pipeline
 
 ```text
@@ -391,3 +438,10 @@ was plumbing, not protocol.
 Inside a compiled function body, `FramePos` is the first argument slot: a
 parameter resolves at `FramePos + index` and `return` writes `slots[FramePos]`
 then sets `SP = FramePos + 1`.
+
+An iterator call returns a lazy `VmIterator<T>` that is enumerated, not a `List<T>`, though the type
+provider spells `IEnumerable<T>` as `List<T>`. Analysis therefore rejects (`IT0007`) a member or index
+access on a local holding an iterator call result, for `var e = M()` and `IEnumerable<T> e = M()` alike;
+`foreach` over it is the supported use. A `VmIterator<T>` also throws `ObjectDisposedException` from
+`MoveNext` / `GetEnumerator` once the execution that created it is disposed, because its stack array is
+back in the shared pool.

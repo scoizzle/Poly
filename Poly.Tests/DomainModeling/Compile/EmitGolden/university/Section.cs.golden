@@ -178,10 +178,6 @@ public class Section
         {
             return DomainResult<Section>.Failure("'Cap' must be <= 200.");
         }
-        if (object.ReferenceEquals(offeringTerm, null))
-        {
-            return DomainResult<Section>.Failure("'OfferingTerm' is required.");
-        }
         if (offeringTerm != Term.Fall && offeringTerm != Term.Spring && offeringTerm != Term.Summer)
         {
             return DomainResult<Section>.Failure(string.Concat("'", offeringTerm, "' is not a valid member of Term for property 'OfferingTerm'."));

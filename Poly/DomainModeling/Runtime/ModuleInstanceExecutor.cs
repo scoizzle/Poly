@@ -95,6 +95,15 @@ public sealed partial class ModuleInstanceExecutor {
         return type with { Methods = methods };
     }
 
+    /// <summary>
+    /// The body this executor compiled for a module method, or null when it has not run
+    /// that method. Lets a test hold the executed tree against the lowered artifact.
+    /// </summary>
+    internal Node? CompiledBodyFor(string entityName, string methodName) {
+        lock (_gate)
+            return _compiled.TryGetValue((entityName, methodName), out var compiled) ? compiled.Body : null;
+    }
+
     /// <summary>The session's storage port: the one every module call receives.</summary>
     public IStoragePort Storage => _port;
 

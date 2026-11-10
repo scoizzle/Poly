@@ -101,6 +101,46 @@ public class DslOutlineTests {
     }
 
     [Test]
+    public async Task Outline_FindsMarkedEntityValueAndAction() {
+        const string text = """
+            domain Shop
+
+            public value Money {
+              Amount: Number
+            }
+
+            public entity Order {
+              Total: Number
+              public action Pay {
+              }
+            }
+            """;
+
+        var outline = DslOutline.Build(text);
+
+        var money = outline.Find("Money", out var moneyCode, out _);
+        await Assert.That(moneyCode).IsNull();
+        await Assert.That(money).IsNotNull();
+        await Assert.That(money!.Kind).IsEqualTo("value");
+        await Assert.That(Slice(text, money)).StartsWith("public value Money");
+        await Assert.That(Slice(text, money)).EndsWith("}");
+
+        var order = outline.Find("Order", out var orderCode, out _);
+        await Assert.That(orderCode).IsNull();
+        await Assert.That(order).IsNotNull();
+        await Assert.That(order!.Kind).IsEqualTo("entity");
+        await Assert.That(Slice(text, order)).StartsWith("public entity Order");
+        await Assert.That(order.Children.Select(c => c.Path).ToArray())
+            .IsEquivalentTo(new[] { "Order.Total", "Order.Pay" });
+
+        var pay = outline.Find("Order.Pay", out var payCode, out _);
+        await Assert.That(payCode).IsNull();
+        await Assert.That(pay).IsNotNull();
+        await Assert.That(pay!.Kind).IsEqualTo("action");
+        await Assert.That(Slice(text, pay)).StartsWith("public action Pay");
+    }
+
+    [Test]
     public async Task Token_OffsetAndLengthAreSourceExact() {
         const string text = "A: \"x\\\"y\"\n  B 12 \"open";
         var reader = new DslTokenReader(text);

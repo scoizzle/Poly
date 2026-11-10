@@ -157,6 +157,28 @@ public class MemberVisibilityTests {
     }
 
     [Test]
+    public async Task StageShell_CopiesPublicFromLaterEntityAction() {
+        // Declaration order is not meaningful: the same mark must survive when the
+        // entity-level action is declared after the stage that holds its shell.
+        var poly = """
+            domain Test
+
+            public entity Order {
+              Open: stage {
+                Pay: action {
+                }
+              }
+              public action Pay {
+              }
+            }
+            """;
+
+        var order = EntityOf(Apply(poly), "Order");
+        await Assert.That(order.Actions.Single().Visibility).IsEqualTo(Visibility.Public);
+        await Assert.That(order.Stages.Single().Actions.Single().Visibility).IsEqualTo(Visibility.Public);
+    }
+
+    [Test]
     public async Task UnmarkedAction_IsNotExported_MarkedActionIs() {
         var poly = """
             domain Test

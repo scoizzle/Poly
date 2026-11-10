@@ -196,10 +196,38 @@ public sealed record AddActionChange(
     Visibility Visibility = Visibility.Internal
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
+        var visibility = Visibility;
         context.RequireUpdate(
             context.AppendChildToEntity(EntityName, e => e.Actions,
-                (e, actions) => e with { Actions = actions }, new Action(Name, InvocationResult.Void, [], [], []) { Visibility = Visibility }),
+                (e, actions) => e with { Actions = actions },
+                new Action(Name, InvocationResult.Void, [], [], []) { Visibility = visibility }),
             $"Entity '{EntityName}' not found — cannot add action '{Name}'");
+        PromoteSameNamedStageActions(context, visibility);
+    }
+
+    /// <summary>
+    /// A stage shell can be declared before the entity-level action it mirrors.
+    /// <see cref="AddActionToStageChange"/> copies only an entity action that already
+    /// exists at apply time, so promote a shell already in place to the same
+    /// max(source, shell) the forward declaration order produces. Declaration order
+    /// then never changes the resulting mark.
+    /// </summary>
+    private void PromoteSameNamedStageActions(DomainMutationContext context, Visibility visibility) {
+        var entity = context.FindEntity(EntityName);
+        if (entity is null
+            || !entity.Stages.Any(s => s.Actions.Any(a => string.Equals(a.Name, Name, StringComparison.Ordinal))))
+            return;
+
+        context.UpdateEntity(EntityName, e => e with {
+            Stages = e.Stages.Select(s => s.Actions.Any(a => string.Equals(a.Name, Name, StringComparison.Ordinal))
+                ? s with {
+                    Actions = s.Actions.Select(a =>
+                        string.Equals(a.Name, Name, StringComparison.Ordinal) && visibility > a.Visibility
+                            ? a with { Visibility = visibility }
+                            : a).ToList()
+                }
+                : s).ToList()
+        });
     }
 
     internal override string GetDescription() => $"Add Action '{Name}' to Entity '{EntityName}'";
@@ -601,7 +629,7 @@ public sealed record AddActionToStageChange(
     string EntityName,
     string StageName,
     string Name,
-    Visibility Visibility = Visibility.Internal
+    Visibility visibility = Visibility.Internal
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
         // SA: Look for an entity-level action with the same name. If found,
@@ -623,9 +651,9 @@ public sealed record AddActionToStageChange(
                     source is not null
                         ? new Action(Name, source.Result, source.Parameters.ToArray(),
                             source.Effects.ToArray(), source.Policies.ToArray()) {
-                            Visibility = source.Visibility > Visibility ? source.Visibility : Visibility
+                            Visibility = source.Visibility > visibility ? source.Visibility : visibility
                         }
-                        : new Action(Name, InvocationResult.Void, [], [], []) { Visibility = Visibility }
+                        : new Action(Name, InvocationResult.Void, [], [], []) { Visibility = visibility }
                 ).ToList()
             }),
             $"Stage '{StageName}' on Entity '{EntityName}' not found — cannot add action '{Name}'");

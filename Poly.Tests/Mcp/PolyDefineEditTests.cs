@@ -27,11 +27,39 @@ public class PolyDefineEditTests {
         }
         """;
 
+    private const string EntityThenEnumDoc = """
+        domain Shop
+
+        Zebra: entity {
+          Total: Number
+        }
+
+        Alpha: entity {
+          Name: Text
+        }
+
+        Size: enum { Small, Large }
+        """;
+
     private const string UsedAmount = """
         domain Shop
         Item: entity {
           Amount: Decimal
           Bump: action { assign Amount to Amount + 1 }
+        }
+        """;
+
+    private const string MarkedDoc = """
+        domain Shop
+
+        public value Money {
+          Amount: Number
+        }
+
+        public entity Order {
+          Total: Number
+          public action Pay {
+          }
         }
         """;
 
@@ -95,6 +123,87 @@ public class PolyDefineEditTests {
         await Assert.That(response.Ok).IsTrue();
         await Assert.That(State(workspace).SourceText)
             .IsEqualTo(Doc.Replace("domain Shop\n", "domain Shop\n\nColor: enum { Red, Green }\n"));
+    }
+
+    [Test]
+    public async Task Add_MarkedTopLevelEntity_PlacedAfterLastEntity_NotAfterLastRoot() {
+        var surface = Surface();
+        var workspace = Defined(surface, EntityThenEnumDoc);
+
+        var response = surface.Define(workspace, edit: Edit(Add("", "public entity Beta {\n  Qty: Number\n}")));
+
+        await Assert.That(response.Ok).IsTrue();
+        await Assert.That(State(workspace).SourceText)
+            .IsEqualTo(EntityThenEnumDoc.Replace(
+                "}\n\nSize: enum",
+                "}\n\npublic entity Beta {\n  Qty: Number\n}\n\nSize: enum"));
+    }
+
+    [Test]
+    public async Task Add_MarkedTopLevelValue_PlacedWithTheOtherValues_NotAfterLastRoot() {
+        var surface = Surface();
+        var workspace = Defined(surface, MarkedDoc);
+
+        var response = surface.Define(workspace, edit: Edit(Add("", "public value Fee {\n  Amount: Number\n}")));
+
+        await Assert.That(response.Ok).IsTrue();
+        await Assert.That(State(workspace).SourceText)
+            .IsEqualTo(MarkedDoc.Replace(
+                "}\n\npublic entity Order",
+                "}\n\npublic value Fee {\n  Amount: Number\n}\n\npublic entity Order"));
+    }
+
+    [Test]
+    public async Task Add_MarkedTopLevelEntity_CollisionIsDetected() {
+        var surface = Surface();
+        var workspace = Defined(surface, MarkedDoc);
+
+        var response = surface.Define(workspace, edit: Edit(Add("", "public entity Order {\n  Extra: Text\n}")));
+
+        await Assert.That(response.Ok).IsFalse();
+        await Assert.That(response.ErrorCode).IsEqualTo("EDIT_NAME_COLLISION");
+        await Assert.That(State(workspace).Revision).IsEqualTo(1);
+        await Assert.That(State(workspace).SourceText).IsEqualTo(MarkedDoc);
+    }
+
+    [Test]
+    public async Task Add_MarkedTopLevelValue_CollisionIsDetected() {
+        var surface = Surface();
+        var workspace = Defined(surface, MarkedDoc);
+
+        var response = surface.Define(workspace, edit: Edit(Add("", "public value Money {\n  Amount: Number\n}")));
+
+        await Assert.That(response.Ok).IsFalse();
+        await Assert.That(response.ErrorCode).IsEqualTo("EDIT_NAME_COLLISION");
+        await Assert.That(State(workspace).Revision).IsEqualTo(1);
+        await Assert.That(State(workspace).SourceText).IsEqualTo(MarkedDoc);
+    }
+
+    [Test]
+    public async Task Apply_MarkedTopLevelAdd_ReportsDeclaredNameAsPath() {
+        var outcome = PolyEdit.Apply(MarkedDoc, Edit(Add("", "public entity Customer {\n  Name: Text\n}")));
+
+        await Assert.That(outcome.Ok).IsTrue();
+        await Assert.That(outcome.Applied[0].Path).IsEqualTo("Customer");
+    }
+
+    [Test]
+    public async Task Add_MarkedEntity_RoundTripsMarkedDocumentApartFromTheAdd() {
+        var surface = Surface();
+        var workspace = Defined(surface, MarkedDoc);
+
+        var response = surface.Define(workspace, edit: Edit(Add("", "public entity Customer {\n  Name: Text\n}")));
+
+        await Assert.That(response.Ok).IsTrue();
+        await Assert.That(State(workspace).SourceText)
+            .IsEqualTo(MarkedDoc + "\n\npublic entity Customer {\n  Name: Text\n}");
+
+        var handWritten = Defined(surface, MarkedDoc + "\n\npublic entity Customer {\n  Name: Text\n}");
+
+        static string Exported(string workspace) =>
+            JsonSerializer.SerializeToNode(McpTestTools.Dsl.ExportDsl(workspace).Data)!["poly"]!.GetValue<string>();
+
+        await Assert.That(Exported(workspace)).IsEqualTo(Exported(handWritten));
     }
 
     [Test]
@@ -258,6 +367,54 @@ public class PolyDefineEditTests {
         await Assert.That(response.Ok).IsFalse();
         await Assert.That(State(workspace).Revision).IsEqualTo(1);
         await Assert.That(State(workspace).SourceText).IsEqualTo(UsedAmount);
+    }
+
+    [Test]
+    public async Task Edit_AddReplaceRemoveMarkedMembers() {
+        var surface = Surface();
+        var workspace = Defined(surface, MarkedDoc);
+
+        // Marked action: add, replace, remove inside the marked entity.
+        var actionAdded = surface.Define(workspace, edit: Edit(Add("Order", "public action Refund {\n}")));
+        await Assert.That(actionAdded.Ok).IsTrue();
+        await Assert.That(State(workspace).SourceText).Contains("public action Refund {");
+
+        var actionReplaced = surface.Define(workspace,
+            edit: Edit(Replace("Order.Refund", "public action Refund {\n    // reversed\n  }")));
+        await Assert.That(actionReplaced.Ok).IsTrue();
+        await Assert.That(State(workspace).SourceText).Contains("// reversed");
+
+        var actionRemoved = surface.Define(workspace, edit: Edit(Remove("Order.Refund")));
+        await Assert.That(actionRemoved.Ok).IsTrue();
+        await Assert.That(State(workspace).SourceText).DoesNotContain("Refund");
+
+        // Marked value type: add, replace, remove at top level.
+        var valueAdded = surface.Define(workspace, edit: Edit(Add("", "public value Fee {\n  Amount: Number\n}")));
+        await Assert.That(valueAdded.Ok).IsTrue();
+        await Assert.That(State(workspace).SourceText).Contains("public value Fee {");
+
+        var valueReplaced = surface.Define(workspace,
+            edit: Edit(Replace("Fee", "public value Fee {\n  Amount: Decimal\n}")));
+        await Assert.That(valueReplaced.Ok).IsTrue();
+        await Assert.That(State(workspace).SourceText).Contains("public value Fee {\n  Amount: Decimal");
+
+        var valueRemoved = surface.Define(workspace, edit: Edit(Remove("Fee")));
+        await Assert.That(valueRemoved.Ok).IsTrue();
+        await Assert.That(State(workspace).SourceText).DoesNotContain("Fee");
+
+        // Marked entity: add, replace, remove at top level.
+        var entityAdded = surface.Define(workspace, edit: Edit(Add("", "public entity Customer {\n  Name: Text\n}")));
+        await Assert.That(entityAdded.Ok).IsTrue();
+        await Assert.That(State(workspace).SourceText).Contains("public entity Customer {");
+
+        var entityReplaced = surface.Define(workspace,
+            edit: Edit(Replace("Customer", "public entity Client {\n  Name: Text\n}")));
+        await Assert.That(entityReplaced.Ok).IsTrue();
+        await Assert.That(State(workspace).SourceText).Contains("public entity Client {");
+
+        var entityRemoved = surface.Define(workspace, edit: Edit(Remove("Client")));
+        await Assert.That(entityRemoved.Ok).IsTrue();
+        await Assert.That(State(workspace).SourceText!.TrimEnd()).IsEqualTo(MarkedDoc.TrimEnd());
     }
 
     [Test]

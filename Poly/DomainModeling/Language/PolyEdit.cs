@@ -212,6 +212,8 @@ public static class PolyEdit {
         OutlineNode? anchor = kind switch {
             "uses" => roots.LastOrDefault(n => n.Kind is "domain" or "uses"),
             "enum" or "value" or "contract" => firstEntity > 0 ? roots[firstEntity - 1] : roots.LastOrDefault(),
+            // Entities stay grouped: a trailing enum or value root must not pull a new entity past them.
+            "entity" => roots.LastOrDefault(n => n.Kind == "entity") ?? roots.LastOrDefault(),
             _ => roots.LastOrDefault(),
         };
 
@@ -245,11 +247,19 @@ public static class PolyEdit {
             var end = lineEnd;
             if (end < text.Length && text[end] == '\r') end++;
             if (end < text.Length && text[end] == '\n') end++;
+            // A top-level node spliced between blank separators ("\n\n<node>\n\n") would leave a
+            // doubled blank line behind; drop the separator that now has nothing to separate.
+            if (end < text.Length && text[end] is '\r' or '\n' && BlankLineBefore(text, lineStart))
+                end += text[end] == '\r' && end + 1 < text.Length && text[end + 1] == '\n' ? 2 : 1;
             return (lineStart, end, "");
         }
 
         return (node.StartOffset, node.EndOffset, "");
     }
+
+    /// <summary>Whether the line ending at <paramref name="lineStart"/> is empty.</summary>
+    private static bool BlankLineBefore(string text, int lineStart) =>
+        lineStart >= 2 && text[lineStart - 1] == '\n' && text[lineStart - 2] is '\n' or '\r';
 
     private static (int Start, int End, string Insert)? Replace(
         string text, string nl, DslOutline outline, Op op, out string? code, out string? error) {
@@ -276,27 +286,45 @@ public static class PolyEdit {
         return outline.All().FirstOrDefault(n => n.Children.Contains(node))?.Children ?? [];
     }
 
+    /// <summary>
+    /// The name an <c>add</c>/<c>replace</c> dsl declares: <c>Name: kind</c>, or the marked
+    /// <c>public entity Name</c> / <c>public value Name</c> / <c>public action Name</c> form, where
+    /// the name follows the kind.
+    /// </summary>
     private static string? DeclaredName(string dsl) {
         try {
             var reader = new DslTokenReader(dsl);
-            var first = reader.Peek(0);
-            var second = reader.Peek(1);
-            return second.Kind == DslTokenKind.Colon
-                && first.Kind is DslTokenKind.Identifier or DslTokenKind.Text or DslTokenKind.NumberType or DslTokenKind.BooleanType
-                    ? first.Text
-                    : null;
+            var marked = reader.Peek(0).Kind == DslTokenKind.Public;
+            var first = reader.Peek(marked ? 1 : 0);
+            var second = reader.Peek(marked ? 2 : 1);
+            if (marked)
+                return IsKindWord(first) && IsNameToken(second) ? second.Text : null;
+            return second.Kind == DslTokenKind.Colon && IsNameToken(first)
+                ? first.Text
+                : null;
         }
         catch (FormatException) {
             return null;
         }
     }
 
+    /// <summary>A token shaped like a declared name (the same kinds the unmarked form accepts).</summary>
+    private static bool IsNameToken(DslToken token) =>
+        token.Kind is DslTokenKind.Identifier or DslTokenKind.Text or DslTokenKind.NumberType or DslTokenKind.BooleanType;
+
+    /// <summary>The kind word a leading <c>public</c> modifier may introduce.</summary>
+    private static bool IsKindWord(DslToken token) =>
+        token.Kind is DslTokenKind.Entity or DslTokenKind.Action || DslGrammar.IsValueWord(token);
+
     private static string TopLevelKind(string dsl) {
         try {
             var reader = new DslTokenReader(dsl);
-            var first = reader.Peek(0);
+            var marked = reader.Peek(0).Kind == DslTokenKind.Public;
+            var first = reader.Peek(marked ? 1 : 0);
             if (first.Kind == DslTokenKind.Uses)
                 return "uses";
+            if (marked)
+                return DslGrammar.IsValueWord(first) ? "value" : "entity";
             if (reader.Peek(1).Kind == DslTokenKind.Colon)
                 return reader.Peek(2).Text switch {
                     "enum" => "enum",

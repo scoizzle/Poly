@@ -279,8 +279,20 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
                     binderName: null, invoke.ActionName, invoke.ParameterBindings, props, parameters, enumTypes);
                 break;
             case ForEachEffect fe:
-                // The body is checked in the caller's scope. `where` is binder-typed and is
-                // not type-checked until lowering (slice 6) gives the binder a type.
+                // The body is checked in the caller's scope. The `where` clause is
+                // binder-typed against the iterated relationship's target entity (#455 F4):
+                // a non-Boolean `where` lowers but cannot compile.
+                if (fe.Where is { } where) {
+                    var iteratedTypeName = ResolveRelationshipTargetTypeName(
+                        context, callerEntityName, fe.RelationshipName);
+                    WalkExpression(context, where, props, parameters, enumTypes);
+                    var whereType = BindsToBinder(where, fe.BinderName)
+                        ? InferBinderExpressionType(context, iteratedTypeName, fe.BinderName, where, enumTypes)
+                        : InferType(context, where, props, parameters, enumTypes);
+                    if (whereType.Category is not (TypeCategory.Boolean or TypeCategory.Unknown))
+                        Report(context, where,
+                            $"'for' where condition must be Boolean (got '{Describe(whereType)}')");
+                }
                 CheckEffectTree(context, fe.Body, callerEntityName, props, parameters, enumTypes);
                 break;
             case ForEachInvokeEffect efe:

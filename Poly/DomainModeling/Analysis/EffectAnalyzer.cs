@@ -564,7 +564,7 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
         DomainTypeLookupMetadata lookup,
         string? currentStage,
         string? peerBinding,
-        IReadOnlySet<string>? forBinders = null)
+        IReadOnlyDictionary<string, string?>? forBinders = null)
         : EffectDispatch<object?> {
         protected override object? Default() => null;
 
@@ -590,9 +590,15 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
 
         protected override object? InvokeAction(InvokeActionEffect e) {
             // `invoke line.Mark` inside `for line in …` targets the loop binder, not a
-            // relationship; resolving the binder's callee is slice 6 (lowering).
-            if (e.TargetRelationship is { } target && forBinders?.Contains(target) == true)
+            // relationship: the binder is typed as the iterated relationship's target entity,
+            // so the callee gets the same checks a relationship-targeted invoke runs (#455 F3).
+            if (e.TargetRelationship is { } target && forBinders?.TryGetValue(target, out var binderTargetTypeName) == true) {
+                if (binderTargetTypeName is not null
+                    && TryResolveEntity(context, domain, binderTargetTypeName, e, out var binderTargetEntity)
+                    && binderTargetEntity is not null)
+                    ValidateInvokeCallee(context, e, binderTargetEntity, dispatchStage: null);
                 return null;
+            }
             ValidateInvokeAction(context, e, entity, domain, currentStage);
             return null;
         }
@@ -603,19 +609,27 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
         }
 
         // #409: the general `for` lowers and executes (slice 6); its body is checked for effect
-        // legality here.
+        // legality here. #455: it iterates a relationship exactly as the fan-out form does, so
+        // the relationship and callee checks are shared — analysis must reject what lowering
+        // and the C# export cannot compile.
         protected override object? ForEach(ForEachEffect e) {
+            var binders = new Dictionary<string, string?>(StringComparer.Ordinal);
+            if (forBinders is not null)
+                foreach (var (name, targetTypeName) in forBinders)
+                    binders[name] = targetTypeName;
+            binders[e.BinderName] = null;
+            if (ValidateForRelationship(context, domain, entity, e.RelationshipName, e, "ForEach") is { } iterated)
+                binders[e.BinderName] = iterated.Name;
             // Legality: the body may write only the owning entity's own state. An assign
             // through a relationship or the loop binder is another entity's state (DMEFF012,
             // the same rule as actions and `when`); mutate that entity with `invoke binder.Action`.
-            var binders = new HashSet<string>(forBinders ?? new HashSet<string>(), StringComparer.Ordinal) { e.BinderName };
             new EffectValidationDispatch(context, action, entity, domain, lookup, currentStage, peerBinding, binders)
                 .RouteAll(e.Body);
             return null;
         }
 
         protected override object? Assign(AssignEffect e) {
-            if (e.Target is RelationshipNavigation { RelationshipName: var root } && forBinders?.Contains(root) == true) {
+            if (e.Target is RelationshipNavigation { RelationshipName: var root } && forBinders?.ContainsKey(root) == true) {
                 context.ReportError(
                     e,
                     $"Assign targets state of loop binder '{root}', which belongs to another entity. " +
@@ -961,12 +975,20 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
         }
     }
 
-    private static void ValidateForEachInvoke(
-        AnalysisContext context, ForEachInvokeEffect efe, Entity entity, Domain domain) {
-        // `for` requires a relationship, source-side, OneToMany (iterating a known singular
-        // makes no sense), non-self.
-        if (!TryResolveRelationship(context, domain, entity.Name, efe.RelationshipName, efe, out var relationship))
-            return;
+    /// <summary>
+    /// Shared <c>for</c> relationship check (#409 / #455 F1–F2): a <c>for</c> iterates a
+    /// relationship declared on the caller's source side, OneToMany (iterating a known singular
+    /// makes no sense), and never a self-relationship. Both the fan-out form
+    /// (<see cref="ForEachInvokeEffect"/>, <c>for Rel as x … invoke</c>) and the general form
+    /// (<see cref="ForEachEffect"/>, <c>for x in Rel { … }</c>) go through here, so analysis
+    /// rejects what lowering and the C# export cannot compile.
+    /// Returns the iterated target entity, or null after reporting a positioned error.
+    /// </summary>
+    private static Entity? ValidateForRelationship(
+        AnalysisContext context, Domain domain, Entity entity, string relationshipName, Node reportNode,
+        string formName) {
+        if (!TryResolveRelationship(context, domain, entity.Name, relationshipName, reportNode, out var relationship))
+            return null;
         if (relationship is null) {
             // Reverse-side detection: the name exists on a different source entity,
             // so this is a wrong-direction `for`, not an unknown relationship.
@@ -974,56 +996,64 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
             // missing declaration that exists elsewhere.)
             var relLookup = ResolveRelationshipLookup(context, domain);
             if (relLookup is not null) {
-                var elsewhere = relLookup.FindByNameAcrossSources(efe.RelationshipName).FirstOrDefault();
+                var elsewhere = relLookup.FindByNameAcrossSources(relationshipName).FirstOrDefault();
                 if (elsewhere is not null) {
                     context.ReportError(
-                        efe,
-                        $"ForEachInvoke relationship '{efe.RelationshipName}' is declared on source entity " +
-                        $"'{elsewhere.Source.TypeName}', not '{entity.Name}' — reverse-side fan-out invoke " +
+                        reportNode,
+                        $"{formName} relationship '{relationshipName}' is declared on source entity " +
+                        $"'{elsewhere.Source.TypeName}', not '{entity.Name}' — reverse-side iteration " +
                         "is not supported.",
                         DomainModelDiagnosticCodes.EffectInvokeShape);
-                    return;
+                    return null;
                 }
             }
             context.ReportError(
-                efe,
-                $"ForEachInvoke references relationship '{efe.RelationshipName}' which does not exist on domain.",
+                reportNode,
+                $"{formName} references relationship '{relationshipName}' which does not exist on domain.",
                 DomainModelDiagnosticCodes.EffectBinding);
-            return;
+            return null;
         }
         if (!string.Equals(relationship.Source.TypeName, entity.Name, StringComparison.Ordinal)) {
             context.ReportError(
-                efe,
-                $"ForEachInvoke relationship '{efe.RelationshipName}' may only be used from source entity " +
+                reportNode,
+                $"{formName} relationship '{relationshipName}' may only be used from source entity " +
                 $"'{relationship.Source.TypeName}' (caller is '{entity.Name}').",
                 DomainModelDiagnosticCodes.EffectInvokeShape);
-            return;
+            return null;
         }
         if (relationship.Cardinality is not RelationshipCardinality.OneToMany) {
             context.ReportError(
-                efe,
-                $"ForEachInvoke requires OneToMany relationship '{efe.RelationshipName}', " +
+                reportNode,
+                $"{formName} requires OneToMany relationship '{relationshipName}', " +
                 $"got {relationship.Cardinality}. Iterating a singular relationship is not supported.",
                 DomainModelDiagnosticCodes.EffectInvokeShape);
-            return;
+            return null;
         }
         if (string.Equals(relationship.Source.TypeName, relationship.Target.TypeName, StringComparison.Ordinal)) {
             context.ReportError(
-                efe,
-                $"ForEachInvoke on self-relationship '{efe.RelationshipName}' is not supported.",
+                reportNode,
+                $"{formName} on self-relationship '{relationshipName}' is not supported.",
                 DomainModelDiagnosticCodes.EffectInvokeShape);
-            return;
+            return null;
         }
 
-        if (!TryResolveEntity(context, domain, relationship.Target.TypeName, efe, out var targetEntity))
-            return;
+        if (!TryResolveEntity(context, domain, relationship.Target.TypeName, reportNode, out var targetEntity))
+            return null;
         if (targetEntity is null) {
             context.ReportError(
-                efe,
-                $"Target entity type '{relationship.Target.TypeName}' for relationship '{efe.RelationshipName}' not found.",
+                reportNode,
+                $"Target entity type '{relationship.Target.TypeName}' for relationship '{relationshipName}' not found.",
                 DomainModelDiagnosticCodes.EffectBinding);
-            return;
+            return null;
         }
+        return targetEntity;
+    }
+
+    private static void ValidateForEachInvoke(
+        AnalysisContext context, ForEachInvokeEffect efe, Entity entity, Domain domain) {
+        if (ValidateForRelationship(context, domain, entity, efe.RelationshipName, efe, "ForEachInvoke")
+            is not { } targetEntity)
+            return;
 
         // Binder must not collide with the caller's own members (property/stage/policy/action).
         if (entity.Properties.Any(p => string.Equals(p.Name, efe.BinderName, StringComparison.Ordinal))
@@ -1264,7 +1294,17 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
             targetEntity = entity;
         }
 
-        var dispatchStage = iae.TargetRelationship is null ? currentStage : null;
+        ValidateInvokeCallee(context, iae, targetEntity, iae.TargetRelationship is null ? currentStage : null);
+    }
+
+    /// <summary>
+    /// Callee checks shared by every invoke that resolves a target entity — a relationship
+    /// target and a general-<c>for</c> loop binder (#455 F3): the action exists on the target
+    /// entity, it is not entity-returning, and every parameter binding is known, present
+    /// and unique.
+    /// </summary>
+    private static void ValidateInvokeCallee(
+        AnalysisContext context, InvokeActionEffect iae, Entity targetEntity, string? dispatchStage) {
         var targetAction = DomainAnalysis.FindAction(targetEntity, iae.ActionName, dispatchStage);
         if (targetAction is null && dispatchStage is null)
             targetAction = DomainAnalysis.FindAnyNamedAction(targetEntity, iae.ActionName);

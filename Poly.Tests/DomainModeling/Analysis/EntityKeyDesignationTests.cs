@@ -6,6 +6,7 @@ using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Ontology.Constraints;
 using Poly.DomainModeling.Ontology.Effects;
 using Poly.DomainModeling.Queries;
+using Poly.Grammar;
 using Poly.Interpretation.CSharp;
 
 namespace Poly.Tests.DomainModeling.Analysis;
@@ -68,7 +69,10 @@ public sealed class EntityKeyDesignationTests {
         var keyed = ValidDomain.Create("Test", [Keyed("Order", ["Number"], Text("Number"))]);
         var unkeyed = ValidDomain.Create("Test", [new Entity("Order", [Text("Number")], [], [], [])]);
 
-        await Assert.That(new DomainDslPrinter().Print(keyed)).IsEqualTo(new DomainDslPrinter().Print(unkeyed));
+        // The DSL now prints the designation (#405 key authoring arm): the only difference is the
+        // header clause. Everything else — exports and generated C# below — stays byte-identical.
+        await Assert.That(new DomainDslPrinter().Print(keyed))
+            .IsEqualTo(new DomainDslPrinter().Print(unkeyed).Replace("Order: entity {", "Order: entity key(Number) {"));
         await Assert.That(JsonLdExporter.Export(keyed)).IsEqualTo(JsonLdExporter.Export(unkeyed));
 
         var keyedAnalysis = DomainModelAnalyzer.Analyze(keyed);
@@ -229,5 +233,188 @@ public sealed class EntityKeyDesignationTests {
 
         var analysis = Analyze(order);
         await Assert.That(Errors(analysis, DomainModelDiagnosticCodes.InvalidKeyDesignation)).IsEmpty();
+    }
+
+    // ── #405 key authoring arm: `key(a, b)` is an entity header clause immediately before `{` ──
+
+    private static DomainSession Session => ExtensionCatalog.Core.Authoring;
+
+    private static Poly.DomainModeling.Evolution.EvolutionResult Compile(string poly) =>
+        new Poly.DomainModeling.Evolution.DomainEvolution(DomainTestFactory.Create("_", [], []))
+            .ApplyAndAnalyze(new PolyDslParser(poly, Session).Parse());
+
+    private static string Print(Domain domain) =>
+        new DomainDslPrinter(Session.Annotations).Print(domain);
+
+    private static GrammarException ParseFails(string poly) {
+        var ex = Assert.Throws<GrammarException>(() => new PolyDslParser(poly, Session).Parse());
+        return ex!;
+    }
+
+    [Test]
+    public async Task Dsl_SingleKey_ParsesPopulatesKeyPropertiesAndPrintsInPlace() {
+        var result = Compile("""
+            domain Test
+
+            Order: entity key(Code) {
+              Code: Text
+              Note: Text
+            }
+            """);
+
+        await Assert.That(result.Succeeded).IsTrue();
+        var order = result.Root.Types.OfType<Entity>().Single();
+        await Assert.That(order.KeyProperties).IsEquivalentTo(new[] { "Code" });
+
+        var printed = Print(result.Root);
+        await Assert.That(printed).Contains("Order: entity key(Code) {");
+    }
+
+    [Test]
+    public async Task Dsl_MultiKey_AfterAnnotation_PrintsClauseImmediatelyBeforeBrace_AndRoundTrips() {
+        var result = Compile("""
+            domain Test
+
+            Order: entity table("ORDERS") key(Code, Region) {
+              Code: Text
+              Region: Text
+            }
+            """);
+
+        await Assert.That(result.Succeeded).IsTrue();
+        var order = result.Root.Types.OfType<Entity>().Single();
+        await Assert.That(order.KeyProperties).IsEquivalentTo(new[] { "Code", "Region" });
+
+        var printed = Print(result.Root);
+        await Assert.That(printed).Contains("Order: entity table(\"ORDERS\") key(Code, Region) {");
+        // not a member: nothing in the body mentions key(
+        await Assert.That(printed.Split('\n').Count(l => l.Contains("key("))).IsEqualTo(1);
+
+        var again = Compile(printed);
+        await Assert.That(again.Succeeded).IsTrue();
+        await Assert.That(Print(again.Root)).IsEqualTo(printed);
+    }
+
+    [Test]
+    public async Task Dsl_PublicEntity_KeyClause_RoundTrips() {
+        var result = Compile("""
+            domain Test
+
+            public entity Order key(Code) {
+              Code: Text
+            }
+            """);
+
+        await Assert.That(result.Succeeded).IsTrue();
+        var printed = Print(result.Root);
+        await Assert.That(printed).Contains("public entity Order key(Code) {");
+        await Assert.That(Print(Compile(printed).Root)).IsEqualTo(printed);
+    }
+
+    [Test]
+    public async Task Dsl_KeylessEntity_PrintsByteIdenticallyToBefore() {
+        var result = Compile("""
+            domain Test
+
+            Order: entity table("ORDERS") {
+              Code: Text
+            }
+            """);
+
+        var printed = Print(result.Root);
+        await Assert.That(printed).Contains("Order: entity table(\"ORDERS\") {");
+        await Assert.That(printed).DoesNotContain("key(");
+    }
+
+    [Test]
+    public async Task Dsl_UnknownKeyMember_FeedsAnalysis_AsInvalidKeyDesignation() {
+        var result = Compile("""
+            domain Test
+
+            Order: entity key(Missing) {
+              Code: Text
+            }
+            """);
+
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(Errors(result.Analysis, DomainModelDiagnosticCodes.InvalidKeyDesignation).Count).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task Dsl_DuplicateKeyMember_FeedsAnalysis_AsStructuralDuplicate() {
+        var result = Compile("""
+            domain Test
+
+            Order: entity key(Code, Code) {
+              Code: Text
+            }
+            """);
+
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(Errors(result.Analysis, DomainModelDiagnosticCodes.StructuralDuplicate).Count).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task Dsl_CollectionNavigationKey_FeedsAnalysis_AsInvalidKeyDesignation() {
+        var result = Compile("""
+            domain Test
+
+            Customer: entity key(Code) {
+              Code: Text
+            }
+
+            Order: entity key(Lines) {
+              Number: Text
+              Lines: many Customer
+            }
+            """);
+
+        await Assert.That(result.Succeeded).IsFalse();
+        var errors = Errors(result.Analysis, DomainModelDiagnosticCodes.InvalidKeyDesignation);
+        await Assert.That(errors.Count).IsEqualTo(1);
+        await Assert.That(errors[0].Message).Contains("singular");
+    }
+
+    [Test]
+    public async Task Dsl_NavigationKey_ToUnkeyedTarget_FeedsAnalysis_AsInvalidKeyDesignation() {
+        var result = Compile("""
+            domain Test
+
+            Customer: entity {
+              Code: Text
+            }
+
+            Order: entity key(Customer) {
+              Number: Text
+              Customer: Customer
+            }
+            """);
+
+        await Assert.That(result.Succeeded).IsFalse();
+        var errors = Errors(result.Analysis, DomainModelDiagnosticCodes.InvalidKeyDesignation);
+        await Assert.That(errors.Count).IsEqualTo(1);
+        await Assert.That(errors[0].Message).Contains("no key");
+    }
+
+    [Test]
+    [Arguments("key() {", "empty")]
+    [Arguments("key(Code,) {", "Trailing comma")]
+    [Arguments("key(Code,, Region) {", "key member name")]
+    [Arguments("key(Code {", "Expected ',' or ')'")]
+    [Arguments("key(, Code) {", "key member name")]
+    public async Task Dsl_MalformedKeyClause_FailsClosed_Positioned(string clause, string messagePart) {
+        var ex = ParseFails($"domain Test\n\nOrder: entity {clause}\n  Code: Text\n  Region: Text\n}}\n");
+
+        await Assert.That(ex.Detail).Contains(messagePart);
+        await Assert.That(ex.Line).IsGreaterThan(0);
+        await Assert.That(ex.Column).IsGreaterThan(0);
+    }
+
+    [Test]
+    public async Task Dsl_RepeatedKeyClause_FailsClosed() {
+        var ex = ParseFails("domain Test\n\nOrder: entity key(Code) key(Region) {\n  Code: Text\n  Region: Text\n}\n");
+
+        await Assert.That(ex.Detail).Contains("key");
+        await Assert.That(ex.Line).IsGreaterThan(0);
     }
 }

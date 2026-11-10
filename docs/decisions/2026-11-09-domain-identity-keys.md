@@ -114,14 +114,30 @@ no surface form exists yet.
   unkeyed entity is `DMSTR007`; a key cycle, including a self-navigation, is `DMSTR002`
   (`StructuralCycle`) (`Poly/DomainModeling/Analysis/StructuralDomainAnalyzer.cs:91-152`,
   `Poly/DomainModeling/Analysis/DomainModelDiagnosticCodes.cs:4,5,35`).
-- Printing and export are unchanged: a keyed entity is **byte-identical** to its unkeyed twin
-  (`Poly.Tests/DomainModeling/Analysis/EntityKeyDesignationTests.cs:67`). No member is lowered or printed.
+- Export and generated C# are unchanged: a keyed entity is **byte-identical** to its unkeyed twin
+  (`Poly.Tests/DomainModeling/Analysis/EntityKeyDesignationTests.cs`). No member is lowered. (The DSL
+  printer now prints the header clause; see the placement ruling below.)
+
+## Placement ruling (2026-11-09, owner)
+
+Ruled by the owner on 2026-11-09, recorded here beside the decision; it is not a new decision of the
+implementer: **`key(...)` is a header clause immediately before the opening curly brace of the entity
+declaration.** The accepted spelling is the entity header with the clause last:
+
+```
+Order: entity table("ORDERS") key(Code, Region) {
+public entity Order key(Code) {
+```
+
+The header is `["public"] entity-name [":" "entity"] annotation* ["key" "(" ident ("," ident)* ")"] "{"`
+(`Poly.Mcp/Docs/poly-dsl-guide.md` §3; parsed at `Poly/DomainModeling/Language/DomainResolver.cs`,
+`ParseEntityAfterKind`, printed at `DomainDslPrinter.PrintEntity`). It is not a body member and lowers to
+nothing. A repeated `key(...)` clause, an empty `key()`, a doubled or trailing comma, or an unclosed
+list is a positioned parse error. Member names are checked by the slice-2 analysis, unchanged.
+Scoped **value** uniqueness (open question 1) is not implemented by this arm.
 
 ## What is not built
 
-- The `key(...)` **authoring surface** — parser and printer. The issue puts it last: *"The parser arm
-  lands **last**, so nothing is authorable before it is enforced."* Every slice-2 test builds the AST/API
-  directly.
 - Composite key enforcement at create and assign over the designated tuple; the composite index;
   `HasPrincipalKey`/`HasForeignKey` for navigation keys; declared-key route keys (issue slice 3).
 - Link/unlink/reparent key lifecycle — link check/record, unlink release, reparent atomic move (slice 4).
@@ -167,7 +183,7 @@ words; the decision itself is Sources A and B, quoted verbatim.
 
 - The epic's documentation blocker (Source C) is closed; this file records no new ruling and changes no
   behaviour.
-- The `key(...)` surface remains unauthorable until the parser slice lands and the enforcement slices make
-  the designation authoritative.
+- The `key(...)` surface is authorable as the entity header clause above; the enforcement slices still
+  have to make the designation authoritative.
 - `docs/decisions/README.md` is not updated by this change, and `AGENTS.md` carries no always-on line for
   it; both are left for the slice that makes the designation authorable.

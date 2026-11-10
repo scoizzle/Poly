@@ -53,32 +53,7 @@ public static class ConstraintMerge {
         ArgumentNullException.ThrowIfNull(other);
         if (self.GetType() != other.GetType())
             return ConstraintMergeResult.Unmergeable;
-        return (self, other) switch {
-            (RangeConstraint a, RangeConstraint b) =>
-                MergeRangeResult(a, b),
-            (LengthConstraint a, LengthConstraint b) =>
-                MergeLength(a, b) is { } length
-                    ? ConstraintMergeResult.Of(length)
-                    : ConstraintMergeResult.Empty,
-            (RequiredConstraint, RequiredConstraint) =>
-                ConstraintMergeResult.Of(new RequiredConstraint()),
-            (OptionalConstraint, OptionalConstraint) =>
-                ConstraintMergeResult.Of(new OptionalConstraint()),
-            (EqualityConstraint a, EqualityConstraint b) =>
-                Equals(a.ExpectedValue, b.ExpectedValue)
-                    ? ConstraintMergeResult.Of(a)
-                    : ConstraintMergeResult.Empty,
-            (PatternConstraint a, PatternConstraint b) =>
-                string.Equals(a.Pattern, b.Pattern, StringComparison.Ordinal)
-                    ? ConstraintMergeResult.Of(a)
-                    : ConstraintMergeResult.Empty,
-            (UniqueConstraint a, UniqueConstraint) => ConstraintMergeResult.Of(a),
-            (DefaultValueConstraint a, DefaultValueConstraint b) =>
-                SameDefault(a.Expression, b.Expression)
-                    ? ConstraintMergeResult.Of(a)
-                    : ConstraintMergeResult.Empty,
-            _ => ConstraintMergeResult.Unmergeable,
-        };
+        return ConstraintKinds.Of(self)?.Merge(self, other) ?? ConstraintMergeResult.Unmergeable;
     }
 
     /// <summary>
@@ -91,21 +66,7 @@ public static class ConstraintMerge {
         ArgumentNullException.ThrowIfNull(b);
         if (a.GetType() != b.GetType())
             return false;
-        return (a, b) switch {
-            (RangeConstraint x, RangeConstraint y) =>
-                Equals(x.Minimum, y.Minimum) && Equals(x.Maximum, y.Maximum),
-            (LengthConstraint x, LengthConstraint y) =>
-                x.MinLength == y.MinLength && x.MaxLength == y.MaxLength,
-            (RequiredConstraint, RequiredConstraint) => true,
-            (OptionalConstraint, OptionalConstraint) => true,
-            (EqualityConstraint x, EqualityConstraint y) => Equals(x.ExpectedValue, y.ExpectedValue),
-            (PatternConstraint x, PatternConstraint y) =>
-                string.Equals(x.Pattern, y.Pattern, StringComparison.Ordinal),
-            (UniqueConstraint, UniqueConstraint) => true,
-            (DefaultValueConstraint x, DefaultValueConstraint y) =>
-                SameDefault(x.Expression, y.Expression),
-            _ => false,
-        };
+        return ConstraintKinds.Of(a)?.Identical(a, b) ?? false;
     }
 
     /// <summary>
@@ -113,7 +74,7 @@ public static class ConstraintMerge {
     /// node identity and position, so a library-contributed clock (<c>Today</c>) or date
     /// arithmetic (<c>Today - 1 Days</c>) compares like any other expression.
     /// </summary>
-    private static bool SameDefault(DomainExpression a, DomainExpression b) =>
+    internal static bool SameDefault(DomainExpression a, DomainExpression b) =>
         DomainExpressionStructuralComparer.Equal(a, b);
 
     /// <summary>
@@ -142,21 +103,14 @@ public static class ConstraintMerge {
         ArgumentNullException.ThrowIfNull(other);
         if (self.GetType() != other.GetType())
             return null;
-        return (self, other) switch {
-            (RangeConstraint a, RangeConstraint b) => JoinRange(a, b),
-            (LengthConstraint a, LengthConstraint b) =>
-                new LengthConstraint(Math.Min(a.MinLength, b.MinLength), Math.Max(a.MaxLength, b.MaxLength)),
-            (RequiredConstraint, RequiredConstraint) => new RequiredConstraint(),
-            (OptionalConstraint, OptionalConstraint) => new OptionalConstraint(),
-            _ => Identical(self, other) ? self : null,
-        };
+        return ConstraintKinds.Of(self)?.Join(self, other);
     }
 
     /// <summary>
     /// Hull of two ranges. A bound missing on either side is unbounded in the hull; bounds that
     /// cannot be ordered drop the whole axis (null) instead of throwing.
     /// </summary>
-    private static RangeConstraint? JoinRange(RangeConstraint a, RangeConstraint b) {
+    internal static RangeConstraint? JoinRange(RangeConstraint a, RangeConstraint b) {
         object? min = null;
         if (a.Minimum is not null && b.Minimum is not null) {
             if (TryCompare(a.Minimum, b.Minimum) is not { } c) return null;
@@ -179,7 +133,7 @@ public static class ConstraintMerge {
         return result.Net as RangeConstraint;
     }
 
-    private static ConstraintMergeResult MergeRangeResult(RangeConstraint a, RangeConstraint b) {
+    internal static ConstraintMergeResult MergeRangeResult(RangeConstraint a, RangeConstraint b) {
         object? min = a.Minimum;
         if (b.Minimum is not null) {
             if (min is null) min = b.Minimum;

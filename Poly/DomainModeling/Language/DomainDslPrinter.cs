@@ -949,25 +949,24 @@ public sealed class DomainDslPrinter {
     /// </summary>
     private void AppendPrintedConstraints(IEnumerable<Constraint> constraints) {
         foreach (var c in constraints) {
-            if (c is RequiredConstraint)
+            if (ConstraintKinds.Of(c) is { PrintedInDsl: false })
                 continue;
             _sb.Append(' ');
             _sb.Append(PrintConstraint(c));
         }
     }
 
-    private string PrintConstraint(Constraint constraint) => constraint switch {
-        OptionalConstraint => "optional",
-        UniqueConstraint => "unique",
-        RangeConstraint r => $"range({Convert.ToString(r.Minimum, CultureInfo.InvariantCulture)}, {Convert.ToString(r.Maximum, CultureInfo.InvariantCulture)})",
-        LengthConstraint l => l.MinLength == l.MaxLength
-            ? $"length({l.MinLength})"
-            : $"length({l.MinLength}, {l.MaxLength})",
-        PatternConstraint p => $"pattern(\"{EscapeStringLiteral(p.Pattern)}\")",
-        DefaultValueConstraint dv => $"default({PrintExpression(dv.Expression)})",
-        EqualityConstraint e => $"equals({PrintLiteralValue(e.ExpectedValue)})",
-        _ => $"?{constraint.GetType().Name}",
-    };
+    private string PrintConstraint(Constraint constraint) =>
+        ConstraintKinds.Of(constraint)?.Print?.Invoke(constraint, new PrintHost(this))
+        ?? $"?{constraint.GetType().Name}";
+
+    private sealed class PrintHost(DomainDslPrinter printer) : IConstraintPrintHost {
+        public string Expression(DomainExpression expression) => printer.PrintExpression(expression);
+
+        public string Literal(object? value) => PrintLiteralValue(value);
+
+        public string EscapeString(string value) => EscapeStringLiteral(value);
+    }
 
     private static string PrintLiteralValue(object? value) => value switch {
         null => "null",

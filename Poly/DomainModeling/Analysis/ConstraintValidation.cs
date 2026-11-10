@@ -1,5 +1,6 @@
 using Poly.Analysis;
 using Poly.DomainModeling.Ontology;
+using Poly.DomainModeling.Ontology.Constraints;
 
 namespace Poly.DomainModeling.Analysis;
 
@@ -18,17 +19,7 @@ internal static class ConstraintValidation {
     /// </summary>
     public static ConstraintVerdict Evaluate(Constraint constraint, object? value) {
         ArgumentNullException.ThrowIfNull(constraint);
-        return constraint switch {
-            RequiredConstraint => Of(value is not null),
-            OptionalConstraint => ConstraintVerdict.Satisfied, // optional is the opt-out of requiredness; any value (incl. null) is legal
-            RangeConstraint r => Of(IsInRange(value, r.Minimum, r.Maximum)),
-            LengthConstraint l => Of(IsValidLength(value, l.MinLength, l.MaxLength)),
-            PatternConstraint p => Of(IsValidPattern(value, p.Pattern)),
-            EqualityConstraint eq => Of(Equals(value, eq.ExpectedValue)),
-            UniqueConstraint => ConstraintVerdict.Satisfied, // cannot validate statically; requires instance set
-            DefaultValueConstraint => ConstraintVerdict.Satisfied, // default-expression does not constrain assignment
-            _ => ConstraintVerdict.Undecided
-        };
+        return ConstraintKinds.Of(constraint)?.Evaluate(constraint, value) ?? ConstraintVerdict.Undecided;
     }
 
     /// <summary>Reports the shared DMCS003 warning for a constraint kind analysis does not model.</summary>
@@ -38,24 +29,14 @@ internal static class ConstraintValidation {
             $"Constraint {Describe(constraint)} {where} is not modelled by analysis, so it was not checked.",
             DomainModelDiagnosticCodes.ConstraintUndecided);
 
-    private static ConstraintVerdict Of(bool satisfied) =>
+    internal static ConstraintVerdict Of(bool satisfied) =>
         satisfied ? ConstraintVerdict.Satisfied : ConstraintVerdict.Violated;
 
     public static string Describe(Constraint constraint) {
-        return constraint switch {
-            RequiredConstraint => "required (non-null)",
-            OptionalConstraint => "optional",
-            RangeConstraint r => FormatRange(r),
-            LengthConstraint l => $"length({l.MinLength}, {l.MaxLength})",
-            PatternConstraint p => $"pattern({p.Pattern})",
-            EqualityConstraint eq => $"== {eq.ExpectedValue}",
-            UniqueConstraint => "unique",
-            DefaultValueConstraint => "default(...)",
-            _ => constraint.GetType().Name
-        };
+        return ConstraintKinds.Of(constraint)?.Describe(constraint) ?? constraint.GetType().Name;
     }
 
-    private static string FormatRange(RangeConstraint r) {
+    internal static string FormatRange(RangeConstraint r) {
         var lo = r.Minimum is not null ? FormatValue(r.Minimum) : "−∞";
         var hi = r.Maximum is not null ? FormatValue(r.Maximum) : "+∞";
         return $"range({lo}, {hi})";
@@ -68,7 +49,7 @@ internal static class ConstraintValidation {
 
     // ── Individual constraint checks ──────────────────────────────────────
 
-    private static bool IsInRange(object? value, object? min, object? max) {
+    internal static bool IsInRange(object? value, object? min, object? max) {
         if (value is null) return false; // null is never in range
         var d = ToDouble(value);
         if (d is null) return false;
@@ -78,12 +59,12 @@ internal static class ConstraintValidation {
         return true;
     }
 
-    private static bool IsValidLength(object? value, int minLength, int maxLength) {
+    internal static bool IsValidLength(object? value, int minLength, int maxLength) {
         if (value is not string s) return false;
         return s.Length >= minLength && s.Length <= maxLength;
     }
 
-    private static bool IsValidPattern(object? value, string pattern) {
+    internal static bool IsValidPattern(object? value, string pattern) {
         if (value is not string s) return false;
         try {
             return Regex.IsMatch(s, pattern);

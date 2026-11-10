@@ -412,8 +412,8 @@ internal sealed class ContractIntegrationAnalyzer : INodeAnalyzer {
 
     /// <summary>
     /// #425: whether the loaded library contributed an implementation body for this endpoint.
-    /// A surface-only contribution (a sibling export) has none. The body itself is not read:
-    /// Scot's 2026-11-08 ruling keeps every contributed body unknown on the postcondition half.
+    /// A surface-only contribution (a sibling export) has none and stays unknown on the
+    /// postcondition half. A present body is walked by <c>ContractBoundaryCheck</c>.
     /// Reads the session the same way <see cref="ValidatePlatformTarget"/> does; a domain whose
     /// <c>uses</c> id the catalog cannot load throws in <c>DomainEvolution.ResolveSession</c>
     /// before either runs.

@@ -1,3 +1,4 @@
+using Poly.Ast.Nodes;
 using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Ontology.Constraints;
@@ -24,11 +25,17 @@ namespace Poly.DomainModeling.Analysis;
 /// incompatibility path exactly as <c>origin/master</c> refused it.
 /// </para>
 /// <para>
-/// Scot's 2026-11-08 ruling: library bodies are not walked. Every contributed body is
-/// <see cref="ContractBoundaryVerdict.Unknown"/> on the postcondition half, named once.
+/// The postcondition half walks the contributed body. A body that provably writes a declared
+/// payload constraint outside its bound, or nulls a required payload member, is
+/// <see cref="ContractBoundaryVerdict.Violated"/> and Lower refuses. A write the walk cannot
+/// decide, or a payload handed to a call that may mutate it, is unknown: one
+/// <c>DMCON015</c> naming the member, and Lower is not blocked. A surface-only contribution
+/// has no body to walk, so its postcondition half stays unknown and silent.
 /// </para>
 /// </summary>
 internal static class ContractBoundaryCheck {
+    /// <summary>The bound payload parameter name the splice contract fixes.</summary>
+    private const string PayloadParameter = "request";
     /// <summary>One obligation, its verdict, and whether it is readable from the argument.</summary>
     private sealed record Obligation(
         string Name,
@@ -51,25 +58,423 @@ internal static class ContractBoundaryCheck {
         if (obligations is null)
             return null;
 
+        var payload = FindValueType(contract, domain, endpoint.PayloadType.TypeName);
         var precondition = Verdict(obligations);
         var compatibility = Compatibility(obligations, precondition);
-        // Scot 2026-11-08: a contributed body is not walked, so its postcondition half is
-        // always unknown. A surface-only contribution has no body to prove either.
-        var postcondition = ContractBoundaryVerdict.Unknown;
+        var postcondition = Postcondition(context, binding, contract, domain, endpoint, payload, hasBody);
 
         Report(context, binding, endpoint, obligations);
 
-        if (hasBody) {
+        return new ContractBoundaryMetadata(precondition, postcondition, compatibility);
+    }
+
+    // ── Postcondition half ──────────────────────────────────────
+
+    /// <summary>
+    /// The body's obligations against the endpoint's declared payload. Every node is walked,
+    /// including the final <c>return</c> expression, which can still hand the payload to a call.
+    /// </summary>
+    private static ContractBoundaryVerdict Postcondition(
+        AnalysisContext context,
+        ContractBinding binding,
+        ImportedContract contract,
+        Domain domain,
+        ContractEndpoint endpoint,
+        ValueType? payload,
+        bool hasBody) {
+        // A surface-only contribution has no body to prove. Unknown, and silent: the caller
+        // half is the only thing the bind can decide (#425 §4).
+        if (!hasBody)
+            return ContractBoundaryVerdict.Unknown;
+
+        var body = ContributedBody(domain, contract, endpoint);
+        if (body is null || body.Nodes.Count == 0) {
             context.ReportWarning(
                 binding,
-                $"Contract binding '{binding.Name}' splices a contributed body for endpoint " +
-                $"'{contract.Name}.{endpoint.Name}'. Its postconditions are not proved in this slice; " +
-                "the half is unknown and Lower is not blocked.",
+                $"Contract binding '{binding.Name}' endpoint '{contract.Name}.{endpoint.Name}' " +
+                "records a contributed body that analysis could not read (missing, empty, or its " +
+                "factory threw). The postcondition half is unknown; Lower will refuse the body.",
+                DomainModelDiagnosticCodes.ContractBoundaryUnknown);
+            return ContractBoundaryVerdict.Unknown;
+        }
+
+        var obligations = BodyObligations(payload, body);
+        foreach (var obligation in obligations.Where(o => o.Verdict == ContractBoundaryVerdict.Violated)) {
+            context.ReportError(
+                binding,
+                $"Contract binding '{binding.Name}' endpoint '{contract.Name}.{endpoint.Name}' " +
+                $"body cannot satisfy payload '{payload?.Name ?? endpoint.PayloadType.TypeName}' " +
+                $"constraint '{obligation.Name}': the body writes a value outside it. A contributed " +
+                "body must satisfy the surface it implements; Lower refuses.",
+                DomainModelDiagnosticCodes.ContractBoundaryViolation);
+        }
+
+        foreach (var obligation in obligations.Where(o => o.Verdict == ContractBoundaryVerdict.Unknown)) {
+            var payloadName = payload?.Name ?? endpoint.PayloadType.TypeName;
+            var message = obligation.Unreadable
+                ? $"Contract binding '{binding.Name}' endpoint '{contract.Name}.{endpoint.Name}' " +
+                  $"cannot prove payload '{payloadName}' from the contributed body: " +
+                  $"{obligation.Name}. " + (obligation.Name.StartsWith("the body does not end", StringComparison.Ordinal)
+                      || obligation.Name.StartsWith("the body returns before", StringComparison.Ordinal)
+                      ? "Lower will refuse the body."
+                      : "Lower is not blocked.")
+                : $"Contract binding '{binding.Name}' endpoint '{contract.Name}.{endpoint.Name}' " +
+                  $"cannot prove payload '{payloadName}' constraint '{obligation.Name}' from the " +
+                  "contributed body: the assigned value cannot be decided by the walk. " +
+                  "Lower is not blocked.";
+            context.ReportWarning(
+                binding,
+                message,
                 DomainModelDiagnosticCodes.ContractBoundaryUnknown);
         }
 
-        return new ContractBoundaryMetadata(precondition, postcondition, compatibility);
+        return Verdict(obligations);
     }
+
+    private static Block? ContributedBody(Domain domain, ImportedContract contract, ContractEndpoint endpoint) {
+        if (contract.UsesId is null)
+            return null;
+        var contribution = RuntimeAnalysisCache.Session(domain).FindContractContribution(contract.UsesId);
+        if (contribution is null || !contribution.Bodies.TryGetValue(endpoint.Name, out var factory))
+            return null;
+        try {
+            return factory();
+        }
+        catch (OperationCanceledException) {
+            throw;
+        }
+        catch (Exception) {
+            // A throwing factory is a body analysis cannot read, not a crash in Analyze.
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// One obligation per payload member the body can change, decided from the member's final
+    /// value on every path. Requiredness is implicit: a payload member is required unless it is
+    /// marked optional, and the DSL cannot mark one optional.
+    /// </summary>
+    // Mirrors ContractSplicePlan.ContainsReturn: a lambda's return belongs to the lambda.
+    private static bool ContainsReturn(Node node) {
+        if (node is Return)
+            return true;
+        if (node is Lambda)
+            return false;
+        foreach (var child in node.Children) {
+            if (child is not null && ContainsReturn(child))
+                return true;
+        }
+        return false;
+    }
+
+    private static IReadOnlyList<Obligation> BodyObligations(ValueType? payload, Block body) {
+        var obligations = new List<Obligation>();
+        if (payload is null)
+            return obligations;
+
+        // Lower requires a final `return <value>`; analysis must not call any other shape proven.
+        if (body.Nodes.Count == 0 || body.Nodes[^1] is not Return { Value: not null }) {
+            obligations.Add(new Obligation(
+                "the body does not end in `return <value>`",
+                ContractBoundaryVerdict.Unknown,
+                Unreadable: true));
+            return obligations;
+        }
+
+        // Lower refuses a return before the final expression (ContractSplicePlan.ValidateShape).
+        for (var i = 0; i < body.Nodes.Count - 1; i++) {
+            if (ContainsReturn(body.Nodes[i])) {
+                obligations.Add(new Obligation(
+                    "the body returns before its final expression",
+                    ContractBoundaryVerdict.Unknown,
+                    Unreadable: true));
+                return obligations;
+            }
+        }
+
+        // The final return is walked too: its expression can hand the payload to a call.
+        var state = new BodyState();
+        WalkBody(body.Nodes, state, payload);
+
+        if (state.PayloadMayChange) {
+            obligations.Add(new Obligation(
+                "the body may mutate or alias the payload in a way the walk cannot read",
+                ContractBoundaryVerdict.Unknown,
+                Unreadable: true));
+            return obligations;
+        }
+
+        foreach (var (name, wrote) in state.Properties) {
+            var property = payload.Properties.FirstOrDefault(candidate =>
+                string.Equals(candidate.Name, name, StringComparison.Ordinal));
+            if (property is null) {
+                obligations.Add(new Obligation(
+                    $"{name} on payload '{payload.Name}'",
+                    ContractBoundaryVerdict.Unknown,
+                    Unreadable: false));
+                continue;
+            }
+
+            if (!wrote.Known) {
+                obligations.Add(new Obligation(
+                    $"{name} on payload '{payload.Name}'",
+                    ContractBoundaryVerdict.Unknown,
+                    Unreadable: false));
+                continue;
+            }
+
+            AddWriteObligation(property, wrote.Value, obligations);
+        }
+
+        return obligations;
+    }
+
+    private static void AddWriteObligation(
+        Property property,
+        object? value,
+        List<Obligation> obligations) {
+        // Presence is the DMEFF015-class invariant: a null into a required payload member
+        // breaks it, whatever the member's other constraints say.
+        var optional = property.Constraints.Any(constraint => constraint is OptionalConstraint);
+        if (value is null && !optional) {
+            obligations.Add(new Obligation(
+                $"{property.Name} required (non-null)",
+                ContractBoundaryVerdict.Violated,
+                Unreadable: false));
+            return;
+        }
+
+        if (value is null)
+            return;
+
+        Constraint? violated = null;
+        Constraint? unknown = null;
+        foreach (var constraint in property.Constraints) {
+            var verdict = ConstantVerdict(constraint, value);
+            if (verdict == ContractBoundaryVerdict.Violated && violated is null)
+                violated = constraint;
+            else if (verdict == ContractBoundaryVerdict.Unknown && unknown is null)
+                unknown = constraint;
+        }
+
+        if (violated is not null) {
+            obligations.Add(new Obligation(
+                $"{property.Name} {Printer.PrintConstraintText(violated)}",
+                ContractBoundaryVerdict.Violated,
+                Unreadable: false));
+        }
+        else if (unknown is not null) {
+            obligations.Add(new Obligation(
+                $"{property.Name} {Printer.PrintConstraintText(unknown)}",
+                ContractBoundaryVerdict.Unknown,
+                Unreadable: false));
+        }
+    }
+
+    /// <summary>
+    /// A literal against one declared constraint. Only a kind whose meaning the value can be
+    /// checked against is decided; a type mismatch, or a kind with no static check, is unknown
+    /// so a body is never called violated on a comparison the walk cannot make.
+    /// </summary>
+    private static ContractBoundaryVerdict ConstantVerdict(Constraint constraint, object value) {
+        switch (constraint) {
+            case RequiredConstraint or OptionalConstraint or DefaultValueConstraint:
+                return ContractBoundaryVerdict.Proven;
+            case RangeConstraint range:
+                return IsNumber(value) && HasNumericBounds(range)
+                    ? ConstraintValidation.IsSatisfiedBy(range, value)
+                        ? ContractBoundaryVerdict.Proven
+                        : ContractBoundaryVerdict.Violated
+                    : ContractBoundaryVerdict.Unknown;
+            case LengthConstraint length:
+                return value is string
+                    ? ConstraintValidation.IsSatisfiedBy(length, value)
+                        ? ContractBoundaryVerdict.Proven
+                        : ContractBoundaryVerdict.Violated
+                    : ContractBoundaryVerdict.Unknown;
+            case PatternConstraint pattern:
+                if (value is not string text)
+                    return ContractBoundaryVerdict.Unknown;
+                try {
+                    return Regex.IsMatch(text, pattern.Pattern)
+                        ? ContractBoundaryVerdict.Proven
+                        : ContractBoundaryVerdict.Violated;
+                }
+                catch (RegexParseException) {
+                    return ContractBoundaryVerdict.Unknown;
+                }
+            case EqualityConstraint equality:
+                return NumberEquals(value, equality.ExpectedValue) is { } equal
+                    ? equal ? ContractBoundaryVerdict.Proven : ContractBoundaryVerdict.Violated
+                    : ContractBoundaryVerdict.Unknown;
+            default:
+                // unique has no static check.
+                return ContractBoundaryVerdict.Unknown;
+        }
+    }
+
+    private static bool? NumberEquals(object value, object? expected) {
+        if (IsNumber(value) && IsNumber(expected))
+            return Convert.ToDouble(value) == Convert.ToDouble(expected);
+        return null;
+    }
+
+    private static bool HasNumericBounds(RangeConstraint range) =>
+        (range.Minimum is null || IsNumber(range.Minimum))
+        && (range.Maximum is null || IsNumber(range.Maximum));
+
+    private static bool IsNumber(object? value) =>
+        value is sbyte or byte or short or ushort or int or uint or long or ulong
+            or float or double or decimal;
+
+    // ── Body walk ───────────────────────────────────────────────
+
+    /// <summary>One payload member's final value, or unknown when a path leaves it undecided.</summary>
+    private readonly record struct Wrote(bool Known, object? Value) {
+        public static Wrote Unknown => new(false, null);
+        public static Wrote Of(object? value) => new(true, value);
+    }
+
+    /// <summary>The payload writes a straight-line walk can see, and whether the payload escapes.</summary>
+    private sealed class BodyState {
+        public bool PayloadMayChange { get; set; }
+        public Dictionary<string, Wrote> Properties { get; } = new(StringComparer.Ordinal);
+
+        public BodyState Clone() {
+            var copy = new BodyState { PayloadMayChange = PayloadMayChange };
+            foreach (var pair in Properties)
+                copy.Properties[pair.Key] = pair.Value;
+            return copy;
+        }
+
+        /// <summary>
+        /// A member is decided only when both branches leave it at the same known value. A
+        /// member written on one path only is unknown: the other path leaves the caller's value.
+        /// </summary>
+        public void Merge(BodyState then, BodyState other) {
+            PayloadMayChange = then.PayloadMayChange || other.PayloadMayChange;
+            Properties.Clear();
+            foreach (var name in then.Properties.Keys.Concat(other.Properties.Keys).Distinct(StringComparer.Ordinal)) {
+                var inThen = then.Properties.TryGetValue(name, out var a);
+                var inOther = other.Properties.TryGetValue(name, out var b);
+                Properties[name] = inThen && inOther && a.Known && b.Known && Equals(a.Value, b.Value)
+                    ? Wrote.Of(a.Value)
+                    : Wrote.Unknown;
+            }
+        }
+    }
+
+    private static void WalkBody(IEnumerable<Node> statements, BodyState state, ValueType payload) {
+        foreach (var statement in statements)
+            WalkStatement(statement, state, payload);
+    }
+
+    private static void WalkStatement(Node node, BodyState state, ValueType payload) {
+        switch (node) {
+            case Assignment { Destination: Member { Value: Parameter parameter } member, Value: Constant constant }
+                when IsPayload(parameter):
+                state.Properties[member.MemberName] = Wrote.Of(constant.Value);
+                break;
+            case Assignment { Destination: Member { Value: Parameter parameter } member } assignment
+                when IsPayload(parameter):
+                state.Properties[member.MemberName] = Wrote.Unknown;
+                if (ContainsBarePayload(assignment.Value, payload) || MayMutatePayload(assignment.Value, payload))
+                    state.PayloadMayChange = true;
+                break;
+            case Assignment assignment:
+                if (MayMutatePayload(assignment, payload))
+                    state.PayloadMayChange = true;
+                break;
+            case IfStatement conditional: {
+                    if (MayMutatePayload(conditional.Condition, payload))
+                        state.PayloadMayChange = true;
+                    var whenTrue = state.Clone();
+                    var whenFalse = state.Clone();
+                    WalkBody(Nodes(conditional.ThenBranch), whenTrue, payload);
+                    if (conditional.ElseBranch is not null)
+                        WalkBody(Nodes(conditional.ElseBranch), whenFalse, payload);
+                    state.Merge(whenTrue, whenFalse);
+                    break;
+                }
+            default:
+                if (MayMutatePayload(node, payload))
+                    state.PayloadMayChange = true;
+                break;
+        }
+    }
+
+    private static IEnumerable<Node> Nodes(Node branch) =>
+        branch is Block block ? block.Nodes : [branch];
+
+    private static bool IsPayload(Parameter parameter) =>
+        string.Equals(parameter.Name, PayloadParameter, StringComparison.Ordinal);
+
+    /// <summary>
+    /// True when the node writes a payload member, rebinds the payload, calls a method on it, or
+    /// hands the payload object (or a member that may be an object) to a call. Nulling it is not
+    /// needed: any of those means the final payload cannot be read from the body.
+    /// </summary>
+    private static bool MayMutatePayload(Node? node, ValueType payload) {
+        switch (node) {
+            case null:
+                return false;
+            case Assignment assignment:
+                return RootedAtPayload(assignment.Destination)
+                       || ContainsBarePayload(assignment.Value, payload)
+                       || MayMutatePayload(assignment.Value, payload);
+            case IfStatement conditional:
+                return MayMutatePayload(conditional.Condition, payload)
+                       || MayMutatePayload(conditional.ThenBranch, payload)
+                       || conditional.ElseBranch is not null && MayMutatePayload(conditional.ElseBranch, payload);
+            case Invoke invoke:
+                return invoke.Delegate is Member { Value: var receiver } && RootedAtPayload(receiver)
+                       || invoke.Arguments.Any(argument => ContainsBarePayload(argument, payload))
+                       || MayMutatePayload(invoke.Delegate, payload)
+                       || invoke.Arguments.Any(argument => MayMutatePayload(argument, payload));
+            case New created:
+                return created.Arguments.Any(argument => ContainsBarePayload(argument, payload))
+                       || created.Arguments.Any(argument => MayMutatePayload(argument, payload));
+            default:
+                return node.Children.Any(child => MayMutatePayload(child, payload));
+        }
+    }
+
+    /// <summary>
+    /// True when the tree holds a reference to the payload that a scalar member read does not
+    /// consume: the bare payload object, or a member or index of it that could itself be an
+    /// object. Such a reference leaves the body's control wherever it sits (a cast, a
+    /// conditional, a lambda, a call argument), so the walk cannot read the final payload.
+    /// </summary>
+    private static bool ContainsBarePayload(Node? node, ValueType payload) {
+        switch (node) {
+            case null:
+                return false;
+            case Parameter parameter:
+                return IsPayload(parameter);
+            case IndexAccess index when RootedAtPayload(index):
+                return true;
+            case Member member when RootedAtPayload(member):
+                // One level only: a nested member is an object the walk cannot see through.
+                if (member.Value is not Parameter)
+                    return true;
+                var property = payload.Properties.FirstOrDefault(candidate =>
+                    string.Equals(candidate.Name, member.MemberName, StringComparison.Ordinal));
+                return property is null || !IsScalar(property.Type.TypeName);
+            default:
+                return node.Children.Any(child => ContainsBarePayload(child, payload));
+        }
+    }
+
+    private static bool RootedAtPayload(Node? node) => node switch {
+        Parameter parameter => IsPayload(parameter),
+        Member member => RootedAtPayload(member.Value),
+        IndexAccess index => RootedAtPayload(index.Value),
+        _ => false,
+    };
+
+    private static bool IsScalar(string typeName) => typeName is
+        "Text" or "String" or "Number" or "Int" or "Int32" or "Int64"
+        or "Boolean" or "Bool" or "Guid" or "Decimal" or "Double" or "Float";
 
     private static void Report(
         AnalysisContext context,

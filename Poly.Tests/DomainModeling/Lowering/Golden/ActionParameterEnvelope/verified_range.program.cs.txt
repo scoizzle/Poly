@@ -1,0 +1,162 @@
+#nullable enable
+
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using Microsoft.EntityFrameworkCore;
+using System.ComponentModel.DataAnnotations;
+using Poly.Generated;
+
+var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.ConfigureHttpJsonOptions(options => {
+    options.SerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
+    options.SerializerOptions.Converters.Add(new JsonStringEnumConverter());
+});
+
+builder.Services.AddDbContext<TDbCtx>(options => options.UseInMemoryDatabase("T"));
+
+var app = builder.Build();
+
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<TDbCtx>();
+    await SeedAsync(db);
+}
+
+app.MapGet("/api/gauges", async (TDbCtx db) => await db.Gauges.ToListAsync());
+
+app.MapGet("/api/gauges/{id}", async (int id, TDbCtx db) => (await db.Gauges.FindAsync(id) is Gauge gauge ? Results.Ok(gauge) : Results.NotFound()));
+
+app.MapPost("/api/gauges", async (GaugeDto dto, TDbCtx db) => {
+    var gaugeResult = Gauge.Create(dto.Level, dto.Peak);
+    if (!gaugeResult.IsSuccess)
+    {
+        return FailureStatus(gaugeResult.ErrorMessage);
+    }
+    db.Gauges.Add(gaugeResult.Value);
+    await db.SaveChangesAsync();
+    return Results.Ok(gaugeResult.Value);
+});
+
+app.MapPost("/api/gauges/{id}/setlevel", async (int id, SetLevelDto dto, TDbCtx db) => {
+    var entity = await db.Gauges.FindAsync(id);
+    if (entity == null)
+    {
+        return Results.NotFound("Gauge not found");
+    }
+    try
+    {
+        var result = entity.SetLevel(dto.V);
+        await db.SaveChangesAsync();
+        if (result.IsSuccess)
+        {
+            return Results.Ok("ok");
+        }
+        else
+        {
+            return FailureStatus(result.ErrorMessage);
+        }
+    }
+    catch (Exception)
+    {
+        return Results.StatusCode(500);
+    }
+});
+
+app.MapPost("/api/gauges/{id}/setpeak", async (int id, SetPeakDto dto, TDbCtx db) => {
+    var entity = await db.Gauges.FindAsync(id);
+    if (entity == null)
+    {
+        return Results.NotFound("Gauge not found");
+    }
+    try
+    {
+        var result = entity.SetPeak(dto.V);
+        await db.SaveChangesAsync();
+        if (result.IsSuccess)
+        {
+            return Results.Ok("ok");
+        }
+        else
+        {
+            return FailureStatus(result.ErrorMessage);
+        }
+    }
+    catch (Exception)
+    {
+        return Results.StatusCode(500);
+    }
+});
+
+app.MapPost("/api/gauges/{id}/surge", async (int id, TDbCtx db) => {
+    var entity = await db.Gauges.FindAsync(id);
+    if (entity == null)
+    {
+        return Results.NotFound("Gauge not found");
+    }
+    try
+    {
+        var result = entity.Surge();
+        await db.SaveChangesAsync();
+        if (result.IsSuccess)
+        {
+            return Results.Ok("ok");
+        }
+        else
+        {
+            return FailureStatus(result.ErrorMessage);
+        }
+    }
+    catch (Exception)
+    {
+        return Results.StatusCode(500);
+    }
+});
+
+static IResult FailureStatus(string? message)
+{
+    return (message != null && (message.Contains("Unique constraint") || message.Contains("already has a target")) ? Results.Conflict(message) : Results.BadRequest(message));
+}
+
+
+static async System.Threading.Tasks.Task SeedAsync(TDbCtx db)
+{
+    if (db == null)
+    {
+        return;
+    }
+    if (await db.Gauges.AnyAsync())
+    {
+        return;
+    }
+    var gaugeResult = Gauge.Create(1, 1);
+    if (gaugeResult.IsSuccess)
+    {
+        db.Add(gaugeResult.Value);
+    }
+    await db.SaveChangesAsync();
+}
+
+
+app.Run();
+
+
+public record GaugeDto
+{
+    [Range(0, 100)]
+    public long Level { get; init; }
+    [Range(0, 100)]
+    public long Peak { get; init; }
+}
+
+public record SetLevelDto
+{
+    [Range(0, 100)]
+    public long V { get; init; }
+}
+
+public record SetPeakDto
+{
+    [Range(0, 100)]
+    public long V { get; init; }
+}

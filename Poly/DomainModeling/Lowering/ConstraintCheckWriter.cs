@@ -265,6 +265,8 @@ internal static class ConstraintCheckWriter {
                 "marker: optionality is a requiredness fact, not a guard"),
             [typeof(DefaultValueConstraint)] = new([],
                 "marker: the default feeds requiredness and default lowering, not a guard"),
+            [typeof(RelationalConstraint)] = new([],
+                "marker: an analysis-derived relation between two properties (#367 A-6); policies lower the guard, not this fact"),
         };
 
     /// <summary>One constraint record's check kinds, or the writer that owns its guard instead.</summary>

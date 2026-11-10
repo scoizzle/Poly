@@ -253,7 +253,8 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
 
         var needsConstraintWrap = assignProp is not null
             && HasAssignableConstraints(assignProp)
-            && !SatisfiesAssignConstraints(assignProp, value.Value);
+            && !SatisfiesAssignConstraints(assignProp, value.Value)
+            && !CopiesStrongerGuardClosedProperty(assignProp, a, value);
         Node assignment = uniqueName is null && !needsConstraintWrap
             ? new Assignment(target.Value, value.Value)
             : WrapConstrainedAssign(
@@ -324,6 +325,133 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
                 && enumType.MemberNames.Contains(member, StringComparer.Ordinal)))
             return false;
         return true;
+    }
+
+    /// <summary>
+    /// #367 C-1. <c>assign Target to Source</c> needs no assign guard when (a) Source is a different plain
+    /// property of this entity that the analysis proves guard-closed (every writer of Source leaves it within
+    /// Source's own constraints), and (b) Source's constraints imply every check the guard would emit for Target
+    /// (<see cref="SourceConstraintsImplyTarget"/>). The checks that remain are Source's own guards on each write
+    /// to Source (Create factory, in-range literal default/assign), which guard-closed guarantees exist, so a
+    /// violating value is still rejected where it enters Source. Anything not proven keeps the guard.
+    /// Restricted to a result-returning action body: not in ctor / stage-entry (void) contexts, where Source
+    /// may still hold its CLR default before it is written.
+    /// </summary>
+    private bool CopiesStrongerGuardClosedProperty(Property target, AssignEffect a, LoweredExpression value) {
+        if (a.Value is not PropertyAccess sourceAccess
+            || _analysis is null
+            || _context.ActionResultType is null
+            || _entriesInlining.Count > 0
+            || _exitsInlining.Count > 0
+            || value.Statements.Count > 0
+            || string.Equals(sourceAccess.Name, target.Name, StringComparison.Ordinal)
+            || _context.ActionParameterNames?.Contains(sourceAccess.Name) == true
+            || (_context.Parameters?.ContainsKey(sourceAccess.Name) ?? false))
+            return false;
+
+        // The lowered RHS must be exactly Subject.Source: no clock/guid fold, no conversion, no enum rewrite.
+        if (value.Value is not Member { MemberName: var memberName } member
+            || !string.Equals(memberName, sourceAccess.Name, StringComparison.Ordinal)
+            || !Equals(member.Value, Subject))
+            return false;
+
+        var source = _entity.Properties.FirstOrDefault(p =>
+            string.Equals(p.Name, sourceAccess.Name, StringComparison.Ordinal));
+        if (source is null)
+            return false;
+
+        var closed = _analysis.GetStructure(_entity)?.GuardClosedPropertyNames;
+        if (closed is null || !closed.Contains(source.Name))
+            return false;
+
+        return SourceConstraintsImplyTarget(source, target);
+    }
+
+    /// <summary>
+    /// The implication, per kind. Every constraint on <paramref name="target"/> must be matched by a
+    /// constraint on <paramref name="source"/> at least as strong; an unmatched or unknown kind refuses.
+    /// <list type="bullet">
+    /// <item>type: identical Text/String, numeric or Boolean type name; enums and everything else refuse.</item>
+    /// <item>required: a required target needs a required source (and a source never <c>optional</c>), so a
+    ///   null/empty source cannot reach the target; guard-closed makes the source's own required guard hold.</item>
+    /// <item>range: every target bound needs a source bound at least as tight (min_s &gt;= min_t, max_s &lt;= max_t);
+    ///   a union (Intervals) on the target refuses.</item>
+    /// <item>length: source MinLength &gt;= target MinLength, source MaxLength &lt;= target MaxLength.</item>
+    /// <item>pattern: only a source pattern with the identical regex string. Regex containment is not decided.</item>
+    /// <item>equality: only the identical expected value (same runtime type).</item>
+    /// <item>excluded, never elided: unique, relational, any unmodelled constraint record, enum types.</item>
+    /// </list>
+    /// </summary>
+    private bool SourceConstraintsImplyTarget(Property source, Property target) {
+        var typeName = target.Type.TypeName;
+        if (!string.Equals(source.Type.TypeName, typeName, StringComparison.Ordinal))
+            return false;
+        var isText = typeName is "Text" or "String";
+        var isNumber = typeName is "Number" or "Int" or "Decimal";
+        var isBoolean = typeName is "Boolean";
+        if (!isText && !isNumber && !isBoolean)
+            return false;
+        if (IsUniqueProperty(target.Name)
+            || DomainToCSharpExporter.TryResolveEnumType(_domain, _analysis, typeName, out _))
+            return false;
+        if (source.Constraints.OfType<OptionalConstraint>().Any())
+            return false;
+        if (NeedsRequiredValueCheck(target) && !NeedsRequiredValueCheck(source))
+            return false;
+
+        var sourceRanges = source.Constraints.OfType<RangeConstraint>().ToList();
+        var sourceLengths = source.Constraints.OfType<LengthConstraint>().ToList();
+        var sourcePatterns = source.Constraints.OfType<PatternConstraint>().ToList();
+        var sourceEqualities = source.Constraints.OfType<EqualityConstraint>().ToList();
+
+        foreach (var constraint in target.Constraints) {
+            switch (constraint) {
+                case RangeConstraint range when isNumber:
+                    if (range.Intervals is not null)
+                        return false;
+                    if (range.Minimum is not null
+                        && !sourceRanges.Any(s => s.Intervals is null && s.Minimum is not null
+                            && TryCompare(s.Minimum, range.Minimum) is >= 0))
+                        return false;
+                    if (range.Maximum is not null
+                        && !sourceRanges.Any(s => s.Intervals is null && s.Maximum is not null
+                            && TryCompare(s.Maximum, range.Maximum) is <= 0))
+                        return false;
+                    break;
+                case LengthConstraint length when isText:
+                    if (length.MinLength > 0 && !sourceLengths.Any(s => s.MinLength >= length.MinLength))
+                        return false;
+                    if (length.MaxLength < int.MaxValue && !sourceLengths.Any(s => s.MaxLength <= length.MaxLength))
+                        return false;
+                    break;
+                case PatternConstraint pattern when isText:
+                    if (!sourcePatterns.Any(s => string.Equals(s.Pattern, pattern.Pattern, StringComparison.Ordinal)))
+                        return false;
+                    break;
+                case EqualityConstraint equality:
+                    if (!sourceEqualities.Any(s => s.ExpectedValue.GetType() == equality.ExpectedValue.GetType()
+                        && Equals(s.ExpectedValue, equality.ExpectedValue)))
+                        return false;
+                    break;
+                case DefaultValueConstraint or OptionalConstraint or UniqueConstraint:
+                    break;
+                default:
+                    return false;
+            }
+        }
+        return true;
+    }
+
+    /// <summary>Exact integer compare when both bounds are integral, otherwise double (the guard's own domain); null when not numeric.</summary>
+    private static int? TryCompare(object left, object right) {
+        try {
+            if (left is int or long && right is int or long)
+                return Convert.ToInt64(left).CompareTo(Convert.ToInt64(right));
+            return Convert.ToDouble(left).CompareTo(Convert.ToDouble(right));
+        }
+        catch (Exception e) when (e is InvalidCastException or FormatException or OverflowException) {
+            return null;
+        }
     }
 
     private static bool TryNumeric(Node value, out double number) {

@@ -118,7 +118,12 @@ internal sealed class ConstraintQualityAnalyzer : INodeAnalyzer {
         if (equality is not null) {
             foreach (var c in constraints) {
                 if (c is EqualityConstraint or RangeConstraint) continue; // range covered elsewhere
-                if (!ConstraintValidation.IsSatisfiedBy(c, equality.ExpectedValue)) {
+                var verdict = ConstraintValidation.Evaluate(c, equality.ExpectedValue);
+                if (verdict == ConstraintVerdict.Undecided) {
+                    ConstraintValidation.ReportUndecided(context, property, c, $"on property '{property.Name}'");
+                    continue;
+                }
+                if (verdict == ConstraintVerdict.Violated) {
                     context.ReportError(
                         property,
                         $"Property '{property.Name}' EqualityConstraint value '{equality.ExpectedValue}' " +
@@ -131,7 +136,12 @@ internal sealed class ConstraintQualityAnalyzer : INodeAnalyzer {
         if (constraints.OfType<DefaultValueConstraint>().FirstOrDefault()?.Expression is Literal lit) {
             foreach (var c in constraints) {
                 if (c is DefaultValueConstraint or RangeConstraint or LengthConstraint) continue; // covered elsewhere
-                if (!ConstraintValidation.IsSatisfiedBy(c, lit.Value)) {
+                var verdict = ConstraintValidation.Evaluate(c, lit.Value);
+                if (verdict == ConstraintVerdict.Undecided) {
+                    ConstraintValidation.ReportUndecided(context, property, c, $"on property '{property.Name}'");
+                    continue;
+                }
+                if (verdict == ConstraintVerdict.Violated) {
                     context.ReportError(
                         property,
                         $"Property '{property.Name}' default value '{lit.Value}' violates {ConstraintValidation.Describe(c)}.",
@@ -165,7 +175,8 @@ internal sealed class ConstraintQualityAnalyzer : INodeAnalyzer {
         var equality = equalities.FirstOrDefault();
         var range = constraints.OfType<RangeConstraint>().FirstOrDefault();
         if (equality is not null && range is not null
-            && !ConstraintValidation.IsSatisfiedBy(range, equality.ExpectedValue)) {
+            // RangeConstraint is always modelled, so its verdict is never Undecided here.
+            && ConstraintValidation.Evaluate(range, equality.ExpectedValue) == ConstraintVerdict.Violated) {
             context.ReportError(
                 property,
                 $"Property '{property.Name}' EqualityConstraint ({equality.ExpectedValue}) is outside its " +
@@ -182,32 +193,31 @@ internal sealed class ConstraintQualityAnalyzer : INodeAnalyzer {
     private static void ValidateDefaultWithinConstraints(
         AnalysisContext context, Property property, IReadOnlyList<Constraint> constraints) {
         var defaultConstraint = constraints.OfType<DefaultValueConstraint>().FirstOrDefault();
-        if (defaultConstraint?.Expression is not Literal { Value: long l }) return;
+        if (defaultConstraint is null) return;
 
-        var range = constraints.OfType<RangeConstraint>().FirstOrDefault();
-        if (range is not null) {
-            if (range.Minimum is not null && l < Convert.ToInt64(range.Minimum)) {
-                context.ReportError(
+        var checks = constraints.Where(c => c is RangeConstraint or LengthConstraint).ToList();
+        if (checks.Count == 0) return; // pattern/equality are checked in ValidateJointConstraintSatisfiability
+
+        if (defaultConstraint.Expression is not Literal literal) {
+            // A non-literal default (clock, arithmetic, reference) has no value at analysis time, so
+            // it cannot be compared with the range/length: say so instead of passing it silently.
+            foreach (var c in checks) {
+                context.ReportWarning(
                     property,
-                    $"Property '{property.Name}' default value {l} is below its range minimum {range.Minimum}.",
-                    DomainModelDiagnosticCodes.SemanticTypeCompatibility);
+                    $"Property '{property.Name}' default({defaultConstraint.Expression}) is not a literal, so it was not validated against {ConstraintValidation.Describe(c)}.",
+                    DomainModelDiagnosticCodes.ConstraintUndecided);
             }
-            else if (range.Maximum is not null && l > Convert.ToInt64(range.Maximum)) {
-                context.ReportError(
-                    property,
-                    $"Property '{property.Name}' default value {l} exceeds its range maximum {range.Maximum}.",
-                    DomainModelDiagnosticCodes.SemanticTypeCompatibility);
-            }
+            return;
         }
 
-        var length = constraints.OfType<LengthConstraint>().FirstOrDefault();
-        if (length is not null && defaultConstraint.Expression is Literal { Value: string s }) {
-            if (s.Length < length.MinLength || s.Length > length.MaxLength) {
-                context.ReportError(
-                    property,
-                    $"Property '{property.Name}' default value length {s.Length} is outside its length bounds ({length.MinLength}, {length.MaxLength}).",
-                    DomainModelDiagnosticCodes.SemanticTypeCompatibility);
-            }
+        // Evaluate decides every literal type through the registered kind (ordering rule shared with
+        // merge/join): a value that cannot be ordered against a bound is Violated (fail closed).
+        foreach (var c in checks) {
+            if (ConstraintValidation.Evaluate(c, literal.Value) != ConstraintVerdict.Violated) continue;
+            context.ReportError(
+                property,
+                $"Property '{property.Name}' default value '{literal.Value}' violates {ConstraintValidation.Describe(c)}.",
+                DomainModelDiagnosticCodes.SemanticTypeCompatibility);
         }
     }
 

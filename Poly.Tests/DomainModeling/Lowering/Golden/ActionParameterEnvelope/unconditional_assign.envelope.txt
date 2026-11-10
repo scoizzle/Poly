@@ -1,0 +1,3 @@
+Book.Restock(amount): RequiredConstraint;Range(0:Double,1000:Double)
+Book.Rename(value): RequiredConstraint;Length(2,50)
+Book.SetCode(value): RequiredConstraint;Pattern(^[A-Z]{2}-[0-9]{3}$)

@@ -127,6 +127,7 @@ public class BuiltinConstraintCompilerTests {
         : type == typeof(string) ? "x"
         : type == typeof(object) ? "x"
         : type == typeof(DomainExpression) ? DomainExpression.Literal("x")
+        : type == typeof(RelationalOrdering) ? RelationalOrdering.Less
         : throw new InvalidOperationException(
             $"Add a sample value for constraint parameter type '{type.Name}'.");
 }

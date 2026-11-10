@@ -92,6 +92,8 @@ public class ConstraintWriterCoverageTests {
         if (type == typeof(OptionalConstraint)) return ("Text", new OptionalConstraint());
         if (type == typeof(DefaultValueConstraint))
             return ("Text", new DefaultValueConstraint(DomainExpression.Literal("x")));
+        if (type == typeof(RelationalConstraint))
+            return ("Number", new RelationalConstraint("Other", RelationalOrdering.Less));
         throw new InvalidOperationException($"Add a sample for coverage row '{type.Name}'.");
     }
 }

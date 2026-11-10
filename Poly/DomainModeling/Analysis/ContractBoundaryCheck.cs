@@ -271,6 +271,12 @@ internal static class ContractBoundaryCheck {
         }
     }
 
+    private static ContractBoundaryVerdict FromVerdict(ConstraintVerdict verdict) => verdict switch {
+        ConstraintVerdict.Satisfied => ContractBoundaryVerdict.Proven,
+        ConstraintVerdict.Violated => ContractBoundaryVerdict.Violated,
+        _ => ContractBoundaryVerdict.Unknown,
+    };
+
     /// <summary>
     /// A literal against one declared constraint. Only a kind whose meaning the value can be
     /// checked against is decided; a type mismatch, or a kind with no static check, is unknown
@@ -282,15 +288,11 @@ internal static class ContractBoundaryCheck {
                 return ContractBoundaryVerdict.Proven;
             case RangeConstraint range:
                 return IsNumber(value) && HasNumericBounds(range)
-                    ? ConstraintValidation.IsSatisfiedBy(range, value)
-                        ? ContractBoundaryVerdict.Proven
-                        : ContractBoundaryVerdict.Violated
+                    ? FromVerdict(ConstraintValidation.Evaluate(range, value))
                     : ContractBoundaryVerdict.Unknown;
             case LengthConstraint length:
                 return value is string
-                    ? ConstraintValidation.IsSatisfiedBy(length, value)
-                        ? ContractBoundaryVerdict.Proven
-                        : ContractBoundaryVerdict.Violated
+                    ? FromVerdict(ConstraintValidation.Evaluate(length, value))
                     : ContractBoundaryVerdict.Unknown;
             case PatternConstraint pattern:
                 if (value is not string text)

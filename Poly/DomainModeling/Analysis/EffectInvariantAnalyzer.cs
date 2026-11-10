@@ -292,11 +292,13 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
                     var thenEnv = CloneEnv(env);
                     Refine(thenEnv, cond.Condition);
                     ApplyEffects(cond.ThenEffects, entity, action, thenEnv, paramEnv, visited, result, domain, currentStage);
+                    Dictionary<string, AbstractValue>? elseEnv = null;
                     if (cond.ElseEffects is not null) {
-                        var elseEnv = CloneEnv(env);
+                        elseEnv = CloneEnv(env);
                         RefineNegated(elseEnv, cond.Condition);
                         ApplyEffects(cond.ElseEffects, entity, action, elseEnv, paramEnv, visited, result, domain, currentStage);
                     }
+                    JoinBranches(env, thenEnv, elseEnv, entity);
                     break;
                 case CompositeEffect composite:
                     ApplyEffects(composite.Effects, entity, action, env, paramEnv, visited, result, domain, currentStage);
@@ -418,6 +420,41 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
         }
 
         ApplyEffects(targetAction.Effects, targetEntity, targetAction, targetEnv, targetParams, visited, result, domain, currentStage: null);
+    }
+
+    /// <summary>#367 B-1: after an <c>if</c>, each symbol either arm touched becomes the join
+    /// (lub) of the two arms; with no <c>else</c> the unchanged incoming environment is the
+    /// implicit else. A symbol both arms left as the incoming instance is not rewritten.
+    /// An arm value that is <see cref="AbstractValue.Unsatisfiable"/> is not treated as an
+    /// unreachable arm: the assign step narrows by intersection, so an arm that assigns
+    /// outside its refinement looks empty while the value really exists. That arm contributes
+    /// the property's declared constraints instead, which keeps the join sound.</summary>
+    private static void JoinBranches(
+        Dictionary<string, AbstractValue> env,
+        Dictionary<string, AbstractValue> thenEnv,
+        Dictionary<string, AbstractValue>? elseEnv,
+        Entity entity) {
+        var keys = new HashSet<string>(env.Keys, StringComparer.Ordinal);
+        keys.UnionWith(thenEnv.Keys);
+        if (elseEnv is not null) keys.UnionWith(elseEnv.Keys);
+
+        foreach (var key in keys) {
+            env.TryGetValue(key, out var incoming);
+            if (!thenEnv.TryGetValue(key, out var fromThen)) continue;
+            AbstractValue? fromElse;
+            if (elseEnv is null) fromElse = incoming;
+            else if (!elseEnv.TryGetValue(key, out fromElse)) continue;
+            if (fromElse is null) continue;
+            if (ReferenceEquals(fromThen, incoming) && ReferenceEquals(fromElse, incoming)) continue;
+
+            env[key] = SoundArm(fromThen, key, entity).Join(SoundArm(fromElse, key, entity));
+        }
+    }
+
+    private static AbstractValue SoundArm(AbstractValue arm, string key, Entity entity) {
+        if (!arm.Unsatisfiable) return arm;
+        var prop = entity.Properties.FirstOrDefault(p => string.Equals(p.Name, key, StringComparison.Ordinal));
+        return prop is null ? AbstractValue.Unknown : AbstractValue.From(prop.Constraints);
     }
 
     private static Dictionary<string, AbstractValue> CloneEnv(Dictionary<string, AbstractValue> env) =>

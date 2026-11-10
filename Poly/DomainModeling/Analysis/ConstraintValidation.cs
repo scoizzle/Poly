@@ -62,11 +62,10 @@ internal static class ConstraintValidation {
 
     internal static bool IsInRange(object? value, object? min, object? max) {
         if (value is null) return false; // null is never in range
-        var d = ToDouble(value);
-        if (d is null) return false;
-
-        if (min is not null && ToDouble(min) is double lo && d.Value < lo) return false;
-        if (max is not null && ToDouble(max) is double hi && d.Value > hi) return false;
+        // Same ordering rule as the merge/join (ConstraintMerge.TryCompare); a value that cannot be
+        // ordered against a bound is not in range (fail closed), never coerced or skipped.
+        if (min is not null && ConstraintMerge.TryCompare(value, min) is not >= 0) return false;
+        if (max is not null && ConstraintMerge.TryCompare(value, max) is not <= 0) return false;
         return true;
     }
 
@@ -83,10 +82,5 @@ internal static class ConstraintValidation {
         catch (RegexParseException) {
             return false;
         }
-    }
-
-    private static double? ToDouble(object? value) {
-        try { return Convert.ToDouble(value); }
-        catch { return null; }
     }
 }

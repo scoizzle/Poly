@@ -71,12 +71,11 @@ public class ConstraintJoinTests {
         await Assert.That(joined.Maximum).IsEqualTo(d4);
         await Assert.That(Same(joined, R(d1, d4))).IsFalse();
         await Assert.That(joined.Intervals!.Count).IsEqualTo(2);
-        // ConstraintValidation.Evaluate cannot rate DateTime values at all (Convert.ToDouble throws, so
-        // even a single-interval range is Violated for every DateTime); the exact union is pinned
-        // structurally instead: the gap (d2, d3) is in no interval, both intervals are kept whole.
         await Assert.That(joined.Intervals![0]).IsEqualTo(new RangeInterval(d1, d2));
         await Assert.That(joined.Intervals![1]).IsEqualTo(new RangeInterval(d3, d4));
-        await Assert.That(ConstraintValidation.IsInRangeUnion(new DateTime(2021, 6, 1), joined)).IsFalse();
+        await Assert.That(ConstraintValidation.Evaluate(joined, new DateTime(2020, 6, 1))).IsEqualTo(ConstraintVerdict.Satisfied);
+        await Assert.That(ConstraintValidation.Evaluate(joined, new DateTime(2022, 6, 1))).IsEqualTo(ConstraintVerdict.Satisfied);
+        await Assert.That(ConstraintValidation.Evaluate(joined, new DateTime(2021, 6, 1))).IsEqualTo(ConstraintVerdict.Violated);
     }
 
     [Test]

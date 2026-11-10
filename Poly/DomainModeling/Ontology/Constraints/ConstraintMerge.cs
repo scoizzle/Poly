@@ -229,7 +229,7 @@ public static class ConstraintMerge {
     /// Two different numeric types fall back to double, as before; a bound of any
     /// non-numeric type against a different type is not comparable (cannot decide).
     /// </summary>
-    private static int? TryCompare(object x, object y) {
+    internal static int? TryCompare(object x, object y) {
         if (x.GetType() == y.GetType())
             return x is IComparable c ? c.CompareTo(y) : null;
         if (IsNumeric(x) && IsNumeric(y))

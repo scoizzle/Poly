@@ -270,15 +270,15 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
                     : AbstractValue.From(lit.Value is string s ? [new EqualityConstraint(s)] : []);
             case PropertyAccess pa:
                 if (paramEnv is not null && paramEnv.TryGetValue(pa.Name, out var fromParam))
-                    return fromParam;
-                if (env.TryGetValue(pa.Name, out var pv)) return pv;
+                    return fromParam.WithoutRelations();
+                if (env.TryGetValue(pa.Name, out var pv)) return pv.WithoutRelations();
                 // Cross-entity read: the property belongs to the target entity.
                 var owner = targetEntity ?? entity;
                 var prop = owner.Properties.FirstOrDefault(p =>
                     string.Equals(p.Name, pa.Name, StringComparison.Ordinal));
                 return prop is null ? AbstractValue.Unknown : AbstractValue.From(prop.Constraints);
             case ParameterAccess pa2:
-                if (paramEnv is not null && paramEnv.TryGetValue(pa2.Name, out var bv)) return bv;
+                if (paramEnv is not null && paramEnv.TryGetValue(pa2.Name, out var bv)) return bv.WithoutRelations();
                 var param = action?.Parameters.FirstOrDefault(p =>
                     string.Equals(p.Name, pa2.Name, StringComparison.Ordinal));
                 return param is null ? AbstractValue.Unknown : AbstractValue.From(param.Constraints);
@@ -359,12 +359,21 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
                     break;
                 case InvokeActionEffect invoke:
                     ApplyInvoke(invoke, entity, action, env, paramEnv, visited, result, domain, currentStage);
+                    DropAllRelations(env);
                     break;
                 case ForEachInvokeEffect efe:
                     ApplyForEachInvoke(efe, entity, action, env, paramEnv, visited, result, domain);
+                    DropAllRelations(env);
                     break;
             }
         }
+    }
+
+    /// <summary>A callee runs on a copy of the environment and may reassign any property, so after
+    /// an invoke no relation between symbols is known (conservative widening).</summary>
+    private static void DropAllRelations(Dictionary<string, AbstractValue> env) {
+        foreach (var key in env.Keys.ToList())
+            env[key] = env[key].WithoutRelations();
     }
 
     /// <summary>Call-chain propagation. Self-invoke threads the current environment into the

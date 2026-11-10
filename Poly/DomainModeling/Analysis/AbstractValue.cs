@@ -113,12 +113,23 @@ public sealed class AbstractValue {
     /// <summary>Applies a single extra constraint (a bound from a guard/if/where condition).</summary>
     public AbstractValue Narrow(Constraint constraint) {
         var list = _constraints.ToList();
+        AbstractValue narrowed;
         if (!list.Any(c => c.GetType() == constraint.GetType()))
-            return From([.. list, constraint]);
-        return Absorb(list, constraint) == Absorbed.Empty
-            ? new AbstractValue(list, unsatisfiable: true)
-            : new AbstractValue(list);
+            narrowed = From([.. list, constraint]);
+        else
+            narrowed = Absorb(list, constraint) == Absorbed.Empty
+                ? new AbstractValue(list, unsatisfiable: true)
+                : new AbstractValue(list);
+        // Bottom is sticky: narrowing a value with no admissible value cannot make one appear.
+        return Unsatisfiable && !narrowed.Unsatisfiable ? narrowed.AsUnsatisfiable() : narrowed;
     }
+
+    /// <summary>This value with every relational constraint removed. Relations are facts about a
+    /// symbol in the environment, not about a value, so they never travel with a read value.</summary>
+    internal AbstractValue WithoutRelations() =>
+        _constraints.Any(c => c is RelationalConstraint)
+            ? new AbstractValue([.. _constraints.Where(c => c is not RelationalConstraint)], Unsatisfiable)
+            : this;
 
     /// <summary>This value with every relation to <paramref name="property"/> removed (the property was
     /// reassigned, so "this vs property" is stale). Widening, hence sound.</summary>

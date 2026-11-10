@@ -1,6 +1,8 @@
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
+using Poly.DomainModeling.Ontology;
+using Poly.DomainModeling.Ontology.Constraints;
 
 namespace Poly.Tests.DomainModeling.Analysis;
 
@@ -98,27 +100,226 @@ public class RelationalConstraintAnalysisTests {
         await Assert.That(Unsatisfiable(result)).IsFalse();
     }
 
+    // A property assigned inside the `if` arm and read by a later assign makes arm liveness observable:
+    // a dead arm is skipped by the join, so `Z` stays within range(0, 15); a live arm widens `Qty`
+    // to [0, 25] and `assign Z to Qty + 10` can fall outside. (A literal assign inside the arm would
+    // be flagged by literal validation whether or not the arm is live, so it cannot prove liveness.)
+    private static bool ZCanFallOutside(EvolutionResult r, string? chain = null) => r.Analysis.Diagnostics.Any(d =>
+        d.Severity == DiagnosticSeverity.Warning
+        && d.Message.Contains("can fall outside constraint range(0, 15)")
+        && (chain is null || d.Message.Contains(chain)));
+
     [Test]
     public async Task RelationIsDroppedAfterTheReferencedPropertyIsAssigned_ArmStaysLive() {
-        // After `assign Start to 100` the fact "End > Start" is stale. If it survived, refining by
-        // `Start > End` would meet it into bottom and wrongly kill the arm, hiding the real
-        // out-of-range assignment inside it.
+        // After `assign Start to 100` the fact "Start < End" is stale. If it survived, refining by
+        // `Start > End` would meet it into bottom and wrongly kill the arm.
         var result = Parse("""
             domain Test
             Item: entity {
               Start: Number
               End: Number
-              Qty: Number range(0, 10)
+              Qty: Number range(0, 30)
+              Z: Number range(0, 15)
               Ordered: policy { Start < End }
+              Small: policy { Qty <= 5 }
               Run: action
                 require Ordered
+                require Small
               {
                 assign Start to 100
-                if (Start > End) { assign Qty to 99 }
+                if (Start > End) { assign Qty to 25 }
+                assign Z to Qty + 10
               }
             }
             """);
-        await Assert.That(result.Analysis.Diagnostics.Any(d =>
-            d.Severity == DiagnosticSeverity.Error && d.Message.Contains("violates constraint range(0, 10)"))).IsTrue();
+        await Assert.That(ZCanFallOutside(result)).IsTrue();
+    }
+
+    [Test]
+    public async Task RelationKeptWhenNothingIsAssigned_ContradictingArmIsDead() {
+        // Positive twin: with no reassignment `Start < End` holds, so `Start > End` is unreachable
+        // and nothing assigned inside it reaches the later assign.
+        var result = Parse("""
+            domain Test
+            Item: entity {
+              Start: Number
+              End: Number
+              Qty: Number range(0, 30)
+              Z: Number range(0, 15)
+              Ordered: policy { Start < End }
+              Small: policy { Qty <= 5 }
+              Run: action
+                require Ordered
+                require Small
+              {
+                if (Start > End) { assign Qty to 25 }
+                assign Z to Qty + 10
+              }
+            }
+            """);
+        await Assert.That(ZCanFallOutside(result)).IsFalse();
+    }
+
+    [Test]
+    public async Task RelationIsDroppedAfterACalleeAssignsTheOtherProperty_ArmStaysLive() {
+        // F1(i): the callee runs on a clone, so the caller's `Start < End` would survive a callee
+        // that reassigns End. Resolution: all relations are dropped after an invoke.
+        var result = Parse("""
+            domain Test
+            Item: entity {
+              Start: Number
+              End: Number
+              Qty: Number range(0, 30)
+              Z: Number range(0, 15)
+              Ordered: policy { Start < End }
+              Small: policy { Qty <= 5 }
+              Widen: action { assign End to 0 }
+              Run: action
+                require Ordered
+                require Small
+              {
+                invoke Widen
+                if (Start > End) { assign Qty to 25 }
+                assign Z to Qty + 10
+              }
+            }
+            """);
+        await Assert.That(ZCanFallOutside(result, "can fall outside")).IsTrue();
+    }
+
+    [Test]
+    public async Task StaleRelationDoesNotResurrectThroughABoundParameter() {
+        // F1(ii): End is read with its relation to Start and bound to a parameter; the callee then
+        // reassigns Start and copies the parameter. The parameter's relation must not reappear.
+        var result = Parse("""
+            domain Test
+            Item: entity {
+              Start: Number
+              End: Number
+              Mirror: Number range(0, 30)
+              Qty: Number range(0, 30)
+              Z: Number range(0, 15)
+              Ordered: policy { Start < End }
+              Small: policy { Qty <= 5 }
+              Take: action (x: Number) {
+                assign Start to 100
+                assign Mirror to x
+                if (Mirror <= Start) { assign Qty to 25 }
+                assign Z to Qty + 10
+              }
+              Run: action
+                require Ordered
+                require Small
+              {
+                invoke Take(x: End)
+              }
+            }
+            """);
+        await Assert.That(ZCanFallOutside(result, "Run → Take")).IsTrue();
+    }
+
+    [Test]
+    public async Task CallerRelationDoesNotFlowIntoAnotherEntityThroughABinding() {
+        // F1(iii): relations are keyed by property name; the caller's `Start < End` must not meet the
+        // other entity's own Start.
+        var result = Parse("""
+            domain Test
+            Order: entity {
+              Start: Number
+              End: Number
+              lines: many Line
+              Ordered: policy { Start < End }
+              Ship: action
+                require Ordered
+              {
+                for lines as line invoke line.Take(x: End)
+              }
+            }
+            Line: entity {
+              Start: Number range(0, 100)
+              Mirror: Number range(0, 30)
+              Qty: Number range(0, 30)
+              Z: Number range(0, 15)
+              Small: policy { Qty <= 5 }
+              order: Order
+              Take: action (x: Number)
+                require Small
+              {
+                assign Mirror to x
+                if (Mirror <= Start) { assign Qty to 25 }
+                assign Z to Qty + 10
+              }
+            }
+            """);
+        await Assert.That(ZCanFallOutside(result, "Ship → Take")).IsTrue();
+    }
+
+    [Test]
+    public async Task AssigningOnePropertyFromTheOther_LeavesNoSelfRelation() {
+        // `assign Start to End` evaluates End (which carries End > Start) into Start; the stored value
+        // must not carry a relation of Start to itself, and the arm below stays live.
+        var result = Parse("""
+            domain Test
+            Item: entity {
+              Start: Number
+              End: Number
+              Qty: Number range(0, 30)
+              Z: Number range(0, 15)
+              Ordered: policy { Start < End }
+              Small: policy { Qty <= 5 }
+              Run: action
+                require Ordered
+                require Small
+              {
+                assign Start to End
+                if (Start > End) { assign Qty to 25 }
+                assign Z to Qty + 10
+              }
+            }
+            """);
+        await Assert.That(ZCanFallOutside(result)).IsTrue();
+    }
+
+    [Test]
+    public async Task EvalOfAProperty_ReturnsNoRelations() {
+        var start = AbstractValue.From([new RangeConstraint(0d, 10d), new RelationalConstraint("End", RelationalOrdering.Less)]);
+        var env = new Dictionary<string, AbstractValue> { ["Start"] = start };
+        var entity = new Entity("Item", [], [], [], []);
+        var v = EffectInvariantAnalyzer.Eval(DomainExpression.Property("Start"), entity, null, env);
+        await Assert.That(v.Constraints.OfType<RelationalConstraint>().Any()).IsFalse();
+        await Assert.That(v.Constraints.OfType<RangeConstraint>().Any()).IsTrue();
+    }
+
+    [Test]
+    public async Task NarrowingAfterABottom_StaysUnsatisfiable() {
+        // F2: P1 and P2 contradict; a later restatement (P3) must not erase the bottom.
+        var bottom = AbstractValue.From([new RangeConstraint(0d, 5d)]).Narrow(new RangeConstraint(10d, null));
+        await Assert.That(bottom.Unsatisfiable).IsTrue();
+        var later = bottom.Narrow(new RangeConstraint(null, 100d));
+        await Assert.That(later.Unsatisfiable).IsTrue();
+        var viaNewKind = bottom.Narrow(new EqualityConstraint("x"));
+        await Assert.That(viaNewKind.Unsatisfiable).IsTrue();
+    }
+
+    [Test]
+    public async Task ContradictionThenRestatement_IsStillUnsatisfiablePrecondition() {
+        var result = Parse("""
+            domain Test
+            Item: entity {
+              Start: Number
+              End: Number
+              Before: policy { Start < End }
+              After: policy { Start > End }
+              Again: policy { Start < End }
+              Run: action
+                require Before
+                require After
+                require Again
+              {
+                assign Start to Start + 0
+              }
+            }
+            """);
+        await Assert.That(Unsatisfiable(result)).IsTrue();
     }
 }

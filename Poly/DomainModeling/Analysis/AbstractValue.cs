@@ -4,7 +4,7 @@ namespace Poly.DomainModeling.Analysis;
 
 /// <summary>
 /// The abstract value of a symbol (property, parameter, binder) or expression result:
-/// a merged constraint set — at most one constraint per type, combined by intersection
+/// a merged constraint set — one constraint per type (several only for a conjunction such as two patterns), combined by intersection
 /// (via <see cref="ConstraintMerge"/>). This is the single representation underlying
 /// domain propagation: preconditions refine it, expressions compose it, and postconditions
 /// verify it against declared constraints. Replaces the numeric-only value range.
@@ -37,26 +37,48 @@ public sealed class AbstractValue {
         foreach (var c in constraints) {
             if (dropped.Contains(c.GetType()))
                 continue;
-            var idx = merged.FindIndex(m => m.GetType() == c.GetType());
-            if (idx < 0) {
-                merged.Add(c);
-                continue;
-            }
-            var merge = merged[idx].MergeResult(c);
-            switch (merge.Kind) {
-                case ConstraintMergeKind.Net:
-                    merged[idx] = merge.Net!;
-                    break;
-                case ConstraintMergeKind.Empty:
+            switch (Absorb(merged, c)) {
+                case Absorbed.Empty:
                     unsatisfiable = true;
                     break;
-                case ConstraintMergeKind.Unmergeable:
-                    merged.RemoveAt(idx);
+                case Absorbed.Dropped:
                     dropped.Add(c.GetType());
                     break;
             }
         }
         return merged.Count == 0 && !unsatisfiable ? Unknown : new AbstractValue(merged, unsatisfiable);
+    }
+
+    private enum Absorbed { Added, Empty, Dropped }
+
+    /// <summary>
+    /// Adds <paramref name="c"/> to the conjunction in <paramref name="list"/>: merged into a
+    /// same-type entry when they intersect to one constraint, kept beside it when both must hold
+    /// (<see cref="ConstraintMerge.Coexists"/>), otherwise the whole axis is removed (widened).
+    /// </summary>
+    private static Absorbed Absorb(List<Constraint> list, Constraint c) {
+        var coexist = true;
+        for (var i = 0; i < list.Count; i++) {
+            if (list[i].GetType() != c.GetType()) continue;
+            var merge = list[i].MergeResult(c);
+            switch (merge.Kind) {
+                case ConstraintMergeKind.Net:
+                    list[i] = merge.Net!;
+                    return Absorbed.Added;
+                case ConstraintMergeKind.Empty:
+                    return Absorbed.Empty;
+                default:
+                    if (!ConstraintMerge.Coexists(list[i], c)) coexist = false;
+                    break;
+            }
+        }
+        if (coexist) {
+            list.Add(c);
+            return Absorbed.Added;
+        }
+        var type = c.GetType();
+        list.RemoveAll(m => m.GetType() == type);
+        return Absorbed.Dropped;
     }
 
     /// <summary>Intersection of two abstract values (per type).</summary>
@@ -79,10 +101,11 @@ public sealed class AbstractValue {
         if (other.Unsatisfiable) return this;
         var joined = new List<Constraint>();
         foreach (var c in _constraints) {
-            var counterpart = other.Constraints.FirstOrDefault(o => o.GetType() == c.GetType());
-            if (counterpart is null) continue;
-            if (c.Join(counterpart) is { } j)
-                joined.Add(j);
+            foreach (var o in other.Constraints) {
+                if (o.GetType() != c.GetType()) continue;
+                if (c.Join(o) is { } j && !joined.Any(x => ConstraintMerge.Identical(x, j)))
+                    joined.Add(j);
+            }
         }
         return joined.Count == 0 ? Unknown : new AbstractValue(joined);
     }
@@ -90,20 +113,11 @@ public sealed class AbstractValue {
     /// <summary>Applies a single extra constraint (a bound from a guard/if/where condition).</summary>
     public AbstractValue Narrow(Constraint constraint) {
         var list = _constraints.ToList();
-        var idx = list.FindIndex(c => c.GetType() == constraint.GetType());
-        if (idx < 0)
+        if (!list.Any(c => c.GetType() == constraint.GetType()))
             return From([.. list, constraint]);
-        var merge = list[idx].MergeResult(constraint);
-        switch (merge.Kind) {
-            case ConstraintMergeKind.Net:
-                list[idx] = merge.Net!;
-                return new AbstractValue(list);
-            case ConstraintMergeKind.Empty:
-                return new AbstractValue(list, unsatisfiable: true);
-            default:
-                list.RemoveAt(idx);
-                return new AbstractValue(list);
-        }
+        return Absorb(list, constraint) == Absorbed.Empty
+            ? new AbstractValue(list, unsatisfiable: true)
+            : new AbstractValue(list);
     }
 
     /// <summary>The RangeConstraint, if the value carries one.</summary>

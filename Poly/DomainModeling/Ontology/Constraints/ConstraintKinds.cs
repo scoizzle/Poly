@@ -143,9 +143,11 @@ internal static class ConstraintKinds {
                 describe: eq => $"== {eq.ExpectedValue}",
                 print: (e, host) => $"equals({host.Literal(e.ExpectedValue)})"),
             Row<PatternConstraint>(
+                // Two different patterns are a conjunction (a string can match both), not bottom:
+                // not one pattern, so Unmergeable; AbstractValue keeps both (ConstraintMerge.Coexists).
                 merge: (a, b) => string.Equals(a.Pattern, b.Pattern, StringComparison.Ordinal)
                     ? ConstraintMergeResult.Of(a)
-                    : ConstraintMergeResult.Empty,
+                    : ConstraintMergeResult.Unmergeable,
                 join: null,
                 identical: (x, y) => string.Equals(x.Pattern, y.Pattern, StringComparison.Ordinal),
                 evaluate: (p, v) => ConstraintValidation.Of(ConstraintValidation.IsValidPattern(v, p.Pattern)),

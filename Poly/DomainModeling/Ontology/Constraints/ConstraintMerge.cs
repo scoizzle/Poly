@@ -57,6 +57,14 @@ public static class ConstraintMerge {
     }
 
     /// <summary>
+    /// True when two same-type constraints that do not merge into one are still both required
+    /// (a conjunction): each is a complete predicate on the value. Only patterns qualify today;
+    /// every other unmergeable kind is dropped (widened) by <see cref="AbstractValue"/>.
+    /// </summary>
+    internal static bool Coexists(Constraint a, Constraint b) =>
+        a is PatternConstraint && b is PatternConstraint;
+
+    /// <summary>
     /// True when the two constraints say the same thing, ignoring node identity and source
     /// position (both participate in record equality). Used by the idempotent merge arms and
     /// by the evolution layer so adding the same constraint twice is a no-op.

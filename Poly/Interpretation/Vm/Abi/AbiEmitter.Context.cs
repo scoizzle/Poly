@@ -97,6 +97,167 @@ public static partial class AbiEmitter {
                     defaultBody, cases));
         }
 
+        // ── Iterator body: hierarchical resume (#338 slice 2) ──────────────────
+
+        /// <summary>True while emitting an iterator method body. A yield resumes through a
+        /// two-level dispatch kept in the iterator's private frame, not through
+        /// <see cref="EmitPcDispatch"/>.</summary>
+        public bool IsIteratorBody { get; set; }
+
+        /// <summary>The CLR element type an iterator body yields.</summary>
+        public Type? IteratorElement { get; set; }
+
+        /// <summary>Frame slot holding the region id to resume into (0 = fresh start).</summary>
+        public int IteratorRegionSlot { get; set; }
+
+        /// <summary>Frame slot the body writes 1 to when it yielded and 0 when it finished.</summary>
+        public int IteratorMovedSlot { get; set; }
+
+        /// <summary>Frame slot holding the word of the value last yielded.</summary>
+        public int IteratorCurrentSlot { get; set; }
+
+        /// <summary>Frame slot <c>VmIterator&lt;T&gt;.Dispose</c> sets to 1 before it resumes a suspended
+        /// body: every yield then runs the outstanding cleanup chain instead of continuing.</summary>
+        public int IteratorDisposeSlot { get; set; }
+
+        /// <summary>A fresh frame word that nothing else owns.</summary>
+        public int AllocFrameSlot() => _nextFrameSlot++;
+
+        // ── Iterator cleanup: lowered try/finally, using and foreach (#338 slice 3) ──────
+
+        /// <summary>A try/finally, using or foreach of an iterator body that contains a yield. The CLR
+        /// cannot jump into a try, so the region is lowered: no CLR try, a frame flag that is 1 while
+        /// the region is entered, and a dispose label that runs the cleanup once and falls to the
+        /// enclosing region's.</summary>
+        internal sealed class ResumableCleanup {
+            public ResumableCleanup(int flagSlot, ResumableCleanup? parent) {
+                FlagSlot = flagSlot;
+                Parent = parent;
+                DisposeLabel = Label($"dispose_{flagSlot}");
+                Depth = (parent?.Depth ?? 0) + 1;
+            }
+
+            public int FlagSlot { get; }
+            public ResumableCleanup? Parent { get; }
+            public int Depth { get; }
+            public LabelTarget DisposeLabel { get; }
+        }
+
+        private ResumableCleanup? _currentCleanup;
+        private readonly List<Expression> _exceptionCleanups = new();
+        private bool _hasIteratorCleanup;
+
+        /// <summary>The innermost lowered cleanup region being compiled, or null.</summary>
+        internal ResumableCleanup? CurrentCleanup => _currentCleanup;
+
+        /// <summary>True once any lowered cleanup exists; the iterator shape records it so
+        /// <c>Dispose</c> knows whether resuming a suspended body can have an effect.</summary>
+        internal bool HasIteratorCleanup => _hasIteratorCleanup;
+
+        /// <summary>Where a <c>yield break</c> / <c>return</c> / disposed resume goes: through the
+        /// enclosing cleanups, then out.</summary>
+        internal LabelTarget IteratorLeaveLabel => _currentCleanup?.DisposeLabel ?? ExitLabel;
+
+        internal ResumableCleanup OpenCleanup(int flagSlot) {
+            _hasIteratorCleanup = true;
+            _currentCleanup = new ResumableCleanup(flagSlot, _currentCleanup);
+            return _currentCleanup;
+        }
+
+        internal void CloseCleanup() => _currentCleanup = _currentCleanup!.Parent;
+
+        /// <summary>A closed cleanup's exception-path copy. Regions close innermost first, so the
+        /// list is already in the order a thrown exception must unwind them.</summary>
+        internal void RegisterExceptionCleanup(Expression cleanup) => _exceptionCleanups.Add(cleanup);
+
+        /// <summary>The handler body that runs every still-entered cleanup, innermost first; an
+        /// outer cleanup runs even when an inner one throws.</summary>
+        internal Expression? EmitExceptionCleanups() {
+            if (_exceptionCleanups.Count == 0)
+                return null;
+            Expression chain = _exceptionCleanups[^1];
+            for (int i = _exceptionCleanups.Count - 2; i >= 0; i--)
+                chain = TryFinally(_exceptionCleanups[i], chain);
+            return chain;
+        }
+
+        private readonly List<ResumeRegion> _regions = new();
+        private readonly Stack<ResumeRegion> _openRegions = new();
+
+        /// <summary>The region that owns a yield compiled now.</summary>
+        internal ResumeRegion? CurrentRegion => _openRegions.Count > 0 ? _openRegions.Peek() : null;
+
+        /// <summary>Open a region: a block (or the body itself) whose directly contained yields
+        /// resume through one switch of their own.</summary>
+        internal ResumeRegion BeginRegion() {
+            var region = new ResumeRegion(_regions.Count + 1, AllocFrameSlot());
+            _regions.Add(region);
+            _openRegions.Push(region);
+            return region;
+        }
+
+        /// <summary>Close <paramref name="region"/> around <paramref name="body"/>. With no
+        /// yield of its own the body is returned untouched. Otherwise the body is preceded by
+        /// the region's entry and its inner switch (region step to yield resume label); normal
+        /// flow jumps over both, so a stale step can never redirect a fresh entry.</summary>
+        internal Expression EndRegion(ResumeRegion region, Expression body) {
+            _openRegions.Pop();
+            if (region.Yields.Count == 0)
+                return body;
+            var bodyStart = Label($"region_{region.Id}_body");
+            var cases = new System.Linq.Expressions.SwitchCase[region.Yields.Count];
+            for (int i = 0; i < cases.Length; i++)
+                cases[i] = System.Linq.Expressions.Expression.SwitchCase(
+                    Goto(region.Yields[i]), Constant(i + 1));
+            var inner = System.Linq.Expressions.Expression.Switch(
+                Convert(FrameSlotRead(region.StepSlot), typeof(int)),
+                Empty(), cases);
+            return Block(
+                Goto(bodyStart),
+                Label(region.EntryLabel),
+                inner,
+                Label(bodyStart),
+                body);
+        }
+
+        /// <summary>The outer switch: the region id in the private frame selects the region
+        /// whose entry label the body resumes at. Fresh start (id 0) falls through.</summary>
+        internal Expression EmitRegionDispatch() {
+            var owned = _regions.Where(r => r.Yields.Count > 0).ToArray();
+            if (owned.Length == 0)
+                return Empty();
+            var cases = new System.Linq.Expressions.SwitchCase[owned.Length];
+            for (int i = 0; i < owned.Length; i++)
+                cases[i] = System.Linq.Expressions.Expression.SwitchCase(
+                    Goto(owned[i].EntryLabel), Constant(owned[i].Id));
+            return System.Linq.Expressions.Expression.Switch(
+                Convert(FrameSlotRead(IteratorRegionSlot), typeof(int)),
+                Empty(), cases);
+        }
+
+        /// <summary>A region of an iterator body: the yields it owns directly, each with the
+        /// resume label that region's inner switch jumps to. The yield's index plus one is the
+        /// region-local step stored in <see cref="StepSlot"/>.</summary>
+        internal sealed class ResumeRegion {
+            public ResumeRegion(int id, int stepSlot) {
+                Id = id;
+                StepSlot = stepSlot;
+                EntryLabel = Label($"region_{id}_entry");
+            }
+
+            public int Id { get; }
+            public int StepSlot { get; }
+            public LabelTarget EntryLabel { get; }
+            public List<LabelTarget> Yields { get; } = new();
+
+            /// <summary>Register a yield; returns its step (1-based) and resume label.</summary>
+            public (int Step, LabelTarget Label) AddYield() {
+                var label = Label($"region_{Id}_resume_{Yields.Count + 1}");
+                Yields.Add(label);
+                return (Yields.Count, label);
+            }
+        }
+
         public Expression StatePcFlush => Property(_stateParam, "ProgramCounter");
         public CompilationMode Mode { get; set; }
         public Expression? FunctionTableExpr { get; set; }
@@ -775,10 +936,10 @@ public static partial class AbiEmitter {
 
         public bool HasInlineParameters => _inlineParameterDepth > 0;
 
-        private readonly Stack<(LabelTarget breakLabel, LabelTarget continueLabel, string? name)> _loopScopes = new();
+        private readonly Stack<(LabelTarget breakLabel, LabelTarget continueLabel, string? name, int cleanupDepth)> _loopScopes = new();
 
         public void PushLoopScope(LabelTarget breakLabel, LabelTarget continueLabel, string? name = null) {
-            _loopScopes.Push((breakLabel, continueLabel, name));
+            _loopScopes.Push((breakLabel, continueLabel, name, _currentCleanup?.Depth ?? 0));
         }
 
         public void PopLoopScope() => _loopScopes.Pop();
@@ -786,14 +947,29 @@ public static partial class AbiEmitter {
         public (LabelTarget breakLabel, LabelTarget continueLabel) ResolveLoopLabels(string? name) {
             if (_loopScopes.Count == 0)
                 throw new InvalidOperationException("VM compile rejected: break/continue outside an enclosing loop.");
-            if (name is null)
-                return (_loopScopes.Peek().breakLabel, _loopScopes.Peek().continueLabel);
+            int current = _currentCleanup?.Depth ?? 0;
+            if (name is null) {
+                var innermost = _loopScopes.Peek();
+                RejectCleanupCrossing(innermost.cleanupDepth, current);
+                return (innermost.breakLabel, innermost.continueLabel);
+            }
             foreach (var scope in _loopScopes) {
-                if (scope.name == name)
+                if (scope.name == name) {
+                    RejectCleanupCrossing(scope.cleanupDepth, current);
                     return (scope.breakLabel, scope.continueLabel);
+                }
             }
             throw new InvalidOperationException(
                 $"VM compile rejected: no enclosing loop with label '{name}'.");
+        }
+
+        /// <summary>A break or continue that leaves a lowered try/finally, using or foreach would skip its
+        /// cleanup: the region has no CLR finally to run. Fails closed (the analyzer reports it as
+        /// IT0008 first).</summary>
+        private static void RejectCleanupCrossing(int loopDepth, int currentDepth) {
+            if (currentDepth > loopDepth)
+                throw new InvalidOperationException(
+                    "VM compile rejected: break/continue leaves a try/finally, using or foreach that contains a yield (IT0008).");
         }
 
         private readonly Dictionary<string, LabelTarget> _labels = new();

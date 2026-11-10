@@ -228,6 +228,45 @@ if (state.Status == InterpreterStatus.Resuming)
     }
 ```
 
+An iterator method body (`yield return` / `yield break`, #338) uses the same spill and reload but
+resumes hierarchically, and the dispatch reads the iterator's private frame instead of
+`VmState.ProgramCounter`. An outer switch on the region id (a frame word) jumps to the entry label of
+the *region* that owns the yield: a block (every block is a region; a loop whose body is a bare statement has none of its own). The region's entry sits at its start, behind a
+`goto` that normal flow takes, and holds a small inner switch on a region-local step that jumps to the
+yield's own resume label:
+
+```csharp
+switch (_slots[_fp + regionIdSlot]) {      // outer: region id -> region
+    case 1: goto region_1_entry;
+    case 2: goto region_2_entry;
+}
+...
+{                                          // a block that owns two yields
+    goto region_2_body;                    // fresh entry skips the dispatch
+    region_2_entry:
+    switch (_slots[_fp + region2StepSlot]) { // inner: step -> yield
+        case 1: goto region_2_resume_1;
+        case 2: goto region_2_resume_2;
+    }
+    region_2_body:
+    ...
+}
+```
+
+`VmIterator<T>` owns the frame (a private `long[]`). Each `MoveNext` copies it onto the stack above
+the stack pointer, runs the compiled step with `FramePos` there, and copies it back.
+
+A try/finally, `using` or `foreach` whose body contains a yield (#338 slice 3) is not a CLR try: the CLR
+cannot jump into one to resume. It is lowered to a frame flag (1 while entered) and plain cleanup code
+(`EmitLoweredFinally`). Four paths run the cleanup, and clearing the flag first makes each run it once:
+the body completing; `VmIterator<T>.Dispose` (sets the dispose word and resumes the suspended body, and
+every yield then jumps to its region's dispose label, which runs that cleanup and falls to the enclosing
+region's); `yield break` / `return` (the same label); and an exception, caught by a handler around the whole
+iterator body that runs every flagged cleanup, innermost first, then rethrows. A `using` resource handle
+and a `foreach` enumerator (heap-allocated) live in frame words so they survive each yield. Fail closed:
+`yield` in a try with a catch, in a catch or in a finally is IT0003-IT0005; a `break` / `continue` that
+leaves such a region is IT0008 and a `goto` inside one is IT0009, because the cleanup would be skipped.
+
 ## Pipeline
 
 ```text
@@ -391,3 +430,10 @@ was plumbing, not protocol.
 Inside a compiled function body, `FramePos` is the first argument slot: a
 parameter resolves at `FramePos + index` and `return` writes `slots[FramePos]`
 then sets `SP = FramePos + 1`.
+
+An iterator call returns a lazy `VmIterator<T>` that is enumerated, not a `List<T>`, though the type
+provider spells `IEnumerable<T>` as `List<T>`. Analysis therefore rejects (`IT0007`) a member or index
+access on a local holding an iterator call result, for `var e = M()` and `IEnumerable<T> e = M()` alike;
+`foreach` over it is the supported use. A `VmIterator<T>` also throws `ObjectDisposedException` from
+`MoveNext` / `GetEnumerator` once the execution that created it is disposed, because its stack array is
+back in the shared pool.

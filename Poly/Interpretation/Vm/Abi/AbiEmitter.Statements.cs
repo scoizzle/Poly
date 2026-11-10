@@ -163,6 +163,14 @@ public static partial class AbiEmitter {
     }
 
     private static Expression EmitBlock(Block block, Context ctx) {
+        // An iterator body's block is a resume region: the yields it owns directly resume
+        // through a switch of their own (see Context.EndRegion).
+        var region = ctx.IsIteratorBody ? ctx.BeginRegion() : null;
+        var emitted = EmitBlockBody(block, ctx);
+        return region is null ? emitted : ctx.EndRegion(region, emitted);
+    }
+
+    private static Expression EmitBlockBody(Block block, Context ctx) {
         ctx.PushScope();
         var varInitExprs = new List<Expression>();
         var releases = new List<Expression>();
@@ -624,6 +632,13 @@ public static partial class AbiEmitter {
     }
 
     private static Expression EmitTryCatchFinally(TryCatchFinally tcf, Context ctx) {
+        // A try/finally whose try block yields cannot be a CLR try: the CLR will not jump into one
+        // to resume. It is lowered to a frame flag and an explicit cleanup (see EmitLoweredFinally).
+        if (ctx.IsIteratorBody && tcf.FinallyBlock is { } finallyBlock
+            && tcf.CatchClauses is null or { Count: 0 } && ContainsYield(tcf.TryBlock))
+            return EmitLoweredFinally(ctx, Empty(),
+                () => CompileNode(tcf.TryBlock, ctx).Code,
+                () => CompileNode(finallyBlock, ctx).Code);
         ctx.EnterUnresumable();
         try {
             var tryBody = CompileNode(tcf.TryBlock, ctx).Code;
@@ -738,6 +753,58 @@ public static partial class AbiEmitter {
         resumed.AddRange(reload);
         resumed.Add(clearSuspended);
         return Block(resumed);
+    }
+
+    /// <summary>
+    /// <c>yield break</c> and <c>yield return</c> in an iterator body (#338 slice 2). A yield
+    /// stores the value's frame word, the owning region's id and its region-local step, spills
+    /// like a <see cref="SuspendNode"/>, marks the body as having yielded and leaves through the
+    /// exit. The resume label follows: the owning region's inner switch jumps to it, and the
+    /// reload is the first thing after it, because a resumed body starts with every CLR local zero.
+    /// </summary>
+    private static Expression EmitYield(YieldStatement ys, Context ctx) {
+        if (!ctx.IsIteratorBody)
+            throw new UnresumableBodyRejection(
+                $"VM compile rejected: '{ys}' is only executable in the body of an iterator method returning IEnumerable<T>.");
+        if (ys.Value is null)
+            return Block(
+                Assign(ctx.FrameSlotRead(ctx.IteratorMovedSlot), Constant(0L)),
+                Goto(ctx.IteratorLeaveLabel));
+        if (ctx.InUnresumable)
+            throw new InvalidOperationException(
+                $"VM compile rejected: '{ys}' cannot resume inside a catch clause or a try that has one; only try/finally, using and foreach around a yield are resumable.");
+        var region = ctx.CurrentRegion
+            ?? throw new InvalidOperationException($"VM compile rejected: '{ys}' has no enclosing resume region.");
+        var element = ctx.IteratorElement!;
+
+        var ring = ctx.OpenRing();
+        var value = ring.AddValue(CompileNode(ys.Value, ctx));
+        var (step, resumeLabel) = region.AddYield();
+        var word = RingCodec.ToFrame(
+            RingCodec.ToClr(value.Read, element, ys.Value, ctx.Analysis, ctx.HeapLocal),
+            element, ctx.HeapLocal);
+
+        var spill = new List<Expression>();
+        var reload = new List<Expression>();
+        // The yielded value's own slot is consumed by the store below, so the barrier starts at it.
+        ctx.SpillBarrier(ring.Base, spill, reload);
+
+        var suspended = new List<Expression> {
+            Assign(ctx.FrameSlotRead(ctx.IteratorCurrentSlot), word),
+            Assign(ctx.FrameSlotRead(region.StepSlot), Constant((long)step)),
+            Assign(ctx.FrameSlotRead(ctx.IteratorRegionSlot), Constant((long)region.Id)),
+        };
+        suspended.AddRange(spill);
+        suspended.Add(Assign(ctx.FrameSlotRead(ctx.IteratorMovedSlot), Constant(1L)));
+        suspended.Add(Goto(ctx.ExitLabel));
+        suspended.Add(Label(resumeLabel));
+        suspended.AddRange(reload);
+        // Dispose resumes a suspended body to run its outstanding cleanup, not to continue it.
+        suspended.Add(IfThen(
+            NotEqual(ctx.FrameSlotRead(ctx.IteratorDisposeSlot), Constant(0L)),
+            Goto(ctx.IteratorLeaveLabel)));
+        suspended.Add(Empty());
+        return ring.Then(Block(suspended));
     }
 
     private static Expression EmitParameter(Parameter p, Context ctx) {
@@ -915,6 +982,8 @@ public static partial class AbiEmitter {
     /// Null / non-enumerable fails loud. Enumerator is disposed when IDisposable.
     /// </summary>
     private static Expression EmitForEachLoop(ForEachLoop fel, Context ctx) {
+        if (ctx.IsIteratorBody && ContainsYield(fel.Body))
+            return EmitResumableForEach(fel, ctx);
         ctx.EnterUnresumable();
         try {
             // A foreach yields no ring value: the collection slot and the body's slots are
@@ -967,7 +1036,7 @@ public static partial class AbiEmitter {
     /// element is unboxed to its element type, converted to the declared type, and encoded by that
     /// type's representation — a value widened into an IEEE slot would otherwise be mis-read, and a
     /// value stored where the declared type is a reference must become a heap handle.</summary>
-    private static Expression ForEachElementValue(ForEachLoop fel, ParameterExpression enumerator, Context ctx) {
+    private static Expression ForEachElementValue(ForEachLoop fel, Expression enumerator, Context ctx) {
         var current = Property(enumerator, EnumeratorCurrent);
         if (fel.DeclaredType is null)
             return Call(null, BoxToAbiInfo, ctx.HeapLocal, current);
@@ -1014,6 +1083,8 @@ public static partial class AbiEmitter {
 
     /// <summary>UsingStatement: try/finally Dispose when the resource is IDisposable.</summary>
     private static Expression EmitUsingStatement(UsingStatement us, Context ctx) {
+        if (ctx.IsIteratorBody && ContainsYield(us.Body))
+            return EmitResumableUsing(us, ctx);
         ctx.EnterUnresumable();
         try {
             // A using yields nothing: the resource slot and the body's slots are dead when
@@ -1039,6 +1110,130 @@ public static partial class AbiEmitter {
         }
     }
 
+    /// <summary>
+    /// A try/finally, using or foreach of an iterator body that contains a yield (#338 slice 3). The CLR
+    /// will not jump into a try, so the region is not one: a frame flag is 1 while the region is entered,
+    /// and the cleanup is emitted as plain code. Four paths run it, and the flag makes each run it once:
+    /// the body completing (flag cleared, cleanup, fall on); <c>Dispose</c> resuming a suspended body
+    /// (every yield jumps to the dispose label); <c>yield break</c> / <c>return</c> (same label, then
+    /// out); and an exception, whose handler around the whole iterator body runs every flagged cleanup,
+    /// innermost first. The dispose label runs this region's cleanup and falls to the enclosing region's.
+    /// </summary>
+    private static Expression EmitLoweredFinally(
+        Context ctx, Expression setup, Func<Expression> compileBody, Func<Expression> compileCleanup) {
+        int flagSlot = ctx.AllocFrameSlot();
+        var flag = ctx.FrameSlotRead(flagSlot);
+        var region = ctx.OpenCleanup(flagSlot);
+        Expression body;
+        try {
+            body = compileBody();
+        }
+        finally {
+            ctx.CloseCleanup();
+        }
+
+        // The cleanup is compiled once per path: sharing one tree would define its labels twice.
+        Expression Cleanup() {
+            using var scope = ctx.OpenRingScope();
+            return Block(typeof(void), compileCleanup());
+        }
+        var onComplete = Cleanup();
+        var onDispose = Cleanup();
+        var onException = Cleanup();
+        ctx.RegisterExceptionCleanup(IfThen(
+            NotEqual(flag, Constant(0L)),
+            Block(typeof(void), Assign(flag, Constant(0L)), onException)));
+
+        var after = Label("after_cleanup");
+        return Block(typeof(void),
+            setup,
+            Assign(flag, Constant(1L)),
+            body,
+            Assign(flag, Constant(0L)),
+            onComplete,
+            Goto(after),
+            Label(region.DisposeLabel),
+            Assign(flag, Constant(0L)),
+            onDispose,
+            Goto(region.Parent?.DisposeLabel ?? ctx.ExitLabel),
+            Label(after));
+    }
+
+    private static Expression EmitResumableUsing(UsingStatement us, Context ctx) {
+        using var ringScope = ctx.OpenRingScope();
+        var resourceExpr = CompileNode(us.Resource, ctx);
+        int resSlot = ctx.RingDepth - 1;
+        // The resource handle lives in a frame word so it survives every yield.
+        int handleSlot = ctx.AllocFrameSlot();
+        var setup = Block(typeof(void),
+            resourceExpr,
+            Assign(ctx.FrameSlotRead(handleSlot), ctx.RingVar(resSlot)));
+        return EmitLoweredFinally(ctx, setup,
+            () => CompileNode(us.Body, ctx).Code,
+            () => {
+                var resource = Variable(typeof(object), "_using");
+                return Block(typeof(void), [resource],
+                    Assign(resource, Call(ctx.HeapLocal, HeapUnsafeGet,
+                        Convert(ctx.FrameSlotRead(handleSlot), typeof(int)))),
+                    IfThen(
+                        TypeIs(resource, typeof(IDisposable)),
+                        Call(Convert(resource, typeof(IDisposable)), IDisposableDispose)));
+            });
+    }
+
+    private static Expression EmitResumableForEach(ForEachLoop fel, Context ctx) {
+        using var ringScope = ctx.OpenRingScope();
+        ctx.PushScope();
+        ctx.DeclareVariable(fel.LoopVariable);
+        Expression loopVarCellInit = ctx.NeedsCell(fel.LoopVariable)
+            ? EmitUpvalueCellInit(fel.LoopVariable, ctx)
+            : Empty();
+
+        var ring = ctx.OpenRing();
+        var col = ring.AddValue(CompileNode(fel.Collection, ctx));
+
+        // The enumerator lives on the heap and its handle in a frame word, so it survives every yield.
+        int enumeratorSlot = ctx.AllocFrameSlot();
+        Expression Enumerator() => Convert(
+            Call(ctx.HeapLocal, HeapUnsafeGet, Convert(ctx.FrameSlotRead(enumeratorSlot), typeof(int))),
+            typeof(System.Collections.IEnumerator));
+        var colObj = Variable(typeof(object), "_col");
+        var setup = Block(typeof(void), [colObj],
+            loopVarCellInit,
+            Assign(colObj, Call(ctx.HeapLocal, HeapUnsafeGet, Convert(col.Read, typeof(int)))),
+            Assign(ctx.FrameSlotRead(enumeratorSlot),
+                Convert(
+                    Call(ctx.HeapLocal, HeapAllocate,
+                        Convert(Call(null, GetEnumeratorOrThrowInfo, colObj), typeof(object))),
+                    typeof(long))));
+
+        var lowered = EmitLoweredFinally(ctx, setup,
+            () => EmitLoopScaffold(
+                new LoopPlan(
+                    "foreach",
+                    fel.Label,
+                    LoopTestPosition.BeforeBody,
+                    Test: _ => Call(Enumerator(), EnumeratorMoveNext),
+                    PerIteration: c => c.VariableWrite(fel.LoopVariable, ForEachElementValue(fel, Enumerator(), c)),
+                    Body: c => CompileNode(fel.Body, c),
+                    AfterContinue: null),
+                ctx),
+            () => {
+                var enumerator = Variable(typeof(object), "_en");
+                return Block(typeof(void), [enumerator],
+                    Assign(enumerator, Call(ctx.HeapLocal, HeapUnsafeGet,
+                        Convert(ctx.FrameSlotRead(enumeratorSlot), typeof(int)))),
+                    TryFinally(
+                        IfThen(
+                            TypeIs(enumerator, typeof(IDisposable)),
+                            Call(Convert(enumerator, typeof(IDisposable)), IDisposableDispose)),
+                        Call(ctx.HeapLocal, HeapRecycle,
+                            Convert(ctx.FrameSlotRead(enumeratorSlot), typeof(int)))));
+            });
+        ctx.PopScope();
+        return ring.Then(lowered);
+    }
+
     private static Type ResolveCatchClrType(Node? exceptionType, Context ctx) {
         if (exceptionType is null) return typeof(Exception);
         var resolved = ctx.TryClrType(exceptionType);
@@ -1050,6 +1245,15 @@ public static partial class AbiEmitter {
     /// <summary>Return statement: write value to frame slot, set SP, jump to exit.
     /// A null <see cref="Return.Value"/> is a void return (no slot write).</summary>
     private static Expression EmitReturn(Return ret, Context ctx) {
+        if (ctx.IsIteratorBody) {
+            // C# rejects a value return in an iterator; a bare return finishes it, as yield break does.
+            if (ret.Value is not null)
+                throw new InvalidOperationException(
+                    "VM compile rejected: an iterator method cannot return a value; use yield return / yield break.");
+            return Block(
+                Assign(ctx.FrameSlotRead(ctx.IteratorMovedSlot), Constant(0L)),
+                Goto(ctx.IteratorLeaveLabel));
+        }
         if (ret.Value is null) {
             if (ctx.AsyncReturn is not null)
                 return Block(

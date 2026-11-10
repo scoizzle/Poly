@@ -594,6 +594,10 @@ public static class CSharpReader {
                     return new BreakStatement();
                 case "continue":
                     return new ContinueStatement();
+                case "yield-return":
+                    return new YieldStatement(FoldExpr(match.Children[0]));
+                case "yield-break":
+                    return new YieldStatement();
                 case "goto":
                     return new GotoStatement(Capture(match, "target"));
                 case "label":
@@ -1019,7 +1023,7 @@ public static class CSharpReader {
                 or WhileLoop or DoWhileLoop or ForLoop or ForEachLoop
                 or IfStatement or SwitchStatement or ThrowStatement
                 or TryCatchFinally or UsingStatement
-                or BreakStatement or ContinueStatement or GotoStatement or LabelDeclaration => false,
+                or BreakStatement or ContinueStatement or GotoStatement or LabelDeclaration or YieldStatement => false,
             _ => node.Children.All(child => child is null || IsSideEffectFreeReceiver(child)),
         };
 

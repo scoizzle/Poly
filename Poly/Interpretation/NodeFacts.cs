@@ -153,6 +153,7 @@ public static class NodeFacts {
         [typeof(UnionTypeReference)] = Inert<UnionTypeReference>(Producers.None),
         [typeof(UsingStatement)] = Fact<UsingStatement>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid, NodeEffect.External | NodeEffect.Throws),
         [typeof(Variable)] = Inert<Variable>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid),
+        [typeof(YieldStatement)] = Fact<YieldStatement>(Producers.Vm | Producers.Writer | Producers.Reader, NodeEffect.Write),
         [typeof(WhileLoop)] = Fact<WhileLoop>(Producers.Vm | Producers.Writer | Producers.Reader | Producers.Mermaid, NodeEffect.Write),
     };
 

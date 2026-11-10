@@ -98,8 +98,14 @@ public static class TemporalMeaning {
             // (`Budget: Duration default(30 Minutes)`); it has nowhere else to
             // come from. Every other target (or no default scope) keeps failing
             // closed: a bare duration needs a temporal left operand.
-            if (scope.DefaultTargetTypeName is "Duration")
+            if (scope.DefaultTargetTypeName is "Duration") {
+                if (d.Unit is DurationUnit.Months or DurationUnit.Years)
+                    context.ReportError(expression,
+                        $"default value '{d.Amount} {d.Unit}' has no fixed length " +
+                        "(months and years vary; use Days or a smaller unit)",
+                        DomainModelDiagnosticCodes.SemanticTypeCompatibility);
                 return;
+            }
             context.ReportError(expression,
                 $"default value '{d.Amount} {d.Unit}' is a bare duration with no temporal left operand",
                 DomainModelDiagnosticCodes.SemanticTypeCompatibility);

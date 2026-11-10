@@ -9,7 +9,8 @@ public enum DurationUnit { Milliseconds, Seconds, Minutes, Hours, Days, Weeks, M
 /// <see cref="DurationForm"/>. Resolves into a <see cref="DateOperation"/>
 /// when combined with a clock date node (<c>Now - 12 days</c>) at parse time; a bare
 /// <see cref="Duration"/> has no lowering (fail loud) and is rejected at analysis
-/// when it lacks a temporal left operand.
+/// when it lacks a temporal left operand, except as a fixed-length <c>default(...)</c>
+/// of a <c>Duration</c> property (months/years are rejected there).
 /// </summary>
 public sealed record Duration(
     long Amount,

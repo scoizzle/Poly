@@ -163,6 +163,70 @@ public static class AstParity {
         return new(program, vm.Disposal, vm.Outcome, printed.Disposal, printed.Outcome, printed.Source);
     }
 
+    /// <summary>
+    /// The iterator differential (#338 slice 4). An iterator is a method on a type, not a program body,
+    /// so it is compared by draining it: the VM runs <c>new T().M()</c> from <paramref name="script"/> and
+    /// the host enumerates the lazy sequence it returns; the printed side is the same unit printed
+    /// through the same analysis, compiled by Roslyn, with <paramref name="typeName"/>.<paramref name="methodName"/>
+    /// enumerated by the C# compiler's own iterator. Both sides yield the values in order, so a
+    /// difference in laziness-visible order, count or value is a failing row. A side that refuses is a row.
+    /// </summary>
+    public static ParityRow CompareIterator(string program, string script, string typeName, string methodName) {
+        var unit = CSharpScript.ReadUnit(script);
+        var analysis = Interpreter.Analyze(unit);
+
+        (ParityDisposal, string) vm;
+        try {
+            var compiled = Interpreter.Compile(CSharpScript.ProgramBlock(unit), analysis, CompilationMode.Normal);
+            using var exec = Interpreter.Execute(compiled);
+            vm = (ParityDisposal.Executed, DescribeSequence(exec.Result.Value as System.Collections.IEnumerable));
+        }
+        catch (Exception ex) {
+            vm = (ParityDisposal.Rejected, $"{ex.GetType().Name}: {ex.Message}");
+        }
+
+        string source;
+        try {
+            // The script statement that drives the VM side is not part of the printed type; the
+            // writer prints the type unqualified, so the harness supplies the using it names.
+            source = "using System.Collections.Generic;\n" + new CSharpGenerator(analysis).Generate(unit.Types);
+        }
+        catch (InvalidOperationException ex) {
+            return new(program, vm.Item1, vm.Item2, ParityDisposal.Rejected, "writer refused: " + ex.Message, null);
+        }
+        var syntaxErrors = SyntaxErrors(source);
+        if (syntaxErrors.Count > 0)
+            return new(program, vm.Item1, vm.Item2, ParityDisposal.Rejected,
+                "Roslyn syntax errors: " + string.Join("; ", syntaxErrors), source);
+
+        Assembly assembly;
+        try {
+            assembly = ExportedCSharp.CompileAndLoad(source, HarnessTypeName + "Iterator");
+        }
+        catch (InvalidOperationException ex) {
+            return new(program, vm.Item1, vm.Item2, ParityDisposal.Rejected, "Roslyn compile errors: " + ex.Message, source);
+        }
+        try {
+            var type = assembly.GetType(typeName) ?? throw new InvalidOperationException($"No {typeName} in the printed program.");
+            var method = type.GetMethod(methodName, BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
+                ?? throw new InvalidOperationException($"No {typeName}.{methodName} in the printed program.");
+            var instance = Activator.CreateInstance(type, nonPublic: true);
+            var sequence = (System.Collections.IEnumerable?)method.Invoke(instance, null);
+            return new(program, vm.Item1, vm.Item2, ParityDisposal.Executed, DescribeSequence(sequence), source);
+        }
+        catch (Exception ex) {
+            var thrown = ex is TargetInvocationException { InnerException: { } inner } ? inner : ex;
+            return new(program, vm.Item1, vm.Item2, ParityDisposal.Executed,
+                $"throw {thrown.GetType().Name}: {thrown.Message}", source);
+        }
+    }
+
+    /// <summary>The sequence's values in order, each in the canonical spelling, so two sides compare as strings.</summary>
+    static string DescribeSequence(System.Collections.IEnumerable? sequence) =>
+        sequence is null
+            ? "null"
+            : "seq[" + string.Join(",", sequence.Cast<object?>().Select(static value => Canonical(value, declared: null))) + "]";
+
     static Invoke Invoked(Lambda lambda, object?[] args) =>
         new(lambda, [.. args.Select(static argument => (Node)new Constant(argument))]);
 

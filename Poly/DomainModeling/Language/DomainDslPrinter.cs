@@ -263,6 +263,12 @@ public sealed class DomainDslPrinter {
             _sb.Append(PrintFacet(facet));
         }
 
+        if (entity.KeyProperties.Count > 0) {
+            _sb.Append(" key(");
+            _sb.Append(string.Join(", ", entity.KeyProperties));
+            _sb.Append(')');
+        }
+
         _sb.AppendLine(" {");
 
         // Properties
@@ -884,6 +890,9 @@ public sealed class DomainDslPrinter {
             c.Body is not null
                 ? $"count {c.RelationshipName} where {Run(_printer, c.Body)}"
                 : $"count {c.RelationshipName}";
+
+        protected override string FunctionCall(FunctionCall f) =>
+            $"{f.Name}({string.Join(", ", f.Arguments.Select(a => Run(_printer, a)))})";
 
         protected override string SumExpr(SumExpr s) =>
             $"sum {s.RelationshipName} {s.PropertyName}";

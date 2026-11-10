@@ -11,6 +11,9 @@ public sealed class VmValueStack : IDisposable {
     private long[] _slots;
     private bool _disposed;
 
+    /// <summary>True once <see cref="Dispose"/> has returned the backing array to the pool.</summary>
+    public bool IsDisposed => _disposed;
+
     public VmValueStack() : this(256) { }
     public VmValueStack(int initialSlots) {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(initialSlots, nameof(initialSlots));

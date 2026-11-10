@@ -24,6 +24,7 @@ public enum DslTokenKind {
     Lte,            // <=
     Eq,             // ==
     Neq,            // !=
+    SingleEq,       // =
     Plus,           // +
     Minus,          // -
     Star,           // *

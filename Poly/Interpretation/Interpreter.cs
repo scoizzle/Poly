@@ -33,6 +33,7 @@ public static class Interpreter {
         .UseLoopInvariantMotion()
         .UseExceptionRegionAnalysis()
         .UseSyntaxTypeCompatibility()
+        .UseIteratorLegality()
         .UseCallSiteCatalog()
         .UseDefiniteAssignmentAnalysis()
         .Build();

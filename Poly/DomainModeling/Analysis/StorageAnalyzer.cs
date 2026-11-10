@@ -243,7 +243,8 @@ public sealed class StorageAnalyzer {
             referenceNavs,
             foreignKeys,
             subscriptionLists,
-            tableName);
+            tableName,
+            BuildKeyIndex(entity, columns));
 
         // P2: Apply convention chain
         foreach (var conv in _conventions) {
@@ -253,6 +254,25 @@ public sealed class StorageAnalyzer {
         }
 
         return storageEntity;
+    }
+
+    /// <summary>
+    /// #405: the declared key as a unique index over its columns, in key order. A keyless entity
+    /// yields null; so does a key naming a member with no column (a navigation), whose
+    /// foreign-key shape the decision does not state.
+    /// </summary>
+    private static StorageIndex? BuildKeyIndex(Entity entity, IReadOnlyList<StorageColumn> columns) {
+        var key = entity.KeyProperties;
+        if (key is null || key.Count == 0)
+            return null;
+        var keyColumns = new List<StorageColumn>(key.Count);
+        foreach (var name in key) {
+            var column = columns.FirstOrDefault(c => string.Equals(c.Name, name, StringComparison.Ordinal));
+            if (column is null)
+                return null;
+            keyColumns.Add(column);
+        }
+        return new StorageIndex(keyColumns, IsUnique: true);
     }
 
     private (List<StorageColumn> Columns, List<StorageNavigation> Collections, List<StorageNavigation> References)

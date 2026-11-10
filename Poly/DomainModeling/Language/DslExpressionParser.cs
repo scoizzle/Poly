@@ -125,6 +125,7 @@ public sealed class DslExpressionParser {
             "group" => FoldGroup(match, inWhere),
             "not" => DomainExpression.Not(FoldRule(match.Children[0], inWhere)),
             "duration" => FoldUnresolvedDuration(match),
+            "call" => FoldCall(match),
             "exists" => DomainExpression.Exists(DomainExpression.Property(CaptureText(match, "rel"))),
             "where-nav" => FoldWhereNav(match, inWhere),
             "quant-where" => FoldQuantWhere(match, inWhere),
@@ -136,6 +137,47 @@ public sealed class DslExpressionParser {
             _ => throw new InvalidOperationException(
                 $"Cannot fold primary '{match.RuleName}/{match.PatternName}'."),
         };
+    }
+
+    /// <summary>
+    /// <c>Name(arg, …)</c>: the balanced parentheses are split at top-level commas and each
+    /// segment is parsed as a full expression. Empty segments (a leading, doubled, or
+    /// trailing comma) are a positioned error.
+    /// </summary>
+    private DomainExpression FoldCall(MatchResult<DslToken, DslTokenKind> match) {
+        var nameToken = match.Tokens[0];
+        var name = nameToken.Text;
+        var inner = match.Tokens.Skip(2).Take(match.Tokens.Count - 3).ToList();
+        var arguments = new List<DomainExpression>();
+        if (inner.Count > 0) {
+            var depth = 0;
+            var segment = new List<DslToken>();
+            void Flush(DslToken at) {
+                if (segment.Count == 0)
+                    throw _c.Error($"Expected an argument in call to '{name}' before '{at.Text}' (line {at.Line}, col {at.Col})");
+                arguments.Add(ParseArgument(segment));
+                segment = [];
+            }
+            foreach (var token in inner) {
+                if (token.Kind == DslTokenKind.LParen) depth++;
+                else if (token.Kind == DslTokenKind.RParen) depth--;
+                if (depth == 0 && token.Kind == DslTokenKind.Comma) Flush(token);
+                else segment.Add(token);
+            }
+            Flush(match.Tokens[^1]);
+        }
+        return DomainExpression.Call(name, arguments, nameToken.Line, nameToken.Col);
+    }
+
+    private DomainExpression ParseArgument(List<DslToken> tokens) {
+        var last = tokens[^1];
+        var withEof = new List<DslToken>(tokens) { new(DslTokenKind.EndOfFile, "", last.Line, last.Col) };
+        var reader = new ListTokenReader<DslToken, DslTokenKind>(withEof, static k => k == DslTokenKind.EndOfFile);
+        var nested = new DslCursor(reader, new Matcher<DslToken, DslTokenKind>(_c.Grammar, reader));
+        var argument = new DslExpressionParser(nested, _forms, _folds).ParseExpression();
+        if (nested.Current.Kind != DslTokenKind.EndOfFile)
+            throw nested.Error($"Unexpected '{nested.Current.Text}' in call argument");
+        return argument;
     }
 
     private DomainExpression FoldUnresolvedDuration(MatchResult<DslToken, DslTokenKind> match) {

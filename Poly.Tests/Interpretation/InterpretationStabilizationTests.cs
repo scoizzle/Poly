@@ -466,6 +466,7 @@ public class InterpretationStabilizationTests {
             LoopInvariantMotionPass.Id,
             ExceptionRegionAnalyzer.Id,
             SyntaxTypeCompatibilityAnalyzer.Id,
+            IteratorLegalityAnalyzer.Id,
             CallSiteCatalogAnalyzer.Id,
             DefiniteAssignmentAnalyzer.Id,
         ];

@@ -68,7 +68,7 @@ public class NodeFactsTotalityTests {
             nameof(LabelDeclaration), nameof(IndexAccess), nameof(Member), nameof(New),
             nameof(NewArray), nameof(StridedSetBits), nameof(ForEachLoop), nameof(Invoke),
             nameof(Await), nameof(UsingStatement), nameof(IfStatement),
-            nameof(SwitchStatement), nameof(SuspendNode),
+            nameof(SwitchStatement), nameof(SuspendNode), nameof(YieldStatement),
         ];
         var actual = Ordered()
             .Where(kv => (kv.Value.Effects & ~NodeEffect.Throws) != NodeEffect.None)

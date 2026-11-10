@@ -114,6 +114,24 @@ public sealed record AddEntityChange(
     internal override string GetDescription() => $"Add Entity '{Name}'";
 }
 
+/// <summary>
+/// Sets an Entity's key designation (#405): the names of its own properties or singular navigations
+/// that together are its domain identity. The names are not checked here; analysis rejects a
+/// malformed designation.
+/// </summary>
+public sealed record SetEntityKeyChange(
+    string EntityName,
+    IReadOnlyList<string> KeyProperties
+) : DomainChange {
+    internal override void ApplyTo(DomainMutationContext context) {
+        context.RequireUpdate(
+            context.ReplaceInEntity(EntityName, _ => true, e => e with { KeyProperties = KeyProperties }),
+            $"Entity '{EntityName}' not found — cannot set key");
+    }
+
+    internal override string GetDescription() => $"Set key({string.Join(", ", KeyProperties)}) on Entity '{EntityName}'";
+}
+
 public sealed record RemoveEntityChange(
     string Name
 ) : DomainChange {

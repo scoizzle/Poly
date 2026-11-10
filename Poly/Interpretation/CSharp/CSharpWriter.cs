@@ -292,6 +292,12 @@ public sealed class CSharpWriter {
                 sb.Append(Pad(indent));
                 sb.AppendLine(Render("statement", "continue"));
                 return;
+            case YieldStatement yieldStmt:
+                sb.Append(Pad(indent));
+                sb.AppendLine(yieldStmt.Value is null
+                    ? Render("statement", "yield-break")
+                    : Render("statement", "yield-return", " " + Expr(yieldStmt.Value)));
+                return;
             case GotoStatement gotoStmt:
                 sb.Append(Pad(indent));
                 sb.AppendLine(RenderFills("statement", "goto", Names(("target", gotoStmt.Target))));
@@ -1076,6 +1082,10 @@ public sealed class CSharpWriter {
                     operand = "(" + operand + ")";
                 // (Func<int>)(x => x + 1): without the brackets the cast takes `(x)`.
                 else if (cast.Operand is Lambda)
+                    operand = "(" + operand + ")";
+                // A cast is a unary operator: `(long)a + b` casts only `a`. A looser operand needs brackets.
+                else if (cast.Operand is not Conditional
+                    && (BinaryNodePrecedence(cast.Operand) < 10 || cast.Operand is TypeIs or TypeAs or Assignment or ThrowExpression))
                     operand = "(" + operand + ")";
                 return "(" + type + ")" + operand;
             case TypeIs typeIs:

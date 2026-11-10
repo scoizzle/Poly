@@ -26,9 +26,43 @@ internal static class DomainModelDiagnosticCodes {
     /// </summary>
     public const string StoredValueTypeProperty = "DMSTR006";
 
+    /// <summary>
+    /// An entity's key designation (<c>Entity.KeyProperties</c>, #405) is malformed: it names no
+    /// member, or a member that is optional, assigned by an effect (not immutable), a collection
+    /// navigation, or a navigation whose target entity has no key. A duplicate member is
+    /// <see cref="StructuralDuplicate"/> and a navigation-key cycle is <see cref="StructuralCycle"/>.
+    /// </summary>
+    public const string InvalidKeyDesignation = "DMSTR007";
+
     public const string SemanticTypeCompatibility = "DMSEM003";
     public const string SemanticConstraintMismatch = "DMSEM004";
     public const string SemanticReferenceResolution = "DMSEM005";
+
+    // #406 function calls (DMFUN): a declared function is callable from a domain expression.
+
+    /// <summary>A call names a function the domain does not declare.</summary>
+    public const string FunctionUnknown = "DMFUN001";
+    /// <summary>A call passes a different number of arguments than the function declares.</summary>
+    public const string FunctionArity = "DMFUN002";
+    /// <summary>A call argument's type is not assignable to the declared parameter type.</summary>
+    public const string FunctionArgumentType = "DMFUN003";
+    /// <summary>
+    /// A function reaches itself through calls (directly or through other functions). v1 rejects
+    /// recursion (#406): a body is one expression with no base-case control flow, so every
+    /// recursive function would diverge, and lowering would inline without end.
+    /// </summary>
+    public const string FunctionRecursion = "DMFUN004";
+    /// <summary>
+    /// A function body names something other than its parameters (an entity property, a
+    /// relationship, a quantifier, a clock). Functions are pure: they have no subject entity.
+    /// </summary>
+    public const string FunctionImpureBody = "DMFUN005";
+    /// <summary>A function body's type is not assignable to the declared return type.</summary>
+    public const string FunctionReturnType = "DMFUN006";
+    /// <summary>Two functions declare the same name.</summary>
+    public const string FunctionDuplicate = "DMFUN007";
+    /// <summary>A call sits where lowering cannot place it (a property default).</summary>
+    public const string FunctionCallPosition = "DMFUN008";
 
     public const string EffectBinding = "DMEFF001";
     public const string EffectUnsatisfiedRequirement = "DMEFF002";
@@ -108,13 +142,15 @@ internal static class DomainModelDiagnosticCodes {
 
     /// <summary>
     /// #425: the caller's argument is provably disjoint from a public payload constraint or a
-    /// readable public precondition. An error: the call can never succeed, and Lower refuses.
+    /// readable public precondition, or the contributed body provably writes a payload member
+    /// outside a declared constraint or nulls a required one. An error: Lower refuses.
     /// </summary>
     public const string ContractBoundaryViolation = "DMCON014";
 
     /// <summary>
     /// #425: a boundary obligation the merge cannot decide, or one not readable from the
-    /// argument, and the postcondition half of every contributed body. A warning: Lower is not
+    /// argument, or a contributed-body write or payload escape the walk cannot decide (a surface-only
+    /// contribution has no body and is silent). A warning: Lower is not
     /// blocked, and an allowance is not a way to clear it (#422 owns tolerance).
     /// </summary>
     public const string ContractBoundaryUnknown = "DMCON015";

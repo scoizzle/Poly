@@ -262,6 +262,22 @@ internal static class RingCodec {
         throw new InvalidCastException($"Cannot convert '{value.GetType()}' to '{target}'.");
     }
 
+    /// <summary>Runtime cast of a heap handle to a <c>Nullable&lt;U&gt;</c> target, the
+    /// way <c>(U?)obj</c> reads it: a null handle or null heap value is absent, a boxed
+    /// <c>U</c> is present, and anything else fails closed. The caller stores the result in
+    /// a <c>Nullable&lt;U&gt;</c> ring local, so absence is the nullable's own default
+    /// rather than the word 0, which a nullable slot reads as a present zero.</summary>
+    public static object? CastToNullable(VmManagedObjectHeap heap, long raw, Type target) {
+        if (raw == 0L)
+            return null;
+        var value = heap.UnsafeGet((int)raw);
+        if (value is null)
+            return null;
+        if (Nullable.GetUnderlyingType(target)!.IsInstanceOfType(value))
+            return value;
+        throw new InvalidCastException($"Cannot convert '{value.GetType()}' to '{target}'.");
+    }
+
     /// <summary>The boxed underlying value of a nullable frame slot, or null
     /// when the handle is the absent sentinel.</summary>
     public static object? ReadNullable(VmManagedObjectHeap heap, long handle, Type underlying) {

@@ -318,9 +318,12 @@ the contract and endpoint; it is never erased.
 ## 3. Entities and Properties
 
 ```
-["public"] "entity" entity-name annotation* "{" property* stage* action* policy* "}"
-entity-name ":" "entity" annotation* "{" property* stage* action* policy* "}"
+["public"] "entity" entity-name annotation* [key-clause] "{" property* stage* action* policy* "}"
+entity-name ":" "entity" annotation* [key-clause] "{" property* stage* action* policy* "}"
+key-clause = "key" "(" member ("," member)* ")"
 ```
+
+**Key (identity).** `key(a, b)` designates existing members as the entity's identity. It is a header clause that sits **immediately before the opening `{`**, after any annotations: `Order: entity table("ORDERS") key(Code, Region) {` or `public entity Order key(Code) {`. It is not a body member and adds nothing to the entity; each name is one of the entity's own properties or singular navigations, and names are scoped to the entity. Analysis rejects an unknown member, a blank one, an `optional` or action-assigned key property, a collection navigation, or a navigation to an unkeyed entity (`DMSTR007`), a repeated member (`DMSTR001`), and a key cycle (`DMSTR002`). An empty `key()`, a doubled or trailing comma, an unclosed list, or a second `key(...)` clause is a positioned parse error. The printer writes the clause in the same position. Scoped **value** uniqueness (`unique_by` / `unique(scope, value)`) is **not implemented**, and nothing enforces a key at runtime yet.
 
 `public` is an optional leading modifier before the kind keyword (`public entity Order { … }`). Omitting it is `Visibility.Internal` and keeps `Order: entity`. It is stored as `Visibility` and printed; export filtering is a later slice. `public` is a keyword, so it is not a property name. The mark may appear anywhere among the header annotations; the printer writes it first.
 
@@ -1189,7 +1192,6 @@ is a fragment probe: relationship/owned path-prefix and relationship `exists` fa
 | Action `when Stage` | Not a runtime or emit gate. Place the action inside the stage body; subscriptions stay `when Rel Stage { … }` |
 
 | `relationship Name from A to B` | Use N1 nav properties instead |
-| `function` | Functions not supported |
 | Event/publish/subscribe | Event model retired — stage transitions are the observable |
 | `event.Prop` / `event Prop` in `when` bodies | Use optional peer binder: `when Rel Stage as name { … name Prop … }` |
 
@@ -1242,10 +1244,79 @@ is reported `DMCON015` rather than `DMCON014`, even when the entity and the payl
 property name. Only a precondition that names the bound parameter of a primitive payload is
 decidable. Second, `Empty` from the constraint merge is a real disjointness proof only for
 `range`, `length` and `equals`; a `pattern` or `default` mismatch keeps the ordinary
-incompatible refusal (`DMCON001`) instead of being reported as disjoint. Library bodies are not
-walked: a contributed body is reported `unknown` on its postconditions with one `DMCON015`, and
-the domain still lowers. The note is not part of the surface fingerprint, and it never clears a
+incompatible refusal (`DMCON001`) instead of being reported as disjoint. A contributed
+body is walked on the postcondition half: a write outside a declared `range`, `length`, `pattern`
+or numeric `equals`, or a null into a required payload member, is `DMCON014` and Lower refuses; a
+write the walk cannot decide, or a payload handed to a call (including in the final `return` or a
+local assignment), is one `DMCON015` and the domain still lowers. A body that does not end in a
+`return`, or whose factory throws, is also `unknown`. A surface-only contribution is silent. The note is not part of the surface fingerprint, and it never clears a
 pin mismatch (`DMCON010`).
+
+### Functions
+
+A top-level `function` declares a pure named member of the domain: parameters, a return
+type, and one expression body. The form is what `export_dsl` prints (spaces around `=`
+included), so parse → print → parse is lossless:
+
+```poly
+function Add(a: Number, b: Number): Number = a + b
+
+function Pi(): Number = 3
+```
+
+- Functions sit at the top level, after the entities whose types they name.
+- The body is **one expression** (`a + b`, `3`, `Add(a, 1) * 2`, …). An identifier in that
+  expression that names a declared parameter is that parameter. A function is **pure**: the
+  body may use parameters, literals, arithmetic, comparisons, `and`/`or`/`not`, and calls to
+  other functions. Naming an entity property, a relationship, a quantifier, or a clock is
+  `DMFUN005` (a function has no subject entity).
+- The body's type must be assignable to the declared return type (`DMFUN006`); two
+  functions with one name are `DMFUN007`.
+- `public function` is not part of the surface yet; a function has no visibility and
+  prints without one.
+- A declaration missing its `=` or its body fails closed with a positioned error; the
+  parser never folds the following declaration into the body. `function` is not a path hop
+  (`a b c` navigation), so an expression that ends in an identifier ends at the next
+  `function` declaration.
+
+#### Calling a function
+
+A call is `Name(arg, arg, …)` — the function name, `(`, comma-separated expressions, `)` —
+in policies, in `assign` values, and as arguments of other calls or in function bodies. Other
+expression positions share the same parser and lowering but are not covered by tests yet.
+
+```poly
+Cart: entity {
+  Total: Number default(0)
+  Compute: action { assign Total to Add(1, 2) }              // 3
+  Scale:   action { assign Total to Add(1, 2) * 10 }         // 30
+  Nest:    action { assign Total to Square(Add(1, 2)) }      // 9
+  IsThree: policy { Total is Add(1, 2) }
+}
+
+function Add(a: Number, b: Number): Number = a + b
+function Square(a: Number): Number = a * a
+```
+
+- A call needs the `(` directly after the name. A bare identifier, even one that equals a
+  function name, is still an ordinary property or parameter read.
+- Arguments are full expressions (including entity properties and other calls). A zero
+  argument call is `Seven()`. A leading, doubled, or trailing comma is a positioned parse
+  error.
+- A call evaluates to the function's declared return type. Simulation and printed C# agree:
+  lowering binds each argument to the parameter and lowers the body there.
+- Fail-closed diagnostics (all errors): `DMFUN001` unknown function, `DMFUN002` wrong number of
+  arguments, `DMFUN003` argument type not assignable to the parameter type, `DMFUN004`
+  recursion (direct or through other functions), `DMFUN005` impure body, `DMFUN006` body vs
+  return type, `DMFUN007` duplicate name, `DMFUN008` call in a position lowering cannot place
+  (the `default(…)` of a property — assign the call in an action or entry effect instead). A
+  call result of the wrong type for its use is the ordinary `DMSEM003`.
+- **Recursion is rejected**, not supported: a body is one expression with no base case, so a
+  recursive function never terminates, and lowering would expand it without end.
+
+Not yet part of the surface (later slices of #406): functions on `value` types and `require`
+guards, operator overloads, lowering a function to its own tree artifact with an invoke id,
+and function calls in contract payload constraints.
 
 ### Action Parameters
 

@@ -120,7 +120,8 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
             isRoot, hasNaturalKey, keyPropName, keyClrType,
             hasStages, stageEnumTypeName, stageByName, constructorParameters,
             requiredPropertyNames, enumPropertyNames, entryAssignedPropertyNames,
-            lifecyclePropertyName, lifecycleEnumTypeName, assignOnlyPropertyNames
+            lifecyclePropertyName, lifecycleEnumTypeName, assignOnlyPropertyNames,
+            GuardClosedProperties.Compute(entity, domain).Closed
         );
     }
 

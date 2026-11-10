@@ -75,7 +75,14 @@ public sealed record EntityStructureMetadata(
     string? LifecycleEnumTypeName = null,
 
     /// <summary>Scalar properties assigned only by effects (no create initializer).</summary>
-    IReadOnlySet<string>? AssignOnlyPropertyNames = null
+    IReadOnlySet<string>? AssignOnlyPropertyNames = null,
+
+    /// <summary>
+    /// Properties whose every writer is proven to leave them within their declared constraints
+    /// (#367 C-1 guard-closed fact). Conservative: absent means not proven, never "violated".
+    /// Writer kinds and blockers are in <see cref="GuardClosedProperties"/>.
+    /// </summary>
+    IReadOnlySet<string>? GuardClosedPropertyNames = null
 ) : IAnalysisMetadata;
 
 public sealed record ConstructorParameterOrder(

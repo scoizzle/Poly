@@ -84,15 +84,15 @@ public sealed partial class DomainToCSharpExporter {
         IReadOnlySet<string>? previousStageNotifyStages,
         string? loweringSourceStage, string? guardSourceStage, Domain? domain,
         INodeMetadataProvider? analysis, bool isVoid, LocalNames? names = null,
-        ContractSplicePlan? splice = null) {
+        ContractSplicePlan? splice = null, Node? methodResultType = null) {
         var paramNames = new HashSet<string>(
             action.Parameters.Select(p => p.Name), StringComparer.Ordinal);
         var effectsBody = LowerActionToMethodBody(entity, action, paramNames, stageEnumTypeName,
             postTransitionNotifyStages, previousStageNotifyStages,
-            loweringSourceStage, domain, analysis, isVoid, names);
+            loweringSourceStage, domain, analysis, isVoid, names, methodResultType);
         effectsBody = SpliceContractBody(domain, action, effectsBody, isVoid, analysis, splice, names);
         return BuildActionBodyWithGuards(action, entity, effectsBody, domain,
-            guardSourceStage, stageEnumTypeName, isVoid, analysis, loweringSourceStage);
+            guardSourceStage, stageEnumTypeName, isVoid, analysis, loweringSourceStage, methodResultType);
     }
 
     private static void AddStageDispatchedActionMethod(Entity entity,
@@ -111,11 +111,27 @@ public sealed partial class DomainToCSharpExporter {
                     $"Action '{action.Name}' on entity '{entity.Name}' has incompatible parameter lists across stages.");
         }
 
-        var isVoid = representative.Result is not { Members.Count: > 0 };
+        // Stage copies of one name are distinct actions and may declare different results.
+        // The merged method returns the typed slot when any copy yields a value; a void
+        // copy then succeeds with no value. Typed copies must agree on the type.
+        static bool IsVoidAction(Action a) => a.Result is not { Members.Count: > 0 };
+        var typedVariants = variants.Where(v => !IsVoidAction(v.Action)).ToList();
+        var typedRepresentative = typedVariants.Count > 0 ? typedVariants[0].Action : null;
+        if (typedRepresentative is not null) {
+            var typeName = typedRepresentative.Result!.Members[0].Type.TypeName;
+            foreach (var (action, _) in typedVariants) {
+                if (!string.Equals(action.Result!.Members[0].Type.TypeName, typeName, StringComparison.Ordinal))
+                    throw new InvalidOperationException(
+                        $"Action '{action.Name}' on entity '{entity.Name}' returns different types across stages.");
+            }
+        }
+        var isVoid = typedRepresentative is null;
         Node actionResultType = isVoid
             ? new NamedTypeReference("DomainResult")
             : new NamedTypeReference("DomainResult",
-                TypeArguments: [MapDomainTypeRef(representative.Result!.Members[0].Type, domain, analysis)]);
+                TypeArguments: [MapDomainTypeRef(typedRepresentative!.Result!.Members[0].Type, domain, analysis)]);
+        // Null when the branch's own result already matches the method's.
+        Node? ResultOverride(Action a) => !isVoid && IsVoidAction(a) ? actionResultType : null;
 
         // One method holds every stage branch and the entity-level tail, so their
         // locals come from one name source and cannot collide.
@@ -183,7 +199,7 @@ public sealed partial class DomainToCSharpExporter {
             var branchBody = BuildFullActionBody(entity, group.Action, stageEnumTypeName,
                 postTransitionNotifyStages, previousStageNotifyStages,
                 loweringSourceStage: group.Stages[0], guardSourceStage: null,
-                domain, analysis, isVoid, names, splice);
+                domain, analysis, IsVoidAction(group.Action), names, splice, ResultOverride(group.Action));
             nodes.Add(new IfStatement(
                 InWatchedStages(
                     new Member(new ThisReference(), "CurrentStage"),
@@ -196,7 +212,7 @@ public sealed partial class DomainToCSharpExporter {
             var tail = BuildFullActionBody(entity, entityLevel, stageEnumTypeName,
                 postTransitionNotifyStages, previousStageNotifyStages,
                 loweringSourceStage: null, guardSourceStage: null,
-                domain, analysis, isVoid, names, splice);
+                domain, analysis, IsVoidAction(entityLevel), names, splice, ResultOverride(entityLevel));
             nodes.AddRange(tail.Nodes);
             locals.AddRange(tail.Variables);
         }
@@ -295,12 +311,19 @@ public sealed partial class DomainToCSharpExporter {
     private static Block BuildActionBodyWithGuards(
         Action action, Entity entity, Node? effectsBody,
         Domain? domain = null, string? sourceStageName = null, string? stageEnumTypeName = null,
-        bool isVoid = true, INodeMetadataProvider? analysis = null, string? policyStageName = null) {
+        bool isVoid = true, INodeMetadataProvider? analysis = null, string? policyStageName = null,
+        Node? methodResultType = null) {
 
-        // Build the DomainResult type reference for failure/success returns
+        // Build the DomainResult type reference for failure/success returns. A stage
+        // branch that yields no value inside a typed merged method still returns the
+        // method's DomainResult<T>.
         Node actionResultType;
         Node resultTypeRef;
-        if (isVoid) {
+        if (methodResultType is not null) {
+            actionResultType = methodResultType;
+            resultTypeRef = methodResultType;
+        }
+        else if (isVoid) {
             actionResultType = new NamedTypeReference("DomainResult");
             resultTypeRef = new NamedTypeReference("DomainResult");
         }
@@ -384,9 +407,11 @@ public sealed partial class DomainToCSharpExporter {
             // make the return unreachable (CS0162).
             if (nodes.Count == 0 || nodes[^1] is not ThrowStatement) {
                 nodes.Add(new Return(
-                    new Invoke(
-                        new Member(
-                            new NamedTypeReference("DomainResult"), "Success"))));
+                    methodResultType is null
+                        ? new Invoke(new Member(new NamedTypeReference("DomainResult"), "Success"))
+                        : new Invoke(
+                            new Member(methodResultType, "Success"),
+                            new NullForgiving(new Default()))));
             }
         }
         else {
@@ -571,14 +596,15 @@ public sealed partial class DomainToCSharpExporter {
         IReadOnlySet<string>? postTransitionNotifyStages = null,
         IReadOnlySet<string>? previousStageNotifyStages = null,
         string? sourceStageName = null, Domain? domain = null,
-        INodeMetadataProvider? analysis = null, bool isVoid = true, LocalNames? names = null) {
+        INodeMetadataProvider? analysis = null, bool isVoid = true, LocalNames? names = null,
+        Node? methodResultType = null) {
         if (action.Effects.Count == 0) return null;
         var enumProps = GetEnumPropertyNames(entity, domain, analysis);
         var esm = analysis?.GetStructure(entity);
-        Node actionResultType = isVoid
+        Node actionResultType = methodResultType ?? (isVoid
             ? new NamedTypeReference("DomainResult")
             : new NamedTypeReference("DomainResult",
-                TypeArguments: [MapDomainTypeRef(action.Result.Members[0].Type, domain, analysis)]);
+                TypeArguments: [MapDomainTypeRef(action.Result.Members[0].Type, domain, analysis)]));
         var context = new LoweringContext(
             new ThisReference(),
             Analysis: analysis,

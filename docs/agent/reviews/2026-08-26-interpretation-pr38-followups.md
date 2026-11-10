@@ -1,13 +1,13 @@
 # Follow-ups — Interpretation PR #38 — 2026-08-26
 
-Review: [`2026-08-26-interpretation-pr38-local-review.md`](./2026-08-26-interpretation-pr38-local-review.md)
+Review: [`2026-08-26-interpretation-pr38-local-review.md`](2026-08-26-interpretation-pr38-local-review.md)
 
 Owning stream: Interpretation (VM emit + analysis) and C# printer only where fusion must stay honest.
 
 ## Prior open items (disposition)
 
 - F1–F9 capture/kinds siblings (capture-analysis + declare-init reviews) — **still closed**.
-- Declare-init printer residual "never-assigned `default(object)`" — **tracked** in [`2026-08-26-interpretation-declare-init-followups.md`](./2026-08-26-interpretation-declare-init-followups.md) (not a merge blocker).
+- Declare-init printer residual "never-assigned `default(object)`" — **tracked** in [`2026-08-26-interpretation-declare-init-followups.md`](2026-08-26-interpretation-declare-init-followups.md) (not a merge blocker).
 
 ## Closed this change
 

@@ -3,7 +3,7 @@
 - **Target**: local uncommitted changes
 - **Mode**: multi (Pass A = session; Pass B = independent read-only subagent, current tree)
 - **Issue counts**: 2 bugs, 6 suggestions, 2 nits (all closed in full-send)
-- **Verdict**: Full-send closed F1–F10 **as implemented**; **r2 re-review** found residuals — see [`2026-08-02-subscription-peer-binding-r2.md`](./2026-08-02-subscription-peer-binding-r2.md).
+- **Verdict**: Full-send closed F1–F10 **as implemented**; **r2 re-review** found residuals — see [`2026-08-02-subscription-peer-binding-r2.md`](2026-08-02-subscription-peer-binding-r2.md).
 - **Diff stats**: 16 files, +420 / −157
 
 ## Summary

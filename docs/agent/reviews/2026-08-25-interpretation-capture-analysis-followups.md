@@ -1,10 +1,10 @@
 # Follow-ups — capture + analysis kinds local review — 2026-08-25
 
-Review: [`2026-08-25-interpretation-capture-analysis-local-review.md`](./2026-08-25-interpretation-capture-analysis-local-review.md)
+Review: [`2026-08-25-interpretation-capture-analysis-local-review.md`](2026-08-25-interpretation-capture-analysis-local-review.md)
 
 Owning stream: Interpretation only.
 
-## Prior follow-ups ([`2026-08-25-interpretation-invariant-followups.md`](./2026-08-25-interpretation-invariant-followups.md))
+## Prior follow-ups ([`2026-08-25-interpretation-invariant-followups.md`](2026-08-25-interpretation-invariant-followups.md))
 
 - Nested frame-slot aliasing — **closed** (monotonic `_nextFrameSlot`).
 - Declare-init as `Assignment` — **closed**: `Variable` is binding only; declare on `Block.Variables` / foreach; write is `Assignment`; C# `var x = e` is printer fusion.

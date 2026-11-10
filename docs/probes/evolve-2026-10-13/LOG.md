@@ -3,7 +3,7 @@
 Branch: `mission/evolve-2026-10-13` (worktree `/Users/scoizzle/Projects/Poly/mission-evolve-2026-10-13`, off master `a6203103`)
 Agent start: Tue Oct 13 23:20 CDT. Budget: ~8h.
 
-Archive baseline consulted: `docs/plans/archive/probes-2026-08/findings/` (rounds 2–5).
+Archive baseline consulted: [`docs/plans/archive/probes-2026-08/findings/`](https://github.com/scoizzle/Poly/tree/067bde75f69646fdf134f7c53ffdf62b463f24fd/docs/plans/archive/probes-2026-08/findings) (rounds 2–5).
 Known-bad from archive (to re-check as regressions): multi-hop PascalCase export; `Rel exists`
 on many divergence; CS0162 unreachable after quantified invoke; CS8602 null deref; date
 arithmetic lowering gaps (now partially shipped per guide §8); unique no-op; create-in-conditional

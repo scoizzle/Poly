@@ -10,7 +10,7 @@ Execute **one** suite the user names. Do not invent product work outside its tas
 
 ## Admit
 
-1. Read [`docs/plans/poly-eng/board.md`](../../docs/plans/poly-eng/board.md).
+1. Read [`docs/plans/poly-eng/board.md`](https://github.com/scoizzle/Poly/blob/067bde75f69646fdf134f7c53ffdf62b463f24fd/docs/plans/poly-eng/board.md).
 2. The argument is a `*-README.md` path. There is no key table.
 3. If that path is under `docs/plans/archive/`, or the status table marks the suite archived, stop and report that.
 4. Also read [`AGENTS.md`](../../AGENTS.md), [`docs/CORE.md`](../../docs/CORE.md) before platform edits, and the suite gate linked from the README.

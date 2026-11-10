@@ -1,8 +1,0 @@
-domain ReviewEnumAssign
-StockLevel: enum { InStock, Low, Out }
-Bin: entity {
-  Status: StockLevel
-  seed: action {
-    assign Status to Bogus
-  }
-}

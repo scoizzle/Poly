@@ -1,9 +1,0 @@
-domain DegenerateSelfRefOne
-
-Node: entity {
-  parent: Node
-  Start: stage {}
-  Link: action {
-    create in parent { }
-  }
-}

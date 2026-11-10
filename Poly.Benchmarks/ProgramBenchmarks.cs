@@ -11,7 +11,7 @@ namespace Poly.Benchmarks;
 /// perf gates name — nqueens, sieve, mandelbrot, collatz. Each program is read from the
 /// C# surface and compiled once in <see cref="GlobalSetup"/>; the benchmark executes the
 /// compiled program and returns its checksum, so no work can be elided. The program
-/// texts are frozen in docs/plans/interpretation-simplification/tasks/ISB.md.
+/// texts are frozen in https://github.com/scoizzle/Poly/blob/067bde75f69646fdf134f7c53ffdf62b463f24fd/docs/plans/interpretation-simplification/tasks/ISB.md.
 /// </summary>
 [MemoryDiagnoser]
 [MinColumn, MaxColumn, MeanColumn, MedianColumn]

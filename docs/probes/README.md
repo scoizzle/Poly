@@ -2,7 +2,7 @@
 
 Thin set of `.poly` domains used by tests, `scripts/run-probe.sh`, and `scripts/live-demo.sh`.
 
-Historical discovery rounds: [`docs/plans/archive/probes-2026-08/`](../plans/archive/probes-2026-08/README.md).
+Historical discovery rounds: [`docs/plans/archive/probes-2026-08/`](https://github.com/scoizzle/Poly/blob/067bde75f69646fdf134f7c53ffdf62b463f24fd/docs/plans/archive/probes-2026-08/README.md).
 
 | Path | Consumer |
 |------|----------|

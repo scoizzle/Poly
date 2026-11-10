@@ -151,7 +151,7 @@ See [`Poly.Mcp/README.md`](Poly.Mcp/README.md) for the full tool surface and usa
 - **[`docs/CORE.md`](docs/CORE.md)** — Platform map: module boundaries, critical machinery, "use this / not that"
 - **[`docs/decisions/`](docs/decisions/)** — Architectural decision records (ADRs)
 - **[`AGENTS.md`](AGENTS.md)** — Agent and contributor conventions, placement rules, build/test instructions
-- **[`docs/plans/`](docs/plans/)** — Execution plans and work tracking
+- **[`docs/reference/`](docs/reference/)** — Design records and research notes; work is tracked in GitHub issues
 
 ## License
 

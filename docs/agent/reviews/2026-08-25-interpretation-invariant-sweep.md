@@ -52,4 +52,4 @@ Canonical VM is stronger than the F1–F22 cut, but not fully a language VM. Dua
 
 ## Follow-ups
 
-[`2026-08-25-interpretation-invariant-followups.md`](./2026-08-25-interpretation-invariant-followups.md)
+[`2026-08-25-interpretation-invariant-followups.md`](2026-08-25-interpretation-invariant-followups.md)

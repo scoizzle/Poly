@@ -1,5 +1,0 @@
-domain ReviewEnumDefault
-StockLevel: enum { InStock, Low, Out }
-Bin: entity {
-  Status: StockLevel default(Bogus)
-}

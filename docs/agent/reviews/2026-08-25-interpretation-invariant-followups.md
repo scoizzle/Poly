@@ -1,6 +1,6 @@
 # Interpretation invariant follow-ups — 2026-08-25
 
-Review: [`2026-08-25-interpretation-invariant-sweep.md`](./2026-08-25-interpretation-invariant-sweep.md)
+Review: [`2026-08-25-interpretation-invariant-sweep.md`](2026-08-25-interpretation-invariant-sweep.md)
 
 Owning stream: Interpretation only.
 
@@ -25,7 +25,7 @@ Owning stream: Interpretation only.
 
 - [x] Nested frame-slot aliasing: `DeclareVariable` uses a monotonic frame slot, not `scope.Count` (inner/outer no longer share `FrameOffset` 0).
 - [x] Declare-init as `Assignment`: `Variable` is binding only; declare on `Block.Variables` / foreach; write is `Assignment`; C# `var x = e` is printer fusion.
-- Capture-analysis review F1–F9 closed (siblings listed in [`2026-08-25-interpretation-capture-analysis-followups.md`](./2026-08-25-interpretation-capture-analysis-followups.md)).
+- Capture-analysis review F1–F9 closed (siblings listed in [`2026-08-25-interpretation-capture-analysis-followups.md`](2026-08-25-interpretation-capture-analysis-followups.md)).
 
 ## Process
 

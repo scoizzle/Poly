@@ -95,7 +95,7 @@ Repo-local principles that usually apply (adapt names if the project differs):
 | Ownership / seams | Logic lives in the module that owns the concern; no silent side paths |
 | Tests prove contracts | “Fail-closed” tests must withhold the dependency and assert the throw/error |
 | Plan honesty | `[x] Complete` / gate checks must match residual markers and real AC |
-| Follow-ups in docs | Residuals become tasks under `docs/plans/` (or suite-specific follow-up file) |
+| Follow-ups in docs | Residuals go in a follow-ups file under `docs/agent/reviews/` (evidence) until a human files a GitHub issue |
 | Fix the process | Recurring bug classes → improve this protocol / suite gate / tests, not only one-line patches (file as follow-up) |
 
 ### 2.1 Feedback-loop ranking
@@ -359,7 +359,6 @@ returns the note in its reply, and the parent writes it here:
 
 | Situation | Path |
 |---|---|
-| Work has an active suite (e.g. `docs/plans/simple-agent-tasks/`) | `<suite-prefix>-local-review-YYYY-MM-DD.md` or append `rN` to an existing review file |
 | No suite | `docs/agent/reviews/YYYY-MM-DD-<short-slug>.md` (create `reviews/` if needed) |
 
 **Required structure:**
@@ -407,7 +406,7 @@ Docs/config findings use `Check:` (command + captured output) instead of `Test:`
 
 **Chat is not the system of record.**
 
-1. Create or update a follow-ups file next to the suite (e.g. `<prefix>-followups-YYYY-MM-DD.md`) or under `docs/agent/reviews/`. A shell-less reviewer returns this text in its reply; the parent writes it.
+1. Create or update a follow-ups file under `docs/agent/reviews/` (`YYYY-MM-DD-<slug>-followups.md`). A shell-less reviewer returns this text in its reply; the parent writes it.
 2. Every open **bug** and material **suggestion** becomes a checkable task (`- [ ] **F#** — …`) with file, do-statement, owning plan phase if any, and the repro test/check from §3.10. The test source lives in the review note; the gate lands it at fix time.
 3. Disposition prior open items: **fixed** / **still open** / **invalid** with one-line evidence. `fixed` means the reported test was landed verbatim and is green; a bug with no repro stays `still open (unproven)` and is never disposed as fixed.
 4. Update the suite README or plan status table if reopenings change phase/gate state — **do not** mark complete unless true. A shell-less reviewer returns the needed status change in its reply; the parent applies it.
@@ -470,7 +469,7 @@ When reviewing Poly DomainModeling / MCP / lowering:
 - `GetMetadata` / `SetMetadata` **keys must agree** (domain node vs default vs entity).
 - Runtime notify/dispatch: missing required runtime metadata should throw, not skip all subscribers.
 - MCP/oracle describe routes: “analysis present + metadata missing” ≠ “element not found.”
-- Suite example for follow-up discipline: archived `docs/plans/archive/domainmodeling-completed-2026-08/simple-agent-tasks/dacr-README.md` (docs follow-ups in-suite).
+- Suite example for follow-up discipline: archived [`docs/plans/archive/domainmodeling-completed-2026-08/simple-agent-tasks/dacr-README.md`](https://github.com/scoizzle/Poly/blob/067bde75f69646fdf134f7c53ffdf62b463f24fd/docs/plans/archive/domainmodeling-completed-2026-08/simple-agent-tasks/dacr-README.md) (docs follow-ups in-suite).
 - Analysis pipeline is an early feedback rung — prefer analyze-time catch over runtime soft-scan.
 
 Build/test (when verifying):

@@ -1,6 +1,6 @@
 # Interpretation stabilization follow-ups — 2026-08-25
 
-Review: [`2026-08-25-interpretation-stabilization-review.md`](./2026-08-25-interpretation-stabilization-review.md)
+Review: [`2026-08-25-interpretation-stabilization-review.md`](2026-08-25-interpretation-stabilization-review.md)
 
 Owning stream: Interpretation (exclusive files under `Poly/Interpretation/` and `Poly.Tests/Interpretation/`). Do not mix with DomainModeling create/create-in.
 

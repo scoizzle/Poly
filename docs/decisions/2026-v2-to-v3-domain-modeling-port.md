@@ -5,7 +5,7 @@
 **Owner:** Primary author  
 **Execution plan:** `docs/plans/archive/v2-to-v3/master-roadmap.md` (milestones) + **`docs/plans/archive/v2-to-v3-migration/designs/v3-completion-plan.md`** (gaps + WP1–WP9 implementation order)  
 **First consumer spike:** `docs/plans/archive/completed-2026-08-late/v2-to-v3/spikes/first-v3-consumer.md`  
-**MCP principles:** `docs/plans/reference/mcp-guiding-principles.md`  
+**MCP principles:** `docs/reference/mcp-guiding-principles.md`  
 **Related Decisions:**
 - `2026-core-engineering-principles.md` (foundational)
 - `2026-05-31-immutable-core-domain-modeling.md` (the strategic decision)
@@ -50,7 +50,7 @@ This port must be executed in a way that respects those documentation and agent-
 |-------|----------|
 | **System correctness** | Analysis gate, rollback, truthful diagnostics, correct VM evaluation when runtime truth is required. |
 | **Robustness via composition** | Small composable ops on the direct API; multi-step via `Apply`. MCP **curates** agent-facing tools (see MCP principles spike). |
-| **MCP + direct API guiding light** | MCP scenarios pull features; the direct API is the contract into DomainModeling / Syntax / VM. Tool design: `docs/plans/reference/mcp-guiding-principles.md`. |
+| **MCP + direct API guiding light** | MCP scenarios pull features; the direct API is the contract into DomainModeling / Syntax / VM. Tool design: `docs/reference/mcp-guiding-principles.md`. |
 | **Tests** | Primary net on the direct API (TUnit); MCP smokes / agent-task evals reuse those scenarios. |
 | **Natural-reading code** | Fluent, name-for-what-it-is surfaces; avoid pattern-taxonomy and V2 intent-bag shapes as defaults. |
 

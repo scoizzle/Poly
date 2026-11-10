@@ -1,12 +1,12 @@
 # Follow-ups — declare-init + kinds local review — 2026-08-26
 
-Review: [`2026-08-26-interpretation-declare-init-local-review.md`](./2026-08-26-interpretation-declare-init-local-review.md)
+Review: [`2026-08-26-interpretation-declare-init-local-review.md`](2026-08-26-interpretation-declare-init-local-review.md)
 
 Owning stream: Interpretation (printer/debug) plus DomainModeling lowering only where flatten/fusion must stay honest.
 
 ## Prior follow-ups
 
-From [`2026-08-25-interpretation-capture-analysis-followups.md`](./2026-08-25-interpretation-capture-analysis-followups.md) and [`2026-08-25-interpretation-invariant-followups.md`](./2026-08-25-interpretation-invariant-followups.md):
+From [`2026-08-25-interpretation-capture-analysis-followups.md`](2026-08-25-interpretation-capture-analysis-followups.md) and [`2026-08-25-interpretation-invariant-followups.md`](2026-08-25-interpretation-invariant-followups.md):
 
 - F1–F9 capture/kinds siblings — **still closed** (current `LambdaCaptureCollector.CollectDeclaredLocals` copies nested declared; `BindLambdaArguments` on stored invoke; `CheckInvokeTarget` rejects non-closure `Variable`).
 - Nested `FrameOffset` 0 — **overclaimed closed**. Monotonic `_nextFrameSlot` landed; debug-hook span still uses live `scope.Count` (this review F1).

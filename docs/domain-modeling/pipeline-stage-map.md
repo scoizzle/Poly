@@ -167,6 +167,6 @@ Checked against master `9db8868f`, except difference 1, which was updated for ma
 - About 27 product `.cs` files and roughly 225 occurrences across 20 identifiers, for example `LoweringContext`, `LoweredExpression`, `DomainExpressionLoweringPass`, `EffectLoweringPass`, `ExpressionLoweringRegistry`, `TemporalLowering`, `DomainSession.Lower`, `GetOrLower`. About 80 `.cs` files and 490 occurrences including tests.
 - Docs also say "Lower" (`AGENTS.md`, `docs/CORE.md`, plan files). They already describe "Session Compile = Load -> one analyze -> session.Lower -> artifact set", so the direction is half-documented already.
 
-**Order:** the recommended order of work is in the convergence plan (`pipeline-convergence-plan.md`, section 12).
+**Order:** the recommended order of work is in the convergence plan ([`pipeline-convergence-plan.md`](https://github.com/scoizzle/Poly/blob/067bde75f69646fdf134f7c53ffdf62b463f24fd/docs/domain-modeling/pipeline-convergence-plan.md), section 12).
 
 Method note: code reading was done by Grok Build (grok-4.6) on a throwaway clone; key claims (severity enum, `Lower` body, `ArtifactDescriptor`, `"function"` keyword) were spot-checked directly. The line-level notes from that reading were not kept in the repo.

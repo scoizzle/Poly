@@ -1,6 +1,0 @@
-domain DegenerateNavCollide
-
-Order: entity {
-  Total: Number
-  Total: Total
-}

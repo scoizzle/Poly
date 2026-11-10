@@ -217,9 +217,7 @@ internal static class ConstraintCheckWriter {
             && enumType is { MemberNames.Count: > 0 }) {
             if (style.GuardsEnumSlot && !valueHasDefault) {
                 checks.Add(new Check(Kind.EnumRequiredSlot,
-                    new Invoke(
-                        new Member(new ClrTypeReference(typeof(object)), "ReferenceEquals"),
-                        [value, new Constant(null)]),
+                    new Equal(new TypeCast(value, new ClrTypeReference(typeof(object))), new Constant(null)),
                     null,
                     new Constant($"'{prop.Name}' is required.")));
             }

@@ -353,6 +353,28 @@ public class DomainToCSharpExporterTests {
     }
 
     [Test]
+    public async Task Export_Create_RequiredEnum_DoesNotReferenceEqualsNull() {
+        // CA2013: object.ReferenceEquals boxes a value-type enum, so the probe host
+        // build flagged it. A required enum parameter cannot be null; the factory
+        // has no slot to guard and must not emit the check.
+        var (domain, analysis) = ParseAndAnalyze("""
+            domain Shop
+
+            Kind: enum { Basic, Plus }
+
+            Item: entity {
+              Label: Text
+              Kind: Kind
+            }
+            """);
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
+        var cs = new CSharpGenerator().Generate(new CompilationUnitNode([], null, types, null));
+        var create = ExportedCSharp.ExtractMethod(cs, "DomainResult<Item> Create(");
+
+        await Assert.That(create).DoesNotContain("ReferenceEquals");
+    }
+
+    [Test]
     public async Task Export_PatronEntity_HasPoliciesAsMethods() {
         var (domain, analysis) = ParseAndAnalyze(LibraryCheckoutDsl);
         var types = DomainProgramProjection.ToSyntax(domain, analysis);

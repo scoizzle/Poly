@@ -178,7 +178,7 @@ public class Section
         {
             return DomainResult<Section>.Failure("'Cap' must be <= 200.");
         }
-        if (object.ReferenceEquals(offeringTerm, null))
+        if ((object)offeringTerm == null)
         {
             return DomainResult<Section>.Failure("'OfferingTerm' is required.");
         }

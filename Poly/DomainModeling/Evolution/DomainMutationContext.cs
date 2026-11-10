@@ -1,4 +1,5 @@
 using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Ontology.Contract;
 
@@ -56,7 +57,30 @@ internal sealed class DomainMutationContext {
     /// </summary>
     public List<string> Errors { get; } = new();
 
-    public DomainMutationContext(Domain source, MutationTargetIndexMetadata? mutationIndex = null) {
+    private readonly DomainSession? _session;
+
+    /// <summary>
+    /// The primitives an extension seeds. With a session, only what that session's library
+    /// registered (none when it did not load the id; the session check reports that). Without
+    /// one, the legacy <see cref="ExtensionCatalog.Core"/> catalog.
+    /// </summary>
+    public IReadOnlyList<(string Name, PrimitiveSemantics Semantics)> ExtensionPrimitiveSeeds(string extensionId) {
+        if (_session is not null) {
+            if (!_session.Extensions.Contains(extensionId, StringComparer.Ordinal))
+                return [];
+            return _session.PrimitiveSeeds
+                .Where(seed => string.Equals(seed.LibraryId, extensionId, StringComparison.Ordinal))
+                .Select(seed => (seed.Name, seed.Semantics))
+                .ToList();
+        }
+        return ExtensionCatalog.Core.Contains(extensionId)
+            ? ExtensionCatalog.Core.Resolve(extensionId).PrimitiveSeeds
+            : [];
+    }
+
+    public DomainMutationContext(
+        Domain source, MutationTargetIndexMetadata? mutationIndex = null, DomainSession? session = null) {
+        _session = session;
         DomainName = source.Name;
         Types = new List<DomainType>(source.Types);
         ImportedContracts = new List<ImportedContract>(source.ImportedContracts);

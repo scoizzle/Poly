@@ -740,9 +740,7 @@ public sealed record AddDomainExtensionChange(
             return;
         }
         context.Extensions.Add(ExtensionId);
-        if (!ExtensionCatalog.Core.Contains(ExtensionId))
-            return;
-        foreach (var (name, semantics) in ExtensionCatalog.Core.Resolve(ExtensionId).PrimitiveSeeds) {
+        foreach (var (name, semantics) in context.ExtensionPrimitiveSeeds(ExtensionId)) {
             if (context.Types.Any(t => t is PrimitiveType p
                 && string.Equals(p.Name, name, StringComparison.Ordinal)))
                 continue;

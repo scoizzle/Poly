@@ -419,11 +419,35 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
                 targetParams[binding.PropertyName] = Eval(binding.Expression, entity, action, env, paramEnv);
         }
 
+        // The callee's own guards refine its entry state; only what its EFFECTS change afterwards is
+        // carried back to the caller (the guard facts stay the callee's).
+        var atEntry = CloneEnv(targetEnv);
+
         try {
             ApplyEffects(target.Effects, entity, target, targetEnv, targetParams, visited, result, domain, currentStage);
         }
         finally {
             visited.Remove(target);
+        }
+
+        MergeCalleePostState(env, targetEnv, atEntry, entity);
+    }
+
+    /// <summary>#367 B-3: a self-invoke runs on the SAME entity (the callee env is keyed by this
+    /// entity's property names), so the properties its effects rewrote now hold the callee's final
+    /// values in the caller. A strong update is sound because a failed invoke returns the caller's
+    /// failure (fail-fast, <c>EffectLoweringPass.WrapInvokeResult</c>) and the action's transaction
+    /// restores the instance, so effects after the invoke only run on the callee's success path. The
+    /// callee's conditionals are already joined (B-1) inside its env. A value the callee assigned
+    /// outside its declared range looks empty here (assign narrows by intersection), which is not
+    /// proof the path is unreachable, so it falls back to the declared constraints.</summary>
+    private static void MergeCalleePostState(
+        Dictionary<string, AbstractValue> env, Dictionary<string, AbstractValue> post,
+        Dictionary<string, AbstractValue> atEntry, Entity entity) {
+        foreach (var (key, value) in post) {
+            if (atEntry.TryGetValue(key, out var before) && ReferenceEquals(before, value)) continue;
+            if (!env.ContainsKey(key)) continue;
+            env[key] = SoundArm(value, key, entity);
         }
     }
 

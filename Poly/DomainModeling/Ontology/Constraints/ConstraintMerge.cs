@@ -125,6 +125,51 @@ public static class ConstraintMerge {
     public static Constraint? Merge(this Constraint self, Constraint other) =>
         self.MergeResult(other).Net;
 
+    /// <summary>
+    /// The JOIN (least upper bound) of two constraints of the same type: the strongest single
+    /// constraint that holds whenever EITHER input holds. This is the operation for merging the
+    /// facts of two control-flow arms. It is NOT <see cref="MergeResult"/>, which is the
+    /// intersection (meet): the meet keeps a narrowing true on only one arm and calls two
+    /// disjoint ranges Empty, both wrong for a merge point. <c>null</c> means "no fact survives"
+    /// (the axis is dropped, top): different types, a kind with no join rule, or inputs that
+    /// share no representable common fact. Dropping is always the sound direction.
+    /// Rules: Range/Length = hull (null bound = unbounded); Required/Optional = survive (both
+    /// arms have it); Equality/Pattern/Unique/Default and every other kind = survive only when
+    /// <see cref="Identical"/>.
+    /// </summary>
+    public static Constraint? Join(this Constraint self, Constraint other) {
+        ArgumentNullException.ThrowIfNull(self);
+        ArgumentNullException.ThrowIfNull(other);
+        if (self.GetType() != other.GetType())
+            return null;
+        return (self, other) switch {
+            (RangeConstraint a, RangeConstraint b) => JoinRange(a, b),
+            (LengthConstraint a, LengthConstraint b) =>
+                new LengthConstraint(Math.Min(a.MinLength, b.MinLength), Math.Max(a.MaxLength, b.MaxLength)),
+            (RequiredConstraint, RequiredConstraint) => new RequiredConstraint(),
+            (OptionalConstraint, OptionalConstraint) => new OptionalConstraint(),
+            _ => Identical(self, other) ? self : null,
+        };
+    }
+
+    /// <summary>
+    /// Hull of two ranges. A bound missing on either side is unbounded in the hull; bounds that
+    /// cannot be ordered drop the whole axis (null) instead of throwing.
+    /// </summary>
+    private static RangeConstraint? JoinRange(RangeConstraint a, RangeConstraint b) {
+        object? min = null;
+        if (a.Minimum is not null && b.Minimum is not null) {
+            if (TryCompare(a.Minimum, b.Minimum) is not { } c) return null;
+            min = c <= 0 ? a.Minimum : b.Minimum;
+        }
+        object? max = null;
+        if (a.Maximum is not null && b.Maximum is not null) {
+            if (TryCompare(a.Maximum, b.Maximum) is not { } c) return null;
+            max = c >= 0 ? a.Maximum : b.Maximum;
+        }
+        return min is null && max is null ? null : new RangeConstraint(min, max);
+    }
+
     /// <summary>Intersection of two ranges (the tighter lower bound and the tighter upper bound).</summary>
     public static RangeConstraint? MergeRange(RangeConstraint a, RangeConstraint b) {
         var result = MergeRangeResult(a, b);

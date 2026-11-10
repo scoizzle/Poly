@@ -66,6 +66,27 @@ public sealed class AbstractValue {
         return From(_constraints.Concat(other.Constraints));
     }
 
+    /// <summary>
+    /// JOIN (least upper bound) of two abstract values: what holds whenever EITHER holds. Unlike
+    /// <see cref="Merge"/> (intersection / meet), a fact survives only if both values carry it,
+    /// widened per <see cref="ConstraintMerge.Join"/>; an axis missing on either side is dropped.
+    /// An unsatisfiable value is bottom and is the identity (the arm cannot happen); a value with
+    /// no constraints is top and absorbs everything.
+    /// </summary>
+    public AbstractValue Join(AbstractValue other) {
+        ArgumentNullException.ThrowIfNull(other);
+        if (Unsatisfiable) return other;
+        if (other.Unsatisfiable) return this;
+        var joined = new List<Constraint>();
+        foreach (var c in _constraints) {
+            var counterpart = other.Constraints.FirstOrDefault(o => o.GetType() == c.GetType());
+            if (counterpart is null) continue;
+            if (c.Join(counterpart) is { } j)
+                joined.Add(j);
+        }
+        return joined.Count == 0 ? Unknown : new AbstractValue(joined);
+    }
+
     /// <summary>Applies a single extra constraint (a bound from a guard/if/where condition).</summary>
     public AbstractValue Narrow(Constraint constraint) {
         var list = _constraints.ToList();

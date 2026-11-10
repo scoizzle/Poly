@@ -276,7 +276,8 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
         DomainExpression expr, Entity entity, Action? action,
         IReadOnlyDictionary<string, AbstractValue> env,
         IReadOnlyDictionary<string, AbstractValue>? paramEnv = null,
-        Entity? targetEntity = null) {
+        Entity? targetEntity = null,
+        Domain? domain = null) {
         switch (expr) {
             case Literal { Value: not null } lit:
                 return ToDouble(lit.Value) is double d
@@ -297,21 +298,42 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
                     string.Equals(p.Name, pa2.Name, StringComparison.Ordinal));
                 return param is null ? AbstractValue.Unknown : AbstractValue.From(param.Constraints);
             case RelationshipNavigation rn:
-                // Path-prefix leaf on a related entity — best-effort: read the leaf property
-                // on the target entity's environment (caller supplies it via targetEntity).
-                return Eval(rn.TargetProperty, entity, action, env, paramEnv, targetEntity);
+                // The leaf belongs to the RELATED entity, never to the caller. It is evaluated against that
+                // entity's DECLARED constraints (no flow state is tracked per related entity). If the
+                // relationship does not resolve to exactly one single target entity the result is Unknown.
+                return ResolveSingleTarget(rn.RelationshipName, targetEntity ?? entity, domain) is { } related
+                    ? Eval(rn.TargetProperty, related, null, EmptyEnv, null, null, domain)
+                    : AbstractValue.Unknown;
             case Add add:
-                return ComposeArithmetic(Eval(add.Left, entity, action, env, paramEnv, targetEntity),
-                    Eval(add.Right, entity, action, env, paramEnv, targetEntity), compose: (l, r) => l + r);
+                return ComposeArithmetic(Eval(add.Left, entity, action, env, paramEnv, targetEntity, domain),
+                    Eval(add.Right, entity, action, env, paramEnv, targetEntity, domain), compose: (l, r) => l + r);
             case Subtract sub:
-                return ComposeArithmetic(Eval(sub.Left, entity, action, env, paramEnv, targetEntity),
-                    Eval(sub.Right, entity, action, env, paramEnv, targetEntity), compose: (l, r) => l - r);
+                return ComposeArithmetic(Eval(sub.Left, entity, action, env, paramEnv, targetEntity, domain),
+                    Eval(sub.Right, entity, action, env, paramEnv, targetEntity, domain), compose: (l, r) => l - r);
             case Multiply mul:
-                return ComposeArithmetic(Eval(mul.Left, entity, action, env, paramEnv, targetEntity),
-                    Eval(mul.Right, entity, action, env, paramEnv, targetEntity), compose: (l, r) => l * r);
+                return ComposeArithmetic(Eval(mul.Left, entity, action, env, paramEnv, targetEntity, domain),
+                    Eval(mul.Right, entity, action, env, paramEnv, targetEntity, domain), compose: (l, r) => l * r);
             default:
                 return AbstractValue.Unknown;
         }
+    }
+
+    private static readonly IReadOnlyDictionary<string, AbstractValue> EmptyEnv =
+        new Dictionary<string, AbstractValue>(StringComparer.Ordinal);
+
+    /// <summary>The single entity a to-one relationship of <paramref name="source"/> points at, or null when
+    /// there is no domain, the relationship is unknown or declared more than once, it is to-many, or the target
+    /// type is not exactly one entity. Null means the caller must answer Unknown.</summary>
+    private static Entity? ResolveSingleTarget(string relationshipName, Entity source, Domain? domain) {
+        if (domain is null) return null;
+        var matches = source.Navigations
+            .Where(r => string.Equals(r.Name, relationshipName, StringComparison.Ordinal)).Take(2).ToList();
+        if (matches.Count != 1) return null;
+        if (matches[0].Cardinality is not (RelationshipCardinality.OneToOne or RelationshipCardinality.ManyToOne))
+            return null;
+        var targets = domain.Types.OfType<Entity>()
+            .Where(e => string.Equals(e.Name, matches[0].Target.TypeName, StringComparison.Ordinal)).Take(2).ToList();
+        return targets.Count == 1 ? targets[0] : null;
     }
 
     private static AbstractValue ComposeArithmetic(
@@ -338,7 +360,7 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
                         var prop = entity.Properties.FirstOrDefault(p =>
                             string.Equals(p.Name, target.Name, StringComparison.Ordinal));
                         if (prop is null) break;
-                        var value = Eval(assign.Value, entity, action, env, paramEnv);
+                        var value = Eval(assign.Value, entity, action, env, paramEnv, domain: domain);
                         // Strong update: the assigned value replaces the old one, so it is intersected with the
                         // property's DECLARED constraints, not the (possibly branch-refined) incoming value.
                         env[target.Name] = AbstractValue.From(prop.Constraints).Merge(value);
@@ -416,7 +438,7 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
         if (invoke.ParameterBindings.Count > 0) {
             targetParams = new(StringComparer.Ordinal);
             foreach (var binding in invoke.ParameterBindings)
-                targetParams[binding.PropertyName] = Eval(binding.Expression, entity, action, env, paramEnv);
+                targetParams[binding.PropertyName] = Eval(binding.Expression, entity, action, env, paramEnv, domain: domain);
         }
 
         // The callee's own guards refine its entry state; only what its EFFECTS change afterwards is
@@ -480,7 +502,7 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
         if (invoke.ParameterBindings.Count > 0) {
             targetParams = new(StringComparer.Ordinal);
             foreach (var binding in invoke.ParameterBindings)
-                targetParams[binding.PropertyName] = Eval(binding.Expression, entity, action, env, paramEnv);
+                targetParams[binding.PropertyName] = Eval(binding.Expression, entity, action, env, paramEnv, domain: domain);
         }
 
         try {
@@ -527,7 +549,7 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
         if (efe.ParameterBindings.Count > 0) {
             targetParams = new(StringComparer.Ordinal);
             foreach (var binding in efe.ParameterBindings)
-                targetParams[binding.PropertyName] = Eval(binding.Expression, entity, action, env, paramEnv);
+                targetParams[binding.PropertyName] = Eval(binding.Expression, entity, action, env, paramEnv, domain: domain);
         }
 
         try {

@@ -77,6 +77,7 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
             var narrowed = env.ToDictionary(kv => kv.Key, kv => kv.Value.NumericRange, StringComparer.Ordinal);
             var merged = env.ToDictionary(kv => kv.Key, kv => (IReadOnlyList<Constraint>)kv.Value.Constraints, StringComparer.Ordinal);
             var postconditions = new List<EffectPostcondition>();
+            // Call-stack scoped: an action is in the set only while its walk is on the stack.
             var visited = new HashSet<Action>(ReferenceEqualityComparer.Instance) { action };
             ApplyEffects(action.Effects, entity, action, env, paramEnv: null, visited, postconditions, domain, stageName);
             contexts.Add(new ActionStageInvariant(stageName, preconditions, narrowed, merged, postconditions));
@@ -418,7 +419,12 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
                 targetParams[binding.PropertyName] = Eval(binding.Expression, entity, action, env, paramEnv);
         }
 
-        ApplyEffects(target.Effects, entity, target, targetEnv, targetParams, visited, result, domain, currentStage);
+        try {
+            ApplyEffects(target.Effects, entity, target, targetEnv, targetParams, visited, result, domain, currentStage);
+        }
+        finally {
+            visited.Remove(target);
+        }
     }
 
     /// <summary>Cross-entity invoke: build the related entity's environment (declared
@@ -453,7 +459,12 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
                 targetParams[binding.PropertyName] = Eval(binding.Expression, entity, action, env, paramEnv);
         }
 
-        ApplyEffects(targetAction.Effects, targetEntity, targetAction, targetEnv, targetParams, visited, result, domain, currentStage: null);
+        try {
+            ApplyEffects(targetAction.Effects, targetEntity, targetAction, targetEnv, targetParams, visited, result, domain, currentStage: null);
+        }
+        finally {
+            visited.Remove(targetAction);
+        }
     }
 
     /// <summary>Fan-out invoke (<c>for Rel as x [where x.Policy] invoke x.Action</c>): build
@@ -495,7 +506,12 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
                 targetParams[binding.PropertyName] = Eval(binding.Expression, entity, action, env, paramEnv);
         }
 
-        ApplyEffects(targetAction.Effects, targetEntity, targetAction, targetEnv, targetParams, visited, result, domain, currentStage: null);
+        try {
+            ApplyEffects(targetAction.Effects, targetEntity, targetAction, targetEnv, targetParams, visited, result, domain, currentStage: null);
+        }
+        finally {
+            visited.Remove(targetAction);
+        }
     }
 
     /// <summary>#367 B-1: after an <c>if</c>, each symbol either arm touched becomes the join

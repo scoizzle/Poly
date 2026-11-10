@@ -1,0 +1,2 @@
+Gauge.SetLevel(v): RequiredConstraint;Range(0:Double,100:Double)
+Gauge.SetPeak(v): RequiredConstraint;Range(0:Double,100:Double)

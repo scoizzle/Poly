@@ -1,0 +1,2 @@
+Book.Restock(amount): 
+Book.Either(amount): 

@@ -1,0 +1,176 @@
+#nullable enable
+
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using Microsoft.EntityFrameworkCore;
+using System.ComponentModel.DataAnnotations;
+using Poly.Generated;
+
+var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.ConfigureHttpJsonOptions(options => {
+    options.SerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
+    options.SerializerOptions.Converters.Add(new JsonStringEnumConverter());
+});
+
+builder.Services.AddDbContext<TDbCtx>(options => options.UseInMemoryDatabase("T"));
+
+var app = builder.Build();
+
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<TDbCtx>();
+    await SeedAsync(db);
+}
+
+app.MapGet("/api/books", async (TDbCtx db) => await db.Books.ToListAsync());
+
+app.MapGet("/api/books/{id}", async (int id, TDbCtx db) => (await db.Books.FindAsync(id) is Book book ? Results.Ok(book) : Results.NotFound()));
+
+app.MapPost("/api/books", async (BookDto dto, TDbCtx db) => {
+    var bookResult = Book.Create(dto.Title, dto.Code, dto.Stock);
+    if (!bookResult.IsSuccess)
+    {
+        return FailureStatus(bookResult.ErrorMessage);
+    }
+    db.Books.Add(bookResult.Value);
+    await db.SaveChangesAsync();
+    return Results.Ok(bookResult.Value);
+});
+
+app.MapPost("/api/books/{id}/restock", async (int id, RestockDto dto, TDbCtx db) => {
+    var entity = await db.Books.FindAsync(id);
+    if (entity == null)
+    {
+        return Results.NotFound("Book not found");
+    }
+    try
+    {
+        var result = entity.Restock(dto.Amount);
+        await db.SaveChangesAsync();
+        if (result.IsSuccess)
+        {
+            return Results.Ok("ok");
+        }
+        else
+        {
+            return FailureStatus(result.ErrorMessage);
+        }
+    }
+    catch (Exception)
+    {
+        return Results.StatusCode(500);
+    }
+});
+
+app.MapPost("/api/books/{id}/rename", async (int id, RenameDto dto, TDbCtx db) => {
+    var entity = await db.Books.FindAsync(id);
+    if (entity == null)
+    {
+        return Results.NotFound("Book not found");
+    }
+    try
+    {
+        var result = entity.Rename(dto.Value);
+        await db.SaveChangesAsync();
+        if (result.IsSuccess)
+        {
+            return Results.Ok("ok");
+        }
+        else
+        {
+            return FailureStatus(result.ErrorMessage);
+        }
+    }
+    catch (Exception)
+    {
+        return Results.StatusCode(500);
+    }
+});
+
+app.MapPost("/api/books/{id}/setcode", async (int id, SetCodeDto dto, TDbCtx db) => {
+    var entity = await db.Books.FindAsync(id);
+    if (entity == null)
+    {
+        return Results.NotFound("Book not found");
+    }
+    try
+    {
+        var result = entity.SetCode(dto.Value);
+        await db.SaveChangesAsync();
+        if (result.IsSuccess)
+        {
+            return Results.Ok("ok");
+        }
+        else
+        {
+            return FailureStatus(result.ErrorMessage);
+        }
+    }
+    catch (Exception)
+    {
+        return Results.StatusCode(500);
+    }
+});
+
+static IResult FailureStatus(string? message)
+{
+    return (message != null && (message.Contains("Unique constraint") || message.Contains("already has a target")) ? Results.Conflict(message) : Results.BadRequest(message));
+}
+
+
+static async System.Threading.Tasks.Task SeedAsync(TDbCtx db)
+{
+    if (db == null)
+    {
+        return;
+    }
+    if (await db.Books.AnyAsync())
+    {
+        return;
+    }
+    var bookResult = Book.Create("XXXXXXXX", "Sample", 1);
+    if (bookResult.IsSuccess)
+    {
+        db.Add(bookResult.Value);
+    }
+    await db.SaveChangesAsync();
+}
+
+
+app.Run();
+
+
+public record BookDto
+{
+    [Required]
+    [MinLength(2)]
+    [MaxLength(50)]
+    public string Title { get; init; } = default!;
+    [Required]
+    [RegularExpression("^[A-Z]{2}-[0-9]{3}$")]
+    public string Code { get; init; } = default!;
+    [Range(0, 1000)]
+    public long Stock { get; init; }
+}
+
+public record RestockDto
+{
+    [Range(0, 1000)]
+    public long Amount { get; init; }
+}
+
+public record RenameDto
+{
+    [Required]
+    [MinLength(2)]
+    [MaxLength(50)]
+    public string Value { get; init; } = default!;
+}
+
+public record SetCodeDto
+{
+    [Required]
+    [RegularExpression("^[A-Z]{2}-[0-9]{3}$")]
+    public string Value { get; init; } = default!;
+}

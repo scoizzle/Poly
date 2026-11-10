@@ -22,7 +22,6 @@ Review ──→ Red test ──→ Fix ──→ Green ──→ Re-review ─�
 
 - `AGENTS.md` — principles 1–5 (especially §4 Go well to go fast, §5 Shipped capability)
 - `docs/CORE.md` — module boundaries, pipeline
-- [`docs/plans/archive/domainmodeling-completed-2026-08/v2-to-v3/simple-agent-tasks/qe-README.md`](https://github.com/scoizzle/Poly/blob/067bde75f69646fdf134f7c53ffdf62b463f24fd/docs/plans/archive/domainmodeling-completed-2026-08/v2-to-v3/simple-agent-tasks/qe-README.md) — historical suite conventions (frozen product direction)
 - **Your suite's own task files and source changes** — collect status, diff, and untracked files as Step 1 describes
 
 ## Exact Steps

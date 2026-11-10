@@ -8,6 +8,6 @@ This is an index. It is not a second architecture or a status snapshot.
 4. [`../Poly.Mcp/Docs/poly-dsl-guide.md`](../Poly.Mcp/Docs/poly-dsl-guide.md) — the only product DSL guide. `get_dsl_guide` returns it.
 5. [`agent/README.md`](agent/README.md) — review and discovery protocols.
 
-Open a file under `agent/reviews/` only when a task names it. Open contract residuals: [#{{I1}}](https://github.com/scoizzle/Poly/issues/{{I1}}).
+Open a file under `agent/reviews/` only when a task names it. Open contract residuals: [#464](https://github.com/scoizzle/Poly/issues/464).
 
 Poly.MCP is the harness. Simulation is the interpreter host on the module dictionary, not a product proof.

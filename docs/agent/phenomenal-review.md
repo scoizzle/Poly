@@ -469,7 +469,6 @@ When reviewing Poly DomainModeling / MCP / lowering:
 - `GetMetadata` / `SetMetadata` **keys must agree** (domain node vs default vs entity).
 - Runtime notify/dispatch: missing required runtime metadata should throw, not skip all subscribers.
 - MCP/oracle describe routes: “analysis present + metadata missing” ≠ “element not found.”
-- Suite example for follow-up discipline: archived [`docs/plans/archive/domainmodeling-completed-2026-08/simple-agent-tasks/dacr-README.md`](https://github.com/scoizzle/Poly/blob/067bde75f69646fdf134f7c53ffdf62b463f24fd/docs/plans/archive/domainmodeling-completed-2026-08/simple-agent-tasks/dacr-README.md) (docs follow-ups in-suite).
 - Analysis pipeline is an early feedback rung — prefer analyze-time catch over runtime soft-scan.
 
 Build/test (when verifying):

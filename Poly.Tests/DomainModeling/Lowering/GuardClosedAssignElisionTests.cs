@@ -233,6 +233,57 @@ public class GuardClosedAssignElisionTests {
         await Assert.That(body).Contains("'Score' must be <= 20.");
     }
 
+    private const string Chain = """
+        domain Lab
+        Item: entity {
+          Qty: Number range(5, 10) default(5)
+          Mid: Number range(0, 20) default(0)
+          Top: Number range(0, 30) default(0)
+          CopyMid: action { assign Mid to Qty }
+          CopyTop: action { assign Top to Mid }
+        }
+        """;
+
+    [Test]
+    public async Task Widening_ChainedCopy_SecondLinkGuardIsNowGone() {
+        // Mid is only written by a copy from closed Qty, so (fixpoint) it is closed and CopyTop needs no guard.
+        await Assert.That(CopyBody(Chain, "Item", "CopyMid")).DoesNotContain("'Mid' must be");
+        await Assert.That(CopyBody(Chain, "Item", "CopyTop")).DoesNotContain("'Top' must be");
+    }
+
+    [Test]
+    public async Task Widening_ChainedCopy_CannotHideViolation_SourcesGuardStillFires() {
+        var (domain, analysis, session) = Build(Chain);
+        session.Lower(domain, analysis);
+        var exec = ModuleExec.For(domain);
+
+        var tooHigh = exec.Create("Item", new Dictionary<string, object?> { ["Qty"] = 99.0 });
+        await Assert.That(tooHigh.Succeeded).IsFalse();
+        await Assert.That(tooHigh.Error).Contains("'Qty' must be <= 10.");
+
+        var instance = exec.Create("Item", new Dictionary<string, object?> { ["Qty"] = 7.0 }).Instance!;
+        await Assert.That(exec.Invoke(instance, "CopyMid").Succeeded).IsTrue();
+        await Assert.That(exec.Invoke(instance, "CopyTop").Succeeded).IsTrue();
+        await Assert.That(Convert.ToDouble(instance.Bag["Top"])).IsEqualTo(7.0);
+    }
+
+    [Test]
+    public async Task Widening_ChainedCopy_WeakerMiddle_KeepsTopGuard() {
+        const string poly = """
+            domain Lab
+            Item: entity {
+              Qty: Number range(5, 10) default(5)
+              Mid: Number range(0, 50) default(0)
+              Top: Number range(0, 30) default(0)
+              CopyMid: action { assign Mid to Qty }
+              CopyTop: action { assign Top to Mid }
+            }
+            """;
+
+        await Assert.That(CopyBody(poly, "Item", "CopyMid")).DoesNotContain("'Mid' must be");
+        await Assert.That(CopyBody(poly, "Item", "CopyTop")).Contains("'Top' must be <= 30.");
+    }
+
     private static string CopyBody(string poly, string entityName, string actionName) {
         var (domain, analysis, session) = Build(poly);
         session.Lower(domain, analysis);

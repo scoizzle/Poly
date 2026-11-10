@@ -95,9 +95,11 @@ public class GuardClosedPropertyTests {
     }
 
     [Test]
-    public async Task AssignFromAnotherProperty_IsNotClosed() {
+    public async Task AssignFromAnotherPropertyThatDoesNotImplyIt_IsNotClosed() {
+        // Superseded by the fixpoint widening: a copy from a guard-closed source with equal-or-tighter
+        // constraints is now proven (see Widening_* below). A weaker source is still not.
         var result = Compute(
-            [Prop("Qty", "Int", Range(0, 10), Default(0L)), Prop("Other", "Int", Range(0, 10), Default(0L))],
+            [Prop("Qty", "Int", Range(0, 10), Default(0L)), Prop("Other", "Int", Range(0, 20), Default(0L))],
             [Act("Copy", null, Assign("Qty", DomainExpression.Property("Other")))]);
 
         await Assert.That(result.Closed.Contains("Qty")).IsFalse();
@@ -248,7 +250,7 @@ public class GuardClosedPropertyTests {
             domain Test
             Item: entity {
               Qty: Number range(0, 10) default(0)
-              Score: Number range(0, 10) default(0)
+              Score: Number range(0, 5) default(0)
               Bump: action { assign Qty to 5 }
               Reset: action { assign Score to Qty }
             }
@@ -292,5 +294,74 @@ public class GuardClosedPropertyTests {
         var ungated = Prop("Name", "Text", Range(0, 10));
         await Assert.That(KindsOf(ungated)).DoesNotContain(ConstraintCheckWriter.Kind.RangeMinimum);
         await Assert.That(Compute([ungated]).Closed.Contains("Name")).IsFalse();
+    }
+
+    private static AssignEffect Copy(string target, string source) =>
+        Assign(target, DomainExpression.Property(source));
+
+    [Test]
+    public async Task Widening_CopyFromGuardClosedSourceWithImpliedConstraints_IsClosed() {
+        var result = Compute(
+            [Prop("Qty", "Int", Range(5, 10), Default(5L)), Prop("Score", "Int", Range(0, 20), Default(0L))],
+            [Act("Copy", null, Copy("Score", "Qty"))]);
+
+        await Assert.That(result.Closed.Contains("Qty")).IsTrue();
+        await Assert.That(result.Closed.Contains("Score")).IsTrue();
+    }
+
+    [Test]
+    public async Task Widening_CopyFromWeakerGuardClosedSource_IsNotClosed() {
+        var result = Compute(
+            [Prop("Qty", "Int", Range(0, 50), Default(5L)), Prop("Score", "Int", Range(0, 20), Default(0L))],
+            [Act("Copy", null, Copy("Score", "Qty"))]);
+
+        await Assert.That(result.Closed.Contains("Qty")).IsTrue();
+        await Assert.That(result.Closed.Contains("Score")).IsFalse();
+    }
+
+    [Test]
+    public async Task Widening_CopyCycle_StaysOpenAndTerminates() {
+        var result = Compute(
+            [Prop("A", "Int", Range(0, 10)), Prop("B", "Int", Range(0, 10))],
+            [Act("AB", null, Copy("A", "B")), Act("BA", null, Copy("B", "A"))]);
+
+        await Assert.That(result.Closed.Contains("A")).IsFalse();
+        await Assert.That(result.Closed.Contains("B")).IsFalse();
+        await Assert.That(result.Iterations).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task Widening_Chain_ResolvesAllThree() {
+        var result = Compute(
+            [Prop("A", "Int", Range(0, 30), Default(0L)),
+             Prop("B", "Int", Range(0, 20), Default(0L)),
+             Prop("C", "Int", Range(5, 10), Default(5L))],
+            [Act("AB", null, Copy("A", "B")), Act("BC", null, Copy("B", "C")),
+             Act("SetC", null, Assign("C", DomainExpression.Literal(7L)))]);
+
+        await Assert.That(result.Closed.Contains("A")).IsTrue();
+        await Assert.That(result.Closed.Contains("B")).IsTrue();
+        await Assert.That(result.Closed.Contains("C")).IsTrue();
+        await Assert.That(result.Iterations).IsEqualTo(4);
+    }
+
+    [Test]
+    public async Task Widening_CopyFromParameterNamedLikeClosedProperty_IsNotClosed() {
+        var result = Compute(
+            [Prop("Qty", "Int", Range(5, 10), Default(5L)), Prop("Score", "Int", Range(0, 20), Default(0L))],
+            [Act("Copy", [Prop("Qty", "Int")], Copy("Score", "Qty"))]);
+
+        await Assert.That(result.Closed.Contains("Score")).IsFalse();
+    }
+
+    [Test]
+    public async Task Widening_CopyFromOpenSource_IsNotClosed() {
+        var result = Compute(
+            [Prop("Qty", "Int", Range(5, 10), Default(5L)), Prop("Score", "Int", Range(0, 20), Default(0L))],
+            [Act("Set", [Prop("n", "Int")], Assign("Qty", DomainExpression.Parameter("n"))),
+             Act("Copy", null, Copy("Score", "Qty"))]);
+
+        await Assert.That(result.Closed.Contains("Qty")).IsFalse();
+        await Assert.That(result.Closed.Contains("Score")).IsFalse();
     }
 }

@@ -30,34 +30,38 @@ namespace Poly.DomainModeling.Analysis;
 internal static class GuardClosedProperties {
     internal sealed record Result(
         IReadOnlySet<string> Closed,
-        IReadOnlyDictionary<string, string> Blockers);
+        IReadOnlyDictionary<string, string> Blockers,
+        int Iterations = 0);
+
+    /// <summary>One assign writer; <see cref="ActionParameters"/> is null outside an action body.</summary>
+    private sealed record AssignWriter(AssignEffect Assign, IReadOnlySet<string>? ActionParameters);
 
     internal static Result Compute(Entity entity, Domain domain) {
         ArgumentNullException.ThrowIfNull(entity);
         ArgumentNullException.ThrowIfNull(domain);
 
-        var assigns = new Dictionary<string, List<AssignEffect>>(StringComparer.Ordinal);
+        var assigns = new Dictionary<string, List<AssignWriter>>(StringComparer.Ordinal);
         string? entityWide = null;
         var entryAssigned = EntityStructureAnalyzer.ComputeEntryAssignedPropertyNames(entity);
 
-        void Walk(IEnumerable<Effect> effects) {
+        void Walk(IEnumerable<Effect> effects, IReadOnlySet<string>? actionParameters = null) {
             foreach (var effect in effects) {
                 switch (effect) {
                     case AssignEffect { Target: PropertyAccess target } assign:
                         if (!assigns.TryGetValue(target.Name, out var list))
                             assigns[target.Name] = list = [];
-                        list.Add(assign);
+                        list.Add(new AssignWriter(assign, actionParameters));
                         break;
                     case AssignEffect:
                         entityWide ??= "an assign targets something other than a plain property";
                         break;
                     case CompositeEffect composite:
-                        Walk(composite.Effects);
+                        Walk(composite.Effects, actionParameters);
                         break;
                     case ConditionalEffect conditional:
-                        Walk(conditional.ThenEffects);
+                        Walk(conditional.ThenEffects, actionParameters);
                         if (conditional.ElseEffects is not null)
-                            Walk(conditional.ElseEffects);
+                            Walk(conditional.ElseEffects, actionParameters);
                         break;
                     case StageTransitionEffect or InvokeActionEffect or ForEachInvokeEffect
                         or CreateEntityInstance or CreateEntityInRelationshipEffect:
@@ -72,14 +76,14 @@ internal static class GuardClosedProperties {
         var actionNames = new HashSet<string>(StringComparer.Ordinal);
         foreach (var action in entity.Actions) {
             actionNames.Add(action.Name);
-            Walk(action.Effects);
+            Walk(action.Effects, ParameterNames(action));
         }
         foreach (var subscription in entity.Subscriptions)
             Walk(subscription.Effects);
         foreach (var stage in entity.Stages) {
             foreach (var action in stage.Actions) {
                 actionNames.Add(action.Name);
-                Walk(action.Effects);
+                Walk(action.Effects, ParameterNames(action));
             }
             Walk(stage.OnEntryEffects);
             Walk(stage.OnExitEffects);
@@ -90,21 +94,41 @@ internal static class GuardClosedProperties {
         if (domain.ContractBindings.Any(binding => actionNames.Contains(binding.ActionName)))
             entityWide ??= "an action is bound to an imported contract (library-contributed body is opaque)";
 
+        // Fixpoint (least): a property joins `closed` once every writer is covered, where a property copy is
+        // covered only when its source is already in `closed` and the source's constraints imply this
+        // property's. `closed` only grows and is bounded by the property count, so the loop runs at most
+        // N + 1 rounds (the last changes nothing). Cycles (A = B, B = A) never get a first member, so they
+        // stay open. Parameter sources are never covered.
         var closed = new HashSet<string>(StringComparer.Ordinal);
         var blockers = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var property in entity.Properties) {
-            var blocker = entityWide
-                ?? Blocker(property, entryAssigned.Contains(property.Name),
-                    assigns.GetValueOrDefault(property.Name));
-            if (blocker is null)
-                closed.Add(property.Name);
-            else
-                blockers[property.Name] = blocker;
-        }
-        return new Result(closed, blockers);
+        var iterations = 0;
+        bool changed;
+        do {
+            changed = false;
+            iterations++;
+            blockers.Clear();
+            foreach (var property in entity.Properties) {
+                if (closed.Contains(property.Name))
+                    continue;
+                var blocker = entityWide
+                    ?? Blocker(property, entryAssigned.Contains(property.Name),
+                        assigns.GetValueOrDefault(property.Name), entity, closed);
+                if (blocker is null) {
+                    closed.Add(property.Name);
+                    changed = true;
+                }
+                else
+                    blockers[property.Name] = blocker;
+            }
+        } while (changed);
+        return new Result(closed, blockers, iterations);
     }
 
-    private static string? Blocker(Property property, bool isEntryAssigned, List<AssignEffect>? assigns) {
+    private static IReadOnlySet<string> ParameterNames(Poly.DomainModeling.Ontology.Action action) =>
+        new HashSet<string>(action.Parameters.Select(p => p.Name), StringComparer.Ordinal);
+
+    private static string? Blocker(
+        Property property, bool isEntryAssigned, List<AssignWriter>? assigns, Entity entity, IReadOnlySet<string> closed) {
         var typeName = property.Type.TypeName;
         var isText = typeName is "Text" or "String";
         var isNumber = typeName is "Number" or "Int" or "Decimal";
@@ -133,13 +157,106 @@ internal static class GuardClosedProperties {
             }
         }
 
-        foreach (var assign in assigns ?? []) {
+        foreach (var writer in assigns ?? []) {
+            var assign = writer.Assign;
+            if (IsProvenCopy(property, writer, entity, closed))
+                continue;
             if (assign.Value is not Literal literal)
                 return $"an assign writes {assign.Value.GetType().Name}, which is not a proven in-range literal";
             if (!LiteralSatisfies(property, literal.Value, isText, isNumber, isBoolean))
                 return $"an assign writes {Describe(literal.Value)}, which does not satisfy its constraints";
         }
         return null;
+    }
+
+    /// <summary>
+    /// A copy <c>assign target to Source</c> is a proven writer when it sits in an action body, Source is a
+    /// different plain property of the entity (not shadowed by an action parameter), Source is already in the
+    /// closed set, and Source's constraints imply <paramref name="target"/>'s. Every value Source can hold is
+    /// then already within Source's constraints, hence within the target's.
+    /// </summary>
+    private static bool IsProvenCopy(Property target, AssignWriter writer, Entity entity, IReadOnlySet<string> closed) {
+        if (writer.Assign.Value is not PropertyAccess access
+            || writer.ActionParameters is null
+            || writer.ActionParameters.Contains(access.Name)
+            || string.Equals(access.Name, target.Name, StringComparison.Ordinal)
+            || !closed.Contains(access.Name))
+            return false;
+        var source = entity.Properties.FirstOrDefault(p => string.Equals(p.Name, access.Name, StringComparison.Ordinal));
+        return source is not null && SourceConstraintsImplyTarget(source, target);
+    }
+
+    /// <summary>
+    /// Mirrors the guard-elision implication (EffectLoweringPass.SourceConstraintsImplyTarget): identical
+    /// Text/String, numeric or Boolean type; source never optional; no unique target; every range/length/
+    /// pattern/equality constraint on the target matched by an at-least-as-strong one on the source; a range
+    /// union on the target, a relational or any unmodelled constraint refuses.
+    /// </summary>
+    private static bool SourceConstraintsImplyTarget(Property source, Property target) {
+        var typeName = target.Type.TypeName;
+        if (!string.Equals(source.Type.TypeName, typeName, StringComparison.Ordinal))
+            return false;
+        var isText = typeName is "Text" or "String";
+        var isNumber = typeName is "Number" or "Int" or "Decimal";
+        var isBoolean = typeName is "Boolean";
+        if (!isText && !isNumber && !isBoolean)
+            return false;
+        if (target.Constraints.OfType<UniqueConstraint>().Any()
+            || source.Constraints.OfType<OptionalConstraint>().Any())
+            return false;
+
+        var sourceRanges = source.Constraints.OfType<RangeConstraint>().ToList();
+        var sourceLengths = source.Constraints.OfType<LengthConstraint>().ToList();
+        var sourcePatterns = source.Constraints.OfType<PatternConstraint>().ToList();
+        var sourceEqualities = source.Constraints.OfType<EqualityConstraint>().ToList();
+
+        foreach (var constraint in target.Constraints) {
+            switch (constraint) {
+                case RangeConstraint range when isNumber:
+                    if (range.Intervals is not null)
+                        return false;
+                    if (range.Minimum is not null
+                        && !sourceRanges.Any(s => s.Intervals is null && s.Minimum is not null
+                            && TryCompare(s.Minimum, range.Minimum) is >= 0))
+                        return false;
+                    if (range.Maximum is not null
+                        && !sourceRanges.Any(s => s.Intervals is null && s.Maximum is not null
+                            && TryCompare(s.Maximum, range.Maximum) is <= 0))
+                        return false;
+                    break;
+                case LengthConstraint length when isText:
+                    if (length.MinLength > 0 && !sourceLengths.Any(s => s.MinLength >= length.MinLength))
+                        return false;
+                    if (length.MaxLength < int.MaxValue && !sourceLengths.Any(s => s.MaxLength <= length.MaxLength))
+                        return false;
+                    break;
+                case PatternConstraint pattern when isText:
+                    if (!sourcePatterns.Any(s => string.Equals(s.Pattern, pattern.Pattern, StringComparison.Ordinal)))
+                        return false;
+                    break;
+                case EqualityConstraint equality:
+                    if (!sourceEqualities.Any(s => s.ExpectedValue.GetType() == equality.ExpectedValue.GetType()
+                        && Equals(s.ExpectedValue, equality.ExpectedValue)))
+                        return false;
+                    break;
+                case DefaultValueConstraint or OptionalConstraint or UniqueConstraint:
+                    break;
+                default:
+                    return false;
+            }
+        }
+        return true;
+    }
+
+    private static int? TryCompare(object left, object right) {
+        try {
+            if (left is int or long && right is int or long)
+                return Convert.ToInt64(left).CompareTo(Convert.ToInt64(right));
+            return Convert.ToDouble(left).CompareTo(Convert.ToDouble(right));
+        }
+        catch (Exception e) when (e is InvalidCastException or FormatException or OverflowException) {
+            return null;
+        }
     }
 
     /// <summary>Why the create guard does not fully cover <paramref name="constraint"/>, or null when it does.</summary>

@@ -1439,7 +1439,8 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
 
         bool fullyBelow = tmin is not null && hi < tmin.Value;
         bool fullyAbove = tmax is not null && lo > tmax.Value;
-        if (fullyBelow || fullyAbove) {
+        // #367: a target bound that cannot be ordered against a number is not skipped; nothing numeric is in it.
+        if (fullyBelow || fullyAbove || HasUnorderableBound(range)) {
             context.ReportError(
                 errorNode,
                 $"Assigned expression value range [{FormatRangeValue(lo)}, {FormatRangeValue(hi)}] is entirely outside " +
@@ -1485,7 +1486,7 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
                 double lo = vr.Min!.Value, hi = vr.Max!.Value;
                 bool fullyBelow = tmin is not null && hi < tmin.Value;
                 bool fullyAbove = tmax is not null && lo > tmax.Value;
-                if (fullyBelow || fullyAbove) {
+                if (fullyBelow || fullyAbove || HasUnorderableBound(range)) {
                     context.ReportError(
                         post.Effect,
                         $"Call-chain postcondition ({action.Name} → {post.DeclaringAction.Name}): assigned value range " +
@@ -1601,6 +1602,10 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
         try { return Convert.ToDouble(value); }
         catch { return null; }
     }
+
+    private static bool HasUnorderableBound(RangeConstraint range) =>
+        (range.Minimum is not null && ToDouble(range.Minimum) is null)
+        || (range.Maximum is not null && ToDouble(range.Maximum) is null);
 
 
     private static bool TryResolveDomainType(

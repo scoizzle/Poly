@@ -79,7 +79,8 @@ public sealed class DomainResolver : DslCursor {
         string PropertyName,
         string TargetTypeName,
         RelationshipCardinality Cardinality,
-        bool SourceOwnsTarget);
+        bool SourceOwnsTarget,
+        DslToken At);
 
     public DomainResolver(DslSyntaxTree tree, DomainSession session)
         : base(TokenReaderFor(tree), reader => new Matcher<DslToken, DslTokenKind>(session.Language.Grammar, reader)) {
@@ -1502,10 +1503,11 @@ public sealed class DomainResolver : DslCursor {
                 : $" unexpected token '{Current.Text}'";
             throw Error($"Navigation property '{name}' requires an entity type as target:{hint}");
         }
+        var targetToken = Current;
         var targetType = ExpectIdentifier(TokenKind.Identifier, "target entity name");
 
         RejectRetiredRequiredWord();
-        _pendingNavs.Add(new PendingNav(_currentEntityName, name, targetType, cardinality, owned));
+        _pendingNavs.Add(new PendingNav(_currentEntityName, name, targetType, cardinality, owned, targetToken));
     }
 
     /// <summary>
@@ -1516,22 +1518,22 @@ public sealed class DomainResolver : DslCursor {
     private void ResolvePendingNavs(List<DomainChange> changes) {
         foreach (var nav in _pendingNavs) {
             if (IsKnownPrimitiveName(nav.TargetTypeName)) {
-                throw Error($"Navigation property '{nav.PropertyName}': '{nav.TargetTypeName}' is a primitive type, not an entity. Use a primitive property declaration instead.");
+                throw GrammarError.Error($"Navigation property '{nav.PropertyName}': '{nav.TargetTypeName}' is a primitive type, not an entity. Use a primitive property declaration instead.", nav.At.Line, nav.At.Col);
             }
             if (!_entityNames.Contains(nav.TargetTypeName)) {
                 // A bare type name here is a nav target, but the author may have meant a
                 // value type or a value keyword (`Ref: Guid`). Name both possibilities.
                 var known = string.Join(", ", _primitiveTypeNames.OrderBy(n => n, StringComparer.Ordinal));
-                throw Error(
+                throw GrammarError.Error(
                     $"Property '{nav.PropertyName}' is declared with type '{nav.TargetTypeName}', which is "
                     + $"neither an entity in this domain nor a value type ({known}). "
                     + $"A value keyword such as 'Guid' or 'Now' is only valid inside an expression "
-                    + $"(e.g. `default(Guid)`). To reference another domain, declare that entity.");
+                    + $"(e.g. `default(Guid)`). To reference another domain, declare that entity.", nav.At.Line, nav.At.Col);
             }
 
             // Check property name collision
             if (_entityPropertyNames.TryGetValue(nav.SourceEntityName, out var props) && props.Contains(nav.PropertyName)) {
-                throw Error($"Navigation property '{nav.PropertyName}' on '{nav.SourceEntityName}' conflicts with an existing property of the same name.");
+                throw GrammarError.Error($"Navigation property '{nav.PropertyName}' on '{nav.SourceEntityName}' conflicts with an existing property of the same name.", nav.At.Line, nav.At.Col);
             }
 
             // Check duplicate relationship name within the same source entity.
@@ -1542,7 +1544,7 @@ public sealed class DomainResolver : DslCursor {
                 _relationshipNamesByEntity[nav.SourceEntityName] = names = new HashSet<string>(StringComparer.Ordinal);
             }
             if (!names.Add(nav.PropertyName)) {
-                throw Error($"Relationship '{nav.PropertyName}' is defined more than once on entity '{nav.SourceEntityName}'. Relationship names must be unique within their source entity.");
+                throw GrammarError.Error($"Relationship '{nav.PropertyName}' is defined more than once on entity '{nav.SourceEntityName}'. Relationship names must be unique within their source entity.", nav.At.Line, nav.At.Col);
             }
 
             changes.Add(new AddRelationshipChange(

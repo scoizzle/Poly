@@ -368,7 +368,7 @@ Use this as a kill/keep board:
 | [`plans/grammar-pure-end-state.md`](https://github.com/scoizzle/Poly/blob/067bde75f69646fdf134f7c53ffdf62b463f24fd/docs/plans/archive/completed-2026-08-late/grammar-pure-end-state.md) | Pure Grammar product direction |
 | Open GitHub issues | the queue (the board is retired) |
 | [`Poly.Mcp/Docs/poly-dsl-guide.md`](../Poly.Mcp/Docs/poly-dsl-guide.md) | Product DSL surface |
-| [`agent/reviews/2026-08-08-long-term-growth-review.md`](agent/reviews/2026-08-08-long-term-growth-review.md) | Full-project growth review (demons → roadmap) |
+| [`agent/reviews/2026-08-08-long-term-growth-review.md`](https://github.com/scoizzle/Poly/blob/067bde75f69646fdf134f7c53ffdf62b463f24fd/docs/agent/reviews/2026-08-08-long-term-growth-review.md) | Full-project growth review (demons → roadmap) |
 
 ---
 

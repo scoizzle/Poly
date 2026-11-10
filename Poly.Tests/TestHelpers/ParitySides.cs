@@ -170,12 +170,25 @@ sealed class PrintedSide(Domain domain, Assembly assembly) : ParitySide(domain) 
     MethodInfo Method(string name) => Current.GetType().GetMethod(name, Type.EmptyTypes)
         ?? throw new ArgumentException($"Printed type '{Current.GetType().Name}' has no public '{name}()'.");
 
+    /// <summary>A value outside every declared member, for a caller passing an out-of-range cast.</summary>
+    const int UndefinedEnumMember = 42;
+
     static object? Materialize(object? value, Type target) {
         if (value is null || target.IsInstanceOfType(value))
             return value;
         var enumType = Nullable.GetUnderlyingType(target) ?? target;
-        if (value is string s && enumType.IsEnum)
-            return Enum.Parse(enumType, s);
+        if (enumType.IsEnum) {
+            // A defined member name parses. A non-member lands as an undefined member so the
+            // module's own member guard runs, the way a hand-written caller passing an
+            // out-of-range cast reaches it instead of failing in the harness. The CLR enum
+            // cannot carry the original text, so the guard names the numeric value.
+            if (value is string s) {
+                if (Enum.TryParse(enumType, s, out var parsed) && parsed is not null)
+                    return parsed;
+                return Enum.ToObject(enumType, UndefinedEnumMember);
+            }
+            return Enum.ToObject(enumType, value);
+        }
         if (value is not Dictionary<string, object?> fields)
             return value;
         var instance = Activator.CreateInstance(target)

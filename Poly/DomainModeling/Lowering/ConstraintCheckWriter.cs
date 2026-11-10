@@ -215,12 +215,11 @@ internal static class ConstraintCheckWriter {
 
         if (DomainToCSharpExporter.TryResolveEnumType(domain, analysis, prop.Type.TypeName, out var enumType)
             && enumType is { MemberNames.Count: > 0 }) {
-            // Only a nullable slot can omit the value. A required, non-nullable enum
-            // parameter cannot be null, and ReferenceEquals on a value type boxes
-            // (CA2013), so the non-nullable slot gets no guard.
-            if (style.GuardsEnumSlot && !valueHasDefault && nullableValue) {
+            if (style.GuardsEnumSlot && !valueHasDefault) {
                 checks.Add(new Check(Kind.EnumRequiredSlot,
-                    new Equal(value, new Constant(null)),
+                    new Invoke(
+                        new Member(new ClrTypeReference(typeof(object)), "ReferenceEquals"),
+                        [value, new Constant(null)]),
                     null,
                     new Constant($"'{prop.Name}' is required.")));
             }

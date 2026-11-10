@@ -46,6 +46,7 @@ public class PrintedSubsetVmTests {
         [typeof(PopCount)] = PrintForm.Expanded,
         [typeof(MethodDefinitionNode)] = PrintForm.Declaration,
         [typeof(Await)] = PrintForm.Live,
+        [typeof(YieldStatement)] = PrintForm.Live,
     };
 
     [Test]
@@ -79,6 +80,33 @@ public class PrintedSubsetVmTests {
         await Assert.That(NodeFacts.All[typeof(Await)].RejectReason).IsNull();
         await Assert.That(Forms[typeof(Await)]).IsEqualTo(PrintForm.Live);
         await Assert.That(CSharpLanguage.Write(new Await(new Constant(1L)))).Contains("await");
+    }
+
+    /// <summary>
+    /// #338 slice 4: <c>yield</c> prints live and executes in an iterator body, so its row claims
+    /// the VM and carries no reject reason. The one shape the VM refuses, a yield outside an
+    /// iterator body, is a legality reject (IT0001) rather than a kind reject.
+    /// </summary>
+    [Test]
+    public async Task Yield_IsLiveAndExecutable() {
+        var fact = NodeFacts.All[typeof(YieldStatement)];
+        await Assert.That(fact.Producers.HasFlag(Producers.Vm)).IsTrue();
+        await Assert.That(fact.RejectReason).IsNull();
+        await Assert.That(Forms[typeof(YieldStatement)]).IsEqualTo(PrintForm.Live);
+        await Assert.That(CSharpLanguage.Write(new YieldStatement(new Constant(1L)))).Contains("yield return");
+    }
+
+    [Test]
+    public async Task Yield_OutsideAnIterator_RejectionNamesYieldAtEveryDoor() {
+        var node = new YieldStatement(new Constant(1L));
+        var analysis = Interpreter.Analyze(node);
+        var diagnostic = analysis.Diagnostics.Single(d => d.Code == "IT0001");
+        var compiled = await Assert.That(() => Interpreter.Compile(node)).Throws<InvalidOperationException>();
+        await Assert.That(compiled!.Message).Contains(diagnostic.Message);
+        var emitted = await Assert.That(() => Poly.Interpretation.Vm.Abi.AbiEmitter.Build(node, analysis, Poly.Interpretation.Vm.CompilationMode.NoDebug))
+            .Throws<InvalidOperationException>();
+        await Assert.That(emitted!.Message).Contains("only executable in the body of an iterator method");
+        await Assert.That(diagnostic.Message).Contains("yield");
     }
 
     [Test]

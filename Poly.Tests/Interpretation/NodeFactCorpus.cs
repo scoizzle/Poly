@@ -3,6 +3,7 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 using Poly.Interpretation;
 using Poly.Interpretation.CSharp;
+using Poly.Interpretation.Vm;
 using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 
@@ -31,7 +32,7 @@ internal static class NodeFactCorpus {
     /// (the node itself for a parsed case, the sample program containing it otherwise),
     /// and where the case came from.
     /// </summary>
-    public sealed record CorpusCase(Type Kind, string Source, Node KindNode, Node Root);
+    public sealed record CorpusCase(Type Kind, string Source, Node KindNode, Node Root, AnalysisResult? Analysis = null);
 
     /// <summary>
     /// Statement-level C# the suite does not otherwise carry, each naming the kind it
@@ -45,6 +46,7 @@ internal static class NodeFactCorpus {
         ("BreakStatement", "while (true) { break; }"),
         ("ContinueStatement", "while (true) { continue; }"),
         ("GotoStatement", "var x = 0L; goto done; done: x = 1L;"),
+        ("YieldStatement", "class C { IEnumerable<long> M() { yield return 1L; yield break; } }"),
         ("TryCatchFinally", "try { var y = 1L; } catch { var z = 2L; }"),
         ("UsingStatement", "using var d = new System.IO.MemoryStream();"),
         ("SwitchStatement", "switch (1L) { case 1L: break; default: break; }"),
@@ -126,10 +128,10 @@ internal static class NodeFactCorpus {
                 cases.TryAdd(node.GetType(), new CorpusCase(node.GetType(), source, node, node));
             }
         }
-        foreach (var (kind, source, program) in DeclaredSamples()) {
+        foreach (var (kind, source, program, root) in DeclaredSamples()) {
             var node = Walk(program).FirstOrDefault(n => n.GetType() == kind)
                 ?? throw new InvalidOperationException($"Sample '{source}' does not contain {kind.Name}.");
-            cases[kind] = new CorpusCase(kind, source, node, program);
+            cases[kind] = new CorpusCase(kind, source, node, root ?? program, root is null ? null : Interpreter.Analyze(program));
         }
         return (units, [.. cases.Values.OrderBy(c => c.Kind.Name, StringComparer.Ordinal)], parsed,
             CompilingPrograms(units, cases.Values));
@@ -155,9 +157,15 @@ internal static class NodeFactCorpus {
         }
         foreach (var corpusCase in cases.Where(c => c.Source.StartsWith("sample:", StringComparison.Ordinal))) {
             try {
-                Interpreter.Compile(corpusCase.Root);
+                if (corpusCase.Analysis is { } analysis)
+                    Interpreter.Compile(corpusCase.Root, analysis, CompilationMode.Normal);
+                else
+                    Interpreter.Compile(corpusCase.Root);
                 foreach (var kind in KindsOf(corpusCase.Root))
                     kinds.Add(kind);
+                // A method body is not a child of the program block, so the sample's own kind is
+                // recorded once its program compiles.
+                kinds.Add(corpusCase.Kind);
             }
             catch (Exception) {
             }
@@ -223,7 +231,7 @@ internal static class NodeFactCorpus {
     /// that has nothing to do with its kind. Each program is the shape an existing test already
     /// constructs for that kind.
     /// </summary>
-    private static IEnumerable<(Type Kind, string Source, Node Program)> DeclaredSamples() {
+    private static IEnumerable<(Type Kind, string Source, Node Program, Node? Root)> DeclaredSamples() {
         var x = new Variable("x");
         var bits = new Variable("bits");
 
@@ -283,6 +291,12 @@ internal static class NodeFactCorpus {
         yield return Sample<TypeIs>("LanguageVmTests", new TypeIs(new Constant("x"), TypeReference.To<string>()));
         yield return Sample<TypeOf>("LanguageVmTests.TypeOf_String_ReturnsRuntimeType",
             new TypeOf(TypeReference.To<string>()));
+        // A yield lives in a method body, which the program block does not expose as a child: the
+        // kind is found in the unit and the program block is what the VM compiles.
+        var iterator = CSharpScript.ReadUnit(
+            "class C { C() { } IEnumerable<long> M() { yield return 2L; yield break; } } new C().M();");
+        yield return (typeof(YieldStatement), "sample: IteratorExecutionTests.Iterator_ForeachConsumes",
+            iterator, CSharpScript.ProgramBlock(iterator));
         yield return Sample<UsingStatement>("UsingStatementVmTests.Using_NonIDisposable_SkipsDispose_Completes",
             new UsingStatement(new Constant("not-disposable"), new Constant(42L)));
 
@@ -302,8 +316,8 @@ internal static class NodeFactCorpus {
             new UnionTypeReference([TypeReference.To<long>()]));
     }
 
-    private static (Type Kind, string Source, Node Program) Sample<T>(string source, Node program) =>
-        (typeof(T), "sample: " + source, program);
+    private static (Type Kind, string Source, Node Program, Node? Root) Sample<T>(string source, Node program) =>
+        (typeof(T), "sample: " + source, program, null);
 
     private sealed class Awaitable {
         public Task<long> Completed() => Task.FromResult(42L);

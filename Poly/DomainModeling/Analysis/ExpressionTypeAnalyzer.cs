@@ -48,8 +48,15 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
 
     public void Analyze(AnalysisContext context, Node node) {
 
-        if (node is Domain domain)
+        if (node is Domain domain) {
             AnalyzeObservedFlows(context, domain);
+            FunctionAnalysis.CheckDeclarations(context, domain);
+            AnalyzeFunctionBodies(context, domain);
+        }
+        if (node is FunctionCall call)
+            FunctionAnalysis.CheckCall(context, call);
+        if (node is Property property)
+            FunctionAnalysis.CheckProperty(context, property);
         if (node is Entity entity)
             AnalyzeEntity(context, entity);
 
@@ -83,6 +90,77 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
                         context, domain, target.Value.Property, DomainModelDiagnosticCodes.SemanticTypeCompatibility),
                     message,
                     DomainModelDiagnosticCodes.SemanticTypeCompatibility));
+        }
+    }
+
+    /// <summary>
+    /// Each function body is walked with its parameters as the scope and its type must be
+    /// assignable to the declared return type (DMFUN006). Unknown body types are skipped,
+    /// as everywhere else in this pass.
+    /// </summary>
+    private void AnalyzeFunctionBodies(AnalysisContext context, Domain domain) {
+        var enumTypes = ResolveEnums(context);
+        var noProps = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var function in domain.Functions) {
+            var parameters = function.Parameters
+                .GroupBy(p => p.Name, StringComparer.Ordinal)
+                .ToDictionary(g => g.Key, g => g.First().Type.TypeName, StringComparer.Ordinal);
+            WalkExpression(context, function.Body, noProps, parameters, enumTypes);
+            var bodyType = InferValueType(context, function.Body, noProps, parameters, enumTypes);
+            var returnName = function.ReturnType.TypeName;
+            var returnType = new TypeInfo(CategoryOf(context, returnName, enumTypes), returnName);
+            if (bodyType.Category is not TypeCategory.Unknown
+                && returnType.Category is not TypeCategory.Unknown
+                && !Compatible(context, bodyType, returnType, assigning: true))
+                context.ReportError(function,
+                    $"Function '{function.Name}' body is '{Describe(bodyType)}' but it is declared to return '{returnName}'.",
+                    DomainModelDiagnosticCodes.FunctionReturnType);
+        }
+    }
+
+    /// <summary>
+    /// <see cref="InferType"/> plus the arithmetic result types it leaves Unknown: numeric
+    /// arithmetic is Number, and Text + Text is Text. Used for call arguments and function bodies.
+    /// </summary>
+    private TypeInfo InferValueType(
+        AnalysisContext context, DomainExpression expr,
+        Dictionary<string, string>? props, Dictionary<string, string>? parameters,
+        Dictionary<string, EnumType> enumTypes) {
+        if (expr is Add or Subtract or Multiply or Divide) {
+            var operands = expr.Children.OfType<DomainExpression>()
+                .Select(c => InferValueType(context, c, props, parameters, enumTypes)).ToList();
+            if (operands.All(o => IsNumeric(o.Category)))
+                return new(TypeCategory.Number);
+            if (expr is Add && operands.All(o => o.Category is TypeCategory.Text))
+                return new(TypeCategory.Text);
+            return new(TypeCategory.Unknown);
+        }
+        return InferType(context, expr, props, parameters, enumTypes);
+    }
+
+    private void CheckCallArguments(
+        AnalysisContext context, FunctionCall call,
+        Dictionary<string, string> props, Dictionary<string, string>? parameters,
+        Dictionary<string, EnumType> enumTypes) {
+        foreach (var argument in call.Arguments)
+            WalkExpression(context, argument, props, parameters, enumTypes);
+        // Unknown name and wrong arity are reported once per call by FunctionAnalysis.CheckCall.
+        var function = FunctionAnalysis.Find(context, call.Name);
+        if (function is null || function.Parameters.Count != call.Arguments.Count)
+            return;
+        for (var i = 0; i < call.Arguments.Count; i++) {
+            var parameterType = function.Parameters[i].Type.TypeName;
+            var target = new TypeInfo(CategoryOf(context, parameterType, enumTypes), parameterType);
+            var argument = InferValueType(context, call.Arguments[i], props, parameters, enumTypes);
+            if (argument.Category is not TypeCategory.Unknown
+                && target.Category is not TypeCategory.Unknown
+                && !Compatible(context, argument, target, assigning: true)) {
+                var where = call.Line > 0 ? $" (line {call.Line}, col {call.Col})" : "";
+                context.ReportError(call,
+                    $"Argument '{function.Parameters[i].Name}' of '{call.Name}' expects '{parameterType}', " +
+                    $"got '{Describe(argument)}'{where}.",
+                    DomainModelDiagnosticCodes.FunctionArgumentType);
+            }
         }
     }
 
@@ -441,6 +519,9 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
                 return;
             case MatchExpr match:
                 CheckMatch(context, match, props, parameters, enumTypes);
+                return;
+            case FunctionCall call:
+                CheckCallArguments(context, call, props, parameters, enumTypes);
                 return;
             case RelationshipNavigation:
             case Exists or NotExists or AnyExpr or AllExpr or NoneExpr or CountExpr:
@@ -850,6 +931,9 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
             CountExpr => new(TypeCategory.Number),
             SumExpr => new(TypeCategory.Number),
             MatchExpr match => InferMatch(context, match, props, parameters, enumTypes),
+            FunctionCall call => FunctionAnalysis.Find(context, call.Name) is { } function
+                ? new(CategoryOf(context, function.ReturnType.TypeName, enumTypes), function.ReturnType.TypeName)
+                : new(TypeCategory.Unknown),
             _ => new(TypeCategory.Unknown),
         };
     }

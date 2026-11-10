@@ -34,7 +34,7 @@ internal sealed class ConstraintPropagationAnalyzer : INodeAnalyzer {
         foreach (var param in action.Parameters) {
             var visited = new HashSet<Effect>(ReferenceEqualityComparer.Instance);
             var constraints = new List<Constraint>();
-            CollectDownstreamConstraints(action.Effects, param, entity, constraints, visited, currentStage);
+            CollectDownstreamConstraints(context, action.Effects, param, entity, constraints, visited, currentStage);
             if (constraints.Count > 0) {
                 context.SetMetadata(param, new DownstreamConstraintsMetadata(constraints.AsReadOnly()));
             }
@@ -42,6 +42,7 @@ internal sealed class ConstraintPropagationAnalyzer : INodeAnalyzer {
     }
 
     private static void CollectDownstreamConstraints(
+        AnalysisContext context,
         IReadOnlyList<Effect> effects,
         Property param,
         Entity entity,
@@ -54,22 +55,23 @@ internal sealed class ConstraintPropagationAnalyzer : INodeAnalyzer {
 
             switch (effect) {
                 case InvokeActionEffect iae:
-                    CollectFromInvokeAction(iae, param, entity, accumulated, visited, currentStage);
+                    CollectFromInvokeAction(context, iae, param, entity, accumulated, visited, currentStage);
                     break;
                 case ConditionalEffect ce:
-                    CollectDownstreamConstraints(ce.ThenEffects, param, entity, accumulated, visited, currentStage);
+                    CollectDownstreamConstraints(context, ce.ThenEffects, param, entity, accumulated, visited, currentStage);
                     if (ce.ElseEffects is not null) {
-                        CollectDownstreamConstraints(ce.ElseEffects, param, entity, accumulated, visited, currentStage);
+                        CollectDownstreamConstraints(context, ce.ElseEffects, param, entity, accumulated, visited, currentStage);
                     }
                     break;
                 case AssignEffect ae:
-                    CollectFromAssign(ae, param, entity, accumulated);
+                    CollectFromAssign(context, ae, param, entity, accumulated);
                     break;
             }
         }
     }
 
     private static void CollectFromInvokeAction(
+        AnalysisContext context,
         InvokeActionEffect iae,
         Property param,
         Entity entity,
@@ -90,11 +92,12 @@ internal sealed class ConstraintPropagationAnalyzer : INodeAnalyzer {
                 accumulated.AddRange(targetParam.Constraints);
             }
 
-            CollectFromAction(targetAction, param, entity, accumulated, visited, nestedStage);
+            CollectFromAction(context, targetAction, param, entity, accumulated, visited, nestedStage);
         }
     }
 
     private static void CollectFromAssign(
+        AnalysisContext context,
         AssignEffect ae,
         Property param,
         Entity entity,
@@ -110,18 +113,23 @@ internal sealed class ConstraintPropagationAnalyzer : INodeAnalyzer {
             }
         }
 
-        if (ae.Value is Add or Subtract) {
-            var offset = GetExpressionOffset(ae.Value, param.Name);
-            if (offset is not null && offset != 0 && ae.Target is PropertyAccess offsetTarget) {
-                var targetProp = entity.Properties
-                    .FirstOrDefault(p => string.Equals(p.Name, offsetTarget.Name, StringComparison.Ordinal));
-                if (targetProp is not null) {
-                    foreach (var constraint in targetProp.Constraints) {
-                        if (constraint is RangeConstraint range) {
-                            var adjusted = AdjustRangeRange(range, offset.Value);
-                            if (adjusted is not null) {
-                                accumulated.Add(adjusted);
-                            }
+        if (ae.Value is Add or Subtract && ae.Target is PropertyAccess offsetTarget) {
+            var targetProp = entity.Properties
+                .FirstOrDefault(p => string.Equals(p.Name, offsetTarget.Name, StringComparison.Ordinal));
+            var ranges = targetProp?.Constraints.OfType<RangeConstraint>().ToList() ?? [];
+            if (ranges.Count > 0 && HasUnrepresentableOffset(ae.Value, param.Name)) {
+                ReportCannotDerive(context, ae, param, "its offset literal is not representable as an integer");
+            }
+            else {
+                var offset = GetExpressionOffset(ae.Value, param.Name);
+                if (offset is not null && offset != 0) {
+                    foreach (var range in ranges) {
+                        var adjusted = AdjustRangeRange(range, offset.Value);
+                        if (adjusted is not null) {
+                            accumulated.Add(adjusted);
+                        }
+                        if (!BoundsConvertible(range)) {
+                            ReportCannotDerive(context, ae, param, "a range bound cannot be ordered as a number");
                         }
                     }
                 }
@@ -129,7 +137,30 @@ internal sealed class ConstraintPropagationAnalyzer : INodeAnalyzer {
         }
     }
 
+    // #367: a requirement that cannot be shifted is reported, never silently dropped.
+    private static void ReportCannotDerive(AnalysisContext context, AssignEffect ae, Property param, string reason) =>
+        context.ReportWarning(
+            ae,
+            $"Cannot derive a bound on parameter '{param.Name}' through this assignment: {reason}, " +
+            $"so the effect-chain range for '{param.Name}' is unchecked.",
+            DomainModelDiagnosticCodes.EffectConstraintViolation);
+
+    private static bool BoundsConvertible(RangeConstraint range) =>
+        (range.Minimum is null || TryConvertToDouble(range.Minimum) is not null)
+        && (range.Maximum is null || TryConvertToDouble(range.Maximum) is not null);
+
+    private static bool HasUnrepresentableOffset(DomainExpression expr, string paramName) => expr switch {
+        Add add => (IsParameterAccess(add.Left, paramName) && IsUnrepresentableLiteral(add.Right))
+                   || (IsParameterAccess(add.Right, paramName) && IsUnrepresentableLiteral(add.Left)),
+        Subtract sub => IsParameterAccess(sub.Left, paramName) && IsUnrepresentableLiteral(sub.Right),
+        _ => false,
+    };
+
+    private static bool IsUnrepresentableLiteral(DomainExpression expr) =>
+        expr is Literal { Value: not null } && GetLiteralValue(expr) is null;
+
     private static void CollectFromAction(
+        AnalysisContext context,
         Action target,
         Property param,
         Entity entity,
@@ -142,19 +173,19 @@ internal sealed class ConstraintPropagationAnalyzer : INodeAnalyzer {
 
             switch (effect) {
                 case AssignEffect ae:
-                    CollectFromAssign(ae, param, entity, accumulated);
+                    CollectFromAssign(context, ae, param, entity, accumulated);
                     break;
                 case InvokeActionEffect iae:
                     var nestedTarget = DomainAnalysis.FindAction(entity, iae.ActionName, currentStage);
                     if (nestedTarget is not null) {
                         var nestedStage = DomainAnalysis.StageNameOf(entity, nestedTarget) ?? currentStage;
-                        CollectFromAction(nestedTarget, param, entity, accumulated, visited, nestedStage);
+                        CollectFromAction(context, nestedTarget, param, entity, accumulated, visited, nestedStage);
                     }
                     break;
                 case ConditionalEffect ce:
-                    CollectDownstreamConstraints(ce.ThenEffects, param, entity, accumulated, visited, currentStage);
+                    CollectDownstreamConstraints(context, ce.ThenEffects, param, entity, accumulated, visited, currentStage);
                     if (ce.ElseEffects is not null) {
-                        CollectDownstreamConstraints(ce.ElseEffects, param, entity, accumulated, visited, currentStage);
+                        CollectDownstreamConstraints(context, ce.ElseEffects, param, entity, accumulated, visited, currentStage);
                     }
                     break;
             }

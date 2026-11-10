@@ -71,7 +71,7 @@ Yes, but the full key is `(entity type, constrained property/constraint, scope i
 
 **Decision: scope target must be an entity.** Value types have no identity and cannot be a foreign-key target; a value-type "scope" would make two equal values the same scope, which collapses the distinction between identity and equality. Reject.
 
-**Decision: self-scope is legal.** `parent: Node` on `Node` with `unique_within(parent)` means "unique among siblings". The scope identity is well defined; ownership cycles are already a separate structural error ([DomainModelDiagnosticCodes.cs](../../Poly/DomainModeling/Analysis/DomainModelDiagnosticCodes.cs), `DMSTR002`), and a non-owning self-reference cycle is harmless for this constraint.
+**Decision: self-scope is legal.** `parent: Node` on `Node` with `unique_within(parent)` means "unique among siblings". The scope identity is well defined; ownership cycles are already a separate structural error ([DomainModelDiagnosticCodes.cs](../../Poly/DomainModeling/Analysis/DomainModelDiagnosticCodes.cs), `DMSTR003`; `DMSTR002` is now the key-navigation cycle), and a non-owning self-reference cycle is harmless for this constraint.
 
 **Decision: declare on the child.** The canonical form points from the constrained entity to its one parent. The parent-side form ("all my children have distinct X") is the same constraint written on the child with the back-reference, so it does not need a second surface.
 

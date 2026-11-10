@@ -26,6 +26,7 @@ public sealed class MinimalApiGenerator {
     private readonly Dictionary<string, EnumType> _enumLookup;
     private readonly Dictionary<string, EntityStructureMetadata> _entityStructureLookup;
     private readonly CatalogIndex? _catalog;
+    private readonly AnalysisResult _analysis;
 
     private readonly IStorageSyntaxEmitter? _emitter;
     private readonly string? _vendor;
@@ -39,6 +40,7 @@ public sealed class MinimalApiGenerator {
         string? vendor = null,
         CatalogIndex? catalog = null) {
         ArgumentNullException.ThrowIfNull(analysis);
+        _analysis = analysis;
         _emitter = emitter;
         _vendor = vendor;
         _catalog = catalog;
@@ -904,8 +906,10 @@ public sealed class MinimalApiGenerator {
                         ? new PropertyInitializerDefinitionNode()
                         : new PropertyInitializerDefinitionNode(new NullForgiving(new Default())));
                 if (domainAction is not null) {
+                    // The implicit envelope is the analysis ActionParameterEnvelopeMetadata fact: what the
+                    // action's own unconditional effects prove about the parameter.
                     var attrs = BuildConstraintAttributes(
-                        clrType, GetActionParamImplicitConstraints(entity, domainAction, param.Name));
+                        clrType, _analysis.GetActionParameterEnvelope(domainAction, param.Name) ?? []);
                     if (IsEnumTypeName(param.DomainType))
                         attrs = [EnumDataTypeAttribute(param.DomainType), .. attrs];
                     if (attrs.Count > 0) prop = prop with { Attributes = attrs };
@@ -936,116 +940,6 @@ public sealed class MinimalApiGenerator {
         return entity.Properties.FirstOrDefault(p =>
             string.Equals(p.Name, propertyName, StringComparison.Ordinal))
             ?.Constraints.OfType<RangeConstraint>().FirstOrDefault();
-    }
-
-    /// <summary>
-    /// Derives the implicit constraints an action parameter must satisfy: for each
-    /// property the parameter flows into — <c>assign Prop to param</c> on this entity, or a
-    /// <c>create</c>/<c>create in</c> initializer <c>Prop: param</c> on a related entity —
-    /// its effective constraints are merged by intersection (<see cref="ConstraintMerge"/>).
-    /// Not declared in the DSL — proven by the action's own effects, so the action DTO
-    /// enforces the same envelope at the API boundary. Conflicting constraints (e.g. two
-    /// targets with different patterns) merge to nothing and are dropped.
-    /// Only UNCONDITIONAL flows contribute: a parameter that reaches a target only inside
-    /// an <c>if</c> branch has no universally-provable envelope, and intersecting the
-    /// branches' ranges would falsely reject valid inputs.
-    /// </summary>
-    private IReadOnlyList<Constraint> GetActionParamImplicitConstraints(Entity entity, Poly.DomainModeling.Ontology.Action action, string paramName) {
-        var merged = new List<Constraint>();
-        var unconditional = FlattenUnconditionalEffects(action.Effects).ToList();
-
-        foreach (var assign in unconditional.OfType<AssignEffect>()) {
-            // In the domain model a parameter reference in an effect value is still a
-            // PropertyAccess/ParameterAccess whose name equals the action parameter
-            // (the param→bare-identifier rewrite happens later, at C# lowering).
-            var valueName = ValueNameOf(assign.Value);
-            if (valueName is null ||
-                !string.Equals(valueName, paramName, StringComparison.Ordinal))
-                continue;
-            if (assign.Target is not PropertyAccess target) continue;
-            MergeTargetConstraints(merged, entity, target.Name);
-        }
-
-        foreach (var create in unconditional.OfType<Effect>()
-            .Where(e => e is CreateEntityInstance or CreateEntityInRelationshipEffect)) {
-            var (targetEntityName, initializers) = create switch {
-                CreateEntityInstance cei => (cei.Type.TypeName, cei.Initializers),
-                CreateEntityInRelationshipEffect cer => (
-                    cer.ResolvedTargetType?.TypeName ?? ResolveRelationshipTarget(entity, cer.RelationshipName),
-                    cer.Initializers),
-                _ => (null, null!),
-            };
-            if (targetEntityName is null) continue;
-            var targetEntity = _entities.FirstOrDefault(e =>
-                string.Equals(e.Name, targetEntityName, StringComparison.Ordinal));
-            if (targetEntity is null) continue;
-            foreach (var binding in initializers) {
-                var valueName = ValueNameOf(binding.Expression);
-                if (valueName is null ||
-                    !string.Equals(valueName, paramName, StringComparison.Ordinal))
-                    continue;
-                MergeTargetConstraints(merged, targetEntity, binding.PropertyName);
-            }
-        }
-
-        return merged;
-    }
-
-    private static string? ValueNameOf(DomainExpression expression) => expression switch {
-        PropertyAccess pa => pa.Name,
-        ParameterAccess pa => pa.Name,
-        _ => null,
-    };
-
-    private void MergeTargetConstraints(List<Constraint> merged, Entity owner, string propertyName) {
-        foreach (var constraint in EffectivePropertyConstraints(owner, propertyName)) {
-            var existingIndex = merged.FindIndex(m => m.GetType() == constraint.GetType());
-            if (existingIndex < 0) {
-                merged.Add(constraint);
-                continue;
-            }
-            var net = merged[existingIndex].Merge(constraint);
-            if (net is null) merged.RemoveAt(existingIndex);
-            else merged[existingIndex] = net;
-        }
-    }
-
-    /// <summary>The effective constraints for a property: its analysis-verified-or-declared
-    /// range, the declared length/pattern/equality constraints, and requiredness.
-    /// A property is required unless it is marked <c>optional</c>, so the action DTO
-    /// still gets <c>[Required]</c> without a <c>required</c> word on the property.</summary>
-    private IReadOnlyList<Constraint> EffectivePropertyConstraints(Entity owner, string propertyName) {
-        var result = new List<Constraint>();
-        var range = GetPropertyRange(owner, propertyName);
-        if (range is not null) result.Add(range);
-        var prop = owner.Properties.FirstOrDefault(p =>
-            string.Equals(p.Name, propertyName, StringComparison.Ordinal));
-        if (prop is not null)
-            result.AddRange(prop.Constraints.Where(c =>
-                c is LengthConstraint or PatternConstraint or RequiredConstraint
-                    or EqualityConstraint));
-        if (_entityStructureLookup.TryGetValue(owner.Name, out var structure)
-            && structure.RequiredPropertyNames.Contains(propertyName)
-            && result.All(c => c is not RequiredConstraint))
-            result.Insert(0, new RequiredConstraint());
-        return result;
-    }
-
-    private string? ResolveRelationshipTarget(Entity source, string relationshipName) {
-        var rel = source.Navigations.FirstOrDefault(n =>
-            string.Equals(n.Name, relationshipName, StringComparison.Ordinal));
-        return rel?.Target.TypeName;
-    }
-
-    /// <summary>Flattens a composite (sequential) effect tree WITHOUT descending into
-    /// conditional branches — only flows that execute on every path.</summary>
-    private static IEnumerable<Effect> FlattenUnconditionalEffects(IEnumerable<Effect> effects) {
-        foreach (var effect in effects) {
-            yield return effect;
-            if (effect is CompositeEffect composite) {
-                foreach (var nested in FlattenUnconditionalEffects(composite.Effects)) yield return nested;
-            }
-        }
     }
 
     /// <summary>Maps effective constraints to DataAnnotations validation attributes, when

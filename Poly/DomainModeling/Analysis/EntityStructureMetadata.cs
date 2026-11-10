@@ -75,8 +75,30 @@ public sealed record EntityStructureMetadata(
     string? LifecycleEnumTypeName = null,
 
     /// <summary>Scalar properties assigned only by effects (no create initializer).</summary>
-    IReadOnlySet<string>? AssignOnlyPropertyNames = null
-) : IAnalysisMetadata;
+    IReadOnlySet<string>? AssignOnlyPropertyNames = null,
+
+    /// <summary>
+    /// Properties whose every writer is proven to leave them within their declared constraints
+    /// (#367 C-1 guard-closed fact). Conservative: absent means not proven, never "violated".
+    /// Writer kinds and blockers are in <see cref="GuardClosedProperties"/>.
+    /// </summary>
+    IReadOnlySet<string>? GuardClosedPropertyNames = null,
+
+    /// <summary>
+    /// The entity's declared key designation (<see cref="Entity.KeyProperties"/>, #405); empty when the
+    /// entity is unkeyed. A fact over existing members: no synthetic member exists for it.
+    /// </summary>
+    IReadOnlyList<string>? KeyProperties = null
+) : IAnalysisMetadata {
+    /// <summary>
+    /// <c>Id</c> is an alias of the key designation: the single key property, or the tuple of them in
+    /// declared order. Empty for an unkeyed entity, which has an instance handle but no domain identity.
+    /// </summary>
+    public IReadOnlyList<string> Id => KeyProperties ?? [];
+
+    /// <summary>True when the entity designates a key.</summary>
+    public bool HasKey => Id.Count > 0;
+}
 
 public sealed record ConstructorParameterOrder(
     string Name,

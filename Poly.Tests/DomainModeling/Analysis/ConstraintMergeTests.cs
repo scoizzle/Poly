@@ -100,6 +100,64 @@ public class ConstraintMergeTests {
         await Assert.That(Convert.ToDouble(range.Maximum)).IsEqualTo(80d);
     }
 
+    // ── #367 A-3: range bounds compare in their own type, not through double ──
+
+    [Test]
+    public async Task MergeResult_DecimalBoundsDifferingBelowDoublePrecision_IsEmpty() {
+        // 1.00000000000000002m > 1.00000000000000001m, but both round to 1.0 as double,
+        // so a double compare read min == max and called the empty range satisfiable.
+        var result = new RangeConstraint(1.00000000000000002m, null)
+            .MergeResult(new RangeConstraint(null, 1.00000000000000001m));
+
+        await Assert.That(result.Kind).IsEqualTo(ConstraintMergeKind.Empty);
+    }
+
+    [Test]
+    public async Task MergeResult_LongBoundsAboveDoubleMantissa_IsEmpty() {
+        // 2^53 + 1 is not representable as double; both bounds collapse to 2^53.
+        var result = new RangeConstraint(9007199254740993L, null)
+            .MergeResult(new RangeConstraint(null, 9007199254740992L));
+
+        await Assert.That(result.Kind).IsEqualTo(ConstraintMergeKind.Empty);
+    }
+
+    [Test]
+    public async Task MergeResult_DecimalBoundsPicksTighterByDecimalOrder() {
+        var result = new RangeConstraint(1.00000000000000001m, null)
+            .MergeResult(new RangeConstraint(1.00000000000000002m, null));
+
+        var range = (RangeConstraint)result.Net!;
+        await Assert.That(range.Minimum).IsEqualTo(1.00000000000000002m);
+    }
+
+    [Test]
+    public async Task MergeResult_DateTimeBounds_MergeByTicks() {
+        var lo = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var hi = lo.AddTicks(1);
+        var disjoint = new RangeConstraint(hi, null).MergeResult(new RangeConstraint(null, lo));
+        var overlap = new RangeConstraint(lo, hi).MergeResult(new RangeConstraint(hi, null));
+
+        await Assert.That(disjoint.Kind).IsEqualTo(ConstraintMergeKind.Empty);
+        await Assert.That(overlap.Kind).IsEqualTo(ConstraintMergeKind.Net);
+        await Assert.That(((RangeConstraint)overlap.Net!).Minimum).IsEqualTo(hi);
+    }
+
+    [Test]
+    public async Task MergeResult_DateTimeBoundAgainstNumber_IsUnmergeable() {
+        var result = new RangeConstraint(new DateTime(2026, 1, 1), null)
+            .MergeResult(new RangeConstraint(5d, null));
+
+        await Assert.That(result.Kind).IsEqualTo(ConstraintMergeKind.Unmergeable);
+    }
+
+    [Test]
+    public async Task MergeResult_MixedNumericBounds_StillCompareNumerically() {
+        // Cross-numeric behaviour is unchanged (double); see the A-3 report.
+        var result = new RangeConstraint(5m, null).MergeResult(new RangeConstraint(null, 10d));
+
+        await Assert.That(result.Kind).IsEqualTo(ConstraintMergeKind.Net);
+    }
+
     [Test]
     public async Task MergeResult_DifferentConstraintTypes_IsUnmergeable() {
         var result = new UniqueConstraint().MergeResult(new RangeConstraint(0d, 5d));

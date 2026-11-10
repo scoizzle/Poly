@@ -58,6 +58,7 @@ public static class DslGrammar {
         DslTokenKind.Lte => "<=",
         DslTokenKind.Eq => "==",
         DslTokenKind.Neq => "!=",
+        DslTokenKind.SingleEq => "=",
         DslTokenKind.Plus => "+",
         DslTokenKind.Minus => "-",
         DslTokenKind.Star => "*",
@@ -257,6 +258,8 @@ public static class DslGrammar {
             .Pattern("ident").Value(DslTokenKind.Identifier).Fold(ExpressionFoldTable.Ident).Commit()
             .Pattern("match", priority: 3)
                 .Predicate(IsMatchIdent, "kw").Balanced(DslTokenKind.LBrace, DslTokenKind.RBrace).Commit()
+            .Pattern("call", priority: 3)
+                .Predicate(IsPathHopIdent, "fn").Balanced(DslTokenKind.LParen, DslTokenKind.RParen).Commit()
             .Pattern("quant-where", priority: 2)
                 .Predicate(IsQuantifierToken, "quant").Value(DslTokenKind.Identifier, "rel")
                 .Predicate(IsWhereIdent, "where").Ref("expr-and").Commit()
@@ -330,6 +333,8 @@ public static class DslGrammar {
             .Pattern("ident").Value(DslTokenKind.Identifier).Fold(ExpressionFoldTable.Ident).Commit()
             .Pattern("match", priority: 3)
                 .Predicate(IsMatchIdent, "kw").Balanced(DslTokenKind.LBrace, DslTokenKind.RBrace).Commit()
+            .Pattern("call", priority: 3)
+                .Predicate(IsPathHopIdent, "fn").Balanced(DslTokenKind.LParen, DslTokenKind.RParen).Commit()
             .Pattern("quant-where", priority: 2)
                 .Predicate(IsQuantifierToken, "quant").Value(DslTokenKind.Identifier, "rel")
                 .Predicate(IsWhereIdent, "where").Ref("expr-live-and").Commit()
@@ -389,8 +394,14 @@ public static class DslGrammar {
         t.Kind == DslTokenKind.Identifier
         && string.Equals(t.Text, "sum", StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// A path hop is a plain identifier. <c>function</c> is excluded so an expression that ends
+    /// in an identifier cannot run into the next top-level <c>function</c> declaration
+    /// (<c>… = a + b</c> then <c>function Next(…)</c> would read as the path <c>b function Next</c>).
+    /// </summary>
     internal static bool IsPathHopIdent(DslToken t) =>
         t.Kind == DslTokenKind.Identifier
+        && !string.Equals(t.Text, "function", StringComparison.Ordinal)
         && !IsExistsIdent(t)
         && !IsWhereIdent(t)
         && !IsQuantifierToken(t);

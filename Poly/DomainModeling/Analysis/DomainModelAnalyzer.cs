@@ -29,6 +29,7 @@ public static class DomainModelAnalyzer {
         new EffectFactsPass(),
         new EffectInvariantAnalyzer(),
         new EntityStructureAnalyzer(),
+        new ActionParameterEnvelopePass(),
         new EffectAnalyzer(),
         new RuntimeContractAnalyzer(),
         new CapabilityAnalyzer(),

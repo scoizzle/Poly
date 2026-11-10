@@ -66,6 +66,7 @@ public static class CSharpGrammar {
         CSharpTokenKind.KwGoto => "goto",
         CSharpTokenKind.KwBreak => "break",
         CSharpTokenKind.KwContinue => "continue",
+        CSharpTokenKind.KwYield => "yield",
         CSharpTokenKind.KwGet => "get",
         CSharpTokenKind.KwSet => "set",
         CSharpTokenKind.KwInit => "init",
@@ -323,6 +324,8 @@ public static class CSharpGrammar {
             .Pattern("throw").Kind(CSharpTokenKind.KwThrow).Ref("expr").Kind(CSharpTokenKind.Semicolon).Commit()
             .Pattern("break").Kind(CSharpTokenKind.KwBreak).Kind(CSharpTokenKind.Semicolon).Commit()
             .Pattern("continue").Kind(CSharpTokenKind.KwContinue).Kind(CSharpTokenKind.Semicolon).Commit()
+            .Pattern("yield-return").Kind(CSharpTokenKind.KwYield).Kind(CSharpTokenKind.KwReturn).Ref("expr").Kind(CSharpTokenKind.Semicolon).Commit()
+            .Pattern("yield-break").Kind(CSharpTokenKind.KwYield).Kind(CSharpTokenKind.KwBreak).Kind(CSharpTokenKind.Semicolon).Commit()
             .Pattern("goto").Kind(CSharpTokenKind.KwGoto).Value(CSharpTokenKind.Identifier, "target").Kind(CSharpTokenKind.Semicolon).Commit()
             .Pattern("label").Value(CSharpTokenKind.Identifier, "label").Value(CSharpTokenKind.Colon, "colon").Ref("statement").Commit()
             .Pattern("var-decl").Kind(CSharpTokenKind.KwVar).Value(CSharpTokenKind.Identifier, "name")

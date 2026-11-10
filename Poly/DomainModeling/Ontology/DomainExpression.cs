@@ -35,6 +35,9 @@ public abstract record DomainExpression : DomainObject {
     public static DomainExpression Match(
         IReadOnlyList<MatchArm> arms, DomainExpression @else, int line = 0, int col = 0) =>
         new MatchExpr(arms, @else, line, col);
+    public static DomainExpression Call(
+        string functionName, IReadOnlyList<DomainExpression> arguments, int line = 0, int col = 0) =>
+        new FunctionCall(Guard.ThrowIfNullOrEmpty(functionName), arguments, line, col);
 
     public static DomainExpression RelationshipNav(string relationshipName, DomainExpression targetProperty) =>
         new RelationshipNavigation(Guard.ThrowIfNullOrEmpty(relationshipName), targetProperty);
@@ -219,6 +222,24 @@ public sealed record MatchExpr(
             Arms = Arms.Select(a => new MatchArm(map(a.Condition), map(a.Value))).ToList(),
             Else = map(Else),
         };
+}
+
+/// <summary>
+/// A call to a declared <see cref="DomainFunction"/>: <c>Name(arg, …)</c>. The name resolves against
+/// <c>Domain.Functions</c> in analysis (unknown name, arity, argument types, recursion), and lowering
+/// binds each argument to the function's parameter and lowers the body there. <c>Line</c>/<c>Col</c>
+/// position diagnostics at the call.
+/// </summary>
+public sealed record FunctionCall(
+    string Name,
+    IReadOnlyList<DomainExpression> Arguments,
+    int Line = 0,
+    int Col = 0
+) : DomainExpression {
+    public sealed override IEnumerable<Node?> Children => Arguments;
+
+    public override DomainExpression MapChildren(Func<DomainExpression, DomainExpression> map) =>
+        this with { Arguments = Arguments.Select(map).ToList() };
 }
 
 public sealed record RelationshipNavigation(

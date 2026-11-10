@@ -1,0 +1,134 @@
+#nullable enable
+
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using Microsoft.EntityFrameworkCore;
+using System.ComponentModel.DataAnnotations;
+using Poly.Generated;
+
+var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.ConfigureHttpJsonOptions(options => {
+    options.SerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
+    options.SerializerOptions.Converters.Add(new JsonStringEnumConverter());
+});
+
+builder.Services.AddDbContext<TDbCtx>(options => options.UseInMemoryDatabase("T"));
+
+var app = builder.Build();
+
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<TDbCtx>();
+    await SeedAsync(db);
+}
+
+app.MapGet("/api/notes", async (TDbCtx db) => await db.Notes.ToListAsync());
+
+app.MapGet("/api/notes/{id}", async (int id, TDbCtx db) => (await db.Notes.FindAsync(id) is Note note ? Results.Ok(note) : Results.NotFound()));
+
+app.MapPost("/api/notes", async (NoteDto dto, TDbCtx db) => {
+    var noteResult = Note.Create(dto.Body);
+    if (!noteResult.IsSuccess)
+    {
+        return FailureStatus(noteResult.ErrorMessage);
+    }
+    db.Notes.Add(noteResult.Value);
+    await db.SaveChangesAsync();
+    return Results.Ok(noteResult.Value);
+});
+
+app.MapPost("/api/notes/{id}/setbody", async (int id, SetBodyDto dto, TDbCtx db) => {
+    var entity = await db.Notes.FindAsync(id);
+    if (entity == null)
+    {
+        return Results.NotFound("Note not found");
+    }
+    try
+    {
+        var result = entity.SetBody(dto.V);
+        await db.SaveChangesAsync();
+        if (result.IsSuccess)
+        {
+            return Results.Ok("ok");
+        }
+        else
+        {
+            return FailureStatus(result.ErrorMessage);
+        }
+    }
+    catch (Exception)
+    {
+        return Results.StatusCode(500);
+    }
+});
+
+app.MapPost("/api/notes/{id}/setmemo", async (int id, SetMemoDto dto, TDbCtx db) => {
+    var entity = await db.Notes.FindAsync(id);
+    if (entity == null)
+    {
+        return Results.NotFound("Note not found");
+    }
+    try
+    {
+        var result = entity.SetMemo(dto.V);
+        await db.SaveChangesAsync();
+        if (result.IsSuccess)
+        {
+            return Results.Ok("ok");
+        }
+        else
+        {
+            return FailureStatus(result.ErrorMessage);
+        }
+    }
+    catch (Exception)
+    {
+        return Results.StatusCode(500);
+    }
+});
+
+static IResult FailureStatus(string? message)
+{
+    return (message != null && (message.Contains("Unique constraint") || message.Contains("already has a target")) ? Results.Conflict(message) : Results.BadRequest(message));
+}
+
+
+static async System.Threading.Tasks.Task SeedAsync(TDbCtx db)
+{
+    if (db == null)
+    {
+        return;
+    }
+    if (await db.Notes.AnyAsync())
+    {
+        return;
+    }
+    var noteResult = Note.Create("Sample");
+    if (noteResult.IsSuccess)
+    {
+        db.Add(noteResult.Value);
+    }
+    await db.SaveChangesAsync();
+}
+
+
+app.Run();
+
+
+public record NoteDto
+{
+    [Required]
+    public string Body { get; init; } = default!;
+}
+
+public record SetBodyDto
+{
+    [Required]
+    public string V { get; init; } = default!;
+}
+
+public record SetMemoDto
+{
+    public string V { get; init; } = default!;
+}

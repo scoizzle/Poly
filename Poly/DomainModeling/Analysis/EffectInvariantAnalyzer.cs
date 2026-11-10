@@ -70,11 +70,14 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
         var contexts = new List<ActionStageInvariant>();
         foreach (var (stageName, stage) in ValidStages(action, entity)) {
             var preconditions = CollectPreconditions(action, entity, stage);
-            var env = BuildInitialEnv(entity, preconditions);
-            ReportUnsatisfiablePreconditions(context, action, stageName, env);
+            var conflicts = new List<RelationConflict>();
+            var env = BuildInitialEnv(entity, preconditions, conflicts);
+            var scalarEnv = conflicts.Count == 0 ? env : BuildInitialEnv(entity, preconditions, relations: false);
+            ReportUnsatisfiablePreconditions(context, action, stageName, env, scalarEnv, conflicts);
             var narrowed = env.ToDictionary(kv => kv.Key, kv => kv.Value.NumericRange, StringComparer.Ordinal);
             var merged = env.ToDictionary(kv => kv.Key, kv => (IReadOnlyList<Constraint>)kv.Value.Constraints, StringComparer.Ordinal);
             var postconditions = new List<EffectPostcondition>();
+            // Call-stack scoped: an action is in the set only while its walk is on the stack.
             var visited = new HashSet<Action>(ReferenceEqualityComparer.Instance) { action };
             ApplyEffects(action.Effects, entity, action, env, paramEnv: null, visited, postconditions, domain, stageName);
             contexts.Add(new ActionStageInvariant(stageName, preconditions, narrowed, merged, postconditions));
@@ -107,20 +110,31 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
     /// <summary>The initial abstract environment: each property's declared constraints as an
     /// <see cref="AbstractValue"/>, refined by every precondition's bounds.</summary>
     private static Dictionary<string, AbstractValue> BuildInitialEnv(
-        Entity entity, IReadOnlyList<Policy> preconditions) {
+        Entity entity, IReadOnlyList<Policy> preconditions,
+        List<RelationConflict>? conflicts = null, bool relations = true) {
         var env = new Dictionary<string, AbstractValue>(StringComparer.Ordinal);
         foreach (var prop in entity.Properties)
             env[prop.Name] = AbstractValue.From(prop.Constraints);
         foreach (var policy in preconditions)
-            Refine(env, policy.Expression);
+            Refine(env, policy.Expression, conflicts, relations);
         return env;
     }
 
+    /// <summary>A relation (<c>Start &lt; End</c>) whose refinement is what made two previously
+    /// satisfiable properties unsatisfiable: one cause, reported once (#367 B-7).</summary>
+    private readonly record struct RelationConflict(string Left, string Right, RelationalOrdering Orderings);
+
     /// <summary>Narrows the symbols an environment mentions by a boolean condition's bounds
     /// (a guard, an if-branch, or a where-filter). Single-primitive refinement.</summary>
-    private static void Refine(Dictionary<string, AbstractValue> env, DomainExpression condition) {
+    private static void Refine(
+        Dictionary<string, AbstractValue> env, DomainExpression condition,
+        List<RelationConflict>? conflicts = null, bool relations = true) {
         foreach (var conjunct in FlattenAnds(condition)) {
             if (conjunct is not Comparison cmp) continue;
+            if (TryGetRelation(cmp, out var left, out var right, out var orderings)) {
+                if (relations) RefineRelation(env, left, right, orderings, conflicts);
+                continue;
+            }
             if (!TryGetComparisonBound(cmp, out var propName, out double value, out var bound)) continue;
             if (!env.TryGetValue(propName, out var current)) continue;
             switch (bound) {
@@ -137,7 +151,59 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
         }
     }
 
+    /// <summary>A comparison between two properties (<c>Start &lt; End</c>) as the orderings the left
+    /// property may have against the right one (#367 A-6).</summary>
+    private static bool TryGetRelation(
+        Comparison cmp, out string left, out string right, out RelationalOrdering orderings) {
+        left = right = "";
+        orderings = cmp.Kind switch {
+            ComparisonKind.LessThan => RelationalOrdering.Less,
+            ComparisonKind.LessThanOrEqual => RelationalOrdering.Less | RelationalOrdering.Equal,
+            ComparisonKind.GreaterThan => RelationalOrdering.Greater,
+            ComparisonKind.GreaterThanOrEqual => RelationalOrdering.Greater | RelationalOrdering.Equal,
+            ComparisonKind.Equal => RelationalOrdering.Equal,
+            ComparisonKind.NotEqual => RelationalOrdering.Less | RelationalOrdering.Greater,
+            _ => RelationalOrdering.None,
+        };
+        if (orderings == RelationalOrdering.None
+            || cmp.Left is not PropertyAccess l || cmp.Right is not PropertyAccess r
+            || string.Equals(l.Name, r.Name, StringComparison.Ordinal))
+            return false;
+        left = l.Name;
+        right = r.Name;
+        return true;
+    }
+
+    /// <summary>Records the relation on both properties (each seen from its own side), then lets the two
+    /// properties' ranges decide it: a relation no value pair can satisfy makes the symbols
+    /// unsatisfiable. An undecidable relation is only recorded, never assumed true or false.</summary>
+    private static void RefineRelation(
+        Dictionary<string, AbstractValue> env, string left, string right, RelationalOrdering orderings,
+        List<RelationConflict>? conflicts = null) {
+        if (!env.TryGetValue(left, out var l) || !env.TryGetValue(right, out var r)) return;
+        var wasBottom = l.Unsatisfiable || r.Unsatisfiable;
+        var relation = new RelationalConstraint(right, orderings);
+        l = l.Narrow(relation);
+        r = r.Narrow(relation.MirroredFrom(left));
+        if (!l.Unsatisfiable && !r.Unsatisfiable
+            && ConstraintValidation.DecideRelation(relation, l.Range, r.Range) == ConstraintVerdict.Violated) {
+            l = l.AsUnsatisfiable();
+            r = r.AsUnsatisfiable();
+        }
+        if (!wasBottom && (l.Unsatisfiable || r.Unsatisfiable))
+            conflicts?.Add(new RelationConflict(left, right, orderings));
+        env[left] = l;
+        env[right] = r;
+    }
+
     private static void RefineNegated(Dictionary<string, AbstractValue> env, DomainExpression condition) {
+        // A property-vs-property comparison negates exactly: the ordering is trichotomous
+        // (Less | Equal | Greater), so the negation is the complement of the positive orderings.
+        if (condition is Comparison rel
+            && TryGetRelation(rel, out var left, out var right, out var orderings)) {
+            RefineRelation(env, left, right, RelationalOrdering.All & ~orderings);
+            return;
+        }
         if (condition is Comparison cmp
             && TryGetComparisonBound(cmp, out var propName, out double value, out var bound)
             && NegateBound(bound) is { } negated
@@ -217,7 +283,8 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
         DomainExpression expr, Entity entity, Action? action,
         IReadOnlyDictionary<string, AbstractValue> env,
         IReadOnlyDictionary<string, AbstractValue>? paramEnv = null,
-        Entity? targetEntity = null) {
+        Entity? targetEntity = null,
+        Domain? domain = null) {
         switch (expr) {
             case Literal { Value: not null } lit:
                 return ToDouble(lit.Value) is double d
@@ -225,34 +292,55 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
                     : AbstractValue.From(lit.Value is string s ? [new EqualityConstraint(s)] : []);
             case PropertyAccess pa:
                 if (paramEnv is not null && paramEnv.TryGetValue(pa.Name, out var fromParam))
-                    return fromParam;
-                if (env.TryGetValue(pa.Name, out var pv)) return pv;
+                    return fromParam.WithoutRelations();
+                if (env.TryGetValue(pa.Name, out var pv)) return pv.WithoutRelations();
                 // Cross-entity read: the property belongs to the target entity.
                 var owner = targetEntity ?? entity;
                 var prop = owner.Properties.FirstOrDefault(p =>
                     string.Equals(p.Name, pa.Name, StringComparison.Ordinal));
                 return prop is null ? AbstractValue.Unknown : AbstractValue.From(prop.Constraints);
             case ParameterAccess pa2:
-                if (paramEnv is not null && paramEnv.TryGetValue(pa2.Name, out var bv)) return bv;
+                if (paramEnv is not null && paramEnv.TryGetValue(pa2.Name, out var bv)) return bv.WithoutRelations();
                 var param = action?.Parameters.FirstOrDefault(p =>
                     string.Equals(p.Name, pa2.Name, StringComparison.Ordinal));
                 return param is null ? AbstractValue.Unknown : AbstractValue.From(param.Constraints);
             case RelationshipNavigation rn:
-                // Path-prefix leaf on a related entity — best-effort: read the leaf property
-                // on the target entity's environment (caller supplies it via targetEntity).
-                return Eval(rn.TargetProperty, entity, action, env, paramEnv, targetEntity);
+                // The leaf belongs to the RELATED entity, never to the caller. It is evaluated against that
+                // entity's DECLARED constraints (no flow state is tracked per related entity). If the
+                // relationship does not resolve to exactly one single target entity the result is Unknown.
+                return ResolveSingleTarget(rn.RelationshipName, targetEntity ?? entity, domain) is { } related
+                    ? Eval(rn.TargetProperty, related, null, EmptyEnv, null, null, domain)
+                    : AbstractValue.Unknown;
             case Add add:
-                return ComposeArithmetic(Eval(add.Left, entity, action, env, paramEnv, targetEntity),
-                    Eval(add.Right, entity, action, env, paramEnv, targetEntity), compose: (l, r) => l + r);
+                return ComposeArithmetic(Eval(add.Left, entity, action, env, paramEnv, targetEntity, domain),
+                    Eval(add.Right, entity, action, env, paramEnv, targetEntity, domain), compose: (l, r) => l + r);
             case Subtract sub:
-                return ComposeArithmetic(Eval(sub.Left, entity, action, env, paramEnv, targetEntity),
-                    Eval(sub.Right, entity, action, env, paramEnv, targetEntity), compose: (l, r) => l - r);
+                return ComposeArithmetic(Eval(sub.Left, entity, action, env, paramEnv, targetEntity, domain),
+                    Eval(sub.Right, entity, action, env, paramEnv, targetEntity, domain), compose: (l, r) => l - r);
             case Multiply mul:
-                return ComposeArithmetic(Eval(mul.Left, entity, action, env, paramEnv, targetEntity),
-                    Eval(mul.Right, entity, action, env, paramEnv, targetEntity), compose: (l, r) => l * r);
+                return ComposeArithmetic(Eval(mul.Left, entity, action, env, paramEnv, targetEntity, domain),
+                    Eval(mul.Right, entity, action, env, paramEnv, targetEntity, domain), compose: (l, r) => l * r);
             default:
                 return AbstractValue.Unknown;
         }
+    }
+
+    private static readonly IReadOnlyDictionary<string, AbstractValue> EmptyEnv =
+        new Dictionary<string, AbstractValue>(StringComparer.Ordinal);
+
+    /// <summary>The single entity a to-one relationship of <paramref name="source"/> points at, or null when
+    /// there is no domain, the relationship is unknown or declared more than once, it is to-many, or the target
+    /// type is not exactly one entity. Null means the caller must answer Unknown.</summary>
+    private static Entity? ResolveSingleTarget(string relationshipName, Entity source, Domain? domain) {
+        if (domain is null) return null;
+        var matches = source.Navigations
+            .Where(r => string.Equals(r.Name, relationshipName, StringComparison.Ordinal)).Take(2).ToList();
+        if (matches.Count != 1) return null;
+        if (matches[0].Cardinality is not (RelationshipCardinality.OneToOne or RelationshipCardinality.ManyToOne))
+            return null;
+        var targets = domain.Types.OfType<Entity>()
+            .Where(e => string.Equals(e.Name, matches[0].Target.TypeName, StringComparison.Ordinal)).Take(2).ToList();
+        return targets.Count == 1 ? targets[0] : null;
     }
 
     private static AbstractValue ComposeArithmetic(
@@ -279,8 +367,14 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
                         var prop = entity.Properties.FirstOrDefault(p =>
                             string.Equals(p.Name, target.Name, StringComparison.Ordinal));
                         if (prop is null) break;
-                        var value = Eval(assign.Value, entity, action, env, paramEnv);
-                        env[target.Name] = env.TryGetValue(target.Name, out var cur) ? cur.Merge(value) : value;
+                        var value = Eval(assign.Value, entity, action, env, paramEnv, domain: domain);
+                        // Strong update: the assigned value replaces the old one, so it is intersected with the
+                        // property's DECLARED constraints, not the (possibly branch-refined) incoming value.
+                        env[target.Name] = AbstractValue.From(prop.Constraints).Merge(value);
+                        // Relations to the reassigned property are stale on every other symbol.
+                        foreach (var key in env.Keys.ToList())
+                            if (!string.Equals(key, target.Name, StringComparison.Ordinal))
+                                env[key] = env[key].WithoutRelationsTo(target.Name);
                         result.Add(new EffectPostcondition(
                             assign, prop.Name,
                             BuildPostconditionConstraints(prop, assign.Value, action, paramEnv),
@@ -291,18 +385,24 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
                 case ConditionalEffect cond:
                     var thenEnv = CloneEnv(env);
                     Refine(thenEnv, cond.Condition);
+                    var thenDead = ArmIsDead(env, thenEnv);
                     ApplyEffects(cond.ThenEffects, entity, action, thenEnv, paramEnv, visited, result, domain, currentStage);
+                    Dictionary<string, AbstractValue>? elseEnv = null;
+                    var elseDead = false;
                     if (cond.ElseEffects is not null) {
-                        var elseEnv = CloneEnv(env);
+                        elseEnv = CloneEnv(env);
                         RefineNegated(elseEnv, cond.Condition);
+                        elseDead = ArmIsDead(env, elseEnv);
                         ApplyEffects(cond.ElseEffects, entity, action, elseEnv, paramEnv, visited, result, domain, currentStage);
                     }
+                    JoinBranches(env, thenEnv, thenDead, elseEnv, elseDead, entity);
                     break;
                 case CompositeEffect composite:
                     ApplyEffects(composite.Effects, entity, action, env, paramEnv, visited, result, domain, currentStage);
                     break;
                 case InvokeActionEffect invoke:
                     ApplyInvoke(invoke, entity, action, env, paramEnv, visited, result, domain, currentStage);
+                    DropAllRelations(env);
                     break;
                 case ForEachEffect fe:
                     // Zero or more iterations: assigns join into the env (Merge), so the
@@ -311,9 +411,17 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
                     break;
                 case ForEachInvokeEffect efe:
                     ApplyForEachInvoke(efe, entity, action, env, paramEnv, visited, result, domain);
+                    DropAllRelations(env);
                     break;
             }
         }
+    }
+
+    /// <summary>A callee runs on a copy of the environment and may reassign any property, so after
+    /// an invoke no relation between symbols is known (conservative widening).</summary>
+    private static void DropAllRelations(Dictionary<string, AbstractValue> env) {
+        foreach (var key in env.Keys.ToList())
+            env[key] = env[key].WithoutRelations();
     }
 
     /// <summary>Call-chain propagation. Self-invoke threads the current environment into the
@@ -342,10 +450,39 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
         if (invoke.ParameterBindings.Count > 0) {
             targetParams = new(StringComparer.Ordinal);
             foreach (var binding in invoke.ParameterBindings)
-                targetParams[binding.PropertyName] = Eval(binding.Expression, entity, action, env, paramEnv);
+                targetParams[binding.PropertyName] = Eval(binding.Expression, entity, action, env, paramEnv, domain: domain);
         }
 
-        ApplyEffects(target.Effects, entity, target, targetEnv, targetParams, visited, result, domain, currentStage);
+        // The callee's own guards refine its entry state; only what its EFFECTS change afterwards is
+        // carried back to the caller (the guard facts stay the callee's).
+        var atEntry = CloneEnv(targetEnv);
+
+        try {
+            ApplyEffects(target.Effects, entity, target, targetEnv, targetParams, visited, result, domain, currentStage);
+        }
+        finally {
+            visited.Remove(target);
+        }
+
+        MergeCalleePostState(env, targetEnv, atEntry, entity);
+    }
+
+    /// <summary>#367 B-3: a self-invoke runs on the SAME entity (the callee env is keyed by this
+    /// entity's property names), so the properties its effects rewrote now hold the callee's final
+    /// values in the caller. A strong update is sound because a failed invoke returns the caller's
+    /// failure (fail-fast, <c>EffectLoweringPass.WrapInvokeResult</c>) and the action's transaction
+    /// restores the instance, so effects after the invoke only run on the callee's success path. The
+    /// callee's conditionals are already joined (B-1) inside its env. A value the callee assigned
+    /// outside its declared range looks empty here (assign narrows by intersection), which is not
+    /// proof the path is unreachable, so it falls back to the declared constraints.</summary>
+    private static void MergeCalleePostState(
+        Dictionary<string, AbstractValue> env, Dictionary<string, AbstractValue> post,
+        Dictionary<string, AbstractValue> atEntry, Entity entity) {
+        foreach (var (key, value) in post) {
+            if (atEntry.TryGetValue(key, out var before) && ReferenceEquals(before, value)) continue;
+            if (!env.ContainsKey(key)) continue;
+            env[key] = SoundArm(value, key, entity);
+        }
     }
 
     /// <summary>Cross-entity invoke: build the related entity's environment (declared
@@ -377,10 +514,15 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
         if (invoke.ParameterBindings.Count > 0) {
             targetParams = new(StringComparer.Ordinal);
             foreach (var binding in invoke.ParameterBindings)
-                targetParams[binding.PropertyName] = Eval(binding.Expression, entity, action, env, paramEnv);
+                targetParams[binding.PropertyName] = Eval(binding.Expression, entity, action, env, paramEnv, domain: domain);
         }
 
-        ApplyEffects(targetAction.Effects, targetEntity, targetAction, targetEnv, targetParams, visited, result, domain, currentStage: null);
+        try {
+            ApplyEffects(targetAction.Effects, targetEntity, targetAction, targetEnv, targetParams, visited, result, domain, currentStage: null);
+        }
+        finally {
+            visited.Remove(targetAction);
+        }
     }
 
     /// <summary>Fan-out invoke (<c>for Rel as x [where x.Policy] invoke x.Action</c>): build
@@ -419,10 +561,100 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
         if (efe.ParameterBindings.Count > 0) {
             targetParams = new(StringComparer.Ordinal);
             foreach (var binding in efe.ParameterBindings)
-                targetParams[binding.PropertyName] = Eval(binding.Expression, entity, action, env, paramEnv);
+                targetParams[binding.PropertyName] = EvalForEachBinding(
+                    binding.Expression, efe.BinderName, targetEntity, entity, action, env, paramEnv, domain);
         }
 
-        ApplyEffects(targetAction.Effects, targetEntity, targetAction, targetEnv, targetParams, visited, result, domain, currentStage: null);
+        try {
+            ApplyEffects(targetAction.Effects, targetEntity, targetAction, targetEnv, targetParams, visited, result, domain, currentStage: null);
+        }
+        finally {
+            visited.Remove(targetAction);
+        }
+    }
+
+    /// <summary>A for-each binding argument's only legal navigation root is the BINDER (<c>line Qty</c>), which
+    /// names the ITERATED entity, not a caller relationship that happens to share the binder's name. The leaf
+    /// is evaluated against the iterated entity's declared constraints. A non-binder root is rejected by the
+    /// validator (DMEFF007); an API-built one keeps its caller-relative meaning.</summary>
+    private static AbstractValue EvalForEachBinding(
+        DomainExpression expr, string binder, Entity iterated, Entity caller, Action action,
+        Dictionary<string, AbstractValue> env, IReadOnlyDictionary<string, AbstractValue>? paramEnv, Domain domain) {
+        switch (expr) {
+            case RelationshipNavigation rn:
+                return string.Equals(rn.RelationshipName, binder, StringComparison.Ordinal)
+                    ? Eval(rn.TargetProperty, iterated, null, EmptyEnv, null, null, domain)
+                    : Eval(rn, caller, action, env, paramEnv, domain: domain);
+            case Add add:
+                return ComposeArithmetic(
+                    EvalForEachBinding(add.Left, binder, iterated, caller, action, env, paramEnv, domain),
+                    EvalForEachBinding(add.Right, binder, iterated, caller, action, env, paramEnv, domain), (l, r) => l + r);
+            case Subtract sub:
+                return ComposeArithmetic(
+                    EvalForEachBinding(sub.Left, binder, iterated, caller, action, env, paramEnv, domain),
+                    EvalForEachBinding(sub.Right, binder, iterated, caller, action, env, paramEnv, domain), (l, r) => l - r);
+            case Multiply mul:
+                return ComposeArithmetic(
+                    EvalForEachBinding(mul.Left, binder, iterated, caller, action, env, paramEnv, domain),
+                    EvalForEachBinding(mul.Right, binder, iterated, caller, action, env, paramEnv, domain), (l, r) => l * r);
+        }
+        return Eval(expr, caller, action, env, paramEnv, domain: domain);
+    }
+
+    /// <summary>#367 B-1: after an <c>if</c>, each symbol either arm touched becomes the join
+    /// (lub) of the two arms; with no <c>else</c> the unchanged incoming environment is the
+    /// implicit else. A symbol both arms left as the incoming instance is not rewritten.
+    /// An arm value that is <see cref="AbstractValue.Unsatisfiable"/> is not treated as an
+    /// unreachable arm: the assign step narrows by intersection, so an arm that assigns
+    /// outside its refinement looks empty while the value really exists. That arm contributes
+    /// the property's declared constraints instead, which keeps the join sound.</summary>
+    private static void JoinBranches(
+        Dictionary<string, AbstractValue> env,
+        Dictionary<string, AbstractValue> thenEnv, bool thenDead,
+        Dictionary<string, AbstractValue>? elseEnv, bool elseDead,
+        Entity entity) {
+        // A dead arm (its condition contradicts the incoming facts) is bottom: it is skipped.
+        // Both dead: the incoming environment is already the best statement.
+        if (thenDead && elseDead) return;
+        if (thenDead) { if (elseEnv is not null) AdoptArm(env, elseEnv); return; }
+        if (elseDead) { AdoptArm(env, thenEnv); return; }
+        var keys = new HashSet<string>(env.Keys, StringComparer.Ordinal);
+        keys.UnionWith(thenEnv.Keys);
+        if (elseEnv is not null) keys.UnionWith(elseEnv.Keys);
+
+        foreach (var key in keys) {
+            env.TryGetValue(key, out var incoming);
+            if (!thenEnv.TryGetValue(key, out var fromThen)) continue;
+            AbstractValue? fromElse;
+            if (elseEnv is null) fromElse = incoming;
+            else if (!elseEnv.TryGetValue(key, out fromElse)) continue;
+            if (fromElse is null) continue;
+            if (ReferenceEquals(fromThen, incoming) && ReferenceEquals(fromElse, incoming)) continue;
+
+            env[key] = SoundArm(fromThen, key, entity).Join(SoundArm(fromElse, key, entity));
+        }
+    }
+
+    /// <summary>With the then arm dead and an else present, the else arm is the only path.</summary>
+    private static void AdoptArm(Dictionary<string, AbstractValue> env, Dictionary<string, AbstractValue> arm) {
+        foreach (var (key, value) in arm)
+            env[key] = value;
+    }
+
+    /// <summary>True when refining by the branch condition turned a satisfiable incoming
+    /// symbol into an unsatisfiable one: the arm is unreachable.</summary>
+    private static bool ArmIsDead(
+        Dictionary<string, AbstractValue> incoming, Dictionary<string, AbstractValue> refined) {
+        foreach (var (key, value) in refined)
+            if (value.Unsatisfiable && incoming.TryGetValue(key, out var before) && !before.Unsatisfiable)
+                return true;
+        return false;
+    }
+
+    private static AbstractValue SoundArm(AbstractValue arm, string key, Entity entity) {
+        if (!arm.Unsatisfiable) return arm;
+        var prop = entity.Properties.FirstOrDefault(p => string.Equals(p.Name, key, StringComparison.Ordinal));
+        return prop is null ? AbstractValue.Unknown : AbstractValue.From(prop.Constraints);
     }
 
     private static Dictionary<string, AbstractValue> CloneEnv(Dictionary<string, AbstractValue> env) =>
@@ -456,14 +688,31 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
 
     private static void ReportUnsatisfiablePreconditions(
         AnalysisContext context, Action action, string? stageName,
-        IReadOnlyDictionary<string, AbstractValue> env) {
+        IReadOnlyDictionary<string, AbstractValue> env,
+        IReadOnlyDictionary<string, AbstractValue> scalarEnv,
+        IReadOnlyList<RelationConflict> conflicts) {
+        var prefix = $"Action '{action.Name}'{(stageName is null ? "" : $" in stage '{stageName}'")} has unsatisfiable preconditions: ";
+        // A property is reported by name only when its own (non-relational) constraints are empty;
+        // a property that only the relation emptied is covered by the relation's single report.
         foreach (var (prop, value) in env) {
             if (!value.Unsatisfiable) continue;
+            if (!(scalarEnv.TryGetValue(prop, out var scalar) && scalar.Unsatisfiable)
+                && conflicts.Any(c => c.Left == prop || c.Right == prop))
+                continue;
             context.ReportError(
                 action,
-                $"Action '{action.Name}'{(stageName is null ? "" : $" in stage '{stageName}'")} has unsatisfiable " +
-                $"preconditions: its guard policies narrow property '{prop}' to an empty admissible set " +
+                prefix + $"its guard policies narrow property '{prop}' to an empty admissible set " +
                 "given the property's declared constraint.",
+                DomainModelDiagnosticCodes.ConstraintSatisfiability);
+        }
+        var seen = new HashSet<(string, string)>();
+        foreach (var c in conflicts) {
+            var pair = string.CompareOrdinal(c.Left, c.Right) <= 0 ? (c.Left, c.Right) : (c.Right, c.Left);
+            if (!seen.Add(pair)) continue;
+            context.ReportError(
+                action,
+                prefix + $"the relation '{c.Left} {RelationalConstraint.Symbol(c.Orderings)} {c.Right}' between " +
+                $"properties '{c.Left}' and '{c.Right}' contradicts the other constraints on them.",
                 DomainModelDiagnosticCodes.ConstraintSatisfiability);
         }
     }

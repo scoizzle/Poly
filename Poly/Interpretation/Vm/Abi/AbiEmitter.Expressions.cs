@@ -334,6 +334,11 @@ public static partial class AbiEmitter {
             result = Assign(slot.Read,
                 RingCodec.ToIeee(Negate(dbl)));
         }
+        else if (IntegerWidthOf(unaryMinus.Operand, ctx) == typeof(int)) {
+            // C# negates a 32-bit-width operand at 32 bits, so -int.MinValue wraps.
+            result = Assign(slot.Read, RingCodec.AsRepresentation(
+                Negate(RingCodec.AsRepresentation(slot.Read, typeof(int))), slot.Read.Type));
+        }
         else {
             result = Assign(slot.Read, Negate(slot.Read));
         }
@@ -681,10 +686,23 @@ public static partial class AbiEmitter {
         Type? sourceType = ctx.ClrTypeOf(t.Operand);
         if (sourceType is null && t.Operand is Constant c && c.Value is not null)
             sourceType = c.Value.GetType();
+        // `(T?)null` is absent. The operand's word is 0, and a bare 0 in a slot read at the
+        // underlying type is a present zero, so the cast writes the nullable's own absent value.
+        if (t.Operand is Constant { Value: null } && Nullable.GetUnderlyingType(targetType) is not null)
+            return Assign(ctx.HoldRing(targetType), Default(targetType));
         var ring = ctx.OpenRing();
         var slot = ring.AddValue(CompileNode(t.Operand, ctx));
         if (sourceType is null || sourceType == targetType || targetType.IsAssignableFrom(sourceType))
             return Block(ring.Steps);
+        // A reference-typed operand (object, a call result) cast to T? may hold null at run time.
+        // The heap helper would throw for a value-type target, so a null handle is read here as the
+        // nullable's own absent value, in a Nullable<T> ring local, never as the word 0.
+        if (Nullable.GetUnderlyingType(targetType) is not null && !sourceType.IsValueType) {
+            var nullable = ctx.HoldRing(targetType);
+            return ring.Then(Assign(nullable,
+                Convert(Call(null, CastToNullableAbiInfo, ctx.HeapLocal, slot.Read,
+                    Constant(targetType, typeof(Type))), targetType)));
+        }
         // An unchecked integer cast wraps, the way `(short)32768` is -32768.
         // Convert.ToInt16 throws, so this is not that call. A reference cast
         // stays on the heap helper below.

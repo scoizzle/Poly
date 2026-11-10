@@ -624,6 +624,7 @@ public sealed class CSharpTokenizer : BufferedTokenReader<CSharpToken, CSharpTok
             "goto" => CSharpTokenKind.KwGoto,
             "break" => CSharpTokenKind.KwBreak,
             "continue" => CSharpTokenKind.KwContinue,
+            "yield" => CSharpTokenKind.KwYield,
             "get" => CSharpTokenKind.KwGet,
             "set" => CSharpTokenKind.KwSet,
             "init" => CSharpTokenKind.KwInit,

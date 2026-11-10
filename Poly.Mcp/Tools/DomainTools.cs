@@ -110,7 +110,46 @@ internal sealed record AnalysisData(
     [property: JsonPropertyName("aggregateRootCount")] int AggregateRootCount = 0,
     [property: JsonPropertyName("aggregates")] IReadOnlyList<AggregateFact>? Aggregates = null,
     [property: JsonPropertyName("subscriptionPlans")] IReadOnlyList<SubscriptionPlanFact>? SubscriptionPlans = null,
-    [property: JsonPropertyName("diagnosticFacts")] IReadOnlyList<DiagnosticFact>? DiagnosticFacts = null
+    [property: JsonPropertyName("diagnosticFacts")] IReadOnlyList<DiagnosticFact>? DiagnosticFacts = null,
+    [property: JsonPropertyName("actionInvariants")] IReadOnlyList<ActionInvariantFact>? ActionInvariants = null,
+    [property: JsonPropertyName("guardClosedProperties")] IReadOnlyList<GuardClosedFact>? GuardClosedProperties = null
+);
+
+/// <summary>
+/// One action in one stage context (<see cref="StageName"/> is null for a stage-less entity), as the
+/// analysis proved it: the guard policies that hold, each property's narrowed range and merged
+/// constraints, and the postcondition each assign must respect. Read-only (#367 C-5).
+/// </summary>
+internal sealed record ActionInvariantFact(
+    [property: JsonPropertyName("entityName")] string EntityName,
+    [property: JsonPropertyName("actionName")] string ActionName,
+    [property: JsonPropertyName("stageName")] string? StageName,
+    [property: JsonPropertyName("preconditions")] IReadOnlyList<string> Preconditions,
+    [property: JsonPropertyName("properties")] IReadOnlyList<PropertyInvariantFact> Properties,
+    [property: JsonPropertyName("postconditions")] IReadOnlyList<PostconditionFact> Postconditions
+);
+
+/// <summary>A property inside an action context: numeric bounds (null = unbounded) and constraint text.</summary>
+internal sealed record PropertyInvariantFact(
+    [property: JsonPropertyName("name")] string Name,
+    [property: JsonPropertyName("min")] double? Min,
+    [property: JsonPropertyName("max")] double? Max,
+    [property: JsonPropertyName("constraints")] IReadOnlyList<string> Constraints
+);
+
+/// <summary>What an assign to <see cref="TargetProperty"/> must satisfy, and the range its value can take.</summary>
+internal sealed record PostconditionFact(
+    [property: JsonPropertyName("targetProperty")] string TargetProperty,
+    [property: JsonPropertyName("declaringAction")] string DeclaringAction,
+    [property: JsonPropertyName("min")] double? Min,
+    [property: JsonPropertyName("max")] double? Max,
+    [property: JsonPropertyName("constraints")] IReadOnlyList<string> Constraints
+);
+
+/// <summary>Properties of one entity whose every writer is proven to keep them within their declared constraints.</summary>
+internal sealed record GuardClosedFact(
+    [property: JsonPropertyName("entityName")] string EntityName,
+    [property: JsonPropertyName("propertyNames")] IReadOnlyList<string> PropertyNames
 );
 
 /// <summary>
@@ -323,7 +362,7 @@ internal sealed class QueryTool(ISessionStore store, ILogger<QueryTool> logger) 
     /// Structured facts (roots, aggregates, topology, action names, subscription plans) are
     /// derived from LatestAnalysis metadata.
     /// </summary>
-    [McpServerTool(Name = "get_domain_analysis"), Description("Returns analysis diagnostics and structured domain facts (entity structure, aggregates, topology, actions, subscription plans) for the current domain state.")]
+    [McpServerTool(Name = "get_domain_analysis"), Description("Returns analysis diagnostics and structured domain facts (entity structure, aggregates, topology, actions, subscription plans, per-action stage invariants, guard-closed properties) for the current domain state. Read-only.")]
     public DomainToolResponse GetDomainAnalysis(
         [Description("Session ID")] string sessionId) {
         if (!store.TryGet(sessionId, out var state))
@@ -433,6 +472,23 @@ internal sealed class QueryTool(ISessionStore store, ILogger<QueryTool> logger) 
             }
         }
 
+        var actionInvariants = new List<ActionInvariantFact>();
+        var guardClosed = new List<GuardClosedFact>();
+        foreach (var entity in state.Domain.Types.OfType<Entity>().OrderBy(e => e.Name, StringComparer.Ordinal)) {
+            var closed = state.LatestAnalysis.GetStructure(entity)?.GuardClosedPropertyNames;
+            if (closed is { Count: > 0 })
+                guardClosed.Add(new GuardClosedFact(entity.Name, closed.Order(StringComparer.Ordinal).ToList()));
+
+            var actions = entity.Actions.Concat(entity.Stages.SelectMany(s => s.Actions))
+                .OrderBy(a => a.Name, StringComparer.Ordinal);
+            foreach (var action in actions) {
+                var meta = state.LatestAnalysis.GetMetadata<ActionInvariantMetadata>(action);
+                if (meta is null) continue;
+                foreach (var ctx in meta.StageContexts.OrderBy(c => c.StageName, StringComparer.Ordinal))
+                    actionInvariants.Add(ToInvariantFact(entity, action, ctx));
+            }
+        }
+
         var data = new AnalysisData(
             summary.ErrorCount, summary.WarningCount, summary.InfoCount, hintCount,
             summary.ErrorCount > 0, summary.Messages,
@@ -447,7 +503,9 @@ internal sealed class QueryTool(ISessionStore store, ILogger<QueryTool> logger) 
             Aggregates: aggregates.Count > 0 ? aggregates : null,
             SubscriptionPlans: subscriptionPlans.Count > 0 ? subscriptionPlans : null,
             DiagnosticFacts: summary.Findings?.Select(f => new DiagnosticFact(
-                f.Severity, f.Code, f.ElementPath, f.Message)).ToList() is { Count: > 0 } facts ? facts : null
+                f.Severity, f.Code, f.ElementPath, f.Message)).ToList() is { Count: > 0 } facts ? facts : null,
+            ActionInvariants: actionInvariants.Count > 0 ? actionInvariants : null,
+            GuardClosedProperties: guardClosed.Count > 0 ? guardClosed : null
         );
 
         var message = summary.ErrorCount > 0
@@ -469,6 +527,33 @@ internal sealed class QueryTool(ISessionStore store, ILogger<QueryTool> logger) 
             Affordances: affordances
         );
     }
+
+    // Read-only projection of ActionInvariantMetadata. Ordering is fixed: properties by name (ordinal),
+    // constraints in the analysis' own order, postconditions in effect order, preconditions in policy order.
+    private static ActionInvariantFact ToInvariantFact(Entity entity, Poly.DomainModeling.Ontology.Action action, ActionStageInvariant ctx) {
+        var properties = ctx.MergedConstraints.Keys
+            .Concat(ctx.NarrowedRanges.Keys)
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(n => n, StringComparer.Ordinal)
+            .Select(name => {
+                ctx.NarrowedRanges.TryGetValue(name, out var range);
+                ctx.MergedConstraints.TryGetValue(name, out var merged);
+                return new PropertyInvariantFact(
+                    name, range?.Min, range?.Max,
+                    (merged ?? []).Select(DescribeConstraint).ToList());
+            })
+            .Where(p => p.Min is not null || p.Max is not null || p.Constraints.Count > 0)
+            .ToList();
+        var postconditions = ctx.Postconditions.Select(p => new PostconditionFact(
+            p.TargetProperty, p.DeclaringAction.Name, p.ValueRange?.Min, p.ValueRange?.Max,
+            p.Constraints.Select(DescribeConstraint).ToList())).ToList();
+        return new ActionInvariantFact(
+            entity.Name, action.Name, ctx.StageName,
+            ctx.Preconditions.Select(p => p.Name).ToList(), properties, postconditions);
+    }
+
+    private static string DescribeConstraint(Constraint c) =>
+        ConstraintKinds.Of(c)?.Describe(c) ?? c.GetType().Name;
 
     /// <summary>
     /// Returns a human-readable Markdown report of the domain. A projection over the same

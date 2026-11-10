@@ -1,6 +1,7 @@
 using System.Globalization;
 
 using Poly.DomainModeling.Evolution;
+using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Ontology.Bootstrap;
 using Poly.DomainModeling.Ontology.Contract;
@@ -79,7 +80,8 @@ public sealed class DomainResolver : DslCursor {
         string PropertyName,
         string TargetTypeName,
         RelationshipCardinality Cardinality,
-        bool SourceOwnsTarget);
+        bool SourceOwnsTarget,
+        DslToken At);
 
     public DomainResolver(DslSyntaxTree tree, DomainSession session)
         : base(TokenReaderFor(tree), reader => new Matcher<DslToken, DslTokenKind>(session.Language.Grammar, reader)) {
@@ -140,6 +142,10 @@ public sealed class DomainResolver : DslCursor {
         while (Current.Kind == TokenKind.Identifier || Current.Kind == TokenKind.Public) {
             if (TryTakeVisibility(out var visibility)) {
                 ParseMarkedTop(changes, visibility);
+                continue;
+            }
+            if (IsFunctionDeclarationStart()) {
+                ParseFunction(changes);
                 continue;
             }
             switch (MatchRule("top")?.PatternName) {
@@ -221,6 +227,35 @@ public sealed class DomainResolver : DslCursor {
         ParseEntityAfterKind(changes, entityName, Visibility.Internal);
     }
 
+    private const string KeyKeyword = "key";
+
+    /// <summary>
+    /// Parses <c>key(a, b)</c> after the header annotations. The member names are checked by
+    /// analysis, not here; a malformed list (empty, doubled or trailing comma, unclosed) fails closed.
+    /// </summary>
+    private List<string> ParseKeyClause() {
+        Advance(); // 'key'
+        Expect(TokenKind.LParen);
+        if (Current.Kind == TokenKind.RParen)
+            throw Error("A 'key(...)' clause must name at least one member; found an empty key().");
+
+        var members = new List<string>();
+        while (true) {
+            members.Add(ExpectIdentifier(TokenKind.Identifier, "key member name"));
+            if (Current.Kind == TokenKind.Comma) {
+                Advance();
+                if (Current.Kind == TokenKind.RParen)
+                    throw Error("Trailing comma in 'key(...)' member list");
+                continue;
+            }
+            if (Current.Kind != TokenKind.RParen)
+                throw Error($"Expected ',' or ')' in 'key(...)', got '{Current.Text}'");
+            break;
+        }
+        Expect(TokenKind.RParen);
+        return members;
+    }
+
     private void ParseEntityAfterKind(List<DomainChange> changes, string entityName, Visibility visibility) {
         _currentEntityName = entityName;
         _entityPolicies.Clear();
@@ -237,10 +272,17 @@ public sealed class DomainResolver : DslCursor {
             ValidateTermFacet(headerFacet, termKeywords, $"entity '{entityName}'", allowTerm: false);
             changes.Add(new AddFacetToDomainTypeChange(entityName, headerFacet));
         }
+        // #405 key clause: the last header element, immediately before '{'.
+        if (Current.Kind == TokenKind.Identifier && Current.Text == KeyKeyword && PeekIs(TokenKind.LParen)) {
+            changes.Add(new SetEntityKeyChange(entityName, ParseKeyClause()));
+        }
         if (LooksLikeAnnotationCall()) {
             throw Error(
                 $"Unknown or unregistered annotation '{Current.Text}'. " +
                 "Enable a pack that registers this keyword, or remove the annotation.");
+        }
+        if (Current.Kind == TokenKind.Identifier && Current.Text == KeyKeyword && PeekIs(TokenKind.LParen)) {
+            throw Error($"Entity '{entityName}' declares more than one 'key(...)' clause.");
         }
 
         RejectRetiredRequiredWord();
@@ -1218,7 +1260,7 @@ public sealed class DomainResolver : DslCursor {
                     $"Define '{typeWord.Text}' properties directly on '{name}'.");
             }
         }
-        return Error($"Expected 'entity', 'enum', 'value', 'contract', or 'bind' definition, got '{Current.Text}'");
+        return Error($"Expected 'entity', 'enum', 'value', 'contract', 'function', or 'bind' definition, got '{Current.Text}'");
     }
 
     /// <summary>
@@ -1330,6 +1372,62 @@ public sealed class DomainResolver : DslCursor {
         Expect(TokenKind.Colon);
         ExpectWord("value");
         FinishValueType(changes, name, Visibility.Internal);
+    }
+
+    /// <summary>
+    /// A top-level <c>function</c> declaration starts with the word and is not the
+    /// legacy <c>function: entity</c> name form. A malformed <c>function (…)</c>
+    /// head still enters the parser so the error names the missing function name.
+    /// </summary>
+    private bool IsFunctionDeclarationStart() =>
+        Current.Kind == TokenKind.Identifier
+        && string.Equals(Current.Text, "function", StringComparison.Ordinal)
+        && !PeekIs(TokenKind.Colon);
+
+    /// <summary>
+    /// <c>function Name(p: T, …): T = expr</c> — one expression body. Parameter names
+    /// bind inside the body as <see cref="ParameterAccess"/>, so parse → print →
+    /// parse stays lossless beyond the text.
+    /// </summary>
+    private void ParseFunction(List<DomainChange> changes) {
+        Advance(); // 'function'
+        if (Current.Kind != TokenKind.Identifier)
+            throw Error($"Expected function name after 'function', got '{Current.Text}'");
+        var name = Current.Text;
+        Advance();
+
+        Expect(TokenKind.LParen);
+        var parameters = new List<Property>();
+        while (Current.Kind != TokenKind.RParen) {
+            var parameterName = ExpectIdentifier(TokenKind.Identifier, "parameter name");
+            Expect(TokenKind.Colon);
+            var parameterType = ParseTypeName();
+            parameters.Add(new Property(parameterName, new DomainTypeReference(parameterType), []));
+            if (Current.Kind == TokenKind.Comma) {
+                Advance();
+                if (Current.Kind == TokenKind.RParen)
+                    throw Error($"Trailing comma in function '{name}' parameter list");
+            }
+            else if (Current.Kind != TokenKind.RParen) {
+                throw Error($"Expected ',' or ')' in function '{name}' parameter list, got '{Current.Text}'");
+            }
+        }
+        Expect(TokenKind.RParen);
+        Expect(TokenKind.Colon);
+        var returnType = new DomainTypeReference(ParseTypeName());
+        if (Current.Kind != TokenKind.SingleEq)
+            throw Error($"Expected '=' after function '{name}' return type, got '{Current.Text}'");
+        Advance();
+
+        var parameterNames = parameters.Select(p => p.Name).ToHashSet(StringComparer.Ordinal);
+        var body = new ParameterBinder(parameterNames).Route(ParseExpression());
+        changes.Add(new AddFunctionChange(name, parameters, returnType, body));
+    }
+
+    /// <summary>Rewrites body identifiers that name a declared parameter to parameter access.</summary>
+    private sealed class ParameterBinder(ISet<string> parameterNames) : DomainExpressionRewriteBase {
+        protected override DomainExpression PropertyAccess(PropertyAccess e) =>
+            parameterNames.Contains(e.Name) ? DomainExpression.Parameter(e.Name) : e;
     }
 
     private void FinishValueType(List<DomainChange> changes, string name, Visibility visibility) {
@@ -1557,10 +1655,11 @@ public sealed class DomainResolver : DslCursor {
                 : $" unexpected token '{Current.Text}'";
             throw Error($"Navigation property '{name}' requires an entity type as target:{hint}");
         }
+        var targetToken = Current;
         var targetType = ExpectIdentifier(TokenKind.Identifier, "target entity name");
 
         RejectRetiredRequiredWord();
-        _pendingNavs.Add(new PendingNav(_currentEntityName, name, targetType, cardinality, owned));
+        _pendingNavs.Add(new PendingNav(_currentEntityName, name, targetType, cardinality, owned, targetToken));
     }
 
     /// <summary>
@@ -1571,22 +1670,22 @@ public sealed class DomainResolver : DslCursor {
     private void ResolvePendingNavs(List<DomainChange> changes) {
         foreach (var nav in _pendingNavs) {
             if (IsKnownPrimitiveName(nav.TargetTypeName)) {
-                throw Error($"Navigation property '{nav.PropertyName}': '{nav.TargetTypeName}' is a primitive type, not an entity. Use a primitive property declaration instead.");
+                throw GrammarError.Error($"Navigation property '{nav.PropertyName}': '{nav.TargetTypeName}' is a primitive type, not an entity. Use a primitive property declaration instead.", nav.At.Line, nav.At.Col);
             }
             if (!_entityNames.Contains(nav.TargetTypeName)) {
                 // A bare type name here is a nav target, but the author may have meant a
                 // value type or a value keyword (`Ref: Guid`). Name both possibilities.
                 var known = string.Join(", ", _primitiveTypeNames.OrderBy(n => n, StringComparer.Ordinal));
-                throw Error(
+                throw GrammarError.Error(
                     $"Property '{nav.PropertyName}' is declared with type '{nav.TargetTypeName}', which is "
                     + $"neither an entity in this domain nor a value type ({known}). "
                     + $"A value keyword such as 'Guid' or 'Now' is only valid inside an expression "
-                    + $"(e.g. `default(Guid)`). To reference another domain, declare that entity.");
+                    + $"(e.g. `default(Guid)`). To reference another domain, declare that entity.", nav.At.Line, nav.At.Col);
             }
 
             // Check property name collision
             if (_entityPropertyNames.TryGetValue(nav.SourceEntityName, out var props) && props.Contains(nav.PropertyName)) {
-                throw Error($"Navigation property '{nav.PropertyName}' on '{nav.SourceEntityName}' conflicts with an existing property of the same name.");
+                throw GrammarError.Error($"Navigation property '{nav.PropertyName}' on '{nav.SourceEntityName}' conflicts with an existing property of the same name.", nav.At.Line, nav.At.Col);
             }
 
             // Check duplicate relationship name within the same source entity.
@@ -1597,7 +1696,7 @@ public sealed class DomainResolver : DslCursor {
                 _relationshipNamesByEntity[nav.SourceEntityName] = names = new HashSet<string>(StringComparer.Ordinal);
             }
             if (!names.Add(nav.PropertyName)) {
-                throw Error($"Relationship '{nav.PropertyName}' is defined more than once on entity '{nav.SourceEntityName}'. Relationship names must be unique within their source entity.");
+                throw GrammarError.Error($"Relationship '{nav.PropertyName}' is defined more than once on entity '{nav.SourceEntityName}'. Relationship names must be unique within their source entity.", nav.At.Line, nav.At.Col);
             }
 
             changes.Add(new AddRelationshipChange(

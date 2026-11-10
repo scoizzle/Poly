@@ -1,44 +1,73 @@
+using Poly.Analysis;
 using Poly.DomainModeling.Ontology;
+using Poly.DomainModeling.Ontology.Constraints;
 
 namespace Poly.DomainModeling.Analysis;
+
+/// <summary>Three-valued constraint check result (#367 D-1).</summary>
+internal enum ConstraintVerdict { Satisfied, Violated, Undecided }
 
 /// <summary>
 /// Static helpers for checking whether a value satisfies a constraint.
 /// Used at analysis time to validate literal assignments and parameter-propagation chains.
 /// </summary>
 internal static class ConstraintValidation {
-    public static bool IsSatisfiedBy(Constraint constraint, object? value) {
+    /// <summary>
+    /// Evaluates <paramref name="constraint"/> against a literal. A constraint kind this
+    /// validator does not model is <see cref="ConstraintVerdict.Undecided"/>, never
+    /// <see cref="ConstraintVerdict.Satisfied"/>: callers must decide what to do with it.
+    /// </summary>
+    public static ConstraintVerdict Evaluate(Constraint constraint, object? value) {
         ArgumentNullException.ThrowIfNull(constraint);
-        return constraint switch {
-            RequiredConstraint => value is not null,
-            OptionalConstraint => true, // optional is the opt-out of requiredness; any value (incl. null) is legal
-            RangeConstraint r => IsInRange(value, r.Minimum, r.Maximum),
-            LengthConstraint l => IsValidLength(value, l.MinLength, l.MaxLength),
-            PatternConstraint p => IsValidPattern(value, p.Pattern),
-            EqualityConstraint eq => Equals(value, eq.ExpectedValue),
-            UniqueConstraint => true, // cannot validate statically; requires instance set
-            DefaultValueConstraint => true, // default-expression does not constrain assignment
-            _ => true  // unknown constraint type — pass
-        };
+        return ConstraintKinds.Of(constraint)?.Evaluate(constraint, value) ?? ConstraintVerdict.Undecided;
     }
+
+    /// <summary>Reports the shared DMCS003 warning for a constraint kind analysis does not model.</summary>
+    public static void ReportUndecided(AnalysisContext context, Node node, Constraint constraint, string where) =>
+        context.ReportWarning(
+            node,
+            $"Constraint {Describe(constraint)} {where} is not modelled by analysis, so it was not checked.",
+            DomainModelDiagnosticCodes.ConstraintUndecided);
+
+    /// <summary>
+    /// Decides "<paramref name="self"/>'s value <paramref name="relation"/> the other value" from the
+    /// two properties' ranges (hulls; null range or null bound = unbounded). Computes which orderings
+    /// are possible: none allowed by the relation → Violated; every possible ordering allowed →
+    /// Satisfied; anything else, including bounds that cannot be ordered, → Undecided (fail closed).
+    /// </summary>
+    internal static ConstraintVerdict DecideRelation(
+        RelationalConstraint relation, RangeConstraint? self, RangeConstraint? other) {
+        ArgumentNullException.ThrowIfNull(relation);
+        // a < b is possible unless a's smallest value is >= b's largest; unknown/unorderable = possible.
+        static bool Possible(object? low, object? high, bool strict) =>
+            low is null || high is null || ConstraintMerge.TryCompare(low, high) is not { } c
+                || (strict ? c < 0 : c <= 0);
+        var possible = RelationalOrdering.None;
+        if (Possible(self?.Minimum, other?.Maximum, strict: true)) possible |= RelationalOrdering.Less;
+        if (Possible(other?.Minimum, self?.Maximum, strict: true)) possible |= RelationalOrdering.Greater;
+        if (Possible(self?.Minimum, other?.Maximum, strict: false)
+            && Possible(other?.Minimum, self?.Maximum, strict: false)) possible |= RelationalOrdering.Equal;
+        if ((possible & relation.Orderings) == RelationalOrdering.None) return ConstraintVerdict.Violated;
+        return (possible & ~relation.Orderings) == RelationalOrdering.None
+            ? ConstraintVerdict.Satisfied
+            : ConstraintVerdict.Undecided;
+    }
+
+    internal static ConstraintVerdict Of(bool satisfied) =>
+        satisfied ? ConstraintVerdict.Satisfied : ConstraintVerdict.Violated;
 
     public static string Describe(Constraint constraint) {
-        return constraint switch {
-            RequiredConstraint => "required (non-null)",
-            OptionalConstraint => "optional",
-            RangeConstraint r => FormatRange(r),
-            LengthConstraint l => $"length({l.MinLength}, {l.MaxLength})",
-            PatternConstraint p => $"pattern({p.Pattern})",
-            EqualityConstraint eq => $"== {eq.ExpectedValue}",
-            UniqueConstraint => "unique",
-            DefaultValueConstraint => "default(...)",
-            _ => constraint.GetType().Name
-        };
+        return ConstraintKinds.Of(constraint)?.Describe(constraint) ?? constraint.GetType().Name;
     }
 
-    private static string FormatRange(RangeConstraint r) {
-        var lo = r.Minimum is not null ? FormatValue(r.Minimum) : "−∞";
-        var hi = r.Maximum is not null ? FormatValue(r.Maximum) : "+∞";
+    internal static string FormatRange(RangeConstraint r) =>
+        r.Intervals is { } set
+            ? string.Join(" ∪ ", set.Select(i => FormatInterval(i.Minimum, i.Maximum)))
+            : FormatInterval(r.Minimum, r.Maximum);
+
+    private static string FormatInterval(object? min, object? max) {
+        var lo = min is not null ? FormatValue(min) : "−∞";
+        var hi = max is not null ? FormatValue(max) : "+∞";
         return $"range({lo}, {hi})";
     }
 
@@ -49,22 +78,27 @@ internal static class ConstraintValidation {
 
     // ── Individual constraint checks ──────────────────────────────────────
 
-    private static bool IsInRange(object? value, object? min, object? max) {
-        if (value is null) return false; // null is never in range
-        var d = ToDouble(value);
-        if (d is null) return false;
+    /// <summary>In any interval of a union (exact), or in the single interval of a plain range.</summary>
+    internal static bool IsInRangeUnion(object? value, RangeConstraint range) =>
+        range.Intervals is { } set
+            ? set.Any(i => IsInRange(value, i.Minimum, i.Maximum))
+            : IsInRange(value, range.Minimum, range.Maximum);
 
-        if (min is not null && ToDouble(min) is double lo && d.Value < lo) return false;
-        if (max is not null && ToDouble(max) is double hi && d.Value > hi) return false;
+    internal static bool IsInRange(object? value, object? min, object? max) {
+        if (value is null) return false; // null is never in range
+        // Same ordering rule as the merge/join (ConstraintMerge.TryCompare); a value that cannot be
+        // ordered against a bound is not in range (fail closed), never coerced or skipped.
+        if (min is not null && ConstraintMerge.TryCompare(value, min) is not >= 0) return false;
+        if (max is not null && ConstraintMerge.TryCompare(value, max) is not <= 0) return false;
         return true;
     }
 
-    private static bool IsValidLength(object? value, int minLength, int maxLength) {
+    internal static bool IsValidLength(object? value, int minLength, int maxLength) {
         if (value is not string s) return false;
         return s.Length >= minLength && s.Length <= maxLength;
     }
 
-    private static bool IsValidPattern(object? value, string pattern) {
+    internal static bool IsValidPattern(object? value, string pattern) {
         if (value is not string s) return false;
         try {
             return Regex.IsMatch(s, pattern);
@@ -72,10 +106,5 @@ internal static class ConstraintValidation {
         catch (RegexParseException) {
             return false;
         }
-    }
-
-    private static double? ToDouble(object? value) {
-        try { return Convert.ToDouble(value); }
-        catch { return null; }
     }
 }

@@ -263,6 +263,12 @@ public sealed class DomainDslPrinter {
             _sb.Append(PrintFacet(facet));
         }
 
+        if (entity.KeyProperties.Count > 0) {
+            _sb.Append(" key(");
+            _sb.Append(string.Join(", ", entity.KeyProperties));
+            _sb.Append(')');
+        }
+
         _sb.AppendLine(" {");
 
         // Properties
@@ -905,6 +911,8 @@ public sealed class DomainDslPrinter {
             + string.Join(", ", m.Arms.Select(a => $"{Run(_printer, a.Condition)} -> {Run(_printer, a.Value)}")
                 .Append($"else -> {Run(_printer, m.Else)}"))
             + " }";
+        protected override string FunctionCall(FunctionCall f) =>
+            $"{f.Name}({string.Join(", ", f.Arguments.Select(a => Run(_printer, a)))})";
 
         protected override string SumExpr(SumExpr s) =>
             $"sum {s.RelationshipName} {s.PropertyName}";
@@ -970,25 +978,24 @@ public sealed class DomainDslPrinter {
     /// </summary>
     private void AppendPrintedConstraints(IEnumerable<Constraint> constraints) {
         foreach (var c in constraints) {
-            if (c is RequiredConstraint)
+            if (ConstraintKinds.Of(c) is { PrintedInDsl: false })
                 continue;
             _sb.Append(' ');
             _sb.Append(PrintConstraint(c));
         }
     }
 
-    private string PrintConstraint(Constraint constraint) => constraint switch {
-        OptionalConstraint => "optional",
-        UniqueConstraint => "unique",
-        RangeConstraint r => $"range({Convert.ToString(r.Minimum, CultureInfo.InvariantCulture)}, {Convert.ToString(r.Maximum, CultureInfo.InvariantCulture)})",
-        LengthConstraint l => l.MinLength == l.MaxLength
-            ? $"length({l.MinLength})"
-            : $"length({l.MinLength}, {l.MaxLength})",
-        PatternConstraint p => $"pattern(\"{EscapeStringLiteral(p.Pattern)}\")",
-        DefaultValueConstraint dv => $"default({PrintExpression(dv.Expression)})",
-        EqualityConstraint e => $"equals({PrintLiteralValue(e.ExpectedValue)})",
-        _ => $"?{constraint.GetType().Name}",
-    };
+    private string PrintConstraint(Constraint constraint) =>
+        ConstraintKinds.Of(constraint)?.Print?.Invoke(constraint, new PrintHost(this))
+        ?? $"?{constraint.GetType().Name}";
+
+    private sealed class PrintHost(DomainDslPrinter printer) : IConstraintPrintHost {
+        public string Expression(DomainExpression expression) => printer.PrintExpression(expression);
+
+        public string Literal(object? value) => PrintLiteralValue(value);
+
+        public string EscapeString(string value) => EscapeStringLiteral(value);
+    }
 
     private static string PrintLiteralValue(object? value) => value switch {
         null => "null",

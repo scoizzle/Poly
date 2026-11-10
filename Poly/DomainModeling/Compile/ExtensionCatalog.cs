@@ -1,5 +1,6 @@
 using Poly.DomainModeling.Libraries.Storage;
 using Poly.DomainModeling.Libraries.Temporal;
+using Poly.DomainModeling.Libraries.Tests;
 
 namespace Poly.DomainModeling.Compile;
 
@@ -46,7 +47,8 @@ public sealed class ExtensionCatalog {
     public static ExtensionCatalog Core { get; } = new ExtensionCatalog()
         .With(new TemporalLibrary())
         .With(new StorageFacetLibrary())
-        .With(new PersistenceEmitLibrary());
+        .With(new PersistenceEmitLibrary())
+        .With(new TestsLibrary());
 
     public ExtensionCatalog() {
         _libraries = new Dictionary<string, IDomainLibrary>(StringComparer.Ordinal);

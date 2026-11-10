@@ -762,7 +762,7 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
     private static bool IsVoidYieldNode(Node node) =>
         node is Comment or IfStatement or WhileLoop or DoWhileLoop or ForLoop or ForEachLoop
             or UsingStatement or BreakStatement or ContinueStatement or GotoStatement
-            or ThrowStatement
+            or ThrowStatement or YieldStatement
         || node is Return { Value: null };
 
     private static ITypeDefinition? FindValuedReturnType(AnalysisContext context, Node node) {

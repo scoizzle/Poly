@@ -280,7 +280,9 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
                             string.Equals(p.Name, target.Name, StringComparison.Ordinal));
                         if (prop is null) break;
                         var value = Eval(assign.Value, entity, action, env, paramEnv);
-                        env[target.Name] = env.TryGetValue(target.Name, out var cur) ? cur.Merge(value) : value;
+                        // Strong update: the assigned value replaces the old one, so it is intersected with the
+                        // property's DECLARED constraints, not the (possibly branch-refined) incoming value.
+                        env[target.Name] = AbstractValue.From(prop.Constraints).Merge(value);
                         result.Add(new EffectPostcondition(
                             assign, prop.Name,
                             BuildPostconditionConstraints(prop, assign.Value, action, paramEnv),
@@ -291,14 +293,17 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
                 case ConditionalEffect cond:
                     var thenEnv = CloneEnv(env);
                     Refine(thenEnv, cond.Condition);
+                    var thenDead = ArmIsDead(env, thenEnv);
                     ApplyEffects(cond.ThenEffects, entity, action, thenEnv, paramEnv, visited, result, domain, currentStage);
                     Dictionary<string, AbstractValue>? elseEnv = null;
+                    var elseDead = false;
                     if (cond.ElseEffects is not null) {
                         elseEnv = CloneEnv(env);
                         RefineNegated(elseEnv, cond.Condition);
+                        elseDead = ArmIsDead(env, elseEnv);
                         ApplyEffects(cond.ElseEffects, entity, action, elseEnv, paramEnv, visited, result, domain, currentStage);
                     }
-                    JoinBranches(env, thenEnv, elseEnv, entity);
+                    JoinBranches(env, thenEnv, thenDead, elseEnv, elseDead, entity);
                     break;
                 case CompositeEffect composite:
                     ApplyEffects(composite.Effects, entity, action, env, paramEnv, visited, result, domain, currentStage);
@@ -431,9 +436,14 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
     /// the property's declared constraints instead, which keeps the join sound.</summary>
     private static void JoinBranches(
         Dictionary<string, AbstractValue> env,
-        Dictionary<string, AbstractValue> thenEnv,
-        Dictionary<string, AbstractValue>? elseEnv,
+        Dictionary<string, AbstractValue> thenEnv, bool thenDead,
+        Dictionary<string, AbstractValue>? elseEnv, bool elseDead,
         Entity entity) {
+        // A dead arm (its condition contradicts the incoming facts) is bottom: it is skipped.
+        // Both dead: the incoming environment is already the best statement.
+        if (thenDead && elseDead) return;
+        if (thenDead) { if (elseEnv is not null) AdoptArm(env, elseEnv); return; }
+        if (elseDead) { AdoptArm(env, thenEnv); return; }
         var keys = new HashSet<string>(env.Keys, StringComparer.Ordinal);
         keys.UnionWith(thenEnv.Keys);
         if (elseEnv is not null) keys.UnionWith(elseEnv.Keys);
@@ -449,6 +459,22 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
 
             env[key] = SoundArm(fromThen, key, entity).Join(SoundArm(fromElse, key, entity));
         }
+    }
+
+    /// <summary>With the then arm dead and an else present, the else arm is the only path.</summary>
+    private static void AdoptArm(Dictionary<string, AbstractValue> env, Dictionary<string, AbstractValue> arm) {
+        foreach (var (key, value) in arm)
+            env[key] = value;
+    }
+
+    /// <summary>True when refining by the branch condition turned a satisfiable incoming
+    /// symbol into an unsatisfiable one: the arm is unreachable.</summary>
+    private static bool ArmIsDead(
+        Dictionary<string, AbstractValue> incoming, Dictionary<string, AbstractValue> refined) {
+        foreach (var (key, value) in refined)
+            if (value.Unsatisfiable && incoming.TryGetValue(key, out var before) && !before.Unsatisfiable)
+                return true;
+        return false;
     }
 
     private static AbstractValue SoundArm(AbstractValue arm, string key, Entity entity) {

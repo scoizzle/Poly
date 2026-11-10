@@ -147,4 +147,61 @@ public class ConditionalEffectJoinTests {
         await Assert.That(range!.Min <= 10d).IsTrue();
         await Assert.That(range.Max >= 60d).IsTrue();
     }
+
+    [Test]
+    public async Task DeadArm_DoesNotWidenJoin_NoNewFalseWarning() {
+        // F2: Qty is [5,5]; `Qty > 10` contradicts it, so the then arm is unreachable and
+        // must not widen the join. Total range(0, 30) is never violated.
+        var result = Parse("""
+            domain Test
+            Item: entity {
+              Qty: Number range(0, 100)
+              Total: Number range(0, 30)
+              Other: Number range(0, 10)
+              Run: action { assign Qty to 5
+                if (Qty > 10) { assign Other to 1 }
+                assign Total to Qty + 0 }
+            }
+            """);
+        var range = TotalRange(result);
+        await Assert.That(range!.Min).IsEqualTo(5d);
+        await Assert.That(range.Max).IsEqualTo(5d);
+        await Assert.That(result.Analysis.Diagnostics.Any(d => d.Message.Contains("can fall outside"))).IsFalse();
+    }
+
+    [Test]
+    public async Task ArmAssignsFromWiderProperty_TrueWarningKept() {
+        // F1: the then arm assigns Qty := Other ([0,10]) outside its refinement [0,5]; the
+        // real post-if range is [0,10], which can fall outside Total range(0, 8).
+        var result = Parse("""
+            domain Test
+            Item: entity {
+              Qty: Number range(0, 100)
+              Other: Number range(0, 10)
+              Total: Number range(0, 8)
+              Run: action { if (Qty <= 5) { assign Qty to Other } else { assign Qty to 6 }
+                assign Total to Qty + 0 }
+            }
+            """);
+        var range = TotalRange(result);
+        await Assert.That(range!.Max >= 10d).IsTrue();
+        await Assert.That(result.Analysis.Diagnostics.Any(d => d.Message.Contains("can fall outside"))).IsTrue();
+    }
+
+    [Test]
+    public async Task ArmAssignsFromWiderProperty_NoFalsePositiveError() {
+        // F1: with Total range(7, 30) the real range [0,10] can fall below 7 (warning), but the
+        // computed hull must never be a too-narrow [0,6] that raises an ERROR.
+        var result = Parse("""
+            domain Test
+            Item: entity {
+              Qty: Number range(0, 100)
+              Other: Number range(0, 10)
+              Total: Number range(7, 30)
+              Run: action { if (Qty <= 5) { assign Qty to Other } else { assign Qty to 6 }
+                assign Total to Qty + 0 }
+            }
+            """);
+        await Assert.That(result.Analysis.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error)).IsFalse();
+    }
 }

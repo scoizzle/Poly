@@ -3,8 +3,8 @@
 **Date:** 2026-05-31 (initial)  
 **Status:** Living Plan — **July 2026: V2 frozen (2026-07-10); WP1–WP4 complete; V3 is the only modeling stack; WP7 port/delete in progress toward M4.**  
 **Owner:** Primary author  
-**Execution plan:** `docs/plans/archive/v2-to-v3/master-roadmap.md` (milestones) + **`docs/plans/archive/v2-to-v3-migration/designs/v3-completion-plan.md`** (gaps + WP1–WP9 implementation order)  
-**First consumer spike:** `docs/plans/archive/completed-2026-08-late/v2-to-v3/spikes/first-v3-consumer.md`  
+**Execution plan:** [`docs/plans/archive/v2-to-v3/master-roadmap.md`](https://github.com/scoizzle/Poly/blob/067bde75f69646fdf134f7c53ffdf62b463f24fd/docs/plans/archive/v2-to-v3/master-roadmap.md) (milestones) + **[`docs/plans/archive/v2-to-v3-migration/designs/v3-completion-plan.md`](https://github.com/scoizzle/Poly/blob/067bde75f69646fdf134f7c53ffdf62b463f24fd/docs/plans/archive/v2-to-v3-migration/designs/v3-completion-plan.md)** (gaps + WP1–WP9 implementation order)  
+**First consumer spike:** [`docs/plans/archive/completed-2026-08-late/v2-to-v3/spikes/first-v3-consumer.md`](https://github.com/scoizzle/Poly/blob/067bde75f69646fdf134f7c53ffdf62b463f24fd/docs/plans/archive/completed-2026-08-late/v2-to-v3/spikes/first-v3-consumer.md)  
 **MCP principles:** `docs/reference/mcp-guiding-principles.md`  
 **Related Decisions:**
 - `2026-core-engineering-principles.md` (foundational)
@@ -109,7 +109,7 @@ This port must be executed in a way that respects those documentation and agent-
 | First V3 consumer implemented | **Not started** |
 | V2 freeze / delete | **Not started** |
 
-Do **not** restart Phase 1 greenfield evolution tasks. See `docs/plans/archive/v2-to-v3/master-roadmap.md` for tasking.
+Do **not** restart Phase 1 greenfield evolution tasks. See [`docs/plans/archive/v2-to-v3/master-roadmap.md`](https://github.com/scoizzle/Poly/blob/067bde75f69646fdf134f7c53ffdf62b463f24fd/docs/plans/archive/v2-to-v3/master-roadmap.md) for tasking.
 
 ## Next Planning Steps (Recommended)
 
@@ -120,17 +120,17 @@ Do **not** restart Phase 1 greenfield evolution tasks. See `docs/plans/archive/v
 5. Expressiveness (Actor, contract gen, …) only when pulled (WP9).
 
 **Related living documents (execution side):**
-- `docs/plans/archive/v2-to-v3/master-roadmap.md` — **Authoritative task status**
-- `docs/plans/archive/v2-to-v3-migration/designs/orchestration-guide.md` — multi-agent operating model
-- `docs/plans/archive/v2-to-v3/agent-summaries/` — executor reports
-- `docs/plans/archive/v2-to-v3-migration/workstreams/` — workstream detail
-- `docs/plans/archive/v2-to-v3/simple-agent-tasks/` — micro-tasks (**prefer `ws8-*` / `ws4-*` / name-first-consumer; `ws1-*` superseded**)
+- [`docs/plans/archive/v2-to-v3/master-roadmap.md`](https://github.com/scoizzle/Poly/blob/067bde75f69646fdf134f7c53ffdf62b463f24fd/docs/plans/archive/v2-to-v3/master-roadmap.md) — **Authoritative task status**
+- [`docs/plans/archive/v2-to-v3-migration/designs/orchestration-guide.md`](https://github.com/scoizzle/Poly/blob/067bde75f69646fdf134f7c53ffdf62b463f24fd/docs/plans/archive/v2-to-v3-migration/designs/orchestration-guide.md) — multi-agent operating model
+- [`docs/plans/archive/v2-to-v3/agent-summaries/`](https://github.com/scoizzle/Poly/tree/067bde75f69646fdf134f7c53ffdf62b463f24fd/docs/plans/archive/v2-to-v3/agent-summaries) — executor reports
+- [`docs/plans/archive/v2-to-v3-migration/workstreams/`](https://github.com/scoizzle/Poly/tree/067bde75f69646fdf134f7c53ffdf62b463f24fd/docs/plans/archive/v2-to-v3-migration/workstreams) — workstream detail
+- [`docs/plans/archive/v2-to-v3/simple-agent-tasks/`](https://github.com/scoizzle/Poly/tree/067bde75f69646fdf134f7c53ffdf62b463f24fd/docs/plans/archive/v2-to-v3/simple-agent-tasks) — micro-tasks (**prefer `ws8-*` / `ws4-*` / name-first-consumer; `ws1-*` superseded**)
 
 **Related decisions:**
 - `docs/decisions/2026-core-engineering-principles.md`
 - `docs/decisions/2026-05-31-evolution-layer-design.md`
 
-This plan and the planning artifacts under `docs/plans/archive/v2-to-v3/` are living. Update them as work progresses.
+This plan and the planning artifacts under [`docs/plans/archive/v2-to-v3/`](https://github.com/scoizzle/Poly/tree/067bde75f69646fdf134f7c53ffdf62b463f24fd/docs/plans/archive/v2-to-v3) are living. Update them as work progresses.
 
 ---
 

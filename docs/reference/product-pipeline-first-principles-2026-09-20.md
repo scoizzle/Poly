@@ -132,7 +132,7 @@ A construct ships only if it lowers to a **complete, legal, generic** Syntax tre
 
 - **Complete:** no `Comment`, no `null` from lowering, no host tree-walk beside the VM, as *shipped meaning*.
 - **Generic:** no domain VM opcodes. Stage, notify, invoke, create, unique, clocks are ordinary Syntax (assignments, `Invoke`, BCL members, Store jobs on the tree).
-- **Fail closed** if it cannot lower. Gaps stay in `docs/plans/`, not in the parser or the DSL guide.
+- **Fail closed** if it cannot lower. Gaps stay in `docs/plans/`, not in the parser or the DSL guide. (Superseded 2026-11-10: gaps go in GitHub issues; `docs/plans/` was removed.)
 - **Shrink the language** if the next construct cannot lower. Do not ship a keyword whose implementation is a harness escape.
 - **Analysis is non-optional** for downstream semantics (lowering decisions, runtime semantic dispatch, MCP semantic inspection, host artifact production). Missing `AnalysisResult` / required bags → fail closed. That is the same gate that keeps artifact producers from running on a dirty domain.
 

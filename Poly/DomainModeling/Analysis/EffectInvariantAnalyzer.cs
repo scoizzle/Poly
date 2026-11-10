@@ -197,6 +197,13 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
     }
 
     private static void RefineNegated(Dictionary<string, AbstractValue> env, DomainExpression condition) {
+        // A property-vs-property comparison negates exactly: the ordering is trichotomous
+        // (Less | Equal | Greater), so the negation is the complement of the positive orderings.
+        if (condition is Comparison rel
+            && TryGetRelation(rel, out var left, out var right, out var orderings)) {
+            RefineRelation(env, left, right, RelationalOrdering.All & ~orderings);
+            return;
+        }
         if (condition is Comparison cmp
             && TryGetComparisonBound(cmp, out var propName, out double value, out var bound)
             && NegateBound(bound) is { } negated

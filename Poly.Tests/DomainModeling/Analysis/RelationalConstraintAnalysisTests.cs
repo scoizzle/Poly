@@ -161,6 +161,78 @@ public class RelationalConstraintAnalysisTests {
     }
 
     [Test]
+    public async Task NegatedRelationInElseArm_ContradictingTheKnownRelation_ArmIsDead() {
+        // #367 C-6: `Start < End` holds, so the else of `if (Start < End)` (Start >= End) is unreachable.
+        var result = Parse("""
+            domain Test
+            Item: entity {
+              Start: Number
+              End: Number
+              Qty: Number range(0, 30)
+              Z: Number range(0, 15)
+              Ordered: policy { Start < End }
+              Small: policy { Qty <= 5 }
+              Run: action
+                require Ordered
+                require Small
+              {
+                if (Start < End) { assign Qty to 1 } else { assign Qty to 25 }
+                assign Z to Qty + 10
+              }
+            }
+            """);
+        await Assert.That(ZCanFallOutside(result)).IsFalse();
+    }
+
+    [Test]
+    public async Task NegatedRelationInElseArm_NotContradictingTheKnownRelation_ArmStaysLive() {
+        // Soundness twin: the known relation is `Start <= End`, so the else (Start >= End) is reachable at Start == End.
+        var result = Parse("""
+            domain Test
+            Item: entity {
+              Start: Number
+              End: Number
+              Qty: Number range(0, 30)
+              Z: Number range(0, 15)
+              Ordered: policy { Start <= End }
+              Small: policy { Qty <= 5 }
+              Run: action
+                require Ordered
+                require Small
+              {
+                if (Start < End) { assign Qty to 1 } else { assign Qty to 25 }
+                assign Z to Qty + 10
+              }
+            }
+            """);
+        await Assert.That(ZCanFallOutside(result)).IsTrue();
+    }
+
+    [Test]
+    public async Task NegatedEqualityRelationInElseArm_ContradictingTheKnownRelation_ArmIsDead() {
+        // `Start == End` known; else of `if (Start == End)` is Start != End, unreachable.
+        var result = Parse("""
+            domain Test
+            Item: entity {
+              Start: Number
+              End: Number
+              Qty: Number range(0, 30)
+              Z: Number range(0, 15)
+              Same: policy { Start == End }
+              Small: policy { Qty <= 5 }
+              Run: action
+                require Same
+                require Small
+              {
+                if (Start == End) { assign Qty to 1 } else { assign Qty to 25 }
+                assign Z to Qty + 10
+              }
+            }
+            """);
+        await Assert.That(ZCanFallOutside(result)).IsFalse();
+    }
+
+    [Test]
     public async Task RelationIsDroppedAfterACalleeAssignsTheOtherProperty_ArmStaysLive() {
         // F1(i): the callee runs on a clone, so the caller's `Start < End` would survive a callee
         // that reassigns End. Resolution: all relations are dropped after an invoke.

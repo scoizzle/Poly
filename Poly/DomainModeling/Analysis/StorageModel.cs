@@ -1,3 +1,4 @@
+using Poly.DomainModeling.Meaning;
 using Poly.DomainModeling.Ontology;
 
 namespace Poly.DomainModeling.Analysis;
@@ -43,6 +44,9 @@ public sealed class StorageEntity {
         StorageIndex? keyIndex = null) {
         Source = source;
         KeyIndex = keyIndex;
+        RouteKeys = keyIndex is null
+            ? []
+            : keyIndex.Columns.Select(c => DomainTypeMapping.ToCamelCase(c.Name)).ToList();
         KeyName = keyName;
         KeyClrType = keyClrType;
         KeyProperty = keyProperty;
@@ -76,6 +80,13 @@ public sealed class StorageEntity {
     /// shape is not decided yet). Independent of <see cref="KeyProperty"/>, the pre-#405 key.
     /// </summary>
     public StorageIndex? KeyIndex { get; }
+
+    /// <summary>
+    /// Route-key segment names (camel-cased, in key order) derived from the declared
+    /// <c>key(...)</c> (#405). Empty unless a key is declared and has a <see cref="KeyIndex"/>; a
+    /// <c>unique</c> property alone yields none. The legacy <see cref="KeyName"/> is unchanged.
+    /// </summary>
+    public IReadOnlyList<string> RouteKeys { get; }
 
     /// <summary>The property used as the natural key (null = shadow key).</summary>
     public Property? KeyProperty { get; }

@@ -94,6 +94,12 @@ public static class TemporalMeaning {
         public void Check(AnalysisContext context, DomainExpression expression, ExpressionTypeCheckScope scope) {
             if (expression is not Duration d)
                 return;
+            // A Duration property may default to a bare duration literal
+            // (`Budget: Duration default(30 Minutes)`); it has nowhere else to
+            // come from. Every other target (or no default scope) keeps failing
+            // closed: a bare duration needs a temporal left operand.
+            if (scope.DefaultTargetTypeName is "Duration")
+                return;
             context.ReportError(expression,
                 $"default value '{d.Amount} {d.Unit}' is a bare duration with no temporal left operand",
                 DomainModelDiagnosticCodes.SemanticTypeCompatibility);

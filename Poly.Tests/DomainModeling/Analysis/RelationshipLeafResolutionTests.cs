@@ -2,6 +2,7 @@ using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Ontology;
+using Poly.DomainModeling.Ontology.Effects;
 
 namespace Poly.Tests.DomainModeling.Analysis;
 
@@ -112,6 +113,59 @@ public class RelationshipLeafResolutionTests {
         await Assert.That(string.Join("|", Problems(with))).IsEqualTo(string.Join("|", Problems(without)));
     }
 
+    private static ValueRange? SlotRange(EvolutionResult r, string entity, string action, string property) {
+        var act = r.Root.Types.OfType<Entity>().Single(e => e.Name == entity).Actions.Single(a => a.Name == action);
+        return r.Analysis.GetActionInvariants(act)?.StageContexts().SelectMany(c => c.Postconditions)
+            .Where(p => p.TargetProperty == property).Select(p => p.ValueRange).FirstOrDefault(v => v is not null);
+    }
+
+    [Test]
+    public async Task SelfInvoke_Binding_ReadsRelatedLevel_NotCallers() {
+        // Caller Level [50,60] collides with Customer Level [0,10]; the bound argument is the related one, so the
+        // callee's Slot postcondition range is [0,10] (Unknown, i.e. null, if the domain is not threaded).
+        var r = Parse("""
+            domain Test
+            Customer: entity { Level: Number range(0, 10) }
+            Order: entity {
+              Level: Number range(50, 60)
+              Slot: Number range(0, 100)
+              cust: one Customer
+              Act: action (P: Number) { assign Slot to P }
+              Run: action { invoke Act(P: cust Level) }
+            }
+            """);
+        var range = SlotRange(r, "Order", "Run", "Slot");
+        await Assert.That(range).IsNotNull();
+        await Assert.That(range!.Min).IsEqualTo(0d);
+        await Assert.That(range.Max).IsEqualTo(10d);
+    }
+
+    [Test]
+    public async Task ForEachInvoke_Binding_ReadsRelatedLevel_NotCallers() {
+        // The DSL only lets a for-each binding dereference its binder (DMEFF007), so the caller-rooted
+        // relationship leaf is built through the API. Caller Level [50,60] collides with Customer Level [0,10].
+        static Property Num(string n, double min, double max) =>
+            new(n, new DomainTypeReference("Number"), [new RangeConstraint(min, max)]);
+        var take = new Poly.DomainModeling.Ontology.Action("Take", InvocationResult.Void, [Num("x", 0, 1000)],
+            [new AssignEffect(DomainExpression.Property("Mirror"), new ParameterAccess("x"))], []);
+        var line = new Entity("Line", [Num("Mirror", 0, 100)], [take], [], []);
+        var customer = new Entity("Customer", [Num("Level", 0, 10)], [], [], []);
+        var run = new Poly.DomainModeling.Ontology.Action("Run", InvocationResult.Void, [], [
+            new ForEachInvokeEffect("lines", "l", null, "Take",
+                [new PropertyBinding("x", new RelationshipNavigation("cust", DomainExpression.Property("Level")))])], []);
+        var order = new Entity("Order", [Num("Level", 50, 60)], [run], [], []) {
+            Navigations = [
+                new Relationship("cust", new DomainTypeReference("Order"), new DomainTypeReference("Customer"), RelationshipCardinality.OneToOne, []),
+                new Relationship("lines", new DomainTypeReference("Order"), new DomainTypeReference("Line"), RelationshipCardinality.OneToMany, [])]
+        };
+        var analysis = DomainModelAnalyzer.Analyze(new Domain("D", [customer, line, order]));
+        var range = analysis.GetActionInvariants(run)?.StageContexts().SelectMany(c => c.Postconditions)
+            .Where(p => p.TargetProperty == "Mirror").Select(p => p.ValueRange).FirstOrDefault(v => v is not null);
+        await Assert.That(range).IsNotNull();
+        await Assert.That(range!.Min).IsEqualTo(0d);
+        await Assert.That(range.Max).IsEqualTo(10d);
+    }
+
     // ── Fail closed: an unresolvable relationship is Unknown, never the caller's property ──
 
     private static (Entity Caller, Domain Domain) Build(Relationship? rel, params Entity[] others) {
@@ -141,6 +195,36 @@ public class RelationshipLeafResolutionTests {
     public async Task Eval_ResolvableToOneRelationship_ReadsRelatedDeclaredRange() {
         var (caller, domain) = Build(Rel("cust", RelationshipCardinality.OneToOne), Customer());
         var v = EvalLeaf(caller, domain, "cust");
+        await Assert.That(v.NumericRange!.Min).IsEqualTo(1000d);
+        await Assert.That(v.NumericRange.Max).IsEqualTo(2000d);
+    }
+
+    [Test]
+    public async Task Eval_ResolvableManyToOneRelationship_ReadsRelatedDeclaredRange() {
+        var (caller, domain) = Build(Rel("cust", RelationshipCardinality.ManyToOne), Customer());
+        var v = EvalLeaf(caller, domain, "cust");
+        await Assert.That(v.NumericRange!.Min).IsEqualTo(1000d);
+        await Assert.That(v.NumericRange.Max).IsEqualTo(2000d);
+    }
+
+    [Test]
+    public async Task Eval_TwoHopNavigation_SecondHopResolvesAgainstFirstHopTarget_NotTheCaller() {
+        static Entity E(string name, double min, double max, params Relationship[] navs) => new(name,
+            [new Property("X", new DomainTypeReference("Number"), [new RangeConstraint(min, max)])],
+            [], [], []) { Navigations = [.. navs] };
+        static Relationship R(string from, string name, string to) =>
+            new(name, new DomainTypeReference(from), new DomainTypeReference(to), RelationshipCardinality.OneToOne, []);
+
+        // Root also has a `b` (to Decoy, [5000,6000]) so resolving hop two against the root gives a different range.
+        var root = E("Root", 0, 10, R("Root", "a", "A"), R("Root", "b", "Decoy"));
+        var a = E("A", 100, 200, R("A", "b", "B"));
+        var b = E("B", 1000, 2000);
+        var decoy = E("Decoy", 5000, 6000);
+        var domain = new Domain("D", [root, a, b, decoy]);
+
+        var v = EffectInvariantAnalyzer.Eval(
+            new RelationshipNavigation("a", new RelationshipNavigation("b", DomainExpression.Property("X"))),
+            root, null, new Dictionary<string, AbstractValue>(), domain: domain);
         await Assert.That(v.NumericRange!.Min).IsEqualTo(1000d);
         await Assert.That(v.NumericRange.Max).IsEqualTo(2000d);
     }

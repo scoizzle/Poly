@@ -549,7 +549,8 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
         if (efe.ParameterBindings.Count > 0) {
             targetParams = new(StringComparer.Ordinal);
             foreach (var binding in efe.ParameterBindings)
-                targetParams[binding.PropertyName] = Eval(binding.Expression, entity, action, env, paramEnv, domain: domain);
+                targetParams[binding.PropertyName] = EvalForEachBinding(
+                    binding.Expression, efe.BinderName, targetEntity, entity, action, env, paramEnv, domain);
         }
 
         try {
@@ -558,6 +559,34 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
         finally {
             visited.Remove(targetAction);
         }
+    }
+
+    /// <summary>A for-each binding argument's only legal navigation root is the BINDER (<c>line Qty</c>), which
+    /// names the ITERATED entity, not a caller relationship that happens to share the binder's name. The leaf
+    /// is evaluated against the iterated entity's declared constraints. A non-binder root is rejected by the
+    /// validator (DMEFF007); an API-built one keeps its caller-relative meaning.</summary>
+    private static AbstractValue EvalForEachBinding(
+        DomainExpression expr, string binder, Entity iterated, Entity caller, Action action,
+        Dictionary<string, AbstractValue> env, IReadOnlyDictionary<string, AbstractValue>? paramEnv, Domain domain) {
+        switch (expr) {
+            case RelationshipNavigation rn:
+                return string.Equals(rn.RelationshipName, binder, StringComparison.Ordinal)
+                    ? Eval(rn.TargetProperty, iterated, null, EmptyEnv, null, null, domain)
+                    : Eval(rn, caller, action, env, paramEnv, domain: domain);
+            case Add add:
+                return ComposeArithmetic(
+                    EvalForEachBinding(add.Left, binder, iterated, caller, action, env, paramEnv, domain),
+                    EvalForEachBinding(add.Right, binder, iterated, caller, action, env, paramEnv, domain), (l, r) => l + r);
+            case Subtract sub:
+                return ComposeArithmetic(
+                    EvalForEachBinding(sub.Left, binder, iterated, caller, action, env, paramEnv, domain),
+                    EvalForEachBinding(sub.Right, binder, iterated, caller, action, env, paramEnv, domain), (l, r) => l - r);
+            case Multiply mul:
+                return ComposeArithmetic(
+                    EvalForEachBinding(mul.Left, binder, iterated, caller, action, env, paramEnv, domain),
+                    EvalForEachBinding(mul.Right, binder, iterated, caller, action, env, paramEnv, domain), (l, r) => l * r);
+        }
+        return Eval(expr, caller, action, env, paramEnv, domain: domain);
     }
 
     /// <summary>#367 B-1: after an <c>if</c>, each symbol either arm touched becomes the join

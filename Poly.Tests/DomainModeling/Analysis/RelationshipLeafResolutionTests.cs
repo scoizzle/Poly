@@ -166,6 +166,42 @@ public class RelationshipLeafResolutionTests {
         await Assert.That(range.Max).IsEqualTo(10d);
     }
 
+    // The validator requires a for-each binding's relationship-navigation root to be the BINDER name, but
+    // lets the binder share a name with one of the CALLER's relationships. The binder-rooted argument
+    // (`cust Level`) must resolve against the ITERATED entity, never the caller's same-named relationship.
+    private const string ForEachCollisionProgram = """
+        domain Test
+        Customer: entity { Level: Number range(0, 10) }
+        Line: entity {
+          Level: Number range(500, 600)
+          Mirror: Number range(0, 1000)
+          Take: action (X: Number) { assign Mirror to X }
+        }
+        Order: entity {
+          cust: one Customer
+          lines: many Line
+          Run: action { for lines as cust invoke cust.Take(X: cust Level) }
+        }
+        """;
+
+    [Test]
+    public async Task ForEachInvoke_DslBinderRootedBinding_ResolvesAgainstIteratedEntity_NotCallersSameNamedRelationship() {
+        var r = Parse(ForEachCollisionProgram);
+        var range = SlotRange(r, "Order", "Run", "Mirror");
+        await Assert.That(r.Succeeded).IsTrue();
+        await Assert.That(range).IsNotNull();
+        await Assert.That($"{range!.Min}..{range.Max}").IsEqualTo("500..600");
+    }
+
+    [Test]
+    public async Task ForEachInvoke_DslBinderRootedArithmetic_ResolvesAgainstIteratedEntity() {
+        var r = Parse(ForEachCollisionProgram.Replace("X: cust Level)", "X: cust Level + 1)"));
+        var range = SlotRange(r, "Order", "Run", "Mirror");
+        await Assert.That(r.Succeeded).IsTrue();
+        await Assert.That(range).IsNotNull();
+        await Assert.That($"{range!.Min}..{range.Max}").IsEqualTo("501..601");
+    }
+
     // ── Fail closed: an unresolvable relationship is Unknown, never the caller's property ──
 
     private static (Entity Caller, Domain Domain) Build(Relationship? rel, params Entity[] others) {

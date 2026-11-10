@@ -221,30 +221,6 @@ internal sealed class ConstraintQualityAnalyzer : INodeAnalyzer {
         }
     }
 
-    private static void ValidateEntityFixedPoint(AnalysisContext context, Entity entity, Entity parentEntity) {
-        foreach (var property in entity.Properties) {
-            var parentProperty = parentEntity.Properties
-                .FirstOrDefault(p => string.Equals(p.Name, property.Name, StringComparison.Ordinal));
-            if (parentProperty is null) continue;
-
-            var parentRequired = EntityStructureAnalyzer.IsRequired(parentProperty);
-            var childRequired = EntityStructureAnalyzer.IsRequired(property);
-            if (parentRequired && !childRequired) {
-                context.ReportWarning(
-                    property,
-                    $"Property '{property.Name}' on '{entity.Name}' breaks constraint fixed-point by weakening parent requiredness.",
-                    DomainModelDiagnosticCodes.ConstraintFixedPoint);
-            }
-
-            if (!string.Equals(property.Type.TypeName, parentProperty.Type.TypeName, StringComparison.Ordinal)) {
-                context.ReportWarning(
-                    property,
-                    $"Property '{property.Name}' on '{entity.Name}' overrides parent type '{parentProperty.Type.TypeName}' with incompatible type '{property.Type.TypeName}'.",
-                    DomainModelDiagnosticCodes.ConstraintFixedPoint);
-            }
-        }
-    }
-
     private static void ValidateRangeSatisfiability(
         AnalysisContext context, Property property, IReadOnlyList<Constraint> constraints) {
         foreach (var range in constraints.OfType<RangeConstraint>()) {

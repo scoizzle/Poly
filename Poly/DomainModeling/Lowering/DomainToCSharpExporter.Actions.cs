@@ -1077,13 +1077,6 @@ public sealed partial class DomainToCSharpExporter {
     }
 
     /// <summary>
-    /// Unique collection on <paramref name="peerEntity"/> whose target is
-    /// <paramref name="childEntityName"/> — the C# inverse of a create-in to-one
-    /// initializer (same rule as runtime <c>TryLinkInverseCollection</c>).
-    /// </summary>
-    internal static Relationship? FindInverseCollection(Entity peerEntity, string childEntityName) =>
-        FindInverseCollectionInfo(peerEntity, childEntityName).Unique;
-    /// <summary>
     /// For each to-one path-prefix hop in a require policy expression, emit
     /// <c>if (this.Rel == null) return DomainResult.Failure("'Action' requires a linked 'rel'…")</c>
     /// before the policy bool is called. Multi-hop guards each hop in order;

@@ -17,7 +17,7 @@ namespace Poly.DomainModeling.Evolution;
 /// an adapter over the legacy DomainMutationIntent types for MCP compatibility.
 /// 
 /// Each change is responsible for:
-/// - Applying itself to a Domain to produce a new immutable root.
+/// - Applying itself to a mutable DomainMutationContext.
 /// - Describing itself for traces.
 /// </summary>
 public abstract record DomainChange {
@@ -26,17 +26,6 @@ public abstract record DomainChange {
     /// This is the efficient path used for bulk application.
     /// </summary>
     internal abstract void ApplyTo(DomainMutationContext context);
-
-    /// <summary>
-    /// Applies this change to a domain and returns a new immutable root.
-    /// This is a convenience wrapper that creates a context internally.
-    /// Prefer using the batch path when applying multiple changes.
-    /// </summary>
-    internal Domain ApplyTo(Domain current) {
-        var context = new DomainMutationContext(current);
-        ApplyTo(context);
-        return context.ToDomain();
-    }
 
     /// <summary>
     /// Returns a human-readable description of this change (used for traces).
@@ -86,15 +75,6 @@ public abstract record DomainChange {
         context.RequireUpdate(
             context.ReplaceInEntity(entityName, _ => true, e => rebuild(e, getChildren(e).Where(i => !match(i)).ToList())),
             $"Entity '{entityName}' not found — cannot remove {childTypeLabel} child '{childName}'");
-    }
-
-    /// <summary>Adds an effect to an action with a RequireUpdate guard.</summary>
-    internal static void UpdateActionWithEffect(
-        DomainMutationContext context,
-        string entityName, string actionName,
-        Func<Action, Action> addEffect, string failMsg) {
-        context.RequireUpdate(
-            context.UpdateAction(entityName, actionName, addEffect, searchStages: true), failMsg);
     }
 }
 

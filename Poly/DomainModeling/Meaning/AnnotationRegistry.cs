@@ -78,7 +78,4 @@ public sealed class AnnotationRegistry {
         }
         return null;
     }
-
-    internal IReadOnlyCollection<IAnnotationSyntax> GetRegisteredSyntaxes() =>
-        _syntaxByKeyword.Values.ToArray();
 }

@@ -56,17 +56,6 @@ public static class TemporalExpressionPrintBinders {
             g.AttachFold(rule, "duration", FoldDuration);
     }
 
-    internal static bool IsNowIdentifier(DslToken t) =>
-        t.Kind == DslTokenKind.Identifier
-        && string.Equals(t.Text, "Now", StringComparison.Ordinal);
-
-    internal static bool IsTodayIdentifier(DslToken t) =>
-        t.Kind == DslTokenKind.Identifier
-        && string.Equals(t.Text, "Today", StringComparison.Ordinal);
-
-    internal static bool IsDurationUnitToken(DslToken t) =>
-        t.Kind == DslTokenKind.Identifier && DurationForm.TryGetUnit(t.Text, out _);
-
     /// <summary>Prints <see cref="Now"/> as the <c>Now</c> primary.</summary>
     private sealed class NowBinder : IExpressionPrintMapping {
         public Type ExpressionType => typeof(Now);

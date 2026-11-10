@@ -18,8 +18,7 @@ namespace Poly.DomainModeling.Evolution;
 /// resolution is catalog-first; on index miss a single live-overlay scan of
 /// the mutable entity in this context covers targets added earlier in the
 /// same batch (prior analysis cannot know them). There is no ad-hoc multi-scan
-/// beyond that overlay. Callers without an index use live entity lists only
-/// (legacy single-change <c>DomainChange.ApplyTo(Domain)</c>).
+/// beyond that overlay. Callers without an index use live entity lists only.
 /// </para>
 /// </summary>
 internal sealed class DomainMutationContext {

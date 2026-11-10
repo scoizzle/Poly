@@ -83,6 +83,12 @@ public sealed class AbstractValue {
 
     /// <summary>Intersection of two abstract values (per type).</summary>
     public AbstractValue Merge(AbstractValue other) {
+        var merged = MergeCore(other);
+        // Bottom is sticky: intersecting with a value that has no admissible value cannot make one appear.
+        return (Unsatisfiable || other.Unsatisfiable) && !merged.Unsatisfiable ? merged.AsUnsatisfiable() : merged;
+    }
+
+    private AbstractValue MergeCore(AbstractValue other) {
         if (ReferenceEquals(this, Unknown) || _constraints.Count == 0) return other;
         if (other.Constraints.Count == 0) return this;
         return From(_constraints.Concat(other.Constraints));

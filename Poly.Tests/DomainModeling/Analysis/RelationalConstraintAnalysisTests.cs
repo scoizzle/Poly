@@ -184,7 +184,40 @@ public class RelationalConstraintAnalysisTests {
               }
             }
             """);
-        await Assert.That(ZCanFallOutside(result, "can fall outside")).IsTrue();
+        await Assert.That(ZCanFallOutside(result)).IsTrue();
+    }
+
+    [Test]
+    public async Task RelationIsDroppedAfterAForEachInvokeWhoseCalleeReassignsTheOtherProperty_ArmStaysLive() {
+        // The for-each path drops relations on its own (separate from the plain invoke): Ship's
+        // callee chain (Line.Touch -> Order.Reset) reassigns End, so `Start < End` is stale and the
+        // contradicting arm must stay live.
+        var result = Parse("""
+            domain Test
+            Order: entity {
+              Start: Number
+              End: Number
+              Qty: Number range(0, 30)
+              Z: Number range(0, 15)
+              lines: many Line
+              Ordered: policy { Start < End }
+              Small: policy { Qty <= 5 }
+              Reset: action { assign End to 0 }
+              Ship: action
+                require Ordered
+                require Small
+              {
+                for lines as line invoke line.Touch
+                if (Start > End) { assign Qty to 25 }
+                assign Z to Qty + 10
+              }
+            }
+            Line: entity {
+              order: Order
+              Touch: action { invoke order.Reset }
+            }
+            """);
+        await Assert.That(ZCanFallOutside(result)).IsTrue();
     }
 
     [Test]
@@ -255,9 +288,10 @@ public class RelationalConstraintAnalysisTests {
     }
 
     [Test]
-    public async Task AssigningOnePropertyFromTheOther_LeavesNoSelfRelation() {
-        // `assign Start to End` evaluates End (which carries End > Start) into Start; the stored value
-        // must not carry a relation of Start to itself, and the arm below stays live.
+    public async Task AssigningOnePropertyFromTheOther_DropsTheStaleRelation_ArmStaysLive() {
+        // After `assign Start to End` the fact "Start < End" is stale (Start now equals End), so the
+        // contradicting arm below stays live. (A Start-vs-Start self-relation would be inert, so the
+        // no-relations-on-read guarantee itself is pinned by EvalOfAProperty_ReturnsNoRelations.)
         var result = Parse("""
             domain Test
             Item: entity {
@@ -299,6 +333,19 @@ public class RelationalConstraintAnalysisTests {
         await Assert.That(later.Unsatisfiable).IsTrue();
         var viaNewKind = bottom.Narrow(new EqualityConstraint("x"));
         await Assert.That(viaNewKind.Unsatisfiable).IsTrue();
+    }
+
+    [Test]
+    public async Task MergingAfterABottom_StaysUnsatisfiable() {
+        // S2: Merge keeps bottom from either side, including via the shortcut paths.
+        var bottom = AbstractValue.From([new RangeConstraint(0d, 5d)]).Narrow(new RangeConstraint(10d, null));
+        await Assert.That(bottom.Unsatisfiable).IsTrue();
+        var plain = AbstractValue.From([new RangeConstraint(0d, 100d)]);
+        await Assert.That(bottom.Merge(plain).Unsatisfiable).IsTrue();
+        await Assert.That(plain.Merge(bottom).Unsatisfiable).IsTrue();
+        await Assert.That(bottom.Merge(AbstractValue.Unknown).Unsatisfiable).IsTrue();
+        await Assert.That(AbstractValue.Unknown.Merge(bottom).Unsatisfiable).IsTrue();
+        await Assert.That(bottom.Merge(AbstractValue.From([new EqualityConstraint("x")])).Unsatisfiable).IsTrue();
     }
 
     [Test]

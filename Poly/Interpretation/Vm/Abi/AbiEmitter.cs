@@ -70,6 +70,8 @@ public static partial class AbiEmitter {
         Ref.Method((Expression<Func<VmManagedObjectHeap, object?, long>>)((h, v) => RingCodec.BoxToAbi(h, v)));
     private static readonly MethodInfo CastAbiInfo =
         Ref.Method((Expression<Func<VmManagedObjectHeap, long, Type, long>>)((h, r, t) => RingCodec.Cast(h, r, t)));
+    private static readonly MethodInfo CastToNullableAbiInfo =
+        Ref.Method((Expression<Func<VmManagedObjectHeap, long, Type, object?>>)((h, r, t) => RingCodec.CastToNullable(h, r, t)));
     private static readonly MethodInfo TypeAsAbiInfo =
         Ref.Method((Expression<Func<VmManagedObjectHeap, long, Type, long>>)((h, r, t) => RingCodec.TypeAs(h, r, t)));
     private static readonly MethodInfo UnboxNullableToLongInfo =
@@ -899,6 +901,12 @@ public static partial class AbiEmitter {
             // An IEEE arm keeps the value, so the arms must agree on one width before
             // Expression.Condition can take them.
             if (ifTrue.Type != ifFalse.Type) {
+                // A call or cast arm leaves an IEEE value as its bit-pattern word. Converting that
+                // long to double numerically would read the bits as a number, so decode it first.
+                ifTrue = DecodeIeeeWordArm(ifTrue, c.IfTrue, ctx);
+                ifFalse = DecodeIeeeWordArm(ifFalse, c.IfFalse, ctx);
+            }
+            if (ifTrue.Type != ifFalse.Type) {
                 var target = ValueTypeOf(ifTrue.Type, ifFalse.Type);
                 ifTrue = Convert(ifTrue, target);
                 ifFalse = Convert(ifFalse, target);
@@ -917,6 +925,11 @@ public static partial class AbiEmitter {
             ? Condition(test, Block(ifTrue, Expression.Default(ifFalse.Type)), ifFalse)
             : Condition(test, ifTrue, Block(ifFalse, Expression.Default(ifTrue.Type)));
     }
+
+    private static Expression DecodeIeeeWordArm(Expression arm, Node branch, Context ctx) =>
+        arm.Type == typeof(long) && ctx.ClrTypeOf(branch) is { } clr && RingCodec.IsIeee(clr)
+            ? RingCodec.FromFrame(arm, clr, clr, ctx.HeapLocal)
+            : arm;
 
     /// <summary>Compiles one arm of a <see cref="Conditional"/>. A literal <c>null</c>
     /// arm of a value-represented conditional — the null-receiver arm of a <c>?.</c>
@@ -1039,9 +1052,12 @@ public static partial class AbiEmitter {
         var tmp = coal.Local;
         if (Nullable.GetUnderlyingType(tmp.Type) is { } underlying) {
             Expression stored = leftRead!.Type == tmp.Type ? leftRead : Convert(leftRead, tmp.Type);
-            Expression right = rightRead.Type == underlying || rightRead.Type == tmp.Type
-                ? rightRead
-                : Convert(rightRead, underlying);
+            // A call or cast arm leaves an IEEE value as its bit-pattern word; decode it before
+            // the numeric conversion would read the bits as a number.
+            var rightArm = DecodeIeeeWordArm(rightRead, n.RightHandValue, ctx);
+            Expression right = rightArm.Type == underlying || rightArm.Type == tmp.Type
+                ? rightArm
+                : Convert(rightArm, underlying);
             return Block(
                 leftCompiled.Code,
                 Assign(tmp, stored),
@@ -1070,7 +1086,9 @@ public static partial class AbiEmitter {
             return EmitCoalesceAcrossSuspend(n, ctx);
         var leftVal = ValueOf(n.LeftHandValue, ctx);
         if (Nullable.GetUnderlyingType(leftVal.Type) is { } underlying) {
-            var rightArm = ValueOf(n.RightHandValue, ctx);
+            // A call or cast arm leaves an IEEE value as its bit-pattern word; decode it before
+            // the numeric conversion below would read the bits as a number.
+            var rightArm = DecodeIeeeWordArm(ValueOf(n.RightHandValue, ctx), n.RightHandValue, ctx);
             // A temporal arm is its word, not a number: decode it, do not convert it.
             Expression right = rightArm.Type == underlying || rightArm.Type == leftVal.Type
                 ? rightArm

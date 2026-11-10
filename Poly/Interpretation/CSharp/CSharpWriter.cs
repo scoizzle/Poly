@@ -1083,6 +1083,10 @@ public sealed class CSharpWriter {
                 // (Func<int>)(x => x + 1): without the brackets the cast takes `(x)`.
                 else if (cast.Operand is Lambda)
                     operand = "(" + operand + ")";
+                // A cast is a unary operator: `(long)a + b` casts only `a`. A looser operand needs brackets.
+                else if (cast.Operand is not Conditional
+                    && (BinaryNodePrecedence(cast.Operand) < 10 || cast.Operand is TypeIs or TypeAs or Assignment or ThrowExpression))
+                    operand = "(" + operand + ")";
                 return "(" + type + ")" + operand;
             case TypeIs typeIs:
                 return Expr(typeIs.Operand) + " is " + TypeText(typeIs.TargetTypeReference)

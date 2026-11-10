@@ -64,7 +64,7 @@ These are the failure modes 2.0 must fix and the contract suite must pin. I hit 
 
 1. **Parameter name ≠ description.** The description says "Replaces the session domain with a `.poly` document"; the actual parameter is **`polyText`**. Passing `document` produced `isError: true` and `"missing a value for the required parameter 'polyText'"`.
 2. **Unknown arguments are silently ignored.** `create_instance(..., values: {...})` (the real parameter is `propertiesJson`, a JSON **string**) did not reject the unknown key; it proceeded and failed later with `'Isbn' is required`, which points at the wrong cause.
-3. **Free-form JSON bags.** `create_instance.propertiesJson: string`, `add.payload: string` — the repo's own guiding principles call this an anti-pattern (`docs/plans/reference/mcp-guiding-principles.md` §4).
+3. **Free-form JSON bags.** `create_instance.propertiesJson: string`, `add.payload: string` — the repo's own guiding principles call this an anti-pattern (`docs/reference/mcp-guiding-principles.md` §4).
 4. **Result shape is not guessable.** `create_instance` returns `data.instance` (a snapshot), not `data.instanceId`; my grader script crashed on the difference.
 5. **The success path costs an extra 5k-char call.** `apply_dsl` returns diagnostics only on failure; to learn about warnings the agent must call `get_domain_analysis` (5,280 chars on a 4-entity model).
 
@@ -493,4 +493,4 @@ Do not claim "agents are less confused" from a token delta. Do not claim signifi
 - BFCL V3 (Gorilla) — state-based + subset-matched response grading, irrelevance detection, step caps. https://gorilla.cs.berkeley.edu/blogs/13_bfcl_v3_multi_turn.html
 - MCP spec, *Tools* (2025-06-18) — `tools/list`, `isError`, `structuredContent`, `outputSchema`, annotations. https://modelcontextprotocol.io/specification/2025-06-18/server/tools
 - OpenCode, *MCP servers* — local stdio config, MCP tools added alongside built-ins, per-agent tool enablement, 30s default timeout. https://opencode.ai/docs/mcp-servers/
-- Repo: `Poly.Mcp/README.md`, `Poly.Mcp/Program.cs`, `Poly.Mcp/Tools/*.cs`, `Poly.Mcp/ToolExceptionBoundary.cs`, `Poly.Mcp/Sessions/McpSessionOptions.cs`, `Poly.Tests/Mcp/*`, `Poly.Tests/TestHelpers/McpTestTools.cs`, `docs/plans/reference/mcp-guiding-principles.md`, `docs/agent/poly-discovery-loop.md`, `scripts/run-probe.sh`, `scripts/discovery-round.sh`, `docs/probes/fleet-eval/12-mcp/mcp-library.poly`.
+- Repo: `Poly.Mcp/README.md`, `Poly.Mcp/Program.cs`, `Poly.Mcp/Tools/*.cs`, `Poly.Mcp/ToolExceptionBoundary.cs`, `Poly.Mcp/Sessions/McpSessionOptions.cs`, `Poly.Tests/Mcp/*`, `Poly.Tests/TestHelpers/McpTestTools.cs`, `docs/reference/mcp-guiding-principles.md`, `docs/agent/poly-discovery-loop.md`, `scripts/run-probe.sh`, `scripts/discovery-round.sh`, `docs/probes/fleet-eval/12-mcp/mcp-library.poly`.

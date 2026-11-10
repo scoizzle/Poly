@@ -129,7 +129,7 @@ The key is the 3-tuple `(entity name, property name, value)` rendered as one str
 - Because assign already computes `previous`/`value`, a scoped assign does not need new state: only `Exists/Release/Record` gain the scope argument.
 
 ### Gaps
-- The `DomainInstanceStore` referenced by older review docs (`docs/agent/reviews/2026-08-31-pr44-*`) no longer exists; it was replaced by `ModuleInstanceExecutor` + `ModuleStoragePort`. I did not trace the exact commit that removed it.
+- The `DomainInstanceStore` referenced by older review docs ([`docs/agent/reviews/2026-08-31-pr44-*`](https://github.com/scoizzle/Poly/tree/067bde75f69646fdf134f7c53ffdf62b463f24fd/docs/agent/reviews)) no longer exists; it was replaced by `ModuleInstanceExecutor` + `ModuleStoragePort`. I did not trace the exact commit that removed it.
 - No test exercises two entities of the same type under different parents, so the global-vs-scoped semantics are only inferable from the key, not pinned.
 
 ---

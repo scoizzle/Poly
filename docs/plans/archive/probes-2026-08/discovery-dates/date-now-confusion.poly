@@ -1,8 +1,0 @@
-domain DiscoveryDateConfusion
-A: entity {
-  StartDate: Date default(now)
-  OpenedAt: DateTime default(today)
-  Set: action {
-    assign StartDate to now
-  }
-}

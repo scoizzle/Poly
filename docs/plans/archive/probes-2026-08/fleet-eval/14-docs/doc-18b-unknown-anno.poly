@@ -1,5 +1,0 @@
-domain DocUnknownAnno
-
-Item: entity {
-  Code: Text zebra("X")
-}

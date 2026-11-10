@@ -53,7 +53,7 @@ Neurosymbolic platform: author structured domain → lower to symbolic AST → a
 | Hard line | Implication |
 |-----------|-------------|
 | Domain is a module, not a process | No `Main` / `Program.cs` in core |
-| Shipped ⊆ lowerable | Gaps stay in `docs/plans/`, not the parser/guide |
+| Shipped ⊆ lowerable | Gaps stay in GitHub issues, not the parser/guide |
 | Always-legal operations | Full tree per op; no `Comment` / `null` / host walk as meaning |
 | AST is symbolic primary | No parallel primitive IR on product paths |
 | VM executes Syntax programs | `Interpreter.Compile` fail-closed; no domain opcodes; C# emit is a projection |
@@ -180,7 +180,7 @@ Simulate = Interpreter on lowered module bodies with caller-supplied context —
 | Product door | Opt-in `uses` + `IArtifactContributor` | Core `Program.cs` |
 | Domain mutation | `DomainEvolution`…`Apply` | In-place graph edits |
 | New domain feature | Lower to existing Syntax (+ analyze/replace) | Domain opcodes; ABI one-offs |
-| Why / multi-step work | `docs/decisions/` · `docs/plans/` | Expanding CORE or AGENTS into a plan |
+| Why / multi-step work | `docs/decisions/` · GitHub issues | Expanding CORE or AGENTS into a plan |
 
 ---
 
@@ -194,8 +194,8 @@ Simulate = Interpreter on lowered module bodies with caller-supplied context —
 | Principles (Rule + How) | [`decisions/2026-core-engineering-principles.md`](decisions/2026-core-engineering-principles.md) |
 | Trust bar | [`decisions/2026-07-11-platform-trust-bar-and-dogfood.md`](decisions/2026-07-11-platform-trust-bar-and-dogfood.md) |
 | Domain library / MCP harness | [`decisions/2026-08-15-domain-library-extensions-mcp-harness.md`](decisions/2026-08-15-domain-library-extensions-mcp-harness.md) |
-| Lower vision | [`plans/reference/session-lower-plan-2026-09-21.md`](plans/reference/session-lower-plan-2026-09-21.md) |
-| Queue | Open GitHub issues ([umbrella #305](https://github.com/scoizzle/Poly/issues/305) is closed; `docs/plans/poly-eng/board.md` is retired) |
+| Lower vision | [`reference/session-lower-plan-2026-09-21.md`](reference/session-lower-plan-2026-09-21.md) |
+| Queue | Open GitHub issues ([umbrella #305](https://github.com/scoizzle/Poly/issues/305) is closed) |
 | Module detail | `Poly/*/README.md`, `docs/interpretation/*` |
 
 ---

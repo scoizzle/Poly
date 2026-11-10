@@ -8,7 +8,7 @@ namespace Poly.Tests.Interpretation;
 
 /// <summary>
 /// Residual experiment notes for
-/// <c>docs/plans/archive/experiments/variable-assignment-union-types.md</c>.
+/// <c>https://github.com/scoizzle/Poly/blob/067bde75f69646fdf134f7c53ffdf62b463f24fd/docs/plans/archive/experiments/variable-assignment-union-types.md</c>.
 /// Mixed assigns to one <see cref="Variable"/> fail closed at analysis
 /// (<see cref="InvalidProgramTests"/>). This file keeps same-kind reassign,
 /// C# print of an illegal tree, and property-level <see cref="UnionTypeReference"/> collapse.

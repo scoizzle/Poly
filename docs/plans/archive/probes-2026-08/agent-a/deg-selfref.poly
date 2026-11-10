@@ -1,6 +1,0 @@
-domain DegenerateSelfRef
-
-Node: entity {
-  kids: many Node
-  Start: stage {}
-}

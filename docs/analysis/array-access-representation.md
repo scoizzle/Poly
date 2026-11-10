@@ -1,6 +1,6 @@
 # Array access: cache the array in a typed local, don't window its elements
 
-**Status:** implemented as [IS7d](../plans/interpretation-simplification/tasks/IS7d.md) (`slice/IS7d`, merged `6db19380`). Numeric agreement is 92 across every nqueens run. Measurements taken 2026-10-23 on `plan/interpretation-simplification`.
+**Status:** implemented as [IS7d](https://github.com/scoizzle/Poly/blob/067bde75f69646fdf134f7c53ffdf62b463f24fd/docs/plans/interpretation-simplification/tasks/IS7d.md) (`slice/IS7d`, merged `6db19380`). Numeric agreement is 92 across every nqueens run. Measurements taken 2026-10-23 on `plan/interpretation-simplification`.
 **Scope:** `Poly/Interpretation/Vm/Abi/` — `IndexAccess` emission, `SlotLocation`, the variable/storage model.
 **Input:** [#262](https://github.com/scoizzle/Poly/pull/262) (frame windows) and the measurement in [`docs/perf-comparison/README.md`](../perf-comparison/README.md) §Why nqueens is the weakest row.
 
@@ -131,7 +131,7 @@ The null-at-scope-exit is in, keyed by (slot, element type), with the sibling-re
 
 ## Outcome of the recycle work (2026-10-23)
 
-[IS7e](../plans/interpretation-simplification/tasks/IS7e.md) landed `Recycle(handle)` and removed recycle-on-null. Measured:
+[IS7e](https://github.com/scoizzle/Poly/blob/067bde75f69646fdf134f7c53ffdf62b463f24fd/docs/plans/interpretation-simplification/tasks/IS7e.md) landed `Recycle(handle)` and removed recycle-on-null. Measured:
 
 - **`heap.Count` after 10,000 loop-body array definitions: 10,001 -> 2.** The heap is now bounded by the live set rather than by the iteration count.
 - `Set`/`UnsafeSet` store a null instead of freeing, so no stray store can hand a live handle to a later allocation - the silent alias the old contract allowed (`Allocate` reuses free-list handles).

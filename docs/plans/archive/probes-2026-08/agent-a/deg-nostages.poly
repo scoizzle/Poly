@@ -1,9 +1,0 @@
-domain DegenerateNoStages
-
-NoStages: entity {
-  Val: Text
-  JustAssign: action { assign Val to "x" }
-  CreateChild: action {
-    create NoStages { }
-  }
-}

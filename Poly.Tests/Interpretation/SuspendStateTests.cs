@@ -6,7 +6,7 @@ using Poly.Tests.TestHelpers;
 namespace Poly.Tests.Interpretation;
 
 /// <summary>
-/// ABI7 S0: the suspension cases of docs/plans/poly-eng/tasks/ABI7.md §3, each asserted
+/// ABI7 S0: the suspension cases of https://github.com/scoizzle/Poly/blob/067bde75f69646fdf134f7c53ffdf62b463f24fd/docs/plans/poly-eng/tasks/ABI7.md §3, each asserted
 /// at the behaviour the design requires. A suspend is a spill barrier: every live local
 /// is stored to its frame word before the exit and reloaded at the resume label, because
 /// resume re-enters the method with CLR locals reset.

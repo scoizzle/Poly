@@ -1,5 +1,0 @@
-domain D
-
-Item: entity {
-  Color: Text enum(Red, Green, Blue)
-}

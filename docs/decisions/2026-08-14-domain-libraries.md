@@ -4,7 +4,7 @@
 **Status:** Accepted  
 **Deciders:** Primary author  
 
-**Related:** [`2026-07-22-persistence-units-medium-facets-pack-syntax-export.md`](2026-07-22-persistence-units-medium-facets-pack-syntax-export.md), [`../CORE.md`](../CORE.md) §3.6, [`../plans/parked/pack/pack-host-2026-08-13.md`](../plans/parked/pack/pack-host-2026-08-13.md)
+**Related:** [`2026-07-22-persistence-units-medium-facets-pack-syntax-export.md`](2026-07-22-persistence-units-medium-facets-pack-syntax-export.md), [`../CORE.md`](../CORE.md) §3.6, [`../plans/parked/pack/pack-host-2026-08-13.md`](https://github.com/scoizzle/Poly/blob/067bde75f69646fdf134f7c53ffdf62b463f24fd/docs/plans/parked/pack/pack-host-2026-08-13.md)
 
 ## Context
 

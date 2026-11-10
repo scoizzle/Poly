@@ -26,7 +26,7 @@ Runtime and emit of those operations consume **the same** lowered trees. Consume
 
 ### 2. Shipped language ⊆ lowerable language
 
-A construct is shipped only if it lowers to that tree and program analysis of the tree is clean. New spell waits in `docs/plans/` (and stays out of the parser and the DSL guide) until then.
+A construct is shipped only if it lowers to that tree and program analysis of the tree is clean. New spell waits in a GitHub issue (before 2026-11-10: `docs/plans/`) (and stays out of the parser and the DSL guide) until then.
 
 AGENTS §5 (thinnest slice) may **shrink the language**. It may not ship a keyword whose implementation is optional.
 

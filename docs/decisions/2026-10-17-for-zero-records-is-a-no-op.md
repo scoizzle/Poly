@@ -57,5 +57,5 @@ iterations is never an error."*
   real-domain confirmation.
 - A subscription body still cannot carry a *failure return*: a `for` **or** a plain `invoke` inside a
   `when` emits `return DomainResult…` into a `void` handler (**CS0127**) — pre-existing, recorded in
-  `docs/plans/poly-eng/research/2026-10-17-failure-return-in-void-subscription-handler.md`.
+  `docs/reference/research/2026-10-17-failure-return-in-void-subscription-handler.md`.
   The empty-set rule does not change that shape's status.

@@ -7,7 +7,7 @@
 
 **Home:** `docs/decisions/2026-10-15-multi-vendor-storage-layout.md`
 
-`docs/decisions/` records why. `docs/plans/` records execution. This spike chooses a seam and implements nothing. The parent decision already exists, so this file does not open a plan and does not admit work to [`docs/plans/poly-eng/board.md`](../plans/poly-eng/board.md). Follow-ups below stay evidence until a human adds them to the board. An agent does not start them from this document.
+`docs/decisions/` records why. `docs/plans/` records execution. This spike chooses a seam and implements nothing. The parent decision already exists, so this file does not open a plan and does not admit work to [`docs/plans/poly-eng/board.md`](https://github.com/scoizzle/Poly/blob/067bde75f69646fdf134f7c53ffdf62b463f24fd/docs/plans/poly-eng/board.md). Follow-ups below stay evidence until a human adds them to the board. An agent does not start them from this document.
 
 **Parent:** [`2026-07-22-persistence-units-medium-facets-pack-syntax-export.md`](2026-07-22-persistence-units-medium-facets-pack-syntax-export.md). This spike is ladder step 4 (a `PersistenceUnit` compile model: two units, two `StorageModel`s, no map merge, context type names that include the pack when more than one unit exists). It does not take ladder steps 2–3 (qualified facets) or 8–10 (Syntax-ify `DbContextGenerator`, extract a C# pack).
 

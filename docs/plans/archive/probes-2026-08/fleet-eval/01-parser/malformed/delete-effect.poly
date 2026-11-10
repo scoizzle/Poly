@@ -1,7 +1,0 @@
-domain D
-
-Item: entity {
-  DoIt: action {
-    delete Foo
-  }
-}

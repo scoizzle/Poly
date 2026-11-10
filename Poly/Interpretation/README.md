@@ -334,9 +334,9 @@ to emit the LINQ Expression. Add emit tests in `Poly.Tests/Interpretation/`.
 | `Poly.Tests/Interpretation/` | VM correctness, direct lowering, integration tests |
 | `LanguageVmTests` | One `Interpreter.Compile` + execute or compile-reject per executable `CompileNodeInner` kind |
 | `LanguageSurfaceTests` | Inventory: Executable / CompileReject / AnalysisOnly for every `Poly.Ast` `Node` |
-| [`docs/plans/archive/interpretation/`](../../docs/plans/archive/interpretation/README.md) | **Archived** pre-direct-ABI plans (do not execute) |
-| [`docs/plans/archive/v2-to-v3/master-roadmap.md`](../../docs/plans/archive/v2-to-v3/master-roadmap.md) | Milestone history (archived) |
-| [`docs/plans/archive/interpretation/interpretation-system-architecture-review.md`](../../docs/plans/archive/interpretation/interpretation-system-architecture-review.md) | Holistic architecture review (historical) |
+| [`docs/plans/archive/interpretation/`](https://github.com/scoizzle/Poly/blob/067bde75f69646fdf134f7c53ffdf62b463f24fd/docs/plans/archive/interpretation/README.md) | **Archived** pre-direct-ABI plans (do not execute) |
+| [`docs/plans/archive/v2-to-v3/master-roadmap.md`](https://github.com/scoizzle/Poly/blob/067bde75f69646fdf134f7c53ffdf62b463f24fd/docs/plans/archive/v2-to-v3/master-roadmap.md) | Milestone history (archived) |
+| [`docs/plans/archive/interpretation/interpretation-system-architecture-review.md`](https://github.com/scoizzle/Poly/blob/067bde75f69646fdf134f7c53ffdf62b463f24fd/docs/plans/archive/interpretation/interpretation-system-architecture-review.md) | Holistic architecture review (historical) |
 | [`docs/decisions/`](../../docs/decisions/) | ADRs: VM, primitives-as-IR, EH, serialization, sandboxing |
 
 Build and test (from repo root):

@@ -1,5 +1,0 @@
-domain PatternNonText
-Bin: entity {
-  Zone: Number pattern("^[A-Z]$")
-  Rate: Boolean pattern("yes")
-}

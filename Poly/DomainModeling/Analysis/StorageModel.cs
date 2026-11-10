@@ -39,8 +39,10 @@ public sealed class StorageEntity {
         IReadOnlyList<StorageNavigation> referenceNavigations,
         IReadOnlyList<StorageForeignKey> foreignKeys,
         IReadOnlyList<StorageSubscriptionList> subscriptionLists,
-        string? tableName = null) {
+        string? tableName = null,
+        StorageIndex? keyIndex = null) {
         Source = source;
+        KeyIndex = keyIndex;
         KeyName = keyName;
         KeyClrType = keyClrType;
         KeyProperty = keyProperty;
@@ -67,6 +69,13 @@ public sealed class StorageEntity {
 
     /// <summary>Physical table name. Defaults to <c>Name + "s"</c>; overridable via <c>table("…")</c>.</summary>
     public string TableName { get; init; }
+
+    /// <summary>
+    /// The unique index over the entity's declared <c>key(...)</c> designation (#405), in key
+    /// order. Null for a keyless entity, and for a key that names a navigation (its foreign-key
+    /// shape is not decided yet). Independent of <see cref="KeyProperty"/>, the pre-#405 key.
+    /// </summary>
+    public StorageIndex? KeyIndex { get; }
 
     /// <summary>The property used as the natural key (null = shadow key).</summary>
     public Property? KeyProperty { get; }
@@ -194,6 +203,9 @@ public sealed class StorageNavigation {
     public bool SourceOwnsTarget => Source.SourceOwnsTarget;
     public string? InversePropertyName { get; }
 }
+
+/// <summary>A unique index over columns, in order. Columns are the storage view of the key members.</summary>
+public sealed record StorageIndex(IReadOnlyList<StorageColumn> Columns, bool IsUnique);
 
 /// <summary>Describes a foreign key for mapping.</summary>
 public sealed record StorageForeignKey(

@@ -433,7 +433,27 @@ public sealed class CSharpWriter {
                 return td.Name.Replace('`', '_');
         }
         var inferred = InferTypeNameFromFirstAssignment(block, variable);
-        return inferred ?? "object";
+        if (inferred is not null)
+            return inferred;
+        if (block.Nodes.Any(node => ReadsVariable(node, variable)))
+            return Unprintable(variable,
+                "a declared local with no resolved type and no inferable first assignment is read");
+        return "object";
+    }
+
+    /// <summary>True when <paramref name="variable"/> is used as a value, not only written.
+    /// An assignment's destination is a write; everything else that names the variable
+    /// reads it.</summary>
+    private static bool ReadsVariable(Node node, Variable variable) {
+        if (ReferenceEquals(node, variable))
+            return true;
+        if (node is Assignment assign && ReferenceEquals(assign.Destination, variable))
+            return ReadsVariable(assign.Value, variable);
+        foreach (var child in node.Children) {
+            if (child is not null && ReadsVariable(child, variable))
+                return true;
+        }
+        return false;
     }
 
     private static string? InferTypeNameFromFirstAssignment(Node node, Variable variable) {

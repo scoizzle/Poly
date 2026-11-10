@@ -32,6 +32,9 @@ public abstract record DomainExpression : DomainObject {
     public static DomainExpression Divide(DomainExpression left, DomainExpression right) =>
         new Divide(left, right);
 
+    public static DomainExpression Match(
+        IReadOnlyList<MatchArm> arms, DomainExpression @else, int line = 0, int col = 0) =>
+        new MatchExpr(arms, @else, line, col);
     public static DomainExpression Call(
         string functionName, IReadOnlyList<DomainExpression> arguments, int line = 0, int col = 0) =>
         new FunctionCall(Guard.ThrowIfNullOrEmpty(functionName), arguments, line, col);
@@ -194,6 +197,31 @@ public sealed record Divide(
     DomainExpression Right
 ) : DomainExpression {
     public sealed override IEnumerable<Node?> Children => [Left, Right];
+}
+
+/// <summary>One <c>condition -&gt; value</c> arm of a <see cref="MatchExpr"/>.</summary>
+public sealed record MatchArm(DomainExpression Condition, DomainExpression Value);
+
+/// <summary>
+/// Expression-level branching (#409): <c>match { cond -&gt; value, ..., else -&gt; value }</c>. A guard
+/// chain with no scrutinee: the first arm whose condition holds supplies the value, otherwise
+/// <see cref="Else"/> does. <c>else</c> is required, so a match is always total. Arms are
+/// expressions, never effects. <c>Line</c>/<c>Col</c> position diagnostics at the <c>match</c> keyword.
+/// </summary>
+public sealed record MatchExpr(
+    IReadOnlyList<MatchArm> Arms,
+    DomainExpression Else,
+    int Line = 0,
+    int Col = 0
+) : DomainExpression {
+    public sealed override IEnumerable<Node?> Children =>
+        [.. Arms.SelectMany(a => new Node?[] { a.Condition, a.Value }), Else];
+
+    public override DomainExpression MapChildren(Func<DomainExpression, DomainExpression> map) =>
+        this with {
+            Arms = Arms.Select(a => new MatchArm(map(a.Condition), map(a.Value))).ToList(),
+            Else = map(Else),
+        };
 }
 
 /// <summary>

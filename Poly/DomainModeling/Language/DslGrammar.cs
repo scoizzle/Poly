@@ -256,6 +256,8 @@ public static class DslGrammar {
             .Pattern("group").Kind(DslTokenKind.LParen).Ref("expr").Kind(DslTokenKind.RParen).Commit()
             .Pattern("duration").Value(DslTokenKind.Number, "amount").Value(DslTokenKind.Identifier, "unit").NotFollowedBy(DslTokenKind.Colon).Commit()
             .Pattern("ident").Value(DslTokenKind.Identifier).Fold(ExpressionFoldTable.Ident).Commit()
+            .Pattern("match", priority: 3)
+                .Predicate(IsMatchIdent, "kw").Balanced(DslTokenKind.LBrace, DslTokenKind.RBrace).Commit()
             .Pattern("call", priority: 3)
                 .Predicate(IsPathHopIdent, "fn").Balanced(DslTokenKind.LParen, DslTokenKind.RParen).Commit()
             .Pattern("quant-where", priority: 2)
@@ -329,6 +331,8 @@ public static class DslGrammar {
             .Pattern("not").Kind(DslTokenKind.Not).Ref("expr-add").Commit()
             .Pattern("duration").Value(DslTokenKind.Number, "amount").Value(DslTokenKind.Identifier, "unit").NotFollowedBy(DslTokenKind.Colon).Commit()
             .Pattern("ident").Value(DslTokenKind.Identifier).Fold(ExpressionFoldTable.Ident).Commit()
+            .Pattern("match", priority: 3)
+                .Predicate(IsMatchIdent, "kw").Balanced(DslTokenKind.LBrace, DslTokenKind.RBrace).Commit()
             .Pattern("call", priority: 3)
                 .Predicate(IsPathHopIdent, "fn").Balanced(DslTokenKind.LParen, DslTokenKind.RParen).Commit()
             .Pattern("quant-where", priority: 2)
@@ -366,6 +370,10 @@ public static class DslGrammar {
                 .Value(DslTokenKind.Number, "amount").Value(DslTokenKind.Identifier, "unit").NotFollowedBy(DslTokenKind.Colon)
                 .Commit()
             .Build();
+
+    internal static bool IsMatchIdent(DslToken t) =>
+        t.Kind == DslTokenKind.Identifier
+        && string.Equals(t.Text, "match", StringComparison.Ordinal);
 
     internal static bool IsExistsIdent(DslToken t) =>
         t.Kind == DslTokenKind.Identifier

@@ -906,6 +906,8 @@ public sealed class DomainResolver : DslCursor {
                 return ParseInvokeEffectTail();
 
             case "for":
+                if (_forBodyDepth > 0)
+                    throw Error("A 'for' inside a 'for' body is not supported");
                 Consume(match);
                 return ParseForEffect();
 
@@ -994,6 +996,47 @@ public sealed class DomainResolver : DslCursor {
         return new InvokeActionEffect(actionName, bindings, targetRelationship);
     }
 
+    private int _forBodyDepth;
+
+    /// <summary>
+    /// Parses the general <c>for x in Rel [where cond] { effects }</c> (#409), with the cursor
+    /// at the binder. The collection is a relationship name; the optional <c>where</c> is an
+    /// inline expression; the body is any effects. A nested <c>for</c> is rejected (no bound
+    /// story for nested fan-out yet).
+    /// </summary>
+    private Effect ParseGeneralForEffect() {
+        var binderName = ExpectIdentifier(TokenKind.Identifier, "binder name");
+        Expect(TokenKind.In);
+        if (Current.Kind == TokenKind.Identifier &&
+            string.Equals(Current.Text, "where", StringComparison.OrdinalIgnoreCase))
+            throw Error($"Expected relationship name after 'for {binderName} in', got 'where'");
+        var relName = ExpectIdentifier(TokenKind.Identifier, "relationship name");
+
+        DomainExpression? where = null;
+        if (Current.Kind == TokenKind.Identifier &&
+            string.Equals(Current.Text, "where", StringComparison.OrdinalIgnoreCase)) {
+            Advance(); // consume 'where'
+            where = ParseExpression();
+        }
+
+        if (Current.Kind != TokenKind.LBrace)
+            throw Error($"Expected '{{' to open the 'for' body, got '{Current.Text}'");
+        Advance();
+
+        var body = new List<Effect>();
+        _forBodyDepth++;
+        try {
+            while (Current.Kind != TokenKind.RBrace)
+                body.Add(ParseEffect());
+        }
+        finally {
+            _forBodyDepth--;
+        }
+        Expect(TokenKind.RBrace);
+
+        return new ForEachEffect(binderName, relName, where, body);
+    }
+
     /// <summary>
     /// Parses the <c>for</c> effect:
     /// <c>for Rel as name [where name.Policy | where name in Stage] invoke name.Action(args)</c>.
@@ -1002,6 +1045,18 @@ public sealed class DomainResolver : DslCursor {
     /// membership on the target entity — never an inline expression.
     /// </summary>
     private Effect ParseForEffect() {
+        if (Current.Kind == TokenKind.Identifier) {
+            var next = Peek(1).Kind;
+            if (next == TokenKind.In)
+                return ParseGeneralForEffect();
+            if (next != TokenKind.As) {
+                Advance();
+                throw Error(
+                    "Expected 'in' (for x in Rel { … }) or 'as' (for Rel as x invoke …) after the 'for' name, " +
+                    $"got '{Current.Text}'");
+            }
+        }
+
         var relName = ExpectIdentifier(TokenKind.Identifier, "relationship name");
         Expect(TokenKind.As);
         var binderName = ExpectIdentifier(TokenKind.Identifier, "binder name (as name)");

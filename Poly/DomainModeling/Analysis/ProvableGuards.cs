@@ -253,6 +253,18 @@ internal static class ProvableGuards {
                     case CompositeEffect composite:
                         Collect(composite.Effects, facts, action, open);
                         break;
+                    case ForEachEffect forEach: {
+                            // Zero or more iterations: an `if` with no else over the body.
+                            var bodyFacts = facts.Clone();
+                            var bodyOpen = CloneHits(open);
+                            Collect(forEach.Body, bodyFacts, action, bodyOpen);
+                            for (var i = 0; i < open.Count; i++)
+                                open[i].RenulledAfter.UnionWith(bodyOpen[i].RenulledAfter);
+                            foreach (var created in bodyOpen.Skip(open.Count))
+                                open.Add(created);
+                            Intersect(facts, bodyFacts, bodyFacts, hasElse: false);
+                            break;
+                        }
                 }
             }
         }
@@ -390,6 +402,12 @@ internal static class ProvableGuards {
                 case CompositeEffect composite:
                     Walk(composite.Effects, facts, action, entity, onAssign);
                     break;
+                case ForEachEffect forEach: {
+                        var bodyFacts = facts.Clone();
+                        Walk(forEach.Body, bodyFacts, action, entity, onAssign);
+                        Intersect(facts, bodyFacts, bodyFacts, hasElse: false);
+                        break;
+                    }
             }
         }
     }

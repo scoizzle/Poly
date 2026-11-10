@@ -686,6 +686,21 @@ public sealed class DomainDslPrinter {
             return null;
         }
 
+        protected override object? ForEach(ForEachEffect fe) {
+            _sb.Append($"for {fe.BinderName} in {fe.RelationshipName}");
+            if (fe.Where is not null)
+                _sb.Append(" where ").Append(_printer.PrintExpression(fe.Where));
+            _sb.AppendLine(" {");
+            foreach (var sub in fe.Body) {
+                _sb.Append(_indent);
+                _sb.Append("    ");
+                _printer.PrintEffect(sub, _indent + "  ");
+            }
+            _sb.Append(_indent);
+            _sb.AppendLine("}");
+            return null;
+        }
+
         protected override object? ForEachInvoke(ForEachInvokeEffect efe) {
             _sb.Append($"for {efe.RelationshipName} as {efe.BinderName}");
             switch (efe.Predicate) {
@@ -891,6 +906,11 @@ public sealed class DomainDslPrinter {
                 ? $"count {c.RelationshipName} where {Run(_printer, c.Body)}"
                 : $"count {c.RelationshipName}";
 
+        protected override string MatchExpr(MatchExpr m) =>
+            "match { "
+            + string.Join(", ", m.Arms.Select(a => $"{Run(_printer, a.Condition)} -> {Run(_printer, a.Value)}")
+                .Append($"else -> {Run(_printer, m.Else)}"))
+            + " }";
         protected override string FunctionCall(FunctionCall f) =>
             $"{f.Name}({string.Join(", ", f.Arguments.Select(a => Run(_printer, a)))})";
 

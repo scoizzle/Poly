@@ -233,6 +233,35 @@ internal static class DomainModelDiagnosticCodes {
     public const string StagePresenceInvalidated = "DMEFF015";
 
     /// <summary>
+    /// The general <c>for x in Rel [where cond] { … }</c> effect (#409) parses and prints but its
+    /// effect legality (slice 5) and lowering (slice 6) are not shipped; Analyze rejects it so
+    /// nothing unlowerable ships. An error.
+    /// </summary>
+    public const string EffectForNotLowerable = "DMEFF016";
+
+    /// <summary>
+    /// A <c>match</c> arm condition (#409) is not Boolean. An error.
+    /// </summary>
+    public const string MatchConditionNotBoolean = "DMMAT001";
+
+    /// <summary>
+    /// The value types of a <c>match</c> do not unify: an arm (or the <c>else</c>) has a type
+    /// incompatible with the other arms. An error.
+    /// </summary>
+    public const string MatchArmTypeMismatch = "DMMAT002";
+
+    /// <summary>
+    /// Two arms of a <c>match</c> have the same condition, so the later arm is unreachable. An error.
+    /// </summary>
+    public const string MatchDuplicateCondition = "DMMAT003";
+
+    /// <summary>
+    /// A bare name in a <c>match</c> condition or value resolves to no property, parameter, enum
+    /// member or library identifier. An error.
+    /// </summary>
+    public const string MatchUnresolvedName = "DMMAT004";
+
+    /// <summary>
     /// A <see cref="DiagnosticAllowance"/> names a <see cref="ObservedFlowNullability"/> finding. That
     /// finding cannot be acknowledged; only a provable guard clears it. An error.
     /// </summary>

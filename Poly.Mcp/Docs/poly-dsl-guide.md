@@ -635,6 +635,7 @@ Effects in an action body:
 | Self-invoke | `invoke ActionName` / `invoke ActionName(param: expr, ...)` |
 | Cross-entity invoke | `invoke RelName.ActionName` / `invoke RelName.ActionName(param: expr, ...)` — OneToOne source only |
 | Fan-out invoke | `for Rel as name [where name.PolicyName \| where name in StageName] invoke name.ActionName(param: expr, ...)` — OneToMany source only |
+| General for | `for name in Rel [where expr] { effects }` — executable; fail-fast, zero records is a no-op (see "General `for`" below) |
 | Conditional | `if (expr) { effects } [else if (expr) { effects }]* [else { effects }]` |
 
 ```poly
@@ -715,6 +716,33 @@ and invokes the action on each. One fan-out mode, no `any`/`all`/`each` quantifi
   export both fail on such a policy). Relationship `exists` and collection-quantifier
   predicates are allowed and give the same answer in simulate and export. Use a **local policy over the record's own properties** instead of a
   path-prefix hop, and compare a property to a value instead of testing `exists`.
+
+### General `for` (#409)
+
+`for name in Rel [where expr] { effects }` parses, prints back identically
+(`Write(Read(x))` is idempotent), analyzes, lowers and **executes** in simulation and in
+generated C#: a loop over the relationship's records in storage order that runs the body
+once per record whose `where` holds.
+
+- **Zero records is a no-op:** an empty relationship, or a `where` that matches none,
+  runs nothing and the action still succeeds.
+- **Fail-fast:** the first failing body effect (for example an `invoke name.Action` that
+  fails) fails the whole `for` and no later record is visited. The simulator rolls back
+  the failed action; generated C# keeps what earlier records already did.
+- **Legal body effects:** an `assign` to the owning entity's own state, `invoke name.Action`
+  on the loop record. An `assign` through the binder or a relationship is another
+  entity's state and is rejected with `DMEFF012`; mutate that entity with `invoke name.Action`.
+
+- `name` binds each record; `Rel` is a relationship name (a `many` relationship once
+  analysis ships); `where expr` is an **inline** expression (e.g. `where line Qty > 1`) —
+  unlike the fan-out form, not a named policy. The body is any effects except another `for` (a nested `for` is a parse error).
+- Distinct from fan-out: `for name in Rel …` (general) versus `for Rel as name …` (fan-out).
+- **Parse errors (positioned, with line and column):** missing `in` or `as` after the name;
+  an empty collection name (`for x in where …`, `for x in {`); missing `{` after
+  the collection or condition; a malformed `where` expression; a `for` nested inside a
+  `for` body; and a missing `}`, which is reported at the end of the input rather than
+  at the `for`.
+- Still missing: `first` / `filter`; `create in` inside the body is not exercised yet.
 
 ```poly
 invoke Validate                              # self-only
@@ -1164,10 +1192,35 @@ and lowering pipeline but are **not yet authorable in product DSL**:
 | Collection quantifiers (`any`/`all`/`none`/`count`) | ✅ | ✅ **Q3′ shipped** | `any items where Status is "Open"`; foreach over the collection in simulate and export. |
 | Arithmetic (`+`, `-`, `*`, `/`) | ✅ | ✅ **shipped** | `Total + 5 > 10`, `Total * 2 > 10` |
 | Action parameters | ✅ | ✅ **shipped** | `actionName: action (param: Text) { ... }` |
+| `match { cond -> value, …, else -> value }` | ✅ | ✅ **shipped** (#409) | Expression-level branching; see below. |
 
 **Expression bodies are DSL text only** — JSON expression bags were retired with the catalog minify.
 Named-policy evaluate runs on a session instance (`create_instance` + `evaluate_policy`). `oracle_expression`
 is a fragment probe: relationship/owned path-prefix and relationship `exists` fail closed without session instances.
+
+### `match` (#409)
+
+```
+assign Tier to match { Qty > 100 -> "big", Qty > 10 -> "mid", else -> "small" }
+```
+
+- A **guard chain with no scrutinee**: arms are tried in order and the first whose condition
+  is true supplies the value. Arms are separated by `,`; each is `condition -> value`.
+- **`else -> value` is required and must be the last arm**, so a match is always total. A missing,
+  repeated or non-final `else` is a positioned parse error. There is no implicit default.
+- Arms are **expressions**, never effects. It works wherever an expression does (assign RHS, `if`
+  conditions, policy bodies, `create` initializers, nested inside another `match`).
+- Conditions must be Boolean (**DMMAT001**). The arm values and the `else` must unify to one type
+  (**DMMAT002**; `Text` and an enum unify, `Text` and `Number` do not). Two arms with the same
+  condition are an error, the later arm is unreachable (**DMMAT003**); only identical conditions
+  are seen, overlapping ranges are the author's problem. A bare name that is no property, parameter or
+  enum member is an error (**DMMAT004**).
+- Malformed forms (`match { }`, an arm with no `->`, an empty condition or value, a stray or trailing
+  `,`) fail with a positioned parse error.
+- Lowers to a nested conditional; simulation and printed C# agree. Arms are lazy in the result
+  (only the chosen value is selected), but a quantifier inside an arm is evaluated up front.
+- Not shipped: matching on a scrutinee (`match X { "a" -> … }`), patterns, and constant-folding of
+  provably unreachable arms.
 
 ## 9. Supported Effect Summary
 

@@ -150,6 +150,21 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
             _parameters.TryGetValue(p.Name, out var param) ? param : new Parameter(p.Name));
 
     /// <summary>
+    /// <c>match</c> (#409) lowers to a right-nested <see cref="Conditional"/> chain with the
+    /// <c>else</c> value innermost, so simulation and printed C# share one conditional. Statements
+    /// hoisted by an arm (quantifier loops) are read-only and run before the chain.
+    /// </summary>
+    protected override LoweredExpression MatchExpr(MatchExpr m) {
+        var arms = m.Arms.Select(a => (Condition: Route(a.Condition), Value: Route(a.Value))).ToList();
+        var otherwise = Route(m.Else);
+        var value = otherwise.Value;
+        for (var i = arms.Count - 1; i >= 0; i--)
+            value = new SN.Conditional(arms[i].Condition.Value, arms[i].Value.Value, value);
+        return LoweredExpression.Combine(
+            [.. arms.SelectMany(a => new[] { a.Condition, a.Value }), otherwise], value);
+    }
+
+    /// <summary>
     /// A call binds each lowered argument to the function's parameter and lowers the body
     /// there, so the body's value reads the argument nodes directly (slice 2 of #406). A body is
     /// pure by analysis (DMFUN005): it names only its parameters, so the nested pass needs no

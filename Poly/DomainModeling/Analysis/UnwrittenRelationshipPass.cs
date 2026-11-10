@@ -58,7 +58,7 @@ internal sealed class UnwrittenRelationshipPass : INodeAnalyzer {
 
             foreach (var forLoop in ForLoopsOf(entity)) {
                 if (IsUnwrittenCollection(entity, forLoop.RelationshipName, written))
-                    context.ReportWarning(forLoop,
+                    context.ReportWarning(forLoop.Node,
                         DeadEdgeMessage(entity, forLoop.RelationshipName, "'for' loop"),
                         DomainModelDiagnosticCodes.UnwrittenRelationship);
             }
@@ -106,10 +106,12 @@ internal sealed class UnwrittenRelationshipPass : INodeAnalyzer {
         }
     }
 
-    private static IEnumerable<ForEachInvokeEffect> ForLoopsOf(Entity entity) {
+    private static IEnumerable<(Effect Node, string RelationshipName)> ForLoopsOf(Entity entity) {
         foreach (var effect in EffectsOf(entity)) {
-            if (effect is ForEachInvokeEffect forLoop)
-                yield return forLoop;
+            if (effect is ForEachInvokeEffect fanOut)
+                yield return (fanOut, fanOut.RelationshipName);
+            else if (effect is ForEachEffect general)
+                yield return (general, general.RelationshipName);
         }
     }
 

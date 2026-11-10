@@ -263,6 +263,12 @@ public sealed class DomainDslPrinter {
             _sb.Append(PrintFacet(facet));
         }
 
+        if (entity.KeyProperties.Count > 0) {
+            _sb.Append(" key(");
+            _sb.Append(string.Join(", ", entity.KeyProperties));
+            _sb.Append(')');
+        }
+
         _sb.AppendLine(" {");
 
         // Properties

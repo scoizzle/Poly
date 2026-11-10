@@ -318,9 +318,12 @@ the contract and endpoint; it is never erased.
 ## 3. Entities and Properties
 
 ```
-["public"] "entity" entity-name annotation* "{" property* stage* action* policy* "}"
-entity-name ":" "entity" annotation* "{" property* stage* action* policy* "}"
+["public"] "entity" entity-name annotation* [key-clause] "{" property* stage* action* policy* "}"
+entity-name ":" "entity" annotation* [key-clause] "{" property* stage* action* policy* "}"
+key-clause = "key" "(" member ("," member)* ")"
 ```
+
+**Key (identity).** `key(a, b)` designates existing members as the entity's identity. It is a header clause that sits **immediately before the opening `{`**, after any annotations: `Order: entity table("ORDERS") key(Code, Region) {` or `public entity Order key(Code) {`. It is not a body member and adds nothing to the entity; each name is one of the entity's own properties or singular navigations, and names are scoped to the entity. Analysis rejects an unknown member, a blank one, an `optional` or action-assigned key property, a collection navigation, or a navigation to an unkeyed entity (`DMSTR007`), a repeated member (`DMSTR001`), and a key cycle (`DMSTR002`). An empty `key()`, a doubled or trailing comma, an unclosed list, or a second `key(...)` clause is a positioned parse error. The printer writes the clause in the same position. Scoped **value** uniqueness (`unique_by` / `unique(scope, value)`) is **not implemented**, and nothing enforces a key at runtime yet.
 
 `public` is an optional leading modifier before the kind keyword (`public entity Order { … }`). Omitting it is `Visibility.Internal` and keeps `Order: entity`. It is stored as `Visibility` and printed; export filtering is a later slice. `public` is a keyword, so it is not a property name. The mark may appear anywhere among the header annotations; the printer writes it first.
 

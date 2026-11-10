@@ -26,6 +26,14 @@ internal static class DomainModelDiagnosticCodes {
     /// </summary>
     public const string StoredValueTypeProperty = "DMSTR006";
 
+    /// <summary>
+    /// An entity's key designation (<c>Entity.KeyProperties</c>, #405) is malformed: it names no
+    /// member, or a member that is optional, assigned by an effect (not immutable), a collection
+    /// navigation, or a navigation whose target entity has no key. A duplicate member is
+    /// <see cref="StructuralDuplicate"/> and a navigation-key cycle is <see cref="StructuralCycle"/>.
+    /// </summary>
+    public const string InvalidKeyDesignation = "DMSTR007";
+
     public const string SemanticTypeCompatibility = "DMSEM003";
     public const string SemanticConstraintMismatch = "DMSEM004";
     public const string SemanticReferenceResolution = "DMSEM005";

@@ -227,6 +227,35 @@ public sealed class DomainResolver : DslCursor {
         ParseEntityAfterKind(changes, entityName, Visibility.Internal);
     }
 
+    private const string KeyKeyword = "key";
+
+    /// <summary>
+    /// Parses <c>key(a, b)</c> after the header annotations. The member names are checked by
+    /// analysis, not here; a malformed list (empty, doubled or trailing comma, unclosed) fails closed.
+    /// </summary>
+    private List<string> ParseKeyClause() {
+        Advance(); // 'key'
+        Expect(TokenKind.LParen);
+        if (Current.Kind == TokenKind.RParen)
+            throw Error("A 'key(...)' clause must name at least one member; found an empty key().");
+
+        var members = new List<string>();
+        while (true) {
+            members.Add(ExpectIdentifier(TokenKind.Identifier, "key member name"));
+            if (Current.Kind == TokenKind.Comma) {
+                Advance();
+                if (Current.Kind == TokenKind.RParen)
+                    throw Error("Trailing comma in 'key(...)' member list");
+                continue;
+            }
+            if (Current.Kind != TokenKind.RParen)
+                throw Error($"Expected ',' or ')' in 'key(...)', got '{Current.Text}'");
+            break;
+        }
+        Expect(TokenKind.RParen);
+        return members;
+    }
+
     private void ParseEntityAfterKind(List<DomainChange> changes, string entityName, Visibility visibility) {
         _currentEntityName = entityName;
         _entityPolicies.Clear();
@@ -243,10 +272,17 @@ public sealed class DomainResolver : DslCursor {
             ValidateTermFacet(headerFacet, termKeywords, $"entity '{entityName}'", allowTerm: false);
             changes.Add(new AddFacetToDomainTypeChange(entityName, headerFacet));
         }
+        // #405 key clause: the last header element, immediately before '{'.
+        if (Current.Kind == TokenKind.Identifier && Current.Text == KeyKeyword && PeekIs(TokenKind.LParen)) {
+            changes.Add(new SetEntityKeyChange(entityName, ParseKeyClause()));
+        }
         if (LooksLikeAnnotationCall()) {
             throw Error(
                 $"Unknown or unregistered annotation '{Current.Text}'. " +
                 "Enable a pack that registers this keyword, or remove the annotation.");
+        }
+        if (Current.Kind == TokenKind.Identifier && Current.Text == KeyKeyword && PeekIs(TokenKind.LParen)) {
+            throw Error($"Entity '{entityName}' declares more than one 'key(...)' clause.");
         }
 
         RejectRetiredRequiredWord();

@@ -29,6 +29,30 @@ internal static class ConstraintValidation {
             $"Constraint {Describe(constraint)} {where} is not modelled by analysis, so it was not checked.",
             DomainModelDiagnosticCodes.ConstraintUndecided);
 
+    /// <summary>
+    /// Decides "<paramref name="self"/>'s value <paramref name="relation"/> the other value" from the
+    /// two properties' ranges (hulls; null range or null bound = unbounded). Computes which orderings
+    /// are possible: none allowed by the relation → Violated; every possible ordering allowed →
+    /// Satisfied; anything else, including bounds that cannot be ordered, → Undecided (fail closed).
+    /// </summary>
+    internal static ConstraintVerdict DecideRelation(
+        RelationalConstraint relation, RangeConstraint? self, RangeConstraint? other) {
+        ArgumentNullException.ThrowIfNull(relation);
+        // a < b is possible unless a's smallest value is >= b's largest; unknown/unorderable = possible.
+        static bool Possible(object? low, object? high, bool strict) =>
+            low is null || high is null || ConstraintMerge.TryCompare(low, high) is not { } c
+                || (strict ? c < 0 : c <= 0);
+        var possible = RelationalOrdering.None;
+        if (Possible(self?.Minimum, other?.Maximum, strict: true)) possible |= RelationalOrdering.Less;
+        if (Possible(other?.Minimum, self?.Maximum, strict: true)) possible |= RelationalOrdering.Greater;
+        if (Possible(self?.Minimum, other?.Maximum, strict: false)
+            && Possible(other?.Minimum, self?.Maximum, strict: false)) possible |= RelationalOrdering.Equal;
+        if ((possible & relation.Orderings) == RelationalOrdering.None) return ConstraintVerdict.Violated;
+        return (possible & ~relation.Orderings) == RelationalOrdering.None
+            ? ConstraintVerdict.Satisfied
+            : ConstraintVerdict.Undecided;
+    }
+
     internal static ConstraintVerdict Of(bool satisfied) =>
         satisfied ? ConstraintVerdict.Satisfied : ConstraintVerdict.Violated;
 

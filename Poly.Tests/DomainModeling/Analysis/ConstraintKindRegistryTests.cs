@@ -22,6 +22,7 @@ public class ConstraintKindRegistryTests {
         new PatternConstraint("a+"),
         new UniqueConstraint(),
         new DefaultValueConstraint(new Literal(1)),
+        new RelationalConstraint("End", RelationalOrdering.Less),
     ];
 
     [Test]
@@ -59,10 +60,11 @@ public class ConstraintKindRegistryTests {
     }
 
     [Test]
-    public async Task OnlyRequired_HasNoDslWord() {
-        var unprinted = ConstraintKinds.All.Where(k => !k.PrintedInDsl).Select(k => k.Type).ToArray();
-        await Assert.That(unprinted.Length).IsEqualTo(1);
-        await Assert.That(unprinted[0]).IsEqualTo(typeof(RequiredConstraint));
+    public async Task OnlyRequiredAndRelational_HaveNoDslWord() {
+        // Required is the absence of `optional`; a relation is derived from a two-property policy
+        // (#367 A-6) and deliberately has no authoring form.
+        var unprinted = ConstraintKinds.All.Where(k => !k.PrintedInDsl).Select(k => k.Type).ToHashSet();
+        await Assert.That(unprinted.SetEquals([typeof(RequiredConstraint), typeof(RelationalConstraint)])).IsTrue();
     }
 
     [Test]

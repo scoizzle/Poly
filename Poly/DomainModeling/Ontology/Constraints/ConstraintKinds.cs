@@ -169,6 +169,24 @@ internal static class ConstraintKinds {
                 evaluate: (_, _) => ConstraintVerdict.Satisfied, // default-expression does not constrain assignment
                 describe: _ => "default(...)",
                 print: (dv, host) => $"default({host.Expression(dv.Expression)})"),
+            Row<RelationalConstraint>(
+                // Same pair: intersect the ordering sets (none left = bottom). A different pair is an
+                // independent fact: Unmergeable, kept beside it (ConstraintMerge.Coexists).
+                merge: (a, b) => !string.Equals(a.Other, b.Other, StringComparison.Ordinal)
+                    ? ConstraintMergeResult.Unmergeable
+                    : (a.Orderings & b.Orderings) is var both and not RelationalOrdering.None
+                        ? ConstraintMergeResult.Of(a with { Orderings = both })
+                        : ConstraintMergeResult.Empty,
+                // Same pair: union of the orderings; all three (no information) or a different pair drops the axis.
+                join: (a, b) => string.Equals(a.Other, b.Other, StringComparison.Ordinal)
+                    && (a.Orderings | b.Orderings) is var either and not RelationalOrdering.All
+                        ? a with { Orderings = either }
+                        : null,
+                identical: (x, y) => string.Equals(x.Other, y.Other, StringComparison.Ordinal) && x.Orderings == y.Orderings,
+                // A relation needs the other property's value; a lone literal cannot decide it.
+                evaluate: (_, _) => ConstraintVerdict.Undecided,
+                describe: r => $"{RelationalConstraint.Symbol(r.Orderings)} {r.Other}",
+                print: null),
         };
         return rows.ToDictionary(r => r.Type);
     }

@@ -120,6 +120,18 @@ public sealed class AbstractValue {
             : new AbstractValue(list);
     }
 
+    /// <summary>This value with every relation to <paramref name="property"/> removed (the property was
+    /// reassigned, so "this vs property" is stale). Widening, hence sound.</summary>
+    internal AbstractValue WithoutRelationsTo(string property) =>
+        _constraints.Any(c => c is RelationalConstraint r && string.Equals(r.Other, property, StringComparison.Ordinal))
+            ? new AbstractValue(
+                [.. _constraints.Where(c => c is not RelationalConstraint r || !string.Equals(r.Other, property, StringComparison.Ordinal))],
+                Unsatisfiable)
+            : this;
+
+    /// <summary>The same constraints, marked as having no admissible value (bottom).</summary>
+    internal AbstractValue AsUnsatisfiable() => new(_constraints, unsatisfiable: true);
+
     /// <summary>The RangeConstraint, if the value carries one.</summary>
     public RangeConstraint? Range => _constraints.OfType<RangeConstraint>().FirstOrDefault();
 

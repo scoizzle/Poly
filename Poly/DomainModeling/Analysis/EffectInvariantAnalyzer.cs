@@ -121,6 +121,10 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
     private static void Refine(Dictionary<string, AbstractValue> env, DomainExpression condition) {
         foreach (var conjunct in FlattenAnds(condition)) {
             if (conjunct is not Comparison cmp) continue;
+            if (TryGetRelation(cmp, out var left, out var right, out var orderings)) {
+                RefineRelation(env, left, right, orderings);
+                continue;
+            }
             if (!TryGetComparisonBound(cmp, out var propName, out double value, out var bound)) continue;
             if (!env.TryGetValue(propName, out var current)) continue;
             switch (bound) {
@@ -135,6 +139,47 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
                     break;
             }
         }
+    }
+
+    /// <summary>A comparison between two properties (<c>Start &lt; End</c>) as the orderings the left
+    /// property may have against the right one (#367 A-6).</summary>
+    private static bool TryGetRelation(
+        Comparison cmp, out string left, out string right, out RelationalOrdering orderings) {
+        left = right = "";
+        orderings = cmp.Kind switch {
+            ComparisonKind.LessThan => RelationalOrdering.Less,
+            ComparisonKind.LessThanOrEqual => RelationalOrdering.Less | RelationalOrdering.Equal,
+            ComparisonKind.GreaterThan => RelationalOrdering.Greater,
+            ComparisonKind.GreaterThanOrEqual => RelationalOrdering.Greater | RelationalOrdering.Equal,
+            ComparisonKind.Equal => RelationalOrdering.Equal,
+            ComparisonKind.NotEqual => RelationalOrdering.Less | RelationalOrdering.Greater,
+            _ => RelationalOrdering.None,
+        };
+        if (orderings == RelationalOrdering.None
+            || cmp.Left is not PropertyAccess l || cmp.Right is not PropertyAccess r
+            || string.Equals(l.Name, r.Name, StringComparison.Ordinal))
+            return false;
+        left = l.Name;
+        right = r.Name;
+        return true;
+    }
+
+    /// <summary>Records the relation on both properties (each seen from its own side), then lets the two
+    /// properties' ranges decide it: a relation no value pair can satisfy makes the symbols
+    /// unsatisfiable. An undecidable relation is only recorded, never assumed true or false.</summary>
+    private static void RefineRelation(
+        Dictionary<string, AbstractValue> env, string left, string right, RelationalOrdering orderings) {
+        if (!env.TryGetValue(left, out var l) || !env.TryGetValue(right, out var r)) return;
+        var relation = new RelationalConstraint(right, orderings);
+        l = l.Narrow(relation);
+        r = r.Narrow(relation.MirroredFrom(left));
+        if (!l.Unsatisfiable && !r.Unsatisfiable
+            && ConstraintValidation.DecideRelation(relation, l.Range, r.Range) == ConstraintVerdict.Violated) {
+            l = l.AsUnsatisfiable();
+            r = r.AsUnsatisfiable();
+        }
+        env[left] = l;
+        env[right] = r;
     }
 
     private static void RefineNegated(Dictionary<string, AbstractValue> env, DomainExpression condition) {
@@ -283,6 +328,10 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
                         // Strong update: the assigned value replaces the old one, so it is intersected with the
                         // property's DECLARED constraints, not the (possibly branch-refined) incoming value.
                         env[target.Name] = AbstractValue.From(prop.Constraints).Merge(value);
+                        // Relations to the reassigned property are stale on every other symbol.
+                        foreach (var key in env.Keys.ToList())
+                            if (!string.Equals(key, target.Name, StringComparison.Ordinal))
+                                env[key] = env[key].WithoutRelationsTo(target.Name);
                         result.Add(new EffectPostcondition(
                             assign, prop.Name,
                             BuildPostconditionConstraints(prop, assign.Value, action, paramEnv),

@@ -62,7 +62,8 @@ public static class ConstraintMerge {
     /// every other unmergeable kind is dropped (widened) by <see cref="AbstractValue"/>.
     /// </summary>
     internal static bool Coexists(Constraint a, Constraint b) =>
-        a is PatternConstraint && b is PatternConstraint;
+        (a is PatternConstraint && b is PatternConstraint)
+        || (a is RelationalConstraint && b is RelationalConstraint); // only reached for different pairs
 
     /// <summary>
     /// True when the two constraints say the same thing, ignoring node identity and source

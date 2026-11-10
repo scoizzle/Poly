@@ -375,14 +375,24 @@ public static partial class AbiEmitter {
             _scopeVars.Pop();
         }
 
+        /// <summary>Copy every leased binding into its frame slot, innermost scope
+        /// first, each local once. Every open scope is flushed, not just the innermost
+        /// one: a nested block that declares nothing would otherwise leave an enclosing
+        /// scope's slots holding the values they had when that scope last ran a
+        /// statement, so the hook (and <see cref="VmDebugger"/>) reports them stale for
+        /// the whole nested block.</summary>
         public IReadOnlyList<Expression> EmitScopeStores() {
-            if (_scopeVars.Count == 0 || _scopeStack.Count == 0) return Array.Empty<Expression>();
-            var vars = _scopeVars.Peek();
-            var scope = _scopeStack.Peek();
-            var stores = new List<Expression>(vars.Count);
-            foreach (var v in vars) {
-                if (_variableLeases.TryGetValue(v, out var lease) && scope.TryGetValue(v, out int slot)) {
-                    stores.Add(new SlotLocation.Frame(slot).Write(this, LeaseLocal(lease)));
+            if (_scopeStack.Count == 0) return Array.Empty<Expression>();
+            var seen = new HashSet<ParameterExpression>(ReferenceEqualityComparer.Instance);
+            var stores = new List<Expression>();
+            foreach (var scope in _scopeStack) {
+                foreach (var (variable, slot) in scope) {
+                    if (!_variableLeases.TryGetValue(variable, out var lease))
+                        continue;
+                    var local = LeaseLocal(lease);
+                    if (!seen.Add(local))
+                        continue;
+                    stores.Add(new SlotLocation.Frame(slot).Write(this, local));
                 }
             }
             return stores;

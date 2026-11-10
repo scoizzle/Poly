@@ -179,7 +179,12 @@
     }
 
     private static IReadOnlyList<string> FrameLines(ScriptDebugSession session) {
-        var lines = new List<string> { $"at {session.CurrentNodeText}" };
+        var lines = new List<string>();
+        // A completed run has no statement to step to, so the debugger's last
+        // position is stale: printing it again repeated the previous frame's
+        // "at …" line (issue #403). Show only the terminal status.
+        if (!session.IsCompleted)
+            lines.Add($"at {session.CurrentNodeText}");
         if (session.Locals.Count > 0)
             lines.Add("locals: " + string.Join(", ", session.Locals.Select(local => $"{local.Name}={local.Value}")));
         if (session.IsCompleted)

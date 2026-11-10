@@ -423,6 +423,60 @@ public class VmDebuggerTests {
     }
 
     [Test]
+    public async Task DebugHook_WhileBody_ReportsEnclosingLocalsCurrent() {
+        var i = new Variable("i");
+        var sum = new Variable("sum");
+        var bump = new Assignment(i, new Add(i, new Constant(1L)));
+        var program = Interpreter.Compile(new Block([
+            new Assignment(i, new Constant(0L)),
+            new Assignment(sum, new Constant(0L)),
+            new WhileLoop(
+                new LessThan(i, new Constant(3L)),
+                new Block([
+                    new Assignment(sum, new Add(sum, i)),
+                    bump
+                ])),
+            sum
+        ], [i, sum]));
+
+        var seen = new List<IReadOnlyList<(string Name, long Value)>>();
+        Interpreter.Execute(program, s => s.DebugHook = (n, span, heap) => {
+            if (ReferenceEquals(n, bump))
+                seen.Add(VmDebugger.GetLocals(program, span, heap));
+        });
+
+        await Assert.That(seen.Count).IsEqualTo(3);
+        await Assert.That(seen[0].First(l => l.Name == "i").Value).IsEqualTo(0L);
+        await Assert.That(seen[0].First(l => l.Name == "sum").Value).IsEqualTo(0L);
+        await Assert.That(seen[1].First(l => l.Name == "i").Value).IsEqualTo(1L);
+        await Assert.That(seen[1].First(l => l.Name == "sum").Value).IsEqualTo(1L);
+        await Assert.That(seen[2].First(l => l.Name == "i").Value).IsEqualTo(2L);
+        await Assert.That(seen[2].First(l => l.Name == "sum").Value).IsEqualTo(3L);
+    }
+
+    [Test]
+    public async Task DebugHook_NestedIfBlock_ReportsEnclosingLocalsCurrent() {
+        var a = new Variable("a");
+        var assignTwo = new Assignment(a, new Constant(2L));
+        var assignThree = new Assignment(a, new Constant(3L));
+        var program = Interpreter.Compile(new Block([
+            new Assignment(a, new Constant(1L)),
+            new IfStatement(
+                new Equal(a, new Constant(1L)),
+                new Block([assignTwo, assignThree])),
+            a
+        ], [a]));
+
+        var atThree = new List<long>();
+        Interpreter.Execute(program, s => s.DebugHook = (n, span, heap) => {
+            if (ReferenceEquals(n, assignThree))
+                atThree.Add(VmDebugger.GetLocals(program, span, heap).First(l => l.Name == "a").Value);
+        });
+
+        await Assert.That(atThree).IsEquivalentTo(new[] { 2L });
+    }
+
+    [Test]
     public async Task VmDebugger_GetLocals_CapturedVariable_IsCellValueNotHandle() {
         var x = new Variable("x");
         var fn = new Variable("fn");

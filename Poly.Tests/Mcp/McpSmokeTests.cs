@@ -3986,7 +3986,7 @@ E: entity {{
     }
 
     [Test]
-    public async Task InvokeAction_Description_ListsOnlyShippedEffects() {
+    public async Task GuideEffectTable_ListsOnlyShippedEffects() {
         // The v1 invoke_action tool text is no longer an MCP surface; poly_simulate's description
         // names no effects. Agents read the shipped action effects from the DSL guide, so the
         // "only shipped effects" guarantee is asserted on that effect table and on poly_simulate.
@@ -4008,7 +4008,7 @@ E: entity {{
         await Assert.That(end).IsGreaterThan(start);
         var effectTable = guide[start..end];
 
-        foreach (var shipped in new[] { "transition to", "assign", "create", "create in", "invoke", "for ", "if (" })
+        foreach (var shipped in new[] { "transition to StageName", "assign PropertyName to expression", "create in RelationshipName", "if (expr) {" })
             await Assert.That(effectTable).Contains(shipped);
         await Assert.That(effectTable.Contains("unlink", StringComparison.OrdinalIgnoreCase)).IsFalse();
         await Assert.That(effectTable.Contains("link ", StringComparison.OrdinalIgnoreCase)).IsFalse();

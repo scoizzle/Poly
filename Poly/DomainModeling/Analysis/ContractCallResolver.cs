@@ -120,6 +120,24 @@ internal static class ContractCallResolver {
         }
     }
 
+    /// <summary>
+    /// Slice 1 resolves an endpoint call but nothing lowers it, so analysis must not pass it:
+    /// reported at the call node in every position, whatever the resolution status or argument
+    /// typing, once per call node (a shared policy is walked in several scopes).
+    /// </summary>
+    public static void RejectUnlowerable(AnalysisContext context, FunctionCall call) {
+        if (context.Diagnostics.Any(d =>
+                ReferenceEquals(d.Node, call)
+                && string.Equals(d.Code, DomainModelDiagnosticCodes.ContractCallNotLowerable, StringComparison.Ordinal)))
+            return;
+        var where = call.Line > 0 ? $" (line {call.Line}, col {call.Col})" : "";
+        context.ReportError(
+            call,
+            $"Calling imported endpoint '{call.Name}' from an expression is not supported yet; " +
+            $"it cannot be lowered (#426){where}.",
+            DomainModelDiagnosticCodes.ContractCallNotLowerable);
+    }
+
     private static List<ImportedContract> ExportingContracts(Domain domain, string name) =>
         domain.ImportedContracts
             .Where(contract => contract.Endpoints.Any(endpoint =>

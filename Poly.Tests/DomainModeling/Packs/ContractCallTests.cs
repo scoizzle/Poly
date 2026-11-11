@@ -108,9 +108,11 @@ public sealed class ContractCallTests {
         var (domain, analysis) = AnalyzeBilling(Dsl(), [new RangeConstraint(0, 100)]);
 
         await Assert.That(analysis.Diagnostics.Where(d => d.Code is "DMCON001" or "DMFUN001")).IsEmpty();
-        await Assert.That(analysis.HasErrors).IsFalse();
-        // DMAS001 (no stages) is the fixture's own advice; the call itself raises nothing.
-        await Assert.That(analysis.Diagnostics.Where(d => d.Code != "DMAS001")).IsEmpty();
+        // Changed from "no diagnostics": the slice-1 expectation let an unlowerable domain pass
+        // analysis (review-deep). A bound call now reports exactly DMCON016 and no other error.
+        await Assert.That(WithCode(analysis, "DMCON016")).HasSingleItem();
+        await Assert.That(analysis.Diagnostics
+            .Where(d => d.Severity == DiagnosticSeverity.Error && d.Code != "DMCON016")).IsEmpty();
         var fact = analysis.GetMetadata<ContractCallMetadata>(EntityCall(domain))
             ?? throw new InvalidOperationException("No call fact was recorded.");
         await Assert.That(fact.Status).IsEqualTo(ContractBindingStatus.Bound);
@@ -124,6 +126,62 @@ public sealed class ContractCallTests {
         // The fact is the surface and nothing about where the call is written.
         await Assert.That(typeof(ContractCallMetadata).GetProperties()
             .Any(p => p.Name.Contains("Caller", StringComparison.OrdinalIgnoreCase))).IsFalse();
+    }
+
+    [Test]
+    public async Task BoundEndpointCall_InExpression_ReportsDmcon016AndStillRecordsFact() {
+        var (domain, analysis) = AnalyzeBilling(Dsl(), [new RangeConstraint(0, 100)]);
+
+        var finding = WithCode(analysis, "DMCON016").Single();
+        await Assert.That(finding.Severity).IsEqualTo(DiagnosticSeverity.Error);
+        await Assert.That(ReferenceEquals(finding.Node, EntityCall(domain))).IsTrue();
+        await Assert.That(finding.Message).Contains("imported endpoint 'Charge' from an expression is not supported yet");
+        await Assert.That(finding.Message).Contains("#426");
+        await Assert.That(analysis.GetMetadata<ContractCallMetadata>(EntityCall(domain))!.Status)
+            .IsEqualTo(ContractBindingStatus.Bound);
+    }
+
+    [Test]
+    public async Task BoundEndpointCall_AnalysisRejects_SoLowerIsNeverReached() {
+        var (_, analysis) = AnalyzeBilling(Dsl(), [new RangeConstraint(0, 100)]);
+
+        await Assert.That(analysis.HasErrors).IsTrue();
+    }
+
+    [Test]
+    public async Task EndpointCall_InSharedEntityPolicyUsedByAction_ReportsDmcon016Once() {
+        var (_, analysis) = AnalyzeBilling("""
+            domain Shop
+            uses billing
+
+            SmallRequest: value {
+              Amount: Number range(0, 50)
+            }
+
+            Order: entity {
+              Authorised: policy { Charge(request) }
+              Pay: action (request: SmallRequest) require Authorised { }
+            }
+            """, [new RangeConstraint(0, 100)]);
+
+        await Assert.That(WithCode(analysis, "DMCON016")).HasSingleItem();
+        await Assert.That(analysis.HasErrors).IsTrue();
+    }
+
+    [Test]
+    public async Task EndpointCall_WithNeverResolvingArgument_IsNeverSilent() {
+        var (_, analysis) = AnalyzeBilling("""
+            domain Shop
+            uses billing
+
+            Order: entity {
+              Authorised: policy { Charge(ghost) }
+              Pay: action { }
+            }
+            """);
+
+        await Assert.That(WithCode(analysis, "DMCON016")).HasSingleItem();
+        await Assert.That(analysis.HasErrors).IsTrue();
     }
 
     // ── (b) is unreachable by a name-only call: see PROOF. ──────

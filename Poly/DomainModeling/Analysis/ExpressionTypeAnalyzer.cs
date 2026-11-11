@@ -154,6 +154,7 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
                     ? InferValueType(context, call.Arguments[0], props, parameters, enumTypes).TypeName
                     : null;
                 ContractCallResolver.Resolve(context, domain, call, argumentType);
+                ContractCallResolver.RejectUnlowerable(context, call);
             }
             return;
         }

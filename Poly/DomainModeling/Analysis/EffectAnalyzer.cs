@@ -610,6 +610,24 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
         }
     }
 
+    private static bool IsExclusivelyOwned(AnalysisContext context, Entity entity, Domain domain) {
+        var entityName = entity.Name;
+        bool isSource = false;
+        bool isOwnedTarget = false;
+
+        foreach (var rel in context.GetAllRelationships(domain)) {
+            if (string.Equals(rel.Source.TypeName, entityName, StringComparison.Ordinal)) {
+                isSource = true;
+            }
+            if (string.Equals(rel.Target.TypeName, entityName, StringComparison.Ordinal) && rel.SourceOwnsTarget) {
+                isOwnedTarget = true;
+            }
+        }
+
+        // Exclusively owned: exists only as a target of owned relationships, never as a source
+        return isOwnedTarget && !isSource;
+    }
+
     /// <summary>
     /// Catalog/RLM relationship name resolve (amu-w1-1; review F1). Replaces
     /// linear <c>domain.Relationships.FirstOrDefault</c> scans on domain-bound

@@ -146,7 +146,18 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
             WalkExpression(context, argument, props, parameters, enumTypes);
         // Unknown name and wrong arity are reported once per call by FunctionAnalysis.CheckCall.
         var function = FunctionAnalysis.Find(context, call.Name);
-        if (function is null || function.Parameters.Count != call.Arguments.Count)
+        if (function is null) {
+            // #426: a name no function declares may be an imported contract endpoint.
+            if (context.GetTypeLookup()?.Domain is { } domain
+                && ContractCallResolver.IsExported(domain, call.Name)) {
+                var argumentType = call.Arguments.Count == 1
+                    ? InferValueType(context, call.Arguments[0], props, parameters, enumTypes).TypeName
+                    : null;
+                ContractCallResolver.Resolve(context, domain, call, argumentType);
+            }
+            return;
+        }
+        if (function.Parameters.Count != call.Arguments.Count)
             return;
         for (var i = 0; i < call.Arguments.Count; i++) {
             var parameterType = function.Parameters[i].Type.TypeName;

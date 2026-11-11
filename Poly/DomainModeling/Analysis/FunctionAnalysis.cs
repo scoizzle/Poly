@@ -20,6 +20,15 @@ internal static class FunctionAnalysis {
         context.GetTypeLookup()?.Domain.Functions
             .FirstOrDefault(f => string.Equals(f.Name, name, StringComparison.Ordinal));
 
+    /// <summary>
+    /// A name no declared function owns that a loaded contract exports (#426). A declared
+    /// function with the same name wins, so this is false for it.
+    /// </summary>
+    public static bool IsEndpointCall(AnalysisContext context, FunctionCall call) =>
+        Find(context, call.Name) is null
+        && context.GetTypeLookup()?.Domain is { } domain
+        && ContractCallResolver.IsExported(domain, call.Name);
+
     public static void CheckDeclarations(AnalysisContext context, Domain domain) {
         foreach (var group in domain.Functions.GroupBy(f => f.Name, StringComparer.Ordinal).Where(g => g.Count() > 1)) {
             foreach (var duplicate in group.Skip(1))
@@ -40,6 +49,12 @@ internal static class FunctionAnalysis {
                 return;
             case Add or Subtract or Multiply or Divide or Comparison or And or Or or Not:
                 break;
+            case FunctionCall call when IsEndpointCall(context, call):
+                context.ReportError(function,
+                    $"Function '{function.Name}' body calls contract endpoint '{call.Name}'; " +
+                    "a function is pure, and an endpoint call is a side effect.",
+                    DomainModelDiagnosticCodes.FunctionImpureBody);
+                return;
             case FunctionCall:
                 break;
             case PropertyAccess property:
@@ -94,6 +109,8 @@ internal static class FunctionAnalysis {
         var where = call.Line > 0 ? $" (line {call.Line}, col {call.Col})" : "";
         var function = Find(context, call.Name);
         if (function is null) {
+            if (IsEndpointCall(context, call))
+                return;
             context.ReportError(call,
                 $"Call to unknown function '{call.Name}'{where}.",
                 DomainModelDiagnosticCodes.FunctionUnknown);

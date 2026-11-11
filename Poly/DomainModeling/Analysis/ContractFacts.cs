@@ -64,6 +64,23 @@ public sealed record ContractBindingMetadata(
     ContractBindingStatus Status) : IAnalysisMetadata;
 
 /// <summary>
+/// #426: one expression call's recorded fact, on the <see cref="FunctionCall"/> node. The same
+/// resolution and status a bind gets (<see cref="ContractBindingMetadata"/>), keyed to the
+/// surface only: the fact carries no caller kind, so the call's meaning does not depend on
+/// where it is written. <see cref="Endpoint"/> is the resolved exported identity; null when the
+/// call did not resolve. Lower reads this fact; it does not resolve again.
+/// </summary>
+public sealed record ContractCallMetadata(
+    string? LibraryId,
+    string Contract,
+    string? SourceIdentifier,
+    string? Version,
+    string? Fingerprint,
+    string AuthoredEndpoint,
+    string? Endpoint,
+    ContractBindingStatus Status) : IAnalysisMetadata;
+
+/// <summary>
 /// #425 (decision 21): the three-way outcome of one boundary obligation. <see cref="Proven"/>
 /// and <see cref="Violated"/> are decided by the constraint merge; <see cref="Unknown"/> is
 /// cannot-decide, never a silent pass and never a violation (#442).

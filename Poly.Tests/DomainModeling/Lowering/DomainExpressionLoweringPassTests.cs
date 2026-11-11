@@ -12,7 +12,7 @@ public class DomainExpressionLoweringPassTests {
     private static readonly ExpressionMeaning Temporal = TemporalMeaningHarness.Create();
 
     private readonly DomainExpressionLoweringPass Pass = new(
-        new LoweringContext(new Parameter("entity"), Meaning: Temporal));
+        LoweringFixtures.MinimalContext(new Parameter("entity")) with { Meaning = Temporal });
 
     private readonly ParameterReference Subject = new();
 
@@ -30,7 +30,10 @@ public class DomainExpressionLoweringPassTests {
     [Test]
     public async Task ParameterAccess_LowersToParameter_WhenFoundInDictionary() {
         var param = new Parameter("p1");
-        var pass = new DomainExpressionLoweringPass(new Dictionary<string, Node> { ["p1"] = param });
+        var pass = new DomainExpressionLoweringPass(
+            LoweringFixtures.MinimalContext(new Parameter("entity")) with {
+                Parameters = new Dictionary<string, Node> { ["p1"] = param }
+            });
 
         var expr = DomainExpression.Parameter("p1");
         var result = pass.Lower(expr, Subject);
@@ -88,8 +91,7 @@ public class DomainExpressionLoweringPassTests {
         var inner = DomainExpression.Property("AvailableCopies");
         var expr = DomainExpression.RelationshipNav("Book", inner);
 
-        var pass = new DomainExpressionLoweringPass(new LoweringContext(
-            Subject));
+        var pass = new DomainExpressionLoweringPass(LoweringFixtures.MinimalContext(Subject));
         var result = pass.Lower(expr, Subject);
 
         await Assert.That(result).IsTypeOf<Member>();
@@ -315,10 +317,7 @@ public class DomainExpressionLoweringPassTests {
 
     [Test]
     public async Task DateOperation_AddWeeks_OnDate_ScalesThenIntCasts() {
-        var pass = new DomainExpressionLoweringPass(new LoweringContext(
-            new Parameter("entity"),
-            PropertyTypeResolver: n => n == "DueDate" ? "Date" : null,
-            Meaning: Temporal));
+        var pass = new DomainExpressionLoweringPass(LoweringFixtures.MinimalContext(new Parameter("entity")) with { PropertyTypeResolver = n => n == "DueDate" ? "Date" : null, Meaning = Temporal });
         var expr = new DateOperation(
             DomainExpression.Property("DueDate"),
             DomainExpression.Literal(2L),
@@ -339,10 +338,7 @@ public class DomainExpressionLoweringPassTests {
 
     [Test]
     public async Task DateOperation_AddMilliseconds_OnTime_LowersToTimeSpanFromMilliseconds() {
-        var pass = new DomainExpressionLoweringPass(new LoweringContext(
-            new Parameter("entity"),
-            PropertyTypeResolver: n => n == "Opens" ? "Time" : null,
-            Meaning: Temporal));
+        var pass = new DomainExpressionLoweringPass(LoweringFixtures.MinimalContext(new Parameter("entity")) with { PropertyTypeResolver = n => n == "Opens" ? "Time" : null, Meaning = Temporal });
         var expr = new DateOperation(
             DomainExpression.Property("Opens"),
             DomainExpression.Literal(50),
@@ -427,7 +423,9 @@ public class DomainExpressionLoweringPassTests {
     public async Task ParameterAccess_ResolvesInNestedContext() {
         var param = new Parameter("status");
         var pass = new DomainExpressionLoweringPass(
-            new Dictionary<string, Node> { ["status"] = param });
+            LoweringFixtures.MinimalContext(new Parameter("entity")) with {
+                Parameters = new Dictionary<string, Node> { ["status"] = param }
+            });
 
         // Owned("Details", Parameter("status"))
         var expr = DomainExpression.Owned("Details", DomainExpression.Parameter("status"));
@@ -440,14 +438,14 @@ public class DomainExpressionLoweringPassTests {
 
     [Test]
     public async Task Guard_ThrowsOnNullExpression() {
-        var pass = new DomainExpressionLoweringPass();
+        var pass = new DomainExpressionLoweringPass(LoweringFixtures.MinimalContext(new Parameter("entity")));
         var ex = Assert.Throws<ArgumentNullException>(() => pass.Lower(null!, Subject));
         await Assert.That(ex).IsNotNull();
     }
 
     [Test]
     public async Task Guard_ThrowsOnNullSubject() {
-        var pass = new DomainExpressionLoweringPass();
+        var pass = new DomainExpressionLoweringPass(LoweringFixtures.MinimalContext(new Parameter("entity")));
         var ex = Assert.Throws<ArgumentNullException>(() => pass.Lower(DomainExpression.Literal(1), null!));
         await Assert.That(ex).IsNotNull();
     }

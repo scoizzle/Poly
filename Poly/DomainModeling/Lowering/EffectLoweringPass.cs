@@ -20,16 +20,17 @@ namespace Poly.DomainModeling.Lowering;
 /// returns the caller's <c>DomainResult</c>. StageTransition and invoke are
 /// the same Syntax on both paths.</para>
 ///
-/// <para>When <see cref="Analysis"/> is set, lowering reads pre-computed
-/// <see cref="IAnalysisMetadata"/> instead of re-scanning domain collections.
-/// Null-safe — falls back to re-scan when absent. The emitted tree is generic
+/// <para>Lowering reads the pre-computed <see cref="IAnalysisMetadata"/> that
+/// <see cref="LoweringContext"/> requires instead of re-scanning domain collections;
+/// only a bag a pass did not publish for a node falls back to a computed value.
+/// The emitted tree is generic
 /// Syntax (Store calls, Assignment, …); it does not carry bag types.</para>
 /// </summary>
 public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     private readonly Entity _entity;
-    private readonly Domain? _domain;
+    private readonly Domain _domain;
     private readonly DomainExpressionLoweringPass _expressionPass;
-    private readonly INodeMetadataProvider? _analysis;
+    private readonly INodeMetadataProvider _analysis;
     private readonly string? _stageEnumTypeName;
     private readonly IReadOnlySet<string>? _postTransitionNotifyStages;
     private readonly IReadOnlySet<string>? _previousStageNotifyStages;
@@ -47,10 +48,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     private readonly HashSet<string> _entriesInlining = new(StringComparer.Ordinal);
 
     /// <summary>Pre-computed analysis metadata provider, when available.</summary>
-    public INodeMetadataProvider? Analysis => _analysis;
-
-    public EffectLoweringPass(Entity entity, Node subject)
-        : this(entity, new LoweringContext(subject)) { }
+    public INodeMetadataProvider Analysis => _analysis;
 
     /// <summary>
     /// Creates a pass for <paramref name="entity"/>. The effect's entity always sets
@@ -58,6 +56,9 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     /// <paramref name="context"/>.
     /// </summary>
     public EffectLoweringPass(Entity entity, LoweringContext context) {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(context.Analysis);
+        ArgumentNullException.ThrowIfNull(context.Domain);
         _entity = entity;
         _context = (context.Names is null ? context with { Names = new LocalNames() } : context)
             with { SourceEntityName = entity.Name };
@@ -101,26 +102,19 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     /// falls back to the domain relationship list. Identity when no context.
     /// </summary>
     internal static Func<string, string> BuildNavigationNameResolver(
-        Entity entity, Domain? domain, INodeMetadataProvider? analysis) {
-        if (analysis is not null) {
-            var rlm = domain is not null
-                ? analysis.GetRelationshipLookup(domain)
-                : analysis.GetRelationshipLookup();
-            if (rlm is not null) {
-                return name => rlm.TryGetRelationship(entity.Name, name, out var rel)
-                        ? DomainToCSharpExporter.ToPascalCase(name)
-                        : name;
-            }
+        Entity entity, Domain domain, INodeMetadataProvider analysis) {
+        var rlm = analysis.GetRelationshipLookup(domain);
+        if (rlm is not null) {
+            return name => rlm.TryGetRelationship(entity.Name, name, out var rel)
+                    ? DomainToCSharpExporter.ToPascalCase(name)
+                    : name;
         }
-        if (domain is not null) {
-            var sourceNavs = entity.Navigations
-                .Select(r => r.Name)
-                .ToHashSet(StringComparer.Ordinal);
-            return name => sourceNavs.Contains(name)
-                ? DomainToCSharpExporter.ToPascalCase(name)
-                : name;
-        }
-        return name => name;
+        var sourceNavs = entity.Navigations
+            .Select(r => r.Name)
+            .ToHashSet(StringComparer.Ordinal);
+        return name => sourceNavs.Contains(name)
+            ? DomainToCSharpExporter.ToPascalCase(name)
+            : name;
     }
 
     /// <summary>
@@ -131,24 +125,17 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     /// <c>.Count != 0</c> check in the export.
     /// </summary>
     internal static Func<string, bool> BuildIsCollectionNavigation(
-        Entity entity, Domain? domain, INodeMetadataProvider? analysis) {
-        if (analysis is not null) {
-            var rlm = domain is not null
-                ? analysis.GetRelationshipLookup(domain)
-                : analysis.GetRelationshipLookup();
-            if (rlm is not null) {
-                return name => rlm.TryGetRelationship(entity.Name, name, out var rel)
-                    && rel.Cardinality is RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany;
-            }
+        Entity entity, Domain domain, INodeMetadataProvider analysis) {
+        var rlm = analysis.GetRelationshipLookup(domain);
+        if (rlm is not null) {
+            return name => rlm.TryGetRelationship(entity.Name, name, out var rel)
+                && rel.Cardinality is RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany;
         }
-        if (domain is not null) {
-            var navCardinalities = entity.Navigations
-                .GroupBy(r => r.Name)
-                .ToDictionary(g => g.Key, g => g.First().Cardinality, StringComparer.Ordinal);
-            return name => navCardinalities.TryGetValue(name, out var card)
-                && card is RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany;
-        }
-        return _ => false;
+        var navCardinalities = entity.Navigations
+            .GroupBy(r => r.Name)
+            .ToDictionary(g => g.Key, g => g.First().Cardinality, StringComparer.Ordinal);
+        return name => navCardinalities.TryGetValue(name, out var card)
+            && card is RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany;
     }
 
     /// <summary>
@@ -276,7 +263,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             // pass (Add/Subtract) so it applies in every context — nothing more here.
         }
 
-        if (_analysis?.GetMetadata<AssignedMemberConversionMetadata>(a) is { } conversion) {
+        if (_analysis.GetMetadata<AssignedMemberConversionMetadata>(a) is { } conversion) {
             value = value with {
                 Value = new Invoke(
                     new Member(value.Value, conversion.MethodName),
@@ -385,7 +372,6 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     /// </summary>
     private bool CopiesStrongerGuardClosedProperty(Property target, AssignEffect a, LoweredExpression value) {
         if (a.Value is not PropertyAccess sourceAccess
-            || _analysis is null
             || _context.ActionResultType is null
             || _entriesInlining.Count > 0
             || _exitsInlining.Count > 0
@@ -531,14 +517,12 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             && enumType is { MemberNames.Count: > 0 });
 
     private bool IsUniqueProperty(string propertyName) {
-        if (_analysis is not null && _domain is not null) {
-            var storage = _analysis.GetMetadata<StorageMappingMetadata>(_domain);
-            if (storage is not null) {
-                var mapped = storage.Storage.Entities.FirstOrDefault(e =>
-                    string.Equals(e.Name, _entity.Name, StringComparison.Ordinal));
-                return mapped?.Columns.Any(c =>
-                    string.Equals(c.Name, propertyName, StringComparison.Ordinal) && c.IsUnique) == true;
-            }
+        var storage = _analysis.GetMetadata<StorageMappingMetadata>(_domain);
+        if (storage is not null) {
+            var mapped = storage.Storage.Entities.FirstOrDefault(e =>
+                string.Equals(e.Name, _entity.Name, StringComparison.Ordinal));
+            return mapped?.Columns.Any(c =>
+                string.Equals(c.Name, propertyName, StringComparison.Ordinal) && c.IsUnique) == true;
         }
         return _entity.Properties.Any(p =>
             string.Equals(p.Name, propertyName, StringComparison.Ordinal)
@@ -747,15 +731,9 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         // throw covers the dispatch contract.
 
         // Include exit effects from the source stage (if known).
-        // Analysis-present: TryGetStage only (no entity.Stages rescan).
-        // Null analysis: structural stage list for non-product/test callers only.
+        // TryGetStage only (no entity.Stages rescan).
         if (_sourceStageName is not null) {
-            Stage? sourceStage = null;
-            if (_analysis is not null)
-                _analysis.TryGetStage(_entity, _sourceStageName, out sourceStage);
-            else
-                sourceStage = _entity.Stages.FirstOrDefault(s =>
-                    string.Equals(s.Name, _sourceStageName, StringComparison.Ordinal));
+            _analysis.TryGetStage(_entity, _sourceStageName, out var sourceStage);
             if (sourceStage is not null)
                 InlineExitOnce(sourceStage, nodes);
         }
@@ -781,12 +759,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         // Entry effects run after the stage assign (a nested entry transition
         // must end at Y). Constraint probes are not emitted.
         var tryNodes = new List<Node>();
-        Stage? targetStage = null;
-        if (_analysis is not null)
-            _analysis.TryGetStage(_entity, t.TargetStage.StageName, out targetStage);
-        else
-            targetStage = _entity.Stages.FirstOrDefault(s =>
-                string.Equals(s.Name, t.TargetStage.StageName, StringComparison.Ordinal));
+        _analysis.TryGetStage(_entity, t.TargetStage.StageName, out var targetStage);
         if (targetStage is not null)
             InlineEntryOnce(targetStage, tryNodes);
 
@@ -995,22 +968,20 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     }
 
     /// <summary>Resolves the stage enum CLR name for a target entity of a relationship
-    /// (e.g. <c>LineStage</c>), from analysis when present, else the default convention.</summary>
+    /// (e.g. <c>LineStage</c>), from analysis, else the default convention.</summary>
     private string TargetStageEnumTypeName(string relationshipName) {
         var targetName = _entity.Navigations.FirstOrDefault(n =>
             string.Equals(n.Name, relationshipName, StringComparison.Ordinal))?.Target.TypeName;
-        if (targetName is not null && _domain is not null) {
+        if (targetName is not null) {
             var targetEntity = _domain.Types.OfType<Entity>()
                 .FirstOrDefault(t => string.Equals(t.Name, targetName, StringComparison.Ordinal));
             if (targetEntity is not null) {
-                if (_analysis is not null) {
-                    var esm = _analysis.GetStructure(targetEntity);
-                    if (esm is { HasStages: false })
-                        throw new InvalidOperationException(
-                            $"Entity '{targetEntity.Name}' has only an implicit stage; " +
-                            "a stage membership filter needs an explicit stage.");
-                    if (esm?.StageEnumTypeName is { } custom) return custom;
-                }
+                var esm = _analysis.GetStructure(targetEntity);
+                if (esm is { HasStages: false })
+                    throw new InvalidOperationException(
+                        $"Entity '{targetEntity.Name}' has only an implicit stage; " +
+                        "a stage membership filter needs an explicit stage.");
+                if (esm?.StageEnumTypeName is { } custom) return custom;
                 if (EntityStructureAnalyzer.IsImplicitStage(targetEntity, _domain))
                     throw new InvalidOperationException(
                         $"Entity '{targetEntity.Name}' has only an implicit stage; " +
@@ -1087,7 +1058,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     protected override Node? CreateEntityInstance(CreateEntityInstance cei) {
         var target = ResolveEntity(cei.Type.TypeName);
         // No structure bag: the positional factory signature is unknown.
-        if (target is null || _analysis is null || _analysis.GetStructure(target) is null)
+        if (target is null || _analysis.GetStructure(target) is null)
             return LowerRuntimeFactoryCall(
                 "Create", cei.Type.TypeName, cei.Initializers, target, cei.RelationshipName);
         return LowerTypedCreateCall(target, cei.Initializers, cei.RelationshipName);
@@ -1100,14 +1071,11 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     /// <c>if (this.Rel != null) return Failure(…)</c> before the call.
     /// </summary>
     protected override Node? CreateEntityInRelationship(CreateEntityInRelationshipEffect cr) {
-        if (_domain is null)
-            throw new InvalidOperationException(
-                "Cannot execute 'create in' without a domain to resolve relationship targets.");
-        var runtimeTarget = _analysis?.GetMetadata<ResolvedRelationshipTargetMetadata>(cr);
+        var runtimeTarget = _analysis.GetMetadata<ResolvedRelationshipTargetMetadata>(cr);
         var runtimeRel = runtimeTarget?.Relationship ?? ResolveRelationship(cr.RelationshipName);
         var runtimeEntity = runtimeTarget?.TargetEntity
             ?? (runtimeRel is not null ? ResolveEntity(runtimeRel.Target.TypeName) : null);
-        var create = runtimeEntity is null || _analysis is null
+        var create = runtimeEntity is null
             ? LowerRuntimeFactoryCall(
                 "CreateIn", cr.RelationshipName, cr.Initializers, runtimeEntity)
             : LowerCreateNavCall(runtimeRel?.Name ?? cr.RelationshipName, runtimeEntity, cr.Initializers);
@@ -1136,10 +1104,6 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         string relationshipName,
         Entity targetEntity,
         IReadOnlyList<PropertyBinding> initializers) {
-        if (_analysis is null)
-            throw new InvalidOperationException(
-                $"Cannot lower create-in '{relationshipName}' without analysis.");
-
         var loweredInitializers = new List<LoweredExpression>();
         var inits = BindingsByName(initializers);
         var slots = new List<(Node Node, bool OmitWhenTrailing)>();
@@ -1184,10 +1148,6 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         Entity targetEntity,
         IReadOnlyList<PropertyBinding> initializers,
         string? linkRelationshipName) {
-        if (_analysis is null)
-            throw new InvalidOperationException(
-                $"Cannot lower typed create of '{targetEntity.Name}' without analysis.");
-
         var loweredInitializers = new List<LoweredExpression>();
         var args = BuildFullCreateArgs(targetEntity, initializers, loweredInitializers);
 
@@ -1248,11 +1208,11 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
         List<LoweredExpression> loweredInitializers) {
         var inits = BindingsByName(initializers);
         var slots = new List<(Node Node, bool OmitWhenTrailing)>();
-        foreach (var parameter in DomainToCSharpExporter.GetConstructorParameters(target, _analysis!))
+        foreach (var parameter in DomainToCSharpExporter.GetConstructorParameters(target, _analysis))
             slots.Add(ArgumentFor(
                 target, parameter.Name, parameter.Type, parameter.IsNavigation,
                 parameter.IsCollection, inits, loweredInitializers));
-        foreach (var prop in DomainToCSharpExporter.TrailingOmittableProperties(target, _analysis!))
+        foreach (var prop in DomainToCSharpExporter.TrailingOmittableProperties(target, _analysis))
             slots.Add(ArgumentFor(
                 target, prop.Name, prop.Type, isNavigation: false, isCollection: false,
                 inits, loweredInitializers));
@@ -1304,7 +1264,7 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
             }
             // Optional with no default: an omitted slot passes null and may be dropped
             // from the trailing run. Requiredness is the published fact.
-            var required = _analysis?.GetStructure(target)?.RequiredPropertyNames
+            var required = _analysis.GetStructure(target)?.RequiredPropertyNames
                 ?? EntityStructureAnalyzer.ComputeRequiredPropertyNames(target);
             if (!required.Contains(prop.Name))
                 return (new Constant(null), true);
@@ -1375,8 +1335,8 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     }
 
     private bool IsDomainEntityType(DomainTypeReference? type) =>
-        type is not null && _domain?.Types.OfType<Entity>().Any(e =>
-            string.Equals(e.Name, type.TypeName, StringComparison.Ordinal)) == true;
+        type is not null && _domain.Types.OfType<Entity>().Any(e =>
+            string.Equals(e.Name, type.TypeName, StringComparison.Ordinal));
 
     // ── Runtime default expression helpers ─────────────────
 
@@ -1441,40 +1401,21 @@ public sealed class EffectLoweringPass : EffectDispatch<Node?> {
     }
 
     private Entity? ResolveEntity(string typeName) {
-        // Catalog primary when domain + analysis present.
-        if (_analysis is not null) {
-            var lookup = _analysis.GetTypeLookup(_domain);
-            if (lookup is not null
-                && lookup.Types.TryGetValue(typeName, out var domainType)
-                && domainType is Entity entity)
-                return entity;
+        var lookup = _analysis.GetTypeLookup(_domain);
+        if (lookup is not null
+            && lookup.Types.TryGetValue(typeName, out var domainType)
+            && domainType is Entity entity)
+            return entity;
 
-            // Analysis present: fail closed (no domain tree rescan).
-            return null;
-        }
-
-        if (_domain is not null) {
-            return _domain.Types.OfType<Entity>().FirstOrDefault(e =>
-                string.Equals(e.Name, typeName, StringComparison.Ordinal));
-        }
-
+        // Fail closed (no domain tree rescan).
         return null;
     }
 
     private Relationship? ResolveRelationship(string relationshipName) {
-        if (_analysis is not null) {
-            var lookup = _analysis.GetRelationshipLookup(_domain);
-            if (lookup is not null
-                && lookup.TryGetRelationship(_entity.Name, relationshipName, out var relationship))
-                return relationship;
-
-            return null;
-        }
-
-        if (_domain is not null) {
-            return _entity.Navigations.FirstOrDefault(r =>
-                string.Equals(r.Name, relationshipName, StringComparison.Ordinal));
-        }
+        var lookup = _analysis.GetRelationshipLookup(_domain);
+        if (lookup is not null
+            && lookup.TryGetRelationship(_entity.Name, relationshipName, out var relationship))
+            return relationship;
 
         return null;
     }

@@ -5,13 +5,14 @@ namespace Poly.DomainModeling.Lowering;
 
 /// <summary>
 /// Shared context for lowering passes. Bundles the subject (current-instance root),
-/// optional parameter map, and analysis metadata so lowering **passes** can consume
+/// analysis metadata, domain and optional parameter map so lowering **passes** consume
 /// pre-computed bags instead of re-scanning <see cref="Domain"/> collections.
 /// The Syntax they emit does not carry bag types — bags are lowering input only.
 ///
-/// When <see cref="Analysis"/> is provided, lowering reads <see cref="IAnalysisMetadata"/>
-/// via <see cref="INodeMetadataProvider.GetMetadata{T}"/> (typically an
-/// <see cref="AnalysisResult"/>). When null, lowering falls back to re-scan logic.
+/// <see cref="Analysis"/> and <see cref="Domain"/> are required: lowering reads
+/// <see cref="IAnalysisMetadata"/> via <see cref="INodeMetadataProvider.GetMetadata{T}"/>
+/// (typically an <see cref="AnalysisResult"/>). Only a bag a pass did not publish for a
+/// node falls back to a computed value; there is no analysis-less lowering.
 /// </summary>
 /// <param name="Subject">The Syntax AST node representing the current entity instance.</param>
 /// <param name="Parameters">
@@ -21,15 +22,14 @@ namespace Poly.DomainModeling.Lowering;
 /// <c>order Code</c> → <c>order.Code</c>, not <c>this.order.Code</c>).
 /// </param>
 /// <param name="Analysis">
-/// Metadata provider with pre-computed analysis bags. When present, lowering uses
-/// provider lookups instead of scanning domain collections. Null-safe (falls
-/// back to re-scan).</param>
+/// Metadata provider with pre-computed analysis bags. Required: lowering uses
+/// provider lookups instead of scanning domain collections.</param>
 /// <param name="ActionParameterNames">
 /// These names are rendered as bare parameters (e.g. <c>maxAmount</c>) instead of
 /// <c>this.maxAmount</c>. The instance root is <see cref="Subject"/> — pass
 /// <see cref="ThisReference"/> for module method bodies.
 /// </param>
-/// <param name="Domain">Optional domain reference for cross-entity type resolution.</param>
+/// <param name="Domain">The domain, for cross-entity type resolution. Required.</param>
 /// <param name="StageEnumTypeName">
 /// Optional stage enum type name for stage transition lowering. Overrides the
 /// default <c>{EntityName}Stage</c> derivation — necessary for inherited entities
@@ -102,10 +102,10 @@ namespace Poly.DomainModeling.Lowering;
 /// </param>
 public sealed record LoweringContext(
     Node Subject,
+    INodeMetadataProvider Analysis,
+    Domain Domain,
     IReadOnlyDictionary<string, Node>? Parameters = null,
-    INodeMetadataProvider? Analysis = null,
     HashSet<string>? ActionParameterNames = null,
-    Domain? Domain = null,
     string? StageEnumTypeName = null,
     IReadOnlySet<string>? PostTransitionNotifyStages = null,
     IReadOnlySet<string>? PreviousStageNotifyStages = null,

@@ -227,9 +227,7 @@ public class DomainToCSharpExporterTests {
             """);
         var entity = domain.Types.OfType<Entity>().Single(e => e.Name == "Person");
         var effect = new CreateEntityInstance(new DomainTypeReference("Person"));
-        var context = new LoweringContext(
-            new ThisReference(),
-            Analysis: analysis);
+        var context = new LoweringContext(new ThisReference(), analysis, domain);
         var pass = new EffectLoweringPass(entity, context);
 
         var lowered = pass.TryLowerVmNode(effect);
@@ -255,10 +253,7 @@ public class DomainToCSharpExporterTests {
             """);
         var entity = domain.Types.OfType<Entity>().Single(e => e.Name == "Customer");
         var effect = new CreateEntityInRelationshipEffect("orders", []);
-        var context = new LoweringContext(
-            new ThisReference(),
-            Analysis: analysis,
-            Domain: domain);
+        var context = new LoweringContext(new ThisReference(), analysis, domain);
         var pass = new EffectLoweringPass(entity, context);
 
         var lowered = pass.TryLowerVmNode(effect);
@@ -279,10 +274,7 @@ public class DomainToCSharpExporterTests {
         var entity = domain.Types.OfType<Entity>().Single(e => e.Name == "Person");
         analysis = analysis.WithoutMetadata<EntityStructureMetadata>(entity);
         var effect = new CreateEntityInstance(new DomainTypeReference("Person"));
-        var context = new LoweringContext(
-            new ThisReference(),
-            Analysis: analysis,
-            Domain: domain);
+        var context = new LoweringContext(new ThisReference(), analysis, domain);
         var pass = new EffectLoweringPass(entity, context);
 
         await Assert.That(() => pass.TryLowerVmNode(effect))
@@ -313,11 +305,7 @@ public class DomainToCSharpExporterTests {
 
         // Analysis-present path: entry effects must come from the EntityStructure bag.
         var effect = new StageTransitionEffect(new StageReference("Suspended"));
-        var context = new LoweringContext(
-            new ThisReference(),
-            Analysis: analysis,
-            Domain: domain,
-            SourceStageName: "Active");
+        var context = new LoweringContext(new ThisReference(), analysis, domain, SourceStageName: "Active");
         var pass = new EffectLoweringPass(entity, context);
 
         var lowered = pass.TryLowerVmNode(effect);

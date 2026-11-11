@@ -129,9 +129,7 @@ public class C1bConstraintFailureTests {
                 Properties: [new Property("Score", new DomainTypeReference("Number"),
                     [new RangeConstraint(1.0, 10.0)])],
                 Actions: [], Policies: [], Stages: []),
-            new LoweringContext(
-                new ThisReference(),
-                ActionResultType: new NamedTypeReference("DomainResult")));
+            LoweringFixtures.MinimalContext(new ThisReference()) with { ActionResultType = new NamedTypeReference("DomainResult") });
         var lowered = pass.TryLowerVmNode(new AssignEffect(
             DomainExpression.Property("Score"),
             DomainExpression.Property("n")));

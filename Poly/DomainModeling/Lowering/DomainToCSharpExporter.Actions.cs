@@ -19,7 +19,7 @@ public sealed partial class DomainToCSharpExporter {
         string? stageEnumTypeName,
         IReadOnlySet<string>? postTransitionNotifyStages,
         IReadOnlySet<string>? previousStageNotifyStages,
-        Domain? domain, INodeMetadataProvider? analysis,
+        Domain domain, INodeMetadataProvider analysis,
         ContractSplicePlan? splice = null) {
         var variants = new List<(Action Action, string? SourceStage)>();
         foreach (var action in entity.Actions)
@@ -44,11 +44,11 @@ public sealed partial class DomainToCSharpExporter {
     }
 
     private static void AddActionMethod(Entity entity, Action action,
-        List<MethodDefinitionNode> methods, string? stageEnumTypeName = null,
-        IReadOnlySet<string>? postTransitionNotifyStages = null,
-        IReadOnlySet<string>? previousStageNotifyStages = null,
-        string? sourceStageName = null, Domain? domain = null,
-        INodeMetadataProvider? analysis = null, ContractSplicePlan? splice = null) {
+        List<MethodDefinitionNode> methods, string? stageEnumTypeName,
+        IReadOnlySet<string>? postTransitionNotifyStages,
+        IReadOnlySet<string>? previousStageNotifyStages,
+        string? sourceStageName, Domain domain,
+        INodeMetadataProvider analysis, ContractSplicePlan? splice = null) {
         var isVoid = action.Result is not { Members.Count: > 0 };
         var body = BuildFullActionBody(entity, action, stageEnumTypeName,
             postTransitionNotifyStages, previousStageNotifyStages,
@@ -82,8 +82,8 @@ public sealed partial class DomainToCSharpExporter {
         string? stageEnumTypeName,
         IReadOnlySet<string>? postTransitionNotifyStages,
         IReadOnlySet<string>? previousStageNotifyStages,
-        string? loweringSourceStage, string? guardSourceStage, Domain? domain,
-        INodeMetadataProvider? analysis, bool isVoid, LocalNames? names = null,
+        string? loweringSourceStage, string? guardSourceStage, Domain domain,
+        INodeMetadataProvider analysis, bool isVoid, LocalNames? names = null,
         ContractSplicePlan? splice = null, Node? methodResultType = null) {
         var paramNames = new HashSet<string>(
             action.Parameters.Select(p => p.Name), StringComparer.Ordinal);
@@ -100,7 +100,7 @@ public sealed partial class DomainToCSharpExporter {
         List<MethodDefinitionNode> methods, string? stageEnumTypeName,
         IReadOnlySet<string>? postTransitionNotifyStages,
         IReadOnlySet<string>? previousStageNotifyStages,
-        Domain? domain, INodeMetadataProvider? analysis,
+        Domain domain, INodeMetadataProvider analysis,
         ContractSplicePlan? splice = null) {
         var representative = variants[0].Action;
         var paramSignature = DomainAnalysis.ParameterSignature(representative);
@@ -164,9 +164,7 @@ public sealed partial class DomainToCSharpExporter {
         // then key on the fragment: effects + require + source-stage policies +
         // OnExit effects + parameter names. Identical fragments share one body
         // guarded by a stage-set equality; a singleton keeps a single-stage if.
-        var printer = domain is null
-            ? new DomainDslPrinter()
-            : new DomainDslPrinter(RuntimeAnalysisCache.Session(domain));
+        var printer = new DomainDslPrinter(RuntimeAnalysisCache.Session(domain));
         var groups = new List<(string Key, Action Action, List<string> Stages)>();
         var groupIndex = new Dictionary<string, int>(StringComparer.Ordinal);
         foreach (var (action, sourceStage) in variants) {
@@ -310,8 +308,8 @@ public sealed partial class DomainToCSharpExporter {
     /// </summary>
     private static Block BuildActionBodyWithGuards(
         Action action, Entity entity, Node? effectsBody,
-        Domain? domain = null, string? sourceStageName = null, string? stageEnumTypeName = null,
-        bool isVoid = true, INodeMetadataProvider? analysis = null, string? policyStageName = null,
+        Domain domain, string? sourceStageName, string? stageEnumTypeName,
+        bool isVoid, INodeMetadataProvider analysis, string? policyStageName = null,
         Node? methodResultType = null) {
 
         // Build the DomainResult type reference for failure/success returns. A stage
@@ -499,19 +497,19 @@ public sealed partial class DomainToCSharpExporter {
     /// <c>if (!adapterResult.IsSuccess) return</c> that Failure (void <c>DomainResult</c>) or
     /// <c>DomainResult&lt;T&gt;.Failure(ErrorMessage)</c> (typed). A surface-only in-solution
     /// contribution erases the call and leaves the local action body untouched. A hand-built
-    /// domain with no analysis falls back to the authored name; a recorded non-<c>Bound</c>
+    /// domain's authored name is the fallback when analysis published no resolved endpoint; a recorded non-<c>Bound</c>
     /// binding fact (#422) refuses instead of silently erasing the call.
     /// </summary>
     private static Node? SpliceContractBody(
-        Domain? domain, Action action, Node? effectsBody, bool isVoid,
-        INodeMetadataProvider? analysis, ContractSplicePlan? splice, LocalNames? names) {
-        if (domain is null || splice is null) return effectsBody;
+        Domain domain, Action action, Node? effectsBody, bool isVoid,
+        INodeMetadataProvider analysis, ContractSplicePlan? splice, LocalNames? names) {
+        if (splice is null) return effectsBody;
         var binding = domain.ContractBindings.FirstOrDefault(b =>
             string.Equals(b.ActionName, action.Name, StringComparison.Ordinal));
         if (binding is null) return effectsBody;
         // #422: an acknowledged bind failure is stored, not hidden. This must precede the
         // contract/endpoint early returns, which would otherwise erase the call silently.
-        if (analysis?.GetMetadata<ContractBindingMetadata>(binding) is { Status: not ContractBindingStatus.Bound } refused)
+        if (analysis.GetMetadata<ContractBindingMetadata>(binding) is { Status: not ContractBindingStatus.Bound } refused)
             throw new InvalidOperationException(
                 $"Contract binding '{binding.Name}' is recorded as '{refused.Status}' and cannot be lowered. " +
                 "Resolve the finding (the contract, endpoint, parameter, or pin) or remove the acknowledgement.");
@@ -520,8 +518,8 @@ public sealed partial class DomainToCSharpExporter {
         if (contract is null) return effectsBody;
         // #420: analysis recorded the resolved exported identity (an original action name may
         // map to a suffixed endpoint). Splice that identity; the authored text is the fallback
-        // for a hand-built domain lowered without an analysis.
-        var resolvedEndpoint = analysis?.GetMetadata<ContractBindingMetadata>(binding)?.Endpoint
+        // when analysis published none.
+        var resolvedEndpoint = analysis.GetMetadata<ContractBindingMetadata>(binding)?.Endpoint
             ?? binding.EndpointName;
         var endpoint = contract.Endpoints.FirstOrDefault(e =>
             string.Equals(e.Name, resolvedEndpoint, StringComparison.Ordinal));
@@ -592,28 +590,28 @@ public sealed partial class DomainToCSharpExporter {
 
     internal static Node? LowerActionToMethodBody(
         Entity entity, Action action,
-        HashSet<string>? paramNames = null, string? stageEnumTypeName = null,
-        IReadOnlySet<string>? postTransitionNotifyStages = null,
-        IReadOnlySet<string>? previousStageNotifyStages = null,
-        string? sourceStageName = null, Domain? domain = null,
-        INodeMetadataProvider? analysis = null, bool isVoid = true, LocalNames? names = null,
+        HashSet<string>? paramNames, string? stageEnumTypeName,
+        IReadOnlySet<string>? postTransitionNotifyStages,
+        IReadOnlySet<string>? previousStageNotifyStages,
+        string? sourceStageName, Domain domain,
+        INodeMetadataProvider analysis, bool isVoid = true, LocalNames? names = null,
         Node? methodResultType = null) {
         if (action.Effects.Count == 0) return null;
         var enumProps = GetEnumPropertyNames(entity, domain, analysis);
-        var esm = analysis?.GetStructure(entity);
+        var esm = analysis.GetStructure(entity);
         Node actionResultType = methodResultType ?? (isVoid
             ? new NamedTypeReference("DomainResult")
             : new NamedTypeReference("DomainResult",
                 TypeArguments: [MapDomainTypeRef(action.Result.Members[0].Type, domain, analysis)]));
         var context = new LoweringContext(
             new ThisReference(),
-            Analysis: analysis,
+            analysis,
+            domain,
             ActionParameterNames: paramNames,
             StageEnumTypeName: stageEnumTypeName,
             PostTransitionNotifyStages: postTransitionNotifyStages,
             PreviousStageNotifyStages: previousStageNotifyStages,
             SourceStageName: sourceStageName,
-            Domain: domain,
             EnumPropertyNames: enumProps,
             LifecyclePropertyName: esm?.LifecyclePropertyName,
             LifecycleEnumTypeName: esm?.LifecycleEnumTypeName,
@@ -628,13 +626,13 @@ public sealed partial class DomainToCSharpExporter {
     /// Policy method body: quantifier loops (if any) sit immediately before <c>return</c> of the value.
     /// </summary>
     internal static Node? LowerExpressionToMethodBody(
-        DomainExpression expr, Entity entity, Domain? domain = null,
-        INodeMetadataProvider? analysis = null) {
+        DomainExpression expr, Entity entity, Domain domain,
+        INodeMetadataProvider analysis) {
         var enumProps = GetEnumPropertyNames(entity, domain, analysis);
         var context = new LoweringContext(
             new ThisReference(),
-            Analysis: analysis,
-            Domain: domain,
+            analysis,
+            domain,
             EnumPropertyNames: enumProps,
             NavigationNameResolver: EffectLoweringPass.BuildNavigationNameResolver(entity, domain, analysis),
             IsCollectionNavigation: EffectLoweringPass.BuildIsCollectionNavigation(entity, domain, analysis),
@@ -646,29 +644,17 @@ public sealed partial class DomainToCSharpExporter {
         return body is Block ? body : new Block([body]);
     }
 
-    internal static bool TryResolveEnumType(Domain? domain, INodeMetadataProvider? analysis, string typeName, out EnumType? enumType) {
+    internal static bool TryResolveEnumType(Domain domain, INodeMetadataProvider analysis, string typeName, out EnumType? enumType) {
         enumType = null;
 
-        // Catalog primary when analysis present.
-        if (analysis is not null) {
-            var lookup = analysis.GetTypeLookup(domain);
-            if (lookup is not null
-                && lookup.Types.TryGetValue(typeName, out var resolvedType)
-                && resolvedType is EnumType resolvedEnum) {
-                enumType = resolvedEnum;
-                return true;
-            }
-            // Analysis present: fail closed (no domain tree rescan).
-            return false;
+        // Catalog only: fail closed (no domain tree rescan).
+        var lookup = analysis.GetTypeLookup(domain);
+        if (lookup is not null
+            && lookup.Types.TryGetValue(typeName, out var resolvedType)
+            && resolvedType is EnumType resolvedEnum) {
+            enumType = resolvedEnum;
+            return true;
         }
-
-        // Null-analysis residual for non-product/test callers only.
-        if (domain is not null) {
-            enumType = domain.Types.OfType<EnumType>()
-                .FirstOrDefault(e => string.Equals(e.Name, typeName, StringComparison.Ordinal));
-            return enumType is not null;
-        }
-
         return false;
     }
 
@@ -676,34 +662,26 @@ public sealed partial class DomainToCSharpExporter {
     /// Builds a map from property name → enum type name for all properties of
     /// <paramref name="entity"/> whose type resolves to an <see cref="EnumType"/>.
     /// Used by the expression lowering pass to emit qualified enum member access.
-    /// Catalog-only when <paramref name="analysis"/> is present.
+    /// Catalog-only.
     /// </summary>
     /// <summary>
     /// Returns the entity's enum-typed property map (property name → enum type name),
     /// preferring the published <see cref="EntityStructureMetadata.EnumPropertyNames"/>
-    /// bag and falling back to a catalog re-scan only for the null-analysis path.
+    /// bag and falling back to the catalog type lookup when the bag is absent.
     /// </summary>
     internal static IReadOnlyDictionary<string, string>? GetEnumPropertyNames(
-        Entity entity, Domain? domain, INodeMetadataProvider? analysis) {
-        if (analysis is not null
-            && analysis.GetStructure(entity) is { EnumPropertyNames: not null } esm)
+        Entity entity, Domain domain, INodeMetadataProvider analysis) {
+        if (analysis.GetStructure(entity) is { EnumPropertyNames: not null } esm)
             return esm.EnumPropertyNames;
-        return domain is not null ? BuildEnumPropertyNames(entity, domain, analysis) : null;
+        return BuildEnumPropertyNames(entity, domain, analysis);
     }
 
     internal static Dictionary<string, string>? BuildEnumPropertyNames(
-        Entity entity, Domain domain, INodeMetadataProvider? analysis = null) {
+        Entity entity, Domain domain, INodeMetadataProvider analysis) {
         Dictionary<string, string>? map = null;
-        IReadOnlyDictionary<string, DomainType> types;
-        if (analysis is not null) {
-            var lookup = analysis.GetTypeLookup(domain)
-                ?? throw new InvalidOperationException(
-                    "Domain catalog type lookup is required for enum property mapping when analysis is present.");
-            types = lookup.Types;
-        }
-        else {
-            types = domain.Types.ToDictionary(t => t.Name, StringComparer.Ordinal);
-        }
+        var types = (analysis.GetTypeLookup(domain)
+            ?? throw new InvalidOperationException(
+                "Domain catalog type lookup is required for enum property mapping.")).Types;
 
         foreach (var prop in entity.Properties) {
             if (types.TryGetValue(prop.Type.TypeName, out var resolved)
@@ -717,19 +695,11 @@ public sealed partial class DomainToCSharpExporter {
     // ── Type mapping ────────────────────────────────────────────
 
     internal static Node MapDomainTypeRef(DomainTypeReference domainType,
-        Domain? domain = null, INodeMetadataProvider? analysis = null) {
+        Domain domain, INodeMetadataProvider analysis) {
         var typeName = domainType.TypeName;
 
-        // Enum types and entity references both emit NamedTypeReference(typeName),
-        // so with analysis present the catalog is the single source of truth and no
-        // tree scan is performed (amu-w3-1). Only null-analysis residuals rescan.
-        if (analysis is null && domain is not null) {
-            var enumType = domain.Types.OfType<EnumType>()
-                .FirstOrDefault(e => string.Equals(e.Name, typeName, StringComparison.Ordinal));
-            if (enumType is not null)
-                return new NamedTypeReference(typeName);
-        }
-
+        // Enum types and entity references both emit NamedTypeReference(typeName):
+        // the catalog is the single source of truth and no tree scan is performed (amu-w3-1).
         var clr = RuntimeAnalysisCache.ClrTypeName(domain, typeName);
         if (DomainTypeMapping.TryPrimitiveType(clr, out var prim))
             return new PrimitiveTypeReference(prim);
@@ -1024,13 +994,12 @@ public sealed partial class DomainToCSharpExporter {
     internal static Node? LowerDefaultConstantNode(
         DefaultValueConstraint defaultValue,
         Property prop,
-        Domain? domain,
-        INodeMetadataProvider? metadata) {
+        Domain domain,
+        INodeMetadataProvider metadata) {
         if (defaultValue.Expression is Literal lit)
             return new Constant(lit.Value);
         if (defaultValue.Expression is PropertyAccess pa) {
-            if (domain is not null
-                && TryResolveEnumType(domain, metadata, prop.Type.TypeName, out var enumType)
+            if (TryResolveEnumType(domain, metadata, prop.Type.TypeName, out var enumType)
                 && enumType is not null
                 && enumType.MemberNames.Contains(pa.Name, StringComparer.Ordinal)) {
                 return new Member(new NamedTypeReference(enumType.Name), pa.Name);
@@ -1038,11 +1007,9 @@ public sealed partial class DomainToCSharpExporter {
             // Non-keyword, non-enum-member PropertyAccess default cannot be lowered —
             // fail loud instead of silently dropping the constraint (which would turn
             // the property into a required Create parameter).
-            if (domain is not null) {
-                throw new NotSupportedException(
-                    $"default({pa.Name}) on property '{prop.Name}' (type '{prop.Type.TypeName}') cannot be lowered: " +
-                    $"'{pa.Name}' is not a member of an enum that '{prop.Name}' is typed with.");
-            }
+            throw new NotSupportedException(
+                $"default({pa.Name}) on property '{prop.Name}' (type '{prop.Type.TypeName}') cannot be lowered: " +
+                $"'{pa.Name}' is not a member of an enum that '{prop.Name}' is typed with.");
         }
         return null;
     }
@@ -1112,7 +1079,7 @@ public sealed partial class DomainToCSharpExporter {
         DomainExpression expression,
         Action action,
         Entity entity,
-        Domain? domain,
+        Domain domain,
         List<Node> nodes,
         Func<string, Node> failureReturn) {
         WalkPathPrefixRequireGuards(
@@ -1124,7 +1091,7 @@ public sealed partial class DomainToCSharpExporter {
         Node subject,
         Action action,
         string subjectEntityName,
-        Domain? domain,
+        Domain domain,
         List<Node> nodes,
         Func<string, Node> failureReturn) {
         if (expression is RelationshipNavigation rn) {
@@ -1146,9 +1113,7 @@ public sealed partial class DomainToCSharpExporter {
     }
 
     private static string? ResolveNavTargetEntityName(
-        string sourceEntityName, string relationshipName, Domain? domain) {
-        if (domain is null)
-            return null;
+        string sourceEntityName, string relationshipName, Domain domain) {
         var source = domain.Types.OfType<Entity>().FirstOrDefault(e =>
             string.Equals(e.Name, sourceEntityName, StringComparison.Ordinal));
         var nav = source?.Navigations.FirstOrDefault(n =>

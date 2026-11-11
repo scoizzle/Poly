@@ -55,6 +55,7 @@ public class ConstraintWriterCoverageTests {
                 : [sample, new OptionalConstraint()];
             var property = new Property("P", new DomainTypeReference(typeName), constraints);
             var entity = new Entity("E", [property], [], [], []);
+            var (domain, analysis) = LoweringFixtures.Analyze(entity);
 
             foreach (var style in new[] {
                          ConstraintCheckWriter.ConstraintCheckStyle.Create,
@@ -63,8 +64,8 @@ public class ConstraintWriterCoverageTests {
                 var emitted = ConstraintCheckWriter.ChecksFor(
                         entity,
                         property,
-                        domain: null,
-                        analysis: null,
+                        domain,
+                        analysis,
                         style,
                         new Constant(sample is RangeConstraint ? 5L : "value"),
                         nullableValue: false,

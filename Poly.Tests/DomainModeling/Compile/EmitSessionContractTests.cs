@@ -281,8 +281,7 @@ public sealed class EmitSessionContractTests {
         var cmp = (Comparison)policy.Expression;
         await Assert.That(cmp.Right).IsTypeOf<Now>();
 
-        var lowered = new DomainExpressionLoweringPass(new LoweringContext(
-                new Parameter("entity"), Meaning: session.Meaning))
+        var lowered = new DomainExpressionLoweringPass(LoweringFixtures.MinimalContext(new Parameter("entity")) with { Meaning = session.Meaning })
             .Lower(cmp.Right, new Parameter("entity"));
         await Assert.That(lowered).IsTypeOf<Member>();
         var member = (Member)lowered;

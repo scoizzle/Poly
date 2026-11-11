@@ -31,8 +31,7 @@ public class ForEachInvokeHostAbiTests {
                 new ForEachInvokeEffect("Items", "item", null, "Process", [])
             ], [])
         ], [], []);
-        var off = new EffectLoweringPass(source, new LoweringContext(
-            new Parameter("entity")));
+        var off = new EffectLoweringPass(source, LoweringFixtures.Context(new Parameter("entity"), source));
         var lowered = off.TryLowerVmNode(
             new ForEachInvokeEffect("Items", "item", null, "Process", []));
         await Assert.That(lowered).IsNotNull();

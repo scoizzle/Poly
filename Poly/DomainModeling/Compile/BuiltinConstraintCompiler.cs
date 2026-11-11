@@ -46,8 +46,8 @@ public sealed class BuiltinConstraintCompiler : IConstraintCompiler {
     internal static IReadOnlyList<ConstraintCheckWriter.Check> Checks(
         Entity entity,
         Property prop,
-        Domain? domain,
-        INodeMetadataProvider? analysis,
+        Domain domain,
+        INodeMetadataProvider analysis,
         ConstraintCheckWriter.ConstraintCheckStyle style,
         Node value,
         bool nullableValue,

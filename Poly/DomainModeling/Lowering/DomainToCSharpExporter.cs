@@ -262,7 +262,7 @@ public sealed partial class DomainToCSharpExporter {
         var defaultedCtorParams = new List<Parameter>();
 
         // Stage enum name — the published fact (EntityStructureMetadata.StageEnumTypeName)
-        // is the single source; fall back to the derivation only for the null-analysis path.
+        // is the single source; fall back to the derivation only when the bag is absent.
         var stageEnumTypeName = esm.HasStages
             ? esm.StageEnumTypeName ?? $"{entity.Name}Stage"
             : null;

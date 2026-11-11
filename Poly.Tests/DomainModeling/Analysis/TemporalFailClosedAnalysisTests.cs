@@ -3,6 +3,7 @@ using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
+using Poly.Tests.TestHelpers;
 
 using DmAction = Poly.DomainModeling.Ontology.Action;
 
@@ -229,7 +230,9 @@ public class TemporalFailClosedAnalysisTests {
 
     [Test]
     public async Task Duration_UnresolvedSpecializationAtLowering_FailsLoud() {
-        var pass = new DomainExpressionLoweringPass();
+        var coreOnly = SessionBuilder.CreateEmpty().LoadCore().Build();
+        var pass = new DomainExpressionLoweringPass(
+            LoweringFixtures.MinimalContext(new Parameter("entity"), coreOnly));
         await Assert.That(() => pass.Lower(new Duration(12, DurationUnit.Days), new ParameterReference()))
             .Throws<NotSupportedException>();
     }
@@ -346,7 +349,9 @@ public class TemporalFailClosedAnalysisTests {
         var expr = DslExpressionFragment.Resolve(DslExpressionFragment.ParseExpressionFragment("Now"), raw);
         await Assert.That(expr).IsTypeOf<PropertyAccess>();
 
-        var lowered = new DomainExpressionLoweringPass().Lower(expr, new ParameterReference());
+        var lowered = new DomainExpressionLoweringPass(
+                LoweringFixtures.MinimalContext(new Parameter("entity"), raw))
+            .Lower(expr, new ParameterReference());
         await Assert.That(lowered).IsTypeOf<Member>();
         var member = (Member)lowered;
         await Assert.That(member.MemberName).IsEqualTo("Now");

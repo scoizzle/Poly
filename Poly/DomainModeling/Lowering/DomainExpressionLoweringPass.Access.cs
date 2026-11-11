@@ -30,4 +30,7 @@ public sealed partial class DomainExpressionLoweringPass {
 
     protected override LoweredExpression OwnedAccess(OwnedAccess oa)
         => Route(oa.Inner, new Member(_currentSubject, ResolveName(oa.OwnedName)));
+
+    /// <summary>Applies the navigation name resolver (DSL nav → generated member name).</summary>
+    private string ResolveName(string name) => _navigationNameResolver?.Invoke(name) ?? name;
 }

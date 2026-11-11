@@ -1,0 +1,164 @@
+using Poly.Ast.Nodes;
+using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Dispatch;
+using Poly.DomainModeling.Meaning;
+using Poly.DomainModeling.Ontology;
+using Poly.DomainModeling.Runtime;
+
+using Syntactic = Poly.Ast.Nodes;
+
+namespace Poly.DomainModeling.Lowering;
+
+// StageTransition with the inline entry/exit helpers.
+public sealed partial class EffectLoweringPass {
+    /// <summary>
+    /// Lowers a stage transition to generic Syntax AST on both runtime and emit:
+    /// source-stage exit effects (when known; once — no self-re-entry), CurrentStage
+    /// assignment, target-stage entry effects (once), then
+    /// <c>Notify{Target}Subscribers(previousStageN)</c> when the target is a watched
+    /// stage (see <see cref="LoweringContext.PreviousStageNotifyStages"/>).
+    /// Does not emit instance <c>Notify</c> — that method exists only on the
+    /// simulator heap object; printed classes do not have one. Emits
+    /// <c>NoteAutomaticStage</c> before the assign so simulate and printed C#
+    /// share a loop-guard backstop.
+    /// Captures <c>CurrentStage</c> into a unique local before the assign so nested
+    /// OnEntry transitions do not collide (CS0136) and <c>when all</c> sees the
+    /// outer pre-stage. Not a host-ABI node.
+    /// </summary>
+    protected override Node? StageTransition(StageTransitionEffect t) {
+        if (!_entity.Stages.Any(s =>
+            string.Equals(s.Name, t.TargetStage.StageName, StringComparison.Ordinal)))
+            throw new InvalidOperationException(
+                $"Stage '{t.TargetStage.StageName}' does not exist on entity '{_entity.Name}'.");
+
+        var nodes = new List<Node>();
+        Variable? previousStage = null;
+        var notifyTarget = _postTransitionNotifyStages is not null
+            && _postTransitionNotifyStages.Contains(t.TargetStage.StageName);
+        var needsPrevious = notifyTarget
+            && _previousStageNotifyStages is not null
+            && _previousStageNotifyStages.Contains(t.TargetStage.StageName);
+        if (needsPrevious) {
+            previousStage = _names.Next("previousStage");
+            nodes.Add(new Assignment(
+                previousStage,
+                new Member(Subject, "CurrentStage")));
+        }
+
+        // Exit/entry effects are best-effort at lowering time: with analysis present a
+        // TryGetStage miss implies analysis/domain disagreement (both derive from the
+        // same entity.Stages), so skipping is safe; InvokeActionInternal's fail-closed
+        // throw covers the dispatch contract.
+
+        // Include exit effects from the source stage (if known).
+        // TryGetStage only (no entity.Stages rescan).
+        if (_sourceStageName is not null) {
+            _analysis.TryGetStage(_entity, _sourceStageName, out var sourceStage);
+            if (sourceStage is not null)
+                InlineExitOnce(sourceStage, nodes);
+        }
+        else {
+            // Entity-level transition: source stage is CurrentStage at run time.
+            // Emit per-stage OnExit so simulate and C# both run exit before assign.
+            foreach (var stage in _entity.Stages) {
+                if (stage.OnExitEffects.Count == 0)
+                    continue;
+                var exitNodes = new List<Node>();
+                InlineExitOnce(stage, exitNodes);
+                if (exitNodes.Count == 0)
+                    continue;
+                Node stageMatch = new Member(
+                    new NamedTypeReference(_stageEnumTypeName ?? $"{_entity.Name}Stage"),
+                    stage.Name);
+                nodes.Add(new IfStatement(
+                    new Equal(new Member(Subject, "CurrentStage"), stageMatch),
+                    exitNodes.Count == 1 ? exitNodes[0] : new Block(exitNodes)));
+            }
+        }
+
+        // Entry effects run after the stage assign (a nested entry transition
+        // must end at Y). Constraint probes are not emitted.
+        var tryNodes = new List<Node>();
+        _analysis.TryGetStage(_entity, t.TargetStage.StageName, out var targetStage);
+        if (targetStage is not null)
+            InlineEntryOnce(targetStage, tryNodes);
+
+        // Loop-guard backstop shared with printed C#: each stage once per trigger.
+        if (Subject is ThisReference && _emitAutomaticStageGuard) {
+            nodes.Add(new Invoke(
+                new Member(Subject, "NoteAutomaticStage"),
+                new Constant(t.TargetStage.StageName)));
+        }
+
+        Node stageValue = new Member(
+            new NamedTypeReference(_stageEnumTypeName ?? $"{_entity.Name}Stage"),
+            t.TargetStage.StageName);
+        nodes.Add(new Assignment(
+            new Member(Subject, "CurrentStage"),
+            stageValue));
+
+        // G7: keep the lifecycle property in lockstep with CurrentStage. Emit
+        // this.{LifecycleProperty} = {LifecycleEnum}.X after the stage assign and
+        // before entry effects, unless the target stage's entry already assigns it
+        // at the top level (Visit.CheckedIn entry { assign State to CheckedIn }).
+        if (_lifecyclePropertyName is not null && _lifecycleEnumTypeName is not null) {
+            var entryAssignsLifecycle = targetStage is not null
+                && targetStage.OnEntryEffects.OfType<AssignEffect>().Any(ae =>
+                    ae.Target is PropertyAccess pa
+                    && string.Equals(pa.Name, _lifecyclePropertyName, StringComparison.Ordinal));
+            if (!entryAssignsLifecycle) {
+                nodes.Add(new Assignment(
+                    new Member(Subject, _lifecyclePropertyName),
+                    new Member(new NamedTypeReference(_lifecycleEnumTypeName), t.TargetStage.StageName)));
+            }
+        }
+
+        if (notifyTarget) {
+            tryNodes.Add(new Invoke(
+                new Member(Subject, $"Notify{t.TargetStage.StageName}Subscribers"),
+                needsPrevious ? [previousStage!] : []));
+        }
+
+        // Splice a lowered entry Block into this transition body (D13) while
+        // keeping its locals on the returned block.
+        var tryLocals = new List<Node>();
+        var flatTry = new List<Node>();
+        foreach (var tryNode in tryNodes)
+            CollectNode(flatTry, tryLocals, tryNode);
+        if (flatTry.Count > 0)
+            nodes.AddRange(flatTry);
+
+        _sourceStageName = t.TargetStage.StageName;
+
+        var locals = new List<Node>();
+        if (previousStage is not null)
+            locals.Add(previousStage);
+        locals.AddRange(tryLocals);
+        if (locals.Count == 0 && nodes.Count == 1)
+            return nodes[0];
+        return new Block(nodes, locals);
+    }
+    /// <summary>Inline a stage's exit at most once per lowering (no self-re-entry).</summary>
+    private void InlineExitOnce(Stage stage, List<Node> bodySink) {
+        if (!_exitsInlining.Add(stage.Name))
+            return;
+        try {
+            AppendInlinedStageEffects(stage.OnExitEffects, bodySink);
+        }
+        finally {
+            _exitsInlining.Remove(stage.Name);
+        }
+    }
+
+    /// <summary>Inline a stage's entry at most once per lowering (no self-re-entry).</summary>
+    private void InlineEntryOnce(Stage stage, List<Node> bodySink) {
+        if (!_entriesInlining.Add(stage.Name))
+            return;
+        try {
+            AppendInlinedStageEffects(stage.OnEntryEffects, bodySink);
+        }
+        finally {
+            _entriesInlining.Remove(stage.Name);
+        }
+    }
+}

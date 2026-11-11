@@ -358,7 +358,7 @@ The registry is host bookkeeping beside the bag. The effects are the module.
 | [`vm-abi-reference.md`](vm-abi-reference.md) | VM ABI, frame layout, register model (below this layer) |
 | [`docs/CORE.md`](../CORE.md) | Module boundaries and pipeline ownership |
 | `Poly/DomainModeling/Runtime/ModuleInstanceExecutor.cs` | Interpreter host; named invoke runs the cached module on the dictionary |
-| `Poly/DomainModeling/Lowering/DomainExpressionLoweringPass.cs` | Expression → Syntax AST lowering |
+| `Poly/DomainModeling/Lowering/DomainExpressionLoweringPass.cs` and its `DomainExpressionLoweringPass.*.cs` partials | Expression → Syntax AST lowering |
 | `Poly/DomainModeling/Lowering/EffectLoweringPass.cs` | Effect → Syntax AST lowering |
 | `Poly/DomainModeling/EffectDispatch.cs` | Effect dispatch base class |
 | `Poly/DomainModeling/DomainExpressionDispatch.cs` | Expression dispatch base class |

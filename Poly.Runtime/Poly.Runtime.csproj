@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+        <OutputType>Library</OutputType>
+        <!-- The types keep namespace Poly.DomainModeling.Runtime until R-05/R-07 so the
+             emitted C# surface (ClrTypeReference derives names from RuntimeType.FullName)
+             is byte-identical. The folder name must not become the root namespace. -->
+        <RootNamespace>Poly.DomainModeling.Runtime</RootNamespace>
+
+        <!-- pack writes every ProjectReference into Poly's nuspec as a dependency whether or
+             not the referenced project is packable, so this project must ship: Poly 1.0.1
+             would otherwise depend on a Poly.Runtime 1.0.0 that never exists (NU1101).
+             Version tracks Poly's; bumping it is an owner decision (issue #682). -->
+        <PackageId>Poly.Runtime</PackageId>
+        <Authors>Scot 'Scoizzle' Murphy</Authors>
+        <Product>Poly.Runtime</Product>
+        <Description>The storage port and constraint failure contract a compiled Poly domain module names at runtime.</Description>
+        <Copyright>Scot 'Scoizzle' Murphy</Copyright>
+        <PackageProjectUrl>https://github.com/scoizzle/Poly/</PackageProjectUrl>
+        <RepositoryUrl>https://github.com/scoizzle/Poly/</RepositoryUrl>
+        <RepositoryType>git</RepositoryType>
+        <PackageLicenseExpression>MIT</PackageLicenseExpression>
+        <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+        <Owners>Scot 'Scoizzle' Murphy</Owners>
+        <Version>1.0.1</Version>
+
+        <!-- No type-forwarders: compiled consumers of Poly 1.0.1 take a binary break, the
+             accepted and recorded risk for this wave. -->
+        <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    </PropertyGroup>
+
+</Project>

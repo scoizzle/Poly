@@ -1,102 +1,142 @@
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Ontology;
-using Poly.DomainModeling.Ontology.Contract;
-
-using AccessModifier = Poly.Introspection.AccessModifier;
-using Action = Poly.DomainModeling.Ontology.Action;
-using Syntactic = Poly.Ast.Nodes;
-using ValueType = Poly.DomainModeling.Ontology.ValueType;
 
 namespace Poly.DomainModeling.Lowering;
 
+// Notify core: subscription facts, handler naming, and the shared notify vocabulary.
 public sealed partial class DomainToCSharpExporter {
+    /// <summary>Collected subscription data for cross-entity notification — populated from the
+    /// analysis-published <see cref="SubscriptionDispatchPlanMetadata"/> (the SAME dispatch
+    /// plan the runtime consumes), one info per watched target stage.</summary>
+    internal sealed record SubscriptionInfo(
+        string StageName,
+        SubscriptionDispatchPlanEntry Subscription,
+        Entity SourceEntity,
+        Entity TargetEntity,
+        Relationship Relationship,
+        string? SubscriberStageName = null
+    );
+
+    private static string SubscriberRegistryFieldName(SubscriptionInfo info) =>
+        SubscriberRegistryFieldName(info.SourceEntity.Name, info.Relationship.Name, info.StageName);
+
+    /// <summary>Registry field on the watched target that lists subscribers of one stage.</summary>
+    internal static string SubscriberRegistryFieldName(
+        string sourceEntityName, string relationshipName, string stageName) =>
+        $"_{ToCamelCase(sourceEntityName)}{ToPascalCase(relationshipName)}{stageName}Subscribers";
+
+    private static string SubscriberRegisterMethodName(SubscriptionInfo info) =>
+        $"Register{info.SourceEntity.Name}{ToPascalCase(info.Relationship.Name)}{info.StageName}Subscriber";
+
     /// <summary>
-    /// Appends subscription registration statements to the constructor body.
-    /// For each subscription on this entity's stage, emits code that registers
-    /// this instance as a subscriber on each related target entity.
+    /// Collects the subscription facts for one node's dispatch plan (an entity for
+    /// entity-level subscriptions, or a stage for stage-scoped ones) into the target/
+    /// subscriber maps used for code generation. The exporter consumes the analysis-
+    /// published <see cref="SubscriptionDispatchPlanMetadata"/> rather than re-walking
+    /// <see cref="StageSubscription"/> — one description of what fires, shared with the
+    /// runtime (no per-site re-derivation drift).
     /// </summary>
-    private static void AddSubscriberRegistrationNodes(
-        List<SubscriptionInfo>? subscriberSubs,
-        List<Node> bodyNodes) {
-        if (subscriberSubs is { Count: > 0 }) {
-            foreach (var group in subscriberSubs.GroupBy(s => s.Relationship.Name)) {
-                var rel = group.First().Relationship;
-                var pascalNavName = ToPascalCase(rel.Name);
-                var isMany = rel.Cardinality is RelationshipCardinality.OneToMany
-                             or RelationshipCardinality.ManyToMany;
+    internal static void CollectSubscriptionInfo(
+        SubscriptionDispatchPlanMetadata plan,
+        Entity subscriber,
+        string? subscriberStageName,
+        IReadOnlyDictionary<string, Entity> entityLookup,
+        List<SubscriptionInfo> subList,
+        Dictionary<string, List<SubscriptionInfo>> subscriptionsByTarget) {
+        foreach (var entry in plan.ByRelationshipName.Values.SelectMany(e => e)) {
+            var rel = subscriber.Navigations.FirstOrDefault(n =>
+                string.Equals(n.Name, entry.RelationshipName, StringComparison.Ordinal));
+            if (rel is null) continue;
+            if (!entityLookup.TryGetValue(entry.TargetEntityName, out var targetEntity))
+                continue;
 
-                // Multiple subscriptions on the same relation+stage (any/all/Each) share
-                // ONE registry list on the target — register once per stage, or the
-                // subscriber is added N times and each handler fires N times.
-                var perStage = group.GroupBy(s => s.StageName).Select(g => g.First());
+            foreach (var sName in entry.StageNames) {
+                var info = new SubscriptionInfo(sName, entry, subscriber, targetEntity, rel, subscriberStageName);
+                subList.Add(info);
 
-                if (isMany) {
-                    foreach (var info in perStage) {
-                        var subVarName = "target";
-                        bodyNodes.Add(new ForEachLoop(
-                            new Variable(subVarName),
-                            new Member(new ThisReference(), pascalNavName),
-                            new Block([
-                                new Invoke(
-                                    new Member(
-                                        new Variable(subVarName),
-                                        SubscriberRegisterMethodName(info)),
-                                    [new ThisReference()])
-                            ])
-                        ));
-                    }
-                }
-                else {
-                    // A singular navigation is optional (unlinked until a later link),
-                    // so every per-stage registration shares ONE null guard: dereferencing
-                    // this.{Nav} in the constructor would NRE when the target is absent.
-                    var registrations = new List<Node>();
-                    foreach (var info in perStage) {
-                        registrations.Add(new Invoke(
-                            new Member(
-                                new Member(new ThisReference(), pascalNavName),
-                                SubscriberRegisterMethodName(info)),
-                            [new ThisReference()])
-                        );
-                    }
-                    bodyNodes.Add(new IfStatement(
-                        new NotEqual(
-                            new Member(new ThisReference(), pascalNavName),
-                            new Constant(null!)),
-                        new Block(registrations)));
-                }
+                if (!subscriptionsByTarget.TryGetValue(targetEntity.Name, out var targetList))
+                    subscriptionsByTarget[targetEntity.Name] = targetList = new();
+                targetList.Add(info);
             }
         }
     }
 
     /// <summary>
-    /// Generates a <c>Create{NavName}(args)</c> method on the source entity
-    /// that constructs the target entity, adds it to the collection field,
-    /// and wires subscription registration.
-    ///
-    /// The method parameters correspond to the target entity's constructor
-    /// parameters (regular properties + singular nav properties), minus
-    /// the back-reference to the source entity which is auto-wired as <c>this</c>.
-    ///
-    /// For DSL <c>create in loans { book: book }</c>, this produces:
-    /// <code>
-    /// public DomainResult&lt;Loan&gt; CreateLoans(Book book, string status, ...)
-    /// {
-    ///     var loanResult = Loan.Create(book: book, borrower: this, status: status, ...);
-    ///     // Loan.Create Attaches via borrower:this (Add + Register*) — no duplicate here.
-    ///     if (!loanResult.IsSuccess) return Failure(...);
-    ///     return Success(loanResult.Value);
-    /// }
-    /// </code>
+    /// Assigns each subscription its generated handler method name. The name is
+    /// quantifier-aware (<c>WhenAny/WhenAll/WhenEach{Target}{Stage}</c>) and
+    /// disambiguated with a <c>_{n}</c> suffix when multiple subscriptions share the
+    /// same method signature (same quantifier + peer-binding shape) on the same
+    /// relationship+stage — two <c>when Rel Stage</c> (Each) blocks must each fire.
+    /// Keyed by reference so even structurally-identical subscriptions get distinct names.
     /// </summary>
-    private static void AddCreateSingularNavMethod(
-        Entity entity,
-        Relationship rel,
-        Domain domain,
-        List<SubscriptionInfo>? subscriberSubs,
-        List<MethodDefinitionNode> methods,
-        INodeMetadataProvider metadata) =>
-        AddCreateNavMethod(entity, rel, domain, subscriberSubs, fieldName: null, methods, metadata);
+    internal static Dictionary<SubscriptionInfo, string> BuildHandlerNames(
+        IEnumerable<KeyValuePair<string, List<SubscriptionInfo>>> subscriptionsBySubscriber) {
+        var map = new Dictionary<SubscriptionInfo, string>(ReferenceEqualityComparer.Instance);
+        foreach (var (_, subList) in subscriptionsBySubscriber) {
+            var groups = subList
+                .GroupBy(info => (
+                    info.StageName,
+                    info.TargetEntity.Name,
+                    QuantifierName(info.Subscription.Quantifier),
+                    HasPeerBinding(info)))
+                .ToDictionary(g => g.Key, g => g.ToList());
+            foreach (var info in subList) {
+                var hasPeer = HasPeerBinding(info);
+                var quantifier = QuantifierName(info.Subscription.Quantifier);
+                var key = (info.StageName, info.TargetEntity.Name, quantifier, hasPeer);
+                var name = $"When{quantifier}{info.TargetEntity.Name}{info.StageName}";
+                var group = groups[key];
+                if (group.Count == 1) {
+                    map[info] = name;
+                    continue;
+                }
+                // Name every handler in a multi-handler group by its effect, not
+                // by declaration order (`_2` says nothing).
+                var label = EffectLabel(info.Subscription);
+                var occurrence = group.TakeWhile(other => !ReferenceEquals(other, info))
+                    .Count(other => string.Equals(EffectLabel(other.Subscription), label, StringComparison.Ordinal));
+                map[info] = occurrence == 0 ? $"{name}_{label}" : $"{name}_{label}_{occurrence + 1}";
+            }
+        }
+        return map;
+    }
+
+    private static string EffectLabel(SubscriptionDispatchPlanEntry subscription) =>
+        EffectLabel(subscription.Effects.FirstOrDefault()) ?? "Effect";
+
+    private static string? EffectLabel(Effect? effect) => effect switch {
+        AssignEffect { Target: PropertyAccess property } => $"Set{property.Name}",
+        InvokeActionEffect invoke => $"Call{invoke.ActionName}",
+        StageTransitionEffect transition => $"To{transition.TargetStage.StageName}",
+        CreateEntityInstance create => $"Create{create.Type.TypeName}",
+        CreateEntityInRelationshipEffect create => $"Create{create.RelationshipName}",
+        CompositeEffect composite => composite.Effects.Select(EffectLabel).FirstOrDefault(l => l is not null),
+        ConditionalEffect conditional => EffectLabel(conditional.ThenEffects.FirstOrDefault())
+            ?? (conditional.ElseEffects is null ? null : EffectLabel(conditional.ElseEffects.FirstOrDefault())),
+        _ => null,
+    };
+
+    private static string QuantifierName(StageSubscriptionQuantifier quantifier) => quantifier switch {
+        StageSubscriptionQuantifier.Any => "Any",
+        StageSubscriptionQuantifier.All => "All",
+        _ => "Each",
+    };
+
+    /// <summary>
+    /// Handler takes a peer argument when the subscription binds <c>when … as name</c>.
+    /// Print (overload key and call args) and simulate (When arm) share this.
+    /// </summary>
+    internal static bool HasPeerBinding(SubscriptionInfo info) =>
+        info.Subscription.PeerBinding is { Length: > 0 };
+
+    /// <summary>
+    /// <c>when all</c> handlers take the transitioning record's previous stage.
+    /// Print (call args and handler params) and simulate (When arm) share this.
+    /// </summary>
+    internal static bool NeedsAllPreviousStage(SubscriptionInfo info) =>
+        info.Subscription.Quantifier == StageSubscriptionQuantifier.All
+        && info.TargetEntity.Stages.Count > 0
+        && info.Subscription.StageNames.Count > 0;
 
     /// <summary>
     /// True when the target entity's <c>Notify{Stage}Subscribers</c> group carries the
@@ -121,430 +161,4 @@ public sealed partial class DomainToCSharpExporter {
         }
         return false;
     }
-
-    /// <summary>
-    /// For a self-relationship <c>create in rel</c>, the unique singular navigation on
-    /// <paramref name="targetEntity"/> whose target is <paramref name="sourceEntityName"/>.
-    /// This is the peer the new instance wires to <c>this</c> (e.g. <c>Account.parent</c>
-    /// for a <c>create in children</c>); null when there is none or it is ambiguous.
-    /// Unlike <see cref="FindAutoWireBackReference"/>, it does not skip self-relationships.
-    /// </summary>
-    private static Relationship? FindSelfRelPeerSingular(Entity targetEntity, string sourceEntityName) {
-        Relationship? found = null;
-        var count = 0;
-        foreach (var nav in targetEntity.Navigations) {
-            if (nav.Cardinality is RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany)
-                continue;
-            if (string.Equals(nav.Target.TypeName, sourceEntityName, StringComparison.Ordinal)) {
-                found = nav;
-                count++;
-            }
-        }
-        return count == 1 ? found : null;
-    }
-
-    private static void AddCreateNavMethod(
-        Entity entity,
-        Relationship rel,
-        Domain domain,
-        List<SubscriptionInfo>? subscriberSubs,
-        string? fieldName,
-        List<MethodDefinitionNode> methods,
-        INodeMetadataProvider metadata) {
-        ArgumentNullException.ThrowIfNull(metadata);
-
-        var pascalName = ToPascalCase(rel.Name);
-        var targetTypeName = rel.Target.TypeName;
-        var targetType = new NamedTypeReference(targetTypeName);
-        var lookup = metadata.GetTypeLookup(domain)
-            ?? throw new InvalidOperationException(
-                "Domain catalog type lookup is required for CreateNav export.");
-        if (!lookup.Types.TryGetValue(targetTypeName, out var resolvedType)
-            || resolvedType is not Entity targetEntity)
-            return;
-
-        var methodName = $"Create{pascalName}";
-
-        // Collect all target entity constructor-level parameters from the COMPLETE
-        // signature (EntityStructureMetadata now includes collection navs):
-        // regular entity properties (minus defaults) + navs (singular + collection)
-        // in relationship order. One source of truth — no per-consumer re-scan of
-        // domain.Relationships (the CS7036 class of bugs).
-        var methodParams = new List<Parameter>();
-        var createArgs = new List<Node>();
-        var parameterMetadata = GetConstructorParameters(targetEntity, metadata);
-
-        // Cross-entity auto-wire back-ref: exactly one singular nav on the target
-        // pointing back to the source → wired with `this`, excluded from the factory
-        // signature. (Self-relationship back-refs are already excluded via IsBackReference.)
-        var autoWireBackRef = FindAutoWireBackReference(targetEntity, entity.Name);
-        var requiredProps = metadata.GetStructure(targetEntity)?.RequiredPropertyNames
-            ?? EntityStructureAnalyzer.ComputeRequiredPropertyNames(targetEntity);
-        var selfPeerSingular = FindSelfRelPeerSingular(targetEntity, entity.Name);
-        var isCollectionRel = rel.Cardinality is RelationshipCardinality.OneToMany
-            or RelationshipCardinality.ManyToMany;
-
-        foreach (var parameter in parameterMetadata) {
-            if (parameter.IsNavigation && parameter.IsBackReference) {
-                // Self-rel slot. A self collection (including `rel` when it is a
-                // collection) starts empty; a singular self-nav wires `this` only as
-                // the peer of a collection create-in; every other self singular is null.
-                if (parameter.IsCollection) {
-                    createArgs.Add(new New(
-                        new NamedTypeReference("List",
-                            TypeArguments: [new NamedTypeReference(parameter.Type.TypeName)])));
-                    continue;
-                }
-                createArgs.Add(isCollectionRel
-                    && selfPeerSingular is not null
-                    && string.Equals(parameter.Name, selfPeerSingular.Name, StringComparison.Ordinal)
-                        ? (Node)new ThisReference()
-                        : TypedNull(parameter.Type.TypeName));
-                continue;
-            }
-
-            if (autoWireBackRef is not null
-                && string.Equals(parameter.Name, autoWireBackRef.Name, StringComparison.Ordinal)) {
-                createArgs.Add(new ThisReference());
-                continue;
-            }
-
-            if (parameter.IsCollection) {
-                // Collection nav: ctor param is IEnumerable<T>; the CreateNav factory
-                // starts every child with an empty collection.
-                createArgs.Add(new New(
-                    new NamedTypeReference("List",
-                        TypeArguments: [new NamedTypeReference(parameter.Type.TypeName)])));
-                continue;
-            }
-
-            var paramName = ToCamelCase(parameter.Name);
-            var mapped = MapDomainTypeRef(parameter.Type, domain, metadata);
-            // Nav params are optional references (unbound initializers pass null) —
-            // emit nullable to match the property/ctor and avoid CS8625. Scalar ctor
-            // params are required by construction; optional scalars are trailing params.
-            var propRef = parameter.IsNavigation
-                ? (Node)new OptionalTypeReference(mapped)
-                : mapped;
-            // Same node in the signature and the Create call. A second untyped
-            // Parameter does not resolve, so the VM cannot tell scalar from reference.
-            // A navigation the caller did not write is omitted. It needs a default
-            // so that omission is a legal trailing argument.
-            var param = parameter.IsNavigation
-                ? new Parameter(paramName, propRef, DefaultValue: new Constant(null))
-                : parameter.IsOptional
-                    ? new Parameter(paramName, propRef, DefaultValue: EmptyDefault(parameter.Type))
-                    : new Parameter(paramName, propRef);
-            methodParams.Add(param);
-            createArgs.Add(param);
-        }
-
-        // NOTE: defaulted and optional properties are NOT included in
-        // the Target.Create() parameter list — they are trailing params
-        // from TrailingOmittableProperties below.
-
-        // Defaulted and optional props of the target become TRAILING optional method
-        // params (C# optional params must be last) and are forwarded to Target.Create —
-        // so a `create in { Prop: value }` override flows through construction.
-        foreach (var prop in TrailingOmittableProperties(targetEntity, metadata)) {
-            var paramName = ToCamelCase(prop.Name);
-            var mapped = MapDomainTypeRef(prop.Type, domain, metadata);
-            var defaultConstraint = prop.Constraints.OfType<DefaultValueConstraint>().FirstOrDefault();
-            Parameter trailing;
-            if (defaultConstraint is null) {
-                // Optional with no default: omitted passes null (never ""/0).
-                trailing = new Parameter(paramName,
-                    new OptionalTypeReference(mapped),
-                    DefaultValue: new Constant(null));
-            }
-            else {
-                var runtimeExpr = EffectLoweringPass.LowerDefaultExpression(
-                    defaultConstraint.Expression,
-                    new NamedTypeReference(prop.Type.TypeName),
-                    RuntimeAnalysisCache.MeaningFor(domain),
-                    RuntimeAnalysisCache.FormsFor(domain));
-                if (runtimeExpr is not null) {
-                    trailing = new Parameter(paramName,
-                        new OptionalTypeReference(mapped),
-                        DefaultValue: new Constant(null));
-                }
-                else {
-                    trailing = new Parameter(paramName,
-                        requiredProps.Contains(prop.Name) ? mapped : new OptionalTypeReference(mapped),
-                        DefaultValue: LowerDefaultConstantNode(defaultConstraint, prop, domain, metadata));
-                }
-            }
-            methodParams.Add(trailing);
-            createArgs.Add(trailing);
-        }
-
-        var bodyNodes = new List<Node>();
-        var localResult = new Variable($"{ToCamelCase(targetTypeName)}Result");
-        var local = new Variable(ToCamelCase(targetTypeName));
-
-        bodyNodes.Add(new Assignment(localResult,
-            new Invoke(
-                new Member(targetType, "Create"),
-                [.. createArgs])));
-
-        var createResultType = new NamedTypeReference("DomainResult", TypeArguments: [targetType]);
-        bodyNodes.Add(new IfStatement(
-            new Syntactic.Not(
-                new Member(localResult, "IsSuccess")),
-            new Block([
-                new Return(
-                    new Invoke(
-                        new Member(createResultType, "Failure"),
-                        new Syntactic.Coalesce(
-                            new Member(localResult, "ErrorMessage"),
-                            new Constant(""))))
-            ])));
-
-        bodyNodes.Add(new Assignment(local, new Member(localResult, "Value")));
-
-        // Target.Create already Attaches via singular nav args (including auto-wired
-        // `this` back-ref): peer collections + WhenEach* registries. Do not duplicate
-        // _field.Add / Register* / peer Attach when Create wired this collection.
-        var (wiredInverse, _) = FindInverseCollectionInfo(entity, targetTypeName);
-        var createWiredThisCollection = (autoWireBackRef is not null || selfPeerSingular is not null)
-            && fieldName is not null
-            && wiredInverse is not null
-            && string.Equals(wiredInverse.Name, rel.Name, StringComparison.Ordinal);
-
-        if (!createWiredThisCollection) {
-            if (fieldName is not null) {
-                bodyNodes.Add(new Invoke(
-                    new Member(
-                        new Member(new ThisReference(), fieldName), "Add"),
-                    [local]));
-            }
-            else {
-                bodyNodes.Add(new Assignment(
-                    new Member(new ThisReference(), pascalName),
-                    local));
-
-                // A singular create-in links `this` into the target's unique inverse
-                // collection (e.g. local.AttachItems(this)); ambiguous/no inverse is a no-op.
-                var inverse = FindInverseCollectionInfo(targetEntity, entity.Name).Unique;
-                if (inverse is not null) {
-                    bodyNodes.Add(new Invoke(
-                        new Member(local, $"Attach{ToPascalCase(inverse.Name)}"),
-                        [new ThisReference()]));
-                }
-            }
-
-            // Subscription registration when Create did not Attach this relation.
-            if (subscriberSubs is { Count: > 0 }) {
-                foreach (var info in subscriberSubs
-                    .Where(i => string.Equals(i.Relationship.Name, rel.Name, StringComparison.Ordinal))
-                    .GroupBy(s => s.StageName)
-                    .Select(g => g.First())) {
-                    bodyNodes.Add(new Invoke(
-                        new Member(
-                            local,
-                            SubscriberRegisterMethodName(info)),
-                        [new ThisReference()]));
-                }
-            }
-        }
-
-        // A create-in lands the child in its first stage. When a subscription watches
-        // that stage, no transition occurs, so no previousStage notify runs. One call
-        // here covers both wired and unwired cases.
-        if (metadata.GetStructure(targetEntity)?.HasStages == true) {
-            var firstStage = targetEntity.Stages[0].Name;
-            if (subscriberSubs is { Count: > 0 }
-                && subscriberSubs.Any(i =>
-                    string.Equals(i.Relationship.Name, rel.Name, StringComparison.Ordinal)
-                    && string.Equals(i.StageName, firstStage, StringComparison.Ordinal))) {
-                var needsPrevious = StageGroupNeedsPrevious(targetEntity, firstStage, domain);
-                bodyNodes.Add(new Invoke(
-                    new Member(local, $"Notify{firstStage}Subscribers"),
-                    needsPrevious ? [new Constant(null)] : []));
-            }
-        }
-
-        bodyNodes.Add(new Return(
-            new Invoke(
-                new Member(
-                    new NamedTypeReference("DomainResult", TypeArguments: [targetType]),
-                    "Success"),
-                local)));
-
-        methods.Add(new MethodDefinitionNode(
-            methodName,
-            new NamedTypeReference("DomainResult", TypeArguments: [targetType]),
-            Parameters: methodParams.Count > 0 ? methodParams : null,
-            Body: new Block(bodyNodes, [localResult, local]),
-            AccessModifier: AccessModifier.Public
-        ));
-    }
-
-    /// <summary>
-    /// Inverse of a create-in to-one initializer: add an already-constructed child
-    /// to this collection and register this entity's subscriptions on it.
-    /// </summary>
-    private static void AddAttachNavMethod(
-        Entity entity,
-        Relationship rel,
-        List<SubscriptionInfo>? subscriberSubs,
-        string fieldName,
-        List<MethodDefinitionNode> methods) {
-        var targetType = new NamedTypeReference(rel.Target.TypeName);
-        var child = new Parameter("child", targetType);
-        var body = new List<Node> {
-            new Invoke(
-                new Member(new Member(new ThisReference(), fieldName), "Add"),
-                [child])
-        };
-        if (subscriberSubs is { Count: > 0 }) {
-            foreach (var info in subscriberSubs
-                .Where(i => string.Equals(i.Relationship.Name, rel.Name, StringComparison.Ordinal))
-                .GroupBy(s => s.StageName)
-                .Select(g => g.First())) {
-                body.Add(new Invoke(
-                    new Member(child, SubscriberRegisterMethodName(info)),
-                    [new ThisReference()]));
-            }
-        }
-        methods.Add(new MethodDefinitionNode(
-            $"Attach{ToPascalCase(rel.Name)}",
-            new TypeReference("void"),
-            Parameters: [child],
-            Body: new Block(body),
-            AccessModifier: AccessModifier.Internal
-        ));
-    }
-
-    /// <summary>
-    /// Public parameters of <c>Create{Nav}</c>: constructor slots the method
-    /// asks the caller for. Back-references, the auto-wired peer, and
-    /// collections are filled inside the method.
-    /// </summary>
-    internal static List<ConstructorParameterOrder> CreateNavParameters(
-        Entity source, Entity target, INodeMetadataProvider analysis) {
-        var slots = new List<ConstructorParameterOrder>();
-        var autoWire = FindAutoWireBackReference(target, source.Name);
-        foreach (var parameter in GetConstructorParameters(target, analysis)) {
-            if (parameter.IsNavigation && parameter.IsBackReference)
-                continue;
-            if (autoWire is not null
-                && string.Equals(parameter.Name, autoWire.Name, StringComparison.Ordinal))
-                continue;
-            if (parameter.IsCollection)
-                continue;
-            slots.Add(parameter);
-        }
-        return slots;
-    }
-
-    internal static IReadOnlyList<ConstructorParameterOrder> GetConstructorParameters(
-        Entity targetEntity,
-        INodeMetadataProvider analysis) {
-        if (analysis.GetStructure(targetEntity) is EntityStructureMetadata esm)
-            return esm.ConstructorParameters;
-
-        throw new InvalidOperationException(
-            $"EntityStructureMetadata is required for constructor ordering on entity '{targetEntity.Name}'.");
-    }
-
-    /// <summary>
-    /// Trailing omittable Create/ctor parameters: defaulted or optional properties
-    /// that are not entry-assigned, in the order the Create factory appends them.
-    /// </summary>
-    internal static List<Property> TrailingOmittableProperties(
-        Entity entity,
-        INodeMetadataProvider metadata) {
-        var structure = metadata.GetStructure(entity);
-        var entryAssigned = structure?.EntryAssignedPropertyNames
-            ?? EntityStructureAnalyzer.ComputeEntryAssignedPropertyNames(entity);
-        var required = structure?.RequiredPropertyNames
-            ?? EntityStructureAnalyzer.ComputeRequiredPropertyNames(entity);
-        var list = new List<Property>();
-        foreach (var prop in entity.Properties.OrderBy(p => p.Name)) {
-            if (required.Contains(prop.Name)
-                && !prop.Constraints.OfType<DefaultValueConstraint>().Any())
-                continue;
-            if (entryAssigned.Contains(prop.Name))
-                continue;
-            list.Add(prop);
-        }
-        return list;
-    }
-
-    /// <summary>
-    /// Null <c>IEnumerable&lt;T&gt;?</c> for an omitted collection create argument.
-    /// The printed constructor already coalesces that null into an empty list.
-    /// A synthetic <c>new List&lt;T&gt;()</c> is a different collection instance the
-    /// VM cannot assign or construct.
-    /// </summary>
-    internal static Node NullCollectionNode(string elementTypeName) =>
-        new TypeCast(
-            new Constant(null),
-            new OptionalTypeReference(
-                new NamedTypeReference("IEnumerable",
-                    TypeArguments: [new NamedTypeReference(elementTypeName)])));
-
-    /// <summary>
-    /// Builds constraint-validation guard clauses for the <c>Create</c> factory method.
-    /// Each constraint on a constructor-parameter property produces an early-return
-    /// guard: <c>if (violation) return DomainResult&lt;T&gt;.Failure("'Prop' ...");</c>
-    /// Enum-typed properties get a not-any-member guard from the same Member + NotEqual
-    /// nodes as assign.
-    ///
-    /// Only entity properties (not navigation properties) are validated — navs do not
-    /// carry constraints in the current domain model. Requiredness guards come from the
-    /// published fact; a defaulted property's own default supplies the value. Other
-    /// constraint guards still apply to defaulted params. Entry-assigned props are
-    /// body-initialized, never ctor params, so they are skipped.
-    /// </summary>
-    private static List<Node> BuildCreateConstraintChecks(
-        Entity entity, Domain domain, IReadOnlySet<string> entryAssignedProps,
-        INodeMetadataProvider analysis, IReadOnlyList<Parameter> signature) {
-
-        var checks = new List<Node>();
-        var entityTypeRef = new NamedTypeReference(entity.Name);
-        var resultType = new NamedTypeReference("DomainResult",
-            TypeArguments: [entityTypeRef]);
-
-        Node Failure(Node msg) => new Return(
-            new Invoke(new Member(resultType, "Failure"), msg));
-
-        foreach (var prop in entity.Properties.OrderBy(p => p.Name)) {
-            // Entry-assigned props are body-initialized by the ctor's stage-entry effects
-            // — not constructor params, so no guard to attach.
-            if (entryAssignedProps.Contains(prop.Name)) continue;
-
-            var paramName = ToCamelCase(prop.Name);
-            // The signature parameter, not a same-named copy. A copy has no
-            // type, so name.Length does not resolve and the VM rejects Create.
-            var paramRef = signature.FirstOrDefault(p =>
-                string.Equals(p.Name, paramName, StringComparison.Ordinal));
-            if (paramRef is null)
-                continue;
-
-            // An optional parameter is nullable, so a value constraint only applies
-            // when the caller supplied a value. The printed `&&` lets flow analysis see
-            // a non-null value inside the comparison (and skips an omitted null).
-            var nullableParam = paramRef.TypeReference is OptionalTypeReference;
-            // Required-by-default: a defaulted prop's own default supplies the value,
-            // so the factory does not ask the caller for one (assign always does).
-            var includeRequired = !prop.Constraints.Any(c => c is DefaultValueConstraint);
-            var valueHasDefault = paramRef.DefaultValue is not null;
-
-            foreach (var check in BuiltinConstraintCompiler.Checks(
-                         entity, prop, domain, analysis,
-                         ConstraintCheckWriter.ConstraintCheckStyle.Create,
-                         paramRef, nullableParam, valueHasDefault, includeRequired)) {
-                checks.Add(BuiltinConstraintCompiler.Claims(check.Kind)
-                    ? BuiltinConstraintCompiler.CreateGuard(entity.Name, check)
-                    : new IfStatement(
-                        check.GuardedCondition,
-                        new Block([Failure(check.Message)])));
-            }
-        }
-
-        return checks;
-    }
-
 }

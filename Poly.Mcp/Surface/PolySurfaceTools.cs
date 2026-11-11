@@ -272,8 +272,17 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
 
         var allFindings = AllFindings(analysis);
         var selectMatched = true;
+        IReadOnlyList<ActionInvariantFact>? witness = null;
         if (!string.IsNullOrWhiteSpace(select)) {
             var normalized = NormalizeSelect(select, workspaceState.Domain.Name);
+            var selectParts = normalized.Split('/');
+            if (selectParts.Length == 2 && analysis.Data is AnalysisData { ActionInvariants: { } invariants }) {
+                var contexts = invariants
+                    .Where(i => string.Equals(i.EntityName, selectParts[0], StringComparison.Ordinal)
+                        && string.Equals(i.ActionName, selectParts[1], StringComparison.Ordinal))
+                    .ToList();
+                witness = contexts.Count > 0 ? contexts : null;
+            }
             var focused = allFindings.Where(f => PathMatches(f.Path, normalized)).ToList();
             selectMatched = focused.Count > 0 || ElementExists(workspaceState.Domain, normalized);
             allFindings = focused;
@@ -310,6 +319,7 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
                 hintCount,
                 findingsTotal = reportable.Count,
                 truncated = reportable.Count > FindingCap,
+                witness,
             },
             Next: verdict == "violated"
                 ? Next(workspace, "poly_guide", "poly_define")

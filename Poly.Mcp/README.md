@@ -74,6 +74,7 @@ Color: enum iri("https://example.com/Color") {
 ## Honesty
 
 - `poly_define` writes the model; a rejected document changes nothing.
+- `poly_check` with `select` naming an action also returns `data.witness` — the analyzer's per-stage preconditions, narrowed ranges and postconditions (omitted when none were published; the verdict is unchanged).
 - `poly_check` reports `proven` only when it has no error findings; `unknown` when the request is not modelled (argument-specific proofs) or no selector matches.
 - `poly_export` fails closed when an exporter returns no artifact.
 - `poly_workspace`/`poly_inspect`/`poly_check`/`poly_export` are read-only (export may write a temp file); `poly_define`/`poly_simulate` are destructive.

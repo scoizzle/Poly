@@ -81,8 +81,11 @@ public class McpSessionStoreTests {
 
         await Assert.That(result.IsError).IsTrue();
         var envelope = result.StructuredContent!.Value;
-        await Assert.That(envelope.GetProperty("success").GetBoolean()).IsFalse();
-        await Assert.That(envelope.GetProperty("message").GetString()).Contains("boom");
+        // Rationale: the boundary used to emit the v1 DomainToolResponse shape (success/message),
+        // which violated the outputSchema every v2 tool advertises (ok/summary). Same assertion
+        // intent (failed call, carries the exception message), now in the advertised shape.
+        await Assert.That(envelope.GetProperty("ok").GetBoolean()).IsFalse();
+        await Assert.That(envelope.GetProperty("summary").GetString()).Contains("boom");
         await Assert.That(result.Content[0]).IsTypeOf<ModelContextProtocol.Protocol.TextContentBlock>();
     }
 }

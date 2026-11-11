@@ -69,8 +69,10 @@ class Client:
         self.chars += len(text)
         structured = result.get("structuredContent")
         if structured is not None:
+            # v2 text is a prose projection, not JSON: the envelope is the structured channel.
             self.structured += len(json.dumps(structured))
-        return json.loads(text), len(text)
+            return structured, len(text)
+        return json.loads(text), len(text)  # older runs: the text block was the JSON
 
     def close(self):
         try:
@@ -289,6 +291,10 @@ TASKS = [
 ]
 
 
+def git(*args: str) -> str:
+    return subprocess.run(["git", *args], cwd=ROOT, capture_output=True, text=True).stdout.strip()
+
+
 def run(surface: int):
     results = []
     for index, (name, task) in enumerate(TASKS):
@@ -327,18 +333,28 @@ def main() -> int:
             "chars": sum(row["chars"] for row in rows),
             "structured": sum(row["structured"] for row in rows),
         }
-        print(f"\nv{surface}: {summary[f'v{surface}']['passed']}/{len(rows)} passed, "
-              f"{summary[f'v{surface}']['calls']} calls, {summary[f'v{surface}']['chars']} text chars, "
-              f"{summary[f'v{surface}']['structured']} structured chars")
+        v = summary[f"v{surface}"]
+        v["combined"] = v["chars"] + v["structured"]
+        print(f"\nv{surface}: {v['passed']}/{len(rows)} passed, "
+              f"{v['calls']} calls, {v['chars']} text chars, "
+              f"{v['structured']} structured chars, {v['combined']} combined")
         for row in rows:
+            row["combined"] = row["chars"] + row["structured"]
             print(f"  {'PASS' if row['ok'] else 'FAIL'}  {row['task']:<20} "
-                  f"calls={row['calls']:<3} chars={row['chars']:<6} structured={row['structured']}"
+                  f"calls={row['calls']:<3} text={row['chars']:<6} structured={row['structured']:<6} "
+                  f"combined={row['combined']}"
                   + (f"  {row.get('error', '')}" if row.get("error") else ""))
 
     out = Path(sys.argv[sys.argv.index("--json") + 1]) if "--json" in sys.argv else None
     if out:
-        out.write_text(json.dumps(summary, indent=2))
-        print(f"\nwrote {out}")
+        # Merge under a new key; never overwrite the recorded v1 / v2 measurements.
+        existing = json.loads(out.read_text()) if out.exists() else {}
+        block = summary["v2"]
+        block["commit"] = git("rev-parse", "HEAD")
+        block["tree"] = "dirty" if git("status", "--porcelain") else "clean"
+        existing["v2-dedup"] = block
+        out.write_text(json.dumps(existing, indent=2))
+        print(f"\nwrote {out} (v2-dedup at {block['commit'][:8]}, tree {block['tree']})")
     return 0 if summary["v2"]["passed"] == summary["v2"]["total"] else 2
 
 

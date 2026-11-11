@@ -589,6 +589,139 @@ public class PolySurfaceV2Tests {
         }
     }
 
+    [Test]
+    public async Task StdioSurface_TextCarriesEssentialsAndStructuredKeepsDetail() {
+        await WithStdioServerAsync(async call => {
+            var guide = await call("poly_guide", new Dictionary<string, object?>());
+            var guideText = TextOf(guide);
+            await Assert.That(guideText).Contains(guide["result"]!["structuredContent"]!["data"]!["guide"]!.GetValue<string>());
+
+            var created = await call("poly_workspace", new Dictionary<string, object?> { ["name"] = "Surf" });
+            var handle = created["result"]!["structuredContent"]!["state"]!["workspace"]!.GetValue<string>();
+            var createdText = TextOf(created);
+            await Assert.That(createdText).Contains("workspace: " + handle);
+            await Assert.That(createdText).Contains("next:");
+            await Assert.That(createdText).DoesNotContain("\"findings\":[");
+            await Assert.That(created["result"]!["structuredContent"]!["ok"]!.GetValue<bool>()).IsTrue();
+            await Assert.That(created["result"]!["structuredContent"]!["summary"]).IsNotNull();
+
+            var defined = await call("poly_define", new Dictionary<string, object?> { ["workspace"] = handle, ["poly"] = Valid });
+            await Assert.That(defined["result"]!["structuredContent"]!["ok"]!.GetValue<bool>()).IsTrue();
+            await Assert.That(TextOf(defined).Length)
+                .IsLessThan(defined["result"]!["structuredContent"]!.ToJsonString().Length);
+
+            var inspected = await call("poly_inspect", new Dictionary<string, object?> { ["workspace"] = handle });
+            await Assert.That(TextOf(inspected)).Contains("Product");
+
+            var simulated = await call("poly_simulate", new Dictionary<string, object?> {
+                ["workspace"] = handle,
+                ["steps"] = """
+                    [{"op":"create","entity":"Product","properties":{"Total":42},"as":"p1"},
+                     {"op":"invoke","instanceId":"p1","action":"Submit"},
+                     {"op":"get","instanceId":"p1"}]
+                    """,
+            });
+            await Assert.That(TextOf(simulated)).Contains("Active");
+        });
+    }
+
+    [Test]
+    public async Task StdioSurface_ExportTextCarriesBodyInlineAndPathWhenLarge() {
+        await WithStdioServerAsync(async call => {
+            var created = await call("poly_workspace", new Dictionary<string, object?> { ["name"] = "Big" });
+            var handle = created["result"]!["structuredContent"]!["state"]!["workspace"]!.GetValue<string>();
+            var big = "domain Big\n" + string.Concat(Enumerable.Range(0, 60).Select(i =>
+                $"Entity{i}: entity {{\n  Name{i}: Text\n  Total{i}: Number range(0, 100)\n}}\n"));
+            var defined = await call("poly_define", new Dictionary<string, object?> { ["workspace"] = handle, ["poly"] = big });
+            await Assert.That(defined["result"]!["structuredContent"]!["ok"]!.GetValue<bool>()).IsTrue();
+
+            var inline = await call("poly_export", new Dictionary<string, object?> {
+                ["workspace"] = handle,
+                ["format"] = "dsl",
+                ["inline"] = true,
+            });
+            var content = inline["result"]!["structuredContent"]!["data"]!["content"]!.GetValue<string>();
+            await Assert.That(TextOf(inline)).StartsWith("ok — ");
+            await Assert.That(TextOf(inline)).Contains($"artifact dsl {System.Text.Encoding.UTF8.GetByteCount(content)}B\n{content}");
+
+            var file = await call("poly_export", new Dictionary<string, object?> { ["workspace"] = handle, ["format"] = "dsl" });
+            var data = file["result"]!["structuredContent"]!["data"]!;
+            await Assert.That(TextOf(file)).Contains(
+                $"artifact dsl {data["path"]!.GetValue<string>()} {data["bytes"]!.GetValue<int>()}B sha256={data["sha256"]!.GetValue<string>()}");
+            await Assert.That(TextOf(file)).DoesNotContain(content);
+        });
+    }
+
+    private static string TextOf(JsonNode response) =>
+        response["result"]!["content"]![0]!["text"]!.GetValue<string>();
+
+    /// <summary>Boots the built server over stdio and hands the script a tools/call function.</summary>
+    private static async Task WithStdioServerAsync(Func<Func<string, Dictionary<string, object?>, Task<JsonNode>>, Task> script) {
+        var root = RepoRoot();
+        var dll = Path.Combine(root, "Poly.Mcp/bin/Debug/net10.0/Poly.Mcp.dll");
+        var runtimeConfig = Path.Combine(root, "Poly.Mcp/bin/Debug/net10.0/Poly.Mcp.runtimeconfig.json");
+        await Assert.That(File.Exists(dll)).IsTrue();
+        var start = new ProcessStartInfo("dotnet") {
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+        };
+        start.ArgumentList.Add("exec");
+        start.ArgumentList.Add("--runtimeconfig");
+        start.ArgumentList.Add(runtimeConfig);
+        start.ArgumentList.Add(dll);
+
+        using var process = Process.Start(start)!;
+        try {
+            async Task SendAsync(Dictionary<string, object?> message) {
+                await process.StandardInput.WriteLineAsync(JsonSerializer.Serialize(message));
+                await process.StandardInput.FlushAsync();
+            }
+            async Task<JsonNode> ReadUntilAsync(int id) {
+                while (true) {
+                    var line = await process.StandardOutput.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(30));
+                    if (line is null)
+                        throw new InvalidOperationException("server closed stdout");
+                    if (string.IsNullOrWhiteSpace(line))
+                        continue;
+                    var node = JsonNode.Parse(line)!;
+                    if (node["id"]?.GetValue<int>() == id)
+                        return node;
+                }
+            }
+
+            await SendAsync(new() {
+                ["jsonrpc"] = "2.0",
+                ["id"] = 1,
+                ["method"] = "initialize",
+                ["params"] = new {
+                    protocolVersion = "2024-11-05",
+                    capabilities = new { },
+                    clientInfo = new { name = "test", version = "1" },
+                },
+            });
+            await ReadUntilAsync(1);
+            await SendAsync(new() { ["jsonrpc"] = "2.0", ["method"] = "notifications/initialized" });
+
+            var nextId = 2;
+            await script(async (name, arguments) => {
+                var id = nextId++;
+                await SendAsync(new() {
+                    ["jsonrpc"] = "2.0",
+                    ["id"] = id,
+                    ["method"] = "tools/call",
+                    ["params"] = new { name, arguments },
+                });
+                return await ReadUntilAsync(id);
+            });
+        }
+        finally {
+            if (!process.HasExited)
+                process.Kill(entireProcessTree: true);
+        }
+    }
+
     private static async Task<(string? Instructions, List<JsonObject> Tools)> ReadSurfaceAsync() {
         var root = RepoRoot();
         var dll = Path.Combine(root, "Poly.Mcp/bin/Debug/net10.0/Poly.Mcp.dll");

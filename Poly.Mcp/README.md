@@ -20,7 +20,7 @@ Seven outcome tools. Server instructions carry the framing: use Poly when a task
 | `poly_export` | One `format` enum: `dsl`, `json-schema`, `csharp`, `markdown`, `html`, `json-ld`, `shacl`; inline under 4 KB, otherwise a file path |
 | `poly_simulate` | Ordered `create`/`link`/`unlink`/`invoke`/`evaluate`/`get`/`list` steps; one trace entry per step |
 
-Every response is `{ok, summary, findings[], data?, next[], state{workspace, model, revision, entities, instances}, errorCode?}`. A missing or expired handle returns `WORKSPACE_REQUIRED`; `next` entries are call sketches with the real handle. Unknown arguments are rejected with the valid names.
+Every response is `{ok, summary, findings[], data?, next[], state{workspace, model, revision, entities, instances}, errorCode?}` in `structuredContent`. The text block is not a copy of that JSON: it carries the essentials as fixed prose lines (`ok — summary`, `workspace: <handle> model=… rev=…`, one `finding:` line each, `next:` call sketches) plus `data` flattened to `key: value` lines (guide body, export body, one line per simulate step, a witness count). This deliberately departs from the MCP SHOULD that a text block carry the serialized JSON; clients that read only text lose nothing they need to continue, and `structuredContent` keeps the full envelope. An inline export therefore doubles its bytes by design. A missing or expired handle returns `WORKSPACE_REQUIRED`; `next` entries are call sketches with the real handle. Unknown arguments are rejected with the valid names.
 
 The legacy 30-tool v1 surface was removed. Its operation adapters remain internal to `PolySurfaceTools` (they are not registered as MCP tools). The historical A/B is the `Poly MCP agent surface implementation.md` note in `../reports/`.
 
@@ -78,7 +78,7 @@ Color: enum iri("https://example.com/Color") {
 - `poly_check` reports `proven` only when it has no error findings; `unknown` when the request is not modelled (argument-specific proofs) or no selector matches.
 - `poly_export` fails closed when an exporter returns no artifact.
 - `poly_workspace`/`poly_inspect`/`poly_check`/`poly_export` are read-only (export may write a temp file); `poly_define`/`poly_simulate` are destructive.
-- Tool annotations, output schemas, and structured content are on every tool; unknown arguments fail with the valid names.
+- Tool annotations, output schemas, and structured content are on every tool (structured = the full envelope; text = essentials plus flattened data); unknown arguments fail with the valid names.
 
 ## Harness Runtime
 
@@ -86,7 +86,7 @@ Color: enum iri("https://example.com/Color") {
 
 - **Store:** `ISessionStore` is a singleton (`McpSessionStore`). Sessions are in memory only; a restart loses them. Each session has its own lock.
 - **Eviction:** sessions idle longer than `Mcp:Sessions:IdleTimeout` (default 8h) are removed by `SessionEvictionService`; `SweepInterval` (default 15m) controls the sweep. Set `IdleTimeout` to zero to disable eviction.
-- **Boundary:** one `AddCallToolFilter` catches uncaught exceptions; another rejects unknown v2 arguments. Both keep the `PolyResponse` envelope.
+- **Boundary:** one `AddCallToolFilter` catches uncaught exceptions (as the advertised envelope, `INTERNAL_ERROR`); another rejects unknown v2 arguments; the innermost, `EnvelopeTextFilter`, replaces the text block with the prose projection of the structured envelope. All keep the `PolyResponse` envelope.
 - **Transport:** stdio; session identity is the workspace handle, not an HTTP header.
 
 See the `Poly MCP agent surface design.md` note in `../reports/` for the rationale and the gate results.

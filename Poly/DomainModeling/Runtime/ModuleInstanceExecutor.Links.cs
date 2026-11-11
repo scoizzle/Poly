@@ -16,8 +16,9 @@ namespace Poly.DomainModeling.Runtime;
 public sealed partial class ModuleInstanceExecutor {
     /// <summary>
     /// Links <paramref name="target"/> to <paramref name="source"/> over
-    /// <paramref name="relationshipName"/>. Idempotent. A second link on a to-one source
-    /// is refused.
+    /// <paramref name="relationshipName"/>. Idempotent: a repeat succeeds with
+    /// <see cref="LinkChange.AlreadyLinked"/> and leaves the bag unchanged. A second
+    /// link on a to-one source is refused.
     /// </summary>
     public ModuleOutcome Link(string relationshipName, ModuleInstance source, ModuleInstance target) {
         ArgumentException.ThrowIfNullOrEmpty(relationshipName);
@@ -29,7 +30,7 @@ public sealed partial class ModuleInstanceExecutor {
                 RequireRegistered(target);
                 var contract = RequireContract(relationshipName, source, target);
                 if (IsLinkedCore(contract, source.Bag, target.Bag))
-                    return ModuleOutcome.Ok();
+                    return ModuleOutcome.Ok(change: LinkChange.AlreadyLinked);
 
                 if (IsToMany(contract)) {
                     var field = CollectionField(contract);
@@ -45,14 +46,16 @@ public sealed partial class ModuleInstanceExecutor {
                 }
                 foreach (var field in SubscriberFields(contract))
                     AddSubscriber(target.Bag, field, source.Bag);
-                return ModuleOutcome.Ok();
+                return ModuleOutcome.Ok(change: LinkChange.Linked);
             });
         }
     }
 
     /// <summary>
-    /// Removes the link if present. Unlinking the last owner of an owned target is
-    /// refused: another source entity sharing the relationship name is not an owner.
+    /// Removes the link if present. Unlinking an absent link succeeds with
+    /// <see cref="LinkChange.NotLinked"/> and changes nothing. Unlinking the last owner
+    /// of an owned target is refused: another source entity sharing the relationship
+    /// name is not an owner.
     /// </summary>
     public ModuleOutcome Unlink(string relationshipName, ModuleInstance source, ModuleInstance target) {
         ArgumentException.ThrowIfNullOrEmpty(relationshipName);
@@ -64,7 +67,7 @@ public sealed partial class ModuleInstanceExecutor {
                 RequireRegistered(target);
                 var contract = RequireContract(relationshipName, source, target);
                 if (!IsLinkedCore(contract, source.Bag, target.Bag))
-                    return ModuleOutcome.Ok();
+                    return ModuleOutcome.Ok(change: LinkChange.NotLinked);
                 if (contract.SourceOwnsTarget && OwnerCount(contract, target.Bag) == 1)
                     return ModuleOutcome.Fail(Relationship.UnlinkViolationMessage(relationshipName));
 
@@ -80,7 +83,7 @@ public sealed partial class ModuleInstanceExecutor {
                 }
                 foreach (var field in SubscriberFields(contract))
                     RemoveSubscriber(target.Bag, field, source.Bag);
-                return ModuleOutcome.Ok();
+                return ModuleOutcome.Ok(change: LinkChange.Unlinked);
             });
         }
     }

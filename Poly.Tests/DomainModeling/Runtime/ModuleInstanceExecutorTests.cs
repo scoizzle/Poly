@@ -324,6 +324,31 @@ public sealed class ModuleInstanceExecutorTests {
     }
 
     [Test]
+    public async Task Link_AlreadyLinkedPair_ReportsAlreadyLinked() {
+        var executor = ExecutorFor(Orders);
+        var ada = executor.Create("Customer", Values(("Name", "Ada"))).Instance!;
+        var order = executor.Create("Order", Values(("Total", 5L))).Instance!;
+
+        var first = executor.Link("orders", ada, order);
+        var second = executor.Link("orders", ada, order);
+
+        await Assert.That(first.Succeeded).IsTrue();
+        await Assert.That(first.Change).IsEqualTo(LinkChange.Linked);
+        await Assert.That(second.Succeeded).IsTrue();
+        await Assert.That(second.Change).IsEqualTo(LinkChange.AlreadyLinked);
+        await Assert.That(((System.Collections.IList)ada.Bag["_orders"]!).Count).IsEqualTo(1);
+
+        var unlinked = executor.Unlink("orders", ada, order);
+        var alreadyUnlinked = executor.Unlink("orders", ada, order);
+
+        await Assert.That(unlinked.Succeeded).IsTrue();
+        await Assert.That(unlinked.Change).IsEqualTo(LinkChange.Unlinked);
+        await Assert.That(alreadyUnlinked.Succeeded).IsTrue();
+        await Assert.That(alreadyUnlinked.Change).IsEqualTo(LinkChange.NotLinked);
+        await Assert.That(((System.Collections.IList)ada.Bag["_orders"]!).Count).IsEqualTo(0);
+    }
+
+    [Test]
     public async Task Link_UnknownRelationship_AndWrongTarget_Fail() {
         var executor = ExecutorFor(Orders);
         var ada = executor.Create("Customer", Values(("Name", "Ada"))).Instance!;

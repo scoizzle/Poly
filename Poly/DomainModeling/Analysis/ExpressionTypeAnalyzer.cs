@@ -27,7 +27,7 @@ namespace Poly.DomainModeling.Analysis;
 ///  - assign RHS is compatible with the target property;
 ///  - <c>default(...)</c> is compatible with the property type.
 /// </summary>
-internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
+internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
     public const string Id = "DomainExpressionType";
     public string PassName => Id;
 
@@ -136,56 +136,6 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
             return new(TypeCategory.Unknown);
         }
         return InferType(context, expr, props, parameters, enumTypes);
-    }
-
-    private static void RejectEndpointCallsInBody(AnalysisContext context, Node node) {
-        foreach (var child in node.Children) {
-            if (child is FunctionCall call
-                && FunctionAnalysis.Find(context, call.Name) is null
-                && context.GetTypeLookup()?.Domain is { } domain
-                && ContractCallResolver.IsExported(domain, call.Name))
-                ContractCallResolver.RejectUnlowerable(context, call);
-            if (child is not null)
-                RejectEndpointCallsInBody(context, child);
-        }
-    }
-
-    private void CheckCallArguments(
-        AnalysisContext context, FunctionCall call,
-        Dictionary<string, string> props, Dictionary<string, string>? parameters,
-        Dictionary<string, EnumType> enumTypes) {
-        foreach (var argument in call.Arguments)
-            WalkExpression(context, argument, props, parameters, enumTypes);
-        // Unknown name and wrong arity are reported once per call by FunctionAnalysis.CheckCall.
-        var function = FunctionAnalysis.Find(context, call.Name);
-        if (function is null) {
-            // #426: a name no function declares may be an imported contract endpoint.
-            if (context.GetTypeLookup()?.Domain is { } domain
-                && ContractCallResolver.IsExported(domain, call.Name)) {
-                var argumentType = call.Arguments.Count == 1
-                    ? InferValueType(context, call.Arguments[0], props, parameters, enumTypes).TypeName
-                    : null;
-                ContractCallResolver.Resolve(context, domain, call, argumentType);
-                ContractCallResolver.RejectUnlowerable(context, call);
-            }
-            return;
-        }
-        if (function.Parameters.Count != call.Arguments.Count)
-            return;
-        for (var i = 0; i < call.Arguments.Count; i++) {
-            var parameterType = function.Parameters[i].Type.TypeName;
-            var target = new TypeInfo(CategoryOf(context, parameterType, enumTypes), parameterType);
-            var argument = InferValueType(context, call.Arguments[i], props, parameters, enumTypes);
-            if (argument.Category is not TypeCategory.Unknown
-                && target.Category is not TypeCategory.Unknown
-                && !Compatible(context, argument, target, assigning: true)) {
-                var where = call.Line > 0 ? $" (line {call.Line}, col {call.Col})" : "";
-                context.ReportError(call,
-                    $"Argument '{function.Parameters[i].Name}' of '{call.Name}' expects '{parameterType}', " +
-                    $"got '{Describe(argument)}'{where}.",
-                    DomainModelDiagnosticCodes.FunctionArgumentType);
-            }
-        }
     }
 
     // ── Entry points per entity ────────────────────────────────
@@ -574,173 +524,6 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
         }
     }
 
-    /// <summary>
-    /// <c>match</c> (#409): every arm condition is Boolean (DMMAT001), the arm values and the
-    /// <c>else</c> unify to one type (DMMAT002), and no two arms share a condition (DMMAT003).
-    /// Unknown types are skipped, as everywhere else in this pass. Every sub-expression is walked.
-    /// </summary>
-    private void CheckMatch(
-        AnalysisContext context, MatchExpr match,
-        Dictionary<string, string> props, Dictionary<string, string>? parameters,
-        Dictionary<string, EnumType> enumTypes) {
-        var where = match.Line > 0 ? $" (line {match.Line}, col {match.Col})" : "";
-        foreach (var arm in match.Arms) {
-            var condition = InferType(context, arm.Condition, props, parameters, enumTypes);
-            if (condition.Category is not (TypeCategory.Boolean or TypeCategory.Unknown))
-                context.ReportError(match,
-                    $"'match' arm condition must be Boolean (got '{Describe(condition)}'){where}.",
-                    DomainModelDiagnosticCodes.MatchConditionNotBoolean);
-            WalkExpression(context, arm.Condition, props, parameters, enumTypes);
-            WalkExpression(context, arm.Value, props, parameters, enumTypes);
-            CheckMatchNames(context, match, arm.Condition, props, parameters, enumTypes, where);
-            CheckMatchNames(context, match, arm.Value, props, parameters, enumTypes, where);
-        }
-        WalkExpression(context, match.Else, props, parameters, enumTypes);
-        CheckMatchNames(context, match, match.Else, props, parameters, enumTypes, where);
-
-        TypeInfo? reference = null;
-        foreach (var value in match.Arms.Select(a => a.Value).Append(match.Else)) {
-            var type = InferType(context, value, props, parameters, enumTypes);
-            if (type.Category is TypeCategory.Unknown or TypeCategory.Null) continue;
-            if (reference is null) { reference = type; continue; }
-            if (!Unifies(reference.Value, type))
-                context.ReportError(match,
-                    $"'match' arm values do not unify: '{Describe(reference.Value)}' and '{Describe(type)}'{where}.",
-                    DomainModelDiagnosticCodes.MatchArmTypeMismatch);
-        }
-
-        var seen = new List<string>();
-        foreach (var arm in match.Arms) {
-            var key = StructuralKey(arm.Condition);
-            if (seen.Contains(key))
-                context.ReportError(match,
-                    $"'match' has two arms with the same condition; the later arm is unreachable{where}.",
-                    DomainModelDiagnosticCodes.MatchDuplicateCondition);
-            else
-                seen.Add(key);
-        }
-    }
-
-    /// <summary>
-    /// Two known arm types unify when they share a category (enums: the same enum), or one is an
-    /// enum and the other Text, as in comparisons. Not <see cref="Compatible"/>: that treats two
-    /// untyped values as equal by name.
-    /// </summary>
-    private static bool Unifies(TypeInfo a, TypeInfo b) =>
-        a.Category == b.Category
-            ? a.Category is not TypeCategory.Enum || string.Equals(a.TypeName, b.TypeName, StringComparison.Ordinal)
-            : (a.Category is TypeCategory.Enum && b.Category is TypeCategory.Text)
-              || (b.Category is TypeCategory.Enum && a.Category is TypeCategory.Text);
-
-    /// <summary>
-    /// A position- and identity-free structural key for an expression: type, scalar members (not
-    /// <c>Id</c>, <c>Line</c>, <c>Col</c>), then children. Two conditions written on different lines
-    /// with the same shape produce the same key.
-    /// </summary>
-    private static string StructuralKey(Node? node) {
-        if (node is null) return "_";
-        var scalars = node.GetType().GetProperties()
-            .Where(p => p.GetIndexParameters().Length == 0
-                && p.Name is not ("Id" or "Line" or "Col" or "Children")
-                && (p.PropertyType.IsPrimitive || p.PropertyType.IsEnum
-                    || p.PropertyType == typeof(string) || p.PropertyType == typeof(object)
-                    || p.PropertyType == typeof(decimal)))
-            .Select(p => {
-                var value = p.GetValue(node);
-                return $"{p.Name}={value?.GetType().Name}:{value}";
-            });
-        return $"{node.GetType().Name}{{{string.Join(",", scalars)}}}({string.Join(",", node.Children.Select(StructuralKey))})";
-    }
-
-    /// <summary>
-    /// Fail closed on a bare name that resolves to nothing (it would lower to a member the entity
-    /// does not have). Descends only value-level nodes; quantifier and navigation bodies are
-    /// target-scoped. A bare name is allowed as a comparison operand against an enum, and as a
-    /// value when some enum declares that member.
-    /// </summary>
-    private void CheckMatchNames(
-        AnalysisContext context, MatchExpr match, DomainExpression expr,
-        Dictionary<string, string> props, Dictionary<string, string>? parameters,
-        Dictionary<string, EnumType> enumTypes, string where) {
-        switch (expr) {
-            case PropertyAccess pa:
-                var rewritten = RewriteLibraryIdent(pa);
-                if (rewritten is not PropertyAccess
-                    || ResolvePropertyType(pa.Name, props, parameters) is not null
-                    || string.Equals(pa.Name, "Guid", StringComparison.Ordinal)
-                    || enumTypes.Values.Any(e => e.MemberNames.Contains(pa.Name, StringComparer.Ordinal)))
-                    return;
-                context.ReportError(match,
-                    $"'{pa.Name}' in 'match' is not a property, parameter, or enum member{where}.",
-                    DomainModelDiagnosticCodes.MatchUnresolvedName);
-                return;
-            case Comparison cmp:
-                CheckMatchNames(context, match, cmp.Left, props, parameters, enumTypes, where);
-                CheckMatchNames(context, match, cmp.Right, props, parameters, enumTypes, where);
-                return;
-            case And or Or or Not or Add or Subtract or Multiply or Divide:
-                foreach (var child in expr.Children.OfType<DomainExpression>())
-                    CheckMatchNames(context, match, child, props, parameters, enumTypes, where);
-                return;
-            default:
-                return; // nested match reports its own names when it is walked
-        }
-    }
-
-    /// <summary>The unified value type of a <c>match</c>: the first arm type that is known and not null.</summary>
-    private TypeInfo InferMatch(
-        AnalysisContext context, MatchExpr match,
-        Dictionary<string, string>? props, Dictionary<string, string>? parameters,
-        Dictionary<string, EnumType> enumTypes) {
-        var types = match.Arms.Select(a => a.Value).Append(match.Else)
-            .Select(v => InferType(context, v, props, parameters, enumTypes)).ToList();
-        if (types.Any(t => t.Category is TypeCategory.Unknown))
-            return new(TypeCategory.Unknown);
-        return types.FirstOrDefault(t => t.Category is not TypeCategory.Null) is { Category: not TypeCategory.Unknown } known
-            ? known
-            : new(TypeCategory.Null);
-    }
-
-    private void CheckArithmetic(
-        AnalysisContext context, DomainExpression left, DomainExpression right,
-        Dictionary<string, string> props, Dictionary<string, string>? parameters,
-        Dictionary<string, EnumType> enumTypes,
-        bool allowTextConcat = false) {
-        var leftType = InferType(context, left, props, parameters, enumTypes);
-        var rightType = InferType(context, right, props, parameters, enumTypes);
-        ReportFractionalLiteral(context, left, leftType, right, rightType);
-        // numeric + numeric, text + text (concatenation; `+` only), date + number (AddDays
-        // lowering), or date + duration
-        // (a parsed `N days` offset with a temporal left operand); Unknown operands
-        // (path-prefix reads, peer binders) are out of this scope — skip. A duration
-        // without a temporal left operand (Number + days, days + date) is an unresolved
-        // temporal specialization — reject, never a silent numeric constant.
-        if (leftType.Category is not TypeCategory.Unknown && rightType.Category is not TypeCategory.Unknown
-            && !(IsNumeric(leftType.Category) && IsNumeric(rightType.Category))
-            && !(allowTextConcat && leftType.Category is TypeCategory.Text && rightType.Category is TypeCategory.Text)
-            && !(IsDate(leftType.Category) && IsNumeric(rightType.Category))
-            && !(IsDate(leftType.Category) && rightType.Category is TypeCategory.Duration))
-            Report(context, left,
-                $"arithmetic operand is not numeric (got '{Describe(leftType)}' and '{Describe(rightType)}')");
-        WalkExpression(context, left, props, parameters, enumTypes);
-        WalkExpression(context, right, props, parameters, enumTypes);
-    }
-
-    private void CheckNumericArithmetic(
-        AnalysisContext context, DomainExpression left, DomainExpression right,
-        Dictionary<string, string> props, Dictionary<string, string>? parameters,
-        Dictionary<string, EnumType> enumTypes) {
-        var leftType = InferType(context, left, props, parameters, enumTypes);
-        var rightType = InferType(context, right, props, parameters, enumTypes);
-        ReportFractionalLiteral(context, left, leftType, right, rightType);
-        if (leftType.Category is not TypeCategory.Unknown && rightType.Category is not TypeCategory.Unknown
-            && (!IsNumeric(leftType.Category) || !IsNumeric(rightType.Category)))
-            Report(context, left,
-                $"arithmetic operand is not numeric (got '{Describe(leftType)}' and '{Describe(rightType)}')");
-        WalkExpression(context, left, props, parameters, enumTypes);
-        WalkExpression(context, right, props, parameters, enumTypes);
-    }
-
     private void CheckBooleanOperands(
         AnalysisContext context, DomainExpression left, DomainExpression right,
         Dictionary<string, string> props, Dictionary<string, string>? parameters,
@@ -753,43 +536,6 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
                 $"'and'/'or' requires Boolean operands (got '{Describe(leftType)}' and '{Describe(rightType)}')");
         WalkExpression(context, left, props, parameters, enumTypes);
         WalkExpression(context, right, props, parameters, enumTypes);
-    }
-
-    private void CheckComparison(
-        AnalysisContext context,
-        Comparison cmp,
-        Dictionary<string, string> props,
-        Dictionary<string, string>? parameters,
-        Dictionary<string, EnumType> enumTypes) {
-        var left = InferType(context, cmp.Left, props, parameters, enumTypes);
-        var right = InferType(context, cmp.Right, props, parameters, enumTypes);
-
-        // enum member literal validity: Enum prop compared to a string must be a member
-        if (left.Category is TypeCategory.Enum && cmp.Right is Literal { Value: string s })
-            CheckEnumMember(context, cmp.Right, left.TypeName!, s, enumTypes);
-        if (right.Category is TypeCategory.Enum && cmp.Left is Literal { Value: string s2 })
-            CheckEnumMember(context, cmp.Left, right.TypeName!, s2, enumTypes);
-
-        // C4e (c): if (Level is Nope) — bare identifier on the other side of an enum
-        // comparison must be a member of that enum (string literals already checked).
-        if (left.Category is TypeCategory.Enum && cmp.Right is PropertyAccess { Name: var rightName }
-            && ResolvePropertyType(rightName, props, parameters) is null)
-            CheckEnumMember(context, cmp.Right, left.TypeName!, rightName, enumTypes);
-        if (right.Category is TypeCategory.Enum && cmp.Left is PropertyAccess { Name: var leftName }
-            && ResolvePropertyType(leftName, props, parameters) is null)
-            CheckEnumMember(context, cmp.Left, right.TypeName!, leftName, enumTypes);
-
-        // Date (DateOnly) and DateTime do not compare. Now is DateTime; Today is Date.
-        // Assign still widens Date onto DateTime; this rejection is comparison only.
-        // A fractional literal against Number / Int / Int64 is rejected here. Both
-        // sides are category Number, so Compatible would allow the pair.
-        ReportFractionalLiteral(context, cmp.Left, left, cmp.Right, right);
-        if (MixedDateGranularity(context, left, right) || !Compatible(context, left, right))
-            Report(context, cmp,
-                $"comparison between incompatible types '{Describe(left)}' and '{Describe(right)}'");
-
-        WalkExpression(context, cmp.Left, props, parameters, enumTypes);
-        WalkExpression(context, cmp.Right, props, parameters, enumTypes);
     }
 
     private void CheckCompatible(

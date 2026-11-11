@@ -22,18 +22,7 @@ public sealed class EmitGoldenTests {
     // DslCompiler seed for CompileMode.All + DbmsPack.Sqlite (HttpLibrary is catalog-only here).
     private static readonly string[] Seed = [.. ExtensionCatalog.ProductAuthoring, "sqlite"];
 
-    public static IEnumerable<string> SampleDomains() => [
-        "docs/probes/fleet-eval/09-transport/warehouse.poly",
-        "docs/probes/fleet-eval/09-transport/orders.poly",
-        "docs/probes/fleet-eval/09-transport/clinic.poly",
-        "docs/probes/fleet-eval/12-mcp/mcp-library.poly",
-        "docs/probes/dogfood/university.poly",
-        "docs/probes/dogfood/crm.poly",
-        "docs/probes/dogfood/hotel.poly",
-        "docs/probes/dogfood/simulate-create-type.poly",
-        "docs/probes/dogfood/simulate-create-in.poly",
-        "docs/probes/dogfood/simulate-create-create-in.poly",
-    ];
+    public static IEnumerable<string> SampleDomains() => GoldenDomains.Compilable.Select(d => d.Path);
 
     [Test]
     [MethodDataSource(nameof(SampleDomains))]

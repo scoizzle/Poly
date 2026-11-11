@@ -12,7 +12,7 @@ namespace Poly.DomainModeling.Analysis;
 /// Validate pack: effect binding, ordering, parameter usage, and requirement coverage diagnostics.
 /// Writes no analysis facts — create-in resolution is published by <see cref="EffectFactsPass"/>.
 /// </summary>
-internal sealed class EffectAnalyzer : INodeAnalyzer {
+internal sealed partial class EffectAnalyzer : INodeAnalyzer {
     public const string Id = "DomainEffectAnalyzer";
     public string PassName => Id;
     // Lint-only: reads catalog types/resolved refs, RequiredProperties,
@@ -127,114 +127,6 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
         }
     }
 
-    /// <summary>
-    /// DMEFF013: reject only unconditional cycles in the automatic transition graph
-    /// (entry + exit, including nested in <c>if</c>). A cycle that passes through a real
-    /// guard is allowed; Analyze cannot prove every guard eventually fails, so the runtime
-    /// loop guard is the backstop.
-    /// </summary>
-    private static void ValidateUnconditionalAutomaticTransitionCycles(
-        AnalysisContext context, Entity entity) {
-        if (entity.Stages.Count == 0)
-            return;
-
-        // Unconditional edges only: stage → target when a transition is reached without a
-        // real guard (or only through guards Analyze can prove always true).
-        var adjacency = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
-        foreach (var stage in entity.Stages) {
-            CollectUnconditionalTargets(stage.OnEntryEffects, guarded: false, adjacency, stage.Name);
-            CollectUnconditionalTargets(stage.OnExitEffects, guarded: false, adjacency, stage.Name);
-        }
-        if (adjacency.Count == 0)
-            return;
-
-        var cycle = FindCycle(adjacency);
-        if (cycle is null)
-            return;
-
-        context.ReportError(
-            entity,
-            $"Entity '{entity.Name}' has an unconditional automatic stage transition cycle: " +
-            $"{string.Join(" → ", cycle)}. Add a guard (if) on at least one edge, or remove a " +
-            "transition from entry/exit.",
-            DomainModelDiagnosticCodes.UnconditionalAutomaticTransitionCycle);
-    }
-
-    private static void CollectUnconditionalTargets(
-        IReadOnlyList<Effect> effects,
-        bool guarded,
-        Dictionary<string, HashSet<string>> adjacency,
-        string fromStage) {
-        foreach (var effect in effects) {
-            switch (effect) {
-                case StageTransitionEffect st when !guarded:
-                    if (!adjacency.TryGetValue(fromStage, out var set)) {
-                        set = new HashSet<string>(StringComparer.Ordinal);
-                        adjacency[fromStage] = set;
-                    }
-                    set.Add(st.TargetStage.StageName);
-                    break;
-                case StageTransitionEffect:
-                    break; // guarded — not part of the unconditional graph
-                case ConditionalEffect c:
-                    var alwaysTrue = IsProvablyAlwaysTrue(c.Condition);
-                    // Then-branch: still unguarded only when the condition is always true.
-                    CollectUnconditionalTargets(
-                        c.ThenEffects, guarded: guarded || !alwaysTrue, adjacency, fromStage);
-                    if (c.ElseEffects is { Count: > 0 })
-                        CollectUnconditionalTargets(
-                            c.ElseEffects, guarded: true, adjacency, fromStage);
-                    break;
-                case CompositeEffect c:
-                    CollectUnconditionalTargets(c.Effects, guarded, adjacency, fromStage);
-                    break;
-            }
-        }
-    }
-
-    /// <summary>
-    /// Only literals and comparisons of literals — anything that reads state is not proven.
-    /// </summary>
-    private static bool IsProvablyAlwaysTrue(DomainExpression expression) => expression switch {
-        Literal { Value: bool b } => b,
-        global::Poly.DomainModeling.Ontology.Not n => IsProvablyAlwaysFalse(n.Operand),
-        global::Poly.DomainModeling.Ontology.And a => IsProvablyAlwaysTrue(a.Left) && IsProvablyAlwaysTrue(a.Right),
-        global::Poly.DomainModeling.Ontology.Or o => IsProvablyAlwaysTrue(o.Left) || IsProvablyAlwaysTrue(o.Right),
-        Comparison { Kind: ComparisonKind.Equal, Left: Literal l, Right: Literal r } =>
-            Equals(l.Value, r.Value),
-        Comparison { Kind: ComparisonKind.NotEqual, Left: Literal l, Right: Literal r } =>
-            !Equals(l.Value, r.Value),
-        Comparison { Kind: ComparisonKind.GreaterThanOrEqual, Left: Literal l, Right: Literal r }
-            when TryToDouble(l.Value, out var lv) && TryToDouble(r.Value, out var rv) => lv >= rv,
-        Comparison { Kind: ComparisonKind.GreaterThan, Left: Literal l, Right: Literal r }
-            when TryToDouble(l.Value, out var lv) && TryToDouble(r.Value, out var rv) => lv > rv,
-        Comparison { Kind: ComparisonKind.LessThanOrEqual, Left: Literal l, Right: Literal r }
-            when TryToDouble(l.Value, out var lv) && TryToDouble(r.Value, out var rv) => lv <= rv,
-        Comparison { Kind: ComparisonKind.LessThan, Left: Literal l, Right: Literal r }
-            when TryToDouble(l.Value, out var lv) && TryToDouble(r.Value, out var rv) => lv < rv,
-        _ => false
-    };
-
-    private static bool IsProvablyAlwaysFalse(DomainExpression expression) => expression switch {
-        Literal { Value: bool b } => !b,
-        global::Poly.DomainModeling.Ontology.Not n => IsProvablyAlwaysTrue(n.Operand),
-        global::Poly.DomainModeling.Ontology.And a => IsProvablyAlwaysFalse(a.Left) || IsProvablyAlwaysFalse(a.Right),
-        global::Poly.DomainModeling.Ontology.Or o => IsProvablyAlwaysFalse(o.Left) && IsProvablyAlwaysFalse(o.Right),
-        Comparison { Kind: ComparisonKind.Equal, Left: Literal l, Right: Literal r } =>
-            !Equals(l.Value, r.Value),
-        Comparison { Kind: ComparisonKind.NotEqual, Left: Literal l, Right: Literal r } =>
-            Equals(l.Value, r.Value),
-        Comparison { Kind: ComparisonKind.GreaterThanOrEqual, Left: Literal l, Right: Literal r }
-            when TryToDouble(l.Value, out var lv) && TryToDouble(r.Value, out var rv) => lv < rv,
-        Comparison { Kind: ComparisonKind.GreaterThan, Left: Literal l, Right: Literal r }
-            when TryToDouble(l.Value, out var lv) && TryToDouble(r.Value, out var rv) => lv <= rv,
-        Comparison { Kind: ComparisonKind.LessThanOrEqual, Left: Literal l, Right: Literal r }
-            when TryToDouble(l.Value, out var lv) && TryToDouble(r.Value, out var rv) => lv > rv,
-        Comparison { Kind: ComparisonKind.LessThan, Left: Literal l, Right: Literal r }
-            when TryToDouble(l.Value, out var lv) && TryToDouble(r.Value, out var rv) => lv >= rv,
-        _ => false
-    };
-
     private static bool TryToDouble(object? value, out double d) {
         switch (value) {
             case double x: d = x; return true;
@@ -244,43 +136,6 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
             case decimal m: d = (double)m; return true;
             default: d = 0; return false;
         }
-    }
-
-    /// <summary>DFS back-edge cycle; returns stage names A → … → A when found.</summary>
-    private static List<string>? FindCycle(Dictionary<string, HashSet<string>> adjacency) {
-        var visiting = new HashSet<string>(StringComparer.Ordinal);
-        var visited = new HashSet<string>(StringComparer.Ordinal);
-        var stack = new List<string>();
-
-        List<string>? Dfs(string node) {
-            if (visiting.Contains(node)) {
-                var i = stack.IndexOf(node);
-                var cycle = stack.Skip(i).ToList();
-                cycle.Add(node);
-                return cycle;
-            }
-            if (!visited.Add(node))
-                return null;
-            visiting.Add(node);
-            stack.Add(node);
-            if (adjacency.TryGetValue(node, out var targets)) {
-                foreach (var t in targets) {
-                    var cycle = Dfs(t);
-                    if (cycle is not null)
-                        return cycle;
-                }
-            }
-            stack.RemoveAt(stack.Count - 1);
-            visiting.Remove(node);
-            return null;
-        }
-
-        foreach (var start in adjacency.Keys) {
-            var cycle = Dfs(start);
-            if (cycle is not null)
-                return cycle;
-        }
-        return null;
     }
 
     /// <summary>
@@ -1361,181 +1216,6 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
         }
     }
 
-    internal static void ReportCrossEntityMutation(
-        AnalysisContext context, Node node, Entity owner, string relationshipName) {
-        context.ReportError(
-            node,
-            $"Assign targets state reached through relationship '{relationshipName}', which belongs to another entity. " +
-            $"Only '{owner.Name}' and its own actions, entry, exit and when blocks may assign its state; " +
-            $"cross-entity access is read-only. Invoke an action on the other entity instead " +
-            $"(e.g. 'invoke {relationshipName}.SomeAction').",
-            DomainModelDiagnosticCodes.EffectCrossEntityMutation);
-    }
-
-    private static void ReportPeerBinderMutation(AnalysisContext context, Node node, string peerBinding) =>
-        context.ReportError(
-            node,
-            $"Assign target starts with peer binder '{peerBinding}', the other entity in this when handler. " +
-            "Peer fields are read-only here: use them only on the right-hand side (values, conditions, initializers). " +
-            "Change the peer in its own actions or when blocks.",
-            DomainModelDiagnosticCodes.EffectCrossEntityMutation);
-
-    private static void ValidateAssign(
-        AnalysisContext context, AssignEffect ae, Action? action, Entity entity, string? peerBinding) {
-        // Only the owning entity's named behavior mutates its state. Entry, exit and
-        // when blocks count as named behavior. Any other entity changes through
-        // `invoke`; create-in, link and unlink are separate effects owned by the relationship.
-        // In a when handler the path can instead start with the peer binder, which cannot be invoked.
-        if (ae.Target is RelationshipNavigation nav) {
-            if (string.Equals(nav.RelationshipName, peerBinding, StringComparison.Ordinal))
-                ReportPeerBinderMutation(context, ae, nav.RelationshipName);
-            else
-                ReportCrossEntityMutation(context, ae, entity, nav.RelationshipName);
-            return;
-        }
-
-        // The parser writes only a bare property here. Any other shape comes from a model
-        // built through the API (an owned field, a parameter, a computed value) and cannot be
-        // printed back as the same DSL, so it is an error rather than skipped.
-        if (ae.Target is not PropertyAccess propAccess) {
-            context.ReportError(
-                ae,
-                $"Assign target is not a property of entity '{entity.Name}'. " +
-                "An assign writes one of the entity's own properties by name: 'assign <Property> to <value>'.",
-                DomainModelDiagnosticCodes.EffectBinding);
-            return;
-        }
-
-        var targetProp = entity.Properties
-            .FirstOrDefault(p => string.Equals(p.Name, propAccess.Name, StringComparison.Ordinal));
-
-        if (targetProp is null) {
-            context.ReportError(
-                ae,
-                $"Assign effect targets property '{propAccess.Name}' which does not exist on entity '{entity.Name}'.",
-                DomainModelDiagnosticCodes.EffectBinding);
-            return;
-        }
-
-        if (targetProp.Constraints.Count == 0) return;
-
-        // ── Validate literal assignments against property constraints ──────
-        if (ae.Value is Literal lit) {
-            ValidateLiteralAgainstConstraints(context, ae, lit.Value, targetProp);
-            return;
-        }
-
-        // ── Propagate the target's range onto derived (arithmetic) values ────
-        if (ae.Value is Add or Subtract or Multiply) {
-            ValidateDerivedValueRange(context, ae, ae.Value, entity, action, targetProp);
-        }
-
-        // ── Validate parameter-to-property constraint compatibility ─────────
-        if (ae.Value is ParameterAccess pa && action is not null) {
-            var sourceParam = action.Parameters
-                .FirstOrDefault(p => string.Equals(p.Name, pa.Name, StringComparison.Ordinal));
-            if (sourceParam is not null) {
-                ValidateParameterConstraintCompatibility(context, ae, sourceParam, targetProp);
-
-                // Also check DownstreamConstraintsMetadata if ConstraintPropagationAnalyzer has run
-                var downstreamMeta = context.GetMetadata<DownstreamConstraintsMetadata>(sourceParam);
-                if (downstreamMeta is not null) {
-                    ValidateDownstreamConstraints(context, ae, downstreamMeta.Constraints, targetProp, sourceParam);
-                }
-            }
-        }
-    }
-
-    private static void ValidateLiteralAgainstConstraints(
-        AnalysisContext context, Node errorNode, object? literalValue, Property targetProp) {
-        foreach (var constraint in targetProp.Constraints) {
-            var verdict = ConstraintValidation.Evaluate(constraint, literalValue);
-            if (verdict == ConstraintVerdict.Undecided) {
-                ConstraintValidation.ReportUndecided(
-                    context, errorNode, constraint, $"on property '{targetProp.Name}'");
-                continue;
-            }
-            if (verdict == ConstraintVerdict.Violated) {
-                var display = FormatValueForMessage(literalValue);
-                context.ReportError(
-                    errorNode,
-                    $"Assigned value '{display}' violates constraint {ConstraintValidation.Describe(constraint)} " +
-                    $"on property '{targetProp.Name}'.",
-                    DomainModelDiagnosticCodes.EffectConstraintViolation);
-            }
-        }
-    }
-
-    /// <summary>
-    /// Constraint propagation onto derived (arithmetic) values: infer the value range the
-    /// RHS expression can produce (from literals, property/param ranges, and arithmetic
-    /// composition) and check it against the target property's RangeConstraint. A range
-    /// entirely outside the constraint is a definite violation (error); a range that can
-    /// extend outside is a possible violation (warning).
-    /// </summary>
-    private static void ValidateDerivedValueRange(
-        AnalysisContext context,
-        Node errorNode,
-        DomainExpression value,
-        Entity entity,
-        Action? action,
-        Property targetProp) {
-        var range = targetProp.Constraints.OfType<RangeConstraint>().FirstOrDefault();
-        if (range is null) return;
-
-        var meta = action is null ? null : context.GetMetadata<ActionInvariantMetadata>(action);
-        if (meta is null) {
-            // No action context (create-initializer): infer against declared ranges only.
-            var (lo, hi) = EffectInvariantAnalyzer.InferNumericRange(value, entity, null, null);
-            CheckDerivedRange(context, errorNode, lo, hi, range, targetProp);
-            return;
-        }
-
-        // The effect is valid in one or more stage contexts (entity states); check the
-        // postcondition in each — a violation in ANY state the action can run is reported.
-        foreach (var ctx in meta.StageContexts) {
-            var post = ctx.Postconditions.FirstOrDefault(p => ReferenceEquals(p.Effect, errorNode));
-            if (post?.ValueRange is { } vr)
-                CheckDerivedRange(context, errorNode, vr.Min, vr.Max, range, targetProp);
-        }
-    }
-
-    private static void CheckDerivedRange(
-        AnalysisContext context,
-        Node errorNode,
-        double? loNullable,
-        double? hiNullable,
-        RangeConstraint range,
-        Property targetProp) {
-        if (loNullable is null || hiNullable is null) return;
-        double lo = loNullable.Value, hi = hiNullable.Value;
-
-        var tmin = ToDouble(range.Minimum);
-        var tmax = ToDouble(range.Maximum);
-
-        bool fullyBelow = tmin is not null && hi < tmin.Value;
-        bool fullyAbove = tmax is not null && lo > tmax.Value;
-        // #367: a target bound that cannot be ordered against a number is not skipped; nothing numeric is in it.
-        if (fullyBelow || fullyAbove || HasUnorderableBound(range)) {
-            context.ReportError(
-                errorNode,
-                $"Assigned expression value range [{FormatRangeValue(lo)}, {FormatRangeValue(hi)}] is entirely outside " +
-                $"constraint {ConstraintValidation.Describe(range)} on property '{targetProp.Name}'.",
-                DomainModelDiagnosticCodes.EffectConstraintViolation);
-            return;
-        }
-
-        bool canViolate = (tmin is not null && lo < tmin.Value)
-                          || (tmax is not null && hi > tmax.Value);
-        if (canViolate) {
-            context.ReportWarning(
-                errorNode,
-                $"Assigned expression value range [{FormatRangeValue(lo)}, {FormatRangeValue(hi)}] can fall outside " +
-                $"constraint {ConstraintValidation.Describe(range)} on property '{targetProp.Name}'.",
-                DomainModelDiagnosticCodes.EffectConstraintViolation);
-        }
-    }
-
     /// <summary>
     /// Validates the call-chain postconditions: effects of actions this action invokes
     /// (transitively), whose value ranges were computed under the caller's narrowed context.
@@ -1588,60 +1268,6 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
     private static string FormatRangeValue(double d) =>
         d == Math.Floor(d) ? d.ToString("F0", System.Globalization.CultureInfo.InvariantCulture) : d.ToString("G", System.Globalization.CultureInfo.InvariantCulture);
 
-    private static void ValidateParameterConstraintCompatibility(
-        AnalysisContext context, Node errorNode, Property sourceParam, Property targetProp) {
-        // Check that the parameter's constraints don't allow values the property prohibits.
-        // For each property constraint, check if any value allowed by the parameter would violate it.
-        // We use a simple subsumption check: the parameter's range/length must be within the property's.
-        foreach (var propConstraint in targetProp.Constraints) {
-            // Find the matching constraint on the parameter (same type)
-            var paramConstraint = sourceParam.Constraints
-                .FirstOrDefault(c => c.GetType() == propConstraint.GetType());
-            if (paramConstraint is null) {
-                // Parameter has no constraint of this type — parameter could carry any value,
-                // including ones that violate the property constraint.
-                context.ReportWarning(
-                    errorNode,
-                    $"Parameter '{sourceParam.Name}' has no {ConstraintValidation.Describe(propConstraint)} constraint, " +
-                    $"but flows to property '{targetProp.Name}' which requires " +
-                    $"{ConstraintValidation.Describe(propConstraint)}. The parameter may carry values " +
-                    $"that violate the property constraint.",
-                    DomainModelDiagnosticCodes.EffectConstraintViolation);
-                continue;
-            }
-
-            // Check parameter constraint does not exceed property constraint bounds
-            if (!IsConstraintSubsumed(paramConstraint, propConstraint)) {
-                context.ReportWarning(
-                    errorNode,
-                    $"Parameter '{sourceParam.Name}' has {ConstraintValidation.Describe(paramConstraint)} " +
-                    $"which allows values outside property '{targetProp.Name}' constraint " +
-                    $"{ConstraintValidation.Describe(propConstraint)}.",
-                    DomainModelDiagnosticCodes.EffectConstraintViolation);
-            }
-        }
-    }
-
-    private static void ValidateDownstreamConstraints(
-        AnalysisContext context, Node errorNode,
-        IReadOnlyList<Constraint> downstreamConstraints, Property targetProp, Property sourceParam) {
-        foreach (var dc in downstreamConstraints) {
-            // Check if downstream constraint is compatible with target property constraints
-            var matchingPropConstraint = targetProp.Constraints
-                .FirstOrDefault(c => c.GetType() == dc.GetType());
-            if (matchingPropConstraint is null) continue;
-
-            if (!IsConstraintSubsumed(dc, matchingPropConstraint)) {
-                context.ReportWarning(
-                    errorNode,
-                    $"Effect-chain constraint {ConstraintValidation.Describe(dc)} from parameter " +
-                    $"'{sourceParam.Name}' exceeds property '{targetProp.Name}' constraint " +
-                    $"{ConstraintValidation.Describe(matchingPropConstraint)}.",
-                    DomainModelDiagnosticCodes.EffectConstraintViolation);
-            }
-        }
-    }
-
     /// <summary>
     /// Returns true if <paramref name="inner"/> is at least as restrictive as <paramref name="outer"/>,
     /// meaning any value satisfying <c>inner</c> also satisfies <c>outer</c>.
@@ -1657,32 +1283,10 @@ internal sealed class EffectAnalyzer : INodeAnalyzer {
         return true;
     }
 
-    private static bool IsRangeSubsumed(RangeConstraint inner, RangeConstraint outer) {
-        var innerMin = inner.Minimum is not null ? ToDouble(inner.Minimum) : double.NegativeInfinity;
-        var innerMax = inner.Maximum is not null ? ToDouble(inner.Maximum) : double.PositiveInfinity;
-        var outerMin = outer.Minimum is not null ? ToDouble(outer.Minimum) : double.NegativeInfinity;
-        var outerMax = outer.Maximum is not null ? ToDouble(outer.Maximum) : double.PositiveInfinity;
-
-        if (innerMin is null || innerMax is null || outerMin is null || outerMax is null) return false;
-
-        return innerMin.Value >= outerMin.Value && innerMax.Value <= outerMax.Value;
-    }
-
-    private static string FormatValueForMessage(object? value) => value switch {
-        null => "<null>",
-        string s => $"\"{s}\"",
-        _ => value.ToString() ?? "?"
-    };
-
     private static double? ToDouble(object? value) {
         try { return Convert.ToDouble(value); }
         catch { return null; }
     }
-
-    private static bool HasUnorderableBound(RangeConstraint range) =>
-        (range.Minimum is not null && ToDouble(range.Minimum) is null)
-        || (range.Maximum is not null && ToDouble(range.Maximum) is null);
-
 
     private static bool TryResolveDomainType(
         AnalysisContext context,

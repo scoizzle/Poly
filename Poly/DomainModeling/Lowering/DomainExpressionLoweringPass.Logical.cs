@@ -97,4 +97,108 @@ public sealed partial class DomainExpressionLoweringPass {
         var operand = Route(n.Operand);
         return operand with { Value = new SN.Not(operand.Value) };
     }
+
+    /// <summary>
+    /// Preserves source-order short-circuit when the right operand has statements:
+    /// evaluate left, then run the right statements only if the left requires it
+    /// (<c>if (t)</c> for and, <c>if (!t)</c> for or).
+    /// </summary>
+    private LoweredExpression ShortCircuit(LoweredExpression left, LoweredExpression right, bool whenTrue) {
+        var t = _names.Next("t");
+        Node gate = whenTrue ? t : new SN.Not(t);
+        var thenBlock = new Block(
+            [.. right.Statements, new Assignment(t, right.Value)],
+            right.Variables);
+        List<Node> statements = [.. left.Statements, new Assignment(t, left.Value), new IfStatement(gate, thenBlock)];
+        return new LoweredExpression(statements, [.. left.Variables, t], t);
+    }
+
+    private static bool IsCount(Node node) =>
+        node is Member { MemberName: "Count" };
+
+    private static Node CountConstant(long value) =>
+        value is >= int.MinValue and <= int.MaxValue
+            ? new Constant((int)value)
+            : new Constant(value);
+
+    /// <summary>
+    /// Collects the to-one hops an operand reads through from <paramref name="subject"/>
+    /// (the comparison's subject, or the hop a navigation's target is read on):
+    /// <c>advisor mentor Age</c> and <c>advisor where mentor Age * 2</c> both yield
+    /// <c>.Advisor</c> and <c>.Advisor.Mentor</c>. Arithmetic and
+    /// <c>not</c>/<c>and</c>/<c>or</c> are looked through; any other operand adds no
+    /// hop (a quantifier body runs against its loop item and guards its own
+    /// comparisons). The chain stops at a subscription binder name
+    /// (<c>order Total</c>) and at a navigation to a condition
+    /// (<c>advisor where Age &lt; 30</c>): lowering guards that navigation's own
+    /// hop, and hops inside the condition are guarded by the comparisons there.
+    /// Known issue: lowering treats a binder name as the binder at any depth, so
+    /// <c>advisor order Total</c> reads the binder, not the advisor's order. The
+    /// chain matches lowering rather than guarding a hop lowering never reads.
+    /// </summary>
+    /// <param name="subjectPath">Dotted member path of <paramref name="subject"/>, used to
+    /// recognise the same hop reached twice (nodes compare by identity, not shape).</param>
+    private void CollectValueHops(
+        DomainExpression operand, Node subject, string subjectPath,
+        List<Node> hops, HashSet<string> seenPaths) {
+        switch (operand) {
+            case Ontology.Add or Ontology.Subtract or Ontology.Multiply or Ontology.Divide
+                or Ontology.Not or Ontology.And or Ontology.Or:
+                foreach (var child in operand.Children.OfType<DomainExpression>())
+                    CollectValueHops(child, subject, subjectPath, hops, seenPaths);
+                break;
+            case RelationshipNavigation rn:
+                CollectHopChain(rn, subject, subjectPath, hops, seenPaths);
+                break;
+        }
+    }
+
+    private void CollectHopChain(
+        RelationshipNavigation rn, Node subject, string subjectPath,
+        List<Node> hops, HashSet<string> seenPaths) {
+        if (_parameters.ContainsKey(rn.RelationshipName)
+            || IsCollectionNav(rn.RelationshipName)
+            || IsPathPrefixPredicate(rn.TargetProperty))
+            return;
+        var navName = ResolveNavName(rn.RelationshipName);
+        var hopPath = subjectPath + "." + navName;
+        var hop = new Member(subject, navName);
+        if (seenPaths.Add(hopPath))
+            hops.Add(hop);
+        CollectValueHops(rn.TargetProperty, hop, hopPath, hops, seenPaths);
+    }
+
+    /// <summary>
+    /// If <paramref name="valueNode"/> is a string literal and <paramref name="otherSide"/>
+    /// is a property access for an enum-typed property, returns a Syntax node that
+    /// references the enum member qualified by the type name (e.g. <c>PatronStatus.Active</c>).
+    /// Returns null if no substitution is needed.
+    /// </summary>
+    private Node? FixEnumLiteral(DomainExpression valueExpr, DomainExpression otherSide, Node otherSideNode) {
+        if (otherSide is not PropertyAccess prop
+            || _enumPropertyNames is null
+            || !_enumPropertyNames.TryGetValue(prop.Name, out var enumTypeName))
+            return null;
+
+        // String form: Status == "Active" → PatronStatus.Active
+        if (valueExpr is Literal { Value: string strVal }
+            && !string.IsNullOrEmpty(strVal)
+            && strVal is not "true" and not "false" and not "null"
+            && !char.IsDigit(strVal[0])) {
+            return new Member(new NamedTypeReference(enumTypeName), strVal);
+        }
+
+        // Bare member form: Status is Active → PatronStatus.Active. A bare name that
+        // is itself a property stays an instance read (an enum-to-enum comparison).
+        if (valueExpr is PropertyAccess memberAccess
+            && !_enumPropertyNames.ContainsKey(memberAccess.Name)
+            && _propertyTypeResolver?.Invoke(memberAccess.Name) is null
+            && _domain.Types.OfType<EnumType>().Any(e =>
+                string.Equals(e.Name, enumTypeName, StringComparison.Ordinal)
+                && e.MemberNames.Contains(memberAccess.Name, StringComparer.Ordinal))) {
+            return new Member(new NamedTypeReference(enumTypeName), memberAccess.Name);
+        }
+
+        return null;
+    }
 }

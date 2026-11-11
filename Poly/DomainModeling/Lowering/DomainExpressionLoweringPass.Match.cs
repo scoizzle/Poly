@@ -8,7 +8,7 @@ namespace Poly.DomainModeling.Lowering;
 
 public sealed partial class DomainExpressionLoweringPass {
     /// <summary>
-    /// <c>match</c> (#409) lowers to a right-nested <see cref="Conditional"/> chain with the
+    /// <c>match</c> (#409) lowers to a right-nested <see cref="SN.Conditional"/> chain with the
     /// <c>else</c> value innermost, so simulation and printed C# share one conditional. Statements
     /// hoisted by an arm (quantifier loops) are read-only and run before the chain.
     /// </summary>

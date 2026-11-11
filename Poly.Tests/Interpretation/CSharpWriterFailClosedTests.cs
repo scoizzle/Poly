@@ -29,6 +29,63 @@ public class CSharpWriterFailClosedTests {
     }
 
     [Test]
+    public async Task DeclaredNeverWritten_ReadLocal_FailsClosedInsteadOfPrintingObject() {
+        // A local declared with no analysis type and no first assignment has no
+        // faithful C# type; reading it would print `object` while the VM slot is a
+        // long zero (#465). Refuse instead of printing the wrong shape.
+        var v = new Variable("x");
+        var block = new Block([v], [v]);
+        var error = Assert.Throws<InvalidOperationException>(() => CSharpLanguage.Write(block));
+        await Assert.That(error.Message).Contains(nameof(Variable)).Because(error.Message);
+        await Assert.That(error.Message).Contains(v.Id.ToString()).Because(error.Message);
+        await Assert.That(error.Message).Contains("no resolved type").Because(error.Message);
+    }
+
+    [Test]
+    public async Task DeclaredNeverWritten_UnreadLocal_WriteReadIsIdempotent() {
+        // An unread declared local is inert: its default initializer prints and the
+        // printed source re-reads and re-prints identically.
+        var v = new Variable("x");
+        var block = new Block([new Constant(1L)], [v]);
+        var printed = CSharpLanguage.Write(block);
+        await Assert.That(printed).Contains("var x = default(object);");
+
+        var source = $"class C {{ void M() {printed} }}";
+        await Assert.That(SyntaxErrors(source)).IsEmpty();
+        var written = CSharpLanguage.Write(CSharpLanguage.Read(source));
+        var second = CSharpLanguage.Write(CSharpLanguage.Read(written));
+        await Assert.That(second).IsEqualTo(written);
+    }
+
+    // The assignment sits in a nested block so the writer cannot fuse it into a
+    // `var x = value;` declaration; the declaration then needs TypeNameForVariable,
+    // and `1 + 2` is a value InferTypeNameFromValue returns null for (it handles
+    // constants, new, new-array and casts only).
+    private static Block NestedAssignment(Variable v) =>
+        new([new Assignment(v, new Add(new Constant(1L), new Constant(2L)))]);
+
+    [Test]
+    public async Task DeclaredLocal_OnlyAssignedUninferableValue_PrintsBecauseDestinationIsNotARead() {
+        var v = new Variable("x");
+        var block = new Block([NestedAssignment(v)], [v]);
+
+        var printed = CSharpLanguage.Write(block);
+
+        await Assert.That(printed).Contains("var x = default(object);").Because(printed);
+    }
+
+    [Test]
+    public async Task DeclaredLocal_AssignedUninferableThenRead_FailsClosed() {
+        var v = new Variable("x");
+        var block = new Block([NestedAssignment(v), v], [v]);
+
+        var error = Assert.Throws<InvalidOperationException>(() => CSharpLanguage.Write(block));
+
+        await Assert.That(error.Message).Contains("no resolved type").Because(error.Message);
+        await Assert.That(error.Message).Contains(v.Id.ToString()).Because(error.Message);
+    }
+
+    [Test]
     public async Task NewArray_WriteRead_IsKindStable() {
         var printed = CSharpLanguage.Write(new NewArray(TypeReference.To<long>(), new Constant(4L)));
         await Assert.That(printed).IsEqualTo("new System.Int64[4L];");

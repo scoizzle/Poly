@@ -166,4 +166,52 @@ public class DateDifferenceDurationTests {
 
         await Assert.That(csharp).Contains(".AddDays(");
     }
+
+    [Test]
+    public async Task DurationProperty_DefaultBareDuration_AnalyzesClean() {
+        var result = ParseTemporal("""
+            domain Sla
+            uses temporal
+            Job: entity {
+              Budget: Duration default(30 Minutes)
+            }
+            """);
+        await Assert.That(Errors(result)).IsEmpty();
+    }
+
+    [Test]
+    public async Task NonDurationProperty_DefaultBareDuration_StillErrors() {
+        var result = ParseTemporal("""
+            domain Sla
+            uses temporal
+            Job: entity {
+              Budget: Number default(30 Minutes)
+            }
+            """);
+        await Assert.That(HasError(result, "bare duration with no temporal left operand")).IsTrue();
+    }
+
+    [Test]
+    public async Task DurationProperty_DefaultMonths_FailsAtAnalysis() {
+        var result = ParseTemporal("""
+            domain Sla
+            uses temporal
+            Job: entity {
+              Budget: Duration default(3 Months)
+            }
+            """);
+        await Assert.That(HasError(result, "no fixed length")).IsTrue();
+    }
+
+    [Test]
+    public async Task DurationProperty_DefaultYears_FailsAtAnalysis() {
+        var result = ParseTemporal("""
+            domain Sla
+            uses temporal
+            Job: entity {
+              Budget: Duration default(1 Years)
+            }
+            """);
+        await Assert.That(HasError(result, "no fixed length")).IsTrue();
+    }
 }

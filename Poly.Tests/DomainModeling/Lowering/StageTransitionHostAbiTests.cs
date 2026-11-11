@@ -29,9 +29,7 @@ public class StageTransitionHostAbiTests {
     [Test]
     public async Task StageTransition_RuntimeContext_LowersToAssignmentWithoutInstanceNotify() {
         var entity = CreatePersonEntity();
-        var context = new LoweringContext(
-            new Parameter("entity", new TypeReference(entity.Name)),
-            SourceStageName: "Draft");
+        var context = LoweringFixtures.MinimalContext(new Parameter("entity", new TypeReference(entity.Name))) with { SourceStageName = "Draft" };
         var pass = new EffectLoweringPass(entity, context);
 
         var lowered = pass.TryLowerVmNode(new StageTransitionEffect(new StageReference("Active")));
@@ -57,10 +55,8 @@ public class StageTransitionHostAbiTests {
     [Test]
     public async Task StageTransition_LowersWithAndWithoutThisReference() {
         var entity = CreatePersonEntity();
-        var off = new EffectLoweringPass(entity, new LoweringContext(
-            new Parameter("entity")));
-        var on = new EffectLoweringPass(entity, new LoweringContext(
-            new ThisReference()));
+        var off = new EffectLoweringPass(entity, LoweringFixtures.Context(new Parameter("entity"), entity));
+        var on = new EffectLoweringPass(entity, LoweringFixtures.Context(new ThisReference(), entity));
 
         await Assert.That(off.TryLowerVmNode(new StageTransitionEffect(new StageReference("Active"))))
             .IsNotNull();
@@ -71,13 +67,12 @@ public class StageTransitionHostAbiTests {
     [Test]
     public async Task Create_LowersOnRuntimePath() {
         var entity = CreatePersonEntity();
-        var pass = new EffectLoweringPass(entity, new LoweringContext(
-            new Parameter("entity")));
+        var pass = new EffectLoweringPass(entity, LoweringFixtures.Context(new Parameter("entity"), entity));
 
-        await Assert.That(() => pass.TryLowerVmNode(
-            new CreateEntityInstance(new DomainTypeReference("Person"))))
-            .Throws<InvalidOperationException>()
-            .WithMessageContaining("no dictionary create member");
+        // Analysis is required now, so the old "no dictionary create" failure is unrepresentable; the legal path yields a typed create call.
+        var created = pass.TryLowerVmNode(new CreateEntityInstance(new DomainTypeReference("Person")));
+        await Assert.That(created).IsTypeOf<Block>();
+        await Assert.That(created!.ToString()).Contains("Person.Create()");
         await Assert.That(pass.TryLowerVmNode(
             new InvokeActionEffect("Activate", [], TargetRelationship: "orders"))).IsNotNull();
         await Assert.That(pass.TryLowerVmNode(
@@ -100,9 +95,7 @@ public class StageTransitionHostAbiTests {
     [Test]
     public async Task Lower_UnknownStageTransition_ThrowsFailClosed() {
         var entity = CreatePersonEntity();
-        var pass = new EffectLoweringPass(entity, new LoweringContext(
-            new Parameter("entity"),
-            SourceStageName: "Draft"));
+        var pass = new EffectLoweringPass(entity, LoweringFixtures.Context(new Parameter("entity"), entity) with { SourceStageName = "Draft" });
 
         var ex = Assert.Throws<InvalidOperationException>(() =>
             pass.TryLowerVmNode(new StageTransitionEffect(new StageReference("Nope"))));
@@ -112,10 +105,7 @@ public class StageTransitionHostAbiTests {
     [Test]
     public async Task Export_Transition_SetsStageWithoutInstanceNotify() {
         var entity = CreatePersonEntity();
-        var context = new LoweringContext(
-            new ThisReference(),
-            StageEnumTypeName: "PersonStage",
-            SourceStageName: "Draft");
+        var context = LoweringFixtures.MinimalContext(new ThisReference()) with { StageEnumTypeName = "PersonStage", SourceStageName = "Draft" };
         var pass = new EffectLoweringPass(entity, context);
         var lowered = pass.TryLowerVmNode(new StageTransitionEffect(new StageReference("Active")));
         var cs = new CSharpGenerator().Generate(lowered!);

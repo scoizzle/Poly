@@ -499,7 +499,7 @@ public sealed partial class DomainToCSharpExporter {
     /// body-initialized, never ctor params, so they are skipped.
     /// </summary>
     private static List<Node> BuildCreateConstraintChecks(
-        Entity entity, Domain? domain, IReadOnlySet<string> entryAssignedProps,
+        Entity entity, Domain domain, IReadOnlySet<string> entryAssignedProps,
         INodeMetadataProvider analysis, IReadOnlyList<Parameter> signature) {
 
         var checks = new List<Node>();

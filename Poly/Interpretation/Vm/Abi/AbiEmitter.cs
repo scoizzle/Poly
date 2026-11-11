@@ -1095,7 +1095,12 @@ public static partial class AbiEmitter {
                 : rightArm.Type == typeof(long)
                     && LocalType.Of(underlying) is LocalType.TemporalLocal { IsWord: true }
                     ? LocalType.Decode(rightArm, underlying, underlying, ctx.HeapLocal)
-                    : Convert(rightArm, underlying);
+                    // A struct-typed call arm (TimeSpan.FromMinutes) answers its heap handle word.
+                    : rightArm.Type == typeof(long)
+                        && LocalType.Of(underlying) is LocalType.StructLocal
+                        && ctx.ClrTypeOf(n.RightHandValue) == underlying
+                        ? LocalType.Decode(rightArm, underlying, underlying, ctx.HeapLocal)
+                        : Convert(rightArm, underlying);
             using var coal = ctx.LeaseHelper(leftVal.Type, "_coal");
             var leftLocal = coal.Local;
             return Block(Assign(leftLocal, leftVal), Coalesce(leftLocal, right));

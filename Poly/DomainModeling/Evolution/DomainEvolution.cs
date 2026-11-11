@@ -34,7 +34,7 @@ public sealed class DomainEvolution {
         DomainSession? session = null) {
         var start = DateTime.UtcNow;
         var (proposed, _, mutationErrors) = ApplyChanges(
-            _current, changes, priorAnalysis?.GetMutationIndex(_current));
+            _current, changes, priorAnalysis?.GetMutationIndex(_current), session);
         EnsureSessionLoaded(proposed, session);
 
         var rejected = mutationErrors.Count > 0;
@@ -62,7 +62,7 @@ public sealed class DomainEvolution {
 
         var mutationIndex = ResolveMutationTargetIndex(priorAnalysis, session);
 
-        var (proposed, _, mutationErrors) = ApplyChanges(_current, changes, mutationIndex);
+        var (proposed, _, mutationErrors) = ApplyChanges(_current, changes, mutationIndex, session);
 
         EnsureSessionLoaded(proposed, session);
 
@@ -88,11 +88,12 @@ public sealed class DomainEvolution {
     private (Domain Domain, IReadOnlyList<Node> ModifiedNodes, IReadOnlyList<string> Errors) ApplyChanges(
         Domain current,
         IReadOnlyList<DomainChange> changes,
-        MutationTargetIndexMetadata? mutationIndex) {
+        MutationTargetIndexMetadata? mutationIndex,
+        DomainSession? session = null) {
         if (changes.Count == 0)
             return (current, [], []);
 
-        var context = new DomainMutationContext(current, mutationIndex);
+        var context = new DomainMutationContext(current, mutationIndex, session);
 
         foreach (var change in changes) {
             change.ApplyTo(context);
@@ -320,8 +321,13 @@ public sealed class EvolutionBuilder {
 
 
 
-    public EvolutionBuilder AddEffectToAction(string entityName, string actionName, Effect effect) =>
-        Apply(new AddEffectToActionChange(entityName, actionName, effect));
+    /// <summary>
+    /// Adds an effect to an action. <paramref name="stageName"/> targets one stage's action
+    /// when several stages share the name.
+    /// </summary>
+    public EvolutionBuilder AddEffectToAction(
+        string entityName, string actionName, Effect effect, string? stageName = null) =>
+        Apply(new AddEffectToActionChange(entityName, actionName, effect, stageName));
 
     /// <summary>
     /// Adds a CreateEntityInstance effect with property bindings. This is the common pattern for creating owned documents.

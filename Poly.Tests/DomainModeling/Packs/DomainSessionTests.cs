@@ -1,5 +1,6 @@
 using Poly.Ast.Nodes;
 using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Libraries.Temporal;
 using Poly.DomainModeling.Lowering;
@@ -63,7 +64,10 @@ public sealed class DomainSessionTests {
 
     [Test]
     public async Task Lowering_Now_WithoutMeaning_FailsClosed() {
-        var pass = new DomainExpressionLoweringPass(new LoweringContext(new Parameter("entity")));
+        // A domain bound to a core-only session: the pass finds no temporal meaning for Now.
+        var coreOnly = SessionBuilder.CreateEmpty().LoadCore().Build();
+        var pass = new DomainExpressionLoweringPass(
+            LoweringFixtures.MinimalContext(new Parameter("entity"), coreOnly));
         await Assert.That(() => pass.Lower(new Now(), new Parameter("entity")))
             .Throws<NotSupportedException>()
             .WithMessageContaining("Now");
@@ -71,8 +75,8 @@ public sealed class DomainSessionTests {
 
     [Test]
     public async Task Lowering_Now_WithMeaning_LowersToUtcNow() {
-        var pass = new DomainExpressionLoweringPass(new LoweringContext(
-            new Parameter("entity"), Meaning: TemporalMeaningHarness.Create()));
+        var pass = new DomainExpressionLoweringPass(
+            LoweringFixtures.MinimalContext(new Parameter("entity")) with { Meaning = TemporalMeaningHarness.Create() });
         var lowered = pass.Lower(new Now(), new Parameter("entity"));
         await Assert.That(lowered).IsTypeOf<Member>();
         await Assert.That(((Member)lowered).MemberName).IsEqualTo("UtcNow");

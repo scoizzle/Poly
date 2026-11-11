@@ -126,9 +126,7 @@ public class ConstraintCheckShapeTests {
 
     private static string PrintAssign(Domain domain, string entityName, string propertyName, string valueName) {
         var entity = domain.Types.OfType<Entity>().First(e => e.Name == entityName);
-        var pass = new EffectLoweringPass(entity, new LoweringContext(
-            new ThisReference(),
-            ActionResultType: new NamedTypeReference("DomainResult")));
+        var pass = new EffectLoweringPass(entity, LoweringFixtures.Context(new ThisReference(), entity) with { ActionResultType = new NamedTypeReference("DomainResult") });
         var lowered = pass.TryLowerVmNode(new AssignEffect(
             DomainExpression.Property(propertyName),
             DomainExpression.Property(valueName)));

@@ -30,10 +30,8 @@ public class CrossEntityInvokeHostAbiTests {
     [Test]
     public async Task CrossEntityInvoke_LowersToNavCall_NotGatedOnFlag() {
         var (orchestrator, _, _) = CreateLinkedDomain();
-        var off = new EffectLoweringPass(orchestrator, new LoweringContext(
-            new Parameter("entity")));
-        var on = new EffectLoweringPass(orchestrator, new LoweringContext(
-            new ThisReference()));
+        var off = new EffectLoweringPass(orchestrator, LoweringFixtures.Context(new Parameter("entity"), orchestrator));
+        var on = new EffectLoweringPass(orchestrator, LoweringFixtures.Context(new ThisReference(), orchestrator));
 
         var effect = new InvokeActionEffect("Process", [], TargetRelationship: "ServiceCall");
         var loweredOff = off.TryLowerVmNode(effect);

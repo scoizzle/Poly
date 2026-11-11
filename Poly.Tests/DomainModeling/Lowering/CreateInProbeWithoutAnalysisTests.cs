@@ -6,8 +6,10 @@ using Poly.Tests.TestHelpers;
 namespace Poly.Tests.DomainModeling.Lowering;
 
 /// <summary>
-/// Create-in lowers without a constraint probe. A missing domain still fails closed.
-/// A missing analysis fails closed: the compiled entity has no dictionary create.
+/// Create-in lowers without a constraint probe. A context with no domain or no analysis is
+/// not representable any more: <see cref="LoweringContext"/> requires both (see
+/// <see cref="LoweringContextBoundaryTests"/>), so the old "missing domain" and "missing
+/// analysis" cases have no state left to test.
 /// </summary>
 public class CreateInProbeWithoutAnalysisTests {
     const string Dsl = """
@@ -22,29 +24,17 @@ public class CreateInProbeWithoutAnalysisTests {
         }
         """;
 
-    static void LowerAddKid(bool withDomain, bool withAnalysis) {
+    static void LowerAddKid() {
         var (domain, analysis) = EvolvedDomain.FromDsl(Dsl);
         var parent = domain.Types.OfType<Entity>().Single(e => e.Name == "Parent");
         var pass = new EffectLoweringPass(parent, new LoweringContext(
             new Parameter("entity", new TypeReference(parent.Name)),
-            Domain: withDomain ? domain : null,
-            Analysis: withAnalysis ? analysis : null));
+            analysis,
+            domain));
         pass.LowerActionBody(parent.Actions.Single(a => a.Name == "AddKid").Effects);
     }
 
     [Test]
-    [Arguments(false, true)]
-    [Arguments(false, false)]
-    public async Task LowerActionBody_CreateInWithoutDomain_Throws(bool withDomain, bool withAnalysis) =>
-        await Assert.That(() => LowerAddKid(withDomain, withAnalysis)).Throws<InvalidOperationException>();
-
-    [Test]
-    public async Task LowerActionBody_CreateInWithoutAnalysis_Throws() =>
-        await Assert.That(() => LowerAddKid(withDomain: true, withAnalysis: false))
-            .Throws<InvalidOperationException>()
-            .WithMessageContaining("no dictionary create member");
-
-    [Test]
     public async Task LowerActionBody_CreateInWithDomainAndAnalysis_Lowers() =>
-        await Assert.That(() => LowerAddKid(withDomain: true, withAnalysis: true)).ThrowsNothing();
+        await Assert.That(LowerAddKid).ThrowsNothing();
 }

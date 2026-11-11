@@ -102,8 +102,8 @@ internal static class ConstraintCheckWriter {
     /// fallback; does not read <c>DefaultValueConstraint</c> or <c>RequiredPropertiesMetadata</c>.
     /// </summary>
     internal static bool RequiredApplies(
-        Entity entity, Property prop, Domain? domain, INodeMetadataProvider? analysis) {
-        var required = analysis?.GetStructure(entity)?.RequiredPropertyNames
+        Entity entity, Property prop, Domain domain, INodeMetadataProvider analysis) {
+        var required = analysis.GetStructure(entity)?.RequiredPropertyNames
             ?? EntityStructureAnalyzer.ComputeRequiredPropertyNames(entity);
         if (!required.Contains(prop.Name))
             return false;
@@ -124,8 +124,8 @@ internal static class ConstraintCheckWriter {
     internal static IReadOnlyList<Check> ChecksFor(
         Entity entity,
         Property prop,
-        Domain? domain,
-        INodeMetadataProvider? analysis,
+        Domain domain,
+        INodeMetadataProvider analysis,
         ConstraintCheckStyle style,
         Node value,
         bool nullableValue,
@@ -217,9 +217,7 @@ internal static class ConstraintCheckWriter {
             && enumType is { MemberNames.Count: > 0 }) {
             if (style.GuardsEnumSlot && !valueHasDefault) {
                 checks.Add(new Check(Kind.EnumRequiredSlot,
-                    new Invoke(
-                        new Member(new ClrTypeReference(typeof(object)), "ReferenceEquals"),
-                        [value, new Constant(null)]),
+                    new Equal(new TypeCast(value, new ClrTypeReference(typeof(object))), new Constant(null)),
                     null,
                     new Constant($"'{prop.Name}' is required.")));
             }
@@ -320,9 +318,8 @@ internal static class ConstraintCheckWriter {
         || string.Equals(prop.Type.TypeName, "Decimal", StringComparison.Ordinal);
 
     /// <summary>True when the domain type maps to a nullable CLR type (string or reference type).</summary>
-    private static bool IsNullableDomainType(string typeName, Domain? domain) {
-        if (domain is not null
-            && domain.Types.OfType<EnumType>().Any(e => string.Equals(e.Name, typeName, StringComparison.Ordinal)))
+    private static bool IsNullableDomainType(string typeName, Domain domain) {
+        if (domain.Types.OfType<EnumType>().Any(e => string.Equals(e.Name, typeName, StringComparison.Ordinal)))
             return false;
         return !DomainTypeMapping.IsNonNullableClrValueType(
             RuntimeAnalysisCache.ClrTypeName(domain, typeName));

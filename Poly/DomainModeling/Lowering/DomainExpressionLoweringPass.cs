@@ -38,21 +38,13 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
     private readonly Func<string, string>? _navigationNameResolver;
     private readonly Func<string, bool>? _isCollectionNavigation;
     private readonly Func<string, string?>? _propertyTypeResolver;
-    private readonly Domain? _domain;
-    private readonly INodeMetadataProvider? _analysis;
+    private readonly Domain _domain;
+    private readonly INodeMetadataProvider _analysis;
     private readonly ExpressionMeaning _meaning;
     private readonly ExpressionFormRegistry? _forms;
     private Node _currentSubject = null!;
     private readonly LocalNames _names;
     private IReadOnlyList<string> _activeCalls = [];
-
-    /// <param name="parameters">
-    /// Optional map of parameter names to their Syntax AST nodes.
-    /// When a ParameterAccess is encountered, its name is looked up here.
-    /// If absent, a fresh Parameter node is created.
-    /// </param>
-    public DomainExpressionLoweringPass(IReadOnlyDictionary<string, Node>? parameters = null)
-        : this(new LoweringContext(new Parameter("entity"), parameters)) { }
 
     /// <summary>
     /// Creates a pass using context from a <see cref="LoweringContext"/>.
@@ -70,6 +62,9 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
     /// source entity, and binder roots keep the source name and enum map.
     /// </summary>
     public DomainExpressionLoweringPass(LoweringContext context) {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(context.Analysis);
+        ArgumentNullException.ThrowIfNull(context.Domain);
         _context = context.Names is null ? context with { Names = new LocalNames() } : context;
         _names = _context.Names!;
         _parameters = context.Parameters ?? new Dictionary<string, Node>();
@@ -88,16 +83,12 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
         get {
             if (_meaning.Lowering.Handlers.Count > 0)
                 return _meaning;
-            return _domain is not null
-                ? RuntimeAnalysisCache.MeaningFor(_domain)
-                : _meaning;
+            return RuntimeAnalysisCache.MeaningFor(_domain);
         }
     }
 
     private ExpressionFormRegistry EffectiveForms =>
-        _forms ?? (_domain is not null
-            ? RuntimeAnalysisCache.FormsFor(_domain)
-            : new ExpressionFormRegistry());
+        _forms ?? RuntimeAnalysisCache.FormsFor(_domain);
 
     /// <summary>
     /// Lowers <paramref name="expression"/> to statements plus a value, using
@@ -172,7 +163,7 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
     /// wrong shape: an unknown function, wrong arity, or a recursive cycle throws.
     /// </summary>
     protected override LoweredExpression FunctionCall(FunctionCall call) {
-        var function = _domain?.Functions.FirstOrDefault(f => string.Equals(f.Name, call.Name, StringComparison.Ordinal))
+        var function = _domain.Functions.FirstOrDefault(f => string.Equals(f.Name, call.Name, StringComparison.Ordinal))
             ?? throw new InvalidOperationException(
                 $"Cannot lower call to '{call.Name}' (line {call.Line}, col {call.Col}): " +
                 "no such function is declared in the domain being lowered.");
@@ -325,7 +316,7 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
         _isCollectionNavigation?.Invoke(name) == true;
 
     private string? ResolveRelationshipTarget(string relationshipName) {
-        if (_domain is null || _context.SourceEntityName is null)
+        if (_context.SourceEntityName is null)
             return null;
         var source = _domain.Types.OfType<Entity>().FirstOrDefault(e =>
             string.Equals(e.Name, _context.SourceEntityName, StringComparison.Ordinal));
@@ -544,9 +535,9 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
         if (valueExpr is PropertyAccess memberAccess
             && !_enumPropertyNames.ContainsKey(memberAccess.Name)
             && _propertyTypeResolver?.Invoke(memberAccess.Name) is null
-            && _domain?.Types.OfType<EnumType>().Any(e =>
+            && _domain.Types.OfType<EnumType>().Any(e =>
                 string.Equals(e.Name, enumTypeName, StringComparison.Ordinal)
-                && e.MemberNames.Contains(memberAccess.Name, StringComparer.Ordinal)) == true) {
+                && e.MemberNames.Contains(memberAccess.Name, StringComparer.Ordinal))) {
             return new Member(new NamedTypeReference(enumTypeName), memberAccess.Name);
         }
 
@@ -674,7 +665,7 @@ public sealed class DomainExpressionLoweringPass : DomainExpressionDispatch<Lowe
     private LoweredExpression LowerAgainstEntity(
         string? entityName, DomainExpression expression, Node subject) {
         IReadOnlyDictionary<string, string>? enums = _enumPropertyNames;
-        if (_domain is not null && entityName is not null) {
+        if (entityName is not null) {
             var targetEntity = _domain.Types.OfType<Entity>().FirstOrDefault(e =>
                 string.Equals(e.Name, entityName, StringComparison.Ordinal));
             if (targetEntity is not null)

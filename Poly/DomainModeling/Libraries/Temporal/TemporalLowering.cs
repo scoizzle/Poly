@@ -20,6 +20,7 @@ internal static class TemporalLowering {
         meaning.Lowering.Register(new DateAddDaysLowering(typeof(Subtract), subtract: true));
         meaning.Defaults.Register(new NowDefaultResolver());
         meaning.Defaults.Register(new TodayDefaultResolver());
+        meaning.Defaults.Register(new DurationDefaultResolver());
     }
 
     private sealed class NowLowering : IExpressionLoweringHandler {
@@ -173,6 +174,72 @@ internal static class TemporalLowering {
             return true;
         }
     }
+
+    /// <summary>
+    /// A bare <c>Duration</c> default on a <c>Duration</c> property
+    /// (<c>Budget: Duration default(30 Minutes)</c>) lowers to its
+    /// <c>TimeSpan</c> construction. Without this the constant is not a literal or
+    /// an enum member, so the exporter would drop it and the create factory would
+    /// lose its default. Months and years have no fixed <c>TimeSpan</c> length and
+    /// fail closed instead of approximating a calendar span.
+    /// </summary>
+    private sealed class DurationDefaultResolver : IExpressionDefaultResolver {
+        public Type ExpressionType => typeof(Duration);
+
+        public bool TryResolve(
+            DomainExpression expression,
+            string? propTypeName,
+            out object? runtimeValue,
+            out Node exportNode) {
+            runtimeValue = null;
+            exportNode = null!;
+            if (expression is not Duration duration)
+                return false;
+            if (propTypeName is not ("Duration" or "TimeSpan"))
+                return false;
+            runtimeValue = ToTimeSpan(duration);
+            exportNode = ToTimeSpanNode(duration);
+            return true;
+        }
+    }
+
+    private static TimeSpan ToTimeSpan(Duration d) => d.Unit switch {
+        DurationUnit.Milliseconds => TimeSpan.FromMilliseconds(d.Amount),
+        DurationUnit.Seconds => TimeSpan.FromSeconds(d.Amount),
+        DurationUnit.Minutes => TimeSpan.FromMinutes(d.Amount),
+        DurationUnit.Hours => TimeSpan.FromHours(d.Amount),
+        DurationUnit.Days => TimeSpan.FromDays(d.Amount),
+        DurationUnit.Weeks => TimeSpan.FromDays(WeeksAsDays(d.Amount, d.Unit)),
+        _ => throw UnsupportedDurationDefault(d),
+    };
+
+    private static Node ToTimeSpanNode(Duration d) {
+        var (factory, amount) = d.Unit switch {
+            DurationUnit.Milliseconds => ("FromMilliseconds", d.Amount),
+            DurationUnit.Seconds => ("FromSeconds", d.Amount),
+            DurationUnit.Minutes => ("FromMinutes", d.Amount),
+            DurationUnit.Hours => ("FromHours", d.Amount),
+            DurationUnit.Days => ("FromDays", d.Amount),
+            DurationUnit.Weeks => ("FromDays", WeeksAsDays(d.Amount, d.Unit)),
+            _ => throw UnsupportedDurationDefault(d),
+        };
+        return new Invoke(
+            new Member(new NamedTypeReference("TimeSpan"), factory),
+            new Constant(amount));
+    }
+
+    private static long WeeksAsDays(long weeks, DurationUnit unit) {
+        try {
+            return checked(weeks * 7);
+        }
+        catch (OverflowException) {
+            throw UnsupportedDurationDefault(new Duration(weeks, unit));
+        }
+    }
+
+    private static NotSupportedException UnsupportedDurationDefault(Duration d) =>
+        new($"default({d.Amount} {d.Unit}) cannot be lowered to a TimeSpan default: " +
+            "months and years have no fixed length.");
 
     private enum DateClrFamily { Unknown, DateOnly, DateTime, TimeOnly }
 

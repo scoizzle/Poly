@@ -78,7 +78,7 @@ public sealed class TemporalGoldenTests {
         var assign = SingleAssign(SingleEntity(domain));
 
         var pass = new DomainExpressionLoweringPass(
-            new LoweringContext(new Parameter("entity"), Meaning: TemporalInputs().Meaning));
+            LoweringFixtures.MinimalContext(new Parameter("entity")) with { Meaning = TemporalInputs().Meaning });
         var lowered = pass.Lower(assign.Value, new ParameterReference());
 
         await Assert.That(lowered).IsTypeOf<Invoke>();

@@ -262,7 +262,7 @@ public sealed partial class DomainToCSharpExporter {
         var defaultedCtorParams = new List<Parameter>();
 
         // Stage enum name — the published fact (EntityStructureMetadata.StageEnumTypeName)
-        // is the single source; fall back to the derivation only for the null-analysis path.
+        // is the single source; fall back to the derivation only when the bag is absent.
         var stageEnumTypeName = esm.HasStages
             ? esm.StageEnumTypeName ?? $"{entity.Name}Stage"
             : null;
@@ -922,7 +922,7 @@ public sealed partial class DomainToCSharpExporter {
             // Construct, then Success. Create is the unique-inverse attach source
             // (Attach* when count==1); CreateNav/BindCreate defer Add/Register when
             // that attach ran. Ambiguous peer collections (count>1) skip Attach —
-            // same as HostAbi.TryLinkInverseCollection — so named create-in can
+            // same as the inverse-link rule — so named create-in can
             // fallback-_field.Add. OneToOne (no collection inverse) leaves the
             // ctor to-one only. Null peer is a no-op.
             var createSuccessNodes = new List<Node>();
@@ -954,8 +954,8 @@ public sealed partial class DomainToCSharpExporter {
                     peerEntity = domain.Types.OfType<Entity>()
                         .FirstOrDefault(e => string.Equals(e.Name, peerTypeName, StringComparison.Ordinal));
 
-                // Unique collection inverse on the peer (FindInverseCollectionInfo /
-                // HostAbi.TryLinkInverseCollection). count == 0: OneToOne / no
+                // Unique collection inverse on the peer (FindInverseCollectionInfo).
+                // count == 0: OneToOne / no
                 // collection — ctor already set the to-one. count > 1: skip Attach
                 // (named create-in CreateNav fallback Add). count == 1: Attach*.
                 var inverse = peerEntity is not null

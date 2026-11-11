@@ -4,18 +4,22 @@ using System.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 
-// Roslyn compile-check for a generated export.cs. Usage:
-//   probe-check <export.cs>
+// Roslyn compile-check for generated export files. Usage:
+//   probe-check <file.cs> [<file.cs> ...]
 // Reports 0/1 exit with the diagnostic summary. Compiles against the
 // platform reference assemblies only (no Poly dependency) — catches
-// CS1503/CS1061/CS8602-class export bugs fast.
-if (args.Length != 1 || !File.Exists(args[0])) {
-    Console.Error.WriteLine("usage: probe-check <export.cs>");
+// CS1503/CS1061/CS8602-class export bugs fast. Warnings fail the gate: a
+// generated warning is an export bug too. This is a bare Roslyn compile without
+// analyzers: warnings here are compiler warnings only; analyzer (CA*) warnings
+// surface only on the http path's dotnet build with TreatWarningsAsErrors (#469).
+if (args.Length == 0 || args.Any(a => !File.Exists(a))) {
+    Console.Error.WriteLine("usage: probe-check <file.cs> [<file.cs> ...]");
     return 1;
 }
 
-var csharp = File.ReadAllText(args[0]);
-var tree = CSharpSyntaxTree.ParseText(csharp);
+var trees = args
+    .Select(path => CSharpSyntaxTree.ParseText(File.ReadAllText(path), path: path))
+    .ToArray();
 var refs = ((string?)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES"))
     ?.Split(Path.PathSeparator)
     .Select(p => (MetadataReference)MetadataReference.CreateFromFile(p))
@@ -23,15 +27,16 @@ var refs = ((string?)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES"))
 
 var comp = CSharpCompilation.Create(
     "Probe",
-    [tree],
+    trees,
     refs,
     new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
 
-var errors = comp.GetDiagnostics().Count(d => d.Severity == DiagnosticSeverity.Error);
-var warnings = comp.GetDiagnostics().Count(d => d.Severity == DiagnosticSeverity.Warning);
+var diagnostics = comp.GetDiagnostics().ToArray();
+var errors = diagnostics.Count(d => d.Severity == DiagnosticSeverity.Error);
+var warnings = diagnostics.Count(d => d.Severity == DiagnosticSeverity.Warning);
 
-foreach (var d in comp.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error))
-    Console.WriteLine($"error: {d}");
+foreach (var d in diagnostics.Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning))
+    Console.WriteLine($"{(d.Severity == DiagnosticSeverity.Error ? "error" : "warning")}: {d}");
 
 Console.WriteLine($"errors: {errors}, warnings: {warnings}");
-return errors == 0 ? 0 : 1;
+return errors == 0 && warnings == 0 ? 0 : 1;

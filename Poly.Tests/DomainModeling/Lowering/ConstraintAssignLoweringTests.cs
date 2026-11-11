@@ -22,9 +22,7 @@ public class ConstraintAssignLoweringTests {
         var entity = new Entity("Widget",
             Properties: [score],
             Actions: [], Policies: [], Stages: []);
-        var pass = new EffectLoweringPass(entity, new LoweringContext(
-            new ThisReference(),
-            ActionResultType: new NamedTypeReference("DomainResult")));
+        var pass = new EffectLoweringPass(entity, LoweringFixtures.Context(new ThisReference(), entity) with { ActionResultType = new NamedTypeReference("DomainResult") });
 
         var lowered = pass.TryLowerVmNode(new AssignEffect(
             DomainExpression.Property("Score"),
@@ -53,8 +51,7 @@ public class ConstraintAssignLoweringTests {
         var entity = new Entity("Widget",
             Properties: [score],
             Actions: [], Policies: [], Stages: []);
-        var pass = new EffectLoweringPass(entity, new LoweringContext(
-            new ThisReference()));
+        var pass = new EffectLoweringPass(entity, LoweringFixtures.Context(new ThisReference(), entity));
 
         var lowered = pass.TryLowerVmNode(new AssignEffect(
             DomainExpression.Property("Score"),
@@ -127,8 +124,7 @@ public class ConstraintAssignLoweringTests {
         var instance = exec.Create((entity).Name, new Dictionary<string, object?> { ["Code"] = "OK" }).Instance!;
 
         // Lowered tree must null-guard IsMatch (export: bare IsMatch(null) throws).
-        var pass = new EffectLoweringPass(entity, new LoweringContext(
-            new Parameter("entity", new TypeReference(entity.Name))));
+        var pass = new EffectLoweringPass(entity, LoweringFixtures.Context(new Parameter("entity", new TypeReference(entity.Name)), entity));
         var lowered = pass.TryLowerVmNode(new AssignEffect(
             DomainExpression.Property("Code"),
             DomainExpression.Property("code")));
@@ -214,11 +210,7 @@ public class ConstraintAssignLoweringTests {
 
         var entity = domain.Types.OfType<Entity>().First(e => e.Name == "Widget");
         var action = entity.Actions.First(a => a.Name == "SetScore");
-        var exportPass = new EffectLoweringPass(entity, new LoweringContext(
-            new ThisReference(),
-            Analysis: analysis,
-            Domain: domain,
-            ActionParameterNames: ["n"]));
+        var exportPass = new EffectLoweringPass(entity, LoweringFixtures.Context(new ThisReference(), entity) with { Analysis = analysis, Domain = domain, ActionParameterNames = ["n"] });
         var exportLowered = exportPass.LowerActionBody(action.Effects);
         var exportCs = new CSharpGenerator().Generate(exportLowered!);
         await Assert.That(exportCs).Contains("must be >=");
@@ -229,8 +221,7 @@ public class ConstraintAssignLoweringTests {
     [Test]
     public async Task UniqueAssign_StillLowersEnsureUnique_Regression() {
         var entity = PermitEntity();
-        var pass = new EffectLoweringPass(entity, new LoweringContext(
-            new Parameter("entity", new TypeReference(entity.Name))));
+        var pass = new EffectLoweringPass(entity, LoweringFixtures.Context(new Parameter("entity", new TypeReference(entity.Name)), entity));
 
         var lowered = pass.TryLowerVmNode(new AssignEffect(
             DomainExpression.Property("Plate"),

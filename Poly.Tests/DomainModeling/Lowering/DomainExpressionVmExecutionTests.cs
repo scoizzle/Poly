@@ -20,7 +20,7 @@ public class DomainExpressionVmExecutionTests {
     // DomainExpressionLoweringPass carries mutable _currentSubject state — a shared
     // static instance raced under parallel execution (Exists_NonNullValue_ReturnsTrue flake).
     private readonly DomainExpressionLoweringPass Pass = new(
-        new LoweringContext(new SN.Parameter("entity"), Meaning: TemporalMeaningHarness.Create()));
+        LoweringFixtures.MinimalContext(new SN.Parameter("entity")) with { Meaning = TemporalMeaningHarness.Create() });
     private readonly ParameterReference Subject = new();
 
     private static AnalysisResult Analyze(Node node) =>

@@ -110,10 +110,7 @@ public class ClockLoweringTests {
     }
 
     private static Node Lower(Entity entity, Poly.DomainModeling.Ontology.Action action) {
-        var pass = new EffectLoweringPass(entity, new LoweringContext(
-            new Parameter("entity", new TypeReference(entity.Name)),
-            Meaning: TemporalMeaningHarness.Create(),
-            Forms: TemporalMeaningHarness.Forms()));
+        var pass = new EffectLoweringPass(entity, LoweringFixtures.Context(new Parameter("entity", new TypeReference(entity.Name)), entity) with { Meaning = TemporalMeaningHarness.Create(), Forms = TemporalMeaningHarness.Forms() });
         var lowered = pass.LowerActionBody(action.Effects);
         return lowered ?? throw new InvalidOperationException("LowerActionBody returned null.");
     }

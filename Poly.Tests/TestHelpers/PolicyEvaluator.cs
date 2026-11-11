@@ -35,7 +35,7 @@ public static class PolicyEvaluator {
         PolicySubject.ValidateType<TEntity>();
 
         var entityParam = new Parameter("entity", TypeReference.To<TEntity>());
-        var pass = new DomainExpressionLoweringPass();
+        var pass = new DomainExpressionLoweringPass(LoweringFixtures.MinimalContext(entityParam));
         var lowered = pass.Lower(policy.Expression, entityParam);
 
         // Standard VM interpretation pipeline

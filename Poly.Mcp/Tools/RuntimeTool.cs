@@ -653,6 +653,9 @@ To link or unlink existing instances, use link_instances / unlink_instances — 
 
         // Entity-typed arguments are instance ids; the executor resolves them to the
         // registered dictionaries, and the module body owns guards, stage and effects.
+        // The action the module runs is the one for the stage the instance is in now; a
+        // transition changes the stage, so capture it before the invoke.
+        var stageBefore = StageOf(state, instance);
         ModuleOutcome outcome;
         try {
             outcome = executor.Invoke(instance, actionName, args);
@@ -666,7 +669,7 @@ To link or unlink existing instances, use link_instances / unlink_instances — 
                 Affordances: ["get_instance", "list_instances"]);
         }
 
-        var action = FindAction(state, instance, actionName);
+        var action = ResolveAction(state, instance, stageBefore, actionName);
         var returnedType = action?.Result.Members.Count > 0 ? action.Result.Members[0].Type.TypeName : null;
         var errorMessage = outcome.Error;
         IReadOnlyList<string>? failedGuards = null;
@@ -708,12 +711,19 @@ To link or unlink existing instances, use link_instances / unlink_instances — 
             Affordances: ["get_instance", "list_instances", "create_instance"]);
     }
 
-    private static Poly.DomainModeling.Ontology.Action? FindAction(
-        McpSessionState state, ModuleInstance instance, string actionName) =>
-        EntityOf(state, instance) is { } entity
-            ? entity.Actions.Concat(entity.Stages.SelectMany(s => s.Actions))
-                .FirstOrDefault(a => string.Equals(a.Name, actionName, StringComparison.Ordinal))
+    /// <summary>
+    /// Resolves through the analysis door, which is stage-aware (a stage's own action wins,
+    /// then the entity's). When the door has no action for the stage, there is none: borrowing
+    /// a same-named action from a sibling stage would report its guards and return type.
+    /// </summary>
+    private static Poly.DomainModeling.Ontology.Action? ResolveAction(
+        McpSessionState state, ModuleInstance instance, string? stageBefore, string actionName) {
+        if (EntityOf(state, instance) is not { } entity)
+            return null;
+        return state.ExecutionAnalysis.TryResolveAction(state.Domain, entity, stageBefore, actionName, out var resolved)
+            ? resolved
             : null;
+    }
 
     /// <summary>
     /// The module reports a blocked guard as a Failure message. A policy block names the

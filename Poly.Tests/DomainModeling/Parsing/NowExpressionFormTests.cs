@@ -18,7 +18,7 @@ public class NowExpressionFormTests {
         DslExpressionFragment.Resolve(DslExpressionFragment.ParseExpressionFragment(text), session);
 
     private readonly DomainExpressionLoweringPass Pass = new(
-        new LoweringContext(new Parameter("entity"), Meaning: TemporalMeaningHarness.Create()));
+        LoweringFixtures.MinimalContext(new Parameter("entity")) with { Meaning = TemporalMeaningHarness.Create() });
 
     [Test]
     public async Task Now_Form_ParsesAndLowers() {

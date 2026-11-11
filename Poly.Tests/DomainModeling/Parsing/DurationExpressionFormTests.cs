@@ -21,7 +21,7 @@ public class DurationExpressionFormTests {
         ExtensionCatalog.Core.Language;
 
     private readonly DomainExpressionLoweringPass Pass = new(
-        new LoweringContext(new Parameter("entity"), Meaning: TemporalMeaningHarness.Create()));
+        LoweringFixtures.MinimalContext(new Parameter("entity")) with { Meaning = TemporalMeaningHarness.Create() });
 
     [Test]
     public async Task Duration_12Days_Form_Parses() {

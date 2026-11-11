@@ -12,8 +12,7 @@ public class StoreBindUniqueTests {
     [Test]
     public async Task UniqueAssign_Runtime_LowersToEnsureUniqueThenAssign() {
         var entity = PermitEntity();
-        var pass = new EffectLoweringPass(entity, new LoweringContext(
-            new Parameter("entity", new TypeReference(entity.Name))));
+        var pass = new EffectLoweringPass(entity, LoweringFixtures.Context(new Parameter("entity", new TypeReference(entity.Name)), entity));
 
         var lowered = pass.TryLowerVmNode(new AssignEffect(
             DomainExpression.Property("Plate"),
@@ -31,8 +30,7 @@ public class StoreBindUniqueTests {
     [Test]
     public async Task UniqueAssign_Export_LowersToEnsureUniqueThenAssign() {
         var entity = PermitEntity();
-        var pass = new EffectLoweringPass(entity, new LoweringContext(
-            new ThisReference()));
+        var pass = new EffectLoweringPass(entity, LoweringFixtures.Context(new ThisReference(), entity));
 
         var lowered = pass.TryLowerVmNode(new AssignEffect(
             DomainExpression.Property("Plate"),
@@ -66,8 +64,7 @@ public class StoreBindUniqueTests {
         var entity = new Entity("Person",
             Properties: [name],
             Actions: [], Policies: [], Stages: []);
-        var pass = new EffectLoweringPass(entity, new LoweringContext(
-            new Parameter("entity", new TypeReference(entity.Name))));
+        var pass = new EffectLoweringPass(entity, LoweringFixtures.Context(new Parameter("entity", new TypeReference(entity.Name)), entity));
 
         var lowered = pass.TryLowerVmNode(new AssignEffect(
             DomainExpression.Property("Name"),
@@ -85,8 +82,7 @@ public class StoreBindUniqueTests {
         var entity = new Entity("Person",
             Properties: [name],
             Actions: [], Policies: [], Stages: []);
-        var pass = new EffectLoweringPass(entity, new LoweringContext(
-            new Parameter("entity", new TypeReference(entity.Name))));
+        var pass = new EffectLoweringPass(entity, LoweringFixtures.Context(new Parameter("entity", new TypeReference(entity.Name)), entity));
 
         var lowered = pass.TryLowerVmNode(new AssignEffect(
             DomainExpression.Property("Name"),
@@ -112,10 +108,7 @@ public class StoreBindUniqueTests {
         await Assert.That(analysis.GetMetadata<Poly.DomainModeling.Analysis.StorageMappingMetadata>(domain))
             .IsNotNull();
 
-        var pass = new EffectLoweringPass(entity, new LoweringContext(
-            new Parameter("entity", new TypeReference(entity.Name)),
-            Analysis: analysis,
-            Domain: domain));
+        var pass = new EffectLoweringPass(entity, LoweringFixtures.Context(new Parameter("entity", new TypeReference(entity.Name)), entity) with { Analysis = analysis, Domain = domain });
         var lowered = pass.TryLowerVmNode(new AssignEffect(
             DomainExpression.Property("Plate"),
             DomainExpression.Property("plate")));
@@ -186,10 +179,7 @@ public class StoreBindUniqueTests {
             """);
         var entity = domain.Types.OfType<Entity>().First(e => e.Name == "Permit");
         var action = entity.Actions.First(a => a.Name == "Relabel");
-        var pass = new EffectLoweringPass(entity, new LoweringContext(
-            new Parameter("entity", new TypeReference(entity.Name)),
-            Analysis: analysis,
-            Domain: domain));
+        var pass = new EffectLoweringPass(entity, LoweringFixtures.Context(new Parameter("entity", new TypeReference(entity.Name)), entity) with { Analysis = analysis, Domain = domain });
         var lowered = pass.LowerActionBody(action.Effects);
         var cs = new CSharpGenerator().Generate(lowered!);
         await Assert.That(cs).Contains("EnsureUnique");

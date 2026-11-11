@@ -1,15 +1,11 @@
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Ontology.Contract;
-using Poly.DomainModeling.Ontology.Effects;
 using Poly.DomainModeling.Runtime;
 
 using AccessModifier = Poly.Introspection.AccessModifier;
-using Action = Poly.DomainModeling.Ontology.Action;
 using PrimType = Poly.Introspection.PrimitiveType;
 using Syntactic = Poly.Ast.Nodes;
-using TypeKind = Poly.Introspection.TypeKind;
-using ValueType = Poly.DomainModeling.Ontology.ValueType;
 
 namespace Poly.DomainModeling.Lowering;
 
@@ -31,152 +27,6 @@ namespace Poly.DomainModeling.Lowering;
 /// (<c>sub.When…(previousStage)</c>, <c>sub.When…(this)</c>, or both).
 /// </summary>
 public sealed partial class DomainToCSharpExporter {
-    /// <summary>Collected subscription data for cross-entity notification — populated from the
-    /// analysis-published <see cref="SubscriptionDispatchPlanMetadata"/> (the SAME dispatch
-    /// plan the runtime consumes), one info per watched target stage.</summary>
-    internal sealed record SubscriptionInfo(
-        string StageName,
-        SubscriptionDispatchPlanEntry Subscription,
-        Entity SourceEntity,
-        Entity TargetEntity,
-        Relationship Relationship,
-        string? SubscriberStageName = null
-    );
-
-    private static string SubscriberRegistryFieldName(SubscriptionInfo info) =>
-        SubscriberRegistryFieldName(info.SourceEntity.Name, info.Relationship.Name, info.StageName);
-
-    /// <summary>Registry field on the watched target that lists subscribers of one stage.</summary>
-    internal static string SubscriberRegistryFieldName(
-        string sourceEntityName, string relationshipName, string stageName) =>
-        $"_{ToCamelCase(sourceEntityName)}{ToPascalCase(relationshipName)}{stageName}Subscribers";
-
-    private static string SubscriberRegisterMethodName(SubscriptionInfo info) =>
-        $"Register{info.SourceEntity.Name}{ToPascalCase(info.Relationship.Name)}{info.StageName}Subscriber";
-
-    /// <summary>
-    /// Collects the subscription facts for one node's dispatch plan (an entity for
-    /// entity-level subscriptions, or a stage for stage-scoped ones) into the target/
-    /// subscriber maps used for code generation. The exporter consumes the analysis-
-    /// published <see cref="SubscriptionDispatchPlanMetadata"/> rather than re-walking
-    /// <see cref="StageSubscription"/> — one description of what fires, shared with the
-    /// runtime (no per-site re-derivation drift).
-    /// </summary>
-    internal static void CollectSubscriptionInfo(
-        SubscriptionDispatchPlanMetadata plan,
-        Entity subscriber,
-        string? subscriberStageName,
-        IReadOnlyDictionary<string, Entity> entityLookup,
-        List<SubscriptionInfo> subList,
-        Dictionary<string, List<SubscriptionInfo>> subscriptionsByTarget) {
-        foreach (var entry in plan.ByRelationshipName.Values.SelectMany(e => e)) {
-            var rel = subscriber.Navigations.FirstOrDefault(n =>
-                string.Equals(n.Name, entry.RelationshipName, StringComparison.Ordinal));
-            if (rel is null) continue;
-            if (!entityLookup.TryGetValue(entry.TargetEntityName, out var targetEntity))
-                continue;
-
-            foreach (var sName in entry.StageNames) {
-                var info = new SubscriptionInfo(sName, entry, subscriber, targetEntity, rel, subscriberStageName);
-                subList.Add(info);
-
-                if (!subscriptionsByTarget.TryGetValue(targetEntity.Name, out var targetList))
-                    subscriptionsByTarget[targetEntity.Name] = targetList = new();
-                targetList.Add(info);
-            }
-        }
-    }
-
-    /// <summary>
-    /// Assigns each subscription its generated handler method name. The name is
-    /// quantifier-aware (<c>WhenAny/WhenAll/WhenEach{Target}{Stage}</c>) and
-    /// disambiguated with a <c>_{n}</c> suffix when multiple subscriptions share the
-    /// same method signature (same quantifier + peer-binding shape) on the same
-    /// relationship+stage — two <c>when Rel Stage</c> (Each) blocks must each fire.
-    /// Keyed by reference so even structurally-identical subscriptions get distinct names.
-    /// </summary>
-    internal static Dictionary<SubscriptionInfo, string> BuildHandlerNames(
-        IEnumerable<KeyValuePair<string, List<SubscriptionInfo>>> subscriptionsBySubscriber) {
-        var map = new Dictionary<SubscriptionInfo, string>(ReferenceEqualityComparer.Instance);
-        foreach (var (_, subList) in subscriptionsBySubscriber) {
-            var groups = subList
-                .GroupBy(info => (
-                    info.StageName,
-                    info.TargetEntity.Name,
-                    QuantifierName(info.Subscription.Quantifier),
-                    HasPeerBinding(info)))
-                .ToDictionary(g => g.Key, g => g.ToList());
-            foreach (var info in subList) {
-                var hasPeer = HasPeerBinding(info);
-                var quantifier = QuantifierName(info.Subscription.Quantifier);
-                var key = (info.StageName, info.TargetEntity.Name, quantifier, hasPeer);
-                var name = $"When{quantifier}{info.TargetEntity.Name}{info.StageName}";
-                var group = groups[key];
-                if (group.Count == 1) {
-                    map[info] = name;
-                    continue;
-                }
-                // Name every handler in a multi-handler group by its effect, not
-                // by declaration order (`_2` says nothing).
-                var label = EffectLabel(info.Subscription);
-                var occurrence = group.TakeWhile(other => !ReferenceEquals(other, info))
-                    .Count(other => string.Equals(EffectLabel(other.Subscription), label, StringComparison.Ordinal));
-                map[info] = occurrence == 0 ? $"{name}_{label}" : $"{name}_{label}_{occurrence + 1}";
-            }
-        }
-        return map;
-    }
-
-    /// <summary>Splice a lowered handler body's statements/locals after a prefix (D13).</summary>
-    private static Block Prefixed(List<Node> prefix, Node body, List<Node>? locals = null) {
-        if (body is Block block) {
-            prefix.AddRange(block.Nodes);
-            locals ??= [];
-            locals.AddRange(block.Variables);
-        }
-        else {
-            prefix.Add(body);
-        }
-        return new Block(prefix, locals ?? []);
-    }
-
-    private static string EffectLabel(SubscriptionDispatchPlanEntry subscription) =>
-        EffectLabel(subscription.Effects.FirstOrDefault()) ?? "Effect";
-
-    private static string? EffectLabel(Effect? effect) => effect switch {
-        AssignEffect { Target: PropertyAccess property } => $"Set{property.Name}",
-        InvokeActionEffect invoke => $"Call{invoke.ActionName}",
-        StageTransitionEffect transition => $"To{transition.TargetStage.StageName}",
-        CreateEntityInstance create => $"Create{create.Type.TypeName}",
-        CreateEntityInRelationshipEffect create => $"Create{create.RelationshipName}",
-        CompositeEffect composite => composite.Effects.Select(EffectLabel).FirstOrDefault(l => l is not null),
-        ConditionalEffect conditional => EffectLabel(conditional.ThenEffects.FirstOrDefault())
-            ?? (conditional.ElseEffects is null ? null : EffectLabel(conditional.ElseEffects.FirstOrDefault())),
-        _ => null,
-    };
-
-    private static string QuantifierName(StageSubscriptionQuantifier quantifier) => quantifier switch {
-        StageSubscriptionQuantifier.Any => "Any",
-        StageSubscriptionQuantifier.All => "All",
-        _ => "Each",
-    };
-
-    /// <summary>
-    /// Handler takes a peer argument when the subscription binds <c>when … as name</c>.
-    /// Print (overload key and call args) and simulate (When arm) share this.
-    /// </summary>
-    internal static bool HasPeerBinding(SubscriptionInfo info) =>
-        info.Subscription.PeerBinding is { Length: > 0 };
-
-    /// <summary>
-    /// <c>when all</c> handlers take the transitioning record's previous stage.
-    /// Print (call args and handler params) and simulate (When arm) share this.
-    /// </summary>
-    internal static bool NeedsAllPreviousStage(SubscriptionInfo info) =>
-        info.Subscription.Quantifier == StageSubscriptionQuantifier.All
-        && info.TargetEntity.Stages.Count > 0
-        && info.Subscription.StageNames.Count > 0;
-
     private static Node StageEnumMember(string enumName, string stageName) =>
         new Member(new NamedTypeReference(enumName), stageName);
 
@@ -202,26 +52,6 @@ public sealed partial class DomainToCSharpExporter {
             acc = acc is null ? neq : new Syntactic.And(acc, neq);
         }
         return acc!;
-    }
-
-    /// <summary>
-    /// Enumeration type with a static const string field per member, defaulted to the member name.
-    /// </summary>
-    internal static TypeDefinitionNode BuildEnumTypeDef(string name, IEnumerable<string> memberNames) {
-        var fields = memberNames.Select(memberName => new FieldDefinitionNode(
-            memberName,
-            new PrimitiveTypeReference(PrimType.String),
-            DefaultValue: new Constant(memberName),
-            IsStatic: true,
-            IsConst: true,
-            AccessModifier: AccessModifier.Public
-        )).ToList();
-        return new TypeDefinitionNode(
-            name,
-            Fields: fields,
-            Kind: TypeKind.Enum,
-            Semantics: Syntactic.TypeDefinitionSemantics.MutableReference
-        );
     }
 
     // ── Per-entity builder ──────────────────────────────────────
@@ -1026,44 +856,315 @@ public sealed partial class DomainToCSharpExporter {
         return typeDefs;
     }
 
-    /// <summary>
-    /// Assign of a unique property calls <c>this.EnsureUnique</c>. The same value
-    /// already on this instance is Success. A different value fails closed: this method holds
-    /// no storage port. The storage library rewrites every EnsureUnique-then-assign into
-    /// <c>db.Exists</c>/<c>Release</c>/<c>Record</c> on the <c>IStoragePort</c> the action receives,
-    /// so a module compiled with storage never reaches this failure.
-    /// </summary>
-    private static MethodDefinitionNode EnsureUniqueAssignMethod(Entity entity) {
-        var propertyName = new Parameter("propertyName", new PrimitiveTypeReference(PrimType.String));
-        var value = new Parameter("value", StoreJobObjectType());
-        var nodes = new List<Node> {
-            new IfStatement(
-                new Equal(value, new Constant(null)),
-                new Block([DomainResultSuccess()]))
-        };
-        foreach (var prop in entity.Properties.OrderBy(p => p.Name, StringComparer.Ordinal)) {
-            if (!prop.Constraints.OfType<UniqueConstraint>().Any())
-                continue;
-            nodes.Add(new IfStatement(
-                new Syntactic.And(
-                    new Equal(propertyName, new Constant(prop.Name)),
-                    new Invoke(
-                        new Member(new ClrTypeReference(typeof(object)), "Equals"),
-                        new Member(new ThisReference(), prop.Name),
-                        value)),
-                new Block([DomainResultSuccess()])));
-        }
-        nodes.Add(new Return(new Invoke(
-            new Member(new NamedTypeReference("DomainResult"), "Failure"),
-            new Constant("A unique assign needs the storage port."))));
-        return new MethodDefinitionNode(
-            "EnsureUnique",
-            new NamedTypeReference("DomainResult"),
-            Parameters: [propertyName, value],
-            Body: new Block(nodes),
-            AccessModifier: AccessModifier.Public);
+    // ── Type mapping ────────────────────────────────────────────
+
+    internal static Node MapDomainTypeRef(DomainTypeReference domainType,
+        Domain domain, INodeMetadataProvider analysis) {
+        var typeName = domainType.TypeName;
+
+        // Enum types and entity references both emit NamedTypeReference(typeName):
+        // the catalog is the single source of truth and no tree scan is performed (amu-w3-1).
+        var clr = RuntimeAnalysisCache.ClrTypeName(domain, typeName);
+        if (DomainTypeMapping.TryPrimitiveType(clr, out var prim))
+            return new PrimitiveTypeReference(prim);
+        return new NamedTypeReference(typeName);
     }
 
-    private static Return DomainResultSuccess() =>
-        new(new Invoke(new Member(new NamedTypeReference("DomainResult"), "Success")));
+    internal static bool TryResolveEnumType(Domain domain, INodeMetadataProvider analysis, string typeName, out EnumType? enumType) {
+        enumType = null;
+
+        // Catalog only: fail closed (no domain tree rescan).
+        var lookup = analysis.GetTypeLookup(domain);
+        if (lookup is not null
+            && lookup.Types.TryGetValue(typeName, out var resolvedType)
+            && resolvedType is EnumType resolvedEnum) {
+            enumType = resolvedEnum;
+            return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Builds a map from property name → enum type name for all properties of
+    /// <paramref name="entity"/> whose type resolves to an <see cref="EnumType"/>.
+    /// Used by the expression lowering pass to emit qualified enum member access.
+    /// Catalog-only.
+    /// </summary>
+    /// <summary>
+    /// Returns the entity's enum-typed property map (property name → enum type name),
+    /// preferring the published <see cref="EntityStructureMetadata.EnumPropertyNames"/>
+    /// bag and falling back to the catalog type lookup when the bag is absent.
+    /// </summary>
+    internal static IReadOnlyDictionary<string, string>? GetEnumPropertyNames(
+        Entity entity, Domain domain, INodeMetadataProvider analysis) {
+        if (analysis.GetStructure(entity) is { EnumPropertyNames: not null } esm)
+            return esm.EnumPropertyNames;
+        return BuildEnumPropertyNames(entity, domain, analysis);
+    }
+
+    internal static Dictionary<string, string>? BuildEnumPropertyNames(
+        Entity entity, Domain domain, INodeMetadataProvider analysis) {
+        Dictionary<string, string>? map = null;
+        var types = (analysis.GetTypeLookup(domain)
+            ?? throw new InvalidOperationException(
+                "Domain catalog type lookup is required for enum property mapping.")).Types;
+
+        foreach (var prop in entity.Properties) {
+            if (types.TryGetValue(prop.Type.TypeName, out var resolved)
+                && resolved is EnumType) {
+                (map ??= new(StringComparer.Ordinal))[prop.Name] = prop.Type.TypeName;
+            }
+        }
+        return map;
+    }
+
+    // ── DomainResult infrastructure type builders ───────────────
+
+    /// <summary>
+    /// Builds the <c>DomainResult</c> record struct: a discrimated-union-like
+    /// result type for void actions. Methods return <c>DomainResult.Success()</c>
+    /// or <c>DomainResult.Failure(message)</c> instead of throwing or returning void.
+    /// Consumers switch on <see cref="IsSuccess"/> to handle success/failure.
+    /// </summary>
+    internal static TypeDefinitionNode BuildDomainResultTypeDef() {
+        // public readonly record struct DomainResult
+        // {
+        //     public bool IsSuccess { get; }
+        //     public string? ErrorMessage { get; }
+        //
+        //     private DomainResult(bool isSuccess, string? errorMessage)
+        //     {
+        //         IsSuccess = isSuccess;
+        //         ErrorMessage = errorMessage;
+        //     }
+        //
+        //     public static DomainResult Success() => new(true, null);
+        //     public static DomainResult Failure(string message) => new(false, message);
+        // }
+
+        var props = new List<PropertyDefinitionNode>
+        {
+            new("IsSuccess",
+                new PrimitiveTypeReference(PrimType.Boolean),
+                Getter: new PropertyGetterDefinitionNode()),
+            new("ErrorMessage",
+                new OptionalTypeReference(
+                    new PrimitiveTypeReference(PrimType.String)),
+                Getter: new PropertyGetterDefinitionNode()),
+        };
+
+        var ctor = new ConstructorDefinitionNode(
+            Parameters: [
+                new Parameter("isSuccess",
+                    new PrimitiveTypeReference(PrimType.Boolean)),
+                new Parameter("errorMessage",
+                    new OptionalTypeReference(
+                        new PrimitiveTypeReference(PrimType.String))),
+            ],
+            Body: new Block([
+                new Assignment(
+                    new Member(new ThisReference(), "IsSuccess"),
+                    new Parameter("isSuccess")),
+                new Assignment(
+                    new Member(new ThisReference(), "ErrorMessage"),
+                    new Parameter("errorMessage")),
+            ]),
+            AccessModifier: AccessModifier.Private
+        );
+
+        var methods = new List<MethodDefinitionNode>
+        {
+            new("Success",
+                new NamedTypeReference("DomainResult"),
+                Body: new Block([
+                    new Return(
+                        new New(
+                            new NamedTypeReference("DomainResult"),
+                            new Constant(true),
+                            new Constant(null)))
+                ]),
+                IsStatic: true,
+                AccessModifier: AccessModifier.Public),
+            new("Failure",
+                new NamedTypeReference("DomainResult"),
+                Parameters: [
+                    new Parameter("message",
+                        new PrimitiveTypeReference(PrimType.String))
+                ],
+                Body: new Block([
+                    new Return(
+                        new New(
+                            new NamedTypeReference("DomainResult"),
+                            new Constant(false),
+                            new Parameter("message")))
+                ]),
+                IsStatic: true,
+                AccessModifier: AccessModifier.Public),
+        };
+
+        return new TypeDefinitionNode(
+            "DomainResult",
+            Properties: props,
+            Constructors: [ctor],
+            Methods: methods,
+            Semantics: Syntactic.TypeDefinitionSemantics.ImmutableValue
+        );
+    }
+
+    /// <summary>
+    /// Printed twin of runtime <c>ConstraintFailureException</c>: a
+    /// string-message exception that void OnEntry / ctor / subscription trees throw.
+    /// </summary>
+    internal static TypeDefinitionNode BuildConstraintFailureExceptionTypeDef() {
+        var ctor = new ConstructorDefinitionNode(
+            Parameters: [
+                new Parameter("message",
+                    new PrimitiveTypeReference(PrimType.String))
+            ],
+            BaseCall: [new Parameter("message")]
+        );
+        return new TypeDefinitionNode(
+            "ConstraintFailureException",
+            Constructors: [ctor],
+            BaseType: new NamedTypeReference("System.Exception")
+        );
+    }
+
+    /// <summary>
+    /// Builds the <c>DomainResult&lt;T&gt;</c> generic record: a typed result
+    /// for non-void actions. Returns <c>DomainResult&lt;T&gt;.Success(value)</c> or
+    /// <c>DomainResult&lt;T&gt;.Failure(message)</c>. <c>Value</c> stays non-nullable
+    /// <c>T</c> and throws when the result failed. The getter is an expression over
+    /// a private method because <c>CSharpReader</c> accepts <c>get;</c> and
+    /// <c>get =&gt; expr</c>, not a block-bodied getter.
+    /// </summary>
+    internal static TypeDefinitionNode BuildDomainResultGenericTypeDef() {
+        // public record DomainResult<T>
+        // {
+        //     private T _value;
+        //     public bool IsSuccess { get; }
+        //     public T Value => this.GetValue();
+        //     public string? ErrorMessage { get; }
+        //
+        //     private DomainResult(bool isSuccess, T value, string? errorMessage)
+        //     {
+        //         IsSuccess = isSuccess;
+        //         _value = value;
+        //         ErrorMessage = errorMessage;
+        //     }
+        //
+        //     public static DomainResult<T> Success(T value) => new(true, value, null);
+        //     public static DomainResult<T> Failure(string message) => new(false, default!, message);
+        //     private T GetValue()
+        //     {
+        //         if (!this.IsSuccess)
+        //             throw new System.InvalidOperationException("A failed DomainResult has no Value.");
+        //         return this._value;
+        //     }
+        // }
+
+        var tParam = new NamedTypeReference("T");
+        var actionResultT = new NamedTypeReference("DomainResult",
+            TypeArguments: [tParam]);
+
+        var props = new List<PropertyDefinitionNode>
+        {
+            new("IsSuccess",
+                new PrimitiveTypeReference(PrimType.Boolean),
+                Getter: new PropertyGetterDefinitionNode()),
+            new("Value", tParam,
+                Getter: new PropertyGetterDefinitionNode(
+                    new Invoke(new Member(new ThisReference(), "GetValue")))),
+            new("ErrorMessage",
+                new OptionalTypeReference(
+                    new PrimitiveTypeReference(PrimType.String)),
+                Getter: new PropertyGetterDefinitionNode()),
+        };
+
+        var ctor = new ConstructorDefinitionNode(
+            Parameters: [
+                new Parameter("isSuccess",
+                    new PrimitiveTypeReference(PrimType.Boolean)),
+                new Parameter("value", tParam),
+                new Parameter("errorMessage",
+                    new OptionalTypeReference(
+                        new PrimitiveTypeReference(PrimType.String))),
+            ],
+            Body: new Block([
+                new Assignment(
+                    new Member(new ThisReference(), "IsSuccess"),
+                    new Parameter("isSuccess")),
+                new Assignment(
+                    new Member(new ThisReference(), "_value"),
+                    new Parameter("value")),
+                new Assignment(
+                    new Member(new ThisReference(), "ErrorMessage"),
+                    new Parameter("errorMessage")),
+            ]),
+            AccessModifier: AccessModifier.Private
+        );
+
+        var methods = new List<MethodDefinitionNode>
+        {
+            new("Success", actionResultT,
+                Parameters: [
+                    new Parameter("value", tParam)
+                ],
+                Body: new Block([
+                    new Return(
+                        new New(actionResultT,
+                            new Constant(true),
+                            new Parameter("value"),
+                            new Constant(null)))
+                ]),
+                IsStatic: true,
+                AccessModifier: AccessModifier.Public),
+            new("Failure", actionResultT,
+                Parameters: [
+                    new Parameter("message",
+                        new PrimitiveTypeReference(PrimType.String))
+                ],
+                Body: new Block([
+                    new Return(
+                        new New(actionResultT,
+                            new Constant(false),
+                            new NullForgiving(new Default()),
+                            new Parameter("message")))
+                ]),
+                IsStatic: true,
+                AccessModifier: AccessModifier.Public),
+            new("GetValue", tParam,
+                Body: new Block([
+                    new IfStatement(
+                        new Syntactic.Not(new Member(new ThisReference(), "IsSuccess")),
+                        new ThrowStatement(
+                            new New(
+                                new NamedTypeReference("System.InvalidOperationException"),
+                                new Constant("A failed DomainResult has no Value.")))),
+                    new Return(new Member(new ThisReference(), "_value")),
+                ]),
+                AccessModifier: AccessModifier.Private),
+        };
+
+        return new TypeDefinitionNode(
+            "DomainResult",
+            GenericParameters: [new Parameter("T")],
+            Properties: props,
+            Constructors: [ctor],
+            Methods: methods,
+            Fields: [
+                new FieldDefinitionNode(
+                    "_value",
+                    tParam,
+                    AccessModifier: AccessModifier.Private),
+            ],
+            Semantics: Syntactic.TypeDefinitionSemantics.ImmutableValue
+        );
+    }
+
+    // ── String helpers ──────────────────────────────────────────
+
+    internal static string ToCamelCase(string name) => DomainTypeMapping.ToCamelCase(name);
+
+    internal static string ToPascalCase(string name) => DomainTypeMapping.ToPascalCase(name);
 }

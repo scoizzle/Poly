@@ -283,6 +283,74 @@ public sealed class ContractCallTests {
         await Assert.That(finding.Message).Contains("exactly one argument");
     }
 
+    [Test]
+    public async Task Call_WithLiteralArgument_YieldsExactlyDmcon001AndDmcon016() {
+        var (_, analysis) = AnalyzeBilling("""
+            domain Shop
+            uses billing
+
+            Order: entity {
+              Authorised: policy { Charge(5) }
+              Pay: action require Authorised { }
+            }
+            """);
+
+        var codes = string.Join(",", analysis.Diagnostics.Select(d => d.Code).Distinct().Order(StringComparer.Ordinal));
+        await Assert.That(codes).IsEqualTo("DMCON001,DMCON016");
+    }
+
+    [Test]
+    public async Task FunctionBody_CallToEndpoint_YieldsExactlyDmfun005AndDmcon016() {
+        var (_, analysis) = AnalyzeBilling("""
+            domain Shop
+            uses billing
+
+            SmallRequest: value {
+              Amount: Number range(0, 50)
+            }
+
+            Order: entity {
+              Total: Number optional
+            }
+
+            function Notify(r: SmallRequest): Boolean = Charge(r)
+            """, [new RangeConstraint(0, 100)]);
+
+        var codes = string.Join(",", analysis.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).Select(d => d.Code).Distinct().Order(StringComparer.Ordinal));
+        await Assert.That(codes).IsEqualTo("DMCON016,DMFUN005");
+    }
+
+    private const string QuantifierShell = """
+        domain Shop
+        uses billing
+
+        Line: entity {
+          Qty: Number
+        }
+        Order: entity {
+          lines: many Line
+          {0}
+        }
+        """;
+
+    [Test]
+    public async Task Policy_EndpointCallInQuantifierBody_ReportsDmcon016() {
+        var (_, analysis) = AnalyzeBilling(QuantifierShell.Replace(
+            "{0}", "Big: policy { any lines where Charge(Qty) > 0 }"));
+
+        await Assert.That(WithCode(analysis, "DMCON016")).HasSingleItem();
+        await Assert.That(analysis.HasErrors).IsTrue();
+    }
+
+    [Test]
+    public async Task Policy_EndpointCallInWhereNavigationBody_ReportsDmcon016() {
+        var (_, analysis) = AnalyzeBilling(QuantifierShell.Replace(
+            "{0}", "Big: policy { lines where Charge(Qty) > 0 }"));
+
+        await Assert.That(WithCode(analysis, "DMCON016")).HasSingleItem();
+        await Assert.That(analysis.HasErrors).IsTrue();
+    }
+
     // ── (h) ─────────────────────────────────────────────────────
 
     [Test]

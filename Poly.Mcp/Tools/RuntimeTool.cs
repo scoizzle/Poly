@@ -713,17 +713,16 @@ To link or unlink existing instances, use link_instances / unlink_instances — 
 
     /// <summary>
     /// Resolves through the analysis door, which is stage-aware (a stage's own action wins,
-    /// then the entity's). When the door has no resolution for the entity, falls back to the
-    /// first same-named action so guard mapping is not silently dropped.
+    /// then the entity's). When the door has no action for the stage, there is none: borrowing
+    /// a same-named action from a sibling stage would report its guards and return type.
     /// </summary>
     private static Poly.DomainModeling.Ontology.Action? ResolveAction(
         McpSessionState state, ModuleInstance instance, string? stageBefore, string actionName) {
         if (EntityOf(state, instance) is not { } entity)
             return null;
-        if (state.ExecutionAnalysis.TryResolveAction(state.Domain, entity, stageBefore, actionName, out var resolved))
-            return resolved;
-        return entity.Actions.Concat(entity.Stages.SelectMany(s => s.Actions))
-            .FirstOrDefault(a => string.Equals(a.Name, actionName, StringComparison.Ordinal));
+        return state.ExecutionAnalysis.TryResolveAction(state.Domain, entity, stageBefore, actionName, out var resolved)
+            ? resolved
+            : null;
     }
 
     /// <summary>

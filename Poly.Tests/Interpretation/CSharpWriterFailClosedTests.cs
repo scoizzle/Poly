@@ -57,6 +57,34 @@ public class CSharpWriterFailClosedTests {
         await Assert.That(second).IsEqualTo(written);
     }
 
+    // The assignment sits in a nested block so the writer cannot fuse it into a
+    // `var x = value;` declaration; the declaration then needs TypeNameForVariable,
+    // and `1 + 2` is a value InferTypeNameFromValue returns null for (it handles
+    // constants, new, new-array and casts only).
+    private static Block NestedAssignment(Variable v) =>
+        new([new Assignment(v, new Add(new Constant(1L), new Constant(2L)))]);
+
+    [Test]
+    public async Task DeclaredLocal_OnlyAssignedUninferableValue_PrintsBecauseDestinationIsNotARead() {
+        var v = new Variable("x");
+        var block = new Block([NestedAssignment(v)], [v]);
+
+        var printed = CSharpLanguage.Write(block);
+
+        await Assert.That(printed).Contains("var x = default(object);").Because(printed);
+    }
+
+    [Test]
+    public async Task DeclaredLocal_AssignedUninferableThenRead_FailsClosed() {
+        var v = new Variable("x");
+        var block = new Block([NestedAssignment(v), v], [v]);
+
+        var error = Assert.Throws<InvalidOperationException>(() => CSharpLanguage.Write(block));
+
+        await Assert.That(error.Message).Contains("no resolved type").Because(error.Message);
+        await Assert.That(error.Message).Contains(v.Id.ToString()).Because(error.Message);
+    }
+
     [Test]
     public async Task NewArray_WriteRead_IsKindStable() {
         var printed = CSharpLanguage.Write(new NewArray(TypeReference.To<long>(), new Constant(4L)));

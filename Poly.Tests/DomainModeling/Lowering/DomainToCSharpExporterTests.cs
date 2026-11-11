@@ -355,8 +355,9 @@ public class DomainToCSharpExporterTests {
     [Test]
     public async Task Export_Create_RequiredEnum_DoesNotReferenceEqualsNull() {
         // CA2013: object.ReferenceEquals boxes a value-type enum, so the probe host
-        // build flagged it. A required enum parameter cannot be null; the factory
-        // has no slot to guard and must not emit the check.
+        // build flagged it. This asserts only that the printed guard carries no
+        // ReferenceEquals call; the required-enum guard itself stays in the factory
+        // (EnumCreateMessageAgreeTests pins it).
         var (domain, analysis) = ParseAndAnalyze("""
             domain Shop
 

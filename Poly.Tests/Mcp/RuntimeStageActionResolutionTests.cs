@@ -62,6 +62,90 @@ public class RuntimeStageActionResolutionTests {
         await Assert.That(string.Join(",", result.FailedGuards)).IsEqualTo("not_Ready");
     }
 
+    private const string SiblingGuardDsl = """
+        domain Siblings
+        Order: entity {
+          Memo: Text
+          New: stage {
+            Activate: action { transition to Active }
+          }
+          Held: stage {
+            Cancel: action -> Receipt require Ready { create Receipt { Note: "n" } }
+          }
+          Active: stage {
+            Cancel: action require not Ready { transition to Closed }
+          }
+          Closed: stage { }
+          Ready: policy { Memo is "m" }
+        }
+        Receipt: entity { Note: Text }
+        """;
+
+    [Test]
+    public async Task InvokeAction_StageWithoutAction_DoesNotBorrowGuardsFromSiblingStages() {
+        var (sessionId, _) = McpTestTools.Store.Create("Siblings");
+        var applied = McpTestTools.Dsl.ApplyDsl(sessionId, SiblingGuardDsl);
+        await Assert.That(applied.Success).IsTrue().Because(applied.Message);
+        var id = NewOrder(sessionId);
+
+        var response = McpTestTools.Runtime.InvokeAction(sessionId, id, "Cancel");
+
+        await Assert.That(response.Success).IsFalse();
+        // The module rejects the call ("not valid for the current stage"); nothing about
+        // the result may be borrowed from a sibling stage's Cancel (its guards or its Receipt).
+        var result = Result(response);
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.FailedGuards.Count).IsEqualTo(0);
+        await Assert.That(ReturnShape(response).ReturnTypeName).IsNull();
+    }
+
+    private const string ReturnDsl = """
+        domain Tickets
+        Ticket: entity {
+          Memo: Text
+          Draft: stage {
+            Cancel: action -> Receipt { create Receipt { Note: "done" } }
+            Activate: action { transition to Active }
+          }
+          Active: stage { Cancel: action { transition to Closed } }
+          Closed: stage { }
+        }
+        Receipt: entity { Note: Text }
+        """;
+
+    private static (string? ReturnTypeName, string? NewStage) ReturnShape(DomainToolResponse response) {
+        using var doc = System.Text.Json.JsonDocument.Parse(System.Text.Json.JsonSerializer.Serialize(response.Data));
+        var r = doc.RootElement.GetProperty("invokeActionResult");
+        string? Str(string name) => r.TryGetProperty(name, out var v) && v.ValueKind == System.Text.Json.JsonValueKind.String
+            ? v.GetString() : null;
+        return (Str("returnTypeName"), Str("newStage"));
+    }
+
+    [Test]
+    public async Task InvokeAction_SameNamedStageActions_ReportReturnTypeAndNewStagePerStage() {
+        var (sessionId, _) = McpTestTools.Store.Create("Tickets");
+        var applied = McpTestTools.Dsl.ApplyDsl(sessionId, ReturnDsl);
+        await Assert.That(applied.Success).IsTrue().Because(applied.Message);
+
+        var draft = NewTicket(sessionId);
+        var fromDraft = ReturnShape(McpTestTools.Runtime.InvokeAction(sessionId, draft, "Cancel"));
+        await Assert.That(fromDraft.ReturnTypeName).IsEqualTo("Receipt");
+
+        var active = NewTicket(sessionId);
+        await Assert.That(McpTestTools.Runtime.InvokeAction(sessionId, active, "Activate").Success).IsTrue();
+        var fromActive = ReturnShape(McpTestTools.Runtime.InvokeAction(sessionId, active, "Cancel"));
+        await Assert.That(fromActive.ReturnTypeName).IsNull();
+        await Assert.That(fromActive.NewStage).IsEqualTo("Closed");
+    }
+
+    private static string NewTicket(string sessionId) {
+        var create = McpTestTools.Runtime.CreateInstance(sessionId, "Ticket", """{"Memo":"m"}""");
+        if (!create.Success)
+            throw new InvalidOperationException(create.Message);
+        using var doc = System.Text.Json.JsonDocument.Parse(System.Text.Json.JsonSerializer.Serialize(create.Data));
+        return doc.RootElement.GetProperty("instance").GetProperty("instanceId").GetString()!;
+    }
+
     [Test]
     public async Task InvokeAction_FromDraftStage_UnguardedCancelTransitions() {
         var (sessionId, _) = McpTestTools.Store.Create("Stages");

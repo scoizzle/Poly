@@ -48,7 +48,8 @@ internal static class ContractBoundaryCheck {
     /// </summary>
     public static ContractBoundaryMetadata? Check(
         AnalysisContext context,
-        ContractBinding binding,
+        Node site,
+        string subject,
         ImportedContract contract,
         Domain domain,
         ContractEndpoint endpoint,
@@ -61,9 +62,9 @@ internal static class ContractBoundaryCheck {
         var payload = FindValueType(contract, domain, endpoint.PayloadType.TypeName);
         var precondition = Verdict(obligations);
         var compatibility = Compatibility(obligations, precondition);
-        var postcondition = Postcondition(context, binding, contract, domain, endpoint, payload, hasBody);
+        var postcondition = Postcondition(context, site, subject, contract, domain, endpoint, payload, hasBody);
 
-        Report(context, binding, endpoint, obligations);
+        Report(context, site, subject, endpoint, obligations);
 
         return new ContractBoundaryMetadata(precondition, postcondition, compatibility);
     }
@@ -76,7 +77,8 @@ internal static class ContractBoundaryCheck {
     /// </summary>
     private static ContractBoundaryVerdict Postcondition(
         AnalysisContext context,
-        ContractBinding binding,
+        Node site,
+        string subject,
         ImportedContract contract,
         Domain domain,
         ContractEndpoint endpoint,
@@ -90,8 +92,8 @@ internal static class ContractBoundaryCheck {
         var body = ContributedBody(domain, contract, endpoint);
         if (body is null || body.Nodes.Count == 0) {
             context.ReportWarning(
-                binding,
-                $"Contract binding '{binding.Name}' endpoint '{contract.Name}.{endpoint.Name}' " +
+                site,
+                $"{subject} endpoint '{contract.Name}.{endpoint.Name}' " +
                 "records a contributed body that analysis could not read (missing, empty, or its " +
                 "factory threw). The postcondition half is unknown; Lower will refuse the body.",
                 DomainModelDiagnosticCodes.ContractBoundaryUnknown);
@@ -101,8 +103,8 @@ internal static class ContractBoundaryCheck {
         var obligations = BodyObligations(payload, body);
         foreach (var obligation in obligations.Where(o => o.Verdict == ContractBoundaryVerdict.Violated)) {
             context.ReportError(
-                binding,
-                $"Contract binding '{binding.Name}' endpoint '{contract.Name}.{endpoint.Name}' " +
+                site,
+                $"{subject} endpoint '{contract.Name}.{endpoint.Name}' " +
                 $"body cannot satisfy payload '{payload?.Name ?? endpoint.PayloadType.TypeName}' " +
                 $"constraint '{obligation.Name}': the body writes a value outside it. A contributed " +
                 "body must satisfy the surface it implements; Lower refuses.",
@@ -112,18 +114,18 @@ internal static class ContractBoundaryCheck {
         foreach (var obligation in obligations.Where(o => o.Verdict == ContractBoundaryVerdict.Unknown)) {
             var payloadName = payload?.Name ?? endpoint.PayloadType.TypeName;
             var message = obligation.Unreadable
-                ? $"Contract binding '{binding.Name}' endpoint '{contract.Name}.{endpoint.Name}' " +
+                ? $"{subject} endpoint '{contract.Name}.{endpoint.Name}' " +
                   $"cannot prove payload '{payloadName}' from the contributed body: " +
                   $"{obligation.Name}. " + (obligation.Name.StartsWith("the body does not end", StringComparison.Ordinal)
                       || obligation.Name.StartsWith("the body returns before", StringComparison.Ordinal)
                       ? "Lower will refuse the body."
                       : "Lower is not blocked.")
-                : $"Contract binding '{binding.Name}' endpoint '{contract.Name}.{endpoint.Name}' " +
+                : $"{subject} endpoint '{contract.Name}.{endpoint.Name}' " +
                   $"cannot prove payload '{payloadName}' constraint '{obligation.Name}' from the " +
                   "contributed body: the assigned value cannot be decided by the walk. " +
                   "Lower is not blocked.";
             context.ReportWarning(
-                binding,
+                site,
                 message,
                 DomainModelDiagnosticCodes.ContractBoundaryUnknown);
         }
@@ -480,13 +482,14 @@ internal static class ContractBoundaryCheck {
 
     private static void Report(
         AnalysisContext context,
-        ContractBinding binding,
+        Node site,
+        string subject,
         ContractEndpoint endpoint,
         IReadOnlyList<Obligation> obligations) {
         foreach (var obligation in obligations.Where(o => o.Verdict == ContractBoundaryVerdict.Violated)) {
             context.ReportError(
-                binding,
-                $"Contract binding '{binding.Name}' parameter cannot satisfy endpoint " +
+                site,
+                $"{subject} parameter cannot satisfy endpoint " +
                 $"'{endpoint.Name}' public constraint '{obligation.Name}': the caller's values are " +
                 "disjoint from it. Widen the caller's constraint or narrow the endpoint's surface.",
                 DomainModelDiagnosticCodes.ContractBoundaryViolation);
@@ -497,14 +500,14 @@ internal static class ContractBoundaryCheck {
             // carry: the caller cannot clear it by tightening anything, so a fix-up hint would
             // be unactionable. Only a decided-but-wider obligation gets one.
             var message = obligation.Unreadable
-                ? $"Contract binding '{binding.Name}' cannot prove endpoint '{endpoint.Name}' public " +
+                ? $"{subject} cannot prove endpoint '{endpoint.Name}' public " +
                   $"constraint '{obligation.Name}': it is not decidable from the bound argument. " +
                   "Lower is not blocked."
-                : $"Contract binding '{binding.Name}' cannot prove endpoint '{endpoint.Name}' public " +
+                : $"{subject} cannot prove endpoint '{endpoint.Name}' public " +
                   $"constraint '{obligation.Name}': the caller's constraints do not decide it. " +
                   "Lower is not blocked; tighten the caller's constraint to prove it.";
             context.ReportWarning(
-                binding,
+                site,
                 message,
                 DomainModelDiagnosticCodes.ContractBoundaryUnknown);
         }

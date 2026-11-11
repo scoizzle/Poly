@@ -11,6 +11,12 @@
 > **MCP surface:** `poly_guide`, `poly_workspace`, `poly_define`, `poly_check`,
 > `poly_inspect`, `poly_export`, `poly_simulate`. The 30-tool v1 surface was removed;
 > names such as `apply_dsl` in older sections refer to it historically.
+> `poly_check` with `select: "Entity.Action"` adds `data.witness`: one entry per stage context
+> (`stageName`, `preconditions`, `properties[].min/max`, `postconditions`) copied from the
+> analyzer's range/precondition facts; absent when the analysis published none. Only an
+> `Entity.Action` select carries a witness; a stage-qualified `Entity.Stage.Action` select does not.
+> Each result's text block is a prose summary (outcome, `workspace:` handle, findings, `next:`
+> calls, flattened data); the full envelope is in `structuredContent`.
 
 ---
 

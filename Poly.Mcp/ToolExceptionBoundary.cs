@@ -6,17 +6,20 @@ using Microsoft.Extensions.Logging;
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
 
-using Poly.Mcp.Tools;
+using Poly.Mcp.Surface;
 
 namespace Poly.Mcp;
 
 /// <summary>
 /// One boundary for every tool call: an uncaught exception becomes a failed call
-/// that still carries the <see cref="DomainToolResponse"/> envelope, so agents see
-/// the same shape as a tool-level failure instead of a bare protocol error.
+/// that still carries the advertised <see cref="PolyResponse"/> envelope (what the tools'
+/// outputSchema promises), so agents see the same shape as a tool-level failure instead
+/// of a bare protocol error.
 /// </summary>
 internal static class ToolExceptionBoundary {
-    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) {
+        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
+    };
 
     public static McpRequestHandler<CallToolRequestParams, CallToolResult> Filter(
         McpRequestHandler<CallToolRequestParams, CallToolResult> next) {
@@ -34,15 +37,14 @@ internal static class ToolExceptionBoundary {
 
     /// <summary>The failed-call result every uncaught tool exception becomes.</summary>
     internal static CallToolResult Failure(Exception ex) {
-        var envelope = new DomainToolResponse(
-            Success: false,
-            Message: $"Internal error: {ex.Message}",
-            Diagnostics: [ex.GetType().Name]);
-        var json = JsonSerializer.SerializeToElement(envelope, Json);
-        return new CallToolResult {
-            IsError = true,
-            StructuredContent = json,
-            Content = [new TextContentBlock { Text = json.GetRawText() }],
-        };
+        var envelope = new PolyResponse(
+            Ok: false,
+            Summary: $"Internal error ({ex.GetType().Name}): {ex.Message}",
+            Findings: [],
+            Data: null,
+            Next: [],
+            State: null,
+            ErrorCode: "INTERNAL_ERROR");
+        return PolyEnvelopeText.Result(JsonSerializer.SerializeToElement(envelope, Json), isError: true);
     }
 }

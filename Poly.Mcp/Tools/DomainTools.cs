@@ -229,7 +229,6 @@ internal sealed record DomainReportData(
 /// <summary>
 /// Tools for managing V3 domain sessions.
 /// </summary>
-[McpServerToolType]
 internal sealed class SessionTool(ISessionStore store, ILogger<SessionTool> logger) {
     /// <summary>
     /// Creates a new domain session with the canonical built-in primitive types.
@@ -237,7 +236,6 @@ internal sealed class SessionTool(ISessionStore store, ILogger<SessionTool> logg
     /// plus Temporal types (Date, Time, DateTime, Duration) loaded implicitly at Load.
     /// Returns a sessionId that must be passed to other tools.
     /// </summary>
-    [McpServerTool(Name = "create_domain_session"), Description("Creates a new bootstrapped domain session with built-in primitive types.")]
     public DomainToolResponse CreateDomainSession(
         [Description("Name for the new domain (e.g. 'Orders', 'Inventory')")] string domainName) {
         if (!DslTokenReader.IsIdentifier(domainName))
@@ -259,7 +257,6 @@ internal sealed class SessionTool(ISessionStore store, ILogger<SessionTool> logg
     /// <summary>
     /// Lists all active domain sessions.
     /// </summary>
-    [McpServerTool(Name = "list_sessions"), Description("Lists all active domain sessions.")]
     public DomainToolResponse ListSessions() {
         var sessions = store.ListSessions();
         if (sessions.Count == 0)
@@ -279,12 +276,10 @@ internal sealed class SessionTool(ISessionStore store, ILogger<SessionTool> logg
 /// <summary>
 /// Tools for querying V3 domain state.
 /// </summary>
-[McpServerToolType]
 internal sealed class QueryTool(ISessionStore store, ILogger<QueryTool> logger) {
     /// <summary>
     /// Returns a high-level overview of the domain: entity/primitive/relationship counts and entity names.
     /// </summary>
-    [McpServerTool(Name = "get_domain_overview"), Description("Returns a high-level overview of the domain model (entity/primitive/relationship counts and entity names).")]
     public DomainToolResponse GetDomainOverview(
         [Description("Session ID returned by create_domain_session")] string sessionId) {
         if (!store.TryGet(sessionId, out var state))
@@ -314,7 +309,6 @@ internal sealed class QueryTool(ISessionStore store, ILogger<QueryTool> logger) 
     /// <summary>
     /// Returns details about a specific entity: properties, stages, actions, and policies.
     /// </summary>
-    [McpServerTool(Name = "get_entity_detail"), Description("Returns detailed information about a specific entity (properties, stages, actions, policies).")]
     public DomainToolResponse GetEntityDetail(
         [Description("Session ID")] string sessionId,
         [Description("Name of the entity to inspect")] string entityName) {
@@ -362,7 +356,6 @@ internal sealed class QueryTool(ISessionStore store, ILogger<QueryTool> logger) 
     /// Structured facts (roots, aggregates, topology, action names, subscription plans) are
     /// derived from LatestAnalysis metadata.
     /// </summary>
-    [McpServerTool(Name = "get_domain_analysis"), Description("Returns analysis diagnostics and structured domain facts (entity structure, aggregates, topology, actions, subscription plans, per-action stage invariants, guard-closed properties) for the current domain state. Read-only.")]
     public DomainToolResponse GetDomainAnalysis(
         [Description("Session ID")] string sessionId) {
         if (!store.TryGet(sessionId, out var state))
@@ -559,7 +552,6 @@ internal sealed class QueryTool(ISessionStore store, ILogger<QueryTool> logger) 
     /// Returns a human-readable Markdown report of the domain. A projection over the same
     /// facts the machine exports read, so the two cannot drift.
     /// </summary>
-    [McpServerTool(Name = "get_domain_report"), Description("Returns a human-readable Markdown report of the current domain: terms, properties with constraints and requiredness, stages, actions, enums, value types, and relationships. Read-only; use it to show a person what the model means.")]
     public DomainToolResponse GetDomainReport(
         [Description("Session ID")] string sessionId) {
         if (!store.TryGet(sessionId, out var state))
@@ -610,7 +602,6 @@ internal sealed class QueryTool(ISessionStore store, ILogger<QueryTool> logger) 
     /// Returns authoring suggestions (advisory hints) for the current domain.
     /// Suggestions identify common gaps like missing stages, actions, or policies.
     /// </summary>
-    [McpServerTool(Name = "get_domain_suggestions"), Description("Returns authoring suggestions (advisory hints) for the current domain. Suggestions identify common gaps like missing stages, actions, or policies — they are advisory and do not block evolution.")]
     public DomainToolResponse GetDomainSuggestions(
         [Description("Session ID")] string sessionId) {
         if (!store.TryGet(sessionId, out var state))
@@ -651,7 +642,6 @@ internal sealed class QueryTool(ISessionStore store, ILogger<QueryTool> logger) 
     /// <summary>
     /// Lists all relationships in the domain, optionally filtered by entity name.
     /// </summary>
-    [McpServerTool(Name = "get_relationships"), Description("Lists all relationships in the domain. Optionally filter by entity name to show relationships where that entity is source or target.")]
     public DomainToolResponse GetRelationships(
         [Description("Session ID")] string sessionId,
         [Description("Optional entity name filter — only show relationships involving this entity")] string? entityName = null) {
@@ -685,7 +675,6 @@ internal sealed class QueryTool(ISessionStore store, ILogger<QueryTool> logger) 
 /// Each tool resolves the session, applies the change, gates on analysis, and updates the session on success.
 /// On rollback, the response includes diagnostics and affordances.
 /// </summary>
-[McpServerToolType]
 internal sealed class EvolveTool(ISessionStore store, ILogger<EvolveTool> logger) {
 
     // ── Unified add (kind + payload) ────────────────────────────
@@ -695,7 +684,6 @@ internal sealed class EvolveTool(ISessionStore store, ILogger<EvolveTool> logger
     /// Incremental structure edits only — bulk structure, effects, and subscriptions go
     /// through <c>apply_dsl</c>. Expression bodies are product DSL text, never JSON IR.
     /// </summary>
-    [McpServerTool(Name = "add"), Description("Creates one domain element. kind is case-sensitive. Payload shapes are in get_dsl_guide section 12. Unknown kind, a missing field, or a name the DSL would reject fails closed. Bulk structure uses apply_dsl.")]
     public DomainToolResponse Add(
         [Description("Session ID returned by create_domain_session")] string sessionId,
         [Description("Domain element kind (case-sensitive): entity, property, stage, action, stage_action, relationship, constraint, policy, value_type, contract, contract_value_type, contract_endpoint, contract_binding")] string kind,
@@ -994,7 +982,6 @@ internal sealed class EvolveTool(ISessionStore store, ILogger<EvolveTool> logger
     /// Removes one domain definition element by identity, dispatched by
     /// <c>kind</c> + <c>payload</c>. Identity fields only — no expression bodies.
     /// </summary>
-    [McpServerTool(Name = "remove"), Description("Removes one domain element by kind and identity payload. Shapes are in get_dsl_guide section 12. Constraint removal is not supported; use apply_dsl.")]
     public DomainToolResponse Remove(
         [Description("Session ID returned by create_domain_session")] string sessionId,
         [Description("Domain element kind (case-sensitive): entity, property, stage, action, stage_action, relationship, policy")] string kind,
@@ -1236,7 +1223,6 @@ internal sealed class EvolveTool(ISessionStore store, ILogger<EvolveTool> logger
     /// <summary>
     /// Lists all constraints on an entity's properties.
     /// </summary>
-    [McpServerTool(Name = "get_constraints"), Description("Lists all constraints on an entity's properties. Optionally filter by property name.")]
     public DomainToolResponse GetConstraints(
         [Description("Session ID")] string sessionId,
         [Description("Name of the entity")] string entityName,
@@ -1325,13 +1311,11 @@ internal sealed class EvolveTool(ISessionStore store, ILogger<EvolveTool> logger
 /// <c>get_policy_expression</c> is inspect-only; <c>evaluate_policy</c> runs
 /// against an instance from <c>create_instance</c>.
 /// </summary>
-[McpServerToolType]
 internal sealed class PolicyTool(ISessionStore store, ILogger<PolicyTool> logger) {
     /// <summary>
     /// Returns the guard expression text of a named policy on an entity.
     /// Use this to inspect what condition a policy enforces (e.g. "Age >= 18").
     /// </summary>
-    [McpServerTool(Name = "get_policy_expression"), Description("Returns the guard expression text of a named policy on an entity for inspection.")]
     public DomainToolResponse GetPolicyExpression(
         [Description("Session ID")] string sessionId,
         [Description("Name of the entity that has the policy")] string entityName,
@@ -1374,7 +1358,6 @@ internal sealed class PolicyTool(ISessionStore store, ILogger<PolicyTool> logger
     /// <summary>
     /// Evaluates a named policy on a store instance from <c>create_instance</c>.
     /// </summary>
-    [McpServerTool(Name = "evaluate_policy"), Description("Evaluates a named policy on an instance from create_instance. For policies that read related entities, link those instances first with link_instances. instanceId is required — do not pass a property bag. Returns true if the policy passes, false otherwise.")]
     public DomainToolResponse EvaluatePolicy(
         [Description("Session ID")] string sessionId,
         [Description("Name of the entity that has the policy")] string entityName,
@@ -1457,14 +1440,12 @@ internal sealed class PolicyTool(ISessionStore store, ILogger<PolicyTool> logger
 /// and export_dsl (print). These provide bulk authoring alongside the unified add/remove
 /// incremental tools.
 /// </summary>
-[McpServerToolType]
 internal sealed class DslTool(ISessionStore store, ILogger<DslTool> logger) {
     /// <summary>
     /// Validates a .poly document without touching the session: parse, evolve a fresh
     /// domain, and analyze it. This is the iteration half of the authoring loop — an
     /// agent can fix a rejected document without losing the applied domain or instances.
     /// </summary>
-    [McpServerTool(Name = "validate_dsl"), Description("Validates a .poly document without changing the session (dry run). Returns structured findings: severity, diagnostic code, element path, and message. Use while authoring, before apply_dsl. A document is valid when it has zero analysis errors; warnings and hints do not block apply_dsl.")]
     public DomainToolResponse ValidateDsl(
         [Description("Session ID returned by create_domain_session")] string sessionId,
         [Description("Phase 1a/1b .poly DSL text to validate; the session domain is not changed")] string polyText) {
@@ -1502,7 +1483,6 @@ internal sealed class DslTool(ISessionStore store, ILogger<DslTool> logger) {
     /// session domain with the result. On failure nothing changes and the response carries
     /// the same structured findings as <c>validate_dsl</c>.
     /// </summary>
-    [McpServerTool(Name = "apply_dsl"), Description("Replaces the session domain with a .poly document. Call get_dsl_guide before authoring. On success, revision increments and earlier instances are cleared. On failure nothing changes; the response carries structured findings (severity, code, element path, message) like validate_dsl.")]
     public DomainToolResponse ApplyDsl(
         [Description("Session ID returned by create_domain_session")] string sessionId,
         [Description("Phase 1a/1b .poly DSL text to parse and apply")] string polyText) =>
@@ -1568,7 +1548,6 @@ internal sealed class DslTool(ISessionStore store, ILogger<DslTool> logger) {
     /// <summary>
     /// Exports the current session domain as .poly DSL text.
     /// </summary>
-    [McpServerTool(Name = "export_dsl"), Description("Exports the current session domain as .poly DSL text.")]
     public DomainToolResponse ExportDsl(
         [Description("Session ID")] string sessionId) {
         if (!store.TryGet(sessionId, out var state))
@@ -1608,7 +1587,6 @@ internal sealed class DslTool(ISessionStore store, ILogger<DslTool> logger) {
     /// Call this before the first large `apply_dsl` to avoid inventing lab constructs.
     /// No session required.
     /// </summary>
-    [McpServerTool(Name = "get_dsl_guide"), Description("Returns the short DSL guide: principles, unsupported constructs, the golden workflow, and a section index. Pass section as a heading number or title, or \"all\" for the full guide. No session required.")]
     public DomainToolResponse GetDslGuide(
         [Description("Omit for the short guide. A heading number or title returns that section. \"all\" returns the full guide.")] string? section = null) {
         var assembly = typeof(DslTool).Assembly;

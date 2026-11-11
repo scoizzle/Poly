@@ -138,6 +138,18 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
         return InferType(context, expr, props, parameters, enumTypes);
     }
 
+    private static void RejectEndpointCallsInBody(AnalysisContext context, Node node) {
+        foreach (var child in node.Children) {
+            if (child is FunctionCall call
+                && FunctionAnalysis.Find(context, call.Name) is null
+                && context.GetTypeLookup()?.Domain is { } domain
+                && ContractCallResolver.IsExported(domain, call.Name))
+                ContractCallResolver.RejectUnlowerable(context, call);
+            if (child is not null)
+                RejectEndpointCallsInBody(context, child);
+        }
+    }
+
     private void CheckCallArguments(
         AnalysisContext context, FunctionCall call,
         Dictionary<string, string> props, Dictionary<string, string>? parameters,
@@ -146,7 +158,19 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
             WalkExpression(context, argument, props, parameters, enumTypes);
         // Unknown name and wrong arity are reported once per call by FunctionAnalysis.CheckCall.
         var function = FunctionAnalysis.Find(context, call.Name);
-        if (function is null || function.Parameters.Count != call.Arguments.Count)
+        if (function is null) {
+            // #426: a name no function declares may be an imported contract endpoint.
+            if (context.GetTypeLookup()?.Domain is { } domain
+                && ContractCallResolver.IsExported(domain, call.Name)) {
+                var argumentType = call.Arguments.Count == 1
+                    ? InferValueType(context, call.Arguments[0], props, parameters, enumTypes).TypeName
+                    : null;
+                ContractCallResolver.Resolve(context, domain, call, argumentType);
+                ContractCallResolver.RejectUnlowerable(context, call);
+            }
+            return;
+        }
+        if (function.Parameters.Count != call.Arguments.Count)
             return;
         for (var i = 0; i < call.Arguments.Count; i++) {
             var parameterType = function.Parameters[i].Type.TypeName;
@@ -537,7 +561,9 @@ internal sealed class ExpressionTypeAnalyzer : INodeAnalyzer {
                 return;
             case RelationshipNavigation:
             case Exists or NotExists or AnyExpr or AllExpr or NoneExpr or CountExpr:
-                // target-scoped (related-entity properties / store-aware) — no local type check
+                // target-scoped (related-entity properties / store-aware) — no local type check,
+                // but an imported endpoint call in the body is still unlowerable (#426).
+                RejectEndpointCallsInBody(context, expr);
                 return;
             default:
                 foreach (var child in expr.Children.OfType<DomainExpression>())

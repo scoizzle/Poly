@@ -155,6 +155,13 @@ internal static class DomainModelDiagnosticCodes {
     /// </summary>
     public const string ContractBoundaryUnknown = "DMCON015";
 
+    /// <summary>
+    /// #426: an expression call that names an imported contract endpoint. Slice 1 only resolves
+    /// and records it; nothing lowers it yet, so analysis rejects it in every position (shipped
+    /// is a subset of lowerable). An error, reported once per call node.
+    /// </summary>
+    public const string ContractCallNotLowerable = "DMCON016";
+
     // Stage-subscription diagnostics (replaced retired DMEV* event codes)
     public const string SubscriptionCausalityCycle = "DMSS001";
     public const string SubscriptionIdempotencyReplay = "DMSS002";

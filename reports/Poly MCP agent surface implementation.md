@@ -57,14 +57,16 @@ The v2 fixed surface is ~7.3k chars (~1.8k–2.2k tokens), roughly 40% of v1’s
 
 Fifteen reference scenarios, each graded by code against both surfaces over real stdio. This is the replay gate, not a model-driven pass@k: it measures surface mechanics, not tool selection.
 
-| | v1 | v2 | ratio |
-|---|---|---|---|
-| Scenarios passed | 15/15 | 15/15 | — |
-| Tool calls | 48 | 47 | 0.98× |
-| Text-response characters | 43,732 | 30,960 | 0.71× |
-| Structured-content characters | 0 | 30,344 | — |
-| Combined payload (text + structured) | 43,732 | 61,304 | 1.40× |
-| Fixed surface (`tools/list` + instructions) | 17,102 | 8,995 | 0.53× |
+| | v1 | v2 | ratio | v2-dedup (`60253a38`, clean tree) | ratio vs v1 |
+|---|---|---|---|---|---|
+| Scenarios passed | 15/15 | 15/15 | — | 15/15 | — |
+| Tool calls | 48 | 47 | 0.98× | 47 | 0.98× |
+| Text-response characters | 43,732 | 30,960 | 0.71× | 25,051 | 0.57× |
+| Structured-content characters | 0 | 30,344 | — | 30,465 | — |
+| Combined payload (text + structured) | 43,732 | 61,304 | 1.40× | 55,516 | 1.27× |
+| Fixed surface (`tools/list` + instructions) | 17,102 | 8,995 | 0.53× | not re-measured | — |
+
+`v2-dedup` is the text block as a prose projection (essentials plus flattened data) with `structuredContent` still the full envelope (owner ruling: keep both channels). The combined payload fell 9% from the prior v2 (61,304 → 55,516) but remains above v1 (1.27×): the text is no longer the JSON, yet it still carries the workspace handle, `next` sketches and flattened data. No pass threshold was set. The machine-readable record is the `v2-dedup` key in `reports/mcp-surface-eval.json`.
 
 After the shrink: the text gate passes (0.71×), the fixed surface is under the report's 9k-char cap (8,996), and scenario success is parity. The calls gate still misses (0.98× vs 0.7×) because the scripted reference transcripts use the optimal v1 sequence for each task; only a model-driven run can show selection savings. Structured content still duplicates the text payload (combined 1.40×); clients that surface both pay it. The largest per-task win is the ten-entity check: 2,117 text chars vs v1's 18,698. The owner chose to purge v1 on this evidence; the internal operation adapters remain.
 
@@ -75,5 +77,5 @@ The first `opencode run` against the live v2 server found a real protocol bug: t
 ## Next
 
 1. Run the model-driven v2 corpus (pass@1/pass^5, wrong-tool rate, recovery); the historical v1 baseline is in `reports/mcp-surface-eval.json` and the pre-purge commit.
-2. Remove the structured/text duplication, then re-measure the combined payload.
+2. ~~Remove the structured/text duplication, then re-measure the combined payload.~~ Done (#466 S2/S4): text is a prose projection; combined 55,516 chars (table above).
 3. Expose the analyzer's range/precondition facts as a real `poly_check` witness; optionally port the internal adapters into the v2 tools and delete the old classes.

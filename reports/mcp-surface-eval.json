@@ -226,5 +226,137 @@
     "calls": 47,
     "chars": 30960,
     "structured": 30344
+  },
+  "v2-dedup": {
+    "tasks": [
+      {
+        "task": "define_valid",
+        "ok": true,
+        "calls": 2,
+        "chars": 759,
+        "structured": 963,
+        "combined": 1722
+      },
+      {
+        "task": "invalid_then_fix",
+        "ok": true,
+        "calls": 3,
+        "chars": 1831,
+        "structured": 2340,
+        "combined": 4171
+      },
+      {
+        "task": "check_valid",
+        "ok": true,
+        "calls": 3,
+        "chars": 1111,
+        "structured": 1435,
+        "combined": 2546
+      },
+      {
+        "task": "inspect_overview",
+        "ok": true,
+        "calls": 3,
+        "chars": 1143,
+        "structured": 1468,
+        "combined": 2611
+      },
+      {
+        "task": "inspect_entity",
+        "ok": true,
+        "calls": 3,
+        "chars": 1310,
+        "structured": 1688,
+        "combined": 2998
+      },
+      {
+        "task": "export_dsl",
+        "ok": true,
+        "calls": 3,
+        "chars": 1202,
+        "structured": 1547,
+        "combined": 2749
+      },
+      {
+        "task": "export_json_schema",
+        "ok": true,
+        "calls": 3,
+        "chars": 1595,
+        "structured": 2006,
+        "combined": 3601
+      },
+      {
+        "task": "export_csharp",
+        "ok": true,
+        "calls": 3,
+        "chars": 3694,
+        "structured": 4126,
+        "combined": 7820
+      },
+      {
+        "task": "simulate_lifecycle",
+        "ok": true,
+        "calls": 3,
+        "chars": 1943,
+        "structured": 2316,
+        "combined": 4259
+      },
+      {
+        "task": "requiredness",
+        "ok": true,
+        "calls": 3,
+        "chars": 1601,
+        "structured": 2017,
+        "combined": 3618
+      },
+      {
+        "task": "enum_terms",
+        "ok": true,
+        "calls": 3,
+        "chars": 1678,
+        "structured": 2108,
+        "combined": 3786
+      },
+      {
+        "task": "relationship",
+        "ok": true,
+        "calls": 3,
+        "chars": 1375,
+        "structured": 1628,
+        "combined": 3003
+      },
+      {
+        "task": "dry_run",
+        "ok": true,
+        "calls": 3,
+        "chars": 1269,
+        "structured": 1678,
+        "combined": 2947
+      },
+      {
+        "task": "two_workspaces",
+        "ok": true,
+        "calls": 6,
+        "chars": 2260,
+        "structured": 2910,
+        "combined": 5170
+      },
+      {
+        "task": "large_model",
+        "ok": true,
+        "calls": 3,
+        "chars": 2280,
+        "structured": 2235,
+        "combined": 4515
+      }
+    ],
+    "passed": 15,
+    "total": 15,
+    "calls": 47,
+    "chars": 25051,
+    "structured": 30465,
+    "combined": 55516,
+    "commit": "60253a38714d5e7c5916fe50f1e12d95ba3715ef",
+    "tree": "clean"
   }
 }

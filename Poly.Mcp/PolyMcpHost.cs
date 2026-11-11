@@ -31,7 +31,9 @@ public static class PolyMcpHost {
             .WithStdioServerTransport()
             .WithRequestFilters(filters => filters
                 .AddCallToolFilter(ToolExceptionBoundary.Filter)
-                .AddCallToolFilter(UnknownArgumentFilter.Filter));
+                .AddCallToolFilter(UnknownArgumentFilter.Filter)
+                // Registered last = innermost: it sees the tool result before the outer filters.
+                .AddCallToolFilter(EnvelopeTextFilter.Filter));
 
         // v2 is the only surface: seven outcome tools. The old operation adapters remain
         // internal to PolySurfaceTools and are not registered as MCP tools.

@@ -74,6 +74,32 @@ public sealed class EmitGoldenTests {
         await AssertGoldens(Path.Combine(GoldenRoot(), "crm-dslcompiler"), produced);
     }
 
+    // Regenerate: polyc build demo/Poly.RestApi/library.poly --out demo
+    // (the compiler writes demo/Library/; the files are renamed to Poly.RestApi/).
+    [Test]
+    public async Task LibraryDemo_DslCompilerOutput_MatchesCheckedInDemo() {
+        var demoDir = Path.Combine(FindRepoRoot(), "demo", "Poly.RestApi");
+        var poly = await File.ReadAllTextAsync(Path.Combine(demoDir, "library.poly"));
+        var result = new Compiler()
+            .Load(new HttpLibrary())
+            .Compile(poly, CompileMode.All, DbmsPack.Sqlite);
+        if (!result.Success)
+            throw new InvalidOperationException(
+                $"DslCompiler failed: {string.Join("; ", result.Errors ?? [])}");
+
+        var produced = result.Files!.ToDictionary(f => f.FileName, f => f.Source, StringComparer.Ordinal);
+        var checkedIn = Directory.GetFiles(demoDir)
+            .Select(p => Path.GetFileName(p)!)
+            .Where(name => name.EndsWith(".cs", StringComparison.Ordinal) || name == "demo.http")
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        await Assert.That(checkedIn).IsEquivalentTo(produced.Keys.Order(StringComparer.Ordinal).ToArray());
+        foreach (var (fileName, source) in produced) {
+            var disk = Normalize(await File.ReadAllTextAsync(Path.Combine(demoDir, fileName)));
+            await Assert.That(Normalize(source)).IsEqualTo(disk).Because(fileName);
+        }
+    }
+
     [Test]
     [MethodDataSource(nameof(SampleDomains))]
     public async Task Emit_IsReproducible(string relativePath) {

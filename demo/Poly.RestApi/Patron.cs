@@ -1,27 +1,30 @@
 #nullable enable
-public enum PatronStage {
+using System;
+using System.Collections.Generic;
+
+public enum PatronStage
+{
     Active = 0,
     Suspended = 1,
     Closed = 2
 }
 
-public class Patron {
-    private readonly List<Loan> _loans;
-    private readonly List<Fine> _fines;
-    private Patron() {
-        this._loans = new List<Loan>();
-        this._fines = new List<Fine>();
-    }
-    private Patron(long currentBorrowCount, string email, long maxItems, string name, long outstandingFines, IEnumerable<Loan> loans, IEnumerable<Fine> fines, DateOnly? memberSince = null, PatronStatus status = PatronStatus.Active) {
-        this.CurrentBorrowCount = currentBorrowCount;
+public class Patron
+{
+    private List<Loan> _loans = new List<Loan>();
+    private List<Fine> _fines = new List<Fine>();
+    private Patron() { }
+    private Patron(string email, string name, long maxItems = 0L, IEnumerable<Loan>? loans = null, IEnumerable<Fine>? fines = null, long currentBorrowCount = 0L, DateOnly? memberSince = null, long outstandingFines = 0L, PatronStatus status = PatronStatus.Active)
+    {
         this.Email = email;
-        this.MaxItems = maxItems;
-        this.MemberSince = memberSince ?? DateOnly.FromDateTime(DateTime.UtcNow);
         this.Name = name;
+        this.MaxItems = maxItems;
+        this.CurrentBorrowCount = currentBorrowCount;
+        this.MemberSince = memberSince ?? DateOnly.FromDateTime(DateTime.UtcNow);
         this.OutstandingFines = outstandingFines;
         this.Status = status;
-        this._loans = new List<Loan>(loans);
-        this._fines = new List<Fine>(fines);
+        this._loans = new List<Loan>(loans ?? new List<Loan>());
+        this._fines = new List<Fine>(fines ?? new List<Fine>());
         this.CurrentStage = PatronStage.Active;
         this.InitializeSubscriptions();
     }
@@ -32,124 +35,196 @@ public class Patron {
     public string Name { get; private set; } = default!;
     public long OutstandingFines { get; private set; }
     public PatronStatus Status { get; private set; }
-    public IReadOnlyList<Loan> Loans {
+    public IReadOnlyList<Loan> Loans
+    {
         get => this._loans;
     }
-    public IReadOnlyList<Fine> Fines {
+    public IReadOnlyList<Fine> Fines
+    {
         get => this._fines;
     }
     public PatronStage CurrentStage { get; private set; }
-    private Loan CreateLoans(DateTime dueDate, DateTime returnedAt, string status, long timesRenewed, Book? book) {
-        var loanResult = Loan.Create(dueDate, returnedAt, status, timesRenewed, book, this);
-        if (!loanResult.IsSuccess) {
-            throw new InvalidOperationException(loanResult.ErrorMessage);
+    public DomainResult<Loan> CreateLoans(Book? book = null, DateTime? dueDate = null, DateTime? returnedAt = null, string? status = null, long? timesRenewed = null)
+    {
+        var loanResult = Loan.Create(book, this, dueDate, returnedAt, status, timesRenewed);
+        if (!loanResult.IsSuccess)
+        {
+            return DomainResult<Loan>.Failure(loanResult.ErrorMessage ?? "");
         }
         var loan = loanResult.Value;
-        this._loans.Add(loan);
-        loan.RegisterPatronOverdueSubscriber(this);
-        loan.RegisterPatronReturnedSubscriber(this);
-        return loan;
+        return DomainResult<Loan>.Success(loan);
     }
-    private Fine CreateFines(long amount, bool paid, string reason, DateTime? dateIssued = null) {
-        var fineResult = Fine.Create(amount, paid, reason, this, dateIssued);
-        if (!fineResult.IsSuccess) {
-            throw new InvalidOperationException(fineResult.ErrorMessage);
-        }
-        var fine = fineResult.Value;
-        this._fines.Add(fine);
-        fine.RegisterPatronResolvedSubscriber(this);
-        return fine;
+    internal void AttachLoans(Loan child)
+    {
+        this._loans.Add(child);
+        child.RegisterPatronLoansOverdueSubscriber(this);
+        child.RegisterPatronLoansReturnedSubscriber(this);
     }
-    public DomainResult<Loan> CheckOut(Book book) {
-        if (this.CurrentStage != PatronStage.Active) {
+    internal void AttachFines(Fine child)
+    {
+        this._fines.Add(child);
+        child.RegisterPatronFinesResolvedSubscriber(this);
+    }
+    public DomainResult<Loan> CheckOut(Book book)
+    {
+        if (this.CurrentStage != PatronStage.Active)
+        {
             return DomainResult<Loan>.Failure("'CheckOut' requires stage 'Active' on entity 'Patron'.");
         }
-        if (!this.GoodStanding()) {
+        if (!this.GoodStanding())
+        {
             return DomainResult<Loan>.Failure("'CheckOut' blocked by policy 'GoodStanding'.");
         }
-        if (this.AtLimit()) {
+        if (this.AtLimit())
+        {
             return DomainResult<Loan>.Failure("'CheckOut' blocked by policy 'AtLimit'.");
         }
-        if (this.HasFines()) {
+        if (this.HasFines())
+        {
             return DomainResult<Loan>.Failure("'CheckOut' blocked by policy 'HasFines'.");
         }
         this.CurrentBorrowCount = this.CurrentBorrowCount + 1L;
-        return DomainResult<Loan>.Success(this.CreateLoans(DateTime.MinValue, DateTime.MinValue, "", 0L, book));
+        var create0 = this.CreateLoans();
+        if (!create0.IsSuccess)
+        {
+            return DomainResult<Loan>.Failure(create0.ErrorMessage ?? "");
+        }
+        var created1 = create0.Value;
+        return DomainResult<Loan>.Success(created1);
     }
-    public DomainResult Suspend() {
-        if (this.CurrentStage != PatronStage.Active) {
+    public DomainResult Suspend()
+    {
+        if (this.CurrentStage != PatronStage.Active)
+        {
             return DomainResult.Failure("'Suspend' requires stage 'Active' on entity 'Patron'.");
         }
         this.Status = PatronStatus.Suspended;
         this.CurrentBorrowCount = 0L;
-        this.MaxItems = 0L;
         this.CurrentStage = PatronStage.Suspended;
+        this.Status = PatronStatus.Suspended;
+        this.MaxItems = 0L;
         return DomainResult.Success();
     }
-    public DomainResult CloseAccount() {
-        if (this.CurrentStage != PatronStage.Active) {
+    public DomainResult CloseAccount()
+    {
+        if (this.CurrentStage != PatronStage.Active)
+        {
             return DomainResult.Failure("'CloseAccount' requires stage 'Active' on entity 'Patron'.");
         }
         this.CurrentStage = PatronStage.Closed;
+        this.Status = PatronStatus.Closed;
         return DomainResult.Success();
     }
-    public DomainResult Reinstate() {
-        if (this.CurrentStage != PatronStage.Suspended) {
+    public DomainResult Reinstate()
+    {
+        if (this.CurrentStage != PatronStage.Suspended)
+        {
             return DomainResult.Failure("'Reinstate' requires stage 'Suspended' on entity 'Patron'.");
         }
-        if (this.HasOverdueLoans()) {
+        if (this.HasOverdueLoans())
+        {
             return DomainResult.Failure("'Reinstate' blocked by policy 'HasOverdueLoans'.");
         }
         this.Status = PatronStatus.Active;
         this.MaxItems = 5L;
         this.CurrentStage = PatronStage.Active;
+        this.Status = PatronStatus.Active;
         return DomainResult.Success();
     }
     public bool GoodStanding() => this.Status == PatronStatus.Active;
     public bool AtLimit() => this.CurrentBorrowCount >= this.MaxItems;
     public bool HasFines() => this.OutstandingFines > 0L;
-    public bool HasOverdueLoans() {
-        throw new NotSupportedException("Policy 'HasOverdueLoans' requires store-aware evaluation and cannot be compiled to standalone C#.");
+    public bool HasOverdueLoans()
+    {
+        var any1 = false;
+        foreach (var item0 in this.Loans)
+        {
+            if (item0.Status == "Overdue")
+            {
+                any1 = true;
+                break;
+            }
+        }
+        return any1;
     }
     public bool AccountInGoodStanding() => this.Status == PatronStatus.Active && this.OutstandingFines == 0L;
-    internal void WhenLoanOverdue() {
-        var fineResult = Fine.Create(5L, false, "Overdue item", null);
-        if (!fineResult.IsSuccess) {
-            throw new InvalidOperationException(fineResult.ErrorMessage);
+    internal void WhenEachLoanOverdue()
+    {
+        var create0 = Fine.Create("Overdue item", 5L);
+        if (!create0.IsSuccess)
+        {
+            throw new ConstraintFailureException(create0.ErrorMessage ?? "");
         }
-        var fine = fineResult.Value;
         this.OutstandingFines = this.OutstandingFines + 5L;
     }
-    internal void WhenLoanReturned() {
+    internal void WhenEachLoanReturned()
+    {
         this.CurrentBorrowCount = this.CurrentBorrowCount - 1L;
     }
-    internal void WhenFineResolved() {
+    internal void WhenEachFineResolved()
+    {
         this.OutstandingFines = this.OutstandingFines - 5L;
     }
-    public static DomainResult<Patron> Create(long currentBorrowCount, string email, long maxItems, string name, long outstandingFines, IEnumerable<Loan> loans, IEnumerable<Fine> fines, DateOnly? memberSince = null, PatronStatus status = PatronStatus.Active) {
-        if (!System.Text.RegularExpressions.Regex.IsMatch(email, "^[^@]+@[^@]+$")) {
+    public static DomainResult<Patron> Create(string email, string name, Poly.DomainModeling.Runtime.IStoragePort db, long maxItems = 0L, IEnumerable<Loan>? loans = null, IEnumerable<Fine>? fines = null, long currentBorrowCount = 0L, DateOnly? memberSince = null, long outstandingFines = 0L, PatronStatus status = PatronStatus.Active)
+    {
+        if (string.IsNullOrEmpty(email))
+        {
+            return DomainResult<Patron>.Failure("'Email' is required.");
+        }
+        if (!System.Text.RegularExpressions.Regex.IsMatch(email, "^[^@]+@[^@]+$"))
+        {
             return DomainResult<Patron>.Failure("'Email' does not match the required pattern.");
         }
-        if (maxItems < 0L) {
+        if (maxItems < 0L)
+        {
             return DomainResult<Patron>.Failure("'MaxItems' must be >= 0.");
         }
-        if (maxItems > 20L) {
+        if (maxItems > 20L)
+        {
             return DomainResult<Patron>.Failure("'MaxItems' must be <= 20.");
         }
-        if (string.IsNullOrEmpty(name)) {
+        if (string.IsNullOrEmpty(name))
+        {
             return DomainResult<Patron>.Failure("'Name' is required.");
         }
-        return DomainResult<Patron>.Success(new Patron(currentBorrowCount, email, maxItems, name, outstandingFines, loans, fines, memberSince, status));
+        if (status != PatronStatus.Active && status != PatronStatus.Suspended && status != PatronStatus.Closed)
+        {
+            return DomainResult<Patron>.Failure(string.Concat("'", status, "' is not a valid member of PatronStatus for property 'Status'."));
+        }
+        if (Patron.ExistsWithEmail(db, email))
+        {
+            return DomainResult<Patron>.Failure("Unique constraint violated: 'Email' value is already used on another 'Patron'.");
+        }
+        var created = new Patron(email, name, maxItems, loans, fines, currentBorrowCount, memberSince, outstandingFines, status);
+        db.Record("Patron", "Email", email);
+        return DomainResult<Patron>.Success(created);
     }
-    private void InitializeSubscriptions() {
-        foreach (var target in this.Loans) {
-            target.RegisterPatronOverdueSubscriber(this);
+    private void InitializeSubscriptions()
+    {
+        foreach (var target in this.Loans)
+        {
+            target.RegisterPatronLoansOverdueSubscriber(this);
         }
-        foreach (var target in this.Loans) {
-            target.RegisterPatronReturnedSubscriber(this);
+        foreach (var target in this.Loans)
+        {
+            target.RegisterPatronLoansReturnedSubscriber(this);
         }
-        foreach (var target in this.Fines) {
-            target.RegisterPatronResolvedSubscriber(this);
+        foreach (var target in this.Fines)
+        {
+            target.RegisterPatronFinesResolvedSubscriber(this);
         }
     }
+    public DomainResult EnsureUnique(string propertyName, object value)
+    {
+        if (value == null)
+        {
+            return DomainResult.Success();
+        }
+        if (propertyName == "Email" && object.Equals(this.Email, value))
+        {
+            return DomainResult.Success();
+        }
+        return DomainResult.Failure("A unique assign needs the storage port.");
+    }
+    public static System.Boolean ExistsWithEmail(Poly.DomainModeling.Runtime.IStoragePort db, System.String email) => db.Exists("Patron", "Email", email);
 }

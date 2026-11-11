@@ -342,30 +342,11 @@ internal sealed class ContractIntegrationAnalyzer : INodeAnalyzer {
 
         var resolution = ContractEndpointResolver.Resolve(
             contract, domain, binding.EndpointName, localParam.Type.TypeName);
-        var pinMismatch = contract.Pin is not null && !ContractPin.Matches(contract, contract.Pin);
-
-        // #425: a same-shape constraint mismatch is a boundary verdict, not a generic
-        // incompatibility. The resolver refuses a wider caller; the boundary check decides
-        // whether that is a violation (DMCON014) or cannot-decide (DMCON015). A shape
-        // mismatch stays Incompatible: there is no constraint pair to compare.
-        var boundaryEndpoint = resolution.Endpoint
-            ?? (resolution.Status == ContractBindingStatus.Incompatible && resolution.Candidates.Count == 1
-                ? resolution.Candidates[0]
-                : null);
-        var boundary = boundaryEndpoint is not null
-                       && ContractPayloadRelation.SameShape(
-                           contract, domain, localParam.Type.TypeName, boundaryEndpoint.PayloadType.TypeName)
-            ? ContractBoundaryCheck.Check(
-                context, binding, contract, domain, boundaryEndpoint, localParam,
-                HasContributedBody(domain, contract, boundaryEndpoint))
-            : null;
-
-        var resolvedByBoundary = boundary is not null
-                                 && resolution.Status == ContractBindingStatus.Incompatible;
-        var status = pinMismatch && boundaryEndpoint is not null
-            ? ContractBindingStatus.PinMismatch
-            : resolvedByBoundary ? ContractBindingStatus.Bound : resolution.Status;
-        RecordBinding(context, binding, contract, status, boundaryEndpoint?.Name);
+        var classified = ClassifyResolution(
+            context, domain, binding, $"Contract binding '{binding.Name}'", contract, resolution, localParam);
+        var boundary = classified.Boundary;
+        var boundaryEndpoint = classified.Endpoint;
+        RecordBinding(context, binding, contract, classified.Status, boundaryEndpoint?.Name);
         if (boundary is not null)
             context.SetMetadata(binding, boundary);
 
@@ -409,6 +390,52 @@ internal sealed class ContractIntegrationAnalyzer : INodeAnalyzer {
             }
         }
     }
+
+    /// <summary>
+    /// The post-resolve classification shared by a bind and an expression call (#426): the pin
+    /// check, the #425 boundary check (which reports DMCON014/DMCON015 on <paramref name="site"/>),
+    /// and the status mapping. The bind and the call differ only in how they report a plain
+    /// incompatibility, an ambiguity and a name that is not on the surface.
+    /// </summary>
+    internal static ContractClassification ClassifyResolution(
+        AnalysisContext context,
+        Domain domain,
+        Node site,
+        string subject,
+        ImportedContract contract,
+        ContractEndpointResolution resolution,
+        Property localParameter) {
+        var pinMismatch = contract.Pin is not null && !ContractPin.Matches(contract, contract.Pin);
+
+        // #425: a same-shape constraint mismatch is a boundary verdict, not a generic
+        // incompatibility. The resolver refuses a wider caller; the boundary check decides
+        // whether that is a violation (DMCON014) or cannot-decide (DMCON015). A shape
+        // mismatch stays Incompatible: there is no constraint pair to compare.
+        var boundaryEndpoint = resolution.Endpoint
+            ?? (resolution.Status == ContractBindingStatus.Incompatible && resolution.Candidates.Count == 1
+                ? resolution.Candidates[0]
+                : null);
+        var boundary = boundaryEndpoint is not null
+                       && ContractPayloadRelation.SameShape(
+                           contract, domain, localParameter.Type.TypeName, boundaryEndpoint.PayloadType.TypeName)
+            ? ContractBoundaryCheck.Check(
+                context, site, subject, contract, domain, boundaryEndpoint, localParameter,
+                HasContributedBody(domain, contract, boundaryEndpoint))
+            : null;
+
+        var resolvedByBoundary = boundary is not null
+                                 && resolution.Status == ContractBindingStatus.Incompatible;
+        var status = pinMismatch && boundaryEndpoint is not null
+            ? ContractBindingStatus.PinMismatch
+            : resolvedByBoundary ? ContractBindingStatus.Bound : resolution.Status;
+        return new ContractClassification(status, boundaryEndpoint, boundary);
+    }
+
+    /// <summary>The outcome of <see cref="ClassifyResolution"/>.</summary>
+    internal sealed record ContractClassification(
+        ContractBindingStatus Status,
+        ContractEndpoint? Endpoint,
+        ContractBoundaryMetadata? Boundary);
 
     /// <summary>
     /// #425: whether the loaded library contributed an implementation body for this endpoint.
@@ -459,7 +486,7 @@ internal sealed class ContractIntegrationAnalyzer : INodeAnalyzer {
     /// the decision-8 set is routed here, never <see cref="DomainModelDiagnosticCodes.ContractIntegration"/>
     /// metadata errors, <see cref="DomainModelDiagnosticCodes.ContractOverloadAmbiguous"/>, or a flow code.
     /// </summary>
-    private static void ReportContractFinding(
+    internal static void ReportContractFinding(
         AnalysisContext context, Domain domain, Node finding, string code, string message) {
         if (!DiagnosticAllowanceMatch.TryConsume(context, domain, finding, code)) {
             context.ReportError(finding, message, code);
@@ -493,7 +520,7 @@ internal sealed class ContractIntegrationAnalyzer : INodeAnalyzer {
     private static string PinSuffix(ImportedContract contract) =>
         contract.Pin is { Length: > 0 } pin ? $" (pinned '{pin}')" : "";
 
-    private static string DescribeCandidates(IReadOnlyList<ContractEndpoint> candidates) =>
+    internal static string DescribeCandidates(IReadOnlyList<ContractEndpoint> candidates) =>
         candidates.Count switch {
             0 => "no endpoint",
             1 => $"endpoint '{candidates[0].Name}' ({candidates[0].PayloadType.TypeName})",

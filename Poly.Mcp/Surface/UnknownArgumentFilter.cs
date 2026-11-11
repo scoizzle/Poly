@@ -56,11 +56,6 @@ internal static class UnknownArgumentFilter {
             state = (object?)null,
             errorCode,
         };
-        var json = JsonSerializer.SerializeToElement(envelope);
-        return new CallToolResult {
-            IsError = true,
-            StructuredContent = json,
-            Content = [new TextContentBlock { Text = json.GetRawText() }],
-        };
+        return PolyEnvelopeText.Result(JsonSerializer.SerializeToElement(envelope), isError: true);
     }
 }

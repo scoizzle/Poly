@@ -19,6 +19,12 @@ namespace Poly.DomainModeling.Analysis;
 /// (<see cref="DomainProgramProjection.ToSyntax"/>), including policy, subscription,
 /// and OnEntry/OnExit bodies so Domain-bound hot paths bind those trees instead of
 /// re-lowering at execute time.
+/// <para>Kept beside <see cref="Poly.DomainModeling.Compile.CompiledDomain"/> by the
+/// 2026-11-10 ruling (#467 K5): this table is keyed by <see cref="Domain"/> identity so
+/// lowering, the analysis passes, the module executor, MCP and the product pack read a
+/// session, analysis and module before or without a session-owned compiled domain.
+/// The VM analysis stays off it (#359), and merging would re-key every caller to a
+/// session and reopen the "which session owns a Domain" ruling (#387).</para>
 /// </summary>
 internal static class RuntimeAnalysisCache {
     private sealed class Holder {

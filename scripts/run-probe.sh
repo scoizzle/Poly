@@ -5,6 +5,8 @@
 # Exits 0 when the export compiles with 0 errors and 0 warnings: a generated
 # warning is an export bug, so it fails the gate. A domain that `uses http` is
 # compiled and every emitted file is built as a host.
+# The non-http path (probe-check) is a bare Roslyn compile without analyzers, so it
+# fails on compiler warnings only; CA* warnings appear only on the http dotnet build (#469).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 REPO="$(pwd -P)"

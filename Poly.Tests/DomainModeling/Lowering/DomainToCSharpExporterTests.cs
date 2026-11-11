@@ -8,6 +8,7 @@ using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Runtime;
 using Poly.Interpretation.CSharp;
+using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.DomainModeling.Lowering;
 
@@ -4195,6 +4196,20 @@ public class DomainToCSharpExporterTests {
         var (domain, analysis) = ParseAndAnalyze(dsl);
         var cs = new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis));
         await Assert.That(cs).DoesNotContain("private Item()");
+    }
+
+    [Test]
+    public async Task LowerDefaultConstantNode_NonEnumPropertyAccessDefault_ThrowsNotSupported() {
+        // #469: `default(X)` where X names no enum member cannot be lowered. Dropping
+        // the constraint silently would turn the property into a required Create
+        // parameter, so lowering fails loud instead of folding to a wrong shape.
+        var (domain, analysis) = LoweringFixtures.Analyze(
+            new Entity("Widget", Properties: [], Actions: [], Policies: [], Stages: []));
+        var prop = new Property("Label", new DomainTypeReference("Text"), []);
+        var defaultValue = new DefaultValueConstraint(DomainExpression.Property("Other"));
+
+        await Assert.That(() => DomainToCSharpExporter.LowerDefaultConstantNode(defaultValue, prop, domain, analysis))
+            .Throws<NotSupportedException>();
     }
 
     private static int CountOccurrences(string text, string needle) {

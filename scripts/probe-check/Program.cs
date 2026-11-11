@@ -9,7 +9,9 @@ using Microsoft.CodeAnalysis.CSharp;
 // Reports 0/1 exit with the diagnostic summary. Compiles against the
 // platform reference assemblies only (no Poly dependency) — catches
 // CS1503/CS1061/CS8602-class export bugs fast. Warnings fail the gate: a
-// generated warning is an export bug too.
+// generated warning is an export bug too. This is a bare Roslyn compile without
+// analyzers: warnings here are compiler warnings only; analyzer (CA*) warnings
+// surface only on the http path's dotnet build with TreatWarningsAsErrors (#469).
 if (args.Length == 0 || args.Any(a => !File.Exists(a))) {
     Console.Error.WriteLine("usage: probe-check <file.cs> [<file.cs> ...]");
     return 1;

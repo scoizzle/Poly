@@ -1,0 +1,8 @@
+root = false
+
+[*.cs]
+generated_code = true
+dotnet_analyzer_diagnostic.severity = none
+csharp_new_line_before_open_brace = all
+dotnet_diagnostic.IDE0044.severity = none
+dotnet_sort_system_directives_first = false

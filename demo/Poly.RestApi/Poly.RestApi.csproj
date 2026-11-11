@@ -6,13 +6,17 @@
     <Nullable>enable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <RootNamespace>Poly.RestApi</RootNamespace>
-    <NoWarn>$(NoWarn);CS8618</NoWarn>
+    <NoWarn>$(NoWarn);CS8618;CA2013</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
     <!-- NU1903 GHSA-2m69-gcr7-jv3q: transitive 2.1.11 is vulnerable; pin past audit. -->
     <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Poly\Poly.csproj" />
   </ItemGroup>
 
 </Project>

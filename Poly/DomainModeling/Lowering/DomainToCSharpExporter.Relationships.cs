@@ -1,6 +1,8 @@
+using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Ontology;
 
 using AccessModifier = Poly.Introspection.AccessModifier;
+using Syntactic = Poly.Ast.Nodes;
 
 namespace Poly.DomainModeling.Lowering;
 
@@ -119,5 +121,118 @@ public sealed partial class DomainToCSharpExporter {
         var nav = source?.Navigations.FirstOrDefault(n =>
             string.Equals(n.Name, relationshipName, StringComparison.Ordinal));
         return nav?.Target.TypeName;
+    }
+
+    /// <summary>
+    /// Emits the navigation properties (PascalCase; <c>IReadOnlyList</c> for collections)
+    /// and the create-in / attach methods that go with a collection navigation.
+    /// </summary>
+    private static void AddNavigationMembers(
+        Entity entity, Domain domain, IReadOnlyList<Relationship> domainRelationships,
+        INodeMetadataProvider metadata, List<SubscriptionInfo>? subscriberSubs,
+        List<PropertyDefinitionNode> props, List<FieldDefinitionNode> fields,
+        List<MethodDefinitionNode> methods) {
+        // ── Navigation properties (PascalCase; IReadOnlyList for collections) ──
+        foreach (var rel in domainRelationships) {
+            if (!string.Equals(rel.Source.TypeName, entity.Name, StringComparison.Ordinal))
+                continue;
+
+            var isMany = rel.Cardinality is RelationshipCardinality.OneToMany
+                         or RelationshipCardinality.ManyToMany;
+            var targetType = new NamedTypeReference(rel.Target.TypeName);
+            var pascalName = ToPascalCase(rel.Name);
+            var paramName = ToCamelCase(pascalName);
+
+            if (isMany) {
+                // Collection nav: private field, IEnumerable<T> constructor param,
+                // getter-only property. EF passes loaded items in via the constructor.
+                var fieldName = $"_{paramName}";
+                var listType = new NamedTypeReference("List",
+                    TypeArguments: [targetType]);
+                var readOnlyType = new NamedTypeReference("IReadOnlyList",
+                    TypeArguments: [targetType]);
+                var enumerableType = new NamedTypeReference("IEnumerable",
+                    TypeArguments: [targetType]);
+
+                fields.Add(new FieldDefinitionNode(
+                    fieldName,
+                    listType,
+                    DefaultValue: new New(listType),
+                    AccessModifier: AccessModifier.Private
+                ));
+
+                props.Add(new PropertyDefinitionNode(
+                    pascalName, readOnlyType,
+                    Getter: new PropertyGetterDefinitionNode(
+                        Body: new Member(new ThisReference(), fieldName)),
+                    IsReadOnly: true
+                ));
+
+                // Create{Nav} is the typed create-in. A relationship with no create-in
+                // on this entity does not get a factory (Order.CreateCustomer).
+                if (EffectHelpers.CreatesIn(entity, rel.Name))
+                    AddCreateNavMethod(entity, rel, domain, subscriberSubs, fieldName, methods, metadata);
+                AddAttachNavMethod(entity, rel, subscriberSubs, fieldName, methods);
+            }
+            else {
+                // Singular nav: property with private setter (constructor param).
+                // Navs are optional references (set at link/create time, may be null
+                // at EF materialization) — emit nullable so the generated code has
+                // no non-nullable-uninitialized warnings (CS8618).
+                if (EffectHelpers.CreatesIn(entity, rel.Name))
+                    AddCreateSingularNavMethod(entity, rel, domain, subscriberSubs, methods, metadata);
+                props.Add(new PropertyDefinitionNode(
+                    pascalName, new OptionalTypeReference(targetType),
+                    Getter: new PropertyGetterDefinitionNode(),
+                    Setter: new PropertySetterDefinitionNode(
+                        AccessModifier: AccessModifier.Private)
+                ));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Constructor parameters and assignments for navigation slots, taken from the
+    /// COMPLETE published signature (<see cref="EntityStructureMetadata.ConstructorParameters"/>).
+    /// </summary>
+    private static void AddNavigationCtorParameters(
+        EntityStructureMetadata esm, Domain domain, INodeMetadataProvider metadata,
+        List<Parameter> ctorParams, List<Node> ctorAssignments) {
+        // ── Constructor params for navs — from the COMPLETE signature (ESM) ──
+        // EntityStructureMetadata.ConstructorParameters now includes collection navs
+        // (IsCollection). This is the single source of truth for the emitted Create(...)
+        // signature — no per-consumer re-derivation of cardinality/order here (the
+        // callers already read the same bag). Order matches the nav loop above
+        // (relationship order), so output is unchanged.
+        foreach (var navParam in esm.ConstructorParameters.Where(p => p.IsNavigation)) {
+            var paramName = ToCamelCase(navParam.Name);
+            if (navParam.IsCollection) {
+                var fieldName = $"_{paramName}";
+                var targetType = new NamedTypeReference(navParam.Type.TypeName);
+                var listType = new NamedTypeReference("List", TypeArguments: [targetType]);
+                var enumerableType = new NamedTypeReference("IEnumerable", TypeArguments: [targetType]);
+                ctorParams.Add(new Parameter(
+                    paramName,
+                    new OptionalTypeReference(enumerableType),
+                    DefaultValue: new Constant(null)));
+                ctorAssignments.Add(new Assignment(
+                    new Member(new ThisReference(), fieldName),
+                    new New(listType, [
+                        new Syntactic.Coalesce(
+                            new Parameter(paramName),
+                            new New(listType))])));
+            }
+            else {
+                // Singular nav (incl. back-reference): optional (unlinked at create).
+                var pascalName = ToPascalCase(navParam.Name);
+                var propRef = new OptionalTypeReference(
+                    MapDomainTypeRef(navParam.Type, domain, metadata));
+                ctorParams.Add(new Parameter(
+                    paramName, propRef, DefaultValue: new Constant(null)));
+                ctorAssignments.Add(new Assignment(
+                    new Member(new ThisReference(), pascalName),
+                    new Parameter(paramName)));
+            }
+        }
     }
 }

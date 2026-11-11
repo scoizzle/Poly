@@ -405,4 +405,164 @@ public sealed partial class DomainToCSharpExporter {
 
         return checks;
     }
+
+    /// <summary>
+    /// Emits the private constructor (initial stage + entry effects + subscription
+    /// wiring) and the public static <c>Create</c> factory with its constraint guard
+    /// clauses and unique-inverse attach calls. Returns the constructors to publish.
+    /// </summary>
+    private static List<ConstructorDefinitionNode>? AddCreateFactory(
+        Entity entity, Domain domain, INodeMetadataProvider metadata,
+        EntityStructureMetadata esm, string? stageEnumTypeName,
+        IReadOnlySet<string>? postTransitionNotifyStages,
+        IReadOnlySet<string>? previousStageNotifyStages,
+        List<SubscriptionInfo>? subscriberSubs,
+        List<Parameter> ctorParams, List<Node> ctorAssignments,
+        List<MethodDefinitionNode> methods) {
+        // ── Private constructor + public static Create factory ─────
+        // Every entity publishes Create, including one with no slots, so
+        // a type-name call resolves. No slots and no stages still emit a
+        // single private parameterless constructor (CS0111).
+        List<ConstructorDefinitionNode>? ctors = null;
+        var bodyNodes = new List<Node>();
+        bodyNodes.AddRange(ctorAssignments);
+
+        if (esm.HasStages) {
+            var firstStage = entity.Stages[0];
+            bodyNodes.Add(new Assignment(
+                new Member(new ThisReference(), "CurrentStage"),
+                new Member(
+                    new NamedTypeReference(stageEnumTypeName!),
+                    firstStage.Name)));
+
+            // Apply the initial stage's entry effects in the constructor.
+            // This ensures properties set by entry effects (e.g. "entry { assign
+            // CheckedOutAt to now }" on Loan.Active) are initialized during
+            // construction, not just during explicit stage transitions.
+            if (firstStage.OnEntryEffects.Count > 0) {
+                var entryCtx = new LoweringContext(
+                    new ThisReference(),
+                    Analysis: metadata,
+                    Domain: domain,
+                    StageEnumTypeName: stageEnumTypeName,
+                    EnumPropertyNames: esm.EnumPropertyNames,
+                    LifecyclePropertyName: esm.LifecyclePropertyName,
+                    LifecycleEnumTypeName: esm.LifecycleEnumTypeName,
+                    PostTransitionNotifyStages: postTransitionNotifyStages,
+                    PreviousStageNotifyStages: previousStageNotifyStages,
+                    SourceStageName: firstStage.Name);
+                var entryPass = new EffectLoweringPass(entity, entryCtx);
+                entryPass.AppendInlinedStageEffects(firstStage.OnEntryEffects, bodyNodes);
+            }
+        }
+
+        // InitializeSubscriptions is called as the last step so that all
+        // state (including collections passed from data-store materialization)
+        // is set before subscription wiring runs.
+        if (subscriberSubs is { Count: > 0 }) {
+            bodyNodes.Add(new Invoke(
+                new Member(new ThisReference(), "InitializeSubscriptions")));
+        }
+
+        // Private parameterless constructor only when a persistence pack is
+        // loaded (EF materialization). Collection fields carry their list
+        // initializer, so this ctor is always empty (D9).
+        var hasPersistence = metadata.GetMetadata<PersistenceSurfaceMetadata>(domain) is not null;
+        if (ctorParams.Count > 0 && hasPersistence) {
+            ctors = [new ConstructorDefinitionNode(
+                Parameters: null,
+                Body: null,
+                AccessModifier: AccessModifier.Private
+            )];
+        }
+        else {
+            ctors = [];
+        }
+        ctors = [.. ctors, new ConstructorDefinitionNode(
+            Parameters: ctorParams,
+            Body: bodyNodes.Count > 0 ? new Block(bodyNodes) : null,
+            AccessModifier: AccessModifier.Private
+        )];
+
+        // public static DomainResult<EntityName> Create(args...)
+        var createResultType = new NamedTypeReference("DomainResult",
+            TypeArguments: [new NamedTypeReference(entity.Name)]);
+
+        // Build constraint validation checks before the constructor call.
+        // Only entity properties (not navigations) are validated — navs
+        // don't carry constraints in the current model.
+        var constraintChecks = BuildCreateConstraintChecks(
+            entity, domain, esm.EntryAssignedPropertyNames, metadata, ctorParams);
+
+        // Construct, then Success. Create is the unique-inverse attach source
+        // (Attach* when count==1); CreateNav/BindCreate defer Add/Register when
+        // that attach ran. Ambiguous peer collections (count>1) skip Attach —
+        // same as the inverse-link rule — so named create-in can
+        // fallback-_field.Add. OneToOne (no collection inverse) leaves the
+        // ctor to-one only. Null peer is a no-op.
+        var createSuccessNodes = new List<Node>();
+        createSuccessNodes.AddRange(constraintChecks);
+        var createdLocal = new Variable("created");
+        var createLocals = new List<Node> { createdLocal };
+        createSuccessNodes.Add(new Assignment(
+            createdLocal,
+            new New(
+                new NamedTypeReference(entity.Name),
+                ctorParams.ToArray())));
+        var lookup = metadata.GetTypeLookup(domain);
+        foreach (var navParam in esm.ConstructorParameters
+            .Where(p => p.IsNavigation && !p.IsCollection)) {
+            var paramName = ToCamelCase(navParam.Name);
+            // The signature parameter, not a same-named copy. A copy has no
+            // type, so the VM reads an empty slot and skips Attach.
+            var paramRef = ctorParams.FirstOrDefault(p =>
+                string.Equals(p.Name, paramName, StringComparison.Ordinal));
+            if (paramRef is null)
+                continue;
+            var peerTypeName = navParam.Type.TypeName;
+            Entity? peerEntity = null;
+            if (lookup is not null
+                && lookup.Types.TryGetValue(peerTypeName, out var resolvedPeer)
+                && resolvedPeer is Entity pe)
+                peerEntity = pe;
+            else
+                peerEntity = domain.Types.OfType<Entity>()
+                    .FirstOrDefault(e => string.Equals(e.Name, peerTypeName, StringComparison.Ordinal));
+
+            // Unique collection inverse on the peer (FindInverseCollectionInfo).
+            // count == 0: OneToOne / no
+            // collection — ctor already set the to-one. count > 1: skip Attach
+            // (named create-in CreateNav fallback Add). count == 1: Attach*.
+            var inverse = peerEntity is not null
+                ? FindInverseCollectionInfo(peerEntity, entity.Name).Unique
+                : null;
+
+            if (inverse is null)
+                continue;
+
+            createSuccessNodes.Add(new IfStatement(
+                new NotEqual(paramRef, new Constant(null)),
+                new Block([
+                    new Invoke(
+                        new Member(paramRef, $"Attach{ToPascalCase(inverse.Name)}"),
+                        [createdLocal])
+                ])));
+        }
+
+        createSuccessNodes.Add(new Return(
+            new Invoke(
+                new Member(createResultType, "Success"),
+                [createdLocal])));
+
+        methods.Add(new MethodDefinitionNode(
+            "Create",
+            createResultType,
+            Parameters: ctorParams,
+            Body: new Block(createSuccessNodes, createLocals),
+            IsStatic: true,
+            AccessModifier: AccessModifier.Public
+        ));
+
+        return ctors;
+    }
 }

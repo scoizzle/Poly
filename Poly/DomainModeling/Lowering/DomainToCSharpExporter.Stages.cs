@@ -88,4 +88,26 @@ public sealed partial class DomainToCSharpExporter {
                     new Constant(null!))]),
             AccessModifier: AccessModifier.Private));
     }
+
+    /// <summary>
+    /// Emits the stage enum type and the <c>CurrentStage</c> property for an entity
+    /// that declares stages.
+    /// </summary>
+    private static void AddStageMembers(
+        Entity entity, EntityStructureMetadata esm, string? stageEnumTypeName,
+        List<TypeDefinitionNode> typeDefs, List<PropertyDefinitionNode> props) {
+        // ── Stage enum + CurrentStage property ────────────────────
+        if (esm.HasStages) {
+            var enumTypeName = stageEnumTypeName!;
+            typeDefs.Add(BuildEnumTypeDef(enumTypeName, entity.Stages.Select(s => s.Name)));
+
+            props.Add(new PropertyDefinitionNode(
+                "CurrentStage",
+                new NamedTypeReference(enumTypeName),
+                Getter: new PropertyGetterDefinitionNode(),
+                Setter: new PropertySetterDefinitionNode(
+                    AccessModifier: AccessModifier.Private)
+            ));
+        }
+    }
 }

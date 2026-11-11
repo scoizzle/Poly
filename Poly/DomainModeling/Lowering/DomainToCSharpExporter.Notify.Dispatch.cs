@@ -114,4 +114,148 @@ public sealed partial class DomainToCSharpExporter {
             ]),
             AccessModifier: AccessModifier.Private));
     }
+
+    /// <summary>
+    /// Target entity: one registry field + register method per (relationship, stage,
+    /// subscriber) triple, and one <c>Notify{Stage}Subscribers</c> per watched stage
+    /// that fans out every registry for that stage through the cascade-depth guard.
+    /// </summary>
+    private static void AddSubscriptionRegistry(
+        List<SubscriptionInfo>? targetSubs, string? stageEnumTypeName,
+        IReadOnlyDictionary<SubscriptionInfo, string>? handlerNames,
+        List<FieldDefinitionNode> fields, List<MethodDefinitionNode> methods) {
+        // ── Target entity: subscription registry ──────────────────
+        // One registry field + register method per (relationship, stage, subscriber)
+        // triple; the notify method calls EVERY subscription's handler for that
+        // triple — a subscriber may declare any/all/Each (or multiple Each) reactions
+        // on the same relation+stage, each with a quantifier-disambiguated handler name.
+        if (targetSubs is { Count: > 0 }) {
+            var groups = targetSubs
+                .GroupBy(i => (i.StageName, i.SourceEntity.Name, i.Relationship.Name))
+                .Select(g => g.ToList())
+                .ToList();
+            foreach (var infos in groups) {
+                var srcType = new NamedTypeReference(infos[0].SourceEntity.Name);
+                var fieldName = SubscriberRegistryFieldName(infos[0]);
+                var paramName = "subscriber";
+
+                fields.Add(new FieldDefinitionNode(
+                    fieldName,
+                    new OptionalTypeReference(
+                        new NamedTypeReference("List",
+                            TypeArguments: [srcType])),
+                    AccessModifier: AccessModifier.Private
+                ));
+
+                var fieldAcc = new Member(new ThisReference(), fieldName);
+                // Idempotent registration: a create-in child is already linked by
+                // the store under simulate, and printed hosts may attach twice.
+                // ReferenceEquals keeps distinct-but-equal records from deduping.
+                // The body must use this parameter, not a same-named copy: a copy
+                // has no type, so the VM cannot place the argument.
+                var existing = new Variable("existing");
+                var subscriber = new Parameter(paramName, srcType);
+                var registerBody = new Block([
+                    new IfStatement(
+                        new Equal(fieldAcc, new Constant(null)),
+                        new Block([
+                            new Assignment(fieldAcc,
+                                new New(
+                                    new NamedTypeReference("List",
+                                        TypeArguments: [srcType])))
+                        ])),
+                    new ForEachLoop(
+                        existing,
+                        fieldAcc,
+                        new IfStatement(
+                            new Invoke(
+                                new Member(new ClrTypeReference(typeof(object)), "ReferenceEquals"),
+                                [existing, subscriber]),
+                            new Block([new Return(null)]))),
+                    new Invoke(
+                        new Member(fieldAcc, "Add"),
+                        [subscriber])
+                ]);
+                methods.Add(new MethodDefinitionNode(
+                    SubscriberRegisterMethodName(infos[0]),
+                    new TypeReference("void"),
+                    Parameters: [subscriber],
+                    Body: registerBody,
+                    AccessModifier: AccessModifier.Internal
+                ));
+            }
+
+            // One Notify{Stage}Subscribers per watched stage, fanning out every
+            // (source, relationship, stage) registry. Two subscribers on the same
+            // target stage (Student + Section on Enrollment.Dropped) used to emit
+            // duplicate _droppedSubscribers / NotifyDroppedSubscribers members.
+            foreach (var stageGroup in groups.GroupBy(infos => infos[0].StageName)) {
+                // Nullable: a create-in lands the child in its first stage with no prior
+                // stage, so the caller passes null. `when all` guards read it as
+                // "transitioned from" and a fresh entry must not match.
+                var needsPrevious = stageGroup.Any(infos => infos.Any(NeedsAllPreviousStage));
+                var notifyPrevious = new Parameter(
+                    "previousStage",
+                    new OptionalTypeReference(new NamedTypeReference(stageEnumTypeName!)));
+                var notifyNodes = new List<Node>();
+                foreach (var infos in stageGroup) {
+                    var fieldName = SubscriberRegistryFieldName(infos[0]);
+                    var notifyCalls = infos.Select(info => {
+                        var args = new List<Node>();
+                        if (HasPeerBinding(info))
+                            args.Add(new ThisReference());
+                        if (NeedsAllPreviousStage(info))
+                            args.Add(notifyPrevious);
+                        return (Node)new Invoke(
+                            new Member(new Variable("sub"), handlerNames![info]),
+                            [.. args]);
+                    }).ToList();
+                    notifyNodes.Add(new IfStatement(
+                        new NotEqual(
+                            new Member(new ThisReference(), fieldName),
+                            new Constant(null)),
+                        new ForEachLoop(
+                            new Variable("sub"),
+                            new Member(new ThisReference(), fieldName),
+                            new Block(notifyCalls))));
+                }
+                methods.Add(new MethodDefinitionNode(
+                    $"Notify{stageGroup.Key}Subscribers",
+                    new TypeReference("void"),
+                    Parameters: needsPrevious ? [notifyPrevious] : null,
+                    Body: new Block([
+                        new Invoke(
+                            new Member(new ThisReference(), "EnterNotifyCascade"),
+                            new Constant(stageGroup.Key)),
+                        new TryCatchFinally(
+                            notifyNodes.Count == 1 ? notifyNodes[0] : new Block(notifyNodes),
+                            FinallyBlock: new Invoke(
+                                new Member(new ThisReference(), "ExitNotifyCascade")))
+                    ]),
+                    AccessModifier: AccessModifier.Internal
+                ));
+            }
+        }
+    }
+
+    /// <summary>
+    /// <c>InitializeSubscriptions</c> — for post-load subscription wiring. Called as
+    /// the last constructor step so all state is set before registration runs.
+    /// </summary>
+    private static void AddSubscriptionInitializer(
+        List<SubscriptionInfo>? subscriberSubs, List<MethodDefinitionNode> methods) {
+        // ── InitializeSubscriptions — for post-load subscription wiring ──
+        if (subscriberSubs is { Count: > 0 }) {
+            var initBody = new List<Node>();
+            AddSubscriberRegistrationNodes(subscriberSubs, initBody);
+            if (initBody.Count > 0) {
+                methods.Add(new MethodDefinitionNode(
+                    "InitializeSubscriptions",
+                    new TypeReference("void"),
+                    Body: new Block(initBody),
+                    AccessModifier: AccessModifier.Private
+                ));
+            }
+        }
+    }
 }

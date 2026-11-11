@@ -2,7 +2,7 @@ using Poly.DomainModeling.Ontology;
 
 namespace Poly.DomainModeling.Analysis;
 
-// Arithmetic arms: Add/Subtract (incl. date difference) and Multiply/Divide operands.
+// Arithmetic arms: CheckArithmetic (Add/Subtract) and CheckNumericArithmetic (Multiply/Divide); the Date - Date case stays inline in core's WalkExpression case Subtract.
 
 internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
     private void CheckArithmetic(

@@ -2,7 +2,7 @@ using Poly.DomainModeling.Ontology;
 
 namespace Poly.DomainModeling.Analysis;
 
-// Quantifier/navigation arm: target-scoped body walk that rejects unlowerable endpoint calls.
+// Holds RejectEndpointCallsInBody only; the quantifier/navigation arm cases stay in core's WalkExpression.
 
 internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
     private static void RejectEndpointCallsInBody(AnalysisContext context, Node node) {

@@ -21,7 +21,6 @@ namespace Poly.Mcp.Tools;
 /// module's dictionary, tracked by executor id; the tool layer only converts JSON
 /// and renders snapshots.
 /// </summary>
-[McpServerToolType]
 internal sealed class RuntimeTool(ISessionStore store, ILogger<RuntimeTool> logger) {
     // ── Shared helpers ──────────────────────────────────────────
 
@@ -178,11 +177,6 @@ internal sealed class RuntimeTool(ISessionStore store, ILogger<RuntimeTool> logg
     /// execution, and stage subscription fan-out. Returns the instance ID and
     /// a snapshot of initial stage and property values.
     /// </summary>
-    [McpServerTool(Name = "create_instance"), Description(@"Creates an instance of a domain entity in this session.
-
-Starts in the first defined stage when the entity has stages. Returns an instance id and a snapshot of initial property values.
-
-Use invoke_action to run actions, evaluate_policy to check policies, link_instances to connect related instances, and get_instance / list_instances to inspect.")]
     public DomainToolResponse CreateInstance(
         [Description("Session ID")] string sessionId,
         [Description("Name of the entity to instantiate")] string entityName,
@@ -282,22 +276,6 @@ Use invoke_action to run actions, evaluate_policy to check policies, link_instan
     /// To evaluate a policy that reads linked targets, call
     /// <c>evaluate_policy(instanceId=sourceId)</c> after linking.
     /// </summary>
-    [McpServerTool(Name = "link_instances"), Description(@"Links two runtime instances via a named relationship.
-
-Both instances must already exist (created via create_instance).
-The relationship must be defined in the domain model between the source and target entities.
-
-After linking, you can evaluate cross-entity policies by passing the
-source instance's ID to evaluate_policy(instanceId=...).
-
-Idempotent: calling link_instances with the same arguments multiple times
-is safe and will not create duplicate edges.
-
-Use case — Collection quantifiers:
-  1. create_instance for source entity (e.g. Customer)
-  2. create_instance for target entity (e.g. Order)
-  3. link_instances with relationship name (e.g. ""orders"")
-  4. evaluate_policy(entityName, policyName, instanceId=sourceId)")]
     public DomainToolResponse LinkInstances(
         [Description("Session ID")] string sessionId,
         [Description("Instance ID of the source (owning) instance")] string sourceInstanceId,
@@ -397,14 +375,6 @@ Use case — Collection quantifiers:
     ///   1. unlink_instances to remove child from old parent
     ///   2. link_instances to attach child to new parent
     /// </summary>
-    [McpServerTool(Name = "unlink_instances"), Description(@"Removes a link between two runtime instances for a named relationship.
-
-Both instances must already exist and be linked via link_instances.
-Fails if the link does not exist — use link_instances to create the link first.
-
-Use case — reassign a child from one parent to another:
-  1. unlink_instances(sessionId, oldParentId, ""relationshipName"", childId)
-  2. link_instances(sessionId, newParentId, ""relationshipName"", childId)")]
     public DomainToolResponse UnlinkInstances(
         [Description("Session ID")] string sessionId,
         [Description("Instance ID of the source (owning) instance")] string sourceInstanceId,
@@ -507,7 +477,6 @@ Use case — reassign a child from one parent to another:
     /// Returns a full snapshot of a runtime instance: current stage, all property values,
     /// and the number of children currently linked through owned relationships.
     /// </summary>
-    [McpServerTool(Name = "get_instance"), Description("Returns a snapshot of a runtime instance: current stage, property values, and the count of children linked through owned relationships.")]
     public DomainToolResponse GetInstance(
         [Description("Session ID")] string sessionId,
         [Description("Instance ID returned by create_instance")] string instanceId) {
@@ -561,7 +530,6 @@ Use case — reassign a child from one parent to another:
     /// Lists all runtime instances in the session, optionally filtered by entity name.
     /// Returns summary data: instance ID, entity name, current stage, and property count.
     /// </summary>
-    [McpServerTool(Name = "list_instances"), Description("Lists all runtime instances in the session, optionally filtered by entity name.")]
     public DomainToolResponse ListInstances(
         [Description("Session ID")] string sessionId,
         [Description("Optional entity name filter — only list instances of this entity type")] string? entityName = null) {
@@ -605,13 +573,6 @@ Use case — reassign a child from one parent to another:
     /// linked subscriber instances see the transition and their subscription
     /// effects are executed.
     /// </summary>
-    [McpServerTool(Name = "invoke_action"), Description(@"Runs a named action on an instance from create_instance.
-
-Resolves the action from the instance's current stage, then entity-level actions. Guard policies run first. Actions may transition, assign, create, create-in, invoke, for-invoke, if. On success, returns the new stage when a transition occurred. On failure, returns which guards blocked or why the action was not found. Linked subscribers fire on a stage transition.
-
-Entity-typed parameters take instance ids from create_instance. Actions that return an entity include returnTypeName and returnInstanceId.
-
-To link or unlink existing instances, use link_instances / unlink_instances — those are not action effects.")]
     public DomainToolResponse InvokeAction(
         [Description("Session ID")] string sessionId,
         [Description("Instance ID returned by create_instance")] string instanceId,

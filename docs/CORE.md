@@ -44,7 +44,7 @@ Always-on summary: [`AGENTS.md`](../AGENTS.md) Frozen core · Agent target.
 
 Neurosymbolic platform: author structured domain → lower to symbolic AST → analyze → VM (canonical). Domain = library of legal operations (no required `Main`). Goal: shipped correct end-to-end behavior, not framework completeness.
 
-**Current consumers:** lower → Interpreter (module dictionary, host `ModuleInstanceExecutor`) | `session.Emit` (C# module) + bag-gated host files. MCP: `create_instance` → `evaluate_policy` / `invoke_action`.
+**Current consumers:** lower → Interpreter (module dictionary, host `ModuleInstanceExecutor`) | `session.Emit` (C# module) + bag-gated host files. MCP: `poly_workspace` → `poly_define` → `poly_simulate` (`create`/`invoke`/`evaluate` steps).
 
 **Emit gate:** `session.Emit` registers the `vm-analysis-report`, then refuses (throws the first VM error) when the interpretation analysis of the lowered module reports an error; the report and the catalog stay on the session.
 
@@ -155,7 +155,7 @@ Host-neutral types/members (`Poly/Introspection/`); CLR is first provider. Consu
 
 | Piece | Location |
 |-------|----------|
-| Tools / sessions | `Poly.Mcp/` |
+| Tools / sessions | `Poly.Mcp/` — `PolySurfaceTools` is the only `[McpServerToolType]`; the v1 tool classes in `Poly.Mcp/Tools/` are internal adapters it delegates to, not registered as MCP tools |
 | Compile session | `DomainSession` in `Poly/DomainModeling/` (MCP holds it) |
 | Libraries | `IDomainLibrary` — `uses` loads analyzers/maps/contributors |
 

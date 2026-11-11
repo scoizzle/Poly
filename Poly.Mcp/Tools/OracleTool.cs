@@ -22,7 +22,6 @@ namespace Poly.Mcp.Tools;
 /// These tools are read-only — they never mutate session state. Named-policy
 /// and named-action simulate is <c>evaluate_policy</c> / <c>invoke_action</c>.
 /// </summary>
-[McpServerToolType]
 internal sealed class OracleTool(ISessionStore store, ILogger<OracleTool> logger) {
     // ── Shared helpers ──────────────────────────────────────────
 
@@ -119,7 +118,6 @@ internal sealed class OracleTool(ISessionStore store, ILogger<OracleTool> logger
     };
 
     // ── V0.6: export_domain_to_csharp ────────────────────────────
-    [McpServerTool(Name = "export_domain_to_csharp"), Description("Generates C# source for the session domain: entities as types with properties, navigations, stages, and actions as methods. Useful for inspecting how the model maps to C#.")]
     public DomainToolResponse ExportDomainToCSharp(
         [Description("Session ID")] string sessionId) {
         if (!store.TryGet(sessionId, out var state))
@@ -162,7 +160,6 @@ internal sealed class OracleTool(ISessionStore store, ILogger<OracleTool> logger
     }
 
     // ── JSON Schema export ───────────────────────────────────────
-    [McpServerTool(Name = "export_domain_to_json_schema"), Description("Exports the session domain as JSON Schema (draft 2020-12): one $defs entry per entity, value type, and enum, with range/length/pattern/default/enum constraints projected. Read-only; hand the ontology to JSON Schema tooling or diff the model. Stages, actions, and policies are behavior and are not emitted.")]
     public DomainToolResponse ExportDomainToJsonSchema(
         [Description("Session ID")] string sessionId) {
         if (!store.TryGet(sessionId, out var state))
@@ -196,7 +193,6 @@ internal sealed class OracleTool(ISessionStore store, ILogger<OracleTool> logger
     }
 
     // ── JSON-LD export ───────────────────────────────────────────
-    [McpServerTool(Name = "export_domain_to_json_ld"), Description("Exports the session domain as JSON-LD: an @context plus an RDFS @graph (classes, properties with domain/range, enum members). Declared term IRIs are used as written; untagged elements get stable urn:poly: IRIs. Read-only; hand the ontology to RDF/JSON-LD tooling.")]
     public DomainToolResponse ExportDomainToJsonLd(
         [Description("Session ID")] string sessionId) {
         if (!store.TryGet(sessionId, out var state))
@@ -235,7 +231,6 @@ internal sealed class OracleTool(ISessionStore store, ILogger<OracleTool> logger
     }
 
     // ── SHACL export ─────────────────────────────────────────────
-    [McpServerTool(Name = "export_domain_to_shacl"), Description("Exports the session domain as SHACL (JSON-LD syntax): a sh:NodeShape per entity targeting its class, and a sh:PropertyShape per property/navigation carrying range/length/pattern/equality constraints and requiredness. Uses the same term IRIs as the JSON-LD export. Read-only.")]
     public DomainToolResponse ExportDomainToShacl(
         [Description("Session ID")] string sessionId) {
         if (!store.TryGet(sessionId, out var state))
@@ -270,7 +265,6 @@ internal sealed class OracleTool(ISessionStore store, ILogger<OracleTool> logger
     }
 
     // ── HTML docs export ─────────────────────────────────────────
-    [McpServerTool(Name = "export_domain_to_html"), Description("Exports the session domain as a self-contained HTML document (no server, no scripts) for a person: terms, properties with constraints and requiredness, stages, actions, enums, value types, and relationships. Read-only; save it or open it in a browser.")]
     public DomainToolResponse ExportDomainToHtml(
         [Description("Session ID")] string sessionId) {
         if (!store.TryGet(sessionId, out var state))
@@ -340,7 +334,6 @@ internal sealed class OracleTool(ISessionStore store, ILogger<OracleTool> logger
 
     // ── V0.3: describe_domain_element ───────────────────────────
 
-    [McpServerTool(Name = "describe_domain_element"), Description("Returns a structured description of a domain element (entity, stage, action, policy, or relationship) from the session domain. For stage/action/policy, specify entityName if the name is not unique across entities.")]
     public DomainToolResponse DescribeDomainElement(
         [Description("Session ID")] string sessionId,
         [Description("Element kind: 'entity', 'stage', 'action', 'policy', or 'relationship'")] string kind,
@@ -554,7 +547,6 @@ internal sealed class OracleTool(ISessionStore store, ILogger<OracleTool> logger
 
     // ── oracle_expression (fragment probe, not named-policy simulate)
 
-    [McpServerTool(Name = "oracle_expression"), Description("Evaluates a DSL expression fragment against a JSON property bag. No session required. For a named policy on a real instance, use create_instance then evaluate_policy. Expressions that read relationships fail. Returns { result: true/false }.")]
     public DomainToolResponse OracleExpression(
         [Description("DSL expression fragment, e.g. `Age >= 18`.")] string expression,
         [Description("JSON object of property values, e.g. \"{\\\"Age\\\":25,\\\"Status\\\":\\\"Active\\\"}\"")] string propertiesJson) {

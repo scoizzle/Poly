@@ -1,10 +1,13 @@
 using System.Reflection;
 
+using Microsoft.Extensions.Logging.Abstractions;
+
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Ontology;
 using Poly.Mcp.Sessions;
+using Poly.Mcp.Surface;
 using Poly.Mcp.Tools;
 
 namespace Poly.Tests.Mcp;
@@ -3984,26 +3987,32 @@ E: entity {{
 
     [Test]
     public async Task InvokeAction_Description_ListsOnlyShippedEffects() {
-        // Live MCP simulate text: list shipped action effects, not store link/unlink.
-        var method = typeof(RuntimeTool).GetMethod(nameof(McpTestTools.Runtime.InvokeAction));
-        await Assert.That(method).IsNotNull();
+        // The v1 invoke_action tool text is no longer an MCP surface; poly_simulate's description
+        // names no effects. Agents read the shipped action effects from the DSL guide, so the
+        // "only shipped effects" guarantee is asserted on that effect table and on poly_simulate.
+        var surface = new PolySurfaceTools(McpTestTools.Store, NullLogger<PolySurfaceTools>.Instance);
 
-        var toolName = method!.GetCustomAttributes(inherit: false)
-            .Select(a => a.GetType().GetProperty("Name")?.GetValue(a) as string)
-            .FirstOrDefault(n => n is not null);
-        await Assert.That(toolName).IsEqualTo("invoke_action");
+        var simulate = typeof(PolySurfaceTools).GetMethod(nameof(PolySurfaceTools.Simulate));
+        await Assert.That(simulate).IsNotNull();
+        var simulateDescription = simulate!.GetCustomAttribute<System.ComponentModel.DescriptionAttribute>()?.Description;
+        await Assert.That(simulateDescription).IsNotNull();
+        await Assert.That(simulateDescription!.Contains("delete", StringComparison.OrdinalIgnoreCase)).IsFalse();
 
-        var description = method.GetCustomAttributes(inherit: false)
-            .OfType<System.ComponentModel.DescriptionAttribute>()
-            .FirstOrDefault()?.Description;
-        await Assert.That(description).IsNotNull();
+        var guideResponse = surface.Guide("all");
+        await Assert.That(guideResponse.Ok).IsTrue();
+        var guide = System.Text.Json.JsonSerializer.Serialize(guideResponse.Data,
+            new System.Text.Json.JsonSerializerOptions { Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
+        var start = guide.IndexOf("Effects in an action body", StringComparison.Ordinal);
+        await Assert.That(start).IsGreaterThanOrEqualTo(0);
+        var end = guide.IndexOf("```poly", start, StringComparison.Ordinal);
+        await Assert.That(end).IsGreaterThan(start);
+        var effectTable = guide[start..end];
 
-        await Assert.That(description!).Contains(
-            "transition, assign, create, create-in, invoke, for-invoke, if");
-        await Assert.That(description).Contains("link_instances");
-        await Assert.That(description).Contains("unlink_instances");
-        await Assert.That(description.Contains("link/unlink")).IsFalse();
-        await Assert.That(description.Contains("delete", StringComparison.OrdinalIgnoreCase)).IsFalse();
+        foreach (var shipped in new[] { "transition to", "assign", "create", "create in", "invoke", "for ", "if (" })
+            await Assert.That(effectTable).Contains(shipped);
+        await Assert.That(effectTable.Contains("unlink", StringComparison.OrdinalIgnoreCase)).IsFalse();
+        await Assert.That(effectTable.Contains("link ", StringComparison.OrdinalIgnoreCase)).IsFalse();
+        await Assert.That(effectTable.Contains("delete", StringComparison.OrdinalIgnoreCase)).IsFalse();
     }
 
     [Test]
@@ -4020,23 +4029,18 @@ E: entity {{
             "type-def",
         };
 
-        var toolTypes = new[] {
-            typeof(SessionTool), typeof(QueryTool), typeof(EvolveTool),
-            typeof(PolicyTool), typeof(DslTool), typeof(OracleTool), typeof(RuntimeTool),
-        };
+        var tools = typeof(PolySurfaceTools).GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+            .Where(m => m.GetCustomAttribute<ModelContextProtocol.Server.McpServerToolAttribute>() is not null)
+            .ToList();
+        await Assert.That(tools.Count).IsEqualTo(7);
 
         var leaks = new List<string>();
-        foreach (var type in toolTypes) {
-            foreach (var method in type.GetMethods(BindingFlags.Public | BindingFlags.Static)) {
-                var description = method.GetCustomAttributes(inherit: false)
-                    .OfType<System.ComponentModel.DescriptionAttribute>()
-                    .FirstOrDefault()?.Description;
-                if (string.IsNullOrEmpty(description))
-                    continue;
-                foreach (var token in forbidden) {
-                    if (description.Contains(token, StringComparison.Ordinal))
-                        leaks.Add($"{type.Name}.{method.Name}: {token}");
-                }
+        foreach (var method in tools) {
+            var description = method.GetCustomAttribute<System.ComponentModel.DescriptionAttribute>()?.Description;
+            await Assert.That(description).IsNotNull();
+            foreach (var token in forbidden) {
+                if (description!.Contains(token, StringComparison.Ordinal))
+                    leaks.Add($"{method.Name}: {token}");
             }
         }
 

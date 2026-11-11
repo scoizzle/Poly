@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Reflection;
 
 namespace Poly.Introspection.CommonLanguageRuntime;
 
@@ -73,6 +74,10 @@ internal sealed class ClrTypeDefinitionRegistry : ITypeDefinitionProvider {
         }
 
         var clrType = Type.GetType(name) ?? ResolveLoadedAssemblyType(name);
+        if (clrType is null) {
+            LoadReferencedAssemblies(typeof(ClrTypeDefinitionRegistry).Assembly);
+            clrType = ResolveLoadedAssemblyType(name);
+        }
         if (clrType is null && Enum.TryParse<PrimitiveType>(name, ignoreCase: false, out var prim))
             clrType = prim.GetClrType();
         if (clrType is null) {
@@ -82,6 +87,24 @@ internal sealed class ClrTypeDefinitionRegistry : ITypeDefinitionProvider {
         var created = GetTypeDefinition(clrType);
         _types.TryAdd(name, created);
         return created;
+    }
+
+    /// <summary>
+    /// Loads <paramref name="assembly"/>'s references that are not loaded yet, so a bare-name
+    /// lookup still resolves a type this assembly does not declare. R-01 moved the runtime
+    /// contract types to Poly.Runtime, and the scan above only sees assemblies something else
+    /// has already loaded. A reference that cannot load cannot hold the type, so load failures
+    /// leave the name unresolved rather than throwing.
+    /// </summary>
+    private static void LoadReferencedAssemblies(Assembly assembly) {
+        foreach (var reference in assembly.GetReferencedAssemblies()) {
+            try {
+                Assembly.Load(reference);
+            }
+            catch (Exception) {
+                // Unloadable reference: the caller returns null for an unresolvable name.
+            }
+        }
     }
 
     private static Type? ResolveLoadedAssemblyType(string name) {

@@ -34,6 +34,7 @@ Poly/                      Core library (zero external dependencies)
 Poly.Tests/                Test suite (TUnit)
 Poly.Mcp/                  MCP interactive harness for agents
 Poly.Benchmarks/           BenchmarkDotNet benchmarks
+Poly.Runtime/              BCL-only contract the emitted C# names (storage port, constraint failure)
 
 src/                       Extension packs
   Poly.DslCompiler/        DSL compiler

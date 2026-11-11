@@ -53,4 +53,8 @@ public sealed partial class DomainExpressionLoweringPass {
             [t],
             t);
     }
+
+    private static bool ContainsRelationshipNavigation(DomainExpression expr) =>
+        expr is RelationshipNavigation
+        || expr.Children.OfType<DomainExpression>().Any(ContainsRelationshipNavigation);
 }

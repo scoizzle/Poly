@@ -1,15 +1,11 @@
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Ontology.Contract;
-using Poly.DomainModeling.Ontology.Effects;
 using Poly.DomainModeling.Runtime;
 
 using AccessModifier = Poly.Introspection.AccessModifier;
-using Action = Poly.DomainModeling.Ontology.Action;
 using PrimType = Poly.Introspection.PrimitiveType;
 using Syntactic = Poly.Ast.Nodes;
-using TypeKind = Poly.Introspection.TypeKind;
-using ValueType = Poly.DomainModeling.Ontology.ValueType;
 
 namespace Poly.DomainModeling.Lowering;
 
@@ -31,152 +27,6 @@ namespace Poly.DomainModeling.Lowering;
 /// (<c>sub.When…(previousStage)</c>, <c>sub.When…(this)</c>, or both).
 /// </summary>
 public sealed partial class DomainToCSharpExporter {
-    /// <summary>Collected subscription data for cross-entity notification — populated from the
-    /// analysis-published <see cref="SubscriptionDispatchPlanMetadata"/> (the SAME dispatch
-    /// plan the runtime consumes), one info per watched target stage.</summary>
-    internal sealed record SubscriptionInfo(
-        string StageName,
-        SubscriptionDispatchPlanEntry Subscription,
-        Entity SourceEntity,
-        Entity TargetEntity,
-        Relationship Relationship,
-        string? SubscriberStageName = null
-    );
-
-    private static string SubscriberRegistryFieldName(SubscriptionInfo info) =>
-        SubscriberRegistryFieldName(info.SourceEntity.Name, info.Relationship.Name, info.StageName);
-
-    /// <summary>Registry field on the watched target that lists subscribers of one stage.</summary>
-    internal static string SubscriberRegistryFieldName(
-        string sourceEntityName, string relationshipName, string stageName) =>
-        $"_{ToCamelCase(sourceEntityName)}{ToPascalCase(relationshipName)}{stageName}Subscribers";
-
-    private static string SubscriberRegisterMethodName(SubscriptionInfo info) =>
-        $"Register{info.SourceEntity.Name}{ToPascalCase(info.Relationship.Name)}{info.StageName}Subscriber";
-
-    /// <summary>
-    /// Collects the subscription facts for one node's dispatch plan (an entity for
-    /// entity-level subscriptions, or a stage for stage-scoped ones) into the target/
-    /// subscriber maps used for code generation. The exporter consumes the analysis-
-    /// published <see cref="SubscriptionDispatchPlanMetadata"/> rather than re-walking
-    /// <see cref="StageSubscription"/> — one description of what fires, shared with the
-    /// runtime (no per-site re-derivation drift).
-    /// </summary>
-    internal static void CollectSubscriptionInfo(
-        SubscriptionDispatchPlanMetadata plan,
-        Entity subscriber,
-        string? subscriberStageName,
-        IReadOnlyDictionary<string, Entity> entityLookup,
-        List<SubscriptionInfo> subList,
-        Dictionary<string, List<SubscriptionInfo>> subscriptionsByTarget) {
-        foreach (var entry in plan.ByRelationshipName.Values.SelectMany(e => e)) {
-            var rel = subscriber.Navigations.FirstOrDefault(n =>
-                string.Equals(n.Name, entry.RelationshipName, StringComparison.Ordinal));
-            if (rel is null) continue;
-            if (!entityLookup.TryGetValue(entry.TargetEntityName, out var targetEntity))
-                continue;
-
-            foreach (var sName in entry.StageNames) {
-                var info = new SubscriptionInfo(sName, entry, subscriber, targetEntity, rel, subscriberStageName);
-                subList.Add(info);
-
-                if (!subscriptionsByTarget.TryGetValue(targetEntity.Name, out var targetList))
-                    subscriptionsByTarget[targetEntity.Name] = targetList = new();
-                targetList.Add(info);
-            }
-        }
-    }
-
-    /// <summary>
-    /// Assigns each subscription its generated handler method name. The name is
-    /// quantifier-aware (<c>WhenAny/WhenAll/WhenEach{Target}{Stage}</c>) and
-    /// disambiguated with a <c>_{n}</c> suffix when multiple subscriptions share the
-    /// same method signature (same quantifier + peer-binding shape) on the same
-    /// relationship+stage — two <c>when Rel Stage</c> (Each) blocks must each fire.
-    /// Keyed by reference so even structurally-identical subscriptions get distinct names.
-    /// </summary>
-    internal static Dictionary<SubscriptionInfo, string> BuildHandlerNames(
-        IEnumerable<KeyValuePair<string, List<SubscriptionInfo>>> subscriptionsBySubscriber) {
-        var map = new Dictionary<SubscriptionInfo, string>(ReferenceEqualityComparer.Instance);
-        foreach (var (_, subList) in subscriptionsBySubscriber) {
-            var groups = subList
-                .GroupBy(info => (
-                    info.StageName,
-                    info.TargetEntity.Name,
-                    QuantifierName(info.Subscription.Quantifier),
-                    HasPeerBinding(info)))
-                .ToDictionary(g => g.Key, g => g.ToList());
-            foreach (var info in subList) {
-                var hasPeer = HasPeerBinding(info);
-                var quantifier = QuantifierName(info.Subscription.Quantifier);
-                var key = (info.StageName, info.TargetEntity.Name, quantifier, hasPeer);
-                var name = $"When{quantifier}{info.TargetEntity.Name}{info.StageName}";
-                var group = groups[key];
-                if (group.Count == 1) {
-                    map[info] = name;
-                    continue;
-                }
-                // Name every handler in a multi-handler group by its effect, not
-                // by declaration order (`_2` says nothing).
-                var label = EffectLabel(info.Subscription);
-                var occurrence = group.TakeWhile(other => !ReferenceEquals(other, info))
-                    .Count(other => string.Equals(EffectLabel(other.Subscription), label, StringComparison.Ordinal));
-                map[info] = occurrence == 0 ? $"{name}_{label}" : $"{name}_{label}_{occurrence + 1}";
-            }
-        }
-        return map;
-    }
-
-    /// <summary>Splice a lowered handler body's statements/locals after a prefix (D13).</summary>
-    private static Block Prefixed(List<Node> prefix, Node body, List<Node>? locals = null) {
-        if (body is Block block) {
-            prefix.AddRange(block.Nodes);
-            locals ??= [];
-            locals.AddRange(block.Variables);
-        }
-        else {
-            prefix.Add(body);
-        }
-        return new Block(prefix, locals ?? []);
-    }
-
-    private static string EffectLabel(SubscriptionDispatchPlanEntry subscription) =>
-        EffectLabel(subscription.Effects.FirstOrDefault()) ?? "Effect";
-
-    private static string? EffectLabel(Effect? effect) => effect switch {
-        AssignEffect { Target: PropertyAccess property } => $"Set{property.Name}",
-        InvokeActionEffect invoke => $"Call{invoke.ActionName}",
-        StageTransitionEffect transition => $"To{transition.TargetStage.StageName}",
-        CreateEntityInstance create => $"Create{create.Type.TypeName}",
-        CreateEntityInRelationshipEffect create => $"Create{create.RelationshipName}",
-        CompositeEffect composite => composite.Effects.Select(EffectLabel).FirstOrDefault(l => l is not null),
-        ConditionalEffect conditional => EffectLabel(conditional.ThenEffects.FirstOrDefault())
-            ?? (conditional.ElseEffects is null ? null : EffectLabel(conditional.ElseEffects.FirstOrDefault())),
-        _ => null,
-    };
-
-    private static string QuantifierName(StageSubscriptionQuantifier quantifier) => quantifier switch {
-        StageSubscriptionQuantifier.Any => "Any",
-        StageSubscriptionQuantifier.All => "All",
-        _ => "Each",
-    };
-
-    /// <summary>
-    /// Handler takes a peer argument when the subscription binds <c>when … as name</c>.
-    /// Print (overload key and call args) and simulate (When arm) share this.
-    /// </summary>
-    internal static bool HasPeerBinding(SubscriptionInfo info) =>
-        info.Subscription.PeerBinding is { Length: > 0 };
-
-    /// <summary>
-    /// <c>when all</c> handlers take the transitioning record's previous stage.
-    /// Print (call args and handler params) and simulate (When arm) share this.
-    /// </summary>
-    internal static bool NeedsAllPreviousStage(SubscriptionInfo info) =>
-        info.Subscription.Quantifier == StageSubscriptionQuantifier.All
-        && info.TargetEntity.Stages.Count > 0
-        && info.Subscription.StageNames.Count > 0;
-
     private static Node StageEnumMember(string enumName, string stageName) =>
         new Member(new NamedTypeReference(enumName), stageName);
 
@@ -202,26 +52,6 @@ public sealed partial class DomainToCSharpExporter {
             acc = acc is null ? neq : new Syntactic.And(acc, neq);
         }
         return acc!;
-    }
-
-    /// <summary>
-    /// Enumeration type with a static const string field per member, defaulted to the member name.
-    /// </summary>
-    internal static TypeDefinitionNode BuildEnumTypeDef(string name, IEnumerable<string> memberNames) {
-        var fields = memberNames.Select(memberName => new FieldDefinitionNode(
-            memberName,
-            new PrimitiveTypeReference(PrimType.String),
-            DefaultValue: new Constant(memberName),
-            IsStatic: true,
-            IsConst: true,
-            AccessModifier: AccessModifier.Public
-        )).ToList();
-        return new TypeDefinitionNode(
-            name,
-            Fields: fields,
-            Kind: TypeKind.Enum,
-            Semantics: Syntactic.TypeDefinitionSemantics.MutableReference
-        );
     }
 
     // ── Per-entity builder ──────────────────────────────────────
@@ -275,227 +105,15 @@ public sealed partial class DomainToCSharpExporter {
         // the constructor-signature computation so both stay in lockstep.
         var entryAssignedProps = esm.EntryAssignedPropertyNames;
 
-        // ── Entity properties (sorted for deterministic output) ──
-        foreach (var prop in entity.Properties.OrderBy(p => p.Name)) {
-            var propRef = MapDomainTypeRef(prop.Type, domain, metadata);
-            // Requiredness is the published fact: required is the default, `optional`
-            // is its opt-out. No constraint re-scan decides nullability.
-            var isRequired = esm.RequiredPropertyNames.Contains(prop.Name);
-            var propertyType = isRequired ? propRef : new OptionalTypeReference(propRef);
-            var isDomainValue = IsDomainValueType(domain, prop.Type.TypeName);
-            List<Node>? constraints = null;
-            if (isRequired)
-                constraints = [new Constant("required")];
+        // ── Properties ────────────────────────────────────────────
+        AddEntityProperties(entity, domain, metadata, esm, entryAssignedProps,
+            props, ctorParams, ctorAssignments, defaultedCtorParams);
+        OrderScalarCtorSlots(esm, ctorParams, ctorAssignments);
 
-            // CS8618: the parameterless materialization ctor does not assign
-            // reference properties. Text uses `default!`. A required domain value record
-            // is default-constructed so a missing initializer is still non-null.
-            Syntactic.PropertyInitializerDefinitionNode? initializer = null;
-            if (IsNonNullableReferenceScalar(propertyType))
-                initializer = new Syntactic.PropertyInitializerDefinitionNode(
-                    new Syntactic.NullForgiving(new Syntactic.Default()));
-            else if (isDomainValue && isRequired)
-                initializer = new Syntactic.PropertyInitializerDefinitionNode(new New(propRef));
-
-            props.Add(new PropertyDefinitionNode(
-                prop.Name, propertyType,
-                Getter: new PropertyGetterDefinitionNode(),
-                // private set — domain state changes only through the Create factory /
-                // action effects (no same-assembly backdoor mutability).
-                Setter: new PropertySetterDefinitionNode(
-                    AccessModifier: AccessModifier.Private),
-                Initializer: initializer,
-                Constraints: constraints
-            ));
-
-            // Defaulted props become OPTIONAL ctor params (the DSL default is the C#
-            // default) so `create in { DefaultedProp: value }` overrides flow through
-            // construction — no setters, no post-create assignment.
-            var defaultValue = prop.Constraints.OfType<DefaultValueConstraint>().FirstOrDefault();
-            var paramName = ToCamelCase(prop.Name);
-            // Gym dogfood: Visits default(0) AND Active entry { assign Visits to 0 }
-            // made a dead ctor param (assign param, then overwrite with entry).
-            if (entryAssignedProps.Contains(prop.Name))
-                continue;
-            if (defaultValue is not null) {
-                var runtimeExpr = EffectLoweringPass.LowerDefaultExpression(
-                    defaultValue.Expression,
-                    new NamedTypeReference(prop.Type.TypeName),
-                    RuntimeAnalysisCache.MeaningFor(domain),
-                    RuntimeAnalysisCache.FormsFor(domain));
-                if (runtimeExpr is not null) {
-                    // Runtime default (now/today/guid) can't be a compile-time default —
-                    // T? = null sentinel; body applies the runtime default when null.
-                    defaultedCtorParams.Add(new Parameter(paramName,
-                        new OptionalTypeReference(propRef),
-                        DefaultValue: new Constant(null)));
-                    ctorAssignments.Add(new Assignment(
-                        new Member(new ThisReference(), prop.Name),
-                        new Syntactic.Coalesce(new Parameter(paramName), runtimeExpr)));
-                }
-                else {
-                    var defaultNode = LowerDefaultConstantNode(defaultValue, prop, domain, metadata);
-                    defaultedCtorParams.Add(new Parameter(paramName, propertyType, DefaultValue: defaultNode));
-                    ctorAssignments.Add(new Assignment(
-                        new Member(new ThisReference(), prop.Name),
-                        new Parameter(paramName)));
-                }
-                continue; // skip ctor param — handled as a trailing optional param
-            }
-
-            // Optional with no default: a trailing `T? = null` parameter assigned
-            // directly, so an omitted value stores null (not ""/0).
-            if (!isRequired) {
-                defaultedCtorParams.Add(new Parameter(paramName,
-                    new OptionalTypeReference(propRef),
-                    DefaultValue: new Constant(null)));
-                ctorAssignments.Add(new Assignment(
-                    new Member(new ThisReference(), prop.Name),
-                    new Parameter(paramName)));
-                continue;
-            }
-
-            // Required with no default — full constructor param + assignment.
-            ctorParams.Add(new Parameter(paramName, propRef));
-            ctorAssignments.Add(new Assignment(
-                new Member(new ThisReference(), prop.Name),
-                new Parameter(paramName)));
-        }
-
-        // ── Scalar constructor slots in the published ESM order ──
-        // Required scalars first, then optional assign-only scalars. Defaulted
-        // properties are not in this list; they stay in defaultedCtorParams.
-        var scalarOrder = esm.ConstructorParameters.Where(p => !p.IsNavigation).ToList();
-        if (scalarOrder.Count > 0 && ctorParams.Count > 0) {
-            var paramsByName = ctorParams.ToDictionary(p => p.Name, StringComparer.Ordinal);
-            var scalarProps = scalarOrder.Select(o => o.Name).ToHashSet(StringComparer.Ordinal);
-            var assignmentsByProp = ctorAssignments
-                .OfType<Assignment>()
-                .Where(a => a.Destination is Member { MemberName: var name }
-                    && scalarProps.Contains(name))
-                .GroupBy(a => ((Member)a.Destination).MemberName, StringComparer.Ordinal)
-                .ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
-            var retainedAssignments = ctorAssignments
-                .Where(a => a is not Assignment {
-                    Destination: Member { MemberName: var name }
-                } || !scalarProps.Contains(name))
-                .ToList();
-            var reordered = new List<Parameter>();
-            var assignments = new List<Node>();
-            foreach (var order in scalarOrder) {
-                var name = ToCamelCase(order.Name);
-                if (!paramsByName.TryGetValue(name, out var parameter))
-                    continue;
-                if (order.IsOptional)
-                    parameter = parameter with { DefaultValue = EmptyDefault(order.Type) };
-                reordered.Add(parameter);
-                assignments.Add(assignmentsByProp.TryGetValue(order.Name, out var assignment)
-                    ? assignment
-                    : new Assignment(
-                        new Member(new ThisReference(), order.Name),
-                        new Parameter(name)));
-            }
-            ctorParams.Clear();
-            ctorParams.AddRange(reordered);
-            ctorAssignments.Clear();
-            ctorAssignments.AddRange(assignments);
-            ctorAssignments.AddRange(retainedAssignments);
-        }
-
-        // ── Navigation properties (PascalCase; IReadOnlyList for collections) ──
-        foreach (var rel in domainRelationships) {
-            if (!string.Equals(rel.Source.TypeName, entity.Name, StringComparison.Ordinal))
-                continue;
-
-            var isMany = rel.Cardinality is RelationshipCardinality.OneToMany
-                         or RelationshipCardinality.ManyToMany;
-            var targetType = new NamedTypeReference(rel.Target.TypeName);
-            var pascalName = ToPascalCase(rel.Name);
-            var paramName = ToCamelCase(pascalName);
-
-            if (isMany) {
-                // Collection nav: private field, IEnumerable<T> constructor param,
-                // getter-only property. EF passes loaded items in via the constructor.
-                var fieldName = $"_{paramName}";
-                var listType = new NamedTypeReference("List",
-                    TypeArguments: [targetType]);
-                var readOnlyType = new NamedTypeReference("IReadOnlyList",
-                    TypeArguments: [targetType]);
-                var enumerableType = new NamedTypeReference("IEnumerable",
-                    TypeArguments: [targetType]);
-
-                fields.Add(new FieldDefinitionNode(
-                    fieldName,
-                    listType,
-                    DefaultValue: new New(listType),
-                    AccessModifier: AccessModifier.Private
-                ));
-
-                props.Add(new PropertyDefinitionNode(
-                    pascalName, readOnlyType,
-                    Getter: new PropertyGetterDefinitionNode(
-                        Body: new Member(new ThisReference(), fieldName)),
-                    IsReadOnly: true
-                ));
-
-                // Create{Nav} is the typed create-in. A relationship with no create-in
-                // on this entity does not get a factory (Order.CreateCustomer).
-                if (EffectHelpers.CreatesIn(entity, rel.Name))
-                    AddCreateNavMethod(entity, rel, domain!, subscriberSubs, fieldName, methods, metadata);
-                AddAttachNavMethod(entity, rel, subscriberSubs, fieldName, methods);
-            }
-            else {
-                // Singular nav: property with private setter (constructor param).
-                // Navs are optional references (set at link/create time, may be null
-                // at EF materialization) — emit nullable so the generated code has
-                // no non-nullable-uninitialized warnings (CS8618).
-                if (EffectHelpers.CreatesIn(entity, rel.Name))
-                    AddCreateSingularNavMethod(entity, rel, domain!, subscriberSubs, methods, metadata);
-                props.Add(new PropertyDefinitionNode(
-                    pascalName, new OptionalTypeReference(targetType),
-                    Getter: new PropertyGetterDefinitionNode(),
-                    Setter: new PropertySetterDefinitionNode(
-                        AccessModifier: AccessModifier.Private)
-                ));
-            }
-        }
-
-        // ── Constructor params for navs — from the COMPLETE signature (ESM) ──
-        // EntityStructureMetadata.ConstructorParameters now includes collection navs
-        // (IsCollection). This is the single source of truth for the emitted Create(...)
-        // signature — no per-consumer re-derivation of cardinality/order here (the
-        // callers already read the same bag). Order matches the nav loop above
-        // (relationship order), so output is unchanged.
-        foreach (var navParam in esm.ConstructorParameters.Where(p => p.IsNavigation)) {
-            var paramName = ToCamelCase(navParam.Name);
-            if (navParam.IsCollection) {
-                var fieldName = $"_{paramName}";
-                var targetType = new NamedTypeReference(navParam.Type.TypeName);
-                var listType = new NamedTypeReference("List", TypeArguments: [targetType]);
-                var enumerableType = new NamedTypeReference("IEnumerable", TypeArguments: [targetType]);
-                ctorParams.Add(new Parameter(
-                    paramName,
-                    new OptionalTypeReference(enumerableType),
-                    DefaultValue: new Constant(null)));
-                ctorAssignments.Add(new Assignment(
-                    new Member(new ThisReference(), fieldName),
-                    new New(listType, [
-                        new Syntactic.Coalesce(
-                            new Parameter(paramName),
-                            new New(listType))])));
-            }
-            else {
-                // Singular nav (incl. back-reference): optional (unlinked at create).
-                var pascalName = ToPascalCase(navParam.Name);
-                var propRef = new OptionalTypeReference(
-                    MapDomainTypeRef(navParam.Type, domain, metadata));
-                ctorParams.Add(new Parameter(
-                    paramName, propRef, DefaultValue: new Constant(null)));
-                ctorAssignments.Add(new Assignment(
-                    new Member(new ThisReference(), pascalName),
-                    new Parameter(paramName)));
-            }
-        }
+        // ── Relationships ─────────────────────────────────────────
+        AddNavigationMembers(entity, domain, domainRelationships, metadata, subscriberSubs,
+            props, fields, methods);
+        AddNavigationCtorParameters(esm, domain, metadata, ctorParams, ctorAssignments);
 
         // Defaulted props trail the required scalar + nav params (optional params must
         // come last). Appended here so the Create/ctor signatures carry them as overridable
@@ -524,487 +142,27 @@ public sealed partial class DomainToCSharpExporter {
             previousStageNotifyStages, domain, metadata, splice);
 
         // ── Policies as bool methods ──────────────────────────────
-        // One unqualified method per policy name. Entity, stage, and action-local
-        // definitions share that namespace with the action methods. A require copy
-        // (same expression instance as the definition) and a not_ use do not emit a
-        // second method, whether the require sits on a stage or an action. Any other
-        // name clash throws (analysis reports it first).
-        var definedPolicies = new Dictionary<string, Policy>(StringComparer.Ordinal);
-        void AddPolicyMethod(Policy policy) {
-            if (methods.Exists(m => string.Equals(m.Name, policy.Name, StringComparison.Ordinal)))
-                throw new InvalidOperationException(
-                    $"Policy '{policy.Name}' is already defined on entity '{entity.Name}'.");
-            definedPolicies.Add(policy.Name, policy);
-            var body = LowerExpressionToMethodBody(policy.Expression, entity, domain, analysis: metadata);
-            if (body is not null)
-                policyBodies?.Add((entity.Name, policy.Name), body);
-            methods.Add(new MethodDefinitionNode(
-                policy.Name,
-                new PrimitiveTypeReference(PrimType.Boolean),
-                Body: body,
-                AccessModifier: AccessModifier.Public
-            ));
-        }
+        AddPolicyMethods(entity, domain, metadata, methods, policyBodies);
 
-        bool IsRequireUse(Policy policy) =>
-            policy.Name.StartsWith("not_", StringComparison.Ordinal)
-            || (definedPolicies.TryGetValue(policy.Name, out var existing)
-                && ReferenceEquals(existing.Expression, policy.Expression));
-
-        foreach (var policy in entity.Policies)
-            AddPolicyMethod(policy);
-        foreach (var stage in entity.Stages)
-            foreach (var policy in stage.Policies)
-                if (!IsRequireUse(policy))
-                    AddPolicyMethod(policy);
-        foreach (var action in entity.Actions.Concat(entity.Stages.SelectMany(s => s.Actions)))
-            foreach (var policy in action.Policies)
-                if (!IsRequireUse(policy))
-                    AddPolicyMethod(policy);
-
-        // ── Target entity: subscription registry ──────────────────
-        // One registry field + register method per (relationship, stage, subscriber)
-        // triple; the notify method calls EVERY subscription's handler for that
-        // triple — a subscriber may declare any/all/Each (or multiple Each) reactions
-        // on the same relation+stage, each with a quantifier-disambiguated handler name.
-        if (targetSubs is { Count: > 0 }) {
-            var groups = targetSubs
-                .GroupBy(i => (i.StageName, i.SourceEntity.Name, i.Relationship.Name))
-                .Select(g => g.ToList())
-                .ToList();
-            foreach (var infos in groups) {
-                var srcType = new NamedTypeReference(infos[0].SourceEntity.Name);
-                var fieldName = SubscriberRegistryFieldName(infos[0]);
-                var paramName = "subscriber";
-
-                fields.Add(new FieldDefinitionNode(
-                    fieldName,
-                    new OptionalTypeReference(
-                        new NamedTypeReference("List",
-                            TypeArguments: [srcType])),
-                    AccessModifier: AccessModifier.Private
-                ));
-
-                var fieldAcc = new Member(new ThisReference(), fieldName);
-                // Idempotent registration: a create-in child is already linked by
-                // the store under simulate, and printed hosts may attach twice.
-                // ReferenceEquals keeps distinct-but-equal records from deduping.
-                // The body must use this parameter, not a same-named copy: a copy
-                // has no type, so the VM cannot place the argument.
-                var existing = new Variable("existing");
-                var subscriber = new Parameter(paramName, srcType);
-                var registerBody = new Block([
-                    new IfStatement(
-                        new Equal(fieldAcc, new Constant(null)),
-                        new Block([
-                            new Assignment(fieldAcc,
-                                new New(
-                                    new NamedTypeReference("List",
-                                        TypeArguments: [srcType])))
-                        ])),
-                    new ForEachLoop(
-                        existing,
-                        fieldAcc,
-                        new IfStatement(
-                            new Invoke(
-                                new Member(new ClrTypeReference(typeof(object)), "ReferenceEquals"),
-                                [existing, subscriber]),
-                            new Block([new Return(null)]))),
-                    new Invoke(
-                        new Member(fieldAcc, "Add"),
-                        [subscriber])
-                ]);
-                methods.Add(new MethodDefinitionNode(
-                    SubscriberRegisterMethodName(infos[0]),
-                    new TypeReference("void"),
-                    Parameters: [subscriber],
-                    Body: registerBody,
-                    AccessModifier: AccessModifier.Internal
-                ));
-            }
-
-            // One Notify{Stage}Subscribers per watched stage, fanning out every
-            // (source, relationship, stage) registry. Two subscribers on the same
-            // target stage (Student + Section on Enrollment.Dropped) used to emit
-            // duplicate _droppedSubscribers / NotifyDroppedSubscribers members.
-            foreach (var stageGroup in groups.GroupBy(infos => infos[0].StageName)) {
-                // Nullable: a create-in lands the child in its first stage with no prior
-                // stage, so the caller passes null. `when all` guards read it as
-                // "transitioned from" and a fresh entry must not match.
-                var needsPrevious = stageGroup.Any(infos => infos.Any(NeedsAllPreviousStage));
-                var notifyPrevious = new Parameter(
-                    "previousStage",
-                    new OptionalTypeReference(new NamedTypeReference(stageEnumTypeName!)));
-                var notifyNodes = new List<Node>();
-                foreach (var infos in stageGroup) {
-                    var fieldName = SubscriberRegistryFieldName(infos[0]);
-                    var notifyCalls = infos.Select(info => {
-                        var args = new List<Node>();
-                        if (HasPeerBinding(info))
-                            args.Add(new ThisReference());
-                        if (NeedsAllPreviousStage(info))
-                            args.Add(notifyPrevious);
-                        return (Node)new Invoke(
-                            new Member(new Variable("sub"), handlerNames![info]),
-                            [.. args]);
-                    }).ToList();
-                    notifyNodes.Add(new IfStatement(
-                        new NotEqual(
-                            new Member(new ThisReference(), fieldName),
-                            new Constant(null)),
-                        new ForEachLoop(
-                            new Variable("sub"),
-                            new Member(new ThisReference(), fieldName),
-                            new Block(notifyCalls))));
-                }
-                methods.Add(new MethodDefinitionNode(
-                    $"Notify{stageGroup.Key}Subscribers",
-                    new TypeReference("void"),
-                    Parameters: needsPrevious ? [notifyPrevious] : null,
-                    Body: new Block([
-                        new Invoke(
-                            new Member(new ThisReference(), "EnterNotifyCascade"),
-                            new Constant(stageGroup.Key)),
-                        new TryCatchFinally(
-                            notifyNodes.Count == 1 ? notifyNodes[0] : new Block(notifyNodes),
-                            FinallyBlock: new Invoke(
-                                new Member(new ThisReference(), "ExitNotifyCascade")))
-                    ]),
-                    AccessModifier: AccessModifier.Internal
-                ));
-            }
-        }
-
-        // ── Subscriber entity: subscription handler methods ──────
-        if (subscriberSubs is { Count: > 0 }) {
-            foreach (var info in subscriberSubs) {
-                var handlerName = handlerNames![info];
-                var peerBinding = info.Subscription.PeerBinding;
-                var targetStageEnumName = metadata.GetStructure(info.TargetEntity)
-                    ?.StageEnumTypeName ?? $"{info.TargetEntity.Name}Stage";
-                Parameter? previousStageParam = NeedsAllPreviousStage(info)
-                    ? new Parameter("previousStage",
-                        new OptionalTypeReference(new NamedTypeReference(targetStageEnumName)))
-                    : null;
-                var handlerParamList = new List<Parameter>();
-                if (HasPeerBinding(info))
-                    handlerParamList.Add(new Parameter(peerBinding!, new NamedTypeReference(info.TargetEntity.Name)));
-                if (previousStageParam is not null)
-                    handlerParamList.Add(previousStageParam);
-                IReadOnlyList<Parameter>? handlerParams = handlerParamList.Count > 0
-                    ? handlerParamList
-                    : null;
-
-                // Lower subscription effects into the handler body.
-                // Peer path-prefix roots (binder name) resolve via Parameters to the
-                // peer method parameter; bare props / this stay on the subscriber.
-                var subscriptionEffects = info.Subscription.Effects;
-                Node handlerBody;
-                if (subscriptionEffects.Count > 0) {
-                    IReadOnlyDictionary<string, Node>? peerParams = null;
-                    if (HasPeerBinding(info)) {
-                        peerParams = new Dictionary<string, Node>(StringComparer.Ordinal) {
-                            [peerBinding!] = new Parameter(peerBinding!, new NamedTypeReference(info.TargetEntity.Name))
-                        };
-                    }
-                    var context = new LoweringContext(
-                        new ThisReference(),
-                        Parameters: peerParams,
-                        Analysis: metadata,
-                        Domain: domain,
-                        EnumPropertyNames: esm.EnumPropertyNames,
-                        LifecyclePropertyName: esm.LifecyclePropertyName,
-                        LifecycleEnumTypeName: esm.LifecycleEnumTypeName,
-                        PostTransitionNotifyStages: postTransitionNotifyStages,
-                        PreviousStageNotifyStages: previousStageNotifyStages);
-                    var effectPass = new EffectLoweringPass(entity, context);
-                    var composite = new CompositeEffect(subscriptionEffects);
-                    handlerBody = effectPass.TryLowerVmNode(composite)
-                        ?? throw new InvalidOperationException(
-                            "Subscription effects could not be lowered to a Syntax AST node.");
-                    // A subscription is its own trigger for the automatic-transition loop guard.
-                    if (EffectHelpers.HasAutomaticTransitions(entity))
-                        handlerBody = Prefixed(
-                            [new Invoke(new Member(new ThisReference(), "ClearAutomaticStageChain"))],
-                            handlerBody);
-                }
-                else {
-                    handlerBody = new Block([]);
-                }
-
-                // Stage-scoped subscriptions (`when` inside a subscriber stage) fire only
-                // while the subscriber is in that stage — the handler returns when
-                // CurrentStage has moved on. Entity-level subscriptions
-                // (SubscriberStageName == null) are always active.
-                if (info.SubscriberStageName is { Length: > 0 }) {
-                    var stageGate = new IfStatement(
-                        new NotEqual(
-                            new Member(new ThisReference(), "CurrentStage"),
-                            new Member(new NamedTypeReference(stageEnumTypeName!), info.SubscriberStageName)),
-                        new Block([new Return()]));
-                    handlerBody = Prefixed([stageGate], handlerBody);
-                }
-
-                // `when all Rel Stage…` fires once, on the transition where the last
-                // linked record reaches a watched stage (union of StageNames). At least
-                // one linked record must exist. Later transitions while every linked
-                // record still matches do not fire again.
-                if (previousStageParam is not null) {
-                    var linkedVar = new Variable("linkedTarget");
-                    var matchedVar = new Variable("linkedMatched");
-                    var currentStage = new Member(linkedVar, "CurrentStage");
-                    var gateLoop = new ForEachLoop(
-                        linkedVar,
-                        new Member(new ThisReference(), ToPascalCase(info.Relationship.Name)),
-                        new Block([
-                            new Assignment(matchedVar, new Constant(true)),
-                            new IfStatement(
-                                NotInWatchedStages(
-                                    currentStage, targetStageEnumName, info.Subscription.StageNames),
-                                new Block([new Return()]))
-                        ]));
-                    var emptyCheck = new IfStatement(
-                        new Poly.Ast.Nodes.Not(matchedVar),
-                        new Block([new Return()]));
-                    var alreadyWatched = new IfStatement(
-                        InWatchedStages(
-                            previousStageParam, targetStageEnumName, info.Subscription.StageNames),
-                        new Block([new Return()]));
-                    handlerBody = Prefixed(
-                        [
-                            new Assignment(matchedVar, new Constant(false)),
-                            gateLoop,
-                            emptyCheck,
-                            alreadyWatched
-                        ],
-                        handlerBody,
-                        [matchedVar]);
-                }
-
-                // `when any Rel Stage…` is level-triggered: on each notified
-                // transition it fires whenever at least one linked record is in
-                // any watched stage (union of StageNames).
-                if (info.Subscription.Quantifier == StageSubscriptionQuantifier.Any
-                    && metadata.GetStructure(info.TargetEntity)?.HasStages == true
-                    && info.Subscription.StageNames.Count > 0) {
-                    var linkedVar = new Variable("linkedTarget");
-                    var matchedVar = new Variable("linkedMatched");
-                    var gateLoop = new ForEachLoop(
-                        linkedVar,
-                        new Member(new ThisReference(), ToPascalCase(info.Relationship.Name)),
-                        new Block([
-                            new IfStatement(
-                                InWatchedStages(
-                                    new Member(linkedVar, "CurrentStage"),
-                                    targetStageEnumName,
-                                    info.Subscription.StageNames),
-                                new Block([
-                                    new Assignment(matchedVar, new Constant(true))
-                                ]))
-                        ]));
-                    var noneMatched = new IfStatement(
-                        new Poly.Ast.Nodes.Not(matchedVar),
-                        new Block([new Return()]));
-                    handlerBody = Prefixed(
-                        [new Assignment(matchedVar, new Constant(false)), gateLoop, noneMatched],
-                        handlerBody,
-                        [matchedVar]);
-                }
-
-                if (subscriptionBodies is not null) {
-                    if (!subscriptionBodies.TryGetValue(info.Subscription, out var byStage)) {
-                        byStage = new Dictionary<string, Node>(StringComparer.Ordinal);
-                        subscriptionBodies[info.Subscription] = byStage;
-                    }
-                    byStage.TryAdd(info.StageName, handlerBody);
-                }
-
-                methods.Add(new MethodDefinitionNode(
-                    handlerName,
-                    new TypeReference("void"),
-                    Parameters: handlerParams,
-                    Body: handlerBody,
-                    AccessModifier: AccessModifier.Internal
-                ));
-            }
-        }
+        // ── Notify dispatch and handlers ──────────────────────────
+        AddSubscriptionRegistry(targetSubs, stageEnumTypeName, handlerNames, fields, methods);
+        AddSubscriptionHandlers(entity, domain, metadata, esm, subscriberSubs, handlerNames,
+            postTransitionNotifyStages, previousStageNotifyStages, stageEnumTypeName,
+            subscriptionBodies, methods);
 
         // ── Stage enum + CurrentStage property ────────────────────
-        if (esm.HasStages) {
-            var enumTypeName = stageEnumTypeName!;
-            typeDefs.Add(BuildEnumTypeDef(enumTypeName, entity.Stages.Select(s => s.Name)));
-
-            props.Add(new PropertyDefinitionNode(
-                "CurrentStage",
-                new NamedTypeReference(enumTypeName),
-                Getter: new PropertyGetterDefinitionNode(),
-                Setter: new PropertySetterDefinitionNode(
-                    AccessModifier: AccessModifier.Private)
-            ));
-        }
+        AddStageMembers(entity, esm, stageEnumTypeName, typeDefs, props);
 
         // ── Private constructor + public static Create factory ─────
-        // Every entity publishes Create, including one with no slots, so
-        // a type-name call resolves. No slots and no stages still emit a
-        // single private parameterless constructor (CS0111).
-        List<ConstructorDefinitionNode>? ctors = null;
-        {
-            var bodyNodes = new List<Node>();
-            bodyNodes.AddRange(ctorAssignments);
-
-            if (esm.HasStages) {
-                var firstStage = entity.Stages[0];
-                bodyNodes.Add(new Assignment(
-                    new Member(new ThisReference(), "CurrentStage"),
-                    new Member(
-                        new NamedTypeReference(stageEnumTypeName!),
-                        firstStage.Name)));
-
-                // Apply the initial stage's entry effects in the constructor.
-                // This ensures properties set by entry effects (e.g. "entry { assign
-                // CheckedOutAt to now }" on Loan.Active) are initialized during
-                // construction, not just during explicit stage transitions.
-                if (firstStage.OnEntryEffects.Count > 0) {
-                    var entryCtx = new LoweringContext(
-                        new ThisReference(),
-                        Analysis: metadata,
-                        Domain: domain,
-                        StageEnumTypeName: stageEnumTypeName,
-                        EnumPropertyNames: esm.EnumPropertyNames,
-                        LifecyclePropertyName: esm.LifecyclePropertyName,
-                        LifecycleEnumTypeName: esm.LifecycleEnumTypeName,
-                        PostTransitionNotifyStages: postTransitionNotifyStages,
-                        PreviousStageNotifyStages: previousStageNotifyStages,
-                        SourceStageName: firstStage.Name);
-                    var entryPass = new EffectLoweringPass(entity, entryCtx);
-                    entryPass.AppendInlinedStageEffects(firstStage.OnEntryEffects, bodyNodes);
-                }
-            }
-
-            // InitializeSubscriptions is called as the last step so that all
-            // state (including collections passed from data-store materialization)
-            // is set before subscription wiring runs.
-            if (subscriberSubs is { Count: > 0 }) {
-                bodyNodes.Add(new Invoke(
-                    new Member(new ThisReference(), "InitializeSubscriptions")));
-            }
-
-            // Private parameterless constructor only when a persistence pack is
-            // loaded (EF materialization). Collection fields carry their list
-            // initializer, so this ctor is always empty (D9).
-            var hasPersistence = metadata.GetMetadata<PersistenceSurfaceMetadata>(domain) is not null;
-            if (ctorParams.Count > 0 && hasPersistence) {
-                ctors = [new ConstructorDefinitionNode(
-                    Parameters: null,
-                    Body: null,
-                    AccessModifier: AccessModifier.Private
-                )];
-            }
-            else {
-                ctors = [];
-            }
-            ctors = [.. ctors, new ConstructorDefinitionNode(
-                Parameters: ctorParams,
-                Body: bodyNodes.Count > 0 ? new Block(bodyNodes) : null,
-                AccessModifier: AccessModifier.Private
-            )];
-
-            // public static DomainResult<EntityName> Create(args...)
-            var createResultType = new NamedTypeReference("DomainResult",
-                TypeArguments: [new NamedTypeReference(entity.Name)]);
-
-            // Build constraint validation checks before the constructor call.
-            // Only entity properties (not navigations) are validated — navs
-            // don't carry constraints in the current model.
-            var constraintChecks = BuildCreateConstraintChecks(
-                entity, domain, esm.EntryAssignedPropertyNames, metadata, ctorParams);
-
-            // Construct, then Success. Create is the unique-inverse attach source
-            // (Attach* when count==1); CreateNav/BindCreate defer Add/Register when
-            // that attach ran. Ambiguous peer collections (count>1) skip Attach —
-            // same as the inverse-link rule — so named create-in can
-            // fallback-_field.Add. OneToOne (no collection inverse) leaves the
-            // ctor to-one only. Null peer is a no-op.
-            var createSuccessNodes = new List<Node>();
-            createSuccessNodes.AddRange(constraintChecks);
-            var createdLocal = new Variable("created");
-            var createLocals = new List<Node> { createdLocal };
-            createSuccessNodes.Add(new Assignment(
-                createdLocal,
-                new New(
-                    new NamedTypeReference(entity.Name),
-                    ctorParams.ToArray())));
-            var lookup = metadata.GetTypeLookup(domain);
-            foreach (var navParam in esm.ConstructorParameters
-                .Where(p => p.IsNavigation && !p.IsCollection)) {
-                var paramName = ToCamelCase(navParam.Name);
-                // The signature parameter, not a same-named copy. A copy has no
-                // type, so the VM reads an empty slot and skips Attach.
-                var paramRef = ctorParams.FirstOrDefault(p =>
-                    string.Equals(p.Name, paramName, StringComparison.Ordinal));
-                if (paramRef is null)
-                    continue;
-                var peerTypeName = navParam.Type.TypeName;
-                Entity? peerEntity = null;
-                if (lookup is not null
-                    && lookup.Types.TryGetValue(peerTypeName, out var resolvedPeer)
-                    && resolvedPeer is Entity pe)
-                    peerEntity = pe;
-                else
-                    peerEntity = domain.Types.OfType<Entity>()
-                        .FirstOrDefault(e => string.Equals(e.Name, peerTypeName, StringComparison.Ordinal));
-
-                // Unique collection inverse on the peer (FindInverseCollectionInfo).
-                // count == 0: OneToOne / no
-                // collection — ctor already set the to-one. count > 1: skip Attach
-                // (named create-in CreateNav fallback Add). count == 1: Attach*.
-                var inverse = peerEntity is not null
-                    ? FindInverseCollectionInfo(peerEntity, entity.Name).Unique
-                    : null;
-
-                if (inverse is null)
-                    continue;
-
-                createSuccessNodes.Add(new IfStatement(
-                    new NotEqual(paramRef, new Constant(null)),
-                    new Block([
-                        new Invoke(
-                            new Member(paramRef, $"Attach{ToPascalCase(inverse.Name)}"),
-                            [createdLocal])
-                    ])));
-            }
-
-            createSuccessNodes.Add(new Return(
-                new Invoke(
-                    new Member(createResultType, "Success"),
-                    [createdLocal])));
-
-            methods.Add(new MethodDefinitionNode(
-                "Create",
-                createResultType,
-                Parameters: ctorParams,
-                Body: new Block(createSuccessNodes, createLocals),
-                IsStatic: true,
-                AccessModifier: AccessModifier.Public
-            ));
-        }
+        var ctors = AddCreateFactory(entity, domain, metadata, esm, stageEnumTypeName,
+            postTransitionNotifyStages, previousStageNotifyStages, subscriberSubs,
+            ctorParams, ctorAssignments, methods);
 
         // Generated C# fans out via Notify{Stage}Subscribers; do not emit a
         // no-op Notify(string) (Fleet dogfood).
 
         // ── InitializeSubscriptions — for post-load subscription wiring ──
-        if (subscriberSubs is { Count: > 0 }) {
-            var initBody = new List<Node>();
-            AddSubscriberRegistrationNodes(subscriberSubs, initBody);
-            if (initBody.Count > 0) {
-                methods.Add(new MethodDefinitionNode(
-                    "InitializeSubscriptions",
-                    new TypeReference("void"),
-                    Body: new Block(initBody),
-                    AccessModifier: AccessModifier.Private
-                ));
-            }
-        }
+        AddSubscriptionInitializer(subscriberSubs, methods);
 
         if (entity.Properties.Any(p => p.Constraints.OfType<UniqueConstraint>().Any())) {
             methods.Add(EnsureUniqueAssignMethod(entity));
@@ -1026,44 +184,315 @@ public sealed partial class DomainToCSharpExporter {
         return typeDefs;
     }
 
-    /// <summary>
-    /// Assign of a unique property calls <c>this.EnsureUnique</c>. The same value
-    /// already on this instance is Success. A different value fails closed: this method holds
-    /// no storage port. The storage library rewrites every EnsureUnique-then-assign into
-    /// <c>db.Exists</c>/<c>Release</c>/<c>Record</c> on the <c>IStoragePort</c> the action receives,
-    /// so a module compiled with storage never reaches this failure.
-    /// </summary>
-    private static MethodDefinitionNode EnsureUniqueAssignMethod(Entity entity) {
-        var propertyName = new Parameter("propertyName", new PrimitiveTypeReference(PrimType.String));
-        var value = new Parameter("value", StoreJobObjectType());
-        var nodes = new List<Node> {
-            new IfStatement(
-                new Equal(value, new Constant(null)),
-                new Block([DomainResultSuccess()]))
-        };
-        foreach (var prop in entity.Properties.OrderBy(p => p.Name, StringComparer.Ordinal)) {
-            if (!prop.Constraints.OfType<UniqueConstraint>().Any())
-                continue;
-            nodes.Add(new IfStatement(
-                new Syntactic.And(
-                    new Equal(propertyName, new Constant(prop.Name)),
-                    new Invoke(
-                        new Member(new ClrTypeReference(typeof(object)), "Equals"),
-                        new Member(new ThisReference(), prop.Name),
-                        value)),
-                new Block([DomainResultSuccess()])));
-        }
-        nodes.Add(new Return(new Invoke(
-            new Member(new NamedTypeReference("DomainResult"), "Failure"),
-            new Constant("A unique assign needs the storage port."))));
-        return new MethodDefinitionNode(
-            "EnsureUnique",
-            new NamedTypeReference("DomainResult"),
-            Parameters: [propertyName, value],
-            Body: new Block(nodes),
-            AccessModifier: AccessModifier.Public);
+    // ── Type mapping ────────────────────────────────────────────
+
+    internal static Node MapDomainTypeRef(DomainTypeReference domainType,
+        Domain domain, INodeMetadataProvider analysis) {
+        var typeName = domainType.TypeName;
+
+        // Enum types and entity references both emit NamedTypeReference(typeName):
+        // the catalog is the single source of truth and no tree scan is performed (amu-w3-1).
+        var clr = RuntimeAnalysisCache.ClrTypeName(domain, typeName);
+        if (DomainTypeMapping.TryPrimitiveType(clr, out var prim))
+            return new PrimitiveTypeReference(prim);
+        return new NamedTypeReference(typeName);
     }
 
-    private static Return DomainResultSuccess() =>
-        new(new Invoke(new Member(new NamedTypeReference("DomainResult"), "Success")));
+    internal static bool TryResolveEnumType(Domain domain, INodeMetadataProvider analysis, string typeName, out EnumType? enumType) {
+        enumType = null;
+
+        // Catalog only: fail closed (no domain tree rescan).
+        var lookup = analysis.GetTypeLookup(domain);
+        if (lookup is not null
+            && lookup.Types.TryGetValue(typeName, out var resolvedType)
+            && resolvedType is EnumType resolvedEnum) {
+            enumType = resolvedEnum;
+            return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Builds a map from property name → enum type name for all properties of
+    /// <paramref name="entity"/> whose type resolves to an <see cref="EnumType"/>.
+    /// Used by the expression lowering pass to emit qualified enum member access.
+    /// Catalog-only.
+    /// </summary>
+    /// <summary>
+    /// Returns the entity's enum-typed property map (property name → enum type name),
+    /// preferring the published <see cref="EntityStructureMetadata.EnumPropertyNames"/>
+    /// bag and falling back to the catalog type lookup when the bag is absent.
+    /// </summary>
+    internal static IReadOnlyDictionary<string, string>? GetEnumPropertyNames(
+        Entity entity, Domain domain, INodeMetadataProvider analysis) {
+        if (analysis.GetStructure(entity) is { EnumPropertyNames: not null } esm)
+            return esm.EnumPropertyNames;
+        return BuildEnumPropertyNames(entity, domain, analysis);
+    }
+
+    internal static Dictionary<string, string>? BuildEnumPropertyNames(
+        Entity entity, Domain domain, INodeMetadataProvider analysis) {
+        Dictionary<string, string>? map = null;
+        var types = (analysis.GetTypeLookup(domain)
+            ?? throw new InvalidOperationException(
+                "Domain catalog type lookup is required for enum property mapping.")).Types;
+
+        foreach (var prop in entity.Properties) {
+            if (types.TryGetValue(prop.Type.TypeName, out var resolved)
+                && resolved is EnumType) {
+                (map ??= new(StringComparer.Ordinal))[prop.Name] = prop.Type.TypeName;
+            }
+        }
+        return map;
+    }
+
+    // ── DomainResult infrastructure type builders ───────────────
+
+    /// <summary>
+    /// Builds the <c>DomainResult</c> record struct: a discrimated-union-like
+    /// result type for void actions. Methods return <c>DomainResult.Success()</c>
+    /// or <c>DomainResult.Failure(message)</c> instead of throwing or returning void.
+    /// Consumers switch on <see cref="IsSuccess"/> to handle success/failure.
+    /// </summary>
+    internal static TypeDefinitionNode BuildDomainResultTypeDef() {
+        // public readonly record struct DomainResult
+        // {
+        //     public bool IsSuccess { get; }
+        //     public string? ErrorMessage { get; }
+        //
+        //     private DomainResult(bool isSuccess, string? errorMessage)
+        //     {
+        //         IsSuccess = isSuccess;
+        //         ErrorMessage = errorMessage;
+        //     }
+        //
+        //     public static DomainResult Success() => new(true, null);
+        //     public static DomainResult Failure(string message) => new(false, message);
+        // }
+
+        var props = new List<PropertyDefinitionNode>
+        {
+            new("IsSuccess",
+                new PrimitiveTypeReference(PrimType.Boolean),
+                Getter: new PropertyGetterDefinitionNode()),
+            new("ErrorMessage",
+                new OptionalTypeReference(
+                    new PrimitiveTypeReference(PrimType.String)),
+                Getter: new PropertyGetterDefinitionNode()),
+        };
+
+        var ctor = new ConstructorDefinitionNode(
+            Parameters: [
+                new Parameter("isSuccess",
+                    new PrimitiveTypeReference(PrimType.Boolean)),
+                new Parameter("errorMessage",
+                    new OptionalTypeReference(
+                        new PrimitiveTypeReference(PrimType.String))),
+            ],
+            Body: new Block([
+                new Assignment(
+                    new Member(new ThisReference(), "IsSuccess"),
+                    new Parameter("isSuccess")),
+                new Assignment(
+                    new Member(new ThisReference(), "ErrorMessage"),
+                    new Parameter("errorMessage")),
+            ]),
+            AccessModifier: AccessModifier.Private
+        );
+
+        var methods = new List<MethodDefinitionNode>
+        {
+            new("Success",
+                new NamedTypeReference("DomainResult"),
+                Body: new Block([
+                    new Return(
+                        new New(
+                            new NamedTypeReference("DomainResult"),
+                            new Constant(true),
+                            new Constant(null)))
+                ]),
+                IsStatic: true,
+                AccessModifier: AccessModifier.Public),
+            new("Failure",
+                new NamedTypeReference("DomainResult"),
+                Parameters: [
+                    new Parameter("message",
+                        new PrimitiveTypeReference(PrimType.String))
+                ],
+                Body: new Block([
+                    new Return(
+                        new New(
+                            new NamedTypeReference("DomainResult"),
+                            new Constant(false),
+                            new Parameter("message")))
+                ]),
+                IsStatic: true,
+                AccessModifier: AccessModifier.Public),
+        };
+
+        return new TypeDefinitionNode(
+            "DomainResult",
+            Properties: props,
+            Constructors: [ctor],
+            Methods: methods,
+            Semantics: Syntactic.TypeDefinitionSemantics.ImmutableValue
+        );
+    }
+
+    /// <summary>
+    /// Printed twin of runtime <c>ConstraintFailureException</c>: a
+    /// string-message exception that void OnEntry / ctor / subscription trees throw.
+    /// </summary>
+    internal static TypeDefinitionNode BuildConstraintFailureExceptionTypeDef() {
+        var ctor = new ConstructorDefinitionNode(
+            Parameters: [
+                new Parameter("message",
+                    new PrimitiveTypeReference(PrimType.String))
+            ],
+            BaseCall: [new Parameter("message")]
+        );
+        return new TypeDefinitionNode(
+            "ConstraintFailureException",
+            Constructors: [ctor],
+            BaseType: new NamedTypeReference("System.Exception")
+        );
+    }
+
+    /// <summary>
+    /// Builds the <c>DomainResult&lt;T&gt;</c> generic record: a typed result
+    /// for non-void actions. Returns <c>DomainResult&lt;T&gt;.Success(value)</c> or
+    /// <c>DomainResult&lt;T&gt;.Failure(message)</c>. <c>Value</c> stays non-nullable
+    /// <c>T</c> and throws when the result failed. The getter is an expression over
+    /// a private method because <c>CSharpReader</c> accepts <c>get;</c> and
+    /// <c>get =&gt; expr</c>, not a block-bodied getter.
+    /// </summary>
+    internal static TypeDefinitionNode BuildDomainResultGenericTypeDef() {
+        // public record DomainResult<T>
+        // {
+        //     private T _value;
+        //     public bool IsSuccess { get; }
+        //     public T Value => this.GetValue();
+        //     public string? ErrorMessage { get; }
+        //
+        //     private DomainResult(bool isSuccess, T value, string? errorMessage)
+        //     {
+        //         IsSuccess = isSuccess;
+        //         _value = value;
+        //         ErrorMessage = errorMessage;
+        //     }
+        //
+        //     public static DomainResult<T> Success(T value) => new(true, value, null);
+        //     public static DomainResult<T> Failure(string message) => new(false, default!, message);
+        //     private T GetValue()
+        //     {
+        //         if (!this.IsSuccess)
+        //             throw new System.InvalidOperationException("A failed DomainResult has no Value.");
+        //         return this._value;
+        //     }
+        // }
+
+        var tParam = new NamedTypeReference("T");
+        var actionResultT = new NamedTypeReference("DomainResult",
+            TypeArguments: [tParam]);
+
+        var props = new List<PropertyDefinitionNode>
+        {
+            new("IsSuccess",
+                new PrimitiveTypeReference(PrimType.Boolean),
+                Getter: new PropertyGetterDefinitionNode()),
+            new("Value", tParam,
+                Getter: new PropertyGetterDefinitionNode(
+                    new Invoke(new Member(new ThisReference(), "GetValue")))),
+            new("ErrorMessage",
+                new OptionalTypeReference(
+                    new PrimitiveTypeReference(PrimType.String)),
+                Getter: new PropertyGetterDefinitionNode()),
+        };
+
+        var ctor = new ConstructorDefinitionNode(
+            Parameters: [
+                new Parameter("isSuccess",
+                    new PrimitiveTypeReference(PrimType.Boolean)),
+                new Parameter("value", tParam),
+                new Parameter("errorMessage",
+                    new OptionalTypeReference(
+                        new PrimitiveTypeReference(PrimType.String))),
+            ],
+            Body: new Block([
+                new Assignment(
+                    new Member(new ThisReference(), "IsSuccess"),
+                    new Parameter("isSuccess")),
+                new Assignment(
+                    new Member(new ThisReference(), "_value"),
+                    new Parameter("value")),
+                new Assignment(
+                    new Member(new ThisReference(), "ErrorMessage"),
+                    new Parameter("errorMessage")),
+            ]),
+            AccessModifier: AccessModifier.Private
+        );
+
+        var methods = new List<MethodDefinitionNode>
+        {
+            new("Success", actionResultT,
+                Parameters: [
+                    new Parameter("value", tParam)
+                ],
+                Body: new Block([
+                    new Return(
+                        new New(actionResultT,
+                            new Constant(true),
+                            new Parameter("value"),
+                            new Constant(null)))
+                ]),
+                IsStatic: true,
+                AccessModifier: AccessModifier.Public),
+            new("Failure", actionResultT,
+                Parameters: [
+                    new Parameter("message",
+                        new PrimitiveTypeReference(PrimType.String))
+                ],
+                Body: new Block([
+                    new Return(
+                        new New(actionResultT,
+                            new Constant(false),
+                            new NullForgiving(new Default()),
+                            new Parameter("message")))
+                ]),
+                IsStatic: true,
+                AccessModifier: AccessModifier.Public),
+            new("GetValue", tParam,
+                Body: new Block([
+                    new IfStatement(
+                        new Syntactic.Not(new Member(new ThisReference(), "IsSuccess")),
+                        new ThrowStatement(
+                            new New(
+                                new NamedTypeReference("System.InvalidOperationException"),
+                                new Constant("A failed DomainResult has no Value.")))),
+                    new Return(new Member(new ThisReference(), "_value")),
+                ]),
+                AccessModifier: AccessModifier.Private),
+        };
+
+        return new TypeDefinitionNode(
+            "DomainResult",
+            GenericParameters: [new Parameter("T")],
+            Properties: props,
+            Constructors: [ctor],
+            Methods: methods,
+            Fields: [
+                new FieldDefinitionNode(
+                    "_value",
+                    tParam,
+                    AccessModifier: AccessModifier.Private),
+            ],
+            Semantics: Syntactic.TypeDefinitionSemantics.ImmutableValue
+        );
+    }
+
+    // ── String helpers ──────────────────────────────────────────
+
+    internal static string ToCamelCase(string name) => DomainTypeMapping.ToCamelCase(name);
+
+    internal static string ToPascalCase(string name) => DomainTypeMapping.ToPascalCase(name);
 }

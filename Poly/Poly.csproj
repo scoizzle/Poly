@@ -25,6 +25,12 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <!-- The storage port and constraint failure the emitted C# names, in their own
+             BCL-only assembly. Transitive, so consumers need no edit. -->
+        <ProjectReference Include="..\Poly.Runtime\Poly.Runtime.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
         <!-- Enables smoke / integration tests in Poly.Tests to reach internal RISC VM types during development and transition.
              No effect on public API surface or packaged consumers. -->
         <InternalsVisibleTo Include="Poly.Tests" />

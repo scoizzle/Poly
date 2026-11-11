@@ -24,7 +24,7 @@ public class PremiumPatron
         {
             return DomainResult<PremiumPatron>.Failure("'Email' is required.");
         }
-        if (!System.Text.RegularExpressions.Regex.IsMatch(email, "^[^@]+@[^@]+$"))
+        if (!System.Text.RegularExpressions.Regex.IsMatch(email, "^[^@]+@[^@]+\\z"))
         {
             return DomainResult<PremiumPatron>.Failure("'Email' does not match the required pattern.");
         }

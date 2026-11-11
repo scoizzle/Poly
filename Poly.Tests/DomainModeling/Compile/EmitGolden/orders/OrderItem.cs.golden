@@ -25,7 +25,7 @@ public class OrderItem
         {
             return DomainResult<OrderItem>.Failure("'Sku' is required.");
         }
-        if (!System.Text.RegularExpressions.Regex.IsMatch(sku, "^[A-Z]{3}-[0-9]{4}$"))
+        if (!System.Text.RegularExpressions.Regex.IsMatch(sku, "^[A-Z]{3}-[0-9]{4}\\z"))
         {
             return DomainResult<OrderItem>.Failure("'Sku' does not match the required pattern.");
         }

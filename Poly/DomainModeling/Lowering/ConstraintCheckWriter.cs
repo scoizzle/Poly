@@ -198,7 +198,7 @@ internal static class ConstraintCheckWriter {
                         new Syntactic.Not(
                             new Invoke(
                                 new Member(style.RegexStatic(), "IsMatch"),
-                                [value, new Constant(p.Pattern)])),
+                                [value, new Constant(AnchorEnd(p.Pattern))])),
                         patternPresence,
                         new Constant($"'{prop.Name}' does not match the required pattern.")));
                     break;
@@ -298,6 +298,24 @@ internal static class ConstraintCheckWriter {
         if (value is string s) return new Constant(s);
         if (value is bool b) return new Constant(b);
         return new Constant(value.ToString());
+    }
+
+    /// <summary>
+    /// Anchors a pattern constraint at the absolute end of the input. .NET's
+    /// <c>$</c> also matches before a final newline, so an author's unescaped
+    /// trailing <c>$</c> is rewritten to <c>\z</c>. A pattern that does not end in
+    /// an unescaped <c>$</c> — no end anchor, or an escaped literal <c>\$</c> — keeps
+    /// its authored meaning and is returned unchanged. One syntactic step; the
+    /// guard's message still names only the property.
+    /// </summary>
+    internal static string AnchorEnd(string pattern) {
+        if (pattern.Length == 0 || pattern[^1] != '$')
+            return pattern;
+        var backslashes = 0;
+        for (var i = pattern.Length - 2; i >= 0 && pattern[i] == '\\'; i--)
+            backslashes++;
+        // An odd backslash run escapes the '$' (a literal dollar), not an anchor.
+        return backslashes % 2 == 1 ? pattern : pattern[..^1] + "\\z";
     }
 
     /// <summary>Formats a constraint bound for a validation message. Invariant, so the message

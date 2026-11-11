@@ -254,7 +254,7 @@ Do not patch the ABI for one scenario — fix upstream (lower / analyze / replac
 
 ### Domain Expression Lowering
 
-**Location:** `Poly/DomainModeling/Lowering/DomainExpressionLoweringPass.cs`
+**Location:** `Poly/DomainModeling/Lowering/DomainExpressionLoweringPass.cs` and its `DomainExpressionLoweringPass.*.cs` partials
 
 Before the emitter runs, domain-level expressions (policies, rules, conditions) must be lowered to AST nodes. This pass expands `DomainExpression` trees — `PropertyAccess`, `RelationshipNavigation`, `And`, `Or`, `Exists`, `Literal`, arithmetic, date ops — into `Poly.Ast` node records. The AST is then analyzed and compiled via the standard path above.
 

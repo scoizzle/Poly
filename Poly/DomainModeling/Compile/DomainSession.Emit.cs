@@ -6,6 +6,9 @@ using Poly.Interpretation.CSharp;
 namespace Poly.DomainModeling.Compile;
 
 public sealed partial class DomainSession {
+    private const string VmAnalysisReportType = "vm-analysis-report";
+    private const string EmitProducer = "Emit";
+
     /// <summary>
     /// Entity-module C# files from the lowered module, then each new
     /// <see cref="ContributedFile"/> from <see cref="Artifacts"/>. The writer consumes
@@ -88,6 +91,25 @@ public sealed partial class DomainSession {
                 files.Add((name, ContributedFile.Text(artifact)));
             }
         }
+    }
+
+    /// <summary>
+    /// One <c>vm-analysis-report</c> per domain, from interpretation analysis of the
+    /// whole lowered module. Always registered on Emit (empty when the analyzer
+    /// reported nothing).
+    /// </summary>
+    private static void RegisterVmAnalysisReport(ArtifactCatalog catalog, Domain domain, AnalysisResult analysis) {
+        catalog.DeclareType(VmAnalysisReportType, mayPointAt: []);
+        var findings = analysis.Diagnostics
+            .Select(d => new AnalysisFinding(
+                d.Code,
+                d.Severity,
+                d.Message,
+                DomainElementPath.Resolve(domain, d.Node)))
+            .ToArray();
+        catalog.Register(new Artifact(
+            new ArtifactDescriptor(ArtifactId.Create([domain.Name], VmAnalysisReportType), EmitProducer),
+            Payload: new AnalysisReport(findings)));
     }
 
     private static void AddPrintedFile(

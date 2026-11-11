@@ -111,12 +111,10 @@ public sealed partial class DomainSession {
     private const string ScaffoldingType = "scaffolding";
     internal const string EntityType = "entity";
     private const string AnalysisReportType = "analysis-report";
-    private const string VmAnalysisReportType = "vm-analysis-report";
     private const string CatalogReferenceReportType = "catalog-reference-report";
     private const string SourceDomainType = "source-domain";
     private const string SourceEntityType = "source-entity";
     private const string LowerProducer = "Lower";
-    private const string EmitProducer = "Emit";
 
     private Analyzer? _analyzer;
 
@@ -470,25 +468,6 @@ public sealed partial class DomainSession {
             .ToArray();
         catalog.Register(new Artifact(
             new ArtifactDescriptor(ArtifactId.Create([domain.Name], AnalysisReportType), "Analyze"),
-            Payload: new AnalysisReport(findings)));
-    }
-
-    /// <summary>
-    /// One <c>vm-analysis-report</c> per domain, from interpretation analysis of the
-    /// whole lowered module. Always registered on Emit (empty when the analyzer
-    /// reported nothing).
-    /// </summary>
-    private static void RegisterVmAnalysisReport(ArtifactCatalog catalog, Domain domain, AnalysisResult analysis) {
-        catalog.DeclareType(VmAnalysisReportType, mayPointAt: []);
-        var findings = analysis.Diagnostics
-            .Select(d => new AnalysisFinding(
-                d.Code,
-                d.Severity,
-                d.Message,
-                DomainElementPath.Resolve(domain, d.Node)))
-            .ToArray();
-        catalog.Register(new Artifact(
-            new ArtifactDescriptor(ArtifactId.Create([domain.Name], VmAnalysisReportType), EmitProducer),
             Payload: new AnalysisReport(findings)));
     }
 

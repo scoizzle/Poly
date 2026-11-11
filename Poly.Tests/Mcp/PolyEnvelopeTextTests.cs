@@ -56,6 +56,17 @@ public class PolyEnvelopeTextTests {
     }
 
     [Test]
+    public async Task DryRunDefine_SplicedDocument_RendersInlineInText() {
+        var text = Text("""
+            {"ok":true,"summary":"Dry run.","findings":[],"data":{"applied":false,"spliced":"Order: entity {\n  Amount: Decimal\n}"},"next":[]}
+            """);
+
+        await Assert.That(text).Contains("spliced:");
+        await Assert.That(text).Contains("Amount: Decimal");
+        await Assert.That(text).Contains("applied: false");
+    }
+
+    [Test]
     public async Task Findings_OverCap_AddsMoreLine() {
         var findings = string.Join(",", Enumerable.Range(0, 25).Select(i =>
             $$"""{"severity":"Warning","code":"W{{i}}","path":"P{{i}}","message":"m{{i}}"}"""));

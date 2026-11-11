@@ -4008,7 +4008,11 @@ E: entity {{
         await Assert.That(end).IsGreaterThan(start);
         var effectTable = guide[start..end];
 
-        foreach (var shipped in new[] { "transition to StageName", "assign PropertyName to expression", "create in RelationshipName", "if (expr) {" })
+        foreach (var shipped in new[] { "transition to StageName", "assign PropertyName to expression", "create in RelationshipName", "if (expr) {",
+            "| Self-invoke | `invoke ActionName` / `invoke ActionName(param: expr, ...)` |",
+            "| Fan-out invoke | `for Rel as name [where name.PolicyName",
+            "where name in StageName] invoke name.ActionName(param: expr, ...)` — OneToMany source only |",
+            "| Create entity | `create EntityType { prop: value }` |" })
             await Assert.That(effectTable).Contains(shipped);
         await Assert.That(effectTable.Contains("unlink", StringComparison.OrdinalIgnoreCase)).IsFalse();
         await Assert.That(effectTable.Contains("link ", StringComparison.OrdinalIgnoreCase)).IsFalse();

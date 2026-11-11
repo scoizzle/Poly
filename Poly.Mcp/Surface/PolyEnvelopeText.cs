@@ -130,8 +130,11 @@ internal static class PolyEnvelopeText {
                 lines.Add($"witness: {property.Value.GetArrayLength()} context(s)");
                 continue;
             }
-            if (property.NameEquals("spliced"))
+            if (property.NameEquals("spliced")) {
+                if (property.Value.ValueKind == JsonValueKind.String)
+                    lines.Add($"spliced:\n{property.Value.GetString()}");
                 continue;
+            }
             if (property.NameEquals("trace") && property.Value.ValueKind == JsonValueKind.Array) {
                 AppendTrace(lines, property.Value);
                 continue;

@@ -897,6 +897,7 @@ public static partial class AbiEmitter {
         var test = CompileConditionAsBool(c.Condition, ctx);
         var ifTrue = CompileConditionalBranch(c, c.IfTrue, ctx);
         var ifFalse = CompileConditionalBranch(c, c.IfFalse, ctx);
+        RejectMixedRepresentationArms(c, ctx);
         if (ifTrue.Type != typeof(void) && ifFalse.Type != typeof(void)) {
             // An IEEE arm keeps the value, so the arms must agree on one width before
             // Expression.Condition can take them.
@@ -924,6 +925,22 @@ public static partial class AbiEmitter {
         return ifTrue.Type == typeof(void)
             ? Condition(test, Block(ifTrue, Expression.Default(ifFalse.Type)), ifFalse)
             : Condition(test, ifTrue, Block(ifFalse, Expression.Default(ifTrue.Type)));
+    }
+
+    /// <summary>An inline scalar arm against a heap-handle arm (a whole number against a Decimal) merges two
+    /// words of different meaning, and the result is read as one or the other. Fail closed at compile time
+    /// (#605). An arm whose representation is unknown, a null literal, or a void arm is not judged here.</summary>
+    private static void RejectMixedRepresentationArms(Conditional c, Context ctx) {
+        if (c.IfTrue is Constant { Value: null } || c.IfFalse is Constant { Value: null })
+            return;
+        var (trueKind, trueClr) = ctx.RepresentationOf(c.IfTrue);
+        var (falseKind, falseClr) = ctx.RepresentationOf(c.IfFalse);
+        var mixed = (trueKind, falseKind) is (ValueRepresentationKind.StackScalar, ValueRepresentationKind.HeapRef)
+            or (ValueRepresentationKind.HeapRef, ValueRepresentationKind.StackScalar);
+        if (mixed)
+            throw new InvalidOperationException(
+                $"VM compile rejected: conditional arms differ in representation: '{c.IfTrue}' ({trueClr?.Name ?? "?"}) vs "
+                + $"'{c.IfFalse}' ({falseClr?.Name ?? "?"}); convert one arm to the other's type.");
     }
 
     private static Expression DecodeIeeeWordArm(Expression arm, Node branch, Context ctx) =>

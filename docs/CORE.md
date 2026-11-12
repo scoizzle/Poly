@@ -56,7 +56,7 @@ Neurosymbolic platform: author structured domain → lower to symbolic AST → a
 | Shipped ⊆ lowerable | Gaps stay in GitHub issues, not the parser/guide |
 | Always-legal operations | Full tree per op; no `Comment` / `null` / host walk as meaning |
 | AST is symbolic primary | No parallel primitive IR on product paths |
-| VM executes Syntax programs | `Interpreter.Compile` fail-closed; no domain opcodes; C# emit is a projection |
+| VM executes Syntax programs | `Interpreter.Compile` fail-closed (a conditional whose arms mix an inline scalar and a heap handle is rejected, #605); no domain opcodes; C# emit is a projection |
 | Domain lowers to generic ops | StageTransition / invoke / create / unique / clocks → existing Syntax + Store jobs on the one module |
 | Product doors are opt-in | `uses`; CLI seeds ids only |
 | MCP is harness | Author / inspect / simulate with caller context — not customer API |

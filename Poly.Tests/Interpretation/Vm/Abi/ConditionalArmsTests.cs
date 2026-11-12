@@ -1,4 +1,5 @@
 using Poly.Interpretation;
+using Poly.Introspection;
 
 namespace Poly.Tests.Interpretation.Vm.Abi;
 
@@ -8,13 +9,16 @@ namespace Poly.Tests.Interpretation.Vm.Abi;
 /// pairs, and a null arm, stay valid.
 /// </summary>
 public class ConditionalArmsTests {
+    /// <summary>The condition is a parameter: a constant condition folds to one arm and never reaches the emitter.</summary>
     private static Node Pick(Node ifTrue, Node ifFalse) =>
-        new Block([new Conditional(new Constant(false), ifTrue, ifFalse)]);
+        new Block([new Conditional(new Parameter("pickFirst", TypeReference.To<bool>()), ifTrue, ifFalse)]);
+
+    private static ExecutionResult Run(Node body) =>
+        Interpreter.Execute(Interpreter.Compile(body), s => s.SetArgs(false));
 
     private static async Task AssertRejected(Node body) {
         var thrown = Assert.Throws<InvalidOperationException>(() => {
-            var program = Interpreter.Compile(body);
-            using var exec = Interpreter.Execute(program);
+            using var exec = Run(body);
         });
         await Assert.That(thrown.Message).Contains("VM compile rejected: conditional arms differ in representation");
     }
@@ -29,25 +33,25 @@ public class ConditionalArmsTests {
 
     [Test]
     public async Task Conditional_IntegralPair_Runs() {
-        using var exec = Interpreter.Execute(Interpreter.Compile(Pick(new Constant(2L), new Constant(3L))));
+        using var exec = Run(Pick(new Constant(2L), new Constant(3L)));
         await Assert.That(exec.GetValue<long>()).IsEqualTo(3L);
     }
 
     [Test]
     public async Task Conditional_DecimalPair_Runs() {
-        using var exec = Interpreter.Execute(Interpreter.Compile(Pick(new Constant(1.5m), new Constant(2.5m))));
+        using var exec = Run(Pick(new Constant(1.5m), new Constant(2.5m)));
         await Assert.That(exec.GetValue<decimal>()).IsEqualTo(2.5m);
     }
 
     [Test]
     public async Task Conditional_StringPair_Runs() {
-        using var exec = Interpreter.Execute(Interpreter.Compile(Pick(new Constant("a"), new Constant("b"))));
+        using var exec = Run(Pick(new Constant("a"), new Constant("b")));
         await Assert.That(exec.GetValue<string>()).IsEqualTo("b");
     }
 
     [Test]
     public async Task Conditional_NullArmAgainstReference_Runs() {
-        using var exec = Interpreter.Execute(Interpreter.Compile(Pick(new Constant("a"), new Constant(null))));
+        using var exec = Run(Pick(new Constant("a"), new Constant(null)));
         await Assert.That(exec.GetValue<string?>()).IsNull();
     }
 }

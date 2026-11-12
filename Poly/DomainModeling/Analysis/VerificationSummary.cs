@@ -1,4 +1,7 @@
+using System.Runtime.CompilerServices;
+
 using Poly.Analysis;
+using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Ontology;
 
 namespace Poly.DomainModeling.Analysis;
@@ -60,7 +63,100 @@ public static class VerificationSummaryExtensions {
         this AnalysisResult analysis, Domain domain, string? path = null) {
         ArgumentNullException.ThrowIfNull(analysis);
         ArgumentNullException.ThrowIfNull(domain);
+        _ = path;
 
-        return new VerificationSummary(CheckVerdict.Unknown, 0, [], 0);
+        // D3: the domain pass creates the bucket before anything else, so a missing one means the
+        // pass never ran — never "there was nothing to report".
+        var facts = analysis.GetMetadata<WriteVerificationFacts>(domain);
+        if (facts is null)
+            return new VerificationSummary(CheckVerdict.Unknown, 0, [], 0);
+
+        var rows = UnverifiedRows(analysis, domain, facts);
+        var violations = ViolationNodes(analysis, facts);
+        var verdict = violations.Count > 0
+            ? CheckVerdict.Violated
+            : rows.Count > 0 || facts.Unverified.Count > 0
+                ? CheckVerdict.Unknown
+                : CheckVerdict.Proven;
+        return new VerificationSummary(verdict, facts.Verified, rows, violations.Count);
+    }
+
+    /// <summary>
+    /// A1: the fold's first arm and the violation count, as distinct nodes. A proven violation fact
+    /// and any error diagnostic name the nodes that failed, so an error with no fact behind it — the
+    /// call-chain arm (V-05) — still counts, and no diagnostic-to-fact match can mask it. That makes
+    /// <see cref="VerificationSummary.Violations"/> deliberately stricter than
+    /// <see cref="WriteVerificationFacts.Violations"/> until V-05 records those facts.
+    /// </summary>
+    private static HashSet<Node> ViolationNodes(AnalysisResult analysis, WriteVerificationFacts facts) {
+        var nodes = new HashSet<Node>(NodeIdentityComparer.Instance);
+        foreach (var violation in facts.Violations)
+            nodes.Add(violation.Effect);
+        foreach (var diagnostic in analysis.Diagnostics) {
+            if (diagnostic.Severity == DiagnosticSeverity.Error)
+                nodes.Add(diagnostic.Node);
+        }
+        return nodes;
+    }
+
+    /// <summary>
+    /// A2: the rows are the write findings, not the facts — a non-Range kind (V-08) and the
+    /// call-chain path (V-05) report a diagnostic and record no fact, and the summary must show
+    /// them. A fact on the same node supplies the property, constraint and reason; rows are
+    /// de-duplicated by (node, code) so one write is one row.
+    /// </summary>
+    private static List<UnverifiedWriteFact> UnverifiedRows(
+        AnalysisResult analysis, Domain domain, WriteVerificationFacts facts) {
+        var rows = new List<UnverifiedWriteFact>();
+        var seen = new HashSet<(Node Node, string Code)>(NodeCodeComparer.Instance);
+        foreach (var diagnostic in analysis.Diagnostics) {
+            var code = diagnostic.Code;
+            if (code is null || !IsUnverifiedWriteFinding(code, diagnostic.Severity))
+                continue;
+            if (!seen.Add((diagnostic.Node, code)))
+                continue;
+
+            var fact = facts.Unverified.FirstOrDefault(f => ReferenceEquals(f.Effect, diagnostic.Node));
+            rows.Add(new UnverifiedWriteFact(
+                DomainElementPath.Resolve(domain, diagnostic.Node),
+                code,
+                diagnostic.Message,
+                fact?.TargetProperty,
+                fact?.Constraint,
+                fact?.Reason));
+        }
+        return rows;
+    }
+
+    /// <summary>
+    /// The write-unverified warning vocabulary (A2): every <c>DMCS003</c> and a <c>DMEFF008</c>
+    /// warning. A <c>DMEFF008</c> error is a proven violation, not an unknown.
+    /// </summary>
+    private static bool IsUnverifiedWriteFinding(string code, DiagnosticSeverity severity) =>
+        string.Equals(code, DomainModelDiagnosticCodes.ConstraintUndecided, StringComparison.Ordinal)
+        || (string.Equals(code, DomainModelDiagnosticCodes.EffectConstraintViolation, StringComparison.Ordinal)
+            && severity == DiagnosticSeverity.Warning);
+
+    private sealed class NodeCodeComparer : IEqualityComparer<(Node Node, string Code)> {
+        public static readonly NodeCodeComparer Instance = new();
+
+        public bool Equals((Node Node, string Code) x, (Node Node, string Code) y) =>
+            ReferenceEquals(x.Node, y.Node) && string.Equals(x.Code, y.Code, StringComparison.Ordinal);
+
+        public int GetHashCode((Node Node, string Code) value) =>
+            HashCode.Combine(RuntimeHelpers.GetHashCode(value.Node), StringComparer.Ordinal.GetHashCode(value.Code));
+    }
+
+    /// <summary>
+    /// Node identity: <see cref="Node"/> is a record, so its generated equality is structural, and
+    /// two identically shaped effects in different actions would compare equal. Every set here is
+    /// keyed on the node instance.
+    /// </summary>
+    private sealed class NodeIdentityComparer : IEqualityComparer<Node> {
+        public static readonly NodeIdentityComparer Instance = new();
+
+        public bool Equals(Node? x, Node? y) => ReferenceEquals(x, y);
+
+        public int GetHashCode(Node value) => RuntimeHelpers.GetHashCode(value);
     }
 }

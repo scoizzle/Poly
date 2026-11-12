@@ -35,11 +35,6 @@ public class CatalogArtifactOracleTests {
         GoldenDomains.Lowerable.Select(d => d.Path).Order(StringComparer.Ordinal);
 
     [Test]
-    public async Task Samples_AreExactlyTheLowerableSet() =>
-        await Assert.That(string.Join("\n", Samples()))
-            .IsEqualTo(string.Join("\n", GoldenDomains.Lowerable.Select(d => d.Path).Order(StringComparer.Ordinal)));
-
-    [Test]
     public async Task Skipped_StoredValueTypeProperty_StillProducesDmstr006() {
         var domain = GoldenDomains.Skipped.Single(d => d.Name == "restaurant");
         var (succeeded, errors) = Analyze(File.ReadAllText(domain.FullPath));
@@ -57,13 +52,21 @@ public class CatalogArtifactOracleTests {
     }
 
     [Test]
-    public async Task Samples_AreAllInTheSharedCatalog() {
-        var unknown = Samples()
-            .Where(path => !GoldenDomains.All.Any(d => d.Path == path))
+    public async Task EveryProbeOnDisk_IsLowerableOrSkipped() {
+        var accounted = GoldenDomains.Lowerable.Select(d => d.Path)
+            .Concat(GoldenDomains.Skipped.Select(d => d.Path))
+            .ToHashSet(StringComparer.Ordinal);
+        var unaccounted = new[] { "docs/probes", "demo/live" }
+            .SelectMany(dir => Directory.EnumerateFiles(
+                Path.Combine(GoldenDomains.RepoRoot, dir), "*.poly", SearchOption.AllDirectories))
+            .Where(path => !path.StartsWith(GoldenDomains.SwarmDirectory, StringComparison.Ordinal))
+            .Select(path => Path.GetRelativePath(GoldenDomains.RepoRoot, path).Replace('\\', '/'))
+            .Where(path => !accounted.Contains(path))
+            .Order(StringComparer.Ordinal)
             .ToList();
-        await Assert.That(unknown).IsEmpty()
-            .Because("the C10 oracle must sample the shared corpus, not its own directory walk: "
-                + string.Join(", ", unknown));
+        await Assert.That(unaccounted).IsEmpty()
+            .Because("every probe on disk must be in GoldenDomains.Lowerable or Skipped: "
+                + string.Join(", ", unaccounted));
     }
 
     [Test]

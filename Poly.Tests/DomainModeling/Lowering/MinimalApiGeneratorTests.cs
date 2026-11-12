@@ -103,7 +103,7 @@ public class MinimalApiGeneratorTests {
     [Test]
     public async Task Detail_UsesBindingName() {
         var d = ParseDomain("domain T\nItem: entity { Sku: Text unique }");
-        await Assert.That(Render(d).Contains("is Item item")).IsTrue();
+        await Assert.That(Render(d).Contains("is T.Item item")).IsTrue();
     }
 
     [Test]
@@ -683,6 +683,29 @@ public class MinimalApiGeneratorTests {
         await Assert.That(host).Contains("Library.Library");
         var errors = CompileHost(http.Files!);
         await Assert.That(errors).IsEmpty();
+    }
+
+    [Test]
+    public async Task EntityNamedLikeAnImportedBclType_HostQualifiesItAndCompiles() {
+        // The host imports System.Threading.Tasks and the domain namespace: a bare `Task` is ambiguous (CS0104).
+        // Red tail from the Desk658 oracle fixture before the fix: "'Task' is an ambiguous reference between
+        // 'Desk.Task' and 'System.Threading.Tasks.Task'".
+        const string poly = """
+            domain Desk
+            Project: entity {
+              Key: Text unique
+              tasks: many Task
+            }
+            Task: entity {
+              Title: Text unique
+            }
+            """;
+
+        var http = CompilerWithHttpHost().Compile(poly, CompileMode.All, DbmsPack.Sqlite);
+
+        await Assert.That(http.Success).IsTrue();
+        await Assert.That(http.Files!.Single(f => f.FileName == "Program.cs").Source).Contains("Desk.Task");
+        await Assert.That(CompileHost(http.Files!)).IsEmpty();
     }
 
     [Test]

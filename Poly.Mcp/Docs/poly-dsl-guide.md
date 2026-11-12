@@ -618,6 +618,29 @@ Active: stage {
 }
 ```
 
+A transition inside an exit block is legal only when it targets the stage that every hop leaving
+that stage targets. A hop assigns the new stage after the inlined exit block, so a differing
+exit-block target is overridden: the instance lands on the hop's target after the exit-block
+target's entry effects ran. Analyze rejects this with `DMEFF017`, positioned on the exit-block
+transition. Entity-level actions, entity-level `when` handlers and a `for` body have no static
+source stage, so a transition there must match every exit-block target. A transition that follows
+another transition, an `invoke`, a `create` or a branch holding a transition counts as leaving
+whatever stage the instance may then be in, so it must match every exit-block target too.
+
+<!-- poly-verify: invalid:DMEFF017 -->
+```poly
+domain Shipping
+
+Parcel: entity {
+  Packed: stage {
+    exit { transition to Returned }   // error: Ship leaves Packed for Shipped
+    Ship: action { transition to Shipped }
+  }
+  Shipped: stage { }
+  Returned: stage { }
+}
+```
+
 ### Explicit Initial Stage
 
 `initial(Stage)` belongs to the entity header, not to a stage: it names the stage a new instance
@@ -1386,6 +1409,8 @@ assign Tier to match { Qty > 100 -> "big", Qty > 10 -> "mid", else -> "small" }
 | `invoke Action` / `invoke Rel.Action` | action (self; OneToOne source-only; fail-closed DMEFF007; depth-limited) |
 | `for Rel as name [where policy \| where in stage] invoke name.Action` | action (OneToMany source-only fan-out; fail-fast; zero records is a no-op) |
 | `if (expr) { … } else if … else { … }` | action, entry, exit |
+
+A `transition` in an exit block must target the stage every hop leaving that stage targets (`DMEFF017`; see Entry/Exit Effects).
 
 **Linking existing instances:** graph wiring happens through `create in Rel { … }`, which the module's own body links on the instance. To connect already-existing instances, the MCP `link_instances` and `unlink_instances` tools write the relationship field on the instance (the session executor's `Link` / `Unlink`) with relationship + entity-type validation at the tool boundary. `unlink_instances` refuses to drop the last owner of an `owned` target (see §4). There is no Link/Unlink **Effect IR** — linking existing instances is a host/tool operation only.
 

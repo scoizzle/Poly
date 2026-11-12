@@ -79,8 +79,15 @@ public class ConstraintJoinTests {
     }
 
     [Test]
-    public async Task Join_CrossNumericBounds_UseDouble() {
-        await Assert.That(Same(R(1, 2).Join(R(0.5, 3.5)), R(0.5, 3.5))).IsTrue();
+    public async Task Join_CrossNumericBounds_UseExactOrdering() {
+        // V-05a: two numeric types compare through ExactNumber, so an integral cross-numeric pair
+        // still joins to its hull (this used to go through double).
+        var joined = (RangeConstraint)R(1, 2).Join(R(0L, 3L))!;
+        await Assert.That(joined.Minimum).IsEqualTo(0L);
+        await Assert.That(joined.Maximum).IsEqualTo(3L);
+        // A fractional double is not exactly representable, so the bounds cannot be ordered and the
+        // join refuses rather than rounding. Fail closed.
+        await Assert.That(R(1, 2).Join(R(0.5, 3.5))).IsNull();
     }
 
     // ---- Length ----

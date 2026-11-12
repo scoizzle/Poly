@@ -1,0 +1,18 @@
+domain GuideEntityBodies
+
+Order: entity {
+  Total: Number optional
+  Code: Text optional
+}
+
+Cart: entity {
+  Name: Text
+  Label: Text optional
+  Status: Text optional
+  Score: Number
+  Rush: Boolean optional
+  orders: many Order
+  Active: stage { }
+  Validate: action { }
+// <<guide-block:entity>>
+}

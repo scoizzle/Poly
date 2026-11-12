@@ -1,5 +1,10 @@
 using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Libraries.Http;
+using Poly.DomainModeling.Libraries.Platform;
 using Poly.DomainModeling.Ontology;
+using Poly.Packs.Product;
+using Poly.Packs.Sqlite;
+using Poly.Packs.SqlServer;
 
 namespace Poly.Tests.DomainModeling.Compile;
 
@@ -170,6 +175,172 @@ public sealed class LibrarySelectionTests {
         await Assert.That(session.Options.Target).IsEqualTo("host");
         await Assert.That(reloaded.Target).IsEqualTo("host");
         await Assert.That(ReferenceEquals(reloaded.Options.Catalog, session.Options.Catalog)).IsTrue();
+    }
+
+    // ---- C-02: the catalog's read-only facts about the libraries it holds. ----
+
+    private static readonly string[] ProductLikeIds = [
+        "http", "persistence", "posix", "sqlite", "sqlserver", "storage", "temporal",
+    ];
+
+    /// <summary>
+    /// The product catalog's library set, built locally so the assertions do not
+    /// move when P-04 adds a vendor pack to <see cref="ProductCatalog"/>.
+    /// </summary>
+    private static ExtensionCatalog ProductLikeCatalog() => new ExtensionCatalog()
+        .With(new TemporalLibrary())
+        .With(new StorageFacetLibrary())
+        .With(new PersistenceEmitLibrary())
+        .With(new SqliteLibrary())
+        .With(new SqlServerLibrary())
+        .With(new HttpLibrary())
+        .With(new PosixLibrary());
+
+    /// <summary>
+    /// The row's named test: one probe of the catalog answers targets, ids and
+    /// which libraries compile a constraint kind.
+    /// </summary>
+    [Test]
+    public async Task Info_ReportsTargetsAndConstraintProviders() {
+        var catalog = ProductLikeCatalog();
+
+        await Assert.That(string.Join(",", catalog.KnownTargets)).IsEqualTo("posix");
+        await Assert.That(string.Join(",", catalog.KnownIds)).IsEqualTo(string.Join(",", ProductLikeIds));
+
+        var providers = catalog.ProvidersOf(new UniqueConstraint());
+        await Assert.That(providers).IsEquivalentTo(new[] { "persistence", "sqlite", "sqlserver" });
+        await Assert.That(string.Join(",", providers)).IsEqualTo("persistence,sqlite,sqlserver");
+    }
+
+    /// <summary>T1: <c>Info</c> reports the targets, contract names and seeds of one library.</summary>
+    [Test]
+    public async Task Info_ReportsHostTargetsContractNamesAndSeeds() {
+        var catalog = ProductLikeCatalog();
+
+        var posix = catalog.Info("posix");
+        await Assert.That(posix.Id).IsEqualTo("posix");
+        await Assert.That(string.Join(",", posix.HostTargets)).IsEqualTo("posix");
+        await Assert.That(string.Join(",", posix.ContractNames)).IsEqualTo("Posix");
+
+        var sqlite = catalog.Info("sqlite");
+        await Assert.That(sqlite.HostTargets).IsEmpty();
+        await Assert.That(sqlite.ContractNames).IsEmpty();
+        await Assert.That(sqlite.PrimitiveSeeds).IsEmpty();
+    }
+
+    /// <summary>T6: targets and contract names are distinct and ordinal-sorted; seeds keep library order.</summary>
+    [Test]
+    public async Task Info_SortsAndDeduplicatesTargetsAndContracts() {
+        var catalog = new ExtensionCatalog()
+            .With(new SortedProbeLibrary())
+            .With(new SeedProbeLibrary());
+
+        var sorted = catalog.Info("sorted");
+        await Assert.That(string.Join(",", sorted.HostTargets)).IsEqualTo("posix,windows");
+        await Assert.That(string.Join(",", sorted.ContractNames)).IsEqualTo("Alpha,Zeta");
+        await Assert.That(string.Join(",", catalog.KnownTargets)).IsEqualTo("posix,windows");
+
+        var seeded = catalog.Info("seeded");
+        await Assert.That(string.Join(",", seeded.PrimitiveSeeds.Select(seed => seed.Name)))
+            .IsEqualTo("Zeta,Alpha");
+    }
+
+    /// <summary>T2: an unknown id fails through <see cref="ExtensionCatalog.Resolve"/> and the message is shared.</summary>
+    [Test]
+    public async Task Info_UnknownId_ThrowsTheResolveMessage() {
+        var catalog = ProductLikeCatalog();
+
+        string? resolveMessage = null;
+        try {
+            catalog.Resolve("nope");
+        }
+        catch (InvalidOperationException ex) {
+            resolveMessage = ex.Message;
+        }
+        await Assert.That(resolveMessage).IsNotNull();
+
+        string? infoMessage = null;
+        try {
+            _ = catalog.Info("nope");
+        }
+        catch (InvalidOperationException ex) {
+            infoMessage = ex.Message;
+        }
+        await Assert.That(infoMessage).IsEqualTo(resolveMessage);
+
+        await Assert.That(() => catalog.Info(" ")).Throws<ArgumentException>();
+        await Assert.That(() => catalog.ProvidersOf(null!)).Throws<ArgumentNullException>();
+    }
+
+    /// <summary>
+    /// T4: <c>KnownIds</c> is the dictionary keys — it never probes. <c>KnownTargets</c>
+    /// probes each library once, and the second read reuses the cache.
+    /// </summary>
+    [Test]
+    public async Task KnownIds_NeverProbes() {
+        var counting = new CountingLibrary("counted");
+        var catalog = new ExtensionCatalog().With(counting);
+
+        await Assert.That(string.Join(",", catalog.KnownIds)).IsEqualTo("counted");
+        await Assert.That(counting.Registrations).IsEqualTo(0);
+
+        await Assert.That(catalog.KnownTargets).IsEmpty();
+        await Assert.That(counting.Registrations).IsEqualTo(1);
+
+        _ = catalog.Info("counted");
+        _ = catalog.KnownTargets;
+        await Assert.That(counting.Registrations).IsEqualTo(1);
+    }
+
+    /// <summary>The Core library set's one constraint provider is <c>persistence</c>.</summary>
+    [Test]
+    public async Task CoreProvidersOf_Unique_IsPersistence() {
+        var providers = ExtensionCatalog.Core.ProvidersOf(new UniqueConstraint());
+
+        await Assert.That(string.Join(",", providers)).IsEqualTo("persistence");
+    }
+
+    /// <summary>A5: the product catalog is covered by containment only, so a new pack does not move it.</summary>
+    [Test]
+    public async Task ProductCatalogModel_ReportsContainedFacts() {
+        var catalog = ProductCatalog.Model;
+
+        foreach (var id in ProductLikeIds)
+            await Assert.That(catalog.KnownIds.Contains(id)).IsTrue();
+        await Assert.That(catalog.KnownTargets.Contains("posix")).IsTrue();
+        await Assert.That(catalog.ProvidersOf(new UniqueConstraint()).Contains("persistence")).IsTrue();
+    }
+
+    private sealed class CountingLibrary(string id) : IDomainLibrary {
+        public int Registrations { get; private set; }
+
+        public string Id => id;
+
+        public void Register(SessionBuilder builder) => Registrations++;
+    }
+
+    private sealed class SortedProbeLibrary : IDomainLibrary {
+        public string Id => "sorted";
+
+        public void Register(SessionBuilder builder) {
+            builder.AddContract(
+                new ImportedContract(
+                    "Zeta", ContractSourceKind.ExternalProvider, "sorted", "1", []),
+                targets: ["windows", "posix"]);
+            builder.AddContract(
+                new ImportedContract(
+                    "Alpha", ContractSourceKind.ExternalProvider, "sorted", "1", []),
+                targets: ["posix", "windows"]);
+        }
+    }
+
+    private sealed class SeedProbeLibrary : IDomainLibrary {
+        public string Id => "seeded";
+
+        public IReadOnlyList<(string Name, PrimitiveSemantics Semantics)> PrimitiveSeeds =>
+            [("Zeta", PrimitiveSemantics.Text), ("Alpha", PrimitiveSemantics.Number)];
+
+        public void Register(SessionBuilder builder) { }
     }
 
     private sealed class ProbeLibrary(string id, ProbeAnnotation? annotation = null) : IDomainLibrary {

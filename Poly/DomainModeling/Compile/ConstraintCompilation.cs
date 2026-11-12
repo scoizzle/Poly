@@ -7,8 +7,10 @@ using Poly.DomainModeling.Ontology;
 namespace Poly.DomainModeling.Compile;
 
 /// <summary>
-/// Compiles library-owned constraints into the lowered module. No compilers,
-/// or none that match this domain, returns the same module instance.
+/// Compiles library-owned constraints into the lowered module. A domain with no constraint
+/// returns the same module instance. A constraint no compiler claims fails closed: Analyze
+/// reports it as <c>DMLIB001</c>, and this is the backstop, because a silently dropped
+/// constraint is the one outcome the pipeline may not produce.
 /// </summary>
 internal static class ConstraintCompilation {
     public static ContributedMethods.AppliedModule Apply(
@@ -55,8 +57,13 @@ internal static class ConstraintCompilation {
                                 $"Constraint '{constraint.GetType().Name}' on {entity.Name}.{property.Name} is compiled by both '{match.LibraryId}' and '{compiler.LibraryId}'.");
                         match = compiler;
                     }
-                    if (match is null)
+                    if (match is null) {
+                        if (ConstraintCoverage.Uncovered(constraint, compilers))
+                            throw new InvalidOperationException(
+                                $"Constraint '{ConstraintValidation.Describe(constraint)}' on {entity.Name}.{property.Name} has no compiler. "
+                                + "Analyze reports DMLIB001; load the library that compiles it (`uses persistence` or a vendor library).");
                         continue;
+                    }
                     // The builtin compiler's guards are already in the create factory
                     // and in each assign block. Placing Compile's statements at the
                     // first `new` would add a second guard, and that anchor cannot

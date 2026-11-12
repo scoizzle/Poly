@@ -1,6 +1,7 @@
 #nullable enable
 public class Product
 {
+    private Product() { }
     private Product(string sku, string name, decimal listPrice)
     {
         this.Sku = sku;
@@ -10,7 +11,7 @@ public class Product
     public string Sku { get; private set; } = default!;
     public string Name { get; private set; } = default!;
     public decimal ListPrice { get; private set; }
-    public static DomainResult<Product> Create(string sku, string name, decimal listPrice)
+    public static DomainResult<Product> Create(string sku, string name, decimal listPrice, Poly.Runtime.IStoragePort db)
     {
         if (string.IsNullOrEmpty(sku))
         {
@@ -36,7 +37,12 @@ public class Product
         {
             return DomainResult<Product>.Failure("'ListPrice' must be <= 100000000.");
         }
+        if (Product.ExistsWithSku(db, sku))
+        {
+            return DomainResult<Product>.Failure("Unique constraint violated: 'Sku' value is already used on another 'Product'.");
+        }
         var created = new Product(sku, name, listPrice);
+        db.Record("Product", "Sku", sku);
         return DomainResult<Product>.Success(created);
     }
     public DomainResult EnsureUnique(string propertyName, object value)
@@ -51,4 +57,5 @@ public class Product
         }
         return DomainResult.Failure("A unique assign needs the storage port.");
     }
+    public static System.Boolean ExistsWithSku(Poly.Runtime.IStoragePort db, System.String sku) => db.Exists("Product", "Sku", sku);
 }

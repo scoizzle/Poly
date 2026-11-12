@@ -20,6 +20,7 @@ public class Opportunity
     private List<Account>? _accountOpportunitiesProposeSubscribers;
     private List<Account>? _accountOpportunitiesLostSubscribers;
     private int _notifyDepth;
+    private Opportunity() { }
     private Opportunity(string title, decimal amount, Account? account = null, Contact? contact = null, IEnumerable<Activity>? activities = null, IEnumerable<Line>? lines = null, IEnumerable<Quote>? quotes = null, DateOnly? closeBy = null)
     {
         this.Title = title;

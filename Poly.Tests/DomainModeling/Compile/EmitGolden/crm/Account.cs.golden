@@ -13,6 +13,7 @@ public class Account
     private List<Contact> _contacts = new List<Contact>();
     private List<Opportunity> _opportunities = new List<Opportunity>();
     private List<Ticket> _tickets = new List<Ticket>();
+    private Account() { }
     private Account(string name, Industry industry, Account? parent = null, Site? hq = null, IEnumerable<Contact>? contacts = null, IEnumerable<Opportunity>? opportunities = null, IEnumerable<Ticket>? tickets = null, long wonCount = 0L, decimal openPipeline = 0m, long closedTickets = 0L)
     {
         this.Name = name;
@@ -59,9 +60,9 @@ public class Account
         this.Hq = site;
         return DomainResult<Site>.Success(site);
     }
-    public DomainResult<Contact> CreateContacts(string name, string email)
+    public DomainResult<Contact> CreateContacts(string name, string email, Poly.Runtime.IStoragePort db)
     {
-        var contactResult = Contact.Create(name, email, this);
+        var contactResult = Contact.Create(name, email, db, this);
         if (!contactResult.IsSuccess)
         {
             return DomainResult<Contact>.Failure(contactResult.ErrorMessage ?? "");
@@ -123,13 +124,13 @@ public class Account
         var created1 = create0.Value;
         return DomainResult<Site>.Success(created1);
     }
-    public DomainResult<Contact> AddContact(string name, string email)
+    public DomainResult<Contact> AddContact(string name, string email, Poly.Runtime.IStoragePort db)
     {
         if (this.CurrentStage != AccountStage.Open)
         {
             return DomainResult<Contact>.Failure("'AddContact' requires stage 'Open' on entity 'Account'.");
         }
-        var create0 = this.CreateContacts(name, email);
+        var create0 = this.CreateContacts(name, email, db);
         if (!create0.IsSuccess)
         {
             return DomainResult<Contact>.Failure(create0.ErrorMessage ?? "");
@@ -137,13 +138,13 @@ public class Account
         var created1 = create0.Value;
         return DomainResult<Contact>.Success(created1);
     }
-    public DomainResult<Contact> ConvertLead(Lead lead)
+    public DomainResult<Contact> ConvertLead(Lead lead, Poly.Runtime.IStoragePort db)
     {
         if (this.CurrentStage != AccountStage.Open)
         {
             return DomainResult<Contact>.Failure("'ConvertLead' requires stage 'Open' on entity 'Account'.");
         }
-        var create0 = this.CreateContacts(lead.Name, lead.Email);
+        var create0 = this.CreateContacts(lead.Name, lead.Email, db);
         if (!create0.IsSuccess)
         {
             return DomainResult<Contact>.Failure(create0.ErrorMessage ?? "");

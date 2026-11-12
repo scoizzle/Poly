@@ -1,6 +1,7 @@
 #nullable enable
 public class RoomType
 {
+    private RoomType() { }
     private RoomType(string name, decimal nightlyRate, long maxOccupancy)
     {
         this.Name = name;

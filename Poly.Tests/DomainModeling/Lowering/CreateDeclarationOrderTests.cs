@@ -147,6 +147,7 @@ public sealed class CreateDeclarationOrderTests {
         // silent in everything but the bound values.
         var (domain, analysis) = EvolvedDomain.FromDsl("""
             domain Commerce
+            uses persistence
             Product: entity {
               Sku: Text unique
               Price: Number range(0, 100000)

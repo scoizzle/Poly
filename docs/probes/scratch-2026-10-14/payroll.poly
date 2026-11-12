@@ -1,5 +1,6 @@
 domain Payroll
 uses temporal
+uses persistence
 
 PayKind: enum { Salaried, Hourly }
 RunStatus: enum { Draft, Open, Approved, Paid }

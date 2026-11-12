@@ -108,6 +108,7 @@ public class N1NavigationTests {
     public async Task Parse_OwnedNav_CreatesOwnedOneToOne() {
         var poly = """
             domain Test
+            uses persistence
 
             Passport: entity {
               PassNum: Text unique

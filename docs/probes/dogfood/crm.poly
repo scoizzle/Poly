@@ -1,5 +1,6 @@
 domain Crm
 uses temporal
+uses persistence
 
 // Surface-only sibling: Lower erases the bind and Capture still runs.
 Billing: contract internal billing v1 {

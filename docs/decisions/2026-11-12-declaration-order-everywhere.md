@@ -40,9 +40,7 @@ Projections list what the model lists. There is no determinism sort: determinism
 
 ## Consequences
 
-- **G-18 (the DSL printer)** must print entity members through `EntityDeclarationOrder.Members`. It does not walk `MemberOrder` today:
-  `DomainDslPrinter.Entities.cs` prints properties, then navigations sorted by name, then policies, stages and actions. G-18 must not
-  re-implement the merge.
+- **G-18 (#786, the DSL printer)** prints entity members through `EntityDeclarationOrder.Members` and reimplements no merge.
 - **L-07 / L-08** read `Members` for Create order.
 - **C-10** needs no seam: `ConstraintCompilation` only drops its own `OrderBy` and reads `entity.Properties`.
 - **D-02, D-04, D-06, D-08, D-09** consume the same seam where they need member order.

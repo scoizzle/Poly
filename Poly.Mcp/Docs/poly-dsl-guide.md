@@ -482,9 +482,12 @@ same facts as a self-contained page for a person; an untagged element gets a sta
 `urn:poly:` IRI. The IRI is `x-poly-iri`, not a subschema `$id`: in JSON Schema 2020-12 a
 `$defs` `$id` starts an embedded resource and would rebase every local `#/$defs/…`
 reference onto the element IRI.
+
 ### Export order and `uses`
 
 `export_dsl` prints declarations in the order they were authored. Top-level declarations are grouped by kind (enums, value types, entities, functions, contracts, bindings), each kind in model order. Entity members (properties, navigations, stages, actions, policies) print in authored order, with subscriptions last. Members added through incremental MCP tools print after the authored ones. A `uses` line is printed only when the domain's extension list differs from the implicit set (`storage`, `persistence`, in that order) or a `uses <id> <version>` pin is present, so a document that listed no `uses` exports without one. Export drops `uses temporal`; reading re-supplies it.
+
+Two consequences of the `uses` rule. First, a document that spells exactly the implicit set (`uses storage` then `uses persistence`) exports without those lines: the model is equal, the text is not. Second, an export without `uses` is not self-describing: applying it into a session that already holds other libraries keeps them (for example `uses http`), and `polyc --seed authoring` loads only `storage`. Write the `uses` lines you need into the document. This is an interim rule until the implicit set stops being recorded in the extension list.
 
 ## 4. Navigation Properties (N1 Relationships Only)
 
@@ -509,7 +512,7 @@ Customer: entity {
 ```
 
 Cardinality: `one` (default, can be omitted), `many`.
-Ownership: `owned` marks `SourceOwnsTarget = true`. Export writes `one ` explicitly for a one-to-one navigation (`invoice: Invoice` prints as `invoice: one Invoice`), because a bare `x: T` also reads back as one-to-one but fails closed when `T` is a Phase 1a keyword (`actor`, `schedule`, `parallel`, `for`, `function`); `one T` is unambiguous.
+Ownership: `owned` marks `SourceOwnsTarget = true`. Export writes `one ` explicitly for a one-to-one navigation (`invoice: Invoice` prints as `invoice: one Invoice`), because a bare `x: T` also reads back as one-to-one but fails closed when `T` is a Phase 1a keyword (`actor`, `schedule`, `parallel`, `for`, `function`; matched case-insensitively); `one T` is unambiguous.
 
 **Which entity is the root.** A collection nav (`children: many Child`) means the
 declaring entity owns the target. `owned` marks composition explicitly. A plain singular
@@ -1821,8 +1824,6 @@ comment describing the old member.
 <!-- poly-verify: valid -->
 ```poly
 domain Orders
-uses storage
-uses persistence
 
 Customer: entity {
   Name: Text

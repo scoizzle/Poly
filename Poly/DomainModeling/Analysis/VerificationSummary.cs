@@ -63,7 +63,6 @@ public static class VerificationSummaryExtensions {
         this AnalysisResult analysis, Domain domain, string? path = null) {
         ArgumentNullException.ThrowIfNull(analysis);
         ArgumentNullException.ThrowIfNull(domain);
-        _ = path;
 
         // D3: the domain pass creates the bucket before anything else, so a missing one means the
         // pass never ran — never "there was nothing to report".
@@ -71,11 +70,18 @@ public static class VerificationSummaryExtensions {
         if (facts is null)
             return new VerificationSummary(CheckVerdict.Unknown, 0, [], 0);
 
-        var rows = UnverifiedRows(analysis, domain, facts);
-        var violations = ViolationNodes(analysis, facts);
+        // A3: the select form is the MCP one, checked against the domain tree. A path that names
+        // nothing is not a proof, so it fails closed to Unknown with no rows.
+        var scope = SelectScope.Parse(domain, path);
+        if (scope is null)
+            return new VerificationSummary(CheckVerdict.Unknown, facts.Verified, [], 0);
+
+        var rows = UnverifiedRows(analysis, domain, facts, scope);
+        var violations = ViolationNodes(analysis, domain, facts, scope);
+        var unverifiedFacts = facts.Unverified.Count(write => scope.Contains(domain, write.Effect));
         var verdict = violations.Count > 0
             ? CheckVerdict.Violated
-            : rows.Count > 0 || facts.Unverified.Count > 0
+            : rows.Count > 0 || unverifiedFacts > 0
                 ? CheckVerdict.Unknown
                 : CheckVerdict.Proven;
         return new VerificationSummary(verdict, facts.Verified, rows, violations.Count);
@@ -88,12 +94,15 @@ public static class VerificationSummaryExtensions {
     /// <see cref="VerificationSummary.Violations"/> deliberately stricter than
     /// <see cref="WriteVerificationFacts.Violations"/> until V-05 records those facts.
     /// </summary>
-    private static HashSet<Node> ViolationNodes(AnalysisResult analysis, WriteVerificationFacts facts) {
+    private static HashSet<Node> ViolationNodes(
+        AnalysisResult analysis, Domain domain, WriteVerificationFacts facts, SelectScope scope) {
         var nodes = new HashSet<Node>(NodeIdentityComparer.Instance);
-        foreach (var violation in facts.Violations)
-            nodes.Add(violation.Effect);
+        foreach (var violation in facts.Violations) {
+            if (scope.Contains(domain, violation.Effect))
+                nodes.Add(violation.Effect);
+        }
         foreach (var diagnostic in analysis.Diagnostics) {
-            if (diagnostic.Severity == DiagnosticSeverity.Error)
+            if (diagnostic.Severity == DiagnosticSeverity.Error && scope.Contains(domain, diagnostic.Node))
                 nodes.Add(diagnostic.Node);
         }
         return nodes;
@@ -106,12 +115,14 @@ public static class VerificationSummaryExtensions {
     /// de-duplicated by (node, code) so one write is one row.
     /// </summary>
     private static List<UnverifiedWriteFact> UnverifiedRows(
-        AnalysisResult analysis, Domain domain, WriteVerificationFacts facts) {
+        AnalysisResult analysis, Domain domain, WriteVerificationFacts facts, SelectScope scope) {
         var rows = new List<UnverifiedWriteFact>();
         var seen = new HashSet<(Node Node, string Code)>(NodeCodeComparer.Instance);
         foreach (var diagnostic in analysis.Diagnostics) {
             var code = diagnostic.Code;
             if (code is null || !IsUnverifiedWriteFinding(code, diagnostic.Severity))
+                continue;
+            if (!scope.Contains(domain, diagnostic.Node))
                 continue;
             if (!seen.Add((diagnostic.Node, code)))
                 continue;
@@ -136,6 +147,93 @@ public static class VerificationSummaryExtensions {
         string.Equals(code, DomainModelDiagnosticCodes.ConstraintUndecided, StringComparison.Ordinal)
         || (string.Equals(code, DomainModelDiagnosticCodes.EffectConstraintViolation, StringComparison.Ordinal)
             && severity == DiagnosticSeverity.Warning);
+
+    /// <summary>
+    /// A3: the select form is the MCP one — <c>Entity</c> or <c>Entity.Member</c>, dot or slash,
+    /// with an optional domain prefix — resolved once against the domain tree rather than against
+    /// the rows, so an entity with no writes is still a valid scope. An empty or whitespace path is
+    /// the whole domain; a path that names no element is not a proof, so it yields no scope.
+    /// </summary>
+    private sealed class SelectScope {
+        private readonly string[] _segments;
+
+        private SelectScope(string[] segments) => _segments = segments;
+
+        /// <summary>The whole domain for an empty path, null when <paramref name="path"/> names nothing.</summary>
+        public static SelectScope? Parse(Domain domain, string? path) {
+            if (string.IsNullOrWhiteSpace(path))
+                return new SelectScope([]);
+
+            var parts = path.Split(['.', '/'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (parts.Length > 1 && string.Equals(parts[0], domain.Name, StringComparison.Ordinal))
+                parts = parts[1..];
+            if (parts.Length == 0)
+                return new SelectScope([]);
+            return NamesAnElement(domain, parts) ? new SelectScope(parts) : null;
+        }
+
+        /// <summary>
+        /// True when <paramref name="node"/> is inside this scope. A node that does not resolve —
+        /// <see cref="DomainElementPath.Resolve"/> falls back to the domain name — is in every
+        /// scope, so it can never be scoped out and leave the model reading proven.
+        /// </summary>
+        public bool Contains(Domain domain, Node node) {
+            if (_segments.Length == 0)
+                return true;
+            return Matches(Segments(domain, node));
+        }
+
+        /// <summary>The node's element path as segments, domain prefix dropped; empty when unresolved.</summary>
+        private static string[] Segments(Domain domain, Node node) {
+            var path = DomainElementPath.Resolve(domain, node).Split('/');
+            if (path.Length <= 1)
+                return [];
+            return string.Equals(path[0], domain.Name, StringComparison.Ordinal) ? path[1..] : path;
+        }
+
+        private bool Matches(string[] row) {
+            if (row.Length == 0)
+                return true; // unresolved: in every scope
+            if (!string.Equals(row[0], _segments[0], StringComparison.Ordinal))
+                return false;
+
+            // Entity, Entity.Member: a prefix of the row's path.
+            if (_segments.Length <= row.Length) {
+                var prefix = true;
+                for (var i = 1; i < _segments.Length; i++) {
+                    if (!string.Equals(row[i], _segments[i], StringComparison.Ordinal)) {
+                        prefix = false;
+                        break;
+                    }
+                }
+                if (prefix)
+                    return true;
+            }
+
+            // A stage action is selected without its stage segment: Entity.Action over
+            // Domain/Entity/Stage/Action.
+            return _segments.Length == 2
+                && row.Length >= 3
+                && string.Equals(row[2], _segments[1], StringComparison.Ordinal);
+        }
+
+        /// <summary>The MCP <c>select</c> existence rule, read from the tree.</summary>
+        private static bool NamesAnElement(Domain domain, string[] parts) {
+            var entity = domain.Types.OfType<Entity>()
+                .FirstOrDefault(e => string.Equals(e.Name, parts[0], StringComparison.Ordinal));
+            if (entity is null)
+                return false;
+            if (parts.Length == 1)
+                return true;
+
+            var member = parts[1];
+            return entity.Properties.Any(p => string.Equals(p.Name, member, StringComparison.Ordinal))
+                || entity.Actions.Any(a => string.Equals(a.Name, member, StringComparison.Ordinal))
+                || entity.Policies.Any(p => string.Equals(p.Name, member, StringComparison.Ordinal))
+                || entity.Stages.Any(s => string.Equals(s.Name, member, StringComparison.Ordinal)
+                    || s.Actions.Any(a => string.Equals(a.Name, member, StringComparison.Ordinal)));
+        }
+    }
 
     private sealed class NodeCodeComparer : IEqualityComparer<(Node Node, string Code)> {
         public static readonly NodeCodeComparer Instance = new();

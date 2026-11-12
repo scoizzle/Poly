@@ -174,4 +174,134 @@ public class VerificationSummaryTests {
         await Assert.That(summary.UnverifiedWrites).IsEmpty();
         await Assert.That(summary.VerifiedWrites).IsEqualTo(0);
     }
+
+    // ── S3: scope (A3) ────────────────────────────────────────────────────
+
+    private const string TwoUnverifiedEntities = """
+        domain Test
+        Box: entity {
+          A: Number range(0, 10)
+          B: Number range(5, 20)
+          Run: action { assign A to B }
+        }
+        Crate: entity {
+          Q: Number range(0, 100)
+          R: Number range(50, 500)
+          Fill: action { assign Q to R }
+        }
+        Empty: entity {
+          V: Number range(0, 10)
+        }
+        """;
+
+    [Test]
+    public async Task SelectedPath_ScopesTheSummary() {
+        var result = Parse(TwoUnverifiedEntities);
+
+        var whole = result.Analysis.GetVerification(result.Root);
+        await Assert.That(whole.Verdict).IsEqualTo(CheckVerdict.Unknown);
+        await Assert.That(whole.UnverifiedWrites.Count).IsEqualTo(2);
+
+        // Entity, both select forms (dot and slash, with and without the domain prefix).
+        foreach (var select in new[] { "Box", "Test.Box", "Test/Box" }) {
+            var box = result.Analysis.GetVerification(result.Root, select);
+            await Assert.That(box.Verdict).IsEqualTo(CheckVerdict.Unknown);
+            await Assert.That(box.UnverifiedWrites.Single().Path).IsEqualTo("Test/Box/Run");
+        }
+
+        // Entity.Action narrows further; only Box's action is in scope.
+        foreach (var select in new[] { "Box.Run", "Test.Box.Run" }) {
+            var run = result.Analysis.GetVerification(result.Root, select);
+            await Assert.That(run.UnverifiedWrites.Single().Path).IsEqualTo("Test/Box/Run");
+        }
+
+        // A clean scope does not inherit another entity's unknown (fail-closed case 6).
+        var clean = result.Analysis.GetVerification(result.Root, "Empty");
+        await Assert.That(clean.Verdict).IsEqualTo(CheckVerdict.Proven);
+        await Assert.That(clean.UnverifiedWrites).IsEmpty();
+
+        // A path naming nothing is not a proof.
+        var nothing = result.Analysis.GetVerification(result.Root, "Nope");
+        await Assert.That(nothing.Verdict).IsEqualTo(CheckVerdict.Unknown);
+        await Assert.That(nothing.UnverifiedWrites).IsEmpty();
+    }
+
+    [Test]
+    public async Task EmptyEntityScope_IsProven() {
+        var result = Parse(TwoUnverifiedEntities);
+
+        var summary = result.Analysis.GetVerification(result.Root, "Empty");
+
+        await Assert.That(summary.Verdict).IsEqualTo(CheckVerdict.Proven);
+        await Assert.That(summary.UnverifiedWrites).IsEmpty();
+        await Assert.That(summary.Violations).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task StageActionScope_MatchesWithoutTheStageSegment() {
+        var result = Parse("""
+            domain Test
+            Box: entity {
+              A: Number range(0, 10)
+              B: Number range(5, 20)
+              Open: stage {
+                Run: action { assign A to B }
+              }
+              Closed: stage { }
+            }
+            """);
+
+        var whole = result.Analysis.GetVerification(result.Root);
+        await Assert.That(whole.UnverifiedWrites.Single().Path).IsEqualTo("Test/Box/Open/Run");
+
+        // `Box.Run` names the stage action without writing the stage segment.
+        var action = result.Analysis.GetVerification(result.Root, "Box.Run");
+        await Assert.That(action.Verdict).IsEqualTo(CheckVerdict.Unknown);
+        await Assert.That(action.UnverifiedWrites.Single().Path).IsEqualTo("Test/Box/Open/Run");
+
+        // The stage itself is a prefix scope.
+        var stage = result.Analysis.GetVerification(result.Root, "Box.Closed");
+        await Assert.That(stage.Verdict).IsEqualTo(CheckVerdict.Proven);
+        await Assert.That(stage.UnverifiedWrites).IsEmpty();
+    }
+
+    [Test]
+    public async Task UnresolvedNode_IsInScopeForEveryScope() {
+        // A node that does not resolve falls back to the domain path, so it can never be scoped out
+        // and let the model read Proven (A3).
+        var entity = new Entity("Item",
+            [NumProp("A", new RangeConstraint(0d, 10d))],
+            [Act("Run", [], new AssignEffect(DomainExpression.Property("A"), DomainExpression.Literal(5)))],
+            [], []);
+        var model = Domain(entity);
+        var analysis = new AnalyzerBuilder().AddAnalyzer(new EffectAnalyzer()).Build().Analyze(model);
+
+        var scoped = analysis.GetVerification(model, "Item");
+
+        await Assert.That(scoped.Verdict).IsEqualTo(CheckVerdict.Violated);
+        await Assert.That(scoped.Violations).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task MissingFactsBucket_IsUnknownNotProven() {
+        // D3: a pipeline without the effect pass never creates the bucket, so there is nothing to
+        // prove — Unknown with zero counts, never an empty Proven.
+        var entity = new Entity("Item",
+            [new Property("Name", new DomainTypeReference("Text"), [])],
+            [], [], []);
+        var domain = DomainTestFactory.Create("Test", [entity], []);
+
+        var analysis = new AnalyzerBuilder()
+            .AddAnalyzer(new StructuralDomainAnalyzer())
+            .AddAnalyzer(new DomainCatalogPass())
+            .Build()
+            .Analyze(domain);
+
+        await Assert.That(analysis.GetMetadata<WriteVerificationFacts>(domain)).IsNull();
+        var summary = analysis.GetVerification(domain);
+        await Assert.That(summary.Verdict).IsEqualTo(CheckVerdict.Unknown);
+        await Assert.That(summary.VerifiedWrites).IsEqualTo(0);
+        await Assert.That(summary.UnverifiedWrites).IsEmpty();
+        await Assert.That(summary.Violations).IsEqualTo(0);
+    }
 }

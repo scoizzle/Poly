@@ -174,7 +174,7 @@ public class ConstraintCoverageTests {
             }
             """;
 
-        using var host = await PolycProcess.McpAsync(McpTarget.Polyc);
+        using var host = await PolycProcess.McpAsync();
         await host.InitializeAsync();
         var opened = await host.ToolAsync("poly_workspace", new JsonObject { ["name"] = "StorageOnly" });
         var workspace = opened["state"]!["workspace"]!.GetValue<string>();

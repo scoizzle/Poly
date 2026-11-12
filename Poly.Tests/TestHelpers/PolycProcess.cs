@@ -42,8 +42,6 @@ internal sealed class PolycTimeoutException(string message, int processId) : Pol
 /// <summary>A write to an MCP host's stdin failed; the message carries the host's stderr tail at that moment.</summary>
 internal sealed class McpWriteException(string message, Exception inner) : IOException(message, inner);
 
-internal enum McpTarget { Polyc, PolyMcp }
-
 /// <summary>The one place under Poly.Tests that starts a polyc/MCP/test-host child. Every path is
 /// acquire slot -> start -> drain (bounded, chunked) -> kill tree -> bounded wait -> release.</summary>
 internal static class PolycProcess {
@@ -134,12 +132,12 @@ internal static class PolycProcess {
             ["--treenode-filter", treenodeFilter, "--minimum-expected-tests", "1", "--no-ansi"]) { Env = merged };
     }
 
-    public static async Task<McpClient> McpAsync(McpTarget target, TimeSpan? readTimeout = null, CancellationToken ct = default) {
+    /// <summary>The one MCP host: <c>polyc mcp</c>. It holds a gate slot and is killed as a tree on dispose.</summary>
+    public static async Task<McpClient> McpAsync(TimeSpan? readTimeout = null, CancellationToken ct = default) {
         GuardDepth();
-        var (dll, _) = HostFiles(target == McpTarget.Polyc ? "polyc" : "Poly.Mcp");
-        string[] args = target == McpTarget.Polyc ? ["mcp"] : [];
+        var (dll, _) = HostFiles("polyc");
         using var linked = Link(ct);
-        var child = await ManagedChild.StartAsync(new ChildSpec(dll, args) { Env = Children.Env(null) }, linked.Token);
+        var child = await ManagedChild.StartAsync(new ChildSpec(dll, ["mcp"]) { Env = Children.Env(null) }, linked.Token);
         try {
             return new McpClient(child, readTimeout ?? TimeSpan.FromSeconds(60));
         }

@@ -4,7 +4,7 @@
     "poly-local": {
       "type": "local",
       // Or ["bun", "x", "my-mcp-command"]
-      "command": ["dotnet", "run", "--project", "./Poly.Mcp/Poly.Mcp.csproj"],
+      "command": ["dotnet", "run", "--project", "./src/polyc/polyc.csproj", "--", "mcp"],
       "enabled": true
     }
   }

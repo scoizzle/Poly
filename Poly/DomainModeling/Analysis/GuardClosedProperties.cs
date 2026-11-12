@@ -1,4 +1,5 @@
 using Poly.DomainModeling.Ontology;
+using Poly.DomainModeling.Ontology.Constraints;
 
 namespace Poly.DomainModeling.Analysis;
 
@@ -217,11 +218,11 @@ internal static class GuardClosedProperties {
                         return false;
                     if (range.Minimum is not null
                         && !sourceRanges.Any(s => s.Intervals is null && s.Minimum is not null
-                            && TryCompare(s.Minimum, range.Minimum) is >= 0))
+                            && ConstraintMerge.TryCompare(s.Minimum, range.Minimum) is >= 0))
                         return false;
                     if (range.Maximum is not null
                         && !sourceRanges.Any(s => s.Intervals is null && s.Maximum is not null
-                            && TryCompare(s.Maximum, range.Maximum) is <= 0))
+                            && ConstraintMerge.TryCompare(s.Maximum, range.Maximum) is <= 0))
                         return false;
                     break;
                 case LengthConstraint length when isText:
@@ -246,17 +247,6 @@ internal static class GuardClosedProperties {
             }
         }
         return true;
-    }
-
-    private static int? TryCompare(object left, object right) {
-        try {
-            if (left is int or long && right is int or long)
-                return Convert.ToInt64(left).CompareTo(Convert.ToInt64(right));
-            return Convert.ToDouble(left).CompareTo(Convert.ToDouble(right));
-        }
-        catch (Exception e) when (e is InvalidCastException or FormatException or OverflowException) {
-            return null;
-        }
     }
 
     /// <summary>Why the create guard does not fully cover <paramref name="constraint"/>, or null when it does.</summary>

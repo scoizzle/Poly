@@ -10,13 +10,15 @@ namespace Poly.DomainModeling.Analysis;
 
 /// <summary>
 /// Validate pack: effect binding, ordering, parameter usage, and requirement coverage diagnostics.
-/// Writes no analysis facts — create-in resolution is published by <see cref="EffectFactsPass"/>.
+/// Publishes one fact bag — <see cref="WriteVerificationFacts"/> (the write channel); create-in
+/// resolution stays on <see cref="EffectFactsPass"/>.
 /// </summary>
 internal sealed partial class EffectAnalyzer : INodeAnalyzer {
     public const string Id = "DomainEffectAnalyzer";
     public string PassName => Id;
     // Lint-only: reads catalog types/resolved refs, RequiredProperties,
-    // DownstreamConstraints, ActionInvariantMetadata. No metadata publication.
+    // DownstreamConstraints, ActionInvariantMetadata. Its only publication is the
+    // write-verification fact bag on the domain (V-03/V-04).
     public void Analyze(AnalysisContext context, Node node) {
 
         if (node is Domain domain) {
@@ -79,14 +81,15 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
     }
 
     /// <summary>
-    /// Each <see cref="ObservedFlow"/> is a copy the existing assign checks decide on. An
-    /// unresolvable or self flow is DMSEM005 on the domain (no allowance clears it). Otherwise
-    /// the length and range of the source must sit inside the target's (<see cref="IsConstraintSubsumed"/>),
-    /// else DMEFF008 on the target property (a matching allowance makes it a warning), and an
-    /// optional source cannot flow into a required target (DMEFF014, #439): an observed flow has no
-    /// guard site, so no allowance or guard clears it. Nothing is inserted into the tree.
-    /// A flow whose source carries no same-kind constraint is NOT verified (the copy can carry any
-    /// value of that kind); it is deferred, not silently skipped — see the comment at the skip.
+    /// Each <see cref="ObservedFlow"/> is a copy the existing assign checks decide on, and it is
+    /// recorded like any other write. An unresolvable or self flow is DMSEM005 on the domain (no
+    /// allowance clears it). Otherwise a source with no same-kind constraint is not verified — a
+    /// <c>DMCS003</c> warning naming the flow plus an <c>UnknownBound</c> fact (V-04 A4) — a source
+    /// whose length or range sits inside the target's is verified, and a wider source keeps its
+    /// <c>DMEFF008</c> on the target property (a matching allowance makes it a warning) with a
+    /// <c>PossibleViolation</c> fact beside it. An optional source cannot flow into a required
+    /// target (DMEFF014, #439): an observed flow has no guard site, so no allowance or guard clears
+    /// it. Nothing is inserted into the tree.
     /// </summary>
     private static void ValidateObservedFlows(AnalysisContext context, Domain domain) {
         foreach (var flow in RuntimeAnalysisCache.Session(domain).ObservedFlows) {
@@ -107,13 +110,43 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
                     continue;
                 var sourceConstraint = source.Value.Property.Constraints
                     .FirstOrDefault(c => c.GetType() == targetConstraint.GetType());
-                // A source with NO same-kind constraint is not verified: the flow can carry any value
-                // of that kind. Deferred, not silently skipped — routing an observed flow through
-                // WriteRecorder needs an effect node to key the fact on and an agreement with the
-                // allowance regime (#444), and V-04 owns that. Pinned by
-                // DiagnosticAllowanceTests.ObservedFlow_UnboundedSource_IsNotYetVerified.
-                if (sourceConstraint is null || IsConstraintSubsumed(sourceConstraint, targetConstraint))
+                var constraint = ConstraintValidation.Describe(targetConstraint);
+
+                // A source with NO same-kind constraint is not verified: the flow can carry any
+                // value of that kind. A4(i) routes it through the recorder — a DMCS003 warning
+                // naming the flow, plus an UnknownBound fact on the target — so the copy is never
+                // silently skipped.
+                if (sourceConstraint is null) {
+                    context.ReportWarning(
+                        target.Value.Property,
+                        $"Observed flow '{flow.SourcePath}' -> '{flow.TargetPath}': the source has no " +
+                        $"{constraint} constraint, so the copy may carry any value of that kind and " +
+                        $"'{flow.TargetPath}' cannot be verified.",
+                        DomainModelDiagnosticCodes.ConstraintUndecided);
+                    WriteRecorder.Record(
+                        context, domain, target.Value.Property, target.Value.Property.Name, constraint,
+                        WriteVerdict.Unverified(
+                            UnverifiedReason.UnknownBound, DomainModelDiagnosticCodes.ConstraintUndecided));
                     continue;
+                }
+
+                // A4(ii): a Range pair is decided by the one procedure every assign uses; a Length
+                // pair keeps the declared-bounds rule.
+                var subsumed = targetConstraint is RangeConstraint rangeTarget
+                               && sourceConstraint is RangeConstraint rangeSource
+                    ? WriteVerification.DecideRange(rangeTarget, AbstractValue.From([rangeSource]))
+                        == ConstraintVerdict.Satisfied
+                    : IsConstraintSubsumed(sourceConstraint, targetConstraint);
+                if (subsumed) {
+                    WriteRecorder.Record(
+                        context, domain, target.Value.Property, target.Value.Property.Name, constraint,
+                        WriteVerdict.Satisfied);
+                    continue;
+                }
+
+                // A4(iii): the finding is unchanged (an allowance may still downgrade it) and the
+                // recorder gets a PossibleViolation fact beside it, so the summary can never read
+                // proven while the flow is undecided.
                 var severity = ObservedFlowChecks.SeverityFor(
                     context, domain, target.Value.Property, DomainModelDiagnosticCodes.EffectConstraintViolation);
                 context.ReportDiagnostic(
@@ -123,6 +156,10 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
                     $"{ConstraintValidation.Describe(sourceConstraint)} allows values outside " +
                     $"{ConstraintValidation.Describe(targetConstraint)}.",
                     DomainModelDiagnosticCodes.EffectConstraintViolation);
+                WriteRecorder.Record(
+                    context, domain, target.Value.Property, target.Value.Property.Name, constraint,
+                    WriteVerdict.Unverified(
+                        UnverifiedReason.PossibleViolation, DomainModelDiagnosticCodes.EffectConstraintViolation));
             }
 
             // #439: `optional` is the only way an entity property may hold null, so a required
@@ -136,17 +173,6 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
                     DomainModelDiagnosticCodes.ObservedFlowNullability);
                 ObservedFlowChecks.NoteNullabilityFinding(context, domain, target.Value.Property);
             }
-        }
-    }
-
-    private static bool TryToDouble(object? value, out double d) {
-        switch (value) {
-            case double x: d = x; return true;
-            case float f: d = f; return true;
-            case int i: d = i; return true;
-            case long l: d = l; return true;
-            case decimal m: d = (double)m; return true;
-            default: d = 0; return false;
         }
     }
 
@@ -1243,7 +1269,7 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
                 double lo = vr.Min ?? double.NegativeInfinity, hi = vr.Max ?? double.PositiveInfinity;
                 bool fullyBelow = tmin is not null && hi < tmin.Value;
                 bool fullyAbove = tmax is not null && lo > tmax.Value;
-                if (fullyBelow || fullyAbove || HasUnorderableBound(range)) {
+                if (fullyBelow || fullyAbove || WriteVerification.HasUnorderableBound(range)) {
                     context.ReportError(
                         post.Effect,
                         $"Call-chain postcondition ({action.Name} → {post.DeclaringAction.Name}): assigned value range " +

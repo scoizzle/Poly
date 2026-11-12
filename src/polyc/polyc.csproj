@@ -11,7 +11,7 @@
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>polyc</ToolCommandName>
     <PackageId>Poly.Polyc</PackageId>
-    <Description>The Poly compiler: check and build .poly domains, and serve them over LSP.</Description>
+    <Description>The Poly compiler: check and build .poly domains, and serve them over LSP and MCP.</Description>
   </PropertyGroup>
 
   <ItemGroup>

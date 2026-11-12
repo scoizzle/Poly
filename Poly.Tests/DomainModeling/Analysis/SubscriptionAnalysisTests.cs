@@ -817,6 +817,117 @@ public class SubscriptionAnalysisTests {
     }
 
     [Test]
+    public async Task SubscriptionToTwoNeverEnteredStages_MessageUsesPluralForm() {
+        var domain = ParseDomain(ShipmentWatch(
+            """
+              Packed: stage { Ship: action { transition to Delivered } }
+              Delivered: stage { }
+              Phantom: stage { }
+              Ghost: stage { }
+            """,
+            """  when shipments Phantom, Ghost { assign Note to "x" }"""));
+        var message = NeverEntered(domain).Single().Message;
+
+        await Assert.That(message).Contains("none is the initial stage");
+        await Assert.That(message).Contains("can never fire for 'Phantom', 'Ghost'");
+    }
+
+    [Test]
+    public async Task SubscriptionToStageEnteredOnlyByStageScopedSubscriptionEffect_IsClean() {
+        var domain = ParseDomain("""
+            domain Test
+
+            Part: entity {
+              Open: stage { Close: action { transition to Closed } }
+              Closed: stage { }
+            }
+
+            Shipment: entity {
+              parts: many Part
+              Packed: stage {
+                when parts Closed { transition to Delivered }
+              }
+              Delivered: stage { }
+            }
+
+            Order: entity {
+              Note: Text optional
+              shipments: many Shipment
+              when shipments Delivered { assign Note to "x" }
+            }
+            """);
+
+        await Assert.That(NeverEntered(domain)).IsEmpty();
+    }
+
+    [Test]
+    public async Task SubscriptionToStageEnteredOnlyInForBody_IsClean() {
+        var domain = ParseDomain("""
+            domain Test
+
+            Part: entity {
+              Open: stage { }
+            }
+
+            Shipment: entity {
+              parts: many Part
+              Packed: stage { Run: action { for p in parts { transition to Delivered } } }
+              Delivered: stage { }
+            }
+
+            Order: entity {
+              Note: Text optional
+              shipments: many Shipment
+              when shipments Delivered { assign Note to "x" }
+            }
+            """);
+
+        await Assert.That(NeverEntered(domain)).IsEmpty();
+    }
+
+    private static string DuplicatePair(string firstWhen, string secondWhen) => $$"""
+        domain Test
+
+        Parcel: entity {
+          Label: Text optional
+          Pending: stage { Move: action { transition to Moved } }
+          Moved: stage { }
+        }
+
+        Hub2: entity {
+          Note: Text optional
+          parcels: many Parcel
+          {{firstWhen}}
+          {{secondWhen}}
+        }
+        """;
+
+    private static int DuplicateCount(string firstWhen, string secondWhen) =>
+        DomainModelAnalyzer.Analyze(ParseDomain(DuplicatePair(firstWhen, secondWhen))).Diagnostics
+            .Count(d => d.Code == DomainModelDiagnosticCodes.SubscriptionDuplicateHandler);
+
+    [Test]
+    public async Task DuplicateWhens_DifferentPeerBinder_AreSilent() {
+        await Assert.That(DuplicateCount(
+            "when parcels Moved as a { assign Note to a Label }",
+            "when parcels Moved as b { assign Note to b Label }")).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task DuplicateWhens_SamePeerBinder_Warn() {
+        await Assert.That(DuplicateCount(
+            "when parcels Moved as a { assign Note to \"x\" }",
+            "when parcels Moved as a { assign Note to \"y\" }")).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task DuplicateWhens_DifferentQuantifier_AreSilent() {
+        await Assert.That(DuplicateCount(
+            "when parcels Moved { assign Note to \"x\" }",
+            "when any parcels Moved { assign Note to \"y\" }")).IsEqualTo(0);
+    }
+
+    [Test]
     public async Task SubscriptionToTwoNeverEnteredStages_WarnsOnce() {
         var domain = ParseDomain(ShipmentWatch(
             """
@@ -863,7 +974,7 @@ public class SubscriptionAnalysisTests {
     public async Task SubscriptionToStageEnteredOnlyFromExitHop_IsClean() {
         var domain = ParseDomain(ShipmentWatch(
             """
-              A: stage { exit { transition to B } Go: action { transition to B } }
+              A: stage { exit { transition to B } }
               B: stage { }
             """,
             """  when shipments B { assign Note to "x" }"""));

@@ -318,4 +318,191 @@ public class FailureTypingTests {
 
         await Assert.That(asm.GetType("Order")).IsNotNull();
     }
+
+    private const string StageGateDsl = """
+        domain Lab
+        Visit: entity {
+          Scheduled: stage { CheckIn: action { transition to Active } }
+          Active: stage { }
+        }
+        """;
+
+    private const string StageFallthroughDsl = """
+        domain Lab
+        Ticket: entity {
+          Draft: stage { Cancel: action { transition to Closed } }
+          Open: stage { Cancel: action { transition to Closed } }
+          Closed: stage { }
+        }
+        """;
+
+    private const string PolicyDsl = """
+        domain Lab
+        Item: entity {
+          Ok: Boolean
+          IsOk: policy { Ok is true }
+          Draft: stage {
+            Go: action require IsOk { transition to Done }
+            Skip: action require not IsOk { transition to Done }
+          }
+          Done: stage { }
+        }
+        """;
+
+    private const string LinkDsl = """
+        domain Lab
+        Child: entity { Name: Text }
+        Parent: entity {
+          kid: Child
+          AddKid: action { create in kid { Name: "x" } }
+        }
+        """;
+
+    private const string InvokeUnlinkedDsl = """
+        domain Lab
+        Child: entity { Poke: action { } }
+        Parent: entity {
+          kid: Child
+          Go: action { invoke kid.Poke }
+        }
+        """;
+
+    private const string PathPrefixDsl = """
+        domain Lab
+        Room: entity { Occupied: Boolean }
+        Reservation: entity {
+          room: Room
+          RoomFree: policy { room Occupied is false }
+          Booked: stage {
+            CheckIn: action require RoomFree { transition to InHouse }
+          }
+          InHouse: stage { }
+        }
+        """;
+
+    private const string EnsureUniqueDsl = """
+        domain Lab
+        Widget: entity {
+          Sku: Text unique
+        }
+        """;
+
+    [Test]
+    [Arguments(StageGateDsl, "Stage(\"'CheckIn' requires stage 'Scheduled' on entity 'Visit'.\", \"Visit.CheckIn\", \"Scheduled\")")]
+    [Arguments(StageFallthroughDsl, "Stage(\"'Cancel' is not valid for the current stage on entity 'Ticket'.\", \"Ticket.Cancel\")")]
+    [Arguments(PolicyDsl, "Policy(\"'Go' blocked by policy 'IsOk'.\", \"Item.Go\", \"IsOk\")")]
+    [Arguments(PolicyDsl, "Policy(\"'Skip' blocked by policy 'IsOk'.\", \"Item.Skip\", \"IsOk\")")]
+    [Arguments(LinkDsl, "Link(\"Cannot add a second link on 'kid': the source already has a target.\", \"Parent.kid\")")]
+    [Arguments(InvokeUnlinkedDsl, "Required(\"'Go' requires a linked 'kid' on entity 'Parent'.\", \"Parent.kid\")")]
+    [Arguments(PathPrefixDsl, "Required(\"'CheckIn' requires a linked 'room' on entity 'Reservation'.\", \"Reservation.room\")")]
+    [Arguments(EnsureUniqueDsl, "Constraint(\"A unique assign needs the storage port.\", \"Widget\")")]
+    public async Task ActionKinds_PrintTheirKindPathAndGuard(string dsl, string call) {
+        var cs = Print(dsl);
+
+        await Assert.That(cs).Contains($"Failure(Poly.Runtime.DomainFailure.{call})");
+    }
+
+    private static DomainFailure PrintedFailure(
+        string dsl, string entity, string? action, int times = 1, string? nested = null) {
+        var asm = ExportedCSharp.CompileAndLoad(Print(dsl));
+        var type = asm.GetType(entity)!;
+        var create = type.GetMethod("Create")!;
+        var args = create.GetParameters().Select(p => p.ParameterType == typeof(string) ? (object?)"x"
+            : p.ParameterType == typeof(IStoragePort) ? new InMemoryStoragePort()
+            : p.ParameterType.IsValueType ? Activator.CreateInstance(p.ParameterType) : null).ToArray();
+        var created = create.Invoke(null, args)!;
+        var instance = created.GetType().GetProperty("Value")!.GetValue(created)!;
+        object? result = null;
+        if (action is null)
+            result = type.GetMethod("EnsureUnique")!.Invoke(instance, ["Sku", "other"]);
+        for (var i = 0; action is not null && i < times; i++)
+            result = type.GetMethod(action)!.Invoke(instance, [])!;
+        return (DomainFailure)result!.GetType().GetProperty("Error")!.GetValue(result)!;
+    }
+
+    [Test]
+    [Arguments(StageGateDsl, "Visit", "CheckIn", 2, DomainFailureKind.Stage, "'CheckIn' requires stage 'Scheduled' on entity 'Visit'.", "Visit.CheckIn", "Scheduled")]
+    [Arguments(PolicyDsl, "Item", "Go", 1, DomainFailureKind.Policy, "'Go' blocked by policy 'IsOk'.", "Item.Go", "IsOk")]
+    [Arguments(PolicyDsl, "Item", "Skip", 1, DomainFailureKind.Policy, "'Skip' blocked by policy 'IsOk'.", "Item.Skip", "IsOk")]
+    [Arguments(LinkDsl, "Parent", "AddKid", 2, DomainFailureKind.Link, "Cannot add a second link on 'kid': the source already has a target.", "Parent.kid", null)]
+    [Arguments(InvokeUnlinkedDsl, "Parent", "Go", 1, DomainFailureKind.Required, "'Go' requires a linked 'kid' on entity 'Parent'.", "Parent.kid", null)]
+    [Arguments(PathPrefixDsl, "Reservation", "CheckIn", 1, DomainFailureKind.Required, "'CheckIn' requires a linked 'room' on entity 'Reservation'.", "Reservation.room", null)]
+    [Arguments(EnsureUniqueDsl, "Widget", null, 1, DomainFailureKind.Constraint, "A unique assign needs the storage port.", "Widget", null)]
+    public async Task ActionKinds_PrintedAssembly_CarryKindPathGuardAndLegacyText(
+        string dsl, string entity, string? action, int times,
+        DomainFailureKind kind, string message, string path, string? guard) {
+        var failure = PrintedFailure(dsl, entity, action, times);
+
+        await Assert.That(failure.Kind).IsEqualTo(kind);
+        await Assert.That(failure.Message).IsEqualTo(message);
+        await Assert.That(failure.ElementPath).IsEqualTo(path);
+        await Assert.That(failure.Guard).IsEqualTo(guard);
+    }
+
+    [Test]
+    [Arguments(StageGateDsl, "Visit", "CheckIn", "'CheckIn' requires stage 'Scheduled' on entity 'Visit'.")]
+    [Arguments(PolicyDsl, "Item", "Go", "'Go' blocked by policy 'IsOk'.")]
+    [Arguments(PolicyDsl, "Item", "Skip", "'Skip' blocked by policy 'IsOk'.")]
+    [Arguments(LinkDsl, "Parent", "AddKid", "Cannot add a second link on 'kid': the source already has a target.")]
+    [Arguments(InvokeUnlinkedDsl, "Parent", "Go", "'Go' requires a linked 'kid' on entity 'Parent'.")]
+    [Arguments(PathPrefixDsl, "Reservation", "CheckIn", "'CheckIn' requires a linked 'room' on entity 'Reservation'.")]
+    public async Task ActionKinds_OnBothSides_KeepTheLegacyMessageText(
+        string dsl, string entity, string action, string expected) {
+        var twice = action is "CheckIn" && entity == "Visit" || action == "AddKid";
+        var outcomes = await ParityScenario.FromDsl(dsl, "FailureTypingAction" + Guid.NewGuid().ToString("N"))
+            .AssertAgree(side => {
+                if (entity == "Item")
+                    side.Create(entity, ("Ok", action == "Skip"));
+                else
+                    side.Create(entity);
+                side.Invoke(action);
+                if (twice)
+                    side.Invoke(action);
+            });
+
+        var failed = outcomes[twice ? 2 : 1];
+        await Assert.That(failed.Success).IsFalse();
+        await Assert.That(failed.Message).IsEqualTo(expected);
+    }
+
+    [Test]
+    public async Task StageFallthrough_OnBothSides_KeepsTheLegacyMessageText() {
+        var outcomes = await ParityScenario.FromDsl(StageFallthroughDsl, "FailureTypingFallthrough")
+            .AssertAgree(side => {
+                side.Create("Ticket");
+                side.Invoke("Cancel");
+                side.Invoke("Cancel");
+            });
+
+        await Assert.That(outcomes[2].Success).IsFalse();
+        await Assert.That(outcomes[2].Message).IsEqualTo(
+            "'Cancel' is not valid for the current stage on entity 'Ticket'.");
+    }
+
+    [Test]
+    public async Task StageFallthrough_PrintedAssembly_CarriesStageKindAndPathWithNoGuard() {
+        var failure = PrintedFailure(StageFallthroughDsl, "Ticket", "Cancel", 2);
+
+        await Assert.That(failure.Kind).IsEqualTo(DomainFailureKind.Stage);
+        await Assert.That(failure.ElementPath).IsEqualTo("Ticket.Cancel");
+        await Assert.That(failure.Guard).IsNull();
+    }
+
+    [Test]
+    public async Task ActionParameterNamedDomainResult_InAVoidAction_IsAReservedNameError() {
+        var session = ParitySessions.Create();
+        var changes = new PolyDslParser("""
+            domain Lab
+            Widget: entity {
+              Done: Boolean
+              Mark: action (DomainResult: Number) { }
+            }
+            """, session).Parse();
+
+        var evolved = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes, session: session);
+
+        await Assert.That(evolved.Analysis.Diagnostics.Any(d =>
+            d.Code == DomainModelDiagnosticCodes.ReservedMemberName
+            && d.Message.Contains("Parameter 'DomainResult' of action 'Mark' would shadow the generated C# type 'DomainResult'"))).IsTrue();
+    }
 }

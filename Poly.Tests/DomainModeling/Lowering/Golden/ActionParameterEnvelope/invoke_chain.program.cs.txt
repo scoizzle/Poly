@@ -106,7 +106,7 @@ static async System.Threading.Tasks.Task SeedAsync(TDbCtx db)
     {
         return;
     }
-    var meterResult = Meter.Create(1);
+    var meterResult = Meter.Create(50);
     if (meterResult.IsSuccess)
     {
         db.Add(meterResult.Value);

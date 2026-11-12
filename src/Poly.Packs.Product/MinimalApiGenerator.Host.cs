@@ -117,8 +117,9 @@ public sealed partial class MinimalApiGenerator {
         // Range-constrained properties
         var range = prop.Constraints.OfType<RangeConstraint>().FirstOrDefault();
         if (range is not null) {
-            if (range.Minimum is long l && l > 0) return new Constant((int)l);
-            if (range.Maximum is long l2 && l2 > 0) return new Constant((int)(l2 / 2));
+            // A Number bound is a long (#643). Narrow only when it fits an int; never truncate.
+            if (range.Minimum is long l && l > 0) return new Constant(NarrowSeed(l));
+            if (range.Maximum is long l2 && l2 > 0) return new Constant(NarrowSeed(l2 / 2));
             return new Constant(1);
         }
 
@@ -145,6 +146,9 @@ public sealed partial class MinimalApiGenerator {
             _ => new Constant("Sample"),
         };
     }
+
+    /// <summary>An int seed when it fits, else the exact long — never a truncating cast.</summary>
+    private static object NarrowSeed(long value) => value <= int.MaxValue ? (object)(int)value : value;
 }
 
 /// <summary>

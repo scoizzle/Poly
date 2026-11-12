@@ -304,6 +304,12 @@ type the payload cannot accept, if a payload type is unknown, or if two contract
 (or the parent domain) share a value-type name. A bind may name the original action
 instead of a suffixed exported endpoint; see §11.
 
+A bind name is a global name: a second bind with the same name is `DMCON017` on the
+second declaration, naming the first. Lower splices one endpoint body per bound
+action, so an action takes one bind: a second bind to the same action is `DMCON018`
+on the second declaration, naming both; the other body would never run. Both are
+errors, and both fail closed.
+
 The `InternalDomain` producer fills a `contract internal`'s value types and endpoints
 from another loaded domain; it contributes no implementation body. A surface-only
 in-solution bind therefore compiles away.

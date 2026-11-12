@@ -102,7 +102,7 @@ internal sealed partial class EffectAnalyzer {
             if (verdict == ConstraintVerdict.Undecided) {
                 ConstraintValidation.ReportUndecided(
                     context, errorNode, constraint, $"on property '{targetProp.Name}'");
-                tally.Add(WriteVerdict.Unverified(UnverifiedReason.NonFlowCheckedKind), constraint);
+                tally.Add(WriteVerdict.Unverified(UnverifiedReason.NonFlowCheckedKind, DomainModelDiagnosticCodes.ConstraintUndecided), constraint);
                 continue;
             }
             tally.Add(verdict == ConstraintVerdict.Violated ? WriteVerdict.Violated : WriteVerdict.Satisfied, constraint);
@@ -138,7 +138,10 @@ internal sealed partial class EffectAnalyzer {
                     $"that violate the property constraint.",
                     DomainModelDiagnosticCodes.EffectConstraintViolation);
                 if (ConstraintValidation.IsWriteRelevant(propConstraint))
-                    tally.Add(WriteVerdict.Unverified(UnverifiedReason.UnknownBound), propConstraint);
+                    tally.Add(
+                        WriteVerdict.Unverified(
+                            UnverifiedReason.UnknownBound, DomainModelDiagnosticCodes.EffectConstraintViolation),
+                        propConstraint);
                 continue;
             }
 
@@ -151,7 +154,10 @@ internal sealed partial class EffectAnalyzer {
                     $"{ConstraintValidation.Describe(propConstraint)}.",
                     DomainModelDiagnosticCodes.EffectConstraintViolation);
                 if (ConstraintValidation.IsWriteRelevant(propConstraint))
-                    tally.Add(WriteVerdict.Unverified(UnverifiedReason.PossibleViolation), propConstraint);
+                    tally.Add(
+                        WriteVerdict.Unverified(
+                            UnverifiedReason.PossibleViolation, DomainModelDiagnosticCodes.EffectConstraintViolation),
+                        propConstraint);
             }
             else if (ConstraintValidation.IsWriteRelevant(propConstraint)) {
                 tally.Add(WriteVerdict.Satisfied, propConstraint);
@@ -176,7 +182,10 @@ internal sealed partial class EffectAnalyzer {
                     $"{ConstraintValidation.Describe(matchingPropConstraint)}.",
                     DomainModelDiagnosticCodes.EffectConstraintViolation);
                 if (ConstraintValidation.IsWriteRelevant(matchingPropConstraint))
-                    tally.Add(WriteVerdict.Unverified(UnverifiedReason.PossibleViolation), matchingPropConstraint);
+                    tally.Add(
+                        WriteVerdict.Unverified(
+                            UnverifiedReason.PossibleViolation, DomainModelDiagnosticCodes.EffectConstraintViolation),
+                        matchingPropConstraint);
             }
         }
     }

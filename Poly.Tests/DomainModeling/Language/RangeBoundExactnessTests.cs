@@ -206,10 +206,11 @@ public class RangeBoundExactnessTests {
     }
 
     [Test]
-    public async Task Assign_LongLiteralAboveDecimalBound_IsRejectedByGuardAndPrint() {
-        // F2 forcing test (#643): a Decimal target keeps analysis on the mixed-type path
-        // (long literal vs decimal bound compares through double and reads equal), so the
-        // lowering guard is the only defence. It must compare exactly.
+    public async Task Assign_LongLiteralAboveDecimalBound_IsRejectedBeforeLowering() {
+        // F2 forcing test (#643): a Decimal target with a long literal is the mixed-type path.
+        // Through double both sides read 9223372036854775807.0/…806.0 and compare equal, so the
+        // analysis gate used to pass and the lowering guard was the only defence. V-05a made the
+        // mixed compare exact, so the gate now rejects the literal before any guard is elided.
         const string dsl = """
             domain Rb
 
@@ -218,15 +219,36 @@ public class RangeBoundExactnessTests {
               Bump: action { assign N to 9223372036854775807 }
             }
             """;
+        var result = ApplySession(dsl, out _);
+
+        await Assert.That(result.Succeeded).IsFalse();
+        var violation = result.Analysis.Diagnostics.First(d =>
+            d.Code == DomainModelDiagnosticCodes.EffectConstraintViolation);
+        await Assert.That(violation.Message).Contains("9223372036854775807");
+        await Assert.That(violation.Message).Contains("range(0, 9223372036854775806)");
+    }
+
+    [Test]
+    public async Task Assign_LongValueAboveDecimalBound_ParameterGuardAndPrintReject() {
+        // The runtime guard must still keep the value out when analysis cannot see it (a parameter).
+        const string dsl = """
+            domain Rb
+
+            D: entity {
+              N: Decimal range(0, 9223372036854775806) default(0)
+              Bump: action (v: Number) { assign N to v }
+            }
+            """;
         var (domain, analysis, session) = Evolve(dsl);
         var exec = ModuleExec.For(domain);
         var instance = exec.Create("D", new Dictionary<string, object?>());
-        var simulated = exec.Invoke(instance.Instance!, "Bump", new Dictionary<string, object?>());
+        var above = new Dictionary<string, object?> { ["v"] = 9223372036854775807L };
+        var simulated = exec.Invoke(instance.Instance!, "Bump", above);
 
         var source = new CSharpGenerator().Generate(session.Lower(domain, analysis));
         var assembly = WhenAnySimulatePrintAgreeTests.CompileGenerated(source, "DecimalBoundGuard");
         var printed = TryCreate(assembly, "D", ("db", (object?)new InMemoryStoragePort()));
-        var printedBump = TryInvoke(printed.Instance!, "Bump");
+        var printedBump = TryInvoke(printed.Instance!, "Bump", ("v", 9223372036854775807L));
 
         await Assert.That(simulated.Succeeded).IsFalse();
         await Assert.That(printedBump.Succeeded).IsFalse();

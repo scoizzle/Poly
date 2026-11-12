@@ -180,7 +180,7 @@ public class ConstraintFailClosedAuditTests {
 
         await Assert.That(meta).IsNotNull();
         await Assert.That(meta!.Constraints.OfType<RangeConstraint>()
-            .Any(r => Equals(r.Minimum, -5d) && Equals(r.Maximum, 95d))).IsTrue();
+            .Any(r => Equals(r.Minimum, -5m) && Equals(r.Maximum, 95m))).IsTrue();
         await Assert.That(analysis.Diagnostics.Any(d => d.Message.Contains("Cannot derive a bound"))).IsFalse();
     }
 }

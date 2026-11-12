@@ -284,6 +284,22 @@ public class GuardClosedAssignElisionTests {
         await Assert.That(CopyBody(poly, "Item", "CopyTop")).Contains("'Top' must be <= 30.");
     }
 
+    [Test]
+    public async Task AssignElision_DecimalBoundAbove2Pow53_KeepsGuard() {
+        // V-05a B3: S's maximum ...992.0000001 is above T's maximum ...992, so S does not imply T
+        // and the printed C# must keep T's create guard. Both round to ...992.0 through double.
+        const string poly = """
+            domain Lab
+            Item: entity {
+              S: Decimal range(0, 9007199254740992.0000001) default(0)
+              T: Decimal range(0, 9007199254740992) default(0)
+              Copy: action { assign T to S }
+            }
+            """;
+
+        await Assert.That(CopyBody(poly, "Item", "Copy")).Contains("'T' must be");
+    }
+
     private static string CopyBody(string poly, string entityName, string actionName) {
         var (domain, analysis, session) = Build(poly);
         session.Lower(domain, analysis);

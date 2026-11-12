@@ -5,7 +5,10 @@ namespace Poly.Tests.DomainModeling.Analysis;
 
 /// <summary>
 /// #367: range validation compares bounds type-correctly (ConstraintMerge.TryCompare's rule):
-/// same type by its own ordering, two numeric types as double, anything else is not coerced.
+/// same type by its own ordering; two numeric types exactly, with master's double comparison as the
+/// fallback when no exact order exists. A pair that still cannot be ordered is Undecided when both
+/// sides are numbers, and Violated for a different type family (a text value is never in a numeric
+/// range).
 /// </summary>
 public class ConstraintRangeValidationTests {
     private static ConstraintVerdict Eval(object? min, object? max, object? value) =>
@@ -49,7 +52,12 @@ public class ConstraintRangeValidationTests {
     }
 
     [Test]
-    public async Task CrossNumeric_ComparesAsDouble() {
+    public async Task CrossNumeric_ComparesExactly() {
+        // V-05a: two numeric types compare through ExactNumber, so a fractional decimal is exact.
+        // The V-05a fix-round restatement made the fractional-double line Violated; that was wrong
+        // (F2): undecidable is not "outside", and TryCompare keeps master's double fallback for a
+        // double/float operand until V-05b removes those producers (F1). Satisfied again.
+        await Assert.That(Eval(1, 10, 5.5m)).IsEqualTo(ConstraintVerdict.Satisfied);
         await Assert.That(Eval(1, 10, 5.5)).IsEqualTo(ConstraintVerdict.Satisfied);
         await Assert.That(Eval(1.5, 10, 1)).IsEqualTo(ConstraintVerdict.Violated);
         await Assert.That(Eval(0L, 10L, 5)).IsEqualTo(ConstraintVerdict.Satisfied);

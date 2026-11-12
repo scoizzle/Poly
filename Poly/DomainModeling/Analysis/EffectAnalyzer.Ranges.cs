@@ -200,8 +200,4 @@ internal sealed partial class EffectAnalyzer {
 
         return innerMin.Value >= outerMin.Value && innerMax.Value <= outerMax.Value;
     }
-
-    private static bool HasUnorderableBound(RangeConstraint range) =>
-        (range.Minimum is not null && NumericBound.ToDoubleOrNull(range.Minimum) is null)
-        || (range.Maximum is not null && NumericBound.ToDoubleOrNull(range.Maximum) is null);
 }

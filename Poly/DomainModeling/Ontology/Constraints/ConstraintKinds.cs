@@ -125,7 +125,7 @@ internal static class ConstraintKinds {
                 merge: ConstraintMerge.MergeRangeResult,
                 join: ConstraintMerge.JoinRange,
                 identical: (x, y) => Equals(x.Minimum, y.Minimum) && Equals(x.Maximum, y.Maximum) && Equals(x.Intervals, y.Intervals),
-                evaluate: (r, v) => ConstraintValidation.Of(ConstraintValidation.IsInRangeUnion(v, r)),
+                evaluate: (r, v) => ConstraintValidation.RangeVerdict(r, v),
                 describe: ConstraintValidation.FormatRange,
                 // A union has no DSL word; it prints as its hull, a sound widening.
                 print: (r, _) => $"range({Convert.ToString(r.Minimum, CultureInfo.InvariantCulture)}, {Convert.ToString(r.Maximum, CultureInfo.InvariantCulture)})",

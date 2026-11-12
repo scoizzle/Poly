@@ -287,7 +287,9 @@ public class SubscriptionAnalysisTests {
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
         await Assert.That(analysis.Diagnostics.Any(d =>
-            d.Code == DomainModelDiagnosticCodes.SubscriptionContractMismatch)).IsTrue();
+            d.Code == DomainModelDiagnosticCodes.SubscriptionDuplicateHandler)).IsTrue();
+        await Assert.That(analysis.Diagnostics.Any(d =>
+            d.Message.Contains("both run", StringComparison.OrdinalIgnoreCase))).IsTrue();
         await Assert.That(analysis.Diagnostics.Any(d =>
             d.Message.Contains("Duplicate") && d.Message.Contains("Notifies"))).IsTrue();
     }
@@ -508,5 +510,424 @@ public class SubscriptionAnalysisTests {
         await Assert.That(result.Succeeded).IsFalse();
         await Assert.That(result.Analysis.Diagnostics.Any(d =>
             d.Message.Contains("stage 'Done'") && d.Message.Contains("does not exist"))).IsTrue();
+    }
+
+    // ── S-05: DMSS006 duplicate handlers ────────────────────────
+
+    private const string DupStageScoped = """
+        domain Test
+
+        Parcel: entity {
+          Pending: stage { Move: action { transition to Moved } }
+          Moved: stage { }
+          Shipped: stage { }
+        }
+
+        Hub2: entity {
+          Note: Text optional
+          parcels: many Parcel
+          Watching: stage {
+            when parcels Moved { assign Note to "a" }
+            when parcels Moved { assign Note to "b" }
+          }
+        }
+        """;
+
+    private const string DupEntityLevel = """
+        domain Test
+
+        Order: entity {
+          Open: stage { Fulfil: action { transition to Fulfilled } }
+          Fulfilled: stage { }
+        }
+
+        Customer: entity {
+          Note: Text optional
+          orders: many Order
+          when orders Fulfilled { assign Note to "a" }
+          when orders Fulfilled { assign Note to "b" }
+        }
+        """;
+
+    private static Entity EntityOf(Domain domain, string name) =>
+        domain.Types.OfType<Entity>().Single(e => e.Name == name);
+
+    [Test]
+    public async Task DuplicateWhen_EntityAndStageLevel_WarnsBothRunAndNeverSaysRemoveAll() {
+        var stageDomain = ParseDomain(DupStageScoped);
+        var stageDiags = DomainModelAnalyzer.Analyze(stageDomain).Diagnostics
+            .Where(d => d.Code == DomainModelDiagnosticCodes.SubscriptionDuplicateHandler).ToList();
+        var watching = EntityOf(stageDomain, "Hub2").Stages.Single(s => s.Name == "Watching");
+
+        await Assert.That(stageDiags.Count).IsEqualTo(1);
+        await Assert.That(stageDiags[0].Severity).IsEqualTo(DiagnosticSeverity.Warning);
+        await Assert.That(ReferenceEquals(stageDiags[0].Node, watching.Subscriptions[1])).IsTrue();
+        foreach (var part in new[] { "Duplicate", "parcels", "Moved", "Watching" })
+            await Assert.That(stageDiags[0].Message).Contains(part);
+        await Assert.That(stageDiags[0].Message).Contains("both run", StringComparison.OrdinalIgnoreCase);
+        await Assert.That(stageDiags[0].Message).DoesNotContain("Remove-all");
+        await Assert.That(stageDiags[0].Message).DoesNotContain("RemoveAll");
+        await Assert.That(DomainModelAnalyzer.Analyze(stageDomain).Diagnostics
+            .Count(d => d.Severity == DiagnosticSeverity.Error)).IsEqualTo(0);
+
+        var entityDomain = ParseDomain(DupEntityLevel);
+        var entityDiags = DomainModelAnalyzer.Analyze(entityDomain).Diagnostics
+            .Where(d => d.Code == DomainModelDiagnosticCodes.SubscriptionDuplicateHandler).ToList();
+        var customer = EntityOf(entityDomain, "Customer");
+
+        await Assert.That(entityDiags.Count).IsEqualTo(1);
+        await Assert.That(entityDiags[0].Severity).IsEqualTo(DiagnosticSeverity.Warning);
+        await Assert.That(ReferenceEquals(entityDiags[0].Node, customer.Subscriptions[1])).IsTrue();
+        foreach (var part in new[] { "Duplicate", "orders", "Fulfilled" })
+            await Assert.That(entityDiags[0].Message).Contains(part);
+        await Assert.That(entityDiags[0].Message).Contains("both run", StringComparison.OrdinalIgnoreCase);
+        await Assert.That(entityDiags[0].Message).DoesNotContain("Remove-all");
+        await Assert.That(entityDiags[0].Message).DoesNotContain("RemoveAll");
+        await Assert.That(DomainModelAnalyzer.Analyze(entityDomain).Diagnostics
+            .Count(d => d.Severity == DiagnosticSeverity.Error)).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task ThreeDuplicateWhens_WarnOnce() {
+        var domain = ParseDomain("""
+            domain Test
+
+            Parcel: entity {
+              Pending: stage { Move: action { transition to Moved } }
+              Moved: stage { }
+            }
+
+            Hub2: entity {
+              Note: Text optional
+              parcels: many Parcel
+              Watching: stage {
+                when parcels Moved { assign Note to "a" }
+                when parcels Moved { assign Note to "b" }
+                when parcels Moved { assign Note to "c" }
+              }
+            }
+            """);
+        var diags = DomainModelAnalyzer.Analyze(domain).Diagnostics
+            .Where(d => d.Code == DomainModelDiagnosticCodes.SubscriptionDuplicateHandler).ToList();
+
+        await Assert.That(diags.Count).IsEqualTo(1);
+        await Assert.That(diags[0].Message).Contains("3");
+    }
+
+    [Test]
+    public async Task DuplicateWhensInDifferentStageOrder_WarnOnce() {
+        var domain = ParseDomain("""
+            domain Test
+
+            Parcel: entity {
+              Pending: stage { Move: action { transition to Moved } Ship: action { transition to Shipped } }
+              Moved: stage { }
+              Shipped: stage { }
+            }
+
+            Hub2: entity {
+              Note: Text optional
+              parcels: many Parcel
+              Watching: stage {
+                when parcels Moved, Shipped { assign Note to "a" }
+                when parcels Shipped, Moved { assign Note to "b" }
+              }
+            }
+            """);
+        var diags = DomainModelAnalyzer.Analyze(domain).Diagnostics
+            .Where(d => d.Code == DomainModelDiagnosticCodes.SubscriptionDuplicateHandler).ToList();
+
+        await Assert.That(diags.Count).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task SameKey_EntityLevelAndStageScoped_NoDMSS006() {
+        // Q11 orders entity-level before stage-scoped, which presupposes the same key at both
+        // placements (the NotifyOrder fixture in GuideClaimsTests is this shape).
+        var domain = ParseDomain("""
+            domain Test
+
+            Parcel: entity {
+              Pending: stage { Move: action { transition to Moved } }
+              Moved: stage { }
+            }
+
+            Hub2: entity {
+              Note: Text optional
+              parcels: many Parcel
+              Watching: stage {
+                when parcels Moved { assign Note to "stage" }
+              }
+              when parcels Moved { assign Note to "entity" }
+            }
+            """);
+
+        await Assert.That(DomainModelAnalyzer.Analyze(domain).Diagnostics.Any(d =>
+            d.Code == DomainModelDiagnosticCodes.SubscriptionDuplicateHandler)).IsFalse();
+    }
+
+    [Test]
+    public async Task StageScopedSameKey_InTwoDifferentStages_NoDMSS006() {
+        var domain = ParseDomain("""
+            domain Test
+
+            Parcel: entity {
+              Pending: stage { Move: action { transition to Moved } }
+              Moved: stage { }
+            }
+
+            Hub2: entity {
+              Note: Text optional
+              parcels: many Parcel
+              Watching: stage {
+                when parcels Moved { assign Note to "a" }
+              }
+              Idle: stage {
+                when parcels Moved { assign Note to "b" }
+              }
+            }
+            """);
+
+        await Assert.That(DomainModelAnalyzer.Analyze(domain).Diagnostics.Any(d =>
+            d.Code == DomainModelDiagnosticCodes.SubscriptionDuplicateHandler)).IsFalse();
+    }
+
+    private const string TraceParcel = """
+        Parcel: entity {
+          Code: Text
+          Pending: stage { Move: action { transition to Moved } }
+          Moved: stage { }
+        }
+        """;
+
+    private static async Task<string> RunTraceAsync(string hubBody) {
+        var domain = ParseDomain("domain Test\n" + TraceParcel + "\n" + hubBody);
+        var exec = ModuleExec.For(domain);
+        var hub = exec.Create("Hub2", new Dictionary<string, object?>()).Instance!;
+        await Assert.That(exec.Invoke(hub, "Add", new Dictionary<string, object?> { ["code"] = "P" }).Succeeded).IsTrue();
+        var parcel = exec.LinkedTargets("parcels", hub).Single();
+        await Assert.That(exec.Invoke(parcel, "Move").Succeeded).IsTrue();
+        return Convert.ToString(hub.Bag["Trace"], System.Globalization.CultureInfo.InvariantCulture)!;
+    }
+
+    [Test]
+    public async Task DuplicateWhens_SameKey_BothRunInDeclarationOrder() {
+        // Runtime pin for the DMSS006 message: both handlers run, in declaration order.
+        var trace = await RunTraceAsync("""
+            Hub2: entity {
+              Trace: Number default(0)
+              parcels: many Parcel
+              Add: action (code: Text) { create in parcels { Code: code } }
+              when parcels Moved { assign Trace to Trace * 10 + 1 }
+              when parcels Moved { assign Trace to Trace * 10 + 2 }
+            }
+            """);
+
+        await Assert.That(trace).IsEqualTo("12");
+    }
+
+    [Test]
+    public async Task SameKey_StageScopedAndEntityLevel_BothRun_EntityFirst() {
+        var trace = await RunTraceAsync("""
+            Hub2: entity {
+              Trace: Number default(0)
+              parcels: many Parcel
+              Open: stage {
+                Add: action (code: Text) { create in parcels { Code: code } }
+                when parcels Moved { assign Trace to Trace * 10 + 2 }
+              }
+              when parcels Moved { assign Trace to Trace * 10 + 1 }
+            }
+            """);
+
+        await Assert.That(trace).IsEqualTo("12");
+    }
+
+    // ── S-05: DMSS007 never-entered stages ──────────────────────
+
+    private static IReadOnlyList<Diagnostic> NeverEntered(Domain domain) =>
+        DomainModelAnalyzer.Analyze(domain).Diagnostics
+            .Where(d => d.Code == DomainModelDiagnosticCodes.SubscriptionToNeverEnteredStage).ToList();
+
+    private static string ShipmentWatch(string shipmentBody, string orderBody, string shipmentHeader = "") => $$"""
+        domain Test
+
+        Shipment: entity{{shipmentHeader}} {
+        {{shipmentBody}}
+        }
+
+        Order: entity {
+          Note: Text optional
+          shipments: many Shipment
+        {{orderBody}}
+        }
+        """;
+
+    [Test]
+    public async Task SubscriptionToNeverEnteredStage_Warns() {
+        var domain = ParseDomain(ShipmentWatch(
+            """
+              Packed: stage { Ship: action { transition to Delivered } }
+              Delivered: stage { }
+              Phantom: stage { }
+            """,
+            """  when shipments Phantom { assign Note to "x" }"""));
+        var diags = NeverEntered(domain);
+
+        await Assert.That(diags.Count).IsEqualTo(1);
+        await Assert.That(diags[0].Severity).IsEqualTo(DiagnosticSeverity.Warning);
+        await Assert.That(ReferenceEquals(diags[0].Node, EntityOf(domain, "Order").Subscriptions[0])).IsTrue();
+        foreach (var part in new[] { "Phantom", "never", "Shipment" })
+            await Assert.That(diags[0].Message).Contains(part);
+        await Assert.That(diags[0].Message).DoesNotContain("nreachable");
+        await Assert.That(DomainModelAnalyzer.Analyze(domain).Diagnostics
+            .Count(d => d.Severity == DiagnosticSeverity.Error)).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task SubscriptionToTwoNeverEnteredStages_WarnsOnce() {
+        var domain = ParseDomain(ShipmentWatch(
+            """
+              Packed: stage { Ship: action { transition to Delivered } }
+              Delivered: stage { }
+              Phantom: stage { }
+              Ghost: stage { }
+            """,
+            """  when shipments Phantom, Ghost { assign Note to "x" }"""));
+        var diags = NeverEntered(domain);
+
+        await Assert.That(diags.Count).IsEqualTo(1);
+        await Assert.That(diags[0].Message).Contains("Phantom");
+        await Assert.That(diags[0].Message).Contains("Ghost");
+    }
+
+    [Test]
+    public async Task SubscriptionToInitialStage_IsClean() {
+        var domain = ParseDomain(ShipmentWatch(
+            """
+              Packed: stage { Ship: action { transition to Delivered } }
+              Other: stage { }
+              Delivered: stage { }
+            """,
+            """  when shipments Other { assign Note to "x" }""",
+            " initial(Other)"));
+
+        await Assert.That(NeverEntered(domain)).IsEmpty();
+    }
+
+    [Test]
+    public async Task SubscriptionToStageEnteredOnlyFromEntryHop_IsClean() {
+        var domain = ParseDomain(ShipmentWatch(
+            """
+              A: stage { entry { transition to B } }
+              B: stage { }
+            """,
+            """  when shipments B { assign Note to "x" }"""));
+
+        await Assert.That(NeverEntered(domain)).IsEmpty();
+    }
+
+    [Test]
+    public async Task SubscriptionToStageEnteredOnlyFromExitHop_IsClean() {
+        var domain = ParseDomain(ShipmentWatch(
+            """
+              A: stage { exit { transition to B } Go: action { transition to B } }
+              B: stage { }
+            """,
+            """  when shipments B { assign Note to "x" }"""));
+
+        await Assert.That(NeverEntered(domain)).IsEmpty();
+    }
+
+    [Test]
+    public async Task SubscriptionToStageEnteredOnlyByEntityLevelAction_IsClean() {
+        var domain = ParseDomain(ShipmentWatch(
+            """
+              Packed: stage { }
+              Delivered: stage { }
+              Deliver: action { transition to Delivered }
+            """,
+            """  when shipments Delivered { assign Note to "x" }"""));
+
+        await Assert.That(NeverEntered(domain)).IsEmpty();
+    }
+
+    [Test]
+    public async Task SubscriptionToStageEnteredOnlyBySubscriptionEffect_IsClean() {
+        var domain = ParseDomain("""
+            domain Test
+
+            Part: entity {
+              Open: stage { Close: action { transition to Closed } }
+              Closed: stage { }
+            }
+
+            Shipment: entity {
+              parts: many Part
+              Packed: stage { }
+              Delivered: stage { }
+              when parts Closed { transition to Delivered }
+            }
+
+            Order: entity {
+              Note: Text optional
+              shipments: many Shipment
+              when shipments Delivered { assign Note to "x" }
+            }
+            """);
+
+        await Assert.That(NeverEntered(domain)).IsEmpty();
+    }
+
+    [Test]
+    public async Task SubscriptionToStageEnteredOnlyInNestedThenHop_IsClean() {
+        var domain = ParseDomain(ShipmentWatch(
+            """
+              Flag: Number default(0)
+              Packed: stage { Ship: action { if (Flag > 0) { transition to Delivered } } }
+              Delivered: stage { }
+            """,
+            """  when shipments Delivered { assign Note to "x" }"""));
+
+        await Assert.That(NeverEntered(domain)).IsEmpty();
+    }
+
+    [Test]
+    public async Task SubscriptionToStageEnteredOnlyInNestedElseHop_IsClean() {
+        var domain = ParseDomain(ShipmentWatch(
+            """
+              Flag: Number default(0)
+              Packed: stage { Ship: action { if (Flag > 0) { assign Flag to 0 } else { transition to Delivered } } }
+              Delivered: stage { }
+            """,
+            """  when shipments Delivered { assign Note to "x" }"""));
+
+        await Assert.That(NeverEntered(domain)).IsEmpty();
+    }
+
+    [Test]
+    public async Task SubscriptionToMissingStage_IsDMSS003Only_NoDMSS007() {
+        var domain = ValidDomain.Create("Test", [
+            MakeEntity("Order", MakeStage("Open", new StageSubscription("Notifies", ["Nowhere"], StageSubscriptionQuantifier.Each, []))),
+            MakeEntity("Customer", new Stage("Active", [], [], [], []))
+        ], [new Relationship("Notifies", new DomainTypeReference("Order"), new DomainTypeReference("Customer"),
+            RelationshipCardinality.OneToOne, [])]);
+        var diags = DomainModelAnalyzer.Analyze(domain).Diagnostics;
+
+        await Assert.That(diags.Any(d => d.Code == DomainModelDiagnosticCodes.SubscriptionContractMismatch)).IsTrue();
+        await Assert.That(diags.Any(d => d.Code == DomainModelDiagnosticCodes.SubscriptionToNeverEnteredStage)).IsFalse();
+    }
+
+    [Test]
+    public async Task SubscriptionToStagelessTarget_IsDMSS003Only_NoDMSS007() {
+        var domain = ValidDomain.Create("Test", [
+            MakeEntity("Order", MakeStage("Open", new StageSubscription("Notifies", ["Done"], StageSubscriptionQuantifier.Each, []))),
+            MakeEntity("Customer")
+        ], [new Relationship("Notifies", new DomainTypeReference("Order"), new DomainTypeReference("Customer"),
+            RelationshipCardinality.OneToOne, [])]);
+        var diags = DomainModelAnalyzer.Analyze(domain).Diagnostics;
+
+        await Assert.That(diags.Any(d => d.Code == DomainModelDiagnosticCodes.SubscriptionContractMismatch)).IsTrue();
+        await Assert.That(diags.Any(d => d.Code == DomainModelDiagnosticCodes.SubscriptionToNeverEnteredStage)).IsFalse();
     }
 }

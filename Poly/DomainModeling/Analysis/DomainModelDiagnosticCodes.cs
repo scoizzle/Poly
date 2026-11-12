@@ -222,6 +222,19 @@ internal static class DomainModelDiagnosticCodes {
     public const string SubscriptionContractMismatch = "DMSS003";
     /// Subscription effect binding: subscriber props, peer binder path-prefix, legacy event ban.
     public const string SubscriptionEffectBinding = "DMSS004";
+    /// <summary>
+    /// #615: two <c>when</c>s in one scope (entity level, or one stage) share a semantic key
+    /// (relationship, quantifier, peer binder, stage set). Nothing is removed: both handlers
+    /// run, in declaration order. A warning, not an error (Q11).
+    /// </summary>
+    public const string SubscriptionDuplicateHandler = "DMSS006";
+    /// <summary>
+    /// #616: a <c>when</c> names a stage on the target entity that nothing transitions into and
+    /// that is not the initial stage (Q21), so the handler can never fire. Syntactic, not
+    /// reachability: no transition into the stage at all. Positioned on the <c>when</c>, not the
+    /// stage declaration, so a stage nobody watches stays silent.
+    /// </summary>
+    public const string SubscriptionToNeverEnteredStage = "DMSS007";
 
     // General system diagnostics
     public const string RuleCoverage = "DMSYS001";

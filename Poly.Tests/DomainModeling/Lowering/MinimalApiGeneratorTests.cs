@@ -640,18 +640,47 @@ public class MinimalApiGeneratorTests {
         await Assert.That(db.Success).IsTrue();
         await Assert.That(db.Files!.Any(f => f.FileName == "Program.cs")).IsFalse();
         var entity = db.Files!.Single(f => f.FileName == "Program.Entity.cs").Source;
-        await Assert.That(entity).Contains("namespace Poly.Generated");
+        await Assert.That(entity).Contains("namespace Registration;");
         await Assert.That(entity).Contains("class Program");
+        await Assert.That(db.Files!.Single(f => f.FileName == "Registration" + "DbContext.cs").Source)
+            .Contains("namespace Registration;");
         await Assert.That(db.Files!.Single(f => f.FileName == "Student.cs").Source)
-            .Contains("namespace Poly.Generated");
+            .Contains("namespace Registration;");
 
         var http = CompilerWithHttpHost().Compile(poly, CompileMode.All, DbmsPack.Sqlite);
         await Assert.That(http.Success).IsTrue();
         await Assert.That(http.Files!.Count(f => f.FileName == "Program.cs")).IsEqualTo(1);
         await Assert.That(http.Files!.Any(f => f.FileName == "Program.Entity.cs")).IsTrue();
         var host = http.Files!.Single(f => f.FileName == "Program.cs").Source;
-        await Assert.That(host).Contains("Poly.Generated.Program");
+        await Assert.That(host).Contains("using Registration;");
+        await Assert.That(host).Contains("Registration.Program");
+        await Assert.That(host).DoesNotContain("Poly.Generated");
 
+        var errors = CompileHost(http.Files!);
+        await Assert.That(errors).IsEmpty();
+    }
+
+    [Test]
+    public async Task EntityNamedLikeItsDomain_HostQualifiesItAndCompiles() {
+        // A bare `Library` in the host (global scope, `using Library;`) binds to the namespace, not the entity.
+        const string poly = """
+            domain Library
+            Library: entity {
+              Code: Text unique
+              Name: Text
+            }
+            Shelf: entity {
+              Label: Text unique
+              library: Library
+            }
+            """;
+
+        var http = CompilerWithHttpHost().Compile(poly, CompileMode.All, DbmsPack.Sqlite);
+
+        await Assert.That(http.Success).IsTrue();
+        var host = http.Files!.Single(f => f.FileName == "Program.cs").Source;
+        await Assert.That(host).Contains("using Library;");
+        await Assert.That(host).Contains("Library.Library");
         var errors = CompileHost(http.Files!);
         await Assert.That(errors).IsEmpty();
     }

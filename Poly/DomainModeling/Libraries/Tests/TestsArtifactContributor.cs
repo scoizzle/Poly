@@ -47,7 +47,7 @@ public sealed class TestsArtifactContributor : IArtifactContributor {
                 artifacts.Add(TestUnsupported.Create(domain, entity.Name, reason, producer, [entityId]));
                 continue;
             }
-            var unit = BuildUnit(entity);
+            var unit = BuildUnit(domain, entity);
             var tree = TestTree.Create(domain, entity.Name, unit, producer);
             artifacts.Add(tree);
             artifacts.Add(TestFile.Create(
@@ -111,10 +111,10 @@ public sealed class TestsArtifactContributor : IArtifactContributor {
         return refused;
     }
 
-    private static CompilationUnitNode BuildUnit(Entity entity) {
+    private static CompilationUnitNode BuildUnit(Domain domain, Entity entity) {
         var initial = entity.InitialStage()!;
         var create = new Invoke(
-            new Member(new TypeReference(entity.Name), "Create"),
+            new Member(new TypeReference(DomainSession.QualifyForHost(domain, entity.Name)), "Create"),
             Arguments(entity.Name, entity.Properties));
         var fresh = new Member(create, "Value");
 
@@ -122,7 +122,7 @@ public sealed class TestsArtifactContributor : IArtifactContributor {
             Test(
                 "Create_WithNeutralArguments_StartsInInitialStage",
                 Check(new Member(fresh, "CurrentStage"), "IsEqualTo",
-                    new Member(new TypeReference($"{entity.Name}Stage"), initial.Name))),
+                    new Member(new TypeReference(DomainSession.QualifyForHost(domain, $"{entity.Name}Stage")), initial.Name))),
         };
         foreach (var action in RefusedActions(entity)) {
             var call = new Invoke(
@@ -135,7 +135,7 @@ public sealed class TestsArtifactContributor : IArtifactContributor {
         }
 
         return new CompilationUnitNode(
-            Usings: ["System.Threading.Tasks"],
+            Usings: ["System.Threading.Tasks", DomainSession.CSharpNamespace(domain)],
             Namespace: null,
             Types: [new TypeDefinitionNode($"{entity.Name}Tests", Methods: methods)],
             TopLevelStatements: null);

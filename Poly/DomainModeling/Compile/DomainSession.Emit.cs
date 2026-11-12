@@ -21,6 +21,7 @@ public sealed partial class DomainSession {
         ArgumentNullException.ThrowIfNull(domain);
         ArgumentNullException.ThrowIfNull(analysis);
         RequireCoreLoaded();
+        var ns = CSharpNamespace(domain);
         var files = new List<(string FileName, string Source)>();
         // The files come from this call's own catalog; the analysis below still covers the
         // whole module, because the writer resolves types across entities from one analysis.
@@ -41,28 +42,25 @@ public sealed partial class DomainSession {
         var writer = new CSharpWriter(compiled.VmAnalysis);
         // Files come in registration order: entities in domain order, then the scaffolding.
         // Snapshot first: registering a file appends to the catalog being enumerated.
-        // Host top-level statements are global Program. An entity of that name stays
-        // class Program, but in Poly.Generated (with the DbContext) and not in Program.cs,
-        // so the file and the fully-qualified type both differ from the entry point.
-        var nestProgram = domain.Types.OfType<Entity>().Any(e => e.Name == "Program");
         var entityTrees = catalog.Artifacts.Where(a => a.Descriptor.Id.Type == EntityType).ToList();
         foreach (var tree in entityTrees) {
             var entityName = tree.Descriptor.Id.Segments[^1];
-            var source = writer.Write(TypesOf(tree));
-            if (nestProgram)
-                source = InGeneratedNamespace(source);
+            // Host top-level statements are global Program, so an entity of that name keeps its
+            // class name but lands in Program.Entity.cs: the file name is deduped against the host Program.cs.
             AddPrintedFile(
                 catalog,
                 domain,
                 files,
                 entityName == "Program" ? "Program.Entity.cs" : $"{entityName}.cs",
-                source,
+                writer.Write(Unit(ns, TypesOf(tree))),
                 tree);
         }
         var scaffolding = catalog.Find(ArtifactId.Create([domain.Name], ScaffoldingType))!;
-        var scaffoldingSource = writer.Write(TypesOf(scaffolding));
-        if (nestProgram)
-            scaffoldingSource = InGeneratedNamespace(scaffoldingSource);
+        var scaffoldingTypes = TypesOf(scaffolding);
+        // An empty types file is the nullable header alone (R-03 / O-R2(a)): no banner, no namespace.
+        var scaffoldingSource = scaffoldingTypes.Count == 0
+            ? writer.Write(scaffoldingTypes)
+            : writer.Write(Unit(ns, scaffoldingTypes));
         AddPrintedFile(catalog, domain, files, "Poly.Types.cs", scaffoldingSource, scaffolding);
         RegisterContributedArtifacts(domain, analysis, catalog, files);
         RegisterCatalogReferenceReport(catalog, domain, EmitProducer);
@@ -123,38 +121,38 @@ public sealed partial class DomainSession {
         catalog.Register(ContributedFile.Create(domain, fileName, source, EmitProducer, [tree.Descriptor.Id]));
     }
 
-    /// <summary>Moves printed types into <c>Poly.Generated</c>. Usings stay file-scoped
-    /// so they still apply. DbContext already lives in that namespace.</summary>
-    private static string InGeneratedNamespace(string source) {
-        const string ns = "Poly.Generated";
-        var lines = source.Replace("\r\n", "\n").Split('\n');
-        var headerCount = 0;
-        while (headerCount < lines.Length) {
-            var trim = lines[headerCount].Trim();
-            if (trim is "" or "#nullable enable" or "#nullable disable" or "#nullable restore"
-                || trim.StartsWith("using ", StringComparison.Ordinal)) {
-                headerCount++;
-                continue;
-            }
-            break;
+    /// <summary>The domain's C# namespace: its name, when every dot-separated segment is an ASCII
+    /// identifier that is not a C# keyword and the first is not <c>Poly</c> or <c>System</c>. Anything
+    /// else fails closed: keyword and non-ASCII names are rejected until E-10 (@-escaping).</summary>
+    public static string CSharpNamespace(Domain domain) {
+        ArgumentNullException.ThrowIfNull(domain);
+        var name = domain.Name;
+        var segments = name.Split('.');
+        foreach (var segment in segments) {
+            if (!CSharpWriter.IsIdentifierSegment(segment))
+                throw RefusedNamespace(name, $"segment '{segment}' is not an ASCII C# identifier");
+            if (CSharpWriter.IsKeyword(segment))
+                throw RefusedNamespace(name, $"segment '{segment}' is a C# keyword");
         }
-        while (headerCount > 0 && lines[headerCount - 1].Trim().Length == 0)
-            headerCount--;
-
-        var sb = new StringBuilder();
-        for (var i = 0; i < headerCount; i++)
-            sb.AppendLine(lines[i]);
-        sb.AppendLine();
-        sb.Append("namespace ").Append(ns).AppendLine(" {");
-        for (var i = headerCount; i < lines.Length; i++) {
-            if (lines[i].Length == 0)
-                sb.AppendLine();
-            else
-                sb.Append("    ").AppendLine(lines[i]);
-        }
-        sb.Append('}');
-        return sb.ToString().TrimEnd();
+        if (segments[0] is "Poly" or "System")
+            throw RefusedNamespace(name, $"'{segments[0]}' is reserved for the generated runtime namespaces");
+        return name;
     }
+
+    private static InvalidOperationException RefusedNamespace(string name, string reason) =>
+        new($"Domain '{name}' cannot name a C# namespace: {reason}. Keyword and non-ASCII names are rejected until E-10 escapes them.");
+
+    /// <summary>A host file (global scope, <c>using &lt;ns&gt;;</c>) sees the global <c>Program</c> and the
+    /// domain's own root namespace ahead of a using-imported type, so a domain type of either name is
+    /// spelled <c>&lt;ns&gt;.&lt;name&gt;</c>. Every other name stays bare.</summary>
+    internal static string QualifyForHost(Domain domain, string typeName) {
+        var ns = CSharpNamespace(domain);
+        var shadowed = typeName == "Program" || typeName == ns.Split('.')[0];
+        return shadowed && domain.Types.Any(t => t.Name == typeName) ? ns + "." + typeName : typeName;
+    }
+
+    private static CompilationUnitNode Unit(string ns, IReadOnlyList<TypeDefinitionNode> types) =>
+        new([], ns, types, null);
 
     private static IReadOnlyList<TypeDefinitionNode> TypesOf(Artifact tree) =>
         (IReadOnlyList<TypeDefinitionNode>)tree.Payload!;

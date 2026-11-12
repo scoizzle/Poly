@@ -373,6 +373,66 @@ public sealed class CSharpExportCompileTests {
         await Assert.That(e.Diagnostics).IsEmpty();
     }
 
+    // E-03 binding re-check: printed types live in the domain namespace, and the host qualifies an entity
+    // named `Program` or like its domain. DomainAccess matches domain types by simple name, so a qualified
+    // name must never reach it: demotion, the explicit EF mapping and the host clamp still apply on those shapes.
+    [Test]
+    [Arguments("Shop", "Order")]
+    [Arguments("Registration", "Program")]
+    [Arguments("Library", "Library")]
+    public async Task Export_NamespacedDomain_PublicOwnerWithInternalTargets_StaysDemotedMappedAndClamped(string domainName, string owner) {
+        var e = ExportHost($$"""
+            domain {{domainName}}
+            uses sqlite
+            uses http
+
+            Money: value {
+              Amount: Number
+            }
+
+            Line: entity {
+              Qty: Number range(1, 100)
+            }
+
+            public entity {{owner}} {
+              Code: Text unique length(3, 8)
+              Total: Number default(0)
+              lines: many Line
+              Pay: action (bill: Money) { assign Total to Total + 1 }
+            }
+            """);
+
+        var db = DbContextText(e);
+        await Assert.That(e.AllText).Contains($"namespace {domainName};");
+        // By metadata name: a referenced assembly may declare its own global `Program`.
+        var ownerType = e.Compilation.GetTypeByMetadataName($"{domainName}.{owner}")!;
+        await Assert.That(ownerType.GetMembers("Lines").Single().DeclaredAccessibility).IsEqualTo(Accessibility.Internal);
+        await Assert.That(ownerType.GetMembers("Pay").OfType<IMethodSymbol>().Single().DeclaredAccessibility).IsEqualTo(Accessibility.Internal);
+        await Assert.That(db).Contains("b.HasMany(e => e.Lines).WithOne()");
+        await Assert.That(e.AllText).Contains($"internal class {domainName}DbContext");
+        await Assert.That(e.AllText).Contains("internal record PayDto");
+        await Assert.That(e.Diagnostics).IsEmpty();
+    }
+
+    [Test]
+    [Arguments("Registration", "Program")]
+    [Arguments("Library", "Library")]
+    public async Task Export_NamespacedDomain_AllPublicEntities_KeepsDbContextAndDtoPublic(string domainName, string owner) {
+        var e = ExportHost($$"""
+            domain {{domainName}}
+            uses sqlite
+            uses http
+
+            public entity {{owner}} {
+              Code: Text unique length(3, 8)
+            }
+            """);
+
+        await Assert.That(e.AllText).Contains($"public class {domainName}DbContext");
+        await Assert.That(e.AllText).Contains($"public record {owner}Dto");
+        await Assert.That(e.Diagnostics).IsEmpty();
+    }
+
     [Test]
     public async Task Export_WhenAllMarkedPublic_EmitsPublicSurfaceUnchanged() {
         var e = Export("""

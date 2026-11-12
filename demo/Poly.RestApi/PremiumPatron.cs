@@ -18,7 +18,7 @@ public class PremiumPatron
     public bool IsLoyal() => this.RewardPoints >= 100L;
     public bool HasPriority() => this.PriorityAccess;
     public bool UnlimitedItems() => this.Tier == PremiumTier.Platinum || this.PriorityAccess;
-    public static DomainResult<PremiumPatron> Create(string email, string name, bool priorityAccess, long rewardPoints, Poly.DomainModeling.Runtime.IStoragePort db, PremiumTier tier = PremiumTier.Silver)
+    public static DomainResult<PremiumPatron> Create(string email, string name, bool priorityAccess, long rewardPoints, Poly.Runtime.IStoragePort db, PremiumTier tier = PremiumTier.Silver)
     {
         if (string.IsNullOrEmpty(email))
         {
@@ -56,5 +56,5 @@ public class PremiumPatron
         }
         return DomainResult.Failure("A unique assign needs the storage port.");
     }
-    public static System.Boolean ExistsWithEmail(Poly.DomainModeling.Runtime.IStoragePort db, System.String email) => db.Exists("PremiumPatron", "Email", email);
+    public static System.Boolean ExistsWithEmail(Poly.Runtime.IStoragePort db, System.String email) => db.Exists("PremiumPatron", "Email", email);
 }

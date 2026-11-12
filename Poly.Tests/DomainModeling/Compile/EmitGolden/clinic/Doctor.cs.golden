@@ -24,7 +24,7 @@ public class Doctor
         }
         return DomainResult.Success();
     }
-    public static DomainResult<Doctor> Create(string licenseNo, string name, Poly.DomainModeling.Runtime.IStoragePort db, Schedule? schedule = null)
+    public static DomainResult<Doctor> Create(string licenseNo, string name, Poly.Runtime.IStoragePort db, Schedule? schedule = null)
     {
         if (string.IsNullOrEmpty(licenseNo))
         {
@@ -66,5 +66,5 @@ public class Doctor
         }
         return DomainResult.Failure("A unique assign needs the storage port.");
     }
-    public static System.Boolean ExistsWithLicenseNo(Poly.DomainModeling.Runtime.IStoragePort db, System.String licenseNo) => db.Exists("Doctor", "LicenseNo", licenseNo);
+    public static System.Boolean ExistsWithLicenseNo(Poly.Runtime.IStoragePort db, System.String licenseNo) => db.Exists("Doctor", "LicenseNo", licenseNo);
 }

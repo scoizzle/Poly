@@ -6,11 +6,11 @@ using Poly.Introspection.CommonLanguageRuntime;
 namespace Poly.Tests.Runtime;
 
 /// <summary>
-/// Guards the R-01 assembly move: <see cref="IStoragePort"/> and
-/// <see cref="ConstraintFailureException"/> ship in their own BCL-only, separately
-/// packable assembly <c>Poly.Runtime</c>, while their namespace stays
-/// <c>Poly.DomainModeling.Runtime</c> so the emitted C# surface is byte-identical.
-/// The namespace move belongs to R-05/R-07, not here.
+/// Guards the R-01 assembly move and the R-05 namespace move: <see cref="IStoragePort"/>
+/// and <see cref="ConstraintFailureException"/> ship in their own BCL-only, separately
+/// packable assembly <c>Poly.Runtime</c>. The port is <c>Poly.Runtime.IStoragePort</c> in
+/// the emitted C#; only <see cref="ConstraintFailureException"/> keeps
+/// <c>Poly.DomainModeling.Runtime</c>, until R-07.
 /// </summary>
 public class PolyRuntimePackageTests {
     [Test]
@@ -68,11 +68,11 @@ public class PolyRuntimePackageTests {
         // fallback that loads Poly's referenced assemblies when nothing has yet touched
         // a Poly.Runtime type in this process. Inside the full suite another test may
         // have loaded that assembly already, and then this passes for the wrong reason.
-        var resolved = ClrTypeDefinitionRegistry.Shared.GetTypeDefinition("Poly.DomainModeling.Runtime.IStoragePort");
+        var resolved = ClrTypeDefinitionRegistry.Shared.GetTypeDefinition("Poly.Runtime.IStoragePort");
 
         await Assert.That(resolved).IsNotNull();
         await Assert.That(resolved!.Name).IsEqualTo(nameof(IStoragePort));
-        await Assert.That(resolved!.Namespace).IsEqualTo("Poly.DomainModeling.Runtime");
+        await Assert.That(resolved!.Namespace).IsEqualTo("Poly.Runtime");
     }
 
     [Test]

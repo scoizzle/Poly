@@ -21,6 +21,9 @@ public sealed class SourceText {
 
     public ReadOnlyMemory<char> Text { get; }
 
+    /// <summary>Per-document intern table; a second <see cref="SourceText"/> over the same text has its own.</summary>
+    public NameTable Names { get; } = new();
+
     public int Length => Text.Length;
 
     /// <summary>
@@ -46,6 +49,9 @@ public sealed class SourceText {
             throw new ArgumentOutOfRangeException(nameof(token), token, $"Span [{token.Start}, +{token.Length}) is outside 0..{Length}.");
         return Text.Span.Slice(token.Start, token.Length);
     }
+
+    /// <summary>The token's raw slice (string literals keep their quotes and escapes), interned per document.</summary>
+    public string Name<TKind>(SpanToken<TKind> token) where TKind : struct => Names.Intern(Span(token));
 
     private int[] BuildLineStarts() {
         var span = Text.Span;

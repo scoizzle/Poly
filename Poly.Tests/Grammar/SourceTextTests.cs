@@ -140,4 +140,57 @@ public class SourceTextTests {
         await Assert.That((a.Start, a.Length)).IsEqualTo((3, 4));
         await Assert.That(System.Runtime.CompilerServices.Unsafe.SizeOf<SpanToken<DslTokenKind>>()).IsEqualTo(12);
     }
+
+    private const string NamedDocument = "domain A\n\nA: entity {\n  B: Text\n}\n";
+
+    private static List<SpanToken<DslTokenKind>> WordTokens(string text) {
+        var reader = new DslTokenReader(text);
+        var words = new List<SpanToken<DslTokenKind>>();
+        for (var i = 0; ; i++) {
+            var t = reader.Peek(i);
+            if (t.Kind == DslTokenKind.EndOfFile) return words;
+            if (char.IsLetter(t.Text[0])) words.Add(new(t.Kind, t.Offset, t.Length));
+        }
+    }
+
+    /// <summary>
+    /// Rule: every word token is named (keywords included), so the document's distinct names are
+    /// <c>domain, A, entity, B, Text</c> = 5.
+    /// </summary>
+    [Test]
+    public async Task Name_InternsEachDistinctIdentifierOnce() {
+        var source = new SourceText(NamedDocument);
+        var words = WordTokens(NamedDocument);
+        var names = words.Select(source.Name).ToList();
+
+        await Assert.That(words.Count).IsEqualTo(6);
+        await Assert.That(ReferenceEquals(names[1], names[2])).IsTrue();   // A@1, A@2
+        await Assert.That(ReferenceEquals(names[1], names[4])).IsFalse();  // A vs B
+        await Assert.That(source.Names.Count).IsEqualTo(5);
+        await Assert.That(source.Name(new SpanToken<DslTokenKind>(default, 0, 0))).IsEqualTo(string.Empty);
+        await Assert.That(source.Names.Count).IsEqualTo(5);
+
+        var second = new SourceText(NamedDocument);
+        await Assert.That(second.Names.Count).IsEqualTo(0);
+        second.Name(words[1]);
+        await Assert.That(second.Names.Count).IsEqualTo(1);
+        await Assert.That(source.Names.Count).IsEqualTo(5);
+        await Assert.That(ReferenceEquals(second.Name(words[1]), names[1])).IsFalse();
+    }
+
+    [Test]
+    public async Task Name_AlreadyInterned_AllocatesZeroBytes() {
+        var source = new SourceText(NamedDocument);
+        var words = WordTokens(NamedDocument);
+        var sink = 0;
+        foreach (var w in words) sink += source.Name(w).Length;
+
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        for (var i = 0; i < 1000; i++)
+            foreach (var w in words) sink += source.Name(w).Length;
+        var bytes = GC.GetAllocatedBytesForCurrentThread() - before;
+
+        await Assert.That(sink).IsGreaterThan(0);
+        await Assert.That(bytes).IsEqualTo(0L);
+    }
 }

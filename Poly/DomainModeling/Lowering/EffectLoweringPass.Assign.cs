@@ -3,6 +3,7 @@ using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Dispatch;
 using Poly.DomainModeling.Meaning;
 using Poly.DomainModeling.Ontology;
+using Poly.DomainModeling.Ontology.Constraints;
 using Poly.DomainModeling.Runtime;
 
 using Syntactic = Poly.Ast.Nodes;
@@ -204,11 +205,11 @@ public sealed partial class EffectLoweringPass {
                         return false;
                     if (range.Minimum is not null
                         && !sourceRanges.Any(s => s.Intervals is null && s.Minimum is not null
-                            && TryCompare(s.Minimum, range.Minimum) is >= 0))
+                            && ConstraintMerge.TryCompare(s.Minimum, range.Minimum) is >= 0))
                         return false;
                     if (range.Maximum is not null
                         && !sourceRanges.Any(s => s.Intervals is null && s.Maximum is not null
-                            && TryCompare(s.Maximum, range.Maximum) is <= 0))
+                            && ConstraintMerge.TryCompare(s.Maximum, range.Maximum) is <= 0))
                         return false;
                     break;
                 case LengthConstraint length when isText:
@@ -233,18 +234,6 @@ public sealed partial class EffectLoweringPass {
             }
         }
         return true;
-    }
-
-    /// <summary>Exact integer compare when both bounds are integral, otherwise double (the guard's own domain); null when not numeric.</summary>
-    private static int? TryCompare(object left, object right) {
-        try {
-            if (left is int or long && right is int or long)
-                return Convert.ToInt64(left).CompareTo(Convert.ToInt64(right));
-            return Convert.ToDouble(left).CompareTo(Convert.ToDouble(right));
-        }
-        catch (Exception e) when (e is InvalidCastException or FormatException or OverflowException) {
-            return null;
-        }
     }
 
     private static bool TryNumeric(Node value, out object number) {

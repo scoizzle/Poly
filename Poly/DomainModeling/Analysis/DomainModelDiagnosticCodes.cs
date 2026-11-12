@@ -223,6 +223,28 @@ internal static class DomainModelDiagnosticCodes {
     /// set. Only an explicit link (or a host) can populate it.
     public const string UnwrittenRelationship = "DMREL002";
 
+    /// <summary>
+    /// A navigation's <c>via</c> clause names something the target entity does not
+    /// declare as a navigation. A property of that name does not pair: the clause
+    /// names the navigation that points back.
+    /// </summary>
+    public const string InverseUnknown = "DMREL003";
+
+    /// <summary>
+    /// Two sides of a <c>via</c> pairing contradict each other: the named navigation
+    /// points elsewhere, declares a different inverse, is the navigation itself, is
+    /// owned on both ends, or two navigations on one entity claim the same undeclared
+    /// inverse.
+    /// </summary>
+    public const string InverseContradictory = "DMREL004";
+
+    /// <summary>
+    /// Two or more navigations from one entity to the same target (same cardinality
+    /// class) with a navigation on the target pointing back, and no side declaring
+    /// <c>via</c>. The pairing is undeclared and ambiguous — declare <c>via</c>.
+    /// </summary>
+    public const string InverseAmbiguous = "DMREL005";
+
     // Retired: nested invoke/create/transition now lower (session.Lower). Kept so
     // historical messages remain identifiable; analysis no longer reports it.
 

@@ -83,6 +83,10 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
         foreach (var entity in domain.Types.OfType<Entity>())
             ReportMemberScopes(context, entity, domain);
 
+        // S-11 (Q10): `via` names the inverse navigation; a declaration that lowering
+        // cannot honour is an analysis error.
+        ReportInverseDeclarations(context, domain);
+
         ReportStoredValueTypeProperties(context, domain);
 
         ReportKeyDesignations(context, domain);
@@ -185,6 +189,260 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
         }
         return false;
     }
+
+    /// <summary>
+    /// S-11 (Q10): <c>via</c> names the navigation on the other side that points back.
+    /// F-15 records it verbatim; this is its first reader. A declaration lowering cannot
+    /// honour fails closed here rather than producing a wrong module:
+    /// <list type="bullet">
+    /// <item><c>DMREL003</c> — the named member is not a navigation of the target entity
+    /// (a property of that name does not pair).</item>
+    /// <item><c>DMREL004</c> — the two sides contradict: the named navigation points
+    /// elsewhere, declares a different inverse, is the navigation itself, both ends are
+    /// owned, or two navigations on one entity claim the same undeclared inverse.</item>
+    /// </list>
+    /// One-sided <c>via</c> is legal: the sides are independent (Q10), so a navigation
+    /// that names nothing back is clean.
+    /// </summary>
+    private static void ReportInverseDeclarations(AnalysisContext context, Domain domain) {
+        // A duplicated or absent target type already failed admission (DMSTR001); skip
+        // the pair rather than cascade.
+        var entities = domain.Types.OfType<Entity>()
+            .GroupBy(static e => e.Name, StringComparer.Ordinal)
+            .Where(static g => g.Count() == 1)
+            .ToDictionary(static g => g.Key, static g => g.First(), StringComparer.Ordinal);
+
+        // At most one DMREL004 per unordered pair: both ends of a both-owned pairing
+        // would otherwise report, once from each side.
+        var reportedPairs = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (var entity in domain.Types.OfType<Entity>()) {
+            foreach (var nav in entity.Navigations)
+                ReportDeclaredInverse(context, entities, entity, nav, reportedPairs);
+            ReportDuplicateViaClaims(context, entities, entity);
+        }
+
+        // D4 (Q10): an undeclared pairing with more than one candidate is ambiguous —
+        // lowering has one peer per side, so the module it would produce is a guess.
+        ReportAmbiguousUndeclaredPairs(context, domain, entities);
+    }
+
+    /// <summary>
+    /// An unordered entity pair (self-pairs included) is ambiguous when one side has two
+    /// or more navigations of the same cardinality class to the other, the other
+    /// navigation back exists, and neither side declares <c>via</c>. Two owned candidates
+    /// are S-12's <c>DMSTR010</c> shape, so they are not reported here; one owned
+    /// candidate is. Mixed cardinality is not an ambiguity (a singular and a collection
+    /// are different candidates).
+    /// </summary>
+    private static void ReportAmbiguousUndeclaredPairs(
+        AnalysisContext context,
+        Domain domain,
+        IReadOnlyDictionary<string, Entity> entities) {
+        var reported = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (var entity in domain.Types.OfType<Entity>()) {
+            var byTarget = new Dictionary<string, List<Relationship>>(StringComparer.Ordinal);
+            var targetOrder = new List<string>();
+            foreach (var nav in entity.Navigations) {
+                if (!byTarget.TryGetValue(nav.Target.TypeName, out var navs)) {
+                    navs = [];
+                    byTarget[nav.Target.TypeName] = navs;
+                    targetOrder.Add(nav.Target.TypeName);
+                }
+                navs.Add(nav);
+            }
+
+            foreach (var targetName in targetOrder) {
+                if (!entities.TryGetValue(targetName, out var target))
+                    continue;
+
+                var candidates = FirstSharedCardinalityClass(byTarget[targetName]);
+                if (candidates is null)
+                    continue;
+
+                // One report per unordered pair, on the navigation that points back.
+                var pairKey = PairKey(entity.Name, target.Name);
+                if (reported.Contains(pairKey))
+                    continue;
+
+                var reverse = ReverseNavigations(entity, target, candidates);
+                if (reverse.Count == 0)
+                    continue;
+
+                // A declared side is a pairing — or a contradiction (DMREL004) — never
+                // an ambiguity.
+                if (candidates.Any(static n => n.Inverse is { Length: > 0 })
+                    || reverse.Any(static n => n.Inverse is { Length: > 0 }))
+                    continue;
+
+                // S-12's DMSTR010 owns the two-owner shape.
+                if (candidates.Count(static n => n.SourceOwnsTarget) >= 2)
+                    continue;
+
+                reported.Add(pairKey);
+                context.ReportError(
+                    reverse[0],
+                    $"Navigations {Names(candidates)} on entity '{entity.Name}' all target entity " +
+                    $"'{target.Name}', and '{target.Name}.{reverse[0].Name}' points back, but no side " +
+                    "declares 'via': the inverse pairing is ambiguous. Declare 'via <name>' on the " +
+                    "navigations that pair.",
+                    DomainModelDiagnosticCodes.InverseAmbiguous);
+            }
+        }
+    }
+
+    /// <summary>
+    /// The first cardinality class (in declaration order) with two or more navigations;
+    /// null when every class has one. Class is singular versus collection — the lowering's
+    /// own classing (<c>FindAutoWireBackReference</c>, <c>FindInverseCollectionInfo</c>).
+    /// </summary>
+    private static List<Relationship>? FirstSharedCardinalityClass(IReadOnlyList<Relationship> navs) {
+        var classes = new List<(bool IsCollection, List<Relationship> Navs)>();
+        foreach (var nav in navs) {
+            var isCollection = nav.Cardinality is RelationshipCardinality.OneToMany
+                or RelationshipCardinality.ManyToMany;
+            var index = classes.FindIndex(c => c.IsCollection == isCollection);
+            if (index < 0) {
+                classes.Add((isCollection, [nav]));
+                continue;
+            }
+            classes[index].Navs.Add(nav);
+        }
+
+        foreach (var (_, group) in classes) {
+            if (group.Count >= 2)
+                return group;
+        }
+        return null;
+    }
+
+    /// <summary>Navigations on <paramref name="target"/> that point back and are not candidates.</summary>
+    private static List<Relationship> ReverseNavigations(
+        Entity source,
+        Entity target,
+        IReadOnlyCollection<Relationship> candidates) {
+        var reverse = new List<Relationship>();
+        foreach (var nav in target.Navigations) {
+            if (candidates.Contains(nav))
+                continue;
+            if (string.Equals(nav.Target.TypeName, source.Name, StringComparison.Ordinal))
+                reverse.Add(nav);
+        }
+        return reverse;
+    }
+
+    private static string Names(IEnumerable<Relationship> navs) =>
+        string.Join(", ", navs.Select(static n => $"'{n.Name}'"));
+
+    /// <summary>
+    /// Two navigations on one entity naming the same <c>via</c> name a target navigation
+    /// that declares no inverse of its own: at most one may claim it. The second claim
+    /// cannot be honoured — lowering has one peer per side — so it is
+    /// <c>DMREL004</c> on the later-declared navigation. When the peer does declare an
+    /// inverse, the reciprocal rules above decide (it names one of the two, and the
+    /// other contradicts it).
+    /// </summary>
+    private static void ReportDuplicateViaClaims(
+        AnalysisContext context,
+        IReadOnlyDictionary<string, Entity> entities,
+        Entity entity) {
+        Dictionary<string, Relationship>? claimed = null;
+        foreach (var nav in entity.Navigations) {
+            if (nav.Inverse is not { Length: > 0 } inverseName)
+                continue;
+            if (!entities.TryGetValue(nav.Target.TypeName, out var target))
+                continue;
+            var peer = target.Navigations.FirstOrDefault(n =>
+                string.Equals(n.Name, inverseName, StringComparison.Ordinal));
+            if (peer is null || peer.Inverse is { Length: > 0 })
+                continue;
+
+            claimed ??= new Dictionary<string, Relationship>(StringComparer.Ordinal);
+            var key = $"{target.Name}\u0000{inverseName}";
+            if (claimed.TryAdd(key, nav))
+                continue;
+            ReportContradictory(
+                context, nav,
+                $"Navigations '{entity.Name}.{claimed[key].Name}' and '{entity.Name}.{nav.Name}' both " +
+                $"declare 'via {inverseName}', and '{target.Name}.{inverseName}' declares no inverse; " +
+                "two navigations cannot claim the same undeclared inverse.");
+        }
+    }
+
+    private static void ReportDeclaredInverse(
+        AnalysisContext context,
+        IReadOnlyDictionary<string, Entity> entities,
+        Entity source,
+        Relationship nav,
+        HashSet<string> reportedPairs) {
+        if (nav.Inverse is not { Length: > 0 } inverseName)
+            return;
+        if (!entities.TryGetValue(nav.Target.TypeName, out var target))
+            return;
+
+        var peer = target.Navigations.FirstOrDefault(n =>
+            string.Equals(n.Name, inverseName, StringComparison.Ordinal));
+        if (peer is null) {
+            context.ReportError(
+                nav,
+                $"Navigation '{nav.Name}' on entity '{source.Name}' declares 'via {inverseName}', " +
+                $"but entity '{target.Name}' has no navigation named '{inverseName}'. " +
+                "'via' must name the navigation on the target entity that points back.",
+                DomainModelDiagnosticCodes.InverseUnknown);
+            return;
+        }
+
+        var selfPair = string.Equals(target.Name, source.Name, StringComparison.Ordinal);
+        if (selfPair && string.Equals(peer.Name, nav.Name, StringComparison.Ordinal)) {
+            ReportContradictory(
+                context, nav,
+                $"Navigation '{nav.Name}' on entity '{source.Name}' declares 'via {inverseName}', " +
+                "which is the navigation itself; a navigation cannot be its own inverse.");
+            return;
+        }
+
+        if (!string.Equals(peer.Target.TypeName, source.Name, StringComparison.Ordinal)) {
+            ReportContradictory(
+                context, nav,
+                $"Navigation '{nav.Name}' on entity '{source.Name}' declares 'via {inverseName}', " +
+                $"but '{target.Name}.{inverseName}' targets entity '{peer.Target.TypeName}', " +
+                $"not '{source.Name}'; the pair contradicts.");
+            return;
+        }
+
+        if (peer.Inverse is { Length: > 0 } peerInverse
+            && !string.Equals(peerInverse, nav.Name, StringComparison.Ordinal)) {
+            ReportContradictory(
+                context, nav,
+                $"Navigation '{nav.Name}' on entity '{source.Name}' declares 'via {inverseName}', " +
+                $"but '{target.Name}.{inverseName}' declares 'via {peerInverse}', " +
+                $"not 'via {nav.Name}'; the two sides contradict.");
+            return;
+        }
+
+        if (!nav.SourceOwnsTarget || !peer.SourceOwnsTarget)
+            return;
+
+        // Exactly one side owns the target. Report on the later-declared navigation of
+        // the pair, once.
+        var pairKey = PairKey(source.Name, target.Name);
+        if (!reportedPairs.Add(pairKey))
+            return;
+        ReportContradictory(
+            context, nav,
+            $"Navigations '{source.Name}.{nav.Name}' and '{target.Name}.{inverseName}' are paired " +
+            "by 'via' and both are owned; exactly one side may own the target.");
+    }
+
+    private static void ReportContradictory(AnalysisContext context, Relationship nav, string message) =>
+        context.ReportError(nav, message, DomainModelDiagnosticCodes.InverseContradictory);
+
+    /// <summary>Order-independent key for an unordered entity pair.</summary>
+    private static string PairKey(string left, string right) =>
+        string.CompareOrdinal(left, right) <= 0
+            ? $"{left}\u0000{right}"
+            : $"{right}\u0000{left}";
 
     /// <summary>
     /// A domain <c>value</c> type is a contract payload / action parameter — it has no

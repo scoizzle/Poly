@@ -170,6 +170,44 @@ public class DomainToCSharpExporterTests {
         return (result.Root!, analysis);
     }
 
+    /// <summary>
+    /// S-11: an invalid inverse declaration is an analysis error, so <c>ApplyAndAnalyze</c>
+    /// rolls back and never yields the proposal. Build the domain mutation-only to reach
+    /// the lowering door with it.
+    /// </summary>
+    private static Domain ApplyWithoutAnalysis(string poly) {
+        var applied = new DomainEvolution(DomainTestFactory.Create("_", [], []))
+            .Apply(new PolyDslParser(poly).Parse());
+        if (!applied.Succeeded)
+            throw new InvalidOperationException("the document did not apply");
+        return applied.Root;
+    }
+
+    /// <summary>
+    /// S-11 flip: assert exactly one <c>DMREL005</c> on the navigation that points back,
+    /// that its message names every candidate, and that lowering fails closed. S-11 makes
+    /// this pairing an error (Q10, #659) — the pre-S-11 expectation was that analysis
+    /// accepted it and lowering only skipped the attach.
+    /// </summary>
+    private static async Task AssertAmbiguousInverseIsAnalysisError(
+        string poly, string reportedNav, params string[] candidates) {
+        var domain = ApplyWithoutAnalysis(poly);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
+        var errors = analysis.Diagnostics
+            .Where(d => d.Severity == Poly.Analysis.DiagnosticSeverity.Error
+                && d.Code == DomainModelDiagnosticCodes.InverseAmbiguous)
+            .ToList();
+        await Assert.That(errors.Count).IsEqualTo(1);
+        var nav = (Relationship)errors[0].Node;
+        await Assert.That(nav.Name).IsEqualTo(reportedNav);
+        foreach (var candidate in candidates)
+            await Assert.That(errors[0].Message).Contains($"'{candidate}'");
+        var thrown = Assert.Throws<InvalidOperationException>(
+            () => DomainProgramProjection.ToSyntax(domain, analysis));
+        await Assert.That(thrown).IsNotNull();
+        await Assert.That(thrown!.Message).Contains(candidates[0]);
+    }
+
     [Test]
     public async Task Export_Produces_CoreInfrastructureTypes() {
         var (domain, analysis) = ParseAndAnalyze(LibraryCheckoutDsl);
@@ -545,8 +583,9 @@ public class DomainToCSharpExporterTests {
     }
 
     [Test]
-    public async Task Export_CreateIn_AmbiguousBackRefs_NotAutoWired() {
-        // Two singular back-refs to the source → ambiguous → keep as ctor params (null).
+    public async Task Export_CreateIn_AmbiguousBackRefs_ErrorsOnAmbiguousPairing() {
+        // Flip (Q10, #659): S-11 makes an undeclared ambiguous pairing an error. The old
+        // assertion was `analysis.HasErrors` false and both back-refs kept as ctor params.
         const string dsl = """
             domain Test
 
@@ -564,15 +603,7 @@ public class DomainToCSharpExporterTests {
             }
             """;
 
-        var (domain, analysis) = ParseAndAnalyze(dsl);
-        await Assert.That(analysis.HasErrors).IsFalse();
-
-        var types = DomainProgramProjection.ToSyntax(domain, analysis);
-        var customer = types.First(t => t.Name == "Customer");
-        var createOrders = customer.Methods?.FirstOrDefault(m => m.Name == "CreateOrders");
-        await Assert.That(createOrders).IsNotNull();
-        await Assert.That(createOrders!.Parameters?.Select(p => p.Name))
-            .IsEquivalentTo(["title", "customer", "primaryContact"]);
+        await AssertAmbiguousInverseIsAnalysisError(dsl, "orders", "customer", "primaryContact");
     }
 
     [Test]
@@ -713,7 +744,9 @@ public class DomainToCSharpExporterTests {
     }
 
     [Test]
-    public async Task Export_SelfRelCreateIn_TwoSingulars_NoThisAndFieldAddOnce() {
+    public async Task Export_SelfRelCreateIn_TwoSingulars_ErrorsOnAmbiguousSelfPairing() {
+        // Flip (Q10, #659): S-11 rejects the undeclared self-pairing. The old assertion
+        // was `analysis.HasErrors` false plus a compiled body that adds once.
         const string dsl = """
             domain Test
             Account: entity {
@@ -726,18 +759,8 @@ public class DomainToCSharpExporterTests {
               }
             }
             """;
-        var (domain, analysis) = ParseAndAnalyze(dsl);
-        await Assert.That(analysis.HasErrors).IsFalse();
-        var types = DomainProgramProjection.ToSyntax(domain, analysis);
-        var cs = new CSharpGenerator().Generate(new CompilationUnitNode([], null, types, null));
 
-        var createChildren = ExportedCSharp.ExtractMethod(cs, "DomainResult<Account> CreateChildren(");
-        await Assert.That(createChildren)
-            .Contains("Account.Create(name, (Account?)null, (Account?)null, new List<Account>())");
-        await Assert.That(createChildren.Split("this._children.Add").Length - 1).IsEqualTo(1);
-        await Assert.That(createChildren).DoesNotContain("Account.Create(name, this");
-        var errors = CompileExported(cs);
-        await Assert.That(errors).IsEmpty();
+        await AssertAmbiguousInverseIsAnalysisError(dsl, "children", "primary", "secondary");
     }
 
     [Test]
@@ -3231,10 +3254,10 @@ public class DomainToCSharpExporterTests {
     }
 
     [Test]
-    public async Task Export_PublicCreate_AmbiguousInverse_SkipsAttach() {
-        // HostAbi.TryLinkInverseCollection skip: public Create with peer when two
-        // collections constructs successfully and does not Attach* / fail-closed.
-        var (domain, analysis) = ParseAndAnalyze("""
+    public async Task Export_PublicCreate_AmbiguousInverse_ErrorsOnAmbiguousPairing() {
+        // Flip (Q10, #659): S-11 rejects the pairing before lowering. The old assertion
+        // was `analysis.HasErrors` false and that public Create skips Attach.
+        const string dsl = """
             domain Ambiguous
             Peer: entity {
               primary: many Child
@@ -3243,24 +3266,17 @@ public class DomainToCSharpExporterTests {
             Child: entity {
               peer: Peer
             }
-            """);
-        await Assert.That(analysis.HasErrors).IsFalse();
-        var types = DomainProgramProjection.ToSyntax(domain, analysis);
-        var cs = new CSharpGenerator().Generate(new CompilationUnitNode([], null, types, null));
-        var createBody = ExportedCSharp.ExtractMethod(cs, "static DomainResult<Child> Create(");
-        await Assert.That(createBody).DoesNotContain("has no unique inverse collection to attach on 'Peer'");
-        await Assert.That(createBody).DoesNotContain("AttachPrimary");
-        await Assert.That(createBody).DoesNotContain("AttachSecondary");
-        await Assert.That(createBody).Contains("DomainResult<Child>.Success");
-        var errors = CompileExported(cs);
-        await Assert.That(errors).IsEmpty();
+            """;
+
+        await AssertAmbiguousInverseIsAnalysisError(dsl, "peer", "primary", "secondary");
     }
 
     [Test]
-    public async Task Export_CreateNav_AmbiguousInverse_CreateInPrimary_Succeeds() {
-        // F1: named create-in when parent has two collections of the child type.
-        // Create skips Attach; CreateNav fallback _primary.Add runs.
-        var (domain, analysis) = ParseAndAnalyze("""
+    public async Task Export_CreateNav_AmbiguousInverse_ErrorsOnAmbiguousPairing() {
+        // Flip (Q10, #659): S-11 rejects the pairing the old test ran end to end. The old
+        // assertion was `analysis.HasErrors` false and that CreateNav falls back to
+        // `_primary.Add` with no Attach and no fail-closed.
+        const string dsl = """
             domain AmbiguousCreateIn
             Peer: entity {
               primary: many Child
@@ -3272,77 +3288,9 @@ public class DomainToCSharpExporterTests {
             Child: entity {
               peer: Peer
             }
-            """);
-        await Assert.That(analysis.HasErrors).IsFalse();
-        var types = DomainProgramProjection.ToSyntax(domain, analysis);
-        var cs = new CSharpGenerator().Generate(new CompilationUnitNode([], null, types, null));
+            """;
 
-        var createPrimary = ExportedCSharp.ExtractMethod(cs, "DomainResult<Child> CreatePrimary(");
-        await Assert.That(createPrimary).Contains("Child.Create(");
-        await Assert.That(createPrimary).Contains("_primary.Add");
-        await Assert.That(createPrimary).DoesNotContain("_secondary.Add");
-        await Assert.That(createPrimary).DoesNotContain("AttachPrimary");
-        await Assert.That(createPrimary).DoesNotContain("AttachSecondary");
-
-        var childCreate = ExportedCSharp.ExtractMethod(cs, "static DomainResult<Child> Create(");
-        await Assert.That(childCreate).DoesNotContain("AttachPrimary");
-        await Assert.That(childCreate).DoesNotContain("AttachSecondary");
-        await Assert.That(childCreate).DoesNotContain("has no unique inverse collection");
-
-        var tree = CSharpSyntaxTree.ParseText("#nullable enable\nusing System.Collections.Generic;\n" + cs);
-        var references = ((string?)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES"))
-            ?.Split(Path.PathSeparator)
-            .Select(p => (MetadataReference)MetadataReference.CreateFromFile(p))
-            .ToArray() ?? [];
-        var compilation = CSharpCompilation.Create(
-            "AmbiguousCreateInPrimary",
-            [tree],
-            references,
-            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
-        using var pe = new MemoryStream();
-        var emit = compilation.Emit(pe);
-        var emitErrors = emit.Diagnostics
-            .Where(d => d.Severity == Microsoft.CodeAnalysis.DiagnosticSeverity.Error)
-            .Select(d => d.ToString())
-            .ToArray();
-        await Assert.That(emitErrors).IsEmpty();
-        pe.Position = 0;
-        var alc = new System.Runtime.Loader.AssemblyLoadContext(
-            "AmbiguousCreateInPrimary", isCollectible: true);
-        var asm = alc.LoadFromStream(pe);
-
-        var peerType = asm.GetType("Peer")!;
-        var childType = asm.GetType("Child")!;
-        var peerCreate = peerType.GetMethods(
-                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
-            .Where(m => m.Name == "Create")
-            .OrderByDescending(m => m.GetParameters().Length)
-            .First();
-        var peerArgs = peerCreate.GetParameters().Select(p =>
-            p.HasDefaultValue ? p.DefaultValue
-            : p.ParameterType == typeof(string) ? (object)""
-            : null).ToArray();
-        var peerResult = peerCreate.Invoke(null, peerArgs)!;
-        await Assert.That((bool)peerResult.GetType().GetProperty("IsSuccess")!.GetValue(peerResult)!).IsTrue();
-        var peer = peerResult.GetType().GetProperty("Value")!.GetValue(peerResult)!;
-
-        var make = peerType.GetMethod("Make")!;
-        var makeResult = make.Invoke(peer, null)!;
-        await Assert.That((bool)makeResult.GetType().GetProperty("IsSuccess")!.GetValue(makeResult)!).IsTrue();
-
-        var primary = peerType.GetProperty("Primary")!.GetValue(peer) as System.Collections.ICollection;
-        var secondary = peerType.GetProperty("Secondary")!.GetValue(peer) as System.Collections.ICollection;
-        await Assert.That(primary).IsNotNull();
-        await Assert.That(secondary).IsNotNull();
-        await Assert.That(primary!.Count).IsEqualTo(1);
-        await Assert.That(secondary!.Count).IsEqualTo(0);
-
-        object? child = null;
-        foreach (var item in primary)
-            child = item;
-        await Assert.That(child).IsNotNull();
-        var childPeer = childType.GetProperty("Peer")!.GetValue(child);
-        await Assert.That(ReferenceEquals(childPeer, peer)).IsTrue();
+        await AssertAmbiguousInverseIsAnalysisError(dsl, "peer", "primary", "secondary");
     }
 
     [Test]

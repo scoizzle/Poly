@@ -95,9 +95,10 @@ drives path-prefix reads, quantifiers, and subscriptions from the source. The
 **C# export auto-wires the child's back-reference** when the target entity has
 exactly one singular navigation pointing back to the source (e.g. `borrower`
 on `Loan` → `Patron`): the generated `Create{Nav}` factory passes `this` and the
-back-ref is not a constructor parameter. When the back-ref is ambiguous (multiple
-singular navs to the source) or a collection, it stays an unset constructor
-parameter. To-one navigation bindings in `create in` initializers are **legal**
+back-ref is not a constructor parameter. When the back-ref is a collection, it stays an
+unset constructor parameter. Two or more singular navigations back to the source with no
+`via` pairing is a **DMREL005** analysis error, so that shape never reaches export. To-one
+navigation bindings in `create in` initializers are **legal**
 (e.g. `create in loans { book: book }`) — the binding flows into the child's
 value bag / constructor parameter like a scalar initializer.
 
@@ -533,12 +534,15 @@ Employee: entity {
 }
 ```
 
-`via` is recorded on the relationship as `Inverse` and is **not yet consumed**: the
-derived back-reference wiring (C# export and runtime link maintenance) is unchanged and
-does not read `via` yet, and ambiguity or contradiction between the two sides will be
-reported by a later analysis slice — that validation is not implemented yet. `via
-<name>` is legal on an owned navigation too — that is how the back-reference names its
-owner. A member may still be named `via` (`via: Text`, `via(x: Text): action { }`): the
+`via` is recorded on the relationship as `Inverse` and is validated by analysis:
+`DMREL003` when the name is not a navigation on the target entity, `DMREL004` when the
+two sides contradict (the named navigation points elsewhere, declares a different
+inverse, is the navigation itself, both ends are owned, or two navigations on one entity
+claim the same undeclared inverse), and `DMREL005` when two or more navigations of one
+cardinality class pair with a side that declares none. Lowering does not dispatch from
+the declared inverse yet — that is a later slice. `via <name>` is legal on an owned
+navigation too — that is how the back-reference names its owner, and only one side of a
+pair may own it. A member may still be named `via` (`via: Text`, `via(x: Text): action { }`): the
 clause starts whenever `via` is followed by anything other than `:` or `(`, so `via 123`
 enters the clause and then fails as a missing name. A `via` with no name, or a second
 `via` on the same navigation, is a positioned parse error.

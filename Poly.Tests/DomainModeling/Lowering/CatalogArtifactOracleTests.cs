@@ -22,12 +22,6 @@ namespace Poly.Tests.DomainModeling.Lowering;
 /// the same node count.
 /// </summary>
 public class CatalogArtifactOracleTests {
-    // Probes that are not run; each has a stated reason, and the set's size is asserted.
-    static readonly Dictionary<string, string> Skipped = new(StringComparer.Ordinal) {
-        ["nested-invoke-type-mismatch.poly"] = "type error by design",
-        ["restaurant.poly"] = "stores a domain value type as an entity property (DMSTR006); does not analyze",
-    };
-
     // Minimum (entity, method) pairs that must have compiled across all probes. A floor,
     // so an oracle whose synthesized instances all fail to create cannot pass vacuously.
     const int MinimumCompiledPairs = 150;
@@ -37,18 +31,30 @@ public class CatalogArtifactOracleTests {
         .With(new HttpLibrary());
     static readonly string[] ProbeSeed = [.. ExtensionCatalog.ProductAuthoring, "sqlite"];
 
-    public static IEnumerable<string> Samples() {
-        var root = FindRepoRoot();
-        return new[] { "docs/probes", "demo/live" }
-            .SelectMany(dir => Directory.EnumerateFiles(Path.Combine(root, dir), "*.poly", SearchOption.AllDirectories))
-            .Where(path => !Skipped.ContainsKey(Path.GetFileName(path)))
-            .Select(path => Path.GetRelativePath(root, path).Replace('\\', '/'))
-            .Order(StringComparer.Ordinal);
+    public static IEnumerable<string> Samples() =>
+        GoldenDomains.Lowerable.Select(d => d.Path).Order(StringComparer.Ordinal);
+
+    [Test]
+    public async Task Samples_AreExactlyTheLowerableSet() =>
+        await Assert.That(string.Join("\n", Samples()))
+            .IsEqualTo(string.Join("\n", GoldenDomains.Lowerable.Select(d => d.Path).Order(StringComparer.Ordinal)));
+
+    [Test]
+    public async Task Skipped_StoredValueTypeProperty_StillProducesDmstr006() {
+        var domain = GoldenDomains.Skipped.Single(d => d.Name == "restaurant");
+        var (succeeded, errors) = Analyze(File.ReadAllText(domain.FullPath));
+        await Assert.That(succeeded).IsFalse().Because(domain.SkipReason!);
+        await Assert.That(errors.Any(e => e.Code == "DMSTR006")).IsTrue().Because(domain.SkipReason!);
     }
 
     [Test]
-    public async Task Samples_AreTheTwentyFiveMinusTheMismatchProbe() =>
-        await Assert.That(Samples().Count()).IsEqualTo(25 - Skipped.Count);
+    public async Task Skipped_NestedInvokeTypeMismatch_StillFailsWithATypeError() {
+        var domain = GoldenDomains.Skipped.Single(d => d.Name == "nested-invoke-type-mismatch");
+        var (succeeded, errors) = Analyze(File.ReadAllText(domain.FullPath));
+        await Assert.That(succeeded).IsFalse().Because(domain.SkipReason!);
+        await Assert.That(errors.Any(e => e.Message.Contains("type", StringComparison.OrdinalIgnoreCase)))
+            .IsTrue().Because(domain.SkipReason!);
+    }
 
     [Test]
     public async Task Samples_AreAllInTheSharedCatalog() {
@@ -104,7 +110,7 @@ public class CatalogArtifactOracleTests {
     // ── harness ───────────────────────────────────────────────────────────────
 
     static int Check(string relativePath, List<string> mismatches) {
-        var poly = File.ReadAllText(Path.Combine(FindRepoRoot(), relativePath));
+        var poly = File.ReadAllText(Path.Combine(GoldenDomains.RepoRoot, relativePath));
         Domain domain;
         ArtifactCatalog catalog;
         try {
@@ -152,6 +158,17 @@ public class CatalogArtifactOracleTests {
                     .Select(d => d.Message)));
         _ = session.Lower(outcome.Root!, outcome.Analysis);
         return (outcome.Root!, session.ArtifactCatalog);
+    }
+
+    // The analysis verdict a skipped probe is held to, without lowering it.
+    static (bool Succeeded, List<Poly.Analysis.Diagnostic> Errors) Analyze(string poly) {
+        var session = DomainSession.ForSource(poly, ProbeSeed, ProbeCatalog);
+        var changes = DomainCompilation.WithSeed(new PolyDslParser(poly, session).Parse(), ProbeSeed);
+        var outcome = new DomainEvolution(new Domain("_", [])).ApplyAndAnalyze(changes, session: session);
+        var errors = outcome.Analysis.Diagnostics
+            .Where(d => d.Severity == Poly.Analysis.DiagnosticSeverity.Error)
+            .ToList();
+        return (outcome.Succeeded, errors);
     }
 
     static IEnumerable<MethodDefinitionNode> MethodsOf(ArtifactCatalog catalog, string entityName) =>
@@ -219,14 +236,4 @@ public class CatalogArtifactOracleTests {
 
     static int NodeCount(Node node) =>
         1 + node.Children.Where(c => c is not null).Sum(c => NodeCount(c!));
-
-    static string FindRepoRoot() {
-        var dir = AppContext.BaseDirectory;
-        while (dir is not null) {
-            if (File.Exists(Path.Combine(dir, "docs/CORE.md")))
-                return dir;
-            dir = Directory.GetParent(dir)?.FullName;
-        }
-        throw new InvalidOperationException("Could not find repo root from " + AppContext.BaseDirectory);
-    }
 }

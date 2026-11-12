@@ -16,6 +16,7 @@
 	</ItemGroup>
 	<ItemGroup>
 		<ProjectReference Include="..\Poly\Poly.csproj" />
+		<ProjectReference Include="..\Poly.Benchmarks\Poly.Benchmarks.csproj" />
 		<ProjectReference Include="..\Poly.Mcp\Poly.Mcp.csproj" />
 		<ProjectReference Include="..\src\Poly.Compile\Poly.Compile.csproj" />
 		<ProjectReference Include="..\src\polyc\polyc.csproj" />

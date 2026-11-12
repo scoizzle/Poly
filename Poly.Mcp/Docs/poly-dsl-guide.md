@@ -1199,18 +1199,31 @@ diverging:
   arithmetic, and defaults (e.g. `Name >= 18` on a `Text` property, `default(Today)` on
   a `Number` property) are rejected at authoring time — the export and runtime no longer
   receive type-confused expressions.
-- **Property constraints propagate onto effects.** An effect that assigns a value to a
-  constrained property is checked against the property's constraints at analysis:
-  a literal value (or a derived expression whose inferred value range is entirely
-  outside, e.g. `assign Age to Age + 200` on `Age: Number range(0, 150)`) is an
-  **error**; a derived expression that *can* fall outside (e.g. `assign Qty to Qty - 100`
-  on `Qty: Number range(0, 100)`) is a **warning**. This covers `assign`, entry/exit
-  effects, and `create`/`create in` initializers. The action's guard policies are
+- **Property constraints propagate onto effects, and every write gets a verdict.**
+  An effect that writes a property with a `range(...)` constraint is checked against it at
+  analysis: a literal value (or a derived expression whose inferred value range is entirely
+  outside, e.g. `assign Age to Age + 200` on `Age: Number range(0, 150)`) is a
+  **`DMEFF008` error**; an expression that *can* fall outside (e.g. `assign Qty to Qty - 100`
+  on `Qty: Number range(0, 100)`) is a **`DMEFF008` warning**. This covers `assign`,
+  entry/exit and `when` effects, and `create`/`create in` initializers, which are evaluated
+  in the **creator's** scope (the creating action's properties and parameters), never the
+  created entity's. The action's guard policies are
   considered **additively**: a `require` gate that
   narrows a property's value range is combined with the property's own constraints before
   judging the downstream violation — e.g. `assign Qty to Qty + 10` under
   `require Qty <= 80` on `Qty: Number range(0, 90)` is provably within range and produces
   no diagnostic.
+- **Silence means verified, not skipped (Q4).** A write analysis cannot decide — a bare
+  property or parameter with no bound, an operator the interval flow does not model
+  (`/`, a call, `match`), or a constraint kind with no flow decision — is a **`DMCS003`
+  warning** naming the write, the property and the constraint. So with
+  `A: Number range(0, 10)` and `B: Number range(5, 20)`, `assign A to B` warns
+  (`DMEFF008`, "can fall outside"), and `assign A to U + 1` with an unbounded `U` warns
+  (`DMCS003`, no usable bound). One write gets exactly one diagnostic: the worst across
+  every stage context the action can run in. Only `range(...)` is decided against a
+  computed value in this slice; `length`, `pattern` and `equal` writes are not flow-checked
+  yet. `poly_check` still prints `proven` for a model whose only findings are warnings
+  (the verdict flip is M-05), so read the findings, not the verdict word.
 - **Invariant verification is per-stage-context and combinatory.** An action valid in
   multiple stages is analyzed once per stage: each stage's policies (plus the action's
   require gates) combine to a **net constraint per constraint type**

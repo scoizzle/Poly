@@ -49,9 +49,9 @@ app.MapPost("/api/pairs/{id}/both", async (int id, BothDto dto, TDbCtx db) => {
     try
     {
         var result = entity.Both(dto.V);
-        await db.SaveChangesAsync();
         if (result.IsSuccess)
         {
+            await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
         else
@@ -74,9 +74,9 @@ app.MapPost("/api/pairs/{id}/conflict", async (int id, ConflictDto dto, TDbCtx d
     try
     {
         var result = entity.Conflict(dto.S);
-        await db.SaveChangesAsync();
         if (result.IsSuccess)
         {
+            await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
         else

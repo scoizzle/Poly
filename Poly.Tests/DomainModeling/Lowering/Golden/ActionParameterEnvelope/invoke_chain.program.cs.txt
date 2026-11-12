@@ -49,9 +49,9 @@ app.MapPost("/api/meters/{id}/bump", async (int id, BumpDto dto, TDbCtx db) => {
     try
     {
         var result = entity.Bump(dto.Amount);
-        await db.SaveChangesAsync();
         if (result.IsSuccess)
         {
+            await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
         else
@@ -74,9 +74,9 @@ app.MapPost("/api/meters/{id}/ship", async (int id, ShipDto dto, TDbCtx db) => {
     try
     {
         var result = entity.Ship(dto.Amt);
-        await db.SaveChangesAsync();
         if (result.IsSuccess)
         {
+            await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
         else

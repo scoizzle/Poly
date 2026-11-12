@@ -42,6 +42,13 @@ public class ActionParameterEnvelopeParityTests {
     [MethodDataSource(nameof(FixtureNames))]
     public async Task EmittedProgram_IsByteIdenticalToPreRelocationOutput(string name) {
         var rendered = GenerationAssertions.MinimalApiIr(Fixture(name)).Render();
+        // Set POLY_UPDATE_GOLDEN=1 to write the snapshot instead of comparing (as EmitGoldenTests does).
+        if (Environment.GetEnvironmentVariable("POLY_UPDATE_GOLDEN") == "1") {
+            await File.WriteAllTextAsync(
+                Path.Combine(ActionParameterEnvelopeFixtures.GoldenDirectory(), name + ".program.cs.txt"), rendered);
+            return;
+        }
+
         await Assert.That(rendered).IsEqualTo(Golden(name, ".program.cs.txt"));
     }
 

@@ -322,7 +322,7 @@ public class DslCompilerSqliteOracleTests {
         await Assert.That(result.Success).IsTrue();
 
         var prog = result.Files!.Single(f => f.FileName == "Program.cs").Source;
-        await Assert.That(prog).Contains("public record RestockDto");
+        await Assert.That(prog).Contains("internal record RestockDto");
         await Assert.That(prog).Contains("[Range(0, 1000)]\n    public long Amount { get; init; }");
         // An action with no constrained target emits no [Range] on its params.
         var compiler2 = CompilerWithHttpHost();
@@ -338,7 +338,7 @@ public class DslCompilerSqliteOracleTests {
             """, CompileMode.All, DbmsPack.Generic);
         await Assert.That(result2.Success).IsTrue();
         var prog2 = result2.Files!.Single(f => f.FileName == "Program.cs").Source;
-        await Assert.That(prog2).Contains("public record RenameDto");
+        await Assert.That(prog2).Contains("internal record RenameDto");
         await Assert.That(prog2).DoesNotContain("[Range");
     }
 
@@ -397,7 +397,7 @@ public class DslCompilerSqliteOracleTests {
         await Assert.That(result.Success).IsTrue();
 
         var prog = result.Files!.Single(f => f.FileName == "Program.cs").Source;
-        await Assert.That(prog).Contains("public record CategorizeDto\n{\n    [EnumDataType(typeof(Genre))]\n    public Genre Genre { get; init; }");
+        await Assert.That(prog).Contains("internal record CategorizeDto\n{\n    [EnumDataType(typeof(Genre))]\n    public Genre Genre { get; init; }");
     }
 
     [Test]
@@ -463,7 +463,7 @@ public class DslCompilerSqliteOracleTests {
         await Assert.That(result.Success).IsTrue();
 
         var prog = result.Files!.Single(f => f.FileName == "Program.cs").Source;
-        await Assert.That(prog).Contains("public record AdjustDto");
+        await Assert.That(prog).Contains("internal record AdjustDto");
         await Assert.That(prog).DoesNotContain("[Range(0, 10)]\n    public long Amount");
     }
 

@@ -118,7 +118,9 @@ public sealed partial class DbContextGenerator {
             Properties: props,
             Methods: methods,
             Fields: fields,
-            Interfaces: interfaces
+            Interfaces: interfaces,
+            AccessModifier: Poly.DomainModeling.Lowering.DomainAccess.ForInfrastructure(
+                _domain, _entities.Select(e => e.Name))
         );
 
         var unit = new CompilationUnitNode(

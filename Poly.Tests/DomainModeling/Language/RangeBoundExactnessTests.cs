@@ -1,4 +1,5 @@
 using System.Reflection;
+using Poly.Tests.TestHelpers;
 
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
@@ -476,7 +477,7 @@ public class RangeBoundExactnessTests {
         Assembly assembly, string typeName, params (string Name, object? Value)[] named) {
         var type = assembly.GetType(typeName)
             ?? throw new InvalidOperationException($"missing type {typeName}");
-        var create = type.GetMethods(BindingFlags.Public | BindingFlags.Static)
+        var create = type.GetMethods(PrintedMembers.Any)
             .Where(m => m.Name == "Create")
             .OrderByDescending(m => m.GetParameters().Length)
             .First();
@@ -497,17 +498,17 @@ public class RangeBoundExactnessTests {
                 args[i] = null;
         }
         var result = create.Invoke(null, args)!;
-        var succeeded = (bool)result.GetType().GetProperty("IsSuccess")!.GetValue(result)!;
-        var message = result.GetType().GetProperty("ErrorMessage")!.GetValue(result) as string;
+        var succeeded = (bool)result.GetType().GetProperty("IsSuccess", PrintedMembers.Any)!.GetValue(result)!;
+        var message = result.GetType().GetProperty("ErrorMessage", PrintedMembers.Any)!.GetValue(result) as string;
         var instance = succeeded
-            ? result.GetType().GetProperty("Value")!.GetValue(result)
+            ? result.GetType().GetProperty("Value", PrintedMembers.Any)!.GetValue(result)
             : null;
         return (succeeded, message, instance);
     }
 
     private static (bool Succeeded, string? Message) TryInvoke(
         object instance, string name, params (string Name, object? Value)[] named) {
-        var method = instance.GetType().GetMethod(name, BindingFlags.Instance | BindingFlags.Public)
+        var method = instance.GetType().GetMethod(name, PrintedMembers.Any)
             ?? throw new InvalidOperationException($"missing action {name}");
         var parameters = method.GetParameters();
         var byName = named.ToDictionary(n => n.Name, n => n.Value, StringComparer.OrdinalIgnoreCase);
@@ -522,8 +523,8 @@ public class RangeBoundExactnessTests {
                 args[i] = null;
         }
         var result = method.Invoke(instance, args)!;
-        var succeeded = (bool)result.GetType().GetProperty("IsSuccess")!.GetValue(result)!;
-        var message = result.GetType().GetProperty("ErrorMessage")!.GetValue(result) as string;
+        var succeeded = (bool)result.GetType().GetProperty("IsSuccess", PrintedMembers.Any)!.GetValue(result)!;
+        var message = result.GetType().GetProperty("ErrorMessage", PrintedMembers.Any)!.GetValue(result) as string;
         return (succeeded, message);
     }
 }

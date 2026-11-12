@@ -788,7 +788,7 @@ public class DomainToCSharpExporterTests {
         var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var cs = new CSharpGenerator().Generate(new CompilationUnitNode([], null, types, null));
 
-        await Assert.That(cs).Contains("public DomainResult<Child> CreateChildren(");
+        await Assert.That(cs).Contains("internal DomainResult<Child> CreateChildren(");
         await Assert.That(cs).DoesNotContain("private DomainResult<Child> CreateChildren(");
         await Assert.That(cs).Contains("internal void AttachChildren(");
         await Assert.That(cs).DoesNotContain("public void AttachChildren(");
@@ -2121,7 +2121,7 @@ public class DomainToCSharpExporterTests {
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
-        var cancelDecls = System.Text.RegularExpressions.Regex.Matches(cs, @"public DomainResult Cancel\(\)");
+        var cancelDecls = System.Text.RegularExpressions.Regex.Matches(cs, @"internal DomainResult Cancel\(\)");
         await Assert.That(cancelDecls.Count).IsEqualTo(1);
         await Assert.That(cs).Contains("TicketStage.Draft");
         await Assert.That(cs).Contains("TicketStage.Open");
@@ -2172,7 +2172,7 @@ public class DomainToCSharpExporterTests {
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
-        var bookIdx = cs.IndexOf("public DomainResult Book(", StringComparison.Ordinal);
+        var bookIdx = cs.IndexOf("internal DomainResult Book(", StringComparison.Ordinal);
         var createIdx = cs.IndexOf("this.CreateStays(", bookIdx);
         var assignIdx = cs.IndexOf("this.OpenStays = this.OpenStays + 1L", bookIdx);
         await Assert.That(bookIdx).IsGreaterThan(-1);
@@ -2660,7 +2660,7 @@ public class DomainToCSharpExporterTests {
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
-        var bookIdx = cs.IndexOf("public DomainResult Book(", StringComparison.Ordinal);
+        var bookIdx = cs.IndexOf("internal DomainResult Book(", StringComparison.Ordinal);
         var assignIdx = cs.IndexOf("this.OpenStays = this.OpenStays + 1L", bookIdx);
         var createIdx = cs.IndexOf("this.CreateStays(", bookIdx);
         await Assert.That(bookIdx).IsGreaterThan(-1);
@@ -2688,7 +2688,7 @@ public class DomainToCSharpExporterTests {
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
-        var bookIdx = cs.IndexOf("public DomainResult Book(", StringComparison.Ordinal);
+        var bookIdx = cs.IndexOf("internal DomainResult Book(", StringComparison.Ordinal);
         var createIdx = cs.IndexOf("Stay.Create(", bookIdx);
         var assignIdx = cs.IndexOf("this.OpenStays = this.OpenStays + 1L", bookIdx);
         await Assert.That(bookIdx).IsGreaterThan(-1);
@@ -2719,7 +2719,7 @@ public class DomainToCSharpExporterTests {
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
-        var bookIdx = cs.IndexOf("public DomainResult Book(", StringComparison.Ordinal);
+        var bookIdx = cs.IndexOf("internal DomainResult Book(", StringComparison.Ordinal);
         var assignIdx = cs.IndexOf("this.OpenStays = this.OpenStays + 1L", bookIdx);
         var createIdx = cs.IndexOf("Stay.Create(", bookIdx);
         await Assert.That(bookIdx).IsGreaterThan(-1);
@@ -2751,7 +2751,7 @@ public class DomainToCSharpExporterTests {
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
-        var bookIdx = cs.IndexOf("public DomainResult Book(", StringComparison.Ordinal);
+        var bookIdx = cs.IndexOf("internal DomainResult Book(", StringComparison.Ordinal);
         var assignIdx = cs.IndexOf("this.OpenStays = this.OpenStays + 1L", bookIdx);
         var createIdx = cs.IndexOf("Stay.Create(", bookIdx);
         await Assert.That(bookIdx).IsGreaterThan(-1);
@@ -2784,7 +2784,7 @@ public class DomainToCSharpExporterTests {
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
-        var bookIdx = cs.IndexOf("public DomainResult Book(", StringComparison.Ordinal);
+        var bookIdx = cs.IndexOf("internal DomainResult Book(", StringComparison.Ordinal);
         var assignIdx = cs.IndexOf("this.OpenStays = this.OpenStays + 1L", bookIdx);
         var createIdx = cs.IndexOf("Stay.Create(", bookIdx);
         await Assert.That(bookIdx).IsGreaterThan(-1);
@@ -2818,7 +2818,7 @@ public class DomainToCSharpExporterTests {
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
-        var bookIdx = cs.IndexOf("public DomainResult Book(", StringComparison.Ordinal);
+        var bookIdx = cs.IndexOf("internal DomainResult Book(", StringComparison.Ordinal);
         var assignIdx = cs.IndexOf("this.OpenStays = this.OpenStays + 1L", bookIdx);
         var createIdx = cs.IndexOf("Stay.Create(", bookIdx);
         await Assert.That(bookIdx).IsGreaterThan(-1);
@@ -2858,7 +2858,7 @@ public class DomainToCSharpExporterTests {
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
-        var issueIdx = cs.IndexOf("public DomainResult Issue(", StringComparison.Ordinal);
+        var issueIdx = cs.IndexOf("internal DomainResult Issue(", StringComparison.Ordinal);
         var assignIdx = cs.IndexOf("this.Enabled = false", issueIdx);
         var createIdx = cs.IndexOf("this.CreatePermits(", issueIdx);
         await Assert.That(issueIdx).IsGreaterThan(-1);
@@ -2892,7 +2892,7 @@ public class DomainToCSharpExporterTests {
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
-        var bookIdx = cs.IndexOf("public DomainResult Book(", StringComparison.Ordinal);
+        var bookIdx = cs.IndexOf("internal DomainResult Book(", StringComparison.Ordinal);
         var assignIdx = cs.IndexOf("this.OpenStays = this.OpenStays + 1L", bookIdx);
         var createIdx = cs.IndexOf("Stay.Create(", bookIdx);
         await Assert.That(bookIdx).IsGreaterThan(-1);
@@ -2924,7 +2924,7 @@ public class DomainToCSharpExporterTests {
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
-        var bookIdx = cs.IndexOf("public DomainResult Book(", StringComparison.Ordinal);
+        var bookIdx = cs.IndexOf("internal DomainResult Book(", StringComparison.Ordinal);
         var assignIdx = cs.IndexOf("this.OpenStays = this.OpenStays + 1L", bookIdx);
         var createIdx = cs.IndexOf("Stay.Create(", bookIdx);
         await Assert.That(bookIdx).IsGreaterThan(-1);
@@ -2962,7 +2962,7 @@ public class DomainToCSharpExporterTests {
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
-        var openItIdx = cs.IndexOf("public DomainResult OpenIt(", StringComparison.Ordinal);
+        var openItIdx = cs.IndexOf("internal DomainResult OpenIt(", StringComparison.Ordinal);
         var stageIdx = cs.IndexOf("this.CurrentStage = GuestStage.Open", openItIdx);
         var assignIdx = cs.IndexOf("this.OpenStays = this.OpenStays + 1L", openItIdx);
         var createIdx = cs.IndexOf("Stay.Create(", openItIdx);
@@ -3026,7 +3026,7 @@ public class DomainToCSharpExporterTests {
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
-        var abortIdx = cs.IndexOf("public DomainResult Abort(", StringComparison.Ordinal);
+        var abortIdx = cs.IndexOf("internal DomainResult Abort(", StringComparison.Ordinal);
         var cancelCall = cs.IndexOf("this.Cancel()", abortIdx);
         await Assert.That(abortIdx).IsGreaterThan(-1);
         await Assert.That(cancelCall).IsGreaterThan(abortIdx);
@@ -3069,11 +3069,11 @@ public class DomainToCSharpExporterTests {
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
-        await Assert.That(cs).Contains("public DomainResult<Dish> Send(");
+        await Assert.That(cs).Contains("internal DomainResult<Dish> Send(");
         await Assert.That(cs).Contains("return DomainResult<Dish>.Failure(invoke");
         await Assert.That(cs).Contains("this.Prep()");
         await Assert.That(cs).Contains("this.Station.Fire()");
-        var sendIdx = cs.IndexOf("public DomainResult<Dish> Send(", StringComparison.Ordinal);
+        var sendIdx = cs.IndexOf("internal DomainResult<Dish> Send(", StringComparison.Ordinal);
         var flagAssign = cs.IndexOf("this.Flag = 2L", sendIdx);
         var failRewrap = cs.IndexOf("return DomainResult<Dish>.Failure(", sendIdx);
         await Assert.That(failRewrap).IsGreaterThan(sendIdx);
@@ -3104,7 +3104,7 @@ public class DomainToCSharpExporterTests {
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
-        await Assert.That(cs).Contains("public DomainResult<Line> Go(");
+        await Assert.That(cs).Contains("internal DomainResult<Line> Go(");
         await Assert.That(cs).Contains("return DomainResult<Line>.Failure(result");
         await Assert.That(cs).DoesNotContain("matched zero targets");
         var errors = CompileExported(cs);
@@ -3189,7 +3189,7 @@ public class DomainToCSharpExporterTests {
         var reservationType = asm.GetType("Reservation")!;
 
         object InvokeCreate(Type type, params object?[] args) {
-            var methods = type.GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
+            var methods = type.GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)
                 .Where(m => m.Name == "Create")
                 .ToArray();
             var create = methods.OrderByDescending(m => m.GetParameters().Length).First();
@@ -3226,7 +3226,7 @@ public class DomainToCSharpExporterTests {
 
         // Reservation.Create(guest, room, …) — match by parameter types where possible.
         var resCreate = reservationType.GetMethods(
-                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
+                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)
             .Where(m => m.Name == "Create")
             .OrderByDescending(m => m.GetParameters().Length)
             .First();
@@ -3244,18 +3244,18 @@ public class DomainToCSharpExporterTests {
         await Assert.That(ResultOk(reservationResult)).IsTrue();
         var reservation = ResultValue(reservationResult);
 
-        var stays = roomType.GetProperty("Stays")!.GetValue(room) as System.Collections.ICollection;
+        var stays = roomType.GetProperty("Stays", PrintedMembers.Any)!.GetValue(room) as System.Collections.ICollection;
         await Assert.That(stays).IsNotNull();
         await Assert.That(stays!.Count).IsEqualTo(1);
 
-        var occupiedBefore = (bool)roomType.GetProperty("Occupied")!.GetValue(room)!;
+        var occupiedBefore = (bool)roomType.GetProperty("Occupied", PrintedMembers.Any)!.GetValue(room)!;
         await Assert.That(occupiedBefore).IsFalse();
 
-        var checkIn = reservationType.GetMethod("CheckIn")!;
+        var checkIn = reservationType.GetMethod("CheckIn", PrintedMembers.Any)!;
         var checkInResult = checkIn.Invoke(reservation, null)!;
         await Assert.That(ResultOk(checkInResult)).IsTrue();
 
-        var occupiedAfter = (bool)roomType.GetProperty("Occupied")!.GetValue(room)!;
+        var occupiedAfter = (bool)roomType.GetProperty("Occupied", PrintedMembers.Any)!.GetValue(room)!;
         await Assert.That(occupiedAfter).IsTrue();
     }
 

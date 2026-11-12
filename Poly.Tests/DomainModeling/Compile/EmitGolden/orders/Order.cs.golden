@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 using Poly.Runtime;
 
-public enum OrderStage
+internal enum OrderStage
 {
     Pending = 0,
     Paid = 1,
@@ -12,7 +12,7 @@ public enum OrderStage
     Cancelled = 4
 }
 
-public class Order : Poly.Runtime.IActionScoped
+internal class Order : Poly.Runtime.IActionScoped
 {
     private List<OrderItem> _items = new List<OrderItem>();
     private Order() { }
@@ -40,7 +40,7 @@ public class Order : Poly.Runtime.IActionScoped
     {
         this._items.Add(child);
     }
-    public DomainResult Cancel(string reason)
+    internal DomainResult Cancel(string reason)
     {
         var assignValue0 = reason;
         if (System.String.IsNullOrEmpty(assignValue0))
@@ -56,7 +56,7 @@ public class Order : Poly.Runtime.IActionScoped
         this.State = OrderState.Cancelled;
         return DomainResult.Success();
     }
-    public DomainResult ApplyDiscount(long amount)
+    internal DomainResult ApplyDiscount(long amount)
     {
         var assignValue0 = amount;
         if (assignValue0 < 0m)
@@ -70,7 +70,7 @@ public class Order : Poly.Runtime.IActionScoped
         this.Discount = assignValue0;
         return DomainResult.Success();
     }
-    public DomainResult Pay()
+    internal DomainResult Pay()
     {
         if (this.CurrentStage != OrderStage.Pending)
         {
@@ -80,7 +80,7 @@ public class Order : Poly.Runtime.IActionScoped
         this.State = OrderState.Paid;
         return DomainResult.Success();
     }
-    public DomainResult Ship()
+    internal DomainResult Ship()
     {
         if (this.CurrentStage != OrderStage.Paid)
         {
@@ -91,7 +91,7 @@ public class Order : Poly.Runtime.IActionScoped
         return DomainResult.Success();
     }
     public bool IsPaid() => this.State == OrderState.Paid;
-    public static DomainResult<Order> Create(decimal total, decimal discount, string cancelReason = "", Customer? customer = null, IEnumerable<OrderItem>? items = null, OrderState state = OrderState.Pending)
+    internal static DomainResult<Order> Create(decimal total, decimal discount, string cancelReason = "", Customer? customer = null, IEnumerable<OrderItem>? items = null, OrderState state = OrderState.Pending)
     {
         if (total < 0m)
         {

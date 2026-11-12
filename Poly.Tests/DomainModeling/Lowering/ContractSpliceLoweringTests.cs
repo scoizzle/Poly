@@ -65,12 +65,12 @@ public sealed class ContractSpliceLoweringTests {
         var reqType = asm.GetType("ChargeRequest")
             ?? throw new InvalidOperationException("ChargeRequest missing");
         var req = Activator.CreateInstance(reqType)!;
-        reqType.GetProperty("Amount")!.SetValue(req, 10L);
-        var pay = printed.GetType().GetMethod("Pay")
+        reqType.GetProperty("Amount", PrintedMembers.Any)!.SetValue(req, 10L);
+        var pay = printed.GetType().GetMethod("Pay", PrintedMembers.Any)
             ?? throw new InvalidOperationException("Pay missing");
         var printedResult = pay.Invoke(printed, [req])
             ?? throw new InvalidOperationException("Pay returned null");
-        await Assert.That((bool)printedResult.GetType().GetProperty("IsSuccess")!.GetValue(printedResult)!).IsTrue();
+        await Assert.That((bool)printedResult.GetType().GetProperty("IsSuccess", PrintedMembers.Any)!.GetValue(printedResult)!).IsTrue();
     }
 
     [Test]
@@ -95,12 +95,12 @@ public sealed class ContractSpliceLoweringTests {
         var reqType = asm.GetType("ChargeRequest")
             ?? throw new InvalidOperationException("ChargeRequest missing");
         var req = Activator.CreateInstance(reqType)!;
-        reqType.GetProperty("Amount")!.SetValue(req, 10L);
-        var pay = printed.GetType().GetMethod("Pay")
+        reqType.GetProperty("Amount", PrintedMembers.Any)!.SetValue(req, 10L);
+        var pay = printed.GetType().GetMethod("Pay", PrintedMembers.Any)
             ?? throw new InvalidOperationException("Pay missing");
         var printedResult = pay.Invoke(printed, [req])
             ?? throw new InvalidOperationException("Pay returned null");
-        await Assert.That((bool)printedResult.GetType().GetProperty("IsSuccess")!.GetValue(printedResult)!).IsTrue();
+        await Assert.That((bool)printedResult.GetType().GetProperty("IsSuccess", PrintedMembers.Any)!.GetValue(printedResult)!).IsTrue();
     }
     [Test]
     public async Task ContributedBody_FailureExpression_AgreesOnSimulateAndPrintedCsharp() {
@@ -139,15 +139,15 @@ public sealed class ContractSpliceLoweringTests {
         var reqType = asm.GetType("ChargeRequest")
             ?? throw new InvalidOperationException("ChargeRequest missing");
         var req = Activator.CreateInstance(reqType)!;
-        reqType.GetProperty("Amount")!.SetValue(req, 10L);
-        var pay = printed.GetType().GetMethod("Pay")
+        reqType.GetProperty("Amount", PrintedMembers.Any)!.SetValue(req, 10L);
+        var pay = printed.GetType().GetMethod("Pay", PrintedMembers.Any)
             ?? throw new InvalidOperationException("Pay missing");
         var printedResult = pay.Invoke(printed, [req])
             ?? throw new InvalidOperationException("Pay returned null");
-        await Assert.That((bool)printedResult.GetType().GetProperty("IsSuccess")!.GetValue(printedResult)!).IsFalse();
-        await Assert.That((string?)printedResult.GetType().GetProperty("ErrorMessage")!.GetValue(printedResult))
+        await Assert.That((bool)printedResult.GetType().GetProperty("IsSuccess", PrintedMembers.Any)!.GetValue(printedResult)!).IsFalse();
+        await Assert.That((string?)printedResult.GetType().GetProperty("ErrorMessage", PrintedMembers.Any)!.GetValue(printedResult))
             .IsEqualTo("declined");
-        var printedFailure = (Poly.Runtime.DomainFailure)printedResult.GetType().GetProperty("Error")!.GetValue(printedResult)!;
+        var printedFailure = (Poly.Runtime.DomainFailure)printedResult.GetType().GetProperty("Error", PrintedMembers.Any)!.GetValue(printedResult)!;
         await Assert.That(printedFailure.Kind).IsEqualTo(Poly.Runtime.DomainFailureKind.Constraint);
         await Assert.That(printedFailure.ElementPath).IsEqualTo("Order.Pay");
         await Assert.That(printedFailure.Message).IsEqualTo("declined");

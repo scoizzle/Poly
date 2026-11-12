@@ -3,13 +3,13 @@ using System.Collections.Generic;
 
 using Poly.Runtime;
 
-public enum HallStage
+internal enum HallStage
 {
     InService = 0,
     OutOfService = 1
 }
 
-public class Hall : Poly.Runtime.IActionScoped
+internal class Hall : Poly.Runtime.IActionScoped
 {
     private List<Section> _sections = new List<Section>();
     private Hall() { }
@@ -41,7 +41,7 @@ public class Hall : Poly.Runtime.IActionScoped
     {
         this._sections.Add(child);
     }
-    public DomainResult Occupy()
+    internal DomainResult Occupy()
     {
         if (this.CurrentStage != HallStage.InService)
         {
@@ -54,7 +54,7 @@ public class Hall : Poly.Runtime.IActionScoped
         this.Occupied = true;
         return DomainResult.Success();
     }
-    public DomainResult Vacate()
+    internal DomainResult Vacate()
     {
         if (this.CurrentStage != HallStage.InService)
         {
@@ -67,7 +67,7 @@ public class Hall : Poly.Runtime.IActionScoped
         this.Occupied = false;
         return DomainResult.Success();
     }
-    public DomainResult MarkChildBusy()
+    internal DomainResult MarkChildBusy()
     {
         if (this.CurrentStage != HallStage.InService)
         {
@@ -76,7 +76,7 @@ public class Hall : Poly.Runtime.IActionScoped
         this.BusySections = this.BusySections + 1L;
         return DomainResult.Success();
     }
-    public DomainResult ClearChildBusy()
+    internal DomainResult ClearChildBusy()
     {
         if (this.CurrentStage != HallStage.InService)
         {
@@ -85,7 +85,7 @@ public class Hall : Poly.Runtime.IActionScoped
         this.BusySections = this.BusySections - 1L;
         return DomainResult.Success();
     }
-    public DomainResult TakeOffline()
+    internal DomainResult TakeOffline()
     {
         if (this.CurrentStage != HallStage.InService)
         {
@@ -103,7 +103,7 @@ public class Hall : Poly.Runtime.IActionScoped
         this.CurrentStage = HallStage.OutOfService;
         return DomainResult.Success();
     }
-    public DomainResult ReturnToService()
+    internal DomainResult ReturnToService()
     {
         if (this.CurrentStage != HallStage.OutOfService)
         {
@@ -117,7 +117,7 @@ public class Hall : Poly.Runtime.IActionScoped
     public bool ChildrenFree() => this.BusySections == 0L;
     public bool CanBook() => !this.Occupied && !this.Offline && this.BusySections == 0L;
     public bool IsOccupied() => this.Occupied;
-    public static DomainResult<Hall> Create(string name, long capacity, decimal dayRate, Property? property = null, IEnumerable<Section>? sections = null, bool occupied = false, bool offline = false, long busySections = 0L)
+    internal static DomainResult<Hall> Create(string name, long capacity, decimal dayRate, Property? property = null, IEnumerable<Section>? sections = null, bool occupied = false, bool offline = false, long busySections = 0L)
     {
         if (string.IsNullOrEmpty(name))
         {

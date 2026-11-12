@@ -3,14 +3,14 @@ using System.Collections.Generic;
 
 using Poly.Runtime;
 
-public enum LoanStage
+internal enum LoanStage
 {
     Active = 0,
     Overdue = 1,
     Returned = 2
 }
 
-public class Loan : Poly.Runtime.IActionScoped
+internal class Loan : Poly.Runtime.IActionScoped
 {
     private List<Patron>? _patronLoansOverdueSubscribers;
     private int _notifyDepth;
@@ -24,7 +24,7 @@ public class Loan : Poly.Runtime.IActionScoped
     public long Amount { get; private set; }
     public Book? Book { get; private set; }
     public LoanStage CurrentStage { get; private set; }
-    public DomainResult MarkOverdue()
+    internal DomainResult MarkOverdue()
     {
         if (this.CurrentStage != LoanStage.Active)
         {
@@ -34,7 +34,7 @@ public class Loan : Poly.Runtime.IActionScoped
         this.NotifyOverdueSubscribers();
         return DomainResult.Success();
     }
-    public DomainResult Return()
+    internal DomainResult Return()
     {
         if (this.CurrentStage != LoanStage.Overdue)
         {
@@ -77,7 +77,7 @@ public class Loan : Poly.Runtime.IActionScoped
             this.ExitNotifyCascade();
         }
     }
-    public static DomainResult<Loan> Create(Book? book = null, long amount = 0L)
+    internal static DomainResult<Loan> Create(Book? book = null, long amount = 0L)
     {
         if (amount < 0L)
         {

@@ -32,6 +32,16 @@ public sealed partial class DomainExpressionLoweringPass {
             [.. arms.SelectMany(a => new[] { a.Condition, a.Value }), otherwise], value);
     }
 
-    private LoweredExpression Arm(DomainExpression value, DomainTypeReference? target) =>
-        target is null ? Route(value) : AdaptTo(value, target, _currentSubject);
+    /// <summary>
+    /// A conditional arm does not ride the analyzer's implicit-conversion rewrite (that wraps an
+    /// <c>Assignment</c>, not a <c>Conditional</c> arm), so a whole-number literal written for a Decimal
+    /// slot is retyped here: the VM would otherwise merge a scalar word with a Decimal handle (#605).
+    /// The arm's hoisted statements are kept.
+    /// </summary>
+    private LoweredExpression Arm(DomainExpression value, DomainTypeReference? target) {
+        if (target is null)
+            return Route(value);
+        var lowered = AdaptTo(value, target, _currentSubject);
+        return lowered with { Value = TargetTypeAdapter.Adapt(lowered.Value, target, _context) };
+    }
 }

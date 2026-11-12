@@ -1,7 +1,7 @@
 #nullable enable
 using Poly.Runtime;
 
-public class Site : Poly.Runtime.IActionScoped
+internal class Site : Poly.Runtime.IActionScoped
 {
     private Site() { }
     private Site(string city, string region)
@@ -11,7 +11,7 @@ public class Site : Poly.Runtime.IActionScoped
     }
     public string City { get; private set; } = default!;
     public string Region { get; private set; } = default!;
-    public static DomainResult<Site> Create(string city, string region)
+    internal static DomainResult<Site> Create(string city, string region)
     {
         if (string.IsNullOrEmpty(city))
         {

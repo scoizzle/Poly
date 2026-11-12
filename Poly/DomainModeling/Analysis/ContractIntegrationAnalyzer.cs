@@ -58,6 +58,7 @@ internal sealed class ContractIntegrationAnalyzer : INodeAnalyzer {
     /// and result types and a public value type's field types may not name a type internal to
     /// this domain. A public action must also be reachable through public (#418): its owning
     /// entity must be public, because a public entity exports its name and its public actions.
+    /// A public entity may not navigate to an internal entity (L-22, <see cref="ValidatePublicNavigations"/>).
     /// Not checked: a public entity's properties (decision 13 exports its name and
     /// public actions only), an imported contract's ACL value types (that contract's surface),
     /// primitives, and enums (no visibility mark; #418 gives them a digest entry).
@@ -75,6 +76,10 @@ internal sealed class ContractIntegrationAnalyzer : INodeAnalyzer {
         }
 
         foreach (var entity in domain.Types.OfType<Entity>()) {
+            if (entity.Visibility == Visibility.Public)
+                ValidatePublicNavigations(context, domain, entity);
+            if (entity.Visibility == Visibility.Public)
+                ValidatePublicStageGroups(context, domain, entity);
             foreach (var action in entity.Actions) {
                 if (action.Visibility == Visibility.Public)
                     ValidatePublicAction(context, domain, entity, action);
@@ -85,6 +90,64 @@ internal sealed class ContractIntegrationAnalyzer : INodeAnalyzer {
                         ValidatePublicAction(context, domain, entity, action);
                 }
             }
+        }
+    }
+
+    /// <summary>
+    /// L-22 (#604): stage copies of one action name print as ONE method that is public when any copy is
+    /// public. A non-public copy of such a group whose result names an internal type would therefore be
+    /// exported through the public method, so it is reported on that copy like any public signature.
+    /// (Parameter lists must agree across copies, so the public copy's own check already covers them.)
+    /// </summary>
+    private static void ValidatePublicStageGroups(AnalysisContext context, Domain domain, Entity entity) {
+        var variants = entity.Actions.Concat(entity.Stages.SelectMany(s => s.Actions));
+        foreach (var group in variants.GroupBy(a => a.Name, StringComparer.Ordinal)) {
+            if (!group.Any(a => a.Visibility == Visibility.Public))
+                continue;
+
+            foreach (var variant in group.Where(a => a.Visibility != Visibility.Public)) {
+                foreach (var member in variant.Result.Members) {
+                    ReportUnclosedSignature(
+                        context, domain, variant, member.Type,
+                        $"Public action '{variant.Name}' on entity '{entity.Name}' (one method across its stage copies)",
+                        "as the result of a stage copy");
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// L-22 (#604): a public entity exports its navigations as public members, and EF maps only public
+    /// navigations, so a navigation to an entity internal to this domain is an error (not acknowledgeable).
+    /// </summary>
+    private static void ValidatePublicNavigations(AnalysisContext context, Domain domain, Entity entity) {
+        foreach (var navigation in entity.Navigations) {
+            if (context.GetMetadata<ResolvedTypeReferenceMetadata>(navigation.Target)
+                is not ResolvedTypeReferenceMetadata { Type: Entity target }
+                || !IsDeclaredInDomain(domain, target)
+                || target.Visibility == Visibility.Public)
+                continue;
+
+            context.ReportError(
+                navigation,
+                $"Public entity '{entity.Name}' navigation '{navigation.Name}' targets internal entity " +
+                $"'{target.Name}'. Mark '{target.Name}' public, or remove the public mark from '{entity.Name}'.",
+                DomainModelDiagnosticCodes.PublicEntityNavigatesToInternalEntity);
+        }
+
+        // An entity-typed property (the DSL reads one as a navigation; the model API can build one) would print as
+        // a public property of an internal type (CS0053), so it is the same finding, positioned on the property.
+        foreach (var property in entity.Properties) {
+            var target = context.GetMetadata<ResolvedTypeReferenceMetadata>(property.Type)?.Type as Entity
+                ?? domain.Types.OfType<Entity>().FirstOrDefault(e => e.Name == property.Type.TypeName);
+            if (target is null || !IsDeclaredInDomain(domain, target) || target.Visibility == Visibility.Public)
+                continue;
+
+            context.ReportError(
+                property,
+                $"Public entity '{entity.Name}' property '{property.Name}' targets internal entity " +
+                $"'{target.Name}'. Mark '{target.Name}' public, or remove the public mark from '{entity.Name}'.",
+                DomainModelDiagnosticCodes.PublicEntityNavigatesToInternalEntity);
         }
     }
 

@@ -414,7 +414,7 @@ static async System.Threading.Tasks.Task SeedAsync(LibraryDbContext db)
 app.Run();
 
 
-public record BookDto
+internal record BookDto
 {
     [Required]
     public string Title { get; init; } = default!;
@@ -430,7 +430,7 @@ public record BookDto
     public Genre Genre { get; init; }
 }
 
-public record PatronDto
+internal record PatronDto
 {
     [Required]
     public string Name { get; init; } = default!;
@@ -441,7 +441,7 @@ public record PatronDto
     public long MaxItems { get; init; }
 }
 
-public record PremiumPatronDto
+internal record PremiumPatronDto
 {
     [Required]
     public string Name { get; init; } = default!;
@@ -452,7 +452,7 @@ public record PremiumPatronDto
     public bool PriorityAccess { get; init; }
 }
 
-public record CheckOutDto
+internal record CheckOutDto
 {
     public string BookId { get; init; } = default!;
 }

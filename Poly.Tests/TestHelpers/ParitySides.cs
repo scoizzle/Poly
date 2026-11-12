@@ -106,6 +106,9 @@ sealed class SimulateSide(Domain domain, IReadOnlySet<string>? recordedException
 
 sealed class PrintedSide(Domain domain, Assembly assembly, IReadOnlySet<string>? recordedExceptions = null, bool recordPostThrowState = false)
     : ParitySide(domain, recordedExceptions, recordPostThrowState) {
+    // L-22: an unmarked entity prints internal, so the printed members are looked up non-public too.
+    const BindingFlags AnyInstance = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+
     internal RecordingStoragePort Port { get; } = new();
 
     public override string Name => "printed";
@@ -134,10 +137,10 @@ sealed class PrintedSide(Domain domain, Assembly assembly, IReadOnlySet<string>?
         // The storage port is threaded into an action that touches a unique key; it is
         // the harness's, not a scenario argument.
         static bool IsPort(ParameterInfo p) => p.ParameterType == typeof(IStoragePort);
-        var method = Current.GetType().GetMethods()
+        var method = Current.GetType().GetMethods(AnyInstance)
             .FirstOrDefault(m => m.Name == action && m.GetParameters().Count(p => !IsPort(p)) == args.Length)
             ?? throw new ArgumentException(
-                $"Printed type '{Current.GetType().Name}' has no public '{action}' with {args.Length} parameter(s).");
+                $"Printed type '{Current.GetType().Name}' has no '{action}' with {args.Length} parameter(s).");
         var parameters = method.GetParameters();
         var callArgs = new object?[parameters.Length];
         for (var i = 0; i < parameters.Length; i++) {
@@ -200,8 +203,8 @@ sealed class PrintedSide(Domain domain, Assembly assembly, IReadOnlySet<string>?
         return state;
     }
 
-    MethodInfo Method(string name) => Current.GetType().GetMethod(name, Type.EmptyTypes)
-        ?? throw new ArgumentException($"Printed type '{Current.GetType().Name}' has no public '{name}()'.");
+    MethodInfo Method(string name) => Current.GetType().GetMethod(name, AnyInstance, Type.EmptyTypes)
+        ?? throw new ArgumentException($"Printed type '{Current.GetType().Name}' has no '{name}()'.");
 
     /// <summary>A value outside every declared member, for a caller passing an out-of-range cast.</summary>
     const int UndefinedEnumMember = 42;
@@ -227,15 +230,15 @@ sealed class PrintedSide(Domain domain, Assembly assembly, IReadOnlySet<string>?
         var instance = Activator.CreateInstance(target)
             ?? throw new ArgumentException($"Could not create '{target.Name}' for invoke argument.");
         foreach (var (name, field) in fields) {
-            var prop = target.GetProperty(name)
+            var prop = target.GetProperty(name, AnyInstance)
                 ?? throw new ArgumentException($"'{target.Name}' has no property '{name}'.");
             prop.SetValue(instance, field);
         }
         return instance;
     }
 
-    // Printed members are public; names match ignoring case because navigations print in PascalCase. An entity without stages has no CurrentStage.
-    static object? Read(object entity, string name) => entity.GetType().GetProperties()
+    // Printed members may be public or internal; names match ignoring case because navigations print in PascalCase. An entity without stages has no CurrentStage.
+    static object? Read(object entity, string name) => entity.GetType().GetProperties(AnyInstance)
         .FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase))?.GetValue(entity);
 
     static Array ToArray(IEnumerable<object> items) {

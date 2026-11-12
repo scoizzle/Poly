@@ -64,13 +64,13 @@ public class UnlinkedComparisonAgreeTests {
             "AdvisorUnderThirty", "NamedPat", "NotPat", "SameName", "ArithmeticYounger"
         }) {
             var sim = exec.EvaluatePolicy(customer, (customerE.Policies.First(p => p.Name == policyName)).Name);
-            var print = (bool)printed.GetType().GetMethod(policyName)!.Invoke(printed, null)!;
+            var print = (bool)printed.GetType().GetMethod(policyName, PrintedMembers.Any)!.Invoke(printed, null)!;
             await Assert.That(sim).IsFalse().Because($"simulate {policyName}");
             await Assert.That(print).IsEqualTo(sim).Because($"print {policyName}");
         }
 
         var notSim = exec.EvaluatePolicy(customer, (customerE.Policies.First(p => p.Name == "NotYounger")).Name);
-        var notPrint = (bool)printed.GetType().GetMethod("NotYounger")!.Invoke(printed, null)!;
+        var notPrint = (bool)printed.GetType().GetMethod("NotYounger", PrintedMembers.Any)!.Invoke(printed, null)!;
         await Assert.That(notSim).IsTrue();
         await Assert.That(notPrint).IsTrue();
     }
@@ -92,11 +92,11 @@ public class UnlinkedComparisonAgreeTests {
         var asm = ExportedCSharp.CompileAndLoad(
             new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis)));
         var printed = ExportedCSharp.CreateEntity(asm, "Customer", ("age", 20L), ("ready", false));
-        var printPolicy = (bool)printed.GetType().GetMethod("YoungerThanAdvisor")!.Invoke(printed, null)!;
+        var printPolicy = (bool)printed.GetType().GetMethod("YoungerThanAdvisor", PrintedMembers.Any)!.Invoke(printed, null)!;
         await Assert.That(printPolicy).IsFalse();
-        var result = printed.GetType().GetMethod("Promote")!.Invoke(printed, null)!;
-        await Assert.That((bool)result.GetType().GetProperty("IsSuccess")!.GetValue(result)!).IsFalse();
-        await Assert.That((bool)printed.GetType().GetProperty("Ready")!.GetValue(printed)!).IsFalse();
+        var result = printed.GetType().GetMethod("Promote", PrintedMembers.Any)!.Invoke(printed, null)!;
+        await Assert.That((bool)result.GetType().GetProperty("IsSuccess", PrintedMembers.Any)!.GetValue(result)!).IsFalse();
+        await Assert.That((bool)printed.GetType().GetProperty("Ready", PrintedMembers.Any)!.GetValue(printed)!).IsFalse();
     }
 
     private const string MultiHopDsl = """
@@ -133,11 +133,11 @@ public class UnlinkedComparisonAgreeTests {
         var printedCustomer = ExportedCSharp.CreateEntity(asm, "Customer", ("age", 20L));
         void WireAdvisor() {
             exec.Link("advisor", customer, advisor);
-            printedCustomer.GetType().GetProperty("Advisor")!.SetValue(printedCustomer, printedAdvisor);
+            printedCustomer.GetType().GetProperty("Advisor", PrintedMembers.Any)!.SetValue(printedCustomer, printedAdvisor);
         }
         void WireMentor() {
             exec.Link("mentor", advisor, mentor);
-            printedAdvisor.GetType().GetProperty("Mentor")!.SetValue(printedAdvisor, printedMentor);
+            printedAdvisor.GetType().GetProperty("Mentor", PrintedMembers.Any)!.SetValue(printedAdvisor, printedMentor);
         }
 
         // No advisor: no path can read through the chain.
@@ -163,7 +163,7 @@ public class UnlinkedComparisonAgreeTests {
         async Task AssertPolicy(string name, bool expected) {
             var policy = E("Customer").Policies.First(p => p.Name == name);
             var sim = exec.EvaluatePolicy(customer, (policy).Name);
-            var print = (bool)printedCustomer.GetType().GetMethod(name)!.Invoke(printedCustomer, null)!;
+            var print = (bool)printedCustomer.GetType().GetMethod(name, PrintedMembers.Any)!.Invoke(printedCustomer, null)!;
             await Assert.That(sim).IsEqualTo(expected).Because($"simulate {name}");
             await Assert.That(print).IsEqualTo(expected).Because($"print {name}");
         }
@@ -199,10 +199,10 @@ public class UnlinkedComparisonAgreeTests {
         var asm = ExportedCSharp.CompileAndLoad(source);
         var printedAdvisor = ExportedCSharp.CreateEntity(asm, "Advisor", ("age", 25L));
         var printedCustomer = ExportedCSharp.CreateEntity(asm, "Customer", ("age", 20L));
-        printedCustomer.GetType().GetProperty("Advisor")!.SetValue(printedCustomer, printedAdvisor);
+        printedCustomer.GetType().GetProperty("Advisor", PrintedMembers.Any)!.SetValue(printedCustomer, printedAdvisor);
 
         var sim = exec.EvaluatePolicy(customer, (E("Customer").Policies.First(p => p.Name == "YoungerThanBoth")).Name);
-        var print = (bool)printedCustomer.GetType().GetMethod("YoungerThanBoth")!.Invoke(printedCustomer, null)!;
+        var print = (bool)printedCustomer.GetType().GetMethod("YoungerThanBoth", PrintedMembers.Any)!.Invoke(printedCustomer, null)!;
         await Assert.That(sim).IsFalse();
         await Assert.That(print).IsFalse();
     }
@@ -231,7 +231,7 @@ public class UnlinkedComparisonAgreeTests {
         var asm = ExportedCSharp.CompileAndLoad(
             new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis)));
         var printed = ExportedCSharp.CreateEntity(asm, "Customer");
-        var print = (bool)printed.GetType().GetMethod("P")!.Invoke(printed, null)!;
+        var print = (bool)printed.GetType().GetMethod("P", PrintedMembers.Any)!.Invoke(printed, null)!;
 
         await Assert.That(sim).IsFalse();
         await Assert.That(print).IsFalse();
@@ -275,15 +275,15 @@ public class UnlinkedComparisonAgreeTests {
         var printedCustomer = ExportedCSharp.CreateEntity(asm, "Customer", ("age", 20L));
         if (linkAdvisor) {
             exec.Link("advisor", customer, advisor);
-            printedCustomer.GetType().GetProperty("Advisor")!.SetValue(printedCustomer, printedAdvisor);
+            printedCustomer.GetType().GetProperty("Advisor", PrintedMembers.Any)!.SetValue(printedCustomer, printedAdvisor);
         }
         if (linkMentor) {
             exec.Link("mentor", advisor, mentor);
-            printedAdvisor.GetType().GetProperty("Mentor")!.SetValue(printedAdvisor, printedMentor);
+            printedAdvisor.GetType().GetProperty("Mentor", PrintedMembers.Any)!.SetValue(printedAdvisor, printedMentor);
         }
 
         var sim = exec.EvaluatePolicy(customer, (E("Customer").Policies.First(p => p.Name == "P")).Name);
-        var print = (bool)printedCustomer.GetType().GetMethod("P")!.Invoke(printedCustomer, null)!;
+        var print = (bool)printedCustomer.GetType().GetMethod("P", PrintedMembers.Any)!.Invoke(printedCustomer, null)!;
         await Assert.That(sim).IsEqualTo(expected);
         await Assert.That(print).IsEqualTo(expected);
     }

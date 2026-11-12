@@ -100,7 +100,7 @@ internal static class NameScopes {
     /// walks them: a <c>not_</c> name, and an expression instance equal to an earlier
     /// definition, are uses rather than new names. Kept in lockstep with that walk.
     /// </summary>
-    private static IEnumerable<Policy> PolicyDefinitions(Entity entity) {
+    internal static IEnumerable<Policy> PolicyDefinitions(Entity entity) {
         var defined = new Dictionary<string, Policy>(StringComparer.Ordinal);
 
         bool IsUse(Policy policy) =>

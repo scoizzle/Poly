@@ -3,13 +3,13 @@ using System.Collections.Generic;
 
 using Poly.Runtime;
 
-public enum RoomStage
+internal enum RoomStage
 {
     InService = 0,
     OutOfService = 1
 }
 
-public class Room : Poly.Runtime.IActionScoped
+internal class Room : Poly.Runtime.IActionScoped
 {
     private List<Reservation> _stays = new List<Reservation>();
     private Room() { }
@@ -50,7 +50,7 @@ public class Room : Poly.Runtime.IActionScoped
         child.RegisterRoomStaysCancelledSubscriber(this);
         child.RegisterRoomStaysNoShowSubscriber(this);
     }
-    public DomainResult TakeOutOfService()
+    internal DomainResult TakeOutOfService()
     {
         if (this.CurrentStage != RoomStage.InService)
         {
@@ -64,7 +64,7 @@ public class Room : Poly.Runtime.IActionScoped
         this.CurrentStage = RoomStage.OutOfService;
         return DomainResult.Success();
     }
-    public DomainResult Inspect()
+    internal DomainResult Inspect()
     {
         if (this.CurrentStage != RoomStage.InService)
         {
@@ -73,7 +73,7 @@ public class Room : Poly.Runtime.IActionScoped
         this.Dirty = false;
         return DomainResult.Success();
     }
-    public DomainResult ReturnToService()
+    internal DomainResult ReturnToService()
     {
         if (this.CurrentStage != RoomStage.OutOfService)
         {
@@ -106,7 +106,7 @@ public class Room : Poly.Runtime.IActionScoped
     {
         this.Dirty = true;
     }
-    public static DomainResult<Room> Create(string number, long floor, decimal nightlyRate, long maxOccupancy, Poly.Runtime.IStoragePort db, Property? property = null, RoomType? roomType = null, IEnumerable<Reservation>? stays = null, bool occupied = false, bool dirty = false, bool offline = false)
+    internal static DomainResult<Room> Create(string number, long floor, decimal nightlyRate, long maxOccupancy, Poly.Runtime.IStoragePort db, Property? property = null, RoomType? roomType = null, IEnumerable<Reservation>? stays = null, bool occupied = false, bool dirty = false, bool offline = false)
     {
         if (string.IsNullOrEmpty(number))
         {

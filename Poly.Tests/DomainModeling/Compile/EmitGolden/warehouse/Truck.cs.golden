@@ -3,14 +3,14 @@ using System.Collections.Generic;
 
 using Poly.Runtime;
 
-public enum TruckStage
+internal enum TruckStage
 {
     Idle = 0,
     EnRoute = 1,
     OutOfService = 2
 }
 
-public class Truck : Poly.Runtime.IActionScoped
+internal class Truck : Poly.Runtime.IActionScoped
 {
     private List<Delivery> _deliveries = new List<Delivery>();
     private Truck() { }
@@ -38,7 +38,7 @@ public class Truck : Poly.Runtime.IActionScoped
     {
         this._deliveries.Add(child);
     }
-    public DomainResult Load(long weight)
+    internal DomainResult Load(long weight)
     {
         var assignValue0 = this.CurrentLoad + weight;
         if (assignValue0 < 0L)
@@ -52,14 +52,14 @@ public class Truck : Poly.Runtime.IActionScoped
         this.CurrentLoad = assignValue0;
         return DomainResult.Success();
     }
-    public DomainResult Dispatch()
+    internal DomainResult Dispatch()
     {
         this.CurrentStage = TruckStage.EnRoute;
         this.Status = TruckStatus.EnRoute;
         return DomainResult.Success();
     }
     public bool IsOverloaded() => this.CurrentLoad > this.MaxLoad;
-    public static DomainResult<Truck> Create(string vin, long maxLoad, Poly.Runtime.IStoragePort db, Warehouse? warehouse = null, IEnumerable<Delivery>? deliveries = null, long currentLoad = 0L, TruckStatus status = TruckStatus.Idle)
+    internal static DomainResult<Truck> Create(string vin, long maxLoad, Poly.Runtime.IStoragePort db, Warehouse? warehouse = null, IEnumerable<Delivery>? deliveries = null, long currentLoad = 0L, TruckStatus status = TruckStatus.Idle)
     {
         if (string.IsNullOrEmpty(vin))
         {

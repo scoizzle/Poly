@@ -8,7 +8,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Poly.Generated;
 
-public class CrmDbContext : DbContext, Poly.Runtime.IStoragePort
+internal class CrmDbContext : DbContext, Poly.Runtime.IStoragePort
 {
     private readonly HashSet<string> _pendingKeys = new HashSet<string>();
     public CrmDbContext(DbContextOptions<CrmDbContext> options) : base(options) { }

@@ -463,4 +463,56 @@ public sealed class PublicSurfaceClosureTests {
         await Assert.That(errors[0].File).IsEqualTo("closed.poly");
         await Assert.That(result.Succeeded).IsFalse();
     }
+
+    // L-22 close-on-evidence: a stage-dispatched group is one printed method, public if any variant is. A
+    // variant whose result names an internal entity would print a public method over an internal type, so
+    // the group is rejected, positioned on the offending variant (DMCON002: the public method's exported
+    // signature is not closed).
+    private const string StageGroupDsl = """
+        domain Test
+
+        Receipt: entity {
+          Note: Text
+        }
+
+        {{TicketDecl}} {
+          Memo: Text
+          Draft: stage {
+            Cancel: action -> Receipt { create Receipt { Note: "done" } }
+            Activate: action { transition to Active }
+          }
+          Active: stage {
+            {{CancelDecl}} { transition to Closed }
+          }
+          Closed: stage { }
+        }
+        """;
+
+    private static string StageGroup(string ticketHeader, string cancelMark, string receipt = "Receipt: entity {") =>
+        StageGroupDsl.Replace("{{TicketDecl}}", ticketHeader == "public" ? "public entity Ticket" : "Ticket: entity").Replace("{{CancelDecl}}", cancelMark == "public" ? "public action Cancel" : "Cancel: action")
+            .Replace("Receipt: entity {", receipt);
+
+    [Test]
+    public async Task PublicStageGroup_WhenAnotherVariantReturnsInternalEntity_ReportsDmcon002OnThatVariant() {
+        var (domain, analysis, _) = Evolve(StageGroup("public", "public"));
+
+        var errors = Errors(analysis, "DMCON002");
+        await Assert.That(errors.Count).IsEqualTo(1);
+        var draft = domain.Types.OfType<Entity>().Single(e => e.Name == "Ticket")
+            .Stages.Single(s => s.Name == "Draft").Actions.Single(a => a.Name == "Cancel");
+        await Assert.That(ReferenceEquals(errors[0].Node, draft)).IsTrue();
+        await Assert.That(errors[0].Message).Contains("Receipt");
+    }
+
+    [Test]
+    public async Task PublicStageGroup_WhenEveryVariantIsPublicOrInternalConsistently_IsClean() {
+        // all-public: the result entity is public too
+        var allPublic = Evolve(StageGroup("public", "public", "public entity Receipt {"));
+        await Assert.That(Errors(allPublic.Analysis, "DMCON002").Count).IsEqualTo(0);
+
+        // all-internal: the group prints internal, nothing is exported
+        var allInternal = Evolve(StageGroup("", ""));
+        await Assert.That(Errors(allInternal.Analysis, "DMCON002").Count).IsEqualTo(0);
+        await Assert.That(Errors(allInternal.Analysis, "DMCON003").Count).IsEqualTo(0);
+    }
 }

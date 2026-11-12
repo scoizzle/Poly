@@ -165,4 +165,86 @@ public class PolycCompileTests {
         await Assert.That(result.Domain!.Extensions).Contains("sqlite");
         await Assert.That(result.Domain!.Extensions).DoesNotContain("storage");
     }
+
+    /// <summary>
+    /// C-03 R2: a document with no <c>uses</c> loads the product implicit set, so the
+    /// one seed source is <c>ProductCatalog.ImplicitIds</c>.
+    /// </summary>
+    [Test]
+    public async Task NoUses_ExtensionsAreTheProductImplicitSet() {
+        var result = global::Polyc.Options.CreateCompiler(null)
+            .Compile("domain D\nA: entity {\n  X: Text\n}\n", "x.poly");
+        await Assert.That(result.Succeeded).IsTrue();
+        await Assert.That(result.Domain!.Extensions).IsEquivalentTo(new[] { "storage", "persistence" });
+    }
+
+    /// <summary>
+    /// C-03 R8: <c>uses sqlite</c> replaces the implicit set, but the facet pack stays a
+    /// session fact, so a <c>column</c> annotation still compiles.
+    /// </summary>
+    [Test]
+    public async Task UsesSqlite_WithColumnAnnotation_StillCompiles() {
+        var result = Compiler().Compile(
+            "domain Shop\nuses sqlite\n\nItem: entity {\n  Sku: Text column(\"SKU\")\n}\n", "shop.poly");
+        await Assert.That(result.Succeeded).IsTrue();
+        await Assert.That(result.Diagnostics.Any(d => d.IsError)).IsFalse();
+    }
+
+    /// <summary>
+    /// C-03 R9: the ids stamped on the domain are the session's ids — replace stamps the
+    /// document's list, never a union with the implicit set.
+    /// </summary>
+    [Test]
+    public async Task UsesDocument_ExtensionsMatchSessionIds() {
+        var result = Compiler().Compile(
+            "domain Shop\nuses posix\n\nOrder: entity { Total: Number }\n", "shop.poly", target: "posix");
+        await Assert.That(result.Succeeded).IsTrue();
+        await Assert.That(result.Domain!.Extensions).IsEquivalentTo(new[] { "posix" });
+        await Assert.That(result.Session!.Extensions).IsEquivalentTo(new[] { "posix" });
+    }
+
+    /// <summary>
+    /// FX1 pin: the explicit <c>authoring</c> seed is <c>[storage]</c>, while an omitted seed
+    /// is the product implicit set. The two diverge until C-04 folds them together.
+    /// </summary>
+    [Test]
+    public async Task ExplicitAuthoringSeed_IsStorageOnly_WhileOmittedSeedIsTheImplicitSet() {
+        var explicitAuthoring = global::Polyc.Options.CreateCompiler("authoring")
+            .Compile("domain D\nA: entity {\n  X: Text\n}\n", "x.poly");
+        await Assert.That(explicitAuthoring.Session!.Extensions).IsEquivalentTo(new[] { "storage" });
+
+        var omitted = global::Polyc.Options.CreateCompiler(null)
+            .Compile("domain D\nA: entity {\n  X: Text\n}\n", "x.poly");
+        await Assert.That(omitted.Session!.Extensions).IsEquivalentTo(new[] { "storage", "persistence" });
+    }
+
+    /// <summary>
+    /// C-03 R11 (B4): one owner for the implicit set. No host constructs the compiler or
+    /// names the authoring seed itself; <c>src/polyc/Options.cs</c> is the only
+    /// <c>new PolyCompiler(</c> in polyc.
+    /// </summary>
+    [Test]
+    public async Task ImplicitSetLiteral_HasOneOwner() {
+        var root = PolycTestSupport.RepoRoot();
+
+        foreach (var relative in new[] { "src/polyc", "Poly.Mcp", "src/Poly.Compile" }) {
+            var offenders = SourceFiles(Path.Combine(root, relative))
+                .Where(path => File.ReadAllText(path).Contains("ProductAuthoring", StringComparison.Ordinal))
+                .Select(path => Path.GetFileName(path))
+                .ToList();
+            await Assert.That(offenders).IsEmpty()
+                .Because($"{relative} must read ProductCatalog.ImplicitIds, not the authoring seed");
+        }
+
+        var constructions = SourceFiles(Path.Combine(root, "src/polyc"))
+            .Where(path => File.ReadAllText(path).Contains("new PolyCompiler(", StringComparison.Ordinal))
+            .Select(path => Path.GetFileName(path))
+            .ToList();
+        await Assert.That(constructions).IsEquivalentTo(new[] { "Options.cs" });
+    }
+
+    private static IEnumerable<string> SourceFiles(string dir) =>
+        Directory.EnumerateFiles(dir, "*.cs", SearchOption.AllDirectories)
+            .Where(path => !path.Replace('\\', '/').Contains("/obj/", StringComparison.Ordinal))
+            .Where(path => !path.Replace('\\', '/').Contains("/bin/", StringComparison.Ordinal));
 }

@@ -219,7 +219,13 @@ public class SimulateCreateDogfoodTests {
               patron: Patron
             }
             """;
-        await Assert.That(McpTestTools.Dsl.ApplyDsl(sessionId, dsl).Success).IsFalse();
+        var applied = McpTestTools.Dsl.ApplyDsl(sessionId, dsl);
+        await Assert.That(applied.Success).IsFalse();
+        var findings = applied.Diagnostics ?? [];
+        await Assert.That(findings.Count(static d => d.Contains("DMREL005"))).IsEqualTo(1);
+        var finding = findings.First(static d => d.Contains("DMREL005"));
+        await Assert.That(finding).Contains("'fines'");
+        await Assert.That(finding).Contains("'waived'");
     }
 
     [Test]

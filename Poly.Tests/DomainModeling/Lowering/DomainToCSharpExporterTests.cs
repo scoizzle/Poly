@@ -198,6 +198,10 @@ public class DomainToCSharpExporterTests {
                 && d.Code == DomainModelDiagnosticCodes.InverseAmbiguous)
             .ToList();
         await Assert.That(errors.Count).IsEqualTo(1);
+        var allErrors = analysis.Diagnostics
+            .Where(d => d.Severity == Poly.Analysis.DiagnosticSeverity.Error)
+            .ToList();
+        await Assert.That(allErrors.Count).IsEqualTo(1);
         var nav = (Relationship)errors[0].Node;
         await Assert.That(nav.Name).IsEqualTo(reportedNav);
         foreach (var candidate in candidates)
@@ -3291,6 +3295,37 @@ public class DomainToCSharpExporterTests {
             """;
 
         await AssertAmbiguousInverseIsAnalysisError(dsl, "peer", "primary", "secondary");
+    }
+
+    [Test]
+    public async Task Export_DeclaredViaWithAmbiguousCollection_ExportsSkippingAttach() {
+        // L-12 flips this when lowering honours declared inverses (#683 comment 6816394015).
+        // Pins today's lowering for the declared-`via` shape: analysis accepts it because
+        // the declared side speaks for the class, and lowering still finds two collection
+        // navs on the peer, so public Create skips Attach and does not fail closed.
+        const string dsl = """
+            domain DeclaredViaAmbiguous
+            Peer: entity {
+              primary: many Child via peer
+              secondary: many Child
+            }
+            Child: entity {
+              peer: Peer
+            }
+            """;
+
+        var (domain, analysis) = ParseAndAnalyze(dsl);
+        await Assert.That(analysis.HasErrors).IsFalse();
+        var types = DomainProgramProjection.ToSyntax(domain, analysis);
+        var cs = new CSharpGenerator().Generate(new CompilationUnitNode([], null, types, null));
+
+        var createBody = ExportedCSharp.ExtractMethod(cs, "static DomainResult<Child> Create(");
+        await Assert.That(createBody).Contains("DomainResult<Child>.Success");
+        await Assert.That(createBody).DoesNotContain("AttachPrimary");
+        await Assert.That(createBody).DoesNotContain("AttachSecondary");
+        await Assert.That(createBody).DoesNotContain("has no unique inverse collection");
+        var errors = CompileExported(cs);
+        await Assert.That(errors).IsEmpty();
     }
 
     [Test]

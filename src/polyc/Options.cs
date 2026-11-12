@@ -1,5 +1,6 @@
 using Poly.Compile;
 using Poly.DomainModeling.Compile;
+using Poly.Packs.Product;
 
 namespace Polyc;
 
@@ -39,6 +40,13 @@ internal sealed class Options {
         --format json prints a JSON array of diagnostic records. A build also prints each
         written path on stderr as `wrote <path>`.
         """;
+
+    /// <summary>
+    /// The one compiler factory: a named seed, or the product implicit set when the
+    /// driver names none. The LSP server and <c>polyc</c> both build through it.
+    /// </summary>
+    internal static PolyCompiler CreateCompiler(string? seed) =>
+        new(ProductCatalog.Catalog, ExtensionCatalog.Seed(seed ?? "authoring"));
 
     /// <summary>Returns null with <paramref name="error"/> set on a usage problem.</summary>
     public static Options? Parse(string[] args, out string? error) {

@@ -19,6 +19,11 @@ public static class ProductCatalog {
     public static ExtensionCatalog Catalog { get; } = Build(wired: true, hostVendor: null);
 
     /// <summary>
+    /// The one implicit library set a document that lists no <c>uses</c> loads.
+    /// </summary>
+    public static IReadOnlyList<string> ImplicitIds => ExtensionCatalog.ProductAuthoring;
+
+    /// <summary>
     /// The same libraries with no host-file contributors: the model and its C# types only. The
     /// MCP harness simulates and exports from this, so a workspace never emits a DbContext or a
     /// Program.cs it did not ask for.

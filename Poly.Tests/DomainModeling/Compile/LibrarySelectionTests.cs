@@ -1,10 +1,16 @@
+using Microsoft.Extensions.Logging.Abstractions;
+
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Libraries.Http;
 using Poly.DomainModeling.Libraries.Platform;
 using Poly.DomainModeling.Ontology;
+using Poly.DslCompiler;
+using Poly.Mcp;
+using Poly.Mcp.Sessions;
 using Poly.Packs.Product;
 using Poly.Packs.Sqlite;
 using Poly.Packs.SqlServer;
+using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.DomainModeling.Compile;
 
@@ -128,7 +134,7 @@ public sealed class LibrarySelectionTests {
         await Assert.That(() => new SessionOptions(catalog, ["storage", " "]))
             .Throws<ArgumentException>();
         await Assert.That(() => new SessionOptions(catalog, ["a", "a"]))
-            .Throws<ArgumentException>();
+            .Throws<InvalidOperationException>();
         await Assert.That(() => new SessionOptions(null!, []))
             .Throws<ArgumentNullException>();
 
@@ -309,6 +315,187 @@ public sealed class LibrarySelectionTests {
             await Assert.That(catalog.KnownIds.Contains(id)).IsTrue();
         await Assert.That(catalog.KnownTargets.Contains("posix")).IsTrue();
         await Assert.That(catalog.ProvidersOf(new UniqueConstraint()).Contains("persistence")).IsTrue();
+    }
+
+    // ---- C-03: one implicit library set. ----
+
+    private static McpSessionStore NewMcpStore() => new(
+        TimeProvider.System,
+        Microsoft.Extensions.Options.Options.Create(new McpSessionOptions()),
+        NullLogger<McpSessionStore>.Instance);
+
+    /// <summary>
+    /// C-03 R3 (A4): the implicit set is exactly <c>[storage, persistence]</c> for the
+    /// constant, the polyc factory, an MCP session, and the DslCompiler's own seed path.
+    /// </summary>
+    [Test]
+    public async Task ImplicitIds_AreExactlyStorageAndPersistence_ForMcpPolycAndDslCompiler() {
+        string[] expected = ["storage", "persistence"];
+
+        await Assert.That(ProductCatalog.ImplicitIds).IsEquivalentTo(expected);
+
+        var polyc = global::Polyc.Options.CreateCompiler(null)
+            .Compile("domain D\nA: entity {\n  X: Text\n}\n", "x.poly");
+        await Assert.That(polyc.Session!.Extensions).IsEquivalentTo(expected);
+
+        var store = NewMcpStore();
+        var (_, state) = store.Create("D");
+        await Assert.That(state.Domain.Extensions).IsEquivalentTo(expected);
+
+        var dsl = new Poly.DslCompiler.DslCompiler().Compile(
+            "domain Holder\n\nItem: entity {\n  Email: Text unique\n}\n", CompileMode.All, DbmsPack.Generic);
+        await Assert.That(dsl.Success).IsTrue();
+        var holder = dsl.Files!.Single(file => file.FileName == "Holder.cs").Source;
+        await Assert.That(holder).Contains("ExistsWithEmail");
+    }
+
+    /// <summary>
+    /// C-03 R4 (A2): polyc and an MCP session load the same libraries for one document —
+    /// the implicit set when it lists no <c>uses</c>, and the document's own list when it does.
+    /// </summary>
+    [Test]
+    public async Task PolycAndMcpSessions_LoadIdenticalLibrariesForOneDocument() {
+        const string NoUses = "domain Doc\nA: entity {\n  X: Text\n}\n";
+        var polyc = global::Polyc.Options.CreateCompiler(null).Compile(NoUses, "doc.poly");
+        await Assert.That(polyc.Succeeded).IsTrue();
+
+        var (id, _) = McpTestTools.Store.Create("Doc");
+        await Assert.That(McpTestTools.Store.TryGet(id, out var created)).IsTrue();
+        await Assert.That(created.Modeling.Extensions).IsEquivalentTo(polyc.Session!.Extensions);
+        await Assert.That(created.Domain.Extensions).IsEquivalentTo(polyc.Session!.Extensions);
+
+        const string UsesSqlite = "domain S\nuses sqlite\n\nA: entity {\n  X: Text\n}\n";
+        var polycSqlite = global::Polyc.Options.CreateCompiler(null).Compile(UsesSqlite, "s.poly");
+        await Assert.That(polycSqlite.Succeeded).IsTrue();
+        await Assert.That(McpTestTools.Dsl.ApplyDsl(id, UsesSqlite).Success).IsTrue();
+        await Assert.That(McpTestTools.Store.TryGet(id, out var applied)).IsTrue();
+        await Assert.That(applied.Domain.Extensions).IsEquivalentTo(new[] { "sqlite" });
+        await Assert.That(applied.Modeling.Extensions).IsEquivalentTo(polycSqlite.Session!.Extensions);
+    }
+
+    /// <summary>C-03 R5: a bare session loads no implicit libraries (C-05's entry point).</summary>
+    [Test]
+    public async Task BareSession_LoadsNoImplicitLibraries() {
+        var session = DomainSession.ForExtensions([]);
+
+        await Assert.That(session.Extensions).IsEmpty();
+        await Assert.That(session.Options.ImplicitIds).IsEmpty();
+    }
+
+    /// <summary>
+    /// C-03 R6 (A7): one rule per input kind, whatever the entry point. A blank id is an
+    /// <see cref="ArgumentException"/>; a duplicate or unknown id is an
+    /// <see cref="InvalidOperationException"/>.
+    /// </summary>
+    [Test]
+    public async Task IdValidation_OneRulePerInputKind() {
+        var catalog = ProductCatalog.Model;
+        var options = new SessionOptions(catalog, []);
+
+        await Assert.That(() => new SessionOptions(catalog, ["a", "a"]))
+            .Throws<InvalidOperationException>()
+            .WithMessageContaining("'a'");
+        await Assert.That(() => LibrarySelection.Load(["a", "a"], options))
+            .Throws<InvalidOperationException>()
+            .WithMessageContaining("'a'");
+        await Assert.That(() => LibrarySelection.Resolve(["a", "a"], options))
+            .Throws<InvalidOperationException>()
+            .WithMessageContaining("'a'");
+
+        await Assert.That(() => new SessionOptions(catalog, [" "]))
+            .Throws<ArgumentException>();
+        await Assert.That(() => LibrarySelection.Load([" "], options))
+            .Throws<ArgumentException>();
+        await Assert.That(() => LibrarySelection.Resolve([" "], options))
+            .Throws<ArgumentException>();
+
+        await Assert.That(() => LibrarySelection.Resolve(["nope"], options))
+            .Throws<InvalidOperationException>()
+            .WithMessageContaining("nope");
+    }
+
+    /// <summary>
+    /// C-03 R10 (A7): C-01's headline reload change — a domain reloaded against
+    /// <see cref="ProductCatalog.Model"/> resolves the new id against Model, not Core.
+    /// </summary>
+    [Test]
+    public async Task Model_Reload_KeepsTheModelCatalog() {
+        var domain = new Domain("D", []) { Extensions = ["storage"] };
+        var session = DomainSession.Open(domain, ProductCatalog.Model);
+
+        var reloaded = session.WithDomain(domain with { Extensions = ["storage", "sqlite"] });
+
+        await Assert.That(reloaded.Extensions).IsEquivalentTo(new[] { "storage", "sqlite" });
+        await Assert.That(ReferenceEquals(reloaded.Options.Catalog, ProductCatalog.Model)).IsTrue();
+    }
+
+    // ---- C-02 carry-overs, tests only (A8/B9). ----
+
+    /// <summary>
+    /// C-02 carry-over 2: <c>ProvidersOf</c> reports the catalog key even when the
+    /// compiler's own <see cref="IConstraintCompiler.LibraryId"/> differs.
+    /// </summary>
+    [Test]
+    public async Task ProvidersOf_ReportsTheCatalogKey_NotTheCompilerLibraryId() {
+        var catalog = new ExtensionCatalog().With(new AliasedCompilerLibrary("alias", "unique-alias"));
+
+        var providers = catalog.ProvidersOf(new UniqueConstraint());
+
+        await Assert.That(string.Join(",", providers)).IsEqualTo("alias");
+    }
+
+    /// <summary>
+    /// C-02 carry-over 3: the probe registers once under contention, and a catalog from
+    /// <c>With</c> re-probes. This is the red the B9 mutation
+    /// (<c>ExecutionAndPublication</c> → <c>PublicationOnly</c>) produces.
+    /// </summary>
+    [Test]
+    public async Task Probe_RegistersOnceUnderContention_AndWithChildReprobes() {
+        var counting = new CountingLibrary("counted");
+        var catalog = new ExtensionCatalog().With(counting);
+
+        Parallel.For(0, 32, i => { _ = catalog.Info("counted"); });
+        await Assert.That(counting.Registrations).IsEqualTo(1);
+
+        var child = catalog.With(new CountingLibrary("other"));
+        _ = child.Info("counted");
+        await Assert.That(counting.Registrations).IsEqualTo(2);
+    }
+
+    /// <summary>C-02 carry-over 3: a throwing <c>Register</c> propagates, and the failure is cached.</summary>
+    [Test]
+    public async Task Probe_ThrowingRegister_PropagatesAndIsCached() {
+        var catalog = new ExtensionCatalog().With(new ThrowingLibrary("boom"));
+
+        await Assert.That(() => catalog.Info("boom"))
+            .Throws<InvalidOperationException>()
+            .WithMessageContaining("boom-probe");
+        await Assert.That(() => catalog.Info("boom"))
+            .Throws<InvalidOperationException>()
+            .WithMessageContaining("boom-probe");
+    }
+
+    private sealed class AliasedCompilerLibrary(string id, string compilerLibraryId) : IDomainLibrary {
+        public string Id => id;
+
+        public void Register(SessionBuilder builder) =>
+            builder.AddConstraintCompiler(new AliasedUniqueCompiler(compilerLibraryId));
+    }
+
+    private sealed class AliasedUniqueCompiler(string libraryId) : IConstraintCompiler {
+        public string LibraryId => libraryId;
+
+        public bool Applies(Constraint constraint) => constraint is UniqueConstraint;
+
+        ConstraintContribution IConstraintCompiler.Compile(ConstraintCompileRequest request) =>
+            throw new NotSupportedException();
+    }
+
+    private sealed class ThrowingLibrary(string id) : IDomainLibrary {
+        public string Id => id;
+
+        public void Register(SessionBuilder builder) =>
+            throw new InvalidOperationException("boom-probe");
     }
 
     private sealed class CountingLibrary(string id) : IDomainLibrary {

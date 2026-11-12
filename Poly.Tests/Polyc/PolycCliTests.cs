@@ -186,6 +186,25 @@ public class PolycCliTests {
         await Assert.That(Run(["check", "--target", " "]).Err).Contains("--target needs a value");
     }
 
+    /// <summary>
+    /// C-03 R1: a document that lists no <c>uses</c> loads the implicit set
+    /// <c>[storage, persistence]</c>, so <c>unique</c> is the storage-port guard in the
+    /// module's own body and the wired catalog writes the DbContext.
+    /// </summary>
+    [Test]
+    public async Task Build_NoUsesUniqueProperty_EmitsTheStoragePortGuard() {
+        var dir = PolycTestSupport.TempDir();
+        var path = Write(dir, "orders.poly", PolycTestSupport.Orders);
+        var outDir = Path.Combine(dir, "out");
+        var (exit, _, _) = Run(["build", path, "--out", outDir]);
+        await Assert.That(exit).IsEqualTo(0);
+
+        var order = File.ReadAllText(Path.Combine(outDir, "Orders", "Order.cs"));
+        await Assert.That(order).Contains("ExistsWithNumber");
+        await Assert.That(order).Contains("Unique constraint violated");
+        await Assert.That(File.Exists(Path.Combine(outDir, "Orders", "OrdersDbContext.cs"))).IsTrue();
+    }
+
     [Test]
     public async Task Check_UnknownUses_ReportsDsl0002() {
         var dir = PolycTestSupport.TempDir();

@@ -73,8 +73,7 @@ public sealed partial class DomainToCSharpExporter {
         // pointing back to the source → wired with `this`, excluded from the factory
         // signature. (Self-relationship back-refs are already excluded via IsBackReference.)
         var autoWireBackRef = FindAutoWireBackReference(targetEntity, entity.Name);
-        var requiredProps = metadata.GetStructure(targetEntity)?.RequiredPropertyNames
-            ?? EntityStructureAnalyzer.ComputeRequiredPropertyNames(targetEntity);
+        var requiredProps = RequireStructure(targetEntity, metadata).RequiredPropertyNames;
         var selfPeerSingular = FindSelfRelPeerSingular(targetEntity, entity.Name);
         var isCollectionRel = rel.Cardinality is RelationshipCardinality.OneToMany
             or RelationshipCardinality.ManyToMany;
@@ -308,17 +307,26 @@ public sealed partial class DomainToCSharpExporter {
     }
 
     /// <summary>
+    /// The published structure bag for <paramref name="entity"/>. A missing bag is a
+    /// lowering fault: it throws rather than recomputing requiredness or entry assignment.
+    /// </summary>
+    internal static EntityStructureMetadata RequireStructure(
+        Entity entity,
+        INodeMetadataProvider analysis) =>
+        analysis.GetStructure(entity)
+        ?? throw new InvalidOperationException(
+            $"EntityStructureMetadata is required for lowering entity '{entity.Name}'; analysis published none.");
+
+    /// <summary>
     /// Trailing omittable Create/ctor parameters: defaulted or optional properties
     /// that are not entry-assigned, in the order the Create factory appends them.
     /// </summary>
     internal static List<Property> TrailingOmittableProperties(
         Entity entity,
         INodeMetadataProvider metadata) {
-        var structure = metadata.GetStructure(entity);
-        var entryAssigned = structure?.EntryAssignedPropertyNames
-            ?? EntityStructureAnalyzer.ComputeEntryAssignedPropertyNames(entity);
-        var required = structure?.RequiredPropertyNames
-            ?? EntityStructureAnalyzer.ComputeRequiredPropertyNames(entity);
+        var structure = RequireStructure(entity, metadata);
+        var entryAssigned = structure.EntryAssignedPropertyNames;
+        var required = structure.RequiredPropertyNames;
         var list = new List<Property>();
         foreach (var prop in entity.Properties.OrderBy(p => p.Name)) {
             if (required.Contains(prop.Name)

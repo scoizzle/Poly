@@ -314,18 +314,14 @@ public sealed partial class EffectLoweringPass {
                 _domain, _analysis, prop.Type.TypeName, out var enumType)
             && enumType is { MemberNames.Count: > 0 });
 
-    private bool IsUniqueProperty(string propertyName) {
-        var storage = _analysis.GetMetadata<StorageMappingMetadata>(_domain);
-        if (storage is not null) {
-            var mapped = storage.Storage.Entities.FirstOrDefault(e =>
-                string.Equals(e.Name, _entity.Name, StringComparison.Ordinal));
-            return mapped?.Columns.Any(c =>
-                string.Equals(c.Name, propertyName, StringComparison.Ordinal) && c.IsUnique) == true;
-        }
-        return _entity.Properties.Any(p =>
+    /// <summary>
+    /// Unique is the declared <see cref="UniqueConstraint"/> on the entity property — the same
+    /// expression the storage analyzer records, read from the model so the two cannot disagree.
+    /// </summary>
+    private bool IsUniqueProperty(string propertyName) =>
+        _entity.Properties.Any(p =>
             string.Equals(p.Name, propertyName, StringComparison.Ordinal)
             && p.Constraints.OfType<UniqueConstraint>().Any());
-    }
 
     /// <summary>
     /// Fail-before-mutate wrap for assign: local RHS, constraint Failure checks

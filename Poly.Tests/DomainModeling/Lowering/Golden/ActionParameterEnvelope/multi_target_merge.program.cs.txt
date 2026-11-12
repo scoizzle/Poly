@@ -30,7 +30,7 @@ app.MapGet("/api/pairs", async (TDbCtx db) => await db.Pairs.ToListAsync());
 app.MapGet("/api/pairs/{id}", async (int id, TDbCtx db) => (await db.Pairs.FindAsync(id) is Pair pair ? Results.Ok(pair) : Results.NotFound()));
 
 app.MapPost("/api/pairs", async (PairDto dto, TDbCtx db) => {
-    var pairResult = Pair.Create(dto.Hi, dto.Code, dto.Lo, dto.Tag);
+    var pairResult = Pair.Create(dto.Hi, dto.Lo, dto.Code, dto.Tag);
     if (!pairResult.IsSuccess)
     {
         return FailureStatus(pairResult.ErrorMessage);
@@ -106,7 +106,7 @@ static async System.Threading.Tasks.Task SeedAsync(TDbCtx db)
     {
         return;
     }
-    var pairResult = Pair.Create(1, "Sample", 1, "Sample");
+    var pairResult = Pair.Create(1, 1, "Sample", "Sample");
     if (pairResult.IsSuccess)
     {
         db.Add(pairResult.Value);
@@ -122,11 +122,11 @@ public record PairDto
 {
     [Range(50, 200)]
     public long Hi { get; init; }
+    [Range(0, 100)]
+    public long Lo { get; init; }
     [Required]
     [RegularExpression("^[A-Z]+$")]
     public string Code { get; init; } = default!;
-    [Range(0, 100)]
-    public long Lo { get; init; }
     [Required]
     [RegularExpression("^[0-9]+$")]
     public string Tag { get; init; } = default!;

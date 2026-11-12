@@ -594,18 +594,19 @@ public class FailureTypingTests {
     }
 
     [Test]
-    [Arguments(StageGateDsl, "Visit", "CheckIn", "'CheckIn' requires stage 'Scheduled' on entity 'Visit'.")]
-    [Arguments(PolicyDsl, "Item", "Go", "'Go' blocked by policy 'IsOk'.")]
-    [Arguments(PolicyDsl, "Item", "Skip", "'Skip' blocked by policy 'IsOk'.")]
-    [Arguments(StageRequireDsl, "Item", "Go", "'Go' blocked by policy 'IsOk'.")]
-    [Arguments(LinkDsl, "Parent", "AddKid", "Cannot add a second link on 'kid': the source already has a target.")]
-    [Arguments(InvokeUnlinkedDsl, "Parent", "Go", "'Go' requires a linked 'kid' on entity 'Parent'.")]
-    [Arguments(PathPrefixDsl, "Reservation", "CheckIn", "'CheckIn' requires a linked 'room' on entity 'Reservation'.")]
-    public async Task ActionKinds_OnBothSides_KeepTheLegacyMessageText(
-        string dsl, string entity, string action, string expected) {
+    [Arguments(StageGateDsl, "Visit", "CheckIn", "'CheckIn' requires stage 'Scheduled' on entity 'Visit'.", DomainFailureKind.Stage, "Visit.CheckIn", "Scheduled")]
+    [Arguments(PolicyDsl, "Item", "Go", "'Go' blocked by policy 'IsOk'.", DomainFailureKind.Policy, "Item.Go", "IsOk")]
+    [Arguments(PolicyDsl, "Item", "Skip", "'Skip' blocked by policy 'IsOk'.", DomainFailureKind.Policy, "Item.Skip", "IsOk")]
+    [Arguments(StageRequireDsl, "Item", "Go", "'Go' blocked by policy 'IsOk'.", DomainFailureKind.Policy, "Item.Go", "IsOk")]
+    [Arguments(LinkDsl, "Parent", "AddKid", "Cannot add a second link on 'kid': the source already has a target.", DomainFailureKind.Link, "Parent.kid", null)]
+    [Arguments(InvokeUnlinkedDsl, "Parent", "Go", "'Go' requires a linked 'kid' on entity 'Parent'.", DomainFailureKind.Required, "Parent.kid", null)]
+    [Arguments(PathPrefixDsl, "Reservation", "CheckIn", "'CheckIn' requires a linked 'room' on entity 'Reservation'.", DomainFailureKind.Required, "Reservation.room", null)]
+    public async Task ActionKinds_OnBothSides_CarryKindPathGuardAndLegacyText(
+        string dsl, string entity, string action, string expected,
+        DomainFailureKind kind, string path, string? guard) {
         var twice = action is "CheckIn" && entity == "Visit" || action == "AddKid";
-        var outcomes = await ParityScenario.FromDsl(dsl, "FailureTypingAction" + Guid.NewGuid().ToString("N"))
-            .AssertAgree(side => {
+        var (simulate, printed) = ParityScenario.FromDsl(dsl, "FailureTypingAction" + Guid.NewGuid().ToString("N"))
+            .Run(side => {
                 if (entity == "Item")
                     side.Create(entity, ("Ok", action == "Skip"));
                 else
@@ -615,9 +616,15 @@ public class FailureTypingTests {
                     side.Invoke(action);
             });
 
-        var failed = outcomes[twice ? 2 : 1];
-        await Assert.That(failed.Success).IsFalse();
-        await Assert.That(failed.Message).IsEqualTo(expected);
+        var index = twice ? 2 : 1;
+        await Assert.That(ParityScenario.Differences(simulate, printed)).IsEmpty();
+        foreach (var failed in new[] { simulate[index], printed[index] }) {
+            await Assert.That(failed.Success).IsFalse();
+            await Assert.That(failed.Message).IsEqualTo(expected);
+            await Assert.That(failed.FailureKind).IsEqualTo(kind.ToString());
+            await Assert.That(failed.FailurePath).IsEqualTo(path);
+            await Assert.That(failed.FailureGuard).IsEqualTo(guard);
+        }
     }
 
     [Test]
@@ -630,6 +637,9 @@ public class FailureTypingTests {
 
         await Assert.That(outcomes[1].Success).IsFalse();
         await Assert.That(outcomes[1].Message).IsEqualTo("'Qty' must be >= 1.");
+        await Assert.That(outcomes[1].FailureKind).IsEqualTo("Range");
+        await Assert.That(outcomes[1].FailurePath).IsEqualTo("Product.Hold.Reservation.Qty");
+        await Assert.That(outcomes[1].FailureGuard).IsNull();
     }
 
     [Test]
@@ -643,6 +653,9 @@ public class FailureTypingTests {
 
         await Assert.That(outcomes[2].Success).IsFalse();
         await Assert.That(outcomes[2].Message).IsEqualTo("'Poke' blocked by policy 'IsOk'.");
+        await Assert.That(outcomes[2].FailureKind).IsEqualTo("Policy");
+        await Assert.That(outcomes[2].FailurePath).IsEqualTo("Parent.Go.Child.Poke");
+        await Assert.That(outcomes[2].FailureGuard).IsEqualTo("IsOk");
     }
 
     private const string EntryCreateDsl = """
@@ -679,7 +692,7 @@ public class FailureTypingTests {
     [Test]
     [Arguments(NestedCreateDsl, "Product", "Hold", DomainFailureKind.Range, "'Qty' must be >= 1.", "Product.Hold.Reservation.Qty", null)]
     [Arguments(InvokeCascadeDsl, "Parent", "Go", DomainFailureKind.Policy, "'Poke' blocked by policy 'IsOk'.", "Parent.Go.Child.Poke", "IsOk")]
-    public async Task Propagation_PerKind_PrintedAssemblyAndBothHosts(
+    public async Task Propagation_PerKind_PrintedAssemblyAndBothHosts_CarryKindPathGuard(
         string dsl, string entity, string action, DomainFailureKind kind, string message, string path, string? guard) {
         var asm = ExportedCSharp.CompileAndLoad(Print(dsl));
         var type = asm.GetType(entity)!;
@@ -706,6 +719,9 @@ public class FailureTypingTests {
             });
         await Assert.That(outcomes[^1].Success).IsFalse();
         await Assert.That(outcomes[^1].Message).IsEqualTo(message);
+        await Assert.That(outcomes[^1].FailureKind).IsEqualTo(kind.ToString());
+        await Assert.That(outcomes[^1].FailurePath).IsEqualTo(path);
+        await Assert.That(outcomes[^1].FailureGuard).IsEqualTo(guard);
     }
 
     [Test]
@@ -741,6 +757,9 @@ public class FailureTypingTests {
         await Assert.That(outcomes[2].Success).IsFalse();
         await Assert.That(outcomes[2].Message).IsEqualTo(
             "'Cancel' is not valid for the current stage on entity 'Ticket'.");
+        await Assert.That(outcomes[2].FailureKind).IsEqualTo("Stage");
+        await Assert.That(outcomes[2].FailurePath).IsEqualTo("Ticket.Cancel");
+        await Assert.That(outcomes[2].FailureGuard).IsNull();
     }
 
     [Test]
@@ -813,5 +832,61 @@ public class FailureTypingTests {
         var asm = ExportedCSharp.CompileAndLoad(cs);
 
         await Assert.That(asm.GetType("Order")).IsNotNull();
+    }
+
+    /// <summary>The guard name the R-04b sign-off left pending: <c>require not X</c> names the real policy on both sides.</summary>
+    [Test]
+    public async Task RequireNot_GuardName_AgreesOnBothSides() {
+        var outcomes = await ParityScenario.FromDsl(PolicyDsl, "FailureTypingRequireNot")
+            .AssertAgree(side => {
+                side.Create("Item", ("Ok", true));
+                side.Invoke("Skip");
+            });
+
+        await Assert.That(outcomes[1].Success).IsFalse();
+        await Assert.That(outcomes[1].Message).IsEqualTo("'Skip' blocked by policy 'IsOk'.");
+        await Assert.That(outcomes[1].FailureKind).IsEqualTo("Policy");
+        await Assert.That(outcomes[1].FailurePath).IsEqualTo("Item.Skip");
+        await Assert.That(outcomes[1].FailureGuard).IsEqualTo("IsOk");
+    }
+
+    private const string EnsureUniqueAssignDsl = """
+        domain Lab
+        uses persistence
+
+        Widget: entity {
+          Sku: Text unique
+          Relabel: action (v: Text) { assign Sku to v }
+        }
+        """;
+
+    /// <summary>
+    /// The create collision and the assign collision (the <c>EnsureUnique</c> site) are both typed
+    /// <c>Unique</c> at <c>Widget.Sku</c> with no guard and no <c>Widget.Relabel.</c> prefix, on both hosts.
+    /// The no-port branch (<c>Constraint</c> at <c>Widget</c>, pinned by
+    /// <c>ActionKinds_PrintedAssembly_CarryKindPathGuardAndLegacyText</c>) has no VM twin: the host
+    /// always supplies its storage port, so that branch is unreachable in the simulator.
+    /// </summary>
+    [Test]
+    public async Task UniqueCollision_CreateAndAssign_BothHostsCarryUniqueKindAndPath() {
+        var (simulate, printed) = ParityScenario.FromDsl(EnsureUniqueAssignDsl, "FailureTypingEnsureUnique")
+            .Run(side => {
+                var first = side.Create("Widget", ("Sku", "A"));
+                side.Create("Widget", ("Sku", "A"));
+                side.Create("Widget", ("Sku", "B"));
+                side.Use(first);
+                side.Invoke("Relabel", ("v", "B"));
+            });
+
+        await Assert.That(ParityScenario.Differences(simulate, printed)).IsEmpty();
+        const string message = "Unique constraint violated: 'Sku' value is already used on another 'Widget'.";
+        foreach (var outcomes in new[] { simulate, printed })
+            foreach (var index in new[] { 1, 4 }) {
+                await Assert.That(outcomes[index].Success).IsFalse();
+                await Assert.That(outcomes[index].Message).IsEqualTo(message);
+                await Assert.That(outcomes[index].FailureKind).IsEqualTo("Unique");
+                await Assert.That(outcomes[index].FailurePath).IsEqualTo("Widget.Sku");
+                await Assert.That(outcomes[index].FailureGuard).IsNull();
+            }
     }
 }

@@ -2,6 +2,7 @@ using System.Reflection;
 
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Runtime;
+using Poly.Runtime;
 
 using StepResult = (bool Success, string? Message, object? Value);
 
@@ -35,8 +36,10 @@ sealed class SimulateSide(Domain domain, IReadOnlySet<string>? recordedException
                 break;
             outcome = _exec.Create(model.Name, properties);
         }
-        if (!outcome.Succeeded || outcome.Instance is null)
+        if (!outcome.Succeeded || outcome.Instance is null) {
+            LastFailure = outcome.Failure;
             return (false, outcome.Error, null);
+        }
         var instance = outcome.Instance;
         foreach (var (name, value) in values) {
             var links = LinksOf(value);
@@ -53,14 +56,17 @@ sealed class SimulateSide(Domain domain, IReadOnlySet<string>? recordedException
             ? null
             : args.ToDictionary(a => a.Name, a => a.Value, StringComparer.Ordinal);
         var result = _exec.Invoke((ModuleInstance)Current, action, dict);
+        LastFailure = result.Failure;
         return (result.Succeeded, result.Error, null);
     }
 
     protected override StepResult LinkCore(string relationship, object?[] targets) {
         foreach (var target in targets) {
             var outcome = _exec.Link(relationship, (ModuleInstance)Current, (ModuleInstance)target!);
-            if (!outcome.Succeeded)
+            if (!outcome.Succeeded) {
+                LastFailure = outcome.Failure;
                 return (false, outcome.Error, null);
+            }
         }
         return (true, null, null);
     }
@@ -241,9 +247,10 @@ sealed class PrintedSide(Domain domain, Assembly assembly, IReadOnlySet<string>?
 
     // Printed methods return DomainResult or DomainResult<T>. A failed DomainResult<T>
     // throws on Value, so a failing row reads null instead.
-    static StepResult Unpack(object result) {
+    StepResult Unpack(object result) {
         var type = result.GetType();
         var success = (bool)type.GetProperty("IsSuccess")!.GetValue(result)!;
+        LastFailure = success ? null : type.GetProperty("Error")!.GetValue(result) as DomainFailure;
         return (success,
             type.GetProperty("ErrorMessage")!.GetValue(result) as string,
             success ? type.GetProperty("Value")?.GetValue(result) : null);

@@ -1,6 +1,8 @@
 using Poly.Ast;
 using Poly.Ast.Nodes;
 using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Lowering;
+using Poly.Introspection;
 
 namespace Poly.Packs.Product;
 
@@ -73,6 +75,11 @@ public sealed partial class DbContextGenerator {
             bodyNodes.Add(new Invoke(new Member(index, "IsUnique")));
         }
 
+        // A navigation the exporter prints internal (public owner, internal target) is invisible to EF's
+        // public-member discovery, so it is mapped explicitly, before its access mode is set below.
+        foreach (var nav in store.CollectionNavigations.Concat(store.ReferenceNavigations).Where(n => IsPrintedInternal(entity, n)))
+            bodyNodes.Add(BuildExplicitNavigationMapping(bParam, nav));
+
         // Collection navigations: set backing field access mode
         foreach (var nav in store.CollectionNavigations) {
             // b.Metadata.FindNavigation(nameof(Entity.NavProp))!.SetPropertyAccessMode(PropertyAccessMode.Field)
@@ -88,6 +95,35 @@ public sealed partial class DbContextGenerator {
         ) {
             TypeArguments = [new TypeReference(entity.Name)]
         };
+    }
+
+    /// <summary>The exporter's own rule (<see cref="DomainAccess.NavigationAccess"/>), not a copy of it.</summary>
+    private bool IsPrintedInternal(Entity entity, StorageNavigation nav) =>
+        DomainAccess.NavigationAccess(entity, new NamedTypeReference(nav.TargetEntityName), _domain)
+            == AccessModifier.Internal;
+
+    /// <summary>
+    /// <c>b.HasMany(e =&gt; e.Nav).WithOne(i =&gt; i.Inverse)</c> or <c>b.HasOne(e =&gt; e.Nav).WithMany()</c>: the
+    /// inverse is the one analysis resolved (<see cref="StorageNavigation.InversePropertyName"/>); none means
+    /// a one-directional navigation (a bare <c>WithOne()</c> / <c>WithMany()</c>).
+    /// </summary>
+    private Node BuildExplicitNavigationMapping(Parameter bParam, StorageNavigation nav) {
+        var eParam = new Parameter("e");
+        var navigation = new Invoke(
+            new Member(bParam, nav.IsCollection ? "HasMany" : "HasOne"),
+            new Lambda([eParam], new Member(eParam, nav.PropertyName)));
+
+        var inverseIsCollection = nav.InverseIsCollection;
+        // The many side of a one-to-many is entered with WithOne; the one side of a many-to-one with WithMany.
+        var withMany = nav.IsCollection ? inverseIsCollection : nav.InversePropertyName is null || inverseIsCollection;
+
+        var withArgs = new List<Node>();
+        if (nav.InversePropertyName is { } inversePropertyName) {
+            var iParam = new Parameter("i");
+            withArgs.Add(new Lambda([iParam], new Member(iParam, inversePropertyName)));
+        }
+
+        return new Invoke(new Member(navigation, withMany ? "WithMany" : "WithOne"), [.. withArgs]);
     }
 
     private static Node BuildNavigationConfigNode(Parameter bParam, StorageNavigation nav, string entityName) {

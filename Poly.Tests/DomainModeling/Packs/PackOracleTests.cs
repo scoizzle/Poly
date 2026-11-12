@@ -44,14 +44,163 @@ public class PackOracleTests {
     }
 
     [Test]
-    public async Task PublicEntityWithInternalNav_IsRejectedByAnalysis_NotBooted() {
-        var result = new Poly.DslCompiler.DslCompiler()
-            .Load(new Poly.DomainModeling.Libraries.Http.HttpLibrary())
-            .Compile(PackOracleDomains.PublicOrderInternalLine604.Poly, Poly.DslCompiler.CompileMode.All, Poly.DslCompiler.DbmsPack.Sqlite);
+    [Category("OracleFull")]
+    public async Task PublicEntityWithInternalManyNav_BootsAndPersistsLines() {
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.PublicOrderInternalLine604);
 
-        await Assert.That(result.Success).IsFalse();
-        await Assert.That(string.Join("\n", result.Errors ?? [])).Contains("navigation 'lines' targets internal entity 'OrderLine'");
-        await Assert.That(PackOracleDomains.PublicOrderInternalLine604.Boots).IsFalse();
+        using var created = await oracle.Client.PostAsync(
+            "/api/orders", new StringContent("""{"Code":"ORD1"}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)created.StatusCode).IsEqualTo(201);
+
+        using var added = await oracle.Client.PostAsync(
+            "/api/orders/ORD1/addline", new StringContent("""{"Qty":5}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)added.StatusCode).IsEqualTo(200);
+
+        // OrderLine is a root here (no inverse), so it is listed at the top level rather than under the order.
+        // The generated seed row (#595) is also listed, so assert the created line is present, not the count.
+        using var lines = await oracle.Client.GetAsync("/api/orderlines");
+        await Assert.That(lines.StatusCode).IsEqualTo(HttpStatusCode.OK);
+        using var linesJson = JsonDocument.Parse(await lines.Content.ReadAsStringAsync());
+        await Assert.That(linesJson.RootElement.EnumerateArray().Any(l => l.GetProperty("qty").GetInt32() == 5)).IsTrue();
+
+        // F3 pin: the entity's JSON omits the non-public navigation; the nested route above reads it.
+        using var order = await oracle.Client.GetAsync("/api/orders/ORD1");
+        await Assert.That(order.StatusCode).IsEqualTo(HttpStatusCode.OK);
+        using var orderJson = JsonDocument.Parse(await order.Content.ReadAsStringAsync());
+        await Assert.That(orderJson.RootElement.TryGetProperty("lines", out _)).IsFalse();
+    }
+
+    [Test]
+    [Category("OracleFull")]
+    public async Task PublicEntityWithInternalOwnedManyNav_ReadsLinesBackThroughNestedRoute() {
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.PublicOrderOwnedInternalLine604);
+
+        using var created = await oracle.Client.PostAsync(
+            "/api/orders", new StringContent("""{"Code":"ORD1"}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)created.StatusCode).IsEqualTo(201);
+
+        using var added = await oracle.Client.PostAsync(
+            "/api/orders/ORD1/addline", new StringContent("""{"Qty":5}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)added.StatusCode).IsEqualTo(200);
+
+        using var lines = await oracle.Client.GetAsync("/api/orders/ORD1/lines");
+        await Assert.That(lines.StatusCode).IsEqualTo(HttpStatusCode.OK);
+        using var linesJson = JsonDocument.Parse(await lines.Content.ReadAsStringAsync());
+        await Assert.That(linesJson.RootElement.GetArrayLength()).IsEqualTo(1);
+        await Assert.That(linesJson.RootElement[0].GetProperty("qty").GetInt32()).IsEqualTo(5);
+    }
+
+    [Test]
+    [Category("OracleFull")]
+    public async Task PublicEntityWithInternalUnidirectionalToOneNav_PersistsTheReceipt_DatabaseDoesNotEnforceOneToOne() {
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.PublicOrderInternalReceipt604);
+
+        using var created = await oracle.Client.PostAsync(
+            "/api/orders", new StringContent("""{"Code":"ORD1"}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)created.StatusCode).IsEqualTo(201);
+
+        using var issued = await oracle.Client.PostAsync(
+            "/api/orders/ORD1/issue", new StringContent("""{"Note":"paid"}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)issued.StatusCode).IsEqualTo(200);
+
+        // A unidirectional to-one target is a root, so it is listed at the top level (with the seed row, #595).
+        using var receipts = await oracle.Client.GetAsync("/api/receipts");
+        await Assert.That(receipts.StatusCode).IsEqualTo(HttpStatusCode.OK);
+        using var receiptsJson = JsonDocument.Parse(await receipts.Content.ReadAsStringAsync());
+        await Assert.That(receiptsJson.RootElement.EnumerateArray().Any(r => r.GetProperty("note").GetString() == "paid")).IsTrue();
+
+        using var order = await oracle.Client.GetAsync("/api/orders/ORD1");
+        using var orderJson = JsonDocument.Parse(await order.Content.ReadAsStringAsync());
+        await Assert.That(orderJson.RootElement.TryGetProperty("receipt", out _)).IsFalse();
+    }
+
+    [Test]
+    [Category("OracleFull")]
+    public async Task PublicChildWithInternalParentNav_BootsAndReadsLinesThroughNestedRoute() {
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.PublicLineInternalOrder604);
+
+        using var created = await oracle.Client.PostAsync(
+            "/api/orders", new StringContent("""{"Code":"ORD1"}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)created.StatusCode).IsEqualTo(201);
+
+        using var added = await oracle.Client.PostAsync(
+            "/api/orders/ORD1/addline", new StringContent("""{"Qty":5}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)added.StatusCode).IsEqualTo(200);
+
+        // No 500 from a serialisation cycle: the line's internal Order navigation is omitted from its JSON.
+        using var lines = await oracle.Client.GetAsync("/api/orders/ORD1/lines");
+        await Assert.That(lines.StatusCode).IsEqualTo(HttpStatusCode.OK);
+        using var linesJson = JsonDocument.Parse(await lines.Content.ReadAsStringAsync());
+        await Assert.That(linesJson.RootElement.GetArrayLength()).IsEqualTo(1);
+        await Assert.That(linesJson.RootElement[0].GetProperty("qty").GetInt32()).IsEqualTo(5);
+        await Assert.That(linesJson.RootElement[0].TryGetProperty("order", out _)).IsFalse();
+    }
+
+    // F3: two orders keep their own lines apart after reload (a fresh request per read). The no-inverse one-to-many and the
+    // unidirectional to-one have no route that loads the navigation (a root target has no nested route), so this pin runs
+    // on the aggregate-child shape, where the nested route observes Lines through the generated Collection(...).LoadAsync().
+    [Test]
+    [Category("OracleFull")]
+    public async Task PublicEntityWithInternalOwnedManyNav_KeepsTwoOrdersLinesSeparate() {
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.PublicOrderOwnedInternalLine604);
+
+        foreach (var code in new[] { "ORD1", "ORD2" }) {
+            using var created = await oracle.Client.PostAsync(
+                "/api/orders", new StringContent($$"""{"Code":"{{code}}"}""", Encoding.UTF8, "application/json"));
+            await Assert.That((int)created.StatusCode).IsEqualTo(201);
+        }
+        foreach (var (code, qty) in new[] { ("ORD1", 5), ("ORD1", 6), ("ORD2", 7) }) {
+            using var added = await oracle.Client.PostAsync(
+                $"/api/orders/{code}/addline", new StringContent($$"""{"Qty":{{qty}}}""", Encoding.UTF8, "application/json"));
+            await Assert.That((int)added.StatusCode).IsEqualTo(200);
+        }
+
+        async Task<int[]> QtysAsync(string code) {
+            using var lines = await oracle.Client.GetAsync($"/api/orders/{code}/lines");
+            using var json = JsonDocument.Parse(await lines.Content.ReadAsStringAsync());
+            return json.RootElement.EnumerateArray().Select(l => l.GetProperty("qty").GetInt32()).Order().ToArray();
+        }
+
+        await Assert.That(await QtysAsync("ORD1")).IsEquivalentTo(new[] { 5, 6 });
+        await Assert.That(await QtysAsync("ORD2")).IsEquivalentTo(new[] { 7 });
+    }
+
+    [Test]
+    public async Task PublicEntityWithBidirectionalInternalOneToOne_IsPinnedAsNotBooting_Issue791() {
+        var fixture = PackOracleDomains.PublicOrderInternalReceiptBidirectional604;
+
+        await Assert.That(fixture.Boots).IsFalse();
+        await Assert.That(fixture.NotBootingReason).Contains("#791");
+        await Assert.ThrowsAsync<Exception>(async () => {
+            await using var oracle = await PackOracle.BootAsync(fixture);
+        });
+    }
+
+    /// <summary>P-18 (#791) flips this to booting. The harness refuses any Boots:false fixture before compiling, so the real
+    /// boot is forced with Boots = true and the child must die: EF cannot determine the dependent side.</summary>
+    [Test]
+    [Category("OracleFull")]
+    public async Task PublicEntityWithBidirectionalInternalOneToOne_BootFails_Issue791() {
+        var ex = await Assert.ThrowsAsync<PackOracleBootException>(async () => {
+            await using var oracle = await PackOracle.BootAsync(
+                PackOracleDomains.PublicOrderInternalReceiptBidirectional604 with { Boots = true });
+        });
+
+        await Assert.That(ex!.Message).Contains("dependent side");
+    }
+
+    [Test]
+    [Category("OracleFull")]
+    public async Task PublicEntityWithTwoWayNonOwnedInternalOneToOne_BootFails_Issue791() {
+        await Assert.That(PackOracleDomains.PublicOrderInternalReceiptTwoWay604.Boots).IsFalse();
+        await Assert.That(PackOracleDomains.PublicOrderInternalReceiptTwoWay604.NotBootingReason).Contains("#791");
+
+        var ex = await Assert.ThrowsAsync<PackOracleBootException>(async () => {
+            await using var oracle = await PackOracle.BootAsync(
+                PackOracleDomains.PublicOrderInternalReceiptTwoWay604 with { Boots = true });
+        });
+
+        await Assert.That(ex!.Message).Contains("dependent side");
     }
 
     [Test]

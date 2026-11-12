@@ -58,6 +58,7 @@ internal sealed class ContractIntegrationAnalyzer : INodeAnalyzer {
     /// and result types and a public value type's field types may not name a type internal to
     /// this domain. A public action must also be reachable through public (#418): its owning
     /// entity must be public, because a public entity exports its name and its public actions.
+    /// A public entity may not navigate to an internal entity (L-22, <see cref="ValidatePublicNavigations"/>).
     /// Not checked: a public entity's properties (decision 13 exports its name and
     /// public actions only), an imported contract's ACL value types (that contract's surface),
     /// primitives, and enums (no visibility mark; #418 gives them a digest entry).
@@ -75,6 +76,8 @@ internal sealed class ContractIntegrationAnalyzer : INodeAnalyzer {
         }
 
         foreach (var entity in domain.Types.OfType<Entity>()) {
+            if (entity.Visibility == Visibility.Public)
+                ValidatePublicNavigations(context, domain, entity);
             foreach (var action in entity.Actions) {
                 if (action.Visibility == Visibility.Public)
                     ValidatePublicAction(context, domain, entity, action);
@@ -85,6 +88,26 @@ internal sealed class ContractIntegrationAnalyzer : INodeAnalyzer {
                         ValidatePublicAction(context, domain, entity, action);
                 }
             }
+        }
+    }
+
+    /// <summary>
+    /// L-22 (#604): a public entity exports its navigations as public members, and EF maps only public
+    /// navigations, so a navigation to an entity internal to this domain is an error (not acknowledgeable).
+    /// </summary>
+    private static void ValidatePublicNavigations(AnalysisContext context, Domain domain, Entity entity) {
+        foreach (var navigation in entity.Navigations) {
+            if (context.GetMetadata<ResolvedTypeReferenceMetadata>(navigation.Target)
+                is not ResolvedTypeReferenceMetadata { Type: Entity target }
+                || !IsDeclaredInDomain(domain, target)
+                || target.Visibility == Visibility.Public)
+                continue;
+
+            context.ReportError(
+                navigation,
+                $"Public entity '{entity.Name}' navigation '{navigation.Name}' targets internal entity " +
+                $"'{target.Name}'. Mark '{target.Name}' public, or remove the public mark from '{entity.Name}'.",
+                DomainModelDiagnosticCodes.PublicEntityNavigatesToInternalEntity);
         }
     }
 

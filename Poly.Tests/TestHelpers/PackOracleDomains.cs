@@ -160,8 +160,8 @@ public static class PackOracleDomains {
         """,
         "/api/orders");
 
-    /// <summary>L-22 (#604), A11 owner gate. A public entity navigates to an internal entity: the nav is demoted to
-    /// internal in the printed C#, so the host must still boot and serve the list route.</summary>
+    /// <summary>L-22 (#604), A11 owner gate. A public entity navigates to an internal entity: EF maps only public
+    /// navigations, so analysis rejects it (DMCON019, ruling on #683) and there is nothing to boot.</summary>
     public static PackOracleDomain PublicOrderInternalLine604 { get; } = new(
         "PublicOrderInternalLine604",
         """
@@ -170,6 +170,29 @@ public static class PackOracleDomains {
         uses http
 
         OrderLine: entity {
+          Qty: Number range(1, 100)
+        }
+
+        public entity Order {
+          Code: Text unique length(3, 8)
+          Total: Number default(0)
+          lines: many OrderLine
+          public action Reset { assign Total to 0 }
+        }
+        """,
+        "/api/orders",
+        Boots: false,
+        NotBootingReason: "DMCON019: a public entity may not navigate to an internal entity (L-22, #604)");
+
+    /// <summary>L-22 (#604): the same domain with the target marked public. It boots and serves the list route.</summary>
+    public static PackOracleDomain PublicOrderPublicLine604 { get; } = new(
+        "PublicOrderPublicLine604",
+        """
+        domain Shop
+        uses sqlite
+        uses http
+
+        public entity OrderLine {
           Qty: Number range(1, 100)
         }
 

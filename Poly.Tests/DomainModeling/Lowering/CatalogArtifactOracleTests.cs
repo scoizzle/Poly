@@ -51,6 +51,16 @@ public class CatalogArtifactOracleTests {
         await Assert.That(Samples().Count()).IsEqualTo(25 - Skipped.Count);
 
     [Test]
+    public async Task Samples_AreAllInTheSharedCatalog() {
+        var unknown = Samples()
+            .Where(path => !GoldenDomains.All.Any(d => d.Path == path))
+            .ToList();
+        await Assert.That(unknown).IsEmpty()
+            .Because("the C10 oracle must sample the shared corpus, not its own directory walk: "
+                + string.Join(", ", unknown));
+    }
+
+    [Test]
     public async Task ExecutedBodies_AreTheCatalogArtifactBodies() {
         var mismatches = new List<string>();
         var compiled = 0;

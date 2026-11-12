@@ -264,4 +264,38 @@ public class CSharpWriterUnitTests {
             "\n",
             text);
     }
+
+    [Test]
+    public async Task Write_TypeDefs_Header_DomainResultLookalikes_AddNoPolyRuntimeUsing() {
+        var text = WriteCart(
+            new FieldDefinitionNode("A", new NamedTypeReference("MyDomainResult")),
+            new FieldDefinitionNode("B", new NamedTypeReference("DomainResultFoo")));
+
+        await AssertHeader("#nullable enable\n", text);
+    }
+
+    [Test]
+    public async Task Write_TypeDefs_Header_ConstraintFailureLookalikes_AddNoDomainModelingRuntimeUsing() {
+        var text = WriteCart(
+            new FieldDefinitionNode("A", new NamedTypeReference("ConstraintFailureExceptionX")),
+            new FieldDefinitionNode("B", new NamedTypeReference("MyConstraintFailureException")));
+
+        await AssertHeader("#nullable enable\n", text);
+    }
+
+    [Test]
+    public async Task Write_TypeDefs_Header_LookalikeBesideRealDomainResult_AddsOnePolyRuntimeUsing() {
+        var text = WriteCart(
+            new FieldDefinitionNode("A", new NamedTypeReference("MyDomainResult")),
+            new FieldDefinitionNode("Result", new NamedTypeReference("DomainResult", TypeArguments: [
+                new NamedTypeReference("Item"),
+            ])));
+
+        await AssertHeader(
+            "#nullable enable\n" +
+            "using Poly.Runtime;\n" +
+            "\n",
+            text);
+        await Assert.That(text.Split("using Poly.Runtime;").Length - 1).IsEqualTo(1);
+    }
 }

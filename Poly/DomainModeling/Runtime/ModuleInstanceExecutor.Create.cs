@@ -1,3 +1,5 @@
+using Poly.Runtime;
+
 namespace Poly.DomainModeling.Runtime;
 
 // Create partial: the static Create factory call that supplies a dictionary This and registers the instance.
@@ -40,11 +42,11 @@ public sealed partial class ModuleInstanceExecutor {
                         throw new HostException($"Unknown property '{key}' for entity '{entityName}'.");
                 }
 
-                if (Run(entityName, create, self: null, args) is not DomainResult result)
+                if (Run(entityName, create, self: null, args) is not IDomainResult result)
                     throw new InvalidOperationException($"Create on '{entityName}' did not return a DomainResult.");
                 if (!result.IsSuccess)
                     return ModuleOutcome.Fail(result.ErrorMessage ?? "Create failed.");
-                if (result.Value is not IDictionary<string, object?> bag)
+                if (result is not DomainResult<object> { Value: IDictionary<string, object?> bag })
                     throw new InvalidOperationException($"Create on '{entityName}' did not return a dictionary instance.");
 
                 var instance = Register(entityName, bag);

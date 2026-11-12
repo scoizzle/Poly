@@ -1,3 +1,5 @@
+using Poly.Runtime;
+
 namespace Poly.DomainModeling.Runtime;
 
 // Invoke partial: argument binding and the action call on a registered instance, including created-child adoption.
@@ -59,7 +61,7 @@ public sealed partial class ModuleInstanceExecutor {
                         $"Action invoke depth exceeded while calling '{actionName}'. "
                         + "Possible recursive invoke cycle (e.g. action → invoke self, or OnEntry → invoke → transition loops).");
                 }
-                if (ran is not DomainResult result)
+                if (ran is not IDomainResult result)
                     throw new InvalidOperationException(
                         $"Action '{actionName}' on '{target.EntityName}' did not return a DomainResult.");
                 if (!result.IsSuccess)
@@ -67,8 +69,9 @@ public sealed partial class ModuleInstanceExecutor {
 
                 var created = AdoptCreatedChildren();
                 ModuleInstance? returned = null;
-                if (result.Value is not null && !_byBag.TryGetValue(result.Value, out returned)
-                    && result.Value is IDictionary<string, object?> returnedBag
+                var value = (result as DomainResult<object>)?.Value;
+                if (value is not null && !_byBag.TryGetValue(value, out returned)
+                    && value is IDictionary<string, object?> returnedBag
                     && action.Result.Members.Count > 0) {
                     // A bare create is returned but linked nowhere: the declared return type
                     // names the entity, and the executor starts tracking the instance.

@@ -22,7 +22,7 @@ namespace Poly.Tests.DomainModeling.Compile;
 /// compiles one of its own method bodies, and executes it on a plain
 /// dictionary-backed instance. Nothing here constructs an instance wrapper, an
 /// instance store, or a host-job entry point. The only runtime scaffolding is
-/// the CLR <see cref="DomainResult"/> the runtime already binds for every module body.
+/// the CLR <see cref="Poly.Runtime.DomainResult"/> the runtime already binds for every module body.
 /// </summary>
 public sealed class ModuleWithoutDeiSpikeTests {
     // ── 1. Create: static factory → dictionary ────────────────────────────────
@@ -37,7 +37,7 @@ public sealed class ModuleWithoutDeiSpikeTests {
 
         var result = module.Execute("Entry", "Create", self: null, args: ["first"]);
 
-        var domainResult = result as DomainResult;
+        var domainResult = result as Poly.Runtime.DomainResult<object>;
         await Assert.That(domainResult).IsNotNull();
         await Assert.That(domainResult!.IsSuccess).IsTrue();
         await Assert.That(domainResult.Value is IDictionary<string, object?>).IsTrue();
@@ -66,8 +66,8 @@ public sealed class ModuleWithoutDeiSpikeTests {
         var lotBag = (IDictionary<string, object?>)lot;
 
         var actionResult = module.Execute("Lot", "Issue", self: lot);
-        await Assert.That(actionResult).IsAssignableTo<DomainResult>();
-        await Assert.That(((DomainResult)actionResult!).IsSuccess).IsTrue();
+        await Assert.That(actionResult).IsAssignableTo<Poly.Runtime.IDomainResult>();
+        await Assert.That(((Poly.Runtime.IDomainResult)actionResult!).IsSuccess).IsTrue();
 
         // The module's own CreatePermits body adds to the receiver's collection field.
         // No Store.Link and no DomainEntityHostJobs.LinkRelated ran.
@@ -146,7 +146,7 @@ public sealed class ModuleWithoutDeiSpikeTests {
     /// The lowered module plus a type provider built from it. Deliberately not
     /// <c>DomainEntityInstance.ModuleAwareTypeProvider</c>: no runtime entity shape,
     /// no stubbed <c>When…</c> bodies, no host-job binder for <c>new Entity(…)</c>.
-    /// The CLR <see cref="DomainResult"/> pair is the only injected type, matching the
+    /// The CLR <see cref="Poly.Runtime.DomainResult"/> pair is the only injected type, matching the
     /// bodies the module itself emits.
     /// </summary>
     private sealed class ModuleHarness {
@@ -198,7 +198,7 @@ public sealed class ModuleWithoutDeiSpikeTests {
                 args.Add(match.Name is null ? DefaultFor(parameter) : match.Value);
             }
             var result = Execute(entityName, "Create", self: null, args: [.. args]);
-            var domainResult = (DomainResult)result!;
+            var domainResult = (Poly.Runtime.DomainResult<object>)result!;
             if (!domainResult.IsSuccess) {
                 throw new InvalidOperationException(
                     $"Create {entityName} failed: {domainResult.ErrorMessage}");

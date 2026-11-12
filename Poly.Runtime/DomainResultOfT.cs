@@ -9,6 +9,12 @@ namespace Poly.Runtime;
 /// <c>default!</c>. The private <see cref="PrintMembers"/> keeps <c>ToString</c> from
 /// reading <see cref="Value"/> on a failure.
 /// </summary>
+/// <remarks>
+/// The compiler-generated equality and hash code cover <see cref="Value"/>, so a mutable
+/// <typeparamref name="T"/> makes the hash of an otherwise unchanged result change. The
+/// record is a result value, not a key: do not use it as a dictionary key or a set element
+/// when <typeparamref name="T"/> is mutable.
+/// </remarks>
 public sealed record DomainResult<T> : IDomainResult {
     /// <summary>True when the action succeeded; false when it carries a <see cref="Error"/>.</summary>
     public bool IsSuccess { get; }
@@ -46,7 +52,11 @@ public sealed record DomainResult<T> : IDomainResult {
     public static DomainResult<T> Failure(string message) =>
         new(false, default!, DomainFailure.Constraint(message ?? throw new ArgumentNullException(nameof(message))));
 
-    /// <summary>Takes the action's value; returns false on a failed result and leaves <paramref name="value"/> null.</summary>
+    /// <summary>
+    /// Takes the action's value; returns false on a failed result and leaves
+    /// <paramref name="value"/> at <c>default</c> (0 or false for a value-type
+    /// <typeparamref name="T"/>), not null.
+    /// </summary>
     public bool TryGetValue([MaybeNullWhen(false)] out T value) {
         if (IsSuccess) {
             value = _value;
@@ -57,13 +67,19 @@ public sealed record DomainResult<T> : IDomainResult {
         return false;
     }
 
+    /// <summary>
+    /// The failure arm appends the whole <see cref="Error"/> rather than
+    /// <see cref="DomainFailure.Render"/>, which returns the message alone: the record's own
+    /// print carries <see cref="DomainFailure.Kind"/>, <see cref="DomainFailure.ElementPath"/>
+    /// and <see cref="DomainFailure.Guard"/>, and reads no throwing member.
+    /// </summary>
     private bool PrintMembers(StringBuilder builder) {
         builder.Append("IsSuccess = ").Append(IsSuccess);
         if (IsSuccess) {
             builder.Append(", Value = ").Append((object?)Value);
         }
         else {
-            builder.Append(", Error = ").Append(Error?.Render());
+            builder.Append(", Error = ").Append(Error);
         }
 
         return true;

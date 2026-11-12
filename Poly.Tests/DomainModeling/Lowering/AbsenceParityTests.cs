@@ -287,6 +287,41 @@ public class AbsenceParityTests {
         await Assert.That(outcomes[2].State["Name"]).IsEqualTo("Ada");
     }
 
+    [Test]
+    public async Task CreateIn_WhenNumberAndEnumDefaultsTrail_Agrees() {
+        // E2: the warehouse RegisterTruck shape — the factory call now carries the
+        // trailing Number and enum defaults explicitly, and both sides link a child
+        // whose stored values are the member name and the number.
+        var outcomes = await ParityScenario.FromDsl("""
+            domain Depot
+            TruckStatus: enum { Idle, EnRoute }
+            Truck: entity {
+              Vin: Text length(17, 17)
+              MaxLoad: Number range(1, 40000)
+              CurrentLoad: Number range(0, 40000) default(0)
+              Status: TruckStatus default(Idle)
+            }
+            Warehouse: entity {
+              Name: Text
+              trucks: many Truck
+              RegisterTruck: action (vin: Text, maxLoad: Number) {
+                create in trucks { Vin: vin MaxLoad: maxLoad }
+              }
+            }
+            """, "ParityTrailingDefaultsCreateIn")
+            .AssertAgree(side => {
+                side.Create("Warehouse", ("Name", "W"));
+                side.Invoke("RegisterTruck", ("vin", "1HGCM82633A004352"), ("maxLoad", 10L));
+                if (side.Outcomes[^1].Success)
+                    side.UseLinked("trucks");
+            });
+
+        await Assert.That(outcomes[1].Success).IsTrue()
+            .Because($"step failed: {outcomes[1].ExceptionType} {outcomes[1].Message}");
+        await Assert.That(outcomes[2].State["Status"]).IsEqualTo("Idle");
+        await Assert.That(outcomes[2].State["CurrentLoad"]).IsEqualTo("0");
+    }
+
     /// <summary>
     /// Pin: a function body names only its parameters (DMFUN005), so the nested pass
     /// keeps an empty enum-property map. An empty map means "no enum properties are

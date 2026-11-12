@@ -173,8 +173,7 @@ public sealed partial class DomainExpressionLoweringPass : DomainExpressionDispa
     /// <see cref="MatchExpr"/> builds its chain against the target; a clock/session fold
     /// adapts to the target; an enum member (string literal or bare identifier) becomes
     /// qualified member access unless it shadows a property or a parameter; anything
-    /// else lowers normally and is adapted at the node level (Decimal literals).
-    /// An unresolvable target leaves the value untouched.
+    /// else lowers normally. An unresolvable target leaves the value untouched.
     /// </summary>
     internal LoweredExpression AdaptTo(DomainExpression value, DomainTypeReference target, Node subject) {
         var saved = _currentSubject;
@@ -204,8 +203,12 @@ public sealed partial class DomainExpressionLoweringPass : DomainExpressionDispa
                 return LoweredExpression.Of(new Member(new NamedTypeReference(enumType.Name), access.Name));
         }
 
-        var lowered = Route(value);
-        return lowered with { Value = TargetTypeAdapter.Adapt(lowered.Value, target, _context) };
+        // No node-level rewrite for the general case: an integral literal written for a
+        // Decimal slot is left as-is (the corpus prints 0L there and the VM accepts it),
+        // so the only Decimal constant lowering rewrites is the default-constant arm in
+        // LowerDefaultConstantNode (#511, E5). TargetTypeAdapter.Adapt stays the #683
+        // contract for consumers that adapt an already-lowered value.
+        return Route(value);
     }
 
     /// <summary>

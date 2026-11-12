@@ -217,13 +217,14 @@ public sealed partial class EffectLoweringPass {
                     return (runtime, true);
                 if (DomainToCSharpExporter.LowerDefaultConstantNode(
                         defaultConstraint, prop, _domain, _analysis) is { } constant)
-                    return (constant, true);
+                    return (constant, !IsEnumMemberDefault(defaultConstraint, prop));
             }
-            // Optional with no default: an omitted slot passes null and may be dropped
-            // from the trailing run. Requiredness is the published fact.
+            // Optional with no default: an omitted slot passes a typed null and may be
+            // dropped from the trailing run. The cast keeps the hole's type when a later
+            // slot is written (#495, D4). Requiredness is the published fact.
             var required = DomainToCSharpExporter.RequireStructure(target, _analysis).RequiredPropertyNames;
             if (!required.Contains(prop.Name))
-                return (new Constant(null), true);
+                return (TypedNullOf(type), true);
         }
         return (TargetTypeAdapter.TypeDefault(type, _context), false);
     }
@@ -232,6 +233,30 @@ public sealed partial class EffectLoweringPass {
     /// An initializer value lowers straight into the property's type through the one
     /// target-type adapter. With no matching property the value lowers normally.
     /// </summary>
+    /// <summary>
+    /// The typed null an omitted scalar slot passes — the same shape the navigation
+    /// hole uses, mapped through the property's CLR type so a kept hole resolves
+    /// against the factory parameter (#495, D4).
+    /// </summary>
+    private Node TypedNullOf(DomainTypeReference type) =>
+        new TypeCast(
+            new Constant(null),
+            new OptionalTypeReference(DomainToCSharpExporter.MapDomainTypeRef(type, _domain, _analysis)));
+
+    /// <summary>
+    /// True when a defaulted slot must be passed explicitly instead of dropped from a
+    /// trailing run: the module default is not a value the VM can evaluate — in
+    /// practice an enum member. Every other default (Text/Number/Boolean/Decimal
+    /// constants, clock/guid runtime folds) keeps dropping, so emitted call shapes are
+    /// unchanged outside enums. Transitional: L-08 owns the final required/NotCreatable
+    /// rule; this never touches requiredness.
+    /// </summary>
+    private bool IsEnumMemberDefault(DefaultValueConstraint constraint, Property prop) =>
+        constraint.Expression is PropertyAccess member
+        && DomainToCSharpExporter.TryResolveEnumType(_domain, _analysis, prop.Type.TypeName, out var enumType)
+        && enumType is not null
+        && enumType.MemberNames.Contains(member.Name, StringComparer.Ordinal);
+
     private LoweredExpression LowerInitializerValue(
         Entity target, string name, DomainExpression expr) {
         var prop = target.Properties.FirstOrDefault(p =>

@@ -65,12 +65,14 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
     // Every topic this tool serves passes here once; the markers stay in the file for the tests.
     private static readonly Regex VerifyMarkerLine = new(@"^[ \t]*<!--\s*poly-verify:.*?-->[ \t]*\r?\n", RegexOptions.Multiline | RegexOptions.Compiled);
 
+    internal static string StripVerifyMarkers(string guide) => VerifyMarkerLine.Replace(guide, "");
+
     private static object? WithoutVerifyMarkers(object? data) {
         if (data is null)
             return null;
         var node = JsonSerializer.SerializeToNode(data)!.AsObject();
         if (node["guide"]?.GetValue<string>() is { } guide)
-            node["guide"] = VerifyMarkerLine.Replace(guide, "");
+            node["guide"] = StripVerifyMarkers(guide);
         return node;
     }
 

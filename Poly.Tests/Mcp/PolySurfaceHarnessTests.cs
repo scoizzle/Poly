@@ -341,4 +341,419 @@ public class PolySurfaceHarnessTests {
         await Assert.That(check.Data!["verdict"]!.GetValue<string>()).IsEqualTo("proven");
         await Assert.That(check.Data["result"]!.GetValue<bool>()).IsTrue();
     }
+
+    private const string Orders = """
+        domain Stages
+        Order: entity {
+          Memo: Text
+          Draft: stage {
+            Cancel: action { transition to Closed }
+            Activate: action { transition to Active }
+          }
+          Active: stage {
+            Cancel: action require not Ready { transition to Closed }
+          }
+          Closed: stage { }
+          Ready: policy { Memo is "m" }
+        }
+        """;
+
+    private const string Families = """
+        domain Families
+        Parent: entity {
+          Name: Text
+          kids: many Child
+        }
+        Child: entity {
+          Name: Text
+        }
+        """;
+
+    private const string Patrons = """
+        domain Patrons
+        Patron: entity {
+          Name: Text
+          loans: many Loan
+          Active: stage {
+            CheckOut: action (amount: Number) {
+              create in loans { Amount: amount }
+            }
+          }
+        }
+        Loan: entity {
+          Amount: Number
+          borrower: Patron
+        }
+        """;
+
+    private static string OpenWith(PolySurfaceHarness h, string name, string poly) {
+        var ws = h.Open(name);
+        var define = h.Define(ws, poly);
+        if (!define.Success)
+            throw new InvalidOperationException(define.Summary);
+        return ws;
+    }
+
+    [Test]
+    public async Task Over_SharesTheStore() {
+        var (ws, _) = McpTestTools.Store.Create("Q05aShared");
+        var h = PolySurfaceHarness.Over(McpTestTools.Store);
+
+        var define = h.Define(ws, Valid);
+
+        await Assert.That(define.Success).IsTrue().Because(define.Summary);
+        await Assert.That(h.Store).IsSameReferenceAs(McpTestTools.Store);
+        await Assert.That(McpTestTools.Store.TryGet(ws, out var state)).IsTrue();
+        await Assert.That(state.Revision).IsEqualTo(define.Revision!.Value);
+        await Assert.That(state.Revision).IsGreaterThan(0L);
+    }
+
+    [Test]
+    public async Task Over_TwoHarnessesOnOneStore_SeeEachOthersWrites() {
+        var store = McpTestTools.Store;
+        var first = PolySurfaceHarness.Over(store);
+        var second = PolySurfaceHarness.Over(store);
+        var ws = OpenWith(first, "Q05aTwo", Orders);
+
+        var seen = second.Inspect(ws);
+        var created = second.Create(ws, "Order", """{"Memo":"m"}""");
+        var fetched = first.Get(ws, created.InstanceId);
+
+        await Assert.That(seen.Success).IsTrue().Because(seen.Summary);
+        await Assert.That(seen.Entities).IsEqualTo(1);
+        await Assert.That(created.Ok).IsTrue().Because(created.Summary);
+        await Assert.That(fetched.Ok).IsTrue().Because(fetched.Summary);
+        await Assert.That(fetched.InstanceId).IsEqualTo(created.InstanceId);
+    }
+
+    [Test]
+    public async Task Step_Accessors_ReadSimulateTrace() {
+        var h = PolySurfaceHarness.New();
+        var ws = OpenWith(h, "Trace", Orders);
+
+        var run = h.Simulate(
+            ws,
+            SimStep.Create("Order", """{"Memo":"m"}""", alias: "o"),
+            SimStep.Invoke("o", "Activate"),
+            SimStep.Invoke("o", "Cancel"),
+            SimStep.Get("o"));
+
+        await Assert.That(run.Success).IsTrue().Because(run.Summary);
+        await Assert.That(run.Steps.Count).IsEqualTo(3).Because("stopOnError ends the trace at the blocked step");
+        await Assert.That(run.Step(0).Op).IsEqualTo("create");
+        await Assert.That(run.Step(0).Ok).IsTrue().Because(run.Step(0).Summary);
+        await Assert.That(run.Step(0).InstanceId).IsNotEmpty();
+        await Assert.That(run.Step(0).Property("Memo")).IsEqualTo("m");
+        await Assert.That(run.Step(1).Result.Succeeded).IsTrue();
+        await Assert.That(run.Step(1).Result.NewStage).IsEqualTo("Active");
+        await Assert.That(run.Step(2).Ok).IsFalse();
+        await Assert.That(run.Step(2).Result.Succeeded).IsFalse();
+        await Assert.That(string.Join(",", run.Step(2).Result.FailedGuards)).IsEqualTo("not_Ready");
+        await Assert.That(run.Step(2).Summary).IsNotEmpty();
+    }
+
+    [Test]
+    public async Task Simulate_StopOnErrorFalse_ContinuesPastAFailedStep() {
+        var h = PolySurfaceHarness.New();
+        var ws = OpenWith(h, "Continue", Orders);
+        SimStep[] steps = [
+            SimStep.Create("Order", """{"Memo":"m"}""", alias: "o"),
+            SimStep.Invoke("o", "NoSuchAction"),
+            SimStep.Get("o"),
+        ];
+
+        var stopped = h.Simulate(ws, steps, reset: true);
+        var continued = h.Simulate(ws, steps, reset: true, stopOnError: false);
+
+        await Assert.That(stopped.Steps.Count).IsEqualTo(2);
+        await Assert.That(stopped.Step(1).Ok).IsFalse();
+        await Assert.That(continued.Success).IsTrue().Because(continued.Summary);
+        await Assert.That(continued.Steps.Count).IsEqualTo(3);
+        await Assert.That(continued.Step(1).Ok).IsFalse();
+        await Assert.That(continued.Step(2).Ok).IsTrue().Because(continued.Step(2).Summary);
+    }
+
+    [Test]
+    public async Task Create_Shorthand_EmbedsPropertiesAsJsonNotAsAString() {
+        var h = PolySurfaceHarness.New();
+        var ws = OpenWith(h, "Props", SellableShape);
+
+        var created = h.Create(ws, "Item", """{"Name":"Widget","Qty":3}""");
+
+        await Assert.That(created.Ok).IsTrue().Because(created.Summary);
+        await Assert.That(created.Op).IsEqualTo("create");
+        await Assert.That(created.Property("Qty")).IsEqualTo("3");
+        await Assert.That(created.Property("Name")).IsEqualTo("Widget");
+        var missing = Thrown(() => created.Property("Missing"));
+        await Assert.That(missing).IsNotNull();
+        await Assert.That(missing!.Message).Contains("Missing").And.Contains("create");
+    }
+
+    [Test]
+    public async Task Create_WithoutProperties_RunsTheStepWithNone() {
+        var h = PolySurfaceHarness.New();
+        var ws = OpenWith(h, "NoProps", Families);
+
+        var created = h.Create(ws, "Parent");
+
+        await Assert.That(created.Ok).IsFalse().Because("Name is required at create");
+        await Assert.That(created.Summary).IsNotEmpty();
+    }
+
+    [Test]
+    public async Task Shorthands_ChainALiteralInstanceId_AcrossSeparateCalls() {
+        var h = PolySurfaceHarness.New();
+        var ws = OpenWith(h, "Chain", Orders);
+
+        var created = h.Create(ws, "Order", """{"Memo":"m"}""");
+        var activated = h.Invoke(ws, created.InstanceId, "Activate");
+        var blocked = h.Invoke(ws, created.InstanceId, "Cancel");
+        var fetched = h.Get(ws, created.InstanceId);
+        var listed = h.List(ws, "Order");
+        var evaluated = h.Evaluate(ws, "Order", "Ready", created.InstanceId);
+
+        await Assert.That(activated.Op).IsEqualTo("invoke");
+        await Assert.That(activated.Ok).IsTrue().Because(activated.Summary);
+        await Assert.That(activated.Result.NewStage).IsEqualTo("Active");
+        await Assert.That(blocked.Ok).IsFalse();
+        await Assert.That(string.Join(",", blocked.Result.FailedGuards)).IsEqualTo("not_Ready");
+        await Assert.That(fetched.Op).IsEqualTo("get");
+        await Assert.That(fetched.Data!["instance"]!["currentStage"]!.GetValue<string>()).IsEqualTo("Active");
+        await Assert.That(listed.Op).IsEqualTo("list");
+        await Assert.That(listed.Data!["count"]!.GetValue<int>()).IsEqualTo(1);
+        await Assert.That(evaluated.Op).IsEqualTo("evaluate");
+        await Assert.That(evaluated.Ok).IsTrue().Because(evaluated.Summary);
+    }
+
+    [Test]
+    public async Task Invoke_Shorthand_EmbedsArgsAsJsonNotAsAString() {
+        var h = PolySurfaceHarness.New();
+        var ws = OpenWith(h, "Args", Patrons);
+        var patron = h.Create(ws, "Patron", """{"Name":"Alice"}""");
+
+        var checkOut = h.Invoke(ws, patron.InstanceId, "CheckOut", """{"amount":100}""");
+        var loans = h.List(ws, "Loan");
+
+        await Assert.That(checkOut.Ok).IsTrue().Because(checkOut.Summary);
+        await Assert.That(checkOut.Result.Succeeded).IsTrue();
+        await Assert.That(loans.Data!["count"]!.GetValue<int>()).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task Link_Unlink_Shorthands_RunOneStepEach() {
+        var h = PolySurfaceHarness.New();
+        var ws = OpenWith(h, "Links", Families);
+        var parent = h.Create(ws, "Parent", """{"Name":"p"}""");
+        var child = h.Create(ws, "Child", """{"Name":"c"}""");
+
+        var linked = h.Link(ws, parent.InstanceId, "kids", child.InstanceId);
+        var unlinked = h.Unlink(ws, parent.InstanceId, "kids", child.InstanceId);
+
+        await Assert.That(linked.Op).IsEqualTo("link");
+        await Assert.That(linked.Ok).IsTrue().Because(linked.Summary);
+        await Assert.That(unlinked.Op).IsEqualTo("unlink");
+        await Assert.That(unlinked.Ok).IsTrue().Because(unlinked.Summary);
+    }
+
+    [Test]
+    public async Task Step_WhenTheResponseHasNoTrace_ThrowsADescriptiveError() {
+        var h = PolySurfaceHarness.New();
+
+        var noWorkspace = h.Simulate("", SimStep.List());
+        var badJson = h.Simulate(h.Open("Bad"), "not json");
+
+        foreach (var (result, fragment) in new[] { (noWorkspace, "WORKSPACE_REQUIRED"), (badJson, "Invalid steps JSON") }) {
+            Exception? thrown = null;
+            try {
+                _ = result.Step(0);
+            }
+            catch (Exception ex) {
+                thrown = ex;
+            }
+
+            await Assert.That(thrown).IsNotNull();
+            await Assert.That(thrown!.GetType()).IsEqualTo(typeof(InvalidOperationException));
+            await Assert.That(thrown.Message).Contains(fragment);
+        }
+    }
+
+    [Test]
+    public async Task Step_IndexOutOfRange_ThrowsADescriptiveError() {
+        var h = PolySurfaceHarness.New();
+        var ws = OpenWith(h, "Range", Orders);
+        var run = h.Simulate(ws, SimStep.List());
+
+        Exception? thrown = null;
+        try {
+            _ = run.Step(5);
+        }
+        catch (Exception ex) {
+            thrown = ex;
+        }
+
+        await Assert.That(thrown).IsNotNull();
+        await Assert.That(thrown!.GetType()).IsEqualTo(typeof(InvalidOperationException));
+        await Assert.That(thrown.Message).Contains("5");
+    }
+
+    [Test]
+    public async Task InvokeOutcome_ReadsBothShapes_AndAStepWithNoDataThrows() {
+        var thrown = new HarnessStep(0, "invoke", false, "Action execution failed: boom",
+            JsonNode.Parse("""{"actionName":"A","error":"boom"}"""));
+        var noData = new HarnessStep(1, "invoke", false, "Step 1 failed: nope", null);
+        var succeeded = new HarnessStep(2, "invoke", true, "ok",
+            JsonNode.Parse("""{"invokeActionResult":{"actionName":"A","succeeded":true,"newStage":"Active","failedGuards":null,"errorMessage":null}}"""));
+
+        await Assert.That(thrown.Result.Succeeded).IsFalse();
+        await Assert.That(thrown.Result.ErrorMessage).IsEqualTo("boom");
+        await Assert.That(thrown.Result.FailedGuards).IsEmpty();
+        var noDataThrown = Thrown(() => noData.Result);
+        await Assert.That(noDataThrown).IsNotNull();
+        await Assert.That(noDataThrown!.Message).Contains("Step 1").And.Contains("invoke").And.Contains("Step 1 failed: nope");
+        await Assert.That(succeeded.Result.Succeeded).IsTrue();
+        await Assert.That(succeeded.Result.NewStage).IsEqualTo("Active");
+        await Assert.That(succeeded.Result.ErrorMessage).IsNull();
+    }
+
+    [Test]
+    public async Task Result_OfAnInvokeOnAnUnknownInstance_ThrowsInsteadOfInventingAnOutcome() {
+        var h = PolySurfaceHarness.New();
+        var ws = OpenWith(h, "NoInstance", Orders);
+
+        var step = h.Invoke(ws, "no-such-id", "Cancel");
+        var thrown = Thrown(() => step.Result);
+
+        await Assert.That(step.Ok).IsFalse();
+        await Assert.That(step.Summary).IsNotEmpty();
+        await Assert.That(thrown).IsNotNull();
+        await Assert.That(thrown!.Message).Contains("invoke").And.Contains(step.Summary);
+    }
+
+    [Test]
+    public async Task Result_OfANonInvokeStep_Throws() {
+        var h = PolySurfaceHarness.New();
+        var ws = OpenWith(h, "NonInvoke", Orders);
+        var created = h.Create(ws, "Order", """{"Memo":"m"}""");
+
+        var thrown = Thrown(() => h.Get(ws, created.InstanceId).Result);
+
+        await Assert.That(thrown).IsNotNull();
+        await Assert.That(thrown!.Message).Contains("get");
+    }
+
+    [Test]
+    public async Task Property_ComparedAcrossTwoCreates_ThrowsWhenNeitherHasIt() {
+        var h = PolySurfaceHarness.New();
+        var ws = OpenWith(h, "TwoCreates", Orders);
+        var a = h.Create(ws, "Order", """{"Memo":"m"}""");
+        var b = h.Create(ws, "Order", """{"Memo":"m"}""");
+
+        var thrown = Thrown(() => a.Property("Nope") == b.Property("Nope"));
+
+        await Assert.That(thrown).IsNotNull();
+        await Assert.That(thrown!.Message).Contains("Nope");
+    }
+
+    [Test]
+    public async Task Property_OfAFailedStepOrAStepWithNoInstance_Throws() {
+        var h = PolySurfaceHarness.New();
+        var ws = OpenWith(h, "NoProps", Orders);
+        var failed = h.Get(ws, "no-such-id");
+        var listed = h.List(ws);
+
+        await Assert.That(failed.Ok).IsFalse();
+        await Assert.That(Thrown(() => failed.Property("Memo"))).IsNotNull();
+        await Assert.That(Thrown(() => listed.Property("Memo"))).IsNotNull();
+    }
+
+    [Test]
+    public async Task Result_OfAnActionThatReturnsAnEntity_CarriesTheReturnShape() {
+        var h = PolySurfaceHarness.New();
+        var ws = OpenWith(h, "Tickets", """
+            domain Tickets
+            Ticket: entity {
+              Memo: Text
+              Draft: stage {
+                Cancel: action -> Receipt { create Receipt { Note: "done" } }
+                Activate: action { transition to Active }
+              }
+              Active: stage { Cancel: action { transition to Closed } }
+              Closed: stage { }
+            }
+            Receipt: entity { Note: Text }
+            """);
+        var returning = h.Create(ws, "Ticket", """{"Memo":"m"}""");
+        var plain = h.Create(ws, "Ticket", """{"Memo":"m"}""");
+        await Assert.That(h.Invoke(ws, plain.InstanceId, "Activate").Ok).IsTrue();
+
+        var fromDraft = h.Invoke(ws, returning.InstanceId, "Cancel").Result;
+        var fromActive = h.Invoke(ws, plain.InstanceId, "Cancel").Result;
+
+        await Assert.That(fromDraft.Succeeded).IsTrue();
+        await Assert.That(fromDraft.ReturnTypeName).IsEqualTo("Receipt");
+        await Assert.That(fromDraft.ReturnInstanceId).IsNotNull();
+        await Assert.That(fromActive.ReturnTypeName).IsNull();
+        await Assert.That(fromActive.ReturnInstanceId).IsNull();
+        await Assert.That(fromActive.NewStage).IsEqualTo("Closed");
+    }
+
+    [Test]
+    public async Task Steps_WhenTheResponseHasNoTrace_Throws() {
+        var h = PolySurfaceHarness.New();
+
+        var thrown = Thrown(() => h.Simulate("", SimStep.List()).Steps);
+
+        await Assert.That(thrown).IsNotNull();
+        await Assert.That(thrown!.Message).Contains("WORKSPACE_REQUIRED");
+    }
+
+    [Test]
+    public async Task Steps_OfAMalformedTraceEntry_Throws() {
+        var malformed = HarnessResult.FromEnvelope(JsonNode.Parse(
+            """{"ok":true,"summary":"s","data":{"trace":[{"index":0,"op":"get","summary":"x","data":null}]}}""")!);
+
+        var thrown = Thrown(() => malformed.Steps);
+
+        await Assert.That(thrown).IsNotNull();
+        await Assert.That(thrown!.Message).Contains("ok");
+    }
+
+    private static Exception? Thrown(Func<object?> action) {
+        try {
+            _ = action();
+            return null;
+        }
+        catch (Exception ex) {
+            return ex;
+        }
+    }
+
+    [Test]
+    public async Task Content_OfAFailedExport_ThrowsWithTheCodeAndSummary() {
+        var h = PolySurfaceHarness.New();
+        var ws = OpenWith(h, "Failed", Orders);
+
+        var unknownFormat = h.Export(ws, "no-such-format");
+        var unknownWorkspace = h.Export("no-such-workspace", "dsl");
+        var formatThrown = Thrown(() => unknownFormat.Content);
+        var workspaceThrown = Thrown(() => unknownWorkspace.Content);
+
+        await Assert.That(unknownFormat.Success).IsFalse();
+        await Assert.That(unknownFormat.Data).IsNull();
+        await Assert.That(formatThrown).IsNotNull();
+        await Assert.That(formatThrown!.Message).Contains(unknownFormat.Summary);
+        await Assert.That(workspaceThrown).IsNotNull();
+        await Assert.That(workspaceThrown!.Message).Contains("WORKSPACE_REQUIRED");
+    }
+
+    [Test]
+    public async Task Content_TwoFailedExportsCompared_ThrowInsteadOfComparingEqual() {
+        var h = PolySurfaceHarness.New();
+        var ws = OpenWith(h, "FixedPoint", Orders);
+
+        var thrown = Thrown(() => h.Export(ws, "no-such-format").Content == h.Export(ws, "no-such-format").Content);
+
+        await Assert.That(thrown).IsNotNull();
+        await Assert.That(thrown!.GetType()).IsEqualTo(typeof(InvalidOperationException));
+    }
 }

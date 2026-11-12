@@ -883,7 +883,7 @@ once per record whose `where` holds.
   runs nothing and the action still succeeds.
 - **Fail-fast:** the first failing body effect (for example an `invoke name.Action` that
   fails) fails the whole `for` and no later record is visited. The simulator rolls back
-  the failed action, and generated C# does the same through its action scope.
+  the failed action; generated C# keeps what earlier records already did.
 - **Legal body effects:** an `assign` to the owning entity's own state, `invoke name.Action`
   on the loop record. An `assign` through the binder or a relationship is another
   entity's state and is rejected with `DMEFF012`; mutate that entity with `invoke name.Action`.

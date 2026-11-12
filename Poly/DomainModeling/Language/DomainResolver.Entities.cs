@@ -11,6 +11,9 @@ namespace Poly.DomainModeling.Language;
 // DomainResolver (Entities) — entity declarations, entity-body members (properties, annotations) and entity-body require resolution.
 
 public sealed partial class DomainResolver {
+    // S-15: the current entity's authored member order, recorded at the body arms below.
+    private readonly List<EntityMemberRef> _entityMembers = new();
+
     private void ParseEntity(List<DomainChange> changes) {
         var entityName = ExpectIdentifier(TokenKind.Identifier, "entity name");
         Expect(TokenKind.Colon);
@@ -53,6 +56,7 @@ public sealed partial class DomainResolver {
     private void ParseEntityAfterKind(List<DomainChange> changes, string entityName, Visibility visibility) {
         _currentEntityName = entityName;
         _entityPolicies.Clear();
+        _entityMembers.Clear();
         _pendingRequires.Clear();
         _pendingStageRequires.Clear();
         _entityIndex++;
@@ -82,8 +86,6 @@ public sealed partial class DomainResolver {
         RejectRetiredRequiredWord();
         Expect(TokenKind.LBrace);
 
-        EnsurePrimitivesOnce(changes);
-
         while (Current.Kind != TokenKind.RBrace) {
             if (Current.Kind == TokenKind.Relationship) {
                 throw N2RelationshipNotSupported();
@@ -100,6 +102,7 @@ public sealed partial class DomainResolver {
                     case "stage": {
                             var name = ExpectIdentifier(TokenKind.Identifier, "stage name");
                             Expect(TokenKind.Colon);
+                            NoteMember(EntityMemberKind.Stage, name);
                             ParseStage(name, changes);
                             continue;
                         }
@@ -108,6 +111,7 @@ public sealed partial class DomainResolver {
                             Expect(TokenKind.Public);
                             Expect(TokenKind.Action);
                             var name = ExpectIdentifier(TokenKind.Identifier, "action name");
+                            NoteMember(EntityMemberKind.Action, name);
                             ParseActionBody(name, changes, stageName: null, preParsedParams: null, Visibility.Public);
                             continue;
                         }
@@ -115,6 +119,7 @@ public sealed partial class DomainResolver {
                     case "action": {
                             var name = ExpectIdentifier(TokenKind.Identifier, "action name");
                             Expect(TokenKind.Colon);
+                            NoteMember(EntityMemberKind.Action, name);
                             ParseStandaloneAction(name, changes);
                             continue;
                         }
@@ -122,6 +127,7 @@ public sealed partial class DomainResolver {
                     case "policy": {
                             var name = ExpectIdentifier(TokenKind.Identifier, "policy name");
                             Expect(TokenKind.Colon);
+                            NoteMember(EntityMemberKind.Policy, name);
                             ParsePolicy(name, changes);
                             continue;
                         }
@@ -134,6 +140,7 @@ public sealed partial class DomainResolver {
                             if (Current.Kind is not (TokenKind.Action or TokenKind.LBrace or TokenKind.When or TokenKind.Require)) {
                                 throw Error($"Expected action after '{name}(...)', got '{Current.Text}'");
                             }
+                            NoteMember(EntityMemberKind.Action, name);
                             ParseActionBody(name, changes, stageName: null, actionParams);
                             continue;
                         }
@@ -147,9 +154,11 @@ public sealed partial class DomainResolver {
                                 || _valueTypeNames.Contains(Current.Text)
                                 || IsKnownPrimitiveName(Current.Text)) {
                                 var typeName = ExpectIdentifier(TokenKind.Identifier, "type name");
+                                NoteMember(EntityMemberKind.Property, name);
                                 ParseNamedTypeProperty(name, typeName, changes);
                             }
                             else if (IsNavLine()) {
+                                NoteMember(EntityMemberKind.Navigation, name);
                                 ParseNavLine(name);
                             }
                             else {
@@ -162,6 +171,7 @@ public sealed partial class DomainResolver {
                     case "property": {
                             var name = ExpectIdentifier(TokenKind.Identifier, "property name");
                             Expect(TokenKind.Colon);
+                            NoteMember(EntityMemberKind.Property, name);
                             ParseProperty(name, Current.Kind, changes);
                             continue;
                         }
@@ -171,6 +181,7 @@ public sealed partial class DomainResolver {
                     case "nav-owned": {
                             var name = ExpectIdentifier(TokenKind.Identifier, "navigation property name");
                             Expect(TokenKind.Colon);
+                            NoteMember(EntityMemberKind.Navigation, name);
                             ParseNavLine(name);
                             continue;
                         }
@@ -184,11 +195,13 @@ public sealed partial class DomainResolver {
                             if (!DslGrammar.IsPrimitiveType(Current.Kind, Current.Text, IsKnownPrimitiveName))
                                 throw Error($"Expected type after '{name}:', got '{Current.Text}'");
                             if (IsPrimitiveType(Current.Kind)) {
+                                NoteMember(EntityMemberKind.Property, name);
                                 ParseProperty(name, Current.Kind, changes);
                             }
                             else {
                                 var typeName = Current.Text;
                                 Advance();
+                                NoteMember(EntityMemberKind.Property, name);
                                 ParseNamedTypeProperty(name, typeName, changes);
                             }
                             continue;
@@ -204,6 +217,7 @@ public sealed partial class DomainResolver {
                 Advance(); // consume identifier
                 Expect(TokenKind.Colon);
                 if (Current.Kind is TokenKind.LBrace or TokenKind.When or TokenKind.Require) {
+                    NoteMember(EntityMemberKind.Action, name);
                     ParseStandaloneAction(name, changes);
                 }
                 else {
@@ -218,9 +232,14 @@ public sealed partial class DomainResolver {
 
         Expect(TokenKind.RBrace);
 
+        changes.Add(new SetEntityMemberOrderChange(entityName, _entityMembers.ToArray()));
+
         // ── Resolve pending requires (now all policies for this entity are known) ──
         ResolvePendingRequires(changes);
     }
+
+    private void NoteMember(EntityMemberKind kind, string name) =>
+        _entityMembers.Add(new EntityMemberRef(kind, name));
 
     /// <summary>
     /// Resolves all collected require references against known entity policies.

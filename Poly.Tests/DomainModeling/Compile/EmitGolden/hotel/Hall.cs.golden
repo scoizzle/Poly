@@ -1,6 +1,8 @@
 #nullable enable
 using System.Collections.Generic;
 
+using Poly.Runtime;
+
 public enum HallStage
 {
     InService = 0,

@@ -1,14 +1,17 @@
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Libraries.Storage;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Runtime;
+using Poly.Interpretation;
 using Poly.Interpretation.Analysis;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
+using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.DomainModeling.Runtime;
 
@@ -110,7 +113,86 @@ public sealed class DomainResultErasureTests {
         return resolved.Properties.Single(p => p.Name == "Slot").MemberTypeDefinition;
     }
 
-    private static Domain Lower(string poly) {
+    private static Domain Lower(string poly) => LowerWithSession(poly).Domain;
+
+    /// <summary>The sample catalog's mcp-library domain: the only entity golden that
+    /// throws <c>ConstraintFailureException</c> from a void body.</summary>
+    private static string McpLibraryPoly() =>
+        GoldenDomains.Compilable.Single(d => d.Name == "mcp-library").Poly;
+
+    /// <summary>
+    /// One report path for both twins-present (S2b) and twins-absent (S3): the module
+    /// exactly as the runtime host analyzes it. S2b retargets this single call to
+    /// <c>DomainSession.AnalyzeModule</c>, like the other module-analysis sites.
+    /// </summary>
+    private static (int Errors, int Warnings, IReadOnlyList<TypeDefinitionNode> Module)
+        ModuleReport(string poly) {
+        var (domain, analysis, session) = LowerWithSession(poly);
+        var module = RuntimeAnalysisCache.GetOrLower(domain, session, analysis);
+        var vm = DomainSession.AnalyzeModule(module);
+
+        return (
+            vm.Diagnostics.Count(d => d.Severity == DiagnosticSeverity.Error),
+            vm.Diagnostics.Count(d => d.Severity == DiagnosticSeverity.Warning),
+            module);
+    }
+
+    [Test]
+    public async Task AnalyzeModule_ModuleDeclaringItsOwnResultTypes_OwnDeclarationsWin() {
+        // AST-wins: a module that declares DomainResult and DomainResult<T> itself binds those
+        // declarations, not the Poly.Runtime provider's, and analyzes clean.
+        var plain = new TypeDefinitionNode("DomainResult");
+        var generic = new TypeDefinitionNode("DomainResult", GenericParameters: [new Parameter("T")]);
+        var holder = new TypeDefinitionNode(
+            "Holder",
+            Properties: [
+                new PropertyDefinitionNode("Plain", new NamedTypeReference("DomainResult")),
+                new PropertyDefinitionNode(
+                    "Typed",
+                    new NamedTypeReference("DomainResult", TypeArguments: [
+                        new PrimitiveTypeReference(Poly.Introspection.PrimitiveType.String),
+                    ])),
+            ]);
+
+        var vm = DomainSession.AnalyzeModule([plain, generic, holder]);
+
+        await Assert.That(vm.Diagnostics.Count(d => d.Severity == DiagnosticSeverity.Error)).IsEqualTo(0);
+        var properties = vm.GetMetadata<TypeDefinitionMetadata>(holder)!.TypeDefinition.Properties;
+        await Assert.That(properties.Single(p => p.Name == "Plain").MemberTypeDefinition)
+            .IsTypeOf<AstTypeDefinition>();
+        await Assert.That(properties.Single(p => p.Name == "Typed").MemberTypeDefinition)
+            .IsTypeOf<AstTypeDefinition>();
+    }
+
+    [Test]
+    public async Task ModuleAnalysis_TwinsAbsent_ResolvesPolyRuntime() {
+        // R8b / I4: with the twins gone the same report is clean only through Poly.Runtime.
+        var (errors, warnings, module) = ModuleReport(McpLibraryPoly());
+
+        await Assert.That(errors).IsEqualTo(0);
+        await Assert.That(warnings).IsEqualTo(0);
+        await Assert.That(module.Any(t => t.Name == "DomainResult")).IsFalse();
+    }
+
+    [Test]
+    public async Task AnalyzeModule_ModuleWithoutResultTwins_ResolvesPolyRuntime() {
+        // Seam pin: the seam wraps the default registry with DomainResultTypeProvider, so the
+        // lowered module, which declares none of the result family, analyzes clean.
+        var (domain, analysis, session) = LowerWithSession(McpLibraryPoly());
+        var module = RuntimeAnalysisCache.GetOrLower(domain, session, analysis);
+        var withoutTwins = module
+            .Where(t => t.Name is not ("DomainResult" or "ConstraintFailureException"))
+            .ToList();
+        await Assert.That(withoutTwins.Count).IsEqualTo(module.Count);
+
+        var vm = DomainSession.AnalyzeModule(withoutTwins);
+
+        await Assert.That(vm.Diagnostics.Count(d => d.Severity == DiagnosticSeverity.Error)).IsEqualTo(0);
+        await Assert.That(vm.Diagnostics.Count(d => d.Severity == DiagnosticSeverity.Warning)).IsEqualTo(0);
+    }
+
+    private static (Domain Domain, AnalysisResult Analysis, DomainSession Session)
+        LowerWithSession(string poly) {
         var builder = SessionBuilder.CreateEmpty();
         builder.LoadCore();
         foreach (var id in ExtensionCatalog.ProductAuthoring)
@@ -125,6 +207,6 @@ public sealed class DomainResultErasureTests {
                 .Where(d => d.Severity == Poly.Analysis.DiagnosticSeverity.Error)
                 .Select(d => d.Message)));
         _ = RuntimeAnalysisCache.GetOrLower(result.Root!, session, result.Analysis);
-        return result.Root!;
+        return (result.Root!, result.Analysis, session);
     }
 }

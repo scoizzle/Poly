@@ -1,6 +1,8 @@
 #nullable enable
 using System;
 
+using Poly.Runtime;
+
 public enum ActivityStage
 {
     Open = 0,

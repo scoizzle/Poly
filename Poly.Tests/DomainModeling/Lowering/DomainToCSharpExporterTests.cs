@@ -214,12 +214,12 @@ public class DomainToCSharpExporterTests {
     }
 
     [Test]
-    public async Task Export_Produces_CoreInfrastructureTypes() {
+    public async Task Export_DoesNotProduce_ResultFamilyTypes() {
         var (domain, analysis) = ParseAndAnalyze(LibraryCheckoutDsl);
         var types = DomainProgramProjection.ToSyntax(domain, analysis);
 
-        await Assert.That(types.Any(t => t.Name == "DomainResult")).IsTrue();
-        await Assert.That(types.Any(t => t.Name is "DomainResult" && t.GenericParameters?.Count > 0)).IsTrue();
+        // R-03b: the result family is Poly.Runtime's; the tree no longer declares it.
+        await Assert.That(types.Any(t => t.Name == "DomainResult")).IsFalse();
     }
 
     [Test]
@@ -1348,7 +1348,7 @@ public class DomainToCSharpExporterTests {
     private static async Task AssertExportCompiles(Domain domain, AnalysisResult analysis) {
         var typeDefs = DomainProgramProjection.ToSyntax(domain, analysis);
         var csharp = new CSharpGenerator().Generate(typeDefs);
-        var tree = CSharpSyntaxTree.ParseText("#nullable enable\n" + csharp);
+        var tree = CSharpSyntaxTree.ParseText("#nullable enable\n" + ExportedCSharp.MissingPolyRuntimeUsings(csharp) + csharp);
 
         var references = ((string?)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES"))
             ?.Split(Path.PathSeparator)
@@ -3162,7 +3162,7 @@ public class DomainToCSharpExporterTests {
         var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var cs = new CSharpGenerator().Generate(new CompilationUnitNode([], null, types, null));
 
-        var tree = CSharpSyntaxTree.ParseText("#nullable enable\nusing System.Collections.Generic;\n" + cs);
+        var tree = CSharpSyntaxTree.ParseText("#nullable enable\nusing System.Collections.Generic;\n" + ExportedCSharp.MissingPolyRuntimeUsings(cs) + cs);
         var references = ((string?)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES"))
             ?.Split(Path.PathSeparator)
             .Select(p => (MetadataReference)MetadataReference.CreateFromFile(p))
@@ -4071,14 +4071,15 @@ public class DomainToCSharpExporterTests {
     public async Task Export_NoVerbatimValue_AndOnlyNeededUsings() {
         const string dsl = """
             domain Shop
+            uses persistence
             Item: entity {
-              Name: Text
+              Name: Text unique
             }
             """;
         var (domain, analysis) = ParseAndAnalyze(dsl);
         var cs = new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis));
 
-        await Assert.That(cs).Contains("this._value = value;");
+        await Assert.That(cs).Contains("object value");
         await Assert.That(cs).DoesNotContain("@value");
         await Assert.That(cs).DoesNotContain("using System;");
         await Assert.That(cs).DoesNotContain("using System.Collections.Generic;");
@@ -4213,7 +4214,7 @@ public class DomainToCSharpExporterTests {
     }
 
     private static string[] CompileExported(string cs) {
-        var tree = CSharpSyntaxTree.ParseText("#nullable enable\nusing System.Collections.Generic;\n" + cs);
+        var tree = CSharpSyntaxTree.ParseText("#nullable enable\nusing System.Collections.Generic;\n" + ExportedCSharp.MissingPolyRuntimeUsings(cs) + cs);
         var references = ((string?)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES"))
             ?.Split(Path.PathSeparator)
             .Select(p => (MetadataReference)MetadataReference.CreateFromFile(p))

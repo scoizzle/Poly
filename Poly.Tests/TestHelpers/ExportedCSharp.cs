@@ -28,9 +28,20 @@ public static class ExportedCSharp {
         throw new InvalidOperationException($"Unbalanced braces for '{signature}'.");
     }
 
+    /// <summary>The usings a printed module needs for the shared <c>Poly.Runtime</c> result family.</summary>
+    private const string PolyRuntimeUsings = "using Poly.Runtime;\nusing Poly.DomainModeling.Runtime;\n";
+
+    /// <summary>The <see cref="PolyRuntimeUsings"/> lines <paramref name="cs"/> does not already
+    /// carry: a printed type list brings its own, a printed compilation unit does not.</summary>
+    public static string MissingPolyRuntimeUsings(string cs) =>
+        string.Concat(PolyRuntimeUsings
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries)
+            .Where(line => !cs.Contains(line, StringComparison.Ordinal))
+            .Select(line => line + "\n"));
+
     /// <summary>Compiles exported C# with Roslyn and loads the assembly.</summary>
     public static Assembly CompileAndLoad(string cs, string assemblyName = "ExportedDomain") {
-        var tree = CSharpSyntaxTree.ParseText("#nullable enable\n" + cs);
+        var tree = CSharpSyntaxTree.ParseText("#nullable enable\n" + MissingPolyRuntimeUsings(cs) + cs);
         var references = ((string?)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES"))!
             .Split(Path.PathSeparator)
             .Select(p => (MetadataReference)MetadataReference.CreateFromFile(p));

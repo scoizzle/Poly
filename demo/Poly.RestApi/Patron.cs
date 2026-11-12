@@ -2,6 +2,9 @@
 using System;
 using System.Collections.Generic;
 
+using Poly.DomainModeling.Runtime;
+using Poly.Runtime;
+
 public enum PatronStage
 {
     Active = 0,

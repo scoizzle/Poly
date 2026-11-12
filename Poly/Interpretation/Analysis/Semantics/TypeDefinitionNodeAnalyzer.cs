@@ -928,9 +928,9 @@ internal static class AstTypeReferenceResolver {
     }
 
     private static ITypeDefinition? AsConstructedClr(ITypeDefinition? definition) =>
-        // An AST definition also reports a constructed CLR RuntimeType (IDictionary<,>); it closes through its own substitution map.
-        definition is not AstTypeDefinition
-            and IClrTypeDefinition { RuntimeType: { IsConstructedGenericType: true, ContainsGenericParameters: false } }
+        // Only a CLR definition is accepted: an AST definition also reports a constructed RuntimeType
+        // (IDictionary<,>), but it closes through its own substitution map.
+        definition is ClrTypeDefinition { RuntimeType: { IsConstructedGenericType: true, ContainsGenericParameters: false } }
             ? definition
             : null;
 

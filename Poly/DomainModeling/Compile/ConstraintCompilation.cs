@@ -44,9 +44,9 @@ internal static class ConstraintCompilation {
         IReadOnlyList<IConstraintCompiler> compilers) {
         var storage = analysis.GetMetadata<StorageMappingMetadata>(domain)?.Storage;
         var pending = new Dictionary<(string Library, string Type, string Method, ContributionPlacement Placement), Pending>(PendingKey.Comparer);
-        foreach (var entity in domain.Types.OfType<Entity>().OrderBy(e => e.Name, StringComparer.Ordinal)) {
+        foreach (var entity in domain.Types.OfType<Entity>()) {
             var type = FindType(module, entity.Name);
-            foreach (var property in entity.Properties.OrderBy(p => p.Name, StringComparer.Ordinal)) {
+            foreach (var property in EntityDeclarationOrder.Properties(entity)) {
                 foreach (var constraint in property.Constraints) {
                     IConstraintCompiler? match = null;
                     foreach (var compiler in compilers) {

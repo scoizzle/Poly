@@ -52,7 +52,7 @@ public sealed class ContractContributionTests {
 
     private static Domain ParseWith(string poly, ExtensionCatalog catalog) {
         var tree = DslSyntaxTree.Parse(poly);
-        var session = DomainSession.ForDocument(tree, [], catalog);
+        var session = DomainSession.Create(tree.Uses, SessionOptions.Bare(catalog));
         var changes = new DomainResolver(tree, session).Resolve();
         var result = new DomainEvolution(new Domain("_", [])).ApplyAndAnalyze(changes, session: session);
         if (!result.Succeeded) {

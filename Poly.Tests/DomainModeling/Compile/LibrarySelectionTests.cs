@@ -39,8 +39,8 @@ public sealed class LibrarySelectionTests {
     [Test]
     public async Task DocumentFactories_ShareIdsAndContributions_DifferOnlyByAuthoring() {
         var tree = TreeWithoutUses();
-        var document = DomainSession.ForDocument(tree, []);
-        var authoring = DomainSession.ForAuthoringDocument(tree, []);
+        var document = DomainSession.Create(tree.Uses, SessionOptions.Bare(ExtensionCatalog.Core));
+        var authoring = LibrarySelection.Load(tree, SessionOptions.Bare(ExtensionCatalog.Core) with { Authoring = true });
 
         await Assert.That(document.Extensions).IsEmpty();
         await Assert.That(authoring.Extensions).IsEmpty();
@@ -79,7 +79,7 @@ public sealed class LibrarySelectionTests {
     [Test]
     public async Task WithDomain_EmptyUsesAfterSeed_LoadsNoImplicitIds() {
         var catalog = ProbeCatalog();
-        var seeded = DomainSession.ForDocument(TreeWithoutUses(), ["x"], catalog);
+        var seeded = DomainSession.Create(TreeWithoutUses().Uses, new SessionOptions(catalog, ["x"]));
         await Assert.That(seeded.Extensions).IsEquivalentTo(new[] { "x" });
 
         var emptied = seeded.WithDomain(new Domain("D", []));
@@ -98,7 +98,8 @@ public sealed class LibrarySelectionTests {
     /// </summary>
     [Test]
     public async Task WithDomain_AfterUsesChange_KeepsTheAuthoringPack() {
-        var session = DomainSession.ForAuthoringDocument(TreeWithoutUses(), []);
+        var session = LibrarySelection.Load(
+            TreeWithoutUses(), SessionOptions.Bare(ExtensionCatalog.Core) with { Authoring = true });
         await Assert.That(session.Annotations.CanAccept("column")).IsTrue();
 
         var reloaded = session.WithDomain(new Domain("D", []) { Extensions = ["temporal"] });
@@ -162,7 +163,7 @@ public sealed class LibrarySelectionTests {
         var sessions = new[] {
             LibrarySelection.Load(tree, options),
             LibrarySelection.Load(["x"], options),
-            DomainSession.ForDocument(tree, ["x"], catalog),
+            DomainSession.Create(tree.Uses, new SessionOptions(catalog, ["x"])),
             DomainSession.Create([], options),
         };
 

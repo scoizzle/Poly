@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 
 using Poly.Grammar;
 
@@ -19,7 +20,7 @@ public sealed class DslTokenReader : BufferedTokenReader<DslToken, DslTokenKind>
     private int _startLine = 1;
     private int _startCol = 1;
 
-    public DslTokenReader(string text) => _text = text;
+    public DslTokenReader(string text) => _text = SkipLeadingBom(text);
 
     public override bool EndOfStream(DslTokenKind kind) => kind == DslTokenKind.EndOfFile;
 
@@ -71,8 +72,29 @@ public sealed class DslTokenReader : BufferedTokenReader<DslToken, DslTokenKind>
             return Make(WordToKind(word), word);
         }
 
-        throw GrammarError.Error($"Unexpected character '{ch}'", _line, _col);
+        throw GrammarError.Error($"Unexpected character {Describe(ch)}", _line, _col);
     }
+
+    /// <summary>
+    /// A UTF-8 BOM (U+FEFF) is an encoding artifact, not a character of the document: the
+    /// first one is dropped so it cannot shift any line, column or source offset. A BOM
+    /// anywhere else reaches <see cref="ScanNextToken"/> and fails there, positioned.
+    /// </summary>
+    private static string SkipLeadingBom(string text) =>
+        text.Length > 0 && text[0] == '\uFEFF' ? text[1..] : text;
+
+    /// <summary>
+    /// A printable character in quotes, or its code point as <c>U+XXXX</c> when it has no
+    /// visible glyph (BOM, zero-width space, non-breaking space, control), so a parse error
+    /// names what the author cannot see.
+    /// </summary>
+    private static string Describe(char ch) =>
+        IsInvisible(ch) ? $"U+{(int)ch:X4}" : $"'{ch}'";
+
+    private static bool IsInvisible(char ch) =>
+        char.IsWhiteSpace(ch) || char.IsControl(ch) || char.IsSurrogate(ch)
+        || char.GetUnicodeCategory(ch) is UnicodeCategory.Format or UnicodeCategory.OtherNotAssigned
+            or UnicodeCategory.PrivateUse;
 
     private DslToken Make(DslTokenKind kind, string text) => new(kind, text, _startLine, _startCol, _startPos, _pos - _startPos);
 

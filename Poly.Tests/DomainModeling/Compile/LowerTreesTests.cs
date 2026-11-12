@@ -1,3 +1,4 @@
+using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Ontology;
 
@@ -50,8 +51,10 @@ public sealed class LowerTreesTests {
             .IsEquivalentTo(["Permit"]);
         await Assert.That(TypeNames(catalog.Find(ArtifactId.Create(["Parking", "Garage"], "entity"))!))
             .IsEquivalentTo(["Garage"]);
+        // The scaffolding tree carries enums and value types; the result family is
+        // Poly.Runtime's, not printed (R-03b).
         await Assert.That(TypeNames(catalog.Find(ArtifactId.Create(["Parking"], "scaffolding"))!))
-            .Contains("DomainResult");
+            .DoesNotContain("DomainResult");
         await Assert.That(catalog.FindDanglingOrWrongType()).IsEmpty();
     }
 
@@ -238,6 +241,62 @@ public sealed class LowerTreesTests {
                 }
                 """));
 
-        await Assert.That(ex.Message).Contains("DomainResult").And.Contains("scaffolding");
+        await Assert.That(ex.Message).Contains("DomainResult").And.Contains("Poly.Runtime");
+    }
+
+    // ── R-03b: the result family is Poly.Runtime's, not printed ──────────────
+
+    [Test]
+    public async Task Lower_ScaffoldingTreeDeclaresNoResultTypes() {
+        // R1: the module scaffolding keeps enums and value types only.
+        var (domain, analysis, session) = SliceCProducerLoopCatalogTests.Evolve(Parking);
+
+        session.Lower(domain, analysis);
+
+        var scaffolding = session.ArtifactCatalog.Find(ArtifactId.Create([domain.Name], "scaffolding"))!;
+        var names = TypeNames(scaffolding);
+        await Assert.That(names).DoesNotContain("DomainResult");
+        await Assert.That(names).DoesNotContain("ConstraintFailureException");
+    }
+
+    [Test]
+    public async Task Emit_NoEnumDomain_PolyTypesIsOnlyTheNullableHeader() {
+        // R2 (O-R2(a)): the file is still emitted, and with nothing to declare it is
+        // the header alone — no usings, no body.
+        var (domain, analysis, session) = SliceCProducerLoopCatalogTests.Evolve(Parking);
+
+        var files = session.Emit(domain, analysis);
+
+        var types = files.Single(f => f.FileName == "Poly.Types.cs");
+        await Assert.That(types.Source).IsEqualTo("#nullable enable");
+    }
+
+    [Test]
+    public async Task Emit_EmptyTypesFile_ForProgramDomain_NestsInPolyGenerated() {
+        // R4: an entity named Program still nests printed types, and the types file
+        // nests with nothing in it.
+        var (domain, analysis, session) = SliceCProducerLoopCatalogTests.Evolve("""
+            domain Entry
+            Program: entity { Name: Text }
+            """);
+
+        var files = session.Emit(domain, analysis);
+
+        var types = files.Single(f => f.FileName == "Poly.Types.cs").Source;
+        await Assert.That(types).Contains("namespace Poly.Generated {");
+        await Assert.That(types).DoesNotContain("DomainResult");
+    }
+
+    [Test]
+    public async Task Module_DeclaresNoPrintedResultTypes() {
+        // R7: the lowered module is shared by the executor and the printer, so the
+        // twins leave it too — this is what makes ModuleInstanceExecutor's skip dead.
+        var (domain, analysis, session) = SliceCProducerLoopCatalogTests.Evolve(Parking);
+
+        var module = RuntimeAnalysisCache.GetOrLower(domain, session, analysis);
+
+        var names = module.Select(t => t.Name).ToList();
+        await Assert.That(names).DoesNotContain("DomainResult");
+        await Assert.That(names).DoesNotContain("ConstraintFailureException");
     }
 }

@@ -73,8 +73,8 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
         ReportNavigationNameShadowing(context, domain);
 
         // N4: names lowering emits at module scope must not be user types.
-        // Emit/RegisterTrees puts each entity with its `{Entity}Stage` enum in one tree
-        // and DomainResult in the scaffolding tree; a user type of that name compiles as CS0101.
+        // The printed C# imports Poly.Runtime (DomainResult, ConstraintFailureException) and
+        // System; a user type of one of those names shadows the import.
         ReportReservedGeneratedNames(context, domain);
 
         // S-01: one generated C# namespace per entity — cross-list names, one identifier,
@@ -537,10 +537,10 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
     /// <summary>
     /// N4 + S-01: names lowering emits at module scope must not be user types. The rows come
     /// from <see cref="ReservedNames"/> — <c>DomainResult</c>, <c>DomainResult&lt;T&gt;</c>,
-    /// <c>ConstraintFailureException</c> (scaffolding types) and <c>System</c> (the imported
-    /// namespace) — plus <c>{Entity}Stage</c> for every entity whose stage enum the emitter
-    /// actually generates (not an implicit single stage). Emit splits by entity tree, so the
-    /// collision is a duplicate top-level C# type name (CS0101).
+    /// <c>ConstraintFailureException</c> (the <c>Poly.Runtime</c> types the printed C# imports),
+    /// <c>Poly</c> and <c>System</c> (the imported namespaces) — plus <c>{Entity}Stage</c> for
+    /// every entity whose stage enum the emitter actually generates (not an implicit single
+    /// stage). A user type of an imported name shadows the import.
     /// </summary>
     private static void ReportReservedGeneratedNames(AnalysisContext context, Domain domain) {
         foreach (var type in domain.Types) {

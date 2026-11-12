@@ -181,9 +181,6 @@ public sealed class ModuleWithoutDeiSpikeTests {
                 DomainResultTypeProvider.Wrap(ClrTypeDefinitionRegistry.Shared));
             var analyzer = new TypeDefinitionNodeAnalyzer();
             foreach (var type in module) {
-                if (string.Equals(type.Name, "DomainResult", StringComparison.Ordinal)
-                    || string.Equals(type.Name, "ConstraintFailureException", StringComparison.Ordinal))
-                    continue;
                 analyzer.Analyze(ctx, type);
             }
             return new ModuleHarness(module, ctx.TypeDefinitions);

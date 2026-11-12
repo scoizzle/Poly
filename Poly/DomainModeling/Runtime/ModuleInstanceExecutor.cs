@@ -59,9 +59,6 @@ public sealed partial class ModuleInstanceExecutor {
             DomainResultTypeProvider.Wrap(AnalysisContext.CreateDefault().TypeDefinitions));
         var analyzer = new TypeDefinitionNodeAnalyzer();
         foreach (var type in module) {
-            if (string.Equals(type.Name, "DomainResult", StringComparison.Ordinal)
-                || string.Equals(type.Name, "ConstraintFailureException", StringComparison.Ordinal))
-                continue;
             analyzer.Analyze(ctx, type);
         }
         return ctx.TypeDefinitions;

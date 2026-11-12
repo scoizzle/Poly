@@ -189,4 +189,113 @@ public class CSharpWriterUnitTests {
             .Throws<InvalidOperationException>()
             .WithMessageContaining(ns);
     }
+
+    // ── R-03b / A6: the type-list header contract ────────────────────────────
+    //
+    // #nullable enable, then the System group, a blank line, the Poly group, a
+    // blank line, then the body. A group appears only when one of its identifiers
+    // is present, and with neither group the header is unchanged.
+
+    private static TypeDefinitionNode Cart(params FieldDefinitionNode[] fields) =>
+        new("Cart", Fields: [.. fields]);
+
+    private static string WriteCart(params FieldDefinitionNode[] fields) =>
+        CSharpLanguage.Write([Cart(fields)]);
+
+    private static async Task AssertHeader(string expectedHeader, string text) {
+        await Assert.That(text.StartsWith(expectedHeader, StringComparison.Ordinal))
+            .IsTrue().Because(text);
+        await Assert.That(text[expectedHeader.Length..].StartsWith("public class Cart", StringComparison.Ordinal))
+            .IsTrue().Because(text);
+    }
+
+    [Test]
+    public async Task Write_TypeDefs_Header_NeitherGroup() {
+        var text = WriteCart(new FieldDefinitionNode("Label", new NamedTypeReference("Text")));
+
+        await AssertHeader("#nullable enable\n", text);
+    }
+
+    [Test]
+    public async Task Write_TypeDefs_Header_SystemGroupOnly() {
+        var text = WriteCart(
+            new FieldDefinitionNode("PlacedOn", new NamedTypeReference("DateOnly")),
+            new FieldDefinitionNode("Items", new NamedTypeReference("List", TypeArguments: [
+                new PrimitiveTypeReference(Poly.Introspection.PrimitiveType.Int32),
+            ])));
+
+        await AssertHeader(
+            "#nullable enable\n" +
+            "using System;\n" +
+            "using System.Collections.Generic;\n" +
+            "\n",
+            text);
+    }
+
+    [Test]
+    public async Task Write_TypeDefs_Header_PolyGroupOnly() {
+        var text = WriteCart(
+            new FieldDefinitionNode("Result", new NamedTypeReference("DomainResult", TypeArguments: [
+                new NamedTypeReference("Item"),
+            ])));
+
+        await AssertHeader(
+            "#nullable enable\n" +
+            "using Poly.Runtime;\n" +
+            "\n",
+            text);
+    }
+
+    [Test]
+    public async Task Write_TypeDefs_Header_BothGroupsWithSeparatingBlankLine() {
+        var text = WriteCart(
+            new FieldDefinitionNode("PlacedOn", new NamedTypeReference("DateOnly")),
+            new FieldDefinitionNode("Result", new NamedTypeReference("DomainResult", TypeArguments: [
+                new NamedTypeReference("Item"),
+            ])),
+            new FieldDefinitionNode("Failure", new NamedTypeReference("ConstraintFailureException")));
+
+        await AssertHeader(
+            "#nullable enable\n" +
+            "using System;\n" +
+            "\n" +
+            "using Poly.DomainModeling.Runtime;\n" +
+            "using Poly.Runtime;\n" +
+            "\n",
+            text);
+    }
+
+    [Test]
+    public async Task Write_TypeDefs_Header_DomainResultLookalikes_AddNoPolyRuntimeUsing() {
+        var text = WriteCart(
+            new FieldDefinitionNode("A", new NamedTypeReference("MyDomainResult")),
+            new FieldDefinitionNode("B", new NamedTypeReference("DomainResultFoo")));
+
+        await AssertHeader("#nullable enable\n", text);
+    }
+
+    [Test]
+    public async Task Write_TypeDefs_Header_ConstraintFailureLookalikes_AddNoDomainModelingRuntimeUsing() {
+        var text = WriteCart(
+            new FieldDefinitionNode("A", new NamedTypeReference("ConstraintFailureExceptionX")),
+            new FieldDefinitionNode("B", new NamedTypeReference("MyConstraintFailureException")));
+
+        await AssertHeader("#nullable enable\n", text);
+    }
+
+    [Test]
+    public async Task Write_TypeDefs_Header_LookalikeBesideRealDomainResult_AddsOnePolyRuntimeUsing() {
+        var text = WriteCart(
+            new FieldDefinitionNode("A", new NamedTypeReference("MyDomainResult")),
+            new FieldDefinitionNode("Result", new NamedTypeReference("DomainResult", TypeArguments: [
+                new NamedTypeReference("Item"),
+            ])));
+
+        await AssertHeader(
+            "#nullable enable\n" +
+            "using Poly.Runtime;\n" +
+            "\n",
+            text);
+        await Assert.That(text.Split("using Poly.Runtime;").Length - 1).IsEqualTo(1);
+    }
 }

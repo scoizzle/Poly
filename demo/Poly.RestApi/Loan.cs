@@ -2,6 +2,8 @@
 using System;
 using System.Collections.Generic;
 
+using Poly.Runtime;
+
 public enum LoanStage
 {
     Active = 0,

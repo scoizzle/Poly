@@ -207,9 +207,9 @@ public class DslCompilerSqliteOracleTests {
     }
 
     [Test]
-    public async Task DslCompiler_EmitsScaffoldingFile_WithEnumsAndDomainResult() {
-        // The entity files reference enums + DomainResult<T> — the compiler must
-        // emit a scaffolding file or the output does not compile standalone.
+    public async Task DslCompiler_ScaffoldingFile_KeepsEnumsAndDropsDomainResult() {
+        // The entity files reference enums, so the compiler still emits the scaffolding
+        // file. The result family is Poly.Runtime's now, so nothing of it is printed.
         var compiler = new Compiler();
         var result = compiler.Compile("""
             domain Demo
@@ -220,10 +220,10 @@ public class DslCompilerSqliteOracleTests {
 
         var scaffolding = result.Files!.Single(f => f.FileName == "Poly.Types.cs").Source;
         await Assert.That(scaffolding).Contains("enum Color");
-        await Assert.That(scaffolding).Contains("record DomainResult");
-        await Assert.That(scaffolding).Contains("record DomainResult<T>");
+        await Assert.That(scaffolding).DoesNotContain("record DomainResult");
+        await Assert.That(scaffolding).DoesNotContain("record DomainResult<T>");
 
-        // Entity file references them without defining them.
+        // Entity file references the runtime type without defining it.
         var item = result.Files!.Single(f => f.FileName == "Item.cs").Source;
         await Assert.That(item).Contains("DomainResult<Item>");
     }

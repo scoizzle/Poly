@@ -1,6 +1,9 @@
 #nullable enable
 using System.Collections.Generic;
 
+using Poly.DomainModeling.Runtime;
+using Poly.Runtime;
+
 public class Patron
 {
     private List<Loan> _loans = new List<Loan>();

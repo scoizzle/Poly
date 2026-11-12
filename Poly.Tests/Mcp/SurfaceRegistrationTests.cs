@@ -36,6 +36,6 @@ public class SurfaceRegistrationTests {
         await Assert.That(typeNames).DoesNotContain("UnknownArgumentFilter");
         await Assert.That(typeNames).Contains("ArgumentSpecCatalog");
         await Assert.That(ArgumentLimits.Registry.Count).IsEqualTo(0)
-            .Because("M-01 ships the empty limits registry; the slice owning a number adds its entry");
+            .Because("G-09 adds the first registry entry (DslLimits.MaxDocumentChars); M-01 ships the registry empty");
     }
 }

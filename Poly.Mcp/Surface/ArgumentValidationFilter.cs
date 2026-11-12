@@ -106,10 +106,10 @@ internal static class ArgumentValidator {
         }
 
         // A required, absent workspace is a host status, not an argument error: hand it to the
-        // tool body, whose TryWorkspace produces the one WORKSPACE_REQUIRED envelope.
-        if (spec.Any(argument => argument.Name == "workspace" && argument.Required)
-            && (arguments is null || !arguments.ContainsKey("workspace")))
-            return new ValidationOutcome(null, InsertEmptyWorkspace: true);
+        // tool body, whose TryWorkspace produces the one WORKSPACE_REQUIRED envelope. It is only
+        // reported when every other argument is well-formed, so a defect here is never masked.
+        var insertWorkspace = spec.Any(argument => argument.Name == "workspace" && argument.Required)
+            && (arguments is null || !arguments.ContainsKey("workspace"));
 
         foreach (var argument in spec) {
             if (argument.Required && argument.Name != "workspace"
@@ -131,7 +131,7 @@ internal static class ArgumentValidator {
             }
         }
 
-        return new ValidationOutcome(null, InsertEmptyWorkspace: false);
+        return new ValidationOutcome(null, InsertEmptyWorkspace: insertWorkspace);
     }
 
     private static ValidationOutcome Verdict(string errorCode, string message) =>

@@ -56,6 +56,10 @@ public class McpProtocolTests {
             ("workspace:42 is the wrong type", "poly_define",
                 new JsonObject { ["workspace"] = 42, ["poly"] = Valid },
                 "INVALID_ARGUMENT", ["workspace", "string"]),
+            // N1: a missing workspace must not mask a defect in another argument.
+            ("a wrong-typed steps with no workspace names steps", "poly_simulate",
+                new JsonObject { ["steps"] = 42 },
+                "INVALID_ARGUMENT", ["steps"]),
             // #488's repro. M-07 widens `steps` to array-or-string and inverts this assertion.
             ("steps as a JSON array is invalid until M-07 accepts arrays", "poly_simulate",
                 new JsonObject { ["workspace"] = workspace, ["steps"] = new JsonArray() },
@@ -81,6 +85,23 @@ public class McpProtocolTests {
                 await Assert.That(observed[i].Summary).Contains(fragment)
                     .Because($"{rows[i].Row}\nobserved:\n{table}");
         }
+
+        // N2: an explicit null on a nullable optional string is valid at the wire.
+        var nullTopic = await host.ToolAsync("poly_guide", JsonNode.Parse("""{"topic":null}""")!.AsObject());
+        await Assert.That(nullTopic["ok"]?.GetValue<bool>()).IsTrue();
+    }
+
+    /// <summary>N1: a missing workspace is reported only when every other argument is well-formed.</summary>
+    [Test]
+    public async Task Validator_MissingWorkspace_DoesNotMaskAnotherDefect() {
+        var spec = ArgumentSpecCatalog.For(ToolFor("poly_simulate"));
+        var outcome = ArgumentValidator.Validate("poly_simulate",
+            Args(("steps", JsonSerializer.SerializeToElement(42))), spec, ArgumentLimits.Registry);
+
+        await Assert.That(outcome.InsertEmptyWorkspace).IsFalse()
+            .Because("a wrong-typed steps must be reported, not masked by the missing-workspace insert");
+        await Assert.That(outcome.Verdict?.ErrorCode).IsEqualTo("INVALID_ARGUMENT");
+        await Assert.That(outcome.Verdict!.Value.Message).Contains("steps");
     }
 
     /// <summary>
@@ -146,7 +167,141 @@ public class McpProtocolTests {
         // The shipped registry is empty: a 1 MB document is not rejected.
         var big = ArgumentValidator.Validate("poly_define",
             Args(("poly", JsonSerializer.SerializeToElement(new string('x', 1 << 20)))), spec, ArgumentLimits.Registry);
-        await Assert.That(big.Verdict.HasValue).IsFalse();
+        await Assert.That(big.Verdict.HasValue).IsFalse()
+            .Because("G-09 owns the first registry entry; until it lands the registry rejects nothing");
+    }
+
+    /// <summary>
+    /// S-a (N2): every parameter that is nullable in the signature has a published schema that
+    /// accepts JSON null, so an explicit null on a nullable optional string is a valid call.
+    /// </summary>
+    [Test]
+    public async Task ToolSignatures_NullableParameters_AcceptExplicitNull() {
+        var nullability = new NullabilityInfoContext();
+        foreach (var method in typeof(PolySurfaceTools).GetMethods()) {
+            var attribute = method.GetCustomAttribute<McpServerToolAttribute>();
+            if (attribute?.Name is null)
+                continue;
+            var spec = ArgumentSpecCatalog.For(ToolFor(attribute.Name));
+            foreach (var parameter in method.GetParameters()) {
+                if (nullability.Create(parameter).WriteState != NullabilityState.Nullable)
+                    continue;
+                var argument = spec.Single(candidate => candidate.Name == parameter.Name);
+                await Assert.That(argument.JsonTypes.Contains("null")).IsTrue()
+                    .Because($"{attribute.Name}.{parameter.Name} is nullable in the signature, so its published schema must accept null");
+            }
+        }
+    }
+
+    /// <summary>
+    /// N2: an explicit null is valid on a nullable string and invalid on a non-nullable boolean,
+    /// which is the line between "absent-like" and "wrong type".
+    /// </summary>
+    [Test]
+    public async Task Validator_AcceptsNullOnANullableString_RejectsNullOnABoolean() {
+        var guide = ArgumentSpecCatalog.For(ToolFor("poly_guide"));
+        var accepted = ArgumentValidator.Validate("poly_guide",
+            Args(("topic", JsonSerializer.SerializeToElement((string?)null))), guide, ArgumentLimits.Registry);
+        await Assert.That(accepted.Verdict.HasValue).IsFalse()
+            .Because("poly_guide.topic is a nullable string; an explicit null is a valid quickstart call");
+
+        var simulate = ArgumentSpecCatalog.For(ToolFor("poly_simulate"));
+        var resetNull = ArgumentValidator.Validate("poly_simulate",
+            Args(
+                ("workspace", JsonSerializer.SerializeToElement("ws")),
+                ("steps", JsonSerializer.SerializeToElement("[]")),
+                ("reset", JsonSerializer.SerializeToElement((bool?)null))),
+            simulate, ArgumentLimits.Registry);
+        await Assert.That(resetNull.Verdict?.ErrorCode).IsEqualTo("INVALID_ARGUMENT");
+        await Assert.That(resetNull.Verdict!.Value.Message).Contains("reset");
+        await Assert.That(resetNull.Verdict!.Value.Message).Contains("boolean");
+
+        var define = ArgumentSpecCatalog.For(ToolFor("poly_define"));
+        var applyNull = ArgumentValidator.Validate("poly_define",
+            Args(
+                ("workspace", JsonSerializer.SerializeToElement("ws")),
+                ("poly", JsonSerializer.SerializeToElement("domain V2")),
+                ("apply", JsonSerializer.SerializeToElement((bool?)null))),
+            define, ArgumentLimits.Registry);
+        await Assert.That(applyNull.Verdict?.ErrorCode).IsEqualTo("INVALID_ARGUMENT");
+        await Assert.That(applyNull.Verdict!.Value.Message).Contains("apply");
+    }
+
+    /// <summary>S-b (N3): two wrong types in one call report the first in parameter order.</summary>
+    [Test]
+    public async Task Validator_TwoWrongTypes_ReportsParameterOrder() {
+        var spec = new[] {
+            new ArgumentSpec("first", new HashSet<string>(StringComparer.Ordinal) { "string" }, Required: false),
+            new ArgumentSpec("second", new HashSet<string>(StringComparer.Ordinal) { "string" }, Required: false),
+        };
+        var outcome = ArgumentValidator.Validate("synthetic",
+            Args(("first", JsonSerializer.SerializeToElement(true)), ("second", JsonSerializer.SerializeToElement(true))),
+            spec, ArgumentLimits.Registry);
+
+        await Assert.That(outcome.Verdict!.Value.Message).Contains("first");
+        await Assert.That(outcome.Verdict!.Value.Message).DoesNotContain("second");
+    }
+
+    /// <summary>
+    /// N3: adjacent precedence pairs. Unknown beats a limit; a limit beats a missing required
+    /// argument; a missing required argument beats a wrong kind; a wrong kind beats the
+    /// missing-workspace insert, which is the last resort.
+    /// </summary>
+    [Test]
+    public async Task Validator_ReportsTheFirstPrecedenceCategory() {
+        var guide = ArgumentSpecCatalog.For(ToolFor("poly_guide"));
+        var limits = new Dictionary<(string Tool, string Argument), ArgumentLimit> {
+            [("poly_guide", "topic")] = new(MaxChars: 8, MaxItems: null),
+            [("poly_export", "inline")] = new(MaxChars: 3, MaxItems: null),
+        };
+
+        var unknownAndLimit = ArgumentValidator.Validate("poly_guide",
+            Args(("topic", JsonSerializer.SerializeToElement(new string('x', 40))), ("bogus", JsonSerializer.SerializeToElement(1))),
+            guide, limits);
+        await Assert.That(unknownAndLimit.Verdict!.Value.ErrorCode).IsEqualTo("UNKNOWN_ARGUMENT");
+
+        var export = ArgumentSpecCatalog.For(ToolFor("poly_export"));
+
+        var limitAndMissing = ArgumentValidator.Validate("poly_export",
+            Args(("workspace", JsonSerializer.SerializeToElement("ws")), ("inline", JsonSerializer.SerializeToElement("toolong"))),
+            export, limits);
+        await Assert.That(limitAndMissing.Verdict!.Value.ErrorCode).IsEqualTo("INVALID_ARGUMENT");
+        await Assert.That(limitAndMissing.Verdict!.Value.Message).Contains("inline");
+
+        var missingAndKind = ArgumentValidator.Validate("poly_export",
+            Args(("workspace", JsonSerializer.SerializeToElement("ws")), ("inline", JsonSerializer.SerializeToElement("yes"))),
+            export, ArgumentLimits.Registry);
+        await Assert.That(missingAndKind.Verdict!.Value.ErrorCode).IsEqualTo("INVALID_ARGUMENT");
+        await Assert.That(missingAndKind.Verdict!.Value.Message).Contains("format");
+
+        // A valid workspace with a missing format takes the missing-required branch and names format.
+        var missingFormat = ArgumentValidator.Validate("poly_export",
+            Args(("workspace", JsonSerializer.SerializeToElement("ws"))), export, ArgumentLimits.Registry);
+        await Assert.That(missingFormat.Verdict!.Value.ErrorCode).IsEqualTo("INVALID_ARGUMENT");
+        await Assert.That(missingFormat.Verdict!.Value.Message).Contains("format");
+
+        var simulate = ArgumentSpecCatalog.For(ToolFor("poly_simulate"));
+        var kindBeforeWorkspace = ArgumentValidator.Validate("poly_simulate",
+            Args(("steps", JsonSerializer.SerializeToElement(42))), simulate, ArgumentLimits.Registry);
+        await Assert.That(kindBeforeWorkspace.Verdict!.Value.ErrorCode).IsEqualTo("INVALID_ARGUMENT");
+        await Assert.That(kindBeforeWorkspace.Verdict!.Value.Message).Contains("steps");
+        await Assert.That(kindBeforeWorkspace.InsertEmptyWorkspace).IsFalse();
+
+        var onlyMissingWorkspace = ArgumentValidator.Validate("poly_export",
+            Args(("format", JsonSerializer.SerializeToElement("dsl"))), export, ArgumentLimits.Registry);
+        await Assert.That(onlyMissingWorkspace.Verdict.HasValue).IsFalse();
+        await Assert.That(onlyMissingWorkspace.InsertEmptyWorkspace).IsTrue();
+    }
+
+    /// <summary>N4: the schema map fails closed on every shape it cannot read.</summary>
+    [Test]
+    public async Task ArgumentSpecCatalog_ThrowsOnAnUnmappableSchema() {
+        await Assert.That(() => ArgumentSpecCatalog.Map("noProperties",
+            JsonDocument.Parse("""{"type":"object"}""").RootElement)).Throws<InvalidOperationException>();
+        await Assert.That(() => ArgumentSpecCatalog.Map("noType",
+            JsonDocument.Parse("""{"type":"object","properties":{"x":{"description":"x"}}}""").RootElement)).Throws<InvalidOperationException>();
+        await Assert.That(() => ArgumentSpecCatalog.Map("unpublishedRequired",
+            JsonDocument.Parse("""{"type":"object","properties":{"x":{"type":"string"}},"required":["y"]}""").RootElement)).Throws<InvalidOperationException>();
     }
 
     [Test]
@@ -189,6 +344,13 @@ public class McpProtocolTests {
         var result = ToolExceptionBoundary.Failure(exception);
         await Assert.That(result.StructuredContent!.Value.GetProperty("errorCode").GetString()).IsEqualTo(code)
             .Because($"{exception.GetType().Name}: {exception.Message}");
+    }
+
+    private static McpServerTool ToolFor(string name) {
+        var surface = new PolySurfaceTools(McpTestTools.Store, NullLogger<PolySurfaceTools>.Instance);
+        var method = typeof(PolySurfaceTools).GetMethods()
+            .Single(candidate => candidate.GetCustomAttribute<McpServerToolAttribute>()?.Name == name);
+        return McpServerTool.Create(method, surface, new McpServerToolCreateOptions());
     }
 
     private static Dictionary<string, JsonElement> Args(params (string Name, JsonElement Value)[] entries) =>

@@ -47,14 +47,17 @@ The filter sits where `UnknownArgumentFilter` sat (inside `ToolExceptionBoundary
 
 1. an unknown name → `UNKNOWN_ARGUMENT`, with the valid names;
 2. a registered limit exceeded → `INVALID_ARGUMENT`, naming the argument, the limit and the size;
-3. a **missing** required `workspace` → the filter inserts `""` and lets the tool body's
-   `TryWorkspace` produce the one `WORKSPACE_REQUIRED` envelope (no second producer, no wording
-   drift). Blank (`""`) and explicit `null` already reach `TryWorkspace` on master and are
-   characterised as `WORKSPACE_REQUIRED`; a non-null wrong type is `INVALID_ARGUMENT`;
-4. another missing required argument → `INVALID_ARGUMENT`;
-5. a wrong JSON type → `INVALID_ARGUMENT`, naming the argument, the expected type and the actual
+3. another missing required argument → `INVALID_ARGUMENT`;
+4. a wrong JSON type → `INVALID_ARGUMENT`, naming the argument, the expected type and the actual
    kind. A JSON `null` is invalid unless the schema's type includes `null`; the required
-   `workspace` is the one exception handed to the tool body.
+   `workspace` is the one exception handed to the tool body;
+5. only when **every other argument is well-formed**, a missing required `workspace` is a host
+   status: the filter inserts `""` and lets the tool body's `TryWorkspace` produce the one
+   `WORKSPACE_REQUIRED` envelope (no second producer, no wording drift). **A missing workspace is
+   reported only when every other argument is well-formed** — a defect in another argument is
+   reported first, so the missing handle never masks it. Blank (`""`) and explicit `null` already
+   reach `TryWorkspace` on master and are characterised as `WORKSPACE_REQUIRED`; a non-null wrong
+   type is `INVALID_ARGUMENT`.
 
 Within one category the first defect in parameter order is reported.
 
@@ -84,6 +87,22 @@ defect that throws an `ArgumentException` with `ParamName == "arguments"` would 
 The pre-binder filter makes the binder path unreachable for every caller error the published
 schema describes, so this path is a hole only if a future validator hole lets a malformed value
 through; the warning line names the tool, which is the evidence to fix the hole.
+
+**The `JsonException` half.** The other matched shape is the SDK's deserialisation failure. A
+`JsonException` thrown by a tool body — `poly_simulate` parsing `steps`, for example — is caught
+inside the tool and returned as `ok:false` with no `errorCode`, so it never reaches the boundary. If
+a future tool body lets a `JsonException` escape, it would be relabelled `INVALID_ARGUMENT`; the
+same warning line names the tool.
+
+**Declined guard.** An optional extra guard — require that no stack frame belongs to a `Poly*`
+assembly before calling an exception a binder failure — was considered and declined. It couples the
+boundary to assembly names and would still misclassify a binder failure that passes through a
+`Poly*` frame. The pre-binder filter is the real guard.
+
+**Messages are prose, not contract.** The two `INVALID_ARGUMENT` producers emit different summary
+texts — `Argument 'x' for tool must be a JSON string, not a number.` from the validator and
+`Invalid argument: <binder message>` from the classifier. Only `errorCode` is the contract; the
+summary is for a human or an agent reading it, and a client must not parse it.
 
 ### 5. Limits are one empty registry
 

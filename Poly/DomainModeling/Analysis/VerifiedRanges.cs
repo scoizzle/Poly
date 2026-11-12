@@ -62,11 +62,13 @@ internal static class VerifiedRanges {
     /// value) is read as master did, by its invariant round-trip text (V-05b fix round 1).</summary>
     private static decimal? Bound(object? bound) {
         if (ExactNumber.TryFrom(bound) is { } exact) return exact.ToDecimal();
+        if (bound is ulong big) return big; // above long.MaxValue, and exact in a decimal
         var value = bound switch { double d => d, float f => f, _ => double.NaN };
-        return double.IsFinite(value)
-            && decimal.TryParse(value.ToString("R", System.Globalization.CultureInfo.InvariantCulture),
-                System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var parsed)
-            ? parsed
-            : null;
+        if (!double.IsFinite(value)
+            || !decimal.TryParse(value.ToString("R", System.Globalization.CultureInfo.InvariantCulture),
+                System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var parsed))
+            return null;
+        // A finite nonzero value that rounds to 0m (scale above 28) is not 0: leave the side open.
+        return parsed == 0m && value != 0d ? null : parsed;
     }
 }

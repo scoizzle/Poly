@@ -373,7 +373,7 @@ public class DbContextGeneratorTests {
     /// <summary>V-05b fix round 2: a ulong bound above long.MaxValue converts exactly, never dropped.</summary>
     [Test]
     public async Task CheckSql_UlongBoundAboveLongMax_IsExact() {
-        var price = new Property("Price", new DomainTypeReference("Decimal"), [new RangeConstraint(0L, 18446744073709551615UL)]);
+        var price = new Property("Price", new DomainTypeReference("Decimal"), [new RangeConstraint(0UL, 18446744073709551615UL)]);
         var domain = DomainTestFactory.Create("Test", [new Entity("Item", [price], [], [], [])], [])
             with { Extensions = ["persistence"] };
 

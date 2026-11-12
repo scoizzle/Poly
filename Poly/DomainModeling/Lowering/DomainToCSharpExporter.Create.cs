@@ -246,7 +246,7 @@ public sealed partial class DomainToCSharpExporter {
         // that stage, no transition occurs, so no previousStage notify runs. One call
         // here covers both wired and unwired cases.
         if (metadata.GetStructure(targetEntity)?.HasStages == true) {
-            var firstStage = targetEntity.Stages[0].Name;
+            var firstStage = targetEntity.InitialStage()!.Name;
             if (subscriberSubs is { Count: > 0 }
                 && subscriberSubs.Any(i =>
                     string.Equals(i.Relationship.Name, rel.Name, StringComparison.Ordinal)
@@ -436,7 +436,7 @@ public sealed partial class DomainToCSharpExporter {
         bodyNodes.AddRange(ctorAssignments);
 
         if (esm.HasStages) {
-            var firstStage = entity.Stages[0];
+            var firstStage = entity.InitialStage()!;
             bodyNodes.Add(new Assignment(
                 new Member(new ThisReference(), "CurrentStage"),
                 new Member(

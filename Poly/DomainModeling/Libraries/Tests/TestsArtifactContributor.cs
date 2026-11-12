@@ -97,18 +97,21 @@ public sealed class TestsArtifactContributor : IArtifactContributor {
     /// declaration order, once per name. The initial stage is the first declared stage.
     /// </summary>
     private static List<Action> RefusedActions(Entity entity) {
-        var covered = entity.Stages[0].Actions.Select(a => a.Name)
+        // The initial stage is the first declared stage; every other stage is "later". Reference
+        // identity, not value equality: two stages may declare the same name-free shape.
+        var initial = entity.InitialStage()!;
+        var covered = initial.Actions.Select(a => a.Name)
             .Concat(entity.Actions.Select(a => a.Name))
             .ToHashSet(StringComparer.Ordinal);
         var refused = new List<Action>();
-        foreach (var action in entity.Stages.Skip(1).SelectMany(s => s.Actions))
+        foreach (var action in entity.Stages.Where(s => !ReferenceEquals(s, initial)).SelectMany(s => s.Actions))
             if (covered.Add(action.Name))
                 refused.Add(action);
         return refused;
     }
 
     private static CompilationUnitNode BuildUnit(Entity entity) {
-        var initial = entity.Stages[0];
+        var initial = entity.InitialStage()!;
         var create = new Invoke(
             new Member(new TypeReference(entity.Name), "Create"),
             Arguments(entity.Name, entity.Properties));

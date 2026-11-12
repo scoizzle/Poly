@@ -85,7 +85,7 @@ internal sealed class RuntimeTool(ISessionStore store, ILogger<RuntimeTool> logg
     private static string? StageOf(McpSessionState state, ModuleInstance instance) =>
         instance.Bag.TryGetValue(CurrentStageKey, out var stage) && stage is not null
             ? Convert.ToString(stage, CultureInfo.InvariantCulture)
-            : EntityOf(state, instance)?.Stages.FirstOrDefault()?.Name;
+            : EntityOf(state, instance)?.InitialStage()?.Name;
 
     private static Entity? EntityOf(McpSessionState state, ModuleInstance instance) =>
         state.Domain.Types.OfType<Entity>()

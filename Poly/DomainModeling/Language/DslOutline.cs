@@ -312,6 +312,16 @@ public sealed class DslOutline {
                 return true;
             }
 
+            // A top-level `function` declaration starts with the word and is not the legacy
+            // `function: entity` name form (mirrors DomainResolver.IsFunctionDeclarationStart).
+            if (t.Kind == DslTokenKind.Identifier
+                && string.Equals(t.Text, "function", StringComparison.Ordinal)
+                && !(i + 1 < tokens.Count && tokens[i + 1].Kind == DslTokenKind.Colon)) {
+                kind = "function";
+                skip = 2;
+                return true;
+            }
+
             if (IsNameColon(i)) {
                 kind = "member";
                 skip = 2;

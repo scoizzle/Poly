@@ -214,7 +214,10 @@ public static class PolyEdit {
         var kind = TopLevelKind(op.Dsl!);
 
         if (kind == "uses") {
-            var id = op.Dsl!.Trim().Split(default(char[]), StringSplitOptions.RemoveEmptyEntries).ElementAtOrDefault(1);
+            var path = TopLevelPath(op.Dsl!);
+            var id = path is not null && path.StartsWith("uses:", StringComparison.Ordinal)
+                ? path["uses:".Length..]
+                : null;
             if (id is not null && outline.Roots.Any(n => n.Path == "uses:" + id)) {
                 code = "EDIT_NAME_COLLISION";
                 error = $"The model already uses '{id}'.";
@@ -344,13 +347,13 @@ public static class PolyEdit {
     /// </summary>
     private static string? BadSnippet(SnippetShape shape) => shape.Fault switch {
         { Kind: SnippetFaultKind.UnexpectedClose } f =>
-            $"the dsl has an unmatched '}}' at dsl line {f.Line}, col {f.Col}; the dsl must be one member with balanced braces.",
+            $"the dsl has an unmatched '}}' at dsl line {f.Line}, col {f.Col}; the dsl must be one declaration with balanced braces.",
         { Kind: SnippetFaultKind.Unclosed } f =>
-            $"the dsl has an unclosed '{{' at dsl line {f.Line}, col {f.Col}; the dsl must be one member with balanced braces.",
+            $"the dsl has an unclosed '{{' at dsl line {f.Line}, col {f.Col}; the dsl must be one declaration with balanced braces.",
         { Kind: SnippetFaultKind.Multiple } f =>
-            $"the dsl contains more than one declaration (the second starts at dsl line {f.Line}, col {f.Col}); each op changes exactly one member.",
+            $"the dsl contains more than one declaration (the second starts at dsl line {f.Line}, col {f.Col}); each op changes exactly one declaration.",
         { Kind: SnippetFaultKind.Empty } =>
-            "the dsl does not declare a member, e.g. \"Amount: Decimal\".",
+            "the dsl does not declare anything, e.g. \"Amount: Decimal\".",
         { Kind: SnippetFaultKind.BadToken } f =>
             $"the dsl could not be read: {f.Detail}",
         _ => null,

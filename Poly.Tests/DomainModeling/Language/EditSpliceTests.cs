@@ -25,6 +25,17 @@ public class EditSpliceTests {
         }
         """;
 
+    /// <summary>A document with a stage, for the stage-body accept guards.</summary>
+    private const string StageDoc = """
+        domain Shop
+        uses storage
+        Order: entity {
+          Total: Number
+          Active: stage {
+          }
+        }
+        """;
+
     /// <summary>A payload that closes the parent brace and smuggles a top-level entity in.</summary>
     private const string BraceBreakout = "X: Number }\nEvil: entity {\n  Y: Number";
 
@@ -109,6 +120,28 @@ public class EditSpliceTests {
     }
 
     [Test]
+    public async Task Add_TopLevelFunction_IsAccepted() {
+        var square = PolyEdit.Apply(Doc, Edit(Add("", "function Square(a: Number): Number = a * a")));
+        await Assert.That(square.Ok).IsTrue();
+        await Assert.That(square.Text!).Contains("function Square");
+
+        var pi = PolyEdit.Apply(Doc, Edit(Add("", "function Pi(): Number = 3")));
+        await Assert.That(pi.Ok).IsTrue();
+        await Assert.That(pi.Text!).Contains("function Pi");
+    }
+
+    [Test]
+    public async Task Add_TwoTopLevelFunctions_IsMultiple() {
+        var outcome = PolyEdit.Apply(Doc,
+            Edit(Add("", "function Square(a: Number): Number = a * a\nfunction Pi(): Number = 3")));
+
+        await Assert.That(outcome.Ok).IsFalse();
+        await Assert.That(outcome.ErrorCode).IsEqualTo("EDIT_BAD_SNIPPET");
+        await Assert.That(outcome.Error!).Contains("more than one declaration");
+        await Assert.That(outcome.Text).IsNull();
+    }
+
+    [Test]
     public async Task Replace_PropertyEmittingBrace_Rejected() {
         var surface = Surface();
         var workspace = Defined(surface);
@@ -153,7 +186,7 @@ public class EditSpliceTests {
 
         await Assert.That(outcome.Ok).IsFalse();
         await Assert.That(outcome.ErrorCode).IsEqualTo("EDIT_BAD_SNIPPET");
-        await Assert.That(outcome.Error!).Contains("does not declare a member");
+        await Assert.That(outcome.Error!).Contains("does not declare anything");
         await Assert.That(outcome.Text).IsNull();
     }
 
@@ -179,6 +212,72 @@ public class EditSpliceTests {
         var outcome = PolyEdit.Apply(Doc, Edit(Add("Order", "Number: Number")));
 
         await Assert.That(outcome.Ok).IsTrue();
+    }
+
+    [Test]
+    public async Task Add_StringLiteralWithBraces_IsAccepted() {
+        var outcome = PolyEdit.Apply(Doc, Edit(Add("Order", "Note: Text pattern(\"}{\")")));
+
+        await Assert.That(outcome.Ok).IsTrue();
+        await Assert.That(outcome.Text!).Contains("Note: Text pattern(\"}{\")");
+    }
+
+    [Test]
+    public async Task Add_TrailingCommentWithBrace_IsAccepted() {
+        var outcome = PolyEdit.Apply(Doc, Edit(Add("Order", "Count: Number // }")));
+
+        await Assert.That(outcome.Ok).IsTrue();
+        await Assert.That(outcome.Text!).Contains("Count: Number // }");
+    }
+
+    [Test]
+    public async Task Add_PublicActionWithSpaceBeforeParen_IsAccepted() {
+        var outcome = PolyEdit.Apply(Doc, Edit(Add("Order", "public action Pay (bill: Money) { }")));
+
+        await Assert.That(outcome.Ok).IsTrue();
+        await Assert.That(outcome.Text!).Contains("public action Pay (bill: Money) { }");
+    }
+
+    [Test]
+    public async Task Add_SubscriptionWhen_IsAccepted() {
+        var outcome = PolyEdit.Apply(Doc, Edit(Add("Order",
+            "when loans Overdue {\n  create in fines { Amount: 5 }\n}")));
+
+        await Assert.That(outcome.Ok).IsTrue();
+        await Assert.That(outcome.Text!).Contains("when loans Overdue {");
+    }
+
+    [Test]
+    public async Task Add_StageEntry_IsAccepted() {
+        var outcome = PolyEdit.Apply(StageDoc, Edit(Add("Order.Active", "entry { assign Total to 0 }")));
+
+        await Assert.That(outcome.Ok).IsTrue();
+        await Assert.That(outcome.Text!).Contains("entry { assign Total to 0 }");
+    }
+
+    [Test]
+    public async Task Add_PolicyMember_IsAccepted() {
+        var outcome = PolyEdit.Apply(Doc, Edit(Add("Order", "PositiveTotal: policy { Total > 0 }")));
+
+        await Assert.That(outcome.Ok).IsTrue();
+        await Assert.That(outcome.Text!).Contains("PositiveTotal: policy { Total > 0 }");
+    }
+
+    [Test]
+    public async Task Replace_MemberSnippet_IsAccepted() {
+        var outcome = PolyEdit.Apply(Doc, Edit(Replace("Order.Total", "Total: Decimal")));
+
+        await Assert.That(outcome.Ok).IsTrue();
+        await Assert.That(outcome.Text!).Contains("Total: Decimal");
+    }
+
+    [Test]
+    public async Task Replace_TopLevelNode_IsAccepted() {
+        var outcome = PolyEdit.Apply(Doc,
+            Edit(Replace("Order", "Order: entity {\n  Total: Number\n  Count: Number\n}")));
+
+        await Assert.That(outcome.Ok).IsTrue();
+        await Assert.That(outcome.Text!).Contains("Count: Number");
     }
 
     // ── B2: uses:<pack> is an addressable root ──────────────────
@@ -248,10 +347,29 @@ public class EditSpliceTests {
 
     [Test]
     public async Task Replace_UsesPath_IsAddressable() {
-        var outcome = PolyEdit.Apply(Doc, Edit(Replace("uses:storage", "uses storage")));
+        var outcome = PolyEdit.Apply(Doc, Edit(Replace("uses:storage", "uses storage v2")));
 
         await Assert.That(outcome.Ok).IsTrue();
-        await Assert.That(outcome.Text).IsEqualTo(Doc);
+        await Assert.That(outcome.Text).IsEqualTo(Doc.Replace("uses storage\n", "uses storage v2\n"));
+        await Assert.That(outcome.Applied[0].Path).IsEqualTo("uses:storage");
+    }
+
+    [Test]
+    public async Task Replace_VersionedUses_LeavesNoVersionRemnant() {
+        const string Versioned = """
+            domain Shop
+            uses storage v1
+            uses http
+            Order: entity {
+              Total: Number
+            }
+            """;
+
+        var outcome = PolyEdit.Apply(Versioned, Edit(Replace("uses:storage", "uses http")));
+
+        await Assert.That(outcome.Ok).IsTrue();
+        await Assert.That(outcome.Text).IsEqualTo(Versioned.Replace("uses storage v1", "uses http"));
+        await Assert.That(outcome.Text!).DoesNotContain("v1");
     }
 
     [Test]
@@ -269,6 +387,16 @@ public class EditSpliceTests {
         await Assert.That(outcome.Ok).IsTrue();
         await Assert.That(outcome.Applied[0].Path).IsEqualTo("uses:http");
         await Assert.That(outcome.Text).Contains("uses storage v1\nuses http");
+    }
+
+    [Test]
+    public async Task Add_UsesSnippetWithLeadingComment_CollidesOnPackId() {
+        var outcome = PolyEdit.Apply(Doc, Edit(Add("", "// note\nuses storage")));
+
+        await Assert.That(outcome.Ok).IsFalse();
+        await Assert.That(outcome.ErrorCode).IsEqualTo("EDIT_NAME_COLLISION");
+        await Assert.That(outcome.Error!).Contains("already uses 'storage'");
+        await Assert.That(outcome.Text).IsNull();
     }
 
     [Test]

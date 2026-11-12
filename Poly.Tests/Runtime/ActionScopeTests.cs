@@ -448,6 +448,112 @@ public class ActionScopeTests {
         await Assert.That(() => ActionScope.Create(new Scoped("B"), null!)).Throws<ArgumentNullException>();
     }
 
+    [Test]
+    public async Task Begin_AfterAClosedFrame_StartsFreshRoot() {
+        var committed = ActionScope.Begin();
+        ActionScope.Commit(committed);
+        var afterCommit = ActionScope.Begin();
+        await Assert.That(afterCommit.IsRoot).IsTrue();
+        ActionScope.Commit(afterCommit);
+
+        var rolledBack = ActionScope.Begin();
+        ActionScope.Rollback(rolledBack);
+        var afterRollback = ActionScope.Begin();
+        await Assert.That(afterRollback.IsRoot).IsTrue();
+        ActionScope.Rollback(afterRollback);
+    }
+
+    [Test]
+    public async Task FanOut_ConcurrentTouches_AllRestoredInTouchOrder() {
+        var snapshots = new List<string>();
+        var restores = new List<string>();
+        var doubles = Enumerable.Range(0, 8)
+            .Select(index => new Scoped($"T{index}") {
+                OnSnapshot = snapshots.Add,
+                OnRestore = restores.Add
+            })
+            .ToArray();
+        var shared = new Scoped("shared") { OnSnapshot = snapshots.Add, OnRestore = restores.Add };
+
+        var root = ActionScope.Begin();
+        await Task.WhenAll(doubles.Select(doubled => Task.Run(() => {
+            for (var i = 0; i < 4; i++)
+                ActionScope.Touch(doubled);
+            ActionScope.Touch(shared);
+        })));
+
+        ActionScope.Rollback(root);
+
+        // Both logs are appended inside __Snapshot/__Restore, which run under the frame lock,
+        // so the snapshot log is the frame's touch order and the restore log is its reverse.
+        await Assert.That(doubles.All(doubled => doubled.SnapshotCount == 1)).IsTrue();
+        await Assert.That(doubles.All(doubled => doubled.RestoreCount == 1)).IsTrue();
+        await Assert.That(shared.SnapshotCount).IsEqualTo(1);
+        await Assert.That(shared.RestoreCount).IsEqualTo(1);
+        await Assert.That(string.Join(",", restores))
+            .IsEqualTo(string.Join(",", Enumerable.Reverse(snapshots)));
+    }
+
+    [Test]
+    public async Task Touch_InSiblingFlow_AfterRootClosed_Throws() {
+        var scoped = new Scoped("A");
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var root = ActionScope.Begin();
+
+        // Created while the frame is ambient, so this flow holds the frame reference.
+        var writer = Task.Run(async () => {
+            await gate.Task;
+            try {
+                ActionScope.Touch(scoped);
+                return (Exception?)null;
+            }
+            catch (Exception exception) {
+                return exception;
+            }
+        });
+
+        ActionScope.Rollback(root);
+        gate.SetResult();
+
+        await Assert.That(await writer).IsTypeOf<InvalidOperationException>();
+        await Assert.That(scoped.SnapshotCount).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task ParallelActions_OnDistinctJournals_EachOwnTheirFrame() {
+        var results = await Task.WhenAll(Enumerable.Range(0, 4).Select(index => Task.Run(() => {
+            var journal = new SpyJournal([]);
+            var scoped = new Scoped($"P{index}");
+            var token = ActionScope.Begin(journal);
+            ActionScope.Touch(scoped);
+            ActionScope.Rollback(token);
+            return (Token: token, Scoped: scoped, Journal: journal);
+        })));
+
+        // A token's frame is internal (A11), so the observable equivalent is one root token and
+        // exactly one journal revert per action, each against its own journal.
+        await Assert.That(results.All(result => result.Token.IsRoot)).IsTrue();
+        await Assert.That(results.All(result => result.Journal.RollbackCount == 1)).IsTrue();
+        await Assert.That(results.All(result => result.Journal.LastMark == 0)).IsTrue();
+        await Assert.That(results.All(result => result.Scoped.RestoreCount == 1)).IsTrue();
+        await Assert.That(ActionScope.HasOpenScope).IsFalse();
+    }
+
+    [Test]
+    public async Task Thread_DoesNotInheritAnAmbientFrame() {
+        var outer = ActionScope.Begin();
+
+        var innerIsRoot = await InFreshFlow(() => {
+            var inner = ActionScope.Begin();
+            var isRoot = inner.IsRoot;
+            ActionScope.Commit(inner);
+            return isRoot;
+        });
+
+        await Assert.That(innerIsRoot).IsTrue();
+        ActionScope.Commit(outer);
+    }
+
     private static async Task<T> InFreshFlow<T>(Func<T> body) {
         Task<T> task;
         using (ExecutionContext.SuppressFlow())
@@ -484,9 +590,17 @@ public class ActionScopeTests {
 
     /// <summary>One journal double that records the position it was reverted to.</summary>
     private sealed class SpyJournal(List<string> log) : IStorageJournal {
+        public int RollbackCount { get; private set; }
+
+        public int LastMark { get; private set; } = -1;
+
         public int Mark() => 0;
 
-        public void RollbackTo(int mark) => log.Add($"rollbackTo:{mark}");
+        public void RollbackTo(int mark) {
+            RollbackCount++;
+            LastMark = mark;
+            log.Add($"rollbackTo:{mark}");
+        }
     }
 
     private static string[] DeclaredPublic(Type type) =>

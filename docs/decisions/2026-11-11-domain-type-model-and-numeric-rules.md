@@ -89,11 +89,12 @@ Open, named by the contract (each decided by the slice that owns it; no decision
   assigned to Decimal" and by T-03's `Assign_NumberToDecimal_IsWidening`.
 - **What "assigned" covers for R4's Decimal warning** — `Open: decided in T-08`; #679's red test covers
   `assign` only, not call arguments, function returns or defaults.
-- **A declared `Number` bound outside `long` range** — error, or saturate to unbounded — `Open: decided in
-  T-02`; #515 reports it accepted silently, and OQ-6 saturation is analysis-time arithmetic, not literal
-  parsing.
-- **`Int32` / `Float` / `Double` bound and column types** — `Open: decided in T-02/P-05`;
-  `DomainTypeMapping` maps them today, but the contract states only `Number` and `Decimal`.
+- **A declared `Number` bound outside `long` range** is an **error**, decided by T-02: #515's silent
+  acceptance is fixed at parse time with a positioned "out of range" message, and OQ-6 saturation is
+  analysis-time arithmetic (`ExactNumber`), not literal parsing.
+- **`Int32` / `Float` / `Double` bound types** take `decimal`, never `double`, decided by T-02 (A1): a
+  non-Number-family declared type parses both bounds as `decimal` so one constraint never holds mixed
+  bound types; column types remain P-05's.
 
 ## Interim state, by slice
 

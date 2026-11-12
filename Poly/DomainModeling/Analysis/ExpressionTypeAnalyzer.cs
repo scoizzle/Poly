@@ -1,3 +1,5 @@
+using System.Runtime.CompilerServices;
+
 using Poly.DomainModeling.Meaning;
 using Poly.DomainModeling.Ontology;
 
@@ -46,6 +48,16 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
             ? claimed
             : expr;
 
+    /// <summary>
+    /// Calls already checked in this analysis run (#483): a <c>require</c> copy shares its policy's
+    /// expression object, so the tree walk reaches one call node twice. Keyed on the run's context,
+    /// which is what the session creates per analysis — never on this pass instance, which it reuses.
+    /// </summary>
+    private static readonly ConditionalWeakTable<AnalysisContext, HashSet<Node>> CheckedCalls = new();
+
+    private static bool FirstVisitOfCall(AnalysisContext context, FunctionCall call) =>
+        CheckedCalls.GetValue(context, _ => new HashSet<Node>(ReferenceEqualityComparer.Instance)).Add(call);
+
     public void Analyze(AnalysisContext context, Node node) {
 
         if (node is Domain domain) {
@@ -53,7 +65,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
             FunctionAnalysis.CheckDeclarations(context, domain);
             AnalyzeFunctionBodies(context, domain);
         }
-        if (node is FunctionCall call)
+        if (node is FunctionCall call && FirstVisitOfCall(context, call))
             FunctionAnalysis.CheckCall(context, call);
         if (node is Property property)
             FunctionAnalysis.CheckProperty(context, property);
@@ -153,19 +165,23 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
         }
 
         // policies (entity, stage, action)
+        // #483: a `require P` copy holds P's expression object, so one tree is walked twice and
+        // would report twice. The set is per entity walk (the session re-runs this pass) and keyed
+        // on the parameter scope, because an action's parameters change what a name infers to.
+        var walked = new WalkedExpressions();
         foreach (var policy in entity.Policies)
-            WalkExpression(context, policy.Expression, props, null, enumTypes);
+            WalkExpression(context, policy.Expression, props, null, enumTypes, walked);
         foreach (var stage in entity.Stages) {
             foreach (var policy in stage.Policies)
-                WalkExpression(context, policy.Expression, props, null, enumTypes);
+                WalkExpression(context, policy.Expression, props, null, enumTypes, walked);
         }
         foreach (var action in entity.Actions)
             foreach (var policy in action.Policies)
-                WalkExpression(context, policy.Expression, props, ParamsOf(action), enumTypes);
+                WalkExpression(context, policy.Expression, props, ParamsOf(action), enumTypes, walked);
         foreach (var stage in entity.Stages)
             foreach (var action in stage.Actions)
                 foreach (var policy in action.Policies)
-                    WalkExpression(context, policy.Expression, props, ParamsOf(action), enumTypes);
+                    WalkExpression(context, policy.Expression, props, ParamsOf(action), enumTypes, walked);
 
         // effects (actions, entry/exit, subscriptions)
         foreach (var action in entity.Actions)
@@ -186,6 +202,27 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
         action.Parameters.Count > 0
             ? action.Parameters.ToDictionary(p => p.Name, p => p.Type.TypeName, StringComparer.Ordinal)
             : null;
+
+    /// <summary>
+    /// Policy expressions already walked for this entity, per parameter scope (#483). A
+    /// <c>require</c> copy shares its policy's expression object, so one tree is reachable by two
+    /// paths; the scope is part of the key because an action's parameters can change how a name
+    /// infers, and a finding is deduped only when the context is the same.
+    /// </summary>
+    private sealed class WalkedExpressions {
+        private readonly Dictionary<string, HashSet<Node>> _byScope = new(StringComparer.Ordinal);
+
+        public bool TryEnter(DomainExpression expr, Dictionary<string, string>? parameters) {
+            var scope = parameters is null
+                ? ""
+                : string.Join('\u001f', parameters
+                    .OrderBy(p => p.Key, StringComparer.Ordinal)
+                    .Select(p => $"{p.Key}:{p.Value}"));
+            if (!_byScope.TryGetValue(scope, out var seen))
+                _byScope[scope] = seen = new HashSet<Node>(ReferenceEqualityComparer.Instance);
+            return seen.Add(expr);
+        }
+    }
 
     private static Dictionary<string, EnumType> ResolveEnums(AnalysisContext context) {
         var lookup = context.GetTypeLookup();
@@ -463,7 +500,9 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
         DomainExpression expr,
         Dictionary<string, string> props,
         Dictionary<string, string>? parameters,
-        Dictionary<string, EnumType> enumTypes) {
+        Dictionary<string, EnumType> enumTypes,
+        WalkedExpressions? walked = null) {
+        if (walked is not null && !walked.TryEnter(expr, parameters)) return;
         switch (expr) {
             case Comparison cmp:
                 CheckComparison(context, cmp, props, parameters, enumTypes);

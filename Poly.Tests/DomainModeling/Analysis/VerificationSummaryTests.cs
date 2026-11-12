@@ -524,12 +524,12 @@ public class VerificationSummaryTests {
         await Assert.That(Enum.GetValues<UnverifiedReason>()).IsEquivalentTo(ladder);
 
         for (var i = 1; i < ladder.Length; i++) {
-            var lower = WriteVerdict.Unverified(ladder[i - 1]);
-            var higher = WriteVerdict.Unverified(ladder[i]);
+            var lower = WriteVerdict.Unverified(ladder[i - 1], DomainModelDiagnosticCodes.ConstraintUndecided);
+            var higher = WriteVerdict.Unverified(ladder[i], DomainModelDiagnosticCodes.ConstraintUndecided);
             await Assert.That(lower.Worst(higher)).IsEqualTo(higher);
             await Assert.That(higher.Worst(lower)).IsEqualTo(higher);
         }
-        await Assert.That(() => WriteVerdict.Unverified((UnverifiedReason)99).Worst(WriteVerdict.Satisfied))
+        await Assert.That(() => WriteVerdict.Unverified((UnverifiedReason)99, DomainModelDiagnosticCodes.ConstraintUndecided).Worst(WriteVerdict.Satisfied))
             .Throws<ArgumentOutOfRangeException>();
     }
 
@@ -617,7 +617,9 @@ public class VerificationSummaryTests {
     [Test]
     public async Task ObservedFlow_WiderRangeSource_IsPossibleViolation() {
         // A4(ii)/(iii): both sides are `range`, DecideRange is not Satisfied, so the finding stays
-        // and a PossibleViolation fact sits beside it.
+        // and a PossibleViolation fact sits beside it. The finding is an ERROR, so this write is
+        // Violated and the fact takes no row — G3 excludes a fact whose node carries an in-scope
+        // error, or else a Violated write would also be reported as an unknown one (fix round 2).
         var (domain, analysis) = RunFlowed("""
             domain Orders
             Source: entity {
@@ -632,7 +634,8 @@ public class VerificationSummaryTests {
             .IsEqualTo(UnverifiedReason.PossibleViolation);
         var summary = analysis.GetVerification(domain);
         await Assert.That(summary.Verdict).IsEqualTo(CheckVerdict.Violated);
-        await Assert.That(summary.UnverifiedWrites.Single().Reason).IsEqualTo(UnverifiedReason.PossibleViolation);
+        await Assert.That(summary.Violations).IsEqualTo(1);
+        await Assert.That(summary.UnverifiedWrites).IsEmpty();
     }
 
     [Test]
@@ -652,9 +655,38 @@ public class VerificationSummaryTests {
         var (model, analysis) = CallChainAgainstUnorderableTargetBound();
 
         await Assert.That(analysis.GetVerification(model).Verdict).IsEqualTo(CheckVerdict.Violated);
-        await Assert.That(analysis.GetVerification(model, "Item.B").Verdict).IsEqualTo(CheckVerdict.Violated);
+        var callee = analysis.GetVerification(model, "Item.B");
+        await Assert.That(callee.Verdict).IsEqualTo(CheckVerdict.Violated);
+        // G1: the callee's parameter-arm warning is one enriched row, not a warning plus an orphan.
+        await Assert.That(callee.UnverifiedWrites.Count).IsEqualTo(1);
+        await Assert.That(callee.UnverifiedWrites.Single().Code)
+            .IsEqualTo(DomainModelDiagnosticCodes.EffectConstraintViolation);
         var caller = analysis.GetVerification(model, "Item.A");
         await Assert.That(caller.Verdict).IsEqualTo(CheckVerdict.Proven);
         await Assert.That(caller.UnverifiedWrites).IsEmpty();
+    }
+
+    [Test]
+    public async Task ParameterArm_UnboundedParameter_IsOneEnrichedRow() {
+        // G1: the parameter arm reports UnknownBound as a DMEFF008 warning
+        // (ValidateParameterConstraintCompatibility), so the row's code is DMEFF008 — not the
+        // DMCS003 a reason-derived mapping would guess. One finding, one enriched row.
+        var entity = new Entity("Item",
+            [NumProp("Total", new RangeConstraint(0d, 10d))],
+            [Act("Set", [NumProp("x")],
+                new AssignEffect(DomainExpression.Property("Total"), DomainExpression.Parameter("x")))],
+            [], []);
+        var model = Domain(entity);
+
+        var analysis = DomainModelAnalyzer.Analyze(model);
+
+        var summary = analysis.GetVerification(model);
+        await Assert.That(summary.Verdict).IsEqualTo(CheckVerdict.Unknown);
+        await Assert.That(summary.UnverifiedWrites.Count).IsEqualTo(1);
+        var row = summary.UnverifiedWrites.Single();
+        await Assert.That(row.Code).IsEqualTo(DomainModelDiagnosticCodes.EffectConstraintViolation);
+        await Assert.That(row.Property).IsEqualTo("Total");
+        await Assert.That(row.Constraint).IsEqualTo("range(0, 10)");
+        await Assert.That(row.Reason).IsEqualTo(UnverifiedReason.UnknownBound);
     }
 }

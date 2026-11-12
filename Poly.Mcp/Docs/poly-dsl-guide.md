@@ -1236,9 +1236,10 @@ diverging:
   value on an `assign` or an initializer in this slice, so `length(...)`, `pattern(...)` and
   `equals(...)` are not flow-checked there — but `length` **is** decided on an observed flow
   and in the parameter arm, which compare declared bounds. The **call chain** records
-  nothing: a call-chain postcondition whose value range is not known is skipped silently,
-  and a call-chain `DMEFF008` warning has no fact behind it, so read those findings
-  directly. `poly_check` still prints `proven` for a model whose only findings are
+  nothing of its own: a call-chain postcondition whose value range is not known is skipped
+  silently, and a call-chain `DMEFF008` warning has no fact of its own — though a fact the
+  callee's own direct analysis recorded on the same node does enrich its row — so read those
+  findings directly. `poly_check` still prints `proven` for a model whose only findings are
   warnings (the verdict flip is M-05), so read the findings, not the verdict word. A
   call-chain finding is attributed to the **callee** element that assigns (the chain is
   named in its message), so a summary scoped to the caller reads `proven` while the whole

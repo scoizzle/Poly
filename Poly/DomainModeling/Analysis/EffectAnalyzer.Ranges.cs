@@ -120,8 +120,11 @@ internal sealed partial class EffectAnalyzer {
     }
 
     private static WriteVerdict DecideWrite(Constraint constraint, AbstractValue? value, DomainExpression assigned) {
-        if (ConstraintKinds.Of(constraint) is null) return WriteVerdict.Unverified(UnverifiedReason.NonFlowCheckedKind);
-        if (value is null) return WriteVerdict.Unverified(UnverifiedReason.UnknownBound);
+        if (ConstraintKinds.Of(constraint) is null)
+            return WriteVerdict.Unverified(
+                UnverifiedReason.NonFlowCheckedKind, DomainModelDiagnosticCodes.ConstraintUndecided);
+        if (value is null)
+            return WriteVerdict.Unverified(UnverifiedReason.UnknownBound, DomainModelDiagnosticCodes.ConstraintUndecided);
         switch (ConstraintValidation.Decide(constraint, value)) {
             case ConstraintVerdict.Satisfied:
                 return WriteVerdict.Satisfied;
@@ -129,8 +132,9 @@ internal sealed partial class EffectAnalyzer {
                 return WriteVerdict.Violated;
             default:
                 return constraint is RangeConstraint && value.NumericRange is not null
-                    ? WriteVerdict.Unverified(UnverifiedReason.PossibleViolation)
-                    : WriteVerdict.Unverified(OpaqueReason(assigned));
+                    ? WriteVerdict.Unverified(
+                        UnverifiedReason.PossibleViolation, DomainModelDiagnosticCodes.EffectConstraintViolation)
+                    : WriteVerdict.Unverified(OpaqueReason(assigned), DomainModelDiagnosticCodes.ConstraintUndecided);
         }
     }
 
@@ -164,31 +168,24 @@ internal sealed partial class EffectAnalyzer {
                         ? $"Assigned expression value range [{FormatBound(nr.Min, lower: true)}, {FormatBound(nr.Max, lower: false)}] is entirely outside " +
                           $"constraint {described} on property '{targetProp.Name}'."
                         : $"Constraint {described} on property '{targetProp.Name}' has a bound that cannot be ordered against a number, so no assigned value can satisfy it.",
-                    DomainModelDiagnosticCodes.EffectConstraintViolation);
+                    finding.Verdict.Code!);
                 break;
             case WriteOutcome.Unverified when finding.Verdict.Reason == UnverifiedReason.PossibleViolation && numeric is { } range:
                 context.ReportWarning(
                     errorNode,
                     $"Assigned expression value range [{FormatBound(range.Min, lower: true)}, {FormatBound(range.Max, lower: false)}] can fall outside " +
                     $"constraint {described} on property '{targetProp.Name}'.",
-                    DomainModelDiagnosticCodes.EffectConstraintViolation);
+                    finding.Verdict.Code!);
                 break;
             case WriteOutcome.Unverified:
                 context.ReportWarning(
                     errorNode,
                     $"Cannot verify '{writeText}' against constraint " +
-                    $"{described} on property '{targetProp.Name}': {UnverifiedReasonText(finding.Verdict.Reason)}.",
-                    DomainModelDiagnosticCodes.ConstraintUndecided);
+                    $"{described} on property '{targetProp.Name}': {UnverifiedReasonText.Of(finding.Verdict.Reason)}.",
+                    finding.Verdict.Code!);
                 break;
         }
     }
-
-    private static string UnverifiedReasonText(UnverifiedReason? reason) => reason switch {
-        UnverifiedReason.UnsupportedOperator => "the expression uses an operator analysis does not model",
-        UnverifiedReason.NonFlowCheckedKind => "the constraint kind is not checked against computed values",
-        UnverifiedReason.RecursionCut => "the value comes from a recursive invoke whose effect was cut",
-        _ => "the assigned value has no bound analysis can use",
-    };
 
     private static bool IsRangeSubsumed(RangeConstraint inner, RangeConstraint outer) {
         var innerMin = inner.Minimum is not null ? NumericBound.ToDoubleOrNull(inner.Minimum) : double.NegativeInfinity;

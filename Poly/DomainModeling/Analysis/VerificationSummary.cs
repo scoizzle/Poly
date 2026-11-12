@@ -132,14 +132,21 @@ public static class VerificationSummaryExtensions {
     /// A2: the rows are the write findings, not the facts — a non-Range kind (V-08) and the
     /// call-chain path (V-05) report a diagnostic and record no fact, and the summary must show
     /// them. A fact on the same node <em>and</em> with the same reported code supplies the property,
-    /// constraint and reason, so two findings on one node keep their own (E4). A fact with no finding
-    /// is synthesised into a row, so <see cref="CheckVerdict.Unknown"/> always has something to show
-    /// (E5a). Rows are de-duplicated by (node, code) so one write is one row.
+    /// constraint and reason, so two findings on one node keep their own (E4); when several facts
+    /// share that key the worst reason wins (G4). A fact with no finding is synthesised into a row,
+    /// except on a node that carries an in-scope error — that write is Violated, not unknown (G3).
+    /// Rows are de-duplicated by (node, code) so one write is one row.
     /// </summary>
     private static List<UnverifiedWriteFact> UnverifiedRows(
         AnalysisResult analysis, Domain domain, WriteVerificationFacts facts, SelectScope scope) {
         var rows = new List<UnverifiedWriteFact>();
         var seen = new HashSet<(Node Node, string Code)>(NodeCodeComparer.Instance);
+        var failed = new HashSet<Node>(NodeIdentityComparer.Instance);
+        foreach (var diagnostic in analysis.Diagnostics) {
+            if (diagnostic.Severity == DiagnosticSeverity.Error && scope.Contains(domain, diagnostic.Node))
+                failed.Add(diagnostic.Node);
+        }
+
         foreach (var diagnostic in analysis.Diagnostics) {
             var code = diagnostic.Code;
             if (code is null || !IsUnverifiedWriteFinding(code, diagnostic.Severity))
@@ -149,9 +156,7 @@ public static class VerificationSummaryExtensions {
             if (!seen.Add((diagnostic.Node, code)))
                 continue;
 
-            var fact = facts.Unverified.FirstOrDefault(f =>
-                ReferenceEquals(f.Effect, diagnostic.Node)
-                && string.Equals(f.ReportedCode, code, StringComparison.Ordinal));
+            var fact = WorstFact(facts.Unverified, diagnostic.Node, code);
             rows.Add(new UnverifiedWriteFact(
                 DomainElementPath.Resolve(domain, diagnostic.Node),
                 code,
@@ -162,20 +167,46 @@ public static class VerificationSummaryExtensions {
         }
 
         // A recorded fact whose finding did not surface still means Unknown; without a row the
-        // verdict would say not-proven and show nothing.
-        foreach (var fact in facts.Unverified) {
-            if (!scope.Contains(domain, fact.Effect) || !seen.Add((fact.Effect, fact.ReportedCode)))
+        // verdict would say not-proven and show nothing. A fact on a node that carries an in-scope
+        // error is excluded: that write is Violated, never unknown (G3).
+        foreach (var fact in InWorstFirstOrder(facts.Unverified)) {
+            if (!scope.Contains(domain, fact.Effect) || failed.Contains(fact.Effect))
+                continue;
+            if (!seen.Add((fact.Effect, fact.ReportedCode)))
                 continue;
             rows.Add(new UnverifiedWriteFact(
                 DomainElementPath.Resolve(domain, fact.Effect),
                 fact.ReportedCode,
-                $"Write to '{fact.TargetProperty}' against {fact.Constraint} is not verified: {fact.Reason}.",
+                $"Write to '{fact.TargetProperty}' against {fact.Constraint} is not verified: " +
+                $"{UnverifiedReasonText.Of(fact.Reason)}.",
                 fact.TargetProperty,
                 fact.Constraint,
                 fact.Reason));
         }
         return rows;
     }
+
+    /// <summary>
+    /// The fact belonging to one finding: same node and same reported code. When a node carries
+    /// several facts of one code, the worst reason wins deterministically instead of the first
+    /// declared (G4).
+    /// </summary>
+    private static UnverifiedWrite? WorstFact(
+        IReadOnlyList<UnverifiedWrite> facts, Node node, string code) {
+        UnverifiedWrite? worst = null;
+        foreach (var fact in facts) {
+            if (!ReferenceEquals(fact.Effect, node)
+                || !string.Equals(fact.ReportedCode, code, StringComparison.Ordinal))
+                continue;
+            if (worst is null || WriteVerdict.RankFor(fact.Reason) > WriteVerdict.RankFor(worst.Reason))
+                worst = fact;
+        }
+        return worst;
+    }
+
+    /// <summary>The facts worst reason first, so a de-duplicating pass keeps the worst of a tie.</summary>
+    private static IEnumerable<UnverifiedWrite> InWorstFirstOrder(IReadOnlyList<UnverifiedWrite> facts) =>
+        facts.OrderByDescending(fact => WriteVerdict.RankFor(fact.Reason));
 
     /// <summary>
     /// The write-unverified warning vocabulary (A2): every <c>DMCS003</c> and a <c>DMEFF008</c>

@@ -125,7 +125,8 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
                         DomainModelDiagnosticCodes.ConstraintUndecided);
                     WriteRecorder.Record(
                         context, domain, target.Value.Property, target.Value.Property.Name, constraint,
-                        WriteVerdict.Unverified(UnverifiedReason.UnknownBound));
+                        WriteVerdict.Unverified(
+                            UnverifiedReason.UnknownBound, DomainModelDiagnosticCodes.ConstraintUndecided));
                     continue;
                 }
 
@@ -157,7 +158,8 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
                     DomainModelDiagnosticCodes.EffectConstraintViolation);
                 WriteRecorder.Record(
                     context, domain, target.Value.Property, target.Value.Property.Name, constraint,
-                    WriteVerdict.Unverified(UnverifiedReason.PossibleViolation));
+                    WriteVerdict.Unverified(
+                        UnverifiedReason.PossibleViolation, DomainModelDiagnosticCodes.EffectConstraintViolation));
             }
 
             // #439: `optional` is the only way an entity property may hold null, so a required

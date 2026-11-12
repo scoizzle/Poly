@@ -21,11 +21,11 @@ public enum OperandExpect {
 /// One operand-agreement row: a lowered tree whose operands are typed <see cref="Parameter"/>s, what
 /// analysis must do with it, and the result type and value a row that runs must produce.
 /// <see cref="CommonType"/> is the literal the row states for its result type, with a one-line reason at the row;
-/// <see cref="Owner"/> is a seed hint for the first red run only.
+/// <see cref="Read"/> replaces the typed read with an untyped one.
 /// </summary>
 public sealed record OperandCase(
     Type Kind, string Name, OperandExpect Expect, Func<Node> Build, object?[] Args,
-    Type? CommonType = null, object? Value = null, string Owner = "NONE") {
+    Type? CommonType = null, object? Value = null, Func<ExecutionResult, object?>? Read = null) {
     public override string ToString() => $"{Kind.Name}.{Name}";
 }
 
@@ -35,10 +35,10 @@ public sealed record OperandCase(
 /// whose node is inside the tree; also an analysis that threw). <see cref="Compile"/> is <c>rejected-by-analysis</c>
 /// (compile threw an <see cref="InvalidOperationException"/> carrying the first in-tree Error's message),
 /// <c>backstop</c> (compile threw an <see cref="InvalidOperationException"/> without it), <c>compile-threw:Type</c> (any
-/// other compile exception), <c>run-threw:Type</c> (it compiled and the run or the read threw), <c>wrong-value</c> (a
-/// <c>Converts</c> or <c>Accepts</c> row that ran to a value other than the expected one), <c>ran</c> (a <c>Rejects</c>
-/// row that compiled and ran) or <c>ok</c> (a <c>Converts</c> or <c>Accepts</c> row that ran, with the expected value
-/// when the row states one). <see cref="Detail"/> is the message behind the outcome and is never part of the ledger.
+/// other compile exception), <c>run-threw:Type</c> (a <c>Converts</c> or <c>Accepts</c> row compiled and the run or the read threw),
+/// <c>wrong-value</c> (such a row ran to a value other than the expected one) or <c>ok</c> (a <c>Converts</c> or
+/// <c>Accepts</c> row that ran, with the expected value when the row states one; a <c>Rejects</c> row that compiled,
+/// which is never run because an ill-typed tree reads garbage that differs between platforms). <see cref="Detail"/> is the message behind the outcome and is never part of the ledger.
 /// </summary>
 public sealed record OperandObservation(string Analysis, string Compile, string Detail) {
     public string Observed => $"analysis={Analysis};compile={Compile}";
@@ -78,8 +78,8 @@ public class LoweredTreeOperandCoverageTests {
         Wrap(new SwitchStatement(key, [new SwitchCase(pattern, caseBody)], defaultBody));
 
     static OperandCase Row(Type kind, string name, OperandExpect expect, Func<Node> build, object?[] args,
-        Type? type = null, object? value = null, string owner = "NONE") =>
-        new(kind, name, expect, build, args, type, value, owner);
+        Type? type = null, object? value = null, Func<ExecutionResult, object?>? read = null) =>
+        new(kind, name, expect, build, args, type, value, read);
 
     static readonly OperandCase[] Rows = [
         // Add: common type is the wider arithmetic type, or string when one side is text.
@@ -149,32 +149,35 @@ public class LoweredTreeOperandCoverageTests {
         Row(typeof(Assignment), "IndexNumberIntoNumberArray", Accepts, () => { var a = NumArray(); var i = Num("i"); return Wrap(new Assignment(new IndexAccess(a, i), Num("v")), new IndexAccess(a, i)); }, [new long[] { 1 }, 0L, 7L], typeof(long), 7L), // common type: identical element and value types
 
         // Conditional: both arms must reach one common type (or null for a reference arm).
-        Row(typeof(Conditional), "DecimalNumber", Converts, () => Pick(Flag(), Dec(), Num()), [false, 1.5m, 2L], typeof(decimal), 2m, "#605 T-09"), // common type: the integral arm widens to decimal
-        Row(typeof(Conditional), "NumberDecimal", Converts, () => Pick(Flag(), Num(), Dec()), [true, 2L, 1.5m], typeof(decimal), 2m, "#605 T-09"), // common type: the integral arm widens to decimal
+        Row(typeof(Conditional), "DecimalNumber", Converts, () => Pick(Flag(), Dec(), Num()), [false, 1.5m, 2L], typeof(decimal), 2m), // common type: the integral arm widens to decimal
+        Row(typeof(Conditional), "NumberDecimal", Converts, () => Pick(Flag(), Num(), Dec()), [true, 2L, 1.5m], typeof(decimal), 2m), // common type: the integral arm widens to decimal
         Row(typeof(Conditional), "TextNumber", Rejects, () => Pick(Flag(), Txt(), Num()), [false, "a", 2L]), // common type: none, text and number share no type
         Row(typeof(Conditional), "DecimalText", Rejects, () => Pick(Flag(), Dec(), Txt()), [false, 1.5m, "a"]), // common type: none, decimal and text share no type
         Row(typeof(Conditional), "EntityDecimal", Rejects, () => Pick(Flag(), Ent(), Dec()), [false, new Item(1m), 1.5m]), // common type: none, an entity and a decimal share no type
         Row(typeof(Conditional), "NumberNumber", Accepts, () => Pick(Flag(), Num(), Num("m")), [false, 2L, 3L], typeof(long), 3L), // common type: identical arm types
-        Row(typeof(Conditional), "NullableThenNumberNullTaken", Accepts, () => Pick(Flag(), OptNum(), Num()), [true, null, 5L], typeof(long?), null, "#803 T-06"), // common type: long? (the long arm converts to long?)
-        Row(typeof(Conditional), "NumberThenNullableNullTaken", Accepts, () => Pick(Flag(), Num(), OptNum()), [false, 5L, null], typeof(long?), null, "#803 T-06"), // common type: long? (the long arm converts to long?)
-        Row(typeof(Conditional), "ThreeArmsDecimalNumberDecimal", Converts, () => Pick(Flag("f1"), Dec(), Pick(Flag("f2"), Num(), Dec("d2"))), [false, 1.5m, true, 2L, 3.5m], typeof(decimal), 2m, "#605 T-09"), // common type: the nested integral arm widens to decimal
+        Row(typeof(Conditional), "NullableThenNumberNullTaken", Accepts, () => Pick(Flag(), OptNum(), Num()), [true, null, 5L], typeof(long?), null), // common type: long? (the long arm converts to long?)
+        Row(typeof(Conditional), "NumberThenNullableNullTaken", Accepts, () => Pick(Flag(), Num(), OptNum()), [false, 5L, null], typeof(long?), null), // common type: long? (the long arm converts to long?)
+        Row(typeof(Conditional), "ThreeArmsDecimalNumberDecimal", Converts, () => Pick(Flag("f1"), Dec(), Pick(Flag("f2"), Num(), Dec("d2"))), [false, 1.5m, true, 2L, 3.5m], typeof(decimal), 2m), // common type: the nested integral arm widens to decimal
         Row(typeof(Conditional), "ThreeArmsTextInside", Rejects, () => Pick(Flag("f1"), Dec(), Pick(Flag("f2"), Num(), Txt())), [false, 1.5m, true, 2L, "a"]), // common type: none, the nested arms share no type
         Row(typeof(Conditional), "NumberCondition", Rejects, () => Pick(Num("c"), Num(), Num("m")), [2L, 2L, 3L]), // common type: none, the condition is not Boolean
 
         // Coalesce: the right arm must convert to the left arm's underlying type.
-        Row(typeof(Coalesce), "OptionalDecimalNumber", Converts, () => Wrap(new Coalesce(OptDec(), Num())), [null, 2L], typeof(decimal), 2m, "#605 T-09"), // common type: decimal (the long arm widens)
-        Row(typeof(Coalesce), "OptionalNumberDecimal", Converts, () => Wrap(new Coalesce(OptNum(), Dec())), [null, 1.5m], typeof(decimal), 1.5m, "#605 T-09"), // common type: decimal (long? coalesced with decimal widens)
+        Row(typeof(Coalesce), "OptionalDecimalNumber", Converts, () => Wrap(new Coalesce(OptDec(), Num())), [null, 2L], typeof(decimal), 2m), // common type: decimal (the long arm widens)
+        Row(typeof(Coalesce), "OptionalNumberDecimal", Converts, () => Wrap(new Coalesce(OptNum(), Dec())), [null, 1.5m], typeof(decimal), 1.5m), // common type: decimal (long? coalesced with decimal widens)
         Row(typeof(Coalesce), "TextNumber", Rejects, () => Wrap(new Coalesce(Txt(), Num())), ["a", 2L]), // common type: none, text and number share no type
         Row(typeof(Coalesce), "OptionalNumberNumber", Accepts, () => Wrap(new Coalesce(OptNum(), Num())), [null, 2L], typeof(long), 2L), // common type: long
         Row(typeof(Coalesce), "EntityDecimal", Rejects, () => Wrap(new Coalesce(Ent(), Dec())), [null, 1.5m]), // common type: none, an entity and a decimal share no type
 
         // SwitchStatement in value position: case and default bodies merge into one value. As a statement nothing merges.
         // Arguments bind in emission order: key, default body, then the case bodies.
-        Row(typeof(SwitchStatement), "DecimalCaseNumberDefault", Converts, () => Switched(Num("key"), new Constant(1L), Dec(), Num()), [0L, 2L, 1.5m], typeof(decimal), 2m, "#805 T-21"), // common type: the integral arm widens to decimal
-        Row(typeof(SwitchStatement), "NumberCaseDecimalDefault", Converts, () => Switched(Num("key"), new Constant(1L), Num(), Dec()), [1L, 1.5m, 2L], typeof(decimal), 2m, "#805 T-21"), // common type: the integral arm widens to decimal
+        Row(typeof(SwitchStatement), "DecimalCaseNumberDefault", Converts, () => Switched(Num("key"), new Constant(1L), Dec(), Num()), [0L, 2L, 1.5m], typeof(decimal), 2m), // common type: the integral arm widens to decimal
+        Row(typeof(SwitchStatement), "NumberCaseDecimalDefault", Converts, () => Switched(Num("key"), new Constant(1L), Num(), Dec()), [1L, 1.5m, 2L], typeof(decimal), 2m), // common type: the integral arm widens to decimal
         Row(typeof(SwitchStatement), "TextCaseNumberDefault", Rejects, () => Switched(Num("key"), new Constant(1L), Txt(), Num()), [0L, 2L, "a"]), // common type: none, the bodies share no type
         Row(typeof(SwitchStatement), "NumberCaseNumberDefault", Accepts, () => Switched(Num("key"), new Constant(1L), Num(), Num("m")), [0L, 3L, 2L], typeof(long), 3L), // common type: identical body types
         Row(typeof(SwitchStatement), "PatternTextAgainstNumberSubject", Rejects, () => Switched(Num("key"), new Constant("a"), Num(), Num("m")), [1L, 3L, 2L]), // common type: none, a text pattern never matches a number
+        // #805's exact tree: Constant arms are used here because this is the reported shape; read as the report read it, the untyped result value.
+        Row(typeof(SwitchStatement), "Issue805RawReadKey1", Converts, () => Wrap(new SwitchStatement(Num("key"), [new SwitchCase(new Constant(1L), new Constant(1.5m))], new Constant(2L))), [1L], null, 1.5m, exec => exec.Result.Value), // common type: the integral default widens to decimal
+        Row(typeof(SwitchStatement), "Issue805RawReadKey0", Converts, () => Wrap(new SwitchStatement(Num("key"), [new SwitchCase(new Constant(1L), new Constant(1.5m))], new Constant(2L))), [0L], null, 2m, exec => exec.Result.Value), // common type: the integral default widens to decimal
         Row(typeof(SwitchStatement), "StatementMixedAssignments", Accepts, () => {
             var vd = new Variable("vd");
             var vn = new Variable("vn");
@@ -348,14 +351,17 @@ public class LoweredTreeOperandCoverageTests {
             return new(verdict, $"compile-threw:{ex.GetType().Name}", ex.Message);
         }
 
+        if (row.Expect == Rejects)
+            return new(verdict, "ok", "");
+
         try {
             using var exec = Interpreter.Execute(program, state => state.SetArgs(row.Args));
-            if (row.Expect == Rejects)
-                return new(verdict, "ran", "");
-            if (row.CommonType is null)
+            if (row.Read is null && row.CommonType is null)
                 return new(verdict, "ok", "");
-            var read = typeof(ExecutionResult).GetMethod(nameof(ExecutionResult.GetValue))!
-                .MakeGenericMethod(row.CommonType).Invoke(exec, null);
+            var read = row.Read is not null
+                ? row.Read(exec)
+                : typeof(ExecutionResult).GetMethod(nameof(ExecutionResult.GetValue))!
+                    .MakeGenericMethod(row.CommonType!).Invoke(exec, null);
             return Equals(read, row.Value)
                 ? new(verdict, "ok", "")
                 : new(verdict, "wrong-value", $"read '{read ?? "null"}', expected '{row.Value ?? "null"}'");
@@ -379,7 +385,7 @@ public class LoweredTreeOperandCoverageTests {
     }
 
     static string SeedLine(OperandCase row, OperandObservation seen) =>
-        $"{row.Kind.Name} | {row.Name} | {row.Expect} | {seen.Observed} | {Repro(row)} | {row.Owner} | detail: {seen.Detail}";
+        $"{row.Kind.Name} | {row.Name} | {row.Expect} | {seen.Observed} | {Repro(row)} | detail: {seen.Detail}";
 
     static IEnumerable<(OperandCase Row, OperandObservation Seen)> LiveGaps() =>
         Rows.Select(row => (Row: row, Seen: Observations.Value[Key(row)])).Where(pair => !Met(pair.Row, pair.Seen));
@@ -433,7 +439,7 @@ public class LoweredTreeOperandCoverageTests {
                 .Select(pair => SeedLine(pair.Row, pair.Seen));
             var summary = string.Join(", ", drifts.GroupBy(drift => drift.Kind).Select(group => $"{group.Key}={group.Count()}"));
             Assert.Fail($"{live.Count} live gap(s) of {Rows.Length} rows; ledger drift: {summary}\n"
-                + "Kind | Case | Expect | Observed | repro tree | existing issue+owner or NONE | detail\n"
+                + "Kind | Case | Expect | Observed | repro tree | detail\n"
                 + string.Join("\n", seeds) + "\n"
                 + string.Join("\n", problems.Where(problem => !problem.StartsWith("Widened", StringComparison.Ordinal))));
         }

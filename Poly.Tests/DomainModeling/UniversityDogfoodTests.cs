@@ -154,7 +154,7 @@ public class UniversityDogfoodTests {
         var enrollment2 = enroll2.Instance!;
         var confirmFull = exec.Invoke(enrollment2, "Confirm");
         await Assert.That(confirmFull.Succeeded).IsFalse();
-        await Assert.That(confirmFull.FailedGuards).Contains("not_SectionFull");
+        await Assert.That(confirmFull.FailedGuards).Contains("SectionFull");
 
         var drop = exec.Invoke(enrollment, "Drop");
         await Assert.That(drop.Succeeded).IsTrue();

@@ -645,6 +645,69 @@ public class FailureTypingTests {
         await Assert.That(outcomes[2].Message).IsEqualTo("'Poke' blocked by policy 'IsOk'.");
     }
 
+    private const string EntryCreateDsl = """
+        domain Lab
+        Parent: entity {
+          N: Number default(0)
+          kids: many Kid
+          Open: stage { entry { create in kids { Qty: N } } }
+        }
+        Kid: entity { Qty: Number range(1, 5) }
+        """;
+
+    /// <summary>A void body (stage entry) throws the callee's text through ThrowFrom; the VM and the printed assembly agree.</summary>
+    [Test]
+    public async Task VoidEntryCreate_WhenTheCalleeFails_ThrowsTheCalleeTextOnBothSides() {
+        var (vm, printed) = ParityScenario.FromDsl(EntryCreateDsl, "FailureTypingThrowFrom")
+            .Run(side => side.Create("Parent"));
+
+        await Assert.That(vm[0].Success).IsFalse();
+        await Assert.That(vm[0].Message).IsEqualTo("'Qty' must be >= 1.");
+        await Assert.That(printed[0].Success).IsFalse();
+        await Assert.That(printed[0].Message).IsEqualTo("'Qty' must be >= 1.");
+    }
+
+    [Test]
+    public async Task VoidEntryCreate_PrintsThrowFromNotATypedFailure() {
+        var cs = Print(EntryCreateDsl);
+
+        await Assert.That(cs).Contains("throw new ConstraintFailureException(");
+        await Assert.That(cs).Contains("ErrorMessage ?? \"\"");
+    }
+
+    /// <summary>Literal per-kind rows for every propagation S3 touched, through the printed assembly and both hosts.</summary>
+    [Test]
+    [Arguments(NestedCreateDsl, "Product", "Hold", DomainFailureKind.Range, "'Qty' must be >= 1.", "Product.Hold.Reservation.Qty", null)]
+    [Arguments(InvokeCascadeDsl, "Parent", "Go", DomainFailureKind.Policy, "'Poke' blocked by policy 'IsOk'.", "Parent.Go.Child.Poke", "IsOk")]
+    public async Task Propagation_PerKind_PrintedAssemblyAndBothHosts(
+        string dsl, string entity, string action, DomainFailureKind kind, string message, string path, string? guard) {
+        var asm = ExportedCSharp.CompileAndLoad(Print(dsl));
+        var type = asm.GetType(entity)!;
+        var instance = Instantiate(type)!;
+        if (entity == "Parent")
+            type.GetMethod("AddKid")!.Invoke(instance, []);
+        var method = type.GetMethod(action)!;
+        var result = method.Invoke(instance, method.GetParameters().Length == 0 ? [] : [0L])!;
+        var failure = Failed(result);
+        await Assert.That(failure.Kind).IsEqualTo(kind);
+        await Assert.That(failure.Message).IsEqualTo(message);
+        await Assert.That(failure.ElementPath).IsEqualTo(path);
+        await Assert.That(failure.Guard).IsEqualTo(guard);
+
+        var outcomes = await ParityScenario.FromDsl(dsl, "FailureTypingPerKind" + Guid.NewGuid().ToString("N"))
+            .AssertAgree(side => {
+                side.Create(entity);
+                if (entity == "Parent")
+                    side.Invoke("AddKid");
+                if (action == "Hold")
+                    side.Invoke(action, ("q", 0L));
+                else
+                    side.Invoke(action);
+            });
+        await Assert.That(outcomes[^1].Success).IsFalse();
+        await Assert.That(outcomes[^1].Message).IsEqualTo(message);
+    }
+
     [Test]
     [Arguments("DomainResult")]
     [Arguments("Poly")]

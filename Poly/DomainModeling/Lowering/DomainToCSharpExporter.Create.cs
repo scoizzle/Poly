@@ -319,7 +319,10 @@ public sealed partial class DomainToCSharpExporter {
 
     /// <summary>
     /// Trailing omittable Create/ctor parameters: defaulted or optional properties
-    /// that are not entry-assigned, in the order the Create factory appends them.
+    /// that are not entry-assigned, in declaration order — the order the Create
+    /// factory appends them. The two producers of the trailing block (this list and
+    /// <c>AddEntityProperties</c>' defaultedCtorParams) must stay in that one order;
+    /// L-08 removes the block split entirely.
     /// </summary>
     internal static List<Property> TrailingOmittableProperties(
         Entity entity,
@@ -328,7 +331,7 @@ public sealed partial class DomainToCSharpExporter {
         var entryAssigned = structure.EntryAssignedPropertyNames;
         var required = structure.RequiredPropertyNames;
         var list = new List<Property>();
-        foreach (var prop in entity.Properties.OrderBy(p => p.Name)) {
+        foreach (var prop in entity.Properties) {
             if (required.Contains(prop.Name)
                 && !prop.Constraints.OfType<DefaultValueConstraint>().Any())
                 continue;
@@ -360,7 +363,8 @@ public sealed partial class DomainToCSharpExporter {
     /// nodes as assign.
     ///
     /// Only entity properties (not navigation properties) are validated — navs do not
-    /// carry constraints in the current domain model. Requiredness guards come from the
+    /// carry constraints in the current domain model. Guards follow declaration order,
+    /// so the first declared violated constraint is the message the caller sees. Requiredness guards come from the
     /// published fact; a defaulted property's own default supplies the value. Other
     /// constraint guards still apply to defaulted params. Entry-assigned props are
     /// body-initialized, never ctor params, so they are skipped.
@@ -377,7 +381,7 @@ public sealed partial class DomainToCSharpExporter {
         Node Failure(Node msg) => new Return(
             new Invoke(new Member(resultType, "Failure"), msg));
 
-        foreach (var prop in entity.Properties.OrderBy(p => p.Name)) {
+        foreach (var prop in entity.Properties) {
             // Entry-assigned props are body-initialized by the ctor's stage-entry effects
             // — not constructor params, so no guard to attach.
             if (entryAssignedProps.Contains(prop.Name)) continue;

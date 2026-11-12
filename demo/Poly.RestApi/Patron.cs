@@ -14,27 +14,27 @@ public class Patron
     private List<Loan> _loans = new List<Loan>();
     private List<Fine> _fines = new List<Fine>();
     private Patron() { }
-    private Patron(string email, string name, long maxItems = 0L, IEnumerable<Loan>? loans = null, IEnumerable<Fine>? fines = null, long currentBorrowCount = 0L, DateOnly? memberSince = null, long outstandingFines = 0L, PatronStatus status = PatronStatus.Active)
+    private Patron(string name, string email, long maxItems = 0L, IEnumerable<Loan>? loans = null, IEnumerable<Fine>? fines = null, DateOnly? memberSince = null, PatronStatus status = PatronStatus.Active, long currentBorrowCount = 0L, long outstandingFines = 0L)
     {
-        this.Email = email;
         this.Name = name;
+        this.Email = email;
         this.MaxItems = maxItems;
-        this.CurrentBorrowCount = currentBorrowCount;
         this.MemberSince = memberSince ?? DateOnly.FromDateTime(DateTime.UtcNow);
-        this.OutstandingFines = outstandingFines;
         this.Status = status;
+        this.CurrentBorrowCount = currentBorrowCount;
+        this.OutstandingFines = outstandingFines;
         this._loans = new List<Loan>(loans ?? new List<Loan>());
         this._fines = new List<Fine>(fines ?? new List<Fine>());
         this.CurrentStage = PatronStage.Active;
         this.InitializeSubscriptions();
     }
-    public long CurrentBorrowCount { get; private set; }
-    public string Email { get; private set; } = default!;
-    public long MaxItems { get; private set; }
-    public DateOnly MemberSince { get; private set; }
     public string Name { get; private set; } = default!;
-    public long OutstandingFines { get; private set; }
+    public string Email { get; private set; } = default!;
+    public DateOnly MemberSince { get; private set; }
     public PatronStatus Status { get; private set; }
+    public long MaxItems { get; private set; }
+    public long CurrentBorrowCount { get; private set; }
+    public long OutstandingFines { get; private set; }
     public IReadOnlyList<Loan> Loans
     {
         get => this._loans;
@@ -44,9 +44,9 @@ public class Patron
         get => this._fines;
     }
     public PatronStage CurrentStage { get; private set; }
-    public DomainResult<Loan> CreateLoans(Book? book = null, DateTime? dueDate = null, DateTime? returnedAt = null, string? status = null, long? timesRenewed = null)
+    public DomainResult<Loan> CreateLoans(Book? book = null, string? status = null, DateTime? dueDate = null, DateTime? returnedAt = null, long? timesRenewed = null)
     {
-        var loanResult = Loan.Create(book, this, dueDate, returnedAt, status, timesRenewed);
+        var loanResult = Loan.Create(book, this, status, dueDate, returnedAt, timesRenewed);
         if (!loanResult.IsSuccess)
         {
             return DomainResult<Loan>.Failure(loanResult.ErrorMessage ?? "");
@@ -165,8 +165,12 @@ public class Patron
     {
         this.OutstandingFines = this.OutstandingFines - 5L;
     }
-    public static DomainResult<Patron> Create(string email, string name, Poly.Runtime.IStoragePort db, long maxItems = 0L, IEnumerable<Loan>? loans = null, IEnumerable<Fine>? fines = null, long currentBorrowCount = 0L, DateOnly? memberSince = null, long outstandingFines = 0L, PatronStatus status = PatronStatus.Active)
+    public static DomainResult<Patron> Create(string name, string email, Poly.Runtime.IStoragePort db, long maxItems = 0L, IEnumerable<Loan>? loans = null, IEnumerable<Fine>? fines = null, DateOnly? memberSince = null, PatronStatus status = PatronStatus.Active, long currentBorrowCount = 0L, long outstandingFines = 0L)
     {
+        if (string.IsNullOrEmpty(name))
+        {
+            return DomainResult<Patron>.Failure("'Name' is required.");
+        }
         if (string.IsNullOrEmpty(email))
         {
             return DomainResult<Patron>.Failure("'Email' is required.");
@@ -174,6 +178,10 @@ public class Patron
         if (!System.Text.RegularExpressions.Regex.IsMatch(email, "^[^@]+@[^@]+\\z"))
         {
             return DomainResult<Patron>.Failure("'Email' does not match the required pattern.");
+        }
+        if (status != PatronStatus.Active && status != PatronStatus.Suspended && status != PatronStatus.Closed)
+        {
+            return DomainResult<Patron>.Failure(string.Concat("'", status, "' is not a valid member of PatronStatus for property 'Status'."));
         }
         if (maxItems < 0L)
         {
@@ -183,19 +191,11 @@ public class Patron
         {
             return DomainResult<Patron>.Failure("'MaxItems' must be <= 20.");
         }
-        if (string.IsNullOrEmpty(name))
-        {
-            return DomainResult<Patron>.Failure("'Name' is required.");
-        }
-        if (status != PatronStatus.Active && status != PatronStatus.Suspended && status != PatronStatus.Closed)
-        {
-            return DomainResult<Patron>.Failure(string.Concat("'", status, "' is not a valid member of PatronStatus for property 'Status'."));
-        }
         if (Patron.ExistsWithEmail(db, email))
         {
             return DomainResult<Patron>.Failure("Unique constraint violated: 'Email' value is already used on another 'Patron'.");
         }
-        var created = new Patron(email, name, maxItems, loans, fines, currentBorrowCount, memberSince, outstandingFines, status);
+        var created = new Patron(name, email, maxItems, loans, fines, memberSince, status, currentBorrowCount, outstandingFines);
         db.Record("Patron", "Email", email);
         return DomainResult<Patron>.Success(created);
     }

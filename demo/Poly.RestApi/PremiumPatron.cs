@@ -2,24 +2,28 @@
 public class PremiumPatron
 {
     private PremiumPatron() { }
-    private PremiumPatron(string email, string name, bool priorityAccess, long rewardPoints, PremiumTier tier = PremiumTier.Silver)
+    private PremiumPatron(string name, string email, long rewardPoints, bool priorityAccess, PremiumTier tier = PremiumTier.Silver)
     {
-        this.Email = email;
         this.Name = name;
-        this.PriorityAccess = priorityAccess;
+        this.Email = email;
         this.RewardPoints = rewardPoints;
+        this.PriorityAccess = priorityAccess;
         this.Tier = tier;
     }
-    public string Email { get; private set; } = default!;
     public string Name { get; private set; } = default!;
-    public bool PriorityAccess { get; private set; }
+    public string Email { get; private set; } = default!;
     public long RewardPoints { get; private set; }
     public PremiumTier Tier { get; private set; }
+    public bool PriorityAccess { get; private set; }
     public bool IsLoyal() => this.RewardPoints >= 100L;
     public bool HasPriority() => this.PriorityAccess;
     public bool UnlimitedItems() => this.Tier == PremiumTier.Platinum || this.PriorityAccess;
-    public static DomainResult<PremiumPatron> Create(string email, string name, bool priorityAccess, long rewardPoints, Poly.Runtime.IStoragePort db, PremiumTier tier = PremiumTier.Silver)
+    public static DomainResult<PremiumPatron> Create(string name, string email, long rewardPoints, bool priorityAccess, Poly.Runtime.IStoragePort db, PremiumTier tier = PremiumTier.Silver)
     {
+        if (string.IsNullOrEmpty(name))
+        {
+            return DomainResult<PremiumPatron>.Failure("'Name' is required.");
+        }
         if (string.IsNullOrEmpty(email))
         {
             return DomainResult<PremiumPatron>.Failure("'Email' is required.");
@@ -27,10 +31,6 @@ public class PremiumPatron
         if (!System.Text.RegularExpressions.Regex.IsMatch(email, "^[^@]+@[^@]+\\z"))
         {
             return DomainResult<PremiumPatron>.Failure("'Email' does not match the required pattern.");
-        }
-        if (string.IsNullOrEmpty(name))
-        {
-            return DomainResult<PremiumPatron>.Failure("'Name' is required.");
         }
         if (tier != PremiumTier.Silver && tier != PremiumTier.Gold && tier != PremiumTier.Platinum)
         {
@@ -40,7 +40,7 @@ public class PremiumPatron
         {
             return DomainResult<PremiumPatron>.Failure("Unique constraint violated: 'Email' value is already used on another 'PremiumPatron'.");
         }
-        var created = new PremiumPatron(email, name, priorityAccess, rewardPoints, tier);
+        var created = new PremiumPatron(name, email, rewardPoints, priorityAccess, tier);
         db.Record("PremiumPatron", "Email", email);
         return DomainResult<PremiumPatron>.Success(created);
     }

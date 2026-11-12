@@ -24,7 +24,7 @@ public sealed partial class DomainToCSharpExporter {
                 new Equal(value, new Constant(null)),
                 new Block([DomainResultSuccess()]))
         };
-        foreach (var prop in entity.Properties.OrderBy(p => p.Name, StringComparer.Ordinal)) {
+        foreach (var prop in entity.Properties) {
             if (!prop.Constraints.OfType<UniqueConstraint>().Any())
                 continue;
             nodes.Add(new IfStatement(

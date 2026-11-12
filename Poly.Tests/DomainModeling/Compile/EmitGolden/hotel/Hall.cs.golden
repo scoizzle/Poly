@@ -10,24 +10,24 @@ public enum HallStage
 public class Hall
 {
     private List<Section> _sections = new List<Section>();
-    private Hall(long capacity, decimal dayRate, string name, Property? property = null, IEnumerable<Section>? sections = null, long busySections = 0L, bool occupied = false, bool offline = false)
+    private Hall(string name, long capacity, decimal dayRate, Property? property = null, IEnumerable<Section>? sections = null, bool occupied = false, bool offline = false, long busySections = 0L)
     {
+        this.Name = name;
         this.Capacity = capacity;
         this.DayRate = dayRate;
-        this.Name = name;
-        this.BusySections = busySections;
         this.Occupied = occupied;
         this.Offline = offline;
+        this.BusySections = busySections;
         this.Property = property;
         this._sections = new List<Section>(sections ?? new List<Section>());
         this.CurrentStage = HallStage.InService;
     }
-    public long BusySections { get; private set; }
+    public string Name { get; private set; } = default!;
     public long Capacity { get; private set; }
     public decimal DayRate { get; private set; }
-    public string Name { get; private set; } = default!;
     public bool Occupied { get; private set; }
     public bool Offline { get; private set; }
+    public long BusySections { get; private set; }
     public Property? Property { get; private set; }
     public IReadOnlyList<Section> Sections
     {
@@ -114,8 +114,20 @@ public class Hall
     public bool ChildrenFree() => this.BusySections == 0L;
     public bool CanBook() => !this.Occupied && !this.Offline && this.BusySections == 0L;
     public bool IsOccupied() => this.Occupied;
-    public static DomainResult<Hall> Create(long capacity, decimal dayRate, string name, Property? property = null, IEnumerable<Section>? sections = null, long busySections = 0L, bool occupied = false, bool offline = false)
+    public static DomainResult<Hall> Create(string name, long capacity, decimal dayRate, Property? property = null, IEnumerable<Section>? sections = null, bool occupied = false, bool offline = false, long busySections = 0L)
     {
+        if (string.IsNullOrEmpty(name))
+        {
+            return DomainResult<Hall>.Failure("'Name' is required.");
+        }
+        if (name.Length < 1L)
+        {
+            return DomainResult<Hall>.Failure("'Name' must be at least 1 characters.");
+        }
+        if (name.Length > 80L)
+        {
+            return DomainResult<Hall>.Failure("'Name' must be at most 80 characters.");
+        }
         if (capacity < 1L)
         {
             return DomainResult<Hall>.Failure("'Capacity' must be >= 1.");
@@ -132,19 +144,7 @@ public class Hall
         {
             return DomainResult<Hall>.Failure("'DayRate' must be <= 100000.");
         }
-        if (string.IsNullOrEmpty(name))
-        {
-            return DomainResult<Hall>.Failure("'Name' is required.");
-        }
-        if (name.Length < 1L)
-        {
-            return DomainResult<Hall>.Failure("'Name' must be at least 1 characters.");
-        }
-        if (name.Length > 80L)
-        {
-            return DomainResult<Hall>.Failure("'Name' must be at most 80 characters.");
-        }
-        var created = new Hall(capacity, dayRate, name, property, sections, busySections, occupied, offline);
+        var created = new Hall(name, capacity, dayRate, property, sections, occupied, offline, busySections);
         if (property != null)
         {
             property.AttachHalls(created);

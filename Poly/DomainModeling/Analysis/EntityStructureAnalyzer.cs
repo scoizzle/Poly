@@ -293,7 +293,10 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
         var entryAssignedProps = ComputeEntryAssignedPropertyNames(entity);
         var requiredProps = ComputeRequiredPropertyNames(entity);
 
-        foreach (var prop in entity.Properties.OrderBy(p => p.Name)) {
+        // Declaration order. The required/optional block split is C#-mandated
+        // (defaulted parameters must be last); L-08 removes it by emitting every
+        // Create parameter as `T? x = default` in declaration order.
+        foreach (var prop in entity.Properties) {
             // Optional properties are trailing `T? = null` parameters, added after
             // the required scalar and navigation parameters.
             if (!requiredProps.Contains(prop.Name)) continue;

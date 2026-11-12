@@ -8,17 +8,17 @@ public enum LeadStage
 
 public class Lead
 {
-    private Lead(string company, string email, string name, Account? account = null)
+    private Lead(string name, string email, string company, Account? account = null)
     {
-        this.Company = company;
-        this.Email = email;
         this.Name = name;
+        this.Email = email;
+        this.Company = company;
         this.Account = account;
         this.CurrentStage = LeadStage.New;
     }
-    public string Company { get; private set; } = default!;
-    public string Email { get; private set; } = default!;
     public string Name { get; private set; } = default!;
+    public string Email { get; private set; } = default!;
+    public string Company { get; private set; } = default!;
     public Account? Account { get; private set; }
     public LeadStage CurrentStage { get; private set; }
     public DomainResult Convert()
@@ -44,11 +44,11 @@ public class Lead
         return DomainResult.Success();
     }
     public bool HasAccount() => this.Account != null;
-    public static DomainResult<Lead> Create(string company, string email, string name, Account? account = null)
+    public static DomainResult<Lead> Create(string name, string email, string company, Account? account = null)
     {
-        if (string.IsNullOrEmpty(company))
+        if (string.IsNullOrEmpty(name))
         {
-            return DomainResult<Lead>.Failure("'Company' is required.");
+            return DomainResult<Lead>.Failure("'Name' is required.");
         }
         if (string.IsNullOrEmpty(email))
         {
@@ -58,11 +58,11 @@ public class Lead
         {
             return DomainResult<Lead>.Failure("'Email' does not match the required pattern.");
         }
-        if (string.IsNullOrEmpty(name))
+        if (string.IsNullOrEmpty(company))
         {
-            return DomainResult<Lead>.Failure("'Name' is required.");
+            return DomainResult<Lead>.Failure("'Company' is required.");
         }
-        var created = new Lead(company, email, name, account);
+        var created = new Lead(name, email, company, account);
         return DomainResult<Lead>.Success(created);
     }
     public DomainResult EnsureUnique(string propertyName, object value)

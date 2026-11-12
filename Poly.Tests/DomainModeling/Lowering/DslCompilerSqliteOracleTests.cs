@@ -287,10 +287,19 @@ public class DslCompilerSqliteOracleTests {
         var prog = result.Files!.Single(f => f.FileName == "Program.cs").Source;
         // Enum type maps to its own CLR name (Genre) with the allowed-value union declared
         // via [EnumDataType] — not excluded by entity-ness.
-        await Assert.That(prog).Contains("public record BookDto\n{\n    [EnumDataType(typeof(Genre))]\n    public Genre Genre { get; init; }");
+        await Assert.That(prog).Contains("public Genre Genre { get; init; }");
         await Assert.That(prog).Contains("public string Title { get; init; } = default!;");
+        // L-07 (#558): the DTO and the POST endpoint read one fact, in DECLARATION
+        // order — Title was declared before Genre. The expected order changed here
+        // deliberately; ordinal order (Genre, Title) was the old, swap-prone shape.
+        var titleAt = prog.IndexOf("public string Title { get; init; }", StringComparison.Ordinal);
+        var genreAt = prog.IndexOf("[EnumDataType(typeof(Genre))]", StringComparison.Ordinal);
+        await Assert.That(titleAt).IsGreaterThanOrEqualTo(0);
+        await Assert.That(genreAt).IsGreaterThanOrEqualTo(0);
+        await Assert.That(titleAt).IsLessThan(genreAt)
+            .Because("DTO members follow declaration order (Title before Genre)");
         // POST endpoint passes the DTO members into Book.Create in the same order.
-        await Assert.That(prog).Contains("Book.Create(dto.Genre, dto.Title)");
+        await Assert.That(prog).Contains("Book.Create(dto.Title, dto.Genre)");
     }
 
     [Test]

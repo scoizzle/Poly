@@ -52,6 +52,26 @@ public sealed class DslEffectGrammarTests {
     }
 
     [Test]
+    public async Task EffectGrammar_CreateWithTwoInitializers_ParsesBoth() {
+        var changes = ParseEffects("create Order { Total: 10 Note: \"x\" }");
+        var create = (CreateEntityInstance)changes.OfType<AddEffectToActionChange>().Single().Effect;
+
+        await Assert.That(create.Initializers.Count).IsEqualTo(2);
+        await Assert.That(create.Initializers[0].PropertyName).IsEqualTo("Total");
+        await Assert.That(create.Initializers[1].PropertyName).IsEqualTo("Note");
+    }
+
+    [Test]
+    public async Task EffectGrammar_InvokeWithTwoBindings_ParsesBoth() {
+        var changes = ParseEffects("invoke Approve(a: 1 b: 2)");
+        var invoke = (InvokeActionEffect)changes.OfType<AddEffectToActionChange>().Single().Effect;
+
+        await Assert.That(invoke.ParameterBindings.Count).IsEqualTo(2);
+        await Assert.That(invoke.ParameterBindings[0].PropertyName).IsEqualTo("a");
+        await Assert.That(invoke.ParameterBindings[1].PropertyName).IsEqualTo("b");
+    }
+
+    [Test]
     public async Task EffectGrammar_WhenInBody_Rejected() {
         // F7: no 'when' pattern exists under "effect" — stays rejected.
         await AssertFails("when Rel Active { transition to Done }");

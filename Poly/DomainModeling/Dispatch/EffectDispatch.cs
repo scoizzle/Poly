@@ -25,10 +25,13 @@ public abstract class EffectDispatch<TResult> {
     protected virtual TResult ForEach(ForEachEffect e) => Default();
     protected virtual TResult Composite(CompositeEffect e) => Default();
     protected virtual TResult Conditional(ConditionalEffect e) => Default();
+    protected virtual TResult Link(LinkEffect e) => Default();
+    protected virtual TResult Unlink(UnlinkEffect e) => Default();
 
     /// <summary>
     /// Routes an <see cref="Effect"/> to the appropriate handler method.
-    /// New subtypes cause a compile error here if not added to the switch.
+    /// A subtype missing from the switch fails at run time with <see cref="NotSupportedException"/>;
+    /// <c>EffectDispatchTotalityTests</c> routes every concrete subtype to catch that.
     /// </summary>
     public TResult Route(Effect effect) => effect switch {
         StageTransitionEffect e => StageTransition(e),
@@ -40,6 +43,8 @@ public abstract class EffectDispatch<TResult> {
         ForEachEffect e => ForEach(e),
         CompositeEffect e => Composite(e),
         ConditionalEffect e => Conditional(e),
+        LinkEffect e => Link(e),
+        UnlinkEffect e => Unlink(e),
         _ => throw new NotSupportedException(
             $"Effect type '{effect.GetType().Name}' is not handled by {GetType().Name}")
     };

@@ -498,6 +498,21 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
             return null;
         }
 
+        protected override object? Link(LinkEffect e) {
+            ValidateLinkEffect(context, e, e.RelationshipName, e.Target,
+                $"link {e.RelationshipName} to {TargetText(e.Target)}", entity, domain, forBinders);
+            return null;
+        }
+
+        protected override object? Unlink(UnlinkEffect e) {
+            ValidateLinkEffect(context, e, e.RelationshipName, e.Target,
+                $"unlink {e.RelationshipName} from {TargetText(e.Target)}", entity, domain, forBinders);
+            return null;
+        }
+
+        private static string TargetText(DomainExpression target) =>
+            target is PropertyAccess { Name: var name } ? name : "<expression>";
+
         protected override object? ForEachInvoke(ForEachInvokeEffect e) {
             ValidateForEachInvoke(context, e, entity, domain);
             return null;

@@ -7,7 +7,7 @@ This file records how D-01 implements it and the contract the dependants cite.
 
 ## Context
 
-- **The defect.** Thirty `OrderBy`/`ThenBy` sites in six files under `Poly/DomainModeling/Queries/` sorted type names and member
+- **The defect.** 29 `OrderBy`/`ThenBy` sites in six files under `Poly/DomainModeling/Queries/` sorted type names and member
   names ordinally "for determinism": the Markdown report, the HTML document, the JSON Schema, the JSON-LD graph, the SHACL graph
   and the shared `JsonLdContext`. A reader of any projection saw `Apple` before `Zebra` even though the source declared `Zebra` first.
 - **What landed first.** S-15 made `Domain.Types` document order and gave every entity `MemberOrder`: properties, navigations,
@@ -26,9 +26,9 @@ Projections list what the model lists. There is no determinism sort: determinism
    SHACL `@graph`) lists types in `Domain.Types` order, kinds interleaved as authored. A projection with per-kind sections (Markdown,
    HTML) keeps its section order and orders each section by `Domain.Types`. `DomainExportOrder.Types` is the projection-side reader.
 2. **Entity members** come from `EntityDeclarationOrder.Members(entity)`, one seam over all five kinds. It walks `MemberOrder`, takes the
-   first match per `(Kind, Name)` and drops an entry that resolves to no member of that kind, then appends every still-unplaced member in
+   first unclaimed match per `(Kind, Name)` and drops an entry that resolves to no member of that kind, then appends every still-unplaced member in
    list order (Property, Navigation, Stage, Action, Policy). The merge is monotone: adding a member never reorders existing ones,
-   removing one drops only that member, and an empty `MemberOrder` degrades to per-list order. The fallback is by design, not
+   removing one drops only that member, a removed-then-re-added property returns to its old `MemberOrder` position, and an empty `MemberOrder` degrades to per-list order. The fallback is by design, not
    fail-closed, because builder evolution and programmatic models are legitimate inputs. `Properties` and `Navigations` are filtered views
    of `Members`, so the table projections and the JSON projections cannot disagree about relative order.
 3. **Enum members** follow `EnumType.MemberNames`, including the key order of `x-poly-enum`.

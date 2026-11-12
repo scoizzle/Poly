@@ -86,12 +86,10 @@ public sealed partial class DomainDslPrinter {
         _sb.Append("  ");
         _sb.Append(rel.Name);
         _sb.Append(": ");
-        // Q11: print a cardinality keyword only where the text reads back as the same
-        // cardinality. `one T` and `one owned T` read back as one-to-one, so a
-        // one-to-one navigation keeps its keyword; a bare `x: T` is parsed as one-to-one
-        // as well, but printing one-to-one bare would re-read as a typed property line,
-        // and a target whose name is a Phase 1a unsupported keyword then fails closed.
-        // ManyToOne has no N1 spelling at all and keeps the bare form it always had.
+        // Q11: a one-to-one navigation prints `one T`, which reads back as one-to-one without
+        // ambiguity. A bare `x: T` also reads back as one-to-one, but it fails closed when T spells a
+        // Phase 1a unsupported keyword (actor, schedule, parallel, for, function). ManyToOne has no DSL
+        // spelling and prints bare, so a code-built ManyToOne reprints as `one T` on its second print.
         var isMany = rel.Cardinality is RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany;
         if (isMany) {
             _sb.Append("many ");

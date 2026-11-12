@@ -33,6 +33,7 @@ Common members include:
 - `Members`
 - `GetMembers(string name)`
 - `IsAssignableFrom` / `GetConversionFrom` (conversion operators are not in `Methods`)
+- `ResolveConversionFrom` / `GetOperators` (internal, default-bodied: what the platform defines for conversions and operators; see below)
 
 ### ITypeMember
 
@@ -52,6 +53,30 @@ Resolves type definitions:
 - `GetTypeDefinition(Type type)`
 - `GetTypeDefinition(PrimitiveType primitiveTypeId)`
 - `GetDeferredTypeDefinitionResolver(string name)`
+
+## Conversions and operators (T-03b)
+
+A definition answers what its platform defines, through two internal members of `ITypeDefinition`:
+`ResolveConversionFrom(source)` (a `TypeConversion`: the kind, and the declared method or null when the platform
+applies it itself) and `GetOperators(kind)` (`DeclaredOperator`: a signature and whether the platform applies it).
+`GetOperator(kind, right)` (`TypeDefinitionOperatorExtensions`) is the consumer door: candidates are the operators
+either operand declares; a candidate applies when each operand is identical to its parameter or converts
+implicitly; all-identity wins, otherwise exactly one applicable candidate, otherwise none. `GetCommonType(types)`
+is the unique type the others identically or implicitly convert to. Optionality is the caller's (T-06).
+
+- **.NET rules** live in `CommonLanguageRuntime/`: `ClrTypeDefinition` reflects `op_Implicit`/`op_Explicit` and
+  static special-name `op_*` members, then `ClrBuiltInRules` supplies what C# leaves to the compiler (the closed
+  {Int32, Int64, Float64} conversions, and the intrinsic operators of those, Boolean and String). A closed set
+  answers none, not unknown. `ClrBuiltInRules` is the only source of the built-in answers; three older branches
+  in this folder's root still name .NET classes and move in T-16.
+- **Modeled definitions** answer from declared static `op_*` members: Poly's modeled convention, shared with
+  `op_Implicit`, not a platform fact. `And` and `Or` have no declared form.
+- **Introspection-internal today.** The members are `internal` and neutral at signature level only
+  (`ITypeMember.EmitRead` still returns an `Expression`). A platform in another assembly cannot implement them
+  yet; they go public, non-breaking, when the first non-CLR platform lands. The long-term goal is a VM and
+  Introspection general enough to simulate almost any platform, with .NET the first.
+- **The contract carries no representation fact.** It says what a platform's types do, never how the VM stores
+  them; the tree states conversions and the ABI executes exactly those or rejects (CORE §3.1, row T-21).
 
 ## Provider Composition
 

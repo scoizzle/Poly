@@ -1,6 +1,6 @@
 # Domain type model and numeric rules (Q5, Q6, OQ-3, OQ-6, OQ-11)
 
-Status: **Transcription of owner rulings Q5, Q6, OQ-3, OQ-6, OQ-11, plus the two contract clauses T-02 decided and the one T-03 decided (see *Open or newly decided*, below). `ExprType` and `DomainTypeModel` have landed (T-03, internal, no production caller until T-04).**
+Status: **Transcription of owner rulings Q5, Q6, OQ-3, OQ-6, OQ-11, plus the two contract clauses T-02 decided and the one T-03 decided (see *Open or newly decided*, below). `ExprType` and `DomainTypeModel` have landed (T-03, internal, no production caller until T-04). T-03b landed the Introspection contract for conversions and operators (internal, no production caller until T-04).**
 
 Recorded by slice T-01 of theme T ([#679](https://github.com/scoizzle/Poly/issues/679), epic
 [#677](https://github.com/scoizzle/Poly/issues/677)) so the slices that implement the model are held to the
@@ -61,8 +61,13 @@ OQ-6; that bullet is F-07's to correct.
 — OQ-11 row, [#659 comment 6805267269](https://github.com/scoizzle/Poly/issues/659#issuecomment-6805267269).
 
 Landed (T-03): `Meaning/OperatorTable.cs` maps syntax → `OperatorKind` only (the enum lives in
-`Poly/Introspection/OperatorKind.cs`). Planned (OQ-11, T-03b): an Introspection `GetOperator` lookup owns
-operand typing and result resolution.
+`Poly/Introspection/OperatorKind.cs`). Landed (T-03b): an Introspection `GetOperator` lookup owns operand
+typing and result resolution, as members of `ITypeDefinition` with the .NET rules under
+`Poly/Introspection/CommonLanguageRuntime/` (see *Owner rulings of 2026-11-12*, below). OQ-11's "built-in
+numeric/temporal operators are defined on the built-in types" holds for the numeric, Boolean and String
+primitives through `ClrBuiltInRules`; the temporal operators are the ones the CLR types declare, and the
+offset forms no host member expresses (`Date ± Number`, `Date + duration`) stay with the temporal library
+until T-10.
 
 ## Rules
 
@@ -84,8 +89,12 @@ owner-approved plan, not a ruling. **Open** — not settled by either; the named
 
 Open or newly decided, named by the contract (an open item names the slice that decides it; T-02 decided two below and T-03 one):
 
-- **Mixed `Number op Decimal` result type** — `Open: decided in T-03b`; #679's
-  `Binary_DecimalPlusNumber_IsDecimal` assumes `Decimal`, and T-03b owns operator result resolution.
+- **Mixed `Number op Decimal` result type** — decided by T-03b: `Decimal`. `Decimal + Int64` resolves to the
+  declared `decimal.op_Addition(decimal, decimal)` because `Int64` converts implicitly to `Decimal`.
+- **`Float64 op Decimal`** — decided by T-03b: none. Neither type converts implicitly to the other, which is C#
+  and the VM; the domain analyzer accepts it today (the ledger names T-07 as the owner).
+- **`Text` operators** — decided by T-03b: `Text + Text` is `Text`, equality is defined, and ordering and
+  subtraction are none (#631 is T-07's).
 - **Implicit `Number -> Decimal` widening** — decided by T-03: `Assign(Number -> Decimal)` is `Widening`,
   found through `decimal.op_Implicit(long)` via `GetConversionFrom`; `Decimal -> Number` is
   `RoundingNarrowing` through the explicit operator. Implied by Q6's "+ warning when assigned to Decimal".
@@ -110,9 +119,49 @@ mirrors the T-02…T-13 rows in #679.
 | R1 | `Unknown` on either side is compatible — `Poly/DomainModeling/Analysis/ExpressionTypeAnalyzer.cs:785-786`; the assign check returns silently, `:585-586`; and an assigned numeric arithmetic expression is `Unknown`, `:696`. | T-04 keeps a provisional lenient flag; T-05 flips it |
 | R2 | one `TypeCategory.Number` for both — `Poly/DomainModeling/Analysis/ExpressionTypeAnalyzer.cs:750`; messages print "Number" for Decimal, `:768`. | T-03 model, T-04 messages |
 | R3 | `null` accepted for Text/Guid regardless of optionality, and rejected into a Number/Boolean/Date target even when optional (`CheckCompatible` has no optionality input) — `Poly/DomainModeling/Analysis/ExpressionTypeAnalyzer.cs:787-790`, `:541-600`; `IsRequired` is the only optionality definition — `Poly/DomainModeling/Analysis/EntityStructureAnalyzer.cs:135-136`. | T-06 |
-| R4 | no rule; every numeric result is a bare `Number` (call args, function bodies, Sum/Count — `Poly/DomainModeling/Analysis/ExpressionTypeAnalyzer.cs:133`, `:357`, `:716`; an assigned numeric arithmetic expression stays `Unknown`, see R5). | T-03b/T-04 result typing; T-08 warning |
+| R4 | no rule; every numeric result is a bare `Number` (call args, function bodies, Sum/Count — `Poly/DomainModeling/Analysis/ExpressionTypeAnalyzer.cs:133`, `:357`, `:716`; an assigned numeric arithmetic expression stays `Unknown`, see R5). | T-03b result typing (`GetOperator(...).Result`; `Int64 / Int64` is `Int64`); T-04 adopts it; T-08 warning |
 | R5 | an assigned numeric arithmetic expression is `Unknown` and unchecked (this is #491's path) — `Poly/DomainModeling/Analysis/ExpressionTypeAnalyzer.cs:585-586`, `:696`; Decimal -> Number on a *typed* source errors with a "Number to Number" message (#581) — `:768`; rounding modes diverge per OQ-3's recorded correction. | T-08 fail-closed baseline (error), T-12 rounding |
 | R6 | `double` at `Number` bound parse — `Poly/DomainModeling/Language/DomainResolver.Constraints.cs:100-113`; at mixed-type compare only, because same-type compare uses the type's own ordering — `Poly/DomainModeling/Ontology/Constraints/ConstraintMerge.cs:241-245`; and in `ValueRange(double?, double?)` — `Poly/DomainModeling/Analysis/EffectInvariantAnalyzer.cs:12`. Decimal bounds already parse as `decimal` — `Poly/DomainModeling/Language/DomainResolver.Constraints.cs:108-111`. | **Landed in T-02**: parse (`long`/`decimal`, `ExactNumber.TryParseDecimalText`) and the assign guard (`ExactNumber.Compare`); V-05 then removes the remaining `double` in analysis-time arithmetic. **Landed in V-05b**: the `ValueRange(double?, double?)` and `NumericBound` double paths are removed (same six-type binary break; version bump is the owner's Q3); the mixed-compare `double` survives only as `ConstraintMerge.TryCompare`'s fallback for a public API-built `RangeConstraint(double, double)`. |
+
+## Owner rulings of 2026-11-12: the type provider supplies the platform's conversion and operator rules
+
+Recorded by T-03b from [#679 comment 6837489066](https://github.com/scoizzle/Poly/issues/679#issuecomment-6837489066),
+[6837522801](https://github.com/scoizzle/Poly/issues/679#issuecomment-6837522801) and
+[6837577384](https://github.com/scoizzle/Poly/issues/679#issuecomment-6837577384). These are the owner's, not this file's.
+
+- **Diagnosis.** The type system did not compute the resultant type of an expression in one place, so promotion
+  and conversion were handled separately wherever they were needed; nine copies disagreed (`Float64 × Decimal`
+  was accepted by the domain analyzer, typed `Decimal` by the lowered-tree pass, resolved in decimal's favour by
+  the lambda bridge, and rejected by the VM).
+- **Ruling 1.** The rules live with the type provider's definitions: the .NET definitions answer what converts
+  to what and what an operator produces from reflection plus the built-in rules .NET leaves to the compiler;
+  modeled types answer from declared members. Language policy stays in `DomainTypeModel`; the common result
+  type of several operands is derived from those answers and the policy (T-03b ships it as `GetCommonType`);
+  storage representation stays a VM fact.
+- **Ruling 2.** The interface is in `Poly/Introspection/` (members of `ITypeDefinition`, internal today) and the
+  .NET implementation is in `Poly/Introspection/CommonLanguageRuntime/`. Everything else consumes the interface
+  only.
+- **The long-term goal.** The VM and Introspection should be general enough to simulate almost any platform,
+  provided the right foundational layers are supplied through the common interfaces. .NET is the first platform,
+  not the only one the design may assume. The members are `internal` until the first non-CLR platform lands;
+  going public is non-breaking.
+- **Tree states vs ABI executes (R6).** What the tree states (operand types, the operator chosen, every
+  conversion, as explicit nodes whose meaning comes from the interface) stays distinguishable from what the
+  VM's ABI executes. The end state: the ABI executes exactly what the tree states, or rejects it; it never
+  decides meaning. T-03b's cross-check ledger reports both, and a cell where the ABI did something the tree did
+  not state is its own ledger kind. Row T-21 removes emitter-side promotion that decides meaning; L-03v's
+  emit-time rejection is its first instance.
+- **Convergence.** One row per remaining copy after T-04: T-16 (`IsNumericWideningFrom`, plus the three
+  Introspection-root branches that name .NET classes), T-17 (`PromoteNumeric`/`GetNumericRank`/`ResolveAddType`),
+  T-18 (`SyntaxTypeCompatibilityAnalyzer`), T-19 (`LambdaBridge.PromoteNumeric`), T-20
+  (`ConstantFoldingPass.Promote`), T-21 (the emitter's promotion).
+
+Landed shape (T-03b): `TypeConversion(Kind, Method?)` (null `Method` means the platform applies it),
+`DeclaredOperator(Signature, PlatformApplied)`, `OperatorResolution(Signature, PlatformApplied)` with `Result`,
+`GetOperator(kind, right)` with the identity-then-unique tie rule, and `GetCommonType(types)`. `And` and `Or` have
+no declared form; the `op_*` names are Poly's modeled convention, not a platform fact. The closed numeric set
+{Int32, Int64, Float64} moved verbatim from the interim `DomainTypeModel.BuiltInNumeric`, which is deleted:
+`Int64 → Float64` stays implicit and lossy above 2^53.
 
 ## P-05: which bound type goes with which column type
 

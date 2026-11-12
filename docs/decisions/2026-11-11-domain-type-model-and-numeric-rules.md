@@ -48,7 +48,9 @@ owns the typing half and does not restate it.
 — OQ-6 row, [#659 comment 6805267269](https://github.com/scoizzle/Poly/issues/659#issuecomment-6805267269).
 
 **OQ-6's "never throws, never wraps" is about `ExactNumber` — analysis-time bound arithmetic — not runtime
-`Number`, which wraps outside `checked` per Q6.**
+`Number`, which wraps outside `checked` per Q6.** The checked-region ADR's bullet "`Decimal` does not wrap at
+all (OQ-6 …)" (`docs/decisions/2026-11-11-checked-arithmetic-region.md:78-80`) therefore does not rest on
+OQ-6; that bullet is F-07's to correct.
 
 ### OQ-11 — operator lookup (T)
 
@@ -68,10 +70,10 @@ owner-approved plan, not a ruling. **Open** — not settled by either; the named
 
 | # | Rule | Provenance |
 |---|---|---|
-| R0 | define/check acceptance is the one gate: what it accepts, simulate, printed C# and polyc accept. | **ruling clause** — Q5: "domain analysis is the one gate". The harness is T-05 `GateParity`, closed by T-13 |
-| R1 | `Unresolved` is never compatible — not a wildcard. | **#679 plan direction** (goal: "`Unknown` never compatible"). Q5 says replace the model; it does not say this |
+| R0 | define/check acceptance is the one gate: what it accepts, simulate, printed C# and polyc accept. | **ruling clause (Q5: gate) + #679 plan direction (host parity)** — Q5: "domain analysis is the one gate"; #679 goal: "anything define/check accepts compiles on the VM, in generated C# and in polyc". The harness is T-05 `GateParity`, closed by T-13 |
+| R1 | `Unknown` (planned: `ExprType.Unresolved`, T-03) is never compatible — not a wildcard. | **#679 plan direction** (goal: "`Unknown` never compatible"; contract: `ExprType.Unresolved` is never assignable/comparable). Q5 says replace the model; it does not say this |
 | R2 | `Decimal` ≠ `Number`; `Number` ≡ `Int64`. | **#679 plan direction** — "Decimal distinct from Number" in the goal, and "Number ≡ Int64" in T-03's red test; the existing mapping (below) already spells `Number` as `long`/`bigint` |
-| R3 | optionality is a flag beside the definition, not a wrapped type; `null` only into an optional target. | **#679 plan direction** (goal: "first-class optionality") |
+| R3 | optionality is a flag beside the definition, not a wrapped type; `null` only into an optional target. | **#679 plan direction** — goal: "first-class optionality"; the shape is the `ExprType(Definition, Optional, DomainName)` contract (T-03) and T-06's `OptionalTyping` row |
 | R4 | `Number / Number` is integer division; assigning it to `Decimal` warns. | **ruling clause** — Q6: "Number / Number is integer division (+ warning when assigned to Decimal)" |
 | R5 | `Decimal -> Number` is an error unless analysis proves it safe; when it rounds, both hosts round `MidpointRounding.AwayFromZero`. | **ruling clauses** — Q6: "Decimal -> Number rounding only when analysis proves it safe, else an error"; OQ-3: "`MidpointRounding.AwayFromZero`, emitted explicitly in BOTH the simulator and the generated C#". **Open: "proves it safe" — decided in T-12 via V-05** |
 | R6 | bounds are never `double`: a `Number` bound is `long`, a `Decimal` bound `decimal`; `ExactNumber` (planned, T-02) is decimal-backed and saturates to unbounded on overflow. | **#679 plan direction** (T-02 row: "Number bounds are long, Decimal bounds decimal, never double") + **ruling clause** — OQ-6: "decimal-backed and saturates to unbounded on overflow (never throws, never wraps)" |
@@ -79,20 +81,35 @@ owner-approved plan, not a ruling. **Open** — not settled by either; the named
 `DMNUM001` and `DMNUM002` are identifiers owned by T-08, not ruling text. Every planned symbol is tagged
 `planned (T-NN)`; nothing planned is described as current.
 
+Open, named by the contract (each decided by the slice that owns it; no decision is taken here):
+
+- **Mixed `Number op Decimal` result type** — `Open: decided in T-03/T-03b`; #679's
+  `Binary_DecimalPlusNumber_IsDecimal` assumes `Decimal`, and T-03b owns operator result resolution.
+- **Implicit `Number -> Decimal` widening** — `Open: decided in T-03`; implied by Q6's "+ warning when
+  assigned to Decimal" and by T-03's `Assign_NumberToDecimal_IsWidening`.
+- **What "assigned" covers for R4's Decimal warning** — `Open: decided in T-08`; #679's red test covers
+  `assign` only, not call arguments, function returns or defaults.
+- **A declared `Number` bound outside `long` range** — error, or saturate to unbounded — `Open: decided in
+  T-02`; #515 reports it accepted silently, and OQ-6 saturation is analysis-time arithmetic, not literal
+  parsing.
+- **`Int32` / `Float` / `Double` bound and column types** — `Open: decided in T-02/P-05`;
+  `DomainTypeMapping` maps them today, but the contract states only `Number` and `Decimal`.
+
 ## Interim state, by slice
 
-Today's column is as of `d16a33bf` (the plan's evidence was `32d6ecb8`; the rows below were re-read at
-`d16a33bf`). The "Landed by" column mirrors the T-02…T-13 rows in #679.
+Today's column is as of `12aa6c9d` (`origin/master` at the fix round; the plan's evidence was `32d6ecb8`, the
+transcription `d16a33bf`). Every Today cell carries its file anchors at that commit. The "Landed by" column
+mirrors the T-02…T-13 rows in #679.
 
 | Rule | Today | Landed by |
 |---|---|---|
-| R0 | nothing asserts parity. | T-05 `GateParity`; closed by T-13 |
-| R1 | `Unknown` on either side is compatible; the assign check returns silently, and an assigned arithmetic expression is `Unknown`. | T-04 keeps a provisional lenient flag; T-05 flips it |
-| R2 | one `TypeCategory.Number` for both; messages print "Number" for Decimal. | T-03 model, T-04 messages |
-| R3 | `null` accepted for Text/Guid regardless of optionality; `IsRequired` is the only optionality definition. | T-06 |
-| R4 | no rule; every numeric result is a bare `Number` (call args, function bodies, Sum/Count; an assigned arithmetic expression stays `Unknown`, see R5). | T-03b/T-04 result typing; T-08 warning |
-| R5 | an assigned arithmetic expression is `Unknown` and unchecked (this is #491's path); Decimal -> Number on a *typed* source errors with a "Number to Number" message (#581); rounding modes diverge per OQ-3's recorded correction. | T-08 fail-closed baseline (error), T-12 rounding |
-| R6 | `double` at bound parse, at mixed compare, and in `ValueRange`. | T-02 (`ExactNumber`), then V-05 |
+| R0 | no general "analysis accepts ⇒ every host accepts" gate exists; specific parity tests do — `Poly.Tests/DomainModeling/Compile/SampleRoslynGateTests.cs:14`, `Poly.Tests/DomainModeling/Compile/UniqueSimulatePrintAgreeTests.cs:20`, `Poly.Tests/DomainModeling/Lowering/ActionParameterEnvelopeParityTests.cs:13`, `Poly.Tests/DomainModeling/Lowering/DurationDefaultParityTests.cs:21`, `Poly.Tests/Interpretation/AstParityTests.cs:21`. | T-05 `GateParity`; closed by T-13 |
+| R1 | `Unknown` on either side is compatible — `Poly/DomainModeling/Analysis/ExpressionTypeAnalyzer.cs:785-786`; the assign check returns silently, `:585-586`; and an assigned numeric arithmetic expression is `Unknown`, `:696`. | T-04 keeps a provisional lenient flag; T-05 flips it |
+| R2 | one `TypeCategory.Number` for both — `Poly/DomainModeling/Analysis/ExpressionTypeAnalyzer.cs:750`; messages print "Number" for Decimal, `:768`. | T-03 model, T-04 messages |
+| R3 | `null` accepted for Text/Guid regardless of optionality, and rejected into a Number/Boolean/Date target even when optional (`CheckCompatible` has no optionality input) — `Poly/DomainModeling/Analysis/ExpressionTypeAnalyzer.cs:787-790`, `:541-600`; `IsRequired` is the only optionality definition — `Poly/DomainModeling/Analysis/EntityStructureAnalyzer.cs:135-136`. | T-06 |
+| R4 | no rule; every numeric result is a bare `Number` (call args, function bodies, Sum/Count — `Poly/DomainModeling/Analysis/ExpressionTypeAnalyzer.cs:133`, `:357`, `:716`; an assigned numeric arithmetic expression stays `Unknown`, see R5). | T-03b/T-04 result typing; T-08 warning |
+| R5 | an assigned numeric arithmetic expression is `Unknown` and unchecked (this is #491's path) — `Poly/DomainModeling/Analysis/ExpressionTypeAnalyzer.cs:585-586`, `:696`; Decimal -> Number on a *typed* source errors with a "Number to Number" message (#581) — `:768`; rounding modes diverge per OQ-3's recorded correction. | T-08 fail-closed baseline (error), T-12 rounding |
+| R6 | `double` at `Number` bound parse — `Poly/DomainModeling/Language/DomainResolver.Constraints.cs:100-113`; at mixed-type compare only, because same-type compare uses the type's own ordering — `Poly/DomainModeling/Ontology/Constraints/ConstraintMerge.cs:241-245`; and in `ValueRange(double?, double?)` — `Poly/DomainModeling/Analysis/EffectInvariantAnalyzer.cs:12`. Decimal bounds already parse as `decimal` — `Poly/DomainModeling/Language/DomainResolver.Constraints.cs:108-111`. | T-02 (`ExactNumber`), then V-05 |
 
 ## P-05: which bound type goes with which column type
 
@@ -101,7 +118,10 @@ mapping: a `Number` property is `Int64` → `long` → `bigint`, a `Decimal` pro
 `decimal`. The existing mapping already says so — `DomainTypeMapping.ToClrTypeName`
 (`Poly/DomainModeling/Meaning/DomainTypeMapping.cs:12-22`) and `ToSqlColumnType`
 (`Poly/DomainModeling/Meaning/DomainTypeMapping.cs:29-39`) — so P-05 derives the column type from the
-property's type.
+property's type. `ToSqlColumnType` is the generic default, and its own contract says vendor packs override
+it through `TypeMappingRegistry` (`Poly/DomainModeling/Meaning/DomainTypeMapping.cs:24-39`), so this paragraph
+settles the bound type, not the DDL; #687's open sub-decision 1 (SQLite `NUMERIC` vs `TEXT` for Decimal)
+stays open for P-05.
 
 ## Rules this file follows
 

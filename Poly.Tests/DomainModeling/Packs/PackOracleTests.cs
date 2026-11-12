@@ -214,7 +214,7 @@ public class PackOracleTests {
             var deadHost = await ExitedProcessIdAsync();
             var record = JsonNode.Parse(await File.ReadAllTextAsync(oracle.PidFilePath))!.AsObject();
             record["hostPid"] = deadHost;
-            await File.WriteAllTextAsync(oracle.PidFilePath, record.ToJsonString());
+            await RewritePidFileAsync(oracle.PidFilePath, record);
 
             var killed = PackOracle.SweepOrphans();
 
@@ -245,7 +245,7 @@ public class PackOracleTests {
             var record = JsonNode.Parse(await File.ReadAllTextAsync(oracle.PidFilePath))!.AsObject();
             record["hostPid"] = deadHost;
             record["startedUtc"] = DateTime.UtcNow.AddHours(-1);
-            await File.WriteAllTextAsync(oracle.PidFilePath, record.ToJsonString());
+            await RewritePidFileAsync(oracle.PidFilePath, record);
 
             PackOracle.SweepOrphans();
 
@@ -461,6 +461,14 @@ public class PackOracleTests {
         await using var oracle = await PackOracle.BootAsync(PackOracleDomains.Tally653);
         using var list = await oracle.Client.GetAsync("/api/tallies");
         await Assert.That(list.StatusCode).IsEqualTo(HttpStatusCode.OK);
+    }
+
+    /// <summary>Replaces a pidfile atomically (temp + move): a sweep beside this test can never read a torn
+    /// record, which would make it drop the record and leave the run directory behind.</summary>
+    private static async Task RewritePidFileAsync(string path, JsonObject record) {
+        var temp = path + ".tmp";
+        await File.WriteAllTextAsync(temp, record.ToJsonString());
+        File.Move(temp, path, overwrite: true);
     }
 
     private static async Task<int> ExitedProcessIdAsync() {

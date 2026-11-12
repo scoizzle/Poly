@@ -21,6 +21,9 @@ internal sealed record ChildSpec(string Dll, IReadOnlyList<string> Args) {
     public Action<int>? Started { get; init; }
     /// <summary>Test seam: replaces the launcher so a start failure can be provoked.</summary>
     internal string? Launcher { get; init; }
+    /// <summary>Test seam: the depth-1 registry probe must start exactly one real child to prove the exit reap;
+    /// every other start under a child host is the fork bomb <see cref="PolycProcess.GuardDepth"/> refuses.</summary>
+    internal bool InChildProbe { get; init; }
 }
 
 internal sealed record ProcessResult(
@@ -36,6 +39,9 @@ internal class PolycChildException(string message, int processId, bool killed, E
 
 internal sealed class PolycTimeoutException(string message, int processId) : PolycChildException(message, processId, killed: true);
 
+/// <summary>A write to an MCP host's stdin failed; the message carries the host's stderr tail at that moment.</summary>
+internal sealed class McpWriteException(string message, Exception inner) : IOException(message, inner);
+
 internal enum McpTarget { Polyc, PolyMcp }
 
 /// <summary>The one place under Poly.Tests that starts a polyc/MCP/test-host child. Every path is
@@ -49,9 +55,9 @@ internal static class PolycProcess {
     public static readonly TimeSpan BatchTimeout = TimeSpan.FromSeconds(120);
     private static readonly TimeSpan _killWait = TimeSpan.FromSeconds(10);
 
-    internal static void GuardDepth() {
+    internal static void GuardDepth(string harness = "PolycProcess") {
         if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("POLY_CHILD_DEPTH")))
-            throw new InvalidOperationException("PolycProcess inside a child (POLY_CHILD_DEPTH=1)");
+            throw new InvalidOperationException($"{harness} inside a child (POLY_CHILD_DEPTH=1): a harness child that starts its own child is a fork bomb, not a test.");
     }
 
     public static async Task<ProcessResult> RunAsync(ChildSpec spec, CancellationToken ct = default) {
@@ -67,13 +73,13 @@ internal static class PolycProcess {
         var drains = Task.WhenAll(
             Drain(process.StandardOutput, stdout, drainCts.Token),
             Drain(process.StandardError, stderr, drainCts.Token));
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(linked.Token);
+        deadline.CancelAfter(timeout);
         if (spec.StdinText is not null)
-            _ = WriteStdinAsync(process, spec.StdinText);
+            _ = WriteStdinAsync(process, spec.StdinText, deadline.Token);
         else if (!spec.KeepStdinOpen)
             TryCloseStdin(process);
 
-        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(linked.Token);
-        deadline.CancelAfter(timeout);
         try {
             await process.WaitForExitAsync(deadline.Token);
             try {
@@ -186,13 +192,16 @@ internal static class PolycProcess {
         }
     }
 
-    private static async Task WriteStdinAsync(Process process, string text) {
+    private static async Task WriteStdinAsync(Process process, string text, CancellationToken ct) {
         try {
-            await process.StandardInput.WriteAsync(text);
-            await process.StandardInput.FlushAsync();
+            await process.StandardInput.WriteAsync(text.AsMemory(), ct);
+            await process.StandardInput.FlushAsync(ct);
         }
         catch (IOException) {
             // The child exited (or crashed) before reading it all: that is the result, not an error.
+        }
+        catch (OperationCanceledException) {
+            // The deadline killed the child mid-write: RunAsync's own catch reports that, not this task.
         }
         finally {
             TryCloseStdin(process);
@@ -270,6 +279,8 @@ internal static class PolycProcess {
         public int Pid { get; }
 
         public static async Task<ManagedChild> StartAsync(ChildSpec spec, CancellationToken ct) {
+            if (!spec.InChildProbe)
+                GuardDepth();
             await ChildProcessGate.AcquireAsync(ct);
             ManagedChild? child = null;
             try {
@@ -304,18 +315,24 @@ internal static class PolycProcess {
             }
         }
 
+        /// <summary>Kills the tree and waits, bounded. Inert on every failure: a tree walk can throw
+        /// <see cref="AggregateException"/> (one descendant already gone), a disposed <see cref="Process"/> throws
+        /// <see cref="ObjectDisposedException"/>, and a signal can raise Win32 or InvalidOperation. None of those may
+        /// escape <see cref="Dispose"/>, RunAsync's cancel/timeout catch (StopDrains must still run and the original
+        /// OCE/<see cref="PolycTimeoutException"/> must surface), or the MCP lifetime timer callback.</summary>
         public void KillAndWait() {
             try {
                 if (!Process.HasExited)
                     Process.Kill(entireProcessTree: true);
             }
-            catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception) {
-                // Already gone, or not ours to signal.
+            catch (Exception) {
+                // Already gone, not ours to signal, or a descendant raced the walk.
             }
             try {
                 Process.WaitForExit((int)_killWait.TotalMilliseconds);
             }
-            catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception) {
+            catch (Exception) {
+                // A process that cannot be waited for is already as dead as this harness can make it.
             }
         }
 
@@ -325,10 +342,26 @@ internal static class PolycProcess {
             try {
                 KillAndWait();
             }
+            catch (Exception) {
+                // KillAndWait is inert; this is the last belt so the slot is always released.
+            }
             finally {
-                _live.TryRemove(Pid, out _);
-                Process.Dispose();
+                // Only a dead child leaves the registry and gives up its handle: a survivor stays registered
+                // (and signalable) so ReapAll at host exit retries it.
+                if (HasExited()) {
+                    _live.TryRemove(Pid, out _);
+                    Process.Dispose();
+                }
                 ChildProcessGate.Release();
+            }
+        }
+
+        private bool HasExited() {
+            try {
+                return Process.HasExited;
+            }
+            catch (Exception) {
+                return true; // never started or already disposed: nothing to reap
             }
         }
 
@@ -359,10 +392,20 @@ internal static class PolycProcess {
             }
         }
 
+        /// <summary>The head, a dropped-chars marker and the tail. With no tail ring the marker is carved out of
+        /// the head's own budget, so the text never exceeds <c>head</c> + <c>tail</c> chars and truncation is still
+        /// visible in the text (not only in <see cref="Dropped"/>).</summary>
         public string Text {
             get {
-                lock (_gate)
-                    return tail > 0 && _dropped > 0 ? $"{_head}\n...[{_dropped} chars dropped]...\n{_tail}" : _head.ToString() + _tail;
+                lock (_gate) {
+                    if (_dropped == 0)
+                        return _head.ToString() + _tail;
+                    var marker = $"\n...[{_dropped} chars dropped]...\n";
+                    if (tail > 0)
+                        return _head + marker + _tail;
+                    var keep = Math.Max(0, head - marker.Length);
+                    return (_head.Length > keep ? _head.ToString(0, keep) : _head.ToString()) + marker;
+                }
             }
         }
 
@@ -396,7 +439,7 @@ internal sealed class McpClient : IDisposable {
     public const int MaxLineChars = 1 << 20;
     private readonly PolycProcess.ManagedChild _child;
     private readonly TimeSpan _readTimeout;
-    private readonly CancellationTokenSource _life = new();
+    private readonly CancellationTokenSource _life;
     private readonly PolycProcess.BoundedText _stderr = new(0, PolycProcess.StderrTailChars);
     private readonly char[] _buffer = new char[8192];
     private readonly StringBuilder _line = new();
@@ -406,6 +449,9 @@ internal sealed class McpClient : IDisposable {
         _child = child;
         _readTimeout = readTimeout;
         Lifetime = TimeSpan.FromSeconds(150);
+        // A failed or timed-out test cancels its MCP child, not only a caller-supplied token.
+        var testToken = TestContext.Current?.Execution.CancellationToken ?? CancellationToken.None;
+        _life = CancellationTokenSource.CreateLinkedTokenSource(testToken);
         _life.CancelAfter(Lifetime);
         _life.Token.Register(() => child.KillAndWait());
         _ = PolycProcess.Drain(child.Process.StandardError, _stderr, CancellationToken.None);
@@ -421,7 +467,8 @@ internal sealed class McpClient : IDisposable {
             ["capabilities"] = new JsonObject(),
             ["clientInfo"] = new JsonObject { ["name"] = "polyc-test", ["version"] = "1" },
         });
-        await SendAsync(new JsonObject { ["jsonrpc"] = "2.0", ["method"] = "notifications/initialized" });
+        using (var deadline = NewDeadline(_readTimeout))
+            await SendAsync(new JsonObject { ["jsonrpc"] = "2.0", ["method"] = "notifications/initialized" }, deadline.Token, _readTimeout);
         var result = response["result"]!;
         Instructions = result["instructions"]?.GetValue<string>();
         return result;
@@ -430,13 +477,16 @@ internal sealed class McpClient : IDisposable {
     /// <summary>Sends a request and returns the full response message with the matching id.</summary>
     public async Task<JsonNode> CallAsync(string method, JsonObject parameters, TimeSpan? timeout = null) {
         var id = ++_id;
-        await SendAsync(new JsonObject { ["jsonrpc"] = "2.0", ["id"] = id, ["method"] = method, ["params"] = parameters });
         var limit = timeout ?? _readTimeout;
-        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(_life.Token);
-        deadline.CancelAfter(limit);
+        using var deadline = NewDeadline(limit);
+        await SendAsync(new JsonObject { ["jsonrpc"] = "2.0", ["id"] = id, ["method"] = method, ["params"] = parameters }, deadline.Token, limit);
         try {
             while (true) {
-                var message = JsonNode.Parse(await ReadLineAsync(deadline.Token))!;
+                var line = await ReadLineAsync(deadline.Token);
+                // A host may flush a blank line between messages (the old PolySurfaceV2 reader skipped them too).
+                if (string.IsNullOrWhiteSpace(line))
+                    continue;
+                var message = JsonNode.Parse(line)!;
                 if (message["id"]?.GetValue<int>() == id)
                     return message;
             }
@@ -458,10 +508,28 @@ internal sealed class McpClient : IDisposable {
         return result["structuredContent"] ?? JsonNode.Parse(result["content"]![0]!["text"]!.GetValue<string>())!;
     }
 
-    private async Task SendAsync(JsonNode message) {
-        var stdin = _child.Process.StandardInput;
-        await stdin.WriteLineAsync(message.ToJsonString());
-        await stdin.FlushAsync();
+    private CancellationTokenSource NewDeadline(TimeSpan limit) {
+        var linked = CancellationTokenSource.CreateLinkedTokenSource(_life.Token);
+        linked.CancelAfter(limit);
+        return linked;
+    }
+
+    /// <summary>A write is under the same deadline as the read it precedes: a host that stops reading must not
+    /// hang the call. An IOException becomes a named <see cref="McpWriteException"/> carrying the stderr tail.</summary>
+    private async Task SendAsync(JsonNode message, CancellationToken ct, TimeSpan limit) {
+        try {
+            var stdin = _child.Process.StandardInput;
+            await stdin.WriteLineAsync(message.ToJsonString().AsMemory(), ct);
+            await stdin.FlushAsync(ct);
+        }
+        catch (IOException ex) {
+            throw new McpWriteException(
+                $"Could not write to the MCP host within {limit.TotalSeconds:0.###} s: {ex.Message} stderr tail: {StderrTail}", ex);
+        }
+        catch (OperationCanceledException) {
+            throw new TimeoutException(
+                $"Could not write to the MCP host within {limit.TotalSeconds:0.###} s (lifetime {Lifetime.TotalSeconds:0} s). stderr tail: {StderrTail}");
+        }
     }
 
     private async Task<string> ReadLineAsync(CancellationToken ct) {

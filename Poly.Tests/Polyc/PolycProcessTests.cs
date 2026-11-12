@@ -1,5 +1,8 @@
+using System.Diagnostics;
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Text;
+using System.Text.RegularExpressions;
 
 using Poly.Tests.Polyc;
 
@@ -185,6 +188,79 @@ public class PolycProcessTests {
         }
     }
 
+    /// <summary>The registry outlives the owning test: a depth-1 probe starts <c>/bin/sleep 30</c> through
+    /// <see cref="PolycProcess.ManagedChild"/> without ever disposing it, then exits; the process-exit reap must
+    /// leave that pid dead. Skipped on Windows, where the probe's payload shell does not exist.</summary>
+    [Test]
+    public async Task Registry_UndisposedChild_IsReapedAtHostExit() {
+        if (OperatingSystem.IsWindows())
+            return;
+
+        var result = await PolycProcess.RunTestInChildAsync(ProbeFilter(nameof(ChildProbe_RegistryReap)), Probe("reap"));
+
+        await Assert.That(result.ExitCode).IsEqualTo(0);
+        var match = Regex.Match(result.Stdout, @"reap-pid:(\d+)");
+        await Assert.That(match.Success).IsTrue();
+        var pid = int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture);
+        var settle = Stopwatch.StartNew();
+        while (PackOracle.IsProcessAlive(pid) && settle.Elapsed < TimeSpan.FromSeconds(5))
+            await Task.Delay(100);
+        await Assert.That(PackOracle.IsProcessAlive(pid)).IsFalse();
+    }
+
+    /// <summary>Every entry point refuses to start under a test child (POLY_CHILD_DEPTH=1): the probe asserts
+    /// RunAsync, McpAsync and PackOracle.BootAsync each throw, then the parent asserts a clean child exit.</summary>
+    [Test]
+    public async Task Guard_ChildDepthSet_EveryEntryPointThrowsAndTheProbeExitsZero() {
+        var result = await PolycProcess.RunTestInChildAsync(ProbeFilter(nameof(ChildProbe_GuardThrows)), Probe("guard"));
+
+        await Assert.That(result.Stdout).Contains("guard-ok");
+        await Assert.That(result.ExitCode).IsEqualTo(0);
+    }
+
+    /// <summary>A silent child: the per-call read deadline, not the 150 s lifetime, ends the call.</summary>
+    [Test]
+    public async Task McpStdio_SilentChild_TimesOutWithinThePerCallDeadlineAndLeavesNoSurvivor() {
+        if (OperatingSystem.IsWindows())
+            return;
+
+        var child = await PolycProcess.ManagedChild.StartAsync(new ChildSpec("30", []) { Launcher = "/bin/sleep" }, CancellationToken.None);
+        var pid = child.Pid;
+        var host = new McpClient(child, TimeSpan.FromMilliseconds(500));
+        var started = Stopwatch.StartNew();
+        try {
+            await Assert.ThrowsAsync<TimeoutException>(() => host.InitializeAsync());
+        }
+        finally {
+            host.Dispose();
+        }
+
+        await Assert.That(started.Elapsed).IsLessThan(TimeSpan.FromSeconds(5));
+        await Assert.That(PackOracle.IsProcessAlive(pid)).IsFalse();
+    }
+
+    /// <summary>The old PolySurfaceV2 reader skipped blank lines; a real host may flush one, and it must not
+    /// fault the JSON parse. A scripted host answers <c>initialize</c> after exactly one blank line.</summary>
+    [Test]
+    public async Task McpStdio_BlankLineBeforeResponse_IsSkipped() {
+        if (OperatingSystem.IsWindows())
+            return;
+
+        const string script = "printf '\\n{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}\\n'; sleep 30";
+        var child = await PolycProcess.ManagedChild.StartAsync(new ChildSpec("-c", [script]) { Launcher = "/bin/sh" }, CancellationToken.None);
+        var pid = child.Pid;
+        var host = new McpClient(child, TimeSpan.FromSeconds(10));
+        try {
+            var result = await host.InitializeAsync();
+
+            await Assert.That(result).IsNotNull();
+        }
+        finally {
+            host.Dispose();
+        }
+        await Assert.That(PackOracle.IsProcessAlive(pid)).IsFalse();
+    }
+
     private static ChildSpec HoldSpec(Action<int> started, string holdMs = "5000") {
         var env = new Dictionary<string, string?> {
             ["POLY_CHILD_PROBE"] = "hold",
@@ -234,6 +310,35 @@ public class PolycProcessTests {
             return;
         var ms = int.TryParse(Environment.GetEnvironmentVariable("POLY_CHILD_HOLD_MS"), out var parsed) ? parsed : 5000;
         await Task.Delay(Math.Clamp(ms, 0, 5000));
+    }
+
+    [Test]
+    public async Task ChildProbe_RegistryReap() {
+        if (!Probing("reap") || Environment.GetEnvironmentVariable("POLY_CHILD_DEPTH") != "1")
+            return;
+        if (OperatingSystem.IsWindows())
+            return;
+        // Never disposed: the registry and the process-exit reap are what must end this child.
+        var child = await PolycProcess.ManagedChild.StartAsync(
+            new ChildSpec("30", []) { Launcher = "/bin/sleep", InChildProbe = true }, CancellationToken.None);
+        // The test framework replaces Console.Out, so the pid goes to the real fd the parent drains.
+        var stdout = Console.OpenStandardOutput();
+        stdout.Write(Encoding.UTF8.GetBytes($"reap-pid:{child.Pid}\n"));
+        stdout.Flush();
+        Environment.Exit(0);
+    }
+
+    [Test]
+    public async Task ChildProbe_GuardThrows() {
+        if (!Probing("guard") || Environment.GetEnvironmentVariable("POLY_CHILD_DEPTH") != "1")
+            return;
+        await Assert.ThrowsAsync<InvalidOperationException>(() => PolycProcess.RunAsync(new ChildSpec("unused.dll", [])));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => PolycProcess.McpAsync(McpTarget.Polyc));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => PackOracle.BootAsync(PackOracleDomains.Tally653));
+        // The test framework replaces Console.Out, so the marker goes to the real fd the parent drains.
+        var stdout = Console.OpenStandardOutput();
+        stdout.Write(Encoding.UTF8.GetBytes("guard-ok\n"));
+        stdout.Flush();
     }
 
     [Test]

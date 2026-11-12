@@ -15,6 +15,8 @@ using Poly.Compile;
 using Poly.Packs.Product;
 using Poly.Tests.DomainModeling.Lowering;
 
+using TUnit.Core;
+
 namespace Poly.Tests.TestHelpers;
 
 /// <summary>Knobs for one boot. The defaults are the production budgets; every override here exists for a
@@ -155,6 +157,7 @@ public sealed class PackOracle : IAsyncDisposable {
     public static async Task<PackOracle> BootAsync(
         PackOracleDomain fixture, string provider = "sqlite", PackOracleBootOptions? options = null) {
         ArgumentNullException.ThrowIfNull(fixture);
+        PolycProcess.GuardDepth("PackOracle");
         options ??= new PackOracleBootOptions();
         if (!string.Equals(provider, "sqlite", StringComparison.OrdinalIgnoreCase))
             throw new NotSupportedException($"PackOracle boots 'sqlite' only; '{provider}' arrives with its own slice.");
@@ -164,11 +167,13 @@ public sealed class PackOracle : IAsyncDisposable {
         var app = await CompileAsync(fixture);
         var hook = _hookPath.Value;
 
-        using (var slotWait = new CancellationTokenSource(_slotWait)) {
+        var testToken = TestContext.Current?.Execution.CancellationToken ?? CancellationToken.None;
+        using (var slotWait = CancellationTokenSource.CreateLinkedTokenSource(testToken)) {
+            slotWait.CancelAfter(_slotWait);
             try {
                 await _childSlots.WaitAsync(slotWait.Token);
             }
-            catch (OperationCanceledException) {
+            catch (OperationCanceledException) when (!testToken.IsCancellationRequested) {
                 throw new TimeoutException(
                     $"No child slot free within {_slotWait.TotalSeconds:0} s (at most 2 live children).");
             }
@@ -297,12 +302,15 @@ public sealed class PackOracle : IAsyncDisposable {
         return info;
     }
 
+    /// <summary>The same scrub as <see cref="PolycProcess.Children"/>: nothing that steers the runtime or the
+    /// harness crosses into the app, so an ambient <c>POLY_CHILD_DEPTH</c> or GC knob cannot change its behaviour.
+    /// The oracle sets its own <c>POLY_ORACLE_*</c> after the scrub.</summary>
     private static bool IsRuntimeSteering(string key) =>
         key.StartsWith("CORECLR_", StringComparison.OrdinalIgnoreCase)
         || key.StartsWith("COR_", StringComparison.OrdinalIgnoreCase)
         || key.StartsWith("DOTNET_", StringComparison.OrdinalIgnoreCase)
         || key.StartsWith("ASPNETCORE_", StringComparison.OrdinalIgnoreCase)
-        || key.StartsWith("POLY_ORACLE_", StringComparison.OrdinalIgnoreCase);
+        || key.StartsWith("POLY_", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>DOTNET_HOST_PATH when set, else the dotnet next to the running runtime, else <c>dotnet</c> on PATH.</summary>
     public static string LauncherPath() {

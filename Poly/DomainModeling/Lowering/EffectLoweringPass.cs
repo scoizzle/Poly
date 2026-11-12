@@ -43,6 +43,10 @@ public sealed partial class EffectLoweringPass : EffectDispatch<Node?> {
     private readonly LocalNames _names;
     /// <summary>Stages whose exit is already being inlined — nested transitions must not re-enter.</summary>
     private readonly HashSet<string> _exitsInlining = new(StringComparer.Ordinal);
+    /// <summary>True while inlining a hop's source exit block: a nested hop to the same target is redundant.</summary>
+    private bool _inSourceExitInline;
+    /// <summary>The enclosing hop's target while <see cref="_inSourceExitInline"/> is set.</summary>
+    private string? _enclosingHopTarget;
     /// <summary>Stages whose entry is already being inlined — nested transitions must not re-enter.</summary>
     private readonly HashSet<string> _entriesInlining = new(StringComparer.Ordinal);
 
@@ -192,7 +196,7 @@ public sealed partial class EffectLoweringPass : EffectDispatch<Node?> {
         }
         foreach (var effect in effects) {
             var lowered = RouteWithRuntimeCreate(effect);
-            if (lowered is not null)
+            if (lowered is not null && lowered is not Block { Nodes.Count: 0 })
                 bodySink.Add(lowered);
         }
     }

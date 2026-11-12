@@ -46,6 +46,8 @@ public sealed partial class EffectLoweringPass {
 
         if (c.ElseEffects is not { Count: > 0 }) {
             ClearCursorIf(canTransition);
+            if (_inSourceExitInline && thenNodes.Count == 0)
+                return new Block(condition.Statements, condition.Variables);
             return condition.Before(new IfStatement(condition.Value, new Block(thenNodes, thenVars)));
         }
 
@@ -63,6 +65,8 @@ public sealed partial class EffectLoweringPass {
         }
 
         ClearCursorIf(canTransition);
+        if (_inSourceExitInline && thenNodes.Count == 0 && elseNodes.Count == 0)
+            return new Block(condition.Statements, condition.Variables);
         return condition.Before(new IfStatement(
             condition.Value, new Block(thenNodes, thenVars), new Block(elseNodes, elseVars)));
     }

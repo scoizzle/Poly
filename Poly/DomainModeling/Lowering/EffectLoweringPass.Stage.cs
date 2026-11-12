@@ -39,6 +39,15 @@ public sealed partial class EffectLoweringPass {
             throw new InvalidOperationException(
                 $"Stage '{t.TargetStage.StageName}' does not exist on entity '{_entity.Name}'.");
 
+        // A hop inside this hop's own exit block to the same target is redundant: the
+        // enclosing hop owns the stage assign, the target's entry effects and the notify,
+        // once each. DMEFF017 makes this the only reachable shape; a differing target can
+        // occur only in a dead arm (a stage-when handler lowers with a null cursor), so it
+        // falls through and lowers as before. Return before touching the cursor.
+        if (_inSourceExitInline
+            && string.Equals(_enclosingHopTarget, t.TargetStage.StageName, StringComparison.Ordinal))
+            return new Block(Array.Empty<Node>());
+
         var nodes = new List<Node>();
         Variable? previousStage = null;
         var notifyTarget = _postTransitionNotifyStages is not null
@@ -58,40 +67,55 @@ public sealed partial class EffectLoweringPass {
         // same entity.Stages), so skipping is safe; InvokeActionInternal's fail-closed
         // throw covers the dispatch contract.
 
-        // Include exit effects from the source stage (if known).
-        // TryGetStage only (no entity.Stages rescan).
-        if (_sourceStageName is not null) {
-            _analysis.TryGetStage(_entity, _sourceStageName, out var sourceStage);
-            if (sourceStage is not null)
-                InlineExitOnce(sourceStage, nodes);
+        // The exit inline runs with the enclosing-hop flags set (restored in finally, so a
+        // throw cannot leak them and a fall-through hop re-points them at its own target).
+        // Dead-arm corner: a fall-through hop's own entry inline runs after the restore,
+        // with the outer flags, so an entry hop to the outer target is suppressed there; the
+        // arm is dead code behind the handler's stage gate.
+        var savedInline = _inSourceExitInline;
+        var savedTarget = _enclosingHopTarget;
+        _inSourceExitInline = true;
+        _enclosingHopTarget = t.TargetStage.StageName;
+        try {
+            // Include exit effects from the source stage (if known).
+            // TryGetStage only (no entity.Stages rescan).
+            if (_sourceStageName is not null) {
+                _analysis.TryGetStage(_entity, _sourceStageName, out var sourceStage);
+                if (sourceStage is not null)
+                    InlineExitOnce(sourceStage, nodes);
+            }
+            else {
+                // Entity-level transition: source stage is CurrentStage at run time.
+                // Emit per-stage OnExit so simulate and C# both run exit before assign.
+                // An else-if chain: at most one stage's exit runs per hop, even when an
+                // arm's exit holds a hop that moves CurrentStage.
+                var arms = new List<(Stage Stage, List<Node> Body)>();
+                foreach (var stage in _entity.Stages) {
+                    if (stage.OnExitEffects.Count == 0)
+                        continue;
+                    var exitNodes = new List<Node>();
+                    InlineExitOnce(stage, exitNodes);
+                    if (exitNodes.Count == 0)
+                        continue;
+                    arms.Add((stage, exitNodes));
+                }
+                Node? chain = null;
+                for (var i = arms.Count - 1; i >= 0; i--) {
+                    var (stage, body) = arms[i];
+                    Node stageMatch = new Member(
+                        new NamedTypeReference(_stageEnumTypeName ?? $"{_entity.Name}Stage"),
+                        stage.Name);
+                    var test = new Equal(new Member(Subject, "CurrentStage"), stageMatch);
+                    var branch = body.Count == 1 ? body[0] : new Block(body);
+                    chain = chain is null ? new IfStatement(test, branch) : new IfStatement(test, branch, chain);
+                }
+                if (chain is not null)
+                    nodes.Add(chain);
+            }
         }
-        else {
-            // Entity-level transition: source stage is CurrentStage at run time.
-            // Emit per-stage OnExit so simulate and C# both run exit before assign.
-            // An else-if chain: at most one stage's exit runs per hop, even when an
-            // arm's exit holds a hop that moves CurrentStage.
-            var arms = new List<(Stage Stage, List<Node> Body)>();
-            foreach (var stage in _entity.Stages) {
-                if (stage.OnExitEffects.Count == 0)
-                    continue;
-                var exitNodes = new List<Node>();
-                InlineExitOnce(stage, exitNodes);
-                if (exitNodes.Count == 0)
-                    continue;
-                arms.Add((stage, exitNodes));
-            }
-            Node? chain = null;
-            for (var i = arms.Count - 1; i >= 0; i--) {
-                var (stage, body) = arms[i];
-                Node stageMatch = new Member(
-                    new NamedTypeReference(_stageEnumTypeName ?? $"{_entity.Name}Stage"),
-                    stage.Name);
-                var test = new Equal(new Member(Subject, "CurrentStage"), stageMatch);
-                var branch = body.Count == 1 ? body[0] : new Block(body);
-                chain = chain is null ? new IfStatement(test, branch) : new IfStatement(test, branch, chain);
-            }
-            if (chain is not null)
-                nodes.Add(chain);
+        finally {
+            _inSourceExitInline = savedInline;
+            _enclosingHopTarget = savedTarget;
         }
 
         // The hop's own source exit has run: the body is in the target from here on.

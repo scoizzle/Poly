@@ -86,6 +86,16 @@ public class ConstraintKindRegistryTests {
         await Assert.That(unprinted.SetEquals([typeof(RequiredConstraint), typeof(RelationalConstraint)])).IsTrue();
     }
 
+    /// <summary>V-05b fix round 1: range bounds are identical by numeric value, not by CLR type, since
+    /// <c>Refine</c> now emits <c>decimal</c> bounds beside declared <c>long</c> ones.</summary>
+    [Test]
+    public async Task Identical_RangeBoundsAcrossLongAndDecimal_AreEqualByValue() {
+        await Assert.That(ConstraintMerge.Identical(new RangeConstraint(0L, 5L), new RangeConstraint(0m, 5m))).IsTrue();
+        await Assert.That(ConstraintMerge.Identical(new RangeConstraint(0L, 5L), new RangeConstraint(0m, 6m))).IsFalse();
+        await Assert.That(ConstraintMerge.Identical(new RangeConstraint(0L, null), new RangeConstraint(0m, null))).IsTrue();
+        await Assert.That(ConstraintMerge.Identical(new RangeConstraint(0L, null), new RangeConstraint(0m, 5m))).IsFalse();
+    }
+
     [Test]
     public async Task UnregisteredKind_IsUnmergeable_Undecided_AndPrintsFailClosed() {
         var u = new UnregisteredConstraint();

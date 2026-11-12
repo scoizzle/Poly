@@ -122,8 +122,9 @@ public class VerificationSummaryTests {
     /// A5's fixture (from <c>ConstraintFailClosedAuditTests</c>): the callee's assignment runs under
     /// the caller's context against a target bound that cannot be ordered, so the call chain reports
     /// an error and (since V-05b S3b) records a violation fact for it. The callee's own parameter arm also records an
-    /// unverified fact, so this doubles as A1's masking test: a diagnostic-to-fact match must not
-    /// hide the error behind that fact.
+    /// unverified fact on a different node. Since S3b this is no longer a same-node masking case: the
+    /// error node carries a violation fact, and the "error with no fact" arm is covered by
+    /// <c>LookupNullError_IsViolated</c>.
     /// </summary>
     private static (Domain Domain, AnalysisResult Analysis) CallChainAgainstUnorderableTargetBound() {
         var b = Act("B", [NumProp("x")],

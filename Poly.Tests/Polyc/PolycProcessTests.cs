@@ -13,10 +13,9 @@ namespace Poly.Tests.TestHelpers;
 /// only when the parent of a filtered child run sets <c>POLY_CHILD_PROBE</c>. They never call <see cref="PolycProcess"/>.</summary>
 [NotInParallel("ChildProcessSlots")]
 public class PolycProcessTests {
-    /// <summary>Length of a <c>not not ... Flag is true</c> chain. Measured on net10.0/macOS: <c>polyc check</c> aborts with exit 134
-    /// ("Stack overflow." in Poly.Grammar.Matcher) at 2000, 5000, 10000, 20000, 50000 and 400000. Parenthesis nesting does not
-    /// overflow: it stalls past 30 s (2000 deep). When the parser is hardened (G-10) this test flips; the mechanism's permanent
-    /// proof is <see cref="RunTestInChild_OverflowingChild_ReportsAbortNotHostCrash"/>.</summary>
+    /// <summary>Length of a <c>not not ... Flag is true</c> chain. Before G-09 this aborted with exit 134 ("Stack overflow." in
+    /// Poly.Grammar.Matcher) at 2000 and above; the matcher budget now reports it as a positioned DSL0001 instead. The abort
+    /// mechanism's permanent proof is <see cref="RunTestInChild_OverflowingChild_ReportsAbortNotHostCrash"/>.</summary>
     private const int OverflowDepth = 20_000;
 
     /// <summary>A document whose one positioned error names the file, so the BOM comparison is not vacuous:
@@ -43,7 +42,7 @@ public class PolycProcessTests {
     }
 
     [Test]
-    public async Task Check_CrashingChild_ReportsSigabrtExitCodeAsResult() {
+    public async Task Check_DeepNotChain_ReportsPositionedParseError() {
         var dir = PolycTestSupport.TempDir();
         try {
             var path = Path.Combine(dir, "deep.poly");
@@ -51,9 +50,10 @@ public class PolycProcessTests {
 
             var result = await PolycProcess.CheckAsync(path);
 
-            await Assert.That(result.IsAborted).IsTrue();
-            await Assert.That(result.ExitCode).IsEqualTo(134);
-            await Assert.That(result.Stderr).Contains("Stack overflow");
+            await Assert.That(result.IsAborted).IsFalse();
+            await Assert.That(result.ExitCode).IsEqualTo(1);
+            await Assert.That(result.Stdout).Contains(": error DSL0001: ");
+            await Assert.That(result.Stdout).Contains(":5:16: error DSL0001: ");
         }
         finally {
             Directory.Delete(dir, recursive: true);

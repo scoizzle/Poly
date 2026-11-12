@@ -209,9 +209,9 @@ Suspended: stage {
 
 Every valid `.poly` document starts with a domain name. Optional `uses` lines list
 **extension ids** this compilation unit depends on. `polyc build` loads the implicit set
-`[storage, persistence]` when none are listed; a non-empty list replaces it, so `unique`
-needs `persistence` or a vendor library there. MCP execution (`apply_dsl`) and C# export add
-`persistence`, so `uses storage` still guards `unique`. Temporal is implicit; unknown or duplicate ids fail closed.
+`[storage, persistence]` when none are listed; a non-empty list replaces it, so a `unique`
+property needs `persistence` or a vendor library there — nothing adds it for you, and any other list is
+`DMLIB001` at define time (`polyc`, `poly_define`, `apply_dsl`). Temporal stays implicit; unknown or duplicate ids fail closed.
 `uses <id>` loads the library's export package, never a sibling `.poly`. A package boundary
 pins the surface with `uses billing 2024-11-20`; a `contract` block covers what no library contributes.
 
@@ -1040,6 +1040,10 @@ The DSL accepts boolean and scalar expressions through the following precedence 
 | `and` | Binary, left-assoc | `Age >= 18 and Status is "active"` |
 | `or` | Binary, left-assoc | `Total > 0 or Rush is true` |
 
+An expression may nest at most 256 levels: the top level is 0, and each paren group, `not`,
+comparison operand, `where` body or call/match argument adds 1, while a chain of N operands
+adds N - 1. Deeper input is a positioned parse error, not a crash.
+
 Valid expressions:
 <!-- poly-verify: skip:illustration owner:M-02 -->
 ```poly
@@ -1205,12 +1209,14 @@ diverging:
   create factory and any action that assigns the property take an `IStoragePort db`
   parameter and return `Unique constraint violated` before the write — the guard is the
   module's, not a separate export-only stub. This is the same body a source that writes
-  `uses persistence` prints. For `polyc build` (Produce) a non-empty `uses` list replaces the
-  implicit set `[storage, persistence]`, so `unique` needs `persistence` or a vendor library
-  in that list. MCP execution and the C# export add `persistence` themselves
-  (`McpSessionStore.EnsureExecution`), so in MCP a `uses storage` or `uses http` document
-  still guards `unique`. The printed `EnsureUnique` member is a residual with no
-  caller: it refuses with "A unique assign needs the storage port." The EF model uses a
+  `uses persistence` prints. A non-empty `uses` list replaces the implicit set
+  `[storage, persistence]`, so a `unique` property needs `persistence` or a vendor library in
+  that list. Authoring is where the rule bites: a document that lists `uses storage` or
+  `uses http` and nothing else is `DMLIB001` at define time, in `polyc` and in every MCP
+  authoring call, instead of silently losing the constraint. The MCP execution overlay
+  (`McpSessionStore.EnsureExecution`) still adds `persistence`; with the rule in place it adds
+  no `unique` guard the document did not ask for, and its removal is C-08's. The printed `EnsureUnique` member
+  is a residual with no caller: it refuses with "A unique assign needs the storage port." The EF model uses a
   synthetic integer `Id` key. Every `unique` property, including a second one on the
   same entity, is `HasIndex(...).IsUnique()`. Duplicate values fail loud at the session
   storage port and at the database.
@@ -1718,6 +1724,7 @@ comment describing the old member.
 ```poly
 domain Orders
 uses storage
+uses persistence
 
 Customer: entity {
   Name: Text

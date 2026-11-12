@@ -13,6 +13,7 @@ public enum StudentStage
 public class Student
 {
     private List<Enrollment> _enrollments = new List<Enrollment>();
+    private Student() { }
     private Student(string name, string email, IEnumerable<Enrollment>? enrollments = null, long maxCredits = 18L, long openCredits = 0L, long holds = 0L, long completions = 0L, long lastGrade = 0L)
     {
         this.Name = name;
@@ -180,7 +181,7 @@ public class Student
         this.Completions = this.Completions + 1L;
         this.LastGrade = done.Grade;
     }
-    public static DomainResult<Student> Create(string name, string email, IEnumerable<Enrollment>? enrollments = null, long maxCredits = 18L, long openCredits = 0L, long holds = 0L, long completions = 0L, long lastGrade = 0L)
+    public static DomainResult<Student> Create(string name, string email, Poly.Runtime.IStoragePort db, IEnumerable<Enrollment>? enrollments = null, long maxCredits = 18L, long openCredits = 0L, long holds = 0L, long completions = 0L, long lastGrade = 0L)
     {
         if (string.IsNullOrEmpty(name))
         {
@@ -202,7 +203,12 @@ public class Student
         {
             return DomainResult<Student>.Failure("'MaxCredits' must be <= 24.");
         }
+        if (Student.ExistsWithEmail(db, email))
+        {
+            return DomainResult<Student>.Failure("Unique constraint violated: 'Email' value is already used on another 'Student'.");
+        }
         var created = new Student(name, email, enrollments, maxCredits, openCredits, holds, completions, lastGrade);
+        db.Record("Student", "Email", email);
         return DomainResult<Student>.Success(created);
     }
     private void InitializeSubscriptions()
@@ -228,4 +234,5 @@ public class Student
         }
         return DomainResult.Failure("A unique assign needs the storage port.");
     }
+    public static System.Boolean ExistsWithEmail(Poly.Runtime.IStoragePort db, System.String email) => db.Exists("Student", "Email", email);
 }

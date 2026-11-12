@@ -499,14 +499,18 @@ public sealed class LibrarySelectionTests {
     }
 
     /// <summary>
-    /// FX2: the replace rule is a Produce rule. MCP execution adds <c>persistence</c>, so a
-    /// document that lists only <c>storage</c> still guards <c>unique</c> through the C# export.
+    /// FX2 (C-05 B1): the replace rule applies to authoring too. MCP no longer adds
+    /// <c>persistence</c> to the applied document, so the document names both libraries and the
+    /// export still guards <c>unique</c> through the storage port. <c>uses storage</c> alone is
+    /// <c>DMLIB001</c> at define time (pinned by
+    /// <c>ConstraintCoverageTests.PolycMcp_PolyDefine_UsesStorageUnique_IsRejectedWithDMLIB001_AndKeepsTheRevision</c>).
     /// </summary>
     [Test]
-    public async Task UsesStorageAlone_McpCSharpExport_StillGuardsUnique() {
+    public async Task UsesStoragePlusPersistence_McpCSharpExport_GuardsUnique() {
         var (sessionId, _) = McpTestTools.Store.Create("StorageUnique");
         var applied = McpTestTools.Dsl.ApplyDsl(
-            sessionId, "domain StorageUnique\nuses storage\n\nAgent: entity {\n  Handle: Text unique\n}\n");
+            sessionId,
+            "domain StorageUnique\nuses storage\nuses persistence\n\nAgent: entity {\n  Handle: Text unique\n}\n");
         await Assert.That(applied.Success).IsTrue();
 
         var first = McpTestTools.Runtime.CreateInstance(sessionId, "Agent", """{"Handle":"sam"}""");

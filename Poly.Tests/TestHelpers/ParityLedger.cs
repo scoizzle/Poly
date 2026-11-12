@@ -336,6 +336,7 @@ public static class DomainParityScenarios {
 
         new("optional-unique-text", 611, """
             domain M
+            uses persistence
 
             Thing: entity {
               Name: Text length(2, 10)
@@ -343,6 +344,7 @@ public static class DomainParityScenarios {
             }
             """, """
             domain M
+            uses persistence
 
             Thing: entity {
               Name: Text length(2, 10)
@@ -357,12 +359,14 @@ public static class DomainParityScenarios {
 
         new("unique-number", 493, """
             domain M
+            uses persistence
 
             Thing: entity {
               K: Number unique
             }
             """, """
             domain M
+            uses persistence
 
             Thing: entity {
               K: Number unique

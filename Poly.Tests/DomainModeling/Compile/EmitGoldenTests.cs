@@ -63,6 +63,54 @@ public sealed class EmitGoldenTests {
         await AssertGoldens(Path.Combine(GoldenRoot(), "crm-dslcompiler"), produced);
     }
 
+    /// <summary>
+    /// The document's <c>uses</c> order decides which vendor type map wins when the facade
+    /// resolves <c>persistence</c> to <c>sqlite</c> (<c>SwapPersistence</c>, Db/All modes): the
+    /// vendor library must come last, so <c>uses temporal</c> precedes <c>uses persistence</c>
+    /// and the sqlite map keeps <c>closeBy</c> a <c>TEXT</c> column
+    /// (docs/decisions/2026-10-15-multi-vendor-storage-layout.md:206,596).
+    /// </summary>
+    [Test]
+    public async Task Crm_DslCompiler_LoadOrderTemporalThenSqlite_KeepsDateAsText() {
+        var poly = await File.ReadAllTextAsync(
+            Path.Combine(FindRepoRoot(), "docs/probes/dogfood/crm.poly"));
+        var result = new Compiler()
+            .Load(new HttpLibrary())
+            .Compile(poly, CompileMode.All, DbmsPack.Sqlite);
+        if (!result.Success)
+            throw new InvalidOperationException(
+                $"DslCompiler failed: {string.Join("; ", result.Errors ?? [])}");
+
+        var dbContext = result.Files!.Single(f => f.FileName == "CrmDbContext.cs").Source;
+        await Assert.That(dbContext).Contains("HasColumnName(\"closeBy\").HasColumnType(\"TEXT\")");
+        await Assert.That(dbContext).Contains("HasColumnName(\"dueOn\").HasColumnType(\"TEXT\")");
+    }
+
+    /// <summary>
+    /// The same load-order hazard on the second dogfood document: with `uses persistence`
+    /// before `uses temporal` the facade's `SwapPersistence` resolves the first vendor and the
+    /// sqlite map turns every `Date` column into `date`. The vendor must come last, so the
+    /// document's `uses` block ends with `uses persistence`.
+    /// </summary>
+    [Test]
+    public async Task Hotel_DslCompiler_LoadOrderTemporalThenSqlite_KeepsDateAsText() {
+        var poly = await File.ReadAllTextAsync(
+            Path.Combine(FindRepoRoot(), "docs/probes/dogfood/hotel.poly"));
+        var result = new Compiler()
+            .Load(new HttpLibrary())
+            .Compile(poly, CompileMode.All, DbmsPack.Sqlite);
+        if (!result.Success)
+            throw new InvalidOperationException(
+                $"DslCompiler failed: {string.Join("; ", result.Errors ?? [])}");
+
+        var dbContext = result.Files!.Single(f => f.FileName == "HotelDbContext.cs").Source;
+        await Assert.That(dbContext).Contains("HasColumnName(\"checkInDate\").HasColumnType(\"TEXT\")");
+        await Assert.That(dbContext).Contains("HasColumnName(\"checkOutDate\").HasColumnType(\"TEXT\")");
+        await Assert.That(dbContext).Contains("HasColumnName(\"startDate\").HasColumnType(\"TEXT\")");
+        await Assert.That(dbContext).Contains("HasColumnName(\"endDate\").HasColumnType(\"TEXT\")");
+        await Assert.That(dbContext).DoesNotContain("HasColumnType(\"date\")");
+    }
+
     // Regenerate: polyc build demo/Poly.RestApi/library.poly --out demo
     // (the compiler writes demo/Library/; the files are renamed to Poly.RestApi/).
     [Test]

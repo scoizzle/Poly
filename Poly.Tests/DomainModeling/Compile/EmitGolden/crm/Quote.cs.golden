@@ -14,6 +14,7 @@ public enum QuoteStage
 public class Quote
 {
     private List<QuoteLine> _lines = new List<QuoteLine>();
+    private Quote() { }
     private Quote(string title, decimal amount, Opportunity? opportunity = null, IEnumerable<QuoteLine>? lines = null)
     {
         this.Title = title;

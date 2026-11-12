@@ -9,6 +9,7 @@ public enum FolioStage
 
 public class Folio
 {
+    private Folio() { }
     private Folio(Reservation? reservation = null, decimal balance = 0m)
     {
         this.Balance = balance;

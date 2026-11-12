@@ -13,6 +13,7 @@ public class Property
 {
     private List<Hall> _halls = new List<Hall>();
     private List<Room> _rooms = new List<Room>();
+    private Property() { }
     private Property(string name, string city, IEnumerable<Hall>? halls = null, IEnumerable<Room>? rooms = null)
     {
         this.Name = name;

@@ -17,6 +17,14 @@ public sealed partial class EffectLoweringPass {
     /// assignment, target-stage entry effects (once), then
     /// <c>Notify{Target}Subscribers(previousStageN)</c> when the target is a watched
     /// stage (see <see cref="LoweringContext.PreviousStageNotifyStages"/>).
+    /// The exit runs before the cursor moves, so each hop exits its own source.
+    /// <see cref="_sourceStageName"/> is then advanced to the target <em>before</em> the
+    /// entry effects inline and is never overwritten afterwards, so a nested entry chain
+    /// ends on its innermost target. A guarded hop advances the cursor only within its own
+    /// branch (the else branch restarts from the entry stage). The cursor is null — the
+    /// per-stage exit switch — in and after a <c>for</c> whose body holds a hop or a
+    /// self-<c>invoke</c>, after a branch holding a hop or a self-<c>invoke</c>, and after
+    /// every self-<c>invoke</c>.
     /// Does not emit instance <c>Notify</c> — that method exists only on the
     /// simulator heap object; printed classes do not have one. Emits
     /// <c>NoteAutomaticStage</c> before the assign so simulate and printed C#
@@ -76,6 +84,13 @@ public sealed partial class EffectLoweringPass {
             }
         }
 
+        // The hop's own source exit has run: the body is in the target from here on.
+        // Set before the entry inline (not after) so a nested entry hop exits the
+        // target, and do not re-set it afterwards so a chain ends on the innermost
+        // target. Unconditional: a target with no entry effects still leaves the next
+        // effect in this body exiting the target.
+        _sourceStageName = t.TargetStage.StageName;
+
         // Entry effects run after the stage assign (a nested entry transition
         // must end at Y). Constraint probes are not emitted.
         var tryNodes = new List<Node>();
@@ -127,8 +142,6 @@ public sealed partial class EffectLoweringPass {
             CollectNode(flatTry, tryLocals, tryNode);
         if (flatTry.Count > 0)
             nodes.AddRange(flatTry);
-
-        _sourceStageName = t.TargetStage.StageName;
 
         var locals = new List<Node>();
         if (previousStage is not null)

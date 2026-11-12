@@ -288,6 +288,7 @@ public sealed class NameScopeTests {
         var evolved = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(
             new PolyDslParser("""
                 domain Parity
+                uses persistence
                 Item: entity {
                   Code: Text
                 }
@@ -584,6 +585,7 @@ public sealed class NameScopeTests {
         var evolved = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(
             new PolyDslParser("""
                 domain Parity
+                uses persistence
                 Item: entity {
                   Code: Text
                 }
@@ -672,6 +674,7 @@ public sealed class NameScopeTests {
         // `DomainResult.Success()`/`Failure(...)` from its body.
         var analysis = Analyze("""
             domain Scope
+            uses persistence
             A: entity {
               DomainResult: Text
               Code: Text unique

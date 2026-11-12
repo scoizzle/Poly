@@ -3,6 +3,7 @@ using Poly.Runtime;
 
 public class Site
 {
+    private Site() { }
     private Site(string city, string region)
     {
         this.City = city;

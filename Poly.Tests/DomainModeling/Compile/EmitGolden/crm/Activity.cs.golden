@@ -11,6 +11,7 @@ public enum ActivityStage
 
 public class Activity
 {
+    private Activity() { }
     private Activity(string subject, Opportunity? opportunity = null, DateOnly? dueOn = null)
     {
         this.Subject = subject;

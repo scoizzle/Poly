@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 
 using Poly.DomainModeling.Compile;
+using Poly.DomainModeling.Libraries.Storage;
 
 namespace Poly.Benchmarks;
 
@@ -44,13 +45,15 @@ public static class BenchmarkSupport {
 
     /// <summary>
     /// The session the invoke and analysis cases are built on: the define gate's authoring
-    /// pipeline (<see cref="DomainSession.ForAuthoringSource"/>) with
-    /// <see cref="ExtensionCatalog.ProductAuthoring"/> as the seed when a document lists no
-    /// <c>uses</c>. Every failure names the document path.
+    /// pipeline (<see cref="DomainSession.ForAuthoringSource"/>) with the product implicit set
+    /// (<c>storage</c> plus <c>persistence</c>) as the seed when a document lists no
+    /// <c>uses</c>, so a bare corpus document gets the same libraries <c>polyc</c> gives it and
+    /// a <c>unique</c> property is not DMLIB001 (C-05). Every failure names the document path.
     /// </summary>
     public static DomainSession AuthoringSession(string text, string relativePath) {
         try {
-            return DomainSession.ForAuthoringSource(text, ExtensionCatalog.ProductAuthoring);
+            return DomainSession.ForAuthoringSource(
+                text, [ExtensionCatalog.StorageFacetsId, new PersistenceEmitLibrary().Id]);
         }
         catch (Exception exception) {
             throw new InvalidOperationException(

@@ -205,6 +205,15 @@ internal static class DomainModelDiagnosticCodes {
     /// </summary>
     public const string ContractBindActionAlreadyBound = "DMCON018";
 
+    /// <summary>
+    /// #684 C-05: a constraint no loaded library compiles. <c>unique</c> is the one
+    /// shipped record: its guard is the storage port, so a document that lists
+    /// <c>uses</c> without <c>persistence</c> or a vendor library would have it
+    /// silently dropped. Positioned on the constrained <see cref="Property"/> or
+    /// <see cref="DomainType"/>; an error, and Lower refuses it.
+    /// </summary>
+    public const string ConstraintNoCompiler = "DMLIB001";
+
     // Stage-subscription diagnostics (replaced retired DMEV* event codes)
     public const string SubscriptionCausalityCycle = "DMSS001";
     public const string SubscriptionIdempotencyReplay = "DMSS002";

@@ -13,6 +13,7 @@ public class Section
 {
     private List<Enrollment> _enrollments = new List<Enrollment>();
     private List<WaitOffer> _waitlist = new List<WaitOffer>();
+    private Section() { }
     private Section(long cap, Term offeringTerm, Course? course = null, Instructor? instructor = null, IEnumerable<Enrollment>? enrollments = null, IEnumerable<WaitOffer>? waitlist = null, long seatsTaken = 0L, long offeredSeats = 0L, long waitCleared = 0L)
     {
         this.Cap = cap;

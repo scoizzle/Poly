@@ -12,6 +12,7 @@ public enum RoomStage
 public class Room
 {
     private List<Reservation> _stays = new List<Reservation>();
+    private Room() { }
     private Room(string number, long floor, decimal nightlyRate, long maxOccupancy, Property? property = null, RoomType? roomType = null, IEnumerable<Reservation>? stays = null, bool occupied = false, bool dirty = false, bool offline = false)
     {
         this.Number = number;
@@ -105,7 +106,7 @@ public class Room
     {
         this.Dirty = true;
     }
-    public static DomainResult<Room> Create(string number, long floor, decimal nightlyRate, long maxOccupancy, Property? property = null, RoomType? roomType = null, IEnumerable<Reservation>? stays = null, bool occupied = false, bool dirty = false, bool offline = false)
+    public static DomainResult<Room> Create(string number, long floor, decimal nightlyRate, long maxOccupancy, Poly.Runtime.IStoragePort db, Property? property = null, RoomType? roomType = null, IEnumerable<Reservation>? stays = null, bool occupied = false, bool dirty = false, bool offline = false)
     {
         if (string.IsNullOrEmpty(number))
         {
@@ -143,11 +144,16 @@ public class Room
         {
             return DomainResult<Room>.Failure("'MaxOccupancy' must be <= 8.");
         }
+        if (Room.ExistsWithNumber(db, number))
+        {
+            return DomainResult<Room>.Failure("Unique constraint violated: 'Number' value is already used on another 'Room'.");
+        }
         var created = new Room(number, floor, nightlyRate, maxOccupancy, property, roomType, stays, occupied, dirty, offline);
         if (property != null)
         {
             property.AttachRooms(created);
         }
+        db.Record("Room", "Number", number);
         return DomainResult<Room>.Success(created);
     }
     private void InitializeSubscriptions()
@@ -181,4 +187,5 @@ public class Room
         }
         return DomainResult.Failure("A unique assign needs the storage port.");
     }
+    public static System.Boolean ExistsWithNumber(Poly.Runtime.IStoragePort db, System.String number) => db.Exists("Room", "Number", number);
 }

@@ -14,6 +14,7 @@ public class Guest
 {
     private List<EventHold> _events = new List<EventHold>();
     private List<Reservation> _reservations = new List<Reservation>();
+    private Guest() { }
     private Guest(string name, string email, string phone, IEnumerable<EventHold>? events = null, IEnumerable<Reservation>? reservations = null, long stayCount = 0L, long nightCount = 0L, long eventCount = 0L)
     {
         this.Name = name;
@@ -143,7 +144,7 @@ public class Guest
     {
         this.EventCount = this.EventCount + 1L;
     }
-    public static DomainResult<Guest> Create(string name, string email, string phone, IEnumerable<EventHold>? events = null, IEnumerable<Reservation>? reservations = null, long stayCount = 0L, long nightCount = 0L, long eventCount = 0L)
+    public static DomainResult<Guest> Create(string name, string email, string phone, Poly.Runtime.IStoragePort db, IEnumerable<EventHold>? events = null, IEnumerable<Reservation>? reservations = null, long stayCount = 0L, long nightCount = 0L, long eventCount = 0L)
     {
         if (string.IsNullOrEmpty(name))
         {
@@ -169,7 +170,12 @@ public class Guest
         {
             return DomainResult<Guest>.Failure("'Phone' must be at most 20 characters.");
         }
+        if (Guest.ExistsWithEmail(db, email))
+        {
+            return DomainResult<Guest>.Failure("Unique constraint violated: 'Email' value is already used on another 'Guest'.");
+        }
         var created = new Guest(name, email, phone, events, reservations, stayCount, nightCount, eventCount);
+        db.Record("Guest", "Email", email);
         return DomainResult<Guest>.Success(created);
     }
     private void InitializeSubscriptions()
@@ -195,4 +201,5 @@ public class Guest
         }
         return DomainResult.Failure("A unique assign needs the storage port.");
     }
+    public static System.Boolean ExistsWithEmail(Poly.Runtime.IStoragePort db, System.String email) => db.Exists("Guest", "Email", email);
 }

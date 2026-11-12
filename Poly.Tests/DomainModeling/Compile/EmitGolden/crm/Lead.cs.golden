@@ -10,6 +10,7 @@ public enum LeadStage
 
 public class Lead
 {
+    private Lead() { }
     private Lead(string name, string email, string company, Account? account = null)
     {
         this.Name = name;
@@ -46,7 +47,7 @@ public class Lead
         return DomainResult.Success();
     }
     public bool HasAccount() => this.Account != null;
-    public static DomainResult<Lead> Create(string name, string email, string company, Account? account = null)
+    public static DomainResult<Lead> Create(string name, string email, string company, Poly.Runtime.IStoragePort db, Account? account = null)
     {
         if (string.IsNullOrEmpty(name))
         {
@@ -64,7 +65,12 @@ public class Lead
         {
             return DomainResult<Lead>.Failure("'Company' is required.");
         }
+        if (Lead.ExistsWithEmail(db, email))
+        {
+            return DomainResult<Lead>.Failure("Unique constraint violated: 'Email' value is already used on another 'Lead'.");
+        }
         var created = new Lead(name, email, company, account);
+        db.Record("Lead", "Email", email);
         return DomainResult<Lead>.Success(created);
     }
     public DomainResult EnsureUnique(string propertyName, object value)
@@ -79,4 +85,5 @@ public class Lead
         }
         return DomainResult.Failure("A unique assign needs the storage port.");
     }
+    public static System.Boolean ExistsWithEmail(Poly.Runtime.IStoragePort db, System.String email) => db.Exists("Lead", "Email", email);
 }

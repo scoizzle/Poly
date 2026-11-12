@@ -142,8 +142,26 @@ public static class PackOracleDomains {
         """,
         "/api/tallies");
 
+    /// <summary>#675 (Q13 ruling) designated initial stage. <c>Draft</c> is declared first, so <c>Open</c>
+    /// is only initial because the header says so. The unique <c>Code</c> gives the POST a Location and the
+    /// created row its own read route, clear of #589's unserialised synthetic id.</summary>
+    public static PackOracleDomain Fulfillment675 { get; } = new(
+        "Fulfillment675",
+        """
+        domain Fulfillment
+        uses sqlite
+        uses http
+
+        Order: entity initial(Open) {
+          Code: Text unique length(3, 8)
+          Draft: stage {}
+          Open: stage {}
+        }
+        """,
+        "/api/orders");
+
     public static IReadOnlyList<PackOracleDomain> All { get; } =
-        [Inventory588, Logistics559, Warehouse620, Inventory626, Desk658, Tally653];
+        [Inventory588, Logistics559, Warehouse620, Inventory626, Desk658, Tally653, Fulfillment675];
 
     /// <summary>The PR-tier boot set (OQ-10): exactly Inventory588 and Warehouse620.</summary>
     public static IReadOnlyList<PackOracleDomain> Subset { get; } = [Inventory588, Warehouse620];

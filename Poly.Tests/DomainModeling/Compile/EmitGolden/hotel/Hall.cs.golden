@@ -12,6 +12,7 @@ public enum HallStage
 public class Hall
 {
     private List<Section> _sections = new List<Section>();
+    private Hall() { }
     private Hall(string name, long capacity, decimal dayRate, Property? property = null, IEnumerable<Section>? sections = null, bool occupied = false, bool offline = false, long busySections = 0L)
     {
         this.Name = name;

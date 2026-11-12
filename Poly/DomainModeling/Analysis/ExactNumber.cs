@@ -109,8 +109,6 @@ internal readonly struct ExactNumber : IEquatable<ExactNumber> {
 
     public decimal ToDecimal() => Value;
 
-    public long ToLong() => decimal.ToInt64(Value);
-
     public bool TryToLong(out long value) {
         if (Value != decimal.Truncate(Value) || Value < long.MinValue || Value > long.MaxValue) {
             value = 0;

@@ -278,6 +278,85 @@ public class RangeBoundExactnessTests {
         await Assert.That(shifted!.Value.ToDecimal()).IsEqualTo(0.000000000000000000000000001m);
     }
 
+    [Test]
+    public async Task ExactNumber_AddEdges() {
+        var max = ExactNumber.TryFrom(long.MaxValue)!.Value;
+        var sum = max.TryAdd(max);
+        var overflow = ExactNumber.TryFrom(decimal.MaxValue)!.Value.TryAdd(ExactNumber.TryFrom(1m)!.Value);
+        var third = ExactNumber.TryFrom(0.1m)!.Value.TryAdd(ExactNumber.TryFrom(0.2m)!.Value);
+
+        await Assert.That(sum).IsNotNull();
+        await Assert.That(sum!.Value.ToDecimal()).IsEqualTo(18446744073709551614m);
+        await Assert.That(overflow).IsNull();
+        await Assert.That(third).IsNotNull();
+        await Assert.That(third!.Value.ToDecimal()).IsEqualTo(0.3m);
+    }
+
+    [Test]
+    public async Task ExactNumber_SubtractEdges() {
+        var max = ExactNumber.TryFrom(long.MaxValue)!.Value;
+        var min = ExactNumber.TryFrom(long.MinValue)!.Value;
+        var difference = max.TrySubtract(min);
+        var overflow = ExactNumber.TryFrom(decimal.MaxValue)!.Value.TrySubtract(ExactNumber.TryFrom(-1m)!.Value);
+        var tenth = ExactNumber.TryFrom(0.3m)!.Value.TrySubtract(ExactNumber.TryFrom(0.2m)!.Value);
+
+        await Assert.That(difference).IsNotNull();
+        await Assert.That(difference!.Value.ToDecimal()).IsEqualTo(18446744073709551615m);
+        await Assert.That(overflow).IsNull();
+        await Assert.That(tenth).IsNotNull();
+        await Assert.That(tenth!.Value.ToDecimal()).IsEqualTo(0.1m);
+    }
+
+    [Test]
+    public async Task ExactNumber_Negate_DecimalMinValue_IsExact() {
+        var negated = ExactNumber.TryFrom(decimal.MinValue)!.Value.TryNegate();
+
+        await Assert.That(negated).IsNotNull();
+        await Assert.That(negated!.Value.ToDecimal()).IsEqualTo(decimal.MaxValue);
+    }
+
+    [Test]
+    public async Task ExactNumber_TryToLong_InAndOutOfRange() {
+        var inRange = ExactNumber.TryFrom(9223372036854775807L)!.Value.TryToLong(out var max);
+        var fractional = ExactNumber.TryFrom(1.5m)!.Value.TryToLong(out var fraction);
+        var tooLarge = ExactNumber.TryFrom(decimal.MaxValue)!.Value.TryToLong(out var huge);
+
+        await Assert.That(inRange).IsTrue();
+        await Assert.That(max).IsEqualTo(long.MaxValue);
+        await Assert.That(fractional).IsFalse();
+        await Assert.That(fraction).IsEqualTo(0L);
+        await Assert.That(tooLarge).IsFalse();
+        await Assert.That(huge).IsEqualTo(0L);
+    }
+
+    [Test]
+    [Arguments("Int")]
+    [Arguments("Int64")]
+    public async Task IntegralAliasName_BoundParsesLong(string typeName) {
+        // The DSL has no primitive alias for Int/Int64, so a value type named either is the only way
+        // to reach the parser's integral-name arm; the bound type is what this pins.
+        var poly = "domain Rb\n"
+            + typeName + ": value { V: Number }\n"
+            + "B: entity { X: " + typeName + " range(0, 9223372036854775806) }\n";
+        var range = new PolyDslParser(poly).Parse()
+            .OfType<AddConstraintToPropertyChange>()
+            .Select(c => c.Constraint)
+            .OfType<RangeConstraint>()
+            .Single();
+
+        await Assert.That(range.Maximum).IsTypeOf<long>();
+        await Assert.That((long)range.Maximum!).IsEqualTo(9223372036854775806L);
+    }
+
+    [Test]
+    public async Task NumberBound_NegativeOverflow_IsPositionedParseError() {
+        var poly = Entity("Number range(-9223372036854775809, 0)");
+        var error = ParseError(poly);
+
+        await Assert.That(error.Column).IsEqualTo(ColumnOf(poly, "9223372036854775809"));
+        await Assert.That(error.Detail).Contains("out of range for Number (64-bit)");
+    }
+
     // ── helpers ──────────────────────────────────────────────────────────
 
     private static string Entity(string declaration) =>

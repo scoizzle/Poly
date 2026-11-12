@@ -46,11 +46,12 @@ public sealed class NavigationPrintCardinalityTests {
     }
 
     /// <summary>
-    /// A bare <c>x: T</c> is the many-to-one source form the resolver accepts; it reads
-    /// as one-to-one, prints as <c>one T</c>, and stays one-to-one on the second read.
+    /// The bare-source case: a typed line <c>x: T</c> is how the resolver takes a singular
+    /// reference (it reads as one-to-one, not ManyToOne), so the printer writes <c>one T</c>
+    /// and the second read is one-to-one again.
     /// </summary>
     [Test]
-    public async Task Print_BareManyToOneSource_PrintsOneAndKeepsCardinality() {
+    public async Task Print_BareTypedLineSource_PrintsOneAsOneToOne() {
         const string dsl = """
             domain BareNav
             Visit: entity {
@@ -108,6 +109,42 @@ public sealed class NavigationPrintCardinalityTests {
             """;
 
         await AssertCardinalityPin(dsl, "Patient", "visits", RelationshipCardinality.OneToMany, "visits: many Visit");
+    }
+
+    /// <summary>
+    /// A <see cref="RelationshipCardinality.ManyToOne"/> navigation — code-built only, since
+    /// the DSL has no spelling for it — keeps the bare form. <c>one T</c> would read back as
+    /// one-to-one, a cardinality the source never claimed, so the Q11 condition withholds the
+    /// keyword here; the pin exists so a later widening of the printer arm is a red.
+    /// </summary>
+    [Test]
+    public async Task Print_ManyToOneNavigation_KeepsBareForm() {
+        const string dsl = """
+            domain ManyToOneNav
+            Order: entity {
+              Code: Text
+            }
+            Customer: entity {
+              Name: Text
+            }
+            """;
+
+        var parsed = new DomainEvolution(DomainTestFactory.Create("_", [], []))
+            .ApplyAndAnalyze(new PolyDslParser(dsl).Parse());
+        await Assert.That(parsed.Succeeded).IsTrue().Because($"{parsed.FailureSummary}");
+
+        var added = new DomainEvolution(parsed.Root).ApplyAndAnalyze([
+            new AddRelationshipChange(
+                "customer",
+                new DomainTypeReference("Order"),
+                new DomainTypeReference("Customer"),
+                RelationshipCardinality.ManyToOne,
+                [])]);
+        await Assert.That(added.Succeeded).IsTrue().Because($"{added.FailureSummary}");
+
+        var printed = new DomainDslPrinter().Print(added.Root);
+        await Assert.That(printed).Contains("customer: Customer").Because(printed);
+        await Assert.That(printed).DoesNotContain("customer: one Customer").Because(printed);
     }
 
     /// <summary>

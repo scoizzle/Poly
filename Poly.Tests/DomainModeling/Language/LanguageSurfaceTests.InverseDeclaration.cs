@@ -343,8 +343,8 @@ public sealed partial class LanguageSurfaceTests {
         var root = Apply(dsl);
         var printed = new DomainDslPrinter().Print(root);
 
-        // `one` is the default cardinality, so the printer's canonical form drops it;
-        // the explicit input still round-trips through that short form.
+        // The printer writes `one` explicitly for a one-to-one navigation (Q11), so the
+        // canonical form of the explicit input is itself and the cycle is a fixed point.
         await Assert.That(Nav(EntityNamed(root, "Department"), "x").Inverse).IsEqualTo("owner");
         await Assert.That(printed).Contains("x: one Employee via owner");
         await Assert.That(new DomainDslPrinter().Print(Apply(printed))).IsEqualTo(printed);

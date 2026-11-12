@@ -106,7 +106,7 @@ static async System.Threading.Tasks.Task SeedAsync(TDbCtx db)
     {
         return;
     }
-    var pairResult = Pair.Create(1, 1, "Sample", "Sample");
+    var pairResult = Pair.Create(50, 50, "Sample", "Sample");
     if (pairResult.IsSuccess)
     {
         db.Add(pairResult.Value);

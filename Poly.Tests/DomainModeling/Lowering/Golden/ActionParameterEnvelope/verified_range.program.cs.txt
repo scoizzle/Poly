@@ -131,7 +131,7 @@ static async System.Threading.Tasks.Task SeedAsync(TDbCtx db)
     {
         return;
     }
-    var gaugeResult = Gauge.Create(1, 1);
+    var gaugeResult = Gauge.Create(50, 50);
     if (gaugeResult.IsSuccess)
     {
         db.Add(gaugeResult.Value);

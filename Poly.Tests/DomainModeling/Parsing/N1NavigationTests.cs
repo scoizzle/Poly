@@ -614,7 +614,7 @@ public class N1NavigationTests {
         var printed = printer.Print(result.Root);
 
         await Assert.That(printed.Contains("relationship ")).IsFalse();
-        await Assert.That(printed.Contains("Tracks: Order")).IsTrue();
+        await Assert.That(printed.Contains("Tracks: one Order")).IsTrue();
 
         var parser2 = new PolyDslParser(printed);
         var changes2 = parser2.Parse();

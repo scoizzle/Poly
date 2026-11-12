@@ -1166,7 +1166,7 @@ public class McpSmokeTests {
         await Assert.That(poly!.Contains("relationship Tracks from")).IsFalse();
 
         // Should contain N1 nav line on the source entity (Tracker)
-        await Assert.That(poly).Contains("Tracks: Order");
+        await Assert.That(poly).Contains("Tracks: one Order");
 
         // Re-parse the exported N1 poly and verify one relationship
         var parser = new PolyDslParser(poly);

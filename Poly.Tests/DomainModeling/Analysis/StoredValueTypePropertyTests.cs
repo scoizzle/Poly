@@ -1,6 +1,7 @@
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
+using Poly.Grammar;
 
 namespace Poly.Tests.DomainModeling.Analysis;
 
@@ -59,6 +60,26 @@ public sealed class StoredValueTypePropertyTests {
         await Assert.That(result.Analysis.Diagnostics.Any(d =>
             d.Severity == DiagnosticSeverity.Error
             && d.Code == DomainModelDiagnosticCodes.StoredValueTypeProperty)).IsTrue();
+    }
+
+    [Test]
+    public async Task ValueTypeProperty_DeclaredAfterEntity_IsPositionedErrorNamingTheStorageDecision() {
+        // The entity is declared before the value type, so the resolver queues `Bill: Money`
+        // as a navigation and only learns 'Money' is a value type at deferred resolution.
+        var ex = Assert.Throws<GrammarException>(() => new PolyDslParser("""
+            domain Shop
+            Order: entity {
+              Total: Number default(0)
+              Bill: Money
+            }
+            Money: value {
+              Amount: Number
+            }
+            """).Parse());
+
+        await Assert.That(ex!.Line).IsEqualTo(4);
+        await Assert.That(ex.Detail).Contains("has no storage representation");
+        await Assert.That(ex.Detail).Contains("Money").And.Contains("Bill");
     }
 
     [Test]

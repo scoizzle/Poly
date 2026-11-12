@@ -92,6 +92,13 @@ public sealed partial class DomainResolver {
             if (IsKnownPrimitiveName(nav.TargetTypeName)) {
                 throw GrammarError.Error($"Navigation property '{nav.PropertyName}': '{nav.TargetTypeName}' is a primitive type, not an entity. Use a primitive property declaration instead.", nav.At.Line, nav.At.Col);
             }
+            if (_valueTypeNames.Contains(nav.TargetTypeName)) {
+                throw GrammarError.Error(
+                    $"Property '{nav.PropertyName}' is declared with type '{nav.TargetTypeName}', a value type. "
+                    + "A value type is a contract payload or action parameter and has no storage representation. "
+                    + $"Declare a nested entity for stored state, or pass '{nav.TargetTypeName}' as an action parameter.",
+                    nav.At.Line, nav.At.Col);
+            }
             if (!_entityNames.Contains(nav.TargetTypeName)) {
                 // A bare type name here is a nav target, but the author may have meant a
                 // value type or a value keyword (`Ref: Guid`). Name both possibilities.

@@ -1,6 +1,6 @@
 domain Hotel
-uses persistence
 uses temporal
+uses persistence
 
 RoomType: entity {
   Name: Text length(1, 40)

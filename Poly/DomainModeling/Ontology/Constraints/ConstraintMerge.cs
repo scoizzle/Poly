@@ -234,17 +234,27 @@ public static class ConstraintMerge {
         return min > max ? null : new LengthConstraint(min, max);
     }
 
+    /// <summary>Two range bounds are equal by numeric value across numeric types (<c>5L</c> equals
+    /// <c>5m</c>), and by <see cref="object.Equals(object, object)"/> otherwise.</summary>
+    internal static bool BoundsEqual(object? x, object? y) {
+        if (x is null || y is null) return x is null && y is null;
+        return IsNumeric(x) && IsNumeric(y) && TryCompare(x, y) is { } order ? order == 0 : Equals(x, y);
+    }
+
     /// <summary>
     /// Orders two range bounds, or <c>null</c> when they cannot be ordered. Same-type bounds use
     /// that type's own ordering (decimal, long, DateTime...). Two different numeric types compare
     /// exactly through <see cref="ExactNumber"/>, so a bound above 2^53 is never rounded; when an
-    /// exact ordering does not exist but one side is a <c>double</c>/<c>float</c>, the pre-V-05a
-    /// double comparison is the fallback so this is never worse than master.
+    /// exact ordering does not exist for a numeric pair (a fractional <c>double</c>/<c>float</c>, or a
+    /// <c>ulong</c> above <c>long.MaxValue</c>), the pre-V-05a double comparison is the fallback so
+    /// this is never worse than master.
     /// </summary>
     /// <remarks>
-    /// The fallback exists only because the producers (<c>Refine</c>, <c>Eval</c>,
-    /// <c>ComposeArithmetic</c>) still carry a <c>double</c> bound. V-05b makes those endpoints
-    /// <c>decimal</c> and deletes this branch; the S5 grep is what proves it is gone.
+    /// V-05b S2 removed every analysis producer of a <c>double</c> bound (the literal arm, <c>Refine</c> and
+    /// the arithmetic now carry <c>long</c>/<c>decimal</c>). The fallback stays because a public API caller
+    /// can still build <c>new RangeConstraint(0.5, 1.5)</c>, and six V-05a pins (F1, FX2: a fractional
+    /// double against a decimal/long bound) and the cross-numeric join/validation pins assert master's
+    /// ordering for it. Deleting it is a behaviour change for API-built bounds, not an S2 consequence.
     /// </remarks>
     internal static int? TryCompare(object x, object y) {
         if (x.GetType() == y.GetType())

@@ -8,9 +8,6 @@ using Subtract = Poly.DomainModeling.Ontology.Subtract;
 
 namespace Poly.DomainModeling.Analysis;
 
-/// <summary>A numeric value range (inclusive bounds, null = unbounded).</summary>
-public sealed record ValueRange(double? Min, double? Max);
-
 /// <summary>
 /// A postcondition an effect must respect: assigning to <see cref="TargetProperty"/>
 /// must satisfy <see cref="Constraints"/>; <see cref="Value"/> is the abstract value
@@ -139,19 +136,10 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
                 if (relations) RefineRelation(env, left, right, orderings, conflicts);
                 continue;
             }
-            if (!TryGetComparisonBound(cmp, out var propName, out double value, out var bound)) continue;
+            if (!TryGetComparisonBound(cmp, out var propName, out decimal value, out var bound)) continue;
             if (!env.TryGetValue(propName, out var current)) continue;
-            switch (bound) {
-                case ComparisonKind.LessThan or ComparisonKind.LessThanOrEqual:
-                    env[propName] = current.Narrow(new RangeConstraint(null, value));
-                    break;
-                case ComparisonKind.GreaterThan or ComparisonKind.GreaterThanOrEqual:
-                    env[propName] = current.Narrow(new RangeConstraint(value, null));
-                    break;
-                case ComparisonKind.Equal:
-                    env[propName] = current.Narrow(new RangeConstraint(value, value));
-                    break;
-            }
+            if (BoundConstraint(bound, value) is { } narrowing)
+                env[propName] = current.Narrow(narrowing);
         }
     }
 
@@ -209,19 +197,28 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
             return;
         }
         if (condition is Comparison cmp
-            && TryGetComparisonBound(cmp, out var propName, out double value, out var bound)
+            && TryGetComparisonBound(cmp, out var propName, out decimal value, out var bound)
             && NegateBound(bound) is { } negated
-            && env.TryGetValue(propName, out var current)) {
-            switch (negated) {
-                case ComparisonKind.LessThan or ComparisonKind.LessThanOrEqual:
-                    env[propName] = current.Narrow(new RangeConstraint(null, value));
-                    break;
-                case ComparisonKind.GreaterThan or ComparisonKind.GreaterThanOrEqual:
-                    env[propName] = current.Narrow(new RangeConstraint(value, null));
-                    break;
-            }
-        }
+            && env.TryGetValue(propName, out var current)
+            && negated != ComparisonKind.Equal
+            && BoundConstraint(negated, value) is { } narrowing)
+            env[propName] = current.Narrow(narrowing);
     }
+
+    /// <summary>
+    /// The one-sided (or point) constraint a comparison against an exact bound implies. A strict bound
+    /// goes through <see cref="ValueRange.Below"/>/<see cref="ValueRange.Above"/> on the decimal axis, so
+    /// it stays inclusive and the endpoint is the bound itself (F5: soundly over-approximate; the
+    /// integral <c>v − 1</c> narrowing is V-02's). The constraint carries CLR decimals (A1).
+    /// </summary>
+    private static RangeConstraint? BoundConstraint(ComparisonKind kind, decimal value) => kind switch {
+        ComparisonKind.LessThan => new ValueRange(null, null).Below(value, integral: false)?.ToRangeConstraint(),
+        ComparisonKind.LessThanOrEqual => new RangeConstraint(null, value),
+        ComparisonKind.GreaterThan => new ValueRange(null, null).Above(value, integral: false)?.ToRangeConstraint(),
+        ComparisonKind.GreaterThanOrEqual => new RangeConstraint(value, null),
+        ComparisonKind.Equal => new RangeConstraint(value, value),
+        _ => null,
+    };
 
     private static IEnumerable<DomainExpression> FlattenAnds(DomainExpression expr) {
         if (expr is And and) {
@@ -234,17 +231,17 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
     }
 
     private static bool TryGetComparisonBound(
-        Comparison cmp, out string propName, out double value, out ComparisonKind bound) {
+        Comparison cmp, out string propName, out decimal value, out ComparisonKind bound) {
         propName = "";
         value = 0;
         bound = default;
         if (cmp.Left is PropertyAccess pa && cmp.Right is Literal { Value: not null } lit) {
             propName = pa.Name;
-            return NumericBound.ToDoubleOrNull(lit.Value) is double d && SetBound(cmp.Kind, d, out value, out bound);
+            return DeclaredBound(lit.Value) is { } d && SetBound(cmp.Kind, d, out value, out bound);
         }
         if (cmp.Left is Literal { Value: not null } lit2 && cmp.Right is PropertyAccess pa2) {
             propName = pa2.Name;
-            return NumericBound.ToDoubleOrNull(lit2.Value) is double d2 && SetBound(Flip(cmp.Kind), d2, out value, out bound);
+            return DeclaredBound(lit2.Value) is { } d2 && SetBound(Flip(cmp.Kind), d2, out value, out bound);
         }
         return false;
     }
@@ -265,7 +262,7 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
         _ => null,
     };
 
-    private static bool SetBound(ComparisonKind kind, double v, out double value, out ComparisonKind bound) {
+    private static bool SetBound(ComparisonKind kind, decimal v, out decimal value, out ComparisonKind bound) {
         switch (kind) {
             case ComparisonKind.LessThan or ComparisonKind.LessThanOrEqual
                 or ComparisonKind.GreaterThan or ComparisonKind.GreaterThanOrEqual
@@ -291,8 +288,9 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
         Domain? domain = null) {
         switch (expr) {
             case Literal { Value: not null } lit:
-                return NumericBound.ToDoubleOrNull(lit.Value) is double d
-                    ? AbstractValue.From([new RangeConstraint(d, d)])
+                // The literal keeps its declared bound: a long stays long, a decimal stays decimal (A1).
+                return DeclaredClrBound(lit.Value) is { } declared
+                    ? AbstractValue.From([new RangeConstraint(declared, declared)])
                     : AbstractValue.From(lit.Value is string s ? [new EqualityConstraint(s)] : []);
             case PropertyAccess pa:
                 if (paramEnv is not null && paramEnv.TryGetValue(pa.Name, out var fromParam))
@@ -316,14 +314,14 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
                     ? Eval(rn.TargetProperty, related, null, EmptyEnv, null, null, domain)
                     : AbstractValue.Unknown;
             case Add add:
-                return ComposeArithmetic(Eval(add.Left, entity, action, env, paramEnv, targetEntity, domain),
-                    Eval(add.Right, entity, action, env, paramEnv, targetEntity, domain), ArithOp.Add);
+                return EvalArithmetic(add, add.Left, add.Right,
+                    operand => Eval(operand, entity, action, env, paramEnv, targetEntity, domain));
             case Subtract sub:
-                return ComposeArithmetic(Eval(sub.Left, entity, action, env, paramEnv, targetEntity, domain),
-                    Eval(sub.Right, entity, action, env, paramEnv, targetEntity, domain), ArithOp.Sub);
+                return EvalArithmetic(sub, sub.Left, sub.Right,
+                    operand => Eval(operand, entity, action, env, paramEnv, targetEntity, domain));
             case Multiply mul:
-                return ComposeArithmetic(Eval(mul.Left, entity, action, env, paramEnv, targetEntity, domain),
-                    Eval(mul.Right, entity, action, env, paramEnv, targetEntity, domain), ArithOp.Mul);
+                return EvalArithmetic(mul, mul.Left, mul.Right,
+                    operand => Eval(operand, entity, action, env, paramEnv, targetEntity, domain));
             default:
                 return AbstractValue.Unknown;
         }
@@ -347,41 +345,40 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
         return targets.Count == 1 ? targets[0] : null;
     }
 
-    /// <summary>The arithmetic an abstract value composes over. <c>*</c> carries no open endpoint yet:
-    /// 0 · ±∞ needs V-05's exact number (OQ-6), so it stays fail-open (Unknown) rather than guess.</summary>
-    private enum ArithOp { Add, Sub, Mul }
-
     /// <summary>
-    /// Composes two abstract values, one rule per result endpoint, each depending only on its own two
-    /// operand endpoints (#475): add takes like sides, subtract flips, and an absent operand endpoint
-    /// makes that result endpoint absent. An absent side is unbounded, never 0. Both result endpoints
-    /// absent means no numeric range at all (Unknown), never a <c>range(−∞, +∞)</c> constraint.
+    /// The one arithmetic evaluator (A4, A10): both <see cref="Eval"/> and the for-each binding walk
+    /// reach it. <c>X − X</c> is 0 when both operands are structurally equal and pure — checked before
+    /// any range is looked up, so an operand with no range still cancels. Otherwise each operand's
+    /// interval goes through <see cref="IntervalTransfers"/>, the only arithmetic path: an operand with
+    /// no range is a null interval, an unregistered node a null result, and an interval that is open on
+    /// both sides carries no information (Unknown), never a <c>range(−∞, +∞)</c>.
     /// </summary>
-    private static AbstractValue ComposeArithmetic(AbstractValue left, AbstractValue right, ArithOp op) {
-        if (left.NumericRange is not { } lr || right.NumericRange is not { } rr) return AbstractValue.Unknown;
-        double? min, max;
-        switch (op) {
-            case ArithOp.Add:
-                min = lr.Min + rr.Min;
-                max = lr.Max + rr.Max;
-                break;
-            case ArithOp.Sub:
-                min = lr.Min - rr.Max;
-                max = lr.Max - rr.Min;
-                break;
-            default: {
-                    if (lr.Min is not { } lMin || lr.Max is not { } lMax
-                        || rr.Min is not { } rMin || rr.Max is not { } rMax)
-                        return AbstractValue.Unknown;
-                    double[] combos = [lMin * rMin, lMin * rMax, lMax * rMin, lMax * rMax];
-                    min = combos.Min();
-                    max = combos.Max();
-                    break;
-                }
-        }
-        if (min is null && max is null) return AbstractValue.Unknown;
-        return AbstractValue.From([new RangeConstraint(min, max)]);
+    private static AbstractValue EvalArithmetic(
+        DomainExpression node, DomainExpression left, DomainExpression right,
+        Func<DomainExpression, AbstractValue> evalOperand) {
+        if (node is Subtract
+            && !EffectAnalyzer.HasUnmodelledOperator(left) && !EffectAnalyzer.HasUnmodelledOperator(right)
+            && DomainExpressionStructuralComparer.Equal(left, right))
+            return AbstractValue.From([new RangeConstraint(0m, 0m)]);
+        var operands = new[] { evalOperand(left).NumericRange, evalOperand(right).NumericRange };
+        return IntervalTransfers.Transfer(node, operands)?.ToRangeConstraint() is { } range
+            ? AbstractValue.From([range])
+            : AbstractValue.Unknown;
     }
+
+    /// <summary>A literal's numeric value exactly, or null when it is not a number or has no exact form.</summary>
+    private static decimal? DeclaredBound(object? value) => ExactNumber.TryFrom(value)?.ToDecimal();
+
+    /// <summary>A literal's declared bound as the CLR value a <see cref="RangeConstraint"/> keeps: integral
+    /// numbers are <see cref="long"/>, everything else exact is <see cref="decimal"/>; never a
+    /// <see cref="double"/> and never an <see cref="ExactNumber"/> (A1).</summary>
+    private static object? DeclaredClrBound(object? value) => value switch {
+        long or decimal => value,
+        _ when DeclaredBound(value) is { } exact => exact == decimal.Truncate(exact) && exact is >= long.MinValue and <= long.MaxValue
+            ? (long)exact
+            : exact,
+        _ => null,
+    };
 
     // ── Effect stepping ─────────────────────────────────────────
 
@@ -616,17 +613,14 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
                     ? Eval(rn.TargetProperty, iterated, null, EmptyEnv, null, null, domain)
                     : Eval(rn, caller, action, env, paramEnv, domain: domain);
             case Add add:
-                return ComposeArithmetic(
-                    EvalForEachBinding(add.Left, binder, iterated, caller, action, env, paramEnv, domain),
-                    EvalForEachBinding(add.Right, binder, iterated, caller, action, env, paramEnv, domain), ArithOp.Add);
+                return EvalArithmetic(add, add.Left, add.Right,
+                    operand => EvalForEachBinding(operand, binder, iterated, caller, action, env, paramEnv, domain));
             case Subtract sub:
-                return ComposeArithmetic(
-                    EvalForEachBinding(sub.Left, binder, iterated, caller, action, env, paramEnv, domain),
-                    EvalForEachBinding(sub.Right, binder, iterated, caller, action, env, paramEnv, domain), ArithOp.Sub);
+                return EvalArithmetic(sub, sub.Left, sub.Right,
+                    operand => EvalForEachBinding(operand, binder, iterated, caller, action, env, paramEnv, domain));
             case Multiply mul:
-                return ComposeArithmetic(
-                    EvalForEachBinding(mul.Left, binder, iterated, caller, action, env, paramEnv, domain),
-                    EvalForEachBinding(mul.Right, binder, iterated, caller, action, env, paramEnv, domain), ArithOp.Mul);
+                return EvalArithmetic(mul, mul.Left, mul.Right,
+                    operand => EvalForEachBinding(operand, binder, iterated, caller, action, env, paramEnv, domain));
         }
         return Eval(expr, caller, action, env, paramEnv, domain: domain);
     }
@@ -765,7 +759,7 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
         return Eval(expr, entity, action, env);
     }
 
-    internal static (double? Min, double? Max) InferNumericRange(
+    internal static (decimal? Min, decimal? Max) InferNumericRange(
         DomainExpression expr, Entity entity, Action? action,
         IReadOnlyDictionary<string, ValueRange?>? narrowed = null) =>
         InferValue(expr, entity, action, narrowed).NumericRange is { } nr ? (nr.Min, nr.Max) : (null, null);

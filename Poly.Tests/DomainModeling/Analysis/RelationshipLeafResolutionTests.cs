@@ -45,8 +45,8 @@ public class RelationshipLeafResolutionTests {
         // so a Total that cannot hold it is a DMEFF008 error that rolls the model back.
         var r = Parse(Order("Amount: Number range(0, 100)", "Amount: Number range(1000, 2000)", "cust Amount", "range(0, 5000)"));
         var range = TotalRange(r);
-        await Assert.That(range!.Min).IsEqualTo(1000d);
-        await Assert.That(range.Max).IsEqualTo(2000d);
+        await Assert.That(range!.Min).IsEqualTo(1000m);
+        await Assert.That(range.Max).IsEqualTo(2000m);
     }
 
     [Test]
@@ -60,8 +60,8 @@ public class RelationshipLeafResolutionTests {
     public async Task Assign_CallerAmountLarger_UsesRelatedDeclaredRange_NoFalseError() {
         var r = Parse(Order("Amount: Number range(1000, 2000)", "Amount: Number range(0, 100)", "cust Amount + 0"));
         var range = TotalRange(r);
-        await Assert.That(range!.Min).IsEqualTo(0d);
-        await Assert.That(range.Max).IsEqualTo(100d);
+        await Assert.That(range!.Min).IsEqualTo(0m);
+        await Assert.That(range.Max).IsEqualTo(100m);
         await Assert.That(r.Succeeded).IsTrue();
         await Assert.That(Problems(r).Count).IsEqualTo(0);
     }
@@ -71,8 +71,8 @@ public class RelationshipLeafResolutionTests {
         // See Assign_CallerAmountSmaller_UsesRelatedDeclaredRange: Total must hold the related range (Q4).
         var r = Parse(Order("Other: Number range(0, 5)", "Credit: Number range(1000, 2000)", "cust Credit", "range(0, 5000)"));
         var range = TotalRange(r);
-        await Assert.That(range!.Min).IsEqualTo(1000d);
-        await Assert.That(range.Max).IsEqualTo(2000d);
+        await Assert.That(range!.Min).IsEqualTo(1000m);
+        await Assert.That(range.Max).IsEqualTo(2000m);
     }
 
     [Test]
@@ -144,8 +144,8 @@ public class RelationshipLeafResolutionTests {
             """);
         var range = SlotRange(r, "Order", "Run", "Slot");
         await Assert.That(range).IsNotNull();
-        await Assert.That(range!.Min).IsEqualTo(0d);
-        await Assert.That(range.Max).IsEqualTo(10d);
+        await Assert.That(range!.Min).IsEqualTo(0m);
+        await Assert.That(range.Max).IsEqualTo(10m);
     }
 
     [Test]
@@ -170,8 +170,8 @@ public class RelationshipLeafResolutionTests {
         var range = analysis.GetActionInvariants(run)?.StageContexts().SelectMany(c => c.Postconditions)
             .Where(p => p.TargetProperty == "Mirror").Select(p => p.ValueRange).FirstOrDefault(v => v is not null);
         await Assert.That(range).IsNotNull();
-        await Assert.That(range!.Min).IsEqualTo(0d);
-        await Assert.That(range.Max).IsEqualTo(10d);
+        await Assert.That(range!.Min).IsEqualTo(0m);
+        await Assert.That(range.Max).IsEqualTo(10m);
     }
 
     // The validator requires a for-each binding's relationship-navigation root to be the BINDER name, but
@@ -239,16 +239,16 @@ public class RelationshipLeafResolutionTests {
     public async Task Eval_ResolvableToOneRelationship_ReadsRelatedDeclaredRange() {
         var (caller, domain) = Build(Rel("cust", RelationshipCardinality.OneToOne), Customer());
         var v = EvalLeaf(caller, domain, "cust");
-        await Assert.That(v.NumericRange!.Min).IsEqualTo(1000d);
-        await Assert.That(v.NumericRange.Max).IsEqualTo(2000d);
+        await Assert.That(v.NumericRange!.Min).IsEqualTo(1000m);
+        await Assert.That(v.NumericRange.Max).IsEqualTo(2000m);
     }
 
     [Test]
     public async Task Eval_ResolvableManyToOneRelationship_ReadsRelatedDeclaredRange() {
         var (caller, domain) = Build(Rel("cust", RelationshipCardinality.ManyToOne), Customer());
         var v = EvalLeaf(caller, domain, "cust");
-        await Assert.That(v.NumericRange!.Min).IsEqualTo(1000d);
-        await Assert.That(v.NumericRange.Max).IsEqualTo(2000d);
+        await Assert.That(v.NumericRange!.Min).IsEqualTo(1000m);
+        await Assert.That(v.NumericRange.Max).IsEqualTo(2000m);
     }
 
     [Test]
@@ -269,8 +269,8 @@ public class RelationshipLeafResolutionTests {
         var v = EffectInvariantAnalyzer.Eval(
             new RelationshipNavigation("a", new RelationshipNavigation("b", DomainExpression.Property("X"))),
             root, null, new Dictionary<string, AbstractValue>(), domain: domain);
-        await Assert.That(v.NumericRange!.Min).IsEqualTo(1000d);
-        await Assert.That(v.NumericRange.Max).IsEqualTo(2000d);
+        await Assert.That(v.NumericRange!.Min).IsEqualTo(1000m);
+        await Assert.That(v.NumericRange.Max).IsEqualTo(2000m);
     }
 
     [Test]

@@ -302,6 +302,87 @@ public class DbContextGeneratorTests {
         }
     }
 
+    /// <summary>The CHECK SQL text of every emitted <c>HasCheckConstraint</c>, in order.</summary>
+    private static List<string> CheckConstraints(Domain domain) =>
+        OnModelCreating(domain).FindInvocations("HasCheckConstraint")
+            .Select(i => i.Arguments[1] is Constant { Value: string sql } ? sql : "")
+            .ToList();
+
+    /// <summary>V-05b T3: a declared bound above 2^53 reaches the CHECK text exactly, never rounded
+    /// through <c>double</c> to <c>…992</c>.</summary>
+    [Test]
+    public async Task CheckSql_BoundAbove2Pow53_IsExact() {
+        var domain = ParseDomain("""
+            domain Test
+            Item: entity {
+              Price: Decimal range(0, 9007199254740993)
+            }
+            """);
+
+        var checks = CheckConstraints(domain);
+        await Assert.That(checks.Count).IsEqualTo(1);
+        await Assert.That(checks[0]).Contains("price >= 0");
+        await Assert.That(checks[0]).Contains("price <= 9007199254740993");
+    }
+
+    /// <summary>V-05b A13: the CHECK text keeps the declared decimal scale
+    /// (<c>range(0.00, 100.00)</c> is <c>&gt;= 0.00</c>, not <c>&gt;= 0</c>).</summary>
+    [Test]
+    public async Task CheckSql_DeclaredScale_IsKept() {
+        var domain = ParseDomain("""
+            domain Test
+            Item: entity {
+              Price: Decimal range(0.00, 100.00)
+            }
+            """);
+
+        var checks = CheckConstraints(domain);
+        await Assert.That(checks.Count).IsEqualTo(1);
+        await Assert.That(checks[0]).Contains("price >= 0.00");
+        await Assert.That(checks[0]).Contains("price <= 100.00");
+    }
+
+    /// <summary>V-05b fix round 1: an API-built fractional double bound is not an exact number, but it is
+    /// still declared, so the CHECK keeps both sides (a dropped side is a fail-open constraint).</summary>
+    [Test]
+    public async Task CheckSql_ApiBuiltFractionalDoubleBounds_KeepBothSides() {
+        var price = new Property("Price", new DomainTypeReference("Decimal"), [new RangeConstraint(0.5d, 1.5d)]);
+        var domain = DomainTestFactory.Create("Test", [new Entity("Item", [price], [], [], [])], [])
+            with { Extensions = ["persistence"] };
+
+        var checks = CheckConstraints(domain);
+
+        await Assert.That(checks.Count).IsEqualTo(1);
+        await Assert.That(checks[0]).Contains("price >= 0.5");
+        await Assert.That(checks[0]).Contains("price <= 1.5");
+    }
+
+    /// <summary>V-05b fix round 2: a tiny finite double bound must not round to 0 in the CHECK; an open
+    /// side is the sound one.</summary>
+    [Test]
+    public async Task CheckSql_TinyDoubleMaximum_IsOpenNotZero() {
+        var price = new Property("Price", new DomainTypeReference("Decimal"), [new RangeConstraint(null, 1e-30d)]);
+        var domain = DomainTestFactory.Create("Test", [new Entity("Item", [price], [], [], [])], [])
+            with { Extensions = ["persistence"] };
+
+        var checks = CheckConstraints(domain);
+
+        await Assert.That(checks.Any(c => c.Contains("<= 0", StringComparison.Ordinal))).IsFalse();
+    }
+
+    /// <summary>V-05b fix round 2: a ulong bound above long.MaxValue converts exactly, never dropped.</summary>
+    [Test]
+    public async Task CheckSql_UlongBoundAboveLongMax_IsExact() {
+        var price = new Property("Price", new DomainTypeReference("Decimal"), [new RangeConstraint(0UL, 18446744073709551615UL)]);
+        var domain = DomainTestFactory.Create("Test", [new Entity("Item", [price], [], [], [])], [])
+            with { Extensions = ["persistence"] };
+
+        var checks = CheckConstraints(domain);
+
+        await Assert.That(checks.Count).IsEqualTo(1);
+        await Assert.That(checks[0]).Contains("price <= 18446744073709551615");
+    }
+
     private static IEnumerable<Node> Descendants(Node node) {
         yield return node;
         foreach (var child in node.Children) {

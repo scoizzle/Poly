@@ -70,9 +70,10 @@ public sealed partial class DbContextGenerator {
     }
 
     /// <summary>Builds Syntax IR for a collection navigation's property access mode config.</summary>
-    /// <summary>Formats a numeric bound for a SQL CHECK constraint.</summary>
-    private static string FormatBound(double d) =>
-        d == Math.Floor(d) ? d.ToString("F0", System.Globalization.CultureInfo.InvariantCulture) : d.ToString("G", System.Globalization.CultureInfo.InvariantCulture);
+    /// <summary>Formats a numeric bound for a SQL CHECK constraint. The decimal keeps its declared
+    /// scale (<c>range(0.00, 100.00)</c> prints <c>0.00</c>), and every digit is exact (V-05b S3/A13).</summary>
+    private static string FormatBound(decimal d) =>
+        d.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
     /// <summary>Builds the SQL predicate for a verified column's CHECK constraint.</summary>
     private static string CheckSql(string columnName, ValueRange verified) {

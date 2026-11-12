@@ -1261,7 +1261,7 @@ diverging:
   `require Qty <= 80` on `Qty: Number range(0, 90)` is provably within range and produces
   no diagnostic.
 - **Silence means verified (Q4)** — with two exceptions: non-`range` kinds on `assign`
-  and initializer writes (V-08), and the call chain (V-05). A write analysis cannot
+  and initializer writes (V-08). A write analysis cannot
   decide — a bare property or parameter with no bound, an operator the
   interval flow does not model (`/`, a call, `match`), or a constraint kind with no flow
   decision — is a **`DMCS003` warning** naming the write, the property and the constraint.
@@ -1282,11 +1282,12 @@ diverging:
   a `create` has no stage context. `range(...)` is the only kind decided against a computed
   value on an `assign` or an initializer in this slice, so `length(...)`, `pattern(...)` and
   `equals(...)` are not flow-checked there — but `length` **is** decided on an observed flow
-  and in the parameter arm, which compare declared bounds. The **call chain** records
-  nothing of its own: a call-chain postcondition whose value range is not known is skipped
-  silently, and a call-chain `DMEFF008` warning has no fact of its own — though a fact the
-  callee's own direct analysis recorded on the same node does enrich its row — so read those
-  findings directly. `poly_check` still prints `proven` for a model whose only findings are
+  and in the parameter arm, which compare declared bounds. The **call chain** decides
+  each postcondition through the same range decision and records a fact for every
+  non-satisfied outcome (deduplicated per callee write node, so a satisfied write is not
+  counted twice): an error is a violation fact and a warning an unverified fact. A
+  call-chain postcondition whose value range is not known is still skipped silently.
+  `poly_check` still prints `proven` for a model whose only findings are
   warnings (the verdict flip is M-05), so read the findings, not the verdict word. A
   call-chain finding is attributed to the **callee** element that assigns (the chain is
   named in its message), so a summary scoped to the caller reads `proven` while the whole

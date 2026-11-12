@@ -39,12 +39,12 @@ public class InvokePostStateTests {
 
         await Assert.That(posts.Count).IsEqualTo(2);
         // First call: Qty is the declared [0, 90] -> Qty + 10 = [10, 100].
-        await Assert.That(posts[0].ValueRange!.Min).IsEqualTo(10d);
-        await Assert.That(posts[0].ValueRange!.Max).IsEqualTo(100d);
+        await Assert.That(posts[0].ValueRange!.Min).IsEqualTo(10m);
+        await Assert.That(posts[0].ValueRange!.Max).IsEqualTo(100m);
         // After the first call Qty is [10, 90] (declared range met with [10, 100]), so the second
         // call computes [20, 100].
-        await Assert.That(posts[1].ValueRange!.Min).IsEqualTo(20d);
-        await Assert.That(posts[1].ValueRange!.Max).IsEqualTo(100d);
+        await Assert.That(posts[1].ValueRange!.Min).IsEqualTo(20m);
+        await Assert.That(posts[1].ValueRange!.Max).IsEqualTo(100m);
     }
 
     [Test]
@@ -65,8 +65,8 @@ public class InvokePostStateTests {
             """);
         var total = Posts(result, "A").Last(p => p.TargetProperty == "Total").ValueRange!;
 
-        await Assert.That(total.Min).IsEqualTo(10d);
-        await Assert.That(total.Max).IsEqualTo(90d);
+        await Assert.That(total.Min).IsEqualTo(10m);
+        await Assert.That(total.Max).IsEqualTo(90m);
     }
 
     [Test]
@@ -87,8 +87,8 @@ public class InvokePostStateTests {
             """);
         var total = Posts(result, "A").Last(p => p.TargetProperty == "Total").ValueRange!;
 
-        await Assert.That(total.Min).IsEqualTo(0d);
-        await Assert.That(total.Max).IsEqualTo(90d);
+        await Assert.That(total.Min).IsEqualTo(0m);
+        await Assert.That(total.Max).IsEqualTo(90m);
     }
 
     [Test]
@@ -108,8 +108,8 @@ public class InvokePostStateTests {
             """);
         var total = Posts(result, "A").Last(p => p.TargetProperty == "Total").ValueRange!;
 
-        await Assert.That(total.Min).IsEqualTo(40d);
-        await Assert.That(total.Max).IsEqualTo(40d);
+        await Assert.That(total.Min).IsEqualTo(40m);
+        await Assert.That(total.Max).IsEqualTo(40m);
     }
 
     [Test]
@@ -129,7 +129,7 @@ public class InvokePostStateTests {
             """);
         var total = Posts(result, "A").Last(p => p.TargetProperty == "Total").ValueRange!;
 
-        await Assert.That(total.Min).IsEqualTo(5d);
-        await Assert.That(total.Max).IsEqualTo(6d);
+        await Assert.That(total.Min).IsEqualTo(5m);
+        await Assert.That(total.Max).IsEqualTo(6m);
     }
 }

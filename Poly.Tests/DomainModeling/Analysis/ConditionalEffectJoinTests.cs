@@ -47,8 +47,8 @@ public class ConditionalEffectJoinTests {
             """));
         await Assert.That(result.Succeeded).IsTrue();
         var range = TotalRange(result);
-        await Assert.That(range!.Min).IsEqualTo(5d);
-        await Assert.That(range.Max).IsEqualTo(25d);
+        await Assert.That(range!.Min).IsEqualTo(5m);
+        await Assert.That(range.Max).IsEqualTo(25m);
         // The hull [5, 25] is inside Total's range(0, 30): no warning.
         await Assert.That(result.Analysis.Diagnostics.Any(d =>
             d.Severity == DiagnosticSeverity.Warning && d.Message.Contains("can fall outside constraint range(0, 30)"))).IsFalse();
@@ -61,8 +61,8 @@ public class ConditionalEffectJoinTests {
             assign Total to Qty
             """));
         var range = TotalRange(result);
-        await Assert.That(range!.Min).IsEqualTo(7d);
-        await Assert.That(range.Max).IsEqualTo(7d);
+        await Assert.That(range!.Min).IsEqualTo(7m);
+        await Assert.That(range.Max).IsEqualTo(7m);
     }
 
     [Test]
@@ -72,8 +72,8 @@ public class ConditionalEffectJoinTests {
             assign Total to Qty
             """));
         var range = TotalRange(result);
-        await Assert.That(range!.Min).IsEqualTo(0d);
-        await Assert.That(range.Max).IsEqualTo(100d);
+        await Assert.That(range!.Min).IsEqualTo(0m);
+        await Assert.That(range.Max).IsEqualTo(100m);
     }
 
     [Test]
@@ -83,8 +83,8 @@ public class ConditionalEffectJoinTests {
             assign Total to Qty
             """));
         var range = TotalRange(result);
-        await Assert.That(range!.Min).IsEqualTo(0d);
-        await Assert.That(range.Max).IsEqualTo(100d);
+        await Assert.That(range!.Min).IsEqualTo(0m);
+        await Assert.That(range.Max).IsEqualTo(100m);
     }
 
     [Test]
@@ -107,8 +107,8 @@ public class ConditionalEffectJoinTests {
             }
             """);
         var range = TotalRange(result);
-        await Assert.That(range!.Min).IsEqualTo(0d);
-        await Assert.That(range.Max).IsEqualTo(80d);
+        await Assert.That(range!.Min).IsEqualTo(0m);
+        await Assert.That(range.Max).IsEqualTo(80m);
     }
 
     [Test]
@@ -121,8 +121,8 @@ public class ConditionalEffectJoinTests {
             assign Total to Qty
             """));
         var range = TotalRange(result);
-        await Assert.That(range!.Min).IsEqualTo(5d);
-        await Assert.That(range.Max).IsEqualTo(10d);
+        await Assert.That(range!.Min).IsEqualTo(5m);
+        await Assert.That(range.Max).IsEqualTo(10m);
     }
 
     [Test]
@@ -133,8 +133,8 @@ public class ConditionalEffectJoinTests {
             assign Total to Qty
             """));
         var range = TotalRange(result);
-        await Assert.That(range!.Min).IsEqualTo(0d);
-        await Assert.That(range.Max).IsEqualTo(100d);
+        await Assert.That(range!.Min).IsEqualTo(0m);
+        await Assert.That(range.Max).IsEqualTo(100m);
     }
 
     [Test]
@@ -146,8 +146,8 @@ public class ConditionalEffectJoinTests {
             assign Total to Qty
             """));
         var range = TotalRange(result);
-        await Assert.That(range!.Min <= 10d).IsTrue();
-        await Assert.That(range.Max >= 60d).IsTrue();
+        await Assert.That(range!.Min <= 10m).IsTrue();
+        await Assert.That(range.Max >= 60m).IsTrue();
     }
 
     [Test]
@@ -166,8 +166,8 @@ public class ConditionalEffectJoinTests {
             }
             """);
         var range = TotalRange(result);
-        await Assert.That(range!.Min).IsEqualTo(5d);
-        await Assert.That(range.Max).IsEqualTo(5d);
+        await Assert.That(range!.Min).IsEqualTo(5m);
+        await Assert.That(range.Max).IsEqualTo(5m);
         await Assert.That(result.Analysis.Diagnostics.Any(d => d.Message.Contains("can fall outside"))).IsFalse();
     }
 
@@ -186,7 +186,7 @@ public class ConditionalEffectJoinTests {
             }
             """);
         var range = TotalRange(result);
-        await Assert.That(range!.Max >= 10d).IsTrue();
+        await Assert.That(range!.Max >= 10m).IsTrue();
         await Assert.That(result.Analysis.Diagnostics.Any(d => d.Message.Contains("can fall outside"))).IsTrue();
     }
 

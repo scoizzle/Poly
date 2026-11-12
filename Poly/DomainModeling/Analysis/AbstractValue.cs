@@ -157,8 +157,8 @@ public sealed class AbstractValue {
         get {
             var range = Range;
             if (range is null) return null;
-            var min = NumericBound.ToDoubleOrNull(range.Minimum);
-            var max = NumericBound.ToDoubleOrNull(range.Maximum);
+            var min = ExactNumber.TryFrom(range.Minimum)?.ToDecimal();
+            var max = ExactNumber.TryFrom(range.Maximum)?.ToDecimal();
             return min is null && max is null ? null : new ValueRange(min, max);
         }
     }

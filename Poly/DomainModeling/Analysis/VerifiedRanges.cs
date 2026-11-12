@@ -23,11 +23,15 @@ internal static class VerifiedRanges {
             if (meta is null) return;
             foreach (var stageCtx in meta.StageContexts) {
                 foreach (var post in stageCtx.Postconditions) {
-                    if (post.ValueRange is not { } vr) continue;
                     var declared = entity.Properties
                         .FirstOrDefault(p => string.Equals(p.Name, post.TargetProperty, StringComparison.Ordinal))
                         ?.Constraints.OfType<RangeConstraint>().FirstOrDefault();
-                    if (declared is not null && !RangeWithin(vr, declared))
+                    if (declared is null) continue;
+                    // A writer with no range is a violating writer (V-05b S3/A6): an unbounded write can
+                    // produce any value, so a CHECK built from the declared range would false-reject.
+                    // Both-open carries no information and reads the same as absent (A3).
+                    if (post.ValueRange?.ToRangeConstraint() is not { } written
+                        || !RangeWithin(written, declared))
                         violated.Add(post.TargetProperty);
                 }
             }
@@ -41,38 +45,30 @@ internal static class VerifiedRanges {
         foreach (var prop in entity.Properties) {
             if (violated.Contains(prop.Name)) continue;
             var declared = prop.Constraints.OfType<RangeConstraint>().FirstOrDefault();
-            if (declared is null || !BoundsOrderable(declared)) continue;
+            if (declared is null || WriteVerification.HasUnorderableBound(declared)) continue;
             result[prop.Name] = (ToValueRange(declared), true);
         }
         return result;
     }
 
-    private static bool RangeWithin(ValueRange inner, RangeConstraint outer) {
-        // #367: a bound that cannot be ordered is never skipped. A declared bound that does not convert,
-        // or a written side that is unbounded against a declared bound, is not within.
-        if (!BoundsOrderable(outer)) return false;
-        var lo = ToDoubleOrNull(inner.Min);
-        var hi = ToDoubleOrNull(inner.Max);
-        if (lo is null && hi is null) return true;
-        var dmin = ToDoubleOrNull(outer.Minimum);
-        var dmax = ToDoubleOrNull(outer.Maximum);
-        if (dmin is not null && lo is null) return false;
-        if (dmax is not null && hi is null) return false;
-        if (lo is not null && dmin is not null && lo < dmin) return false;
-        if (hi is not null && dmax is not null && hi > dmax) return false;
-        return true;
-    }
-
-    private static bool BoundsOrderable(RangeConstraint range) =>
-        (range.Minimum is null || ToDoubleOrNull(range.Minimum) is not null)
-        && (range.Maximum is null || ToDoubleOrNull(range.Maximum) is not null);
+    private static bool RangeWithin(RangeConstraint inner, RangeConstraint outer) =>
+        WriteVerification.DecideRange(outer, AbstractValue.From([inner])) == ConstraintVerdict.Satisfied;
 
     private static ValueRange ToValueRange(RangeConstraint r) =>
-        new(ToDoubleOrNull(r.Minimum), ToDoubleOrNull(r.Maximum));
+        new(Bound(r.Minimum), Bound(r.Maximum));
 
-    private static double? ToDoubleOrNull(object? v) {
-        if (v is null) return null;
-        try { return Convert.ToDouble(v); }
-        catch { return null; }
+    /// <summary>A declared bound is never dropped: an exact number keeps every digit, and a finite
+    /// API-built <c>double</c>/<c>float</c> that <see cref="ExactNumber"/> cannot take (a fractional
+    /// value) is read as master did, by its invariant round-trip text (V-05b fix round 1).</summary>
+    private static decimal? Bound(object? bound) {
+        if (ExactNumber.TryFrom(bound) is { } exact) return exact.ToDecimal();
+        if (bound is ulong big) return big; // above long.MaxValue, and exact in a decimal
+        var value = bound switch { double d => d, float f => f, _ => double.NaN };
+        if (!double.IsFinite(value)
+            || !decimal.TryParse(value.ToString("R", System.Globalization.CultureInfo.InvariantCulture),
+                System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var parsed))
+            return null;
+        // A finite nonzero value that rounds to 0m (scale above 28) is not 0: leave the side open.
+        return parsed == 0m && value != 0d ? null : parsed;
     }
 }

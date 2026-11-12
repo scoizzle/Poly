@@ -1,6 +1,7 @@
 // EffectAnalyzer partial: the unverified-write channel and derived value range checks.
 using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Ontology;
+using Poly.DomainModeling.Ontology.Constraints;
 
 using Action = Poly.DomainModeling.Ontology.Action;
 using Add = Poly.DomainModeling.Ontology.Add;
@@ -146,8 +147,9 @@ internal sealed partial class EffectAnalyzer {
     private static UnverifiedReason OpaqueReason(DomainExpression assigned) =>
         HasUnmodelledOperator(assigned) ? UnverifiedReason.UnsupportedOperator : UnverifiedReason.UnknownBound;
 
-    /// <summary>True when any node of the expression is an operator the interval flow does not model (pre-order).</summary>
-    private static bool HasUnmodelledOperator(DomainExpression expression) => expression switch {
+    /// <summary>True when any node of the expression is an operator the interval flow does not model (pre-order).
+    /// The one purity gate: the shared evaluator's X − X cancellation and the opaque-reason text use it (B7).</summary>
+    internal static bool HasUnmodelledOperator(DomainExpression expression) => expression switch {
         Add add => HasUnmodelledOperator(add.Left) || HasUnmodelledOperator(add.Right),
         Subtract sub => HasUnmodelledOperator(sub.Left) || HasUnmodelledOperator(sub.Right),
         Multiply mul => HasUnmodelledOperator(mul.Left) || HasUnmodelledOperator(mul.Right),
@@ -188,13 +190,19 @@ internal sealed partial class EffectAnalyzer {
     }
 
     private static bool IsRangeSubsumed(RangeConstraint inner, RangeConstraint outer) {
-        var innerMin = inner.Minimum is not null ? NumericBound.ToDoubleOrNull(inner.Minimum) : double.NegativeInfinity;
-        var innerMax = inner.Maximum is not null ? NumericBound.ToDoubleOrNull(inner.Maximum) : double.PositiveInfinity;
-        var outerMin = outer.Minimum is not null ? NumericBound.ToDoubleOrNull(outer.Minimum) : double.NegativeInfinity;
-        var outerMax = outer.Maximum is not null ? NumericBound.ToDoubleOrNull(outer.Maximum) : double.PositiveInfinity;
-
-        if (innerMin is null || innerMax is null || outerMin is null || outerMax is null) return false;
-
-        return innerMin.Value >= outerMin.Value && innerMax.Value <= outerMax.Value;
+        // #367: a bound that is not a number is never ordered, so it is never subsumed (the old
+        // Convert.ToDouble path threw and answered false). A numeric bound keeps master's fallback.
+        if (!IsNumericBound(inner.Minimum) || !IsNumericBound(inner.Maximum)
+            || !IsNumericBound(outer.Minimum) || !IsNumericBound(outer.Maximum))
+            return false;
+        // Exact: an absent inner side is −∞/ +∞, so an inner side can only be inside a bounded outer
+        // side when it is itself bounded.
+        var lowerOk = outer.Minimum is null
+            || (inner.Minimum is not null && ConstraintMerge.TryCompare(inner.Minimum, outer.Minimum) is >= 0);
+        var upperOk = outer.Maximum is null
+            || (inner.Maximum is not null && ConstraintMerge.TryCompare(inner.Maximum, outer.Maximum) is <= 0);
+        return lowerOk && upperOk;
     }
+
+    private static bool IsNumericBound(object? bound) => bound is null || ConstraintMerge.IsNumeric(bound);
 }

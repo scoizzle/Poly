@@ -357,7 +357,7 @@ An exported signature must be closed. A `public` action's parameter and result t
 
 `Number` is a 64-bit integer (`long`). A fractional value such as `0.25` is rejected and is not stored as `0`. `1` and an integral JSON number such as `1.0` are accepted. `Decimal` is `decimal` and accepts a fraction. A fractional literal or bound on `Number` is an error that names `Decimal`.
 
-`range` bounds are exact. A `Number`/`Int`/`Int64` bound is a `long`; a `Decimal` or any other non-Number-family bound is a `decimal`; a bound is never a `double`. A `Number` bound outside the `long` range (for example `9223372036854775808`) is a positioned parse error, not a silent widening, and the exported DSL and C# keep the declared bound text. Analysis-time bound arithmetic uses `ExactNumber` (`Poly/DomainModeling/Analysis/ExactNumber.cs`), which returns “unbounded” rather than a rounded or wrapped value.
+`range` bounds are exact at parse and in the assign guard: a `Number`/`Int`/`Int64` bound is a `long`, a `Decimal` or any other non-Number-family bound is a `decimal`, and no bound is a `double`. A `Number` bound outside the `long` range (for example `9223372036854775808`) is a positioned parse error, not a silent widening, and the exported DSL and the generated validation messages keep the declared bound text. The generated data-annotation attribute is still `[Range(double, double)]`, so a `long` bound beyond `int` is rounded in that attribute only (a follow-up). Analysis-time bound arithmetic is still `double` and moves to an exact representation in a later slice.
 
 Properties can reference enum types by name as their type, and use `default(MemberName)`
 to set a default value:

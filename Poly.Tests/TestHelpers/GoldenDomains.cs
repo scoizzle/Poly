@@ -7,8 +7,13 @@ namespace Poly.Tests.TestHelpers;
 /// <summary>
 /// A domain in the shared golden corpus, located by its repo-relative
 /// <paramref name="Path"/> so the same catalog works from any test worktree.
+/// <paramref name="Compiles"/> is true when the C10 oracle lowers and executes the domain;
+/// false means the domain is recorded with a <see cref="SkipReason"/>.
 /// </summary>
 public sealed record GoldenDomain(string Name, string Path, bool Compiles) {
+    /// <summary>Why the C10 oracle does not lower this domain; null when it does.</summary>
+    public string? SkipReason { get; init; }
+
     /// <summary>Absolute path of the domain on disk.</summary>
     public string FullPath => System.IO.Path.Combine(GoldenDomains.RepoRoot, Path);
 
@@ -18,8 +23,9 @@ public sealed record GoldenDomain(string Name, string Path, bool Compiles) {
 
 /// <summary>
 /// One catalog for every golden domain: <see cref="Compilable"/> is the frozen
-/// set <c>EmitGoldenTests</c> snapshots, and <see cref="All"/> adds any repro
-/// dropped in <c>Poly.Tests/Corpus/swarm/</c>.
+/// set <c>EmitGoldenTests</c> snapshots; <see cref="Lowerable"/> adds the probes the
+/// C10 oracle lowers; <see cref="Skipped"/> records the probes it does not, with reasons;
+/// and <see cref="All"/> adds any repro dropped in <c>Poly.Tests/Corpus/swarm/</c>.
 /// </summary>
 public static class GoldenDomains {
     /// <summary>Repository root, the base every <see cref="GoldenDomain.Path"/> is relative to.</summary>
@@ -49,8 +55,42 @@ public static class GoldenDomains {
         [.. EmitGoldenPaths.Select(p => new GoldenDomain(
             System.IO.Path.GetFileNameWithoutExtension(p), p, Compiles: true))];
 
-    /// <summary>Every corpus domain: <see cref="Compilable"/> plus <see cref="Swarm()"/>.</summary>
-    public static IReadOnlyList<GoldenDomain> All { get; } = [.. Compilable, .. Swarm()];
+    // Probes outside the emit set that the C10 oracle lowers and executes.
+    private static readonly string[] ProbeOnlyPaths = [
+        "demo/live/checkout.poly",
+        "demo/live/domain.poly",
+        "docs/probes/dogfood/entry-transition-in-first-stage.poly",
+        "docs/probes/dogfood/peer-tracking-transition.poly",
+        "docs/probes/grep-2026-10-17/grep.poly",
+        "docs/probes/scratch-2026-10-14/banking.poly",
+        "docs/probes/scratch-2026-10-14/fleet.poly",
+        "docs/probes/scratch-2026-10-14/gym.poly",
+        "docs/probes/scratch-2026-10-14/insurance.poly",
+        "docs/probes/scratch-2026-10-14/logistics.poly",
+        "docs/probes/scratch-2026-10-14/payroll.poly",
+        "docs/probes/scratch-2026-10-14/roastery.poly",
+        "docs/probes/smoke/smoke.poly",
+    ];
+
+    /// <summary>The domains the C10 oracle lowers and executes: <see cref="Compilable"/> plus the probe-only set.</summary>
+    public static IReadOnlyList<GoldenDomain> Lowerable { get; } = [
+        .. Compilable,
+        .. ProbeOnlyPaths.Select(p => new GoldenDomain(
+            System.IO.Path.GetFileNameWithoutExtension(p), p, Compiles: true)),
+    ];
+
+    /// <summary>Probes the C10 oracle does not lower; each reason is re-derived by the oracle's freshness test.</summary>
+    public static IReadOnlyList<GoldenDomain> Skipped { get; } = [
+        new("nested-invoke-type-mismatch", "docs/probes/dogfood/nested-invoke-type-mismatch.poly", Compiles: false) {
+            SkipReason = "type error by design",
+        },
+        new("restaurant", "docs/probes/scratch-2026-10-14/restaurant.poly", Compiles: false) {
+            SkipReason = "stores a domain value type as an entity property (DMSTR006); does not analyze",
+        },
+    ];
+
+    /// <summary>Every corpus domain: <see cref="Lowerable"/>, <see cref="Skipped"/> and <see cref="Swarm()"/>.</summary>
+    public static IReadOnlyList<GoldenDomain> All { get; } = [.. Lowerable, .. Skipped, .. Swarm()];
 
     /// <summary>
     /// Every <c>*.poly</c> under <see cref="SwarmDirectory"/>, ordered by name.
@@ -63,7 +103,7 @@ public static class GoldenDomains {
                 .Select(p => new GoldenDomain(
                     System.IO.Path.GetFileNameWithoutExtension(p),
                     System.IO.Path.GetRelativePath(RepoRoot, p).Replace('\\', '/'),
-                    Compiles: false))]
+                    Compiles: false) { SkipReason = "parked repro; the oracle does not lower it" })]
             : [];
 
     /// <summary>The swarm repro named <c>&lt;issue&gt;.poly</c>.</summary>

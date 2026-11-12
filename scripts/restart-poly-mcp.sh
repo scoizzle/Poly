@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Rebuild polyc and kill the running instance so opencode relaunches the
+# Rebuild polyc and kill the running host so opencode relaunches the
 # poly-local MCP with the new build. Closes the dogfood loop end-to-end:
 # fix -> test -> restart -> verify via MCP (no manual rebuild/restart step).
 #
@@ -10,21 +10,21 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-echo "== Building polyc (hosts polyc mcp and the Poly.Mcp forwarder) =="
+echo "== Building polyc (the only MCP host: polyc mcp) =="
 dotnet build src/polyc/polyc.csproj -v q
 
 echo "== Killing running MCP host processes =="
-# opencode-launched parents (`dotnet run --project ./Poly.Mcp/...` forwarder, or `polyc mcp`)
-pkill -9 -f 'dotnet run --project .*Poly.Mcp' 2>/dev/null || true
-pkill -9 -f 'dotnet run --project .*polyc' 2>/dev/null || true
-# The compiled hosts — tight patterns so they also catch orphaned instances left over
-# from earlier sessions (PPID 1, spinning), including a leftover Poly.Mcp/bin process.
-pkill -9 -f 'polyc/bin.* mcp' 2>/dev/null || true
-pkill -9 -f 'Poly.Mcp/bin' 2>/dev/null || true
+# The opencode launcher, `dotnet run --project ... src/polyc/polyc.csproj -- mcp`.
+# The literal `-- mcp` suffix keeps a `polyc check` dev run out of the match.
+pkill -9 -f 'dotnet run --project [^ ]*polyc[^ ]* -- mcp' 2>/dev/null || true
+# The compiled host — a tight pattern so it also catches orphaned instances left
+# over from earlier sessions (PPID 1, spinning). The `polyc/bin` anchor plus the
+# `$` keeps an installed `polyc mcp` tool from a different client out of it.
+pkill -9 -f 'polyc/bin.* mcp$' 2>/dev/null || true
 
 sleep 1
 
-if pgrep -f 'Poly.Mcp/bin' >/dev/null 2>&1 || pgrep -f 'polyc/bin.* mcp' >/dev/null 2>&1; then
+if pgrep -f 'polyc/bin.* mcp$' >/dev/null 2>&1; then
     echo "Warning: an MCP host is still running; kill it manually before the next restart." >&2
     exit 1
 fi

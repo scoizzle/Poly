@@ -72,18 +72,27 @@ internal enum WriteOutcome { Satisfied, Violated, Unverified }
 /// One write's outcome under the four-way rule (D2): Satisfied (silent, counted), Violated (DMEFF008
 /// error), or Unverified with the reason that splits the last two outcomes (a known range that can
 /// fall outside is a DMEFF008 warning; anything else is DMCS003).
+/// <para>
+/// A verdict that reports a finding also carries the diagnostic <see cref="Code"/> it was reported
+/// under. The code is the arm's decision, not a function of the reason: the parameter arm reports
+/// <see cref="UnverifiedReason.UnknownBound"/> as a <c>DMEFF008</c> warning while the assign arm
+/// reports it as <c>DMCS003</c> (V-04 fix round 2, G1). <see cref="Satisfied"/> carries none and
+/// never becomes a fact.
+/// </para>
 /// </summary>
-internal readonly record struct WriteVerdict(WriteOutcome Outcome, UnverifiedReason? Reason) {
+internal readonly record struct WriteVerdict(WriteOutcome Outcome, UnverifiedReason? Reason, string? Code) {
     /// <summary>The write is proven inside every stage context's constraint.</summary>
     public bool IsVerified => Outcome == WriteOutcome.Satisfied;
 
-    public static WriteVerdict Satisfied => new(WriteOutcome.Satisfied, null);
+    public static WriteVerdict Satisfied => new(WriteOutcome.Satisfied, null, null);
 
     /// <summary>The write is proven entirely outside its constraint.</summary>
-    public static WriteVerdict Violated => new(WriteOutcome.Violated, null);
+    public static WriteVerdict Violated =>
+        new(WriteOutcome.Violated, null, DomainModelDiagnosticCodes.EffectConstraintViolation);
 
-    /// <summary>The write could not be proven inside its constraint, for the given reason.</summary>
-    public static WriteVerdict Unverified(UnverifiedReason reason) => new(WriteOutcome.Unverified, reason);
+    /// <summary>The write could not be proven inside its constraint, for the given reason and code.</summary>
+    public static WriteVerdict Unverified(UnverifiedReason reason, string code) =>
+        new(WriteOutcome.Unverified, reason, code);
 
     private int Rank => Outcome switch {
         WriteOutcome.Violated => 100,
@@ -101,19 +110,28 @@ internal readonly record struct WriteVerdict(WriteOutcome Outcome, UnverifiedRea
         UnverifiedReason.NonFlowCheckedKind => 3,
         UnverifiedReason.UnsupportedOperator => 2,
         UnverifiedReason.UnknownBound => 1,
-        _ => 0, // PossibleViolation, and the Violated/Satisfied cases that carry no reason.
+        UnverifiedReason.PossibleViolation => 0,
+        null => 0, // the Satisfied and Violated verdicts carry no reason.
+        _ => throw new ArgumentOutOfRangeException(nameof(Reason), Reason, "a new UnverifiedReason must name its rank"),
     };
 
     /// <summary>The worse of two verdicts (Violated, then Unverified, then Satisfied); the first wins a tie.</summary>
     public WriteVerdict Worst(WriteVerdict other) => other.Rank > Rank ? other : this;
+
+    /// <summary>
+    /// The rank of one Unverified reason (the tally's ordering), so a reader outside the tally can
+    /// keep the worst of several facts deterministically. Higher is worse.
+    /// </summary>
+    internal static int RankFor(UnverifiedReason? reason) =>
+        new WriteVerdict(WriteOutcome.Unverified, reason, null).ReasonRank;
 }
 
 /// <summary>
 /// Why a write could not be verified (the fourth outcome's discriminator, D2). A definite
 /// violation stays a separate DMEFF008 error and is recorded in
-/// <see cref="WriteVerificationFacts.Violations"/>.
+/// <c>WriteVerificationFacts.Violations</c> (internal; the public surface exposes the reason only).
 /// </summary>
-internal enum UnverifiedReason {
+public enum UnverifiedReason {
     /// <summary>A known value range overlaps the constraint: it can fall outside (DMEFF008 warning).</summary>
     PossibleViolation,
 
@@ -135,14 +153,32 @@ internal enum UnverifiedReason {
 }
 
 /// <summary>
+/// Prose for an unverified write's reason, shared by the diagnostics that report one and the
+/// summary's synthesised rows, so a row never shows a bare enum name (V-04 fix round 2, G2).
+/// </summary>
+internal static class UnverifiedReasonText {
+    public static string Of(UnverifiedReason? reason) => reason switch {
+        UnverifiedReason.PossibleViolation => "the value can fall outside the constraint",
+        UnverifiedReason.UnknownBound => "the assigned value has no bound analysis can use",
+        UnverifiedReason.UnsupportedOperator => "the expression uses an operator analysis does not model",
+        UnverifiedReason.NonFlowCheckedKind => "the constraint kind is not checked against computed values",
+        UnverifiedReason.RecursionCut => "the value comes from a recursive invoke whose effect was cut",
+        _ => "the write could not be verified",
+    };
+}
+
+/// <summary>
 /// One write analysis could not verify, or proved outside its constraint, as recorded in
 /// <see cref="WriteVerificationFacts"/>. <see cref="Reason"/> is null for a proven violation.
+/// <see cref="ReportedCode"/> is the diagnostic code the reporting arm emitted, stored rather than
+/// derived so a row can be matched to its own fact (V-04 fix round 2, G1).
 /// </summary>
 internal sealed record UnverifiedWrite(
     Node Effect,
     string TargetProperty,
     string Constraint,
-    UnverifiedReason? Reason);
+    UnverifiedReason? Reason,
+    string ReportedCode);
 
 /// <summary>
 /// The analysis-side record of every constrained write in one domain (V-03 / A2-A4), keyed on the
@@ -181,11 +217,11 @@ internal static class WriteRecorder {
                 facts.RecordVerified();
                 break;
             case WriteOutcome.Violated:
-                facts.RecordViolation(new UnverifiedWrite(effect, property, constraint, null));
+                facts.RecordViolation(new UnverifiedWrite(effect, property, constraint, null, verdict.Code!));
                 break;
             default:
                 facts.RecordUnverified(new UnverifiedWrite(
-                    effect, property, constraint, verdict.Reason ?? UnverifiedReason.UnknownBound));
+                    effect, property, constraint, verdict.Reason ?? UnverifiedReason.UnknownBound, verdict.Code!));
                 break;
         }
     }
@@ -217,7 +253,10 @@ internal struct WriteTally {
 
 /// <summary>The domain-keyed facts store: one bucket per <see cref="Domain"/> for one analysis run.</summary>
 internal static class WriteVerificationFactsStore {
-    /// <summary>The facts for <paramref name="domain"/>, created on the first recorded write.</summary>
+    /// <summary>
+    /// The facts for <paramref name="domain"/>, created on first use. The domain pass creates it
+    /// before anything else, so after a full analysis a missing bucket means the pass did not run.
+    /// </summary>
     internal static WriteVerificationFacts For(AnalysisContext context, Domain domain) {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(domain);

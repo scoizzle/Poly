@@ -100,7 +100,7 @@ public class PolycProcessTests {
 
     [Test]
     public async Task McpStdio_InitializeThenToolsList_RoundTrips() {
-        using var host = await PolycProcess.McpAsync(McpTarget.Polyc);
+        using var host = await PolycProcess.McpAsync();
         await host.InitializeAsync();
         var tools = await host.ToolsListAsync();
 
@@ -333,7 +333,7 @@ public class PolycProcessTests {
         if (!Probing("guard") || Environment.GetEnvironmentVariable("POLY_CHILD_DEPTH") != "1")
             return;
         await Assert.ThrowsAsync<InvalidOperationException>(() => PolycProcess.RunAsync(new ChildSpec("unused.dll", [])));
-        await Assert.ThrowsAsync<InvalidOperationException>(() => PolycProcess.McpAsync(McpTarget.Polyc));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => PolycProcess.McpAsync());
         await Assert.ThrowsAsync<InvalidOperationException>(() => PackOracle.BootAsync(PackOracleDomains.Tally653));
         // The test framework replaces Console.Out, so the marker goes to the real fd the parent drains.
         var stdout = Console.OpenStandardOutput();

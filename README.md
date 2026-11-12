@@ -93,9 +93,13 @@ each its own compilation unit; with no path and piped stdin, stdin is one docume
   prints each written path on stderr as `wrote <path>`. Text shows errors and warnings, and
   `--verbosity info|hint` shows more. Codes: `DSL0001` parse, `DSL0002` unknown extension,
   `DSL0003` duplicate extension, `DSL0004` lower or emit refused; analyzer codes pass through.
-- **`uses` resolution:** the document's own `uses` wins. With none, `--seed authoring` (default,
-  the storage annotations) or `--seed language` supplies the extension ids. An unknown id is
-  `DSL0002` on its header token.
+- **`uses` resolution:** a non-empty `uses` list replaces the implicit set `[storage,
+  persistence]`, so a `unique` property needs `persistence` or a vendor library (`sqlite`,
+  `sqlserver`) in that list. With no `uses`, the set applies; `--seed authoring` (the same
+  set) or `--seed language` (no ids) names it explicitly. An unknown id is `DSL0002` on its
+  header token.
+- **`polyc build` output:** a domain that lists no `uses` writes `<Domain>DbContext.cs`
+  (persistence is implicit), and a `unique` entity's `Create` gains a `db` parameter.
 - **`--target <id>`** is the host target (for example `posix` or `windows`) forwarded to the
   compile. It is a host fact, never read from a `uses` line. A package that declares targets
   (for example `uses posix`) is `DMCON004` when the host target is absent or not one the package

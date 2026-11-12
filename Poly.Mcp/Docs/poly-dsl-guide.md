@@ -208,9 +208,9 @@ Suspended: stage {
 ---
 
 Every valid `.poly` document starts with a domain name. Optional `uses` lines list
-**extension ids** this compilation unit depends on (additive facts). Product `apply_dsl`
-seeds `storage` when none are listed. Temporal is implicit: Load always registers it, and
-the printer never writes `uses temporal`. Unknown or duplicate ids fail closed.
+**extension ids** this compilation unit depends on. Product `apply_dsl` loads
+`[storage, persistence]` when none are listed; a non-empty list replaces it, so `unique`
+needs `persistence` or a vendor library. Temporal is implicit and never printed; unknown or duplicate ids fail closed.
 `uses <id>` loads the library's export package, never a sibling `.poly`. A package boundary
 pins the public surface with `uses billing 2024-11-20` (same-line token run after the id).
 A `contract` block remains for a surface no library contributes.
@@ -1205,8 +1205,7 @@ diverging:
   create factory and any action that assigns the property take an `IStoragePort db`
   parameter and return `Unique constraint violated` before the write — the guard is the
   module's, not a separate export-only stub. This is the same body a source that writes
-  `uses persistence` prints; the overlay is implicit in MCP so `unique` behaves
-  identically either way. The printed `EnsureUnique` member is a residual with no
+  `uses persistence` prints; a non-empty `uses` list replaces the implicit set, so `unique` needs `persistence` or a vendor library. The printed `EnsureUnique` member is a residual with no
   caller: it refuses with "A unique assign needs the storage port." The EF model uses a
   synthetic integer `Id` key. Every `unique` property, including a second one on the
   same entity, is `HasIndex(...).IsUnique()`. Duplicate values fail loud at the session

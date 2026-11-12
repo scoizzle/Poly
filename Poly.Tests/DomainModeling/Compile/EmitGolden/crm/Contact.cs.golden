@@ -25,7 +25,7 @@ public class Contact
     {
         if (this.CurrentStage != ContactStage.Active)
         {
-            return DomainResult.Failure("'Retire' requires stage 'Active' on entity 'Contact'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Retire' requires stage 'Active' on entity 'Contact'.", "Contact.Retire", "Active"));
         }
         this.CurrentStage = ContactStage.Inactive;
         return DomainResult.Success();
@@ -34,7 +34,7 @@ public class Contact
     {
         if (this.CurrentStage != ContactStage.Inactive)
         {
-            return DomainResult.Failure("'Reactivate' requires stage 'Inactive' on entity 'Contact'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Reactivate' requires stage 'Inactive' on entity 'Contact'.", "Contact.Reactivate", "Inactive"));
         }
         this.CurrentStage = ContactStage.Active;
         return DomainResult.Success();
@@ -75,7 +75,7 @@ public class Contact
         {
             return DomainResult.Success();
         }
-        return DomainResult.Failure("A unique assign needs the storage port.");
+        return DomainResult.Failure(Poly.Runtime.DomainFailure.Constraint("A unique assign needs the storage port.", "Contact"));
     }
     public static System.Boolean ExistsWithEmail(Poly.Runtime.IStoragePort db, System.String email) => db.Exists("Contact", "Email", email);
 }

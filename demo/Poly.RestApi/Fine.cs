@@ -34,7 +34,7 @@ public class Fine
     {
         if (this.CurrentStage != FineStage.Unpaid)
         {
-            return DomainResult.Failure("'Pay' requires stage 'Unpaid' on entity 'Fine'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Pay' requires stage 'Unpaid' on entity 'Fine'.", "Fine.Pay", "Unpaid"));
         }
         if (this.Amount <= 0L)
         {
@@ -53,7 +53,7 @@ public class Fine
     {
         if (this.CurrentStage != FineStage.Unpaid)
         {
-            return DomainResult.Failure("'Waive' requires stage 'Unpaid' on entity 'Fine'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Waive' requires stage 'Unpaid' on entity 'Fine'.", "Fine.Waive", "Unpaid"));
         }
         this.Amount = 0L;
         this.Paid = true;

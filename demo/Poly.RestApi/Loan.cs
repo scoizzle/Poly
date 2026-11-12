@@ -40,7 +40,7 @@ public class Loan
     {
         if (this.CurrentStage != LoanStage.Active)
         {
-            return DomainResult.Failure("'Renew' requires stage 'Active' on entity 'Loan'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Renew' requires stage 'Active' on entity 'Loan'.", "Loan.Renew", "Active"));
         }
         this.DueDate = this.DueDate.AddDays(14L);
         this.TimesRenewed = this.TimesRenewed + 1L;
@@ -50,7 +50,7 @@ public class Loan
     {
         if (this.CurrentStage != LoanStage.Active)
         {
-            return DomainResult.Failure("'Return' requires stage 'Active' on entity 'Loan'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Return' requires stage 'Active' on entity 'Loan'.", "Loan.Return", "Active"));
         }
         this.ReturnedAt = DateTime.UtcNow;
         this.CurrentStage = LoanStage.Returned;

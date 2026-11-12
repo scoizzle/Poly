@@ -43,7 +43,7 @@ public class Campaign
     {
         if (this.CurrentStage != CampaignStage.Active)
         {
-            return DomainResult<CampaignMember>.Failure("'Enroll' requires stage 'Active' on entity 'Campaign'.");
+            return DomainResult<CampaignMember>.Failure(Poly.Runtime.DomainFailure.Stage("'Enroll' requires stage 'Active' on entity 'Campaign'.", "Campaign.Enroll", "Active"));
         }
         var create0 = this.CreateMembers(who);
         if (!create0.IsSuccess)
@@ -57,7 +57,7 @@ public class Campaign
     {
         if (this.CurrentStage != CampaignStage.Active)
         {
-            return DomainResult.Failure("'End' requires stage 'Active' on entity 'Campaign'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'End' requires stage 'Active' on entity 'Campaign'.", "Campaign.End", "Active"));
         }
         this.CurrentStage = CampaignStage.Ended;
         return DomainResult.Success();

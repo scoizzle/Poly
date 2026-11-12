@@ -74,7 +74,7 @@ public class Order
     {
         if (this.CurrentStage != OrderStage.Pending)
         {
-            return DomainResult.Failure("'Pay' requires stage 'Pending' on entity 'Order'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Pay' requires stage 'Pending' on entity 'Order'.", "Order.Pay", "Pending"));
         }
         this.CurrentStage = OrderStage.Paid;
         this.State = OrderState.Paid;
@@ -84,7 +84,7 @@ public class Order
     {
         if (this.CurrentStage != OrderStage.Paid)
         {
-            return DomainResult.Failure("'Ship' requires stage 'Paid' on entity 'Order'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Ship' requires stage 'Paid' on entity 'Order'.", "Order.Ship", "Paid"));
         }
         this.CurrentStage = OrderStage.Shipped;
         this.State = OrderState.Shipped;

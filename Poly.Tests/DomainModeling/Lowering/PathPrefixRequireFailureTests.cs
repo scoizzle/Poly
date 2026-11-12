@@ -73,7 +73,7 @@ public class PathPrefixRequireFailureTests {
         var cs = new CSharpGenerator().Generate(unit);
 
         await Assert.That(cs).Contains(
-            "DomainResult.Failure(\"'CheckIn' requires a linked 'room' on entity 'Reservation'.\")");
+            "DomainResult.Failure(Poly.Runtime.DomainFailure.Required(\"'CheckIn' requires a linked 'room' on entity 'Reservation'.\", \"Reservation.room\"))");
         await Assert.That(cs).DoesNotContain("?? throw new InvalidOperationException");
         await Assert.That(cs).Contains("this.Room!");
     }

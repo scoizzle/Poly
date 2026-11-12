@@ -28,11 +28,11 @@ public class Lead
     {
         if (this.CurrentStage != LeadStage.New)
         {
-            return DomainResult.Failure("'Convert' requires stage 'New' on entity 'Lead'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Convert' requires stage 'New' on entity 'Lead'.", "Lead.Convert", "New"));
         }
         if (!this.HasAccount())
         {
-            return DomainResult.Failure("'Convert' blocked by policy 'HasAccount'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Policy("'Convert' blocked by policy 'HasAccount'.", "Lead.Convert", "HasAccount"));
         }
         this.CurrentStage = LeadStage.Converted;
         return DomainResult.Success();
@@ -41,7 +41,7 @@ public class Lead
     {
         if (this.CurrentStage != LeadStage.New)
         {
-            return DomainResult.Failure("'Disqualify' requires stage 'New' on entity 'Lead'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Disqualify' requires stage 'New' on entity 'Lead'.", "Lead.Disqualify", "New"));
         }
         this.CurrentStage = LeadStage.Dead;
         return DomainResult.Success();
@@ -83,7 +83,7 @@ public class Lead
         {
             return DomainResult.Success();
         }
-        return DomainResult.Failure("A unique assign needs the storage port.");
+        return DomainResult.Failure(Poly.Runtime.DomainFailure.Constraint("A unique assign needs the storage port.", "Lead"));
     }
     public static System.Boolean ExistsWithEmail(Poly.Runtime.IStoragePort db, System.String email) => db.Exists("Lead", "Email", email);
 }

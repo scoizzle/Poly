@@ -2043,7 +2043,7 @@ public class DomainToCSharpExporterTests {
         var cs = new CSharpGenerator().Generate(unit);
 
         await Assert.That(cs).Contains("this.Assignee == null");
-        await Assert.That(cs).Contains("DomainResult.Failure(\"'Go' requires a linked 'assignee' on entity 'Issue'.\")");
+        await Assert.That(cs).Contains("DomainResult.Failure(Poly.Runtime.DomainFailure.Required(\"'Go' requires a linked 'assignee' on entity 'Issue'.\", \"Issue.assignee\"))");
         await Assert.That(cs).Contains("this.Assignee.Notify()");
         await Assert.That(cs).DoesNotContain("this.Assignee!");
         await Assert.That(cs).DoesNotContain("this.assignee.Notify");
@@ -2073,7 +2073,7 @@ public class DomainToCSharpExporterTests {
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
-        await Assert.That(cs).Contains("DomainResult.Failure(\"'CheckIn' requires a linked 'room' on entity 'Reservation'.\")");
+        await Assert.That(cs).Contains("DomainResult.Failure(Poly.Runtime.DomainFailure.Required(\"'CheckIn' requires a linked 'room' on entity 'Reservation'.\", \"Reservation.room\"))");
         await Assert.That(cs).DoesNotContain("?? throw new InvalidOperationException");
         await Assert.That(cs).Contains("this.Room!.Occupied");
     }
@@ -2099,7 +2099,7 @@ public class DomainToCSharpExporterTests {
         var cs = new CSharpGenerator().Generate(unit);
 
         await Assert.That(cs).DoesNotContain("'Boot' blocked by policy 'IsActive'");
-        await Assert.That(cs).Contains("if (this.IsActive())\n        {\n            return DomainResult.Failure(\"'Skip' blocked by policy 'IsActive'.\")");
+        await Assert.That(cs).Contains("if (this.IsActive())\n        {\n            return DomainResult.Failure(Poly.Runtime.DomainFailure.Policy(\"'Skip' blocked by policy 'IsActive'.\", \"Device.Skip\", \"IsActive\"))");
         await Assert.That(cs).Contains("public bool IsActive()");
     }
 
@@ -2314,8 +2314,8 @@ public class DomainToCSharpExporterTests {
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
-        await Assert.That(cs).Contains("DomainResult.Failure(\"'Escalate' requires a linked 'reporter' on entity 'Issue'.\")");
-        await Assert.That(cs).Contains("DomainResult.Failure(\"'Escalate' requires a linked 'team' on entity 'Engineer'.\")");
+        await Assert.That(cs).Contains("DomainResult.Failure(Poly.Runtime.DomainFailure.Required(\"'Escalate' requires a linked 'reporter' on entity 'Issue'.\", \"Issue.reporter\"))");
+        await Assert.That(cs).Contains("DomainResult.Failure(Poly.Runtime.DomainFailure.Required(\"'Escalate' requires a linked 'team' on entity 'Engineer'.\", \"Engineer.team\"))");
         await Assert.That(cs).Contains(".TeamName == \"Blue\"");
         await Assert.That(cs).DoesNotContain("?? throw new InvalidOperationException");
         await Assert.That(cs).Contains("this.Reporter!.Team!");

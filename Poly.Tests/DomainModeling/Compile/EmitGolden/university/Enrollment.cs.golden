@@ -39,15 +39,15 @@ public class Enrollment
     {
         if (this.CurrentStage != EnrollmentStage.Pending)
         {
-            return DomainResult.Failure("'Confirm' requires stage 'Pending' on entity 'Enrollment'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Confirm' requires stage 'Pending' on entity 'Enrollment'.", "Enrollment.Confirm", "Pending"));
         }
         if (this.Section == null)
         {
-            return DomainResult.Failure("'Confirm' requires a linked 'section' on entity 'Enrollment'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Required("'Confirm' requires a linked 'section' on entity 'Enrollment'.", "Enrollment.section"));
         }
         if (this.SectionFull())
         {
-            return DomainResult.Failure("'Confirm' blocked by policy 'SectionFull'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Policy("'Confirm' blocked by policy 'SectionFull'.", "Enrollment.Confirm", "SectionFull"));
         }
         this.DueDate = this.EnrolledOn.AddDays((int)14L);
         this.CurrentStage = EnrollmentStage.Registered;
@@ -58,7 +58,7 @@ public class Enrollment
     {
         if (this.CurrentStage != EnrollmentStage.Pending)
         {
-            return DomainResult.Failure("'Withdraw' requires stage 'Pending' on entity 'Enrollment'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Withdraw' requires stage 'Pending' on entity 'Enrollment'.", "Enrollment.Withdraw", "Pending"));
         }
         this.CurrentStage = EnrollmentStage.Dropped;
         this.NotifyDroppedSubscribers();
@@ -68,7 +68,7 @@ public class Enrollment
     {
         if (this.CurrentStage != EnrollmentStage.Registered)
         {
-            return DomainResult.Failure("'RecordGrade' requires stage 'Registered' on entity 'Enrollment'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'RecordGrade' requires stage 'Registered' on entity 'Enrollment'.", "Enrollment.RecordGrade", "Registered"));
         }
         if (score >= 70L)
         {
@@ -93,7 +93,7 @@ public class Enrollment
     {
         if (this.CurrentStage != EnrollmentStage.Registered)
         {
-            return DomainResult.Failure("'Complete' requires stage 'Registered' on entity 'Enrollment'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Complete' requires stage 'Registered' on entity 'Enrollment'.", "Enrollment.Complete", "Registered"));
         }
         this.CurrentStage = EnrollmentStage.Completed;
         this.NotifyCompletedSubscribers();
@@ -103,7 +103,7 @@ public class Enrollment
     {
         if (this.CurrentStage != EnrollmentStage.Registered)
         {
-            return DomainResult.Failure("'Drop' requires stage 'Registered' on entity 'Enrollment'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Drop' requires stage 'Registered' on entity 'Enrollment'.", "Enrollment.Drop", "Registered"));
         }
         this.CurrentStage = EnrollmentStage.Dropped;
         this.NotifyDroppedSubscribers();

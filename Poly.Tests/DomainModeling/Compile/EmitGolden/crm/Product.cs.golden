@@ -57,7 +57,7 @@ public class Product
         {
             return DomainResult.Success();
         }
-        return DomainResult.Failure("A unique assign needs the storage port.");
+        return DomainResult.Failure(Poly.Runtime.DomainFailure.Constraint("A unique assign needs the storage port.", "Product"));
     }
     public static System.Boolean ExistsWithSku(Poly.Runtime.IStoragePort db, System.String sku) => db.Exists("Product", "Sku", sku);
 }

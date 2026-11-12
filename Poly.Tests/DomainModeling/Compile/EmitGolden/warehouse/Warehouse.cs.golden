@@ -153,7 +153,7 @@ public class Warehouse
         {
             return DomainResult.Success();
         }
-        return DomainResult.Failure("A unique assign needs the storage port.");
+        return DomainResult.Failure(Poly.Runtime.DomainFailure.Constraint("A unique assign needs the storage port.", "Warehouse"));
     }
     public static System.Boolean ExistsWithCode(Poly.Runtime.IStoragePort db, System.String code) => db.Exists("Warehouse", "Code", code);
 }

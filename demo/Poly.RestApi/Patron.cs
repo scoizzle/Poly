@@ -72,19 +72,19 @@ public class Patron
     {
         if (this.CurrentStage != PatronStage.Active)
         {
-            return DomainResult<Loan>.Failure("'CheckOut' requires stage 'Active' on entity 'Patron'.");
+            return DomainResult<Loan>.Failure(Poly.Runtime.DomainFailure.Stage("'CheckOut' requires stage 'Active' on entity 'Patron'.", "Patron.CheckOut", "Active"));
         }
         if (!this.GoodStanding())
         {
-            return DomainResult<Loan>.Failure("'CheckOut' blocked by policy 'GoodStanding'.");
+            return DomainResult<Loan>.Failure(Poly.Runtime.DomainFailure.Policy("'CheckOut' blocked by policy 'GoodStanding'.", "Patron.CheckOut", "GoodStanding"));
         }
         if (this.AtLimit())
         {
-            return DomainResult<Loan>.Failure("'CheckOut' blocked by policy 'AtLimit'.");
+            return DomainResult<Loan>.Failure(Poly.Runtime.DomainFailure.Policy("'CheckOut' blocked by policy 'AtLimit'.", "Patron.CheckOut", "AtLimit"));
         }
         if (this.HasFines())
         {
-            return DomainResult<Loan>.Failure("'CheckOut' blocked by policy 'HasFines'.");
+            return DomainResult<Loan>.Failure(Poly.Runtime.DomainFailure.Policy("'CheckOut' blocked by policy 'HasFines'.", "Patron.CheckOut", "HasFines"));
         }
         this.CurrentBorrowCount = this.CurrentBorrowCount + 1L;
         var create0 = this.CreateLoans();
@@ -99,7 +99,7 @@ public class Patron
     {
         if (this.CurrentStage != PatronStage.Active)
         {
-            return DomainResult.Failure("'Suspend' requires stage 'Active' on entity 'Patron'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Suspend' requires stage 'Active' on entity 'Patron'.", "Patron.Suspend", "Active"));
         }
         this.Status = PatronStatus.Suspended;
         this.CurrentBorrowCount = 0L;
@@ -112,7 +112,7 @@ public class Patron
     {
         if (this.CurrentStage != PatronStage.Active)
         {
-            return DomainResult.Failure("'CloseAccount' requires stage 'Active' on entity 'Patron'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'CloseAccount' requires stage 'Active' on entity 'Patron'.", "Patron.CloseAccount", "Active"));
         }
         this.CurrentStage = PatronStage.Closed;
         this.Status = PatronStatus.Closed;
@@ -122,11 +122,11 @@ public class Patron
     {
         if (this.CurrentStage != PatronStage.Suspended)
         {
-            return DomainResult.Failure("'Reinstate' requires stage 'Suspended' on entity 'Patron'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Reinstate' requires stage 'Suspended' on entity 'Patron'.", "Patron.Reinstate", "Suspended"));
         }
         if (this.HasOverdueLoans())
         {
-            return DomainResult.Failure("'Reinstate' blocked by policy 'HasOverdueLoans'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Policy("'Reinstate' blocked by policy 'HasOverdueLoans'.", "Patron.Reinstate", "HasOverdueLoans"));
         }
         this.Status = PatronStatus.Active;
         this.MaxItems = 5L;
@@ -227,7 +227,7 @@ public class Patron
         {
             return DomainResult.Success();
         }
-        return DomainResult.Failure("A unique assign needs the storage port.");
+        return DomainResult.Failure(Poly.Runtime.DomainFailure.Constraint("A unique assign needs the storage port.", "Patron"));
     }
     public static System.Boolean ExistsWithEmail(Poly.Runtime.IStoragePort db, System.String email) => db.Exists("Patron", "Email", email);
 }

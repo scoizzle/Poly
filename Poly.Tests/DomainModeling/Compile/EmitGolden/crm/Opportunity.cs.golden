@@ -117,11 +117,11 @@ public class Opportunity
     {
         if (this.CurrentStage != OpportunityStage.Qualify)
         {
-            return DomainResult.Failure("'Propose' requires stage 'Qualify' on entity 'Opportunity'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Propose' requires stage 'Qualify' on entity 'Opportunity'.", "Opportunity.Propose", "Qualify"));
         }
         if (!this.HasAccount())
         {
-            return DomainResult.Failure("'Propose' blocked by policy 'HasAccount'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Policy("'Propose' blocked by policy 'HasAccount'.", "Opportunity.Propose", "HasAccount"));
         }
         this.CurrentStage = OpportunityStage.Propose;
         this.Probability = 40L;
@@ -137,7 +137,7 @@ public class Opportunity
             this.NotifyLostSubscribers();
             return DomainResult.Success();
         }
-        return DomainResult.Failure("'Lose' is not valid for the current stage on entity 'Opportunity'.");
+        return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Lose' is not valid for the current stage on entity 'Opportunity'.", "Opportunity.Lose"));
     }
     public DomainResult<Activity> Log(string subject)
     {
@@ -151,7 +151,7 @@ public class Opportunity
             var created1 = create0.Value;
             return DomainResult<Activity>.Success(created1);
         }
-        return DomainResult<Activity>.Failure("'Log' is not valid for the current stage on entity 'Opportunity'.");
+        return DomainResult<Activity>.Failure(Poly.Runtime.DomainFailure.Stage("'Log' is not valid for the current stage on entity 'Opportunity'.", "Opportunity.Log"));
     }
     public DomainResult<Line> AddLine(Product sku, long qty)
     {
@@ -175,13 +175,13 @@ public class Opportunity
             var created2 = create1.Value;
             return DomainResult<Line>.Success(created2);
         }
-        return DomainResult<Line>.Failure("'AddLine' is not valid for the current stage on entity 'Opportunity'.");
+        return DomainResult<Line>.Failure(Poly.Runtime.DomainFailure.Stage("'AddLine' is not valid for the current stage on entity 'Opportunity'.", "Opportunity.AddLine"));
     }
     public DomainResult<Quote> QuoteDeal()
     {
         if (this.CurrentStage != OpportunityStage.Qualify)
         {
-            return DomainResult<Quote>.Failure("'QuoteDeal' requires stage 'Qualify' on entity 'Opportunity'.");
+            return DomainResult<Quote>.Failure(Poly.Runtime.DomainFailure.Stage("'QuoteDeal' requires stage 'Qualify' on entity 'Opportunity'.", "Opportunity.QuoteDeal", "Qualify"));
         }
         var create0 = this.CreateQuotes(this.Title, 0L);
         if (!create0.IsSuccess)
@@ -195,11 +195,11 @@ public class Opportunity
     {
         if (this.CurrentStage != OpportunityStage.Propose)
         {
-            return DomainResult.Failure("'Commit' requires stage 'Propose' on entity 'Opportunity'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Commit' requires stage 'Propose' on entity 'Opportunity'.", "Opportunity.Commit", "Propose"));
         }
         if (!this.HasLines())
         {
-            return DomainResult.Failure("'Commit' blocked by policy 'HasLines'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Policy("'Commit' blocked by policy 'HasLines'.", "Opportunity.Commit", "HasLines"));
         }
         this.CurrentStage = OpportunityStage.Commit;
         this.Probability = 80L;
@@ -209,7 +209,7 @@ public class Opportunity
     {
         if (this.CurrentStage != OpportunityStage.Commit)
         {
-            return DomainResult.Failure("'Win' requires stage 'Commit' on entity 'Opportunity'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Win' requires stage 'Commit' on entity 'Opportunity'.", "Opportunity.Win", "Commit"));
         }
         this.CurrentStage = OpportunityStage.Won;
         this.Probability = 100L;
@@ -220,7 +220,7 @@ public class Opportunity
     {
         if (this.CurrentStage != OpportunityStage.Commit)
         {
-            return DomainResult.Failure("'Capture' requires stage 'Commit' on entity 'Opportunity'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Capture' requires stage 'Commit' on entity 'Opportunity'.", "Opportunity.Capture", "Commit"));
         }
         var assignValue0 = this.Amount;
         if (assignValue0 < 0m)

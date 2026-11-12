@@ -61,19 +61,19 @@ public class Reservation
     {
         if (this.CurrentStage != ReservationStage.Requested)
         {
-            return DomainResult.Failure("'Confirm' requires stage 'Requested' on entity 'Reservation'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Confirm' requires stage 'Requested' on entity 'Reservation'.", "Reservation.Confirm", "Requested"));
         }
         if (!this.DatesValid())
         {
-            return DomainResult.Failure("'Confirm' blocked by policy 'DatesValid'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Policy("'Confirm' blocked by policy 'DatesValid'.", "Reservation.Confirm", "DatesValid"));
         }
         if (!this.PartyFits())
         {
-            return DomainResult.Failure("'Confirm' blocked by policy 'PartyFits'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Policy("'Confirm' blocked by policy 'PartyFits'.", "Reservation.Confirm", "PartyFits"));
         }
         if (!this.HasRoom())
         {
-            return DomainResult.Failure("'Confirm' blocked by policy 'HasRoom'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Policy("'Confirm' blocked by policy 'HasRoom'.", "Reservation.Confirm", "HasRoom"));
         }
         this.CurrentStage = ReservationStage.Confirmed;
         return DomainResult.Success();
@@ -86,29 +86,29 @@ public class Reservation
             this.NotifyCancelledSubscribers();
             return DomainResult.Success();
         }
-        return DomainResult.Failure("'Cancel' is not valid for the current stage on entity 'Reservation'.");
+        return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Cancel' is not valid for the current stage on entity 'Reservation'.", "Reservation.Cancel"));
     }
     public DomainResult CheckIn()
     {
         if (this.CurrentStage != ReservationStage.Confirmed)
         {
-            return DomainResult.Failure("'CheckIn' requires stage 'Confirmed' on entity 'Reservation'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'CheckIn' requires stage 'Confirmed' on entity 'Reservation'.", "Reservation.CheckIn", "Confirmed"));
         }
         if (this.Room == null)
         {
-            return DomainResult.Failure("'CheckIn' requires a linked 'room' on entity 'Reservation'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Required("'CheckIn' requires a linked 'room' on entity 'Reservation'.", "Reservation.room"));
         }
         if (!this.RoomReady())
         {
-            return DomainResult.Failure("'CheckIn' blocked by policy 'RoomReady'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Policy("'CheckIn' blocked by policy 'RoomReady'.", "Reservation.CheckIn", "RoomReady"));
         }
         if (!this.HasRoom())
         {
-            return DomainResult.Failure("'CheckIn' blocked by policy 'HasRoom'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Policy("'CheckIn' blocked by policy 'HasRoom'.", "Reservation.CheckIn", "HasRoom"));
         }
         if (this.Folio != null)
         {
-            return DomainResult.Failure("Cannot add a second link on 'folio': the source already has a target.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Link("Cannot add a second link on 'folio': the source already has a target.", "Reservation.folio"));
         }
         var create0 = this.CreateFolio(0L);
         if (!create0.IsSuccess)
@@ -123,7 +123,7 @@ public class Reservation
     {
         if (this.CurrentStage != ReservationStage.Confirmed)
         {
-            return DomainResult.Failure("'MarkNoShow' requires stage 'Confirmed' on entity 'Reservation'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'MarkNoShow' requires stage 'Confirmed' on entity 'Reservation'.", "Reservation.MarkNoShow", "Confirmed"));
         }
         this.CurrentStage = ReservationStage.NoShow;
         this.NotifyNoShowSubscribers();
@@ -133,15 +133,15 @@ public class Reservation
     {
         if (this.CurrentStage != ReservationStage.InHouse)
         {
-            return DomainResult.Failure("'PostStayCharge' requires stage 'InHouse' on entity 'Reservation'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'PostStayCharge' requires stage 'InHouse' on entity 'Reservation'.", "Reservation.PostStayCharge", "InHouse"));
         }
         if (!this.HasFolio())
         {
-            return DomainResult.Failure("'PostStayCharge' blocked by policy 'HasFolio'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Policy("'PostStayCharge' blocked by policy 'HasFolio'.", "Reservation.PostStayCharge", "HasFolio"));
         }
         if (this.Folio == null)
         {
-            return DomainResult.Failure("'PostStayCharge' requires a linked 'folio' on entity 'Reservation'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Required("'PostStayCharge' requires a linked 'folio' on entity 'Reservation'.", "Reservation.folio"));
         }
         var invoke0 = this.Folio.PostRoomNight(this.NightlyRate);
         if (!invoke0.IsSuccess)
@@ -154,19 +154,19 @@ public class Reservation
     {
         if (this.CurrentStage != ReservationStage.InHouse)
         {
-            return DomainResult.Failure("'CheckOut' requires stage 'InHouse' on entity 'Reservation'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'CheckOut' requires stage 'InHouse' on entity 'Reservation'.", "Reservation.CheckOut", "InHouse"));
         }
         if (!this.HasFolio())
         {
-            return DomainResult.Failure("'CheckOut' blocked by policy 'HasFolio'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Policy("'CheckOut' blocked by policy 'HasFolio'.", "Reservation.CheckOut", "HasFolio"));
         }
         if (this.Folio == null)
         {
-            return DomainResult.Failure("'CheckOut' requires a linked 'folio' on entity 'Reservation'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Required("'CheckOut' requires a linked 'folio' on entity 'Reservation'.", "Reservation.folio"));
         }
         if (!this.BillSettled())
         {
-            return DomainResult.Failure("'CheckOut' blocked by policy 'BillSettled'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Policy("'CheckOut' blocked by policy 'BillSettled'.", "Reservation.CheckOut", "BillSettled"));
         }
         this.CurrentStage = ReservationStage.Departed;
         this.NotifyDepartedSubscribers();

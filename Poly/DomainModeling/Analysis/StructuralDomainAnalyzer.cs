@@ -362,11 +362,17 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
             reported.Add(entry.Node);
             context.ReportError(
                 entry.Node,
-                row.Kind == ReservedKind.Language
-                    ? $"Member '{entry.MemberIdentity}' on entity '{entity.Name}' would take the enclosing " +
-                      "type's name (CS0542); rename it."
-                    : $"Member '{entry.MemberIdentity}' on entity '{entity.Name}' collides with the C# member " +
-                      $"'{row.Name}' that Emit generates; rename it.",
+                row.Kind switch {
+                    ReservedKind.Language =>
+                        $"Member '{entry.MemberIdentity}' on entity '{entity.Name}' would take the enclosing " +
+                        "type's name (CS0542); rename it.",
+                    ReservedKind.GeneratedReference =>
+                        $"Member '{entry.MemberIdentity}' on entity '{entity.Name}' would shadow the generated " +
+                        $"C# type '{row.Name}' that Emit calls from a generated member body; rename it.",
+                    _ =>
+                        $"Member '{entry.MemberIdentity}' on entity '{entity.Name}' collides with the C# member " +
+                        $"'{row.Name}' that Emit generates; rename it.",
+                },
                 DomainModelDiagnosticCodes.ReservedMemberName);
         }
     }

@@ -255,7 +255,9 @@ public sealed class NameScopeTests {
         foreach (var expected in new[] { "DomainResult", "ConstraintFailureException", "System" })
             await Assert.That(moduleRows.Contains(expected)).IsTrue();
 
-        // {Entity}Stage is generated per entity, so it is not a fixed row.
+        // {Entity}Stage is generated per entity, so it is not a fixed row. It is a
+        // member-scope row: the constructor body prints `AStage.One`, which a member of that
+        // name shadows (probe a).
         var evolved = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(
             new PolyDslParser("""
                 domain Shop
@@ -267,7 +269,7 @@ public sealed class NameScopeTests {
         await Assert.That(evolved.Succeeded).IsTrue();
         var order = evolved.Root!.Types.OfType<Entity>().First(e => e.Name == "Order");
         var stageRow = ReservedNames.ForEntity(order, evolved.Root)
-            .FirstOrDefault(r => r.Name == "OrderStage" && r.Kind == ReservedKind.GeneratedType);
+            .FirstOrDefault(r => r.Name == "OrderStage" && r.Kind == ReservedKind.GeneratedReference);
         await Assert.That(stageRow).IsNotNull();
     }
 
@@ -421,22 +423,54 @@ public sealed class NameScopeTests {
     }
 
     [Test]
-    public async Task PropertyNamedSystem_IsNotRejected() {
-        // Probe (b): a member named System compiles; the namespace row is module scope only.
+    public async Task PropertyNamedSystem_OnEntityWhoseGeneratedBodyCallsSystem_IsRejected() {
+        // Probe (c): the generated action body prints `System.Convert.ToInt64(0)` for a folded
+        // zero divisor, and the member wins the simple name from expression position (CS1061).
+        // Probe (g) fails the same way on a pattern check's `System.Text.RegularExpressions…
+        // Regex.IsMatch`. The row is unconditional because the writer's expression-position
+        // `System.` sites span several shapes; probe (h) shows `new System.X(...)` in type
+        // position would compile, so this rejection is deliberately conservative.
         var analysis = Analyze("""
             domain Scope
             A: entity {
               System: Text
+              N: Number
+              Half: action { assign N to N / 0 }
             }
             """);
 
-        await Assert.That(AllErrors(analysis).Count).IsEqualTo(0);
+        var errors = Errors(analysis, DomainModelDiagnosticCodes.ReservedMemberName);
+        await Assert.That(errors.Count).IsEqualTo(1);
+        await Assert.That(NodeName(errors[0])).IsEqualTo("System");
+        await Assert.That(errors[0].Message).Contains("would shadow the generated C# type 'System'");
     }
 
     [Test]
-    public async Task PropertyNamedConstraintFailureException_IsNotRejected() {
-        // Probe (c2): `new ConstraintFailureException(...)` in a void action body still binds
-        // to the scaffolding type when a property carries the name.
+    public async Task PropertyNamedSystem_OnEntityWithAutomaticTransition_IsRejectedConservatively() {
+        // Probe (h) compiles — `new System.InvalidOperationException(...)` is type position, so
+        // the namespace wins — but the System row is unconditional (probe c/g), so this shape
+        // is rejected anyway. Pinned so the conservative cost is a recorded decision, not an
+        // accident: narrowing it would mean twinning the writer's expression-position decisions.
+        var analysis = Analyze("""
+            domain Scope
+            A: entity {
+              System: Text
+              One: stage { entry { transition to Two } }
+              Two: stage { }
+            }
+            """);
+
+        var errors = Errors(analysis, DomainModelDiagnosticCodes.ReservedMemberName);
+        await Assert.That(errors.Count).IsEqualTo(1);
+        await Assert.That(NodeName(errors[0])).IsEqualTo("System");
+    }
+
+    [Test]
+    public async Task PropertyNamedConstraintFailureException_OnEntityWithVoidActionCreateIn_IsNotRejected() {
+        // Probes (e) and (f): the name binds in both shapes that could throw it unqualified —
+        // a void action's create-in returns a DomainResult instead of throwing, and a stage
+        // entry's assign guard emitted no throw in the probed fixture — so it keeps no member
+        // row. Only the module-scope type row applies to a *type* of this name.
         var analysis = Analyze("""
             domain Scope
             A: entity {
@@ -455,9 +489,11 @@ public sealed class NameScopeTests {
     }
 
     [Test]
-    public async Task PropertyNamedDomainResult_IsNotRejected() {
-        // Probe (d): the generated scaffolding type is referenced as `DomainResult.X` at type
-        // scope, which a property of that name does not shadow.
+    public async Task PropertyNamedDomainResult_OnEntityWithCreateReturningAction_IsNotRejected() {
+        // Probe (b3): a typed action prints only `DomainResult<T>`, which binds as a type
+        // beside the member (generic-arity lookup finds the record), and its failure path goes
+        // through `create0`/`created1`, not an unqualified `DomainResult.Success()`. The
+        // narrow shape matters: a void action (b) and a unique property (b2) both fail.
         var analysis = Analyze("""
             domain Scope
             A: entity {
@@ -581,5 +617,130 @@ public sealed class NameScopeTests {
             .ToList();
         var missing = memberRows.Where(name => !emitted.Contains(name)).ToList();
         await Assert.That(string.Join(",", missing)).IsEqualTo("");
+    }
+
+    // ── Fix round 2: the member-scope rows the compile probes prove ──────────
+
+    [Test]
+    public async Task PropertyNamedLikeOwnStageEnum_OnGeneratedStageEntity_IsRejected() {
+        // Probe (a): the constructor body prints `this.CurrentStage = AStage.One;` for every
+        // generated stage enum (Create.cs:433), which is expression position — the member wins
+        // the name and the emitted C# is CS1061. A type position (`AStage CurrentStage`) would
+        // still compile, which is why this is a GeneratedReference row, not a type row.
+        var analysis = Analyze("""
+            domain Scope
+            A: entity {
+              AStage: Text
+              One: stage { }
+              Two: stage { }
+            }
+            """);
+
+        var errors = Errors(analysis, DomainModelDiagnosticCodes.ReservedMemberName);
+        await Assert.That(errors.Count).IsEqualTo(1);
+        await Assert.That(NodeName(errors[0])).IsEqualTo("AStage");
+        await Assert.That(errors[0].Message).Contains("would shadow the generated C# type 'AStage'");
+    }
+
+    [Test]
+    public async Task PropertyNamedDomainResult_OnEntityWithVoidAction_IsRejected() {
+        // Probe (b): a void action returns the non-generic DomainResult and its body calls
+        // `DomainResult.Success()`, so a member of that name shadows the type (CS1061).
+        var analysis = Analyze("""
+            domain Scope
+            A: entity {
+              DomainResult: Text
+              Go: action { }
+            }
+            """);
+
+        var errors = Errors(analysis, DomainModelDiagnosticCodes.ReservedMemberName);
+        await Assert.That(errors.Count).IsEqualTo(1);
+        await Assert.That(NodeName(errors[0])).IsEqualTo("DomainResult");
+        await Assert.That(errors[0].Message).Contains("would shadow the generated C# type 'DomainResult'");
+    }
+
+    [Test]
+    public async Task PropertyNamedDomainResult_OnEntityWithUniqueProperty_IsRejected() {
+        // Probe (b2): EnsureUnique returns the non-generic DomainResult and calls
+        // `DomainResult.Success()`/`Failure(...)` from its body.
+        var analysis = Analyze("""
+            domain Scope
+            A: entity {
+              DomainResult: Text
+              Code: Text unique
+            }
+            """);
+
+        var errors = Errors(analysis, DomainModelDiagnosticCodes.ReservedMemberName);
+        await Assert.That(errors.Count).IsEqualTo(1);
+        await Assert.That(NodeName(errors[0])).IsEqualTo("DomainResult");
+    }
+
+    [Test]
+    public async Task PropertyNamedLikeStageEnum_OnImplicitSingleStageEntity_IsNotRejected() {
+        // Probe (d), the guard: an implicit single stage emits no stage enum (and no
+        // CurrentStage), so neither member name is reserved on it.
+        var analysis = Analyze("""
+            domain Scope
+            A: entity {
+              AStage: Text
+              Only: stage { }
+            }
+            """);
+
+        await Assert.That(AllErrors(analysis).Count).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task EntityTypeNamedLikeStageEnum_IsDMSTR004OnlyWhenTheEnumIsGenerated() {
+        // The DMSTR004 stage-enum loop is gated on HasStages: an implicit single stage emits no
+        // enum, so a sibling type of that name is legal; a generated enum makes it CS0101.
+        var implicitStage = Analyze("""
+            domain Scope
+            A: entity {
+              N: Text
+              Only: stage { }
+            }
+            AStage: entity { M: Text }
+            """);
+        await Assert.That(AllErrors(implicitStage).Count).IsEqualTo(0);
+
+        var generated = Analyze("""
+            domain Scope
+            A: entity {
+              One: stage { }
+              Two: stage { }
+            }
+            AStage: entity { M: Text }
+            """);
+        var errors = Errors(generated, DomainModelDiagnosticCodes.ReservedGeneratedName);
+        await Assert.That(errors.Count).IsEqualTo(1);
+        await Assert.That(errors[0].Message).Contains("collides with the stage enum generated for entity 'A'");
+    }
+
+    [Test]
+    public async Task PropertyAndTwoPoliciesSameName_OneReportPerNode() {
+        // The action/policy carve-out is per entry: the property↔first-policy pair is reported
+        // by this pass, the policy↔policy pair stays with ReportPolicyNameClashes, and the
+        // second policy is not blamed twice. The stage-scoped second policy avoids the
+        // same-list duplicate path (ReportDuplicateNames + ReportPolicyNameClashes both fire
+        // there), which is legacy and not S-01's to change.
+        var analysis = Analyze("""
+            domain Scope
+            A: entity {
+              X: Text
+              X: policy { X is "a" }
+              X: policy { X is "b" }
+            }
+            """);
+
+        var errors = Errors(analysis, DomainModelDiagnosticCodes.StructuralDuplicate);
+        // The property↔policy pairing is attributed once, to the first policy; the second
+        // policy is skipped here and left to ReportPolicyNameClashes. Without that per-entry
+        // carve-out both policies would take the pairing report.
+        await Assert.That(errors.Count(d => d.Message.Contains("are both named 'X'"))).IsEqualTo(1);
+        await Assert.That(errors.Any(d => d.Node is Property)).IsFalse();
+        await Assert.That(errors.Count).IsGreaterThanOrEqualTo(2);
     }
 }

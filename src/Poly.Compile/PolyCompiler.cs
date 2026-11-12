@@ -53,6 +53,9 @@ public sealed class PolyCompiler {
     private string? _sessionKey;
     private DomainSession? _session;
 
+    public PolyCompiler(ExtensionCatalog catalog, SessionOptions options)
+        : this(catalog, options.ImplicitIds, null) { }
+
     public PolyCompiler(ExtensionCatalog catalog, string seed = "authoring", CompileHooks? hooks = null)
         : this(catalog, ExtensionCatalog.Seed(seed), hooks) { }
 

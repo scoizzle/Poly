@@ -206,18 +206,20 @@ public class PolycCompileTests {
     }
 
     /// <summary>
-    /// FX1 pin: the explicit <c>authoring</c> seed is <c>[storage]</c>, while an omitted seed
-    /// is the product implicit set. The two diverge until C-04 folds them together.
+    /// C-04 A8 / F3 (replaces the FX1 pin, whose expectation was wrong once the seeds fold):
+    /// the CLI's <c>--seed authoring</c> is an alias for the implicit set, the same libraries
+    /// an omitted seed loads. <c>--seed language</c> still loads none.
     /// </summary>
     [Test]
-    public async Task ExplicitAuthoringSeed_IsStorageOnly_WhileOmittedSeedIsTheImplicitSet() {
-        var explicitAuthoring = global::Polyc.Options.CreateCompiler("authoring")
-            .Compile("domain D\nA: entity {\n  X: Text\n}\n", "x.poly");
-        await Assert.That(explicitAuthoring.Session!.Extensions).IsEquivalentTo(new[] { "storage" });
+    public async Task SeedAuthoring_FoldsIntoTheImplicitSet() {
+        const string text = "domain D\nA: entity {\n  X: Text\n}\n";
+        var explicitAuthoring = global::Polyc.Options.CreateCompiler("authoring").Compile(text, "x.poly");
+        var omitted = global::Polyc.Options.CreateCompiler(null).Compile(text, "x.poly");
+        var language = global::Polyc.Options.CreateCompiler("language").Compile(text, "x.poly");
 
-        var omitted = global::Polyc.Options.CreateCompiler(null)
-            .Compile("domain D\nA: entity {\n  X: Text\n}\n", "x.poly");
-        await Assert.That(omitted.Session!.Extensions).IsEquivalentTo(new[] { "storage", "persistence" });
+        await Assert.That(explicitAuthoring.Session!.Extensions.SequenceEqual(["storage", "persistence"])).IsTrue();
+        await Assert.That(omitted.Session!.Extensions.SequenceEqual(["storage", "persistence"])).IsTrue();
+        await Assert.That(language.Session!.Extensions).IsEmpty();
     }
 
     /// <summary>

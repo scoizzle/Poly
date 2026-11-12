@@ -113,6 +113,26 @@ public class PolycLspTests {
         await Assert.That(client.Stop()).IsEqualTo(0);
     }
 
+    /// <summary>
+    /// C-03 carry (pin, green on master): the language server's default seed is the one
+    /// <c>Options.CreateCompiler(null)</c> builds, so a no-<c>uses</c> document with a
+    /// <c>unique</c> property is judged the same as in <c>polyc check</c>.
+    /// </summary>
+    [Test]
+    public async Task LspServer_DefaultSeed_MatchesCreateCompilerNull() {
+        using var client = new Client();
+        client.Request("initialize", new JsonObject());
+        const string text = "domain D\nA: entity {\n  X: Text unique\n}\n";
+        Open(client, text);
+        var published = Published(client.NextPublish());
+
+        var viaOptions = global::Polyc.Options.CreateCompiler(null).Compile(text, File);
+        var expected = JsonNode.Parse(DiagnosticFormat.Report([viaOptions], []))!.AsArray()
+            .Select(n => DiagnosticFormat.FromJson(n!)).ToList();
+        await Assert.That(published.Select(d => d.Code).SequenceEqual(expected.Select(d => d.Code))).IsTrue();
+        await Assert.That(published.Any(d => d.IsError)).IsFalse();
+    }
+
     [Test]
     public async Task Publish_UnknownUses_IsDsl0002OnHeaderToken() {
         using var client = new Client();

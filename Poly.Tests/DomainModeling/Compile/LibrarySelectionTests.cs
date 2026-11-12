@@ -480,6 +480,89 @@ public sealed class LibrarySelectionTests {
         await Assert.That(throwing.Registrations).IsEqualTo(1);
     }
 
+    private static ExtensionCatalog VendorCatalog() =>
+        ProductCatalog.Catalog.With(new ProbeLibrary("x"));
+
+    private static IReadOnlyList<string> ResolveWithVendor(
+        string vendor, string[] uses, string[]? host = null) =>
+        LibrarySelection.Resolve(uses, new SessionOptions(VendorCatalog(), ProductCatalog.ImplicitIds) {
+            StorageVendor = vendor,
+            HostIds = host ?? [],
+        });
+
+    /// <summary>
+    /// C-04 A2: the host's storage vendor replaces <c>persistence</c> in place, is appended only
+    /// when no storage compiler is listed, and never doubles a listed storage library.
+    /// </summary>
+    [Test]
+    [Arguments("sqlite", new string[0], new string[0], new[] { "storage", "sqlite" })]
+    [Arguments("sqlite", new[] { "temporal", "persistence" }, new string[0], new[] { "temporal", "sqlite" })]
+    [Arguments("sqlite", new[] { "http" }, new string[0], new[] { "http", "sqlite" })]
+    [Arguments("sqlite", new[] { "sqlserver" }, new string[0], new[] { "sqlserver" })]
+    [Arguments("sqlite", new[] { "persistence", "sqlite" }, new string[0], new[] { "sqlite" })]
+    [Arguments("sqlite", new[] { "sqlserver", "persistence" }, new string[0], new[] { "sqlserver" })]
+    [Arguments("sqlite", new[] { "http" }, new[] { "x" }, new[] { "http", "x", "sqlite" })]
+    [Arguments("persistence", new string[0], new string[0], new[] { "storage", "persistence" })]
+    [Arguments("persistence", new[] { "http" }, new string[0], new[] { "http", "persistence" })]
+    [Arguments("persistence", new[] { "temporal", "sqlite" }, new string[0], new[] { "temporal", "sqlite" })]
+    [Arguments("persistence", new string[0], new[] { "sqlite" }, new[] { "storage", "sqlite" })]
+    [Arguments("persistence", new string[0], new[] { "http" }, new[] { "storage", "persistence", "http" })]
+    public async Task StorageVendor_ReplacesPersistenceInPlace_AppendsOnlyWhenNoStorageCompilerListed(
+        string vendor, string[] uses, string[] host, string[] expected) {
+        var ids = ResolveWithVendor(vendor, uses, host);
+
+        await Assert.That(ids.SequenceEqual(expected)).IsTrue().Because(string.Join(",", ids));
+    }
+
+    /// <summary>C-04 A1: no vendor means the selection is unchanged.</summary>
+    [Test]
+    public async Task NoStorageVendor_LeavesTheSelectionUnchanged() {
+        var options = new SessionOptions(VendorCatalog(), ProductCatalog.ImplicitIds);
+
+        await Assert.That(LibrarySelection.Resolve([], options).SequenceEqual(["storage", "persistence"])).IsTrue();
+        await Assert.That(LibrarySelection.Resolve(["http"], options).SequenceEqual(["http"])).IsTrue();
+    }
+
+    /// <summary>
+    /// C-04 A1: host libraries join once, after the selection, and are validated like the
+    /// implicit ids (a blank or repeated id is rejected; <c>with</c> is re-checked by Resolve).
+    /// </summary>
+    [Test]
+    public async Task HostIds_AreAppendedOnce_AfterTheSelection() {
+        var options = new SessionOptions(VendorCatalog(), []) { HostIds = ["x"] };
+
+        await Assert.That(LibrarySelection.Resolve(["http"], options).SequenceEqual(["http", "x"])).IsTrue();
+        await Assert.That(LibrarySelection.Resolve(["x", "http"], options).SequenceEqual(["x", "http"])).IsTrue();
+
+        Assert.Throws<ArgumentException>(() => _ = new SessionOptions(VendorCatalog(), []) { HostIds = [" "] });
+        Assert.Throws<InvalidOperationException>(() => _ = new SessionOptions(VendorCatalog(), []) { HostIds = ["x", "x"] });
+        Assert.Throws<ArgumentException>(() =>
+            LibrarySelection.Resolve([], options with { HostIds = [""] }));
+        Assert.Throws<InvalidOperationException>(() =>
+            LibrarySelection.Resolve([], options with { HostIds = ["x", "x"] }));
+        await Assert.That(() => LibrarySelection.Resolve([], options with { HostIds = ["nope"] }))
+            .Throws<InvalidOperationException>();
+    }
+
+    /// <summary>
+    /// C-03 carry: <c>Applies</c> results are never cached, so a throwing <c>Applies</c> throws
+    /// on every <c>ProvidersOf</c> call, and a vendor <c>Resolve</c> surfaces it too.
+    /// </summary>
+    [Test]
+    public async Task ProvidersOf_ThrowingApplies_ThrowsOnEveryCall() {
+        var catalog = new ExtensionCatalog().With(new ThrowingAppliesLibrary("angry"));
+
+        for (var i = 0; i < 2; i++) {
+            await Assert.That(() => catalog.ProvidersOf(new UniqueConstraint()))
+                .Throws<InvalidOperationException>()
+                .WithMessageContaining("applies-boom");
+        }
+        var options = new SessionOptions(catalog, []) { StorageVendor = "angry" };
+        await Assert.That(() => LibrarySelection.Resolve([], options))
+            .Throws<InvalidOperationException>()
+            .WithMessageContaining("applies-boom");
+    }
+
     /// <summary>FX3: a throwing <c>Applies</c> propagates out of <c>ProvidersOf</c>.</summary>
     [Test]
     public async Task ProvidersOf_ThrowingApplies_Propagates() {

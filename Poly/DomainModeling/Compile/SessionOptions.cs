@@ -32,6 +32,12 @@ public sealed record SessionOptions(
     /// </summary>
     internal bool Authoring { get; init; }
 
+    /// <summary>S1 stub.</summary>
+    public string? StorageVendor { get; init; }
+
+    /// <summary>S1 stub.</summary>
+    public IReadOnlyList<string> HostIds { get; init; } = [];
+
     /// <summary>Options with no implicit ids beyond the catalog's.</summary>
     public static SessionOptions Bare(ExtensionCatalog catalog) => new(catalog, []);
 

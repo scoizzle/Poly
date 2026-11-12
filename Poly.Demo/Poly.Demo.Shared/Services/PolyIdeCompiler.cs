@@ -65,7 +65,7 @@ public sealed class PolyIdeCompiler {
             .ToList();
         var moduleAnalysis = module.Count == 0
             ? null
-            : Interpreter.Analyzer.Analyze(new CompilationUnitNode([], null, module, null));
+            : DomainSession.AnalyzeModule(module);
         return catalog.Artifacts.Select(artifact => Render(artifact, moduleAnalysis)).ToList();
     }
 
@@ -92,7 +92,7 @@ public sealed class PolyIdeCompiler {
 
     private static string GenerateModule(IReadOnlyList<TypeDefinitionNode> types, AnalysisResult? moduleAnalysis) {
         var analysis = moduleAnalysis
-            ?? Interpreter.Analyzer.Analyze(new CompilationUnitNode([], null, types, null));
+            ?? DomainSession.AnalyzeModule(types);
         return new CSharpGenerator(analysis).Generate(types);
     }
 

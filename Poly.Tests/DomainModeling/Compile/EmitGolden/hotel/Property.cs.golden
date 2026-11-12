@@ -1,6 +1,8 @@
 #nullable enable
 using System.Collections.Generic;
 
+using Poly.Runtime;
+
 public enum PropertyStage
 {
     Open = 0,

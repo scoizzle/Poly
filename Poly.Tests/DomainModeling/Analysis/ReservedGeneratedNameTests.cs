@@ -72,7 +72,7 @@ public sealed class ReservedGeneratedNameTests {
         var errors = Errors(analysis, DomainModelDiagnosticCodes.ReservedGeneratedName);
         await Assert.That(errors.Count).IsGreaterThanOrEqualTo(1);
         await Assert.That(errors[0].Message).Contains("DomainResult")
-            .And.Contains("scaffolding")
+            .And.Contains("Poly.Runtime")
             .And.Contains("rename");
     }
 
@@ -86,6 +86,46 @@ public sealed class ReservedGeneratedNameTests {
         var errors = Errors(analysis, DomainModelDiagnosticCodes.ReservedGeneratedName);
         await Assert.That(errors.Count).IsGreaterThanOrEqualTo(1);
         await Assert.That(errors[0].Message).Contains("DomainResult");
+    }
+
+    // ── R-03b: the Poly namespace the generated C# imports ───────────────────
+
+    [Test]
+    public async Task PolyEntity_IsAnalyzeError() {
+        var analysis = Analyze("""
+            domain Clash
+            Poly: entity { Name: Text }
+            """);
+
+        var errors = Errors(analysis, DomainModelDiagnosticCodes.ReservedGeneratedName);
+        await Assert.That(errors.Count).IsGreaterThanOrEqualTo(1);
+        await Assert.That(errors[0].Message).Contains("Poly").And.Contains("Poly.Runtime");
+    }
+
+    [Test]
+    public async Task PolyEnum_IsAnalyzeError() {
+        var analysis = Analyze("""
+            domain Clash
+            Poly: enum { Ok, Err }
+            """);
+
+        var errors = Errors(analysis, DomainModelDiagnosticCodes.ReservedGeneratedName);
+        await Assert.That(errors.Count).IsGreaterThanOrEqualTo(1);
+        await Assert.That(errors[0].Message).Contains("Poly").And.Contains("Poly.Runtime");
+    }
+
+    [Test]
+    public async Task PolyValueType_IsAnalyzeError() {
+        // StructuralDomainAnalyzer iterates domain.Types, so a value type reaches the
+        // same module-scope rows as an entity and an enum.
+        var analysis = Analyze("""
+            domain Clash
+            Poly: value { Amount: Number }
+            """);
+
+        var errors = Errors(analysis, DomainModelDiagnosticCodes.ReservedGeneratedName);
+        await Assert.That(errors.Count).IsGreaterThanOrEqualTo(1);
+        await Assert.That(errors[0].Message).Contains("Poly").And.Contains("Poly.Runtime");
     }
 
     [Test]

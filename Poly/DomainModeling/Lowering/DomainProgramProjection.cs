@@ -25,7 +25,7 @@ public static class DomainProgramProjection {
 
     /// <summary>
     /// Projects the domain into Syntax type definitions (entity types, stage
-    /// enums, DomainResult scaffolding, lowered operations). Called from
+    /// enums, value types, lowered operations; the result family is Poly.Runtime's). Called from
     /// <see cref="DomainSession.Lower"/>.
     /// </summary>
     public static IReadOnlyList<TypeDefinitionNode> ToSyntax(
@@ -100,11 +100,6 @@ public static class DomainProgramProjection {
             foreach (var valueType in contract.Types)
                 result.Add(DomainToCSharpExporter.BuildValueTypeTypeDef(valueType, domain, metadata));
         }
-
-        // ── Build DomainResult infrastructure types ─────────────
-        result.Add(DomainToCSharpExporter.BuildDomainResultTypeDef());
-        result.Add(DomainToCSharpExporter.BuildDomainResultGenericTypeDef());
-        result.Add(DomainToCSharpExporter.BuildConstraintFailureExceptionTypeDef());
 
         // ── Build entity type definitions ─────────────────────────
         var handlerNames = DomainToCSharpExporter.BuildHandlerNames(subscriptionsBySubscriber);

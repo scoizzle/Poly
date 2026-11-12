@@ -96,7 +96,7 @@ public sealed class VmAnalyzerReportTests {
 
             // These two calls mirror the start of DomainSession.Emit.
             var types = session.Lower(outcome.Root, outcome.Analysis);
-            var vm = Interpreter.Analyzer.Analyze(new CompilationUnitNode([], null, types, null));
+            var vm = DomainSession.AnalyzeModule(types);
 
             var errors = vm.Diagnostics.Count(d => d.Severity == DiagnosticSeverity.Error);
             var warnings = vm.Diagnostics.Count(d => d.Severity == DiagnosticSeverity.Warning);

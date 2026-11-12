@@ -1,4 +1,6 @@
 #nullable enable
+using Poly.Runtime;
+
 public class Book
 {
     private Book() { }

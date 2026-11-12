@@ -935,9 +935,9 @@ internal static class StoredLambdaBinding {
 }
 
 /// <summary>
-/// <c>DomainResult&lt;T&gt;</c> declared on an AST method. Closing that name
-/// hits the non-generic CLR result, whose <c>Value</c> is object. The
-/// variable that received the call still carries <c>T</c>.
+/// <c>DomainResult&lt;T&gt;</c> declared on an AST method. On the wrapped provider stack
+/// closing that name erases to <c>DomainResult&lt;object&gt;</c>, whose <c>Value</c> is
+/// object. The variable that received the call still carries <c>T</c>.
 /// </summary>
 internal sealed record DomainResultValueMetadata(ITypeDefinition Type) : IAnalysisMetadata;
 

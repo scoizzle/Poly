@@ -176,17 +176,6 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
         }
     }
 
-    private static bool TryToDouble(object? value, out double d) {
-        switch (value) {
-            case double x: d = x; return true;
-            case float f: d = f; return true;
-            case int i: d = i; return true;
-            case long l: d = l; return true;
-            case decimal m: d = (double)m; return true;
-            default: d = 0; return false;
-        }
-    }
-
     /// <summary>
     /// P3: non-void <c>-&gt; T</c> requires a create / create-in that produces entity type T
     /// (product vertical — not primitive assign-as-return), and the FINAL statement
@@ -1280,7 +1269,7 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
                 double lo = vr.Min ?? double.NegativeInfinity, hi = vr.Max ?? double.PositiveInfinity;
                 bool fullyBelow = tmin is not null && hi < tmin.Value;
                 bool fullyAbove = tmax is not null && lo > tmax.Value;
-                if (fullyBelow || fullyAbove || HasUnorderableBound(range)) {
+                if (fullyBelow || fullyAbove || WriteVerification.HasUnorderableBound(range)) {
                     context.ReportError(
                         post.Effect,
                         $"Call-chain postcondition ({action.Name} → {post.DeclaringAction.Name}): assigned value range " +

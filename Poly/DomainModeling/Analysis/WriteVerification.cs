@@ -55,9 +55,14 @@ internal static class WriteVerification {
         return lowerOk && upperOk ? ConstraintVerdict.Satisfied : ConstraintVerdict.Undecided;
     }
 
-    private static bool HasUnorderableBound(RangeConstraint range) =>
-        (range.Minimum is not null && NumericBound.ToDoubleOrNull(range.Minimum) is null)
-        || (range.Maximum is not null && NumericBound.ToDoubleOrNull(range.Maximum) is null);
+    /// <summary>
+    /// A target bound no exact number can order. A numeric bound is always orderable (the compare
+    /// falls back to master's double comparison); only a non-numeric bound is unorderable.
+    /// Shared with the effect analyzer's range text so the two cannot disagree.
+    /// </summary>
+    internal static bool HasUnorderableBound(RangeConstraint range) =>
+        (range.Minimum is not null && !ConstraintMerge.IsNumeric(range.Minimum))
+        || (range.Maximum is not null && !ConstraintMerge.IsNumeric(range.Maximum));
 }
 
 /// <summary>The three-way outcome of one write: proven inside, proven outside, or not proven.</summary>

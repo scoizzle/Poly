@@ -68,6 +68,9 @@ public sealed partial class EffectLoweringPass {
         else {
             // Entity-level transition: source stage is CurrentStage at run time.
             // Emit per-stage OnExit so simulate and C# both run exit before assign.
+            // An else-if chain: at most one stage's exit runs per hop, even when an
+            // arm's exit holds a hop that moves CurrentStage.
+            var arms = new List<(Stage Stage, List<Node> Body)>();
             foreach (var stage in _entity.Stages) {
                 if (stage.OnExitEffects.Count == 0)
                     continue;
@@ -75,13 +78,20 @@ public sealed partial class EffectLoweringPass {
                 InlineExitOnce(stage, exitNodes);
                 if (exitNodes.Count == 0)
                     continue;
+                arms.Add((stage, exitNodes));
+            }
+            Node? chain = null;
+            for (var i = arms.Count - 1; i >= 0; i--) {
+                var (stage, body) = arms[i];
                 Node stageMatch = new Member(
                     new NamedTypeReference(_stageEnumTypeName ?? $"{_entity.Name}Stage"),
                     stage.Name);
-                nodes.Add(new IfStatement(
-                    new Equal(new Member(Subject, "CurrentStage"), stageMatch),
-                    exitNodes.Count == 1 ? exitNodes[0] : new Block(exitNodes)));
+                var test = new Equal(new Member(Subject, "CurrentStage"), stageMatch);
+                var branch = body.Count == 1 ? body[0] : new Block(body);
+                chain = chain is null ? new IfStatement(test, branch) : new IfStatement(test, branch, chain);
             }
+            if (chain is not null)
+                nodes.Add(chain);
         }
 
         // The hop's own source exit has run: the body is in the target from here on.

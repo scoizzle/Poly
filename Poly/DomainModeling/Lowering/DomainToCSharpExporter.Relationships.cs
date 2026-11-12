@@ -127,6 +127,13 @@ public sealed partial class DomainToCSharpExporter {
     /// Emits the navigation properties (PascalCase; <c>IReadOnlyList</c> for collections)
     /// and the create-in / attach methods that go with a collection navigation.
     /// </summary>
+    // EF discovers only public navigations, so a nav on an internal entity stays public: the type is internal,
+    // so nothing outside the assembly can reach it. Only a public entity demotes a nav to an internal target.
+    private static AccessModifier NavigationAccess(Entity entity, Domain domain, Node targetType) =>
+        entity.Visibility == Visibility.Public
+            ? DomainAccess.Demote(AccessModifier.Public, domain, targetType)
+            : AccessModifier.Public;
+
     private static void AddNavigationMembers(
         Entity entity, Domain domain, IReadOnlyList<Relationship> domainRelationships,
         INodeMetadataProvider metadata, List<SubscriptionInfo>? subscriberSubs,
@@ -166,7 +173,7 @@ public sealed partial class DomainToCSharpExporter {
                     Getter: new PropertyGetterDefinitionNode(
                         Body: new Member(new ThisReference(), fieldName)),
                     IsReadOnly: true,
-                    AccessModifier: DomainAccess.Demote(AccessModifier.Public, domain, targetType)
+                    AccessModifier: NavigationAccess(entity, domain, targetType)
                 ));
 
                 // Create{Nav} is the typed create-in. A relationship with no create-in
@@ -187,7 +194,7 @@ public sealed partial class DomainToCSharpExporter {
                     Getter: new PropertyGetterDefinitionNode(),
                     Setter: new PropertySetterDefinitionNode(
                         AccessModifier: AccessModifier.Private),
-                    AccessModifier: DomainAccess.Demote(AccessModifier.Public, domain, targetType)
+                    AccessModifier: NavigationAccess(entity, domain, targetType)
                 ));
             }
         }

@@ -115,7 +115,7 @@ public sealed class CreateDeclarationOrderTests {
         var asm = ExportedCSharp.CompileAndLoad(Print(domain, analysis));
         var shelf = ExportedCSharp.CreateEntity(asm, "Shelf", ("name", "s"));
         var method = shelf.GetType().GetMethod(
-            "CreateWidgets", BindingFlags.Public | BindingFlags.Instance)!;
+            "CreateWidgets", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)!;
 
         // Named values, so a reordered parameter list still finds both slots.
         var args = new object?[method.GetParameters().Length];

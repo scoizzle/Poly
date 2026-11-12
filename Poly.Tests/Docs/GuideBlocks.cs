@@ -24,8 +24,9 @@ internal enum GuideMarkerKind {
 
 /// <summary>
 /// One parsed <c>&lt;!-- poly-verify: ... --&gt;</c> marker. The grammar is the guide's contract with
-/// this harness: <c>valid</c>, <c>fragment:&lt;top|entity|expr&gt; wrapper:&lt;id&gt;</c>,
-/// <c>invalid:&lt;code&gt; [wrapper:&lt;id&gt;]</c>, <c>skip:&lt;illustration|drift&gt; owner:&lt;slice&gt;</c>.
+/// this harness: <c>valid</c>, <c>fragment:&lt;top|entity&gt; wrapper:&lt;id&gt;</c>,
+/// <c>invalid:&lt;code&gt; [wrapper:&lt;id&gt;]</c>, <c>skip:illustration owner:&lt;slice&gt;</c>,
+/// <c>skip:drift:&lt;code&gt; [wrapper:&lt;id&gt;] owner:&lt;slice&gt;</c>.
 /// </summary>
 internal sealed record GuideMarker(
     GuideMarkerKind Kind,
@@ -107,6 +108,9 @@ internal sealed record GuideMarker(
                         $"Guide line {line}: wrapper id '{skipWrapper}' is not lower-case kebab.");
                 ownerIndex = 2;
             }
+            if (skipWrapper is not null && driftCode is null)
+                throw new InvalidOperationException(
+                    $"Guide line {line}: wrapper:<id> is only for a drift skip; an illustration has no verdict.");
             if (tokens.Length != ownerIndex + 1
                 || !tokens[ownerIndex].StartsWith("owner:", StringComparison.Ordinal))
                 throw new InvalidOperationException(

@@ -174,6 +174,12 @@ public class GuideExamplesTests {
                 domain D
                 ```
                 """, null),
+            ("wrapper on an illustration skip", $$"""
+                {{Marker("skip:illustration wrapper:none-here owner:M-02")}}
+                ```poly
+                domain D
+                ```
+                """, root => Write(root, "none-here.poly.tmpl", "domain W\n// <<guide-block:top>>\n")),
             ("comment-only fragment", $$"""
                 {{Marker("fragment:top wrapper:none-here")}}
                 ```poly
@@ -203,8 +209,9 @@ public class GuideExamplesTests {
         await Assert.That(failures.Count).IsEqualTo(0)
             .Because("every hostile guide shape must fail closed, naming the line or the wrapper:\n"
                      + string.Join("\n", failures));
-        await Assert.That(cases.Length).IsEqualTo(12)
-            .Because("R4 is pinned at eleven cases (A10) plus the comment-only fragment FX5 added");
+        await Assert.That(cases.Length).IsEqualTo(13)
+            .Because("R4 is pinned at eleven cases (A10), plus the comment-only fragment and the "
+                     + "wrapper-on-illustration cases the fix rounds added");
     }
 
     [Test]
@@ -354,7 +361,8 @@ public class GuideExamplesTests {
                 continue;
             }
             var outcome = GuideBlocks.Compose(block, document.Wrappers);
-            if (!outcome.Errors.Any(error => string.Equals(error.Code, code, StringComparison.Ordinal)))
+            if (!outcome.Errors.Any(error =>
+                    outcome.InBlock(error) && string.Equals(error.Code, code, StringComparison.Ordinal)))
                 problems.Add($"guide line {block.Line} [{block.FirstLine}]: drift with {code}, but the block gives "
                              + $"{outcome.Codes} ({outcome.Detail})");
         }
@@ -407,10 +415,20 @@ public class GuideExamplesTests {
             if (control.Errors.Count == 0)
                 controlNotBroken.Add($"{name}: the parse control analysed clean, so the wrapper proves nothing");
 
-            var semantic = GuideBlocks.Splice(wrapper, ["Zz: entity { N: NoSuchType }"]);
-            if (!semantic.Errors.Any(semantic.InBlock))
-                controlNotBroken.Add($"{name}: the semantic control did not report an error inside the block's "
-                                     + $"lines {semantic.FirstLine}-{semantic.LastLine}: {semantic.Codes}");
+            // An unknown type resolves to DSL0001 before analysis in both contexts, so the semantic control
+            // is a type mismatch: it must still be an analysis code, inside the block's lines.
+            var semanticLines = string.Equals(wrapper.Context, "entity", StringComparison.Ordinal)
+                ? new[] { "  Zz: Number", "  Zq: action { assign Zz to \"text\" }" }
+                : ["Zz: entity {", "  N: Number", "  Zq: action { assign N to \"text\" }", "}"];
+            var semantic = GuideBlocks.Splice(wrapper, semanticLines);
+            var semanticErrors = semantic.Errors
+                .Where(semantic.InBlock)
+                .Where(error => error.Code is not ("DSL0001" or "DSL0002"))
+                .ToList();
+            if (semanticErrors.Count == 0)
+                controlNotBroken.Add($"{name} ({wrapper.Context}): the semantic control gave no analysis error "
+                                     + $"inside the block's lines {semantic.FirstLine}-{semantic.LastLine}: "
+                                     + semantic.Codes);
 
             foreach (var block in document.Blocks.Where(b =>
                          b.Marker?.Kind == GuideMarkerKind.Fragment && b.Marker.Wrapper == id)) {

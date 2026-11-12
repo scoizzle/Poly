@@ -133,7 +133,7 @@ public class GuideClaimsTests {
             "removing the owner instance entirely is not an unlink, so it is exempt from the minimum.",
             ["present", "absent"], "present", "M-02", OwnedRemoval),
         new("c492", "#492",
-            "Do NOT Use (Unsupported in Phase 1a/1b)",
+            "Action `when Stage` | Not a runtime or emit gate",
             ["accepted", "rejected"], "rejected", "G-05",
             () => ActionWhenVerdict(ActionWhenDomain)),
         new("c576", "#576",
@@ -145,39 +145,60 @@ public class GuideClaimsTests {
             () => StageRequireVerdict(StageRequireDomain)),
     ];
 
-    /// <summary>
-    /// The rows this slice knows about: the id, the one slice that deletes the row, and the measured
-    /// detail. Each entry is a recorded contradiction, never a pass.
-    /// </summary>
-    private static readonly (string Id, string Deleter, string Observed)[] KnownGuideDrift = [
-        ("c600", "M-02", "entity-first: Trace=12"),
-        ("c601", "M-02", "each-transition: AnyN=2, EachN=2"),
-        ("c637", "M-02", "absent: 3/3 effect verbs are parse errors; last-owner unlink refused"),
-        ("c492", "G-05", "accepted: 0 errors"),
-        ("c576", "L-17", "accepted: created in Open with Cleared=true"),
-        ("c577", "V-10", "accepted: 0 errors; the clearing action succeeds; the following action is blocked"),
-    ];
+    /// <summary>One recorded contradiction: the measured detail and the resolution that retires it.</summary>
+    private sealed record DriftRow(string Id, string Deleter, string Observed, string Resolution);
 
     /// <summary>
-    /// Probes whose claim text is still in the guide and whose verdict disagrees with it. A probe whose
-    /// claim the guide no longer makes cannot contradict the guide, so it retires rather than blocks.
+    /// The rows this slice knows about: the id, the one slice that deletes the row, the measured detail,
+    /// and which resolution retires it. Each entry is a recorded contradiction, never a pass.
+    /// <para>
+    /// c576 and c577 share one claim sentence — the guide's only statement about a stage <c>require</c>
+    /// being an invariant — so one M-02 reword retires both rows, and neither can outlive the sentence.
+    /// </para>
     /// </summary>
-    private static IReadOnlyList<string> Contradictions(string guideText) {
+    private static readonly DriftRow[] KnownGuideDrift = [
+        new("c600", "M-02", "entity-first: Trace=12",
+            "M-02 reword: the guide says stage-scoped first; it must say entity-level first."),
+        new("c601", "M-02", "each-transition: AnyN=2, EachN=2",
+            "M-02 reword: 'once' becomes 'each matching transition'."),
+        new("c637", "M-02", "absent: 3/3 effect verbs are parse errors; last-owner unlink refused",
+            "M-02 reword: the removal exemption goes, or a removal operation lands."),
+        new("c492", "G-05", "accepted: 0 errors",
+            "G-05 refuses `action when S` in analysis, at the action's own line; the section 10 row is then true."),
+        new("c576", "L-17", "accepted: created in Open with Cleared=true",
+            "L-17 refuses create in a stage whose require the initial values falsify. Shares c577's claim "
+            + "sentence, so one M-02 reword retires both rows."),
+        new("c577", "V-10", "accepted: 0 errors; the clearing action succeeds; the following action is blocked",
+            "V-10 refuses or post-checks an action that falsifies the stage require. Shares c576's claim "
+            + "sentence, so one M-02 reword retires both rows."),
+    ];
+
+    /// <summary>The audit's answer: contradictions with no row, and rows with no contradiction.</summary>
+    private sealed record DriftAudit(IReadOnlyList<string> Unlisted, IReadOnlyList<string> Stale);
+
+    /// <summary>
+    /// The R6a rule as a pure function, so it can be exercised without the repository's guide, probes or
+    /// ledger. A probe counts only while its claim text is in the guide: a claim the guide no longer makes
+    /// cannot contradict it, so it retires rather than blocks.
+    /// </summary>
+    private static DriftAudit Audit(
+        string guideText, IReadOnlyList<ClaimProbe> probes, IReadOnlyList<DriftRow> rows) {
         var guide = GuideBlocks.Normalise(guideText);
-        return Probes
+        var drifted = probes
             .Where(probe => guide.Contains(GuideBlocks.Normalise(probe.Claim), StringComparison.Ordinal))
             .Where(probe => probe.Observe().Verdict != probe.Claimed)
             .Select(probe => probe.Id)
             .Order(StringComparer.Ordinal)
             .ToList();
+        var listed = rows.Select(row => row.Id).Order(StringComparer.Ordinal).ToList();
+        return new DriftAudit(drifted.Except(listed).ToList(), listed.Except(drifted).ToList());
     }
 
     [Test]
     public async Task EveryClaimAgreesWithTheCode_ExceptTheLedger() {
-        var drifted = Contradictions(GuideBlocks.ReadGuide());
-        var listed = KnownGuideDrift.Select(row => row.Id).Order(StringComparer.Ordinal).ToList();
-        var unlisted = drifted.Except(listed).ToList();
-        var stale = listed.Except(drifted).ToList();
+        var audit = Audit(GuideBlocks.ReadGuide(), Probes, KnownGuideDrift);
+        var unlisted = audit.Unlisted;
+        var stale = audit.Stale;
 
         var table = string.Join("\n", Probes.Select(probe => {
             var answer = probe.Observe();
@@ -197,7 +218,7 @@ public class GuideClaimsTests {
         var guide = GuideBlocks.Normalise(GuideBlocks.ReadGuide());
         var problems = new List<string>();
 
-        foreach (var (id, deleter, observed) in KnownGuideDrift) {
+        foreach (var (id, deleter, observed, resolution) in KnownGuideDrift) {
             var probe = Probes.SingleOrDefault(candidate => candidate.Id == id);
             if (probe is null) {
                 problems.Add($"{id}: no probe carries this row");
@@ -205,6 +226,8 @@ public class GuideClaimsTests {
             }
             if (!string.Equals(deleter, probe.Deleter, StringComparison.Ordinal))
                 problems.Add($"{id}: row deleter '{deleter}' does not match the probe's owner '{probe.Deleter}'");
+            if (resolution.Trim().Length == 0)
+                problems.Add($"{id}: the row does not say which resolution retires it");
             if (!guide.Contains(GuideBlocks.Normalise(probe.Claim), StringComparison.Ordinal)) {
                 problems.Add($"{id}: the claim text is gone from the guide; delete the row or re-point it");
                 continue;
@@ -251,20 +274,35 @@ public class GuideClaimsTests {
                      + string.Join("\n", problems));
     }
 
-    /// <summary>A guide-only change retires the probe: taking the sentence out drops the contradiction.</summary>
+    /// <summary>
+    /// The retirement rule, proved on synthetic inputs so no live row or live sentence can make it pass
+    /// by accident: present-and-drifted-with-a-row is clean, present-and-drifted-without-a-row is
+    /// unlisted, and gone-with-no-row is clean again.
+    /// </summary>
     [Test]
     public async Task Claims_WhoseTextIsGoneFromTheGuide_RetireTheirRow() {
-        var guide = GuideBlocks.ReadGuide();
-        var claim = Probes.Single(probe => probe.Id == "c600").Claim;
-        var without = guide.Replace(claim, "", StringComparison.Ordinal);
-        var before = Contradictions(guide);
-        var after = Contradictions(without);
+        const string claim = "The synthetic claim sentence this test injects.";
+        ClaimProbe[] probes = [
+            new("s1", "#0", claim, ["agrees", "drifted"], "agrees", "M-02",
+                () => new ProbeAnswer("drifted", "drifted: synthetic")),
+        ];
+        DriftRow[] row = [new("s1", "M-02", "drifted: synthetic", "the synthetic resolution")];
+        var guide = "Intro text.\n\n" + claim + "\n\nMore text.\n";
 
-        await Assert.That(after.Contains("c600")).IsFalse()
-            .Because("M-02 can retire the row by taking the claim out of the guide");
-        await Assert.That(after.Count).IsEqualTo(before.Count - 1)
-            .Because("removing one claim text removes exactly one contradiction: before "
-                     + string.Join(", ", before) + "; after " + string.Join(", ", after));
+        var listed = Audit(guide, probes, row);
+        await Assert.That(listed.Unlisted.Count + listed.Stale.Count).IsEqualTo(0)
+            .Because("present, drifted, and listed is the ledger working: unlisted "
+                     + string.Join(", ", listed.Unlisted) + "; stale " + string.Join(", ", listed.Stale));
+
+        var unlisted = Audit(guide, probes, []);
+        await Assert.That(string.Join(",", unlisted.Unlisted)).IsEqualTo("s1")
+            .Because("present and drifted with no row must report the probe as unlisted");
+
+        var retired = Audit(guide.Replace(claim, "", StringComparison.Ordinal), probes, []);
+        await Assert.That(retired.Unlisted.Count + retired.Stale.Count).IsEqualTo(0)
+            .Because("with the claim gone the probe is inert, so a guide-only change retires the row: "
+                     + "unlisted " + string.Join(", ", retired.Unlisted)
+                     + "; stale " + string.Join(", ", retired.Stale));
     }
 
     /// <summary>
@@ -379,7 +417,7 @@ public class GuideClaimsTests {
         if (!exec.Link("kid", a, b).Succeeded)
             return new ProbeAnswer("link-refused", "link refused");
         var unlink = exec.Unlink("kid", a, b);
-        var verdict = refused == verbs.Length && !unlink.Succeeded ? "absent" : "present";
+        var verdict = refused == verbs.Length ? "absent" : "present";
         return new ProbeAnswer(verdict,
             $"{verdict}: {refused}/3 effect verbs are parse errors; last-owner unlink "
             + (unlink.Succeeded ? "allowed" : "refused"));
@@ -420,13 +458,24 @@ public class GuideClaimsTests {
             $"accepted: created in {stage} with Cleared=" + GuideBlocks.Text(created.Bag["Cleared"]));
     }
 
-    /// <summary>#492: is <c>X: action when S { }</c> refused, or accepted and silently dropped?</summary>
+    /// <summary>
+    /// #492: is <c>X: action when S { }</c> refused, or accepted and silently dropped? An error elsewhere
+    /// in the document does not make the clause refused, so only an error on the clause's own line counts.
+    /// </summary>
     private static ProbeAnswer ActionWhenVerdict(string document) {
         var result = GuideBlocks.Analyze(document);
+        var clauseLine = document.Split('\n')
+            .Select((text, index) => (text, number: index + 1))
+            .FirstOrDefault(pair => pair.text.Contains("action when", StringComparison.Ordinal)).number;
         var errors = result.Diagnostics.Where(d => d.IsError).ToList();
+        var onTheClause = errors.Where(d => d.Line == clauseLine).ToList();
+        if (onTheClause.Count > 0)
+            return new ProbeAnswer("rejected",
+                "rejected: " + string.Join(", ", onTheClause.Select(d => d.Code)) + $" at line {clauseLine}");
         return errors.Count == 0
             ? new ProbeAnswer("accepted", "accepted: 0 errors")
-            : new ProbeAnswer("rejected", "rejected: " + string.Join(", ", errors.Select(d => d.Code)));
+            : new ProbeAnswer("accepted",
+                $"accepted: {errors.Count} error(s) elsewhere, none on the `action when` line");
     }
 
     // ── helpers ────────────────────────────────────────────────────────────

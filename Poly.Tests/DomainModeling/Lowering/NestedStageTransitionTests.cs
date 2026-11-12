@@ -190,3 +190,130 @@ public class NestedStageTransitionTests {
         await Assert.That(outcomes[1].State["Stage"]).IsEqualTo("C");
     }
 }
+/// <summary>
+/// A hop that may not run (inside a branch, or inside an invoked action) cannot leave a
+/// static cursor behind: after the branch the instance may still be in the outer source.
+/// The cursor goes dynamic (null, the per-stage exit switch) after any conditional that
+/// contains a hop, and after a self-invoke.
+/// </summary>
+public class GuardedHopCursorTests {
+    private const string GuardedEntryHop = """
+        domain Gate
+        Z: entity {
+          Ready: Boolean
+          ACount: Number default(0)
+          BCount: Number default(0)
+          CCount: Number default(0)
+          DCount: Number default(0)
+          A: stage {
+            exit { assign ACount to ACount + 1 }
+            Go: action {
+              transition to B
+              transition to D
+            }
+          }
+          B: stage {
+            entry { if (Ready is true) { transition to C } }
+            exit { assign BCount to BCount + 1 }
+          }
+          C: stage { exit { assign CCount to CCount + 1 } }
+          D: stage { exit { assign DCount to DCount + 1 } }
+        }
+        """;
+
+    private const string GuardedBodyHop = """
+        domain GateBody
+        Z: entity {
+          Ready: Boolean
+          ACount: Number default(0)
+          BCount: Number default(0)
+          A: stage {
+            exit { assign ACount to ACount + 1 }
+            Go: action {
+              if (Ready is true) { transition to B }
+              transition to C
+            }
+          }
+          B: stage { exit { assign BCount to BCount + 1 } }
+          C: stage { }
+        }
+        """;
+
+    private const string InvokedHop = """
+        domain Caller
+        Z: entity {
+          ACount: Number default(0)
+          BCount: Number default(0)
+          A: stage {
+            exit { assign ACount to ACount + 1 }
+            Step: action { transition to B }
+            Go: action {
+              invoke Step
+              transition to C
+            }
+          }
+          B: stage { exit { assign BCount to BCount + 1 } }
+          C: stage { }
+        }
+        """;
+
+    [Test]
+    public async Task Invoke_GuardedEntryHopThenHop_ExitsStageTheBranchLeft() {
+        var held = await ParityScenario.FromDsl(GuardedEntryHop, "GuardedEntryHeld")
+            .AssertAgree(side => {
+                side.Create("Z", ("Ready", true));
+                side.Invoke("Go");
+            });
+        // The guard fires: A -> B -> C, so B's own exit runs inside its entry. The second
+        // hop must then exit C (never B again) — that is the F1 discriminator.
+        await Assert.That(held[1].State["ACount"]).IsEqualTo("1");
+        await Assert.That(held[1].State["BCount"]).IsEqualTo("1");
+        await Assert.That(held[1].State["CCount"]).IsEqualTo("1");
+        await Assert.That(held[1].State["Stage"]).IsEqualTo("D");
+
+        var notHeld = await ParityScenario.FromDsl(GuardedEntryHop, "GuardedEntryNotHeld")
+            .AssertAgree(side => {
+                side.Create("Z", ("Ready", false));
+                side.Invoke("Go");
+            });
+        // The guard does not fire: the second hop exits B, and C is never entered.
+        await Assert.That(notHeld[1].State["ACount"]).IsEqualTo("1");
+        await Assert.That(notHeld[1].State["BCount"]).IsEqualTo("1");
+        await Assert.That(notHeld[1].State["CCount"]).IsEqualTo("0");
+        await Assert.That(notHeld[1].State["Stage"]).IsEqualTo("D");
+    }
+
+    [Test]
+    public async Task Invoke_BranchHopThenHop_ExitsStageTheGuardLeft() {
+        var held = await ParityScenario.FromDsl(GuardedBodyHop, "GuardedBodyHeld")
+            .AssertAgree(side => {
+                side.Create("Z", ("Ready", true));
+                side.Invoke("Go");
+            });
+        await Assert.That(held[1].State["ACount"]).IsEqualTo("1");
+        await Assert.That(held[1].State["BCount"]).IsEqualTo("1");
+        await Assert.That(held[1].State["Stage"]).IsEqualTo("C");
+
+        // The branch did not run, so the instance is still in A and the second hop exits A.
+        var notHeld = await ParityScenario.FromDsl(GuardedBodyHop, "GuardedBodyNotHeld")
+            .AssertAgree(side => {
+                side.Create("Z", ("Ready", false));
+                side.Invoke("Go");
+            });
+        await Assert.That(notHeld[1].State["ACount"]).IsEqualTo("1");
+        await Assert.That(notHeld[1].State["BCount"]).IsEqualTo("0");
+        await Assert.That(notHeld[1].State["Stage"]).IsEqualTo("C");
+    }
+
+    [Test]
+    public async Task Invoke_SelfInvokeThatTransitions_ThenHop_ExitsCalleeStage() {
+        var outcomes = await ParityScenario.FromDsl(InvokedHop, "CallerHop")
+            .AssertAgree(side => {
+                side.Create("Z");
+                side.Invoke("Go");
+            });
+        await Assert.That(outcomes[1].State["ACount"]).IsEqualTo("1");
+        await Assert.That(outcomes[1].State["BCount"]).IsEqualTo("1");
+        await Assert.That(outcomes[1].State["Stage"]).IsEqualTo("C");
+    }
+}

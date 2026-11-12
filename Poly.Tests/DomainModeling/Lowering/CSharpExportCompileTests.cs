@@ -110,14 +110,14 @@ public sealed class CSharpExportCompileTests {
         }
         """;
 
-    private const string PublicOrderInternalLine = """
+    private const string InternalOrderInternalLine = """
         domain Shop
 
         Line: entity {
           Qty: Number default(1)
         }
 
-        public entity Order {
+        Order: entity {
           Total: Number default(0)
           lines: many Line
           main: Line
@@ -151,19 +151,37 @@ public sealed class CSharpExportCompileTests {
     }
 
     [Test]
-    public async Task Export_WhenPublicEntityRelatesToInternalEntity_NavigationAndCreateAreInternalAndCompile() {
-        var e = Export(PublicOrderInternalLine);
+    public async Task Export_WhenInternalEntityRelatesToInternalEntity_NavigationStaysPublicCreateIsInternalAndCompile() {
+        var e = Export(InternalOrderInternalLine);
 
-        await Assert.That(e.Type("Order").DeclaredAccessibility).IsEqualTo(Accessibility.Public);
+        await Assert.That(e.Type("Order").DeclaredAccessibility).IsEqualTo(Accessibility.Internal);
         await Assert.That(e.Type("Line").DeclaredAccessibility).IsEqualTo(Accessibility.Internal);
         var order = e.Type("Order");
-        await Assert.That(order.GetMembers("Lines").Single().DeclaredAccessibility).IsEqualTo(Accessibility.Internal);
-        await Assert.That(order.GetMembers("Main").Single().DeclaredAccessibility).IsEqualTo(Accessibility.Internal);
+        await Assert.That(order.GetMembers("Lines").Single().DeclaredAccessibility).IsEqualTo(Accessibility.Public);
+        await Assert.That(order.GetMembers("Main").Single().DeclaredAccessibility).IsEqualTo(Accessibility.Public);
         var creates = order.GetMembers().OfType<IMethodSymbol>()
             .Where(m => m.Name.StartsWith("Create", StringComparison.Ordinal)).ToArray();
         await Assert.That(creates.Length).IsGreaterThan(0);
         await Assert.That(creates.All(m => m.DeclaredAccessibility == Accessibility.Internal)).IsTrue();
         await Assert.That(e.Diagnostics).IsEmpty();
+    }
+
+    [Test]
+    public async Task Export_WhenPublicEntityNavigatesToInternalEntity_IsRejectedBeforeLowering() {
+        var ex = Assert.Throws<InvalidOperationException>(() => Export("""
+            domain Shop
+
+            Line: entity {
+              Qty: Number default(1)
+            }
+
+            public entity Order {
+              Total: Number default(0)
+              lines: many Line
+            }
+            """));
+
+        await Assert.That(ex.Message).Contains("targets internal entity 'Line'");
     }
 
     [Test]

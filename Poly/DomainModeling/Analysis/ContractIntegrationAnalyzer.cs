@@ -44,6 +44,8 @@ internal sealed class ContractIntegrationAnalyzer : INodeAnalyzer {
             }
         }
 
+        ValidateBindScope(context, domain);
+
         foreach (var binding in domain.ContractBindings) {
             ValidateBinding(context, domain, binding);
         }
@@ -283,6 +285,43 @@ internal sealed class ContractIntegrationAnalyzer : INodeAnalyzer {
             DomainModelDiagnosticCodes.PlatformTargetMismatch,
             $"Contract '{contract.Name}' comes from library '{contract.UsesId}', which is for host target {declared}; the host target is '{session.Target}'. Pass the host target this compilation is for; 'uses {contract.UsesId}' does not choose it.");
     }
+
+    /// <summary>
+    /// #602, #603: the bind scope. A bind name is a domain-level name, so it must be unique:
+    /// diagnostics and binding facts are keyed by it, and the printer emits a duplicate twice.
+    /// Lower splices one endpoint body per bound action, so a second bind on that action is
+    /// dropped without a word. Both refusals are errors positioned on the second declaration,
+    /// naming the first, so the lowered module never disagrees with what the author wrote.
+    /// </summary>
+    private static void ValidateBindScope(AnalysisContext context, Domain domain) {
+        var names = new Dictionary<string, ContractBinding>(StringComparer.Ordinal);
+        var actions = new Dictionary<string, ContractBinding>(StringComparer.Ordinal);
+
+        foreach (var binding in domain.ContractBindings) {
+            if (names.TryGetValue(binding.Name, out var sameName)) {
+                context.ReportError(
+                    binding,
+                    $"Contract binding '{binding.Name}' ({DescribeBinding(binding)}) reuses the name of the earlier bind '{sameName.Name}' ({DescribeBinding(sameName)}). Each bind name must be unique; rename one of them.",
+                    DomainModelDiagnosticCodes.ContractBindDuplicateName);
+            }
+            else {
+                names[binding.Name] = binding;
+            }
+
+            if (actions.TryGetValue(binding.ActionName, out var boundFirst)) {
+                context.ReportError(
+                    binding,
+                    $"Action '{binding.ActionName}' is bound twice: '{boundFirst.Name}' ({DescribeBinding(boundFirst)}, declared first) and '{binding.Name}' ({DescribeBinding(binding)}). Lower splices one endpoint body and drops the other; remove or retarget one bind.",
+                    DomainModelDiagnosticCodes.ContractBindActionAlreadyBound);
+            }
+            else {
+                actions[binding.ActionName] = binding;
+            }
+        }
+    }
+
+    private static string DescribeBinding(ContractBinding binding) =>
+        $"endpoint '{binding.EndpointName}' to action '{binding.ActionName}'";
 
     private static void ValidateBinding(AnalysisContext context, Domain domain, ContractBinding binding) {
         var contract = domain.ImportedContracts.FirstOrDefault(c =>

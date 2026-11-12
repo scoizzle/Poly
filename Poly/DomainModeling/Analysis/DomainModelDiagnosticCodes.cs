@@ -162,6 +162,20 @@ internal static class DomainModelDiagnosticCodes {
     /// </summary>
     public const string ContractCallNotLowerable = "DMCON016";
 
+    /// <summary>
+    /// #602: two bind declarations reuse one name. Diagnostics and binding facts are keyed by
+    /// bind name, so the duplicate makes them ambiguous and the printer emits both. An error,
+    /// positioned on the second declaration, naming the first.
+    /// </summary>
+    public const string ContractBindDuplicateName = "DMCON017";
+
+    /// <summary>
+    /// #603: two binds target the same action. Lower splices one endpoint body and silently
+    /// drops the other, so the contributed body that was bound never runs. An error,
+    /// positioned on the second declaration, naming both binds.
+    /// </summary>
+    public const string ContractBindActionAlreadyBound = "DMCON018";
+
     // Stage-subscription diagnostics (replaced retired DMEV* event codes)
     public const string SubscriptionCausalityCycle = "DMSS001";
     public const string SubscriptionIdempotencyReplay = "DMSS002";

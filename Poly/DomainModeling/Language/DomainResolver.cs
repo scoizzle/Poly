@@ -128,6 +128,10 @@ public sealed partial class DomainResolver : DslCursor {
             }
         }
 
+        // Every document carries the canonical built-in primitives, plus whichever primitives
+        // the loaded libraries seed — an entity-free document included (#478).
+        EnsurePrimitivesOnce(changes);
+
         // ── Enum type definitions + entity definitions ─────────
         // Parse entities and enum types in order; enum types must precede entities
         // that reference them for property type resolution.

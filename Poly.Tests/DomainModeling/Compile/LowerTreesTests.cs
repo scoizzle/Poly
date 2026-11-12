@@ -241,7 +241,7 @@ public sealed class LowerTreesTests {
                 }
                 """));
 
-        await Assert.That(ex.Message).Contains("DomainResult").And.Contains("scaffolding");
+        await Assert.That(ex.Message).Contains("DomainResult").And.Contains("Poly.Runtime");
     }
 
     // ── R-03b: the result family is Poly.Runtime's, not printed ──────────────

@@ -72,7 +72,7 @@ public sealed class ReservedGeneratedNameTests {
         var errors = Errors(analysis, DomainModelDiagnosticCodes.ReservedGeneratedName);
         await Assert.That(errors.Count).IsGreaterThanOrEqualTo(1);
         await Assert.That(errors[0].Message).Contains("DomainResult")
-            .And.Contains("scaffolding")
+            .And.Contains("Poly.Runtime")
             .And.Contains("rename");
     }
 

@@ -10,7 +10,7 @@ public enum LoanStage
     Returned = 2
 }
 
-public class Loan
+public class Loan : Poly.Runtime.IActionScoped
 {
     private List<Patron>? _patronLoansOverdueSubscribers;
     private int _notifyDepth;
@@ -101,5 +101,39 @@ public class Loan
     private void ExitNotifyCascade()
     {
         this._notifyDepth = this._notifyDepth - 1;
+    }
+    public object __Snapshot()
+    {
+        var __state = new object?[5];
+        __state[0] = this.Amount;
+        __state[1] = this.Book;
+        __state[2] = this.CurrentStage;
+        __state[3] = (this._patronLoansOverdueSubscribers == null ? null : new List<Patron>(this._patronLoansOverdueSubscribers));
+        __state[4] = this._notifyDepth;
+        return __state;
+    }
+    public void __Restore(object state)
+    {
+        var __saved = (object?[])state;
+        this.Amount = (long)__saved[0]!;
+        this.Book = (Book?)__saved[1]!;
+        this.CurrentStage = (LoanStage)__saved[2]!;
+        if (__saved[3] == null)
+        {
+            this._patronLoansOverdueSubscribers = null;
+        }
+        else
+        {
+            if (this._patronLoansOverdueSubscribers == null)
+            {
+                this._patronLoansOverdueSubscribers = new List<Patron>();
+            }
+            ((System.Collections.IList)this._patronLoansOverdueSubscribers).Clear();
+            foreach (var __item3 in(List<Patron>)__saved[3]!)
+            {
+                this._patronLoansOverdueSubscribers.Add(__item3);
+            }
+        }
+        this._notifyDepth = (int)__saved[4]!;
     }
 }

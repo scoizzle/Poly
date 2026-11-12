@@ -7,7 +7,7 @@ public enum ContactStage
     Inactive = 1
 }
 
-public class Contact
+public class Contact : Poly.Runtime.IActionScoped
 {
     private Contact() { }
     private Contact(string name, string email, Account? account = null)
@@ -76,6 +76,23 @@ public class Contact
             return DomainResult.Success();
         }
         return DomainResult.Failure(Poly.Runtime.DomainFailure.Constraint("A unique assign needs the storage port.", "Contact"));
+    }
+    public object __Snapshot()
+    {
+        var __state = new object?[4];
+        __state[0] = this.Name;
+        __state[1] = this.Email;
+        __state[2] = this.Account;
+        __state[3] = this.CurrentStage;
+        return __state;
+    }
+    public void __Restore(object state)
+    {
+        var __saved = (object?[])state;
+        this.Name = (string)__saved[0]!;
+        this.Email = (string)__saved[1]!;
+        this.Account = (Account?)__saved[2]!;
+        this.CurrentStage = (ContactStage)__saved[3]!;
     }
     public static System.Boolean ExistsWithEmail(Poly.Runtime.IStoragePort db, System.String email) => db.Exists("Contact", "Email", email);
 }

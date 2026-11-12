@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using Poly.DomainModeling.Runtime;
 using Poly.Runtime;
 
-public class Patron
+public class Patron : Poly.Runtime.IActionScoped
 {
     private List<Loan> _loans = new List<Loan>();
     private List<Fine> _fines = new List<Fine>();
@@ -96,6 +96,31 @@ public class Patron
         foreach (var target in this.Loans)
         {
             target.RegisterPatronLoansOverdueSubscriber(this);
+        }
+    }
+    public object __Snapshot()
+    {
+        var __state = new object?[4];
+        __state[0] = this.Name;
+        __state[1] = this.Status;
+        __state[2] = new List<Loan>(this._loans);
+        __state[3] = new List<Fine>(this._fines);
+        return __state;
+    }
+    public void __Restore(object state)
+    {
+        var __saved = (object?[])state;
+        this.Name = (string)__saved[0]!;
+        this.Status = (string)__saved[1]!;
+        ((System.Collections.IList)this._loans).Clear();
+        foreach (var __item2 in(List<Loan>)__saved[2]!)
+        {
+            this._loans.Add(__item2);
+        }
+        ((System.Collections.IList)this._fines).Clear();
+        foreach (var __item3 in(List<Fine>)__saved[3]!)
+        {
+            this._fines.Add(__item3);
         }
     }
 }

@@ -1,7 +1,7 @@
 #nullable enable
 using Poly.Runtime;
 
-public class QuoteLine
+public class QuoteLine : Poly.Runtime.IActionScoped
 {
     private QuoteLine() { }
     private QuoteLine(long qty, decimal unitPrice, Product? product = null, Quote? quote = null)
@@ -39,5 +39,22 @@ public class QuoteLine
             quote.AttachLines(created);
         }
         return DomainResult<QuoteLine>.Success(created);
+    }
+    public object __Snapshot()
+    {
+        var __state = new object?[4];
+        __state[0] = this.Qty;
+        __state[1] = this.UnitPrice;
+        __state[2] = this.Product;
+        __state[3] = this.Quote;
+        return __state;
+    }
+    public void __Restore(object state)
+    {
+        var __saved = (object?[])state;
+        this.Qty = (long)__saved[0]!;
+        this.UnitPrice = (decimal)__saved[1]!;
+        this.Product = (Product?)__saved[2]!;
+        this.Quote = (Quote?)__saved[3]!;
     }
 }

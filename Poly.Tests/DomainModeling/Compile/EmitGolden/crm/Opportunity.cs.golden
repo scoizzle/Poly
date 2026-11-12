@@ -13,7 +13,7 @@ public enum OpportunityStage
     Lost = 4
 }
 
-public class Opportunity
+public class Opportunity : Poly.Runtime.IActionScoped
 {
     private List<Activity> _activities = new List<Activity>();
     private List<Line> _lines = new List<Line>();
@@ -368,5 +368,99 @@ public class Opportunity
     private void ExitNotifyCascade()
     {
         this._notifyDepth = this._notifyDepth - 1;
+    }
+    public object __Snapshot()
+    {
+        var __state = new object?[14];
+        __state[0] = this.Title;
+        __state[1] = this.Amount;
+        __state[2] = this.CloseBy;
+        __state[3] = this.Probability;
+        __state[4] = this.Account;
+        __state[5] = this.Contact;
+        __state[6] = this.CurrentStage;
+        __state[7] = new List<Activity>(this._activities);
+        __state[8] = new List<Line>(this._lines);
+        __state[9] = new List<Quote>(this._quotes);
+        __state[10] = (this._accountOpportunitiesWonSubscribers == null ? null : new List<Account>(this._accountOpportunitiesWonSubscribers));
+        __state[11] = (this._accountOpportunitiesProposeSubscribers == null ? null : new List<Account>(this._accountOpportunitiesProposeSubscribers));
+        __state[12] = (this._accountOpportunitiesLostSubscribers == null ? null : new List<Account>(this._accountOpportunitiesLostSubscribers));
+        __state[13] = this._notifyDepth;
+        return __state;
+    }
+    public void __Restore(object state)
+    {
+        var __saved = (object?[])state;
+        this.Title = (string)__saved[0]!;
+        this.Amount = (decimal)__saved[1]!;
+        this.CloseBy = (DateOnly)__saved[2]!;
+        this.Probability = (long)__saved[3]!;
+        this.Account = (Account?)__saved[4]!;
+        this.Contact = (Contact?)__saved[5]!;
+        this.CurrentStage = (OpportunityStage)__saved[6]!;
+        ((System.Collections.IList)this._activities).Clear();
+        foreach (var __item7 in(List<Activity>)__saved[7]!)
+        {
+            this._activities.Add(__item7);
+        }
+        ((System.Collections.IList)this._lines).Clear();
+        foreach (var __item8 in(List<Line>)__saved[8]!)
+        {
+            this._lines.Add(__item8);
+        }
+        ((System.Collections.IList)this._quotes).Clear();
+        foreach (var __item9 in(List<Quote>)__saved[9]!)
+        {
+            this._quotes.Add(__item9);
+        }
+        if (__saved[10] == null)
+        {
+            this._accountOpportunitiesWonSubscribers = null;
+        }
+        else
+        {
+            if (this._accountOpportunitiesWonSubscribers == null)
+            {
+                this._accountOpportunitiesWonSubscribers = new List<Account>();
+            }
+            ((System.Collections.IList)this._accountOpportunitiesWonSubscribers).Clear();
+            foreach (var __item10 in(List<Account>)__saved[10]!)
+            {
+                this._accountOpportunitiesWonSubscribers.Add(__item10);
+            }
+        }
+        if (__saved[11] == null)
+        {
+            this._accountOpportunitiesProposeSubscribers = null;
+        }
+        else
+        {
+            if (this._accountOpportunitiesProposeSubscribers == null)
+            {
+                this._accountOpportunitiesProposeSubscribers = new List<Account>();
+            }
+            ((System.Collections.IList)this._accountOpportunitiesProposeSubscribers).Clear();
+            foreach (var __item11 in(List<Account>)__saved[11]!)
+            {
+                this._accountOpportunitiesProposeSubscribers.Add(__item11);
+            }
+        }
+        if (__saved[12] == null)
+        {
+            this._accountOpportunitiesLostSubscribers = null;
+        }
+        else
+        {
+            if (this._accountOpportunitiesLostSubscribers == null)
+            {
+                this._accountOpportunitiesLostSubscribers = new List<Account>();
+            }
+            ((System.Collections.IList)this._accountOpportunitiesLostSubscribers).Clear();
+            foreach (var __item12 in(List<Account>)__saved[12]!)
+            {
+                this._accountOpportunitiesLostSubscribers.Add(__item12);
+            }
+        }
+        this._notifyDepth = (int)__saved[13]!;
     }
 }

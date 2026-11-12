@@ -1,7 +1,7 @@
 #nullable enable
 using Poly.Runtime;
 
-public class Fine
+public class Fine : Poly.Runtime.IActionScoped
 {
     private Fine(long amount, string reason, Patron? patron = null)
     {
@@ -32,5 +32,20 @@ public class Fine
             patron.AttachFines(created);
         }
         return DomainResult<Fine>.Success(created);
+    }
+    public object __Snapshot()
+    {
+        var __state = new object?[3];
+        __state[0] = this.Amount;
+        __state[1] = this.Reason;
+        __state[2] = this.Patron;
+        return __state;
+    }
+    public void __Restore(object state)
+    {
+        var __saved = (object?[])state;
+        this.Amount = (long)__saved[0]!;
+        this.Reason = (string)__saved[1]!;
+        this.Patron = (Patron?)__saved[2]!;
     }
 }

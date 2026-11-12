@@ -10,7 +10,7 @@ public enum GuestStage
     Blocked = 1
 }
 
-public class Guest
+public class Guest : Poly.Runtime.IActionScoped
 {
     private List<EventHold> _events = new List<EventHold>();
     private List<Reservation> _reservations = new List<Reservation>();
@@ -200,6 +200,41 @@ public class Guest
             return DomainResult.Success();
         }
         return DomainResult.Failure(Poly.Runtime.DomainFailure.Constraint("A unique assign needs the storage port.", "Guest"));
+    }
+    public object __Snapshot()
+    {
+        var __state = new object?[9];
+        __state[0] = this.Name;
+        __state[1] = this.Email;
+        __state[2] = this.Phone;
+        __state[3] = this.StayCount;
+        __state[4] = this.NightCount;
+        __state[5] = this.EventCount;
+        __state[6] = this.CurrentStage;
+        __state[7] = new List<EventHold>(this._events);
+        __state[8] = new List<Reservation>(this._reservations);
+        return __state;
+    }
+    public void __Restore(object state)
+    {
+        var __saved = (object?[])state;
+        this.Name = (string)__saved[0]!;
+        this.Email = (string)__saved[1]!;
+        this.Phone = (string)__saved[2]!;
+        this.StayCount = (long)__saved[3]!;
+        this.NightCount = (long)__saved[4]!;
+        this.EventCount = (long)__saved[5]!;
+        this.CurrentStage = (GuestStage)__saved[6]!;
+        ((System.Collections.IList)this._events).Clear();
+        foreach (var __item7 in(List<EventHold>)__saved[7]!)
+        {
+            this._events.Add(__item7);
+        }
+        ((System.Collections.IList)this._reservations).Clear();
+        foreach (var __item8 in(List<Reservation>)__saved[8]!)
+        {
+            this._reservations.Add(__item8);
+        }
     }
     public static System.Boolean ExistsWithEmail(Poly.Runtime.IStoragePort db, System.String email) => db.Exists("Guest", "Email", email);
 }

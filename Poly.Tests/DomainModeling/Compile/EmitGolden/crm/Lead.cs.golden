@@ -8,7 +8,7 @@ public enum LeadStage
     Dead = 2
 }
 
-public class Lead
+public class Lead : Poly.Runtime.IActionScoped
 {
     private Lead() { }
     private Lead(string name, string email, string company, Account? account = null)
@@ -84,6 +84,25 @@ public class Lead
             return DomainResult.Success();
         }
         return DomainResult.Failure(Poly.Runtime.DomainFailure.Constraint("A unique assign needs the storage port.", "Lead"));
+    }
+    public object __Snapshot()
+    {
+        var __state = new object?[5];
+        __state[0] = this.Name;
+        __state[1] = this.Email;
+        __state[2] = this.Company;
+        __state[3] = this.Account;
+        __state[4] = this.CurrentStage;
+        return __state;
+    }
+    public void __Restore(object state)
+    {
+        var __saved = (object?[])state;
+        this.Name = (string)__saved[0]!;
+        this.Email = (string)__saved[1]!;
+        this.Company = (string)__saved[2]!;
+        this.Account = (Account?)__saved[3]!;
+        this.CurrentStage = (LeadStage)__saved[4]!;
     }
     public static System.Boolean ExistsWithEmail(Poly.Runtime.IStoragePort db, System.String email) => db.Exists("Lead", "Email", email);
 }

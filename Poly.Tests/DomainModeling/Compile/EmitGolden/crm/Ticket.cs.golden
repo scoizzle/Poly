@@ -10,7 +10,7 @@ public enum TicketStage
     Closed = 2
 }
 
-public class Ticket
+public class Ticket : Poly.Runtime.IActionScoped
 {
     private List<Account>? _accountTicketsClosedSubscribers;
     private int _notifyDepth;
@@ -100,5 +100,39 @@ public class Ticket
     private void ExitNotifyCascade()
     {
         this._notifyDepth = this._notifyDepth - 1;
+    }
+    public object __Snapshot()
+    {
+        var __state = new object?[5];
+        __state[0] = this.Subject;
+        __state[1] = this.Account;
+        __state[2] = this.CurrentStage;
+        __state[3] = (this._accountTicketsClosedSubscribers == null ? null : new List<Account>(this._accountTicketsClosedSubscribers));
+        __state[4] = this._notifyDepth;
+        return __state;
+    }
+    public void __Restore(object state)
+    {
+        var __saved = (object?[])state;
+        this.Subject = (string)__saved[0]!;
+        this.Account = (Account?)__saved[1]!;
+        this.CurrentStage = (TicketStage)__saved[2]!;
+        if (__saved[3] == null)
+        {
+            this._accountTicketsClosedSubscribers = null;
+        }
+        else
+        {
+            if (this._accountTicketsClosedSubscribers == null)
+            {
+                this._accountTicketsClosedSubscribers = new List<Account>();
+            }
+            ((System.Collections.IList)this._accountTicketsClosedSubscribers).Clear();
+            foreach (var __item3 in(List<Account>)__saved[3]!)
+            {
+                this._accountTicketsClosedSubscribers.Add(__item3);
+            }
+        }
+        this._notifyDepth = (int)__saved[4]!;
     }
 }

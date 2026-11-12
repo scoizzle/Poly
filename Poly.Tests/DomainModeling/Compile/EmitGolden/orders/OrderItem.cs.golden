@@ -1,7 +1,7 @@
 #nullable enable
 using Poly.Runtime;
 
-public class OrderItem
+public class OrderItem : Poly.Runtime.IActionScoped
 {
     private OrderItem() { }
     private OrderItem(string sku, long qty, Order? order = null)
@@ -37,5 +37,20 @@ public class OrderItem
             order.AttachItems(created);
         }
         return DomainResult<OrderItem>.Success(created);
+    }
+    public object __Snapshot()
+    {
+        var __state = new object?[3];
+        __state[0] = this.Sku;
+        __state[1] = this.Qty;
+        __state[2] = this.Order;
+        return __state;
+    }
+    public void __Restore(object state)
+    {
+        var __saved = (object?[])state;
+        this.Sku = (string)__saved[0]!;
+        this.Qty = (long)__saved[1]!;
+        this.Order = (Order?)__saved[2]!;
     }
 }

@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 using Poly.Runtime;
 
-public class Customer
+public class Customer : Poly.Runtime.IActionScoped
 {
     private List<Order> _orders = new List<Order>();
     private Customer() { }
@@ -94,6 +94,27 @@ public class Customer
             return DomainResult.Success();
         }
         return DomainResult.Failure(Poly.Runtime.DomainFailure.Constraint("A unique assign needs the storage port.", "Customer"));
+    }
+    public object __Snapshot()
+    {
+        var __state = new object?[4];
+        __state[0] = this.Email;
+        __state[1] = this.Name;
+        __state[2] = this.Tier;
+        __state[3] = new List<Order>(this._orders);
+        return __state;
+    }
+    public void __Restore(object state)
+    {
+        var __saved = (object?[])state;
+        this.Email = (string)__saved[0]!;
+        this.Name = (string)__saved[1]!;
+        this.Tier = (string)__saved[2]!;
+        ((System.Collections.IList)this._orders).Clear();
+        foreach (var __item3 in(List<Order>)__saved[3]!)
+        {
+            this._orders.Add(__item3);
+        }
     }
     public static System.Boolean ExistsWithEmail(Poly.Runtime.IStoragePort db, System.String email) => db.Exists("Customer", "Email", email);
 }

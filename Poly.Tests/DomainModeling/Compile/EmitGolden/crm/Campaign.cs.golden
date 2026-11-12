@@ -9,7 +9,7 @@ public enum CampaignStage
     Ended = 1
 }
 
-public class Campaign
+public class Campaign : Poly.Runtime.IActionScoped
 {
     private List<CampaignMember> _members = new List<CampaignMember>();
     private Campaign() { }
@@ -70,5 +70,24 @@ public class Campaign
         }
         var created = new Campaign(name, members);
         return DomainResult<Campaign>.Success(created);
+    }
+    public object __Snapshot()
+    {
+        var __state = new object?[3];
+        __state[0] = this.Name;
+        __state[1] = this.CurrentStage;
+        __state[2] = new List<CampaignMember>(this._members);
+        return __state;
+    }
+    public void __Restore(object state)
+    {
+        var __saved = (object?[])state;
+        this.Name = (string)__saved[0]!;
+        this.CurrentStage = (CampaignStage)__saved[1]!;
+        ((System.Collections.IList)this._members).Clear();
+        foreach (var __item2 in(List<CampaignMember>)__saved[2]!)
+        {
+            this._members.Add(__item2);
+        }
     }
 }

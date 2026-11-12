@@ -65,6 +65,15 @@ internal static class DomainModelDiagnosticCodes {
     /// </summary>
     public const string ReservedMemberName = "DMSTR009";
 
+    /// <summary>
+    /// An entity type is the target of two or more owner navigations (S-12, #585): an owned
+    /// target has exactly one owner navigation. Two <c>owned</c> navigations to one type —
+    /// on different entities or on one — leave the single-owner rule unlowerable. Keep one
+    /// <c>owned</c> and make the other a plain reference. A self-owning navigation is one
+    /// edge and is legal.
+    /// </summary>
+    public const string OwnedTargetMultipleOwners = "DMSTR010";
+
     public const string SemanticTypeCompatibility = "DMSEM003";
     public const string SemanticConstraintMismatch = "DMSEM004";
     public const string SemanticReferenceResolution = "DMSEM005";
@@ -264,8 +273,8 @@ internal static class DomainModelDiagnosticCodes {
     /// <summary>
     /// Two sides of a <c>via</c> pairing contradict each other: the named navigation
     /// points elsewhere, declares a different inverse, is the navigation itself, is
-    /// owned on both ends, or two navigations on one entity claim the same undeclared
-    /// inverse.
+    /// owned on both ends, pairs an owned navigation with a collection inverse (S-12), or
+    /// two navigations on one entity claim the same undeclared inverse.
     /// </summary>
     public const string InverseContradictory = "DMREL004";
 

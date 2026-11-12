@@ -81,9 +81,6 @@ public static class KnownDomainDivergences {
         new(599, "L-05", "guarded-cycle-loop-guard", ["simulate", "printed"], [
             new(1, "invoke Go", "state:Stage", "A", "C"),
         ]),
-        new(605, "T-09", "match-decimal-else", ["simulate", "printed"], [
-            new(1, "invoke Price", "state:Dec", null, "2"),
-        ]),
         new(607, "L-25", "create-in-iterated-collection", ["simulate", "printed"], [
             new(4, "invoke Grow", "state:lines", "1", "2"),
         ]),
@@ -280,32 +277,6 @@ public static class DomainParityScenarios {
                 side.Use(emp);
                 side.Invoke("Leave");
                 side.Invoke("Leave");
-            }, []),
-
-        new("match-decimal-else", 605, """
-            domain P
-
-            Inv: entity {
-              Qty: Number default(0)
-              Dec: Decimal default(0)
-              A: stage {
-                Price: action { assign Dec to match { Qty > 1 -> 1.5, else -> 2.0 } }
-              }
-            }
-            """, """
-            domain P
-
-            Inv: entity {
-              Qty: Number default(0)
-              Dec: Decimal default(0)
-              A: stage {
-                Price: action { assign Dec to match { Qty > 1 -> 1.5, else -> 2.0 } }
-              }
-            }
-            """,
-            side => {
-                side.Create("Inv");
-                side.Invoke("Price");
             }, []),
 
         new("omitted-required-value-types", 621, """

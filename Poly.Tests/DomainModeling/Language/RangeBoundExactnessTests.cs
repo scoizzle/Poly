@@ -77,17 +77,20 @@ public class RangeBoundExactnessTests {
 
     [Test]
     public async Task NumberBound_AboveLongMax_IsPositionedParseError() {
-        var error = ParseError(Entity("Number range(0, 9223372036854775808)"));
+        var poly = Entity("Number range(0, 9223372036854775808)");
+        var error = ParseError(poly);
 
-        await Assert.That(error.Line).IsGreaterThan(0);
+        await Assert.That(error.Line).IsEqualTo(LineOf(poly, "9223372036854775808"));
+        await Assert.That(error.Column).IsEqualTo(ColumnOf(poly, "9223372036854775808"));
         await Assert.That(error.Detail).Contains("out of range for Number (64-bit)");
     }
 
     [Test]
     public async Task NumberBound_TwentyDigits_IsPositionedParseError() {
-        var error = ParseError(Entity("Number range(0, 99999999999999999999)"));
+        var poly = Entity("Number range(0, 99999999999999999999)");
+        var error = ParseError(poly);
 
-        await Assert.That(error.Line).IsGreaterThan(0);
+        await Assert.That(error.Column).IsEqualTo(ColumnOf(poly, "99999999999999999999"));
         await Assert.That(error.Detail).Contains("out of range for Number (64-bit)");
     }
 
@@ -101,10 +104,30 @@ public class RangeBoundExactnessTests {
 
     [Test]
     public async Task DecimalBound_AboveDecimalMax_IsPositionedGrammarError_NotOverflowException() {
-        var error = ParseError(Entity("Decimal range(0, 79228162514264337593543950336)"));
+        var poly = Entity("Decimal range(0, 79228162514264337593543950336)");
+        var error = ParseError(poly);
 
-        await Assert.That(error.Line).IsGreaterThan(0);
+        await Assert.That(error.Column).IsEqualTo(ColumnOf(poly, "79228162514264337593543950336"));
         await Assert.That(error.Detail).Contains("out of range for Decimal");
+    }
+
+    [Test]
+    public async Task DecimalBound_BeyondDecimalPrecision_IsPositionedParseError() {
+        // 1e-29 needs scale 29; decimal.TryParse silently rounds it to 0 (D2).
+        var poly = Entity("Decimal range(0, 0.00000000000000000000000000005)");
+        var error = ParseError(poly);
+
+        await Assert.That(error.Column).IsEqualTo(ColumnOf(poly, "0.00000000000000000000000000005"));
+        await Assert.That(error.Detail).Contains("out of range for Decimal");
+    }
+
+    [Test]
+    public async Task NumberBound_TwentyNineDigitsWithFraction_ReportsOverflow() {
+        // 29 significant digits plus ".0" is still integral text; overflow, never "Fractional".
+        var error = ParseError(Entity("Number range(0, 99999999999999999999999999999.0)"));
+
+        await Assert.That(error.Detail).Contains("out of range for Number (64-bit)");
+        await Assert.That(error.Detail).DoesNotContain("Fractional");
     }
 
     [Test]
@@ -303,6 +326,18 @@ public class RangeBoundExactnessTests {
             return ex;
         }
         throw new InvalidOperationException("expected a positioned parse error");
+    }
+
+    private static int ColumnOf(string text, string token) {
+        var at = text.IndexOf(token, StringComparison.Ordinal);
+        if (at < 0) throw new InvalidOperationException($"token not found: {token}");
+        return at - text.LastIndexOf('\n', at);
+    }
+
+    private static int LineOf(string text, string token) {
+        var at = text.IndexOf(token, StringComparison.Ordinal);
+        if (at < 0) throw new InvalidOperationException($"token not found: {token}");
+        return text.Take(at).Count(c => c == '\n') + 1;
     }
 
     private static (bool Succeeded, string? Message, object? Instance) TryCreate(

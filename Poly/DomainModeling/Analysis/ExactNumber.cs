@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Numerics;
 
 namespace Poly.DomainModeling.Analysis;
@@ -47,6 +48,31 @@ internal readonly struct ExactNumber : IEquatable<ExactNumber> {
         if (!double.IsFinite(value) || value != Math.Truncate(value) || Math.Abs(value) > ExactDoubleLimit)
             return null;
         return new ExactNumber((long)value);
+    }
+
+    /// <summary>
+    /// Parses unsigned decimal text (digits and at most one dot, no exponent) exactly, or returns null
+    /// when decimal would round it (scale above 28 after trailing zeros, or a mantissa above 96 bits).
+    /// <see cref="decimal.TryParse(string, out decimal)"/> alone rounds a bound like
+    /// <c>0.00000000000000000000000000005</c> to zero, so a bound parser must not trust it (#643, D2).
+    /// </summary>
+    public static ExactNumber? TryParseDecimalText(string text) {
+        ArgumentNullException.ThrowIfNull(text);
+        var dot = text.IndexOf('.');
+        var digits = dot < 0 ? text : string.Concat(text.AsSpan(0, dot), text.AsSpan(dot + 1));
+        var scale = dot < 0 ? 0 : text.Length - dot - 1;
+        if (digits.Length == 0 || !digits.All(char.IsAsciiDigit))
+            return null;
+        digits = digits.TrimStart('0');
+        if (digits.Length == 0)
+            return new ExactNumber(0m);
+        var end = digits.Length;
+        while (end > 0 && scale > 0 && digits[end - 1] == '0') {
+            end--;
+            scale--;
+        }
+        var mantissa = BigInteger.Parse(digits[..end], CultureInfo.InvariantCulture);
+        return FromMantissaScale(mantissa, scale);
     }
 
     /// <summary>Orders two CLR values exactly, or null when either side is not exactly representable.</summary>

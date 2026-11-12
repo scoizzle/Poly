@@ -1,5 +1,6 @@
 using System.Globalization;
 
+using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Ontology;
 
 using TokenKind = Poly.DomainModeling.Language.DslTokenKind;
@@ -120,9 +121,10 @@ public sealed partial class DomainResolver {
             return integral;
         }
 
-        if (!decimal.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var dec))
+        if (ExactNumber.TryParseDecimalText(text) is not { } exact)
             throw Error($"Range bound '{signed}' is out of range for {typeName}. Use a smaller value.");
         Advance();
+        var dec = exact.ToDecimal();
         return negative ? -dec : dec;
     }
 
@@ -145,12 +147,15 @@ public sealed partial class DomainResolver {
         typeName is "Number" or "Int" or "Int64";
 
     private static bool IsIntegralNumberText(string text) {
-        // Any run of digits is integral whatever its length: overflow is reported by the bound parse,
-        // not as a "fractional bound" (#515).
-        if (text.Length > 0 && text.All(char.IsAsciiDigit))
-            return true;
-        return decimal.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var dec)
-            && dec == decimal.Truncate(dec);
+        // Syntactic: digits, or digits with a dot whose fraction is all zeros. Length never matters
+        // here — an out-of-range bound is reported by the bound parse, not as "fractional" (#515).
+        var dot = text.IndexOf('.');
+        if (dot < 0)
+            return text.Length > 0 && text.All(char.IsAsciiDigit);
+        var whole = text[..dot];
+        var fraction = text[(dot + 1)..];
+        return whole.Length > 0 && whole.All(char.IsAsciiDigit)
+            && fraction.Length > 0 && fraction.All(c => c == '0');
     }
 
     private static bool IsConstraint(TokenKind kind) => kind switch {

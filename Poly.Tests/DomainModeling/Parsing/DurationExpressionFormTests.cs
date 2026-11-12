@@ -1,5 +1,6 @@
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
+using Poly.Grammar;
 using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.DomainModeling.Parsing;
@@ -194,5 +195,59 @@ public class DurationExpressionFormTests {
 
         await Assert.That(() => Resolved("Now - 12 Fortnights", TemporalInputs()))
             .Throws<FormatException>();
+    }
+
+    [Test]
+    [Arguments("Now - 12 Fortnights", "Fortnights")]
+    [Arguments("Due + 3 days", "days")]
+    public async Task Duration_NumberThenWord_ReportsPositionedUnit(string fragment, string word) {
+        var error = Assert.Throws<GrammarException>(
+            () => DslExpressionFragment.ParseExpressionFragment(fragment))!;
+
+        await Assert.That(error.Detail).Contains($"Unknown duration unit '{word}'");
+        await Assert.That(error.Line).IsEqualTo(1);
+        await Assert.That(error.Column).IsGreaterThan(0);
+    }
+
+    [Test]
+    [Arguments("F(1 x)", "x")]
+    [Arguments("match { Price > 1 -> 3 Foo, else -> 0 }", "Foo")]
+    [Arguments("(3 Foo)", "Foo")]
+    public async Task NearMiss_NumberThenWord_ReportsPositionedUnit(string fragment, string word) {
+        // A number followed by an unknown word inside a call argument, a match arm or a group
+        // fails closed with the positioned unit error from that nested parse; it never reaches
+        // the caller's own trailing-token check.
+        var error = Assert.Throws<GrammarException>(
+            () => DslExpressionFragment.ParseExpressionFragment(fragment))!;
+
+        await Assert.That(error.Detail).Contains($"Unknown duration unit '{word}'").Because(fragment);
+        await Assert.That(error.Line).IsEqualTo(1).Because(fragment);
+        await Assert.That(error.Column)
+            .IsEqualTo(fragment.IndexOf(word, StringComparison.Ordinal) + 1)
+            .Because(fragment);
+    }
+
+    [Test]
+    public async Task Duration_QuotedUnit_IsNotDuration() {
+        await Assert.That(() => DslExpressionFragment.ParseExpressionFragment("Now - 3 \"Days\""))
+            .Throws<FormatException>()
+            .WithMessageContaining("Trailing tokens after expression");
+    }
+
+    [Test]
+    public async Task DurationUnits_LegalUnitsAndSpell_AreAllAccepted() {
+        foreach (var spelling in DurationUnits.Spellings) {
+            await Assert.That(DurationUnits.IsUnit(spelling)).IsTrue().Because(spelling);
+            await Assert.That(DurationUnits.TryGetUnit(spelling, out var unit)).IsTrue().Because(spelling);
+            await Assert.That(Enum.IsDefined(unit)).IsTrue().Because(spelling);
+        }
+
+        await Assert.That(DurationUnits.LegalUnits)
+            .StartsWith(string.Join(", ", DurationUnits.CanonicalSpellings));
+
+        foreach (var kind in Enum.GetValues<DateOperationKind>()) {
+            if (!kind.ToString().StartsWith("Add", StringComparison.Ordinal)) continue;
+            await Assert.That(DurationUnits.IsUnit(DurationForm.Spell(kind))).IsTrue().Because(kind.ToString());
+        }
     }
 }

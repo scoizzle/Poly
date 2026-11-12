@@ -143,7 +143,7 @@ static async System.Threading.Tasks.Task SeedAsync(TDbCtx db)
 app.Run();
 
 
-public record GaugeDto
+internal record GaugeDto
 {
     [Range(0, 100)]
     public long Level { get; init; }
@@ -151,13 +151,13 @@ public record GaugeDto
     public long Peak { get; init; }
 }
 
-public record SetLevelDto
+internal record SetLevelDto
 {
     [Range(0, 100)]
     public long V { get; init; }
 }
 
-public record SetPeakDto
+internal record SetPeakDto
 {
     [Range(0, 100)]
     public long V { get; init; }

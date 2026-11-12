@@ -7,6 +7,7 @@ using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Runtime;
 using Poly.Grammar;
 using Poly.Interpretation.CSharp;
+using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.DomainModeling.Parsing;
 
@@ -175,8 +176,8 @@ public class MatchExpressionTests {
             await Assert.That(exec.Invoke(order, "Classify").Succeeded).IsTrue();
 
             var printed = ExportedCSharp.CreateEntity(orderType, ("qty", qty));
-            orderType.GetMethod("Classify")!.Invoke(printed, null);
-            var printedTier = orderType.GetProperty("Tier")!.GetValue(printed);
+            orderType.GetMethod("Classify", PrintedMembers.Any)!.Invoke(printed, null);
+            var printedTier = orderType.GetProperty("Tier", PrintedMembers.Any)!.GetValue(printed);
 
             await Assert.That(printedTier).IsEqualTo(order.Bag["Tier"]);
         }

@@ -4,7 +4,7 @@ using System.Collections.Generic;
 
 using Poly.Runtime;
 
-public enum EnrollmentStage
+internal enum EnrollmentStage
 {
     Pending = 0,
     Registered = 1,
@@ -12,7 +12,7 @@ public enum EnrollmentStage
     Dropped = 3
 }
 
-public class Enrollment : Poly.Runtime.IActionScoped
+internal class Enrollment : Poly.Runtime.IActionScoped
 {
     private List<Student>? _studentEnrollmentsDroppedSubscribers;
     private List<Student>? _studentEnrollmentsCompletedSubscribers;
@@ -35,7 +35,7 @@ public class Enrollment : Poly.Runtime.IActionScoped
     public Section? Section { get; private set; }
     public Student? Student { get; private set; }
     public EnrollmentStage CurrentStage { get; private set; }
-    public DomainResult Confirm()
+    internal DomainResult Confirm()
     {
         if (this.CurrentStage != EnrollmentStage.Pending)
         {
@@ -54,7 +54,7 @@ public class Enrollment : Poly.Runtime.IActionScoped
         this.NotifyRegisteredSubscribers();
         return DomainResult.Success();
     }
-    public DomainResult Withdraw()
+    internal DomainResult Withdraw()
     {
         if (this.CurrentStage != EnrollmentStage.Pending)
         {
@@ -64,7 +64,7 @@ public class Enrollment : Poly.Runtime.IActionScoped
         this.NotifyDroppedSubscribers();
         return DomainResult.Success();
     }
-    public DomainResult RecordGrade(long score)
+    internal DomainResult RecordGrade(long score)
     {
         if (this.CurrentStage != EnrollmentStage.Registered)
         {
@@ -89,7 +89,7 @@ public class Enrollment : Poly.Runtime.IActionScoped
         }
         return DomainResult.Success();
     }
-    public DomainResult Complete()
+    internal DomainResult Complete()
     {
         if (this.CurrentStage != EnrollmentStage.Registered)
         {
@@ -99,7 +99,7 @@ public class Enrollment : Poly.Runtime.IActionScoped
         this.NotifyCompletedSubscribers();
         return DomainResult.Success();
     }
-    public DomainResult Drop()
+    internal DomainResult Drop()
     {
         if (this.CurrentStage != EnrollmentStage.Registered)
         {
@@ -233,7 +233,7 @@ public class Enrollment : Poly.Runtime.IActionScoped
             this.ExitNotifyCascade();
         }
     }
-    public static DomainResult<Enrollment> Create(Section? section = null, Student? student = null, DateOnly? enrolledOn = null, DateOnly? dueDate = null, long grade = 0L)
+    internal static DomainResult<Enrollment> Create(Section? section = null, Student? student = null, DateOnly? enrolledOn = null, DateOnly? dueDate = null, long grade = 0L)
     {
         if (grade < 0L)
         {

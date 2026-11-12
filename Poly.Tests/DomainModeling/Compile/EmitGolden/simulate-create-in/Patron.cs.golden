@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 using Poly.Runtime;
 
-public class Patron : Poly.Runtime.IActionScoped
+internal class Patron : Poly.Runtime.IActionScoped
 {
     private List<Fine> _fines = new List<Fine>();
     private Patron(string name, IEnumerable<Fine>? fines = null)
@@ -16,7 +16,7 @@ public class Patron : Poly.Runtime.IActionScoped
     {
         get => this._fines;
     }
-    public DomainResult<Fine> CreateFines(long amount, string reason)
+    internal DomainResult<Fine> CreateFines(long amount, string reason)
     {
         var fineResult = Fine.Create(amount, reason, this);
         if (!fineResult.IsSuccess)
@@ -30,7 +30,7 @@ public class Patron : Poly.Runtime.IActionScoped
     {
         this._fines.Add(child);
     }
-    public DomainResult<Fine> AssessByRel()
+    internal DomainResult<Fine> AssessByRel()
     {
         var create0 = this.CreateFines(5L, "CreateIn");
         if (!create0.IsSuccess)
@@ -43,7 +43,7 @@ public class Patron : Poly.Runtime.IActionScoped
     public bool HasFines() => this.Fines.Count != 0;
     public bool HasFineCount() => this.Fines.Count > 0;
     public bool NoFines() => this.Fines.Count == 0;
-    public static DomainResult<Patron> Create(string name, IEnumerable<Fine>? fines = null)
+    internal static DomainResult<Patron> Create(string name, IEnumerable<Fine>? fines = null)
     {
         if (string.IsNullOrEmpty(name))
         {

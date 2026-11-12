@@ -1,7 +1,7 @@
 #nullable enable
 using Poly.Runtime;
 
-public class CampaignMember : Poly.Runtime.IActionScoped
+internal class CampaignMember : Poly.Runtime.IActionScoped
 {
     private CampaignMember() { }
     private CampaignMember(Contact? contact = null, Campaign? campaign = null)
@@ -11,7 +11,7 @@ public class CampaignMember : Poly.Runtime.IActionScoped
     }
     public Contact? Contact { get; private set; }
     public Campaign? Campaign { get; private set; }
-    public static DomainResult<CampaignMember> Create(Contact? contact = null, Campaign? campaign = null)
+    internal static DomainResult<CampaignMember> Create(Contact? contact = null, Campaign? campaign = null)
     {
         var created = new CampaignMember(contact, campaign);
         if (campaign != null)

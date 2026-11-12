@@ -143,7 +143,7 @@ static async System.Threading.Tasks.Task SeedAsync(TDbCtx db)
 app.Run();
 
 
-public record BookDto
+internal record BookDto
 {
     [Required]
     [MinLength(2)]
@@ -156,13 +156,13 @@ public record BookDto
     public string Code { get; init; } = default!;
 }
 
-public record RestockDto
+internal record RestockDto
 {
     [Range(0, 1000)]
     public long Amount { get; init; }
 }
 
-public record RenameDto
+internal record RenameDto
 {
     [Required]
     [MinLength(2)]
@@ -170,7 +170,7 @@ public record RenameDto
     public string Value { get; init; } = default!;
 }
 
-public record SetCodeDto
+internal record SetCodeDto
 {
     [Required]
     [RegularExpression("^[A-Z]{2}-[0-9]{3}$")]

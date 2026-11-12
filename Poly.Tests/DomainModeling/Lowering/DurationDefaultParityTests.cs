@@ -71,9 +71,9 @@ public class DurationDefaultParityTests {
         var csharp = PrintTemporal(Dsl);
         var asm = ExportedCSharp.CompileAndLoad(csharp, "DurationDefaultParity");
         var result = ExportedCSharp.InvokeCreate(asm.GetType("Job")!);
-        await Assert.That((bool)result.GetType().GetProperty("IsSuccess")!.GetValue(result)!).IsTrue();
-        var printed = result.GetType().GetProperty("Value")!.GetValue(result)!;
-        await Assert.That(printed.GetType().GetProperty("Budget")!.GetValue(printed)).IsEqualTo(ThirtyMinutes);
+        await Assert.That((bool)result.GetType().GetProperty("IsSuccess", PrintedMembers.Any)!.GetValue(result)!).IsTrue();
+        var printed = result.GetType().GetProperty("Value", PrintedMembers.Any)!.GetValue(result)!;
+        await Assert.That(printed.GetType().GetProperty("Budget", PrintedMembers.Any)!.GetValue(printed)).IsEqualTo(ThirtyMinutes);
         await Assert.That(csharp).Contains("TimeSpan.FromMinutes(30L)");
     }
 }

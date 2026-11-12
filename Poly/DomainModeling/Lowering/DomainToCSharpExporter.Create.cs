@@ -265,7 +265,9 @@ public sealed partial class DomainToCSharpExporter {
             new NamedTypeReference("DomainResult", TypeArguments: [targetType]),
             Parameters: methodParams.Count > 0 ? methodParams : null,
             Body: new Block(bodyNodes, [localResult, local]),
-            AccessModifier: AccessModifier.Public
+            AccessModifier: DomainAccess.Demote(
+                AccessModifier.Public, domain,
+                [.. methodParams.Select(p => p.TypeReference), targetType])
         ));
     }
 
@@ -565,7 +567,9 @@ public sealed partial class DomainToCSharpExporter {
             Parameters: ctorParams,
             Body: new Block(createSuccessNodes, createLocals),
             IsStatic: true,
-            AccessModifier: AccessModifier.Public
+            AccessModifier: DomainAccess.Demote(
+                AccessModifier.Public, domain,
+                [.. ctorParams.Select(p => p.TypeReference), createResultType])
         ));
 
         return ctors;

@@ -118,7 +118,7 @@ static async System.Threading.Tasks.Task SeedAsync(TDbCtx db)
 app.Run();
 
 
-public record PairDto
+internal record PairDto
 {
     [Range(50, 200)]
     public long Hi { get; init; }
@@ -132,13 +132,13 @@ public record PairDto
     public string Tag { get; init; } = default!;
 }
 
-public record BothDto
+internal record BothDto
 {
     [Range(50, 100)]
     public long V { get; init; }
 }
 
-public record ConflictDto
+internal record ConflictDto
 {
     [Required]
     public string S { get; init; } = default!;

@@ -4,13 +4,13 @@ using System.Collections.Generic;
 
 using Poly.Runtime;
 
-public enum FineStage
+internal enum FineStage
 {
     Unpaid = 0,
     Resolved = 1
 }
 
-public class Fine : Poly.Runtime.IActionScoped
+internal class Fine : Poly.Runtime.IActionScoped
 {
     private List<Patron>? _patronFinesResolvedSubscribers;
     private int _notifyDepth;
@@ -30,7 +30,7 @@ public class Fine : Poly.Runtime.IActionScoped
     public bool? Paid { get; private set; }
     public Patron? Patron { get; private set; }
     public FineStage CurrentStage { get; private set; }
-    public DomainResult Pay()
+    internal DomainResult Pay()
     {
         if (this.CurrentStage != FineStage.Unpaid)
         {
@@ -49,7 +49,7 @@ public class Fine : Poly.Runtime.IActionScoped
         this.NotifyResolvedSubscribers();
         return DomainResult.Success();
     }
-    public DomainResult Waive()
+    internal DomainResult Waive()
     {
         if (this.CurrentStage != FineStage.Unpaid)
         {
@@ -95,7 +95,7 @@ public class Fine : Poly.Runtime.IActionScoped
             this.ExitNotifyCascade();
         }
     }
-    public static DomainResult<Fine> Create(string reason, long amount = 0L, Patron? patron = null, DateTime? dateIssued = null, bool? paid = null)
+    internal static DomainResult<Fine> Create(string reason, long amount = 0L, Patron? patron = null, DateTime? dateIssued = null, bool? paid = null)
     {
         if (string.IsNullOrEmpty(reason))
         {

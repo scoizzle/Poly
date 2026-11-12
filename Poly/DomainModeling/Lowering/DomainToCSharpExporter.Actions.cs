@@ -42,12 +42,19 @@ public sealed partial class DomainToCSharpExporter {
         }
     }
 
+    private static AccessModifier ActionGroupAccess(
+        IReadOnlyList<(Action Action, string? SourceStage)> variants) =>
+        variants.Any(v => DomainAccess.ForAction(v.Action) == AccessModifier.Public)
+            ? AccessModifier.Public
+            : AccessModifier.Internal;
+
     private static void AddActionMethod(Entity entity, Action action,
         List<MethodDefinitionNode> methods, string? stageEnumTypeName,
         IReadOnlySet<string>? postTransitionNotifyStages,
         IReadOnlySet<string>? previousStageNotifyStages,
         string? sourceStageName, Domain domain,
-        INodeMetadataProvider analysis, ContractSplicePlan? splice = null) {
+        INodeMetadataProvider analysis, ContractSplicePlan? splice = null,
+        AccessModifier? access = null) {
         var isVoid = action.Result is not { Members.Count: > 0 };
         var body = BuildFullActionBody(entity, action, stageEnumTypeName,
             postTransitionNotifyStages, previousStageNotifyStages,
@@ -73,7 +80,9 @@ public sealed partial class DomainToCSharpExporter {
                 .Select(p => new Parameter(p.Name, MapDomainTypeRef(p.Type, domain, analysis)))
                 .ToList(),
             Body: body,
-            AccessModifier: AccessModifier.Public
+            AccessModifier: DomainAccess.Demote(
+                access ?? DomainAccess.ForAction(action), domain,
+                [.. action.Parameters.Select(p => MapDomainTypeRef(p.Type, domain, analysis)), returnType])
         ));
     }
 
@@ -154,7 +163,8 @@ public sealed partial class DomainToCSharpExporter {
                 : entityLevel ?? stageAction ?? variants[0].Action;
             AddActionMethod(entity, chosen, methods,
                 stageEnumTypeName, postTransitionNotifyStages, previousStageNotifyStages,
-                sourceStageName: null, domain, analysis, splice);
+                sourceStageName: null, domain, analysis, splice,
+                access: ActionGroupAccess(variants));
             return;
         }
 
@@ -231,7 +241,9 @@ public sealed partial class DomainToCSharpExporter {
                 .Select(p => new Parameter(p.Name, MapDomainTypeRef(p.Type, domain, analysis)))
                 .ToList(),
             Body: new Block(nodes, locals),
-            AccessModifier: AccessModifier.Public
+            AccessModifier: DomainAccess.Demote(
+                ActionGroupAccess(variants), domain,
+                [.. representative.Parameters.Select(p => MapDomainTypeRef(p.Type, domain, analysis)), returnType])
         ));
     }
 

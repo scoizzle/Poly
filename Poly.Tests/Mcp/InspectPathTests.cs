@@ -189,6 +189,34 @@ internal sealed class InspectPathTests {
     }
 
     [Test]
+    public async Task Inspect_EntityActionAndSameNamedStageAction_IsAmbiguous_EachCandidateInspects() {
+        var (h, ws) = Open("""
+            domain Shop
+
+            Order: entity {
+              Total: Number
+              Submit: action { assign Total to 1 }
+              Draft: stage { Submit: action { transition to Placed } }
+              Placed: stage { }
+            }
+            """);
+
+        var r = h.Inspect(ws, "Order.Submit");
+
+        await Assert.That(r.Code).IsEqualTo("ELEMENT_NOT_FOUND");
+        await Assert.That(Str(r, "reason")).IsEqualTo("ambiguous");
+        var candidates = Strings(r.Data!["candidates"]);
+        await Assert.That(candidates.Distinct().Count()).IsEqualTo(2);
+        var matches = r.Data!["matches"]!.AsArray().Select(m => m!["kind"]!.GetValue<string>()).ToList();
+        await Assert.That(matches).IsEquivalentTo(new[] { "entityAction", "stageAction" });
+        foreach (var candidate in candidates) {
+            var each = h.Inspect(ws, candidate, "full");
+            await Assert.That(each.Success).IsTrue().Because(candidate + ": " + each.Summary);
+            await Assert.That(Str(each, "kind")).IsEqualTo(candidate.Contains("Draft") ? "stageAction" : "entityAction");
+        }
+    }
+
+    [Test]
     public async Task Inspect_AmbiguousAcrossKindsWithOneCanonical_ListsDistinguishableMatches() {
         var (h, ws) = Open(Clinic);
         h.Store.TryGet(ws, out var state);

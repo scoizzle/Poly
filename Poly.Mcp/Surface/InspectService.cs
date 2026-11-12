@@ -111,7 +111,11 @@ internal static class InspectService {
             ElementNotFoundCode);
 
     private static InspectOutcome Ambiguous(string select, ElementAmbiguous ambiguous) {
-        var matches = ambiguous.Matches.Select(m => new ElementMatchData(KindName(m.Kind), m.Canonical)).ToList();
+        // An entity-level action's bare path is the ambiguous one, so it is offered in the exact
+        // (analysis-path) form, which selects only that action.
+        var matches = ambiguous.Matches
+            .Select(m => new ElementMatchData(KindName(m.Kind), m.Kind == ElementKind.EntityAction ? m.AnalysisPath : m.Canonical))
+            .ToList();
         var sameName = matches.Select(static m => m.Path).Distinct(StringComparer.Ordinal).Count() < matches.Count;
         var summary = $"'{select}' is ambiguous: it matches "
             + string.Join("; ", matches.Select(m => $"{m.Kind} {m.Path}"))

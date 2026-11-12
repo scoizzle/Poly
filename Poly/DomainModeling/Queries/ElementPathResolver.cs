@@ -72,10 +72,11 @@ internal static class ElementPathResolver {
         if (segments.Count == 0)
             return new ElementNotFound(NotFoundReason.Unknown, [], null, "Element path is empty.");
         if (segments.Count == 1 || !string.Equals(segments[0], domain.Name, StringComparison.Ordinal))
-            return Descend(domain, segments);
+            return Descend(domain, segments, exact: false);
 
-        var asWritten = Descend(domain, segments);
-        var stripped = Descend(domain, [.. segments.Skip(1)]);
+        // A leading domain name makes the path the exact analysis-path form: no bare shorthand.
+        var asWritten = Descend(domain, segments, exact: false);
+        var stripped = Descend(domain, [.. segments.Skip(1)], exact: true);
         return Merge(asWritten, stripped);
     }
 
@@ -104,12 +105,12 @@ internal static class ElementPathResolver {
     private static int Depth(ElementResolution resolution) =>
         resolution is ElementNotFound { Partial: { Kind: not ElementKind.Domain } partial } ? partial.Canonical.Count(static c => c == '.') + 1 : 0;
 
-    private static ElementResolution Descend(Domain domain, IReadOnlyList<string> segments) {
+    private static ElementResolution Descend(Domain domain, IReadOnlyList<string> segments, bool exact) {
         var current = TopLevel(domain, segments[0]);
         for (var i = 1; i < segments.Count; i++) {
             if (current is not ElementRef parent)
                 return current;
-            current = Child(domain, parent, segments[i]);
+            current = Child(domain, parent, segments[i], exact);
         }
 
         return current;
@@ -157,8 +158,8 @@ internal static class ElementPathResolver {
 
     // ── Descending one segment below a resolved element ─────────
 
-    private static ElementResolution Child(Domain domain, ElementRef parent, string name) => parent.Kind switch {
-        ElementKind.Entity => ChildOfEntity(domain, (Entity)parent.Node!, parent, name),
+    private static ElementResolution Child(Domain domain, ElementRef parent, string name, bool exact) => parent.Kind switch {
+        ElementKind.Entity => ChildOfEntity(domain, (Entity)parent.Node!, parent, name, exact),
         ElementKind.Stage => ChildOfStage(domain, DeclaringEntity(domain, parent), (Stage)parent.Node!, parent, name),
         ElementKind.Enum => ChildOfEnum(domain, (EnumType)parent.Node!, parent, name),
         ElementKind.EntityAction or ElementKind.StageAction => ChildOfAction(domain, DeclaringEntity(domain, parent), (Ontology.Action)parent.Node!, parent, name),
@@ -172,7 +173,7 @@ internal static class ElementPathResolver {
         new(NotFoundReason.NotAddressable, [], parent,
             $"'{parent.Canonical}.{name}' is not addressable: nothing below a {Describe(parent.Kind)} ('{parent.Canonical}') can be selected.");
 
-    private static ElementResolution ChildOfEntity(Domain domain, Entity entity, ElementRef parent, string name) {
+    private static ElementResolution ChildOfEntity(Domain domain, Entity entity, ElementRef parent, string name, bool exact) {
         var members = new List<ElementRef>();
         foreach (var property in entity.Properties.Where(p => Is(p.Name, name)))
             members.Add(Make(domain, ElementKind.Property, entity.Name, null, name, $"{entity.Name}.{name}", property));
@@ -184,6 +185,15 @@ internal static class ElementPathResolver {
             members.Add(Make(domain, ElementKind.Stage, entity.Name, stage.Name, name, $"{entity.Name}.{name}", stage));
         foreach (var policy in NameScopes.PolicyDefinitions(entity).Where(p => Is(p.Name, name)))
             members.Add(PolicyRef(domain, entity, policy));
+
+        // An entity-level action and a same-named stage action are two elements: the bare path is
+        // ambiguous. The exact (domain-prefixed) form selects only the entity-level one.
+        if (!exact && members.Any(static m => m.Kind == ElementKind.EntityAction)) {
+            members.AddRange(entity.Stages
+                .SelectMany(stage => stage.Actions.Where(a => Is(a.Name, name)).Select(action => (stage, action)))
+                .Select(pair => Make(domain, ElementKind.StageAction, entity.Name, pair.stage.Name, name,
+                    $"{entity.Name}.{pair.stage.Name}.{name}", pair.action)));
+        }
 
         if (members.Count == 1)
             return members[0];

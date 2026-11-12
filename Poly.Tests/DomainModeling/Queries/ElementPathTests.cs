@@ -248,19 +248,31 @@ internal sealed class ElementPathTests {
     // ── Resolve: precedence, collisions, policies ──────────────
 
     [Test]
-    public async Task Resolve_EntityActionAndSameNamedStageAction_EntityLevelWinsBare_StageSegmentDisambiguates() {
+    public async Task Resolve_EntityActionAndSameNamedStageAction_BareIsAmbiguous_EachMatchSelectsItself() {
         var entityAction = Act("Submit");
-        var draft = new Stage("Draft", [Act("Submit")], [], [], []);
+        var stageAction = Act("Submit");
+        var draft = new Stage("Draft", [stageAction], [], [], []);
         var order = new Entity("Order", [], [entityAction], [], [draft]);
         var domain = DomainTestFactory.Create("Shop", [order], []);
 
-        var bare = (ElementRef)Resolve(domain, "Order.Submit");
-        var staged = (ElementRef)Resolve(domain, "Order.Draft.Submit");
+        var bare = Resolve(domain, "Order.Submit");
 
-        await Assert.That(bare.Kind).IsEqualTo(ElementKind.EntityAction);
-        await Assert.That(ReferenceEquals(bare.Node, entityAction)).IsTrue();
+        await Assert.That(bare).IsTypeOf<ElementAmbiguous>().Because(Describe(bare));
+        var matches = ((ElementAmbiguous)bare).Matches;
+        await Assert.That(matches.Select(m => m.Kind).ToList())
+            .IsEquivalentTo(new[] { ElementKind.EntityAction, ElementKind.StageAction });
+        foreach (var match in matches) {
+            var viaAnalysisPath = Resolve(domain, match.AnalysisPath);
+            await Assert.That(viaAnalysisPath).IsTypeOf<ElementRef>().Because(match.AnalysisPath + ": " + Describe(viaAnalysisPath));
+            await Assert.That(ReferenceEquals(((ElementRef)viaAnalysisPath).Node, match.Node)).IsTrue().Because(match.AnalysisPath);
+        }
+
+        var staged = (ElementRef)Resolve(domain, "Order.Draft.Submit");
         await Assert.That(staged.Kind).IsEqualTo(ElementKind.StageAction);
-        await Assert.That(staged.Canonical).IsEqualTo("Order.Draft.Submit");
+        await Assert.That(ReferenceEquals(staged.Node, stageAction)).IsTrue();
+        var exact = (ElementRef)Resolve(domain, "Shop/Order/Submit");
+        await Assert.That(exact.Kind).IsEqualTo(ElementKind.EntityAction);
+        await Assert.That(ReferenceEquals(exact.Node, entityAction)).IsTrue();
     }
 
     [Test]

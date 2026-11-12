@@ -11,7 +11,7 @@
 > **MCP surface:** `poly_guide`, `poly_workspace`, `poly_define`, `poly_check`,
 > `poly_inspect`, `poly_export`, `poly_simulate`. The 30-tool v1 surface was removed;
 > names such as `apply_dsl` in older sections refer to it historically.
-> `poly_inspect` takes one element path as `select`: `Entity`, `Entity.Member`, `Entity.Stage.Action`, `Enum.Member`, or an enum, value type or function name; an unresolvable path returns `ELEMENT_NOT_FOUND` with candidates.
+> `poly_inspect` takes one element path as `select`: `Entity`, `Entity.Member`, `Entity.Stage.Action`, `Enum.Member`, or an enum, value type or function name; an unresolvable path returns `ELEMENT_NOT_FOUND` with candidates. A same-named entity action and stage action make `Entity.Action` ambiguous: use `Entity.Stage.Action`, or `Domain/Entity/Action` for the entity-level one.
 > `poly_check` with `select: "Entity.Action"` adds `data.witness`: one entry per stage context
 > (`stageName`, `preconditions`, `properties[].min/max`, `postconditions`) copied from the
 > analyzer's range/precondition facts; absent when the analysis published none. Only an

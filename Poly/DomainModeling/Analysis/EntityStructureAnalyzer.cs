@@ -154,7 +154,7 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
     internal static IReadOnlySet<string> ComputeEntryAssignedPropertyNames(Entity entity) {
         var names = new HashSet<string>(StringComparer.Ordinal);
         if (entity.Stages.Count > 0) {
-            foreach (var effect in entity.Stages[0].OnEntryEffects) {
+            foreach (var effect in entity.InitialStage()!.OnEntryEffects) {
                 if (effect is AssignEffect ae && ae.Target is PropertyAccess pa)
                     names.Add(pa.Name);
             }
@@ -229,7 +229,7 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
     internal static bool IsImplicitStage(Entity entity, Domain? domain = null) {
         if (entity.Stages.Count != 1)
             return false;
-        var stage = entity.Stages[0];
+        var stage = entity.InitialStage()!;
         if (stage.OnEntryEffects.Count > 0
             || stage.OnExitEffects.Count > 0
             || stage.Policies.Count > 0

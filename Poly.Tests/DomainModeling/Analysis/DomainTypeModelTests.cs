@@ -173,6 +173,33 @@ public class DomainTypeModelTests {
         var number = model.Resolve("Number");
         var optional = number with { Optional = true };
         await Assert.That(model.Assign(optional, number)).IsEqualTo(model.Assign(number, number));
+        await Assert.That(model.Assign(number, optional)).IsEqualTo(model.Assign(number, number));
+        await Assert.That(model.Assign(optional, optional)).IsEqualTo(Assignability.Identity);
+    }
+
+    [Test]
+    public async Task OfProperty_UnresolvedType_StaysUnresolvedAndNotOptional() {
+        var unresolved = Model().OfProperty(new Property("Ghost", new DomainTypeReference("Nope"), [new OptionalConstraint()]));
+        await Assert.That(unresolved).IsEqualTo(ExprType.Unresolved);
+        await Assert.That(unresolved.Optional).IsFalse();
+    }
+
+    [Test]
+    public async Task Resolve_NullOrEmptyName_Throws() {
+        var model = Model();
+        await Assert.That(() => model.Resolve(null!)).ThrowsExactly<ArgumentNullException>();
+        await Assert.That(() => model.Resolve("")).ThrowsExactly<ArgumentException>();
+    }
+
+    private sealed record UnknownDomainType() : DomainType("Odd", [], []);
+
+    [Test]
+    public async Task Resolve_UnknownDomainTypeSubclass_Throws() {
+        var domain = DomainTestFactory.Create("Odd", [new UnknownDomainType()], []);
+        var model = new DomainTypeModel(domain, new TypeMappingRegistry());
+        await Assert.That(() => model.Resolve("Odd")).ThrowsExactly<InvalidOperationException>();
+        // The sibling: the four known shapes still resolve.
+        await Assert.That(Model().Resolve("Order").IsResolved).IsTrue();
     }
 
     [Test]
@@ -230,6 +257,9 @@ public class DomainTypeModelTests {
     [Arguments("Uuid", "Number")]
     public async Task Assign_UnrelatedTypes_IsNone(string from, string to) {
         var model = Model();
+        // A None verdict must come from the relation, never from a name that failed to resolve.
+        await Assert.That(model.Resolve(from).IsResolved).IsTrue();
+        await Assert.That(model.Resolve(to).IsResolved).IsTrue();
         await Assert.That(model.Assign(model.Resolve(from), model.Resolve(to))).IsEqualTo(Assignability.None);
     }
 

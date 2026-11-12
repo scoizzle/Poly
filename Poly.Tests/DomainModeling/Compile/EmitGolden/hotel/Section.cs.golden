@@ -39,7 +39,7 @@ public class Section
         var invoke0 = this.Hall.MarkChildBusy();
         if (!invoke0.IsSuccess)
         {
-            return DomainResult.Failure(invoke0.ErrorMessage ?? "");
+            return DomainResult.Failure(invoke0.Error!.At("Section.Occupy"));
         }
         return DomainResult.Success();
     }
@@ -57,7 +57,7 @@ public class Section
         var invoke0 = this.Hall.ClearChildBusy();
         if (!invoke0.IsSuccess)
         {
-            return DomainResult.Failure(invoke0.ErrorMessage ?? "");
+            return DomainResult.Failure(invoke0.Error!.At("Section.Vacate"));
         }
         return DomainResult.Success();
     }

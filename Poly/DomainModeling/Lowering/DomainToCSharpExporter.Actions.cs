@@ -89,7 +89,7 @@ public sealed partial class DomainToCSharpExporter {
         var effectsBody = LowerActionToMethodBody(entity, action, paramNames, stageEnumTypeName,
             postTransitionNotifyStages, previousStageNotifyStages,
             loweringSourceStage, domain, analysis, isVoid, names, methodResultType);
-        effectsBody = SpliceContractBody(domain, action, effectsBody, isVoid, analysis, splice, names);
+        effectsBody = SpliceContractBody(domain, entity, action, effectsBody, isVoid, analysis, splice, names);
         return BuildActionBodyWithGuards(action, entity, effectsBody, domain,
             guardSourceStage, stageEnumTypeName, isVoid, analysis, loweringSourceStage, methodResultType);
     }

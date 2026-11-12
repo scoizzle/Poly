@@ -141,19 +141,10 @@ public sealed partial class EffectLoweringPass {
     /// A failed create returns the caller's <c>DomainResult</c>. A context with
     /// no result type (a direct lowering test, a constructor) throws.
     /// </summary>
-    private Node FailCreate(Node resultVar) {
-        var message = new Syntactic.Coalesce(
-            new Member(resultVar, "ErrorMessage"),
-            new Constant(""));
-        if (_context.ActionResultType is null) {
-            return new ThrowStatement(new New(
-                new NamedTypeReference("ConstraintFailureException"),
-                message));
-        }
-        return new Return(new Invoke(
-            new Member(_context.ActionResultType, "Failure"),
-            message));
-    }
+    private Node FailCreate(Node resultVar) =>
+        _context.ActionResultType is null
+            ? FailureLowering.ThrowFrom(resultVar)
+            : FailureLowering.Propagate(_context.ActionResultType, resultVar, CallerPath);
 
     /// <summary>
     /// Positional arguments for the printed <c>Type.Create</c> factory: constructor

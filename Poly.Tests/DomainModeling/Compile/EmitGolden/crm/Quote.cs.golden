@@ -36,7 +36,7 @@ public class Quote
         var quoteLineResult = QuoteLine.Create(qty, unitPrice, product, this);
         if (!quoteLineResult.IsSuccess)
         {
-            return DomainResult<QuoteLine>.Failure(quoteLineResult.ErrorMessage ?? "");
+            return DomainResult<QuoteLine>.Failure(quoteLineResult.Error!);
         }
         var quoteLine = quoteLineResult.Value;
         return DomainResult<QuoteLine>.Success(quoteLine);
@@ -64,7 +64,7 @@ public class Quote
         var create1 = this.CreateLines(qty, sku.ListPrice, sku);
         if (!create1.IsSuccess)
         {
-            return DomainResult<QuoteLine>.Failure(create1.ErrorMessage ?? "");
+            return DomainResult<QuoteLine>.Failure(create1.Error!.At("Quote.AddLine"));
         }
         var created2 = create1.Value;
         return DomainResult<QuoteLine>.Success(created2);

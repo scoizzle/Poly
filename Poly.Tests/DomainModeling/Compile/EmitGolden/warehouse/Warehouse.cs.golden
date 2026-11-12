@@ -32,7 +32,7 @@ public class Warehouse
         var truckResult = Truck.Create(vin, maxLoad, db, this, new List<Delivery>(), currentLoad, status);
         if (!truckResult.IsSuccess)
         {
-            return DomainResult<Truck>.Failure(truckResult.ErrorMessage ?? "");
+            return DomainResult<Truck>.Failure(truckResult.Error!);
         }
         var truck = truckResult.Value;
         return DomainResult<Truck>.Success(truck);
@@ -70,7 +70,7 @@ public class Warehouse
         var create0 = this.CreateTrucks(vin, maxLoad, db, 0L, TruckStatus.Idle);
         if (!create0.IsSuccess)
         {
-            return DomainResult<Truck>.Failure(create0.ErrorMessage ?? "");
+            return DomainResult<Truck>.Failure(create0.Error!.At("Warehouse.RegisterTruck"));
         }
         var created1 = create0.Value;
         return DomainResult<Truck>.Success(created1);

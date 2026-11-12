@@ -223,16 +223,6 @@ public sealed partial class EffectLoweringPass : EffectDispatch<Node?> {
             ? FailureLowering.Throw(spec)
             : FailureLowering.Return(CallerResultType, spec);
 
-    /// <summary>The string-only form; the link-violation site moves to a typed spec in R-04b.</summary>
-    private Node AssignConstraintFailure(Node message) {
-        if (_context.ActionResultType is null) {
-            return new ThrowStatement(new New(
-                new NamedTypeReference("ConstraintFailureException"),
-                message));
-        }
-        return ReturnCallerFailure(message);
-    }
-
     /// <summary>
     /// Rewrap nested Failure as the caller action's <c>DomainResult</c> /
     /// <c>DomainResult&lt;T&gt;</c> — same shape as create-in. Returning the callee
@@ -244,14 +234,24 @@ public sealed partial class EffectLoweringPass : EffectDispatch<Node?> {
     private Node CallerResultType =>
         _context.ActionResultType ?? new TypeReference("DomainResult");
 
-    private Return ReturnCallerFailure(Node errorMessage) =>
-        new(new Invoke(new Member(CallerResultType, "Failure"), errorMessage));
+    /// <summary>
+    /// The path a callee's failure gains at this caller: <c>Entity.Action</c>, or the entity alone
+    /// for a body with no action (constructor, OnEntry, handler).
+    /// </summary>
+    private string CallerPath =>
+        _context.ActionName is { } action ? $"{_entity.Name}.{action}" : _entity.Name;
 
+    /// <summary>A callee's failure rewrapped as the caller's, prefixed with <see cref="CallerPath"/>.</summary>
     private Return ReturnCallerFailureFrom(Node resultVar) =>
-        ReturnCallerFailure(
-            new Syntactic.Coalesce(
-                new Member(resultVar, "ErrorMessage"),
-                new Constant("")));
+        FailureLowering.Propagate(CallerResultType, resultVar, CallerPath);
+
+    /// <summary>
+    /// The entity's own guard method (<c>EnsureUnique</c>) is not a callee: its failure already
+    /// names its entity, so it passes through with no caller prefix, which keeps the path the same
+    /// whether or not the storage library rewrites the guard.
+    /// </summary>
+    private Return ReturnOwnGuardFailureFrom(Node resultVar) =>
+        FailureLowering.Propagate(CallerResultType, resultVar);
 
     // ── Runtime default expression helpers ─────────────────
 

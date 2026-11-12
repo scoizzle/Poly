@@ -25,7 +25,7 @@ public class Patron
         var create0 = Fine.Create(5L, "TypeCreate");
         if (!create0.IsSuccess)
         {
-            return DomainResult<Fine>.Failure(create0.ErrorMessage ?? "");
+            return DomainResult<Fine>.Failure(create0.Error!.At("Patron.AssessByType"));
         }
         var created1 = create0.Value;
         return DomainResult<Fine>.Success(created1);

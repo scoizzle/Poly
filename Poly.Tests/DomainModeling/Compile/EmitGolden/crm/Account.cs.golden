@@ -56,7 +56,7 @@ public class Account
         var siteResult = Site.Create(city, region);
         if (!siteResult.IsSuccess)
         {
-            return DomainResult<Site>.Failure(siteResult.ErrorMessage ?? "");
+            return DomainResult<Site>.Failure(siteResult.Error!);
         }
         var site = siteResult.Value;
         this.Hq = site;
@@ -67,7 +67,7 @@ public class Account
         var contactResult = Contact.Create(name, email, db, this);
         if (!contactResult.IsSuccess)
         {
-            return DomainResult<Contact>.Failure(contactResult.ErrorMessage ?? "");
+            return DomainResult<Contact>.Failure(contactResult.Error!);
         }
         var contact = contactResult.Value;
         return DomainResult<Contact>.Success(contact);
@@ -81,7 +81,7 @@ public class Account
         var opportunityResult = Opportunity.Create(title, amount, this, contact, new List<Activity>(), new List<Line>(), new List<Quote>(), closeBy);
         if (!opportunityResult.IsSuccess)
         {
-            return DomainResult<Opportunity>.Failure(opportunityResult.ErrorMessage ?? "");
+            return DomainResult<Opportunity>.Failure(opportunityResult.Error!);
         }
         var opportunity = opportunityResult.Value;
         return DomainResult<Opportunity>.Success(opportunity);
@@ -98,7 +98,7 @@ public class Account
         var ticketResult = Ticket.Create(subject, this);
         if (!ticketResult.IsSuccess)
         {
-            return DomainResult<Ticket>.Failure(ticketResult.ErrorMessage ?? "");
+            return DomainResult<Ticket>.Failure(ticketResult.Error!);
         }
         var ticket = ticketResult.Value;
         return DomainResult<Ticket>.Success(ticket);
@@ -121,7 +121,7 @@ public class Account
         var create0 = this.CreateHq(city, region);
         if (!create0.IsSuccess)
         {
-            return DomainResult<Site>.Failure(create0.ErrorMessage ?? "");
+            return DomainResult<Site>.Failure(create0.Error!.At("Account.PlaceHq"));
         }
         var created1 = create0.Value;
         return DomainResult<Site>.Success(created1);
@@ -135,7 +135,7 @@ public class Account
         var create0 = this.CreateContacts(name, email, db);
         if (!create0.IsSuccess)
         {
-            return DomainResult<Contact>.Failure(create0.ErrorMessage ?? "");
+            return DomainResult<Contact>.Failure(create0.Error!.At("Account.AddContact"));
         }
         var created1 = create0.Value;
         return DomainResult<Contact>.Success(created1);
@@ -149,7 +149,7 @@ public class Account
         var create0 = this.CreateContacts(lead.Name, lead.Email, db);
         if (!create0.IsSuccess)
         {
-            return DomainResult<Contact>.Failure(create0.ErrorMessage ?? "");
+            return DomainResult<Contact>.Failure(create0.Error!.At("Account.ConvertLead"));
         }
         var created1 = create0.Value;
         return DomainResult<Contact>.Success(created1);
@@ -163,7 +163,7 @@ public class Account
         var create0 = this.CreateOpportunities(title, amount);
         if (!create0.IsSuccess)
         {
-            return DomainResult<Opportunity>.Failure(create0.ErrorMessage ?? "");
+            return DomainResult<Opportunity>.Failure(create0.Error!.At("Account.OpenDeal"));
         }
         var created1 = create0.Value;
         return DomainResult<Opportunity>.Success(created1);
@@ -186,7 +186,7 @@ public class Account
         var create0 = this.CreateTickets(subject);
         if (!create0.IsSuccess)
         {
-            return DomainResult<Ticket>.Failure(create0.ErrorMessage ?? "");
+            return DomainResult<Ticket>.Failure(create0.Error!.At("Account.OpenTicket"));
         }
         var created1 = create0.Value;
         return DomainResult<Ticket>.Success(created1);

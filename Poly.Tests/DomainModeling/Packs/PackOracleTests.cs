@@ -481,4 +481,64 @@ public class PackOracleTests {
         await process.WaitForExitAsync();
         return pid;
     }
+
+    /// <summary>#620 (slice P-03): an action that applies an effect and then fails must persist nothing.
+    /// The rejected request has already bumped Capacity in memory; a save on the failure branch commits it.
+    /// The second call is A3's pin on D2: a failed request must leave no pending change for the next
+    /// request's save to flush, so the successful call must see the capacity the failure never saved.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task ActionFailure_DoesNotPersistPartialWrites(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.Warehouse620);
+
+        using var created = await oracle.Client.PostAsync(
+            "/api/warehouses",
+            new StringContent("""{"Code":"WH2","Capacity":100}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)created.StatusCode).IsEqualTo(201);
+
+        // Used range(0, 100000) rejects 999999 after Capacity has already been incremented.
+        using var rejected = await oracle.Client.PostAsync(
+            "/api/warehouses/WH2/bad",
+            new StringContent("""{"Units":999999}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)rejected.StatusCode).IsEqualTo(400);
+
+        using var snapshot = JsonDocument.Parse(await oracle.Client.GetStringAsync("/api/warehouses/WH2"));
+        await Assert.That(snapshot.RootElement.GetProperty("capacity").GetInt64()).IsEqualTo(100);
+        await Assert.That(snapshot.RootElement.GetProperty("used").GetInt64()).IsEqualTo(0);
+
+        using var accepted = await oracle.Client.PostAsync(
+            "/api/warehouses/WH2/bad",
+            new StringContent("""{"Units":100000}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)accepted.StatusCode).IsEqualTo(200);
+
+        using var after = JsonDocument.Parse(await oracle.Client.GetStringAsync("/api/warehouses/WH2"));
+        await Assert.That(after.RootElement.GetProperty("capacity").GetInt64()).IsEqualTo(101);
+        await Assert.That(after.RootElement.GetProperty("used").GetInt64()).IsEqualTo(100000);
+    }
+
+    /// <summary>#653 (slice P-03) success-path pin: the save must still run when the action succeeds.
+    /// Green on master by construction — it fails only under the over-correction (a handler that never
+    /// saves), which the row's red test cannot catch.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task ActionSuccess_PersistsEffects(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.Tally653);
+
+        using var created = await oracle.Client.PostAsync(
+            "/api/tallies",
+            new StringContent("""{"Name":"t1"}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)created.StatusCode).IsEqualTo(201);
+
+        using var bumped = await oracle.Client.PostAsync(
+            "/api/tallies/t1/bump",
+            new StringContent("{}", Encoding.UTF8, "application/json"));
+        await Assert.That((int)bumped.StatusCode).IsEqualTo(200);
+
+        using var snapshot = JsonDocument.Parse(await oracle.Client.GetStringAsync("/api/tallies/t1"));
+        await Assert.That(snapshot.RootElement.GetProperty("n").GetInt64()).IsEqualTo(1);
+    }
 }

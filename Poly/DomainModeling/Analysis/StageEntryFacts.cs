@@ -52,6 +52,33 @@ internal static class StageEntryFacts {
     }
 
     /// <summary>
+    /// <see cref="EntryAssignedProperties"/> for a fail-closed analysis check: false (and an empty
+    /// set) when a hop targets a stage the entity lacks, so the analyzer never takes an exception as
+    /// control flow. Only that failure is caught; the unresolvable hop is reported on its own.
+    /// </summary>
+    public static bool TryEntryAssignedProperties(Entity entity, Domain domain, out IReadOnlySet<string> names) {
+        try {
+            names = EntryAssignedProperties(entity, domain);
+            return true;
+        }
+        catch (UnresolvableStageHopException) {
+            names = FrozenSet<string>.Empty;
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// The <c>DMEFF019</c> message: a create-supplied value for <paramref name="propertyName"/> is
+    /// overwritten by <paramref name="entity"/>'s entry chain.
+    /// </summary>
+    public static string CannotSupplyMessage(Entity entity, string propertyName) =>
+        $"'{propertyName}' is set by the entry chain of initial stage '{entity.InitialStage()?.Name}' of entity " +
+        $"'{entity.Name}' and cannot be supplied on create; omit it (a required property needs default(...) or " +
+        "optional to be omittable).";
+
+    private sealed class UnresolvableStageHopException(string message) : InvalidOperationException(message);
+
+    /// <summary>
     /// The lifecycle property (G7): the one property typed as a domain enum whose member names equal the
     /// stage names. None for zero or more than one candidate; analysis rejects the latter
     /// (<see cref="EntityStructureAnalyzer"/> throws), so the fact never guesses.
@@ -176,7 +203,7 @@ internal static class StageEntryFacts {
         private void Hop(StageTransitionEffect transition) {
             // Lower's fail-closed boundary: a hop to a stage the entity lacks throws.
             if (FindStage(transition.TargetStage.StageName) is not { } target)
-                throw new InvalidOperationException(
+                throw new UnresolvableStageHopException(
                     $"Stage '{transition.TargetStage.StageName}' does not exist on entity '{entity.Name}'.");
 
             if (_cursor is not null) {

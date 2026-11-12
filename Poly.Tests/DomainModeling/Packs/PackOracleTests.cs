@@ -541,4 +541,26 @@ public class PackOracleTests {
         using var snapshot = JsonDocument.Parse(await oracle.Client.GetStringAsync("/api/tallies/t1"));
         await Assert.That(snapshot.RootElement.GetProperty("n").GetInt64()).IsEqualTo(1);
     }
+
+    /// <summary>#675 (Q13 ruling, 2026-11-12): a designated <c>initial(Open)</c> is honoured on the HTTP
+    /// create leg. <c>Draft</c> is declared first, so a row in <c>Draft</c> is the old implicit rule. The
+    /// unique <c>Code</c> gives the POST a Location and the created row its own route, so #589's missing
+    /// synthetic id and the #595 seed row cannot be mistaken for the row this test made.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task Create_DesignatedInitialStage_HonouredOverHttp(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.Fulfillment675);
+
+        using var created = await oracle.Client.PostAsync(
+            "/api/orders",
+            new StringContent("""{"Code":"JS-1"}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)created.StatusCode).IsEqualTo(201);
+
+        using var read = await oracle.Client.GetAsync("/api/orders/JS-1");
+        await Assert.That(read.StatusCode).IsEqualTo(HttpStatusCode.OK);
+        using var row = JsonDocument.Parse(await read.Content.ReadAsStringAsync());
+        await Assert.That(row.RootElement.GetProperty("currentStage").GetString()).IsEqualTo("Open");
+    }
 }

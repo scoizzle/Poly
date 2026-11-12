@@ -90,7 +90,7 @@ public class SurfaceExtensionDogfoodTests {
         await Assert.That(export.Success).IsTrue();
         var poly = ExtractPoly(export);
         await Assert.That(poly).Contains("when orders Active as order");
-        await Assert.That(poly).Contains("profile: owned Profile");
+        await Assert.That(poly).Contains("profile: one owned Profile");
         await Assert.That(poly).Contains("profile exists");
         await Assert.That(poly).Contains("orders exists");
         await Assert.That(poly).Contains("profile City is \"Metropolis\"");

@@ -168,6 +168,13 @@ public sealed partial class EffectLoweringPass : EffectDispatch<Node?> {
 
     protected override Node? Default() => null;
 
+    // Fail closed until L-13 lowers link/unlink: Default() is null, and a null here would be dropped silently.
+    protected override Node? Link(LinkEffect e) =>
+        throw new InvalidOperationException($"Cannot lower effect '{CallerPath}: {DescribeEffect(e)}': link is not lowerable yet (L-13).");
+
+    protected override Node? Unlink(UnlinkEffect e) =>
+        throw new InvalidOperationException($"Cannot lower effect '{CallerPath}: {DescribeEffect(e)}': unlink is not lowerable yet (L-13).");
+
     /// <summary>
     /// The action body. Create-in is <c>this.Create{Nav}</c>. Constraint probes
     /// are not prefixed.
@@ -312,6 +319,11 @@ public sealed partial class EffectLoweringPass : EffectDispatch<Node?> {
         StageTransitionEffect s => $"transition to {s.TargetStage.StageName} (StageTransitionEffect)",
         CreateEntityInstance cei => $"create {cei.Type.TypeName}",
         CreateEntityInRelationshipEffect cr => $"create in {cr.RelationshipName}",
+        LinkEffect l => $"link {l.RelationshipName} to {DescribeTarget(l.Target)}",
+        UnlinkEffect u => $"unlink {u.RelationshipName} from {DescribeTarget(u.Target)}",
         _ => $"Cannot lower: {effect.GetType().Name}"
     };
+
+    private static string DescribeTarget(DomainExpression target) =>
+        target is PropertyAccess { Name: var name } ? name : "<expression>";
 }

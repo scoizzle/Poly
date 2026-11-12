@@ -68,7 +68,7 @@ Codegen (optional host):
 | Source-ownership | `SourceOwnsTarget` | `Relationship.cs` | ✅ |
 | `create in Rel` auto-wire | `create in loans { }` | `Effects/CreateEntityInRelationshipEffect.cs` | ✅ |
 | MCP link existing | `link_instances` | `Poly.Mcp/Tools/RuntimeTool.cs` | ✅ (`7d067c0`) |
-| Link/unlink existing instances | no DSL keyword | `DomainInstanceStore.Link` / `.Unlink` (MCP `link_instances` / `unlink_instances`) | ✅ store operation — no Link/Unlink **Effect IR** |
+| Link/unlink existing instances | `link Rel to binder` / `unlink Rel from binder` — keyword, syntax and analysis only; not lowerable (DMEFF020 until L-13) | `DomainInstanceStore.Link` / `.Unlink` (MCP `link_instances` / `unlink_instances`) | ✅ store operation; `LinkEffect`/`UnlinkEffect` IR parses and analyzes but is refused until L-13 |
 
 ---
 

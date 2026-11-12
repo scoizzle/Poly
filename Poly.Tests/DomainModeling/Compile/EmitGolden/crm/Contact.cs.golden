@@ -43,19 +43,19 @@ public class Contact
     {
         if (string.IsNullOrEmpty(name))
         {
-            return DomainResult<Contact>.Failure("'Name' is required.");
+            return DomainResult<Contact>.Failure(Poly.Runtime.DomainFailure.Required("'Name' is required.", "Contact.Name"));
         }
         if (string.IsNullOrEmpty(email))
         {
-            return DomainResult<Contact>.Failure("'Email' is required.");
+            return DomainResult<Contact>.Failure(Poly.Runtime.DomainFailure.Required("'Email' is required.", "Contact.Email"));
         }
         if (!System.Text.RegularExpressions.Regex.IsMatch(email, "^[^@]+@[^@]+\\z"))
         {
-            return DomainResult<Contact>.Failure("'Email' does not match the required pattern.");
+            return DomainResult<Contact>.Failure(Poly.Runtime.DomainFailure.Pattern("'Email' does not match the required pattern.", "Contact.Email"));
         }
         if (Contact.ExistsWithEmail(db, email))
         {
-            return DomainResult<Contact>.Failure("Unique constraint violated: 'Email' value is already used on another 'Contact'.");
+            return DomainResult<Contact>.Failure(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'Email' value is already used on another 'Contact'.", "Contact.Email"));
         }
         var created = new Contact(name, email, account);
         if (account != null)

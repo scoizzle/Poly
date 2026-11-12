@@ -338,35 +338,35 @@ public class Reservation
     {
         if (partySize < 1L)
         {
-            return DomainResult<Reservation>.Failure("'PartySize' must be >= 1.");
+            return DomainResult<Reservation>.Failure(Poly.Runtime.DomainFailure.Range("'PartySize' must be >= 1.", "Reservation.PartySize"));
         }
         if (partySize > 8L)
         {
-            return DomainResult<Reservation>.Failure("'PartySize' must be <= 8.");
+            return DomainResult<Reservation>.Failure(Poly.Runtime.DomainFailure.Range("'PartySize' must be <= 8.", "Reservation.PartySize"));
         }
         if (nights < 1L)
         {
-            return DomainResult<Reservation>.Failure("'Nights' must be >= 1.");
+            return DomainResult<Reservation>.Failure(Poly.Runtime.DomainFailure.Range("'Nights' must be >= 1.", "Reservation.Nights"));
         }
         if (nights > 60L)
         {
-            return DomainResult<Reservation>.Failure("'Nights' must be <= 60.");
+            return DomainResult<Reservation>.Failure(Poly.Runtime.DomainFailure.Range("'Nights' must be <= 60.", "Reservation.Nights"));
         }
         if (nightlyRate < 0m)
         {
-            return DomainResult<Reservation>.Failure("'NightlyRate' must be >= 0.");
+            return DomainResult<Reservation>.Failure(Poly.Runtime.DomainFailure.Range("'NightlyRate' must be >= 0.", "Reservation.NightlyRate"));
         }
         if (nightlyRate > 10000m)
         {
-            return DomainResult<Reservation>.Failure("'NightlyRate' must be <= 10000.");
+            return DomainResult<Reservation>.Failure(Poly.Runtime.DomainFailure.Range("'NightlyRate' must be <= 10000.", "Reservation.NightlyRate"));
         }
         if (maxOccupancy < 1L)
         {
-            return DomainResult<Reservation>.Failure("'MaxOccupancy' must be >= 1.");
+            return DomainResult<Reservation>.Failure(Poly.Runtime.DomainFailure.Range("'MaxOccupancy' must be >= 1.", "Reservation.MaxOccupancy"));
         }
         if (maxOccupancy > 8L)
         {
-            return DomainResult<Reservation>.Failure("'MaxOccupancy' must be <= 8.");
+            return DomainResult<Reservation>.Failure(Poly.Runtime.DomainFailure.Range("'MaxOccupancy' must be <= 8.", "Reservation.MaxOccupancy"));
         }
         var created = new Reservation(partySize, nights, nightlyRate, maxOccupancy, checkInDate, checkOutDate, folio, guest, room);
         if (guest != null)

@@ -45,19 +45,19 @@ public class Visit
     {
         if (string.IsNullOrEmpty(reason))
         {
-            return DomainResult<Visit>.Failure("'Reason' is required.");
+            return DomainResult<Visit>.Failure(Poly.Runtime.DomainFailure.Required("'Reason' is required.", "Visit.Reason"));
         }
         if (reason.Length < 2L)
         {
-            return DomainResult<Visit>.Failure("'Reason' must be at least 2 characters.");
+            return DomainResult<Visit>.Failure(Poly.Runtime.DomainFailure.Length("'Reason' must be at least 2 characters.", "Visit.Reason"));
         }
         if (reason.Length > 200L)
         {
-            return DomainResult<Visit>.Failure("'Reason' must be at most 200 characters.");
+            return DomainResult<Visit>.Failure(Poly.Runtime.DomainFailure.Length("'Reason' must be at most 200 characters.", "Visit.Reason"));
         }
         if (state != VisitState.Scheduled && state != VisitState.CheckedIn && state != VisitState.InTreatment && state != VisitState.Completed && state != VisitState.NoShow)
         {
-            return DomainResult<Visit>.Failure(string.Concat("'", state, "' is not a valid member of VisitState for property 'State'."));
+            return DomainResult<Visit>.Failure(Poly.Runtime.DomainFailure.Enum(string.Concat("'", state, "' is not a valid member of VisitState for property 'State'."), "Visit.State"));
         }
         var created = new Visit(reason, patient, primaryDoctor, state);
         if (patient != null)

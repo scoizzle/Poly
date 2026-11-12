@@ -81,11 +81,11 @@ public class Loan
     {
         if (amount < 0L)
         {
-            return DomainResult<Loan>.Failure("'Amount' must be >= 0.");
+            return DomainResult<Loan>.Failure(Poly.Runtime.DomainFailure.Range("'Amount' must be >= 0.", "Loan.Amount"));
         }
         if (amount > 500L)
         {
-            return DomainResult<Loan>.Failure("'Amount' must be <= 500.");
+            return DomainResult<Loan>.Failure(Poly.Runtime.DomainFailure.Range("'Amount' must be <= 500.", "Loan.Amount"));
         }
         var created = new Loan(book, amount);
         return DomainResult<Loan>.Success(created);

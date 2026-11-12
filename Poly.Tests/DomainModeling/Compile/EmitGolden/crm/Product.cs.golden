@@ -17,31 +17,31 @@ public class Product
     {
         if (string.IsNullOrEmpty(sku))
         {
-            return DomainResult<Product>.Failure("'Sku' is required.");
+            return DomainResult<Product>.Failure(Poly.Runtime.DomainFailure.Required("'Sku' is required.", "Product.Sku"));
         }
         if (sku.Length < 3L)
         {
-            return DomainResult<Product>.Failure("'Sku' must be at least 3 characters.");
+            return DomainResult<Product>.Failure(Poly.Runtime.DomainFailure.Length("'Sku' must be at least 3 characters.", "Product.Sku"));
         }
         if (sku.Length > 32L)
         {
-            return DomainResult<Product>.Failure("'Sku' must be at most 32 characters.");
+            return DomainResult<Product>.Failure(Poly.Runtime.DomainFailure.Length("'Sku' must be at most 32 characters.", "Product.Sku"));
         }
         if (string.IsNullOrEmpty(name))
         {
-            return DomainResult<Product>.Failure("'Name' is required.");
+            return DomainResult<Product>.Failure(Poly.Runtime.DomainFailure.Required("'Name' is required.", "Product.Name"));
         }
         if (listPrice < 0m)
         {
-            return DomainResult<Product>.Failure("'ListPrice' must be >= 0.");
+            return DomainResult<Product>.Failure(Poly.Runtime.DomainFailure.Range("'ListPrice' must be >= 0.", "Product.ListPrice"));
         }
         if (listPrice > 100000000m)
         {
-            return DomainResult<Product>.Failure("'ListPrice' must be <= 100000000.");
+            return DomainResult<Product>.Failure(Poly.Runtime.DomainFailure.Range("'ListPrice' must be <= 100000000.", "Product.ListPrice"));
         }
         if (Product.ExistsWithSku(db, sku))
         {
-            return DomainResult<Product>.Failure("Unique constraint violated: 'Sku' value is already used on another 'Product'.");
+            return DomainResult<Product>.Failure(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'Sku' value is already used on another 'Product'.", "Product.Sku"));
         }
         var created = new Product(sku, name, listPrice);
         db.Record("Product", "Sku", sku);

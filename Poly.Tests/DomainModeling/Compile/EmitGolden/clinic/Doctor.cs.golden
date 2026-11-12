@@ -30,27 +30,27 @@ public class Doctor
     {
         if (string.IsNullOrEmpty(name))
         {
-            return DomainResult<Doctor>.Failure("'Name' is required.");
+            return DomainResult<Doctor>.Failure(Poly.Runtime.DomainFailure.Required("'Name' is required.", "Doctor.Name"));
         }
         if (name.Length < 3L)
         {
-            return DomainResult<Doctor>.Failure("'Name' must be at least 3 characters.");
+            return DomainResult<Doctor>.Failure(Poly.Runtime.DomainFailure.Length("'Name' must be at least 3 characters.", "Doctor.Name"));
         }
         if (name.Length > 60L)
         {
-            return DomainResult<Doctor>.Failure("'Name' must be at most 60 characters.");
+            return DomainResult<Doctor>.Failure(Poly.Runtime.DomainFailure.Length("'Name' must be at most 60 characters.", "Doctor.Name"));
         }
         if (string.IsNullOrEmpty(licenseNo))
         {
-            return DomainResult<Doctor>.Failure("'LicenseNo' is required.");
+            return DomainResult<Doctor>.Failure(Poly.Runtime.DomainFailure.Required("'LicenseNo' is required.", "Doctor.LicenseNo"));
         }
         if (!System.Text.RegularExpressions.Regex.IsMatch(licenseNo, "^MD-[0-9]{6}\\z"))
         {
-            return DomainResult<Doctor>.Failure("'LicenseNo' does not match the required pattern.");
+            return DomainResult<Doctor>.Failure(Poly.Runtime.DomainFailure.Pattern("'LicenseNo' does not match the required pattern.", "Doctor.LicenseNo"));
         }
         if (Doctor.ExistsWithLicenseNo(db, licenseNo))
         {
-            return DomainResult<Doctor>.Failure("Unique constraint violated: 'LicenseNo' value is already used on another 'Doctor'.");
+            return DomainResult<Doctor>.Failure(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'LicenseNo' value is already used on another 'Doctor'.", "Doctor.LicenseNo"));
         }
         var created = new Doctor(name, licenseNo, schedule);
         db.Record("Doctor", "LicenseNo", licenseNo);

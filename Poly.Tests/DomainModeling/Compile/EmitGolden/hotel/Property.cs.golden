@@ -88,27 +88,27 @@ public class Property
     {
         if (string.IsNullOrEmpty(name))
         {
-            return DomainResult<Property>.Failure("'Name' is required.");
+            return DomainResult<Property>.Failure(Poly.Runtime.DomainFailure.Required("'Name' is required.", "Property.Name"));
         }
         if (name.Length < 1L)
         {
-            return DomainResult<Property>.Failure("'Name' must be at least 1 characters.");
+            return DomainResult<Property>.Failure(Poly.Runtime.DomainFailure.Length("'Name' must be at least 1 characters.", "Property.Name"));
         }
         if (name.Length > 80L)
         {
-            return DomainResult<Property>.Failure("'Name' must be at most 80 characters.");
+            return DomainResult<Property>.Failure(Poly.Runtime.DomainFailure.Length("'Name' must be at most 80 characters.", "Property.Name"));
         }
         if (string.IsNullOrEmpty(city))
         {
-            return DomainResult<Property>.Failure("'City' is required.");
+            return DomainResult<Property>.Failure(Poly.Runtime.DomainFailure.Required("'City' is required.", "Property.City"));
         }
         if (city.Length < 1L)
         {
-            return DomainResult<Property>.Failure("'City' must be at least 1 characters.");
+            return DomainResult<Property>.Failure(Poly.Runtime.DomainFailure.Length("'City' must be at least 1 characters.", "Property.City"));
         }
         if (city.Length > 60L)
         {
-            return DomainResult<Property>.Failure("'City' must be at most 60 characters.");
+            return DomainResult<Property>.Failure(Poly.Runtime.DomainFailure.Length("'City' must be at most 60 characters.", "Property.City"));
         }
         var created = new Property(name, city, halls, rooms);
         return DomainResult<Property>.Success(created);

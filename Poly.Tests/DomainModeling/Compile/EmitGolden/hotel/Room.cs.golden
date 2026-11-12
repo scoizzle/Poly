@@ -110,43 +110,43 @@ public class Room
     {
         if (string.IsNullOrEmpty(number))
         {
-            return DomainResult<Room>.Failure("'Number' is required.");
+            return DomainResult<Room>.Failure(Poly.Runtime.DomainFailure.Required("'Number' is required.", "Room.Number"));
         }
         if (number.Length < 1L)
         {
-            return DomainResult<Room>.Failure("'Number' must be at least 1 characters.");
+            return DomainResult<Room>.Failure(Poly.Runtime.DomainFailure.Length("'Number' must be at least 1 characters.", "Room.Number"));
         }
         if (number.Length > 8L)
         {
-            return DomainResult<Room>.Failure("'Number' must be at most 8 characters.");
+            return DomainResult<Room>.Failure(Poly.Runtime.DomainFailure.Length("'Number' must be at most 8 characters.", "Room.Number"));
         }
         if (floor < 0L)
         {
-            return DomainResult<Room>.Failure("'Floor' must be >= 0.");
+            return DomainResult<Room>.Failure(Poly.Runtime.DomainFailure.Range("'Floor' must be >= 0.", "Room.Floor"));
         }
         if (floor > 50L)
         {
-            return DomainResult<Room>.Failure("'Floor' must be <= 50.");
+            return DomainResult<Room>.Failure(Poly.Runtime.DomainFailure.Range("'Floor' must be <= 50.", "Room.Floor"));
         }
         if (nightlyRate < 0m)
         {
-            return DomainResult<Room>.Failure("'NightlyRate' must be >= 0.");
+            return DomainResult<Room>.Failure(Poly.Runtime.DomainFailure.Range("'NightlyRate' must be >= 0.", "Room.NightlyRate"));
         }
         if (nightlyRate > 10000m)
         {
-            return DomainResult<Room>.Failure("'NightlyRate' must be <= 10000.");
+            return DomainResult<Room>.Failure(Poly.Runtime.DomainFailure.Range("'NightlyRate' must be <= 10000.", "Room.NightlyRate"));
         }
         if (maxOccupancy < 1L)
         {
-            return DomainResult<Room>.Failure("'MaxOccupancy' must be >= 1.");
+            return DomainResult<Room>.Failure(Poly.Runtime.DomainFailure.Range("'MaxOccupancy' must be >= 1.", "Room.MaxOccupancy"));
         }
         if (maxOccupancy > 8L)
         {
-            return DomainResult<Room>.Failure("'MaxOccupancy' must be <= 8.");
+            return DomainResult<Room>.Failure(Poly.Runtime.DomainFailure.Range("'MaxOccupancy' must be <= 8.", "Room.MaxOccupancy"));
         }
         if (Room.ExistsWithNumber(db, number))
         {
-            return DomainResult<Room>.Failure("Unique constraint violated: 'Number' value is already used on another 'Room'.");
+            return DomainResult<Room>.Failure(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'Number' value is already used on another 'Room'.", "Room.Number"));
         }
         var created = new Room(number, floor, nightlyRate, maxOccupancy, property, roomType, stays, occupied, dirty, offline);
         if (property != null)

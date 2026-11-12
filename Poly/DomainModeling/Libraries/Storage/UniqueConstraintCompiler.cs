@@ -59,9 +59,7 @@ public sealed class UniqueConstraintCompiler : IConstraintCompiler {
         Node guard = new IfStatement(
             new Invoke(new Member(new NamedTypeReference(request.Entity.Name), methodName), db, portValue),
             new Block([
-                new Return(new Invoke(
-                    new Member(failureType, "Failure"),
-                    new Constant(Violation(request.Entity.Name, propertyName))))
+                FailureLowering.Return(failureType, UniqueFailure(request.Entity.Name, propertyName))
             ]));
         Node record = new Invoke(
             new Member(db, "Record"),
@@ -185,6 +183,9 @@ public sealed class UniqueConstraintCompiler : IConstraintCompiler {
                 RejectRemaining(child, where);
         }
     }
+
+    private static FailureLowering.Spec UniqueFailure(string entity, string property) =>
+        new(DomainFailureKind.Unique, new Constant(Violation(entity, property)), $"{entity}.{property}");
 
     private static string Violation(string entity, string property) =>
         $"Unique constraint violated: '{property}' value is already used on another '{entity}'.";
@@ -325,7 +326,7 @@ public sealed class UniqueConstraintCompiler : IConstraintCompiler {
             new(new Member(new ClrTypeReference(typeof(object)), "Equals"), left, right);
 
         private Return FailureReturn(Invoke failure, string property) {
-            var call = new Invoke(failure.Delegate, new Constant(Violation(_typeName, property)));
+            var call = new Invoke(failure.Delegate, FailureLowering.Call(UniqueFailure(_typeName, property)));
             if (failure.TypeArguments.Count > 0)
                 call = call with { TypeArguments = failure.TypeArguments };
             return new Return(call);

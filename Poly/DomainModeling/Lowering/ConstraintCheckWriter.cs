@@ -3,6 +3,7 @@ using System.Globalization;
 using Poly.Ast.Nodes;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Ontology;
+using Poly.Runtime;
 
 using PrimType = Poly.Introspection.PrimitiveType;
 using Syntactic = Poly.Ast.Nodes;
@@ -285,6 +286,21 @@ internal static class ConstraintCheckWriter {
         CoverageByConstraint.TryGetValue(constraint.GetType(), out var coverage)
             ? coverage.Kinds
             : [];
+
+    /// <summary>The closed <see cref="DomainFailureKind"/> a failing check reports; equality is a <c>Constraint</c>.</summary>
+    internal static DomainFailureKind FailureKindOf(Kind kind) => kind switch {
+        Kind.Required or Kind.EnumRequiredSlot => DomainFailureKind.Required,
+        Kind.RangeMinimum or Kind.RangeMaximum => DomainFailureKind.Range,
+        Kind.LengthMinimum or Kind.LengthMaximum => DomainFailureKind.Length,
+        Kind.Pattern => DomainFailureKind.Pattern,
+        Kind.Equality => DomainFailureKind.Constraint,
+        Kind.EnumMember => DomainFailureKind.Enum,
+        _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Constraint check kind has no failure kind.")
+    };
+
+    /// <summary>The failure <paramref name="check"/> reports, on <c>Entity.Property</c>; no guard (a constraint check carries none).</summary>
+    internal static FailureLowering.Spec FailureSpec(Check check, string entityName, string propertyName) =>
+        new(FailureKindOf(check.Kind), check.Message, $"{entityName}.{propertyName}");
 
     /// <summary>Assign's historical pass order: required, range, length, pattern, equality, enum.</summary>
     private static int CategoryRank(Kind kind) => kind switch {

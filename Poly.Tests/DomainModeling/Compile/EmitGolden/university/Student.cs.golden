@@ -185,27 +185,27 @@ public class Student
     {
         if (string.IsNullOrEmpty(name))
         {
-            return DomainResult<Student>.Failure("'Name' is required.");
+            return DomainResult<Student>.Failure(Poly.Runtime.DomainFailure.Required("'Name' is required.", "Student.Name"));
         }
         if (string.IsNullOrEmpty(email))
         {
-            return DomainResult<Student>.Failure("'Email' is required.");
+            return DomainResult<Student>.Failure(Poly.Runtime.DomainFailure.Required("'Email' is required.", "Student.Email"));
         }
         if (!System.Text.RegularExpressions.Regex.IsMatch(email, "^[^@]+@[^@]+\\z"))
         {
-            return DomainResult<Student>.Failure("'Email' does not match the required pattern.");
+            return DomainResult<Student>.Failure(Poly.Runtime.DomainFailure.Pattern("'Email' does not match the required pattern.", "Student.Email"));
         }
         if (maxCredits < 1L)
         {
-            return DomainResult<Student>.Failure("'MaxCredits' must be >= 1.");
+            return DomainResult<Student>.Failure(Poly.Runtime.DomainFailure.Range("'MaxCredits' must be >= 1.", "Student.MaxCredits"));
         }
         if (maxCredits > 24L)
         {
-            return DomainResult<Student>.Failure("'MaxCredits' must be <= 24.");
+            return DomainResult<Student>.Failure(Poly.Runtime.DomainFailure.Range("'MaxCredits' must be <= 24.", "Student.MaxCredits"));
         }
         if (Student.ExistsWithEmail(db, email))
         {
-            return DomainResult<Student>.Failure("Unique constraint violated: 'Email' value is already used on another 'Student'.");
+            return DomainResult<Student>.Failure(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'Email' value is already used on another 'Student'.", "Student.Email"));
         }
         var created = new Student(name, email, enrollments, maxCredits, openCredits, holds, completions, lastGrade);
         db.Record("Student", "Email", email);

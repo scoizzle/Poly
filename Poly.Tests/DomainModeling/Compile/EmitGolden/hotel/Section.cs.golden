@@ -69,31 +69,31 @@ public class Section
     {
         if (string.IsNullOrEmpty(name))
         {
-            return DomainResult<Section>.Failure("'Name' is required.");
+            return DomainResult<Section>.Failure(Poly.Runtime.DomainFailure.Required("'Name' is required.", "Section.Name"));
         }
         if (name.Length < 1L)
         {
-            return DomainResult<Section>.Failure("'Name' must be at least 1 characters.");
+            return DomainResult<Section>.Failure(Poly.Runtime.DomainFailure.Length("'Name' must be at least 1 characters.", "Section.Name"));
         }
         if (name.Length > 80L)
         {
-            return DomainResult<Section>.Failure("'Name' must be at most 80 characters.");
+            return DomainResult<Section>.Failure(Poly.Runtime.DomainFailure.Length("'Name' must be at most 80 characters.", "Section.Name"));
         }
         if (capacity < 1L)
         {
-            return DomainResult<Section>.Failure("'Capacity' must be >= 1.");
+            return DomainResult<Section>.Failure(Poly.Runtime.DomainFailure.Range("'Capacity' must be >= 1.", "Section.Capacity"));
         }
         if (capacity > 2000L)
         {
-            return DomainResult<Section>.Failure("'Capacity' must be <= 2000.");
+            return DomainResult<Section>.Failure(Poly.Runtime.DomainFailure.Range("'Capacity' must be <= 2000.", "Section.Capacity"));
         }
         if (dayRate < 0m)
         {
-            return DomainResult<Section>.Failure("'DayRate' must be >= 0.");
+            return DomainResult<Section>.Failure(Poly.Runtime.DomainFailure.Range("'DayRate' must be >= 0.", "Section.DayRate"));
         }
         if (dayRate > 100000m)
         {
-            return DomainResult<Section>.Failure("'DayRate' must be <= 100000.");
+            return DomainResult<Section>.Failure(Poly.Runtime.DomainFailure.Range("'DayRate' must be <= 100000.", "Section.DayRate"));
         }
         var created = new Section(name, capacity, dayRate, hall, occupied);
         if (hall != null)

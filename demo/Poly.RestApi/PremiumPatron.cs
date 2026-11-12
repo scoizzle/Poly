@@ -24,23 +24,23 @@ public class PremiumPatron
     {
         if (string.IsNullOrEmpty(name))
         {
-            return DomainResult<PremiumPatron>.Failure("'Name' is required.");
+            return DomainResult<PremiumPatron>.Failure(Poly.Runtime.DomainFailure.Required("'Name' is required.", "PremiumPatron.Name"));
         }
         if (string.IsNullOrEmpty(email))
         {
-            return DomainResult<PremiumPatron>.Failure("'Email' is required.");
+            return DomainResult<PremiumPatron>.Failure(Poly.Runtime.DomainFailure.Required("'Email' is required.", "PremiumPatron.Email"));
         }
         if (!System.Text.RegularExpressions.Regex.IsMatch(email, "^[^@]+@[^@]+\\z"))
         {
-            return DomainResult<PremiumPatron>.Failure("'Email' does not match the required pattern.");
+            return DomainResult<PremiumPatron>.Failure(Poly.Runtime.DomainFailure.Pattern("'Email' does not match the required pattern.", "PremiumPatron.Email"));
         }
         if (tier != PremiumTier.Silver && tier != PremiumTier.Gold && tier != PremiumTier.Platinum)
         {
-            return DomainResult<PremiumPatron>.Failure(string.Concat("'", tier, "' is not a valid member of PremiumTier for property 'Tier'."));
+            return DomainResult<PremiumPatron>.Failure(Poly.Runtime.DomainFailure.Enum(string.Concat("'", tier, "' is not a valid member of PremiumTier for property 'Tier'."), "PremiumPatron.Tier"));
         }
         if (PremiumPatron.ExistsWithEmail(db, email))
         {
-            return DomainResult<PremiumPatron>.Failure("Unique constraint violated: 'Email' value is already used on another 'PremiumPatron'.");
+            return DomainResult<PremiumPatron>.Failure(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'Email' value is already used on another 'PremiumPatron'.", "PremiumPatron.Email"));
         }
         var created = new PremiumPatron(name, email, rewardPoints, priorityAccess, tier);
         db.Record("PremiumPatron", "Email", email);

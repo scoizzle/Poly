@@ -99,7 +99,7 @@ public class Fine
     {
         if (string.IsNullOrEmpty(reason))
         {
-            return DomainResult<Fine>.Failure("'Reason' is required.");
+            return DomainResult<Fine>.Failure(Poly.Runtime.DomainFailure.Required("'Reason' is required.", "Fine.Reason"));
         }
         var created = new Fine(reason, amount, patron, dateIssued, paid);
         if (patron != null)

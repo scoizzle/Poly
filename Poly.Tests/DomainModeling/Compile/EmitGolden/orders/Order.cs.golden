@@ -45,11 +45,11 @@ public class Order
         var assignValue0 = reason;
         if (System.String.IsNullOrEmpty(assignValue0))
         {
-            return DomainResult.Failure("'CancelReason' is required.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Required("'CancelReason' is required.", "Order.CancelReason"));
         }
         if (assignValue0.Length > 200L)
         {
-            return DomainResult.Failure("'CancelReason' must be at most 200 characters.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Length("'CancelReason' must be at most 200 characters.", "Order.CancelReason"));
         }
         this.CancelReason = assignValue0;
         this.CurrentStage = OrderStage.Cancelled;
@@ -61,11 +61,11 @@ public class Order
         var assignValue0 = amount;
         if (assignValue0 < 0m)
         {
-            return DomainResult.Failure("'Discount' must be >= 0.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Range("'Discount' must be >= 0.", "Order.Discount"));
         }
         if (assignValue0 > 100m)
         {
-            return DomainResult.Failure("'Discount' must be <= 100.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Range("'Discount' must be <= 100.", "Order.Discount"));
         }
         this.Discount = assignValue0;
         return DomainResult.Success();
@@ -95,31 +95,31 @@ public class Order
     {
         if (total < 0m)
         {
-            return DomainResult<Order>.Failure("'Total' must be >= 0.");
+            return DomainResult<Order>.Failure(Poly.Runtime.DomainFailure.Range("'Total' must be >= 0.", "Order.Total"));
         }
         if (total > 100000m)
         {
-            return DomainResult<Order>.Failure("'Total' must be <= 100000.");
+            return DomainResult<Order>.Failure(Poly.Runtime.DomainFailure.Range("'Total' must be <= 100000.", "Order.Total"));
         }
         if (discount < 0m)
         {
-            return DomainResult<Order>.Failure("'Discount' must be >= 0.");
+            return DomainResult<Order>.Failure(Poly.Runtime.DomainFailure.Range("'Discount' must be >= 0.", "Order.Discount"));
         }
         if (discount > 100m)
         {
-            return DomainResult<Order>.Failure("'Discount' must be <= 100.");
+            return DomainResult<Order>.Failure(Poly.Runtime.DomainFailure.Range("'Discount' must be <= 100.", "Order.Discount"));
         }
         if (state != OrderState.Pending && state != OrderState.Paid && state != OrderState.Shipped && state != OrderState.Delivered && state != OrderState.Cancelled)
         {
-            return DomainResult<Order>.Failure(string.Concat("'", state, "' is not a valid member of OrderState for property 'State'."));
+            return DomainResult<Order>.Failure(Poly.Runtime.DomainFailure.Enum(string.Concat("'", state, "' is not a valid member of OrderState for property 'State'."), "Order.State"));
         }
         if (string.IsNullOrEmpty(cancelReason))
         {
-            return DomainResult<Order>.Failure("'CancelReason' is required.");
+            return DomainResult<Order>.Failure(Poly.Runtime.DomainFailure.Required("'CancelReason' is required.", "Order.CancelReason"));
         }
         if (cancelReason.Length > 200L)
         {
-            return DomainResult<Order>.Failure("'CancelReason' must be at most 200 characters.");
+            return DomainResult<Order>.Failure(Poly.Runtime.DomainFailure.Length("'CancelReason' must be at most 200 characters.", "Order.CancelReason"));
         }
         var created = new Order(total, discount, cancelReason, customer, items, state);
         if (customer != null)

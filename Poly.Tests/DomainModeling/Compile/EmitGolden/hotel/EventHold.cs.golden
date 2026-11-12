@@ -209,27 +209,27 @@ public class EventHold
     {
         if (headcount < 1L)
         {
-            return DomainResult<EventHold>.Failure("'Headcount' must be >= 1.");
+            return DomainResult<EventHold>.Failure(Poly.Runtime.DomainFailure.Range("'Headcount' must be >= 1.", "EventHold.Headcount"));
         }
         if (headcount > 5000L)
         {
-            return DomainResult<EventHold>.Failure("'Headcount' must be <= 5000.");
+            return DomainResult<EventHold>.Failure(Poly.Runtime.DomainFailure.Range("'Headcount' must be <= 5000.", "EventHold.Headcount"));
         }
         if (capacity < 1L)
         {
-            return DomainResult<EventHold>.Failure("'Capacity' must be >= 1.");
+            return DomainResult<EventHold>.Failure(Poly.Runtime.DomainFailure.Range("'Capacity' must be >= 1.", "EventHold.Capacity"));
         }
         if (capacity > 5000L)
         {
-            return DomainResult<EventHold>.Failure("'Capacity' must be <= 5000.");
+            return DomainResult<EventHold>.Failure(Poly.Runtime.DomainFailure.Range("'Capacity' must be <= 5000.", "EventHold.Capacity"));
         }
         if (dayRate < 0m)
         {
-            return DomainResult<EventHold>.Failure("'DayRate' must be >= 0.");
+            return DomainResult<EventHold>.Failure(Poly.Runtime.DomainFailure.Range("'DayRate' must be >= 0.", "EventHold.DayRate"));
         }
         if (dayRate > 100000m)
         {
-            return DomainResult<EventHold>.Failure("'DayRate' must be <= 100000.");
+            return DomainResult<EventHold>.Failure(Poly.Runtime.DomainFailure.Range("'DayRate' must be <= 100000.", "EventHold.DayRate"));
         }
         var created = new EventHold(headcount, capacity, dayRate, startDate, endDate, guest, hall, section);
         if (guest != null)

@@ -15,23 +15,23 @@ public class Course
     {
         if (string.IsNullOrEmpty(code))
         {
-            return DomainResult<Course>.Failure("'Code' is required.");
+            return DomainResult<Course>.Failure(Poly.Runtime.DomainFailure.Required("'Code' is required.", "Course.Code"));
         }
         if (code.Length < 3L)
         {
-            return DomainResult<Course>.Failure("'Code' must be at least 3 characters.");
+            return DomainResult<Course>.Failure(Poly.Runtime.DomainFailure.Length("'Code' must be at least 3 characters.", "Course.Code"));
         }
         if (code.Length > 12L)
         {
-            return DomainResult<Course>.Failure("'Code' must be at most 12 characters.");
+            return DomainResult<Course>.Failure(Poly.Runtime.DomainFailure.Length("'Code' must be at most 12 characters.", "Course.Code"));
         }
         if (string.IsNullOrEmpty(title))
         {
-            return DomainResult<Course>.Failure("'Title' is required.");
+            return DomainResult<Course>.Failure(Poly.Runtime.DomainFailure.Required("'Title' is required.", "Course.Title"));
         }
         if (Course.ExistsWithCode(db, code))
         {
-            return DomainResult<Course>.Failure("Unique constraint violated: 'Code' value is already used on another 'Course'.");
+            return DomainResult<Course>.Failure(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'Code' value is already used on another 'Course'.", "Course.Code"));
         }
         var created = new Course(code, title);
         db.Record("Course", "Code", code);

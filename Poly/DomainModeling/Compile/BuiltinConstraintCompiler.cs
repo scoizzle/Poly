@@ -60,13 +60,13 @@ public sealed class BuiltinConstraintCompiler : IConstraintCompiler {
     /// <summary>
     /// Create's flat guard: <c>if (violation) return DomainResult&lt;T&gt;.Failure(...)</c>.
     /// </summary>
-    internal static IfStatement CreateGuard(string entityName, ConstraintCheckWriter.Check check) {
+    internal static IfStatement CreateGuard(string entityName, string propertyName, ConstraintCheckWriter.Check check) {
         var resultType = new NamedTypeReference(
             "DomainResult", TypeArguments: [new NamedTypeReference(entityName)]);
         return new IfStatement(
             check.GuardedCondition,
             new Block([
-                new Return(new Invoke(new Member(resultType, "Failure"), check.Message))
+                FailureLowering.Return(resultType, ConstraintCheckWriter.FailureSpec(check, entityName, propertyName))
             ]));
     }
 }

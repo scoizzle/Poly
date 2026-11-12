@@ -17,31 +17,31 @@ public class RoomType
     {
         if (string.IsNullOrEmpty(name))
         {
-            return DomainResult<RoomType>.Failure("'Name' is required.");
+            return DomainResult<RoomType>.Failure(Poly.Runtime.DomainFailure.Required("'Name' is required.", "RoomType.Name"));
         }
         if (name.Length < 1L)
         {
-            return DomainResult<RoomType>.Failure("'Name' must be at least 1 characters.");
+            return DomainResult<RoomType>.Failure(Poly.Runtime.DomainFailure.Length("'Name' must be at least 1 characters.", "RoomType.Name"));
         }
         if (name.Length > 40L)
         {
-            return DomainResult<RoomType>.Failure("'Name' must be at most 40 characters.");
+            return DomainResult<RoomType>.Failure(Poly.Runtime.DomainFailure.Length("'Name' must be at most 40 characters.", "RoomType.Name"));
         }
         if (nightlyRate < 0m)
         {
-            return DomainResult<RoomType>.Failure("'NightlyRate' must be >= 0.");
+            return DomainResult<RoomType>.Failure(Poly.Runtime.DomainFailure.Range("'NightlyRate' must be >= 0.", "RoomType.NightlyRate"));
         }
         if (nightlyRate > 10000m)
         {
-            return DomainResult<RoomType>.Failure("'NightlyRate' must be <= 10000.");
+            return DomainResult<RoomType>.Failure(Poly.Runtime.DomainFailure.Range("'NightlyRate' must be <= 10000.", "RoomType.NightlyRate"));
         }
         if (maxOccupancy < 1L)
         {
-            return DomainResult<RoomType>.Failure("'MaxOccupancy' must be >= 1.");
+            return DomainResult<RoomType>.Failure(Poly.Runtime.DomainFailure.Range("'MaxOccupancy' must be >= 1.", "RoomType.MaxOccupancy"));
         }
         if (maxOccupancy > 8L)
         {
-            return DomainResult<RoomType>.Failure("'MaxOccupancy' must be <= 8.");
+            return DomainResult<RoomType>.Failure(Poly.Runtime.DomainFailure.Range("'MaxOccupancy' must be <= 8.", "RoomType.MaxOccupancy"));
         }
         var created = new RoomType(name, nightlyRate, maxOccupancy);
         return DomainResult<RoomType>.Success(created);

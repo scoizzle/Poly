@@ -27,6 +27,29 @@ internal class Customer : Poly.Runtime.IActionScoped
     }
     internal DomainResult ShipAll()
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfShipAll();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfShipAll()
+    {
         foreach (var target0 in this.Orders)
         {
             if (!target0.IsPaid())
@@ -42,6 +65,29 @@ internal class Customer : Poly.Runtime.IActionScoped
         return DomainResult.Success();
     }
     internal DomainResult CancelPending()
+    {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfCancelPending();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfCancelPending()
     {
         foreach (var target0 in this.Orders)
         {

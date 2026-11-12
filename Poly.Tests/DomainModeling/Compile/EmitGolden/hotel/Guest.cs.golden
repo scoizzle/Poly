@@ -75,6 +75,29 @@ internal class Guest : Poly.Runtime.IActionScoped
     }
     internal DomainResult<Reservation> BookStay(Room room, long party, long nights, DateOnly arrive, DateOnly depart)
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfBookStay(room, party, nights, arrive, depart);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult<Reservation> __BodyOfBookStay(Room room, long party, long nights, DateOnly arrive, DateOnly depart)
+    {
         if (this.CurrentStage != GuestStage.Active)
         {
             return DomainResult<Reservation>.Failure(Poly.Runtime.DomainFailure.Stage("'BookStay' requires stage 'Active' on entity 'Guest'.", "Guest.BookStay", "Active"));
@@ -88,6 +111,29 @@ internal class Guest : Poly.Runtime.IActionScoped
         return DomainResult<Reservation>.Success(created1);
     }
     internal DomainResult<EventHold> BookHall(Hall hall, long party, DateOnly arrive, DateOnly depart)
+    {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfBookHall(hall, party, arrive, depart);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult<EventHold> __BodyOfBookHall(Hall hall, long party, DateOnly arrive, DateOnly depart)
     {
         if (this.CurrentStage != GuestStage.Active)
         {
@@ -103,6 +149,29 @@ internal class Guest : Poly.Runtime.IActionScoped
     }
     internal DomainResult<EventHold> BookSection(Section section, Hall hall, long party, DateOnly arrive, DateOnly depart)
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfBookSection(section, hall, party, arrive, depart);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult<EventHold> __BodyOfBookSection(Section section, Hall hall, long party, DateOnly arrive, DateOnly depart)
+    {
         if (this.CurrentStage != GuestStage.Active)
         {
             return DomainResult<EventHold>.Failure(Poly.Runtime.DomainFailure.Stage("'BookSection' requires stage 'Active' on entity 'Guest'.", "Guest.BookSection", "Active"));
@@ -117,6 +186,29 @@ internal class Guest : Poly.Runtime.IActionScoped
     }
     internal DomainResult Block()
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfBlock();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfBlock()
+    {
         if (this.CurrentStage != GuestStage.Active)
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Block' requires stage 'Active' on entity 'Guest'.", "Guest.Block", "Active"));
@@ -125,6 +217,29 @@ internal class Guest : Poly.Runtime.IActionScoped
         return DomainResult.Success();
     }
     internal DomainResult Reinstate()
+    {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfReinstate();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfReinstate()
     {
         if (this.CurrentStage != GuestStage.Blocked)
         {

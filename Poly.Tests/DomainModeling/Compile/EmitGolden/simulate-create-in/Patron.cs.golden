@@ -32,6 +32,29 @@ internal class Patron : Poly.Runtime.IActionScoped
     }
     internal DomainResult<Fine> AssessByRel()
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfAssessByRel();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult<Fine> __BodyOfAssessByRel()
+    {
         var create0 = this.CreateFines(5L, "CreateIn");
         if (!create0.IsSuccess)
         {

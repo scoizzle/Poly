@@ -52,6 +52,29 @@ internal class Room : Poly.Runtime.IActionScoped
     }
     internal DomainResult TakeOutOfService()
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfTakeOutOfService();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfTakeOutOfService()
+    {
         if (this.CurrentStage != RoomStage.InService)
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'TakeOutOfService' requires stage 'InService' on entity 'Room'.", "Room.TakeOutOfService", "InService"));
@@ -66,6 +89,29 @@ internal class Room : Poly.Runtime.IActionScoped
     }
     internal DomainResult Inspect()
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfInspect();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfInspect()
+    {
         if (this.CurrentStage != RoomStage.InService)
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Inspect' requires stage 'InService' on entity 'Room'.", "Room.Inspect", "InService"));
@@ -74,6 +120,29 @@ internal class Room : Poly.Runtime.IActionScoped
         return DomainResult.Success();
     }
     internal DomainResult ReturnToService()
+    {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfReturnToService();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfReturnToService()
     {
         if (this.CurrentStage != RoomStage.OutOfService)
         {

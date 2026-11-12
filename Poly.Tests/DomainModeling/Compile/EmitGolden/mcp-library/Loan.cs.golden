@@ -26,6 +26,29 @@ internal class Loan : Poly.Runtime.IActionScoped
     public LoanStage CurrentStage { get; private set; }
     internal DomainResult MarkOverdue()
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfMarkOverdue();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfMarkOverdue()
+    {
         if (this.CurrentStage != LoanStage.Active)
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'MarkOverdue' requires stage 'Active' on entity 'Loan'.", "Loan.MarkOverdue", "Active"));
@@ -35,6 +58,29 @@ internal class Loan : Poly.Runtime.IActionScoped
         return DomainResult.Success();
     }
     internal DomainResult Return()
+    {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfReturn();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfReturn()
     {
         if (this.CurrentStage != LoanStage.Overdue)
         {

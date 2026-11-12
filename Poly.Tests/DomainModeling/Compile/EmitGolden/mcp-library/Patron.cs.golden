@@ -61,6 +61,29 @@ internal class Patron : Poly.Runtime.IActionScoped
     }
     internal DomainResult<Loan> CheckOut(Book book)
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfCheckOut(book);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult<Loan> __BodyOfCheckOut(Book book)
+    {
         if (!this.GoodStanding())
         {
             return DomainResult<Loan>.Failure(Poly.Runtime.DomainFailure.Policy("'CheckOut' blocked by policy 'GoodStanding'.", "Patron.CheckOut", "GoodStanding"));

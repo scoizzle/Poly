@@ -32,6 +32,29 @@ internal class Fine : Poly.Runtime.IActionScoped
     public FineStage CurrentStage { get; private set; }
     internal DomainResult Pay()
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfPay();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfPay()
+    {
         if (this.CurrentStage != FineStage.Unpaid)
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Pay' requires stage 'Unpaid' on entity 'Fine'.", "Fine.Pay", "Unpaid"));
@@ -50,6 +73,29 @@ internal class Fine : Poly.Runtime.IActionScoped
         return DomainResult.Success();
     }
     internal DomainResult Waive()
+    {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfWaive();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfWaive()
     {
         if (this.CurrentStage != FineStage.Unpaid)
         {

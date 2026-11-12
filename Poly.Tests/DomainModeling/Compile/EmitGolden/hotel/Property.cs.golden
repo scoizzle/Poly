@@ -53,6 +53,29 @@ internal class Property : Poly.Runtime.IActionScoped
     }
     internal DomainResult<Hall> AddHall(string name, long seats, long rate)
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfAddHall(name, seats, rate);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult<Hall> __BodyOfAddHall(string name, long seats, long rate)
+    {
         if (this.CurrentStage != PropertyStage.Open)
         {
             return DomainResult<Hall>.Failure(Poly.Runtime.DomainFailure.Stage("'AddHall' requires stage 'Open' on entity 'Property'.", "Property.AddHall", "Open"));
@@ -67,6 +90,29 @@ internal class Property : Poly.Runtime.IActionScoped
     }
     internal DomainResult Close()
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfClose();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfClose()
+    {
         if (this.CurrentStage != PropertyStage.Open)
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Close' requires stage 'Open' on entity 'Property'.", "Property.Close", "Open"));
@@ -75,6 +121,29 @@ internal class Property : Poly.Runtime.IActionScoped
         return DomainResult.Success();
     }
     internal DomainResult Reopen()
+    {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfReopen();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfReopen()
     {
         if (this.CurrentStage != PropertyStage.Closed)
         {

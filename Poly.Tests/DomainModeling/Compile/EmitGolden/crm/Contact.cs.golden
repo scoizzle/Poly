@@ -23,6 +23,29 @@ internal class Contact : Poly.Runtime.IActionScoped
     public ContactStage CurrentStage { get; private set; }
     internal DomainResult Retire()
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfRetire();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfRetire()
+    {
         if (this.CurrentStage != ContactStage.Active)
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Retire' requires stage 'Active' on entity 'Contact'.", "Contact.Retire", "Active"));
@@ -31,6 +54,29 @@ internal class Contact : Poly.Runtime.IActionScoped
         return DomainResult.Success();
     }
     internal DomainResult Reactivate()
+    {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfReactivate();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfReactivate()
     {
         if (this.CurrentStage != ContactStage.Inactive)
         {

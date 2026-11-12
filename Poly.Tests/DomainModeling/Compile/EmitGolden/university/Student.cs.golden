@@ -57,6 +57,29 @@ internal class Student : Poly.Runtime.IActionScoped
     }
     internal DomainResult<Enrollment> Enroll(Section offering)
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfEnroll(offering);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult<Enrollment> __BodyOfEnroll(Section offering)
+    {
         if (this.CurrentStage != StudentStage.Active)
         {
             return DomainResult<Enrollment>.Failure(Poly.Runtime.DomainFailure.Stage("'Enroll' requires stage 'Active' on entity 'Student'.", "Student.Enroll", "Active"));
@@ -75,6 +98,29 @@ internal class Student : Poly.Runtime.IActionScoped
         return DomainResult<Enrollment>.Success(created1);
     }
     internal DomainResult DropRegistered()
+    {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfDropRegistered();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfDropRegistered()
     {
         if (this.CurrentStage != StudentStage.Active)
         {
@@ -96,6 +142,29 @@ internal class Student : Poly.Runtime.IActionScoped
     }
     internal DomainResult DropAllRegistered()
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfDropAllRegistered();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfDropAllRegistered()
+    {
         if (this.CurrentStage != StudentStage.Active)
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'DropAllRegistered' requires stage 'Active' on entity 'Student'.", "Student.DropAllRegistered", "Active"));
@@ -108,6 +177,29 @@ internal class Student : Poly.Runtime.IActionScoped
         return DomainResult.Success();
     }
     internal DomainResult CompleteRegistered()
+    {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfCompleteRegistered();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfCompleteRegistered()
     {
         if (this.CurrentStage != StudentStage.Active)
         {
@@ -129,6 +221,29 @@ internal class Student : Poly.Runtime.IActionScoped
     }
     internal DomainResult CompletePassing()
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfCompletePassing();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfCompletePassing()
+    {
         if (this.CurrentStage != StudentStage.Active)
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'CompletePassing' requires stage 'Active' on entity 'Student'.", "Student.CompletePassing", "Active"));
@@ -149,6 +264,29 @@ internal class Student : Poly.Runtime.IActionScoped
     }
     internal DomainResult Suspend()
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfSuspend();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfSuspend()
+    {
         if (this.CurrentStage != StudentStage.Active)
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Suspend' requires stage 'Active' on entity 'Student'.", "Student.Suspend", "Active"));
@@ -158,6 +296,29 @@ internal class Student : Poly.Runtime.IActionScoped
         return DomainResult.Success();
     }
     internal DomainResult Reinstate()
+    {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfReinstate();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfReinstate()
     {
         if (this.CurrentStage != StudentStage.Suspended)
         {

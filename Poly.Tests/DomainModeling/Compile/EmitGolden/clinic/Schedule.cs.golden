@@ -13,6 +13,29 @@ internal class Schedule : Poly.Runtime.IActionScoped
     public string State { get; private set; } = default!;
     internal DomainResult Open()
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfOpen();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfOpen()
+    {
         this.State = "open";
         return DomainResult.Success();
     }

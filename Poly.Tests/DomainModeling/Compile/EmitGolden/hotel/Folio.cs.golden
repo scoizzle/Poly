@@ -21,6 +21,29 @@ internal class Folio : Poly.Runtime.IActionScoped
     public FolioStage CurrentStage { get; private set; }
     internal DomainResult PostRoomNight(decimal amount)
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfPostRoomNight(amount);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfPostRoomNight(decimal amount)
+    {
         if (this.CurrentStage != FolioStage.Open)
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'PostRoomNight' requires stage 'Open' on entity 'Folio'.", "Folio.PostRoomNight", "Open"));
@@ -38,6 +61,29 @@ internal class Folio : Poly.Runtime.IActionScoped
         return DomainResult.Success();
     }
     internal DomainResult PostCharge(long amount)
+    {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfPostCharge(amount);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfPostCharge(long amount)
     {
         if (this.CurrentStage != FolioStage.Open)
         {
@@ -57,6 +103,29 @@ internal class Folio : Poly.Runtime.IActionScoped
     }
     internal DomainResult Settle()
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfSettle();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfSettle()
+    {
         if (this.CurrentStage != FolioStage.Open)
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Settle' requires stage 'Open' on entity 'Folio'.", "Folio.Settle", "Open"));
@@ -70,6 +139,29 @@ internal class Folio : Poly.Runtime.IActionScoped
         return DomainResult.Success();
     }
     internal DomainResult CloseEmpty()
+    {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfCloseEmpty();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfCloseEmpty()
     {
         if (this.CurrentStage != FolioStage.Open)
         {

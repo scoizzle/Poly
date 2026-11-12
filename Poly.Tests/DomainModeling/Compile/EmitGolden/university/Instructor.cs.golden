@@ -21,6 +21,29 @@ internal class Instructor : Poly.Runtime.IActionScoped
     public InstructorStage CurrentStage { get; private set; }
     internal DomainResult GoOnLeave()
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfGoOnLeave();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfGoOnLeave()
+    {
         if (this.CurrentStage != InstructorStage.Ready)
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'GoOnLeave' requires stage 'Ready' on entity 'Instructor'.", "Instructor.GoOnLeave", "Ready"));
@@ -29,6 +52,29 @@ internal class Instructor : Poly.Runtime.IActionScoped
         return DomainResult.Success();
     }
     internal DomainResult Return()
+    {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfReturn();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfReturn()
     {
         if (this.CurrentStage != InstructorStage.Leave)
         {

@@ -21,6 +21,29 @@ internal class Fine : Poly.Runtime.IActionScoped
     public FineStage CurrentStage { get; private set; }
     internal DomainResult Resolve()
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfResolve();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfResolve()
+    {
         if (this.CurrentStage != FineStage.Resolved)
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Resolve' requires stage 'Resolved' on entity 'Fine'.", "Fine.Resolve", "Resolved"));

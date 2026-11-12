@@ -1,5 +1,3 @@
-using System.Runtime.CompilerServices;
-
 using Poly.DomainModeling.Meaning;
 using Poly.DomainModeling.Ontology;
 
@@ -50,13 +48,19 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
 
     /// <summary>
     /// Calls already checked in this analysis run (#483): a <c>require</c> copy shares its policy's
-    /// expression object, so the tree walk reaches one call node twice. Keyed on the run's context,
-    /// which is what the session creates per analysis — never on this pass instance, which it reuses.
+    /// expression object, so the tree walk reaches one call node twice. The bag hangs on the run's
+    /// domain in the run's metadata store — per analysis, never on this pass instance, which the
+    /// session reuses, and not a static side table.
     /// </summary>
-    private static readonly ConditionalWeakTable<AnalysisContext, HashSet<Node>> CheckedCalls = new();
+    private sealed class CheckedCallsMetadata : IAnalysisMetadata {
+        private readonly HashSet<Node> _calls = new(ReferenceEqualityComparer.Instance);
+
+        public bool Enter(FunctionCall call) => _calls.Add(call);
+    }
 
     private static bool FirstVisitOfCall(AnalysisContext context, FunctionCall call) =>
-        CheckedCalls.GetValue(context, _ => new HashSet<Node>(ReferenceEqualityComparer.Instance)).Add(call);
+        context.GetTypeLookup()?.Domain is not { } domain
+        || context.GetOrAddMetadata(domain, static () => new CheckedCallsMetadata()).Enter(call);
 
     public void Analyze(AnalysisContext context, Node node) {
 

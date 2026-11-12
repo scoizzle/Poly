@@ -136,6 +136,7 @@ public sealed class PolyCompiler {
             // The resolver sees the ids the session loads, so the domain's extension facts, the
             // primitives they seed and their contract surfaces agree with the session whether
             // the document or the host named them.
+            RejectDroppedPins(tree, requested);
             var selected = tree with { Uses = requested, UsesVersions = PinsFor(tree, requested) };
             session = SessionFor(selected, target);
             cancel.ThrowIfCancellationRequested();
@@ -263,16 +264,27 @@ public sealed class PolyCompiler {
     }
 
     /// <summary>
-    /// Selection may replace or add ids. Keep an authored pin only where the id at that position
-    /// is unchanged; a selected id has no authored surface pin.
+    /// Authored pins follow their id, not their position: selection may drop, replace or add ids,
+    /// which shifts the ones after. A selected id the document did not write has no pin.
     /// </summary>
     private static List<string?> PinsFor(DslSyntaxTree tree, IReadOnlyList<string> ids) =>
-        ids.Select((id, index) =>
-            index < tree.Uses.Count
-            && index < tree.UsesVersions.Count
-            && string.Equals(tree.Uses[index], id, StringComparison.Ordinal)
-                ? tree.UsesVersions[index]
-                : null).ToList();
+        ids.Select(id => {
+            var authored = tree.Uses.ToList().IndexOf(id);
+            return authored >= 0 && authored < tree.UsesVersions.Count ? tree.UsesVersions[authored] : null;
+        }).ToList();
+
+    /// <summary>
+    /// A pin on an authored id that selection dropped or replaced (generic <c>persistence</c>
+    /// under a vendor) has no surface to pin: the resolver's own refusal, kept for the id it
+    /// never sees.
+    /// </summary>
+    private static void RejectDroppedPins(DslSyntaxTree tree, IReadOnlyList<string> selected) {
+        for (var i = 0; i < tree.Uses.Count && i < tree.UsesVersions.Count; i++) {
+            if (tree.UsesVersions[i] is { } pin && !selected.Contains(tree.Uses[i], StringComparer.Ordinal))
+                throw new FormatException(
+                    $"Extension '{tree.Uses[i]}' pins surface version '{pin}' but contributed no contract.");
+        }
+    }
 
     private bool CheckExtensions(
         DiagnosticBuilder build, DslSyntaxTree tree, IReadOnlyList<string> ids, List<CompileDiagnostic> diags) {

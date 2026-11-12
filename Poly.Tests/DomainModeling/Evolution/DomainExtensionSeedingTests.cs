@@ -3,6 +3,8 @@ using Poly.DomainModeling;
 using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Ontology;
+using Poly.Packs.Sqlite;
+using Poly.Packs.SqlServer;
 
 namespace Poly.Tests.DomainModeling.Evolution;
 
@@ -100,5 +102,41 @@ public class DomainExtensionSeedingTests {
             .Because(string.Join("; ", result.Diagnostics.Select(d => d.Code + " " + d.Message)));
         await Assert.That(result.Domain!.ImportedContracts.Any(c => c.Name == "Stripe")).IsTrue();
         await Assert.That(result.Domain.Extensions.SequenceEqual(result.Session!.Extensions)).IsTrue();
+    }
+
+    private static PolyCompiler SqliteVendorCompiler() {
+        var catalog = ExtensionCatalog.Core
+            .With(TestHelpers.ContractContributions.StripeLibrary())
+            .With(new SqliteLibrary())
+            .With(new SqlServerLibrary());
+        return new PolyCompiler(catalog, new SessionOptions(catalog, []) { StorageVendor = "sqlite" });
+    }
+
+    /// <summary>
+    /// C-04 close-on-evidence: authored pins follow their id, not their position. The vendor drops
+    /// <c>persistence</c> here, which shifts <c>stripe</c> up; its pin must still reach the
+    /// resolver (master: the pin check fires on <c>uses stripe</c>).
+    /// </summary>
+    [Test]
+    public async Task Compile_VendorDropsPersistence_LaterAuthoredPinsFollowTheirId() {
+        var result = SqliteVendorCompiler().Analyze(
+            "domain D\nuses persistence\nuses stripe 2024-11-20\nuses sqlserver\n", "p.poly");
+
+        await Assert.That(result.Diagnostics.Any(d => d.Message.Contains("pinned to '2024-11-20' on `uses stripe`")))
+            .IsTrue().Because(string.Join("; ", result.Diagnostics.Select(d => d.Message)));
+    }
+
+    /// <summary>
+    /// C-04 close-on-evidence: a pin on <c>persistence</c> that the vendor replaces still fails
+    /// closed, as master's resolver did ("pins surface version ... contributed no contract").
+    /// </summary>
+    [Test]
+    public async Task Compile_PinOnPersistenceTheVendorReplaces_StillFailsClosed() {
+        var result = SqliteVendorCompiler().Analyze("domain D\nuses persistence 2024\n", "p.poly");
+
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.Diagnostics.Any(d =>
+                d.Message.Contains("pins surface version '2024' but contributed no contract")))
+            .IsTrue().Because(string.Join("; ", result.Diagnostics.Select(d => d.Message)));
     }
 }

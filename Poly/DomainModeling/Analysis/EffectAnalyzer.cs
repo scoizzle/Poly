@@ -1256,10 +1256,16 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
         // One fact per callee effect, deduped by effect node: the same callee write is reachable from
         // several stage contexts of the caller, and V-04 counts writes, not contexts (V-05b B1).
         var recorded = new HashSet<Node>(ReferenceEqualityComparer.Instance);
+        // One diagnostic per (callee effect, call): two invokes of one callee each report, but the same call
+        // seen from several stage contexts reports once (V-03 A2).
+        var reported = new HashSet<(Node Effect, int Call)>();
 
         foreach (var stageCtx in meta.StageContexts()) {
+            var calls = new Dictionary<Node, int>(ReferenceEqualityComparer.Instance);
             foreach (var post in stageCtx.Postconditions) {
                 if (post.DeclaringAction == action) continue; // direct effects — validated per-effect
+                calls[post.Effect] = calls.GetValueOrDefault(post.Effect) + 1;
+                var call = calls[post.Effect];
                 // The postcondition's Constraints are the target's net constraint (declared +
                 // param/binder merges), valid for cross-entity callees whose target property
                 // lives on a different entity than the caller.
@@ -1279,17 +1285,17 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
                 var verdict = WriteVerification.DecideRange(range, value);
                 if (verdict == ConstraintVerdict.Satisfied) continue;
 
-                // One finding per callee effect: the fact and the diagnostic share the dedupe (V-03 A2).
-                if (!recorded.Add(post.Effect)) continue;
+                if (!reported.Add((post.Effect, call))) continue;
 
-                WriteRecorder.Record(
-                    context, domain, post.Effect, post.TargetProperty,
-                    ConstraintValidation.Describe(range),
-                    verdict == ConstraintVerdict.Violated
-                        ? WriteVerdict.Violated
-                        : WriteVerdict.Unverified(
-                            UnverifiedReason.PossibleViolation,
-                            DomainModelDiagnosticCodes.EffectConstraintViolation));
+                if (recorded.Add(post.Effect))
+                    WriteRecorder.Record(
+                        context, domain, post.Effect, post.TargetProperty,
+                        ConstraintValidation.Describe(range),
+                        verdict == ConstraintVerdict.Violated
+                            ? WriteVerdict.Violated
+                            : WriteVerdict.Unverified(
+                                UnverifiedReason.PossibleViolation,
+                                DomainModelDiagnosticCodes.EffectConstraintViolation));
 
                 if (verdict == ConstraintVerdict.Violated) {
                     context.ReportError(

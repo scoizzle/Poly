@@ -30,7 +30,10 @@ public class StageEntryFactsTests {
         domain.Types.OfType<Entity>().Single(e => string.Equals(e.Name, name, StringComparison.Ordinal));
 
     private static IReadOnlySet<string> EntryAssigned(string dsl, string entityName) =>
-        StageEntryFacts.EntryAssignedProperties(EntityNamed(Apply(dsl), entityName));
+        EntryAssigned(Apply(dsl), entityName);
+
+    private static IReadOnlySet<string> EntryAssigned(Domain domain, string entityName) =>
+        StageEntryFacts.EntryAssignedProperties(EntityNamed(domain, entityName), domain);
 
     // Replaces a stage's entry effects with API-built effects the parser cannot produce.
     private static Domain WithEntryEffects(Domain domain, string entityName, string stageName, params Effect[] effects) =>
@@ -203,7 +206,7 @@ public class StageEntryFactsTests {
                 new RelationshipNavigation("owner", DomainExpression.Property("Balance")),
                 DomainExpression.Literal(0L)));
 
-        var assigned = StageEntryFacts.EntryAssignedProperties(EntityNamed(domain, "Ticket"));
+        var assigned = EntryAssigned(domain, "Ticket");
 
         await Assert.That(assigned).IsEquivalentTo(new[] { "N" }, StringComparer.Ordinal);
     }
@@ -213,26 +216,28 @@ public class StageEntryFactsTests {
     // a strict subset. Both halves fail against an empty stub.
     [Test]
     public async Task EntryAssignedProperties_IsSupersetOfFlatHelper() {
-        var topLevelOnly = EntityNamed(Apply("""
+        var domainOnly = Apply("""
             domain ParityFlat
             Ticket: entity {
               N: Number
               Draft: stage { entry { assign N to 1 } }
             }
-            """), "Ticket");
-        var nested = EntityNamed(Apply("""
+            """);
+        var topLevelOnly = EntityNamed(domainOnly, "Ticket");
+        var domainNested = Apply("""
             domain ParityNested
             Ticket: entity {
               N: Number
               M: Number
               Draft: stage { entry { assign N to 1  if (N > 0) { assign M to 2 } } }
             }
-            """), "Ticket");
+            """);
+        var nested = EntityNamed(domainNested, "Ticket");
 
         var flatOnly = EntityStructureAnalyzer.ComputeEntryAssignedPropertyNames(topLevelOnly);
-        var deepOnly = StageEntryFacts.EntryAssignedProperties(topLevelOnly);
+        var deepOnly = StageEntryFacts.EntryAssignedProperties(topLevelOnly, domainOnly);
         var flatNested = EntityStructureAnalyzer.ComputeEntryAssignedPropertyNames(nested);
-        var deepNested = StageEntryFacts.EntryAssignedProperties(nested);
+        var deepNested = StageEntryFacts.EntryAssignedProperties(nested, domainNested);
 
         await Assert.That(deepOnly).IsEquivalentTo(flatOnly, StringComparer.Ordinal);
         await Assert.That(flatNested).IsEquivalentTo(new[] { "N" }, StringComparer.Ordinal);
@@ -270,7 +275,7 @@ public class StageEntryFactsTests {
             foreach (var entity in applied.Root.Types.OfType<Entity>()) {
                 entities++;
                 var flat = EntityStructureAnalyzer.ComputeEntryAssignedPropertyNames(entity);
-                var deep = StageEntryFacts.EntryAssignedProperties(entity);
+                var deep = StageEntryFacts.EntryAssignedProperties(entity, applied.Root);
                 var flatOnly = flat.Where(name => !deep.Contains(name)).Order(StringComparer.Ordinal).ToList();
                 if (flatOnly.Count > 0)
                     mismatches.Add($"{relative}: {entity.Name}: flat-only {{{string.Join(", ", flatOnly)}}}");

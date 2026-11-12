@@ -1,3 +1,5 @@
+using System.Collections.Frozen;
+
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Ontology.Effects;
 
@@ -34,10 +36,10 @@ internal static class StageEntryFacts {
     /// Names of the entity's properties assigned by the entry chain starting at
     /// <see cref="EntityStages.InitialStage"/>. Empty, never null, for an entity with no stages.
     /// </summary>
-    public static IReadOnlySet<string> EntryAssignedProperties(Entity entity) {
+    public static IReadOnlySet<string> EntryAssignedProperties(Entity entity, Domain domain) {
         var names = new HashSet<string>(StringComparer.Ordinal);
         if (entity.InitialStage() is not { } initial)
-            return names;
+            return FrozenSet<string>.Empty;
 
         var visited = new HashSet<string>(StringComparer.Ordinal);
         var pending = new Queue<Stage>();
@@ -57,7 +59,7 @@ internal static class StageEntryFacts {
                 }
             }
         }
-        return names;
+        return names.ToFrozenSet(StringComparer.Ordinal);
     }
 
     private static Stage? FindStage(Entity entity, string name) =>

@@ -22,7 +22,7 @@ public sealed record DomainFailure {
     /// <summary>The dotted, outermost-first path of the failed element; null when the failure has no path.</summary>
     public string? ElementPath { get; }
 
-    /// <summary>The policy or constraint name carried by the Policy, Stage and Constraint kinds.</summary>
+    /// <summary>The policy name (Policy) or stage name (Stage); every other kind carries none.</summary>
     public string? Guard { get; }
 
     private DomainFailure(DomainFailureKind kind, string message, string? elementPath, string? guard) {

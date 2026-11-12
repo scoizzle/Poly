@@ -150,8 +150,9 @@ public sealed class PublicNavigationClosureTests {
         await Assert.That(errors[0].Message).Contains("property 'Owner'");
     }
 
-    // F3 (fix round 1): a public stage group cannot carry an internal-entity result in any variant. A typed
-    // result is produced by create-in, which needs a navigation, so DMCON019 rejects the public owner.
+    // F3 (fix round 1): this shape reaches DMCON019 only because the stage copy produces its result with
+    // create-in, which needs a navigation. A copy that creates the entity directly has no navigation; that
+    // shape is DMCON002 (PublicSurfaceClosureTests.PublicStageGroup_WhenAnotherVariantReturnsInternalEntity...).
     [Test]
     public async Task Analyze_WhenPublicStageGroupVariantReturnsInternalEntity_ReportsDMCON019() {
         var errors = Errors("""
@@ -203,5 +204,20 @@ public sealed class PublicNavigationClosureTests {
         await Assert.That(errors[0].File).IsEqualTo("n.poly");
         await Assert.That(errors[0].Line).IsEqualTo(9);
         await Assert.That(result.Succeeded).IsFalse();
+    }
+
+    // P3: an enum has no visibility mark and is always public, so an enum-typed property on a public entity
+    // is not a finding.
+    [Test]
+    public async Task Analyze_WhenPublicEntityPropertyIsEnum_IsClean() {
+        await Assert.That(Errors("""
+            domain Test
+
+            Tier: enum { Gold, Silver }
+
+            public entity Member {
+              Level: Tier
+            }
+            """)).IsEmpty();
     }
 }

@@ -78,6 +78,8 @@ internal sealed class ContractIntegrationAnalyzer : INodeAnalyzer {
         foreach (var entity in domain.Types.OfType<Entity>()) {
             if (entity.Visibility == Visibility.Public)
                 ValidatePublicNavigations(context, domain, entity);
+            if (entity.Visibility == Visibility.Public)
+                ValidatePublicStageGroups(context, domain, entity);
             foreach (var action in entity.Actions) {
                 if (action.Visibility == Visibility.Public)
                     ValidatePublicAction(context, domain, entity, action);
@@ -86,6 +88,29 @@ internal sealed class ContractIntegrationAnalyzer : INodeAnalyzer {
                 foreach (var action in stage.Actions) {
                     if (action.Visibility == Visibility.Public)
                         ValidatePublicAction(context, domain, entity, action);
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// L-22 (#604): stage copies of one action name print as ONE method that is public when any copy is
+    /// public. A non-public copy of such a group whose result names an internal type would therefore be
+    /// exported through the public method, so it is reported on that copy like any public signature.
+    /// (Parameter lists must agree across copies, so the public copy's own check already covers them.)
+    /// </summary>
+    private static void ValidatePublicStageGroups(AnalysisContext context, Domain domain, Entity entity) {
+        var variants = entity.Actions.Concat(entity.Stages.SelectMany(s => s.Actions));
+        foreach (var group in variants.GroupBy(a => a.Name, StringComparer.Ordinal)) {
+            if (!group.Any(a => a.Visibility == Visibility.Public))
+                continue;
+
+            foreach (var variant in group.Where(a => a.Visibility != Visibility.Public)) {
+                foreach (var member in variant.Result.Members) {
+                    ReportUnclosedSignature(
+                        context, domain, variant, member.Type,
+                        $"Public action '{variant.Name}' on entity '{entity.Name}' (one method across its stage copies)",
+                        "as the result of a stage copy");
                 }
             }
         }

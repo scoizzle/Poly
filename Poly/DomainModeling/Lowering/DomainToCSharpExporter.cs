@@ -223,48 +223,52 @@ public sealed partial class DomainToCSharpExporter {
 
             switch (ListElement(type, out var optionalList)) {
                 case { } element when optionalList: {
-                    var enumerable = new NamedTypeReference("IEnumerable", TypeArguments: [element]);
-                    snapshot.Add(new Assignment(Slot(snapshotArray), new Syntactic.Conditional(
-                        new Equal(Field(name), new Constant(null)),
-                        new Constant(null),
-                        new Invoke(new Member(Field(name), "ToArray")))));
-                    restore.Add(new IfStatement(
-                        new Equal(Slot(savedArray), new Constant(null)),
-                        new Assignment(Field(name), new Constant(null)),
-                        new Block(
-                            new IfStatement(
-                                new Equal(Field(name), new Constant(null)),
-                                new Assignment(Field(name), new New(new NamedTypeReference("List", TypeArguments: [element])))),
-                            new Invoke(new Member(Field(name), "Clear")),
-                            new Invoke(new Member(Field(name), "AddRange"), new TypeCast(SavedValue(), enumerable)))));
-                    break;
-                }
-                case { } element: {
-                    var enumerable = new NamedTypeReference("IEnumerable", TypeArguments: [element]);
-                    snapshot.Add(new Assignment(Slot(snapshotArray), new Invoke(new Member(Field(name), "ToArray"))));
-                    restore.Add(new Invoke(new Member(Field(name), "Clear")));
-                    restore.Add(new Invoke(new Member(Field(name), "AddRange"), new TypeCast(SavedValue(), enumerable)));
-                    break;
-                }
-                default: {
-                    if (IsOptionalSet(type, out var setType)) {
-                        var enumerable = new NamedTypeReference(
-                            "IEnumerable", TypeArguments: [new PrimitiveTypeReference(PrimType.String)]);
+                        var listType = new NamedTypeReference("List", TypeArguments: [element]);
+                        var item = new Variable($"__item{i}");
                         snapshot.Add(new Assignment(Slot(snapshotArray), new Syntactic.Conditional(
                             new Equal(Field(name), new Constant(null)),
                             new Constant(null),
-                            new New(setType, Field(name)))));
-                        restore.Add(new Assignment(Field(name), new Syntactic.Conditional(
+                            new New(listType, Field(name)))));
+                        restore.Add(new IfStatement(
                             new Equal(Slot(savedArray), new Constant(null)),
-                            new Constant(null),
-                            new New(setType, new TypeCast(SavedValue(), enumerable)))));
+                            new Assignment(Field(name), new Constant(null)),
+                            new Block(
+                                new IfStatement(
+                                    new Equal(Field(name), new Constant(null)),
+                                    new Assignment(Field(name), new New(listType))),
+                                ClearList(Field(name)),
+                                new ForEachLoop(item, new TypeCast(SavedValue(), listType),
+                                    new Invoke(new Member(Field(name), "Add"), item)))));
                         break;
                     }
+                case { } element: {
+                        var listType = new NamedTypeReference("List", TypeArguments: [element]);
+                        var item = new Variable($"__item{i}");
+                        snapshot.Add(new Assignment(Slot(snapshotArray), new New(listType, Field(name))));
+                        restore.Add(ClearList(Field(name)));
+                        restore.Add(new ForEachLoop(item, new TypeCast(SavedValue(), listType),
+                            new Invoke(new Member(Field(name), "Add"), item)));
+                        break;
+                    }
+                default: {
+                        if (IsOptionalSet(type, out var setType)) {
+                            var enumerable = new NamedTypeReference(
+                                "IEnumerable", TypeArguments: [new PrimitiveTypeReference(PrimType.String)]);
+                            snapshot.Add(new Assignment(Slot(snapshotArray), new Syntactic.Conditional(
+                                new Equal(Field(name), new Constant(null)),
+                                new Constant(null),
+                                new New(setType, Field(name)))));
+                            restore.Add(new Assignment(Field(name), new Syntactic.Conditional(
+                                new Equal(Slot(savedArray), new Constant(null)),
+                                new Constant(null),
+                                new New(setType, new TypeCast(SavedValue(), enumerable)))));
+                            break;
+                        }
 
-                    snapshot.Add(new Assignment(Slot(snapshotArray), Field(name)));
-                    restore.Add(new Assignment(Field(name), new TypeCast(SavedValue(), type)));
-                    break;
-                }
+                        snapshot.Add(new Assignment(Slot(snapshotArray), Field(name)));
+                        restore.Add(new Assignment(Field(name), new TypeCast(SavedValue(), type)));
+                        break;
+                    }
             }
         }
 
@@ -274,6 +278,10 @@ public sealed partial class DomainToCSharpExporter {
         methods.Add(new MethodDefinitionNode(
             "__Restore", new TypeReference("void"), [stateParameter], new Block(restore, [savedArray])));
     }
+
+    /// <summary>The synthetic entity-list type has no <c>Clear</c>; the cast to <c>IList</c> reaches the real one.</summary>
+    private static Node ClearList(Node list) =>
+        new Invoke(new Member(new TypeCast(list, new ClrTypeReference(typeof(System.Collections.IList))), "Clear"));
 
     private readonly record struct ScopeSlot(string Name, Node Type);
 

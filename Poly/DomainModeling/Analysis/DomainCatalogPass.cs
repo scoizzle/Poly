@@ -21,7 +21,11 @@ internal sealed class DomainCatalogPass : INodeAnalyzer {
                 PublishCatalog(context, domain);
                 break;
             case Property property:
-                ResolveTypeReference(context, property.Type, property, $"Property '{property.Name}'");
+                ResolveTypeReference(context, property.Type, property, UsageLabel(context, property));
+                break;
+            case DomainFunction function:
+                foreach (var parameter in function.Parameters)
+                    context.SetMetadata(parameter, new FunctionParameterUsage());
                 break;
             case InvocationResult.Member resultMember:
                 ResolveTypeReference(context, resultMember.Type, resultMember, $"Result member '{resultMember.Name}'");
@@ -183,6 +187,20 @@ internal sealed class DomainCatalogPass : INodeAnalyzer {
                 context.SetMetadata(action, new OwnerEntityMetadata(entity));
         }
     }
+
+    /// <summary>
+    /// A <see cref="DomainFunction"/> parameter resolves its type through the <see cref="Property"/>
+    /// arm. This marker relabels that finding; it never suppresses it.
+    /// </summary>
+    private sealed record FunctionParameterUsage : IAnalysisMetadata;
+
+    /// <summary>
+    /// The noun a type-reference finding names: a function parameter or a property (#478).
+    /// </summary>
+    private static string UsageLabel(AnalysisContext context, Property property) =>
+        context.GetMetadata<FunctionParameterUsage>(property) is not null
+            ? $"Function parameter '{property.Name}'"
+            : $"Property '{property.Name}'";
 
     private static void ResolveTypeReference(
         AnalysisContext context,

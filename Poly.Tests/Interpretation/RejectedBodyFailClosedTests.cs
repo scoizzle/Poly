@@ -11,7 +11,8 @@ namespace Poly.Tests.Interpretation;
 /// A rejected AST method body must not become a name-dispatched host call. Three rules:
 /// the reject is carried into the runtime failure so it names its cause; type inference
 /// never reflects over an AST type's storage type; and a body that failed on an instance
-/// the VM built itself is a compile reject, because no host method can exist there.
+/// the VM built itself, or on `this` in a module body (the same dictionary), is a compile reject,
+/// because no host method can exist there.
 /// </summary>
 public class RejectedBodyFailClosedTests {
     private static long Run(string source) {

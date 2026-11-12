@@ -32,7 +32,7 @@ public static class ExportedCSharp {
     /// partner; the wrapper text is returned with the partner's text, so body-content assertions
     /// keep seeing the lowered body.</summary>
     private static string WithBodyPartner(string cs, string method) {
-        var call = System.Text.RegularExpressions.Regex.Match(method, @"this\.(__BodyOf\w+)\(");
+        var call = System.Text.RegularExpressions.Regex.Match(method, "this\\.(" + System.Text.RegularExpressions.Regex.Escape(Poly.DomainModeling.Lowering.DomainToCSharpExporter.ActionBodyPrefix) + "\\w+)\\(");
         if (!call.Success)
             return method;
         var declaration = System.Text.RegularExpressions.Regex.Match(cs, @"(?<![.\w])[\w<>?.]+ " + call.Groups[1].Value + @"\(");

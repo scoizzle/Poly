@@ -144,7 +144,7 @@ public sealed class NameScopeTests {
             var scopeNames = emitted.Where(ReservedNames.IsActionScopeName).Order(StringComparer.Ordinal);
             var entity = domain.Types.OfType<Entity>().First(e => e.Name == typeDef.Name);
             var bodies = entity.Actions.Concat(entity.Stages.SelectMany(s => s.Actions))
-                .Select(a => "__BodyOf" + a.Name).Distinct(StringComparer.Ordinal);
+                .Select(a => Poly.DomainModeling.Lowering.DomainToCSharpExporter.ActionBodyPrefix + a.Name).Distinct(StringComparer.Ordinal);
             var expected = bodies.Concat(["__Restore", "__Snapshot"]).Order(StringComparer.Ordinal);
             await Assert.That(string.Join(",", scopeNames)).IsEqualTo(string.Join(",", expected));
         }
@@ -152,7 +152,8 @@ public sealed class NameScopeTests {
 
     /// <summary>The private body method an action wrapper calls: <c>__BodyOf</c> plus an authored ACTION name (not any member).</summary>
     private static bool IsBodyOfAuthoredAction(string name, IReadOnlySet<string> authored) =>
-        name.StartsWith("__BodyOf", StringComparison.Ordinal) && authored.Contains(name["__BodyOf".Length..]);
+        name.StartsWith(Poly.DomainModeling.Lowering.DomainToCSharpExporter.ActionBodyPrefix, StringComparison.Ordinal)
+        && authored.Contains(name[Poly.DomainModeling.Lowering.DomainToCSharpExporter.ActionBodyPrefix.Length..]);
 
     [Test]
     public async Task MemberNamedCreate_IsError() {

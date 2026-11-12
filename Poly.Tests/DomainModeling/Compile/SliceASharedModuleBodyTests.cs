@@ -41,7 +41,7 @@ public class SliceASharedModuleBodyTests {
         await Assert.That(issue).IsNotNull();
         await Assert.That(issue!.Body).IsNotNull();
         var bodyMethod = lotType.Methods.BodyMethod("Issue");
-        await Assert.That(bodyMethod!.Name).IsEqualTo("__BodyOfIssue");
+        await Assert.That(bodyMethod!.Name).IsEqualTo(ActionBodies.Prefix + "Issue");
         var body = bodyMethod.Body!;
 
         // Export-shaped: ThisReference present — not a Parameter("entity")-rooted twin.

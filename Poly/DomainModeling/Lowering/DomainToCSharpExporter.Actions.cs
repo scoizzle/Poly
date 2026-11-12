@@ -84,7 +84,7 @@ public sealed partial class DomainToCSharpExporter {
                 [.. action.Parameters.Select(p => MapDomainTypeRef(p.Type, domain, analysis)), returnType]));
     }
 
-    private const string ActionBodyPrefix = "__BodyOf";
+    internal const string ActionBodyPrefix = "__BodyOf";
 
     private static Node ActionScopeCall(string member, params Node[] arguments) =>
         new Invoke(new Member(new ClrTypeReference(typeof(ActionScope)), member), arguments);

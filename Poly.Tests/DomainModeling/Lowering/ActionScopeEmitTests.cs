@@ -132,6 +132,7 @@ public class ActionScopeEmitTests {
         await Assert.That(bump).Contains("ActionScope.Begin(");
         await Assert.That(bump).Contains("ActionScope.Commit");
         await Assert.That(bump).Contains("ActionScope.Rollback");
+        // The one deliberate literal: the printed spelling of the body method is pinned here.
         await Assert.That(cs).Contains("__BodyOfBump(");
 
         // The lowered module (what the simulator executes) carries the same split: the wrapper opens the
@@ -139,9 +140,9 @@ public class ActionScopeEmitTests {
         var (domain, analysis) = EvolvedDomain.FromDsl(Dsl);
         var group = DomainProgramProjection.ToSyntax(domain, analysis).Single(t => t.Name == "Group");
         var wrapper = group.Methods!.Single(m => m.Name == "Bump");
-        var body = group.Methods!.Single(m => m.Name == "__BodyOfBump");
+        var body = group.Methods!.Single(m => m.Name == ActionBodies.Prefix + "Bump");
         await Assert.That(new CSharpGenerator().Generate(wrapper.Body!)).Contains("ActionScope.Begin(");
-        await Assert.That(new CSharpGenerator().Generate(wrapper.Body!)).Contains("__BodyOfBump(");
+        await Assert.That(new CSharpGenerator().Generate(wrapper.Body!)).Contains(ActionBodies.Prefix + "Bump(");
         await Assert.That(new CSharpGenerator().Generate(body.Body!)).DoesNotContain("ActionScope.Begin(");
         await Assert.That(new CSharpGenerator().Generate(body.Body!)).Contains("Score");
 
@@ -184,7 +185,7 @@ public class ActionScopeEmitTests {
         // Cancel (two stages, one merged method) and Activate: one wrapper each, one shared body each.
         await Assert.That(Occurrences(cs, "ActionScope.Begin(")).IsEqualTo(2);
         await Assert.That(Occurrences(cs, "DomainResult<Receipt> Cancel(")).IsEqualTo(1);
-        await Assert.That(Occurrences(cs, "__BodyOfCancel(")).IsEqualTo(2);
+        await Assert.That(Occurrences(cs, ActionBodies.Prefix + "Cancel(")).IsEqualTo(2);
     }
 
     [Test]

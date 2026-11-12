@@ -36,6 +36,15 @@ internal static class DomainAccess {
             ? AccessModifier.Internal
             : declared;
 
+    /// <summary>
+    /// A navigation stays <c>public</c> on every owner but a public one, where it is <c>internal</c> when its
+    /// target is not public (L-22b): the public surface stays closed, and the pack maps the navigation explicitly.
+    /// </summary>
+    public static AccessModifier NavigationAccess(Entity owner, Node target, Domain domain) =>
+        ForEntity(owner) == AccessModifier.Public
+            ? Demote(AccessModifier.Public, domain, target)
+            : AccessModifier.Public;
+
     public static bool ExposesInternal(Node type, Domain domain) => type switch {
         NamedTypeReference named =>
             domain.Types.Any(t => t.Name == named.TypeName && IsInternal(t))

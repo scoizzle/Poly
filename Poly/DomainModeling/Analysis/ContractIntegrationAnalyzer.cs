@@ -58,7 +58,9 @@ internal sealed class ContractIntegrationAnalyzer : INodeAnalyzer {
     /// and result types and a public value type's field types may not name a type internal to
     /// this domain. A public action must also be reachable through public (#418): its owning
     /// entity must be public, because a public entity exports its name and its public actions.
-    /// A public entity may not navigate to an internal entity (L-22, <see cref="ValidatePublicNavigations"/>).
+    /// A public entity may navigate to an internal entity (L-22b): the navigation prints <c>internal</c> and the
+    /// pack maps it explicitly. Still an error (<see cref="ValidatePublicEntityInternalTargets"/>): an entity-typed
+    /// property, and a many-to-many navigation to an internal entity (until row L-22d).
     /// Not checked: a public entity's properties (decision 13 exports its name and
     /// public actions only), an imported contract's ACL value types (that contract's surface),
     /// primitives, and enums (no visibility mark; #418 gives them a digest entry).
@@ -77,7 +79,7 @@ internal sealed class ContractIntegrationAnalyzer : INodeAnalyzer {
 
         foreach (var entity in domain.Types.OfType<Entity>()) {
             if (entity.Visibility == Visibility.Public)
-                ValidatePublicNavigations(context, domain, entity);
+                ValidatePublicEntityInternalTargets(context, domain, entity);
             if (entity.Visibility == Visibility.Public)
                 ValidatePublicStageGroups(context, domain, entity);
             foreach (var action in entity.Actions) {
@@ -117,26 +119,28 @@ internal sealed class ContractIntegrationAnalyzer : INodeAnalyzer {
     }
 
     /// <summary>
-    /// L-22 (#604): a public entity exports its navigations as public members, and EF maps only public
-    /// navigations, so a navigation to an entity internal to this domain is an error (not acknowledgeable).
+    /// L-22 (#604): an entity-typed property (the DSL reads one as a navigation; the model API can build one) of a
+    /// public entity names an internal entity. Persistence ignores such a property, so demoting it would lose its data
+    /// silently, and printing it public is CS0053: an error (not acknowledgeable), positioned on the property.
     /// </summary>
-    private static void ValidatePublicNavigations(AnalysisContext context, Domain domain, Entity entity) {
+    private static void ValidatePublicEntityInternalTargets(AnalysisContext context, Domain domain, Entity entity) {
+        // A many-to-many navigation to an internal entity prints internal, but the pack's explicit mapping cannot
+        // prove an EF skip navigation over a non-public member, so it fails closed rather than map it as one-to-many.
         foreach (var navigation in entity.Navigations) {
-            if (context.GetMetadata<ResolvedTypeReferenceMetadata>(navigation.Target)
-                is not ResolvedTypeReferenceMetadata { Type: Entity target }
+            if (navigation.Cardinality is not RelationshipCardinality.ManyToMany
+                || context.GetMetadata<ResolvedTypeReferenceMetadata>(navigation.Target)
+                    is not ResolvedTypeReferenceMetadata { Type: Entity target }
                 || !IsDeclaredInDomain(domain, target)
                 || target.Visibility == Visibility.Public)
                 continue;
 
             context.ReportError(
                 navigation,
-                $"Public entity '{entity.Name}' navigation '{navigation.Name}' targets internal entity " +
-                $"'{target.Name}'. Mark '{target.Name}' public, or remove the public mark from '{entity.Name}'.",
-                DomainModelDiagnosticCodes.PublicEntityNavigatesToInternalEntity);
+                $"Public entity '{entity.Name}' many-to-many navigation '{navigation.Name}' targets internal entity " +
+                $"'{target.Name}'; that mapping is not supported. Mark '{target.Name}' public, or remove the public mark from '{entity.Name}'.",
+                DomainModelDiagnosticCodes.PublicEntityPropertyTypedInternalEntity);
         }
 
-        // An entity-typed property (the DSL reads one as a navigation; the model API can build one) would print as
-        // a public property of an internal type (CS0053), so it is the same finding, positioned on the property.
         foreach (var property in entity.Properties) {
             var target = context.GetMetadata<ResolvedTypeReferenceMetadata>(property.Type)?.Type as Entity
                 ?? domain.Types.OfType<Entity>().FirstOrDefault(e => e.Name == property.Type.TypeName);
@@ -145,9 +149,9 @@ internal sealed class ContractIntegrationAnalyzer : INodeAnalyzer {
 
             context.ReportError(
                 property,
-                $"Public entity '{entity.Name}' property '{property.Name}' targets internal entity " +
+                $"Public entity '{entity.Name}' property '{property.Name}' is typed as internal entity " +
                 $"'{target.Name}'. Mark '{target.Name}' public, or remove the public mark from '{entity.Name}'.",
-                DomainModelDiagnosticCodes.PublicEntityNavigatesToInternalEntity);
+                DomainModelDiagnosticCodes.PublicEntityPropertyTypedInternalEntity);
         }
     }
 

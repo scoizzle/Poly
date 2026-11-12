@@ -91,7 +91,7 @@ public class Truck
         {
             return DomainResult<Truck>.Failure("'Vin' must be at most 17 characters.");
         }
-        if (!System.Text.RegularExpressions.Regex.IsMatch(vin, "^[A-HJ-NPR-Z0-9]{17}$"))
+        if (!System.Text.RegularExpressions.Regex.IsMatch(vin, "^[A-HJ-NPR-Z0-9]{17}\\z"))
         {
             return DomainResult<Truck>.Failure("'Vin' does not match the required pattern.");
         }

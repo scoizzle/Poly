@@ -30,7 +30,7 @@ public class Doctor
         {
             return DomainResult<Doctor>.Failure("'LicenseNo' is required.");
         }
-        if (!System.Text.RegularExpressions.Regex.IsMatch(licenseNo, "^MD-[0-9]{6}$"))
+        if (!System.Text.RegularExpressions.Regex.IsMatch(licenseNo, "^MD-[0-9]{6}\\z"))
         {
             return DomainResult<Doctor>.Failure("'LicenseNo' does not match the required pattern.");
         }

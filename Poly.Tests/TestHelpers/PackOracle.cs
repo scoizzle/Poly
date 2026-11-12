@@ -74,8 +74,8 @@ public sealed class PackOracle : IAsyncDisposable {
 
     // Compile+emit is Roslyn-heavy: one at a time per process; the temp+move cache makes it safe across processes.
     private static readonly SemaphoreSlim _compileGate = new(1, 1);
-    // At most two live children, for the whole test process.
-    private static readonly SemaphoreSlim _childSlots = new(2, 2);
+    // At most two live children, for the whole test process: the gate PolycProcess shares.
+    private static readonly SemaphoreSlim _childSlots = ChildProcessGate.Slots;
     private static readonly ConcurrentDictionary<string, Lazy<Task<CompiledApp>>> _apps = new();
     private static readonly ConcurrentDictionary<PackOracle, byte> _live = new();
     private static readonly ConcurrentBag<int> _recordedChildPids = [];

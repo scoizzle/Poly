@@ -40,9 +40,29 @@ internal static class StageEntryFacts {
         if (entity.InitialStage() is not { } initial || EntityStructureAnalyzer.IsImplicitStage(entity, domain))
             return FrozenSet<string>.Empty;
 
-        var walk = new CreateWalk(entity);
+        var walk = new CreateWalk(entity, LifecyclePropertyName(entity, domain));
         walk.Effects(initial.OnEntryEffects);
         return walk.Names.ToFrozenSet(StringComparer.Ordinal);
+    }
+
+    /// <summary>
+    /// The lifecycle property (G7): the one property typed as a domain enum whose member names equal the
+    /// stage names. None for zero or more than one candidate; analysis rejects the latter
+    /// (<see cref="EntityStructureAnalyzer"/> throws), so the fact never guesses.
+    /// </summary>
+    private static string? LifecyclePropertyName(Entity entity, Domain domain) {
+        var stageNames = entity.Stages.Select(stage => stage.Name).ToHashSet(StringComparer.Ordinal);
+        string? found = null;
+        foreach (var property in entity.Properties) {
+            if (domain.Types.OfType<EnumType>().FirstOrDefault(e => string.Equals(e.Name, property.Type.TypeName, StringComparison.Ordinal)) is not { } enumType
+                || enumType.MemberNames.Count != stageNames.Count
+                || !enumType.MemberNames.All(stageNames.Contains))
+                continue;
+            if (found is not null)
+                return null;
+            found = property.Name;
+        }
+        return found;
     }
 
     /// <summary>
@@ -52,7 +72,7 @@ internal static class StageEntryFacts {
     /// its source's exit, moves the cursor to T, then walks T's entry unless T is already being
     /// entered. The initial entry is walked unpushed, as the constructor does.
     /// </summary>
-    private sealed class CreateWalk(Entity entity) {
+    private sealed class CreateWalk(Entity entity, string? lifecycleProperty) {
         private readonly HashSet<string> _entering = new(StringComparer.Ordinal);
         private readonly HashSet<string> _exiting = new(StringComparer.Ordinal);
         private string? _cursor = entity.InitialStage()!.Name;
@@ -127,6 +147,10 @@ internal static class StageEntryFacts {
 
             _cursor = target.Name;
             Enter(target);
+
+            // G7: every resolved hop keeps the lifecycle property in lockstep with CurrentStage.
+            if (lifecycleProperty is not null)
+                Names.Add(lifecycleProperty);
         }
 
         private void Exit(Stage stage) {

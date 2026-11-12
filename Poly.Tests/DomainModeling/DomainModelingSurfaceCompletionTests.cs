@@ -144,6 +144,7 @@ public class DomainModelingSurfaceCompletionTests {
     public async Task Store_DuplicateUnique_FailsClosed() {
         var exec = ModuleExec.For(Apply("""
             domain T
+            uses persistence
             Item: entity { Sku: Text unique }
             """));
         exec.Create("Item", new Dictionary<string, object?> { ["Sku"] = "A" });

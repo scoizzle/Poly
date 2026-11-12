@@ -1,5 +1,6 @@
 domain University
 uses temporal
+uses persistence
 
 Term: enum { Fall, Spring, Summer }
 

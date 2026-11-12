@@ -71,6 +71,7 @@ public class ParityTests {
 
     const string PolicyDsl = """
         domain Library
+        uses persistence
         Patron: entity {
           Name: Text
           Email: Text unique
@@ -85,6 +86,7 @@ public class ParityTests {
 
     const string QuantifierDsl = """
         domain Library
+        uses persistence
         Patron: entity {
           Name: Text
           Email: Text unique
@@ -186,6 +188,7 @@ public class ParityTests {
 
     const string UniqueDsl = """
         domain Lab
+        uses persistence
         Widget: entity {
           Code: Text unique
         }

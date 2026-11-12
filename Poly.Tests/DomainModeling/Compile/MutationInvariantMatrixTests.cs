@@ -143,6 +143,7 @@ public sealed class MutationInvariantMatrixTests {
         // unique — a second create reuses a key the storage port recorded.
         yield return new("unique", """
             domain Matrix
+            uses persistence
             Widget: entity {
               Code: Text unique
             }

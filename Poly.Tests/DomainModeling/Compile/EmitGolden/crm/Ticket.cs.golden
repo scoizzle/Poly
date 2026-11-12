@@ -12,6 +12,7 @@ public class Ticket
 {
     private List<Account>? _accountTicketsClosedSubscribers;
     private int _notifyDepth;
+    private Ticket() { }
     private Ticket(string subject, Account? account = null)
     {
         this.Subject = subject;

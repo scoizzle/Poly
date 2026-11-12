@@ -254,4 +254,68 @@ public class FailureTypingTests {
             foreach (var node in Walk(child))
                 yield return node;
     }
+
+    [Test]
+    [Arguments("Poly")]
+    [Arguments("System")]
+    public async Task ActionParameterNamedAGeneratedReference_WithAnAssignConstraint_IsAReservedNameError(string name) {
+        var session = ParitySessions.Create();
+        var changes = new PolyDslParser($$"""
+            domain Lab
+            Widget: entity {
+              Score: Number range(1, 10) default(5)
+              Set: action ({{name}}: Number) { assign Score to {{name}} }
+            }
+            """, session).Parse();
+
+        var evolved = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes, session: session);
+
+        await Assert.That(evolved.Analysis.Diagnostics.Any(d =>
+            d.Code == DomainModelDiagnosticCodes.ReservedMemberName
+            && d.Message.Contains($"Parameter '{name}' of action 'Set' would shadow the generated C# type '{name}'"))).IsTrue();
+    }
+
+    [Test]
+    public async Task PeerBinderNamedPoly_WithAnAssignConstraint_PrintsCompilableCSharp() {
+        var cs = Print("""
+            domain Lab
+            Tracker: entity {
+              Score: Number range(1, 10) default(5)
+              Tracks: Order
+              Pending: stage {
+                when Tracks Active as Poly {
+                  assign Score to Poly Qty
+                }
+              }
+            }
+            Order: entity {
+              Qty: Number default(1)
+              Draft: stage { }
+              Active: stage { }
+            }
+            """);
+
+        var asm = ExportedCSharp.CompileAndLoad(cs);
+
+        await Assert.That(asm.GetType("Tracker")).IsNotNull();
+    }
+
+    [Test]
+    public async Task ForLoopBinderNamedPoly_WithAnAssignConstraint_PrintsCompilableCSharp() {
+        var cs = Print("""
+            domain Lab
+            Order: entity {
+              lines: many OrderLine
+              Mark: action { for lines as Poly invoke Poly.Mark(amount: 5) }
+            }
+            OrderLine: entity {
+              Qty: Number range(1, 10) default(5)
+              Mark: action (amount: Number) { assign Qty to amount }
+            }
+            """);
+
+        var asm = ExportedCSharp.CompileAndLoad(cs);
+
+        await Assert.That(asm.GetType("Order")).IsNotNull();
+    }
 }

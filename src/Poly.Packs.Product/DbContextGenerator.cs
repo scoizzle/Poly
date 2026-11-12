@@ -97,6 +97,7 @@ public sealed partial class DbContextGenerator {
             usings.Add("System.Linq");
             fields = [PendingKeysField()];
             methods.Add(ExistsMethod());
+            methods.Add(TryReserveMethod());
             methods.Add(RecordMethod());
             methods.Add(ReleaseMethod());
             interfaces = [new ClrTypeReference(typeof(IStoragePort))];

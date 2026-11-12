@@ -97,7 +97,7 @@ public class LibraryDbContext : DbContext, Poly.Runtime.IStoragePort
     }
     public bool Exists(string entity, string property, string value)
     {
-        if (this._pendingKeys.Contains(entity + "\u001f" + property + "\u001f" + value))
+        if (this._pendingKeys.Contains(Poly.Runtime.KeyCodec.Canonical(entity, property, value)))
         {
             return true;
         }
@@ -127,12 +127,13 @@ public class LibraryDbContext : DbContext, Poly.Runtime.IStoragePort
         }
         return false;
     }
+    public bool TryReserve(string entity, string property, string value) => this._pendingKeys.Add(Poly.Runtime.KeyCodec.Canonical(entity, property, value));
     public void Record(string entity, string property, string value)
     {
-        this._pendingKeys.Add(entity + "\u001f" + property + "\u001f" + value);
+        this._pendingKeys.Add(Poly.Runtime.KeyCodec.Canonical(entity, property, value));
     }
     public void Release(string entity, string property, string value)
     {
-        this._pendingKeys.Remove(entity + "\u001f" + property + "\u001f" + value);
+        this._pendingKeys.Remove(Poly.Runtime.KeyCodec.Canonical(entity, property, value));
     }
 }

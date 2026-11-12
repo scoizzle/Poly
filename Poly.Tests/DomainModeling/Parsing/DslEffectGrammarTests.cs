@@ -84,7 +84,7 @@ public sealed class DslEffectGrammarTests {
         // "Unhandled effect pattern" leak.
         var ex = await Assert.ThrowsAsync(
             () => Task.FromResult(ParseEffects("delete")));
-        await Assert.That(ex!.Message).Contains("Expected effect (transition, assign, create, invoke, for, if), got 'delete'");
+        await Assert.That(ex!.Message).Contains("Expected effect (transition, assign, create, link, unlink, invoke, for, if), got 'delete'");
     }
 
     [Test]

@@ -36,13 +36,13 @@ internal sealed class SubscriptionAnalyzer : INodeAnalyzer {
         foreach (var entity in lookup.Entities) {
             // Entity-level when is always-active (entity-level dispatch); same contract + binding
             // validation as stage-scoped (including optional peer binder).
-            CheckDuplicateHandlers(context, entity, entity.Subscriptions, "entity-level dispatch");
+            CheckDuplicateHandlers(context, domain, lookup, entity, entity.Subscriptions, "entity-level dispatch");
             foreach (var entitySub in entity.Subscriptions) {
                 ValidateSubscription(context, entitySub, entity, domain, lookup);
             }
 
             foreach (var stage in entity.Stages) {
-                CheckDuplicateHandlers(context, entity, stage.Subscriptions, $"stage '{stage.Name}'");
+                CheckDuplicateHandlers(context, domain, lookup, entity, stage.Subscriptions, $"stage '{stage.Name}'");
 
                 foreach (var subscription in stage.Subscriptions) {
                     ValidateSubscription(context, subscription, entity, domain, lookup);
@@ -499,9 +499,13 @@ internal sealed class SubscriptionAnalyzer : INodeAnalyzer {
     /// entity-level before stage-scoped, which presupposes both placements coexisting.
     /// </summary>
     private static void CheckDuplicateHandlers(
-        AnalysisContext context, Entity entity, IReadOnlyList<StageSubscription> subscriptions, string scope) {
+        AnalysisContext context, Domain domain, DomainTypeLookupMetadata lookup, Entity entity,
+        IReadOnlyList<StageSubscription> subscriptions, string scope) {
         if (subscriptions.Count < 2) return;
-        foreach (var group in subscriptions.GroupBy(CanonicalKey, StringComparer.Ordinal)) {
+        // A subscription that does not resolve is already an error (DMSS003); nothing runs, so
+        // "both run" would be noise on a domain that fails analysis.
+        var resolvable = subscriptions.Where(sub => Resolves(context, domain, lookup, entity, sub)).ToList();
+        foreach (var group in resolvable.GroupBy(CanonicalKey, StringComparer.Ordinal)) {
             var members = group.ToList();
             if (members.Count < 2) continue;
             var handlers = members.Count == 2 ? "Both run" : $"All {members.Count} handlers run";
@@ -512,6 +516,18 @@ internal sealed class SubscriptionAnalyzer : INodeAnalyzer {
                 $"{handlers}, in declaration order — nothing is removed.",
                 DomainModelDiagnosticCodes.SubscriptionDuplicateHandler);
         }
+    }
+
+    private static bool Resolves(
+        AnalysisContext context, Domain domain, DomainTypeLookupMetadata lookup, Entity entity, StageSubscription sub) {
+        if (string.IsNullOrWhiteSpace(sub.RelationshipName) || sub.StageNames.Count == 0
+            || sub.StageNames.Any(string.IsNullOrWhiteSpace) || !Enum.IsDefined(sub.Quantifier))
+            return false;
+        var relLookup = ResolveRelationshipLookup(context, domain);
+        return relLookup is not null
+            && relLookup.TryGetRelationship(entity.Name, sub.RelationshipName, out var relationship)
+            && lookup.Types.TryGetValue(relationship.Target.TypeName, out var target)
+            && target is Entity;
     }
 
     private static string CanonicalKey(StageSubscription sub) =>

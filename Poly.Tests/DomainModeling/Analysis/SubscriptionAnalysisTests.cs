@@ -907,6 +907,19 @@ public class SubscriptionAnalysisTests {
             .Count(d => d.Code == DomainModelDiagnosticCodes.SubscriptionDuplicateHandler);
 
     [Test]
+    public async Task DuplicateWhens_OnUnresolvableRelationship_DoNotWarnBothRun() {
+        var sub1 = new StageSubscription("Ghost", ["Active"], StageSubscriptionQuantifier.Each, []);
+        var sub2 = new StageSubscription("Ghost", ["Active"], StageSubscriptionQuantifier.Each, []);
+        var order = new Entity("Order", [], [], [], [new Stage("Open", [], [], [], [])]) { Subscriptions = [sub1, sub2] };
+        var domain = ValidDomain.Create("Test", [order], []);
+        var diags = DomainModelAnalyzer.Analyze(domain).Diagnostics;
+
+        await Assert.That(diags.Any(d => d.Code == DomainModelDiagnosticCodes.SubscriptionContractMismatch
+            && d.Severity == DiagnosticSeverity.Error)).IsTrue();
+        await Assert.That(diags.Any(d => d.Code == DomainModelDiagnosticCodes.SubscriptionDuplicateHandler)).IsFalse();
+    }
+
+    [Test]
     public async Task DuplicateWhens_DifferentPeerBinder_AreSilent() {
         await Assert.That(DuplicateCount(
             "when parcels Moved as a { assign Note to a Label }",

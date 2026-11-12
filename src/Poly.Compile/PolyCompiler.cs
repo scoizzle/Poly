@@ -133,12 +133,13 @@ public sealed class PolyCompiler {
         List<DomainChange> changes;
         try {
             var requested = LibrarySelection.Resolve(tree.Uses, _options);
-            session = SessionFor(tree, requested, target);
+            // The resolver sees the ids the session loads, so the domain's extension facts, the
+            // primitives they seed and their contract surfaces agree with the session whether
+            // the document or the host named them.
+            var selected = tree with { Uses = requested, UsesVersions = PinsFor(tree, requested) };
+            session = SessionFor(selected, target);
             cancel.ThrowIfCancellationRequested();
-            var resolved = DomainCompilation.Resolve(tree, session);
-            changes = tree.Uses.Count > 0
-                ? StampExtensions(resolved, requested)
-                : DomainCompilation.WithSeed(resolved, requested, session).ToList();
+            changes = DomainCompilation.Resolve(selected, session);
         }
         catch (OperationCanceledException) {
             throw;
@@ -250,24 +251,28 @@ public sealed class PolyCompiler {
         return refusal is null && !diags.Any(d => d.IsError) ? files : [];
     }
 
-    private DomainSession SessionFor(DslSyntaxTree tree, IReadOnlyList<string> ids, string? target) {
+    private DomainSession SessionFor(DslSyntaxTree selected, string? target) {
+        var ids = selected.Uses;
         var key = string.Join('\n', ids) + "\ntarget:" + (target ?? "");
         if (_session is not null && _sessionKey == key)
             return _session;
-        // Selection may replace or add ids. Keep an authored pin only where the id at that
-        // position is unchanged; a selected id has no authored surface pin.
-        var versions = ids.Select((id, index) =>
+        var session = LibrarySelection.Load(ids, _options).WithTarget(target);
+        _session = session;
+        _sessionKey = key;
+        return session;
+    }
+
+    /// <summary>
+    /// Selection may replace or add ids. Keep an authored pin only where the id at that position
+    /// is unchanged; a selected id has no authored surface pin.
+    /// </summary>
+    private static List<string?> PinsFor(DslSyntaxTree tree, IReadOnlyList<string> ids) =>
+        ids.Select((id, index) =>
             index < tree.Uses.Count
             && index < tree.UsesVersions.Count
             && string.Equals(tree.Uses[index], id, StringComparison.Ordinal)
                 ? tree.UsesVersions[index]
                 : null).ToList();
-        var session = LibrarySelection.Load(tree with { Uses = ids, UsesVersions = versions }, _options)
-            .WithTarget(target);
-        _session = session;
-        _sessionKey = key;
-        return session;
-    }
 
     private bool CheckExtensions(
         DiagnosticBuilder build, DslSyntaxTree tree, IReadOnlyList<string> ids, List<CompileDiagnostic> diags) {
@@ -366,29 +371,4 @@ public sealed class PolyCompiler {
         DiagnosticSeverity.Information => Severities.Information,
         _ => Severities.Hint,
     };
-
-    /// <summary>
-    /// Stamps the ids the session loaded in place of the document's own extension facts, placed
-    /// where the first one was, so the domain and the session never disagree. Other changes keep
-    /// their order.
-    /// </summary>
-    private static List<DomainChange> StampExtensions(
-        List<DomainChange> changes, IReadOnlyList<string> resolved) {
-        var original = changes.OfType<AddDomainExtensionChange>().Select(c => c.ExtensionId).ToList();
-        if (original.Count == 0 || original.SequenceEqual(resolved, StringComparer.Ordinal))
-            return changes;
-        var result = new List<DomainChange>(changes.Count);
-        var placed = false;
-        foreach (var change in changes) {
-            if (change is not AddDomainExtensionChange) {
-                result.Add(change);
-                continue;
-            }
-            if (placed)
-                continue;
-            placed = true;
-            result.AddRange(resolved.Select(id => new AddDomainExtensionChange(id)));
-        }
-        return result;
-    }
 }

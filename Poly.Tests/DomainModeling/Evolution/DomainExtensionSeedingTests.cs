@@ -66,4 +66,39 @@ public class DomainExtensionSeedingTests {
         await Assert.That(result.Domain).IsNotNull();
         await Assert.That(result.Domain!.Types.OfType<PrimitiveType>().Any(p => p.Name == "Gizmo")).IsTrue();
     }
+
+    /// <summary>
+    /// C-04 F1: a host-loaded library whose id the document does not list is stamped on the
+    /// domain after the resolver ran. Its primitive must still be seeded, exactly once.
+    /// </summary>
+    [Test]
+    public async Task Compile_HostLibraryWithSeed_UsesDocument_SeedsItsPrimitiveOnce() {
+        var catalog = ExtensionCatalog.Core.With(new WidgetsLibrary());
+        var compiler = new PolyCompiler(catalog, new SessionOptions(catalog, []) { HostIds = ["widgets"] });
+
+        var result = compiler.Analyze("domain D\nuses temporal\n", "w.poly");
+
+        await Assert.That(result.Succeeded).IsTrue()
+            .Because(string.Join("; ", result.Diagnostics.Select(d => d.Code + " " + d.Message)));
+        await Assert.That(result.Domain!.Types.OfType<PrimitiveType>().Count(p => p.Name == "Gizmo")).IsEqualTo(1);
+    }
+
+    /// <summary>
+    /// C-04 F3: a host-loaded library's contract surface is seeded on the domain whether the
+    /// document lists <c>uses</c> or not.
+    /// </summary>
+    [Test]
+    [Arguments("domain D\n")]
+    [Arguments("domain D\nuses temporal\n")]
+    public async Task Compile_HostLibraryContract_IsSeededOnBothPaths(string text) {
+        var catalog = ExtensionCatalog.Core.With(TestHelpers.ContractContributions.StripeLibrary());
+        var compiler = new PolyCompiler(catalog, new SessionOptions(catalog, []) { HostIds = ["stripe"] });
+
+        var result = compiler.Analyze(text, "c.poly");
+
+        await Assert.That(result.Succeeded).IsTrue()
+            .Because(string.Join("; ", result.Diagnostics.Select(d => d.Code + " " + d.Message)));
+        await Assert.That(result.Domain!.ImportedContracts.Any(c => c.Name == "Stripe")).IsTrue();
+        await Assert.That(result.Domain.Extensions.SequenceEqual(result.Session!.Extensions)).IsTrue();
+    }
 }

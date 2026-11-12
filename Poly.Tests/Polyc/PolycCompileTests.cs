@@ -12,7 +12,8 @@ public class PolycCompileTests {
         var result = Compiler().Compile(PolycTestSupport.Hotel(), "hotel.poly");
         await Assert.That(result.Succeeded).IsTrue();
         await Assert.That(result.Files.Count).IsGreaterThan(0);
-        var warning = result.Diagnostics.First(d => d.IsWarning);
+        // hotel.poly also carries unverified-write warnings (DMCS003, Q4) that sort before DMREL002.
+        var warning = result.Diagnostics.First(d => d.IsWarning && d.Code == "DMREL002");
         await Assert.That(warning.Code).IsEqualTo("DMREL002");
         await Assert.That(warning.File).IsEqualTo("hotel.poly");
         await Assert.That(warning.Placed).IsTrue();

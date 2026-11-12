@@ -39,9 +39,8 @@ public class ConditionalEffectJoinTests {
 
     [Test]
     public async Task BothArms_AssignDifferentLiterals_HullFeedsLaterEffect() {
-        // `Qty + 0`, not a bare `Qty`: EffectAnalyzer only runs the derived-range check
-        // (the one that emits "can fall outside") for Add/Subtract/Multiply, so a bare
-        // property reads as an unvalidated RHS and the no-warning assertion is vacuous.
+        // `Qty + 0` is a no-op kept from before Q4: V-03 now checks a bare `Qty` too (a bare
+        // property copy gets a verdict), so the no-warning assertion below is real either way.
         var result = Parse(Item("""
             if (Flag <= 0) { assign Qty to 5 } else { assign Qty to 25 }
             assign Total to Qty + 0

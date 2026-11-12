@@ -55,6 +55,39 @@ public class DiagnosticAllowanceTests {
         analysis.Diagnostics.Where(d => d.Code == code);
 
     [Test]
+    public async Task ObservedFlow_UnboundedSource_IsNotYetVerified() {
+        // PIN (review H1): a source with no same-kind constraint is not verified today. V-04 routes
+        // observed flows through WriteRecorder and flips this; until then the flow is neither a
+        // finding nor a fact. The counts are read null-safely so this pin does not depend on H3.
+        var domain = """
+            domain Orders
+            Customer: entity {
+              Amount: Number
+              Active: stage { Next: action { transition to Done } }
+              Done: stage { }
+            }
+            Order: entity {
+              Amount: Number range(0, 10)
+              Open: stage { Close: action { transition to Closed } }
+              Closed: stage { }
+            }
+            """;
+
+        var (_, model, analysis) = Run(domain, [new ObservedFlow("Customer.Amount", "Order.Amount")]);
+
+        // Zero diagnostics from the flow. (The domain carries one unrelated DMAS001 authoring
+        // suggestion on Order, so the total is not asserted; the write codes and the flow are.)
+        await Assert.That(Of(analysis, "DMEFF008").Count()).IsEqualTo(0);
+        await Assert.That(Of(analysis, "DMCS003").Count()).IsEqualTo(0);
+        await Assert.That(analysis.Diagnostics.Any(d =>
+            d.Message.Contains("Observed flow", StringComparison.Ordinal))).IsFalse();
+        var facts = analysis.GetMetadata<WriteVerificationFacts>(model);
+        await Assert.That(facts?.Unverified.Count ?? 0).IsEqualTo(0);
+        await Assert.That(facts?.Violations.Count ?? 0).IsEqualTo(0);
+        await Assert.That(facts?.Verified ?? 0).IsEqualTo(0);
+    }
+
+    [Test]
     public async Task WidthNarrowing_NoAllowance_IsDMEFF008Error_AndLowerRefuses() {
         var (session, domain, analysis) = Run(NotesDomain, [NotesFlow()]);
 

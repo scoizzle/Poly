@@ -51,12 +51,31 @@ public class ConstraintKindRegistryTests {
             await Assert.That(c.Join(c)).IsNotNull();
             await Assert.That(ConstraintValidation.Describe(c)).IsNotEqualTo(c.GetType().Name);
             _ = ConstraintValidation.Evaluate(c, "x");
+            // V-03 seam columns: only Range is flow-decidable and write-relevant; every other kind is
+            // fail-closed (Undecided over an unknown value), never Satisfied.
+            await Assert.That(kind.WriteRelevant).IsEqualTo(c is RangeConstraint);
+            if (c is not RangeConstraint)
+                await Assert.That(kind.Decide(c, AbstractValue.Unknown)).IsEqualTo(ConstraintVerdict.Undecided);
             var text = printer.PrintConstraintText(c);
             if (kind.PrintedInDsl)
                 await Assert.That(text.StartsWith('?')).IsFalse();
             else
                 await Assert.That(text).IsEqualTo($"?{c.GetType().Name}");
         }
+    }
+
+    [Test]
+    public async Task RangeKind_DecidesFlowValues_AndIsTheOnlyWriteRelevantKind() {
+        var range = ConstraintKinds.Of(new RangeConstraint(0, 10))!;
+        var inside = AbstractValue.From([new RangeConstraint(2, 3)]);
+        var outside = AbstractValue.From([new RangeConstraint(20, 30)]);
+        var overlap = AbstractValue.From([new RangeConstraint(5, 30)]);
+
+        await Assert.That(range.Decide(new RangeConstraint(0, 10), inside)).IsEqualTo(ConstraintVerdict.Satisfied);
+        await Assert.That(range.Decide(new RangeConstraint(0, 10), outside)).IsEqualTo(ConstraintVerdict.Violated);
+        await Assert.That(range.Decide(new RangeConstraint(0, 10), overlap)).IsEqualTo(ConstraintVerdict.Undecided);
+        await Assert.That(ConstraintKinds.All.Where(k => k.WriteRelevant).Select(k => k.Type))
+            .IsEquivalentTo([typeof(RangeConstraint)]);
     }
 
     [Test]
@@ -75,6 +94,8 @@ public class ConstraintKindRegistryTests {
         await Assert.That(u.Join(u)).IsNull();
         await Assert.That(ConstraintMerge.Identical(u, u)).IsFalse();
         await Assert.That(ConstraintValidation.Evaluate(u, "x")).IsEqualTo(ConstraintVerdict.Undecided);
+        await Assert.That(ConstraintValidation.Decide(u, AbstractValue.Unknown)).IsEqualTo(ConstraintVerdict.Undecided);
+        await Assert.That(ConstraintValidation.IsWriteRelevant(u)).IsTrue();
         await Assert.That(ConstraintValidation.Describe(u)).IsEqualTo(nameof(UnregisteredConstraint));
         await Assert.That(new DomainDslPrinter().PrintConstraintText(u)).IsEqualTo($"?{nameof(UnregisteredConstraint)}");
     }

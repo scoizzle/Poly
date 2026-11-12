@@ -401,6 +401,53 @@ public class ActionScopeTests {
         await Assert.That(ActionScope.HasOpenScope).IsFalse();
     }
 
+    [Test]
+    public async Task Create_RecordsInstanceAndEntity_InOrder() {
+        var order = new Scoped("Order");
+        var line = new Scoped("Line");
+
+        var root = ActionScope.Begin();
+        ActionScope.Create(order, "Order");
+        ActionScope.Create(line, "Line");
+
+        var created = ActionScope.CreatedInstances;
+        await Assert.That(created.Count).IsEqualTo(2);
+        await Assert.That(created[0].Instance).IsSameReferenceAs(order);
+        await Assert.That(created[0].Entity).IsEqualTo("Order");
+        await Assert.That(created[1].Instance).IsSameReferenceAs(line);
+        await Assert.That(created[1].Entity).IsEqualTo("Line");
+
+        // A copy under the lock, read before the root closes: the executor's contract.
+        ActionScope.Commit(root);
+    }
+
+    [Test]
+    public async Task Rollback_ClearsCreatedInstances() {
+        var root = ActionScope.Begin();
+        ActionScope.Create(new Scoped("A"), "Patron");
+        await Assert.That(ActionScope.CreatedInstances.Count).IsEqualTo(1);
+
+        ActionScope.Rollback(root);
+        await Assert.That(ActionScope.CreatedInstances.Count).IsEqualTo(0);
+
+        var next = ActionScope.Begin();
+        ActionScope.Create(new Scoped("B"), "Patron");
+        ActionScope.Commit(next);
+        await Assert.That(ActionScope.CreatedInstances.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task Create_WithoutAScope_IsANoOp() {
+        ActionScope.Create(new Scoped("A"), "Patron");
+
+        await Assert.That(ActionScope.CreatedInstances.Count).IsEqualTo(0);
+        await Assert.That(ActionScope.HasOpenScope).IsFalse();
+
+        // A null instance or entity is host misuse whether or not a scope is open.
+        await Assert.That(() => ActionScope.Create(null!, "Patron")).Throws<ArgumentNullException>();
+        await Assert.That(() => ActionScope.Create(new Scoped("B"), null!)).Throws<ArgumentNullException>();
+    }
+
     private static async Task<T> InFreshFlow<T>(Func<T> body) {
         Task<T> task;
         using (ExecutionContext.SuppressFlow())

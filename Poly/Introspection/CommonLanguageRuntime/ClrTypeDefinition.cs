@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Reflection;
 
 namespace Poly.Introspection.CommonLanguageRuntime;
@@ -15,6 +16,7 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
     private readonly Lazy<IReadOnlyList<ClrTypeMember>> _members;
 
     private readonly ClrTypeDefinitionRegistry _provider;
+    private readonly ConcurrentDictionary<OperatorKind, IReadOnlyList<DeclaredOperator>> _operators = new();
 
     public ClrTypeDefinition(Type type, ClrTypeDefinitionRegistry provider) {
         ArgumentNullException.ThrowIfNull(type);
@@ -80,6 +82,52 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
     PrimitiveType? ITypeDefinition.PrimitiveType => GetPrimitiveTypeId(RuntimeType);
     public TypeKind Kind => GetTypeKind(RuntimeType);
     public override string ToString() => FullName;
+
+    /// <summary>
+    /// The public conversion door first, so the two cannot disagree on a declared operator; then the
+    /// built-in rules, only between two CLR definitions.
+    /// </summary>
+    TypeConversion? ITypeDefinition.ResolveConversionFrom(ITypeDefinition source) {
+        ArgumentNullException.ThrowIfNull(source);
+        if (this.GetConversionFrom(source) is { } declared)
+            return new TypeConversion(declared.Kind, declared.Method);
+        return source is ClrTypeDefinition clrSource
+            ? ClrBuiltInRules.Conversion(GetPrimitiveTypeId(clrSource.RuntimeType), GetPrimitiveTypeId(RuntimeType))
+            : null;
+    }
+
+    /// <summary>
+    /// The operators C# applies itself, then the reflected static special-name <c>op_*</c> members. Where the CLR
+    /// also declares an intrinsic's exact signature (Double declares its comparisons), the intrinsic is the answer.
+    /// </summary>
+    IEnumerable<DeclaredOperator> ITypeDefinition.GetOperators(OperatorKind kind) {
+        OperatorShape.ArityOf(kind);
+        return _operators.GetOrAdd(kind, key => {
+            var intrinsic = ClrBuiltInRules.Operators(this, _provider, key);
+            var reflected = FindOperators(key)
+                .Where(method => !intrinsic.Any(declared => SameSignature(declared.Signature, method)))
+                .Select(static method => new DeclaredOperator(method, PlatformApplied: false));
+            return [.. intrinsic, .. reflected];
+        });
+    }
+
+    private static bool SameSignature(ITypeMethod a, ITypeMethod b) {
+        var (pa, pb) = (a.Parameters.ToArray(), b.Parameters.ToArray());
+        return string.Equals(a.Name, b.Name, StringComparison.Ordinal)
+            && ReferenceEquals(a.MemberTypeDefinition, b.MemberTypeDefinition)
+            && pa.Length == pb.Length
+            && pa.Zip(pb).All(static pair => ReferenceEquals(pair.First.ParameterTypeDefinition, pair.Second.ParameterTypeDefinition));
+    }
+
+    internal IEnumerable<ClrMethod> FindOperators(OperatorKind kind) {
+        if (ModeledOperators.NameOf(kind) is not { } name)
+            return [];
+        var arity = OperatorShape.ArityOf(kind);
+        const BindingFlags flags = BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy;
+        return [.. RuntimeType.GetMethods(flags)
+            .Where(method => method.IsSpecialName && method.Name == name && method.GetParameters().Length == arity)
+            .Select(CreateMethod)];
+    }
 
     internal ClrMethod? FindConversionFrom(ClrTypeDefinition source, ConversionOperatorKind kind) {
         ArgumentNullException.ThrowIfNull(source);

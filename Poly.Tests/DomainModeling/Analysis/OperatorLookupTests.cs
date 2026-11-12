@@ -166,7 +166,11 @@ public class OperatorLookupTests {
     public async Task Float32_Add_IsNone() {
         var single = OperatorOperands.Clr(typeof(float));
         await Assert.That(single.GetOperator(OperatorKind.Add, single)).IsNull();
-        await Assert.That(single.GetOperator(OperatorKind.LessThan, single)).IsNull();
+        await Assert.That(single.GetOperator(OperatorKind.Multiply, single)).IsNull();
+        // The CLR declares Single's comparisons itself; they are a declared member, never a built-in rule.
+        var comparison = single.GetOperator(OperatorKind.LessThan, single);
+        await AssertResult(comparison, OperatorOperands.Clr(typeof(bool)));
+        await Assert.That(comparison!.Value.PlatformApplied).IsFalse();
         // The sibling: the closed set still answers for Float64.
         await AssertResult(Op("Float", OperatorKind.Add, "Float"), OperatorOperands.Clr(typeof(double)));
     }

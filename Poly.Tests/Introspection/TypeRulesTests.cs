@@ -162,11 +162,18 @@ public class TypeRulesTests {
     }
 
     [Test]
-    public async Task GetOperators_Float32_YieldsNothing() {
+    public async Task GetOperators_Float32_ArithmeticIsNone_ComparisonsAreClrDeclaredNeverIntrinsic() {
+        // The closed set gives Float32 no intrinsic operator. The CLR itself declares Single's six comparisons,
+        // which is a declared member, not a built-in rule (A9 expected none for these; reflection says otherwise).
+        var single = Clr(typeof(float));
+        foreach (var kind in new[] { OperatorKind.Add, OperatorKind.Subtract, OperatorKind.Multiply, OperatorKind.Divide, OperatorKind.And, OperatorKind.Or, OperatorKind.Not })
+            await Assert.That(single.GetOperators(kind)).IsEmpty();
         foreach (var kind in Enum.GetValues<OperatorKind>())
-            await Assert.That(Clr(typeof(float)).GetOperators(kind)).IsEmpty();
-        // The sibling: Float64 does declare them.
-        await Assert.That(Clr(typeof(double)).GetOperators(OperatorKind.Add)).IsNotEmpty();
+            await Assert.That(single.GetOperators(kind).Any(static declared => declared.PlatformApplied)).IsFalse();
+        await Assert.That(single.GetOperators(OperatorKind.LessThan).Count()).IsEqualTo(1);
+        // The sibling: Float64 does have intrinsic arithmetic, and its comparison is one intrinsic, not two.
+        await Assert.That(Clr(typeof(double)).GetOperators(OperatorKind.Add).Single().PlatformApplied).IsTrue();
+        await Assert.That(Clr(typeof(double)).GetOperators(OperatorKind.LessThan).Single().PlatformApplied).IsTrue();
     }
 
     [Test]

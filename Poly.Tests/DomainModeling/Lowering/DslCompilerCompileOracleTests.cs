@@ -46,7 +46,7 @@ public class DslCompilerCompileOracleTests {
     private static Compiler CompilerWithHttpHost() =>
         new Compiler().Load(new HttpLibrary());
 
-    private static List<MetadataReference> GatherReferences() {
+    internal static List<MetadataReference> GatherReferences() {
         var byName = new Dictionary<string, MetadataReference>(StringComparer.OrdinalIgnoreCase);
 
         void AddFrom(string path) {
@@ -85,7 +85,7 @@ public class DslCompilerCompileOracleTests {
 
     /// <summary>Picks the ASP.NET Core shared-framework version dir matching the process
     /// runtime version, falling back to the highest installed GA version.</summary>
-    private static string? ResolveSharedFrameworkVersion(string? aspNetCoreRoot, string? coreVersion) {
+    internal static string? ResolveSharedFrameworkVersion(string? aspNetCoreRoot, string? coreVersion) {
         if (aspNetCoreRoot is null || !Directory.Exists(aspNetCoreRoot))
             return null;
 

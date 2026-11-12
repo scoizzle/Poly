@@ -20,7 +20,14 @@ public sealed class DslTokenReader : BufferedTokenReader<DslToken, DslTokenKind>
     private int _startLine = 1;
     private int _startCol = 1;
 
-    public DslTokenReader(string text) => _text = SkipLeadingBom(text);
+    public DslTokenReader(string text) {
+        _text = text;
+        // A leading UTF-8 BOM is an encoding artifact, not a character of the document: start
+        // scanning after it while line and column still begin at 1:1. Offsets stay relative to
+        // the original text, so offset consumers (outline, edit splices, span mapping) splice
+        // the caller's own string. A BOM anywhere else reaches ScanNextToken and fails there.
+        _pos = text.Length > 0 && text[0] == '\uFEFF' ? 1 : 0;
+    }
 
     public override bool EndOfStream(DslTokenKind kind) => kind == DslTokenKind.EndOfFile;
 
@@ -74,14 +81,6 @@ public sealed class DslTokenReader : BufferedTokenReader<DslToken, DslTokenKind>
 
         throw GrammarError.Error($"Unexpected character {Describe(ch)}", _line, _col);
     }
-
-    /// <summary>
-    /// A UTF-8 BOM (U+FEFF) is an encoding artifact, not a character of the document: the
-    /// first one is dropped so it cannot shift any line, column or source offset. A BOM
-    /// anywhere else reaches <see cref="ScanNextToken"/> and fails there, positioned.
-    /// </summary>
-    private static string SkipLeadingBom(string text) =>
-        text.Length > 0 && text[0] == '\uFEFF' ? text[1..] : text;
 
     /// <summary>
     /// A printable character in quotes, or its code point as <c>U+XXXX</c> when it has no

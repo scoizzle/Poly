@@ -11,8 +11,8 @@ namespace Poly.Tests.DomainModeling.Analysis;
 
 /// <summary>
 /// #604 L-22b, owner ruling on #683: a public entity may navigate to an entity that is internal to the domain
-/// (the navigation prints internal and the pack maps it explicitly). <c>DMCON019</c> now covers only an
-/// entity-typed property of a public entity. An internal entity may navigate anywhere.
+/// (the navigation prints internal and the pack maps it explicitly). <c>DMCON019</c> now covers an
+/// entity-typed property of a public entity and a many-to-many navigation to an internal entity (until L-22d). An internal entity may navigate anywhere.
 /// </summary>
 public sealed class PublicNavigationClosureTests {
     private static IReadOnlyList<Diagnostic> AllErrors(string dsl) =>
@@ -246,6 +246,21 @@ public sealed class PublicNavigationClosureTests {
     public async Task Analyze_WhenInternalEntityHasManyToManyNavToInternalEntity_IsNotReported() {
         var item = new Entity("Item", [], [], [], []);
         var order = new Entity("Order", [], [], [], []);
+        var navigation = new Relationship(
+            "items", new DomainTypeReference("Order"), new DomainTypeReference("Item"),
+            RelationshipCardinality.ManyToMany, []);
+        var domain = DomainTestFactory.Create("T", [item, order], [navigation]);
+
+        await Assert.That(DomainModelAnalyzer.Analyze(domain).Diagnostics
+            .Count(d => d.Code == "DMCON019")).IsEqualTo(0);
+    }
+
+    [Test]
+    [Arguments(true, true)]
+    [Arguments(false, true)]
+    public async Task Analyze_WhenManyToManyNavTargetsPublicEntity_IsNotReported(bool ownerPublic, bool targetPublic) {
+        var item = new Entity("Item", [], [], [], []) with { Visibility = targetPublic ? Visibility.Public : Visibility.Internal };
+        var order = new Entity("Order", [], [], [], []) with { Visibility = ownerPublic ? Visibility.Public : Visibility.Internal };
         var navigation = new Relationship(
             "items", new DomainTypeReference("Order"), new DomainTypeReference("Item"),
             RelationshipCardinality.ManyToMany, []);

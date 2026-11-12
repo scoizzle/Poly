@@ -176,6 +176,33 @@ public class PackOracleTests {
         });
     }
 
+    /// <summary>P-18 (#791) flips this to booting. The harness refuses any Boots:false fixture before compiling, so the real
+    /// boot is forced with Boots = true and the child must die: EF cannot determine the dependent side.</summary>
+    [Test]
+    [Category("OracleFull")]
+    public async Task PublicEntityWithBidirectionalInternalOneToOne_BootFails_Issue791() {
+        var ex = await Assert.ThrowsAsync<PackOracleBootException>(async () => {
+            await using var oracle = await PackOracle.BootAsync(
+                PackOracleDomains.PublicOrderInternalReceiptBidirectional604 with { Boots = true });
+        });
+
+        await Assert.That(ex!.Message).Contains("dependent side");
+    }
+
+    [Test]
+    [Category("OracleFull")]
+    public async Task PublicEntityWithTwoWayNonOwnedInternalOneToOne_BootFails_Issue791() {
+        await Assert.That(PackOracleDomains.PublicOrderInternalReceiptTwoWay604.Boots).IsFalse();
+        await Assert.That(PackOracleDomains.PublicOrderInternalReceiptTwoWay604.NotBootingReason).Contains("#791");
+
+        var ex = await Assert.ThrowsAsync<PackOracleBootException>(async () => {
+            await using var oracle = await PackOracle.BootAsync(
+                PackOracleDomains.PublicOrderInternalReceiptTwoWay604 with { Boots = true });
+        });
+
+        await Assert.That(ex!.Message).Contains("dependent side");
+    }
+
     [Test]
     public async Task GeneratedPublicEntityWithPublicNav_BootsAndServesOrderList() {
         await using var oracle = await PackOracle.BootAsync(PackOracleDomains.PublicOrderPublicLine604);

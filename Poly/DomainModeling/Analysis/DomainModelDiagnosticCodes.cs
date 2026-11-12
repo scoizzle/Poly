@@ -220,8 +220,9 @@ internal static class DomainModelDiagnosticCodes {
     /// #604 L-22: a public entity has a property typed as an entity that is internal to the declaring
     /// domain (reachable only through the model API; the DSL reads such a member as a navigation). Persistence
     /// ignores the property, so demoting it would lose data: mark the target <c>public</c>. A navigation to an
-    /// internal entity is legal since L-22b (it prints <c>internal</c> and the pack maps it explicitly).
-    /// An error positioned on the property, not acknowledgeable.
+    /// internal entity is legal since L-22b (it prints <c>internal</c> and the pack maps it explicitly), except a
+    /// many-to-many one (model API only), which fails closed under this code until row L-22d maps it.
+    /// An error positioned on the property or the navigation, not acknowledgeable.
     /// </summary>
     public const string PublicEntityPropertyTypedInternalEntity = "DMCON019";
 

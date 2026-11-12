@@ -270,6 +270,29 @@ public static class PackOracleDomains {
         Boots: false,
         NotBootingReason: "#791: EF cannot determine the dependent side of a bidirectional one-to-one");
 
+    /// <summary>L-22b closing round: the same two-way one-to-one without `owned` also fails to boot (#791).</summary>
+    public static PackOracleDomain PublicOrderInternalReceiptTwoWay604 { get; } = new(
+        "PublicOrderInternalReceiptTwoWay604",
+        """
+        domain Shop
+        uses sqlite
+        uses http
+
+        Receipt: entity {
+          Note: Text
+          order: Order via receipt
+        }
+
+        public entity Order {
+          Code: Text unique length(3, 8)
+          receipt: one Receipt
+          public action Issue (note: Text) { create in receipt { Note: note } }
+        }
+        """,
+        "/api/orders",
+        Boots: false,
+        NotBootingReason: "#791: EF cannot determine the dependent side of a two-way one-to-one");
+
     /// <summary>L-22 (#604): the same domain with the target marked public. It boots and serves the list route.</summary>
     public static PackOracleDomain PublicOrderPublicLine604 { get; } = new(
         "PublicOrderPublicLine604",

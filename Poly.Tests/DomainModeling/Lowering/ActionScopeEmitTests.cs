@@ -144,6 +144,29 @@ public class ActionScopeEmitTests {
     }
 
     [Test]
+    public async Task Vm_DecimalMatchWithElse_NeverLeaksTheScopeToken() {
+        // #605 is a known simulator bug (the match yields nothing); the wrapper must not change what
+        // it yields: the wrapper's own frame values (the scope token) must never reach a member.
+        var (domain, _) = EvolvedDomain.FromDsl("""
+            domain P
+
+            Inv: entity {
+              Qty: Number default(0)
+              Dec: Decimal default(0)
+              A: stage {
+                Price: action { assign Dec to match { Qty > 1 -> 1.5, else -> 2.0 } }
+              }
+            }
+            """);
+        var exec = ModuleExec.For(domain);
+        var created = exec.Create("Inv", new Dictionary<string, object?>());
+        await Assert.That(created.Succeeded).IsTrue();
+        _ = exec.Invoke(created.Instance!, "Price");
+        await Assert.That(created.Instance!.Bag["Dec"]).IsNotTypeOf<ActionScopeToken>();
+        await Assert.That(ActionScope.HasOpenScope).IsFalse();
+    }
+
+    [Test]
     public async Task StageDispatchedAction_OpensOneScope() {
         var (cs, _) = Print(StageDispatchDsl, "ActionScopeStageDispatch");
         // Cancel (two stages, one merged method) and Activate: one wrapper each, one shared body each.

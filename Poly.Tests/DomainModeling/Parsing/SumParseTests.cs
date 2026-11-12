@@ -1,5 +1,6 @@
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Ontology;
+using Poly.Grammar;
 
 namespace Poly.Tests.DomainModeling.Parsing;
 
@@ -37,6 +38,16 @@ public sealed class SumParseTests {
         await Assert.That(() => ParsePolicyExpression("sum lines where Open"))
             .Throws<FormatException>()
             .WithMessageContaining("sum does not take where");
+    }
+
+    [Test]
+    public async Task Sum_WhereNumberThenWord_ReportsPositionedError() {
+        var error = Assert.Throws<GrammarException>(
+            () => ParsePolicyExpression("sum lines where Qty > 1 Price > 5"))!;
+
+        await Assert.That(error.Line).IsGreaterThan(0);
+        await Assert.That(error.Detail).Contains("sum");
+        await Assert.That(error.Detail).DoesNotContain("Unknown duration unit");
     }
 
     [Test]

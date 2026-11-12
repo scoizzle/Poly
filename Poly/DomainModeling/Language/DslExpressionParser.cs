@@ -1,5 +1,6 @@
 using System.Globalization;
 
+using Poly.DomainModeling.Libraries.Temporal;
 using Poly.DomainModeling.Ontology;
 using Poly.Grammar;
 
@@ -28,7 +29,27 @@ public sealed class DslExpressionParser {
         if (match is null)
             throw _c.Error($"Expected expression, got '{_c.Current.Text}'");
         Consume(match);
-        return FoldRule(match);
+        var folded = FoldRule(match);
+        RejectUnknownDurationUnit(match);
+        return folded;
+    }
+
+    /// <summary>
+    /// A duration is <c>Number</c> + a known unit (<c>DslGrammar.IsDurationUnitToken</c>), so a
+    /// number followed on the same line by a word that is not a unit fails closed here with the
+    /// legal spellings. Two shapes are exempt: <c>Identifier :</c> (property initializers and
+    /// invoke bindings) and a same-line <c>function</c> declaration.
+    /// </summary>
+    private void RejectUnknownDurationUnit(MatchResult<DslToken, DslTokenKind> match) {
+        var last = match.Tokens[^1];
+        if (last.Kind != DslTokenKind.Number) return;
+        if (_c.Current.Kind != DslTokenKind.Identifier) return;
+        if (_c.Current.Line != last.Line) return;
+        if (_c.PeekIs(DslTokenKind.Colon)) return;
+        if (DslGrammar.IsFunctionDeclarationWord(_c.Current)) return;
+        if (DslGrammar.IsDurationUnitToken(_c.Current)) return;
+        throw _c.Error(
+            $"Unknown duration unit '{_c.Current.Text}'. Legal units: {DurationUnits.LegalUnits}.");
     }
 
     public DomainExpression ParseNestedExpression() => ParseExpression();

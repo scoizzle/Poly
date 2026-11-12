@@ -1,3 +1,4 @@
+using Poly.DomainModeling.Libraries.Temporal;
 using Poly.DomainModeling.Meaning;
 using Poly.Grammar;
 
@@ -254,7 +255,7 @@ public static class DslGrammar {
             .Pattern("false").Kind(DslTokenKind.False).Fold(ExpressionFoldTable.False).Commit()
             .Pattern("null").Kind(DslTokenKind.Null).Fold(ExpressionFoldTable.Null).Commit()
             .Pattern("group").Kind(DslTokenKind.LParen).Ref("expr").Kind(DslTokenKind.RParen).Commit()
-            .Pattern("duration").Value(DslTokenKind.Number, "amount").Value(DslTokenKind.Identifier, "unit").NotFollowedBy(DslTokenKind.Colon).Commit()
+            .Pattern("duration").Value(DslTokenKind.Number, "amount").Predicate(IsDurationUnitToken, "unit").NotFollowedBy(DslTokenKind.Colon).Commit()
             .Pattern("ident").Value(DslTokenKind.Identifier).Fold(ExpressionFoldTable.Ident).Commit()
             .Pattern("match", priority: 3)
                 .Predicate(IsMatchIdent, "kw").Balanced(DslTokenKind.LBrace, DslTokenKind.RBrace).Commit()
@@ -329,7 +330,7 @@ public static class DslGrammar {
             .Pattern("null").Kind(DslTokenKind.Null).Fold(ExpressionFoldTable.Null).Commit()
             .Pattern("group").Balanced(DslTokenKind.LParen, DslTokenKind.RParen).Commit()
             .Pattern("not").Kind(DslTokenKind.Not).Ref("expr-add").Commit()
-            .Pattern("duration").Value(DslTokenKind.Number, "amount").Value(DslTokenKind.Identifier, "unit").NotFollowedBy(DslTokenKind.Colon).Commit()
+            .Pattern("duration").Value(DslTokenKind.Number, "amount").Predicate(IsDurationUnitToken, "unit").NotFollowedBy(DslTokenKind.Colon).Commit()
             .Pattern("ident").Value(DslTokenKind.Identifier).Fold(ExpressionFoldTable.Ident).Commit()
             .Pattern("match", priority: 3)
                 .Predicate(IsMatchIdent, "kw").Balanced(DslTokenKind.LBrace, DslTokenKind.RBrace).Commit()
@@ -363,11 +364,11 @@ public static class DslGrammar {
         .Define("date-operation")
             .Pattern("add")
                 .Ref("expr-primary").Kind(DslTokenKind.Plus)
-                .Value(DslTokenKind.Number, "amount").Value(DslTokenKind.Identifier, "unit").NotFollowedBy(DslTokenKind.Colon)
+                .Value(DslTokenKind.Number, "amount").Predicate(IsDurationUnitToken, "unit").NotFollowedBy(DslTokenKind.Colon)
                 .Commit()
             .Pattern("sub")
                 .Ref("expr-primary").Kind(DslTokenKind.Minus)
-                .Value(DslTokenKind.Number, "amount").Value(DslTokenKind.Identifier, "unit").NotFollowedBy(DslTokenKind.Colon)
+                .Value(DslTokenKind.Number, "amount").Predicate(IsDurationUnitToken, "unit").NotFollowedBy(DslTokenKind.Colon)
                 .Commit()
             .Build();
 
@@ -401,10 +402,24 @@ public static class DslGrammar {
     /// </summary>
     internal static bool IsPathHopIdent(DslToken t) =>
         t.Kind == DslTokenKind.Identifier
-        && !string.Equals(t.Text, "function", StringComparison.Ordinal)
+        && !IsFunctionDeclarationWord(t)
         && !IsExistsIdent(t)
         && !IsWhereIdent(t)
         && !IsQuantifierToken(t);
+
+    /// <summary>True when <paramref name="t"/> is the <c>function</c> keyword that starts a declaration.</summary>
+    internal static bool IsFunctionDeclarationWord(DslToken t) =>
+        t.Kind == DslTokenKind.Identifier
+        && string.Equals(t.Text, "function", StringComparison.Ordinal);
+
+    /// <summary>
+    /// True when <paramref name="t"/> is an identifier spelling a duration unit
+    /// (<see cref="DurationUnits"/>). A duration is <c>Number</c> + a known unit, so
+    /// <c>3 Days</c> is one and <c>3 function</c> is not — a body ending in a number cannot
+    /// swallow the next declaration. The kind check keeps a quoted <c>"Days"</c> out.
+    /// </summary>
+    internal static bool IsDurationUnitToken(DslToken t) =>
+        t.Kind == DslTokenKind.Identifier && DurationUnits.IsUnit(t.Text);
 
     internal static bool IsQuantifierKeyword(string text) =>
         string.Equals(text, "any", StringComparison.OrdinalIgnoreCase)

@@ -105,6 +105,66 @@ public sealed class FunctionDeclarationParseTests {
         await Assert.That(error.Column).IsEqualTo(1);
     }
 
+    /// <summary>1-based line and column of <paramref name="word"/>, derived from the source text.</summary>
+    private static (int Line, int Column) PositionOf(string poly, string word) {
+        var lines = poly.Split('\n');
+        for (var i = 0; i < lines.Length; i++) {
+            var column = lines[i].IndexOf(word, StringComparison.Ordinal);
+            if (column >= 0) return (i + 1, column + 1);
+        }
+        throw new InvalidOperationException($"'{word}' does not appear in the source.");
+    }
+
+    [Test]
+    public async Task Parse_TwoFunctions_FirstBodyEndsInNumber_ParsesBoth() {
+        // The entity seeds the primitive catalog (Number), as in every real document.
+        static string Doc(string functions) => $$"""
+            domain Shop
+
+            Product: entity {
+              Price: Number
+            }
+
+            {{functions}}
+            """;
+
+        var documents = new[] {
+            Doc("""
+                function A(x: Number): Number = x + 1
+                function B(x: Number): Number = x
+                """),
+            Doc("""
+                function A(): Number = 3
+                function B(): Number = 4
+                """),
+            Doc("""function A(): Number = 3 function B(): Number = 4"""),
+        };
+
+        foreach (var poly in documents) {
+            var functions = Apply(poly).Functions;
+            await Assert.That(functions.Count).IsEqualTo(2).Because(poly);
+            await Assert.That(functions[0].Name).IsEqualTo("A").Because(poly);
+            await Assert.That(functions[1].Name).IsEqualTo("B").Because(poly);
+        }
+    }
+
+    [Test]
+    public async Task Parse_NumberThenUnknownWord_ReportsPositionedUnit() {
+        const string poly = """
+            domain Shop
+
+            function F(): Number = 3 Foo
+            """;
+        var (line, column) = PositionOf(poly, "Foo");
+
+        var error = Assert.Throws<GrammarException>(() => new PolyDslParser(poly).Parse())!;
+
+        await Assert.That(error.Detail).Contains("Unknown duration unit 'Foo'");
+        await Assert.That(error.Detail).Contains("Days");
+        await Assert.That(error.Line).IsEqualTo(line);
+        await Assert.That(error.Column).IsEqualTo(column);
+    }
+
     [Test]
     public async Task Parse_FunctionWithoutName_FailsClosedAtParen() {
         const string poly = """

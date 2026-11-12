@@ -1341,8 +1341,8 @@ function Pi(): Number = 3
   prints without one.
 - A declaration missing its `=` or its body fails closed with a positioned error; the
   parser never folds the following declaration into the body. `function` is not a path hop
-  (`a b c` navigation), so an expression that ends in an identifier ends at the next
-  `function` declaration.
+  (`a b c` navigation) and is not a duration unit, so an expression that ends in an
+  identifier or a number ends at the next `function` declaration.
 
 #### Calling a function
 

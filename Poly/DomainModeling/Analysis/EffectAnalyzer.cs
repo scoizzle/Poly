@@ -1237,16 +1237,17 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
                 var range = post.Constraints.OfType<RangeConstraint>().FirstOrDefault();
                 if (range is null) continue;
 
-                var tmin = ToDouble(range.Minimum);
-                var tmax = ToDouble(range.Maximum);
-                double lo = vr.Min!.Value, hi = vr.Max!.Value;
+                var tmin = NumericBound.ToDoubleOrNull(range.Minimum);
+                var tmax = NumericBound.ToDoubleOrNull(range.Maximum);
+                // An absent side is unbounded, never 0 (#475): the called effect's range may be open.
+                double lo = vr.Min ?? double.NegativeInfinity, hi = vr.Max ?? double.PositiveInfinity;
                 bool fullyBelow = tmin is not null && hi < tmin.Value;
                 bool fullyAbove = tmax is not null && lo > tmax.Value;
                 if (fullyBelow || fullyAbove || HasUnorderableBound(range)) {
                     context.ReportError(
                         post.Effect,
                         $"Call-chain postcondition ({action.Name} → {post.DeclaringAction.Name}): assigned value range " +
-                        $"[{FormatRangeValue(lo)}, {FormatRangeValue(hi)}] is entirely outside constraint " +
+                        $"[{FormatBound(vr.Min, lower: true)}, {FormatBound(vr.Max, lower: false)}] is entirely outside constraint " +
                         $"{ConstraintValidation.Describe(range)} on property '{post.TargetProperty}'.",
                         DomainModelDiagnosticCodes.EffectConstraintViolation);
                     continue;
@@ -1257,7 +1258,7 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
                     context.ReportWarning(
                         post.Effect,
                         $"Call-chain postcondition ({action.Name} → {post.DeclaringAction.Name}): assigned value range " +
-                        $"[{FormatRangeValue(lo)}, {FormatRangeValue(hi)}] can fall outside constraint " +
+                        $"[{FormatBound(vr.Min, lower: true)}, {FormatBound(vr.Max, lower: false)}] can fall outside constraint " +
                         $"{ConstraintValidation.Describe(range)} on property '{post.TargetProperty}'.",
                         DomainModelDiagnosticCodes.EffectConstraintViolation);
                 }
@@ -1267,6 +1268,11 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
 
     private static string FormatRangeValue(double d) =>
         d == Math.Floor(d) ? d.ToString("F0", System.Globalization.CultureInfo.InvariantCulture) : d.ToString("G", System.Globalization.CultureInfo.InvariantCulture);
+
+    /// <summary>A written edge of a value range. An absent side is unbounded and prints as the
+    /// <see cref="ConstraintValidation"/> glyph, never as the number 0 (#475).</summary>
+    private static string FormatBound(double? bound, bool lower) =>
+        bound is { } value ? FormatRangeValue(value) : lower ? "−∞" : "+∞";
 
     /// <summary>
     /// Returns true if <paramref name="inner"/> is at least as restrictive as <paramref name="outer"/>,
@@ -1281,11 +1287,6 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
         }
         // For other constraint types, assume compatible (exact match on type was already checked)
         return true;
-    }
-
-    private static double? ToDouble(object? value) {
-        try { return Convert.ToDouble(value); }
-        catch { return null; }
     }
 
     private static bool TryResolveDomainType(

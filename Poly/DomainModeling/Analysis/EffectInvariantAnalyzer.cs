@@ -236,11 +236,11 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
         bound = default;
         if (cmp.Left is PropertyAccess pa && cmp.Right is Literal { Value: not null } lit) {
             propName = pa.Name;
-            return ToDouble(lit.Value) is double d && SetBound(cmp.Kind, d, out value, out bound);
+            return NumericBound.ToDoubleOrNull(lit.Value) is double d && SetBound(cmp.Kind, d, out value, out bound);
         }
         if (cmp.Left is Literal { Value: not null } lit2 && cmp.Right is PropertyAccess pa2) {
             propName = pa2.Name;
-            return ToDouble(lit2.Value) is double d2 && SetBound(Flip(cmp.Kind), d2, out value, out bound);
+            return NumericBound.ToDoubleOrNull(lit2.Value) is double d2 && SetBound(Flip(cmp.Kind), d2, out value, out bound);
         }
         return false;
     }
@@ -287,7 +287,7 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
         Domain? domain = null) {
         switch (expr) {
             case Literal { Value: not null } lit:
-                return ToDouble(lit.Value) is double d
+                return NumericBound.ToDoubleOrNull(lit.Value) is double d
                     ? AbstractValue.From([new RangeConstraint(d, d)])
                     : AbstractValue.From(lit.Value is string s ? [new EqualityConstraint(s)] : []);
             case PropertyAccess pa:
@@ -313,13 +313,13 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
                     : AbstractValue.Unknown;
             case Add add:
                 return ComposeArithmetic(Eval(add.Left, entity, action, env, paramEnv, targetEntity, domain),
-                    Eval(add.Right, entity, action, env, paramEnv, targetEntity, domain), compose: (l, r) => l + r);
+                    Eval(add.Right, entity, action, env, paramEnv, targetEntity, domain), ArithOp.Add);
             case Subtract sub:
                 return ComposeArithmetic(Eval(sub.Left, entity, action, env, paramEnv, targetEntity, domain),
-                    Eval(sub.Right, entity, action, env, paramEnv, targetEntity, domain), compose: (l, r) => l - r);
+                    Eval(sub.Right, entity, action, env, paramEnv, targetEntity, domain), ArithOp.Sub);
             case Multiply mul:
                 return ComposeArithmetic(Eval(mul.Left, entity, action, env, paramEnv, targetEntity, domain),
-                    Eval(mul.Right, entity, action, env, paramEnv, targetEntity, domain), compose: (l, r) => l * r);
+                    Eval(mul.Right, entity, action, env, paramEnv, targetEntity, domain), ArithOp.Mul);
             default:
                 return AbstractValue.Unknown;
         }
@@ -343,14 +343,40 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
         return targets.Count == 1 ? targets[0] : null;
     }
 
-    private static AbstractValue ComposeArithmetic(
-        AbstractValue left, AbstractValue right, Func<double, double, double> compose) {
+    /// <summary>The arithmetic an abstract value composes over. <c>*</c> carries no open endpoint yet:
+    /// 0 · ±∞ needs V-05's exact number (OQ-6), so it stays fail-open (Unknown) rather than guess.</summary>
+    private enum ArithOp { Add, Sub, Mul }
+
+    /// <summary>
+    /// Composes two abstract values, one rule per result endpoint, each depending only on its own two
+    /// operand endpoints (#475): add takes like sides, subtract flips, and an absent operand endpoint
+    /// makes that result endpoint absent. An absent side is unbounded, never 0. Both result endpoints
+    /// absent means no numeric range at all (Unknown), never a <c>range(−∞, +∞)</c> constraint.
+    /// </summary>
+    private static AbstractValue ComposeArithmetic(AbstractValue left, AbstractValue right, ArithOp op) {
         if (left.NumericRange is not { } lr || right.NumericRange is not { } rr) return AbstractValue.Unknown;
-        if (lr.Min is null || lr.Max is null || rr.Min is null || rr.Max is null) return AbstractValue.Unknown;
-        // For + and -, the general min/max of the endpoint combos (works for * too with care).
-        double[] combos = [compose(lr.Min.Value, rr.Min.Value), compose(lr.Min.Value, rr.Max.Value),
-                           compose(lr.Max.Value, rr.Min.Value), compose(lr.Max.Value, rr.Max.Value)];
-        return AbstractValue.From([new RangeConstraint(combos.Min(), combos.Max())]);
+        double? min, max;
+        switch (op) {
+            case ArithOp.Add:
+                min = lr.Min + rr.Min;
+                max = lr.Max + rr.Max;
+                break;
+            case ArithOp.Sub:
+                min = lr.Min - rr.Max;
+                max = lr.Max - rr.Min;
+                break;
+            default: {
+                    if (lr.Min is not { } lMin || lr.Max is not { } lMax
+                        || rr.Min is not { } rMin || rr.Max is not { } rMax)
+                        return AbstractValue.Unknown;
+                    double[] combos = [lMin * rMin, lMin * rMax, lMax * rMin, lMax * rMax];
+                    min = combos.Min();
+                    max = combos.Max();
+                    break;
+                }
+        }
+        if (min is null && max is null) return AbstractValue.Unknown;
+        return AbstractValue.From([new RangeConstraint(min, max)]);
     }
 
     // ── Effect stepping ─────────────────────────────────────────
@@ -588,15 +614,15 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
             case Add add:
                 return ComposeArithmetic(
                     EvalForEachBinding(add.Left, binder, iterated, caller, action, env, paramEnv, domain),
-                    EvalForEachBinding(add.Right, binder, iterated, caller, action, env, paramEnv, domain), (l, r) => l + r);
+                    EvalForEachBinding(add.Right, binder, iterated, caller, action, env, paramEnv, domain), ArithOp.Add);
             case Subtract sub:
                 return ComposeArithmetic(
                     EvalForEachBinding(sub.Left, binder, iterated, caller, action, env, paramEnv, domain),
-                    EvalForEachBinding(sub.Right, binder, iterated, caller, action, env, paramEnv, domain), (l, r) => l - r);
+                    EvalForEachBinding(sub.Right, binder, iterated, caller, action, env, paramEnv, domain), ArithOp.Sub);
             case Multiply mul:
                 return ComposeArithmetic(
                     EvalForEachBinding(mul.Left, binder, iterated, caller, action, env, paramEnv, domain),
-                    EvalForEachBinding(mul.Right, binder, iterated, caller, action, env, paramEnv, domain), (l, r) => l * r);
+                    EvalForEachBinding(mul.Right, binder, iterated, caller, action, env, paramEnv, domain), ArithOp.Mul);
         }
         return Eval(expr, caller, action, env, paramEnv, domain: domain);
     }
@@ -729,11 +755,6 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
         }
         var value = Eval(expr, entity, action, env);
         return value.NumericRange is { } nr ? (nr.Min, nr.Max) : (null, null);
-    }
-
-    private static double? ToDouble(object? value) {
-        try { return Convert.ToDouble(value); }
-        catch { return null; }
     }
 }
 

@@ -47,11 +47,17 @@ internal sealed partial class EffectAnalyzer {
         double? hiNullable,
         RangeConstraint range,
         Property targetProp) {
-        if (loNullable is null || hiNullable is null) return;
-        double lo = loNullable.Value, hi = hiNullable.Value;
+        // Both sides absent is "no numeric range at all" (Unknown), not the open interval (-∞, +∞):
+        // the create-initializer callers reach here through InferNumericRange for every unranged
+        // arithmetic initializer, and treating that as open would warn each one against its target.
+        if (loNullable is null && hiNullable is null) return;
 
-        var tmin = ToDouble(range.Minimum);
-        var tmax = ToDouble(range.Maximum);
+        var tmin = NumericBound.ToDoubleOrNull(range.Minimum);
+        var tmax = NumericBound.ToDoubleOrNull(range.Maximum);
+
+        // An absent side is unbounded, never 0 (#475): ±∞ orders correctly against a bounded target.
+        double lo = loNullable ?? double.NegativeInfinity;
+        double hi = hiNullable ?? double.PositiveInfinity;
 
         bool fullyBelow = tmin is not null && hi < tmin.Value;
         bool fullyAbove = tmax is not null && lo > tmax.Value;
@@ -59,7 +65,7 @@ internal sealed partial class EffectAnalyzer {
         if (fullyBelow || fullyAbove || HasUnorderableBound(range)) {
             context.ReportError(
                 errorNode,
-                $"Assigned expression value range [{FormatRangeValue(lo)}, {FormatRangeValue(hi)}] is entirely outside " +
+                $"Assigned expression value range [{FormatBound(loNullable, lower: true)}, {FormatBound(hiNullable, lower: false)}] is entirely outside " +
                 $"constraint {ConstraintValidation.Describe(range)} on property '{targetProp.Name}'.",
                 DomainModelDiagnosticCodes.EffectConstraintViolation);
             return;
@@ -70,17 +76,17 @@ internal sealed partial class EffectAnalyzer {
         if (canViolate) {
             context.ReportWarning(
                 errorNode,
-                $"Assigned expression value range [{FormatRangeValue(lo)}, {FormatRangeValue(hi)}] can fall outside " +
+                $"Assigned expression value range [{FormatBound(loNullable, lower: true)}, {FormatBound(hiNullable, lower: false)}] can fall outside " +
                 $"constraint {ConstraintValidation.Describe(range)} on property '{targetProp.Name}'.",
                 DomainModelDiagnosticCodes.EffectConstraintViolation);
         }
     }
 
     private static bool IsRangeSubsumed(RangeConstraint inner, RangeConstraint outer) {
-        var innerMin = inner.Minimum is not null ? ToDouble(inner.Minimum) : double.NegativeInfinity;
-        var innerMax = inner.Maximum is not null ? ToDouble(inner.Maximum) : double.PositiveInfinity;
-        var outerMin = outer.Minimum is not null ? ToDouble(outer.Minimum) : double.NegativeInfinity;
-        var outerMax = outer.Maximum is not null ? ToDouble(outer.Maximum) : double.PositiveInfinity;
+        var innerMin = inner.Minimum is not null ? NumericBound.ToDoubleOrNull(inner.Minimum) : double.NegativeInfinity;
+        var innerMax = inner.Maximum is not null ? NumericBound.ToDoubleOrNull(inner.Maximum) : double.PositiveInfinity;
+        var outerMin = outer.Minimum is not null ? NumericBound.ToDoubleOrNull(outer.Minimum) : double.NegativeInfinity;
+        var outerMax = outer.Maximum is not null ? NumericBound.ToDoubleOrNull(outer.Maximum) : double.PositiveInfinity;
 
         if (innerMin is null || innerMax is null || outerMin is null || outerMax is null) return false;
 
@@ -88,6 +94,6 @@ internal sealed partial class EffectAnalyzer {
     }
 
     private static bool HasUnorderableBound(RangeConstraint range) =>
-        (range.Minimum is not null && ToDouble(range.Minimum) is null)
-        || (range.Maximum is not null && ToDouble(range.Maximum) is null);
+        (range.Minimum is not null && NumericBound.ToDoubleOrNull(range.Minimum) is null)
+        || (range.Maximum is not null && NumericBound.ToDoubleOrNull(range.Maximum) is null);
 }

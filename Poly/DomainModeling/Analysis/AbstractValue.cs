@@ -157,14 +157,9 @@ public sealed class AbstractValue {
         get {
             var range = Range;
             if (range is null) return null;
-            var min = ToDoubleOrNull(range.Minimum);
-            var max = ToDoubleOrNull(range.Maximum);
+            var min = NumericBound.ToDoubleOrNull(range.Minimum);
+            var max = NumericBound.ToDoubleOrNull(range.Maximum);
             return min is null && max is null ? null : new ValueRange(min, max);
         }
-    }
-
-    private static double? ToDoubleOrNull(object? v) {
-        try { return Convert.ToDouble(v); }
-        catch { return null; }
     }
 }

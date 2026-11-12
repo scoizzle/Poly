@@ -83,6 +83,7 @@ public class InfrastructureAnalyzerTests {
     public async Task EntityWithoutEntityRefs_IsRoot() {
         var infra = AnalyzeFull("""
             domain Test
+            uses persistence
             Book: entity {
               Title: Text
               ISBN: Text unique
@@ -124,6 +125,7 @@ public class InfrastructureAnalyzerTests {
     public async Task ChildEntity_HasAggregateParent() {
         var infra = AnalyzeFull("""
             domain Test
+            uses persistence
             Patron: entity {
               Name: Text
               Email: Text unique
@@ -293,6 +295,7 @@ public class InfrastructureAnalyzerTests {
     public async Task UniqueNumberKey_UsesLongClrType() {
         var infra = AnalyzeWithAnalysis("""
             domain Test
+            uses persistence
             Ticket: entity {
               Title: Text
               TicketNumber: Number unique
@@ -310,6 +313,7 @@ public class InfrastructureAnalyzerTests {
     public async Task Behavior_CapturesActionParametersAndVoid() {
         var infra = AnalyzeWithAnalysis("""
             domain Test
+            uses persistence
             Book: entity {
               Title: Text
               ISBN: Text unique
@@ -383,6 +387,7 @@ public class InfrastructureAnalyzerTests {
     public async Task Topology_DetectsCreateInAndSubscriptions() {
         var infra = AnalyzeFull("""
             domain Test
+            uses persistence
             Patron: entity {
               Name: Text
               Email: Text unique
@@ -441,6 +446,7 @@ public class InfrastructureAnalyzerTests {
     public async Task AnalysisPath_MatchesFallback_ForRootAndKeys() {
         const string poly = """
             domain Test
+            uses persistence
             Book: entity {
               Title: Text
               ISBN: Text unique
@@ -501,6 +507,7 @@ public class InfrastructureAnalyzerTests {
     public async Task ColumnAnnotation_OverridesColumnName() {
         var infra = AnalyzeWithPacks("""
             domain Test
+            uses persistence
             Item: entity {
               Code: Text unique column("CODE")
               Name: Text column("PRODUCT_NAME")
@@ -517,6 +524,7 @@ public class InfrastructureAnalyzerTests {
     public async Task ColumnAnnotation_OverridesColumnNameAndType() {
         var infra = AnalyzeWithPacks("""
             domain Test
+            uses persistence
             Item: entity {
               Code: Text unique column("CODE", "VARCHAR2(20)")
             }

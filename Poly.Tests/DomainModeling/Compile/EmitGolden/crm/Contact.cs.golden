@@ -7,6 +7,7 @@ public enum ContactStage
 
 public class Contact
 {
+    private Contact() { }
     private Contact(string name, string email, Account? account = null)
     {
         this.Name = name;
@@ -36,7 +37,7 @@ public class Contact
         this.CurrentStage = ContactStage.Active;
         return DomainResult.Success();
     }
-    public static DomainResult<Contact> Create(string name, string email, Account? account = null)
+    public static DomainResult<Contact> Create(string name, string email, Poly.Runtime.IStoragePort db, Account? account = null)
     {
         if (string.IsNullOrEmpty(name))
         {
@@ -50,11 +51,16 @@ public class Contact
         {
             return DomainResult<Contact>.Failure("'Email' does not match the required pattern.");
         }
+        if (Contact.ExistsWithEmail(db, email))
+        {
+            return DomainResult<Contact>.Failure("Unique constraint violated: 'Email' value is already used on another 'Contact'.");
+        }
         var created = new Contact(name, email, account);
         if (account != null)
         {
             account.AttachContacts(created);
         }
+        db.Record("Contact", "Email", email);
         return DomainResult<Contact>.Success(created);
     }
     public DomainResult EnsureUnique(string propertyName, object value)
@@ -69,4 +75,5 @@ public class Contact
         }
         return DomainResult.Failure("A unique assign needs the storage port.");
     }
+    public static System.Boolean ExistsWithEmail(Poly.Runtime.IStoragePort db, System.String email) => db.Exists("Contact", "Email", email);
 }

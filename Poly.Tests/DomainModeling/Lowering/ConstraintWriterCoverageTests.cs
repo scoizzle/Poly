@@ -13,10 +13,7 @@ namespace Poly.Tests.DomainModeling.Lowering;
 public class ConstraintWriterCoverageTests {
     [Test]
     public async Task EveryConstraintRecord_HasWriterKindOrDocumentedException() {
-        var records = typeof(Constraint).Assembly.GetTypes()
-            .Where(type => !type.IsAbstract && typeof(Constraint).IsAssignableFrom(type))
-            .OrderBy(type => type.Name, StringComparer.Ordinal)
-            .ToList();
+        var records = ConstraintSamples.Records();
 
         await Assert.That(records.Count).IsGreaterThan(0);
         foreach (var record in records) {
@@ -44,10 +41,32 @@ public class ConstraintWriterCoverageTests {
         }
     }
 
+    /// <summary>
+    /// A12: a marker row says no guard can express the fact, so it emits no writer kind and
+    /// its owner starts <c>marker:</c>. Anything else without kinds names a real writer, and
+    /// <c>DMLIB001</c> is what a session misses when that writer's library is not loaded.
+    /// </summary>
+    [Test]
+    public async Task MarkerRows_EmitNoWriterKinds_AndSayWhyNoGuardExists() {
+        var markers = 0;
+        foreach (var (type, coverage) in ConstraintCheckWriter.CoverageByConstraint) {
+            if (!coverage.Marker)
+                continue;
+            markers++;
+            await Assert.That(coverage.Kinds.Count).IsEqualTo(0)
+                .Because($"'{type.Name}' is a marker, so it must not also emit writer kinds.");
+            await Assert.That(coverage.Owner!.StartsWith("marker:", StringComparison.Ordinal)).IsTrue()
+                .Because($"'{type.Name}' is a marker, so its owner must say why no guard exists.");
+        }
+
+        await Assert.That(markers).IsGreaterThan(0)
+            .Because("the marker flag exists for the facts no guard can express; no marker row means it is untested.");
+    }
+
     [Test]
     public async Task CoverageRows_WithKinds_AreEmittedByChecksFor() {
         foreach (var (type, coverage) in ConstraintCheckWriter.CoverageByConstraint) {
-            var (typeName, sample) = Sample(type);
+            var (typeName, sample) = ConstraintSamples.For(type);
             // Text is required by default; every row but Required marks the property optional so
             // the Required kind does not mask what the sampled constraint itself emits.
             IReadOnlyList<Constraint> constraints = sample is RequiredConstraint
@@ -83,7 +102,24 @@ public class ConstraintWriterCoverageTests {
         }
     }
 
-    private static (string TypeName, Constraint Sample) Sample(Type type) {
+    private static (string TypeName, Constraint Sample) Sample(Type type) => ConstraintSamples.For(type);
+}
+
+/// <summary>
+/// The one sample per <see cref="Constraint"/> record two suites share:
+/// <c>ConstraintWriterCoverageTests</c> (does the writer emit the row's kinds?) and
+/// <c>ConstraintCoverageTests</c> (is the record claimed, a marker, or compiled by a
+/// library?). A new record has one place to add its sample.
+/// </summary>
+internal static class ConstraintSamples {
+    /// <summary>Every concrete <see cref="Constraint"/> record, ordinal by name.</summary>
+    public static IReadOnlyList<Type> Records() =>
+        [.. typeof(Constraint).Assembly.GetTypes()
+            .Where(type => !type.IsAbstract && typeof(Constraint).IsAssignableFrom(type))
+            .OrderBy(type => type.Name, StringComparer.Ordinal)];
+
+    /// <summary>A property type name and a representative record for <paramref name="type"/>.</summary>
+    public static (string TypeName, Constraint Sample) For(Type type) {
         if (type == typeof(RequiredConstraint)) return ("Text", new RequiredConstraint());
         if (type == typeof(RangeConstraint)) return ("Number", new RangeConstraint(1L, 10L));
         if (type == typeof(LengthConstraint)) return ("Text", new LengthConstraint(1, 20));
@@ -95,6 +131,6 @@ public class ConstraintWriterCoverageTests {
             return ("Text", new DefaultValueConstraint(DomainExpression.Literal("x")));
         if (type == typeof(RelationalConstraint))
             return ("Number", new RelationalConstraint("Other", RelationalOrdering.Less));
-        throw new InvalidOperationException($"Add a sample for coverage row '{type.Name}'.");
+        throw new InvalidOperationException($"Add a sample for constraint record '{type.Name}'.");
     }
 }

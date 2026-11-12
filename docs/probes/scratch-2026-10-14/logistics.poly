@@ -1,6 +1,7 @@
 domain Logistics
 uses temporal
 uses http
+uses persistence
 
 Address: entity {
   Line1: Text

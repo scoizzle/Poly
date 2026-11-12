@@ -21,6 +21,7 @@ public class DomainToCSharpExporterTests {
     private const string LibraryCheckoutDsl = """
         domain Library
         uses temporal
+        uses persistence
 
         Genre: enum { Fiction, NonFiction, Reference }
         PatronStatus: enum { Active, Suspended, Closed }
@@ -2836,6 +2837,7 @@ public class DomainToCSharpExporterTests {
         // (post-prior-assign subst), not unguarded ProbeCreate before assign.
         var (domain, analysis) = ParseAndAnalyze("""
             domain Parking
+            uses persistence
             Permit: entity {
               Plate: Text unique
             }

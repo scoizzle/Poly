@@ -14,6 +14,7 @@ public class StoreBindCreateTests {
     public async Task CreateIn_Runtime_LowersToCreateNav() {
         var (domain, analysis) = Evolve("""
             domain Parking
+            uses persistence
             Permit: entity { Plate: Text unique }
             Lot: entity {
               permits: many Permit
@@ -126,6 +127,7 @@ public class StoreBindCreateTests {
     public async Task Store_CreateIn_RegistersChildAndLink() {
         var (domain, _) = Evolve("""
             domain Parking
+            uses persistence
             Permit: entity { Plate: Text unique }
             Lot: entity {
               permits: many Permit
@@ -144,6 +146,7 @@ public class StoreBindCreateTests {
     public async Task Store_CreateIn_UniqueCollision_IsFailureWithoutRegistering() {
         var (domain, _) = Evolve("""
             domain Parking
+            uses persistence
             Permit: entity { Plate: Text unique }
             Lot: entity {
               permits: many Permit
@@ -164,6 +167,7 @@ public class StoreBindCreateTests {
     public async Task Store_CreateIn_OmittedUniqueDefault_IsFailureWithoutRegistering() {
         var (domain, _) = Evolve("""
             domain Parking
+            uses persistence
             Permit: entity { Plate: Text unique default("STD") }
             Lot: entity {
               permits: many Permit

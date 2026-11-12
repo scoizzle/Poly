@@ -1,6 +1,7 @@
 domain Roastery
 uses temporal
 uses http
+uses persistence
 
 RoastLevel: enum { Light, Medium, Dark }
 

@@ -19,6 +19,7 @@ public class AnnotationRoundTripTests {
     public async Task ColumnAnnotation_ParsePrint_RoundTrips() {
         var poly = """
             domain Test
+            uses persistence
 
             Item: entity {
               Code: Text unique column("CODE")
@@ -90,6 +91,7 @@ public class AnnotationRoundTripTests {
     public async Task ColumnAndTable_Combined_RoundTrips() {
         var poly = """
             domain Test
+            uses persistence
 
             Patron: entity table("PATRON_MASTER") {
               CardNumber: Text unique column("CARD_NBR", "VARCHAR2(20)")

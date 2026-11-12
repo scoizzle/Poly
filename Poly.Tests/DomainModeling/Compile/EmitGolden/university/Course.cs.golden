@@ -1,6 +1,7 @@
 #nullable enable
 public class Course
 {
+    private Course() { }
     private Course(string code, string title)
     {
         this.Code = code;
@@ -8,7 +9,7 @@ public class Course
     }
     public string Code { get; private set; } = default!;
     public string Title { get; private set; } = default!;
-    public static DomainResult<Course> Create(string code, string title)
+    public static DomainResult<Course> Create(string code, string title, Poly.Runtime.IStoragePort db)
     {
         if (string.IsNullOrEmpty(code))
         {
@@ -26,7 +27,12 @@ public class Course
         {
             return DomainResult<Course>.Failure("'Title' is required.");
         }
+        if (Course.ExistsWithCode(db, code))
+        {
+            return DomainResult<Course>.Failure("Unique constraint violated: 'Code' value is already used on another 'Course'.");
+        }
         var created = new Course(code, title);
+        db.Record("Course", "Code", code);
         return DomainResult<Course>.Success(created);
     }
     public DomainResult EnsureUnique(string propertyName, object value)
@@ -41,4 +47,5 @@ public class Course
         }
         return DomainResult.Failure("A unique assign needs the storage port.");
     }
+    public static System.Boolean ExistsWithCode(Poly.Runtime.IStoragePort db, System.String code) => db.Exists("Course", "Code", code);
 }

@@ -57,6 +57,7 @@ public sealed class LibrarySelectionTests {
 
         await Assert.That(reloaded.Extensions).IsEquivalentTo(new[] { "x" });
         await Assert.That(reloaded.Target).IsNull();
+        await Assert.That(ReferenceEquals(reloaded.Options.Catalog, catalog)).IsTrue();
     }
 
     /// <summary>
@@ -73,6 +74,7 @@ public sealed class LibrarySelectionTests {
         var emptied = seeded.WithDomain(new Domain("D", []));
         // Explicit ids: a reload never re-applies the implicit seed.
         await Assert.That(emptied.Extensions).IsEmpty();
+        await Assert.That(emptied.Options.ImplicitIds).IsEquivalentTo(new[] { "x" });
 
         // The reload keeps the catalog, so this later change still resolves 'x'.
         var reloaded = emptied.WithDomain(new Domain("D", []) { Extensions = ["x"] });
@@ -134,6 +136,40 @@ public sealed class LibrarySelectionTests {
             .WithMessageContaining("nope");
         await Assert.That(() => LibrarySelection.Resolve([" "], options))
             .Throws<ArgumentException>();
+    }
+
+    /// <summary>
+    /// T2b: the explicit-ids, document and wrapper entry points select the same
+    /// implicit set and accept the same annotation. Compile-red (API absent) before C-01 step 3.
+    /// </summary>
+    [Test]
+    public async Task ImplicitSetParity_AcrossLoadEntryPoints() {
+        var catalog = ProbeCatalog();
+        var options = new SessionOptions(catalog, ["x"]);
+        var tree = TreeWithoutUses();
+
+        var sessions = new[] {
+            LibrarySelection.Load(tree, options),
+            LibrarySelection.Load(["x"], options),
+            DomainSession.ForDocument(tree, ["x"], catalog),
+            DomainSession.Create([], options),
+        };
+
+        foreach (var session in sessions) {
+            await Assert.That(session.Extensions).IsEquivalentTo(new[] { "x" });
+            await Assert.That(session.Annotations.CanAccept("xmark")).IsTrue();
+        }
+    }
+
+    /// <summary>The target lives only in <see cref="DomainSession.Options"/>; a reload keeps it.</summary>
+    [Test]
+    public async Task WithTarget_ThenReload_KeepsTargetInOptions() {
+        var session = DomainSession.ForExtensions([], ProbeCatalog()).WithTarget("host");
+        var reloaded = session.WithDomain(new Domain("D", []) { Extensions = ["x"] });
+
+        await Assert.That(session.Options.Target).IsEqualTo("host");
+        await Assert.That(reloaded.Target).IsEqualTo("host");
+        await Assert.That(ReferenceEquals(reloaded.Options.Catalog, session.Options.Catalog)).IsTrue();
     }
 
     private sealed class ProbeLibrary(string id, ProbeAnnotation? annotation = null) : IDomainLibrary {

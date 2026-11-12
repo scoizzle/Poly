@@ -1,3 +1,5 @@
+using Poly.DomainModeling.Libraries.Storage;
+
 namespace Poly.DomainModeling.Compile;
 
 /// <summary>
@@ -31,6 +33,41 @@ public static class LibrarySelection {
         foreach (var id in options.ImplicitIds)
             catalog.Resolve(id);
         return options.ImplicitIds;
+    }
+
+    /// <summary>
+    /// Loads exactly <paramref name="ids"/> against the options' catalog, with no
+    /// <see cref="Resolve"/> substitution. A blank or repeated id and an unknown id
+    /// throw <see cref="InvalidOperationException"/>. The session keeps
+    /// <paramref name="options"/> so a reload resolves against the same catalog.
+    /// </summary>
+    public static DomainSession Load(IReadOnlyList<string> ids, SessionOptions options) {
+        ArgumentNullException.ThrowIfNull(ids);
+        ArgumentNullException.ThrowIfNull(options);
+        var catalog = options.Catalog;
+        ArgumentNullException.ThrowIfNull(catalog);
+        var builder = SessionBuilder.CreateEmpty();
+        builder.LoadCore();
+        if (!ids.Any(id => string.Equals(id, ExtensionCatalog.TemporalId, StringComparison.Ordinal)))
+            builder.LoadTemporal();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var id in ids) {
+            if (string.IsNullOrWhiteSpace(id))
+                throw new InvalidOperationException("Domain extension id must be non-empty.");
+            if (!seen.Add(id))
+                throw new InvalidOperationException($"Domain lists extension '{id}' more than once.");
+            builder.Load(catalog.Resolve(id));
+        }
+        if (options.Authoring)
+            StorageFacetLibrary.EnsureRegistered(builder);
+        return builder.Build(options);
+    }
+
+    /// <summary>Loads the libraries <see cref="Resolve"/> selects for the document's <c>uses</c>.</summary>
+    public static DomainSession Load(DslSyntaxTree tree, SessionOptions options) {
+        ArgumentNullException.ThrowIfNull(tree);
+        ArgumentNullException.ThrowIfNull(options);
+        return Load(Resolve(tree.Uses, options), options);
     }
 
     private static void ValidateDocumentUses(IReadOnlyList<string> documentUses) {

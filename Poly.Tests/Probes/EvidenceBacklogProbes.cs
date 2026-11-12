@@ -57,6 +57,76 @@ public class EvidenceBacklogProbes {
         var thrown = Record.Exception(() => ExportedCSharp.CompileAndLoad(cs, "ValueUnderscore"));
         await Assert.That(thrown?.Message.Split('\n')[0]).IsNull();
     }
+
+    /// <summary>Error text from parse or analysis, or "" when the document is accepted.</summary>
+    private static string ErrorsOf(string dsl) {
+        try {
+            return Dump(Diagnose(dsl).Where(d => d.Severity == DiagnosticSeverity.Error));
+        } catch (FormatException e) {
+            return "PARSE " + e.Message;
+        }
+    }
+
+    private const string EntryHead = "domain E\nLine: entity {\n  N: Text optional\n  Z: action { assign N to \"z\" }\n}\n";
+
+    [Test]
+    public async Task Item02a_EntryInvoke_IsRejected() {
+        var errors = ErrorsOf(EntryHead + "X: entity {\n  Count: Number optional\n  A: stage {\n    entry { invoke Bump }\n    Bump: action { assign Count to 1 }\n  }\n}\n");
+        await Assert.That(errors).IsNotEmpty();
+    }
+
+    [Test]
+    public async Task Item02b_EntryCreate_IsRejected() {
+        var errors = ErrorsOf(EntryHead + "X: entity {\n  Count: Number optional\n  A: stage {\n    entry { create Line { N: \"a\" } }\n  }\n}\n");
+        await Assert.That(errors).IsNotEmpty();
+    }
+
+    [Test]
+    public async Task Item02c_EntryForInvoke_IsRejected() {
+        var errors = ErrorsOf(EntryHead + "X: entity {\n  lines: many Line\n  A: stage {\n    entry { for lines as l invoke l.Z }\n  }\n}\n");
+        await Assert.That(errors).IsNotEmpty();
+    }
+
+    [Test]
+    public async Task Item17_ManyToOneToKeywordNamedEntity_PrintsAndRereadsCleanly() {
+        const string dsl = "domain M\nOrder: entity {\n  Code: Text\n}\nSchedule: entity {\n  Day: Text\n}\n";
+        var parsed = new DomainEvolution(DomainTestFactory.Create("_", [], []))
+            .ApplyAndAnalyze(new PolyDslParser(dsl).Parse());
+        var added = new DomainEvolution(parsed.Root).ApplyAndAnalyze([
+            new AddRelationshipChange("schedule", new DomainTypeReference("Order"),
+                new DomainTypeReference("Schedule"), RelationshipCardinality.ManyToOne, [])]);
+        var printed = new DomainDslPrinter().Print(added.Root);
+        string outcome;
+        try {
+            var reread = new DomainEvolution(DomainTestFactory.Create("_", [], []))
+                .ApplyAndAnalyze(new PolyDslParser(printed).Parse());
+            outcome = reread.Succeeded ? "ok" : "ANALYSIS " + reread.FailureSummary;
+        } catch (FormatException e) {
+            outcome = "PARSE " + e.Message;
+        }
+        await Assert.That(outcome + " <<" + printed.Replace('\n', '~') + ">>").StartsWith("ok");
+    }
+
+    [Test]
+    public async Task Item17_F9_UsesOrder_IsPreservedByLoad() {
+        var session = DomainSession.Create(["persistence", "temporal"], SessionOptions.Bare(ExtensionCatalog.Core));
+        await Assert.That(string.Join(",", session.Extensions)).StartsWith("persistence,temporal");
+    }
+
+    [Test]
+    public async Task Item17_F8_OmittedUsesRedefine_ReproducesFreshModel() {
+        const string withUses = "domain A\nuses http\nT: entity { N: Text }\n";
+        const string without = "domain B\nU: entity { M: Text }\n";
+        var h = PolySurfaceHarness.New();
+        var fresh = h.Open();
+        h.Define(fresh, without);
+        var freshDsl = h.Export(fresh, "dsl").Content;
+        var dirty = h.Open();
+        var first = h.Define(dirty, withUses);
+        var second = h.Define(dirty, without);
+        var dirtyDsl = h.Export(dirty, "dsl").Content;
+        await Assert.That($"first={first.Success} second={second.Success}\n{dirtyDsl}").IsEqualTo($"first={first.Success} second={second.Success}\n{freshDsl}");
+    }
 }
 
 internal static class Record {

@@ -28,7 +28,10 @@ public sealed partial class EffectLoweringPass {
             foreach (var kv in _context.Parameters)
                 mergedParams[kv.Key] = kv.Value;
         mergedParams[e.BinderName] = loopVar;
-        var bodyContext = _context with { Parameters = mergedParams };
+        // The body's source is whatever stage the runtime instance is in at that
+        // iteration, not the stage that declared the loop: seed the dynamic (null)
+        // cursor, the per-stage exit switch.
+        var bodyContext = _context with { Parameters = mergedParams, SourceStageName = null };
 
         var binders = new Dictionary<string, Node>(_loopBinders ?? new Dictionary<string, Node>(), StringComparer.Ordinal) {
             [e.BinderName] = loopVar
@@ -51,6 +54,12 @@ public sealed partial class EffectLoweringPass {
                     $"Cannot lower effect '{DescribeEffect(sub)}' to a Syntax AST node.");
             CollectNode(loopBody, loopLocals, lowered);
         }
+
+        // A body that can transition leaves the runtime stage unknown once the loop
+        // ends, so the enclosing cursor is dynamic for the rest of this body too.
+        if (EffectHelpers.FlattenEffects(e.Body).Any(x => x is StageTransitionEffect))
+            _sourceStageName = null;
+
         return new Block([new ForEachLoop(loopVar, navMember, new Block(loopBody, loopLocals))]);
     }
 }

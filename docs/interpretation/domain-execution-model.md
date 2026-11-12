@@ -151,7 +151,7 @@ ExecuteEffectList(effects)
 
 ### 2d. No placeholder node is shipped meaning
 
-A composite/conditional sub-effect that cannot lower throws `InvalidOperationException`. All shipped effects lower on both runtime and emit paths. The `Comment` node that once served as such a marker was deleted (#391); no AST node is a lowering-gap marker. Sequential transitions update `SourceStageName` after each transition so exit effects use the correct source stage. Clocks (`now`/`today`/`guid`) lower to static BCL members the VM executes — they are not rewritten to host literals.
+A composite/conditional sub-effect that cannot lower throws `InvalidOperationException`. All shipped effects lower on both runtime and emit paths. The `Comment` node that once served as such a marker was deleted (#391); no AST node is a lowering-gap marker. The lowering cursor (`SourceStageName`) advances after each hop's own exit and before its target's entry, so each hop exits its own source and a nested chain ends on its innermost target. It is dynamic — a per-stage exit switch — inside a `for` body that can transition, and for the rest of the enclosing body after such a loop. Clocks (`now`/`today`/`guid`) lower to static BCL members the VM executes — they are not rewritten to host literals.
 
 ---
 

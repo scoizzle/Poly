@@ -200,11 +200,13 @@ public sealed class StorageNavigation {
         Relationship source,
         string propertyName,
         bool isCollection,
-        string? inversePropertyName = null) {
+        string? inversePropertyName = null,
+        bool inverseIsCollection = false) {
         Source = source;
         PropertyName = propertyName;
         IsCollection = isCollection;
         InversePropertyName = inversePropertyName;
+        InverseIsCollection = inverseIsCollection;
     }
 
     public Relationship Source { get; }
@@ -213,6 +215,9 @@ public sealed class StorageNavigation {
     public bool IsCollection { get; }
     public bool SourceOwnsTarget => Source.SourceOwnsTarget;
     public string? InversePropertyName { get; }
+
+    /// <summary>True when the resolved inverse is a collection navigation; false when there is no inverse.</summary>
+    public bool InverseIsCollection { get; }
 }
 
 /// <summary>A unique index over columns, in order. Columns are the storage view of the key members.</summary>

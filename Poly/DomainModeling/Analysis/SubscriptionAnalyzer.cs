@@ -36,24 +36,13 @@ internal sealed class SubscriptionAnalyzer : INodeAnalyzer {
         foreach (var entity in lookup.Entities) {
             // Entity-level when is always-active (entity-level dispatch); same contract + binding
             // validation as stage-scoped (including optional peer binder).
+            CheckDuplicateHandlers(context, entity, entity.Subscriptions, "entity-level dispatch");
             foreach (var entitySub in entity.Subscriptions) {
                 ValidateSubscription(context, entitySub, entity, domain, lookup);
             }
 
             foreach (var stage in entity.Stages) {
-                // ── Check for duplicate subscription keys on this stage ────
-                for (int i = 0; i < stage.Subscriptions.Count; i++) {
-                    for (int j = i + 1; j < stage.Subscriptions.Count; j++) {
-                        if (SemanticKeyMatch(stage.Subscriptions[i], stage.Subscriptions[j])) {
-                            context.ReportWarning(
-                                stage.Subscriptions[i],
-                                $"Duplicate stage subscription key on stage '{stage.Name}' of entity '{entity.Name}': " +
-                                $"{SubscriptionKey(stage.Subscriptions[i])}. " +
-                                $"Remove-all semantics apply.",
-                                DomainModelDiagnosticCodes.SubscriptionContractMismatch);
-                        }
-                    }
-                }
+                CheckDuplicateHandlers(context, entity, stage.Subscriptions, $"stage '{stage.Name}'");
 
                 foreach (var subscription in stage.Subscriptions) {
                     ValidateSubscription(context, subscription, entity, domain, lookup);
@@ -482,21 +471,35 @@ internal sealed class SubscriptionAnalyzer : INodeAnalyzer {
         }
     }
 
-    private static bool SemanticKeyMatch(StageSubscription a, StageSubscription b) {
-        if (!string.Equals(a.RelationshipName, b.RelationshipName, StringComparison.Ordinal))
-            return false;
-        if (a.Quantifier != b.Quantifier)
-            return false;
-        if (!string.Equals(a.PeerBinding, b.PeerBinding, StringComparison.Ordinal))
-            return false;
-        if (a.StageNames.Count != b.StageNames.Count)
-            return false;
-        for (int i = 0; i < a.StageNames.Count; i++) {
-            if (!string.Equals(a.StageNames[i], b.StageNames[i], StringComparison.Ordinal))
-                return false;
+    /// <summary>
+    /// #615: handlers sharing a key in one scope all run, in declaration order (Q11); nothing is
+    /// removed. One warning per group, on the second declaration. The key is intentionally
+    /// stage-order-insensitive, unlike <c>RemoveStageSubscriptionChange.SemanticMatch</c>.
+    /// The same key at entity level and inside a stage is not a duplicate: Q11 orders
+    /// entity-level before stage-scoped, which presupposes both placements coexisting.
+    /// </summary>
+    private static void CheckDuplicateHandlers(
+        AnalysisContext context, Entity entity, IReadOnlyList<StageSubscription> subscriptions, string scope) {
+        if (subscriptions.Count < 2) return;
+        foreach (var group in subscriptions.GroupBy(CanonicalKey, StringComparer.Ordinal)) {
+            var members = group.ToList();
+            if (members.Count < 2) continue;
+            var handlers = members.Count == 2 ? "Both run" : $"All {members.Count} handlers run";
+            context.ReportWarning(
+                members[1],
+                $"Duplicate 'when' handlers in {scope} of entity '{entity.Name}': " +
+                $"{SubscriptionKey(members[0])} is declared {members.Count} times. " +
+                $"{handlers}, in declaration order — nothing is removed.",
+                DomainModelDiagnosticCodes.SubscriptionDuplicateHandler);
         }
-        return true;
     }
+
+    private static string CanonicalKey(StageSubscription sub) =>
+        string.Join("\u001f", [
+            sub.RelationshipName,
+            sub.Quantifier.ToString(),
+            sub.PeerBinding ?? "",
+            .. sub.StageNames.Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)]);
 
     private static string SubscriptionKey(StageSubscription sub) =>
         $"{sub.RelationshipName} -> {string.Join("/", sub.StageNames)} ({sub.Quantifier}" +

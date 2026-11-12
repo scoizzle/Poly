@@ -114,20 +114,20 @@ public sealed partial class MinimalApiGenerator {
                 invokeArgs.Count > 0
                     ? new Invoke(new Member(new Variable("entity"), ia.Name), [.. invokeArgs])
                     : new Invoke(new Member(new Variable("entity"), ia.Name))));
-            tryBody.Add(new Await(new Invoke(new Member(new TypeReference("db"), "SaveChangesAsync"))));
 
-            // IsSuccess → Ok. Constraint and stage failures are 400; unique and link conflicts are 409.
+            // Success commits; a failure returns before any save, so the context discards its pending changes.
+            var commit = new Await(new Invoke(new Member(new TypeReference("db"), "SaveChangesAsync")));
             var failure = new Block(DomainFailureReturn(new Member(new Variable("result"), "ErrorMessage")));
             if (ia.IsVoid) {
                 tryBody.Add(new IfStatement(
                     new Member(new Variable("result"), "IsSuccess"),
-                    new Block(new Return(new Invoke(new Member(new TypeReference("Results"), "Ok"), new Constant("ok")))),
+                    new Block(commit, new Return(new Invoke(new Member(new TypeReference("Results"), "Ok"), new Constant("ok")))),
                     failure));
             }
             else {
                 tryBody.Add(new IfStatement(
                     new Member(new Variable("result"), "IsSuccess"),
-                    new Block(new Return(new Invoke(new Member(new TypeReference("Results"), "Ok"), new Member(new Variable("result"), "Value")))),
+                    new Block(commit, new Return(new Invoke(new Member(new TypeReference("Results"), "Ok"), new Member(new Variable("result"), "Value")))),
                     failure));
             }
 

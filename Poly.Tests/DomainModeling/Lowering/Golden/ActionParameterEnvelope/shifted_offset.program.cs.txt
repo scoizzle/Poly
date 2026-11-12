@@ -49,9 +49,9 @@ app.MapPost("/api/books/{id}/shift", async (int id, ShiftDto dto, TDbCtx db) => 
     try
     {
         var result = entity.Shift(dto.P);
-        await db.SaveChangesAsync();
         if (result.IsSuccess)
         {
+            await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
         else

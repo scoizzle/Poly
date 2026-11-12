@@ -6,9 +6,11 @@ namespace Poly.Tests.DomainModeling.Lowering;
 
 /// <summary>
 /// #367 C-2 relocation parity. The implicit-constraint envelope moved from the Product pack into the
-/// <see cref="ActionParameterEnvelopeMetadata"/> analysis fact; the goldens were captured from the pack's
-/// original private derivation (envelope) and its rendered Program.cs (output) BEFORE the move. Neither the
-/// fact nor the emitted program may differ from them.
+/// <see cref="ActionParameterEnvelopeMetadata"/> analysis fact; the envelope goldens were captured from the
+/// pack's original private derivation BEFORE the move, and the rendered Program.cs goldens from its
+/// pre-relocation output. The program renders were regenerated for P-03 (#620): the only change is each action
+/// handler's save moving inside its <c>if (result.IsSuccess)</c> branch. Neither the fact nor any other line of
+/// the emitted program may differ from them.
 /// </summary>
 public class ActionParameterEnvelopeParityTests {
     public static IEnumerable<string> FixtureNames() => ActionParameterEnvelopeFixtures.All.Select(f => f.Name);

@@ -407,7 +407,7 @@ public sealed class PublicSurfaceClosureTests {
             }
             """;
 
-        var compiler = new PolyCompiler(ProductCatalog.Catalog, "authoring");
+        var compiler = new PolyCompiler(ProductCatalog.Catalog, new SessionOptions(ProductCatalog.Catalog, ExtensionCatalog.ProductAuthoring));
         var result = compiler.Compile(Dsl, "reachable.poly");
 
         var errors = result.Diagnostics
@@ -454,7 +454,7 @@ public sealed class PublicSurfaceClosureTests {
 
     [Test]
     public async Task Polyc_ReportsDmcon002PlacedAtTheMember() {
-        var compiler = new PolyCompiler(ProductCatalog.Catalog, "authoring");
+        var compiler = new PolyCompiler(ProductCatalog.Catalog, new SessionOptions(ProductCatalog.Catalog, ExtensionCatalog.ProductAuthoring));
         var result = compiler.Compile(InternalParameterDsl, "closed.poly");
 
         var errors = result.Diagnostics.Where(d => d.Code == DomainModelDiagnosticCodes.PublicSurfaceNotClosed).ToList();

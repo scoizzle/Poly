@@ -19,7 +19,7 @@ namespace Poly.Benchmarks;
 /// with BenchmarkDotNet 0.15.8, then copied verbatim from the exporter's report.
 /// <para>
 /// <b>Session.</b> The cases are built on <see cref="BenchmarkSupport.AuthoringSession"/>:
-/// <c>DomainSession.ForAuthoringSource(text, [storage, persistence])</c>, the same
+/// <c>LibrarySelection.Load</c> over <c>[storage, persistence]</c> with the authoring pack, the same
 /// authoring pipeline <c>PolyCompiler</c> runs for the define gate (<c>apply_dsl</c> /
 /// <c>validate_dsl</c>). It differs only in catalog — <see cref="ExtensionCatalog.Core"/> here,
 /// <c>ProductCatalog.Model</c> there. That is analysis-neutral for these ten documents: none lists

@@ -28,7 +28,7 @@ public sealed class ParseFirstTests {
             uses temporal
             Item: entity { Due: Date }
             """);
-        var session = DomainSession.ForDocument(tree, []);
+        var session = DomainSession.Create(tree.Uses, SessionOptions.Bare(ExtensionCatalog.Core));
         var changes = new DomainResolver(tree, session).Resolve();
 
         var property = changes.OfType<AddPropertyToEntityChange>().Single(c => c.Property.Name == "Due");
@@ -44,7 +44,7 @@ public sealed class ParseFirstTests {
                 Overdue: policy { Now - 12 Days }
             }
             """);
-        var session = DomainSession.ForDocument(tree, []);
+        var session = DomainSession.Create(tree.Uses, SessionOptions.Bare(ExtensionCatalog.Core));
         var changes = new DomainResolver(tree, session).Resolve();
 
         var policy = changes.OfType<AddPolicyToEntityChange>().Single(p => p.Policy.Name == "Overdue");
@@ -72,7 +72,7 @@ public sealed class ParseFirstTests {
             domain Shop
             Item: entity { Code: Text column("CODE") }
             """);
-        var session = DomainSession.ForDocument(tree, []);
+        var session = DomainSession.Create(tree.Uses, SessionOptions.Bare(ExtensionCatalog.Core));
 
         await Assert.That(() => new DomainResolver(tree, session).Resolve())
             .Throws<FormatException>()

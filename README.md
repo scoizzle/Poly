@@ -94,8 +94,8 @@ each its own compilation unit; with no path and piped stdin, stdin is one docume
   `--verbosity info|hint` shows more. Codes: `DSL0001` parse, `DSL0002` unknown extension,
   `DSL0003` duplicate extension, `DSL0004` lower or emit refused; analyzer codes pass through.
 - **`uses` resolution:** with no `uses`, omitting `--seed` loads the implicit set
-  `[storage, persistence]`; `--seed authoring` loads `[storage]` only and `--seed language`
-  loads no ids. A document's non-empty `uses` list replaces the seed, so a `unique` property
+  `[storage, persistence]`; `--seed authoring` is an alias for the same set (CLI only) and
+  `--seed language` loads no ids. A document's non-empty `uses` list replaces the seed, so a `unique` property
   needs `persistence` or a vendor library (`sqlite`, `sqlserver`) in that list: a loaded library
   that compiles no `unique` is `DMLIB001` at define time in `polyc`, `poly_define`,
   `validate_dsl` and the DslCompiler facade, rather than a silently dropped constraint.

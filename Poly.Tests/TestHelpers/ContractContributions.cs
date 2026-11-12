@@ -84,7 +84,7 @@ public static class ContractContributions {
         string poly,
         params IDomainLibrary[] libraries) {
         var tree = DslSyntaxTree.Parse(poly);
-        var session = DomainSession.ForDocument(tree, [], Catalog(libraries));
+        var session = DomainSession.Create(tree.Uses, SessionOptions.Bare(Catalog(libraries)));
         var changes = new DomainResolver(tree, session).Resolve();
         var result = new DomainEvolution(new Domain("_", [])).ApplyAndAnalyze(changes, session: session);
         if (!result.Succeeded) {

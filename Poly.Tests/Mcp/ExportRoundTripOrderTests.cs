@@ -161,7 +161,7 @@ public sealed class ExportRoundTripOrderTests {
     };
 
     private static (Domain Model, string Text) Generate(string poly) {
-        var session = DomainSession.ForDocument(DslSyntaxTree.Parse(poly), ProductCatalog.ImplicitIds);
+        var session = DomainSession.Create(DslSyntaxTree.Parse(poly).Uses, new SessionOptions(ExtensionCatalog.Core, ProductCatalog.ImplicitIds));
         var result = new DomainEvolution(DomainTestFactory.Create("_", [], []))
             .ApplyAndAnalyze(new PolyDslParser(poly, session).Parse(), session: session);
         if (!result.Succeeded)

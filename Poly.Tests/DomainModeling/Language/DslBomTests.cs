@@ -98,7 +98,7 @@ public class DslBomTests {
         await Assert.That(stderr.ToString()).IsEqualTo("");
 
         // poly_define receives the decoded document, so it sees the leading BOM as U+FEFF.
-        var define = new PolyCompiler(ProductCatalog.Model, "authoring", new CompileHooks { DefaultDomainName = "Imported" })
+        var define = new PolyCompiler(ProductCatalog.Model, new SessionOptions(ProductCatalog.Model, ExtensionCatalog.ProductAuthoring)) { DefaultDomainName = "Imported" }
             .Analyze(Bom + Document, "<workspace>");
         await Assert.That(define.Succeeded).IsTrue();
     }
@@ -169,7 +169,7 @@ public class DslBomTests {
     }
 
     private static CompileResult DefineAnalyze(string text) =>
-        new PolyCompiler(ProductCatalog.Model, "authoring", new CompileHooks { DefaultDomainName = "Imported" })
+        new PolyCompiler(ProductCatalog.Model, new SessionOptions(ProductCatalog.Model, ExtensionCatalog.ProductAuthoring)) { DefaultDomainName = "Imported" }
             .Analyze(text, "<workspace>");
 
     private static string Summarize(IReadOnlyList<CompileDiagnostic> diagnostics) =>

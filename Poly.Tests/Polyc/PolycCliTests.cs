@@ -206,24 +206,29 @@ public class PolycCliTests {
     }
 
     /// <summary>
-    /// FX1 pin: <c>--seed authoring</c> seeds <c>[storage]</c> only; omitting <c>--seed</c>
-    /// gives the implicit set, which carries <c>persistence</c> and so writes the DbContext.
+    /// C-04 F3 (replaces the FX1 pin, whose expectation was wrong once the seeds fold):
+    /// <c>--seed authoring</c> is an alias for the implicit set, so it writes the DbContext just
+    /// as an omitted <c>--seed</c> does; <c>--seed language</c> loads no persistence and writes none.
     /// </summary>
     [Test]
-    public async Task Build_ExplicitSeedAuthoring_SeedsStorageOnly() {
+    public async Task Build_ExplicitSeedAuthoring_IsTheImplicitSet() {
         var dir = PolycTestSupport.TempDir();
-        // Uniqueless: `--seed authoring` loads no persistence, which a `unique` property needs (C-05).
         var path = Write(dir, "orders.poly", PolycTestSupport.UniquelessOrders);
 
         var explicitOut = Path.Combine(dir, "explicit");
         var (explicitExit, _, _) = Run(["build", path, "--out", explicitOut, "--seed", "authoring"]);
         await Assert.That(explicitExit).IsEqualTo(0);
-        await Assert.That(File.Exists(Path.Combine(explicitOut, "Orders", "OrdersDbContext.cs"))).IsFalse();
+        await Assert.That(File.Exists(Path.Combine(explicitOut, "Orders", "OrdersDbContext.cs"))).IsTrue();
 
         var implicitOut = Path.Combine(dir, "implicit");
         var (implicitExit, _, _) = Run(["build", path, "--out", implicitOut]);
         await Assert.That(implicitExit).IsEqualTo(0);
         await Assert.That(File.Exists(Path.Combine(implicitOut, "Orders", "OrdersDbContext.cs"))).IsTrue();
+
+        var languageOut = Path.Combine(dir, "language");
+        var (languageExit, _, _) = Run(["build", path, "--out", languageOut, "--seed", "language"]);
+        await Assert.That(languageExit).IsEqualTo(0);
+        await Assert.That(File.Exists(Path.Combine(languageOut, "Orders", "OrdersDbContext.cs"))).IsFalse();
     }
 
     [Test]

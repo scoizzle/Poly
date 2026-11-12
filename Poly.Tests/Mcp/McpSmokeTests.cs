@@ -86,7 +86,8 @@ public class McpSmokeTests {
         var data = (AnalysisData)response.Data!;
         await Assert.That(data.EntityCount).IsGreaterThanOrEqualTo(2);
         await Assert.That(data.RelationshipCount).IsGreaterThanOrEqualTo(1);
-        await Assert.That(data.HasStorageMapping).IsFalse();
+        // C-03: the implicit set carries persistence, so a session with no `uses` has a mapping.
+        await Assert.That(data.HasStorageMapping).IsTrue();
         await Assert.That(data.RootEntityNames).IsNotNull();
         await Assert.That(data.RootEntityNames!.Count).IsGreaterThanOrEqualTo(1);
         // amu-w4: aggregate ownership summary present when bags exist.

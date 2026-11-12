@@ -36,6 +36,23 @@ public sealed class GoldenDomainsTests {
         "docs/probes/dogfood/simulate-create-create-in.poly",
     ];
 
+    /// <summary>The probes the C10 oracle lowers beyond the EmitGolden set, frozen by name.</summary>
+    private static readonly string[] ProbeOnlySet = [
+        "demo/live/checkout.poly",
+        "demo/live/domain.poly",
+        "docs/probes/dogfood/entry-transition-in-first-stage.poly",
+        "docs/probes/dogfood/peer-tracking-transition.poly",
+        "docs/probes/grep-2026-10-17/grep.poly",
+        "docs/probes/scratch-2026-10-14/banking.poly",
+        "docs/probes/scratch-2026-10-14/fleet.poly",
+        "docs/probes/scratch-2026-10-14/gym.poly",
+        "docs/probes/scratch-2026-10-14/insurance.poly",
+        "docs/probes/scratch-2026-10-14/logistics.poly",
+        "docs/probes/scratch-2026-10-14/payroll.poly",
+        "docs/probes/scratch-2026-10-14/roastery.poly",
+        "docs/probes/smoke/smoke.poly",
+    ];
+
     [Test]
     public async Task All_EveryPathExists_AndParsesWithTheSessionFactory() {
         var all = GoldenDomains.All.ToList();
@@ -85,17 +102,41 @@ public sealed class GoldenDomainsTests {
         await Assert.That(GoldenDomains.SwarmDirectory).IsEqualTo(swarmDir);
         await Assert.That(Directory.Exists(swarmDir)).IsTrue();
 
-        // Independent recomputation: All = Compilable + whatever *.poly is on disk now.
+        // Independent recomputation: Swarm() is exactly the *.poly on disk now.
         var onDisk = Directory.GetFiles(swarmDir, "*.poly")
             .Select(p => Path.GetRelativePath(GoldenDomains.RepoRoot, p).Replace('\\', '/'))
             .Order(StringComparer.Ordinal);
-        var fromCatalog = GoldenDomains.All
-            .Skip(GoldenDomains.Compilable.Count)
+        var fromCatalog = GoldenDomains.Swarm()
             .Select(d => d.Path)
             .Order(StringComparer.Ordinal);
 
         await Assert.That(string.Join("\n", fromCatalog)).IsEqualTo(string.Join("\n", onDisk));
-        foreach (var domain in GoldenDomains.All.Skip(GoldenDomains.Compilable.Count))
-            await Assert.That(domain.Compiles).IsFalse().Because("swarm repros are not part of the emit set");
+        foreach (var domain in GoldenDomains.Swarm())
+            await Assert.That(domain.SkipReason).IsNotNull().Because("a parked repro is recorded with its reason");
+    }
+
+    [Test]
+    public async Task Lowerable_IsCompilablePlusTheProbeOnlySet_AndSkippedCarriesAReason() {
+        var lowerable = GoldenDomains.Lowerable.Select(d => d.Path).ToHashSet(StringComparer.Ordinal);
+        var skipped = GoldenDomains.Skipped.Select(d => d.Path).ToHashSet(StringComparer.Ordinal);
+
+        await Assert.That(GoldenDomains.Compilable.All(d => lowerable.Contains(d.Path))).IsTrue()
+            .Because("every EmitGolden domain is lowerable");
+        await Assert.That(lowerable.Overlaps(skipped)).IsFalse()
+            .Because("a domain is either lowered or skipped, never both");
+        await Assert.That(GoldenDomains.Lowerable.All(d => d.Compiles && d.SkipReason is null)).IsTrue();
+        await Assert.That(GoldenDomains.Skipped.All(d => !d.Compiles && !string.IsNullOrWhiteSpace(d.SkipReason)))
+            .IsTrue().Because("every skipped domain is recorded with a reason");
+
+        // The probe-only set is pinned by name: swapping one path for another fails here.
+        var compilable = GoldenDomains.Compilable.Select(d => d.Path).ToHashSet(StringComparer.Ordinal);
+        var probeOnly = GoldenDomains.Lowerable.Select(d => d.Path)
+            .Where(p => !compilable.Contains(p))
+            .Order(StringComparer.Ordinal);
+        await Assert.That(string.Join("\n", probeOnly)).IsEqualTo(string.Join("\n", ProbeOnlySet));
+
+        // Pinned counts: a probe leaving the corpus fails here, not silently.
+        await Assert.That(GoldenDomains.Lowerable.Count).IsEqualTo(23);
+        await Assert.That(GoldenDomains.Skipped.Count).IsEqualTo(2);
     }
 }

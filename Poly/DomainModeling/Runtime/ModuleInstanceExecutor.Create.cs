@@ -45,7 +45,9 @@ public sealed partial class ModuleInstanceExecutor {
                 if (Run(entityName, create, self: null, args) is not IDomainResult result)
                     throw new InvalidOperationException($"Create on '{entityName}' did not return a DomainResult.");
                 if (!result.IsSuccess)
-                    return ModuleOutcome.Fail(result.ErrorMessage ?? "Create failed.");
+                    return ModuleOutcome.Fail(result.Error
+                        ?? throw new InvalidOperationException(
+                            $"Create on '{entityName}' failed without a DomainFailure."));
                 if (result is not DomainResult<object> { Value: IDictionary<string, object?> bag })
                     throw new InvalidOperationException($"Create on '{entityName}' did not return a dictionary instance.");
 

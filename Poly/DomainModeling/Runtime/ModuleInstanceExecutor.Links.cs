@@ -4,6 +4,7 @@ using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Meaning;
 using Poly.DomainModeling.Ontology;
+using Poly.Runtime;
 
 namespace Poly.DomainModeling.Runtime;
 
@@ -41,7 +42,9 @@ public sealed partial class ModuleInstanceExecutor {
                 }
                 else {
                     if (ReadLinked(source.Bag, contract).Any())
-                        return ModuleOutcome.Fail(Relationship.LinkViolationMessage(relationshipName));
+                        return ModuleOutcome.Fail(DomainFailure.Link(
+                            Relationship.LinkViolationMessage(relationshipName),
+                            $"{source.EntityName}.{relationshipName}"));
                     source.Bag[SingularField(contract)] = target.Bag;
                 }
                 foreach (var field in SubscriberFields(contract))
@@ -69,7 +72,9 @@ public sealed partial class ModuleInstanceExecutor {
                 if (!IsLinkedCore(contract, source.Bag, target.Bag))
                     return ModuleOutcome.Ok(change: LinkChange.NotLinked);
                 if (contract.SourceOwnsTarget && OwnerCount(contract, target.Bag) == 1)
-                    return ModuleOutcome.Fail(Relationship.UnlinkViolationMessage(relationshipName));
+                    return ModuleOutcome.Fail(DomainFailure.Link(
+                        Relationship.UnlinkViolationMessage(relationshipName),
+                        $"{source.EntityName}.{relationshipName}"));
 
                 if (IsToMany(contract)) {
                     var list = (IList)source.Bag[CollectionField(contract)]!;

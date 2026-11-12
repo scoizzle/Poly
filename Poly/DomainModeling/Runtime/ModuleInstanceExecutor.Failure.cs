@@ -1,26 +1,35 @@
+using Poly.DomainModeling.Ontology;
+using Poly.Runtime;
+
 using Action = Poly.DomainModeling.Ontology.Action;
 
 namespace Poly.DomainModeling.Runtime;
 
-// Failure partial: classifies an action failure message into the outcome failure and its policy guard.
+// Failure partial: threads an action's typed failure into the outcome and projects its guard list.
 public sealed partial class ModuleInstanceExecutor {
-    private ModuleOutcome MapFailure(Action action, string? message) {
-        message ??= $"invoke '{action.Name}' failed.";
-        const string blockedPrefix = "blocked by policy '";
-        var blockedIdx = message.IndexOf(blockedPrefix, StringComparison.Ordinal);
-        if (blockedIdx >= 0 && message.StartsWith($"'{action.Name}'", StringComparison.Ordinal)) {
-            var start = blockedIdx + blockedPrefix.Length;
-            var end = message.IndexOf('\'', start);
-            if (end > start) {
-                var leaf = message[start..end];
-                var guard = action.Policies.Select(p => p.Name).FirstOrDefault(n =>
-                    string.Equals(n, leaf, StringComparison.Ordinal)
-                    || string.Equals(n, "not_" + leaf, StringComparison.Ordinal)) ?? leaf;
-                return ModuleOutcome.Fail(message, [guard]);
-            }
-        }
-        if (message.Contains("requires a linked", StringComparison.Ordinal))
-            return ModuleOutcome.Fail(message, [.. action.Policies.Select(p => p.Name)]);
-        return ModuleOutcome.Fail(message);
+    private ModuleOutcome MapFailure(string entityName, Action action, DomainFailure failure) =>
+        ModuleOutcome.Fail(failure, GuardsFor(entityName, action, failure));
+
+    // The simulate surface's guard list. Only structure is read: the failure kind and its element path.
+    private IReadOnlyList<string> GuardsFor(string entityName, Action action, DomainFailure failure) {
+        if (failure.Kind == DomainFailureKind.Policy
+            && string.Equals(failure.ElementPath, $"{entityName}.{action.Name}", StringComparison.Ordinal))
+            return failure.Guard is { } guard ? [guard] : [];
+        if (failure.Kind == DomainFailureKind.Required && IsNavigationPath(failure.ElementPath))
+            return [.. action.Policies.Select(p => p.Name)];
+        return [];
+    }
+
+    // A path of exactly two segments, Entity.relation, where relation is a navigation of that entity.
+    private bool IsNavigationPath(string? path) {
+        if (path is null)
+            return false;
+        var segments = path.Split('.');
+        if (segments.Length != 2)
+            return false;
+        var owner = _domain.Types.OfType<Entity>()
+            .FirstOrDefault(e => string.Equals(e.Name, segments[0], StringComparison.Ordinal));
+        return owner is not null
+            && owner.Navigations.Any(n => string.Equals(n.Name, segments[1], StringComparison.Ordinal));
     }
 }

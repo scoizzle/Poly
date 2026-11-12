@@ -96,7 +96,7 @@ public class MultiHopPathPrefixPolicyTests {
         section.Bag["SeatsTaken"] = 1L;
         var blocked = exec.Invoke(full, "Confirm");
         await Assert.That(blocked.Succeeded).IsFalse();
-        await Assert.That(blocked.FailedGuards).Contains("not_SectionFull");
+        await Assert.That(blocked.FailedGuards).Contains("SectionFull");
     }
 
     [Test]

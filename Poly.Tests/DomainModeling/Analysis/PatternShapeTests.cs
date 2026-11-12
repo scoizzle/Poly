@@ -160,7 +160,11 @@ public class PatternShapeTests {
         await Assert.That(control.MinLength).IsEqualTo(1);
         await Assert.That(control.MaxLength).IsEqualTo(1);
 
-        var deep = PatternShape.Of(Nested(65));
+        // Anchored on purpose: an unanchored deep pattern is unboundable even without the
+        // depth cap, so only the anchored form proves the cap fires (removing it would
+        // yield Min 1 / Max 1 / Anchored true here).
+        var deep = PatternShape.Of("^" + Nested(65) + "$");
+        await Assert.That(deep.MinLength).IsEqualTo(0);
         await Assert.That(deep.MaxLength).IsNull();
         await Assert.That(deep.Anchored).IsFalse();
     }
@@ -180,6 +184,17 @@ public class PatternShapeTests {
         await Assert.That(shape.IsValid).IsTrue();
         await Assert.That(shape.MinLength).IsEqualTo(5);
         await Assert.That(shape.MaxLength).IsEqualTo(5);
+    }
+
+    [Test]
+    public async Task Of_ReversedBraceQuantifier_IsInvalid() {
+        // A4: an inverted brace range is never a bound; .NET rejects the regex, and the
+        // scanner's guard keeps the arm from inventing one if that ever changes.
+        var shape = PatternShape.Of("^a{3,1}$");
+        await Assert.That(shape.IsValid).IsFalse();
+        await Assert.That(shape.MinLength).IsEqualTo(0);
+        await Assert.That(shape.MaxLength).IsNull();
+        await Assert.That(shape.Anchored).IsFalse();
     }
 
     private sealed record OracleRow(
@@ -207,10 +222,21 @@ public class PatternShapeTests {
         // Modelled escapes and classes.
         new("^\\d{5}$", "1x\n", 6, 5, 5, true, Tight: true),
         new("^A$", "Aa1\n", 2, 1, 1, true),
-        new("^a\\nb$", "a\nb", 3, 3, 3, true),
+        // A4: the alphabet carries the trailing '\n' and the cap runs one unit past the
+        // match, so a stale "$ allows a final newline" reading would surface as a longer
+        // observed match instead of hiding outside the enumeration.
+        new("^a\\nb$", "a\nb\n", 4, 3, 3, true),
         new("^\\w$", "a_1\n", 3, 1, 1, true),
         new("^[A-Z]{1,3}$", "A\n", 4, 1, 3, true),
-        new("^a{,3}$", "a{,}3", 5, 5, 5, true),
+        new("^a{,3}$", "a{,}3\n", 6, 5, 5, true),
+        // A4: the \A, (?:...|...) and \z arms composed end to end.
+        new("\\A(?:a\\.|.b)?x\\z", "a.bx\n", 4, 1, 3, true, Tight: true),
+        // A8: an astral scalar (U+10437) is two UTF-16 units — the envelope's unit. The
+        // lone halves let the enumeration build the pair; '^.$' must not match it,
+        // '^..$' must, and '\w' must not match either half.
+        new("^.$", "a\uD801\uDC37\n", 3, 1, 1, true),
+        new("^..$", "a\uD801\uDC37\n", 3, 2, 2, true, Tight: true),
+        new("^\\w$", "a\uD801\uDC37\n", 3, 1, 1, true),
         // A2: the end anchor needs both readings to agree.
         new("^\\c\\$", "\u001c\n", 3, 0, null, false),
         // A3: a quantified anchor bails.

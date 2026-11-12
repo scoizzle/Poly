@@ -296,6 +296,8 @@ internal sealed record PatternShape(
                 return false;
             }
 
+            if (max is { } ceiling && lower > ceiling) return false;
+
             _i = j + 1;
             min = lower;
             return true;

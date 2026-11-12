@@ -45,11 +45,15 @@ internal sealed partial class EffectAnalyzer {
             var stage = exit.Home;
             var target = exit.Node.TargetStage.StageName;
             var conflicts = new List<string>();
-            foreach (var other in hops) {
+            var namedByExit = new HashSet<string>();
+            foreach (var other in hops.OrderByDescending(h => h.IsExit && h.Home == stage)) {
                 if (ReferenceEquals(other, exit)
                     || other.Node.TargetStage.StageName == target
-                    || (other.Static && other.Home != stage))
+                    || (other.Static && other.Home != stage)
+                    || (!(other.IsExit && other.Home == stage) && namedByExit.Contains(other.Node.TargetStage.StageName)))
                     continue;
+                if (other.IsExit && other.Home == stage)
+                    namedByExit.Add(other.Node.TargetStage.StageName);
                 var phrase = DescribeConflict(other, stage);
                 if (!conflicts.Contains(phrase))
                     conflicts.Add(phrase);
@@ -143,7 +147,7 @@ internal sealed partial class EffectAnalyzer {
                     else if (home is not null && !moved)
                         hops.Add(new TransitionHop(st, home, true, isExit, site, false));
                     else
-                        hops.Add(new TransitionHop(st, home ?? "", false, isExit, site, home is not null));
+                        hops.Add(new TransitionHop(st, home ?? "", false, isExit, site, moved));
                     moved = true;
                     break;
                 case ConditionalEffect c: {

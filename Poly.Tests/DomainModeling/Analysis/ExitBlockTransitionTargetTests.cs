@@ -1,6 +1,7 @@
 using Poly.Analysis;
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Ontology;
@@ -311,5 +312,139 @@ public class ExitBlockTransitionTargetTests {
             .ToList();
         await Assert.That(rejected.Count).IsEqualTo(1);
         await Assert.That(rejected[0].Node is InvokeActionEffect).IsTrue();
+    }
+
+    private const string ItemDsl = """
+        Item: entity {
+          Tag: Text optional
+          Touch: action { assign Tag to "x" }
+        }
+        """;
+
+    private static Task AssertAfterMovedEffect(string name, string effect) =>
+        AssertOneOverride($$"""
+            domain {{name}}
+            Z: entity {
+              Items: many Item
+              A: stage {
+                Go: action {
+                  {{effect}}
+                  transition to B
+                }
+              }
+              B: stage { }
+              C: stage { }
+              D: stage { exit { transition to C } }
+            }
+            """ + "\n" + ItemDsl, "C", "action 'Go' transitions to 'B' and can leave 'D' at run time",
+            "(it follows an earlier transition, branch, invoke or create)");
+
+    [Test]
+    public async Task Analyze_ExitTransitionAfterCreate_IsRejected() =>
+        await AssertAfterMovedEffect("M1", "create Item { }");
+
+    [Test]
+    public async Task Analyze_ExitTransitionAfterCreateInRelationship_IsRejected() =>
+        await AssertAfterMovedEffect("M2", "create in Items { }");
+
+    [Test]
+    public async Task Analyze_ExitTransitionAfterForInvoke_IsRejected() =>
+        await AssertAfterMovedEffect("M3", "for Items as i invoke i.Touch");
+
+    [Test]
+    public async Task Analyze_ElseBranchHopRestartsFromEntryState_StaysStatic() {
+        var errors = ExitTargetErrors("""
+            domain G5
+            Z: entity {
+              Flag: Boolean
+              A: stage {
+                Go: action {
+                  if (Flag is true) { transition to B } else { transition to B }
+                }
+              }
+              B: stage { }
+              C: stage { }
+              D: stage { exit { transition to C } }
+            }
+            """);
+        await Assert.That(errors).IsEmpty();
+    }
+
+    [Test]
+    public async Task Analyze_ExitTransitionInsideForInExitBlock_IsRejected() =>
+        await AssertOneOverride("""
+            domain D12
+            Z: entity {
+              Items: many Item
+              A: stage {
+                exit { for i in Items { transition to C } }
+                Go: action { transition to B }
+              }
+              B: stage { }
+              C: stage { }
+            }
+            Item: entity { }
+            """, "C", "action 'Go' leaves 'A' for 'B'");
+
+    [Test]
+    public async Task Analyze_DiagnosticAllowance_CannotAcknowledgeDMEFF017() {
+        string[] paths = ["D1", "D1/Z", "D1/Z/A", "D1/Z/A/exit", "D1/Z/A/C"];
+        var session = SessionBuilder.CreateEmpty().LoadCore().LoadTemporal()
+            .WithDiagnosticAllowances([.. paths.Select(path => new DiagnosticAllowance("DMEFF017", path, ["perl-1"]))])
+            .Build();
+        var changes = new PolyDslParser("""
+            domain D1
+            Z: entity {
+              A: stage {
+                exit { transition to C }
+                Go: action { transition to B }
+              }
+              B: stage { }
+              C: stage { }
+            }
+            """, session).Parse();
+        var domain = new DomainEvolution(new Domain("_", [])).Apply(changes, session: session).Root;
+        var errors = session.Analyze(domain).Diagnostics
+            .Where(d => d.Code == DomainModelDiagnosticCodes.ExitBlockTransitionTargetOverridden)
+            .ToList();
+        await Assert.That(errors.Count).IsEqualTo(1);
+        await Assert.That(errors[0].Severity).IsEqualTo(DiagnosticSeverity.Error);
+    }
+
+    [Test]
+    public async Task Analyze_EntityLevelHopAfterEarlierHop_NamesTheEarlierTransition() =>
+        await AssertOneOverride("""
+            domain F4a
+            Z: entity {
+              Go: action {
+                transition to B
+                transition to D
+              }
+              A: stage { exit { transition to C } }
+              B: stage { }
+              C: stage { }
+              D: stage { }
+            }
+            """, "C", "entity-level action 'Go' transitions to 'D' and can leave 'A' at run time (it follows an earlier transition");
+
+    [Test]
+    public async Task Analyze_SameTargetExitAndHop_AreNamedOncePerTarget() {
+        var errors = ExitTargetErrors("""
+            domain F4b
+            Z: entity {
+              A: stage {
+                exit {
+                  transition to B
+                  transition to C
+                }
+                Go: action { transition to B }
+              }
+              B: stage { }
+              C: stage { }
+            }
+            """);
+        var onC = errors.Single(e => e.Node is StageTransitionEffect st && st.TargetStage.StageName == "C");
+        await Assert.That(onC.Message).Contains("this exit block also transitions to 'B'");
+        await Assert.That(onC.Message).DoesNotContain("action 'Go' leaves 'A' for 'B'");
     }
 }

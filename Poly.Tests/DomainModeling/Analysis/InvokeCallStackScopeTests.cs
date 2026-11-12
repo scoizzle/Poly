@@ -33,10 +33,10 @@ public class InvokeCallStackScopeTests {
         await Assert.That(posts.Count).IsEqualTo(2);
         // The first call sees Qty in [0, 90] and yields [10, 100]. The callee's post-state flows into the
         // second call, which therefore sees [10, 100] and yields [20, 100] (max still bounded by the declared range check).
-        await Assert.That(posts[0].ValueRange!.Min).IsEqualTo(10d);
-        await Assert.That(posts[0].ValueRange!.Max).IsEqualTo(100d);
-        await Assert.That(posts[1].ValueRange!.Min).IsEqualTo(20d);
-        await Assert.That(posts[1].ValueRange!.Max).IsEqualTo(100d);
+        await Assert.That(posts[0].ValueRange!.Min).IsEqualTo(10m);
+        await Assert.That(posts[0].ValueRange!.Max).IsEqualTo(100m);
+        await Assert.That(posts[1].ValueRange!.Min).IsEqualTo(20m);
+        await Assert.That(posts[1].ValueRange!.Max).IsEqualTo(100m);
         // Each call reports its own call-chain violation (previously only the first was reported).
         var callChain = result.Analysis.Diagnostics.Count(d => d.Message.Contains("Call-chain postcondition (A"));
         await Assert.That(callChain).IsEqualTo(2);

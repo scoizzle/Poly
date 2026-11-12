@@ -30,8 +30,8 @@ public enum CheckVerdict {
 /// One write the summary could not prove inside its constraint, projected from a finding and
 /// enriched from the recorded fact on the same node (A2). <see cref="Path"/> is the finding's
 /// element path; <see cref="Property"/>, <see cref="Constraint"/> and <see cref="Reason"/> are
-/// null when no fact is attached to that node — a call-chain warning and a non-Range parameter-arm
-/// warning record no fact, and a <c>DMCS003</c> row may not be a write finding at all
+/// null when no fact is attached to that node — a non-Range parameter-arm
+/// warning records no fact (the call chain records one since V-05b), and a <c>DMCS003</c> row may not be a write finding at all
 /// (<c>ConstraintQualityAnalyzer</c> reports that code too), so the three fields are optional on
 /// every row, not only on those.
 /// </summary>
@@ -50,7 +50,7 @@ public sealed record UnverifiedWriteFact(
 /// <para>
 /// <see cref="Violations"/> counts distinct nodes carrying a violation fact <em>or</em> any
 /// <see cref="DiagnosticSeverity.Error"/> of any code, so it is deliberately larger than the
-/// fact-backed <c>WriteVerificationFacts.Violations</c> until the call chain records facts (V-05).
+/// fact-backed <c>WriteVerificationFacts.Violations</c>: an error with no fact behind it still counts.
 /// With a facts bucket and a scope that names an element, <see cref="CheckVerdict.Unknown"/> implies
 /// at least one row: a recorded fact with no finding is synthesised into one.
 /// </para>
@@ -109,10 +109,10 @@ public static class VerificationSummaryExtensions {
 
     /// <summary>
     /// A1: the fold's first arm and the violation count, as distinct nodes. A proven violation fact
-    /// and any error diagnostic name the nodes that failed, so an error with no fact behind it — the
-    /// call-chain arm (V-05) — still counts, and no diagnostic-to-fact match can mask it. That makes
+    /// and any error diagnostic name the nodes that failed, so an error with no fact behind it
+    /// (a non-Range kind, V-08) still counts, and no diagnostic-to-fact match can mask it. That makes
     /// <see cref="VerificationSummary.Violations"/> deliberately stricter than
-    /// <see cref="WriteVerificationFacts.Violations"/> until V-05 records those facts.
+    /// <see cref="WriteVerificationFacts.Violations"/>.
     /// </summary>
     private static HashSet<Node> ViolationNodes(
         AnalysisResult analysis, Domain domain, WriteVerificationFacts facts, SelectScope scope) {
@@ -129,9 +129,8 @@ public static class VerificationSummaryExtensions {
     }
 
     /// <summary>
-    /// A2: the rows are the write findings, not the facts — a non-Range kind (V-08) and the
-    /// call-chain path (V-05) report a diagnostic and record no fact, and the summary must show
-    /// them. A fact on the same node <em>and</em> with the same reported code supplies the property,
+    /// A2: the rows are the write findings, not the facts — a non-Range kind (V-08)
+    /// reports a diagnostic and records no fact, and the summary must show it. A fact on the same node <em>and</em> with the same reported code supplies the property,
     /// constraint and reason, so two findings on one node keep their own (E4); when several facts
     /// share that key the worst reason wins (G4). A fact with no finding is synthesised into a row,
     /// except on a node that carries an in-scope error — that write is Violated, not unknown (G3).

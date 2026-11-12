@@ -132,8 +132,8 @@ internal sealed record ActionInvariantFact(
 /// <summary>A property inside an action context: numeric bounds (null = unbounded) and constraint text.</summary>
 internal sealed record PropertyInvariantFact(
     [property: JsonPropertyName("name")] string Name,
-    [property: JsonPropertyName("min")] double? Min,
-    [property: JsonPropertyName("max")] double? Max,
+    [property: JsonPropertyName("min")] decimal? Min,
+    [property: JsonPropertyName("max")] decimal? Max,
     [property: JsonPropertyName("constraints")] IReadOnlyList<string> Constraints
 );
 
@@ -141,8 +141,8 @@ internal sealed record PropertyInvariantFact(
 internal sealed record PostconditionFact(
     [property: JsonPropertyName("targetProperty")] string TargetProperty,
     [property: JsonPropertyName("declaringAction")] string DeclaringAction,
-    [property: JsonPropertyName("min")] double? Min,
-    [property: JsonPropertyName("max")] double? Max,
+    [property: JsonPropertyName("min")] decimal? Min,
+    [property: JsonPropertyName("max")] decimal? Max,
     [property: JsonPropertyName("constraints")] IReadOnlyList<string> Constraints
 );
 

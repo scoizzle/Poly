@@ -1,2 +1,2 @@
-Meter.Bump(amount): RequiredConstraint;Range(0:Double,100:Double)
+Meter.Bump(amount): RequiredConstraint;Range(0:Int64,100:Int64)
 Meter.Ship(amt): 

@@ -2,8 +2,11 @@ using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Language;
+using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
 using Poly.Grammar;
+using Poly.Interpretation.CSharp;
+using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.DomainModeling.Language;
 
@@ -119,4 +122,46 @@ public sealed partial class LanguageSurfaceTests {
 
     private static Entity InitialStageEntity(Domain domain, string name) =>
         domain.Types.OfType<Entity>().Single(e => e.Name == name);
+
+    [Test]
+    public async Task InitialStage_Designated_SimCreateStartsInDesignatedStage() {
+        var (domain, _) = InitialStageEvolve(DesignatedDocument);
+        var created = ModuleExec.For(domain).Create("Order", new Dictionary<string, object?> { ["Number"] = "A-1" });
+
+        await Assert.That(created.Succeeded).IsTrue();
+        await Assert.That(created.Instance!.Bag["CurrentStage"]).IsEqualTo("Active");
+        await Assert.That(created.Instance!.Bag["Status"]).IsEqualTo("entered_active");
+    }
+
+    [Test]
+    public async Task InitialStage_NoDesignation_SimCreateStartsInFirstDeclaredStage() {
+        var poly = DesignatedDocument.Replace("entity initial(Active) {", "entity {", StringComparison.Ordinal);
+        var (domain, _) = InitialStageEvolve(poly);
+        var created = ModuleExec.For(domain).Create("Order", new Dictionary<string, object?> { ["Number"] = "A-1" });
+
+        await Assert.That(created.Succeeded).IsTrue();
+        await Assert.That(created.Instance!.Bag["CurrentStage"]).IsEqualTo("Draft");
+    }
+
+    [Test]
+    public async Task InitialStage_Designated_PrintedCreateAssignsDesignatedStage() {
+        var (domain, analysis) = InitialStageEvolve(DesignatedDocument);
+        var cs = new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis));
+
+        await Assert.That(cs).Contains("this.CurrentStage = OrderStage.Active;");
+        await Assert.That(cs).Contains("entered_active").Because("the designated stage's entry effects run in the constructor");
+    }
+
+    [Test]
+    public async Task InitialStage_EntryAssignedProperty_UsesDesignatedStage() {
+        var (domain, analysis) = InitialStageEvolve(DesignatedDocument);
+        await Assert.That(analysis.HasErrors).IsFalse();
+
+        var order = InitialStageEntity(domain, "Order");
+        await Assert.That(EntityStructureAnalyzer.ComputeEntryAssignedPropertyNames(order).Contains("Status")).IsTrue();
+
+        var control = DesignatedDocument.Replace("entity initial(Active) {", "entity {", StringComparison.Ordinal);
+        var controlEntity = InitialStageEntity(InitialStageEvolve(control).Domain, "Order");
+        await Assert.That(EntityStructureAnalyzer.ComputeEntryAssignedPropertyNames(controlEntity).Count).IsEqualTo(0);
+    }
 }

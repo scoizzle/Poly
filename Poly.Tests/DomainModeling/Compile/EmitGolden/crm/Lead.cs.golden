@@ -54,7 +54,7 @@ public class Lead
         {
             return DomainResult<Lead>.Failure("'Email' is required.");
         }
-        if (!System.Text.RegularExpressions.Regex.IsMatch(email, "^[^@]+@[^@]+$"))
+        if (!System.Text.RegularExpressions.Regex.IsMatch(email, "^[^@]+@[^@]+\\z"))
         {
             return DomainResult<Lead>.Failure("'Email' does not match the required pattern.");
         }

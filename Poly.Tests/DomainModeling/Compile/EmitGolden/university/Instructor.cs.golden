@@ -40,7 +40,7 @@ public class Instructor
         {
             return DomainResult<Instructor>.Failure("'Email' is required.");
         }
-        if (!System.Text.RegularExpressions.Regex.IsMatch(email, "^[^@]+@[^@]+$"))
+        if (!System.Text.RegularExpressions.Regex.IsMatch(email, "^[^@]+@[^@]+\\z"))
         {
             return DomainResult<Instructor>.Failure("'Email' does not match the required pattern.");
         }

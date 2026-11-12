@@ -42,7 +42,7 @@ public class Contact
         {
             return DomainResult<Contact>.Failure("'Email' is required.");
         }
-        if (!System.Text.RegularExpressions.Regex.IsMatch(email, "^[^@]+@[^@]+$"))
+        if (!System.Text.RegularExpressions.Regex.IsMatch(email, "^[^@]+@[^@]+\\z"))
         {
             return DomainResult<Contact>.Failure("'Email' does not match the required pattern.");
         }

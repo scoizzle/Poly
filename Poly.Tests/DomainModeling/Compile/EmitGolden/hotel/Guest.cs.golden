@@ -147,7 +147,7 @@ public class Guest
         {
             return DomainResult<Guest>.Failure("'Email' is required.");
         }
-        if (!System.Text.RegularExpressions.Regex.IsMatch(email, "^[^@]+@[^@]+$"))
+        if (!System.Text.RegularExpressions.Regex.IsMatch(email, "^[^@]+@[^@]+\\z"))
         {
             return DomainResult<Guest>.Failure("'Email' does not match the required pattern.");
         }

@@ -15,7 +15,8 @@ namespace Poly.DomainModeling.Queries;
 /// properties and navigations become <c>rdf:Property</c> nodes with
 /// <c>rdfs:domain</c>/<c>rdfs:range</c>; enum members become instances of their enum
 /// class. Term IRIs are used as written; an untagged element gets a stable
-/// <c>urn:poly:</c> identifier so the graph stays complete.
+/// <c>urn:poly:</c> identifier so the graph stays complete. Nodes and context terms follow
+/// declaration order (Q12).
 /// </summary>
 public static class JsonLdExporter {
     public const string Rdf = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
@@ -32,11 +33,7 @@ public static class JsonLdExporter {
 
         var byName = domain.Types.ToDictionary(t => t.Name, StringComparer.Ordinal);
         var typeIris = DomainIris.Types(domain);
-        var types = domain.Types
-            .OfType<DomainType>()
-            .Where(t => t is Entity or ValueType or EnumType)
-            .OrderBy(t => t.Name, StringComparer.Ordinal)
-            .ToList();
+        var types = DomainExportOrder.Types(domain);
 
         var context = new JsonObject {
             ["rdf"] = Rdf,
@@ -57,29 +54,33 @@ public static class JsonLdExporter {
                     var propertyNames = entity.Properties
                         .Select(p => p.Name)
                         .ToHashSet(StringComparer.Ordinal);
-                    foreach (var property in entity.Properties.OrderBy(p => p.Name, StringComparer.Ordinal)) {
-                        var propertyIri = DomainIris.Property(domain, entity.Name, property);
-                        memberNames.Add((property.Name, entity.Name, propertyIri));
-                        graph.Add(PropertyNode(
-                            propertyIri, property, typeIri, DomainIris.Range(property.Type, byName, typeIris)));
-                    }
-                    foreach (var navigation in entity.Navigations.OrderBy(n => n.Name, StringComparer.Ordinal)) {
-                        if (propertyNames.Contains(navigation.Name))
-                            throw new InvalidOperationException(
-                                $"Entity '{entity.Name}' declares both a property and a navigation named '{navigation.Name}'.");
-                        var navigationIri = DomainIris.Navigation(domain, entity.Name, navigation);
-                        memberNames.Add((navigation.Name, entity.Name, navigationIri));
-                        graph.Add(PropertyNode(
-                            navigationIri,
-                            label: navigation.Name,
-                            description: null,
-                            domainIri: typeIri,
-                            rangeIri: DomainIris.Range(navigation.Target, byName, typeIris)));
+                    foreach (var member in EntityDeclarationOrder.Members(entity)) {
+                        switch (member.Node) {
+                            case Property property:
+                                var propertyIri = DomainIris.Property(domain, entity.Name, property);
+                                memberNames.Add((property.Name, entity.Name, propertyIri));
+                                graph.Add(PropertyNode(
+                                    propertyIri, property, typeIri, DomainIris.Range(property.Type, byName, typeIris)));
+                                break;
+                            case Relationship navigation:
+                                if (propertyNames.Contains(navigation.Name))
+                                    throw new InvalidOperationException(
+                                        $"Entity '{entity.Name}' declares both a property and a navigation named '{navigation.Name}'.");
+                                var navigationIri = DomainIris.Navigation(domain, entity.Name, navigation);
+                                memberNames.Add((navigation.Name, entity.Name, navigationIri));
+                                graph.Add(PropertyNode(
+                                    navigationIri,
+                                    label: navigation.Name,
+                                    description: null,
+                                    domainIri: typeIri,
+                                    rangeIri: DomainIris.Range(navigation.Target, byName, typeIris)));
+                                break;
+                        }
                     }
                     break;
 
                 case ValueType valueType:
-                    foreach (var property in valueType.Properties.OrderBy(p => p.Name, StringComparer.Ordinal)) {
+                    foreach (var property in valueType.Properties) {
                         var propertyIri = DomainIris.Property(domain, valueType.Name, property);
                         memberNames.Add((property.Name, valueType.Name, propertyIri));
                         graph.Add(PropertyNode(

@@ -11,7 +11,8 @@ using ValueType = Poly.DomainModeling.Ontology.ValueType;
 namespace Poly.DomainModeling.Queries;
 
 /// <summary>
-/// A human-facing Markdown report over the same domain facts the machine artifacts use.
+/// A human-facing Markdown report over the same domain facts the machine artifacts use,
+/// in declaration order (Q12).
 /// It is a projection, not a second summary: terms, constraints, requiredness, stages,
 /// actions, enums, and relationships all come from the model, so it cannot drift from
 /// the JSON Schema/JSON-LD/DSL outputs.
@@ -20,9 +21,10 @@ public static class DomainReportExporter {
     public static string Export(Domain domain) {
         ArgumentNullException.ThrowIfNull(domain);
 
-        var entities = domain.Types.OfType<Entity>().OrderBy(e => e.Name, StringComparer.Ordinal).ToList();
-        var valueTypes = domain.Types.OfType<ValueType>().OrderBy(v => v.Name, StringComparer.Ordinal).ToList();
-        var enums = domain.Types.OfType<EnumType>().OrderBy(e => e.Name, StringComparer.Ordinal).ToList();
+        var ordered = DomainExportOrder.Types(domain);
+        var entities = ordered.OfType<Entity>().ToList();
+        var valueTypes = ordered.OfType<ValueType>().ToList();
+        var enums = ordered.OfType<EnumType>().ToList();
         var properties = entities.Sum(e => e.Properties.Count) + valueTypes.Sum(v => v.Properties.Count);
         var relationships = entities.Sum(e => e.Navigations.Count);
 
@@ -59,9 +61,7 @@ public static class DomainReportExporter {
         }
 
         var navigations = entities
-            .SelectMany(e => e.Navigations.Select(n => (Source: e, Navigation: n)))
-            .OrderBy(x => x.Source.Name, StringComparer.Ordinal)
-            .ThenBy(x => x.Navigation.Name, StringComparer.Ordinal)
+            .SelectMany(e => EntityDeclarationOrder.Navigations(e).Select(n => (Source: e, Navigation: n)))
             .ToList();
         if (navigations.Count > 0) {
             sb.AppendLine("## Relationships");
@@ -87,7 +87,7 @@ public static class DomainReportExporter {
             sb.AppendLine("| Property | Type | Constraints | Required | IRI |");
             sb.AppendLine("| --- | --- | --- | --- | --- |");
             var entryAssigned = EntityStructureAnalyzer.ComputeEntryAssignedPropertyNames(entity);
-            foreach (var property in entity.Properties.OrderBy(p => p.Name, StringComparer.Ordinal)) {
+            foreach (var property in EntityDeclarationOrder.Properties(entity)) {
                 var term = TermFacets.Read(property.Facets);
                 sb.AppendLine($"| {Cell(property.Name)} | {Cell(property.Type.TypeName)} | " +
                     $"{CodeOrDash(DomainPresentation.Constraints(property))} | " +
@@ -158,7 +158,7 @@ public static class DomainReportExporter {
         sb.AppendLine("| Property | Type | Constraints | Required | IRI |");
         sb.AppendLine("| --- | --- | --- | --- | --- |");
         var entryAssigned = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var property in valueType.Properties.OrderBy(p => p.Name, StringComparer.Ordinal)) {
+        foreach (var property in valueType.Properties) {
             var term = TermFacets.Read(property.Facets);
             sb.AppendLine($"| {Cell(property.Name)} | {Cell(property.Type.TypeName)} | " +
                 $"{CodeOrDash(DomainPresentation.Constraints(property))} | " +

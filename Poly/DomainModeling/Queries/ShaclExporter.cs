@@ -17,6 +17,7 @@ namespace Poly.DomainModeling.Queries;
 /// export uses. Each entity gets a <c>sh:NodeShape</c> targeting its class; each property
 /// and navigation gets a <c>sh:PropertyShape</c> carrying the constraints Poly already
 /// proved. A fact SHACL cannot express is kept as <c>x-poly-*</c>, never dropped silently.
+/// Shapes and their property shapes follow declaration order (Q12).
 /// </summary>
 public static class ShaclExporter {
     public const string Sh = "http://www.w3.org/ns/shacl#";
@@ -29,11 +30,7 @@ public static class ShaclExporter {
     public static string Export(Domain domain) {
         ArgumentNullException.ThrowIfNull(domain);
 
-        var types = domain.Types
-            .OfType<DomainType>()
-            .Where(t => t is Entity or ValueType or EnumType)
-            .OrderBy(t => t.Name, StringComparer.Ordinal)
-            .ToList();
+        var types = DomainExportOrder.Types(domain);
         var byName = domain.Types.ToDictionary(t => t.Name, StringComparer.Ordinal);
         var typeIris = DomainIris.Types(domain);
 
@@ -54,22 +51,24 @@ public static class ShaclExporter {
         var typeNames = new List<(string Name, string Iri)>();
         var memberNames = new List<(string Name, string Owner, string Iri)>();
 
-        foreach (var entity in types.OfType<Entity>()) {
-            typeNames.Add((entity.Name, typeIris[entity.Name]));
-            graph.Add(EntityShape(
-                domain, entity, typeIris[entity.Name], byName, typeIris, memberNames));
-        }
-        foreach (var valueType in types.OfType<ValueType>()) {
-            typeNames.Add((valueType.Name, typeIris[valueType.Name]));
-            graph.Add(ValueTypeShape(
-                domain, valueType, typeIris[valueType.Name], byName, typeIris, memberNames));
-        }
-        foreach (var enumType in types.OfType<EnumType>()) {
-            typeNames.Add((enumType.Name, typeIris[enumType.Name]));
-            foreach (var member in enumType.MemberNames) {
-                var term = TermFacets.Read(enumType.MemberFacets.GetValueOrDefault(member));
-                memberNames.Add((member, enumType.Name,
-                    term?.Iri ?? DomainIris.Join(typeIris[enumType.Name], term?.Term ?? member)));
+        foreach (var type in types) {
+            typeNames.Add((type.Name, typeIris[type.Name]));
+            switch (type) {
+                case Entity entity:
+                    graph.Add(EntityShape(
+                        domain, entity, typeIris[entity.Name], byName, typeIris, memberNames));
+                    break;
+                case ValueType valueType:
+                    graph.Add(ValueTypeShape(
+                        domain, valueType, typeIris[valueType.Name], byName, typeIris, memberNames));
+                    break;
+                case EnumType enumType:
+                    foreach (var member in enumType.MemberNames) {
+                        var term = TermFacets.Read(enumType.MemberFacets.GetValueOrDefault(member));
+                        memberNames.Add((member, enumType.Name,
+                            term?.Iri ?? DomainIris.Join(typeIris[enumType.Name], term?.Term ?? member)));
+                    }
+                    break;
             }
         }
 
@@ -105,32 +104,35 @@ public static class ShaclExporter {
         var properties = new JsonArray();
         var propertyNames = entity.Properties.Select(p => p.Name).ToHashSet(StringComparer.Ordinal);
 
-        foreach (var property in entity.Properties.OrderBy(p => p.Name, StringComparer.Ordinal)) {
-            var propertyIri = DomainIris.Property(domain, entity.Name, property);
-            memberNames.Add((property.Name, entity.Name, propertyIri));
-            properties.Add(PropertyShape(propertyIri, property, entryAssigned, byName, typeIris));
-        }
+        foreach (var member in EntityDeclarationOrder.Members(entity)) {
+            switch (member.Node) {
+                case Property property:
+                    var propertyIri = DomainIris.Property(domain, entity.Name, property);
+                    memberNames.Add((property.Name, entity.Name, propertyIri));
+                    properties.Add(PropertyShape(propertyIri, property, entryAssigned, byName, typeIris));
+                    break;
+                case Relationship navigation:
+                    if (propertyNames.Contains(navigation.Name))
+                        throw new InvalidOperationException(
+                            $"Entity '{entity.Name}' declares both a property and a navigation named '{navigation.Name}'.");
 
-        foreach (var navigation in entity.Navigations.OrderBy(n => n.Name, StringComparer.Ordinal)) {
-            if (propertyNames.Contains(navigation.Name))
-                throw new InvalidOperationException(
-                    $"Entity '{entity.Name}' declares both a property and a navigation named '{navigation.Name}'.");
-
-            var navigationIri = DomainIris.Navigation(domain, entity.Name, navigation);
-            memberNames.Add((navigation.Name, entity.Name, navigationIri));
-            var propertyShape = new JsonObject {
-                ["@type"] = "sh:PropertyShape",
-                ["sh:path"] = new JsonObject { ["@id"] = navigationIri },
-                ["sh:minCount"] = 0,
-                ["sh:class"] = new JsonObject {
-                    ["@id"] = DomainIris.Range(navigation.Target, byName, typeIris),
-                },
-            };
-            if (navigation.Cardinality is RelationshipCardinality.OneToOne
-                or RelationshipCardinality.ManyToOne) {
-                propertyShape["sh:maxCount"] = 1;
+                    var navigationIri = DomainIris.Navigation(domain, entity.Name, navigation);
+                    memberNames.Add((navigation.Name, entity.Name, navigationIri));
+                    var propertyShape = new JsonObject {
+                        ["@type"] = "sh:PropertyShape",
+                        ["sh:path"] = new JsonObject { ["@id"] = navigationIri },
+                        ["sh:minCount"] = 0,
+                        ["sh:class"] = new JsonObject {
+                            ["@id"] = DomainIris.Range(navigation.Target, byName, typeIris),
+                        },
+                    };
+                    if (navigation.Cardinality is RelationshipCardinality.OneToOne
+                        or RelationshipCardinality.ManyToOne) {
+                        propertyShape["sh:maxCount"] = 1;
+                    }
+                    properties.Add(propertyShape);
+                    break;
             }
-            properties.Add(propertyShape);
         }
 
         if (properties.Count > 0)
@@ -160,7 +162,7 @@ public static class ShaclExporter {
 
         var entryAssigned = new HashSet<string>(StringComparer.Ordinal);
         var properties = new JsonArray();
-        foreach (var property in valueType.Properties.OrderBy(p => p.Name, StringComparer.Ordinal)) {
+        foreach (var property in valueType.Properties) {
             var propertyIri = DomainIris.Property(domain, valueType.Name, property);
             memberNames.Add((property.Name, valueType.Name, propertyIri));
             properties.Add(PropertyShape(propertyIri, property, entryAssigned, byName, typeIris));

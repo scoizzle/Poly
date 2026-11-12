@@ -13,15 +13,17 @@ namespace Poly.DomainModeling.Queries;
 /// <summary>
 /// A self-contained HTML document for a person: one file, no scripts, no server. It is a
 /// reading view over the same facts the Markdown report and the RDF/JSON exports use, so
-/// a human can open the ontology in a browser and an agent can hand them the file.
+/// a human can open the ontology in a browser and an agent can hand them the file. Types and
+/// members appear in declaration order (Q12).
 /// </summary>
 public static class DomainHtmlExporter {
     public static string Export(Domain domain) {
         ArgumentNullException.ThrowIfNull(domain);
 
-        var entities = domain.Types.OfType<Entity>().OrderBy(e => e.Name, StringComparer.Ordinal).ToList();
-        var valueTypes = domain.Types.OfType<ValueType>().OrderBy(v => v.Name, StringComparer.Ordinal).ToList();
-        var enums = domain.Types.OfType<EnumType>().OrderBy(e => e.Name, StringComparer.Ordinal).ToList();
+        var ordered = DomainExportOrder.Types(domain);
+        var entities = ordered.OfType<Entity>().ToList();
+        var valueTypes = ordered.OfType<ValueType>().ToList();
+        var enums = ordered.OfType<EnumType>().ToList();
         var properties = entities.Sum(e => e.Properties.Count) + valueTypes.Sum(v => v.Properties.Count);
         var relationships = entities.Sum(e => e.Navigations.Count);
 
@@ -82,7 +84,7 @@ public static class DomainHtmlExporter {
             sb.AppendLine("<thead><tr><th>Property</th><th>Type</th><th>Constraints</th><th>Required</th><th>IRI</th></tr></thead>");
             sb.AppendLine("<tbody>");
             var entryAssigned = EntityStructureAnalyzer.ComputeEntryAssignedPropertyNames(entity);
-            foreach (var property in entity.Properties.OrderBy(p => p.Name, StringComparer.Ordinal)) {
+            foreach (var property in EntityDeclarationOrder.Properties(entity)) {
                 var term = TermFacets.Read(property.Facets);
                 var required = DomainPresentation.IsRequired(property, entryAssigned);
                 sb.AppendLine("<tr>");
@@ -157,7 +159,7 @@ public static class DomainHtmlExporter {
 
         sb.AppendLine("<table><thead><tr><th>Property</th><th>Type</th><th>Constraints</th><th>Required</th><th>IRI</th></tr></thead><tbody>");
         var entryAssigned = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var property in valueType.Properties.OrderBy(p => p.Name, StringComparer.Ordinal)) {
+        foreach (var property in valueType.Properties) {
             var term = TermFacets.Read(property.Facets);
             var required = DomainPresentation.IsRequired(property, entryAssigned);
             sb.AppendLine($"<tr><td>{E(property.Name)}</td><td>{E(property.Type.TypeName)}</td>" +
@@ -174,9 +176,7 @@ public static class DomainHtmlExporter {
         sb.AppendLine("<h2>Relationships</h2>");
         sb.AppendLine("<table><thead><tr><th>Source</th><th>Name</th><th>Target</th><th>Cardinality</th></tr></thead><tbody>");
         foreach (var (source, navigation) in entities
-            .SelectMany(e => e.Navigations.Select(n => (Source: e, Navigation: n)))
-            .OrderBy(x => x.Source.Name, StringComparer.Ordinal)
-            .ThenBy(x => x.Navigation.Name, StringComparer.Ordinal)) {
+            .SelectMany(e => EntityDeclarationOrder.Navigations(e).Select(n => (Source: e, Navigation: n)))) {
             sb.AppendLine($"<tr><td>{E(source.Name)}</td><td>{E(navigation.Name)}</td>" +
                 $"<td>{E(navigation.Target.TypeName)}</td>" +
                 $"<td>{E(DomainPresentation.Cardinality(navigation.Cardinality))}</td></tr>");

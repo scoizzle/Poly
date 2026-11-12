@@ -59,10 +59,10 @@ public class PolyCheckWitnessTests {
         await Assert.That(context["stageName"]).IsNull();
         await Assert.That(context["preconditions"]!.AsArray().Select(n => n!.GetValue<string>())).Contains("Big");
         var qty = context["properties"]!.AsArray().Single(p => p!["name"]!.GetValue<string>() == "Qty")!;
-        await Assert.That(qty["min"]!.GetValue<double>()).IsEqualTo(10d);
-        await Assert.That(qty["max"]!.GetValue<double>()).IsEqualTo(100d);
+        await Assert.That(qty["min"]!.GetValue<decimal>()).IsEqualTo(10m);
+        await Assert.That(qty["max"]!.GetValue<decimal>()).IsEqualTo(100m);
         var post = context["postconditions"]!.AsArray().Single(p => p!["targetProperty"]!.GetValue<string>() == "Qty")!;
-        await Assert.That(post["min"]!.GetValue<double>()).IsEqualTo(50d);
+        await Assert.That(post["min"]!.GetValue<decimal>()).IsEqualTo(50m);
     }
 
     [Test]

@@ -44,7 +44,7 @@ public class OpenRangeBoundTests {
         var range = AbstractValue.From([new RangeConstraint(0, null)]).NumericRange;
 
         await Assert.That(range).IsNotNull();
-        await Assert.That(range!.Min).IsEqualTo(0d);
+        await Assert.That(range!.Min).IsEqualTo(0m);
         await Assert.That(range.Max).IsNull();
     }
 

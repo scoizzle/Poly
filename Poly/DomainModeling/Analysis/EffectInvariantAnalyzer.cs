@@ -8,9 +8,6 @@ using Subtract = Poly.DomainModeling.Ontology.Subtract;
 
 namespace Poly.DomainModeling.Analysis;
 
-/// <summary>A numeric value range (inclusive bounds, null = unbounded).</summary>
-public sealed record ValueRange(double? Min, double? Max);
-
 /// <summary>
 /// A postcondition an effect must respect: assigning to <see cref="TargetProperty"/>
 /// must satisfy <see cref="Constraints"/>; <see cref="Value"/> is the abstract value
@@ -355,33 +352,45 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
     /// Composes two abstract values, one rule per result endpoint, each depending only on its own two
     /// operand endpoints (#475): add takes like sides, subtract flips, and an absent operand endpoint
     /// makes that result endpoint absent. An absent side is unbounded, never 0. Both result endpoints
-    /// absent means no numeric range at all (Unknown), never a <c>range(−∞, +∞)</c> constraint.
+    /// absent means no numeric range at all (Unknown), never a <c>range(−∞, +∞)</c> constraint. The
+    /// endpoints compose exactly: a result that does not fit a decimal is treated as absent, so a bound
+    /// that would round opens instead (OQ-6). The interval ops replace this arm in V-05b S2.
     /// </summary>
     private static AbstractValue ComposeArithmetic(AbstractValue left, AbstractValue right, ArithOp op) {
         if (left.NumericRange is not { } lr || right.NumericRange is not { } rr) return AbstractValue.Unknown;
-        double? min, max;
+        decimal? min, max;
         switch (op) {
             case ArithOp.Add:
-                min = lr.Min + rr.Min;
-                max = lr.Max + rr.Max;
+                min = TryArith(lr.Min, rr.Min, static (l, r) => l.TryAdd(r));
+                max = TryArith(lr.Max, rr.Max, static (l, r) => l.TryAdd(r));
                 break;
             case ArithOp.Sub:
-                min = lr.Min - rr.Max;
-                max = lr.Max - rr.Min;
+                min = TryArith(lr.Min, rr.Max, static (l, r) => l.TrySubtract(r));
+                max = TryArith(lr.Max, rr.Min, static (l, r) => l.TrySubtract(r));
                 break;
             default: {
                     if (lr.Min is not { } lMin || lr.Max is not { } lMax
                         || rr.Min is not { } rMin || rr.Max is not { } rMax)
                         return AbstractValue.Unknown;
-                    double[] combos = [lMin * rMin, lMin * rMax, lMax * rMin, lMax * rMax];
-                    min = combos.Min();
-                    max = combos.Max();
+                    var products = new List<decimal>(4);
+                    foreach (var (x, y) in new[] { (lMin, rMin), (lMin, rMax), (lMax, rMin), (lMax, rMax) }) {
+                        if (TryArith(x, y, static (l, r) => l.TryMultiply(r)) is not { } product)
+                            return AbstractValue.Unknown;
+                        products.Add(product);
+                    }
+                    min = products.Min();
+                    max = products.Max();
                     break;
                 }
         }
         if (min is null && max is null) return AbstractValue.Unknown;
         return AbstractValue.From([new RangeConstraint(min, max)]);
     }
+
+    /// <summary>One endpoint of an exact composition: absent when an operand endpoint is open or the exact
+    /// result does not fit a decimal, so a bound that would round opens instead.</summary>
+    private static decimal? TryArith(decimal? left, decimal? right, Func<ExactNumber, ExactNumber, ExactNumber?> op) =>
+        ExactNumber.TryFrom(left) is { } l && ExactNumber.TryFrom(right) is { } r ? op(l, r)?.ToDecimal() : null;
 
     // ── Effect stepping ─────────────────────────────────────────
 
@@ -765,7 +774,7 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
         return Eval(expr, entity, action, env);
     }
 
-    internal static (double? Min, double? Max) InferNumericRange(
+    internal static (decimal? Min, decimal? Max) InferNumericRange(
         DomainExpression expr, Entity entity, Action? action,
         IReadOnlyDictionary<string, ValueRange?>? narrowed = null) =>
         InferValue(expr, entity, action, narrowed).NumericRange is { } nr ? (nr.Min, nr.Max) : (null, null);

@@ -189,8 +189,8 @@ public class InfrastructureAnalyzerTests {
             """);
         var qty = infra.Storage.Entities[0].Columns.Single(c => c.Name == "Qty");
         await Assert.That(qty.IsRangeVerified).IsTrue();
-        await Assert.That(qty.VerifiedRange!.Min).IsEqualTo(0d);
-        await Assert.That(qty.VerifiedRange!.Max).IsEqualTo(100d);
+        await Assert.That(qty.VerifiedRange!.Min).IsEqualTo(0m);
+        await Assert.That(qty.VerifiedRange!.Max).IsEqualTo(100m);
     }
 
     [Test]
@@ -209,7 +209,7 @@ public class InfrastructureAnalyzerTests {
             """);
         var qty = infra.Storage.Entities[0].Columns.Single(c => c.Name == "Qty");
         await Assert.That(qty.IsRangeVerified).IsTrue();
-        await Assert.That(qty.VerifiedRange!.Max).IsEqualTo(100d);
+        await Assert.That(qty.VerifiedRange!.Max).IsEqualTo(100m);
     }
 
     [Test]

@@ -7,6 +7,13 @@ namespace Poly.DomainModeling.Analysis;
 /// too; callers that must tell the two apart use <c>HasUnorderableBound</c>.
 /// </summary>
 internal static class NumericBound {
+    /// <summary>The bound as an exact decimal, or null when it is absent or not exactly representable
+    /// (a fractional or above-2^53 <see cref="double"/>): an interval endpoint never rounds (OQ-6).</summary>
+    internal static decimal? ToDecimalOrNull(object? value) {
+        if (value is null) return null;
+        return ExactNumber.TryFrom(value)?.ToDecimal();
+    }
+
     internal static double? ToDoubleOrNull(object? value) {
         if (value is null) return null;
         try { return Convert.ToDouble(value); }

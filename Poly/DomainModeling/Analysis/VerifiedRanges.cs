@@ -68,7 +68,7 @@ internal static class VerifiedRanges {
         && (range.Maximum is null || ToDoubleOrNull(range.Maximum) is not null);
 
     private static ValueRange ToValueRange(RangeConstraint r) =>
-        new(ToDoubleOrNull(r.Minimum), ToDoubleOrNull(r.Maximum));
+        new(NumericBound.ToDecimalOrNull(r.Minimum), NumericBound.ToDecimalOrNull(r.Maximum));
 
     private static double? ToDoubleOrNull(object? v) {
         if (v is null) return null;

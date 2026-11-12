@@ -74,7 +74,7 @@ public class ConstraintFailClosedAuditTests {
 
         var column = QtyColumn(Dom(entity));
         await Assert.That(column.IsRangeVerified).IsTrue();
-        await Assert.That(column.VerifiedRange!.Max).IsEqualTo(100d);
+        await Assert.That(column.VerifiedRange!.Max).IsEqualTo(100m);
     }
 
     // ── EffectAnalyzer.CheckDerivedRange / call-chain postcondition ───────

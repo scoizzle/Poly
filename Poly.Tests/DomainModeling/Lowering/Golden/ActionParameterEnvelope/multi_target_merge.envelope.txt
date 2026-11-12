@@ -1,2 +1,2 @@
-Pair.Both(v): RequiredConstraint;Range(50:Double,100:Double)
+Pair.Both(v): RequiredConstraint;Range(50:Decimal,100:Decimal)
 Pair.Conflict(s): RequiredConstraint

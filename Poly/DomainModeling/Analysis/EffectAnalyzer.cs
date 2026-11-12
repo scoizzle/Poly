@@ -1266,9 +1266,10 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
                 var tmin = NumericBound.ToDoubleOrNull(range.Minimum);
                 var tmax = NumericBound.ToDoubleOrNull(range.Maximum);
                 // An absent side is unbounded, never 0 (#475): the called effect's range may be open.
-                double lo = vr.Min ?? double.NegativeInfinity, hi = vr.Max ?? double.PositiveInfinity;
-                bool fullyBelow = tmin is not null && hi < tmin.Value;
-                bool fullyAbove = tmax is not null && lo > tmax.Value;
+                var lo = NumericBound.ToDoubleOrNull(vr.Min);
+                var hi = NumericBound.ToDoubleOrNull(vr.Max);
+                bool fullyBelow = tmin is not null && hi is not null && hi < tmin.Value;
+                bool fullyAbove = tmax is not null && lo is not null && lo > tmax.Value;
                 if (fullyBelow || fullyAbove || WriteVerification.HasUnorderableBound(range)) {
                     context.ReportError(
                         post.Effect,
@@ -1278,8 +1279,8 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
                         DomainModelDiagnosticCodes.EffectConstraintViolation);
                     continue;
                 }
-                bool canViolate = (tmin is not null && lo < tmin.Value)
-                                  || (tmax is not null && hi > tmax.Value);
+                bool canViolate = (tmin is not null && (lo is null || lo < tmin.Value))
+                                  || (tmax is not null && (hi is null || hi > tmax.Value));
                 if (canViolate) {
                     context.ReportWarning(
                         post.Effect,
@@ -1292,12 +1293,12 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
         }
     }
 
-    private static string FormatRangeValue(double d) =>
-        d == Math.Floor(d) ? d.ToString("F0", System.Globalization.CultureInfo.InvariantCulture) : d.ToString("G", System.Globalization.CultureInfo.InvariantCulture);
+    private static string FormatRangeValue(decimal d) =>
+        d == decimal.Truncate(d) ? d.ToString("F0", System.Globalization.CultureInfo.InvariantCulture) : d.ToString("G", System.Globalization.CultureInfo.InvariantCulture);
 
     /// <summary>A written edge of a value range. An absent side is unbounded and prints as the
     /// <see cref="ConstraintValidation"/> glyph, never as the number 0 (#475).</summary>
-    private static string FormatBound(double? bound, bool lower) =>
+    private static string FormatBound(decimal? bound, bool lower) =>
         bound is { } value ? FormatRangeValue(value) : lower ? "−∞" : "+∞";
 
     /// <summary>

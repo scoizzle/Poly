@@ -22,7 +22,7 @@ public class Doctor
         var invoke0 = this.Schedule.Open();
         if (!invoke0.IsSuccess)
         {
-            return DomainResult.Failure(invoke0.ErrorMessage ?? "");
+            return DomainResult.Failure(invoke0.Error!.At("Doctor.StartShift"));
         }
         return DomainResult.Success();
     }

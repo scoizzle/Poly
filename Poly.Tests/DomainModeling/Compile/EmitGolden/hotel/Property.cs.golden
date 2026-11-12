@@ -38,7 +38,7 @@ public class Property
         var hallResult = Hall.Create(name, capacity, dayRate, this, new List<Section>(), occupied, offline, busySections);
         if (!hallResult.IsSuccess)
         {
-            return DomainResult<Hall>.Failure(hallResult.ErrorMessage ?? "");
+            return DomainResult<Hall>.Failure(hallResult.Error!);
         }
         var hall = hallResult.Value;
         return DomainResult<Hall>.Success(hall);
@@ -60,7 +60,7 @@ public class Property
         var create0 = this.CreateHalls(name, seats, rate);
         if (!create0.IsSuccess)
         {
-            return DomainResult<Hall>.Failure(create0.ErrorMessage ?? "");
+            return DomainResult<Hall>.Failure(create0.Error!.At("Property.AddHall"));
         }
         var created1 = create0.Value;
         return DomainResult<Hall>.Success(created1);

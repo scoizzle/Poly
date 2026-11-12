@@ -55,7 +55,7 @@ public class Section
         var waitOfferResult = WaitOffer.Create(student, this);
         if (!waitOfferResult.IsSuccess)
         {
-            return DomainResult<WaitOffer>.Failure(waitOfferResult.ErrorMessage ?? "");
+            return DomainResult<WaitOffer>.Failure(waitOfferResult.Error!);
         }
         var waitOffer = waitOfferResult.Value;
         return DomainResult<WaitOffer>.Success(waitOffer);
@@ -88,7 +88,7 @@ public class Section
         var create0 = this.CreateWaitlist(who);
         if (!create0.IsSuccess)
         {
-            return DomainResult<WaitOffer>.Failure(create0.ErrorMessage ?? "");
+            return DomainResult<WaitOffer>.Failure(create0.Error!.At("Section.Queue"));
         }
         var created1 = create0.Value;
         return DomainResult<WaitOffer>.Success(created1);
@@ -110,7 +110,7 @@ public class Section
         var invoke0 = this.Instructor.GoOnLeave();
         if (!invoke0.IsSuccess)
         {
-            return DomainResult.Failure(invoke0.ErrorMessage ?? "");
+            return DomainResult.Failure(invoke0.Error!.At("Section.StaffLeave"));
         }
         return DomainResult.Success();
     }

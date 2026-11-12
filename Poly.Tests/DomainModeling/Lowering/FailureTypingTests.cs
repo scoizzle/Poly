@@ -17,8 +17,9 @@ namespace Poly.Tests.DomainModeling.Lowering;
 /// instead of a bare string. Each case prints the lowered module and reads the failure call.
 /// </summary>
 public class FailureTypingTests {
-    private static string Print(string dsl) {
-        var session = ParitySessions.Create();
+    private static string Print(string dsl) => Print(dsl, ParitySessions.Create());
+
+    private static string Print(string dsl, DomainSession session) {
         var changes = new PolyDslParser(dsl, session).Parse();
         var evolved = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes, session: session);
         if (!evolved.Succeeded)
@@ -349,6 +350,18 @@ public class FailureTypingTests {
         }
         """;
 
+    private const string StageRequireDsl = """
+        domain Lab
+        Item: entity {
+          Ok: Boolean
+          IsOk: policy { Ok is true }
+          Draft: stage require IsOk {
+            Go: action { transition to Done }
+          }
+          Done: stage { }
+        }
+        """;
+
     private const string LinkDsl = """
         domain Lab
         Child: entity { Name: Text }
@@ -392,6 +405,7 @@ public class FailureTypingTests {
     [Arguments(StageFallthroughDsl, "Stage(\"'Cancel' is not valid for the current stage on entity 'Ticket'.\", \"Ticket.Cancel\")")]
     [Arguments(PolicyDsl, "Policy(\"'Go' blocked by policy 'IsOk'.\", \"Item.Go\", \"IsOk\")")]
     [Arguments(PolicyDsl, "Policy(\"'Skip' blocked by policy 'IsOk'.\", \"Item.Skip\", \"IsOk\")")]
+    [Arguments(StageRequireDsl, "Policy(\"'Go' blocked by policy 'IsOk'.\", \"Item.Go\", \"IsOk\")")]
     [Arguments(LinkDsl, "Link(\"Cannot add a second link on 'kid': the source already has a target.\", \"Parent.kid\")")]
     [Arguments(InvokeUnlinkedDsl, "Required(\"'Go' requires a linked 'kid' on entity 'Parent'.\", \"Parent.kid\")")]
     [Arguments(PathPrefixDsl, "Required(\"'CheckIn' requires a linked 'room' on entity 'Reservation'.\", \"Reservation.room\")")]
@@ -421,10 +435,149 @@ public class FailureTypingTests {
         return (DomainFailure)result!.GetType().GetProperty("Error")!.GetValue(result)!;
     }
 
+    private const string NestedCreateDsl = """
+        domain Lab
+        Product: entity {
+          Hold: action (q: Number) { create in reservations { Qty: q } }
+          reservations: many Reservation
+        }
+        Reservation: entity { Qty: Number range(1, 100) }
+        """;
+
+    private const string InvokeCascadeDsl = """
+        domain Lab
+        Child: entity {
+          Ok: Boolean
+          IsOk: policy { Ok is true }
+          Poke: action require IsOk { }
+        }
+        Parent: entity {
+          kid: Child
+          AddKid: action { create in kid { Ok: false } }
+          Go: action { invoke kid.Poke }
+        }
+        """;
+
+    private static object? Instantiate(Type type, IStoragePort? port = null, params object?[] named) {
+        var create = type.GetMethod("Create")!;
+        var args = create.GetParameters().Select((p, i) =>
+            i < named.Length ? named[i]
+            : p.ParameterType == typeof(string) ? "x"
+            : p.ParameterType == typeof(bool) ? false
+            : p.ParameterType == typeof(IStoragePort) ? port ?? new InMemoryStoragePort()
+            : p.ParameterType.IsValueType ? Activator.CreateInstance(p.ParameterType) : null).ToArray();
+        var created = create.Invoke(null, args)!;
+        return created.GetType().GetProperty("Value")!.GetValue(created);
+    }
+
+    private static DomainFailure Failed(object result) =>
+        (DomainFailure)result.GetType().GetProperty("Error")!.GetValue(result)!;
+
+    [Test]
+    public async Task NestedCreate_PropagateCarriesTheCallerPath_AndTheLeafKeepsItsOwn() {
+        var cs = Print(NestedCreateDsl);
+
+        await Assert.That(cs).Contains("Error!.At(\"Product.Hold\")");
+        await Assert.That(cs).Contains("Poly.Runtime.DomainFailure.Range(\"'Qty' must be >= 1.\", \"Reservation.Qty\")");
+    }
+
+    [Test]
+    public async Task InvokeCascade_PropagationPrintsTheTypedErrorNotText() {
+        var cs = Print(InvokeCascadeDsl);
+
+        await Assert.That(cs).Contains("Error!.At(\"Parent.Go\")");
+        await Assert.That(cs).DoesNotContain("ErrorMessage ?? \"\"");
+    }
+
+    [Test]
+    public async Task Hold_WhenQtyZero_PrintedResultCarriesRangeKindAndFullPath() {
+        var asm = ExportedCSharp.CompileAndLoad(Print(NestedCreateDsl));
+        var product = asm.GetType("Product")!;
+        var result = product.GetMethod("Hold")!.Invoke(Instantiate(product), [0L])!;
+
+        var failure = Failed(result);
+        await Assert.That(failure.Kind).IsEqualTo(DomainFailureKind.Range);
+        await Assert.That(failure.ElementPath).IsEqualTo("Product.Hold.Reservation.Qty");
+        await Assert.That(failure.Message).IsEqualTo("'Qty' must be >= 1.");
+        await Assert.That(result.GetType().GetProperty("ErrorMessage")!.GetValue(result)).IsEqualTo("'Qty' must be >= 1.");
+    }
+
+    [Test]
+    public async Task InvokeCascade_PrefixesTheCallerActionAndKeepsKindAndGuard() {
+        var asm = ExportedCSharp.CompileAndLoad(Print(InvokeCascadeDsl));
+        var parent = asm.GetType("Parent")!;
+        var instance = Instantiate(parent)!;
+        parent.GetMethod("AddKid")!.Invoke(instance, []);
+        var result = parent.GetMethod("Go")!.Invoke(instance, [])!;
+
+        var failure = Failed(result);
+        await Assert.That(failure.Kind).IsEqualTo(DomainFailureKind.Policy);
+        await Assert.That(failure.Guard).IsEqualTo("IsOk");
+        await Assert.That(failure.ElementPath).IsEqualTo("Parent.Go.Child.Poke");
+        await Assert.That(failure.Message).IsEqualTo("'Poke' blocked by policy 'IsOk'.");
+    }
+
+    /// <summary>
+    /// The path rule through <c>At</c>: only a callee's failure gets the caller prefix. The entity's own
+    /// guard method <c>EnsureUnique</c> is not a callee, so its failure is returned as <c>Error!</c>
+    /// with no <c>At</c> before the storage library rewrites it, and the rewritten failure is
+    /// <c>Unique</c> at <c>Widget.Sku</c> with no <c>Widget.Rename.</c> prefix. Kind and path differ
+    /// by storage by design (Constraint at <c>Widget</c> when <c>EnsureUnique</c> itself runs, see
+    /// <c>ActionKinds_PrintedAssembly_CarryKindPathGuardAndLegacyText</c>); an action prefix never appears.
+    /// </summary>
+    [Test]
+    public async Task UniqueAssign_ElementPath_HasNoCallerPrefix_BeforeAndAfterTheStorageRewrite() {
+        var entity = new Entity("Widget",
+            Properties: [new Property("Sku", new DomainTypeReference("Text"), [new UniqueConstraint()])],
+            Actions: [], Policies: [], Stages: []);
+        var context = LoweringFixtures.Context(new ThisReference(), entity)
+            with { ActionResultType = new NamedTypeReference("DomainResult"), ActionName = "Rename" };
+        var lowered = new EffectLoweringPass(entity, context).TryLowerVmNode(
+            new AssignEffect(DomainExpression.Property("Sku"), DomainExpression.Property("v")))!;
+
+        var guardFailure = Walk(lowered).OfType<Invoke>().Single(i =>
+            i.Delegate is Member { MemberName: "Failure" } && i.Arguments is [NullForgiving]);
+        await Assert.That(Walk(lowered).OfType<Member>().Any(m => m.MemberName == "At")).IsFalse();
+        await Assert.That(guardFailure.Arguments[0] is NullForgiving { Operand: Member { MemberName: "Error" } }).IsTrue();
+
+        var cs = Print("""
+            domain Lab
+            uses persistence
+
+            Widget: entity {
+              Sku: Text unique
+              Rename: action (v: Text) { assign Sku to v }
+            }
+            """);
+        await Assert.That(cs).Contains("Poly.Runtime.DomainFailure.Unique(");
+        await Assert.That(cs).Contains("\"Widget.Sku\")");
+        await Assert.That(cs).DoesNotContain("Widget.Rename");
+    }
+
+    [Test]
+    public async Task Corpus_EmitsNoStringOnlyFailureAndNoFlattenedPropagation() {
+        foreach (var domain in GoldenDomains.Compilable) {
+            var (session, root, analysis) = Poly.Tests.DomainModeling.Compile.EmitGoldenTests.AnalyzeSampleFile(domain.Path);
+            foreach (var (fileName, source) in session.Emit(root, analysis)) {
+                foreach (var line in source.Split('\n')) {
+                    var text = line.Trim();
+                    if (text.Contains(".Failure(", StringComparison.Ordinal) && !text.StartsWith("public static ", StringComparison.Ordinal))
+                        await Assert.That(text.Contains("Poly.Runtime.DomainFailure.", StringComparison.Ordinal)
+                            || text.Contains(".Error!", StringComparison.Ordinal))
+                            .IsTrue().Because($"{domain.Name}/{fileName}: {text}");
+                    if (text.Contains("ErrorMessage ?? \"\"", StringComparison.Ordinal))
+                        await Assert.That(text.StartsWith("throw new ConstraintFailureException(", StringComparison.Ordinal))
+                            .IsTrue().Because($"{domain.Name}/{fileName}: {text}");
+                }
+            }
+        }
+    }
+
     [Test]
     [Arguments(StageGateDsl, "Visit", "CheckIn", 2, DomainFailureKind.Stage, "'CheckIn' requires stage 'Scheduled' on entity 'Visit'.", "Visit.CheckIn", "Scheduled")]
     [Arguments(PolicyDsl, "Item", "Go", 1, DomainFailureKind.Policy, "'Go' blocked by policy 'IsOk'.", "Item.Go", "IsOk")]
     [Arguments(PolicyDsl, "Item", "Skip", 1, DomainFailureKind.Policy, "'Skip' blocked by policy 'IsOk'.", "Item.Skip", "IsOk")]
+    [Arguments(StageRequireDsl, "Item", "Go", 1, DomainFailureKind.Policy, "'Go' blocked by policy 'IsOk'.", "Item.Go", "IsOk")]
     [Arguments(LinkDsl, "Parent", "AddKid", 2, DomainFailureKind.Link, "Cannot add a second link on 'kid': the source already has a target.", "Parent.kid", null)]
     [Arguments(InvokeUnlinkedDsl, "Parent", "Go", 1, DomainFailureKind.Required, "'Go' requires a linked 'kid' on entity 'Parent'.", "Parent.kid", null)]
     [Arguments(PathPrefixDsl, "Reservation", "CheckIn", 1, DomainFailureKind.Required, "'CheckIn' requires a linked 'room' on entity 'Reservation'.", "Reservation.room", null)]
@@ -444,6 +597,7 @@ public class FailureTypingTests {
     [Arguments(StageGateDsl, "Visit", "CheckIn", "'CheckIn' requires stage 'Scheduled' on entity 'Visit'.")]
     [Arguments(PolicyDsl, "Item", "Go", "'Go' blocked by policy 'IsOk'.")]
     [Arguments(PolicyDsl, "Item", "Skip", "'Skip' blocked by policy 'IsOk'.")]
+    [Arguments(StageRequireDsl, "Item", "Go", "'Go' blocked by policy 'IsOk'.")]
     [Arguments(LinkDsl, "Parent", "AddKid", "Cannot add a second link on 'kid': the source already has a target.")]
     [Arguments(InvokeUnlinkedDsl, "Parent", "Go", "'Go' requires a linked 'kid' on entity 'Parent'.")]
     [Arguments(PathPrefixDsl, "Reservation", "CheckIn", "'CheckIn' requires a linked 'room' on entity 'Reservation'.")]
@@ -464,6 +618,115 @@ public class FailureTypingTests {
         var failed = outcomes[twice ? 2 : 1];
         await Assert.That(failed.Success).IsFalse();
         await Assert.That(failed.Message).IsEqualTo(expected);
+    }
+
+    [Test]
+    public async Task NestedCreate_OnBothSides_KeepsTheLegacyMessageText() {
+        var outcomes = await ParityScenario.FromDsl(NestedCreateDsl, "FailureTypingNested")
+            .AssertAgree(side => {
+                side.Create("Product");
+                side.Invoke("Hold", ("q", 0L));
+            });
+
+        await Assert.That(outcomes[1].Success).IsFalse();
+        await Assert.That(outcomes[1].Message).IsEqualTo("'Qty' must be >= 1.");
+    }
+
+    [Test]
+    public async Task InvokeCascade_OnBothSides_KeepsTheLegacyMessageText() {
+        var outcomes = await ParityScenario.FromDsl(InvokeCascadeDsl, "FailureTypingCascade")
+            .AssertAgree(side => {
+                side.Create("Parent");
+                side.Invoke("AddKid");
+                side.Invoke("Go");
+            });
+
+        await Assert.That(outcomes[2].Success).IsFalse();
+        await Assert.That(outcomes[2].Message).IsEqualTo("'Poke' blocked by policy 'IsOk'.");
+    }
+
+    private const string EntryCreateDsl = """
+        domain Lab
+        Parent: entity {
+          N: Number default(0)
+          kids: many Kid
+          Open: stage { entry { create in kids { Qty: N } } }
+        }
+        Kid: entity { Qty: Number range(1, 5) }
+        """;
+
+    /// <summary>A void body (stage entry) throws the callee's text through ThrowFrom; the VM and the printed assembly agree.</summary>
+    [Test]
+    public async Task VoidEntryCreate_WhenTheCalleeFails_ThrowsTheCalleeTextOnBothSides() {
+        var (vm, printed) = ParityScenario.FromDsl(EntryCreateDsl, "FailureTypingThrowFrom")
+            .Run(side => side.Create("Parent"));
+
+        await Assert.That(vm[0].Success).IsFalse();
+        await Assert.That(vm[0].Message).IsEqualTo("'Qty' must be >= 1.");
+        await Assert.That(printed[0].Success).IsFalse();
+        await Assert.That(printed[0].Message).IsEqualTo("'Qty' must be >= 1.");
+    }
+
+    [Test]
+    public async Task VoidEntryCreate_PrintsThrowFromNotATypedFailure() {
+        var cs = Print(EntryCreateDsl);
+
+        await Assert.That(cs).Contains("throw new ConstraintFailureException(");
+        await Assert.That(cs).Contains("ErrorMessage ?? \"\"");
+    }
+
+    /// <summary>Literal per-kind rows for every propagation S3 touched, through the printed assembly and both hosts.</summary>
+    [Test]
+    [Arguments(NestedCreateDsl, "Product", "Hold", DomainFailureKind.Range, "'Qty' must be >= 1.", "Product.Hold.Reservation.Qty", null)]
+    [Arguments(InvokeCascadeDsl, "Parent", "Go", DomainFailureKind.Policy, "'Poke' blocked by policy 'IsOk'.", "Parent.Go.Child.Poke", "IsOk")]
+    public async Task Propagation_PerKind_PrintedAssemblyAndBothHosts(
+        string dsl, string entity, string action, DomainFailureKind kind, string message, string path, string? guard) {
+        var asm = ExportedCSharp.CompileAndLoad(Print(dsl));
+        var type = asm.GetType(entity)!;
+        var instance = Instantiate(type)!;
+        if (entity == "Parent")
+            type.GetMethod("AddKid")!.Invoke(instance, []);
+        var method = type.GetMethod(action)!;
+        var result = method.Invoke(instance, method.GetParameters().Length == 0 ? [] : [0L])!;
+        var failure = Failed(result);
+        await Assert.That(failure.Kind).IsEqualTo(kind);
+        await Assert.That(failure.Message).IsEqualTo(message);
+        await Assert.That(failure.ElementPath).IsEqualTo(path);
+        await Assert.That(failure.Guard).IsEqualTo(guard);
+
+        var outcomes = await ParityScenario.FromDsl(dsl, "FailureTypingPerKind" + Guid.NewGuid().ToString("N"))
+            .AssertAgree(side => {
+                side.Create(entity);
+                if (entity == "Parent")
+                    side.Invoke("AddKid");
+                if (action == "Hold")
+                    side.Invoke(action, ("q", 0L));
+                else
+                    side.Invoke(action);
+            });
+        await Assert.That(outcomes[^1].Success).IsFalse();
+        await Assert.That(outcomes[^1].Message).IsEqualTo(message);
+    }
+
+    [Test]
+    [Arguments("DomainResult")]
+    [Arguments("Poly")]
+    public async Task ForLoopBinderNamedAGeneratedReference_WithAPropagatedInvoke_PrintsCompilableCSharp(string binder) {
+        var cs = Print($$"""
+            domain Lab
+            Parent: entity {
+              kids: many Kid
+              Go: action { for kids as {{binder}} invoke {{binder}}.Poke }
+            }
+            Kid: entity {
+              Poke: action { }
+            }
+            """);
+
+        var asm = ExportedCSharp.CompileAndLoad(cs);
+
+        await Assert.That(cs).Contains("Error!.At(\"Parent.Go\")");
+        await Assert.That(asm.GetType("Parent")).IsNotNull();
     }
 
     [Test]

@@ -293,7 +293,7 @@ public sealed partial class EffectLoweringPass {
                 assignedVar)));
             nodes.Add(new IfStatement(
                 new Syntactic.Not(new Member(checkVar, "IsSuccess")),
-                new Block([ReturnCallerFailureFrom(checkVar)])));
+                new Block([ReturnOwnGuardFailureFrom(checkVar)])));
         }
 
         nodes.Add(new Assignment(destination, assignedVar));

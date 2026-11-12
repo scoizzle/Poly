@@ -21,7 +21,7 @@ public class Patron
         var fineResult = Fine.Create(amount, reason, this);
         if (!fineResult.IsSuccess)
         {
-            return DomainResult<Fine>.Failure(fineResult.ErrorMessage ?? "");
+            return DomainResult<Fine>.Failure(fineResult.Error!);
         }
         var fine = fineResult.Value;
         return DomainResult<Fine>.Success(fine);
@@ -35,7 +35,7 @@ public class Patron
         var create0 = this.CreateFines(5L, "CreateIn");
         if (!create0.IsSuccess)
         {
-            return DomainResult<Fine>.Failure(create0.ErrorMessage ?? "");
+            return DomainResult<Fine>.Failure(create0.Error!.At("Patron.AssessByRel"));
         }
         var created1 = create0.Value;
         return DomainResult<Fine>.Success(created1);

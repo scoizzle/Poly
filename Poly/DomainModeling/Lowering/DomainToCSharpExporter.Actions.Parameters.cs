@@ -13,14 +13,14 @@ public sealed partial class DomainToCSharpExporter {
     /// When <paramref name="action"/> is bound to a contract endpoint, splices the library's
     /// contributed body at the bind: the bound `request` parameter, the body's leading statements, then
     /// <c>adapterResult = &lt;final expression&gt;</c> and
-    /// <c>if (!adapterResult.IsSuccess) return</c> that Failure (void <c>DomainResult</c>) or
-    /// <c>DomainResult&lt;T&gt;.Failure(ErrorMessage)</c> (typed). A surface-only in-solution
+    /// <c>if (!adapterResult.IsSuccess)</c> returns that failure rewrapped as the action's result:
+    /// <c>Failure(adapterResult.Error!.At("Entity.Action"))</c>, so kind, message and guard survive. A surface-only in-solution
     /// contribution erases the call and leaves the local action body untouched. The resolved
     /// endpoint is the binding fact lowering reads: a missing fact refuses, and a recorded
     /// non-<c>Bound</c> binding fact (#422) refuses instead of silently erasing the call.
     /// </summary>
     private static Node? SpliceContractBody(
-        Domain domain, Action action, Node? effectsBody, bool isVoid,
+        Domain domain, Entity entity, Action action, Node? effectsBody, bool isVoid,
         INodeMetadataProvider analysis, ContractSplicePlan? splice, LocalNames? names) {
         if (splice is null) return effectsBody;
         var binding = domain.ContractBindings.FirstOrDefault(b =>
@@ -78,20 +78,13 @@ public sealed partial class DomainToCSharpExporter {
         prefix.AddRange(body.Nodes.Take(body.Nodes.Count - 1));
         prefix.Add(new Assignment(adapterResult, final.Value!));
 
-        Node failureReturn;
-        if (isVoid) {
-            failureReturn = new Return(adapterResult);
-        }
-        else {
-            var actionResultType = new NamedTypeReference("DomainResult",
-                TypeArguments: [MapDomainTypeRef(action.Result!.Members[0].Type, domain, analysis)]);
-            failureReturn = new Return(
-                new Invoke(
-                    new Member(actionResultType, "Failure"),
-                    new Syntactic.Coalesce(
-                        new Member(adapterResult, "ErrorMessage"),
-                        new Constant(""))));
-        }
+        var failureReturn = FailureLowering.Propagate(
+            isVoid
+                ? new NamedTypeReference("DomainResult")
+                : new NamedTypeReference("DomainResult",
+                    TypeArguments: [MapDomainTypeRef(action.Result!.Members[0].Type, domain, analysis)]),
+            adapterResult,
+            $"{entity.Name}.{action.Name}");
         prefix.Add(new IfStatement(
             new Syntactic.Not(new Member(adapterResult, "IsSuccess")),
             new Block([failureReturn])));

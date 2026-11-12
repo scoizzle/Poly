@@ -186,12 +186,7 @@ public sealed partial class DomainToCSharpExporter {
             new Syntactic.Not(
                 new Member(localResult, "IsSuccess")),
             new Block([
-                new Return(
-                    new Invoke(
-                        new Member(createResultType, "Failure"),
-                        new Syntactic.Coalesce(
-                            new Member(localResult, "ErrorMessage"),
-                            new Constant(""))))
+                FailureLowering.Propagate(createResultType, localResult)
             ])));
 
         bodyNodes.Add(new Assignment(local, new Member(localResult, "Value")));

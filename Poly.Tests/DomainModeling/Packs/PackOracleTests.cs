@@ -201,6 +201,7 @@ public class PackOracleTests {
     }
 
     [Test]
+    [NotInParallel("PackOracleSweep")]
     public async Task Sweep_DeadHostPidfile_KillsChildAndRemovesRunDir() {
         var options = new PackOracleBootOptions { StallHook = true, WaitForReady = false };
         var oracle = await PackOracle.BootAsync(PackOracleDomains.Tally653, options: options);
@@ -213,7 +214,7 @@ public class PackOracleTests {
             var deadHost = await ExitedProcessIdAsync();
             var record = JsonNode.Parse(await File.ReadAllTextAsync(oracle.PidFilePath))!.AsObject();
             record["hostPid"] = deadHost;
-            await File.WriteAllTextAsync(oracle.PidFilePath, record.ToJsonString());
+            await RewritePidFileAsync(oracle.PidFilePath, record);
 
             var killed = PackOracle.SweepOrphans();
 
@@ -233,6 +234,7 @@ public class PackOracleTests {
     /// <summary>A dead host record whose start time is an hour off names a pid that may exist but is not the
     /// process the record describes: the sweep drops the record and must not signal the pid (F4).</summary>
     [Test]
+    [NotInParallel("PackOracleSweep")]
     public async Task Sweep_StartTimeMismatch_DoesNotKillAndDropsRecord() {
         var options = new PackOracleBootOptions { StallHook = true, WaitForReady = false };
         var oracle = await PackOracle.BootAsync(PackOracleDomains.Tally653, options: options);
@@ -243,7 +245,7 @@ public class PackOracleTests {
             var record = JsonNode.Parse(await File.ReadAllTextAsync(oracle.PidFilePath))!.AsObject();
             record["hostPid"] = deadHost;
             record["startedUtc"] = DateTime.UtcNow.AddHours(-1);
-            await File.WriteAllTextAsync(oracle.PidFilePath, record.ToJsonString());
+            await RewritePidFileAsync(oracle.PidFilePath, record);
 
             PackOracle.SweepOrphans();
 
@@ -257,23 +259,35 @@ public class PackOracleTests {
         await Assert.That(PackOracle.IsProcessAlive(oracle.ChildPid)).IsFalse();
     }
 
-    /// <summary>A record whose child pid is a live process that is not our dotnet child (same start time, wrong
-    /// name) is dropped, never signalled (F4). <c>sleep</c> is the harmless stand-in and is killed here.</summary>
+    /// <summary>A record whose child pid is a live <c>dotnet</c> process that is not our oracle child (same start
+    /// time, same process name) is dropped, never signalled (F4). The stand-in is a <c>polyc mcp</c> host from the
+    /// one runner, held open on stdin, so only the command line vetoes the kill.</summary>
     [Test]
+    [NotInParallel("PackOracleSweep")]
     public async Task Sweep_NameMismatch_DoesNotKill() {
         if (OperatingSystem.IsWindows())
-            return; // 'sleep' is a Unix utility; the Windows record read has no command line and the hook guards.
+            return; // the Windows record read has no command line; there the hook is the guard.
 
-        using var sleep = Process.Start(new ProcessStartInfo("sleep", "30") { UseShellExecute = false })!;
+        var started = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var keep = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        // The child would outlive its own timeout; cancelling `keep` is how this test ends it, and the cancel
+        // runs inside the runner's kill-tree-then-bounded-wait path like every other child.
+        var child = PolycProcess.RunAsync(
+            new ChildSpec(PolycProcess.HostFiles("polyc").Dll, ["mcp"]) {
+                Started = pid => started.TrySetResult(pid),
+                Timeout = TimeSpan.FromSeconds(20),
+            },
+            keep.Token);
         var recordPath = Path.Combine(PackOracle.PidDirectoryForTests, Guid.NewGuid().ToString("N") + ".json");
         try {
+            var childPid = await started.Task.WaitAsync(TimeSpan.FromSeconds(30));
+            using var live = Process.GetProcessById(childPid);
             Directory.CreateDirectory(PackOracle.PidDirectoryForTests);
-            var deadHost = await ExitedProcessIdAsync();
             var record = new JsonObject {
-                ["hostPid"] = deadHost,
-                ["childPid"] = sleep.Id,
+                ["hostPid"] = await ExitedProcessIdAsync(),
+                ["childPid"] = childPid,
                 // The start time matches, so only the process name and command line can veto the kill.
-                ["startedUtc"] = sleep.StartTime.ToUniversalTime(),
+                ["startedUtc"] = live.StartTime.ToUniversalTime(),
                 ["runDir"] = Path.Combine(Path.GetTempPath(), "poly-oracle-nowhere-" + Guid.NewGuid().ToString("N")),
                 ["appDir"] = null,
             };
@@ -281,22 +295,78 @@ public class PackOracleTests {
 
             PackOracle.SweepOrphans();
 
-            await Assert.That(PackOracle.IsProcessAlive(sleep.Id)).IsTrue();
+            await Assert.That(PackOracle.IsProcessAlive(childPid)).IsTrue();
         }
         finally {
+            await keep.CancelAsync();
+            try {
+                await child;
+            }
+            catch (OperationCanceledException) {
+            }
             try {
                 File.Delete(recordPath);
             }
             catch (IOException) {
             }
-            if (!sleep.HasExited)
-                sleep.Kill(entireProcessTree: true);
+        }
+    }
+
+    /// <summary>An unreadable record is an I/O or permission wall, not evidence the record is corrupt: the sweep
+    /// skips it and keeps it, because it may still name a live child (A5). Skipped on Windows (no permission
+    /// bit to withdraw) and when a privileged user reads it anyway.</summary>
+    [Test]
+    [NotInParallel("PackOracleSweep")]
+    public async Task Sweep_UnreadableRecord_IsSkippedAndSurvives() {
+        if (OperatingSystem.IsWindows())
+            return;
+
+        Directory.CreateDirectory(PackOracle.PidDirectoryForTests);
+        var unreadable = Path.Combine(PackOracle.PidDirectoryForTests, Guid.NewGuid().ToString("N") + ".json");
+        await File.WriteAllTextAsync(unreadable, new JsonObject {
+            ["hostPid"] = await ExitedProcessIdAsync(),
+            ["childPid"] = int.MaxValue,
+            ["startedUtc"] = DateTime.UtcNow,
+            ["runDir"] = Path.Combine(Path.GetTempPath(), "poly-oracle-unreadable-" + Guid.NewGuid().ToString("N")),
+            ["appDir"] = null,
+        }.ToJsonString());
+        try {
+            File.SetUnixFileMode(unreadable, UnixFileMode.None);
+            if (await ReadableAsync(unreadable))
+                return; // a privileged user reads through the mode: there is no wall to test.
+
+            PackOracle.SweepOrphans(); // must not throw
+
+            await Assert.That(File.Exists(unreadable)).IsTrue();
+        }
+        finally {
+            try {
+                File.SetUnixFileMode(unreadable, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+            }
+            catch (IOException) {
+            }
+            try {
+                File.Delete(unreadable);
+            }
+            catch (IOException) {
+            }
+        }
+    }
+
+    private static async Task<bool> ReadableAsync(string path) {
+        try {
+            await File.ReadAllTextAsync(path);
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) {
+            return false;
         }
     }
 
     /// <summary>A corrupt record and a record whose host is an alive process we do not own (pid 1) must leave
     /// the sweep quiet: no throw, no signal, and the corrupt record is dropped (F5).</summary>
     [Test]
+    [NotInParallel("PackOracleSweep")]
     public async Task Sweep_CorruptAndForeignRecords_DoNotFaultTheSweep() {
         Directory.CreateDirectory(PackOracle.PidDirectoryForTests);
         var corrupt = Path.Combine(PackOracle.PidDirectoryForTests, Guid.NewGuid().ToString("N") + ".json");
@@ -391,6 +461,14 @@ public class PackOracleTests {
         await using var oracle = await PackOracle.BootAsync(PackOracleDomains.Tally653);
         using var list = await oracle.Client.GetAsync("/api/tallies");
         await Assert.That(list.StatusCode).IsEqualTo(HttpStatusCode.OK);
+    }
+
+    /// <summary>Replaces a pidfile atomically (temp + move): a sweep beside this test can never read a torn
+    /// record, which would make it drop the record and leave the run directory behind.</summary>
+    private static async Task RewritePidFileAsync(string path, JsonObject record) {
+        var temp = path + ".tmp";
+        await File.WriteAllTextAsync(temp, record.ToJsonString());
+        File.Move(temp, path, overwrite: true);
     }
 
     private static async Task<int> ExitedProcessIdAsync() {

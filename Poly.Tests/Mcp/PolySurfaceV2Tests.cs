@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -10,6 +9,7 @@ using ModelContextProtocol.Server;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Ontology;
 using Poly.Mcp.Surface;
+using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Mcp;
 
@@ -521,72 +521,18 @@ public class PolySurfaceV2Tests {
 
     [Test]
     public async Task StdioSurface_RejectsUnknownArgumentsWithValidNames() {
-        var root = RepoRoot();
-        var dll = Path.Combine(root, "Poly.Mcp/bin/Debug/net10.0/Poly.Mcp.dll");
-        var runtimeConfig = Path.Combine(root, "Poly.Mcp/bin/Debug/net10.0/Poly.Mcp.runtimeconfig.json");
-        var start = new ProcessStartInfo("dotnet") {
-            RedirectStandardInput = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-        };
-        start.ArgumentList.Add("exec");
-        start.ArgumentList.Add("--runtimeconfig");
-        start.ArgumentList.Add(runtimeConfig);
-        start.ArgumentList.Add(dll);
+        using var mcp = await PolycProcess.McpAsync(McpTarget.PolyMcp, TimeSpan.FromSeconds(15));
+        await mcp.InitializeAsync("2024-11-05");
 
-        using var process = Process.Start(start)!;
-        try {
-            async Task SendAsync(Dictionary<string, object?> message) {
-                await process.StandardInput.WriteLineAsync(JsonSerializer.Serialize(message));
-                await process.StandardInput.FlushAsync();
-            }
-            async Task<JsonNode> ReadUntilAsync(int id) {
-                while (true) {
-                    var line = await process.StandardOutput.ReadLineAsync()
-                        .WaitAsync(TimeSpan.FromSeconds(15));
-                    if (line is null)
-                        throw new InvalidOperationException("server closed stdout");
-                    if (string.IsNullOrWhiteSpace(line))
-                        continue;
-                    var node = JsonNode.Parse(line)!;
-                    if (node["id"]?.GetValue<int>() == id)
-                        return node;
-                }
-            }
+        var response = await mcp.CallAsync("tools/call", new JsonObject {
+            ["name"] = "poly_guide",
+            ["arguments"] = new JsonObject { ["bogus"] = 1 },
+        });
+        var text = response["result"]!["content"]![0]!["text"]!.GetValue<string>();
 
-            await SendAsync(new() {
-                ["jsonrpc"] = "2.0",
-                ["id"] = 1,
-                ["method"] = "initialize",
-                ["params"] = new {
-                    protocolVersion = "2024-11-05",
-                    capabilities = new { },
-                    clientInfo = new { name = "test", version = "1" },
-                },
-            });
-            await ReadUntilAsync(1);
-            await SendAsync(new() { ["jsonrpc"] = "2.0", ["method"] = "notifications/initialized" });
-            await SendAsync(new() {
-                ["jsonrpc"] = "2.0",
-                ["id"] = 2,
-                ["method"] = "tools/call",
-                ["params"] = new {
-                    name = "poly_guide",
-                    arguments = new Dictionary<string, object?> { ["bogus"] = 1 },
-                },
-            });
-            var response = await ReadUntilAsync(2);
-            var text = response["result"]!["content"]![0]!["text"]!.GetValue<string>();
-
-            await Assert.That(response["result"]!["isError"]!.GetValue<bool>()).IsTrue();
-            await Assert.That(text).Contains("UNKNOWN_ARGUMENT");
-            await Assert.That(text).Contains("Valid: topic");
-        }
-        finally {
-            if (!process.HasExited)
-                process.Kill(entireProcessTree: true);
-        }
+        await Assert.That(response["result"]!["isError"]!.GetValue<bool>()).IsTrue();
+        await Assert.That(text).Contains("UNKNOWN_ARGUMENT");
+        await Assert.That(text).Contains("Valid: topic");
     }
 
     [Test]
@@ -655,149 +601,29 @@ public class PolySurfaceV2Tests {
     private static string TextOf(JsonNode response) =>
         response["result"]!["content"]![0]!["text"]!.GetValue<string>();
 
-    /// <summary>Boots the built server over stdio and hands the script a tools/call function.</summary>
+    /// <summary>Boots the built server over stdio and hands the script a tools/call function. Through the one
+    /// runner: the child holds a gate slot, and its lifetime is bounded by the client's absolute limit.</summary>
     private static async Task WithStdioServerAsync(Func<Func<string, Dictionary<string, object?>, Task<JsonNode>>, Task> script) {
-        var root = RepoRoot();
-        var dll = Path.Combine(root, "Poly.Mcp/bin/Debug/net10.0/Poly.Mcp.dll");
-        var runtimeConfig = Path.Combine(root, "Poly.Mcp/bin/Debug/net10.0/Poly.Mcp.runtimeconfig.json");
-        await Assert.That(File.Exists(dll)).IsTrue();
-        var start = new ProcessStartInfo("dotnet") {
-            RedirectStandardInput = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-        };
-        start.ArgumentList.Add("exec");
-        start.ArgumentList.Add("--runtimeconfig");
-        start.ArgumentList.Add(runtimeConfig);
-        start.ArgumentList.Add(dll);
-
-        using var process = Process.Start(start)!;
-        try {
-            async Task SendAsync(Dictionary<string, object?> message) {
-                await process.StandardInput.WriteLineAsync(JsonSerializer.Serialize(message));
-                await process.StandardInput.FlushAsync();
-            }
-            async Task<JsonNode> ReadUntilAsync(int id) {
-                while (true) {
-                    var line = await process.StandardOutput.ReadLineAsync().WaitAsync(TimeSpan.FromSeconds(30));
-                    if (line is null)
-                        throw new InvalidOperationException("server closed stdout");
-                    if (string.IsNullOrWhiteSpace(line))
-                        continue;
-                    var node = JsonNode.Parse(line)!;
-                    if (node["id"]?.GetValue<int>() == id)
-                        return node;
-                }
-            }
-
-            await SendAsync(new() {
-                ["jsonrpc"] = "2.0",
-                ["id"] = 1,
-                ["method"] = "initialize",
-                ["params"] = new {
-                    protocolVersion = "2024-11-05",
-                    capabilities = new { },
-                    clientInfo = new { name = "test", version = "1" },
-                },
-            });
-            await ReadUntilAsync(1);
-            await SendAsync(new() { ["jsonrpc"] = "2.0", ["method"] = "notifications/initialized" });
-
-            var nextId = 2;
-            await script(async (name, arguments) => {
-                var id = nextId++;
-                await SendAsync(new() {
-                    ["jsonrpc"] = "2.0",
-                    ["id"] = id,
-                    ["method"] = "tools/call",
-                    ["params"] = new { name, arguments },
-                });
-                return await ReadUntilAsync(id);
-            });
-        }
-        finally {
-            if (!process.HasExited)
-                process.Kill(entireProcessTree: true);
-        }
-    }
-
-    private static async Task<(string? Instructions, List<JsonObject> Tools)> ReadSurfaceAsync() {
-        var root = RepoRoot();
-        var dll = Path.Combine(root, "Poly.Mcp/bin/Debug/net10.0/Poly.Mcp.dll");
-        var runtimeConfig = Path.Combine(root, "Poly.Mcp/bin/Debug/net10.0/Poly.Mcp.runtimeconfig.json");
+        var (dll, runtimeConfig) = PolycProcess.HostFiles("Poly.Mcp");
         await Assert.That(File.Exists(dll)).IsTrue();
         await Assert.That(File.Exists(runtimeConfig)).IsTrue();
 
-        var start = new ProcessStartInfo("dotnet") {
-            RedirectStandardInput = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-        };
-        start.ArgumentList.Add("exec");
-        start.ArgumentList.Add("--runtimeconfig");
-        start.ArgumentList.Add(runtimeConfig);
-        start.ArgumentList.Add(dll);
-
-        using var process = Process.Start(start)!;
-        try {
-            async Task SendAsync(Dictionary<string, object?> message) {
-                await process.StandardInput.WriteLineAsync(JsonSerializer.Serialize(message));
-                await process.StandardInput.FlushAsync();
-            }
-
-            async Task<JsonNode> ReadUntilAsync(int id) {
-                while (true) {
-                    var line = await process.StandardOutput.ReadLineAsync()
-                        .WaitAsync(TimeSpan.FromSeconds(15));
-                    if (line is null)
-                        throw new InvalidOperationException("server closed stdout");
-                    if (string.IsNullOrWhiteSpace(line))
-                        continue;
-                    var node = JsonNode.Parse(line)!;
-                    if (node["id"]?.GetValue<int>() == id)
-                        return node;
-                }
-            }
-
-            await SendAsync(new() {
-                ["jsonrpc"] = "2.0",
-                ["id"] = 1,
-                ["method"] = "initialize",
-                ["params"] = new {
-                    protocolVersion = "2024-11-05",
-                    capabilities = new { },
-                    clientInfo = new { name = "test", version = "1" },
-                },
-            });
-            var initialized = await ReadUntilAsync(1);
-            var instructions = initialized["result"]?["instructions"]?.GetValue<string>();
-
-            await SendAsync(new() { ["jsonrpc"] = "2.0", ["method"] = "notifications/initialized" });
-            await SendAsync(new() {
-                ["jsonrpc"] = "2.0",
-                ["id"] = 2,
-                ["method"] = "tools/list",
-                ["params"] = new { },
-            });
-            var listed = await ReadUntilAsync(2);
-            var tools = listed["result"]!["tools"]!.AsArray()
-                .Select(t => t!.AsObject())
-                .ToList();
-            return (instructions, tools);
-        }
-        finally {
-            if (!process.HasExited)
-                process.Kill(entireProcessTree: true);
-        }
+        using var mcp = await PolycProcess.McpAsync(McpTarget.PolyMcp, TimeSpan.FromSeconds(30));
+        await mcp.InitializeAsync("2024-11-05");
+        await script(async (name, arguments) => await mcp.CallAsync("tools/call", new JsonObject {
+            ["name"] = name,
+            ["arguments"] = JsonSerializer.SerializeToNode(arguments),
+        }));
     }
 
-    private static string RepoRoot() {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null && !File.Exists(Path.Combine(directory.FullName, "Poly.slnx")))
-            directory = directory.Parent;
-        return directory?.FullName
-            ?? throw new InvalidOperationException("Could not find the repository root from the test output.");
+    private static async Task<(string? Instructions, List<JsonObject> Tools)> ReadSurfaceAsync() {
+        var (dll, runtimeConfig) = PolycProcess.HostFiles("Poly.Mcp");
+        await Assert.That(File.Exists(dll)).IsTrue();
+        await Assert.That(File.Exists(runtimeConfig)).IsTrue();
+
+        using var mcp = await PolycProcess.McpAsync(McpTarget.PolyMcp, TimeSpan.FromSeconds(15));
+        var initialized = await mcp.InitializeAsync("2024-11-05");
+        var tools = (await mcp.ToolsListAsync()).ToList();
+        return (initialized["instructions"]?.GetValue<string>(), tools);
     }
 }

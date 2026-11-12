@@ -70,12 +70,17 @@ internal static class ProvableGuards {
 
     /// <summary>Runs every in-tree nullable-copy check for one entity.</summary>
     public static void Validate(AnalysisContext context, Domain domain, Entity entity) {
-        var stages = entity.Stages;
+        var initial = entity.InitialStage();
         var hits = CollectEntries(entity);
 
         var entryProven = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
-        for (var i = 1; i < stages.Count; i++) {
-            var name = stages[i].Name;
+        // A stage entered on create borrows no transition seed: its entry proof is only reached by a
+        // transition, which a new instance never took.
+        foreach (var stage in entity.Stages) {
+            if (ReferenceEquals(stage, initial))
+                continue;
+            var name = stage.Name;
+
             var into = hits.Where(h => string.Equals(h.Target, name, StringComparison.Ordinal)).ToList();
             if (into.Count == 0)
                 continue;
@@ -128,7 +133,7 @@ internal static class ProvableGuards {
             }
         }
 
-        foreach (var stage in stages) {
+        foreach (var stage in entity.Stages) {
             foreach (var action in stage.Actions)
                 ReportViolations(action, stage);
             foreach (var action in entity.Actions)
@@ -141,21 +146,23 @@ internal static class ProvableGuards {
 
         foreach (var action in entity.Actions) {
             var facts = FactsOf(Presence(action.Policies));
-            if (stages.Count > 0) {
-                foreach (var property in StagePresence(action, stages[0])) {
-                    if (stages.All(s => StagePresence(action, s).Contains(property)))
+            // The base stage of this intersection does not matter: every stage's presence is
+            // intersected, so any one of them yields the same borrow.
+            if (initial is not null) {
+                foreach (var property in StagePresence(action, initial)) {
+                    if (entity.Stages.All(s => StagePresence(action, s).Contains(property)))
                         facts.Borrow(Property + property);
                 }
             }
             Check(action.Effects, facts, action);
         }
-        for (var i = 0; i < stages.Count; i++) {
-            var stage = stages[i];
+        foreach (var stage in entity.Stages) {
+            var seeded = !ReferenceEquals(stage, initial);
             foreach (var action in stage.Actions) {
                 var facts = FactsOf(Presence(action.Policies));
                 foreach (var property in StagePresence(action, stage))
                     facts.Borrow(Property + property);
-                if (i > 0) {
+                if (seeded) {
                     foreach (var property in ValidSeed(stage))
                         facts.Borrow(Property + property);
                 }

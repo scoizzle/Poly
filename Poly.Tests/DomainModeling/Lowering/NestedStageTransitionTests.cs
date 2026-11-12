@@ -316,4 +316,171 @@ public class GuardedHopCursorTests {
         await Assert.That(outcomes[1].State["BCount"]).IsEqualTo("1");
         await Assert.That(outcomes[1].State["Stage"]).IsEqualTo("C");
     }
+
+    [Test]
+    public async Task Invoke_ElseBranchHop_ExitsDeclaringStage() {
+        const string dsl = """
+            domain Fork
+            Z: entity {
+              Ready: Boolean
+              ACount: Number default(0)
+              BCount: Number default(0)
+              A: stage {
+                exit { assign ACount to ACount + 1 }
+                Go: action {
+                  if (Ready is true) { transition to B } else { transition to C }
+                }
+              }
+              B: stage { exit { assign BCount to BCount + 1 } }
+              C: stage { }
+            }
+            """;
+        var o = await ParityScenario.FromDsl(dsl, "ForkElse")
+            .AssertAgree(side => {
+                side.Create("Z", ("Ready", false));
+                side.Invoke("Go");
+            });
+        await Assert.That(o[1].State["ACount"]).IsEqualTo("1");
+        await Assert.That(o[1].State["BCount"]).IsEqualTo("0");
+        await Assert.That(o[1].State["Stage"]).IsEqualTo("C");
+    }
+
+    [Test]
+    public async Task Invoke_TransitiveCalleeThatTransitions_ThenHop_ExitsCalleeStage() {
+        const string dsl = """
+            domain Transitive
+            Z: entity {
+              ACount: Number default(0)
+              BCount: Number default(0)
+              A: stage {
+                exit { assign ACount to ACount + 1 }
+                Step: action { transition to B }
+                Mid: action { invoke Step }
+                Go: action {
+                  invoke Mid
+                  transition to C
+                }
+              }
+              B: stage { exit { assign BCount to BCount + 1 } }
+              C: stage { }
+            }
+            """;
+        var o = await ParityScenario.FromDsl(dsl, "TransitiveHop")
+            .AssertAgree(side => {
+                side.Create("Z");
+                side.Invoke("Go");
+            });
+        await Assert.That(o[1].State["ACount"]).IsEqualTo("1");
+        await Assert.That(o[1].State["BCount"]).IsEqualTo("1");
+        await Assert.That(o[1].State["Stage"]).IsEqualTo("C");
+    }
+
+    [Test]
+    public async Task Invoke_CalleeWithoutHop_ThenHop_StateMatchesNotInvoking() {
+        const string dsl = """
+            domain Quiet
+            Z: entity {
+              N: Number default(0)
+              ACount: Number default(0)
+              A: stage {
+                exit { assign ACount to ACount + 1 }
+                Bump: action { assign N to N + 1 }
+                Go: action {
+                  invoke Bump
+                  transition to C
+                }
+                GoDirect: action {
+                  transition to C
+                }
+              }
+              C: stage { }
+            }
+            """;
+        var withInvoke = await ParityScenario.FromDsl(dsl, "QuietInvoke")
+            .AssertAgree(side => {
+                side.Create("Z");
+                side.Invoke("Go");
+            });
+        var direct = await ParityScenario.FromDsl(dsl, "QuietDirect")
+            .AssertAgree(side => {
+                side.Create("Z");
+                side.Invoke("GoDirect");
+            });
+        await Assert.That(withInvoke[1].State["ACount"]).IsEqualTo("1");
+        await Assert.That(withInvoke[1].State["ACount"]).IsEqualTo(direct[1].State["ACount"]);
+        await Assert.That(withInvoke[1].State["Stage"]).IsEqualTo(direct[1].State["Stage"]);
+        await Assert.That(withInvoke[1].State["N"]).IsEqualTo("1");
+    }
+
+    [Test]
+    public async Task Invoke_GuardedSelfInvokeThatTransitions_ThenHop_ExitsRuntimeStage() {
+        const string dsl = """
+            domain GuardedInvoke
+            Z: entity {
+              Ready: Boolean
+              ACount: Number default(0)
+              BCount: Number default(0)
+              A: stage {
+                exit { assign ACount to ACount + 1 }
+                Step: action { transition to B }
+                Go: action {
+                  if (Ready is true) { invoke Step }
+                  transition to C
+                }
+              }
+              B: stage { exit { assign BCount to BCount + 1 } }
+              C: stage { }
+            }
+            """;
+        var held = await ParityScenario.FromDsl(dsl, "GuardedInvokeHeld")
+            .AssertAgree(side => {
+                side.Create("Z", ("Ready", true));
+                side.Invoke("Go");
+            });
+        await Assert.That(held[1].State["ACount"]).IsEqualTo("1");
+        await Assert.That(held[1].State["BCount"]).IsEqualTo("1");
+        await Assert.That(held[1].State["Stage"]).IsEqualTo("C");
+
+        var notHeld = await ParityScenario.FromDsl(dsl, "GuardedInvokeNotHeld")
+            .AssertAgree(side => {
+                side.Create("Z", ("Ready", false));
+                side.Invoke("Go");
+            });
+        await Assert.That(notHeld[1].State["ACount"]).IsEqualTo("1");
+        await Assert.That(notHeld[1].State["BCount"]).IsEqualTo("0");
+        await Assert.That(notHeld[1].State["Stage"]).IsEqualTo("C");
+    }
+
+    [Test]
+    public async Task For_SelfInvokeThatTransitions_ThenHop_ExitsRuntimeStage() {
+        const string dsl = """
+            domain LoopInvoke
+            Parent: entity {
+              ACount: Number default(0)
+              BCount: Number default(0)
+              Items: many Item
+              A: stage {
+                exit { assign ACount to ACount + 1 }
+                Spawn: action { create in Items { } }
+                Step: action { transition to B }
+                Go: action {
+                  for i in Items { invoke Step }
+                  transition to C
+                }
+              }
+              B: stage { exit { assign BCount to BCount + 1 } }
+              C: stage { }
+            }
+            Item: entity { }
+            """;
+        var o = await ParityScenario.FromDsl(dsl, "ForInvokeHop")
+            .AssertAgree(side => {
+                side.Create("Parent");
+                side.Invoke("Spawn");
+                side.Invoke("Go");
+            });
+        await Assert.That(o[2].State["ACount"]).IsEqualTo("1");
+        await Assert.That(o[2].State["BCount"]).IsEqualTo("1");
+        await Assert.That(o[2].State["Stage"]).IsEqualTo("C");
+    }
 }

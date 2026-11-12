@@ -82,13 +82,13 @@ internal sealed partial class EffectAnalyzer {
         Comparison { Kind: ComparisonKind.NotEqual, Left: Literal l, Right: Literal r } =>
             !Equals(l.Value, r.Value),
         Comparison { Kind: ComparisonKind.GreaterThanOrEqual, Left: Literal l, Right: Literal r }
-            when TryToDouble(l.Value, out var lv) && TryToDouble(r.Value, out var rv) => lv >= rv,
+            when ExactNumber.Compare(l.Value, r.Value) is { } order => order >= 0,
         Comparison { Kind: ComparisonKind.GreaterThan, Left: Literal l, Right: Literal r }
-            when TryToDouble(l.Value, out var lv) && TryToDouble(r.Value, out var rv) => lv > rv,
+            when ExactNumber.Compare(l.Value, r.Value) is { } order => order > 0,
         Comparison { Kind: ComparisonKind.LessThanOrEqual, Left: Literal l, Right: Literal r }
-            when TryToDouble(l.Value, out var lv) && TryToDouble(r.Value, out var rv) => lv <= rv,
+            when ExactNumber.Compare(l.Value, r.Value) is { } order => order <= 0,
         Comparison { Kind: ComparisonKind.LessThan, Left: Literal l, Right: Literal r }
-            when TryToDouble(l.Value, out var lv) && TryToDouble(r.Value, out var rv) => lv < rv,
+            when ExactNumber.Compare(l.Value, r.Value) is { } order => order < 0,
         _ => false
     };
 
@@ -102,13 +102,13 @@ internal sealed partial class EffectAnalyzer {
         Comparison { Kind: ComparisonKind.NotEqual, Left: Literal l, Right: Literal r } =>
             Equals(l.Value, r.Value),
         Comparison { Kind: ComparisonKind.GreaterThanOrEqual, Left: Literal l, Right: Literal r }
-            when TryToDouble(l.Value, out var lv) && TryToDouble(r.Value, out var rv) => lv < rv,
+            when ExactNumber.Compare(l.Value, r.Value) is { } order => order < 0,
         Comparison { Kind: ComparisonKind.GreaterThan, Left: Literal l, Right: Literal r }
-            when TryToDouble(l.Value, out var lv) && TryToDouble(r.Value, out var rv) => lv <= rv,
+            when ExactNumber.Compare(l.Value, r.Value) is { } order => order <= 0,
         Comparison { Kind: ComparisonKind.LessThanOrEqual, Left: Literal l, Right: Literal r }
-            when TryToDouble(l.Value, out var lv) && TryToDouble(r.Value, out var rv) => lv > rv,
+            when ExactNumber.Compare(l.Value, r.Value) is { } order => order > 0,
         Comparison { Kind: ComparisonKind.LessThan, Left: Literal l, Right: Literal r }
-            when TryToDouble(l.Value, out var lv) && TryToDouble(r.Value, out var rv) => lv >= rv,
+            when ExactNumber.Compare(l.Value, r.Value) is { } order => order >= 0,
         _ => false
     };
 

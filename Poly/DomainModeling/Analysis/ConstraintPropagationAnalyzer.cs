@@ -146,8 +146,8 @@ internal sealed class ConstraintPropagationAnalyzer : INodeAnalyzer {
             DomainModelDiagnosticCodes.EffectConstraintViolation);
 
     private static bool BoundsConvertible(RangeConstraint range) =>
-        (range.Minimum is null || TryConvertToDouble(range.Minimum) is not null)
-        && (range.Maximum is null || TryConvertToDouble(range.Maximum) is not null);
+        (range.Minimum is null || ExactNumber.TryFrom(range.Minimum) is not null)
+        && (range.Maximum is null || ExactNumber.TryFrom(range.Maximum) is not null);
 
     private static bool HasUnrepresentableOffset(DomainExpression expr, string paramName) => expr switch {
         Add add => (IsParameterAccess(add.Left, paramName) && IsUnrepresentableLiteral(add.Right))
@@ -193,20 +193,24 @@ internal sealed class ConstraintPropagationAnalyzer : INodeAnalyzer {
     }
 
     internal static RangeConstraint? AdjustRangeRange(RangeConstraint original, long offset) {
-        object? newMin = original.Minimum is not null && TryConvertToDouble(original.Minimum) is double minVal
-            ? minVal - offset : null;
-        object? newMax = original.Maximum is not null && TryConvertToDouble(original.Maximum) is double maxVal
-            ? maxVal - offset : null;
+        var newMin = AdjustBound(original.Minimum, offset);
+        var newMax = AdjustBound(original.Maximum, offset);
 
         if (newMin is null && newMax is null) return null;
-        if (newMin is double minD && newMax is double maxD && minD > maxD) return null;
+        if (newMin is not null && newMax is not null && ExactNumber.Compare(newMin, newMax) is > 0) return null;
 
         return new RangeConstraint(newMin, newMax);
     }
 
-    private static double? TryConvertToDouble(object value) {
-        try { return Convert.ToDouble(value); }
-        catch { return null; }
+    /// <summary>
+    /// Shifts one bound exactly. A bound that is not exactly representable, or whose difference is not,
+    /// leaves that endpoint open (null) instead of rounding it.
+    /// </summary>
+    private static decimal? AdjustBound(object? bound, long offset) {
+        if (bound is null) return null;
+        if (ExactNumber.TryFrom(bound) is not { } value) return null;
+        if (ExactNumber.TryFrom(offset) is not { } step) return null;
+        return value.TrySubtract(step)?.ToDecimal();
     }
 
     private static bool ExpressionReferencesParameter(DomainExpression expr, string paramName) {

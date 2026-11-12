@@ -248,6 +248,43 @@ internal sealed class ElementPathTests {
     // ── Resolve: precedence, collisions, policies ──────────────
 
     [Test]
+    public async Task Resolve_DomainPrefixedBareStageAction_StillResolvesWhenNoEntityMemberHasTheName() {
+        var (domain, _) = Clinic();
+
+        var resolved = Resolve(domain, "Clinic/Appt/Check");
+
+        await Assert.That(resolved).IsTypeOf<ElementRef>().Because(Describe(resolved));
+        await Assert.That(((ElementRef)resolved).Kind).IsEqualTo(ElementKind.StageAction);
+    }
+
+    [Test]
+    public async Task Resolve_DotAndSlashDomainPrefixedForms_AgreeOnTheEntityAction() {
+        var entityAction = Act("Submit");
+        var order = new Entity("Order", [], [entityAction], [], [new Stage("Draft", [Act("Submit")], [], [], [])]);
+        var domain = DomainTestFactory.Create("Shop", [order], []);
+
+        var dotted = (ElementRef)Resolve(domain, "Shop.Order.Submit");
+        var slashed = (ElementRef)Resolve(domain, "Shop/Order/Submit");
+
+        await Assert.That(ReferenceEquals(dotted.Node, entityAction)).IsTrue();
+        await Assert.That(ReferenceEquals(slashed.Node, entityAction)).IsTrue();
+    }
+
+    [Test]
+    public async Task Resolve_EntityActionAndSameNamedStage_ExactFormSelectsTheAction() {
+        var entityAction = Act("Archive");
+        var order = new Entity("Order", [], [entityAction], [], [new Stage("Archive", [], [], [], [])]);
+        var domain = DomainTestFactory.Create("Shop", [order], []);
+
+        var bare = Resolve(domain, "Order.Archive");
+        var exact = Resolve(domain, "Shop/Order/Archive");
+
+        await Assert.That(bare).IsTypeOf<ElementAmbiguous>().Because(Describe(bare));
+        await Assert.That(exact).IsTypeOf<ElementRef>().Because(Describe(exact));
+        await Assert.That(ReferenceEquals(((ElementRef)exact).Node, entityAction)).IsTrue();
+    }
+
+    [Test]
     public async Task Resolve_EntityActionAndSameNamedStageAction_BareIsAmbiguous_EachMatchSelectsItself() {
         var entityAction = Act("Submit");
         var stageAction = Act("Submit");

@@ -94,7 +94,7 @@ internal static class InspectService {
 
         return ElementPathResolver.Resolve(state.Domain, path!) switch {
             ElementRef element => Describe(workspace, state, element, query),
-            ElementAmbiguous ambiguous => Ambiguous(select, ambiguous),
+            ElementAmbiguous ambiguous => Ambiguous(state.Domain, select, ambiguous),
             ElementNotFound notFound => NotFound(notFound),
             _ => throw new InvalidOperationException("Unknown element resolution."),
         };
@@ -110,29 +110,42 @@ internal static class InspectService {
             },
             ElementNotFoundCode);
 
-    private static InspectOutcome Ambiguous(string select, ElementAmbiguous ambiguous) {
-        // An entity-level action's bare path is the ambiguous one, so it is offered in the exact
-        // (analysis-path) form, which selects only that action.
-        var matches = ambiguous.Matches
-            .Select(m => new ElementMatchData(KindName(m.Kind), m.Kind == ElementKind.EntityAction ? m.AnalysisPath : m.Canonical))
+    private static InspectOutcome Ambiguous(Domain domain, string select, ElementAmbiguous ambiguous) {
+        // A path the tool offers must select: each match is offered in the first form that
+        // re-resolves to that very element.
+        var offered = ambiguous.Matches.Select(m => (Match: m, Path: SelectingPath(domain, m))).ToList();
+        var matches = offered
+            .Select(o => new ElementMatchData(KindName(o.Match.Kind), o.Path ?? o.Match.Canonical))
             .ToList();
-        var sameName = matches.Select(static m => m.Path).Distinct(StringComparer.Ordinal).Count() < matches.Count;
+        var unselectable = offered.Where(static o => o.Path is null)
+            .Select(static o => $"{KindName(o.Match.Kind)} {o.Match.Canonical}")
+            .ToList();
         var summary = $"'{select}' is ambiguous: it matches "
             + string.Join("; ", matches.Select(m => $"{m.Kind} {m.Path}"))
-            + (sameName
-                ? ". Two of them share one path, so no path form selects one; rename one of the elements."
-                : ". Pass the full path to pick one.");
-        IReadOnlyList<string> candidates = sameName
-            ? [.. matches.Select(static m => $"{m.Kind} {m.Path}")]
-            : [.. matches.Select(static m => m.Path)];
+            + (unselectable.Count == 0
+                ? ". Pass one of these paths to pick one."
+                : $". No path selects {string.Join(" or ", unselectable)}; rename an element.");
+        IReadOnlyList<string> candidates = [.. offered.Where(static o => o.Path is not null).Select(static o => o.Path!)];
         return new InspectOutcome(false, summary,
             new ElementNotFoundData("ambiguous", candidates) { Matches = matches },
             ElementNotFoundCode);
     }
 
+    /// <summary>The dotted or exact form of <paramref name="element"/> that re-resolves to that element, or null when none does.</summary>
+    private static string? SelectingPath(Domain domain, ElementRef element) {
+        foreach (var form in new[] { element.Canonical, element.AnalysisPath }) {
+            if (ElementPath.TryParse(form, out var path, out _)
+                && ElementPathResolver.Resolve(domain, path!) is ElementRef resolved
+                && (element.Node is null ? resolved.AnalysisPath == element.AnalysisPath : ReferenceEquals(resolved.Node, element.Node)))
+                return form;
+        }
+
+        return null;
+    }
+
     private static InspectOutcome Describe(string workspace, McpSessionState state, ElementRef element, QueryTool query) {
         var domain = state.Domain;
-        return element.Kind switch {
+        var outcome = element.Kind switch {
             ElementKind.Domain => FromResponse(query.GetDomainOverview(workspace)),
             ElementKind.Entity => FromResponse(query.GetEntityDetail(workspace, element.Name)),
             ElementKind.Property => DescribeProperty(element, (Property)element.Node!),
@@ -146,6 +159,10 @@ internal static class InspectService {
             ElementKind.Policy => DescribePolicy(workspace, state, element, (Policy)element.Node!),
             _ => throw new InvalidOperationException($"Unhandled element kind {element.Kind}."),
         };
+        // data.path is a selector: the form that selects this element, not just its dotted name.
+        return outcome.Data is InspectedElement described
+            ? outcome with { Data = described with { Path = SelectingPath(domain, element) ?? element.Canonical } }
+            : outcome;
     }
 
     // ── Pure-domain kinds ───────────────────────────────────────

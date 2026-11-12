@@ -32,8 +32,9 @@ internal enum NotFoundReason {
 internal abstract record ElementResolution;
 
 /// <summary>
-/// One resolved element. <see cref="Canonical"/> is the dotted path that resolves back to it
-/// (<c>Entity.Stage.Action</c> for a stage action); <see cref="AnalysisPath"/> is the
+/// One resolved element. <see cref="Canonical"/> is the dotted path that normally resolves back to it
+/// (<c>Entity.Stage.Action</c> for a stage action); it does not when another element shares the path, and then
+/// the <see cref="AnalysisPath"/> (a domain-prefixed, exact form) may; <see cref="AnalysisPath"/> is the
 /// <c>Domain/Entity[/Stage]/Member</c> path findings carry. <see cref="Node"/> is null only for an enum member.
 /// </summary>
 internal sealed record ElementRef(
@@ -171,7 +172,7 @@ internal static class ElementPathResolver {
 
     private static ElementNotFound NotAddressable(ElementRef parent, string name) =>
         new(NotFoundReason.NotAddressable, [], parent,
-            $"'{parent.Canonical}.{name}' is not addressable: nothing below a {Describe(parent.Kind)} ('{parent.Canonical}') can be selected.");
+            $"'{parent.Canonical}.{name}' is not addressable: the {Describe(parent.Kind)} '{parent.Canonical}' has no selectable member '{name}'.");
 
     private static ElementResolution ChildOfEntity(Domain domain, Entity entity, ElementRef parent, string name, bool exact) {
         var members = new List<ElementRef>();
@@ -187,7 +188,10 @@ internal static class ElementPathResolver {
             members.Add(PolicyRef(domain, entity, policy));
 
         // An entity-level action and a same-named stage action are two elements: the bare path is
-        // ambiguous. The exact (domain-prefixed) form selects only the entity-level one.
+        // ambiguous. The exact (domain-prefixed) form prefers the entity-level member, so it also
+        // skips a same-named stage and selects only the entity-level action.
+        if (exact && members.Any(static m => m.Kind == ElementKind.EntityAction))
+            members.RemoveAll(static m => m.Kind == ElementKind.Stage);
         if (!exact && members.Any(static m => m.Kind == ElementKind.EntityAction)) {
             members.AddRange(entity.Stages
                 .SelectMany(stage => stage.Actions.Where(a => Is(a.Name, name)).Select(action => (stage, action)))

@@ -213,6 +213,49 @@ internal sealed class InspectPathTests {
             var each = h.Inspect(ws, candidate, "full");
             await Assert.That(each.Success).IsTrue().Because(candidate + ": " + each.Summary);
             await Assert.That(Str(each, "kind")).IsEqualTo(candidate.Contains("Draft") ? "stageAction" : "entityAction");
+            var again = h.Inspect(ws, Str(each, "path"), "full");
+            await Assert.That(again.Success).IsTrue().Because(Str(each, "path") + ": " + again.Summary);
+            await Assert.That(Str(again, "kind")).IsEqualTo(Str(each, "kind"));
+            await Assert.That(Str(again, "path")).IsEqualTo(Str(each, "path"));
+        }
+    }
+
+    [Test]
+    public async Task Inspect_EntityActionAndSameNamedStage_OfferedPathMustSelectOrTheSummaryMustSayNoneDoes() {
+        var h = PolySurfaceHarness.New();
+        var ws = h.Open("M03");
+        var define = h.Define(ws, "domain Shop\n\nOrder: entity {\n  Total: Number\n  Archive: action { assign Total to 1 }\n  Archive: stage { }\n}\n");
+        await Assert.That(define.Success).IsTrue().Because("probe: " + define.Summary);
+
+        var r = h.Inspect(ws, "Order.Archive");
+
+        await Assert.That(r.Code).IsEqualTo("ELEMENT_NOT_FOUND");
+        await Assert.That(Str(r, "reason")).IsEqualTo("ambiguous");
+        var matches = r.Data!["matches"]!.AsArray().Select(m => (Kind: m!["kind"]!.GetValue<string>(), Path: m["path"]!.GetValue<string>())).ToList();
+        foreach (var (kind, path) in matches) {
+            var each = h.Inspect(ws, path, "full");
+            var selects = each.Success && Str(each, "kind") == kind;
+            await Assert.That(selects || r.Summary.Contains("path selects")).IsTrue().Because($"{kind} {path}: {r.Summary}");
+        }
+        if (r.Summary.Contains("Pass"))
+            foreach (var candidate in Strings(r.Data!["candidates"]))
+                await Assert.That(h.Inspect(ws, candidate).Success).IsTrue().Because(candidate);
+        var action = matches.Single(m => m.Kind == "entityAction");
+        await Assert.That(h.Inspect(ws, action.Path, "full").Success).IsTrue().Because(action.Path);
+    }
+
+    [Test]
+    public async Task Inspect_DataPath_OfEveryKind_SelectsTheSameElementAgain() {
+        var (h, ws) = Open(Clinic);
+
+        foreach (var select in new[] { "Appt.SlotNo", "Appt.customer", "Appt.Book", "Appt.Open", "Appt.Adult", "Appt.Open.Go", "Appt.Review.Go", "Kind", "Kind.A", "Money", "Add" }) {
+            var first = h.Inspect(ws, select, "full");
+            if (first.Data!["path"] is null)
+                continue;
+            var again = h.Inspect(ws, Str(first, "path"), "full");
+            await Assert.That(again.Success).IsTrue().Because($"{select} -> {Str(first, "path")}: {again.Summary}");
+            await Assert.That(Str(again, "kind")).IsEqualTo(Str(first, "kind"));
+            await Assert.That(Str(again, "path")).IsEqualTo(Str(first, "path"));
         }
     }
 
@@ -230,9 +273,10 @@ internal sealed class InspectPathTests {
         await Assert.That(outcome.ErrorCode).IsEqualTo("ELEMENT_NOT_FOUND");
         var data = (ElementNotFoundData)outcome.Data!;
         await Assert.That(data.Reason).IsEqualTo("ambiguous");
-        await Assert.That(data.Candidates.Distinct().Count()).IsEqualTo(2);
-        await Assert.That(data.Candidates).Contains("property Gadget.Flag").And.Contains("stage Gadget.Flag");
-        await Assert.That(outcome.Summary).DoesNotContain("full path");
+        await Assert.That(data.Matches!.Select(m => m.Kind).ToList()).IsEquivalentTo(new[] { "property", "stage" });
+        await Assert.That(data.Candidates).IsEmpty();
+        await Assert.That(outcome.Summary).Contains("property Gadget.Flag").And.Contains("stage Gadget.Flag").And.Contains("path selects");
+        await Assert.That(outcome.Summary).DoesNotContain("Pass");
     }
 
     [Test]
@@ -245,7 +289,7 @@ internal sealed class InspectPathTests {
         await Assert.That(define.Success).IsTrue().Because(define.Summary);
         var r = h.Inspect(ws, "Gadget.Flag");
         await Assert.That(Str(r, "reason")).IsEqualTo("ambiguous");
-        await Assert.That(Strings(r.Data!["candidates"]).Distinct().Count()).IsEqualTo(2);
+        await Assert.That(r.Data!["matches"]!.AsArray().Count).IsEqualTo(2);
     }
 
     [Test]

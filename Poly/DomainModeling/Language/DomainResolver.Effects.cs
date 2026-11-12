@@ -28,9 +28,11 @@ public sealed partial class DomainResolver {
                 TokenKind.Assign => " — expected '<property> to'",
                 TokenKind.Create => " — expected '<type> { … }' or 'in <relationship> { … }'",
                 TokenKind.If => " — expected '(condition)'",
+                TokenKind.Link => " — expected '<relationship> to <binder>'",
+                TokenKind.Unlink => " — expected '<relationship> from <binder>'",
                 _ => "",
             };
-            throw Error($"Expected effect (transition, assign, create, invoke, for, if){tailHint}, got '{Current.Text}'");
+            throw Error($"Expected effect (transition, assign, create, link, unlink, invoke, for, if){tailHint}, got '{Current.Text}'");
         }
 
         switch (match.PatternName) {
@@ -45,6 +47,18 @@ public sealed partial class DomainResolver {
                     Consume(match);
                     var expr = ParseExpression();
                     return new AssignEffect(DomainExpression.Property(propName), expr);
+                }
+
+            case "link": {
+                    var relationshipName = match.Tokens[1].Text;
+                    Consume(match);
+                    return new LinkEffect(relationshipName, ParseExpression());
+                }
+
+            case "unlink": {
+                    var relationshipName = match.Tokens[1].Text;
+                    Consume(match);
+                    return new UnlinkEffect(relationshipName, ParseExpression());
                 }
 
             case "create-in": {

@@ -62,6 +62,8 @@ public enum DslTokenKind {
     Equality,
     Relationship,
     From,
+    Link,
+    Unlink,
     One,
     Many,
     Owned,

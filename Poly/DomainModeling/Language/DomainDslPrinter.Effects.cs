@@ -122,6 +122,18 @@ public sealed partial class DomainDslPrinter {
             return null;
         }
 
+        protected override object? Link(LinkEffect le) {
+            _sb.Append("link ").Append(le.RelationshipName).Append(" to ")
+                .Append(_printer.PrintExpression(le.Target)).AppendLine();
+            return null;
+        }
+
+        protected override object? Unlink(UnlinkEffect ue) {
+            _sb.Append("unlink ").Append(ue.RelationshipName).Append(" from ")
+                .Append(_printer.PrintExpression(ue.Target)).AppendLine();
+            return null;
+        }
+
         protected override object? ForEach(ForEachEffect fe) {
             _sb.Append($"for {fe.BinderName} in {fe.RelationshipName}");
             if (fe.Where is not null)

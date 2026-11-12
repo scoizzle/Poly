@@ -41,6 +41,28 @@ public class ConstraintWriterCoverageTests {
         }
     }
 
+    /// <summary>
+    /// A12: a marker row says no guard can express the fact, so it emits no writer kind and
+    /// its owner starts <c>marker:</c>. Anything else without kinds names a real writer, and
+    /// <c>DMLIB001</c> is what a session misses when that writer's library is not loaded.
+    /// </summary>
+    [Test]
+    public async Task MarkerRows_EmitNoWriterKinds_AndSayWhyNoGuardExists() {
+        var markers = 0;
+        foreach (var (type, coverage) in ConstraintCheckWriter.CoverageByConstraint) {
+            if (!coverage.Marker)
+                continue;
+            markers++;
+            await Assert.That(coverage.Kinds.Count).IsEqualTo(0)
+                .Because($"'{type.Name}' is a marker, so it must not also emit writer kinds.");
+            await Assert.That(coverage.Owner!.StartsWith("marker:", StringComparison.Ordinal)).IsTrue()
+                .Because($"'{type.Name}' is a marker, so its owner must say why no guard exists.");
+        }
+
+        await Assert.That(markers).IsGreaterThan(0)
+            .Because("the marker flag exists for the facts no guard can express; no marker row means it is untested.");
+    }
+
     [Test]
     public async Task CoverageRows_WithKinds_AreEmittedByChecksFor() {
         foreach (var (type, coverage) in ConstraintCheckWriter.CoverageByConstraint) {

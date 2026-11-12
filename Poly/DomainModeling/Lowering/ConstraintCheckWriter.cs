@@ -250,7 +250,9 @@ internal static class ConstraintCheckWriter {
     /// this writer emits no guard, and <see cref="Coverage.Owner"/> must name the writer
     /// that does (or, with a <c>marker:</c> prefix, say why no guard exists). A record with
     /// neither fails <c>ConstraintWriterCoverageTests</c>, so a new constraint cannot bypass
-    /// this writer by adding another switch arm.
+    /// this writer by adding another switch arm. A <see cref="Coverage.Marker"/> row is a
+    /// fact no guard can express, so it needs no library compiler; every other row with no
+    /// kinds names a writer whose library must be loaded (<c>DMLIB001</c> otherwise).
     /// </summary>
     internal static readonly IReadOnlyDictionary<Type, Coverage> CoverageByConstraint =
         new Dictionary<Type, Coverage> {
@@ -262,11 +264,12 @@ internal static class ConstraintCheckWriter {
             [typeof(UniqueConstraint)] = new([],
                 "storage port: create guard in UniqueConstraintCompiler.Compile, assign via AssignObligations + AfterApply"),
             [typeof(OptionalConstraint)] = new([],
-                "marker: optionality is a requiredness fact, not a guard"),
+                "marker: optionality is a requiredness fact, not a guard", Marker: true),
             [typeof(DefaultValueConstraint)] = new([],
-                "marker: the default feeds requiredness and default lowering, not a guard"),
+                "marker: the default feeds requiredness and default lowering, not a guard", Marker: true),
             [typeof(RelationalConstraint)] = new([],
-                "marker: an analysis-derived relation between two properties (#367 A-6); policies lower the guard, not this fact"),
+                "marker: an analysis-derived relation between two properties (#367 A-6); policies lower the guard, not this fact",
+                Marker: true),
         };
 
     /// <summary>

@@ -493,7 +493,7 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
                     DomainModelDiagnosticCodes.EffectCrossEntityMutation);
                 return null;
             }
-            ValidateAssign(context, e, action, entity, peerBinding);
+            ValidateAssign(context, e, action, entity, domain, peerBinding);
             return null;
         }
 

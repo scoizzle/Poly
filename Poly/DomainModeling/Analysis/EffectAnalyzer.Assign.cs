@@ -29,7 +29,7 @@ internal sealed partial class EffectAnalyzer {
             DomainModelDiagnosticCodes.EffectCrossEntityMutation);
 
     private static void ValidateAssign(
-        AnalysisContext context, AssignEffect ae, Action? action, Entity entity, string? peerBinding) {
+        AnalysisContext context, AssignEffect ae, Action? action, Entity entity, Domain domain, string? peerBinding) {
         // Only the owning entity's named behavior mutates its state. Entry, exit and
         // when blocks count as named behavior. Any other entity changes through
         // `invoke`; create-in, link and unlink are separate effects owned by the relationship.
@@ -67,42 +67,46 @@ internal sealed partial class EffectAnalyzer {
 
         if (targetProp.Constraints.Count == 0) return;
 
-        // ── Validate literal assignments against property constraints ──────
+        // Every assign to a constrained property gets exactly ONE verdict, recorded once by
+        // WriteRecorder (Q4): a literal, a bare parameter and every other value each reach it
+        // through their own arm; the arms differ in how they decide, not in what they record.
         if (ae.Value is Literal lit) {
-            ValidateLiteralAgainstConstraints(context, ae, lit.Value, targetProp);
+            ValidateLiteralAgainstConstraints(context, ae, lit.Value, targetProp, domain);
             return;
         }
 
-        // ── Propagate the target's range onto derived (arithmetic) values ────
-        if (ae.Value is Add or Subtract or Multiply) {
-            ValidateDerivedValueRange(context, ae, ae.Value, entity, action, targetProp);
-        }
+        if (ae.Value is ParameterAccess pa && action is not null
+            && action.Parameters.FirstOrDefault(p => string.Equals(p.Name, pa.Name, StringComparison.Ordinal))
+                is { } sourceParam) {
+            var tally = new WriteTally();
+            ValidateParameterConstraintCompatibility(context, ae, sourceParam, targetProp, ref tally);
 
-        // ── Validate parameter-to-property constraint compatibility ─────────
-        if (ae.Value is ParameterAccess pa && action is not null) {
-            var sourceParam = action.Parameters
-                .FirstOrDefault(p => string.Equals(p.Name, pa.Name, StringComparison.Ordinal));
-            if (sourceParam is not null) {
-                ValidateParameterConstraintCompatibility(context, ae, sourceParam, targetProp);
-
-                // Also check DownstreamConstraintsMetadata if ConstraintPropagationAnalyzer has run
-                var downstreamMeta = context.GetMetadata<DownstreamConstraintsMetadata>(sourceParam);
-                if (downstreamMeta is not null) {
-                    ValidateDownstreamConstraints(context, ae, downstreamMeta.Constraints, targetProp, sourceParam);
-                }
+            // Also check DownstreamConstraintsMetadata if ConstraintPropagationAnalyzer has run
+            var downstreamMeta = context.GetMetadata<DownstreamConstraintsMetadata>(sourceParam);
+            if (downstreamMeta is not null) {
+                ValidateDownstreamConstraints(context, ae, downstreamMeta.Constraints, targetProp, sourceParam, ref tally);
             }
+            tally.Record(context, domain, ae, targetProp.Name);
+            return;
         }
+
+        // Any other value: the flow value is decided against every write-relevant constraint.
+        ValidateAssignedValue(context, domain, ae, entity, action, targetProp);
     }
 
     private static void ValidateLiteralAgainstConstraints(
-        AnalysisContext context, Node errorNode, object? literalValue, Property targetProp) {
+        AnalysisContext context, Node errorNode, object? literalValue, Property targetProp, Domain? domain = null) {
+        // domain is null for create initializers, which S4 moves onto the recorder.
+        var tally = new WriteTally();
         foreach (var constraint in targetProp.Constraints) {
             var verdict = ConstraintValidation.Evaluate(constraint, literalValue);
             if (verdict == ConstraintVerdict.Undecided) {
                 ConstraintValidation.ReportUndecided(
                     context, errorNode, constraint, $"on property '{targetProp.Name}'");
+                tally.Add(WriteVerdict.Unverified(UnverifiedReason.NonFlowCheckedKind), constraint);
                 continue;
             }
+            tally.Add(verdict == ConstraintVerdict.Violated ? WriteVerdict.Violated : WriteVerdict.Satisfied, constraint);
             if (verdict == ConstraintVerdict.Violated) {
                 var display = FormatValueForMessage(literalValue);
                 context.ReportError(
@@ -112,10 +116,11 @@ internal sealed partial class EffectAnalyzer {
                     DomainModelDiagnosticCodes.EffectConstraintViolation);
             }
         }
+        if (domain is not null) tally.Record(context, domain, errorNode, targetProp.Name);
     }
 
     private static void ValidateParameterConstraintCompatibility(
-        AnalysisContext context, Node errorNode, Property sourceParam, Property targetProp) {
+        AnalysisContext context, Node errorNode, Property sourceParam, Property targetProp, ref WriteTally tally) {
         // Check that the parameter's constraints don't allow values the property prohibits.
         // For each property constraint, check if any value allowed by the parameter would violate it.
         // We use a simple subsumption check: the parameter's range/length must be within the property's.
@@ -133,6 +138,8 @@ internal sealed partial class EffectAnalyzer {
                     $"{ConstraintValidation.Describe(propConstraint)}. The parameter may carry values " +
                     $"that violate the property constraint.",
                     DomainModelDiagnosticCodes.EffectConstraintViolation);
+                if (ConstraintValidation.IsWriteRelevant(propConstraint))
+                    tally.Add(WriteVerdict.Unverified(UnverifiedReason.UnknownBound), propConstraint);
                 continue;
             }
 
@@ -144,13 +151,18 @@ internal sealed partial class EffectAnalyzer {
                     $"which allows values outside property '{targetProp.Name}' constraint " +
                     $"{ConstraintValidation.Describe(propConstraint)}.",
                     DomainModelDiagnosticCodes.EffectConstraintViolation);
+                if (ConstraintValidation.IsWriteRelevant(propConstraint))
+                    tally.Add(WriteVerdict.Unverified(UnverifiedReason.PossibleViolation), propConstraint);
+            }
+            else if (ConstraintValidation.IsWriteRelevant(propConstraint)) {
+                tally.Add(WriteVerdict.Satisfied, propConstraint);
             }
         }
     }
 
     private static void ValidateDownstreamConstraints(
         AnalysisContext context, Node errorNode,
-        IReadOnlyList<Constraint> downstreamConstraints, Property targetProp, Property sourceParam) {
+        IReadOnlyList<Constraint> downstreamConstraints, Property targetProp, Property sourceParam, ref WriteTally tally) {
         foreach (var dc in downstreamConstraints) {
             // Check if downstream constraint is compatible with target property constraints
             var matchingPropConstraint = targetProp.Constraints
@@ -164,6 +176,8 @@ internal sealed partial class EffectAnalyzer {
                     $"'{sourceParam.Name}' exceeds property '{targetProp.Name}' constraint " +
                     $"{ConstraintValidation.Describe(matchingPropConstraint)}.",
                     DomainModelDiagnosticCodes.EffectConstraintViolation);
+                if (ConstraintValidation.IsWriteRelevant(matchingPropConstraint))
+                    tally.Add(WriteVerdict.Unverified(UnverifiedReason.PossibleViolation), matchingPropConstraint);
             }
         }
     }

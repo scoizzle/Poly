@@ -29,7 +29,9 @@ internal sealed class ConstraintKind {
         Func<Constraint, Constraint, bool> identical,
         Func<Constraint, object?, ConstraintVerdict> evaluate,
         Func<Constraint, string> describe,
-        Func<Constraint, IConstraintPrintHost, string>? print) {
+        Func<Constraint, IConstraintPrintHost, string>? print,
+        Func<Constraint, AbstractValue, ConstraintVerdict> decide,
+        bool writeRelevant) {
         Type = type;
         Merge = merge;
         Join = join;
@@ -37,6 +39,8 @@ internal sealed class ConstraintKind {
         Evaluate = evaluate;
         Describe = describe;
         Print = print;
+        Decide = decide;
+        WriteRelevant = writeRelevant;
     }
 
     public Type Type { get; }
@@ -62,6 +66,19 @@ internal sealed class ConstraintKind {
     /// </summary>
     public Func<Constraint, IConstraintPrintHost, string>? Print { get; }
 
+    /// <summary>
+    /// Three-valued check of a non-literal (flow) value against this kind: the flow-side twin of
+    /// <see cref="Evaluate"/>. Kinds that have no flow decision answer Undecided, never Satisfied.
+    /// </summary>
+    public Func<Constraint, AbstractValue, ConstraintVerdict> Decide { get; }
+
+    /// <summary>
+    /// True when a write of a non-literal value must be verified against this kind (the Q4
+    /// unverified-write channel consults <see cref="Decide"/> for it). Range only in V-03: a
+    /// widening kind sets this together with a real <see cref="Decide"/>.
+    /// </summary>
+    public bool WriteRelevant { get; }
+
     public bool PrintedInDsl => Print is not null;
 }
 
@@ -86,7 +103,9 @@ internal static class ConstraintKinds {
         Func<T, T, bool> identical,
         Func<T, object?, ConstraintVerdict> evaluate,
         Func<T, string> describe,
-        Func<T, IConstraintPrintHost, string>? print) where T : Constraint =>
+        Func<T, IConstraintPrintHost, string>? print,
+        Func<T, AbstractValue, ConstraintVerdict>? decide = null,
+        bool writeRelevant = false) where T : Constraint =>
         new(
             typeof(T),
             (a, b) => merge((T)a, (T)b),
@@ -96,7 +115,9 @@ internal static class ConstraintKinds {
             (a, b) => identical((T)a, (T)b),
             (c, v) => evaluate((T)c, v),
             c => describe((T)c),
-            print is null ? null : (c, host) => print((T)c, host));
+            print is null ? null : (c, host) => print((T)c, host),
+            decide is null ? ConstraintValidation.Undecided : (c, v) => decide((T)c, v),
+            writeRelevant);
 
     private static Dictionary<Type, ConstraintKind> Build() {
         var rows = new[] {
@@ -107,7 +128,9 @@ internal static class ConstraintKinds {
                 evaluate: (r, v) => ConstraintValidation.Of(ConstraintValidation.IsInRangeUnion(v, r)),
                 describe: ConstraintValidation.FormatRange,
                 // A union has no DSL word; it prints as its hull, a sound widening.
-                print: (r, _) => $"range({Convert.ToString(r.Minimum, CultureInfo.InvariantCulture)}, {Convert.ToString(r.Maximum, CultureInfo.InvariantCulture)})"),
+                print: (r, _) => $"range({Convert.ToString(r.Minimum, CultureInfo.InvariantCulture)}, {Convert.ToString(r.Maximum, CultureInfo.InvariantCulture)})",
+                decide: WriteVerification.DecideRange,
+                writeRelevant: true),
             Row<LengthConstraint>(
                 merge: (a, b) => ConstraintMerge.MergeLength(a, b) is { } length
                     ? ConstraintMergeResult.Of(length)

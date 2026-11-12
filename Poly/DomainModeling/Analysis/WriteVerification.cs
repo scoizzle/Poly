@@ -59,13 +59,34 @@ internal static class WriteVerification {
         || (range.Maximum is not null && NumericBound.ToDoubleOrNull(range.Maximum) is null);
 }
 
-/// <summary>One write's outcome under the four-way rule (D2).</summary>
-internal readonly record struct WriteVerdict(bool IsVerified, UnverifiedReason? Reason) {
+/// <summary>The three-way outcome of one write: proven inside, proven outside, or not proven.</summary>
+internal enum WriteOutcome { Satisfied, Violated, Unverified }
+
+/// <summary>
+/// One write's outcome under the four-way rule (D2): Satisfied (silent, counted), Violated (DMEFF008
+/// error), or Unverified with the reason that splits the last two outcomes (a known range that can
+/// fall outside is a DMEFF008 warning; anything else is DMCS003).
+/// </summary>
+internal readonly record struct WriteVerdict(WriteOutcome Outcome, UnverifiedReason? Reason) {
     /// <summary>The write is proven inside every stage context's constraint.</summary>
-    public static WriteVerdict Satisfied => new(true, null);
+    public bool IsVerified => Outcome == WriteOutcome.Satisfied;
+
+    public static WriteVerdict Satisfied => new(WriteOutcome.Satisfied, null);
+
+    /// <summary>The write is proven entirely outside its constraint.</summary>
+    public static WriteVerdict Violated => new(WriteOutcome.Violated, null);
 
     /// <summary>The write could not be proven inside its constraint, for the given reason.</summary>
-    public static WriteVerdict Unverified(UnverifiedReason reason) => new(false, reason);
+    public static WriteVerdict Unverified(UnverifiedReason reason) => new(WriteOutcome.Unverified, reason);
+
+    private int Rank => Outcome switch {
+        WriteOutcome.Violated => 2,
+        WriteOutcome.Unverified => 1,
+        _ => 0,
+    };
+
+    /// <summary>The worse of two verdicts (Violated, then Unverified, then Satisfied); the first wins a tie.</summary>
+    public WriteVerdict Worst(WriteVerdict other) => other.Rank > Rank ? other : this;
 }
 
 /// <summary>
@@ -94,12 +115,15 @@ internal enum UnverifiedReason {
     RecursionCut,
 }
 
-/// <summary>One write analysis could not verify, as recorded in <see cref="WriteVerificationFacts"/>.</summary>
+/// <summary>
+/// One write analysis could not verify, or proved outside its constraint, as recorded in
+/// <see cref="WriteVerificationFacts"/>. <see cref="Reason"/> is null for a proven violation.
+/// </summary>
 internal sealed record UnverifiedWrite(
     Node Effect,
     string TargetProperty,
     string Constraint,
-    UnverifiedReason Reason);
+    UnverifiedReason? Reason);
 
 /// <summary>
 /// The analysis-side record of every constrained write in one domain (V-03 / A2-A4), keyed on the
@@ -122,6 +146,54 @@ internal sealed class WriteVerificationFacts : IAnalysisMetadata {
     public void RecordUnverified(UnverifiedWrite write) => Unverified.Add(write);
 
     public void RecordViolation(UnverifiedWrite write) => Violations.Add(write);
+}
+
+/// <summary>
+/// The one recorder (A3): the literal path, the parameter arm and the assign channel all end here,
+/// writing ONE fact per write (a write with several constraints is still one write) so V-04 can
+/// count writes, never constraints.
+/// </summary>
+internal static class WriteRecorder {
+    internal static void Record(
+        AnalysisContext context, Domain domain, Node effect, string property, string constraint, WriteVerdict verdict) {
+        var facts = WriteVerificationFactsStore.For(context, domain);
+        switch (verdict.Outcome) {
+            case WriteOutcome.Satisfied:
+                facts.RecordVerified();
+                break;
+            case WriteOutcome.Violated:
+                facts.RecordViolation(new UnverifiedWrite(effect, property, constraint, null));
+                break;
+            default:
+                facts.RecordUnverified(new UnverifiedWrite(
+                    effect, property, constraint, verdict.Reason ?? UnverifiedReason.UnknownBound));
+                break;
+        }
+    }
+}
+
+/// <summary>
+/// Accumulates the verdicts of one write's constraints (the literal and parameter arms decide per
+/// constraint) into the single verdict <see cref="WriteRecorder"/> records for the write.
+/// </summary>
+internal struct WriteTally {
+    private WriteVerdict _verdict;
+    private string? _constraint;
+    private bool _any;
+
+    public void Add(WriteVerdict verdict, Constraint constraint) {
+        var worst = _verdict.Worst(verdict);
+        if (!_any || worst != _verdict) {
+            _verdict = worst;
+            _constraint = ConstraintValidation.Describe(constraint);
+        }
+        _any = true;
+    }
+
+    /// <summary>Records the write once, when at least one constraint was decided for it.</summary>
+    public readonly void Record(AnalysisContext context, Domain domain, Node effect, string property) {
+        if (_any) WriteRecorder.Record(context, domain, effect, property, _constraint ?? "", _verdict);
+    }
 }
 
 /// <summary>The domain-keyed facts store: one bucket per <see cref="Domain"/> for one analysis run.</summary>

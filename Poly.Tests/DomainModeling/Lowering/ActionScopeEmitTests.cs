@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Reflection;
+using Poly.Tests.TestHelpers;
 
 using Poly.DomainModeling;
 using Poly.DomainModeling.Compile;
@@ -72,18 +73,18 @@ public class ActionScopeEmitTests {
         ExportedCSharp.CreateEntity(assembly, type, named);
 
     private static object? Read(object instance, string property) =>
-        instance.GetType().GetProperty(property)!.GetValue(instance);
+        instance.GetType().GetProperty(property, PrintedMembers.Any)!.GetValue(instance);
 
     private static void Write(object instance, string property, object? value) =>
-        instance.GetType().GetProperty(property)!.GetSetMethod(nonPublic: true)!.Invoke(instance, [value]);
+        instance.GetType().GetProperty(property, PrintedMembers.Any)!.GetSetMethod(nonPublic: true)!.Invoke(instance, [value]);
 
     private static int Count(object instance, string property) => ((ICollection)Read(instance, property)!).Count;
 
     private static void Call(object instance, string method, params object?[] args) {
-        var result = instance.GetType().GetMethod(method)!.Invoke(instance, args)!;
-        var ok = (bool)result.GetType().GetProperty("IsSuccess")!.GetValue(result)!;
+        var result = instance.GetType().GetMethod(method, PrintedMembers.Any)!.Invoke(instance, args)!;
+        var ok = (bool)result.GetType().GetProperty("IsSuccess", PrintedMembers.Any)!.GetValue(result)!;
         if (!ok)
-            throw new InvalidOperationException($"{method} failed: {result.GetType().GetProperty("ErrorMessage")!.GetValue(result)}");
+            throw new InvalidOperationException($"{method} failed: {result.GetType().GetProperty("ErrorMessage", PrintedMembers.Any)!.GetValue(result)}");
     }
 
     [Test]

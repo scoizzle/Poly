@@ -1,7 +1,7 @@
 #nullable enable
 using Poly.Runtime;
 
-public class Book : Poly.Runtime.IActionScoped
+internal class Book : Poly.Runtime.IActionScoped
 {
     private Book() { }
     private Book(string title, string author, string isbn, long pages, Genre genre)
@@ -17,7 +17,7 @@ public class Book : Poly.Runtime.IActionScoped
     public string ISBN { get; private set; } = default!;
     public long Pages { get; private set; }
     public Genre Genre { get; private set; }
-    public static DomainResult<Book> Create(string title, string author, string isbn, long pages, Genre genre, Poly.Runtime.IStoragePort db)
+    internal static DomainResult<Book> Create(string title, string author, string isbn, long pages, Genre genre, Poly.Runtime.IStoragePort db)
     {
         if (string.IsNullOrEmpty(title))
         {

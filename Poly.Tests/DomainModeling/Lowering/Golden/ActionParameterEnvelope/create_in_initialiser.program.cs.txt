@@ -119,7 +119,7 @@ static async System.Threading.Tasks.Task SeedAsync(TDbCtx db)
 app.Run();
 
 
-public record AddLineDto
+internal record AddLineDto
 {
     [Range(10, 20)]
     public long Q { get; init; }

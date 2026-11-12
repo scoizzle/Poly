@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 using Poly.Runtime;
 
-public class Customer : Poly.Runtime.IActionScoped
+internal class Customer : Poly.Runtime.IActionScoped
 {
     private List<Order> _orders = new List<Order>();
     private Customer() { }
@@ -25,7 +25,7 @@ public class Customer : Poly.Runtime.IActionScoped
     {
         this._orders.Add(child);
     }
-    public DomainResult ShipAll()
+    internal DomainResult ShipAll()
     {
         foreach (var target0 in this.Orders)
         {
@@ -41,7 +41,7 @@ public class Customer : Poly.Runtime.IActionScoped
         }
         return DomainResult.Success();
     }
-    public DomainResult CancelPending()
+    internal DomainResult CancelPending()
     {
         foreach (var target0 in this.Orders)
         {
@@ -57,7 +57,7 @@ public class Customer : Poly.Runtime.IActionScoped
         }
         return DomainResult.Success();
     }
-    public static DomainResult<Customer> Create(string email, string name, Poly.Runtime.IStoragePort db, IEnumerable<Order>? orders = null, string tier = "standard")
+    internal static DomainResult<Customer> Create(string email, string name, Poly.Runtime.IStoragePort db, IEnumerable<Order>? orders = null, string tier = "standard")
     {
         if (string.IsNullOrEmpty(email))
         {

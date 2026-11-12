@@ -1,7 +1,7 @@
 #nullable enable
 using Poly.Runtime;
 
-public class Doctor : Poly.Runtime.IActionScoped
+internal class Doctor : Poly.Runtime.IActionScoped
 {
     private Doctor() { }
     private Doctor(string name, string licenseNo, Schedule? schedule = null)
@@ -13,7 +13,7 @@ public class Doctor : Poly.Runtime.IActionScoped
     public string Name { get; private set; } = default!;
     public string LicenseNo { get; private set; } = default!;
     public Schedule? Schedule { get; private set; }
-    public DomainResult StartShift()
+    internal DomainResult StartShift()
     {
         if (this.Schedule == null)
         {
@@ -26,7 +26,7 @@ public class Doctor : Poly.Runtime.IActionScoped
         }
         return DomainResult.Success();
     }
-    public static DomainResult<Doctor> Create(string name, string licenseNo, Poly.Runtime.IStoragePort db, Schedule? schedule = null)
+    internal static DomainResult<Doctor> Create(string name, string licenseNo, Poly.Runtime.IStoragePort db, Schedule? schedule = null)
     {
         if (string.IsNullOrEmpty(name))
         {

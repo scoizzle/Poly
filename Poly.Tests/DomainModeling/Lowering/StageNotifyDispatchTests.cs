@@ -41,11 +41,11 @@ public class StageNotifyDispatchTests {
         var widgets = printedBin.GetType()
             .GetField("_widgets", BindingFlags.NonPublic | BindingFlags.Instance)!
             .GetValue(printedBin)!;
-        widgets.GetType().GetMethod("Add")!.Invoke(widgets, [printedWidget]);
+        widgets.GetType().GetMethod("Add", PrintedMembers.Any)!.Invoke(widgets, [printedWidget]);
 
-        var result = printedBin.GetType().GetMethod("Go")!.Invoke(printedBin, null)!;
-        await Assert.That((bool)result.GetType().GetProperty("IsSuccess")!.GetValue(result)!).IsTrue();
-        await Assert.That((long)printedWidget.GetType().GetProperty("Count")!.GetValue(printedWidget)!)
+        var result = printedBin.GetType().GetMethod("Go", PrintedMembers.Any)!.Invoke(printedBin, null)!;
+        await Assert.That((bool)result.GetType().GetProperty("IsSuccess", PrintedMembers.Any)!.GetValue(result)!).IsTrue();
+        await Assert.That((long)printedWidget.GetType().GetProperty("Count", PrintedMembers.Any)!.GetValue(printedWidget)!)
             .IsEqualTo(1L);
     }
 

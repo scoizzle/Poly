@@ -1,7 +1,7 @@
 #nullable enable
 using Poly.Runtime;
 
-public class Course : Poly.Runtime.IActionScoped
+internal class Course : Poly.Runtime.IActionScoped
 {
     private Course() { }
     private Course(string code, string title)
@@ -11,7 +11,7 @@ public class Course : Poly.Runtime.IActionScoped
     }
     public string Code { get; private set; } = default!;
     public string Title { get; private set; } = default!;
-    public static DomainResult<Course> Create(string code, string title, Poly.Runtime.IStoragePort db)
+    internal static DomainResult<Course> Create(string code, string title, Poly.Runtime.IStoragePort db)
     {
         if (string.IsNullOrEmpty(code))
         {

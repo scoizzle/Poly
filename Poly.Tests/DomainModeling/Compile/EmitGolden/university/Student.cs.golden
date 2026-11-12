@@ -4,13 +4,13 @@ using System.Collections.Generic;
 
 using Poly.Runtime;
 
-public enum StudentStage
+internal enum StudentStage
 {
     Active = 0,
     Suspended = 1
 }
 
-public class Student : Poly.Runtime.IActionScoped
+internal class Student : Poly.Runtime.IActionScoped
 {
     private List<Enrollment> _enrollments = new List<Enrollment>();
     private Student() { }
@@ -39,7 +39,7 @@ public class Student : Poly.Runtime.IActionScoped
         get => this._enrollments;
     }
     public StudentStage CurrentStage { get; private set; }
-    public DomainResult<Enrollment> CreateEnrollments(Section? section = null, DateOnly? enrolledOn = null, DateOnly? dueDate = null, long grade = 0L)
+    internal DomainResult<Enrollment> CreateEnrollments(Section? section = null, DateOnly? enrolledOn = null, DateOnly? dueDate = null, long grade = 0L)
     {
         var enrollmentResult = Enrollment.Create(section, this, enrolledOn, dueDate, grade);
         if (!enrollmentResult.IsSuccess)
@@ -55,7 +55,7 @@ public class Student : Poly.Runtime.IActionScoped
         child.RegisterStudentEnrollmentsDroppedSubscriber(this);
         child.RegisterStudentEnrollmentsCompletedSubscriber(this);
     }
-    public DomainResult<Enrollment> Enroll(Section offering)
+    internal DomainResult<Enrollment> Enroll(Section offering)
     {
         if (this.CurrentStage != StudentStage.Active)
         {
@@ -74,7 +74,7 @@ public class Student : Poly.Runtime.IActionScoped
         var created1 = create0.Value;
         return DomainResult<Enrollment>.Success(created1);
     }
-    public DomainResult DropRegistered()
+    internal DomainResult DropRegistered()
     {
         if (this.CurrentStage != StudentStage.Active)
         {
@@ -94,7 +94,7 @@ public class Student : Poly.Runtime.IActionScoped
         }
         return DomainResult.Success();
     }
-    public DomainResult DropAllRegistered()
+    internal DomainResult DropAllRegistered()
     {
         if (this.CurrentStage != StudentStage.Active)
         {
@@ -107,7 +107,7 @@ public class Student : Poly.Runtime.IActionScoped
         }
         return DomainResult.Success();
     }
-    public DomainResult CompleteRegistered()
+    internal DomainResult CompleteRegistered()
     {
         if (this.CurrentStage != StudentStage.Active)
         {
@@ -127,7 +127,7 @@ public class Student : Poly.Runtime.IActionScoped
         }
         return DomainResult.Success();
     }
-    public DomainResult CompletePassing()
+    internal DomainResult CompletePassing()
     {
         if (this.CurrentStage != StudentStage.Active)
         {
@@ -147,7 +147,7 @@ public class Student : Poly.Runtime.IActionScoped
         }
         return DomainResult.Success();
     }
-    public DomainResult Suspend()
+    internal DomainResult Suspend()
     {
         if (this.CurrentStage != StudentStage.Active)
         {
@@ -157,7 +157,7 @@ public class Student : Poly.Runtime.IActionScoped
         this.Holds = this.Holds + 1L;
         return DomainResult.Success();
     }
-    public DomainResult Reinstate()
+    internal DomainResult Reinstate()
     {
         if (this.CurrentStage != StudentStage.Suspended)
         {
@@ -181,7 +181,7 @@ public class Student : Poly.Runtime.IActionScoped
         this.Completions = this.Completions + 1L;
         this.LastGrade = done.Grade;
     }
-    public static DomainResult<Student> Create(string name, string email, Poly.Runtime.IStoragePort db, IEnumerable<Enrollment>? enrollments = null, long maxCredits = 18L, long openCredits = 0L, long holds = 0L, long completions = 0L, long lastGrade = 0L)
+    internal static DomainResult<Student> Create(string name, string email, Poly.Runtime.IStoragePort db, IEnumerable<Enrollment>? enrollments = null, long maxCredits = 18L, long openCredits = 0L, long holds = 0L, long completions = 0L, long lastGrade = 0L)
     {
         if (string.IsNullOrEmpty(name))
         {

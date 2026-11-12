@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 using Poly.Runtime;
 
-public enum QuoteStage
+internal enum QuoteStage
 {
     Draft = 0,
     Presented = 1,
@@ -11,7 +11,7 @@ public enum QuoteStage
     Rejected = 3
 }
 
-public class Quote : Poly.Runtime.IActionScoped
+internal class Quote : Poly.Runtime.IActionScoped
 {
     private List<QuoteLine> _lines = new List<QuoteLine>();
     private Quote() { }
@@ -31,7 +31,7 @@ public class Quote : Poly.Runtime.IActionScoped
         get => this._lines;
     }
     public QuoteStage CurrentStage { get; private set; }
-    public DomainResult<QuoteLine> CreateLines(long qty, decimal unitPrice, Product? product = null)
+    internal DomainResult<QuoteLine> CreateLines(long qty, decimal unitPrice, Product? product = null)
     {
         var quoteLineResult = QuoteLine.Create(qty, unitPrice, product, this);
         if (!quoteLineResult.IsSuccess)
@@ -45,7 +45,7 @@ public class Quote : Poly.Runtime.IActionScoped
     {
         this._lines.Add(child);
     }
-    public DomainResult<QuoteLine> AddLine(Product sku, long qty)
+    internal DomainResult<QuoteLine> AddLine(Product sku, long qty)
     {
         if (this.CurrentStage != QuoteStage.Draft)
         {
@@ -69,7 +69,7 @@ public class Quote : Poly.Runtime.IActionScoped
         var created2 = create1.Value;
         return DomainResult<QuoteLine>.Success(created2);
     }
-    public DomainResult Present()
+    internal DomainResult Present()
     {
         if (this.CurrentStage != QuoteStage.Draft)
         {
@@ -78,7 +78,7 @@ public class Quote : Poly.Runtime.IActionScoped
         this.CurrentStage = QuoteStage.Presented;
         return DomainResult.Success();
     }
-    public DomainResult Accept()
+    internal DomainResult Accept()
     {
         if (this.CurrentStage != QuoteStage.Presented)
         {
@@ -87,7 +87,7 @@ public class Quote : Poly.Runtime.IActionScoped
         this.CurrentStage = QuoteStage.Accepted;
         return DomainResult.Success();
     }
-    public DomainResult Reject()
+    internal DomainResult Reject()
     {
         if (this.CurrentStage != QuoteStage.Presented)
         {
@@ -96,7 +96,7 @@ public class Quote : Poly.Runtime.IActionScoped
         this.CurrentStage = QuoteStage.Rejected;
         return DomainResult.Success();
     }
-    public static DomainResult<Quote> Create(string title, decimal amount, Opportunity? opportunity = null, IEnumerable<QuoteLine>? lines = null)
+    internal static DomainResult<Quote> Create(string title, decimal amount, Opportunity? opportunity = null, IEnumerable<QuoteLine>? lines = null)
     {
         if (string.IsNullOrEmpty(title))
         {

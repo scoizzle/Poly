@@ -1,5 +1,6 @@
 using Poly.Ast.Nodes;
 using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Lowering;
 
 namespace Poly.Packs.Product;
 
@@ -104,7 +105,9 @@ public sealed partial class MinimalApiGenerator {
                 Semantics: new TypeDefinitionSemantics(
                     TypeDefinitionMutability.Immutable,
                     TypeDefinitionEqualitySemantics.Value
-                )
+                ),
+                AccessModifier: DomainAccess.ForInfrastructure(
+                    _domain, [entity.Name, .. ia.Parameters.Select(p => p.DomainType)])
             ));
         }
     }
@@ -225,7 +228,9 @@ public sealed partial class MinimalApiGenerator {
             Semantics: new TypeDefinitionSemantics(
                 TypeDefinitionMutability.Mutable,
                 TypeDefinitionEqualitySemantics.Value
-            )
+            ),
+            AccessModifier: DomainAccess.ForInfrastructure(
+                _domain, [entity.Name, .. scalarParams.Select(p => p.Type.TypeName)])
         ));
     }
 }

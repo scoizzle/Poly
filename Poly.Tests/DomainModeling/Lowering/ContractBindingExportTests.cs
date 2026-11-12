@@ -86,7 +86,7 @@ public class ContractBindingExportTests {
         var order = files.Single(f => f.FileName == "Order.cs").Source;
         await Assert.That(order.Contains("BillingAdapters", StringComparison.Ordinal)).IsFalse();
         await Assert.That(order.Contains("adapterResult", StringComparison.Ordinal)).IsFalse();
-        await Assert.That(order).Contains("public DomainResult Pay(ChargeRequest request)");
+        await Assert.That(order).Contains("internal DomainResult Pay(ChargeRequest request)");
 
         var types = files.Single(f => f.FileName == "Poly.Types.cs").Source;
         await Assert.That(types.Contains("class BillingAdapters", StringComparison.Ordinal)).IsFalse();
@@ -121,8 +121,8 @@ public class ContractBindingExportTests {
         await Assert.That(types.Contains("BillingAdapters", StringComparison.Ordinal)).IsFalse();
 
         var order = compiled.Files!.Single(f => f.FileName == "Order.cs").Source;
-        await Assert.That(order).Contains("public DomainResult Pay(ChargeRequest request)");
-        await Assert.That(order).Contains("public DomainResult Refund(ChargeRequest request)");
+        await Assert.That(order).Contains("internal DomainResult Pay(ChargeRequest request)");
+        await Assert.That(order).Contains("internal DomainResult Refund(ChargeRequest request)");
     }
 
     [Test]
@@ -135,7 +135,7 @@ public class ContractBindingExportTests {
 
         // Erase removes the call, not the action: the method is still emitted and
         // contains no adapter expression.
-        await Assert.That(order).Contains("public DomainResult Pay(ChargeRequest request)");
+        await Assert.That(order).Contains("internal DomainResult Pay(ChargeRequest request)");
         await Assert.That(order.Contains("BillingAdapters", StringComparison.Ordinal)).IsFalse();
     }
 }

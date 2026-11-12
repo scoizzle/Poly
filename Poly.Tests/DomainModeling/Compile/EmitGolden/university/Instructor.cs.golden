@@ -1,13 +1,13 @@
 #nullable enable
 using Poly.Runtime;
 
-public enum InstructorStage
+internal enum InstructorStage
 {
     Ready = 0,
     Leave = 1
 }
 
-public class Instructor : Poly.Runtime.IActionScoped
+internal class Instructor : Poly.Runtime.IActionScoped
 {
     private Instructor() { }
     private Instructor(string name, string email)
@@ -19,7 +19,7 @@ public class Instructor : Poly.Runtime.IActionScoped
     public string Name { get; private set; } = default!;
     public string Email { get; private set; } = default!;
     public InstructorStage CurrentStage { get; private set; }
-    public DomainResult GoOnLeave()
+    internal DomainResult GoOnLeave()
     {
         if (this.CurrentStage != InstructorStage.Ready)
         {
@@ -28,7 +28,7 @@ public class Instructor : Poly.Runtime.IActionScoped
         this.CurrentStage = InstructorStage.Leave;
         return DomainResult.Success();
     }
-    public DomainResult Return()
+    internal DomainResult Return()
     {
         if (this.CurrentStage != InstructorStage.Leave)
         {
@@ -37,7 +37,7 @@ public class Instructor : Poly.Runtime.IActionScoped
         this.CurrentStage = InstructorStage.Ready;
         return DomainResult.Success();
     }
-    public static DomainResult<Instructor> Create(string name, string email, Poly.Runtime.IStoragePort db)
+    internal static DomainResult<Instructor> Create(string name, string email, Poly.Runtime.IStoragePort db)
     {
         if (string.IsNullOrEmpty(name))
         {

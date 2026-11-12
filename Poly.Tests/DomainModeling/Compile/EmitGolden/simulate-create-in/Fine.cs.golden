@@ -1,7 +1,7 @@
 #nullable enable
 using Poly.Runtime;
 
-public class Fine : Poly.Runtime.IActionScoped
+internal class Fine : Poly.Runtime.IActionScoped
 {
     private Fine(long amount, string reason, Patron? patron = null)
     {
@@ -12,7 +12,7 @@ public class Fine : Poly.Runtime.IActionScoped
     public long Amount { get; private set; }
     public string Reason { get; private set; } = default!;
     public Patron? Patron { get; private set; }
-    public static DomainResult<Fine> Create(long amount, string reason, Patron? patron = null)
+    internal static DomainResult<Fine> Create(long amount, string reason, Patron? patron = null)
     {
         if (amount < 0L)
         {

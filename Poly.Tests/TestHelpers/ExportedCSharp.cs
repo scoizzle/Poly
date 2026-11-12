@@ -81,9 +81,9 @@ public static class ExportedCSharp {
             .ToArray();
     }
 
-    /// <summary>Calls the widest public static Create by named args; returns the DomainResult.</summary>
+    /// <summary>Calls the widest static Create (any accessibility) by named args; returns the DomainResult.</summary>
     public static object InvokeCreate(Type type, params (string Name, object? Value)[] named) {
-        var create = type.GetMethods(BindingFlags.Public | BindingFlags.Static)
+        var create = type.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static)
             .Where(m => m.Name == "Create")
             .OrderByDescending(m => m.GetParameters().Length)
             .First();

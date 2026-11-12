@@ -6,6 +6,7 @@ using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Runtime;
 using Poly.Interpretation.CSharp;
+using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.DomainModeling.Lowering;
 
@@ -170,7 +171,7 @@ public class QuantifierLoopTests {
         foreach (var (name, simulated, printed) in cases) {
             foreach (var policyName in policyNames) {
                 var sim = exec.EvaluatePolicy(simulated, (E("Order").Policies.First(p => p.Name == policyName)).Name);
-                var print = (bool)printed.GetType().GetMethod(policyName)!.Invoke(printed, null)!;
+                var print = (bool)printed.GetType().GetMethod(policyName, PrintedMembers.Any)!.Invoke(printed, null)!;
                 await Assert.That(print).IsEqualTo(sim).Because($"{policyName} on {name}");
             }
         }
@@ -228,9 +229,9 @@ public class QuantifierLoopTests {
         var widgets = Array.CreateInstance(widgetType, 1);
         widgets.SetValue(widget, 0);
         var printed = ExportedCSharp.CreateEntity(binType, ("active", false), ("n", 0L), ("widgets", widgets));
-        var result = binType.GetMethod("Mark")!.Invoke(printed, null)!;
-        await Assert.That((bool)result.GetType().GetProperty("IsSuccess")!.GetValue(result)!).IsTrue();
-        await Assert.That((bool)binType.GetProperty("Active")!.GetValue(printed)!).IsTrue();
+        var result = binType.GetMethod("Mark", PrintedMembers.Any)!.Invoke(printed, null)!;
+        await Assert.That((bool)result.GetType().GetProperty("IsSuccess", PrintedMembers.Any)!.GetValue(result)!).IsTrue();
+        await Assert.That((bool)binType.GetProperty("Active", PrintedMembers.Any)!.GetValue(printed)!).IsTrue();
     }
 
     private const string StagedBinDsl = """
@@ -271,12 +272,12 @@ public class QuantifierLoopTests {
             widgets.SetValue(ExportedCSharp.CreateEntity(widgetType, ("active", true)), 0);
             var printed = ExportedCSharp.CreateEntity(binType, ("n", 0L), ("widgets", widgets));
             if (closeFirst)
-                binType.GetMethod("Close")!.Invoke(printed, null);
-            var result = binType.GetMethod("Go")!.Invoke(printed, null)!;
-            await Assert.That((bool)result.GetType().GetProperty("IsSuccess")!.GetValue(result)!).IsTrue();
+                binType.GetMethod("Close", PrintedMembers.Any)!.Invoke(printed, null);
+            var result = binType.GetMethod("Go", PrintedMembers.Any)!.Invoke(printed, null)!;
+            await Assert.That((bool)result.GetType().GetProperty("IsSuccess", PrintedMembers.Any)!.GetValue(result)!).IsTrue();
 
             return (Convert.ToInt64(bin.Bag["N"]),
-                Convert.ToInt64(binType.GetProperty("N")!.GetValue(printed)));
+                Convert.ToInt64(binType.GetProperty("N", PrintedMembers.Any)!.GetValue(printed)));
         }
 
         var open = await RunGo(closeFirst: false);
@@ -339,10 +340,10 @@ public class QuantifierLoopTests {
             widgets.SetValue(printedBare, 0);
             widgets.SetValue(printedLinked, 1);
             var printed = ExportedCSharp.CreateEntity(binType, ("widgets", widgets));
-            var result = binType.GetMethod(actionName)!.Invoke(printed, null)!;
-            await Assert.That((bool)result.GetType().GetProperty("IsSuccess")!.GetValue(result)!).IsTrue();
+            var result = binType.GetMethod(actionName, PrintedMembers.Any)!.Invoke(printed, null)!;
+            await Assert.That((bool)result.GetType().GetProperty("IsSuccess", PrintedMembers.Any)!.GetValue(result)!).IsTrue();
 
-            bool Flag(object w) => (bool)widgetType.GetProperty("Flag")!.GetValue(w)!;
+            bool Flag(object w) => (bool)widgetType.GetProperty("Flag", PrintedMembers.Any)!.GetValue(w)!;
             return ([(bool)bare.Bag["Flag"]!, (bool)linked.Bag["Flag"]!],
                 [Flag(printedBare), Flag(printedLinked)]);
         }
@@ -396,9 +397,9 @@ public class QuantifierLoopTests {
         printedWidgets.SetValue(ExportedCSharp.CreateEntity(widgetType, ("active", true)), 0);
         printedWidgets.SetValue(ExportedCSharp.CreateEntity(widgetType, ("active", false)), 1);
         var printed = ExportedCSharp.CreateEntity(binType, ("active", false), ("n", 0L), ("widgets", printedWidgets));
-        var result = binType.GetMethod("Tally")!.Invoke(printed, null)!;
-        await Assert.That((bool)result.GetType().GetProperty("IsSuccess")!.GetValue(result)!).IsTrue();
-        await Assert.That(Convert.ToInt64(binType.GetProperty("N")!.GetValue(printed))).IsEqualTo(1L);
+        var result = binType.GetMethod("Tally", PrintedMembers.Any)!.Invoke(printed, null)!;
+        await Assert.That((bool)result.GetType().GetProperty("IsSuccess", PrintedMembers.Any)!.GetValue(result)!).IsTrue();
+        await Assert.That(Convert.ToInt64(binType.GetProperty("N", PrintedMembers.Any)!.GetValue(printed))).IsEqualTo(1L);
     }
 
     [Test]
@@ -428,14 +429,14 @@ public class QuantifierLoopTests {
         var widgets = Array.CreateInstance(widgetType, 1);
         widgets.SetValue(ExportedCSharp.CreateEntity(widgetType, ("active", true)), 0);
         var printed = ExportedCSharp.CreateEntity(binType, ("active", false), ("widgets", widgets));
-        var result = binType.GetMethod("Spawn")!.Invoke(printed, null)!;
-        await Assert.That((bool)result.GetType().GetProperty("IsSuccess")!.GetValue(result)!).IsTrue();
-        var printedWidgets = binType.GetProperty("Widgets")!.GetValue(printed) as System.Collections.ICollection;
+        var result = binType.GetMethod("Spawn", PrintedMembers.Any)!.Invoke(printed, null)!;
+        await Assert.That((bool)result.GetType().GetProperty("IsSuccess", PrintedMembers.Any)!.GetValue(result)!).IsTrue();
+        var printedWidgets = binType.GetProperty("Widgets", PrintedMembers.Any)!.GetValue(printed) as System.Collections.ICollection;
         await Assert.That(printedWidgets).IsNotNull();
         await Assert.That(printedWidgets!.Count).IsEqualTo(2);
         var activeCount = 0;
         foreach (var item in printedWidgets)
-            if ((bool)widgetType.GetProperty("Active")!.GetValue(item)!)
+            if ((bool)widgetType.GetProperty("Active", PrintedMembers.Any)!.GetValue(item)!)
                 activeCount++;
         await Assert.That(activeCount).IsEqualTo(2);
     }
@@ -468,9 +469,9 @@ public class QuantifierLoopTests {
         var widgets = Array.CreateInstance(widgetType, 1);
         widgets.SetValue(ExportedCSharp.CreateEntity(widgetType, ("active", true)), 0);
         var printed = ExportedCSharp.CreateEntity(binType, ("active", false), ("n", 0L), ("widgets", widgets));
-        var result = binType.GetMethod("Guarded")!.Invoke(printed, null)!;
-        await Assert.That((bool)result.GetType().GetProperty("IsSuccess")!.GetValue(result)!).IsTrue();
-        await Assert.That(Convert.ToInt64(binType.GetProperty("N")!.GetValue(printed))).IsEqualTo(0L);
+        var result = binType.GetMethod("Guarded", PrintedMembers.Any)!.Invoke(printed, null)!;
+        await Assert.That((bool)result.GetType().GetProperty("IsSuccess", PrintedMembers.Any)!.GetValue(result)!).IsTrue();
+        await Assert.That(Convert.ToInt64(binType.GetProperty("N", PrintedMembers.Any)!.GetValue(printed))).IsEqualTo(0L);
     }
 
     [Test]
@@ -513,12 +514,12 @@ public class QuantifierLoopTests {
         printedWidgets.SetValue(ExportedCSharp.CreateEntity(widgetType, ("active", true), ("flag", false)), 0);
         printedWidgets.SetValue(ExportedCSharp.CreateEntity(widgetType, ("active", false), ("flag", false)), 1);
         var printed = ExportedCSharp.CreateEntity(binType, ("n", 0L), ("widgets", printedWidgets));
-        var result = binType.GetMethod("Go")!.Invoke(printed, null)!;
-        await Assert.That((bool)result.GetType().GetProperty("IsSuccess")!.GetValue(result)!).IsTrue();
-        await Assert.That(Convert.ToInt64(binType.GetProperty("N")!.GetValue(printed))).IsEqualTo(1L);
-        var after = (System.Collections.ICollection)binType.GetProperty("Widgets")!.GetValue(printed)!;
+        var result = binType.GetMethod("Go", PrintedMembers.Any)!.Invoke(printed, null)!;
+        await Assert.That((bool)result.GetType().GetProperty("IsSuccess", PrintedMembers.Any)!.GetValue(result)!).IsTrue();
+        await Assert.That(Convert.ToInt64(binType.GetProperty("N", PrintedMembers.Any)!.GetValue(printed))).IsEqualTo(1L);
+        var after = (System.Collections.ICollection)binType.GetProperty("Widgets", PrintedMembers.Any)!.GetValue(printed)!;
         foreach (var item in after)
-            await Assert.That((bool)widgetType.GetProperty("Flag")!.GetValue(item)!).IsTrue();
+            await Assert.That((bool)widgetType.GetProperty("Flag", PrintedMembers.Any)!.GetValue(item)!).IsTrue();
     }
 
     [Test]
@@ -549,10 +550,10 @@ public class QuantifierLoopTests {
         var widgets = Array.CreateInstance(widgetType, 1);
         widgets.SetValue(ExportedCSharp.CreateEntity(widgetType, ("active", true)), 0);
         var printed = ExportedCSharp.CreateEntity(binType, ("widgets", widgets));
-        var result = binType.GetMethod("Spawn")!.Invoke(printed, null)!;
-        await Assert.That((bool)result.GetType().GetProperty("IsSuccess")!.GetValue(result)!).IsTrue();
-        var printedWidget = result.GetType().GetProperty("Value")!.GetValue(result)!;
-        await Assert.That((bool)widgetType.GetProperty("Active")!.GetValue(printedWidget)!).IsEqualTo(simActive);
+        var result = binType.GetMethod("Spawn", PrintedMembers.Any)!.Invoke(printed, null)!;
+        await Assert.That((bool)result.GetType().GetProperty("IsSuccess", PrintedMembers.Any)!.GetValue(result)!).IsTrue();
+        var printedWidget = result.GetType().GetProperty("Value", PrintedMembers.Any)!.GetValue(result)!;
+        await Assert.That((bool)widgetType.GetProperty("Active", PrintedMembers.Any)!.GetValue(printedWidget)!).IsEqualTo(simActive);
         await Assert.That(simActive).IsTrue();
     }
 
@@ -599,7 +600,7 @@ public class QuantifierLoopTests {
             var team = ExportedCSharp.CreateEntity(teamType, ("active", teamActive), ("workers", workers));
             return ExportedCSharp.CreateEntity(deptType, ("team", team));
         }
-        bool PrintedP(object dept) => (bool)deptType.GetMethod("P")!.Invoke(dept, null)!;
+        bool PrintedP(object dept) => (bool)deptType.GetMethod("P", PrintedMembers.Any)!.Invoke(dept, null)!;
         await Assert.That(PrintedP(PrintDept(true, true))).IsEqualTo(simTrue);
         await Assert.That(PrintedP(PrintDept(true, false))).IsEqualTo(simFalse);
 
@@ -664,7 +665,7 @@ public class QuantifierLoopTests {
                 ("workers", workers));
             return ExportedCSharp.CreateEntity(deptType, ("team", team));
         }
-        bool PrintedP(object dept) => (bool)deptType.GetMethod("P")!.Invoke(dept, null)!;
+        bool PrintedP(object dept) => (bool)deptType.GetMethod("P", PrintedMembers.Any)!.Invoke(dept, null)!;
         await Assert.That(PrintedP(PrintDept(true, "Busy"))).IsEqualTo(simTrue);
         await Assert.That(PrintedP(PrintDept(true, "Idle"))).IsEqualTo(simFalse);
     }
@@ -732,7 +733,7 @@ public class QuantifierLoopTests {
             var org = ExportedCSharp.CreateEntity(orgType, ("team", team));
             return ExportedCSharp.CreateEntity(deptType, ("org", org));
         }
-        bool PrintedP(object dept) => (bool)deptType.GetMethod("P")!.Invoke(dept, null)!;
+        bool PrintedP(object dept) => (bool)deptType.GetMethod("P", PrintedMembers.Any)!.Invoke(dept, null)!;
         await Assert.That(PrintedP(PrintDept("Busy"))).IsEqualTo(simTrue);
         await Assert.That(PrintedP(PrintDept("Idle"))).IsEqualTo(simFalse);
 
@@ -783,7 +784,7 @@ public class QuantifierLoopTests {
                 ("state", Enum.Parse(deptStateType, "Open")),
                 ("team", team));
         }
-        bool PrintedP(object dept) => (bool)deptType.GetMethod("P")!.Invoke(dept, null)!;
+        bool PrintedP(object dept) => (bool)deptType.GetMethod("P", PrintedMembers.Any)!.Invoke(dept, null)!;
         await Assert.That(PrintedP(PrintDept("Done"))).IsEqualTo(simTrue);
         await Assert.That(PrintedP(PrintDept("Busy"))).IsEqualTo(simFalse);
     }
@@ -834,7 +835,7 @@ public class QuantifierLoopTests {
             }
             return ExportedCSharp.CreateEntity(ticketType, ("due", due), ("lines", lines));
         }
-        bool PrintedP(object ticket) => (bool)ticketType.GetMethod("P")!.Invoke(ticket, null)!;
+        bool PrintedP(object ticket) => (bool)ticketType.GetMethod("P", PrintedMembers.Any)!.Invoke(ticket, null)!;
         await Assert.That(PrintedP(PrintTicket(true))).IsEqualTo(simOpen);
         await Assert.That(PrintedP(PrintTicket(false))).IsEqualTo(simClosed);
     }
@@ -878,15 +879,15 @@ public class QuantifierLoopTests {
             widgets.SetValue(ExportedCSharp.CreateEntity(widgetType, ("level", 0L)), 0);
             return ExportedCSharp.CreateEntity(binType, ("n", 0L), ("widgets", widgets));
         }
-        var close = binType.GetMethod("Close")!;
+        var close = binType.GetMethod("Close", PrintedMembers.Any)!;
         var printedHigh = PrintBin();
         var highResult = close.Invoke(printedHigh, [10L])!;
-        await Assert.That((bool)highResult.GetType().GetProperty("IsSuccess")!.GetValue(highResult)!).IsTrue();
-        await Assert.That(Convert.ToInt64(binType.GetProperty("N")!.GetValue(printedHigh))).IsEqualTo(1L);
+        await Assert.That((bool)highResult.GetType().GetProperty("IsSuccess", PrintedMembers.Any)!.GetValue(highResult)!).IsTrue();
+        await Assert.That(Convert.ToInt64(binType.GetProperty("N", PrintedMembers.Any)!.GetValue(printedHigh))).IsEqualTo(1L);
         var printedLow = PrintBin();
         var lowResult = close.Invoke(printedLow, [2L])!;
-        await Assert.That((bool)lowResult.GetType().GetProperty("IsSuccess")!.GetValue(lowResult)!).IsTrue();
-        await Assert.That(Convert.ToInt64(binType.GetProperty("N")!.GetValue(printedLow))).IsEqualTo(0L);
+        await Assert.That((bool)lowResult.GetType().GetProperty("IsSuccess", PrintedMembers.Any)!.GetValue(lowResult)!).IsTrue();
+        await Assert.That(Convert.ToInt64(binType.GetProperty("N", PrintedMembers.Any)!.GetValue(printedLow))).IsEqualTo(0L);
     }
 
     [Test]
@@ -938,12 +939,12 @@ public class QuantifierLoopTests {
         printedWidgets.SetValue(ExportedCSharp.CreateEntity(widgetType, ("flag", false), ("parts", Parts(true))), 0);
         printedWidgets.SetValue(ExportedCSharp.CreateEntity(widgetType, ("flag", false), ("parts", Parts(false))), 1);
         var printed = ExportedCSharp.CreateEntity(binType, ("widgets", printedWidgets));
-        var result = binType.GetMethod("Go")!.Invoke(printed, null)!;
-        await Assert.That((bool)result.GetType().GetProperty("IsSuccess")!.GetValue(result)!).IsTrue();
-        var after = (System.Collections.ICollection)binType.GetProperty("Widgets")!.GetValue(printed)!;
+        var result = binType.GetMethod("Go", PrintedMembers.Any)!.Invoke(printed, null)!;
+        await Assert.That((bool)result.GetType().GetProperty("IsSuccess", PrintedMembers.Any)!.GetValue(result)!).IsTrue();
+        var after = (System.Collections.ICollection)binType.GetProperty("Widgets", PrintedMembers.Any)!.GetValue(printed)!;
         var flags = new List<bool>();
         foreach (var item in after)
-            flags.Add((bool)widgetType.GetProperty("Flag")!.GetValue(item)!);
+            flags.Add((bool)widgetType.GetProperty("Flag", PrintedMembers.Any)!.GetValue(item)!);
         await Assert.That(flags.Count).IsEqualTo(2);
         await Assert.That(flags[0]).IsTrue();
         await Assert.That(flags[1]).IsFalse();

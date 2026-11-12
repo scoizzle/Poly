@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 using Poly.Runtime;
 
-public class Patient : Poly.Runtime.IActionScoped
+internal class Patient : Poly.Runtime.IActionScoped
 {
     private List<Visit> _visits = new List<Visit>();
     private Patient() { }
@@ -21,7 +21,7 @@ public class Patient : Poly.Runtime.IActionScoped
     {
         this._visits.Add(child);
     }
-    public DomainResult CheckInAll()
+    internal DomainResult CheckInAll()
     {
         foreach (var target0 in this.Visits)
         {
@@ -37,7 +37,7 @@ public class Patient : Poly.Runtime.IActionScoped
         }
         return DomainResult.Success();
     }
-    public static DomainResult<Patient> Create(string name, IEnumerable<Visit>? visits = null)
+    internal static DomainResult<Patient> Create(string name, IEnumerable<Visit>? visits = null)
     {
         if (string.IsNullOrEmpty(name))
         {

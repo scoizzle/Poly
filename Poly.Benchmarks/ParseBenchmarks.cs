@@ -1,14 +1,6 @@
-using System.Globalization;
 using System.Runtime.CompilerServices;
 
 using BenchmarkDotNet.Attributes;
-using BenchmarkDotNet.Columns;
-using BenchmarkDotNet.Configs;
-using BenchmarkDotNet.Exporters.Csv;
-using BenchmarkDotNet.Reports;
-
-using Perfolizer.Horology;
-using Perfolizer.Metrology;
 
 using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Language;
@@ -27,9 +19,12 @@ namespace Poly.Benchmarks;
 /// with BenchmarkDotNet 0.15.8, then copied verbatim from the exporter's report. <c>--job short</c>
 /// is only comparable with another short run on the same machine.
 /// <para>
-/// Usage rule: compare <c>Allocated</c> against the committed file — it is runtime-stable — and
-/// re-run <c>Mean</c> side by side on one machine, because the committed value carries no host or
-/// CPU information. <c>Mean &gt; 0</c> in the smoke test is a schema check, never a threshold.
+/// Usage rule: compare <c>Allocated</c> against the committed file — it is stable for a given
+/// runtime — and re-run <c>Mean</c> side by side on one machine, because the committed value carries
+/// no host or CPU information. The noise caveat covers every row: <c>--job short</c> <c>Mean</c> is a
+/// noisy statistic (the plan-review note records ~49% on the university row and ~90% on the C#
+/// aggregate), so only <c>Allocated</c> is comparable across runs. <c>Mean &gt; 0</c> in the smoke
+/// test is a schema check, never a threshold.
 /// </para>
 /// <para>
 /// The measured DSL op is the real parse, <c>new PolyDslParser(text, session).Parse()</c>, against
@@ -39,20 +34,21 @@ namespace Poly.Benchmarks;
 /// parse-neutral because none of these documents selects a vendor library.
 /// </para>
 /// <para>
-/// The corpus root is a <see cref="CallerFilePathAttribute"/> constant, so a baseline refresh must
-/// run from the checkout that built the benchmark: BenchmarkDotNet's child process runs from
+/// The corpus root is a <see cref="CallerFilePathAttribute"/> constant in
+/// <see cref="BenchmarkSupport"/>, so a baseline refresh must run from the checkout that built the
+/// benchmark: BenchmarkDotNet's child process runs from
 /// <c>BenchmarkDotNet.Artifacts/&lt;guid&gt;/</c>, not the repository.
 /// </para>
 /// </summary>
-[Config(typeof(ParseBenchmarkConfig))]
+[Config(typeof(PolyBenchmarkConfig))]
 [MemoryDiagnoser]
 public class ParseBenchmarks {
     /// <summary>
     /// The only list of the 10 DSL documents in this project. It is a third copy of the catalog
     /// (after <c>GoldenDomains</c> and its test), tied back to the golden set by the test that reads
-    /// this run's CSV: its <c>dsl/</c> rows must equal <c>GoldenDomains.Compilable</c>.
+    /// this run's CSV and by the smoke test that compares it to <c>GoldenDomains.Compilable</c>.
     /// </summary>
-    private static readonly string[] DslPaths = [
+    public static IReadOnlyList<string> DslPaths { get; } = [
         "docs/probes/fleet-eval/09-transport/warehouse.poly",
         "docs/probes/fleet-eval/09-transport/orders.poly",
         "docs/probes/fleet-eval/09-transport/clinic.poly",
@@ -96,8 +92,8 @@ public class ParseBenchmarks {
         entry.Session ?? throw new InvalidOperationException($"{entry} has no session; only DSL entries carry one.");
 
     private static ParseCorpusEntry LoadDsl(string relativePath) {
-        var fullPath = Path.Combine(RepoRoot(), relativePath);
-        var text = ReadText(relativePath, fullPath);
+        var fullPath = Path.Combine(BenchmarkSupport.RepoRoot(), relativePath);
+        var text = BenchmarkSupport.ReadText(relativePath, fullPath);
         if (string.IsNullOrWhiteSpace(text))
             throw new InvalidOperationException($"Parse corpus document '{relativePath}' is empty ({fullPath}).");
 
@@ -115,7 +111,7 @@ public class ParseBenchmarks {
     }
 
     private static ParseCorpusEntry LoadCSharp() {
-        var root = Path.Combine(RepoRoot(), "Poly.Tests", "DomainModeling", "Compile", "EmitGolden");
+        var root = Path.Combine(BenchmarkSupport.RepoRoot(), "Poly.Tests", "DomainModeling", "Compile", "EmitGolden");
         if (!Directory.Exists(root))
             throw new InvalidOperationException($"C# golden corpus directory is missing ({root}).");
         var paths = Directory
@@ -127,8 +123,8 @@ public class ParseBenchmarks {
 
         var documents = new string[paths.Length];
         for (var i = 0; i < paths.Length; i++) {
-            var relativePath = Path.GetRelativePath(RepoRoot(), paths[i]);
-            documents[i] = ReadText(relativePath, paths[i]);
+            var relativePath = Path.GetRelativePath(BenchmarkSupport.RepoRoot(), paths[i]);
+            documents[i] = BenchmarkSupport.ReadText(relativePath, paths[i]);
             if (string.IsNullOrWhiteSpace(documents[i]))
                 throw new InvalidOperationException($"C# golden '{relativePath}' is empty ({paths[i]}).");
             try {
@@ -143,21 +139,6 @@ public class ParseBenchmarks {
         return new ParseCorpusEntry("csharp", "golden", documents, Session: null);
     }
 
-    private static string ReadText(string relativePath, string fullPath) {
-        if (!File.Exists(fullPath))
-            throw new InvalidOperationException($"Parse corpus document '{relativePath}' does not exist ({fullPath}).");
-        try {
-            return File.ReadAllText(fullPath);
-        }
-        catch (IOException exception) {
-            throw new InvalidOperationException(
-                $"Parse corpus document '{relativePath}' cannot be read ({fullPath}): {exception.Message}", exception);
-        }
-    }
-
-    /// <summary>This checkout's root: the parent of the directory holding this file at build time.</summary>
-    private static string RepoRoot([CallerFilePath] string sourceFile = "") =>
-        Path.GetFullPath(Path.Combine(Path.GetDirectoryName(sourceFile)!, ".."));
 }
 
 /// <summary>
@@ -170,26 +151,4 @@ public sealed record ParseCorpusEntry(
     IReadOnlyList<string> Documents,
     DomainSession? Session) {
     public override string ToString() => $"{Corpus}/{Name}";
-}
-
-/// <summary>
-/// Pins the CSV export the committed baseline is copied from: comma-separated invariant culture,
-/// units in the header, bytes and nanoseconds, and a 40-character parameter column so no
-/// <c>dsl/</c> key is trimmed (BenchmarkDotNet trims past 20 otherwise).
-/// </summary>
-public sealed class ParseBenchmarkConfig : ManualConfig {
-    /// <summary>The style the console table and the exported CSV columns share.</summary>
-    public static SummaryStyle Style { get; } = new(
-        cultureInfo: CultureInfo.InvariantCulture,
-        printUnitsInHeader: true,
-        sizeUnit: SizeUnit.B,
-        timeUnit: TimeUnit.Nanosecond,
-        printUnitsInContent: false,
-        maxParameterColumnWidth: 40);
-
-    public ParseBenchmarkConfig() {
-        AddExporter(new CsvExporter(CsvSeparator.Comma, Style));
-        HideColumns(Column.Job, Column.Runtime, Column.EnvironmentVariables);
-        WithSummaryStyle(Style);
-    }
 }

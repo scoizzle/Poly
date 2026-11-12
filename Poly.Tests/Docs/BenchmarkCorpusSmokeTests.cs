@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 
+using Poly.Benchmarks;
 using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Docs;
@@ -109,8 +110,6 @@ public sealed class BenchmarkCorpusSmokeTests {
     internal static string CSharpGoldenDirectory =>
         Path.Combine(GoldenDomains.RepoRoot, "Poly.Tests", "DomainModeling", "Compile", "EmitGolden");
 }
-
-/// <summary>One data row of the committed parse baseline.</summary>
 internal sealed record ParseBaselineRow(string Method, string Entry, double Mean, double Allocated);
 
 /// <summary>

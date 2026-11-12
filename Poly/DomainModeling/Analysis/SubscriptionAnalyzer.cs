@@ -256,6 +256,26 @@ internal sealed class SubscriptionAnalyzer : INodeAnalyzer {
             }
         }
 
+        // ── Never-entered stages (#616): syntactic, not reachability ──
+        // Only stages that exist on the target (a missing one is already DMSS003 above).
+        var initialName = targetEntity.InitialStage()?.Name;
+        var neverEntered = subscription.StageNames
+            .Distinct(StringComparer.Ordinal)
+            .Where(n => targetEntity.Stages.Any(s => string.Equals(s.Name, n, StringComparison.Ordinal))
+                && !string.Equals(n, initialName, StringComparison.Ordinal)
+                && !EntityStructureAnalyzer.TransitionsTo(targetEntity, n))
+            .ToList();
+        if (neverEntered.Count > 0) {
+            var names = string.Join(", ", neverEntered.Select(n => $"'{n}'"));
+            context.ReportWarning(
+                subscription,
+                $"Stage subscription '{subscription.RelationshipName}' watches {names} on entity " +
+                $"'{targetEntity.Name}', but nothing transitions into {(neverEntered.Count == 1 ? "that stage" : "those stages")} " +
+                $"and {(neverEntered.Count == 1 ? "it is" : "none is")} the initial stage ('{initialName}') — " +
+                "this handler can never fire.",
+                DomainModelDiagnosticCodes.SubscriptionToNeverEnteredStage);
+        }
+
         // ── Quantifier vs cardinality (fail-closed: reject, don't warn) ──
         bool isSingularFromSource = relationship.Cardinality is RelationshipCardinality.OneToOne
                                                          or RelationshipCardinality.ManyToOne;

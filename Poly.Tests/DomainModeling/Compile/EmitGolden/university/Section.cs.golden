@@ -11,12 +11,12 @@ public class Section
 {
     private List<Enrollment> _enrollments = new List<Enrollment>();
     private List<WaitOffer> _waitlist = new List<WaitOffer>();
-    private Section(long cap, Term offeringTerm, Course? course = null, Instructor? instructor = null, IEnumerable<Enrollment>? enrollments = null, IEnumerable<WaitOffer>? waitlist = null, long offeredSeats = 0L, long seatsTaken = 0L, long waitCleared = 0L)
+    private Section(long cap, Term offeringTerm, Course? course = null, Instructor? instructor = null, IEnumerable<Enrollment>? enrollments = null, IEnumerable<WaitOffer>? waitlist = null, long seatsTaken = 0L, long offeredSeats = 0L, long waitCleared = 0L)
     {
         this.Cap = cap;
         this.OfferingTerm = offeringTerm;
-        this.OfferedSeats = offeredSeats;
         this.SeatsTaken = seatsTaken;
+        this.OfferedSeats = offeredSeats;
         this.WaitCleared = waitCleared;
         this.Course = course;
         this.Instructor = instructor;
@@ -26,9 +26,9 @@ public class Section
         this.InitializeSubscriptions();
     }
     public long Cap { get; private set; }
-    public long OfferedSeats { get; private set; }
-    public Term OfferingTerm { get; private set; }
     public long SeatsTaken { get; private set; }
+    public Term OfferingTerm { get; private set; }
+    public long OfferedSeats { get; private set; }
     public long WaitCleared { get; private set; }
     public Course? Course { get; private set; }
     public Instructor? Instructor { get; private set; }
@@ -168,7 +168,7 @@ public class Section
         }
         this.WaitCleared = 1L;
     }
-    public static DomainResult<Section> Create(long cap, Term offeringTerm, Course? course = null, Instructor? instructor = null, IEnumerable<Enrollment>? enrollments = null, IEnumerable<WaitOffer>? waitlist = null, long offeredSeats = 0L, long seatsTaken = 0L, long waitCleared = 0L)
+    public static DomainResult<Section> Create(long cap, Term offeringTerm, Course? course = null, Instructor? instructor = null, IEnumerable<Enrollment>? enrollments = null, IEnumerable<WaitOffer>? waitlist = null, long seatsTaken = 0L, long offeredSeats = 0L, long waitCleared = 0L)
     {
         if (cap < 1L)
         {
@@ -186,7 +186,7 @@ public class Section
         {
             return DomainResult<Section>.Failure(string.Concat("'", offeringTerm, "' is not a valid member of Term for property 'OfferingTerm'."));
         }
-        var created = new Section(cap, offeringTerm, course, instructor, enrollments, waitlist, offeredSeats, seatsTaken, waitCleared);
+        var created = new Section(cap, offeringTerm, course, instructor, enrollments, waitlist, seatsTaken, offeredSeats, waitCleared);
         return DomainResult<Section>.Success(created);
     }
     private void InitializeSubscriptions()

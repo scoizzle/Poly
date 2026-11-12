@@ -15,23 +15,23 @@ public class EventHold
 {
     private List<Guest>? _guestEventsReleasedSubscribers;
     private int _notifyDepth;
-    private EventHold(long capacity, decimal dayRate, DateOnly endDate, long headcount, DateOnly startDate, Guest? guest = null, Hall? hall = null, Section? section = null)
+    private EventHold(long headcount, long capacity, decimal dayRate, DateOnly startDate, DateOnly endDate, Guest? guest = null, Hall? hall = null, Section? section = null)
     {
+        this.Headcount = headcount;
         this.Capacity = capacity;
         this.DayRate = dayRate;
-        this.EndDate = endDate;
-        this.Headcount = headcount;
         this.StartDate = startDate;
+        this.EndDate = endDate;
         this.Guest = guest;
         this.Hall = hall;
         this.Section = section;
         this.CurrentStage = EventHoldStage.Requested;
     }
+    public long Headcount { get; private set; }
     public long Capacity { get; private set; }
     public decimal DayRate { get; private set; }
-    public DateOnly EndDate { get; private set; }
-    public long Headcount { get; private set; }
     public DateOnly StartDate { get; private set; }
+    public DateOnly EndDate { get; private set; }
     public Guest? Guest { get; private set; }
     public Hall? Hall { get; private set; }
     public Section? Section { get; private set; }
@@ -202,8 +202,16 @@ public class EventHold
             this.ExitNotifyCascade();
         }
     }
-    public static DomainResult<EventHold> Create(long capacity, decimal dayRate, DateOnly endDate, long headcount, DateOnly startDate, Guest? guest = null, Hall? hall = null, Section? section = null)
+    public static DomainResult<EventHold> Create(long headcount, long capacity, decimal dayRate, DateOnly startDate, DateOnly endDate, Guest? guest = null, Hall? hall = null, Section? section = null)
     {
+        if (headcount < 1L)
+        {
+            return DomainResult<EventHold>.Failure("'Headcount' must be >= 1.");
+        }
+        if (headcount > 5000L)
+        {
+            return DomainResult<EventHold>.Failure("'Headcount' must be <= 5000.");
+        }
         if (capacity < 1L)
         {
             return DomainResult<EventHold>.Failure("'Capacity' must be >= 1.");
@@ -220,15 +228,7 @@ public class EventHold
         {
             return DomainResult<EventHold>.Failure("'DayRate' must be <= 100000.");
         }
-        if (headcount < 1L)
-        {
-            return DomainResult<EventHold>.Failure("'Headcount' must be >= 1.");
-        }
-        if (headcount > 5000L)
-        {
-            return DomainResult<EventHold>.Failure("'Headcount' must be <= 5000.");
-        }
-        var created = new EventHold(capacity, dayRate, endDate, headcount, startDate, guest, hall, section);
+        var created = new EventHold(headcount, capacity, dayRate, startDate, endDate, guest, hall, section);
         if (guest != null)
         {
             guest.AttachEvents(created);

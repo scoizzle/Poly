@@ -14,20 +14,20 @@ public class Order
 {
     private List<OrderItem> _items = new List<OrderItem>();
     private Order() { }
-    private Order(decimal discount, decimal total, string cancelReason = "", Customer? customer = null, IEnumerable<OrderItem>? items = null, OrderState state = OrderState.Pending)
+    private Order(decimal total, decimal discount, string cancelReason = "", Customer? customer = null, IEnumerable<OrderItem>? items = null, OrderState state = OrderState.Pending)
     {
-        this.Discount = discount;
         this.Total = total;
+        this.Discount = discount;
         this.CancelReason = cancelReason;
         this.State = state;
         this.Customer = customer;
         this._items = new List<OrderItem>(items ?? new List<OrderItem>());
         this.CurrentStage = OrderStage.Pending;
     }
-    public string CancelReason { get; private set; } = default!;
+    public decimal Total { get; private set; }
     public decimal Discount { get; private set; }
     public OrderState State { get; private set; }
-    public decimal Total { get; private set; }
+    public string CancelReason { get; private set; } = default!;
     public Customer? Customer { get; private set; }
     public IReadOnlyList<OrderItem> Items
     {
@@ -89,15 +89,15 @@ public class Order
         return DomainResult.Success();
     }
     public bool IsPaid() => this.State == OrderState.Paid;
-    public static DomainResult<Order> Create(decimal discount, decimal total, string cancelReason = "", Customer? customer = null, IEnumerable<OrderItem>? items = null, OrderState state = OrderState.Pending)
+    public static DomainResult<Order> Create(decimal total, decimal discount, string cancelReason = "", Customer? customer = null, IEnumerable<OrderItem>? items = null, OrderState state = OrderState.Pending)
     {
-        if (string.IsNullOrEmpty(cancelReason))
+        if (total < 0m)
         {
-            return DomainResult<Order>.Failure("'CancelReason' is required.");
+            return DomainResult<Order>.Failure("'Total' must be >= 0.");
         }
-        if (cancelReason.Length > 200L)
+        if (total > 100000m)
         {
-            return DomainResult<Order>.Failure("'CancelReason' must be at most 200 characters.");
+            return DomainResult<Order>.Failure("'Total' must be <= 100000.");
         }
         if (discount < 0m)
         {
@@ -111,15 +111,15 @@ public class Order
         {
             return DomainResult<Order>.Failure(string.Concat("'", state, "' is not a valid member of OrderState for property 'State'."));
         }
-        if (total < 0m)
+        if (string.IsNullOrEmpty(cancelReason))
         {
-            return DomainResult<Order>.Failure("'Total' must be >= 0.");
+            return DomainResult<Order>.Failure("'CancelReason' is required.");
         }
-        if (total > 100000m)
+        if (cancelReason.Length > 200L)
         {
-            return DomainResult<Order>.Failure("'Total' must be <= 100000.");
+            return DomainResult<Order>.Failure("'CancelReason' must be at most 200 characters.");
         }
-        var created = new Order(discount, total, cancelReason, customer, items, state);
+        var created = new Order(total, discount, cancelReason, customer, items, state);
         if (customer != null)
         {
             customer.AttachOrders(created);

@@ -1570,7 +1570,8 @@ internal sealed class DslTool(ISessionStore store, ILogger<DslTool> logger) {
                 Revision: state.Revision,
                 Affordances: ["get_relationships", "get_domain_overview"]);
 
-        var printer = new DomainDslPrinter(state.Modeling);
+        // Not Options.ImplicitIds: apply_dsl replaces Modeling with a session seeded from the previous extensions.
+        var printer = new DomainDslPrinter(state.Modeling, ProductCatalog.ImplicitIds);
         var polyText = printer.Print(state.Domain);
 
         return new DomainToolResponse(

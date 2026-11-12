@@ -25,6 +25,7 @@ public sealed partial class DomainDslPrinter {
     private readonly AnnotationRegistry? _annotations;
     private readonly ExpressionPrintRegistry _expressionBinders = new();
     private readonly Printer<DslToken, DslTokenKind> _printTable;
+    private readonly IReadOnlyList<string> _implicitIds = [];
 
     /// <summary>Creates a printer with the default (empty) session.</summary>
     public DomainDslPrinter() : this(DomainSession.ForExtensions([])) {
@@ -38,6 +39,15 @@ public sealed partial class DomainDslPrinter {
         new ExpressionFormRegistry().ContributePrintMappings(_expressionBinders);
         CoreExpressionPrintBinders.Register(_expressionBinders);
         _printTable = language.Printer;
+    }
+
+    /// <summary>
+    /// Creates a printer that omits the <c>uses</c> block when the domain's extension list equals
+    /// <paramref name="implicitIds"/> (the set a document that lists no <c>uses</c> is seeded with).
+    /// </summary>
+    public DomainDslPrinter(DomainSession session, IReadOnlyList<string> implicitIds) : this(session) {
+        ArgumentNullException.ThrowIfNull(implicitIds);
+        _implicitIds = implicitIds;
     }
 
     public DomainDslPrinter(DomainSession session) {
@@ -59,9 +69,7 @@ public sealed partial class DomainDslPrinter {
             "document",
             "header",
             fills: new Dictionary<string, string>(StringComparer.Ordinal) { ["name"] = domain.Name }));
-        foreach (var extensionId in domain.Extensions) {
-            if (string.Equals(extensionId, ExtensionCatalog.TemporalId, StringComparison.Ordinal))
-                continue;
+        foreach (var extensionId in UsesToPrint(domain)) {
             var seeded = domain.ImportedContracts.FirstOrDefault(contract =>
                 string.Equals(contract.UsesId, extensionId, StringComparison.Ordinal));
             if (seeded?.Pin is { Length: > 0 } pin) {
@@ -116,6 +124,21 @@ public sealed partial class DomainDslPrinter {
         }
 
         return _sb.ToString().TrimEnd() + "\n";
+    }
+
+    // Interim (until C stops recording implicit ids in Domain.Extensions): a document that lists no
+    // `uses` is seeded with the implicit set, so an extension list equal to it (ordinal, `temporal`
+    // aside) reads back identically without the lines and is not printed. A pinned `uses <id> <v>`
+    // is authored, never seeded, so it always prints.
+    private IEnumerable<string> UsesToPrint(Domain domain) {
+        var extensions = domain.Extensions
+            .Where(id => !string.Equals(id, ExtensionCatalog.TemporalId, StringComparison.Ordinal))
+            .ToList();
+        var implicitIds = _implicitIds
+            .Where(id => !string.Equals(id, ExtensionCatalog.TemporalId, StringComparison.Ordinal));
+        var anyPinned = domain.ImportedContracts.Any(c =>
+            c.Pin is { Length: > 0 } && c.UsesId is not null && extensions.Contains(c.UsesId, StringComparer.Ordinal));
+        return !anyPinned && extensions.SequenceEqual(implicitIds, StringComparer.Ordinal) ? [] : extensions;
     }
 
     // The parser reads a bare identifier or a string literal here; anything the scanner would

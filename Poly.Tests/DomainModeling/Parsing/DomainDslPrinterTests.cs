@@ -4,6 +4,7 @@ using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Ontology;
+using Poly.Packs.Product;
 
 namespace Poly.Tests.DomainModeling.Parsing;
 
@@ -282,5 +283,80 @@ public sealed class DomainDslPrinterTests {
         var e2 = reparsed.Root.Types.OfType<Entity>().Single();
         await Assert.That(string.Join(",", EntityDeclarationOrder.Members(e2).Select(m => m.Kind.ToString())))
             .IsEqualTo(string.Join(",", EntityDeclarationOrder.Members(bare).Select(m => m.Kind.ToString())));
+    }
+
+    private static string PrintWithImplicitSet(string poly) {
+        var session = DomainSession.ForDocument(DslSyntaxTree.Parse(poly), ProductCatalog.ImplicitIds, ProductCatalog.Model);
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], []))
+            .ApplyAndAnalyze(
+                DomainCompilation.WithSeed(new PolyDslParser(poly, session).Parse(), ProductCatalog.ImplicitIds, session),
+                session: session);
+        if (!result.Succeeded)
+            throw new InvalidOperationException(result.FailureSummary);
+        return new DomainDslPrinter(session, ProductCatalog.ImplicitIds).Print(result.Root);
+    }
+
+    private static IReadOnlyList<string> UsesLines(string text) =>
+        [.. text.Split('\n').Where(l => l.StartsWith("uses ", StringComparison.Ordinal))];
+
+    [Test]
+    public async Task Print_DoesNotAddUsesStorage_WhenDocumentDidNotDeclareIt() {
+        var text = PrintWithImplicitSet("""
+            domain T
+            E: entity {
+              N: Number
+            }
+            """);
+
+        await Assert.That(UsesLines(text).Count).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task Print_KeepsAuthoredUses_WhenDifferentFromImplicitSet() {
+        var text = PrintWithImplicitSet("""
+            domain T
+            uses persistence
+            uses http
+            uses storage
+            E: entity {
+              N: Number
+            }
+            """);
+
+        await Assert.That(string.Join("|", UsesLines(text))).IsEqualTo("uses persistence|uses http|uses storage");
+    }
+
+    [Test]
+    public async Task Print_AuthoredUsesInReverseOfImplicitSet_StaysPrinted() {
+        var text = PrintWithImplicitSet("""
+            domain T
+            uses persistence
+            uses storage
+            E: entity {
+              N: Number
+            }
+            """);
+
+        await Assert.That(string.Join("|", UsesLines(text))).IsEqualTo("uses persistence|uses storage");
+    }
+
+    [Test]
+    public async Task Print_AuthoredUsesEqualToImplicitSet_IsOmitted_ModelEqual() {
+        const string poly = """
+            domain T
+            uses storage
+            uses persistence
+            E: entity {
+              N: Number
+            }
+            """;
+        var text = PrintWithImplicitSet(poly);
+
+        await Assert.That(UsesLines(text).Count).IsEqualTo(0);
+
+        var tree = DslSyntaxTree.Parse(poly);
+        var before = DomainSession.ForDocument(tree, ProductCatalog.ImplicitIds, ProductCatalog.Model);
+        var after = DomainSession.ForDocument(DslSyntaxTree.Parse(text), ProductCatalog.ImplicitIds, ProductCatalog.Model);
+        await Assert.That(string.Join(",", after.Extensions)).IsEqualTo(string.Join(",", before.Extensions));
     }
 }

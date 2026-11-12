@@ -269,8 +269,13 @@ internal static class ConstraintCheckWriter {
                 "marker: an analysis-derived relation between two properties (#367 A-6); policies lower the guard, not this fact"),
         };
 
-    /// <summary>One constraint record's check kinds, or the writer that owns its guard instead.</summary>
-    internal sealed record Coverage(IReadOnlyList<Kind> Kinds, string? Owner);
+    /// <summary>
+    /// One constraint record's check kinds, or the writer that owns its guard instead.
+    /// <see cref="Marker"/> says the record is a fact no guard can express (optionality,
+    /// a default, a derived relation), so no library has to compile it; a row with no
+    /// kinds and no marker names a writer, and needs that writer's library loaded.
+    /// </summary>
+    internal sealed record Coverage(IReadOnlyList<Kind> Kinds, string? Owner, bool Marker = false);
 
     /// <summary>The checks this writer emits for <paramref name="constraint"/>, empty when another writer owns it.</summary>
     internal static IReadOnlyList<Kind> KindsFor(Constraint constraint) =>

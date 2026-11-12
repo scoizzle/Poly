@@ -113,7 +113,7 @@ public class StageEntryFactsTests {
     }
 
     [Test]
-    public async Task EntryAssignedProperties_IgnoresExitAndActionAssigns() {
+    public async Task EntryAssignedProperties_IgnoresNeverDepartedExitAndUninvokedActionAssigns() {
         var assigned = EntryAssigned("""
             domain ExitAndAction
             Order: entity {
@@ -287,12 +287,11 @@ public class StageEntryFactsTests {
         await Assert.That(skipped.Count).IsLessThanOrEqualTo(20);
     }
 
-    // N3 (known gap, characterized not fixed): the constructor inlines the initial entry, so an
-    // entry transition runs the departed stage's exit effects at create time. Q20 and the #681
-    // contract say OnEntry only, so this fact excludes them; S-14 and L-09 cannot rely on
-    // either answer until the owner rules. This test pins the current choice.
+    // N3 (flipped by S-04b, Q12 option (b)): the constructor inlines the initial entry, so an
+    // entry transition runs the departed stage's exit effects at create time, and the fact
+    // follows Lower's source cursor to include them.
     [Test]
-    public async Task EntryAssignedProperties_EntryTransition_ExcludesDepartedStageExitAssigns() {
+    public async Task EntryAssignedProperties_EntryTransition_InlinesDepartedStageExitAssigns() {
         var assigned = EntryAssigned("""
             domain DepartedExit
             Order: entity {
@@ -306,8 +305,7 @@ public class StageEntryFactsTests {
             }
             """, "Order");
 
-        await Assert.That(assigned).IsEquivalentTo(new[] { "M" }, StringComparer.Ordinal);
-        await Assert.That(assigned.Contains("X")).IsFalse();
+        await Assert.That(assigned).IsEquivalentTo(new[] { "M", "X" }, StringComparer.Ordinal);
     }
 
     private static bool IsBuildOutput(string root, string path) =>

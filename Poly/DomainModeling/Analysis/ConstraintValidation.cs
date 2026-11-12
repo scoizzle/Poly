@@ -94,10 +94,7 @@ internal static class ConstraintValidation {
         return $"range({lo}, {hi})";
     }
 
-    private static string FormatValue(object v) => v switch {
-        double d => d == Math.Floor(d) ? d.ToString("F0") : d.ToString("G"),
-        _ => v.ToString() ?? "?"
-    };
+    private static string FormatValue(object v) => v.ToString() ?? "?";
 
     // ── Individual constraint checks ──────────────────────────────────────
 

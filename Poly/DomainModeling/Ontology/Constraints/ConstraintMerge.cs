@@ -1,3 +1,5 @@
+using Poly.DomainModeling.Analysis;
+
 namespace Poly.DomainModeling.Ontology.Constraints;
 
 /// <summary>The outcome of intersecting two constraints of the same type.</summary>
@@ -234,15 +236,15 @@ public static class ConstraintMerge {
 
     /// <summary>
     /// Orders two range bounds, or <c>null</c> when they cannot be ordered. Same-type bounds use
-    /// that type's own ordering (decimal, long, DateTime... never rounded through double).
-    /// Two different numeric types fall back to double, as before; a bound of any
-    /// non-numeric type against a different type is not comparable (cannot decide).
+    /// that type's own ordering (decimal, long, DateTime...). Two different numeric types compare
+    /// exactly through <see cref="ExactNumber"/>, so a bound above 2^53 is never rounded; a bound
+    /// that is not exactly representable (a fractional <c>double</c>) is not comparable.
     /// </summary>
     internal static int? TryCompare(object x, object y) {
         if (x.GetType() == y.GetType())
             return x is IComparable c ? c.CompareTo(y) : null;
         if (IsNumeric(x) && IsNumeric(y))
-            return Convert.ToDouble(x).CompareTo(Convert.ToDouble(y));
+            return ExactNumber.Compare(x, y);
         return null;
     }
 

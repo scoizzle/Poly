@@ -69,6 +69,79 @@ public sealed class NameScopeTests {
     }
 
     [Test]
+    [Arguments("__Snapshot: Text", "__Snapshot")]
+    [Arguments("__Restore: Text", "__Restore")]
+    [Arguments("__x: Text", "__x")]
+    [Arguments("__scope: Number", "__scope")]
+    [Arguments("__Go: action { assign Z to \"a\" }\n  Z: Text", "__Go")]
+    [Arguments("__p: policy { Z is \"a\" }\n  Z: Text", "__p")]
+    [Arguments("__owner: Other", "__owner")]
+    public async Task MemberWithActionScopePrefix_IsReserved(string member, string name) {
+        var analysis = Analyze($$"""
+            domain Scope
+            Other: entity {
+              Tag: Text
+            }
+            A: entity {
+              {{member}}
+            }
+            """);
+
+        var errors = Errors(analysis, DomainModelDiagnosticCodes.ReservedMemberName);
+        await Assert.That(errors.Count).IsEqualTo(1);
+        await Assert.That(NodeName(errors[0])).IsEqualTo(name);
+        await Assert.That(errors[0].Message).Contains("names beginning `__` are the generated action-scope surface");
+    }
+
+    [Test]
+    public async Task ActionParameterWithActionScopePrefix_IsReserved() {
+        var analysis = Analyze("""
+            domain Scope
+            A: entity {
+              Z: Text
+              Go: action (__n: Text) { assign Z to __n }
+            }
+            """);
+
+        var errors = Errors(analysis, DomainModelDiagnosticCodes.ReservedMemberName);
+        await Assert.That(errors.Count).IsEqualTo(1);
+        await Assert.That(NodeName(errors[0])).IsEqualTo("__n");
+        await Assert.That(errors[0].Message).Contains("names beginning `__` are the generated action-scope surface");
+    }
+
+    [Test]
+    public async Task EmitterParity_ActionScopeSurface_IsClosedOverTheTwoSnapshotMembers() {
+        // Every emitted member beginning `__` is one of the two IActionScoped members; a new
+        // `__` name must be added here deliberately, with the prefix rule already covering it.
+        var evolved = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(
+            new PolyDslParser("""
+                domain Parity
+                Item: entity { Code: Text }
+                Group: entity {
+                  Label: Text
+                  items: many Item
+                  Add: action (code: Text) { create in items { Code: code } }
+                  Draft: stage { }
+                  Live: stage { entry { transition to Closed } }
+                  Closed: stage { }
+                }
+                """).Parse());
+        await Assert.That(evolved.Succeeded).IsTrue();
+        var domain = evolved.Root!;
+        var analysis = DomainModelAnalyzer.Analyze(domain);
+
+        foreach (var typeDef in DomainProgramProjection.ToSyntax(domain, analysis)
+            .Where(t => t.Kind != Poly.Introspection.TypeKind.Enum)) {
+            var emitted = new List<string>();
+            emitted.AddRange(typeDef.Properties?.Select(p => p.Name) ?? []);
+            emitted.AddRange(typeDef.Methods?.Select(m => m.Name) ?? []);
+            emitted.AddRange(typeDef.Fields?.Select(f => f.Name) ?? []);
+            var scopeNames = emitted.Where(ReservedNames.IsActionScopeName).Order(StringComparer.Ordinal);
+            await Assert.That(string.Join(",", scopeNames)).IsEqualTo("__Restore,__Snapshot");
+        }
+    }
+
+    [Test]
     public async Task MemberNamedCreate_IsError() {
         var analysis = Analyze("""
             domain Scope

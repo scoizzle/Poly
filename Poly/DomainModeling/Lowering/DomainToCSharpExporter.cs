@@ -172,16 +172,125 @@ public sealed partial class DomainToCSharpExporter {
         if (targetSubs is { Count: > 0 })
             AddNotifyCascadeDepthGuard(entity, fields, methods);
 
+        AddActionScopeMembers(props, fields, methods);
+
         typeDefs.Add(new TypeDefinitionNode(
             entity.Name,
             Constructors: ctors,
             Properties: props.Count > 0 ? props : null,
             Methods: methods.Count > 0 ? methods : null,
             Fields: fields.Count > 0 ? fields : null,
+            Interfaces: [new NamedTypeReference("Poly.Runtime.IActionScoped")],
             Semantics: Syntactic.TypeDefinitionSemantics.MutableReference
         ));
 
         return typeDefs;
+    }
+
+    /// <summary>
+    /// <c>Poly.Runtime.IActionScoped</c> (L-03, D3: implicit, so the two names sit in the entity's
+    /// declaration space under the reserved <c>__</c> prefix). The snapshot is one slot per piece of
+    /// instance state, in declaration order: auto properties, then fields. A list is captured as an
+    /// array and restored by clear and refill so its identity survives; a nullable list or set is
+    /// captured as null or a copy. Neither member calls the storage port.
+    /// </summary>
+    private static void AddActionScopeMembers(
+        List<PropertyDefinitionNode> props, List<FieldDefinitionNode> fields, List<MethodDefinitionNode> methods) {
+        var objectType = new ClrTypeReference(typeof(object));
+        var optionalObject = new OptionalTypeReference(objectType);
+        var slots = new List<ScopeSlot>();
+        foreach (var prop in props.Where(static p => p.Setter is not null && p.Getter?.Body is null && !p.IsStatic))
+            slots.Add(new ScopeSlot(prop.Name, prop.MemberType));
+        foreach (var field in fields.Where(static f => !f.IsStatic && !f.IsConst))
+            slots.Add(new ScopeSlot(field.Name, field.MemberType));
+
+        static Node Field(string name) => new Member(new ThisReference(), name);
+
+        var snapshotArray = new Variable("__state");
+        var snapshot = new List<Node> {
+            new Assignment(snapshotArray, new NewArray(optionalObject, new Constant(slots.Count)))
+        };
+        var stateParameter = new Parameter("state", objectType);
+        var savedArray = new Variable("__saved");
+        var restore = new List<Node> {
+            new Assignment(savedArray, new TypeCast(stateParameter, new CollectionTypeReference(optionalObject, CollectionKind.Array)))
+        };
+
+        for (var i = 0; i < slots.Count; i++) {
+            var (name, type) = slots[i];
+            Node Slot(Variable array) => new IndexAccess(array, new Constant(i));
+            Node SavedValue() => new NullForgiving(Slot(savedArray));
+
+            switch (ListElement(type, out var optionalList)) {
+                case { } element when optionalList: {
+                    var enumerable = new NamedTypeReference("IEnumerable", TypeArguments: [element]);
+                    snapshot.Add(new Assignment(Slot(snapshotArray), new Syntactic.Conditional(
+                        new Equal(Field(name), new Constant(null)),
+                        new Constant(null),
+                        new Invoke(new Member(Field(name), "ToArray")))));
+                    restore.Add(new IfStatement(
+                        new Equal(Slot(savedArray), new Constant(null)),
+                        new Assignment(Field(name), new Constant(null)),
+                        new Block(
+                            new IfStatement(
+                                new Equal(Field(name), new Constant(null)),
+                                new Assignment(Field(name), new New(new NamedTypeReference("List", TypeArguments: [element])))),
+                            new Invoke(new Member(Field(name), "Clear")),
+                            new Invoke(new Member(Field(name), "AddRange"), new TypeCast(SavedValue(), enumerable)))));
+                    break;
+                }
+                case { } element: {
+                    var enumerable = new NamedTypeReference("IEnumerable", TypeArguments: [element]);
+                    snapshot.Add(new Assignment(Slot(snapshotArray), new Invoke(new Member(Field(name), "ToArray"))));
+                    restore.Add(new Invoke(new Member(Field(name), "Clear")));
+                    restore.Add(new Invoke(new Member(Field(name), "AddRange"), new TypeCast(SavedValue(), enumerable)));
+                    break;
+                }
+                default: {
+                    if (IsOptionalSet(type, out var setType)) {
+                        var enumerable = new NamedTypeReference(
+                            "IEnumerable", TypeArguments: [new PrimitiveTypeReference(PrimType.String)]);
+                        snapshot.Add(new Assignment(Slot(snapshotArray), new Syntactic.Conditional(
+                            new Equal(Field(name), new Constant(null)),
+                            new Constant(null),
+                            new New(setType, Field(name)))));
+                        restore.Add(new Assignment(Field(name), new Syntactic.Conditional(
+                            new Equal(Slot(savedArray), new Constant(null)),
+                            new Constant(null),
+                            new New(setType, new TypeCast(SavedValue(), enumerable)))));
+                        break;
+                    }
+
+                    snapshot.Add(new Assignment(Slot(snapshotArray), Field(name)));
+                    restore.Add(new Assignment(Field(name), new TypeCast(SavedValue(), type)));
+                    break;
+                }
+            }
+        }
+
+        snapshot.Add(new Return(snapshotArray));
+        methods.Add(new MethodDefinitionNode(
+            "__Snapshot", objectType, Body: new Block(snapshot, [snapshotArray])));
+        methods.Add(new MethodDefinitionNode(
+            "__Restore", new TypeReference("void"), [stateParameter], new Block(restore, [savedArray])));
+    }
+
+    private readonly record struct ScopeSlot(string Name, Node Type);
+
+    /// <summary>The element type when <paramref name="type"/> is <c>List&lt;T&gt;</c> or <c>List&lt;T&gt;?</c>.</summary>
+    private static Node? ListElement(Node type, out bool optional) {
+        optional = type is OptionalTypeReference;
+        var inner = type is OptionalTypeReference opt ? opt.InnerType : type;
+        return inner is NamedTypeReference { TypeName: "List", TypeArguments: [var element] } ? element : null;
+    }
+
+    private static bool IsOptionalSet(Node type, out NamedTypeReference setType) {
+        if (type is OptionalTypeReference { InnerType: NamedTypeReference { TypeName: "HashSet" } set }) {
+            setType = set;
+            return true;
+        }
+        setType = null!;
+        return false;
     }
 
     // ── Type mapping ────────────────────────────────────────────

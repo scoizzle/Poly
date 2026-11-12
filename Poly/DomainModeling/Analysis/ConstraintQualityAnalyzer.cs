@@ -35,6 +35,7 @@ internal sealed class ConstraintQualityAnalyzer : INodeAnalyzer {
         ValidateRequiredAndOptional(context, property, constraints);
         ValidateRangeSatisfiability(context, property, constraints);
         ValidateLengthSatisfiability(context, property, constraints);
+        ValidatePatternWithinLength(context, property, constraints);
         ValidateEqualitySatisfiability(context, property, constraints);
         ValidateJointConstraintSatisfiability(context, property, constraints);
         ValidateConstraintTypeCompatibility(context, property, constraints);
@@ -304,6 +305,41 @@ internal sealed class ConstraintQualityAnalyzer : INodeAnalyzer {
                 property,
                 $"Property '{property.Name}' has a PatternConstraint but its type '{property.Type.TypeName}' does not resolve to a text type.",
                 DomainModelDiagnosticCodes.SemanticTypeCompatibility);
+        }
+    }
+
+    /// <summary>
+    /// #583: a pattern's length envelope can exclude its <c>length(...)</c> range. Patterns and
+    /// lengths merge separately, so the joint check never sees them together; compare the
+    /// computed <see cref="PatternShape"/> here. At most one report per property. An invalid
+    /// regex and a malformed length are already reported elsewhere, so neither is reread as a
+    /// contradiction.
+    /// </summary>
+    private static void ValidatePatternWithinLength(
+        AnalysisContext context, Property property, IReadOnlyList<Constraint> constraints) {
+        var patterns = constraints.OfType<PatternConstraint>().ToList();
+        if (patterns.Count == 0) return;
+
+        var lengths = constraints.OfType<LengthConstraint>().ToList();
+        if (lengths.Count == 0) return;
+
+        var resolved = context.GetMetadata<ResolvedTypeReferenceMetadata>(property.Type);
+        if (resolved?.Type is not PrimitiveType { Semantics: PrimitiveSemantics.Text }) return;
+
+        foreach (var pattern in patterns) {
+            var shape = PatternShape.Of(pattern.Pattern);
+            foreach (var length in lengths) {
+                if (length.MinLength < 0 || length.MinLength > length.MaxLength) continue;
+                if (!shape.ContradictsLength(length)) continue;
+
+                context.ReportError(
+                    property,
+                    $"Property '{property.Name}' has contradictory {ConstraintValidation.Describe(length)} " +
+                    $"and {ConstraintValidation.Describe(pattern)} constraints: " +
+                    "no non-null value satisfies both — unsatisfiable.",
+                    DomainModelDiagnosticCodes.ConstraintSatisfiability);
+                return;
+            }
         }
     }
 }

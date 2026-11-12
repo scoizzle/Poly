@@ -26,7 +26,8 @@ public sealed class McpPackSharedInputsTests {
         var poly = exported.Data!.GetType().GetProperty("poly")?.GetValue(exported.Data) as string;
         await Assert.That(poly).IsNotNull();
         await Assert.That(poly!.Contains("uses temporal", StringComparison.Ordinal)).IsFalse();
-        await Assert.That(poly!).Contains("uses storage");
+        await Assert.That(poly!).DoesNotContain("uses storage");
+        await Assert.That(poly!).DoesNotContain("uses persistence");
         await Assert.That(poly!).Contains("Due < Now");
     }
 }

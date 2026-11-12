@@ -301,4 +301,33 @@ public sealed class ExportOrderTests {
         await Assert.That(ShapePaths(shacl, "Money"))
             .IsEquivalentTo(new[] { "Zed", "Abe" }, CollectionOrdering.Matching);
     }
+
+    /// <summary>
+    /// D-01 carry: a navigation declared between two properties stays between them in every
+    /// property-and-navigation projection. Fails if <c>EntityDeclarationOrder.Members</c> stops
+    /// walking <c>MemberOrder</c>, because the per-list fallback is properties then navigations.
+    /// </summary>
+    [Test]
+    public async Task Projections_NavigationBetweenProperties_StaysInterleaved() {
+        var domain = EvolvedDomain.FromDsl("""
+            domain Shop
+            Line: entity {
+              Qty: Number
+            }
+            Order: entity {
+              Total: Number
+              lines: many Line
+              Note: Text
+            }
+            """).Domain;
+        string[] expected = ["Total", "lines", "Note"];
+
+        var schema = JsonNode.Parse(JsonSchemaExporter.Export(domain))!["$defs"]!;
+        var jsonLd = JsonLdExporter.Export(domain);
+        var shacl = ShaclExporter.Export(domain);
+
+        await Assert.That(Keys(schema["Order"]!["properties"])).IsEquivalentTo(expected, CollectionOrdering.Matching);
+        await Assert.That(LdPropertyNames(jsonLd, "Order")).IsEquivalentTo(expected, CollectionOrdering.Matching);
+        await Assert.That(ShapePaths(shacl, "Order")).IsEquivalentTo(expected, CollectionOrdering.Matching);
+    }
 }

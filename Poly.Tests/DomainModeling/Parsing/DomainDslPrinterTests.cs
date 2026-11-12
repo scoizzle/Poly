@@ -1,4 +1,10 @@
+using Poly.DomainModeling;
+using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Compile;
+using Poly.DomainModeling.Evolution;
+using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Ontology;
+using Poly.Packs.Product;
 
 namespace Poly.Tests.DomainModeling.Parsing;
 
@@ -116,5 +122,280 @@ public sealed class DomainDslPrinterTests {
             """;
         var changes = new PolyDslParser(poly).Parse();
         await Assert.That(changes.Count > 0).IsTrue();
+    }
+
+    private const string InterleavedDsl = """
+        domain Orders
+        Customer: entity {
+          Name: Text
+        }
+        Order: entity {
+          Id: Text
+          Status: stage { }
+          Total: Number
+          Submit: action { }
+          Valid: policy { Total > 0 }
+          customer: Customer
+        }
+        """;
+
+    private static (EvolutionResult Result, string Text) Generate(string poly) {
+        var session = DomainSession.ForDocument(DslSyntaxTree.Parse(poly), []);
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], []))
+            .ApplyAndAnalyze(new PolyDslParser(poly, session).Parse(), session: session);
+        if (!result.Succeeded)
+            throw new InvalidOperationException(result.FailureSummary);
+        return (result, new DomainDslPrinter(session).Print(result.Root));
+    }
+
+    /// <summary>The names of the member lines at one indent level inside <paramref name="entityName"/>'s body.</summary>
+    private static IReadOnlyList<string> MemberNames(string text, string entityName) {
+        var lines = text.Split('\n');
+        var start = Array.FindIndex(lines, l =>
+            l.StartsWith(entityName + ":", StringComparison.Ordinal)
+            || l.StartsWith("public entity " + entityName + " ", StringComparison.Ordinal));
+        var names = new List<string>();
+        for (var i = start + 1; i < lines.Length && lines[i] != "}"; i++) {
+            var line = lines[i];
+            if (line.Length < 3 || line[0] != ' ' || line[1] != ' ' || line[2] == ' ')
+                continue;
+            var end = line.IndexOf(':', 2);
+            if (end > 0)
+                names.Add(line[2..end]);
+        }
+        return names;
+    }
+
+    private static IReadOnlyList<string> EntityOrder(string text) =>
+        [.. text.Split('\n').Where(l => l.Length > 0 && l[0] != ' ' && l[0] != '}' && l.Contains("entity", StringComparison.Ordinal))
+            .Select(l => l.StartsWith("public entity ", StringComparison.Ordinal)
+                ? l["public entity ".Length..].Split(' ')[0]
+                : l[..l.IndexOf(':')])];
+
+    [Test]
+    public async Task Print_KeepsEntityAndMemberDeclarationOrder() {
+        const string zedAlpha = """
+            domain D
+            Zed: entity {
+              Name: Text
+            }
+            Alpha: entity {
+              Zed1: Text
+              mgr: Zed
+              buddy: Alpha
+              Age: Number
+            }
+            """;
+        var (result, text) = Generate(zedAlpha);
+
+        await Assert.That(string.Join(",", EntityOrder(text))).IsEqualTo("Zed,Alpha");
+        await Assert.That(string.Join(",", MemberNames(text, "Alpha"))).IsEqualTo("Zed1,mgr,buddy,Age");
+
+        var alpha = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Alpha");
+        var before = result.Analysis.GetStructure(alpha)!.ConstructorParameters.Select(p => p.Name).ToList();
+        var (reparsed, _) = Generate(text);
+        var alpha2 = reparsed.Root.Types.OfType<Entity>().Single(e => e.Name == "Alpha");
+        var after = reparsed.Analysis.GetStructure(alpha2)!.ConstructorParameters.Select(p => p.Name).ToList();
+
+        await Assert.That(string.Join(",", after)).IsEqualTo(string.Join(",", before));
+    }
+
+    [Test]
+    public async Task Print_EntityMembers_FollowDeclarationOrder() {
+        const string second = """
+            domain Orders
+            Customer: entity {
+              Name: Text
+            }
+            Order: entity {
+              Id: Text
+              Status: stage { }
+              Total: Number
+              Submit: action { }
+              Valid: policy { Total > 0 }
+              customer: Customer
+            }
+            Thing: entity {
+              Guard: policy { Size > 0 }
+              Size: Number
+              Open: stage { }
+              Close: action { }
+            }
+            """;
+        var (_, text) = Generate(second);
+
+        await Assert.That(string.Join(",", MemberNames(text, "Order"))).IsEqualTo("Id,Status,Total,Submit,Valid,customer");
+        await Assert.That(string.Join(",", MemberNames(text, "Thing"))).IsEqualTo("Guard,Size,Open,Close");
+    }
+
+    [Test]
+    public async Task Print_EnumsValueTypesAndEntities_KeepModelOrder() {
+        const string poly = """
+            domain D
+            Zeta: enum { A, B }
+            Alpha: enum { C, D }
+            Zv: value {
+              X: Number
+            }
+            Av: value {
+              Y: Number
+            }
+            Zent: entity {
+              N: Number
+            }
+            Aent: entity {
+              M: Number
+            }
+            """;
+        var (result, text) = Generate(poly);
+
+        var enumOrder = text.IndexOf("Zeta", StringComparison.Ordinal) < text.IndexOf("Alpha", StringComparison.Ordinal);
+        var valueOrder = text.IndexOf("Zv", StringComparison.Ordinal) < text.IndexOf("Av", StringComparison.Ordinal);
+        var entityOrder = text.IndexOf("Zent", StringComparison.Ordinal) < text.IndexOf("Aent", StringComparison.Ordinal);
+
+        await Assert.That(enumOrder).IsTrue();
+        await Assert.That(valueOrder).IsTrue();
+        await Assert.That(entityOrder).IsTrue();
+        await Assert.That(result.Root.ContractBindings.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task Print_ContractsAndBindings_KeepModelOrder() {
+        var (_, text) = Generate("""
+            domain D
+            Zed: contract internal zed v1 {
+              ZReq: value {
+                Amount: Number
+              }
+              Charge: outbound operation ZReq
+            }
+            Alpha: contract internal alpha v1 {
+              AReq: value {
+                Amount: Number
+              }
+              Charge: outbound operation AReq
+            }
+            Deal: entity {
+              Amount: Number
+              Active: stage {
+                PayZ: action (request: ZReq) {
+                  assign Amount to Amount
+                }
+                PayA: action (request: AReq) {
+                  assign Amount to Amount
+                }
+              }
+            }
+            ZedBind: bind Zed Charge to PayZ request
+            AlphaBind: bind Alpha Charge to PayA request
+            """);
+
+        await Assert.That(text.IndexOf("Zed: contract", StringComparison.Ordinal)).IsGreaterThan(-1);
+        await Assert.That(text.IndexOf("Zed: contract", StringComparison.Ordinal))
+            .IsLessThan(text.IndexOf("Alpha: contract", StringComparison.Ordinal));
+        await Assert.That(text.IndexOf("ZedBind:", StringComparison.Ordinal)).IsGreaterThan(-1);
+        await Assert.That(text.IndexOf("ZedBind:", StringComparison.Ordinal))
+            .IsLessThan(text.IndexOf("AlphaBind:", StringComparison.Ordinal));
+    }
+
+    [Test]
+    public async Task Print_EntityWithEmptyMemberOrder_FallsBackToListOrder() {
+        var (parsed, _) = Generate("""
+            domain T
+            E: entity {
+              Size: Number
+              Open: stage { }
+              Close: action
+                require Big
+              { }
+              Big: policy { Size > 0 }
+            }
+            """);
+        var source = parsed.Root.Types.OfType<Entity>().Single();
+        var bare = source with { MemberOrder = [] };
+        var text = new DomainDslPrinter().Print(new Domain("T", [bare]));
+
+        var reparsed = new DomainEvolution(DomainTestFactory.Create("_", [], []))
+            .Apply(new PolyDslParser(text).Parse());
+
+        await Assert.That(reparsed.Succeeded).IsTrue().Because(reparsed.FailureSummary ?? "");
+        var e2 = reparsed.Root.Types.OfType<Entity>().Single();
+        await Assert.That(string.Join(",", EntityDeclarationOrder.Members(e2).Select(m => m.Kind.ToString())))
+            .IsEqualTo(string.Join(",", EntityDeclarationOrder.Members(bare).Select(m => m.Kind.ToString())));
+    }
+
+    private static string PrintWithImplicitSet(string poly) {
+        var session = DomainSession.ForDocument(DslSyntaxTree.Parse(poly), ProductCatalog.ImplicitIds, ProductCatalog.Model);
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], []))
+            .ApplyAndAnalyze(
+                DomainCompilation.WithSeed(new PolyDslParser(poly, session).Parse(), ProductCatalog.ImplicitIds, session),
+                session: session);
+        if (!result.Succeeded)
+            throw new InvalidOperationException(result.FailureSummary);
+        return new DomainDslPrinter(session, ProductCatalog.ImplicitIds).Print(result.Root);
+    }
+
+    private static IReadOnlyList<string> UsesLines(string text) =>
+        [.. text.Split('\n').Where(l => l.StartsWith("uses ", StringComparison.Ordinal))];
+
+    [Test]
+    public async Task Print_DoesNotAddUsesStorage_WhenDocumentDidNotDeclareIt() {
+        var text = PrintWithImplicitSet("""
+            domain T
+            E: entity {
+              N: Number
+            }
+            """);
+
+        await Assert.That(UsesLines(text).Count).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task Print_KeepsAuthoredUses_WhenDifferentFromImplicitSet() {
+        var text = PrintWithImplicitSet("""
+            domain T
+            uses persistence
+            uses http
+            uses storage
+            E: entity {
+              N: Number
+            }
+            """);
+
+        await Assert.That(string.Join("|", UsesLines(text))).IsEqualTo("uses persistence|uses http|uses storage");
+    }
+
+    [Test]
+    public async Task Print_AuthoredUsesInReverseOfImplicitSet_StaysPrinted() {
+        var text = PrintWithImplicitSet("""
+            domain T
+            uses persistence
+            uses storage
+            E: entity {
+              N: Number
+            }
+            """);
+
+        await Assert.That(string.Join("|", UsesLines(text))).IsEqualTo("uses persistence|uses storage");
+    }
+
+    [Test]
+    public async Task Print_AuthoredUsesEqualToImplicitSet_IsOmitted_ModelEqual() {
+        const string poly = """
+            domain T
+            uses storage
+            uses persistence
+            E: entity {
+              N: Number
+            }
+            """;
+        var text = PrintWithImplicitSet(poly);
+
+        await Assert.That(UsesLines(text).Count).IsEqualTo(0);
+
+        var tree = DslSyntaxTree.Parse(poly);
+        var before = DomainSession.ForDocument(tree, ProductCatalog.ImplicitIds, ProductCatalog.Model);
+        var after = DomainSession.ForDocument(DslSyntaxTree.Parse(text), ProductCatalog.ImplicitIds, ProductCatalog.Model);
+        await Assert.That(string.Join(",", after.Extensions)).IsEqualTo(string.Join(",", before.Extensions));
     }
 }

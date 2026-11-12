@@ -209,6 +209,49 @@ public sealed class ContractContributionTests {
     }
 
     [Test]
+    public async Task Print_PinnedUses_StaysPrinted_WhenExtensionsEqualImplicitSet() {
+        const string poly = """
+            domain Shop
+            uses billing 2024-11-20
+
+            Order: entity { Total: Number }
+            """;
+        var catalog = Catalog(new SurfaceLibrary("billing", BillingSurface(version: "2024-11-20")));
+        var domain = ParseWith(poly, catalog);
+
+        var printed = new DomainDslPrinter(DomainSession.Open(domain, catalog), ["billing"]).Print(domain);
+
+        await Assert.That(printed.Contains("uses billing 2024-11-20", StringComparison.Ordinal)).IsTrue();
+    }
+
+    [Test]
+    public async Task Print_UnpinnedUses_EqualToImplicitSet_IsOmitted_AndReseedsAnEqualContract() {
+        const string poly = """
+            domain Shop
+            uses billing
+
+            Order: entity { Total: Number }
+            """;
+        var catalog = Catalog(new SurfaceLibrary("billing", BillingSurface()));
+        var domain = ParseWith(poly, catalog);
+
+        var printed = new DomainDslPrinter(DomainSession.Open(domain, catalog), ["billing"]).Print(domain);
+
+        await Assert.That(printed.Contains("uses ", StringComparison.Ordinal)).IsFalse();
+
+        var tree = DslSyntaxTree.Parse(printed);
+        var session = DomainSession.ForDocument(tree, ["billing"], catalog);
+        var changes = DomainCompilation.WithSeed(new DomainResolver(tree, session).Resolve(), ["billing"], session);
+        var result = new DomainEvolution(new Domain("_", [])).ApplyAndAnalyze(changes, session: session);
+        await Assert.That(result.Succeeded).IsTrue();
+        var seeded = result.Root.ImportedContracts.Single();
+        var original = domain.ImportedContracts.Single();
+        await Assert.That(seeded.Fingerprint).IsEqualTo(original.Fingerprint);
+        await Assert.That(seeded.UsesId).IsEqualTo(original.UsesId);
+        await Assert.That(seeded.Pin).IsEqualTo(original.Pin);
+    }
+
+    [Test]
     public async Task Uses_ContractBlockBesideSeed_FailsClosed() {
         const string poly = """
             domain Shop

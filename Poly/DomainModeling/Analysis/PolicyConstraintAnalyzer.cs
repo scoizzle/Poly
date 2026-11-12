@@ -26,25 +26,30 @@ internal sealed class PolicyConstraintAnalyzer : INodeAnalyzer {
         var lookup = context.GetTypeLookup();
         var entityPropMap = BuildPropertyMap(entity);
 
+        // #483: a `require P` copy holds P's expression object, so one tree is reachable by two
+        // paths and would be validated — and reported — twice. Identity is the object, and the set
+        // lives for this entity's walk only: the session re-runs this analyzer on every analysis.
+        var visited = new HashSet<Node>(ReferenceEqualityComparer.Instance);
+
         foreach (var policy in entity.Policies) {
-            ValidatePolicyPropertyReferences(context, lookup, policy.Expression, entity, entityPropMap);
+            ValidatePolicyPropertyReferences(context, lookup, policy.Expression, entity, entityPropMap, visited);
         }
 
         foreach (var stage in entity.Stages) {
             foreach (var policy in stage.Policies) {
-                ValidatePolicyPropertyReferences(context, lookup, policy.Expression, entity, entityPropMap);
+                ValidatePolicyPropertyReferences(context, lookup, policy.Expression, entity, entityPropMap, visited);
             }
         }
 
         foreach (var action in entity.Actions) {
             foreach (var policy in action.Policies) {
-                ValidatePolicyPropertyReferences(context, lookup, policy.Expression, entity, entityPropMap);
+                ValidatePolicyPropertyReferences(context, lookup, policy.Expression, entity, entityPropMap, visited);
             }
         }
         foreach (var stage in entity.Stages) {
             foreach (var action in stage.Actions) {
                 foreach (var policy in action.Policies) {
-                    ValidatePolicyPropertyReferences(context, lookup, policy.Expression, entity, entityPropMap);
+                    ValidatePolicyPropertyReferences(context, lookup, policy.Expression, entity, entityPropMap, visited);
                 }
             }
         }
@@ -55,7 +60,10 @@ internal sealed class PolicyConstraintAnalyzer : INodeAnalyzer {
         DomainTypeLookupMetadata? lookup,
         DomainExpression expr,
         Entity entity,
-        Dictionary<string, Property> entityPropMap) {
+        Dictionary<string, Property> entityPropMap,
+        HashSet<Node> visited) {
+
+        if (!visited.Add(expr)) return;
 
         // Walk the expression tree and report errors for any PropertyAccess
         // that references a property not found on the entity, and for any
@@ -118,14 +126,14 @@ internal sealed class PolicyConstraintAnalyzer : INodeAnalyzer {
             case Comparison cmp:
                 // `Outcome == Pending` / `Outcome is Pending`: the bare name is an
                 // enum member, not a property of the entity.
-                ValidateComparisonOperand(context, lookup, cmp.Left, cmp.Right, entity, entityPropMap);
-                ValidateComparisonOperand(context, lookup, cmp.Right, cmp.Left, entity, entityPropMap);
+                ValidateComparisonOperand(context, lookup, cmp.Left, cmp.Right, entity, entityPropMap, visited);
+                ValidateComparisonOperand(context, lookup, cmp.Right, cmp.Left, entity, entityPropMap, visited);
                 return;
         }
 
         // Recurse into children for composite expressions (And, Or, Not, Comparison, etc.)
         foreach (var child in expr.Children.OfType<DomainExpression>()) {
-            ValidatePolicyPropertyReferences(context, lookup, child, entity, entityPropMap);
+            ValidatePolicyPropertyReferences(context, lookup, child, entity, entityPropMap, visited);
         }
     }
 
@@ -440,12 +448,13 @@ internal sealed class PolicyConstraintAnalyzer : INodeAnalyzer {
         DomainExpression side,
         DomainExpression other,
         Entity entity,
-        Dictionary<string, Property> entityPropMap) {
+        Dictionary<string, Property> entityPropMap,
+        HashSet<Node> visited) {
         if (side is PropertyAccess pa
             && !entityPropMap.ContainsKey(pa.Name)
             && IsEnumMemberReference(lookup, other, entityPropMap, pa.Name))
             return;
-        ValidatePolicyPropertyReferences(context, lookup, side, entity, entityPropMap);
+        ValidatePolicyPropertyReferences(context, lookup, side, entity, entityPropMap, visited);
     }
 
     private static bool IsEnumMemberReference(

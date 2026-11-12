@@ -17,20 +17,20 @@ public class ConditionalArmsTests {
     private static ExecutionResult Run(Node body, params object?[] args) =>
         Interpreter.Execute(Interpreter.Compile(body), s => s.SetArgs(args.Length == 0 ? [false] : args));
 
-    private static async Task AssertRejected(Node body, params object?[] args) {
+    private static async Task AssertRejected(Node body, string construct, params object?[] args) {
         var thrown = Assert.Throws<InvalidOperationException>(() => {
             using var exec = Run(body, args);
         });
-        await Assert.That(thrown.Message).Contains("VM compile rejected:").And.Contains("arms differ in representation");
+        await Assert.That(thrown.Message).Contains($"VM compile rejected: {construct} arms differ in representation");
     }
 
     [Test]
     public async Task Conditional_DecimalThenIntegral_Rejects() =>
-        await AssertRejected(Pick(new Constant(1.5m), new Constant(2L)));
+        await AssertRejected(Pick(new Constant(1.5m), new Constant(2L)), "conditional");
 
     [Test]
     public async Task Conditional_IntegralThenDecimal_Rejects() =>
-        await AssertRejected(Pick(new Constant(2L), new Constant(1.5m)));
+        await AssertRejected(Pick(new Constant(2L), new Constant(1.5m)), "conditional");
 
     [Test]
     public async Task Conditional_IntegralPair_Runs() {
@@ -63,11 +63,11 @@ public class ConditionalArmsTests {
 
     [Test]
     public async Task Coalesce_HeapNullableDecimalThenIntegral_Rejects() =>
-        await AssertRejected(Coalesced(TypeReference.To<decimal?>(), new Constant(2L)), (object?)null);
+        await AssertRejected(Coalesced(TypeReference.To<decimal?>(), new Constant(2L)), "coalesce", (object?)null);
 
     [Test]
     public async Task Coalesce_ScalarNullableThenDecimal_Rejects() =>
-        await AssertRejected(Coalesced(TypeReference.To<long?>(), new Constant(1.5m)), (object?)null);
+        await AssertRejected(Coalesced(TypeReference.To<long?>(), new Constant(1.5m)), "coalesce", (object?)null);
 
     [Test]
     public async Task Coalesce_SameRepresentation_Runs() {
@@ -83,11 +83,11 @@ public class ConditionalArmsTests {
 
     [Test]
     public async Task Switch_DecimalCaseIntegralDefault_Rejects() =>
-        await AssertRejected(Switched(new Constant(1.5m), new Constant(2L)), 0L);
+        await AssertRejected(Switched(new Constant(1.5m), new Constant(2L)), "switch", 0L);
 
     [Test]
     public async Task Switch_IntegralCaseDecimalDefault_Rejects() =>
-        await AssertRejected(Switched(new Constant(2L), new Constant(1.5m)), 0L);
+        await AssertRejected(Switched(new Constant(2L), new Constant(1.5m)), "switch", 0L);
 
     [Test]
     public async Task Switch_SameRepresentation_Runs() {
@@ -103,6 +103,7 @@ public class ConditionalArmsTests {
                 new Parameter("key", TypeReference.To<long>()),
                 [new SwitchCase(new Constant(1L), new Constant(null)), new SwitchCase(new Constant(2L), new Constant(1.5m))],
                 new Constant(2L))]),
+            "switch",
             0L);
 
     // Legal code that ran correctly before the guard must keep running (a nullable operand is judged by its
@@ -147,5 +148,52 @@ public class ConditionalArmsTests {
             $"long k = {key}; decimal d = 0; long n = 0; switch (k) {{ case 1: d = 1.5m; break; default: n = 2; break; }} {read};");
         await Assert.That(result.Success).IsTrue();
         await Assert.That(result.Value).IsEqualTo(expected);
+    }
+
+    // The predicate's edges: only a scalar against a heap handle is rejected.
+
+    [Test]
+    public async Task Conditional_IntAgainstLong_Runs() {
+        using var exec = Run(Pick(new Constant(1), new Constant(2L)));
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(2L);
+    }
+
+    [Test]
+    public async Task Conditional_BoolPair_Runs() {
+        using var exec = Run(Pick(new Constant(true), new Constant(false)));
+        await Assert.That(exec.GetValue<bool>()).IsFalse();
+    }
+
+    [Test]
+    public async Task Conditional_DateTimePair_Runs() {
+        using var exec = Run(Pick(new Constant(new DateTime(2020, 1, 1)), new Constant(new DateTime(2021, 2, 2))));
+        await Assert.That(exec.GetValue<DateTime>()).IsEqualTo(new DateTime(2021, 2, 2));
+    }
+
+    [Test]
+    public async Task Conditional_DecimalAgainstText_IsNotJudgedByTheGuard() {
+        // Two different heap types: not a StackScalar-vs-HeapRef pair, so the guard does not cover it.
+        string outcome;
+        try {
+            using var exec = Run(Pick(new Constant(1.5m), new Constant("a")));
+            outcome = "ran";
+        }
+        catch (Exception ex) {
+            outcome = ex.Message;
+        }
+        await Assert.That(outcome).DoesNotContain("arms differ in representation");
+    }
+
+    [Test]
+    public async Task Conditional_EnumAgainstItsUnderlyingValue_IsNotJudgedByTheGuard() {
+        string outcome;
+        try {
+            using var exec = Run(Pick(new Constant(DayOfWeek.Monday), new Constant(2L)));
+            outcome = "ran";
+        }
+        catch (Exception ex) {
+            outcome = ex.Message;
+        }
+        await Assert.That(outcome).DoesNotContain("arms differ in representation");
     }
 }

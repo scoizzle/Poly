@@ -85,6 +85,8 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
     /// else DMEFF008 on the target property (a matching allowance makes it a warning), and an
     /// optional source cannot flow into a required target (DMEFF014, #439): an observed flow has no
     /// guard site, so no allowance or guard clears it. Nothing is inserted into the tree.
+    /// A flow whose source carries no same-kind constraint is NOT verified (the copy can carry any
+    /// value of that kind); it is deferred, not silently skipped — see the comment at the skip.
     /// </summary>
     private static void ValidateObservedFlows(AnalysisContext context, Domain domain) {
         foreach (var flow in RuntimeAnalysisCache.Session(domain).ObservedFlows) {
@@ -105,6 +107,11 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
                     continue;
                 var sourceConstraint = source.Value.Property.Constraints
                     .FirstOrDefault(c => c.GetType() == targetConstraint.GetType());
+                // A source with NO same-kind constraint is not verified: the flow can carry any value
+                // of that kind. Deferred, not silently skipped — routing an observed flow through
+                // WriteRecorder needs an effect node to key the fact on and an agreement with the
+                // allowance regime (#444), and V-04 owns that. Pinned by
+                // DiagnosticAllowanceTests.ObservedFlow_UnboundedSource_IsNotYetVerified.
                 if (sourceConstraint is null || IsConstraintSubsumed(sourceConstraint, targetConstraint))
                     continue;
                 var severity = ObservedFlowChecks.SeverityFor(

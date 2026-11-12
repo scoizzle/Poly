@@ -6,10 +6,11 @@ namespace Poly.DomainModeling.Analysis;
 
 /// <summary>
 /// V-03 (Q4): the unverified-write channel's shared vocabulary and its one range decision
-/// procedure. <see cref="DecideRange"/> is consumed by <c>EffectAnalyzer.CheckDerivedRange</c>
-/// and, once the assign gate widens (S3), by every constrained write; it reads absent
-/// endpoints explicitly (a null side on the target is satisfied, a null side on the value
-/// against a closed target is Undecided, never Violated).
+/// procedure. <see cref="DecideRange"/> is consumed by <see cref="WriteRecorder"/>'s callers —
+/// <c>EffectAnalyzer.ValidateAssignedValue</c> (every assign, through the postcondition or an
+/// in-place inference) and <c>EffectAnalyzer.ValidateInitializerValue</c> (create/create-in
+/// initializers) — and it reads absent endpoints explicitly (a null side on the target is
+/// satisfied, a null side on the value against a closed target is Undecided, never Violated).
 /// </summary>
 internal static class WriteVerification {
     /// <summary>

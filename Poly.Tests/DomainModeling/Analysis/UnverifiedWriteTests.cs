@@ -506,6 +506,52 @@ public class UnverifiedWriteTests {
 
     // ── fix round 1: tie-break determinism, nested operators, the parameter arm ──
 
+    [Test]
+    public async Task CreateInInitializer_IsEvaluatedInTheSourceEntitysScope() {
+        // `create in items { Amount: Amount }` reads the SOURCE entity's Amount ([0, 50]), not the
+        // created Item's ([0, 10]): one "can fall outside" warning and one fact. Read in Item's scope
+        // the value would be [0, 10] and the write would be silently verified (review H6).
+        var result = Parse("""
+            domain Test
+            Shop: entity {
+              Amount: Number range(0, 50)
+              items: many Item
+              Make: action { create in items { Amount: Amount } }
+            }
+            Item: entity {
+              Amount: Number range(0, 10)
+            }
+            """);
+
+        var findings = Findings(result.Analysis, "Amount");
+
+        await Assert.That(findings.Count).IsEqualTo(1);
+        await Assert.That(findings[0].Severity).IsEqualTo(DiagnosticSeverity.Warning);
+        var facts = Facts(result);
+        await Assert.That(facts.Unverified.Count).IsEqualTo(1);
+        await Assert.That(facts.Unverified[0].Reason).IsEqualTo(UnverifiedReason.PossibleViolation);
+    }
+
+    [Test]
+    public async Task LengthTarget_BareTextCopy_IsNotYetVerified() {
+        // PIN (review H8): WriteRelevant is Range-only in this slice (A4), so a bare Text copy into a
+        // `length` target is silent and records nothing. That is a gap, not a proof: V-08 flips it.
+        var result = Parse("""
+            domain Test
+            Box: entity {
+              Short: Text length(0, 5)
+              Long: Text length(0, 50)
+              Run: action { assign Short to Long }
+            }
+            """);
+
+        await Assert.That(Findings(result.Analysis, "Short")).IsEmpty();
+        var facts = Facts(result);
+        await Assert.That(facts.Unverified).IsEmpty();
+        await Assert.That(facts.Violations).IsEmpty();
+        await Assert.That(facts.Verified).IsEqualTo(0);
+    }
+
     /// <summary>The reported code for one write that is PossibleViolation in one stage and UnknownBound in the other.</summary>
     private static string TwoStageVerdictCode(bool narrowedStageFirst) {
         // Qty has no declared range. Stage "Narrowed" narrows it to (-∞, 100] with a policy, so the

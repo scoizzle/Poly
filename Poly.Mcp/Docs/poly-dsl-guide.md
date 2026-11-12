@@ -1213,17 +1213,22 @@ diverging:
   judging the downstream violation — e.g. `assign Qty to Qty + 10` under
   `require Qty <= 80` on `Qty: Number range(0, 90)` is provably within range and produces
   no diagnostic.
-- **Silence means verified, not skipped (Q4).** A write analysis cannot decide — a bare
+- **Silence means verified (Q4).** A write analysis cannot decide — a bare
   property or parameter with no bound, an operator the interval flow does not model
   (`/`, a call, `match`), or a constraint kind with no flow decision — is a **`DMCS003`
   warning** naming the write, the property and the constraint. So with
   `A: Number range(0, 10)` and `B: Number range(5, 20)`, `assign A to B` warns
   (`DMEFF008`, "can fall outside"), and `assign A to U + 1` with an unbounded `U` warns
-  (`DMCS003`, no usable bound). One write gets exactly one diagnostic: the worst across
-  every stage context the action can run in. Only `range(...)` is decided against a
-  computed value in this slice; `length`, `pattern` and `equal` writes are not flow-checked
-  yet. `poly_check` still prints `proven` for a model whose only findings are warnings
-  (the verdict flip is M-05), so read the findings, not the verdict word.
+  (`DMCS003`, no usable bound). One **fact** is recorded per write; the worst verdict
+  across every stage context the action can run in decides the reported code, and the
+  literal and parameter arms report one diagnostic per violated constraint. Observed
+  flows are the exception — a flow whose source carries no same-kind constraint is not
+  yet verified (deferred; V-04). An initializer is judged against the declared ranges
+  only: unlike an assign, it gets no `require` narrowing and no stage invariants, because
+  a `create` has no stage context. Only `range(...)` is decided against a computed value
+  in this slice; `length(...)`, `pattern(...)` and `equals(...)` writes are not
+  flow-checked yet. `poly_check` still prints `proven` for a model whose only findings are
+  warnings (the verdict flip is M-05), so read the findings, not the verdict word.
 - **Invariant verification is per-stage-context and combinatory.** An action valid in
   multiple stages is analyzed once per stage: each stage's policies (plus the action's
   require gates) combine to a **net constraint per constraint type**

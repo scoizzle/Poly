@@ -18,7 +18,7 @@ Use Poly when the task has a domain you would otherwise hard-code assumptions ab
 5. `poly_export` — `dsl`, `json-schema`, `csharp`, `markdown`, `html`, `json-ld`, or `shacl`. Small artifacts return inline; over 4 KB returns `{path, bytes, sha256}`.
    Or `poly_simulate` — an ordered `create`/`link`/`unlink`/`invoke`/`evaluate`/`get`/`list` scenario with one trace entry per step.
 
-`poly_inspect` reads back the overview, one entity, or `Entity.Member` (action/stage/policy). It is brief by default; `detail: "full"` returns the element.
+`poly_inspect` reads back the overview or one element by path: `Entity`, `Entity.Member` (property, navigation, stage, action, policy), `Entity.Stage.Action`, or an enum, value type or function name. It is brief by default; `detail: "full"` returns the element.
 
 ## Authoring rules
 
@@ -35,7 +35,7 @@ Use Poly when the task has a domain you would otherwise hard-code assumptions ab
 - One workspace per task; pass the handle from `poly_workspace` to every stateful call.
 - `poly_define` replaces the model; it does not merge. It clears runtime instances and bumps the revision.
 - The state block in every response (the `workspace: <handle> …` line of the text block, and `structuredContent.state`) carries `workspace`, `model`, `revision`, `entities`, `instances`. An unknown/expired handle returns `WORKSPACE_REQUIRED`; call `poly_workspace`, do not guess.
-- `errorCode` is one of four: `UNKNOWN_ARGUMENT` (a name the tool does not declare), `INVALID_ARGUMENT` (a declared name with a missing, wrong-typed or over-limit value), `WORKSPACE_REQUIRED` (no usable handle), `INTERNAL_ERROR` (a defect — the call was well-formed).
+- `errorCode` is one of five: `ELEMENT_NOT_FOUND` (`poly_inspect` path unknown, ambiguous or not addressable; see `data.reason` and `data.candidates`), `UNKNOWN_ARGUMENT` (a name the tool does not declare), `INVALID_ARGUMENT` (a declared name with a missing, wrong-typed or over-limit value), `WORKSPACE_REQUIRED` (no usable handle), `INTERNAL_ERROR` (a defect — the call was well-formed).
 - Sessions are process-local scratch. `poly_export(format: "dsl")` is how you keep a model.
 - When the task is done, close the workspace: `poly_workspace(op: "close", workspace: "<handle>")`.
 

@@ -68,6 +68,7 @@ Within one category the first defect in parameter order is reported.
 | `UNKNOWN_ARGUMENT` | The tool does not declare that name. Text is byte-identical to the old filter (`Valid: topic`). | Pre-binder filter |
 | `INVALID_ARGUMENT` | A declared name with a missing, wrong-typed, or over-limit value. | Pre-binder filter; the boundary's binder classifier |
 | `WORKSPACE_REQUIRED` | No usable workspace handle. A host status, not an argument error. | `PolySurfaceTools.TryWorkspace` |
+| `ELEMENT_NOT_FOUND` | `poly_inspect` select names no single element: `data.reason` is `unknown`, `ambiguous` or `notAddressable`, with `data.candidates`. | `InspectService` (tool body, like `WORKSPACE_REQUIRED`) |
 | `INTERNAL_ERROR` | A defect. The call was well-formed and the server failed. | `ToolExceptionBoundary` |
 
 `UNKNOWN_ARGUMENT` is not folded into `INVALID_ARGUMENT`: the wire, the README and the existing
@@ -136,3 +137,6 @@ spec. No test is deleted or weakened.
 `INTERNAL_ERROR` with the binder's real exception type — and the green typed answers, including
 `MaxItems` on a raw array and the four-code boundary. `PolycMcpTests` adds one stdio test: a wrong
 type is `INVALID_ARGUMENT` and the same host still serves the next call.
+
+### M-03 note: one path grammar, one resolver
+`poly_inspect` parses `ElementPath` and resolves it once through `ElementPathResolver` (`Poly/DomainModeling/Queries/`). The resolver is pure over the domain and returns a ref, a not-found (`unknown` / `notAddressable`, with candidates) or an ambiguity. `poly_check`'s select helpers and `VerificationSummary.SelectScope` are superseded copies that M-04/M-05 repoint.

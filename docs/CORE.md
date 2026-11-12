@@ -59,7 +59,7 @@ Neurosymbolic platform: author structured domain → lower to symbolic AST → a
 | VM executes Syntax programs | `Interpreter.Compile` fail-closed; no domain opcodes; C# emit is a projection |
 | Domain lowers to generic ops | StageTransition / invoke / create / unique / clocks → existing Syntax + Store jobs on the one module |
 | Product doors are opt-in | `uses`; CLI seeds ids only |
-| MCP is harness | Author / inspect / simulate with caller context — not customer API |
+| MCP is harness | Author / inspect / simulate with caller context — not customer API; `poly_inspect` is a client of `ElementPath` / `ElementPathResolver` (`Poly/DomainModeling/Queries/`), the one typed element-path grammar |
 | Lowered module is **domain meaning** | Artifact set on session; Syntax module privileged; fix Lower when sim ≠ print |
 | Extend in the pipeline | Lower / analyze / replace — not emitter/ABI patches |
 | Analysis required for semantics | Fail closed without `AnalysisResult`; `LoweringContext` takes analysis and domain as required members |

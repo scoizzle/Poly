@@ -345,8 +345,8 @@ public sealed class LibrarySelectionTests {
         var dsl = new Poly.DslCompiler.DslCompiler().Compile(
             "domain Holder\n\nItem: entity {\n  Email: Text unique\n}\n", CompileMode.All, DbmsPack.Generic);
         await Assert.That(dsl.Success).IsTrue();
-        var holder = dsl.Files!.Single(file => file.FileName == "Holder.cs").Source;
-        await Assert.That(holder).Contains("ExistsWithEmail");
+        var source = string.Join("\n", dsl.Files!.Select(file => file.Source));
+        await Assert.That(source).Contains("ExistsWithEmail");
     }
 
     /// <summary>

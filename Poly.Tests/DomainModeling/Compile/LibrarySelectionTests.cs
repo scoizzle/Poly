@@ -451,13 +451,13 @@ public sealed class LibrarySelectionTests {
     /// </summary>
     [Test]
     public async Task Probe_RegistersOnceUnderContention_AndWithChildReprobes() {
-        var counting = new CountingLibrary("counted");
+        var counting = new SlowCountingLibrary("counted");
         var catalog = new ExtensionCatalog().With(counting);
 
         Parallel.For(0, 32, i => { _ = catalog.Info("counted"); });
         await Assert.That(counting.Registrations).IsEqualTo(1);
 
-        var child = catalog.With(new CountingLibrary("other"));
+        var child = catalog.With(new SlowCountingLibrary("other"));
         _ = child.Info("counted");
         await Assert.That(counting.Registrations).IsEqualTo(2);
     }
@@ -491,8 +491,25 @@ public sealed class LibrarySelectionTests {
             throw new NotSupportedException();
     }
 
-    private sealed class ThrowingLibrary(string id) : IDomainLibrary {
+    /// <summary>
+    /// A library whose <c>Register</c> takes long enough that a non-serialized
+    /// <c>Lazy</c> (the B9 <c>PublicationOnly</c> mutation) lets several concurrent
+    /// callers run it.
+    /// </summary>
+    private sealed class SlowCountingLibrary(string id) : IDomainLibrary {
+        private int _registrations;
+
         public string Id => id;
+
+        public int Registrations => Volatile.Read(ref _registrations);
+
+        public void Register(SessionBuilder builder) {
+            _ = Interlocked.Increment(ref _registrations);
+            Thread.Sleep(5);
+        }
+    }
+
+    private sealed class ThrowingLibrary(string id) : IDomainLibrary {        public string Id => id;
 
         public void Register(SessionBuilder builder) =>
             throw new InvalidOperationException("boom-probe");

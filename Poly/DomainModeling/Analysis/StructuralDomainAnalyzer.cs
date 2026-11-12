@@ -440,7 +440,20 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
             return;
         }
 
-        if (!nav.SourceOwnsTarget || !peer.SourceOwnsTarget)
+        // S-12: an owned target has one owner, so the plain side of an owned/plain pairing
+        // cannot be a collection (it would be owned by many).
+        if (nav.SourceOwnsTarget != peer.SourceOwnsTarget) {
+            var plain = nav.SourceOwnsTarget ? peer : nav;
+            if (plain.Cardinality is RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany
+                && reportedPairs.Add(PairKey($"{source.Name}.{nav.Name}", $"{target.Name}.{peer.Name}")))
+                ReportContradictory(
+                    context, nav,
+                    $"Navigations '{source.Name}.{nav.Name}' and '{target.Name}.{inverseName}' are paired by 'via', " +
+                    "one is owned and the other is a collection; an owned entity has one owner, so its inverse must be singular.");
+            return;
+        }
+
+        if (!nav.SourceOwnsTarget)
             return;
 
         // Both ends own the target: exactly one side may. One report per navigation

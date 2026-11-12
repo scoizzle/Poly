@@ -273,8 +273,8 @@ internal static class DomainModelDiagnosticCodes {
     /// <summary>
     /// Two sides of a <c>via</c> pairing contradict each other: the named navigation
     /// points elsewhere, declares a different inverse, is the navigation itself, is
-    /// owned on both ends, or two navigations on one entity claim the same undeclared
-    /// inverse.
+    /// owned on both ends, pairs an owned navigation with a collection inverse (S-12), or
+    /// two navigations on one entity claim the same undeclared inverse.
     /// </summary>
     public const string InverseContradictory = "DMREL004";
 

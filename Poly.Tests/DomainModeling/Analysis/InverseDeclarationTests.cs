@@ -553,4 +553,82 @@ public sealed class InverseDeclarationTests {
 
         await Assert.That(AllErrors(analysis)).IsEmpty();
     }
+
+    [Test]
+    public async Task OwnedWithCollectionInverse_IsDMREL004() {
+        // S-12: an owned target has one owner, so its paired inverse must be singular.
+        var analysis = Analyze("""
+            domain OwnedCollectionInverse
+            Order: entity {
+              Total: Number
+              lines: many owned Line via orders
+            }
+            Line: entity {
+              sku: Text
+              orders: many Order via lines
+            }
+            """);
+
+        var errors = Errors(analysis, DomainModelDiagnosticCodes.InverseContradictory);
+        await Assert.That(errors.Count).IsEqualTo(1);
+        await Assert.That(AllErrors(analysis).Count).IsEqualTo(1);
+        await Assert.That(((Poly.DomainModeling.Ontology.Relationship)errors[0].Node).Name).IsEqualTo("lines");
+    }
+
+    [Test]
+    public async Task OwnedWithCollectionInverse_OnlyThePlainSideDeclares_IsDMREL004() {
+        // Reverse-declared orientation: only Line.orders names the pairing.
+        var analysis = Analyze("""
+            domain OwnedCollectionInverseReverse
+            Order: entity {
+              Total: Number
+              lines: many owned Line
+            }
+            Line: entity {
+              sku: Text
+              orders: many Order via lines
+            }
+            """);
+
+        var errors = Errors(analysis, DomainModelDiagnosticCodes.InverseContradictory);
+        await Assert.That(errors.Count).IsEqualTo(1);
+        await Assert.That(AllErrors(analysis).Count).IsEqualTo(1);
+        await Assert.That(((Poly.DomainModeling.Ontology.Relationship)errors[0].Node).Name).IsEqualTo("orders");
+    }
+
+    /// <summary>Pin: green before the rule — an owned edge with a singular inverse is the legal pairing.</summary>
+    [Test]
+    public async Task OwnedWithSingularInverse_IsClean_Pin() {
+        var analysis = Analyze("""
+            domain OwnedSingularInverse
+            Order: entity {
+              Total: Number
+              lines: many owned Line via order
+            }
+            Line: entity {
+              sku: Text
+              order: Order via lines
+            }
+            """);
+
+        await Assert.That(AllErrors(analysis)).IsEmpty();
+    }
+
+    /// <summary>Pin: green before the rule — without `via` the two navigations are independent (Q10).</summary>
+    [Test]
+    public async Task OwnedWithCollectionInverse_Undeclared_IsClean_Pin() {
+        var analysis = Analyze("""
+            domain OwnedCollectionUndeclared
+            Order: entity {
+              Total: Number
+              lines: many owned Line
+            }
+            Line: entity {
+              sku: Text
+              orders: many Order
+            }
+            """);
+
+        await Assert.That(Errors(analysis, DomainModelDiagnosticCodes.InverseContradictory)).IsEmpty();
+    }
 }

@@ -1,7 +1,9 @@
 using Poly.Analysis;
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Evolution;
+using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Ontology;
 
 using DmAction = Poly.DomainModeling.Ontology.Action;
@@ -303,5 +305,145 @@ public class VerificationSummaryTests {
         await Assert.That(summary.VerifiedWrites).IsEqualTo(0);
         await Assert.That(summary.UnverifiedWrites).IsEmpty();
         await Assert.That(summary.Violations).IsEqualTo(0);
+    }
+
+    // ── S5: observed flows route through the recorder (A4) ────────────────
+
+    private const string FlowedDomain = """
+        domain Orders
+        Customer: entity {
+          Amount: Number
+          Notes: Text length(0, 200)
+        }
+        Order: entity {
+          Amount: Number range(0, 10)
+          Notes: Text length(0, 50)
+        }
+        """;
+
+    private static (Domain Domain, AnalysisResult Analysis) Flowed(
+        params ObservedFlow[] flows) => RunFlowed(FlowedDomain, flows);
+
+    private static (Domain Domain, AnalysisResult Analysis) RunFlowed(
+        string poly, IReadOnlyList<ObservedFlow> flows, IReadOnlyList<DiagnosticAllowance>? allowances = null) {
+        var session = SessionBuilder.CreateEmpty().LoadCore().LoadTemporal()
+            .WithObservedFlows(flows)
+            .WithDiagnosticAllowances(allowances)
+            .Build();
+        var domain = new DomainEvolution(new Domain("_", []))
+            .Apply(new PolyDslParser(poly, session).Parse(), session: session).Root;
+        return (domain, session.Analyze(domain));
+    }
+
+    private static List<Diagnostic> WithCode(AnalysisResult analysis, string code) =>
+        analysis.Diagnostics.Where(d => d.Code == code).ToList();
+
+    [Test]
+    public async Task ObservedFlow_UnboundedSource_IsUnverifiedAndWarns() {
+        // A4(i): the source carries no `range`, so the copy can carry any Number — a DMCS003 warning
+        // naming the flow plus an unverified fact on the target, never silence.
+        var (domain, analysis) = Flowed(new ObservedFlow("Customer.Amount", "Order.Amount"));
+
+        var warning = WithCode(analysis, DomainModelDiagnosticCodes.ConstraintUndecided).Single();
+        await Assert.That(warning.Severity).IsEqualTo(DiagnosticSeverity.Warning);
+        await Assert.That(warning.Message).Contains("Observed flow 'Customer.Amount' -> 'Order.Amount'");
+        var facts = analysis.GetMetadata<WriteVerificationFacts>(domain)!;
+        await Assert.That(facts.Unverified.Single().Reason).IsEqualTo(UnverifiedReason.UnknownBound);
+        await Assert.That(facts.Unverified.Single().TargetProperty).IsEqualTo("Amount");
+
+        var summary = analysis.GetVerification(domain);
+        await Assert.That(summary.Verdict).IsEqualTo(CheckVerdict.Unknown);
+        await Assert.That(summary.UnverifiedWrites.Single().Reason).IsEqualTo(UnverifiedReason.UnknownBound);
+    }
+
+    [Test]
+    public async Task ObservedFlow_SubsumedSource_IsVerified() {
+        // A4(ii): a flow whose value range sits inside the target is verified, not unknown — the
+        // soundness oracle for routing flows through the recorder.
+        var (domain, analysis) = RunFlowed("""
+            domain Orders
+            Source: entity {
+              Amount: Number range(0, 5)
+            }
+            Target: entity {
+              Amount: Number range(0, 10)
+            }
+            """, [new ObservedFlow("Source.Amount", "Target.Amount")]);
+
+        await Assert.That(analysis.HasErrors).IsFalse();
+        await Assert.That(analysis.Diagnostics.Any(d => d.Message.Contains("Observed flow", StringComparison.Ordinal))).IsFalse();
+        var facts = analysis.GetMetadata<WriteVerificationFacts>(domain)!;
+        await Assert.That(facts.Verified).IsEqualTo(1);
+        await Assert.That(facts.Unverified).IsEmpty();
+
+        var summary = analysis.GetVerification(domain);
+        await Assert.That(summary.Verdict).IsEqualTo(CheckVerdict.Proven);
+        await Assert.That(summary.VerifiedWrites).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task ObservedFlow_NonAllowed_ReadsViolated() {
+        // A4(iii): the existing DMEFF008 stays, and a PossibleViolation fact sits beside it. With no
+        // allowance the finding is an error, so the model is Violated, never Proven.
+        var (domain, analysis) = Flowed(new ObservedFlow("Customer.Notes", "Order.Notes"));
+
+        var finding = WithCode(analysis, DomainModelDiagnosticCodes.EffectConstraintViolation).Single();
+        await Assert.That(finding.Severity).IsEqualTo(DiagnosticSeverity.Error);
+        var facts = analysis.GetMetadata<WriteVerificationFacts>(domain)!;
+        await Assert.That(facts.Unverified.Single().Reason).IsEqualTo(UnverifiedReason.PossibleViolation);
+
+        var summary = analysis.GetVerification(domain);
+        await Assert.That(summary.Verdict).IsEqualTo(CheckVerdict.Violated);
+        await Assert.That(summary.Violations).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task ObservedFlow_AllowanceDowngraded_ReadsUnknown() {
+        // The allowance downgrades the finding to a warning; the fact remains, so the model is
+        // Unknown — the finding was acknowledged, not proven.
+        var (domain, analysis) = RunFlowed(
+            FlowedDomain,
+            [new ObservedFlow("Customer.Notes", "Order.Notes")],
+            [new DiagnosticAllowance(
+                DomainModelDiagnosticCodes.EffectConstraintViolation, "Orders/Order/Notes", ["plsql-1"])]);
+
+        await Assert.That(analysis.HasErrors).IsFalse();
+        var finding = WithCode(analysis, DomainModelDiagnosticCodes.EffectConstraintViolation).Single();
+        await Assert.That(finding.Severity).IsEqualTo(DiagnosticSeverity.Warning);
+
+        var summary = analysis.GetVerification(domain);
+        await Assert.That(summary.Verdict).IsEqualTo(CheckVerdict.Unknown);
+        await Assert.That(summary.UnverifiedWrites.Single().Reason).IsEqualTo(UnverifiedReason.PossibleViolation);
+    }
+
+    [Test]
+    public async Task TwoFlowsIntoOneTarget_AreOneRow() {
+        // A2's de-duplication: each flow reports its own DMEFF008 on the same target property, and
+        // the summary shows one row for (node, code). The allowance keeps both findings as warnings,
+        // which is the row vocabulary (an error is a violation, not a row).
+        var (domain, analysis) = RunFlowed("""
+            domain Orders
+            First: entity {
+              Notes: Text length(0, 200)
+            }
+            Second: entity {
+              Notes: Text length(0, 300)
+            }
+            Order: entity {
+              Notes: Text length(0, 50)
+            }
+            """, [
+                new ObservedFlow("First.Notes", "Order.Notes"),
+                new ObservedFlow("Second.Notes", "Order.Notes"),
+            ], [new DiagnosticAllowance(
+                DomainModelDiagnosticCodes.EffectConstraintViolation, "Orders/Order/Notes", ["plsql-1"])]);
+
+        var findings = WithCode(analysis, DomainModelDiagnosticCodes.EffectConstraintViolation).ToList();
+        await Assert.That(findings.Count).IsEqualTo(2);
+        await Assert.That(findings.All(d => d.Severity == DiagnosticSeverity.Warning)).IsTrue();
+        var summary = analysis.GetVerification(domain);
+        await Assert.That(summary.Verdict).IsEqualTo(CheckVerdict.Unknown);
+        await Assert.That(summary.UnverifiedWrites.Count).IsEqualTo(1);
+        await Assert.That(summary.UnverifiedWrites.Single().Path).IsEqualTo("Orders/Order/Notes");
     }
 }

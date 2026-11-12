@@ -107,13 +107,42 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
                     continue;
                 var sourceConstraint = source.Value.Property.Constraints
                     .FirstOrDefault(c => c.GetType() == targetConstraint.GetType());
-                // A source with NO same-kind constraint is not verified: the flow can carry any value
-                // of that kind. Deferred, not silently skipped — routing an observed flow through
-                // WriteRecorder needs an effect node to key the fact on and an agreement with the
-                // allowance regime (#444), and V-04 owns that. Pinned by
-                // DiagnosticAllowanceTests.ObservedFlow_UnboundedSource_IsNotYetVerified.
-                if (sourceConstraint is null || IsConstraintSubsumed(sourceConstraint, targetConstraint))
+                var constraint = ConstraintValidation.Describe(targetConstraint);
+
+                // A source with NO same-kind constraint is not verified: the flow can carry any
+                // value of that kind. A4(i) routes it through the recorder — a DMCS003 warning
+                // naming the flow, plus an UnknownBound fact on the target — so the copy is never
+                // silently skipped.
+                if (sourceConstraint is null) {
+                    context.ReportWarning(
+                        target.Value.Property,
+                        $"Observed flow '{flow.SourcePath}' -> '{flow.TargetPath}': the source has no " +
+                        $"{constraint} constraint, so the copy may carry any value of that kind and " +
+                        $"'{flow.TargetPath}' cannot be verified.",
+                        DomainModelDiagnosticCodes.ConstraintUndecided);
+                    WriteRecorder.Record(
+                        context, domain, target.Value.Property, target.Value.Property.Name, constraint,
+                        WriteVerdict.Unverified(UnverifiedReason.UnknownBound));
                     continue;
+                }
+
+                // A4(ii): a Range pair is decided by the one procedure every assign uses; a Length
+                // pair keeps the declared-bounds rule.
+                var subsumed = targetConstraint is RangeConstraint rangeTarget
+                               && sourceConstraint is RangeConstraint rangeSource
+                    ? WriteVerification.DecideRange(rangeTarget, AbstractValue.From([rangeSource]))
+                        == ConstraintVerdict.Satisfied
+                    : IsConstraintSubsumed(sourceConstraint, targetConstraint);
+                if (subsumed) {
+                    WriteRecorder.Record(
+                        context, domain, target.Value.Property, target.Value.Property.Name, constraint,
+                        WriteVerdict.Satisfied);
+                    continue;
+                }
+
+                // A4(iii): the finding is unchanged (an allowance may still downgrade it) and the
+                // recorder gets a PossibleViolation fact beside it, so the summary can never read
+                // proven while the flow is undecided.
                 var severity = ObservedFlowChecks.SeverityFor(
                     context, domain, target.Value.Property, DomainModelDiagnosticCodes.EffectConstraintViolation);
                 context.ReportDiagnostic(
@@ -123,6 +152,9 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
                     $"{ConstraintValidation.Describe(sourceConstraint)} allows values outside " +
                     $"{ConstraintValidation.Describe(targetConstraint)}.",
                     DomainModelDiagnosticCodes.EffectConstraintViolation);
+                WriteRecorder.Record(
+                    context, domain, target.Value.Property, target.Value.Property.Name, constraint,
+                    WriteVerdict.Unverified(UnverifiedReason.PossibleViolation));
             }
 
             // #439: `optional` is the only way an entity property may hold null, so a required

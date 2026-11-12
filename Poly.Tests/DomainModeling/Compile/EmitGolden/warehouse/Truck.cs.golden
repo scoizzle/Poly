@@ -119,7 +119,7 @@ public class Truck
         {
             return DomainResult.Success();
         }
-        return DomainResult.Failure("A unique assign needs the storage port.");
+        return DomainResult.Failure(Poly.Runtime.DomainFailure.Constraint("A unique assign needs the storage port.", "Truck"));
     }
     public static System.Boolean ExistsWithVin(Poly.Runtime.IStoragePort db, System.String vin) => db.Exists("Truck", "Vin", vin);
 }

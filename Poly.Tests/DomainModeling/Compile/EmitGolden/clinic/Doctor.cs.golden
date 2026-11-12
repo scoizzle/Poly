@@ -17,7 +17,7 @@ public class Doctor
     {
         if (this.Schedule == null)
         {
-            return DomainResult.Failure("'StartShift' requires a linked 'schedule' on entity 'Doctor'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Required("'StartShift' requires a linked 'schedule' on entity 'Doctor'.", "Doctor.schedule"));
         }
         var invoke0 = this.Schedule.Open();
         if (!invoke0.IsSuccess)
@@ -66,7 +66,7 @@ public class Doctor
         {
             return DomainResult.Success();
         }
-        return DomainResult.Failure("A unique assign needs the storage port.");
+        return DomainResult.Failure(Poly.Runtime.DomainFailure.Constraint("A unique assign needs the storage port.", "Doctor"));
     }
     public static System.Boolean ExistsWithLicenseNo(Poly.Runtime.IStoragePort db, System.String licenseNo) => db.Exists("Doctor", "LicenseNo", licenseNo);
 }

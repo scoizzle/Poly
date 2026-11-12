@@ -54,11 +54,11 @@ public class Room
     {
         if (this.CurrentStage != RoomStage.InService)
         {
-            return DomainResult.Failure("'TakeOutOfService' requires stage 'InService' on entity 'Room'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'TakeOutOfService' requires stage 'InService' on entity 'Room'.", "Room.TakeOutOfService", "InService"));
         }
         if (!this.IsVacant())
         {
-            return DomainResult.Failure("'TakeOutOfService' blocked by policy 'IsVacant'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Policy("'TakeOutOfService' blocked by policy 'IsVacant'.", "Room.TakeOutOfService", "IsVacant"));
         }
         this.Offline = true;
         this.CurrentStage = RoomStage.OutOfService;
@@ -68,7 +68,7 @@ public class Room
     {
         if (this.CurrentStage != RoomStage.InService)
         {
-            return DomainResult.Failure("'Inspect' requires stage 'InService' on entity 'Room'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Inspect' requires stage 'InService' on entity 'Room'.", "Room.Inspect", "InService"));
         }
         this.Dirty = false;
         return DomainResult.Success();
@@ -77,7 +77,7 @@ public class Room
     {
         if (this.CurrentStage != RoomStage.OutOfService)
         {
-            return DomainResult.Failure("'ReturnToService' requires stage 'OutOfService' on entity 'Room'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'ReturnToService' requires stage 'OutOfService' on entity 'Room'.", "Room.ReturnToService", "OutOfService"));
         }
         this.Offline = false;
         this.CurrentStage = RoomStage.InService;
@@ -185,7 +185,7 @@ public class Room
         {
             return DomainResult.Success();
         }
-        return DomainResult.Failure("A unique assign needs the storage port.");
+        return DomainResult.Failure(Poly.Runtime.DomainFailure.Constraint("A unique assign needs the storage port.", "Room"));
     }
     public static System.Boolean ExistsWithNumber(Poly.Runtime.IStoragePort db, System.String number) => db.Exists("Room", "Number", number);
 }

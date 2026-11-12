@@ -49,7 +49,7 @@ public class Quote
     {
         if (this.CurrentStage != QuoteStage.Draft)
         {
-            return DomainResult<QuoteLine>.Failure("'AddLine' requires stage 'Draft' on entity 'Quote'.");
+            return DomainResult<QuoteLine>.Failure(Poly.Runtime.DomainFailure.Stage("'AddLine' requires stage 'Draft' on entity 'Quote'.", "Quote.AddLine", "Draft"));
         }
         var assignValue0 = this.Amount + qty * sku.ListPrice;
         if (assignValue0 < 0m)
@@ -73,7 +73,7 @@ public class Quote
     {
         if (this.CurrentStage != QuoteStage.Draft)
         {
-            return DomainResult.Failure("'Present' requires stage 'Draft' on entity 'Quote'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Present' requires stage 'Draft' on entity 'Quote'.", "Quote.Present", "Draft"));
         }
         this.CurrentStage = QuoteStage.Presented;
         return DomainResult.Success();
@@ -82,7 +82,7 @@ public class Quote
     {
         if (this.CurrentStage != QuoteStage.Presented)
         {
-            return DomainResult.Failure("'Accept' requires stage 'Presented' on entity 'Quote'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Accept' requires stage 'Presented' on entity 'Quote'.", "Quote.Accept", "Presented"));
         }
         this.CurrentStage = QuoteStage.Accepted;
         return DomainResult.Success();
@@ -91,7 +91,7 @@ public class Quote
     {
         if (this.CurrentStage != QuoteStage.Presented)
         {
-            return DomainResult.Failure("'Reject' requires stage 'Presented' on entity 'Quote'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Reject' requires stage 'Presented' on entity 'Quote'.", "Quote.Reject", "Presented"));
         }
         this.CurrentStage = QuoteStage.Rejected;
         return DomainResult.Success();

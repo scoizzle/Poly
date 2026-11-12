@@ -70,11 +70,11 @@ public class Section
     {
         if (this.CurrentStage != SectionStage.Open)
         {
-            return DomainResult.Failure("'Close' requires stage 'Open' on entity 'Section'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Close' requires stage 'Open' on entity 'Section'.", "Section.Close", "Open"));
         }
         if (!this.HasInstructor())
         {
-            return DomainResult.Failure("'Close' blocked by policy 'HasInstructor'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Policy("'Close' blocked by policy 'HasInstructor'.", "Section.Close", "HasInstructor"));
         }
         this.CurrentStage = SectionStage.Closed;
         return DomainResult.Success();
@@ -83,7 +83,7 @@ public class Section
     {
         if (this.CurrentStage != SectionStage.Open)
         {
-            return DomainResult<WaitOffer>.Failure("'Queue' requires stage 'Open' on entity 'Section'.");
+            return DomainResult<WaitOffer>.Failure(Poly.Runtime.DomainFailure.Stage("'Queue' requires stage 'Open' on entity 'Section'.", "Section.Queue", "Open"));
         }
         var create0 = this.CreateWaitlist(who);
         if (!create0.IsSuccess)
@@ -97,15 +97,15 @@ public class Section
     {
         if (this.CurrentStage != SectionStage.Open)
         {
-            return DomainResult.Failure("'StaffLeave' requires stage 'Open' on entity 'Section'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'StaffLeave' requires stage 'Open' on entity 'Section'.", "Section.StaffLeave", "Open"));
         }
         if (!this.HasInstructor())
         {
-            return DomainResult.Failure("'StaffLeave' blocked by policy 'HasInstructor'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Policy("'StaffLeave' blocked by policy 'HasInstructor'.", "Section.StaffLeave", "HasInstructor"));
         }
         if (this.Instructor == null)
         {
-            return DomainResult.Failure("'StaffLeave' requires a linked 'instructor' on entity 'Section'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Required("'StaffLeave' requires a linked 'instructor' on entity 'Section'.", "Section.instructor"));
         }
         var invoke0 = this.Instructor.GoOnLeave();
         if (!invoke0.IsSuccess)
@@ -118,7 +118,7 @@ public class Section
     {
         if (this.CurrentStage != SectionStage.Closed)
         {
-            return DomainResult.Failure("'Reopen' requires stage 'Closed' on entity 'Section'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Reopen' requires stage 'Closed' on entity 'Section'.", "Section.Reopen", "Closed"));
         }
         this.CurrentStage = SectionStage.Open;
         return DomainResult.Success();

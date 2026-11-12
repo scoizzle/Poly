@@ -73,7 +73,7 @@ public class Book
         {
             return DomainResult.Success();
         }
-        return DomainResult.Failure("A unique assign needs the storage port.");
+        return DomainResult.Failure(Poly.Runtime.DomainFailure.Constraint("A unique assign needs the storage port.", "Book"));
     }
     public static System.Boolean ExistsWithISBN(Poly.Runtime.IStoragePort db, System.String isbn) => db.Exists("Book", "ISBN", isbn);
 }

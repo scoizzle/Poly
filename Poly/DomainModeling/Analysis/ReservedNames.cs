@@ -153,16 +153,21 @@ internal static class ReservedNames {
     ];
 
     /// <summary>
-    /// True when <paramref name="identity"/> is a name an action method body calls from
-    /// expression position (<c>Poly.Runtime…</c>, <c>System.…</c>): an action parameter of that name
-    /// shadows it inside the body. Only the unconditional <see cref="ReservedKind.GeneratedReference"/>
-    /// rows qualify, so the rule does not depend on the action's shape.
+    /// True when <paramref name="identity"/> is a name <paramref name="action"/>'s method body calls from
+    /// expression position (<c>Poly.Runtime…</c>, <c>System.…</c>, and <c>DomainResult.Success()</c> /
+    /// <c>DomainResult.Failure(…)</c> in a void action): a parameter of that name shadows it inside the
+    /// body. The unconditional <see cref="ReservedKind.GeneratedReference"/> rows qualify for every
+    /// action; the <c>DomainResult</c> row only for an action with no result members, because a typed
+    /// action prints <c>DomainResult&lt;T&gt;</c>, which binds as a type beside the parameter.
     /// </summary>
-    public static bool TryReservedAsActionParameter(string identity, out ReservedName row) {
+    public static bool TryReservedAsActionParameter(string identity, Ontology.Action action, out ReservedName row) {
         foreach (var candidate in Fixed) {
-            if (candidate.Kind != ReservedKind.GeneratedReference || candidate.AppliesTo is not null)
+            if (candidate.Kind != ReservedKind.GeneratedReference)
                 continue;
             if (!string.Equals(candidate.Name, identity, StringComparison.Ordinal))
+                continue;
+            if (candidate.AppliesTo is not null
+                && !(candidate.Name == "DomainResult" && action.Result is not { Members.Count: > 0 }))
                 continue;
             row = candidate;
             return true;

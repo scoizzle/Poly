@@ -45,11 +45,11 @@ public class Hall
     {
         if (this.CurrentStage != HallStage.InService)
         {
-            return DomainResult.Failure("'Occupy' requires stage 'InService' on entity 'Hall'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Occupy' requires stage 'InService' on entity 'Hall'.", "Hall.Occupy", "InService"));
         }
         if (!this.CanBook())
         {
-            return DomainResult.Failure("'Occupy' blocked by policy 'CanBook'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Policy("'Occupy' blocked by policy 'CanBook'.", "Hall.Occupy", "CanBook"));
         }
         this.Occupied = true;
         return DomainResult.Success();
@@ -58,11 +58,11 @@ public class Hall
     {
         if (this.CurrentStage != HallStage.InService)
         {
-            return DomainResult.Failure("'Vacate' requires stage 'InService' on entity 'Hall'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Vacate' requires stage 'InService' on entity 'Hall'.", "Hall.Vacate", "InService"));
         }
         if (!this.IsOccupied())
         {
-            return DomainResult.Failure("'Vacate' blocked by policy 'IsOccupied'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Policy("'Vacate' blocked by policy 'IsOccupied'.", "Hall.Vacate", "IsOccupied"));
         }
         this.Occupied = false;
         return DomainResult.Success();
@@ -71,7 +71,7 @@ public class Hall
     {
         if (this.CurrentStage != HallStage.InService)
         {
-            return DomainResult.Failure("'MarkChildBusy' requires stage 'InService' on entity 'Hall'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'MarkChildBusy' requires stage 'InService' on entity 'Hall'.", "Hall.MarkChildBusy", "InService"));
         }
         this.BusySections = this.BusySections + 1L;
         return DomainResult.Success();
@@ -80,7 +80,7 @@ public class Hall
     {
         if (this.CurrentStage != HallStage.InService)
         {
-            return DomainResult.Failure("'ClearChildBusy' requires stage 'InService' on entity 'Hall'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'ClearChildBusy' requires stage 'InService' on entity 'Hall'.", "Hall.ClearChildBusy", "InService"));
         }
         this.BusySections = this.BusySections - 1L;
         return DomainResult.Success();
@@ -89,15 +89,15 @@ public class Hall
     {
         if (this.CurrentStage != HallStage.InService)
         {
-            return DomainResult.Failure("'TakeOffline' requires stage 'InService' on entity 'Hall'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'TakeOffline' requires stage 'InService' on entity 'Hall'.", "Hall.TakeOffline", "InService"));
         }
         if (!this.IsVacant())
         {
-            return DomainResult.Failure("'TakeOffline' blocked by policy 'IsVacant'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Policy("'TakeOffline' blocked by policy 'IsVacant'.", "Hall.TakeOffline", "IsVacant"));
         }
         if (!this.ChildrenFree())
         {
-            return DomainResult.Failure("'TakeOffline' blocked by policy 'ChildrenFree'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Policy("'TakeOffline' blocked by policy 'ChildrenFree'.", "Hall.TakeOffline", "ChildrenFree"));
         }
         this.Offline = true;
         this.CurrentStage = HallStage.OutOfService;
@@ -107,7 +107,7 @@ public class Hall
     {
         if (this.CurrentStage != HallStage.OutOfService)
         {
-            return DomainResult.Failure("'ReturnToService' requires stage 'OutOfService' on entity 'Hall'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'ReturnToService' requires stage 'OutOfService' on entity 'Hall'.", "Hall.ReturnToService", "OutOfService"));
         }
         this.Offline = false;
         this.CurrentStage = HallStage.InService;

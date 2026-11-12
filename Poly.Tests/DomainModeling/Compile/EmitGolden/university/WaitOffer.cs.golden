@@ -29,7 +29,7 @@ public class WaitOffer
     {
         if (this.CurrentStage != WaitOfferStage.Queued)
         {
-            return DomainResult.Failure("'Seat' requires stage 'Queued' on entity 'WaitOffer'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Seat' requires stage 'Queued' on entity 'WaitOffer'.", "WaitOffer.Seat", "Queued"));
         }
         this.CurrentStage = WaitOfferStage.Offered;
         this.NotifyOfferedSubscribers();
@@ -44,7 +44,7 @@ public class WaitOffer
             this.NotifyCancelledSubscribers(previousStage0);
             return DomainResult.Success();
         }
-        return DomainResult.Failure("'Cancel' is not valid for the current stage on entity 'WaitOffer'.");
+        return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Cancel' is not valid for the current stage on entity 'WaitOffer'.", "WaitOffer.Cancel"));
     }
     internal void RegisterSectionWaitlistOfferedSubscriber(Section subscriber)
     {

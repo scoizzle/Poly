@@ -1,5 +1,6 @@
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Ontology;
+using Poly.Runtime;
 
 using Action = Poly.DomainModeling.Ontology.Action;
 using Syntactic = Poly.Ast.Nodes;
@@ -15,7 +16,7 @@ public sealed partial class DomainToCSharpExporter {
     /// </summary>
     private static void EmitStagePolicyGuards(
         Action action, Entity entity, string? policyStageName, string? stageEnumTypeName,
-        List<Node> nodes, Func<string, Node> failureReturn) {
+        List<Node> nodes, Func<FailureLowering.Spec, Node> failureReturn) {
         void EmitOne(Policy policy) {
             if (action.Policies.Any(p => string.Equals(p.Name, "not_" + policy.Name, StringComparison.Ordinal)))
                 return;
@@ -24,8 +25,10 @@ public sealed partial class DomainToCSharpExporter {
             Node call = new Invoke(new Member(new ThisReference(), realName));
             nodes.Add(new IfStatement(
                 negated ? call : new Syntactic.Not(call),
-                new Block([failureReturn(
-                    $"'{action.Name}' blocked by policy '{realName}'.")])));
+                new Block([failureReturn(new FailureLowering.Spec(
+                    DomainFailureKind.Policy,
+                    new Constant($"'{action.Name}' blocked by policy '{realName}'."),
+                    $"{entity.Name}.{action.Name}", realName))])));
         }
 
         if (policyStageName is not null) {
@@ -103,11 +106,8 @@ public sealed partial class DomainToCSharpExporter {
                 TypeArguments: [resultTypeRef]);
         }
 
-        // Helper: DomainResult[<T>].Failure("message")
-        Node FailureReturn(string message) => new Return(
-            new Invoke(
-                new Member(actionResultType, "Failure"),
-                new Constant(message)));
+        // Helper: return DomainResult[<T>].Failure(DomainFailure.<Kind>(...))
+        Node FailureReturn(FailureLowering.Spec spec) => FailureLowering.Return(actionResultType, spec);
 
         // Collect all nodes: require guards first, then effects
         var nodes = new List<Node>();
@@ -127,8 +127,10 @@ public sealed partial class DomainToCSharpExporter {
                         new NamedTypeReference(stageEnumTypeName),
                         sourceStageName)),
                 new Block([
-                    FailureReturn(
-                        $"'{action.Name}' requires stage '{sourceStageName}' on entity '{entity.Name}'.")
+                    FailureReturn(new FailureLowering.Spec(
+                        DomainFailureKind.Stage,
+                        new Constant($"'{action.Name}' requires stage '{sourceStageName}' on entity '{entity.Name}'."),
+                        $"{entity.Name}.{action.Name}", sourceStageName))
                 ])));
         }
 
@@ -147,16 +149,20 @@ public sealed partial class DomainToCSharpExporter {
                     new Member(new ThisReference(), realName));
                 nodes.Add(new IfStatement(
                     guardCall,
-                    new Block([FailureReturn(
-                        $"'{action.Name}' blocked by policy '{realName}'.")])));
+                    new Block([FailureReturn(new FailureLowering.Spec(
+                        DomainFailureKind.Policy,
+                        new Constant($"'{action.Name}' blocked by policy '{realName}'."),
+                        $"{entity.Name}.{action.Name}", realName))])));
             }
             else {
                 var guardCall = new Invoke(
                     new Member(new ThisReference(), policy.Name));
                 nodes.Add(new IfStatement(
                     new Syntactic.Not(guardCall),
-                    new Block([FailureReturn(
-                        $"'{action.Name}' blocked by policy '{policy.Name}'.")])));
+                    new Block([FailureReturn(new FailureLowering.Spec(
+                        DomainFailureKind.Policy,
+                        new Constant($"'{action.Name}' blocked by policy '{policy.Name}'."),
+                        $"{entity.Name}.{action.Name}", policy.Name))])));
             }
         }
 
@@ -272,7 +278,7 @@ public sealed partial class DomainToCSharpExporter {
         Entity entity,
         Domain domain,
         List<Node> nodes,
-        Func<string, Node> failureReturn) {
+        Func<FailureLowering.Spec, Node> failureReturn) {
         WalkPathPrefixRequireGuards(
             expression, new ThisReference(), action, entity.Name, domain, nodes, failureReturn);
     }
@@ -284,13 +290,15 @@ public sealed partial class DomainToCSharpExporter {
         string subjectEntityName,
         Domain domain,
         List<Node> nodes,
-        Func<string, Node> failureReturn) {
+        Func<FailureLowering.Spec, Node> failureReturn) {
         if (expression is RelationshipNavigation rn) {
             var navMember = new Member(subject, ToPascalCase(rn.RelationshipName));
             nodes.Add(new IfStatement(
                 new Equal(navMember, new Constant(null!)),
-                new Block([failureReturn(
-                    $"'{action.Name}' requires a linked '{rn.RelationshipName}' on entity '{subjectEntityName}'.")])));
+                new Block([failureReturn(new FailureLowering.Spec(
+                    DomainFailureKind.Required,
+                    new Constant($"'{action.Name}' requires a linked '{rn.RelationshipName}' on entity '{subjectEntityName}'."),
+                    $"{subjectEntityName}.{rn.RelationshipName}"))])));
             var nextEntity = ResolveNavTargetEntityName(subjectEntityName, rn.RelationshipName, domain)
                 ?? subjectEntityName;
             WalkPathPrefixRequireGuards(

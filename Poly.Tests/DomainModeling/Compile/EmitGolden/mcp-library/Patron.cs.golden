@@ -63,7 +63,7 @@ public class Patron
     {
         if (!this.GoodStanding())
         {
-            return DomainResult<Loan>.Failure("'CheckOut' blocked by policy 'GoodStanding'.");
+            return DomainResult<Loan>.Failure(Poly.Runtime.DomainFailure.Policy("'CheckOut' blocked by policy 'GoodStanding'.", "Patron.CheckOut", "GoodStanding"));
         }
         var create0 = this.CreateLoans(book);
         if (!create0.IsSuccess)

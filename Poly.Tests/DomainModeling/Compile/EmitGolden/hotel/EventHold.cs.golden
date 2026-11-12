@@ -43,19 +43,19 @@ public class EventHold
     {
         if (this.CurrentStage != EventHoldStage.Requested)
         {
-            return DomainResult.Failure("'Confirm' requires stage 'Requested' on entity 'EventHold'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Confirm' requires stage 'Requested' on entity 'EventHold'.", "EventHold.Confirm", "Requested"));
         }
         if (!this.DatesValid())
         {
-            return DomainResult.Failure("'Confirm' blocked by policy 'DatesValid'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Policy("'Confirm' blocked by policy 'DatesValid'.", "EventHold.Confirm", "DatesValid"));
         }
         if (!this.PartyFits())
         {
-            return DomainResult.Failure("'Confirm' blocked by policy 'PartyFits'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Policy("'Confirm' blocked by policy 'PartyFits'.", "EventHold.Confirm", "PartyFits"));
         }
         if (!this.HasSpace())
         {
-            return DomainResult.Failure("'Confirm' blocked by policy 'HasSpace'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Policy("'Confirm' blocked by policy 'HasSpace'.", "EventHold.Confirm", "HasSpace"));
         }
         this.CurrentStage = EventHoldStage.Confirmed;
         return DomainResult.Success();
@@ -67,25 +67,25 @@ public class EventHold
             this.CurrentStage = EventHoldStage.Cancelled;
             return DomainResult.Success();
         }
-        return DomainResult.Failure("'Cancel' is not valid for the current stage on entity 'EventHold'.");
+        return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Cancel' is not valid for the current stage on entity 'EventHold'.", "EventHold.Cancel"));
     }
     public DomainResult StartHall()
     {
         if (this.CurrentStage != EventHoldStage.Confirmed)
         {
-            return DomainResult.Failure("'StartHall' requires stage 'Confirmed' on entity 'EventHold'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'StartHall' requires stage 'Confirmed' on entity 'EventHold'.", "EventHold.StartHall", "Confirmed"));
         }
         if (!this.HasHall())
         {
-            return DomainResult.Failure("'StartHall' blocked by policy 'HasHall'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Policy("'StartHall' blocked by policy 'HasHall'.", "EventHold.StartHall", "HasHall"));
         }
         if (this.HasSection())
         {
-            return DomainResult.Failure("'StartHall' blocked by policy 'HasSection'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Policy("'StartHall' blocked by policy 'HasSection'.", "EventHold.StartHall", "HasSection"));
         }
         if (this.Hall == null)
         {
-            return DomainResult.Failure("'StartHall' requires a linked 'hall' on entity 'EventHold'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Required("'StartHall' requires a linked 'hall' on entity 'EventHold'.", "EventHold.hall"));
         }
         var invoke0 = this.Hall.Occupy();
         if (!invoke0.IsSuccess)
@@ -99,15 +99,15 @@ public class EventHold
     {
         if (this.CurrentStage != EventHoldStage.Confirmed)
         {
-            return DomainResult.Failure("'StartSection' requires stage 'Confirmed' on entity 'EventHold'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'StartSection' requires stage 'Confirmed' on entity 'EventHold'.", "EventHold.StartSection", "Confirmed"));
         }
         if (!this.HasSection())
         {
-            return DomainResult.Failure("'StartSection' blocked by policy 'HasSection'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Policy("'StartSection' blocked by policy 'HasSection'.", "EventHold.StartSection", "HasSection"));
         }
         if (this.Section == null)
         {
-            return DomainResult.Failure("'StartSection' requires a linked 'section' on entity 'EventHold'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Required("'StartSection' requires a linked 'section' on entity 'EventHold'.", "EventHold.section"));
         }
         var invoke0 = this.Section.Occupy();
         if (!invoke0.IsSuccess)
@@ -121,19 +121,19 @@ public class EventHold
     {
         if (this.CurrentStage != EventHoldStage.InUse)
         {
-            return DomainResult.Failure("'ReleaseHall' requires stage 'InUse' on entity 'EventHold'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'ReleaseHall' requires stage 'InUse' on entity 'EventHold'.", "EventHold.ReleaseHall", "InUse"));
         }
         if (!this.HasHall())
         {
-            return DomainResult.Failure("'ReleaseHall' blocked by policy 'HasHall'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Policy("'ReleaseHall' blocked by policy 'HasHall'.", "EventHold.ReleaseHall", "HasHall"));
         }
         if (this.HasSection())
         {
-            return DomainResult.Failure("'ReleaseHall' blocked by policy 'HasSection'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Policy("'ReleaseHall' blocked by policy 'HasSection'.", "EventHold.ReleaseHall", "HasSection"));
         }
         if (this.Hall == null)
         {
-            return DomainResult.Failure("'ReleaseHall' requires a linked 'hall' on entity 'EventHold'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Required("'ReleaseHall' requires a linked 'hall' on entity 'EventHold'.", "EventHold.hall"));
         }
         var invoke0 = this.Hall.Vacate();
         if (!invoke0.IsSuccess)
@@ -148,15 +148,15 @@ public class EventHold
     {
         if (this.CurrentStage != EventHoldStage.InUse)
         {
-            return DomainResult.Failure("'ReleaseSection' requires stage 'InUse' on entity 'EventHold'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'ReleaseSection' requires stage 'InUse' on entity 'EventHold'.", "EventHold.ReleaseSection", "InUse"));
         }
         if (!this.HasSection())
         {
-            return DomainResult.Failure("'ReleaseSection' blocked by policy 'HasSection'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Policy("'ReleaseSection' blocked by policy 'HasSection'.", "EventHold.ReleaseSection", "HasSection"));
         }
         if (this.Section == null)
         {
-            return DomainResult.Failure("'ReleaseSection' requires a linked 'section' on entity 'EventHold'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Required("'ReleaseSection' requires a linked 'section' on entity 'EventHold'.", "EventHold.section"));
         }
         var invoke0 = this.Section.Vacate();
         if (!invoke0.IsSuccess)

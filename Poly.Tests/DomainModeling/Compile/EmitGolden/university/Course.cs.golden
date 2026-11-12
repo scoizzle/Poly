@@ -47,7 +47,7 @@ public class Course
         {
             return DomainResult.Success();
         }
-        return DomainResult.Failure("A unique assign needs the storage port.");
+        return DomainResult.Failure(Poly.Runtime.DomainFailure.Constraint("A unique assign needs the storage port.", "Course"));
     }
     public static System.Boolean ExistsWithCode(Poly.Runtime.IStoragePort db, System.String code) => db.Exists("Course", "Code", code);
 }

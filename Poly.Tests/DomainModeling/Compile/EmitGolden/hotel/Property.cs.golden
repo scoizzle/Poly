@@ -55,7 +55,7 @@ public class Property
     {
         if (this.CurrentStage != PropertyStage.Open)
         {
-            return DomainResult<Hall>.Failure("'AddHall' requires stage 'Open' on entity 'Property'.");
+            return DomainResult<Hall>.Failure(Poly.Runtime.DomainFailure.Stage("'AddHall' requires stage 'Open' on entity 'Property'.", "Property.AddHall", "Open"));
         }
         var create0 = this.CreateHalls(name, seats, rate);
         if (!create0.IsSuccess)
@@ -69,7 +69,7 @@ public class Property
     {
         if (this.CurrentStage != PropertyStage.Open)
         {
-            return DomainResult.Failure("'Close' requires stage 'Open' on entity 'Property'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Close' requires stage 'Open' on entity 'Property'.", "Property.Close", "Open"));
         }
         this.CurrentStage = PropertyStage.Closed;
         return DomainResult.Success();
@@ -78,7 +78,7 @@ public class Property
     {
         if (this.CurrentStage != PropertyStage.Closed)
         {
-            return DomainResult.Failure("'Reopen' requires stage 'Closed' on entity 'Property'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Reopen' requires stage 'Closed' on entity 'Property'.", "Property.Reopen", "Closed"));
         }
         this.CurrentStage = PropertyStage.Open;
         return DomainResult.Success();

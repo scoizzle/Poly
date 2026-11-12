@@ -108,7 +108,11 @@ public sealed class PolyCompiler {
         string? domainName = null;
         CompileResult Fail() => new(file, domainName, diags, [], null, null, null, null);
 
-        if (string.IsNullOrWhiteSpace(text)) {
+        // A leading UTF-8 BOM is an encoding artifact the scanner skips; strip it here too, so a
+        // BOM-only document reports the same empty-document error as an empty one rather than a
+        // parse attempt on an invisible character.
+        var body = text.Length > 0 && text[0] == '\uFEFF' ? text[1..] : text;
+        if (string.IsNullOrWhiteSpace(body)) {
             diags.Add(build.Unplaced(Severities.Error, DiagnosticCodes.Parse, "DSL text is empty."));
             return Fail();
         }

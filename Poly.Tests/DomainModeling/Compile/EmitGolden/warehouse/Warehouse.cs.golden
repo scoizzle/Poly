@@ -97,7 +97,7 @@ public class Warehouse
         {
             return DomainResult<Warehouse>.Failure("'Code' must be at most 10 characters.");
         }
-        if (!System.Text.RegularExpressions.Regex.IsMatch(code, "^WH-[0-9]{3}$"))
+        if (!System.Text.RegularExpressions.Regex.IsMatch(code, "^WH-[0-9]{3}\\z"))
         {
             return DomainResult<Warehouse>.Failure("'Code' does not match the required pattern.");
         }
@@ -129,7 +129,7 @@ public class Warehouse
         {
             return DomainResult<Warehouse>.Failure("'Zip' is required.");
         }
-        if (!System.Text.RegularExpressions.Regex.IsMatch(zip, "^\\d{5}$"))
+        if (!System.Text.RegularExpressions.Regex.IsMatch(zip, "^\\d{5}\\z"))
         {
             return DomainResult<Warehouse>.Failure("'Zip' does not match the required pattern.");
         }

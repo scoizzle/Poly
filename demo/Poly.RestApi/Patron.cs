@@ -171,7 +171,7 @@ public class Patron
         {
             return DomainResult<Patron>.Failure("'Email' is required.");
         }
-        if (!System.Text.RegularExpressions.Regex.IsMatch(email, "^[^@]+@[^@]+$"))
+        if (!System.Text.RegularExpressions.Regex.IsMatch(email, "^[^@]+@[^@]+\\z"))
         {
             return DomainResult<Patron>.Failure("'Email' does not match the required pattern.");
         }

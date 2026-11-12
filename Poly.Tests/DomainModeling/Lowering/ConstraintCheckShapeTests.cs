@@ -53,7 +53,7 @@ public class ConstraintCheckShapeTests {
         var cs = PrintAssign(domain, "Tag", "Code", "code");
 
         await Assert.That(cs).Contains(
-            "if (assignValue0 != null && !System.Text.RegularExpressions.Regex.IsMatch(assignValue0, \"^[A-Z]{3}$\"))");
+            "if (assignValue0 != null && !System.Text.RegularExpressions.Regex.IsMatch(assignValue0, \"^[A-Z]{3}\\\\z\"))");
     }
 
     [Test]
@@ -100,7 +100,7 @@ public class ConstraintCheckShapeTests {
 
         await Assert.That(create).Contains("if (code != null && code.Length < 3L)");
         await Assert.That(create).Contains(
-            "if (tag != null && !System.Text.RegularExpressions.Regex.IsMatch(tag, \"^[A-Z]+$\"))");
+            "if (tag != null && !System.Text.RegularExpressions.Regex.IsMatch(tag, \"^[A-Z]+\\\\z\"))");
     }
 
     [Test]
@@ -117,6 +117,71 @@ public class ConstraintCheckShapeTests {
 
         await Assert.That(create).Contains("\"'Score' must be >= 1.\"");
         await Assert.That(assign).Contains("\"'Score' must be >= 1.\"");
+    }
+
+    [Test]
+    public async Task Pattern_WhenValueHasTrailingNewline_RejectedInSimAndCSharp() {
+        var (domain, analysis) = EvolvedDomain.FromDsl("""
+            domain Lab
+            E: entity {
+              S: Text pattern("^[A-Z]+$")
+            }
+            """);
+
+        // .NET '$' also matches before a final newline, so the author's anchored
+        // pattern accepted "ABC\n". The simulator and the printed factory share
+        // one lowered guard, so both must reject it with the one existing message.
+        var printedCs = new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis));
+
+        var sim = ModuleExec.For(domain).Create(
+            "E", new Dictionary<string, object?> { ["S"] = "ABC\n" });
+        await Assert.That(sim.Succeeded).IsFalse();
+        await Assert.That(sim.Error).IsEqualTo("'S' does not match the required pattern.");
+
+        var asm = ExportedCSharp.CompileAndLoad(printedCs);
+        var printed = ExportedCSharp.InvokeCreate(asm.GetType("E")!, ("s", "ABC\n"));
+        var printedError = printed.GetType().GetProperty("ErrorMessage")!.GetValue(printed) as string;
+        await Assert.That(printedError).IsEqualTo(sim.Error);
+    }
+
+    [Test]
+    public async Task AnchorEnd_RewritesOnlyAnUnescapedTrailingDollar() {
+        // An unescaped trailing '$' is .NET's end-of-input-or-before-final-newline
+        // anchor; it becomes the absolute-end anchor '\z'.
+        await Assert.That(ConstraintCheckWriter.AnchorEnd("^[A-Z]+$")).IsEqualTo("^[A-Z]+\\z");
+        // No end anchor is the author's search intent; it stays as written.
+        await Assert.That(ConstraintCheckWriter.AnchorEnd("^[A-Z]+")).IsEqualTo("^[A-Z]+");
+        // An escaped '$' is a literal dollar, not an anchor; it stays as written.
+        await Assert.That(ConstraintCheckWriter.AnchorEnd("^[A-Z]+\\$")).IsEqualTo("^[A-Z]+\\$");
+        // The escape parity counts backslashes: an even run leaves the '$' an anchor.
+        await Assert.That(ConstraintCheckWriter.AnchorEnd("^[A-Z]+\\\\$")).IsEqualTo("^[A-Z]+\\\\\\z");
+        await Assert.That(ConstraintCheckWriter.AnchorEnd("")).IsEqualTo("");
+    }
+
+    [Test]
+    public async Task Create_PatternShapes_AnchorAtAbsoluteEndOnlyWhenAuthored() {
+        var (anchored, anchoredAnalysis) = EvolvedDomain.FromDsl("""
+            domain Lab
+            Anchored: entity { S: Text pattern("^[A-Z]+$") }
+            """);
+        var anchoredCreate = PrintCreate(anchored, anchoredAnalysis, "Anchored");
+        await Assert.That(anchoredCreate).Contains("^[A-Z]+\\\\z");
+        await Assert.That(anchoredCreate).DoesNotContain("^[A-Z]+$");
+
+        var (unanchored, unanchoredAnalysis) = EvolvedDomain.FromDsl("""
+            domain Lab
+            Unanchored: entity { S: Text pattern("^[A-Z]+") }
+            """);
+        var unanchoredCreate = PrintCreate(unanchored, unanchoredAnalysis, "Unanchored");
+        await Assert.That(unanchoredCreate).Contains("\"^[A-Z]+\"");
+        await Assert.That(unanchoredCreate).DoesNotContain("\\\\z");
+
+        var (escaped, escapedAnalysis) = EvolvedDomain.FromDsl("""
+            domain Lab
+            Escaped: entity { S: Text pattern("^[A-Z]+\\$") }
+            """);
+        var escapedCreate = PrintCreate(escaped, escapedAnalysis, "Escaped");
+        await Assert.That(escapedCreate).Contains("\"^[A-Z]+\\\\$\"");
     }
 
     private static string PrintCreate(Domain domain, AnalysisResult analysis, string entityName) {

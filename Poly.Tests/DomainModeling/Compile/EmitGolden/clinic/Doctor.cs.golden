@@ -1,7 +1,7 @@
 #nullable enable
 using Poly.Runtime;
 
-public class Doctor
+public class Doctor : Poly.Runtime.IActionScoped
 {
     private Doctor() { }
     private Doctor(string name, string licenseNo, Schedule? schedule = null)
@@ -67,6 +67,21 @@ public class Doctor
             return DomainResult.Success();
         }
         return DomainResult.Failure(Poly.Runtime.DomainFailure.Constraint("A unique assign needs the storage port.", "Doctor"));
+    }
+    public object __Snapshot()
+    {
+        var __state = new object?[3];
+        __state[0] = this.Name;
+        __state[1] = this.LicenseNo;
+        __state[2] = this.Schedule;
+        return __state;
+    }
+    public void __Restore(object state)
+    {
+        var __saved = (object?[])state;
+        this.Name = (string)__saved[0]!;
+        this.LicenseNo = (string)__saved[1]!;
+        this.Schedule = (Schedule?)__saved[2]!;
     }
     public static System.Boolean ExistsWithLicenseNo(Poly.Runtime.IStoragePort db, System.String licenseNo) => db.Exists("Doctor", "LicenseNo", licenseNo);
 }

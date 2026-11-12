@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 using Poly.Runtime;
 
-public class Patron
+public class Patron : Poly.Runtime.IActionScoped
 {
     private List<Fine> _fines = new List<Fine>();
     private Patron(string name, IEnumerable<Fine>? fines = null)
@@ -61,5 +61,22 @@ public class Patron
         }
         var created = new Patron(name, fines);
         return DomainResult<Patron>.Success(created);
+    }
+    public object __Snapshot()
+    {
+        var __state = new object?[2];
+        __state[0] = this.Name;
+        __state[1] = new List<Fine>(this._fines);
+        return __state;
+    }
+    public void __Restore(object state)
+    {
+        var __saved = (object?[])state;
+        this.Name = (string)__saved[0]!;
+        ((System.Collections.IList)this._fines).Clear();
+        foreach (var __item1 in(List<Fine>)__saved[1]!)
+        {
+            this._fines.Add(__item1);
+        }
     }
 }

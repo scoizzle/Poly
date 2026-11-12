@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 using Poly.Runtime;
 
-public class Warehouse
+public class Warehouse : Poly.Runtime.IActionScoped
 {
     private List<Truck> _trucks = new List<Truck>();
     private Warehouse() { }
@@ -154,6 +154,33 @@ public class Warehouse
             return DomainResult.Success();
         }
         return DomainResult.Failure(Poly.Runtime.DomainFailure.Constraint("A unique assign needs the storage port.", "Warehouse"));
+    }
+    public object __Snapshot()
+    {
+        var __state = new object?[7];
+        __state[0] = this.Code;
+        __state[1] = this.Name;
+        __state[2] = this.Zip;
+        __state[3] = this.Capacity;
+        __state[4] = this.SafetyStock;
+        __state[5] = this.Status;
+        __state[6] = new List<Truck>(this._trucks);
+        return __state;
+    }
+    public void __Restore(object state)
+    {
+        var __saved = (object?[])state;
+        this.Code = (string)__saved[0]!;
+        this.Name = (string)__saved[1]!;
+        this.Zip = (string)__saved[2]!;
+        this.Capacity = (long)__saved[3]!;
+        this.SafetyStock = (long)__saved[4]!;
+        this.Status = (TruckStatus)__saved[5]!;
+        ((System.Collections.IList)this._trucks).Clear();
+        foreach (var __item6 in(List<Truck>)__saved[6]!)
+        {
+            this._trucks.Add(__item6);
+        }
     }
     public static System.Boolean ExistsWithCode(Poly.Runtime.IStoragePort db, System.String code) => db.Exists("Warehouse", "Code", code);
 }

@@ -65,6 +65,28 @@ public class ContributedMethodTests {
         }
         """;
 
+    private const string PolyZedAlpha = """
+        domain Lab
+        Widget: entity {
+          Zed: Text unique
+          Alpha: Text unique
+        }
+        """;
+
+    private const string PolyAlphaZed = """
+        domain Lab
+        Widget: entity {
+          Alpha: Text unique
+          Zed: Text unique
+        }
+        """;
+
+    private const string PolyZebraApple = """
+        domain Lab
+        Zebra: entity { Code: Text unique }
+        Apple: entity { Code: Text unique }
+        """;
+
     private const string PolyRootUnique = """
         domain Lab
         Widget: entity {
@@ -313,6 +335,61 @@ public class ContributedMethodTests {
         await Assert.That(() => session.Lower(domain, analysis)).Throws<InvalidOperationException>();
     }
 
+    [Test]
+    public async Task Constraints_FollowDeclarationOrder_NotNameOrder() {
+        var (domain, analysis, session) = Compile(PolyZedAlpha, new ProbeUniqueLibrary(), withPersistence: false);
+        var module = session.Lower(domain, analysis);
+
+        await Assert.That(ExistsGuards(Method(module, "Widget", "Create")))
+            .IsEqualTo("ExistsWithZed,ExistsWithAlpha");
+        await Assert.That(ExistsHelpers(module, "Widget"))
+            .IsEqualTo("ExistsWithZed,ExistsWithAlpha");
+    }
+
+    [Test]
+    public async Task PrintedConstraints_FollowDeclarationOrder_ThroughStorageCompiler() {
+        var (domain, analysis, session) = Compile(PolyZedAlpha, new NoOpLibrary());
+        var widget = session.Emit(domain, analysis).Single(f => f.FileName == "Widget.cs").Source;
+
+        var zedAt = widget.IndexOf("ExistsWithZed", StringComparison.Ordinal);
+        var alphaAt = widget.IndexOf("ExistsWithAlpha", StringComparison.Ordinal);
+        await Assert.That(zedAt).IsGreaterThanOrEqualTo(0);
+        await Assert.That(alphaAt).IsGreaterThanOrEqualTo(0);
+        await Assert.That(zedAt).IsLessThan(alphaAt);
+    }
+
+    [Test]
+    public async Task EntityOrder_FirstFailureNamesFirstDeclaredEntity() {
+        var (domain, analysis, session) = Compile(PolyZebraApple, new StorageRequiringLibrary(), withPersistence: false);
+        await Assert.That(() => session.Lower(domain, analysis))
+            .Throws<InvalidOperationException>()
+            .WithMessageContaining("Zebra.Code");
+    }
+
+    [Test]
+    public async Task Constraints_ReadThroughTheDeclarationOrderSeam_NotListOrder() {
+        var (domain, analysis, session) = Compile(PolyAlphaZed, new ProbeUniqueLibrary(),
+            withPersistence: false,
+            new SetEntityMemberOrderChange("Widget", [
+                new EntityMemberRef(EntityMemberKind.Property, "Zed"),
+                new EntityMemberRef(EntityMemberKind.Property, "Alpha"),
+            ]));
+        var module = session.Lower(domain, analysis);
+
+        await Assert.That(ExistsGuards(Method(module, "Widget", "Create")))
+            .IsEqualTo("ExistsWithZed,ExistsWithAlpha");
+    }
+
+    private static string ExistsGuards(MethodDefinitionNode create) =>
+        string.Join(",", Invokes(create.Body!)
+            .Where(i => i.Delegate is Member { MemberName: var called } && called.StartsWith("ExistsWith", StringComparison.Ordinal))
+            .Select(i => ((Member)i.Delegate!).MemberName));
+
+    private static string ExistsHelpers(IReadOnlyList<TypeDefinitionNode> module, string type) =>
+        string.Join(",", module.First(t => t.Name == type).Methods!
+            .Where(m => m.Name.StartsWith("ExistsWith", StringComparison.Ordinal))
+            .Select(m => m.Name));
+
     private static void CompileGenerated(string source) {
         var references = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!)
             .Split(Path.PathSeparator)
@@ -386,7 +463,7 @@ public class ContributedMethodTests {
     }
 
     private static (Domain Domain, AnalysisResult Analysis, DomainSession Session) Compile(
-        string poly, IDomainLibrary library, bool withPersistence = true) {
+        string poly, IDomainLibrary library, bool withPersistence = true, params DomainChange[] afterParse) {
         var builder = SessionBuilder.CreateEmpty();
         builder.LoadCore();
         foreach (var id in ExtensionCatalog.ProductAuthoring)
@@ -398,7 +475,7 @@ public class ContributedMethodTests {
         builder.Load(library);
         var session = builder.Build();
         var changes = new PolyDslParser(poly, session).Parse();
-        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes, session: session);
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze([.. changes, .. afterParse], session: session);
         if (!result.Succeeded)
             throw new InvalidOperationException(string.Join("; ",
                 result.Analysis.Diagnostics
@@ -488,6 +565,13 @@ public class ContributedMethodTests {
                 [new ImpliedParameter("db", dbType, ThreadToCallers: true)],
                 [exists]);
         }
+    }
+
+    private sealed class ProbeUniqueLibrary : IDomainLibrary {
+        public string Id => "probe-unique";
+
+        public void Register(SessionBuilder builder) =>
+            builder.AddConstraintCompiler(new UniqueCompiler(Id, requireStorage: false));
     }
 
     /// <summary>

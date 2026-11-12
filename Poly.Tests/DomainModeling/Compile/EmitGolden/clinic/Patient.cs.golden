@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 using Poly.Runtime;
 
-public class Patient
+public class Patient : Poly.Runtime.IActionScoped
 {
     private List<Visit> _visits = new List<Visit>();
     private Patient() { }
@@ -45,5 +45,22 @@ public class Patient
         }
         var created = new Patient(name, visits);
         return DomainResult<Patient>.Success(created);
+    }
+    public object __Snapshot()
+    {
+        var __state = new object?[2];
+        __state[0] = this.Name;
+        __state[1] = new List<Visit>(this._visits);
+        return __state;
+    }
+    public void __Restore(object state)
+    {
+        var __saved = (object?[])state;
+        this.Name = (string)__saved[0]!;
+        ((System.Collections.IList)this._visits).Clear();
+        foreach (var __item1 in(List<Visit>)__saved[1]!)
+        {
+            this._visits.Add(__item1);
+        }
     }
 }

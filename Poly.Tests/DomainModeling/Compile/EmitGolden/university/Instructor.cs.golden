@@ -7,7 +7,7 @@ public enum InstructorStage
     Leave = 1
 }
 
-public class Instructor
+public class Instructor : Poly.Runtime.IActionScoped
 {
     private Instructor() { }
     private Instructor(string name, string email)
@@ -70,6 +70,21 @@ public class Instructor
             return DomainResult.Success();
         }
         return DomainResult.Failure(Poly.Runtime.DomainFailure.Constraint("A unique assign needs the storage port.", "Instructor"));
+    }
+    public object __Snapshot()
+    {
+        var __state = new object?[3];
+        __state[0] = this.Name;
+        __state[1] = this.Email;
+        __state[2] = this.CurrentStage;
+        return __state;
+    }
+    public void __Restore(object state)
+    {
+        var __saved = (object?[])state;
+        this.Name = (string)__saved[0]!;
+        this.Email = (string)__saved[1]!;
+        this.CurrentStage = (InstructorStage)__saved[2]!;
     }
     public static System.Boolean ExistsWithEmail(Poly.Runtime.IStoragePort db, System.String email) => db.Exists("Instructor", "Email", email);
 }

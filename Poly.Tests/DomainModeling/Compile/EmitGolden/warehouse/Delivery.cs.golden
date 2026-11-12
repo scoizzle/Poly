@@ -1,7 +1,7 @@
 #nullable enable
 using Poly.Runtime;
 
-public class Delivery
+public class Delivery : Poly.Runtime.IActionScoped
 {
     private Delivery() { }
     private Delivery(string reference, long weight, string notes = "", Truck? truck = null)
@@ -57,5 +57,22 @@ public class Delivery
             truck.AttachDeliveries(created);
         }
         return DomainResult<Delivery>.Success(created);
+    }
+    public object __Snapshot()
+    {
+        var __state = new object?[4];
+        __state[0] = this.Reference;
+        __state[1] = this.Weight;
+        __state[2] = this.Notes;
+        __state[3] = this.Truck;
+        return __state;
+    }
+    public void __Restore(object state)
+    {
+        var __saved = (object?[])state;
+        this.Reference = (string)__saved[0]!;
+        this.Weight = (long)__saved[1]!;
+        this.Notes = (string)__saved[2]!;
+        this.Truck = (Truck?)__saved[3]!;
     }
 }

@@ -10,7 +10,7 @@ public enum StudentStage
     Suspended = 1
 }
 
-public class Student
+public class Student : Poly.Runtime.IActionScoped
 {
     private List<Enrollment> _enrollments = new List<Enrollment>();
     private Student() { }
@@ -233,6 +233,37 @@ public class Student
             return DomainResult.Success();
         }
         return DomainResult.Failure(Poly.Runtime.DomainFailure.Constraint("A unique assign needs the storage port.", "Student"));
+    }
+    public object __Snapshot()
+    {
+        var __state = new object?[9];
+        __state[0] = this.Name;
+        __state[1] = this.Email;
+        __state[2] = this.MaxCredits;
+        __state[3] = this.OpenCredits;
+        __state[4] = this.Holds;
+        __state[5] = this.Completions;
+        __state[6] = this.LastGrade;
+        __state[7] = this.CurrentStage;
+        __state[8] = new List<Enrollment>(this._enrollments);
+        return __state;
+    }
+    public void __Restore(object state)
+    {
+        var __saved = (object?[])state;
+        this.Name = (string)__saved[0]!;
+        this.Email = (string)__saved[1]!;
+        this.MaxCredits = (long)__saved[2]!;
+        this.OpenCredits = (long)__saved[3]!;
+        this.Holds = (long)__saved[4]!;
+        this.Completions = (long)__saved[5]!;
+        this.LastGrade = (long)__saved[6]!;
+        this.CurrentStage = (StudentStage)__saved[7]!;
+        ((System.Collections.IList)this._enrollments).Clear();
+        foreach (var __item8 in(List<Enrollment>)__saved[8]!)
+        {
+            this._enrollments.Add(__item8);
+        }
     }
     public static System.Boolean ExistsWithEmail(Poly.Runtime.IStoragePort db, System.String email) => db.Exists("Student", "Email", email);
 }

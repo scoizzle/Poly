@@ -11,7 +11,7 @@ public enum QuoteStage
     Rejected = 3
 }
 
-public class Quote
+public class Quote : Poly.Runtime.IActionScoped
 {
     private List<QuoteLine> _lines = new List<QuoteLine>();
     private Quote() { }
@@ -116,5 +116,28 @@ public class Quote
             opportunity.AttachQuotes(created);
         }
         return DomainResult<Quote>.Success(created);
+    }
+    public object __Snapshot()
+    {
+        var __state = new object?[5];
+        __state[0] = this.Title;
+        __state[1] = this.Amount;
+        __state[2] = this.Opportunity;
+        __state[3] = this.CurrentStage;
+        __state[4] = new List<QuoteLine>(this._lines);
+        return __state;
+    }
+    public void __Restore(object state)
+    {
+        var __saved = (object?[])state;
+        this.Title = (string)__saved[0]!;
+        this.Amount = (decimal)__saved[1]!;
+        this.Opportunity = (Opportunity?)__saved[2]!;
+        this.CurrentStage = (QuoteStage)__saved[3]!;
+        ((System.Collections.IList)this._lines).Clear();
+        foreach (var __item4 in(List<QuoteLine>)__saved[4]!)
+        {
+            this._lines.Add(__item4);
+        }
     }
 }

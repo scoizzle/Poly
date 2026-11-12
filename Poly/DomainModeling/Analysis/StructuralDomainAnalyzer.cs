@@ -677,7 +677,9 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
             reported.Add(entry.Node);
             context.ReportError(
                 entry.Node,
-                row.Kind switch {
+                ReservedNames.IsActionScopeName(entry.MemberIdentity)
+                    ? $"Member '{entry.MemberIdentity}' on entity '{entity.Name}': {row.Reason}; rename it."
+                    : row.Kind switch {
                     ReservedKind.Language =>
                         $"Member '{entry.MemberIdentity}' on entity '{entity.Name}' would take the enclosing " +
                         "type's name (CS0542); rename it.",
@@ -791,8 +793,10 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
                 continue;
             context.ReportError(
                 parameter,
-                $"Parameter '{parameter.Name}' of action '{action.Name}' would shadow the generated " +
-                $"C# type '{row.Name}' that Emit calls from a generated member body; rename it.",
+                ReservedNames.IsActionScopeName(parameter.Name)
+                    ? $"Parameter '{parameter.Name}' of action '{action.Name}': {row.Reason}; rename it."
+                    : $"Parameter '{parameter.Name}' of action '{action.Name}' would shadow the generated " +
+                    $"C# type '{row.Name}' that Emit calls from a generated member body; rename it.",
                 DomainModelDiagnosticCodes.ReservedMemberName);
         }
         ReportDuplicateNames(context, action.Result.Members, "action result", action.Name);

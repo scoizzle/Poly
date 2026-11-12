@@ -171,15 +171,37 @@ public sealed class CSharpWriter {
             }
 
             var text = body.ToString().TrimEnd();
-            var header = new StringBuilder("#nullable enable\n");
-            if (UsesSystem(text))
-                header.AppendLine("using System;");
-            if (UsesCollections(text))
-                header.AppendLine("using System.Collections.Generic;");
-            if (header.Length > "#nullable enable\n".Length)
-                header.AppendLine();
-            return header.Append(text).ToString();
+            return Header(text) + text;
         });
+    }
+
+    /// <summary>The type-list header (R-03b / A6): the System group, one blank line, the
+    /// Poly group, one blank line, then the body. A group appears only when one of its
+    /// identifiers is present, and with neither group the header is the nullable
+    /// directive alone. The order is written here on purpose — the groups are separated,
+    /// which <see cref="CompareUsings"/> cannot express.</summary>
+    private static string Header(string text) {
+        var system = UsesSystem(text);
+        var collections = UsesCollections(text);
+        var constraintFailure = UsesConstraintFailure(text);
+        var domainResult = UsesDomainResult(text);
+
+        var header = new StringBuilder("#nullable enable\n");
+        if (system || collections) {
+            if (system)
+                header.AppendLine("using System;");
+            if (collections)
+                header.AppendLine("using System.Collections.Generic;");
+            header.AppendLine();
+        }
+        if (constraintFailure || domainResult) {
+            if (constraintFailure)
+                header.AppendLine("using Poly.DomainModeling.Runtime;");
+            if (domainResult)
+                header.AppendLine("using Poly.Runtime;");
+            header.AppendLine();
+        }
+        return header.ToString();
     }
 
     private string WithDeclScope(Func<string> write) {
@@ -1770,6 +1792,16 @@ public sealed class CSharpWriter {
         || ContainsIdentifier(text, "Dictionary")
         || ContainsIdentifier(text, "HashSet")
         || ContainsIdentifier(text, "ISet");
+
+    /// <summary>The shared result family's namespace: the type the printed members
+    /// return and call.</summary>
+    private static bool UsesDomainResult(string text) =>
+        ContainsIdentifier(text, "DomainResult");
+
+    /// <summary>The shared fail-closed exception's namespace: the type a void printed
+    /// body throws.</summary>
+    private static bool UsesConstraintFailure(string text) =>
+        ContainsIdentifier(text, "ConstraintFailureException");
 
     private static bool ContainsIdentifier(string text, string identifier) {
         for (var index = text.IndexOf(identifier, StringComparison.Ordinal);

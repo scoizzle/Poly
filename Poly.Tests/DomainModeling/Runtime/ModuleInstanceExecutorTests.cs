@@ -6,6 +6,7 @@ using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Libraries.Storage;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Runtime;
+using Poly.Runtime;
 
 namespace Poly.Tests.DomainModeling.Runtime;
 
@@ -497,6 +498,191 @@ public sealed class ModuleInstanceExecutorTests {
         await Assert.That(blocked.FailedGuards).Contains("IsAdult");
         await Assert.That(blocked.Error).Contains("blocked by policy 'IsAdult'");
         await Assert.That(Stage(minor)).IsEqualTo("Draft");
+    }
+
+    // ── typed outcome failure (X-01a) ────────────────────────────────────────
+
+    private const string PolicyBlockDsl = """
+        domain Shop
+        Person: entity {
+          Age: Number
+          IsAdult: policy { Age >= 18 }
+          Draft: stage { }
+          Active: stage { }
+          Activate: action require IsAdult { transition to Active }
+        }
+        """;
+
+    private const string SectionDsl = """
+        domain EnrollSlice
+        Section: entity {
+          SeatsTaken: Number default(0)
+        }
+        Enrollment: entity {
+          section: Section
+          SectionFull: policy { section SeatsTaken >= 1 }
+          Pending: stage {
+            Confirm: action require not SectionFull {
+              transition to Confirmed
+            }
+          }
+          Confirmed: stage { }
+        }
+        """;
+
+    [Test]
+    public async Task Invoke_PolicyBlocked_OutcomeFailureHasGuardKindAndElement() {
+        var executor = ExecutorFor(PolicyBlockDsl);
+        var minor = executor.Create("Person", Values(("Age", 10L))).Instance!;
+
+        var blocked = executor.Invoke(minor, "Activate");
+
+        await Assert.That(blocked.Succeeded).IsFalse();
+        await Assert.That(blocked.Failure!.Kind).IsEqualTo(DomainFailureKind.Policy);
+        await Assert.That(blocked.Failure.Guard).IsEqualTo("IsAdult");
+        await Assert.That(blocked.Failure.ElementPath).IsEqualTo("Person.Activate");
+        await Assert.That(blocked.Failure.Message).Contains("blocked by policy 'IsAdult'");
+        await Assert.That(Stage(minor)).IsEqualTo("Draft");
+    }
+
+    [Test]
+    public async Task Create_DuplicateUnique_OutcomeFailureHasUniqueKindAndElementPath() {
+        var executor = ExecutorFor(Unique);
+        executor.Create("Widget", Values(("Code", "A")));
+        var second = executor.Create("Widget", Values(("Code", "A")));
+
+        await Assert.That(second.Succeeded).IsFalse();
+        await Assert.That(second.Failure!.Kind).IsEqualTo(DomainFailureKind.Unique);
+        await Assert.That(second.Failure.ElementPath).IsEqualTo("Widget.Code");
+        await Assert.That(second.Failure.Message).Contains("Unique constraint violated");
+        await Assert.That(executor.Instances.Count).IsEqualTo(1);
+        await Assert.That(executor.Storage.Exists("Widget", "Code", "A")).IsTrue();
+    }
+
+    [Test]
+    public async Task Invoke_PathPrefixRequire_GuardListKeepsEveryActionPolicy() {
+        var executor = ExecutorFor(SectionDsl);
+        var enrollment = executor.Create("Enrollment", Values()).Instance!;
+
+        var blocked = executor.Invoke(enrollment, "Confirm");
+
+        await Assert.That(blocked.Failure!.Kind).IsEqualTo(DomainFailureKind.Required);
+        await Assert.That(blocked.Failure.ElementPath).IsEqualTo("Enrollment.section");
+        await Assert.That(blocked.Failure.Guard).IsNull();
+        await Assert.That(blocked.FailedGuards).Contains("not_SectionFull");
+    }
+
+    [Test]
+    public async Task Invoke_RequireNot_PolicyBlocked_FailureGuardIsTheRealPolicyName() {
+        var executor = ExecutorFor(SectionDsl);
+        var section = executor.Create("Section", Values()).Instance!;
+        var enrollment = executor.Create("Enrollment", Values()).Instance!;
+        executor.Link("section", enrollment, section);
+        section.Bag["SeatsTaken"] = 1L;
+
+        var blocked = executor.Invoke(enrollment, "Confirm");
+
+        await Assert.That(blocked.Failure!.Kind).IsEqualTo(DomainFailureKind.Policy);
+        await Assert.That(blocked.Failure.Guard).IsEqualTo("SectionFull");
+        await Assert.That(string.Join(",", blocked.FailedGuards)).IsEqualTo("SectionFull");
+    }
+
+    [Test]
+    public async Task Invoke_StageGateFailure_FailedGuardsIsEmpty() {
+        var executor = ExecutorFor("""
+            domain Gate
+            Item: entity {
+              Draft: stage { Go: action { transition to Done } }
+              Done: stage { }
+            }
+            """);
+        var item = executor.Create("Item", Values()).Instance!;
+        await Assert.That(executor.Invoke(item, "Go").Succeeded).IsTrue();
+
+        var again = executor.Invoke(item, "Go");
+
+        await Assert.That(again.Succeeded).IsFalse();
+        await Assert.That(again.Failure!.Kind).IsEqualTo(DomainFailureKind.Stage);
+        await Assert.That(again.Failure.Guard).IsNotNull();
+        await Assert.That(again.FailedGuards.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task Invoke_MultiHopPathPrefix_SecondHopUnlinked_ListsActionPolicies() {
+        var executor = ExecutorFor("""
+            domain IssueSlice
+            Engineer: entity { team: Team }
+            Team: entity { TeamName: Text }
+            Issue: entity {
+              reporter: Engineer
+              FromBlueTeam: policy { reporter team TeamName is "Blue" }
+              Open: stage {
+                Escalate: action require FromBlueTeam { transition to Closed }
+              }
+              Closed: stage { }
+            }
+            """);
+        var engineer = executor.Create("Engineer", Values()).Instance!;
+        var issue = executor.Create("Issue", Values()).Instance!;
+        executor.Link("reporter", issue, engineer);
+
+        var blocked = executor.Invoke(issue, "Escalate");
+
+        await Assert.That(blocked.Failure!.Kind).IsEqualTo(DomainFailureKind.Required);
+        await Assert.That(blocked.Failure.ElementPath).IsEqualTo("Engineer.team");
+        await Assert.That(blocked.FailedGuards).Contains("FromBlueTeam");
+    }
+
+    [Test]
+    public async Task ExecutorSource_ContainsNoBlockedByPolicyLiteral() {
+        var directory = Path.Combine(GoldenDomains.RepoRoot, "Poly", "DomainModeling", "Runtime");
+        var files = Directory.GetFiles(directory, "ModuleInstanceExecutor*.cs");
+
+        await Assert.That(files.Length).IsGreaterThan(0);
+        foreach (var file in files) {
+            var text = await File.ReadAllTextAsync(file);
+            await Assert.That(text).DoesNotContain("blocked by policy '");
+            await Assert.That(text).DoesNotContain("requires a linked");
+        }
+    }
+
+    private const string OwnedKidDsl = """
+        domain Lab
+        Child: entity { Name: Text }
+        Parent: entity { kid: owned Child }
+        """;
+
+    [Test]
+    public async Task Link_SecondOwnerOfOwnedTarget_FailureIsLinkKindWithTheEntityPath() {
+        var executor = ExecutorFor(OwnedKidDsl);
+        var parent = executor.Create("Parent", Values()).Instance!;
+        var first = executor.Create("Child", Values(("Name", "a"))).Instance!;
+        var second = executor.Create("Child", Values(("Name", "b"))).Instance!;
+        await Assert.That(executor.Link("kid", parent, first).Succeeded).IsTrue();
+
+        var refused = executor.Link("kid", parent, second);
+
+        await Assert.That(refused.Succeeded).IsFalse();
+        await Assert.That(refused.Failure!.Kind).IsEqualTo(DomainFailureKind.Link);
+        await Assert.That(refused.Failure.ElementPath).IsEqualTo("Parent.kid");
+        await Assert.That(refused.Failure.Guard).IsNull();
+        await Assert.That(refused.Error).IsEqualTo(Relationship.LinkViolationMessage("kid"));
+    }
+
+    [Test]
+    public async Task Unlink_LastOwnerOfOwnedTarget_FailureIsLinkKindWithTheEntityPath() {
+        var executor = ExecutorFor(OwnedKidDsl);
+        var parent = executor.Create("Parent", Values()).Instance!;
+        var kid = executor.Create("Child", Values(("Name", "a"))).Instance!;
+        await Assert.That(executor.Link("kid", parent, kid).Succeeded).IsTrue();
+
+        var refused = executor.Unlink("kid", parent, kid);
+
+        await Assert.That(refused.Succeeded).IsFalse();
+        await Assert.That(refused.Failure!.Kind).IsEqualTo(DomainFailureKind.Link);
+        await Assert.That(refused.Failure.ElementPath).IsEqualTo("Parent.kid");
+        await Assert.That(refused.Failure.Guard).IsNull();
+        await Assert.That(refused.Error).IsEqualTo(Relationship.UnlinkViolationMessage("kid"));
     }
 
     [Test]

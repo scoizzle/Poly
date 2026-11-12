@@ -11,9 +11,8 @@ namespace Poly.Tests.DomainModeling.Parsing;
 /// The round-trip idempotence guard over the shared golden corpus (theme #678, slice
 /// G-01): for every <see cref="GoldenDomains.Compilable"/> entry, generating the DSL
 /// twice in a row is a fixed point — <c>print(parse(print(parse(x))))</c> equals
-/// <c>print(parse(x))</c>. The source is deliberately not compared: the printer re-sorts
-/// entities, value types and contracts, so a source comparison would be red on HEAD for
-/// a reason this guard does not own (that is G-18).
+/// <c>print(parse(x))</c>. The source is deliberately not compared: the printer drops
+/// <c>uses temporal</c>, so a source comparison would be red for a reason this guard does not own.
 ///
 /// <para>The corpus is <see cref="GoldenDomains.Compilable"/>, which is frozen — it is
 /// exactly the set <c>EmitGoldenTests</c> snapshots. A later G slice adds its own
@@ -22,7 +21,7 @@ namespace Poly.Tests.DomainModeling.Parsing;
 ///
 /// <para><b>What this guard is not.</b> It catches instability, not loss. A printer that
 /// silently drops a facet still round-trips, so these pass here: the <c>uses temporal</c>
-/// drop on print, the entity/value/contract re-sort (G-18), and a deterministic change to
+/// drop on print and a deterministic change to
 /// parser associativity (<c>DslExprParityTests</c> carries precedence and associativity,
 /// including for G-10). An injection that is stable after one round (#655's
 /// <c>uses storage</c>) is not caught here either; G-18's

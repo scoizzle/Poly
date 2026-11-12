@@ -30,7 +30,7 @@ public class GuideExamplesTests {
 
     /// <summary>Counts per info string. Pinned by count, not by first line, so a reflow does not red.</summary>
     private static readonly (string Info, int Count)[] FenceCounts = [
-        ("poly", 42),
+        ("poly", 43),
         ("", 5),
         ("json", 1),
     ];

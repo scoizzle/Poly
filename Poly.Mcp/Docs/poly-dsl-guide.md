@@ -525,6 +525,36 @@ inbound link of an `owned` target (minimum one owner): "Cannot unlink '<rel>': t
 owned target must keep its owner." Non-owned links stay minimum zero, and removing
 the owner instance entirely is not an unlink, so it is exempt from the minimum.
 
+**An owned entity has exactly one owner navigation** (`DMSTR010`). Two `owned`
+navigations to one entity type are an analysis error, whether they sit on different
+entities or on one, and the message names every owner:
+
+<!-- poly-verify: invalid:DMSTR010 wrapper:top-default -->
+```poly
+Customer: entity {
+  Name: Text
+  profile: owned Profile
+}
+
+Supplier: entity {
+  Name: Text
+  profile: owned Profile   // error: Profile already has an owner, Customer.profile
+}
+
+Profile: entity {
+  Bio: Text
+}
+```
+
+Keep one navigation `owned` and make the other a plain reference. The rule is by
+navigation, so `Order.billing: owned Address` plus `Order.shipping: owned Address`
+is rejected too: make one a plain reference, or model the address as two entity types.
+A self-owning navigation (`Node.children: many owned Node`) is one owner edge and is
+legal, but a container that owns a recursive type (`Folder.items: many owned Item` plus
+`Item.children: many owned Item`) gives `Item` two owner navigations and is rejected;
+make `Item.children` a plain reference, or declare the tree node as its own type.
+This is a type-level check only: a second owner *instance* is not refused yet.
+
 **Relationship names are scoped to their source entity.** The same navigation name may
 be declared on different source entities — e.g. two children each back-reference their
 parent with a nav named `order` — but never twice on the same entity, and never
@@ -560,8 +590,8 @@ Employee: entity {
 `via` is recorded on the relationship as `Inverse` and is validated by analysis:
 `DMREL003` when the name is not a navigation on the target entity, `DMREL004` when the
 two sides contradict (the named navigation points elsewhere, declares a different
-inverse, is the navigation itself, both ends are owned, or two navigations on one entity
-claim the same undeclared inverse), and `DMREL005` when two or more navigations of one
+inverse, is the navigation itself, both ends are owned, an owned navigation is paired with a
+collection inverse, or two navigations on one entity claim the same undeclared inverse), and `DMREL005` when two or more navigations of one
 cardinality class pair with a side that declares none. Lowering does not dispatch from
 the declared inverse yet — that is a later slice. `via <name>` is legal on an owned
 navigation too — that is how the back-reference names its owner, and only one side of a

@@ -65,6 +65,15 @@ internal static class DomainModelDiagnosticCodes {
     /// </summary>
     public const string ReservedMemberName = "DMSTR009";
 
+    /// <summary>
+    /// An entity type is the target of two or more owner navigations (S-12, #585): an owned
+    /// target has exactly one owner navigation. Two <c>owned</c> navigations to one type —
+    /// on different entities or on one — leave the single-owner rule unlowerable. Keep one
+    /// <c>owned</c> and make the other a plain reference. A self-owning navigation is one
+    /// edge and is legal.
+    /// </summary>
+    public const string OwnedTargetMultipleOwners = "DMSTR010";
+
     public const string SemanticTypeCompatibility = "DMSEM003";
     public const string SemanticConstraintMismatch = "DMSEM004";
     public const string SemanticReferenceResolution = "DMSEM005";

@@ -243,4 +243,118 @@ public class OwnershipAggregateAnalysisTests {
         await Assert.That(a.AggregateParentName == "B" && b.AggregateParentName == "A").IsFalse();
         await AssertParentInvariant(aggregate);
     }
+
+    private static (Domain? Root, AnalysisResult Analysis) Run(string dsl) {
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], []))
+            .ApplyAndAnalyze(new PolyDslParser(dsl).Parse());
+        return result.Root is { } root && result.Succeeded
+            ? (root, DomainModelAnalyzer.Analyze(root))
+            : (result.Root, result.Analysis);
+    }
+
+    private static IReadOnlyList<Diagnostic> AllErrors(AnalysisResult analysis) =>
+        analysis.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+
+    private static IReadOnlyList<Diagnostic> Errors(AnalysisResult analysis, string code) =>
+        analysis.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error && d.Code == code).ToList();
+
+    private static IReadOnlyList<OwnedEdge> Edges(AnalysisResult analysis, Domain domain) =>
+        analysis.GetMetadata<OwnershipAggregateMetadata>(domain)!.OwnedEdges;
+
+    [Test]
+    public async Task OwnedEdges_ListEveryOwnedNavigationInDeclarationOrder() {
+        var (domain, analysis) = Analyze("""
+            domain Test
+            Customer: entity {
+              Name: Text
+              profile: owned Profile
+              orders: many owned Order
+            }
+            Profile: entity { Bio: Text }
+            Order: entity {
+              Total: Number
+              lines: many owned Line
+            }
+            Line: entity { Qty: Number }
+            """);
+
+        var edges = Edges(analysis, domain);
+        await Assert.That(edges.Count).IsEqualTo(3);
+        await Assert.That(edges[0]).IsEqualTo(new OwnedEdge("Customer", "profile", "Profile", RelationshipCardinality.OneToOne));
+        await Assert.That(edges[1]).IsEqualTo(new OwnedEdge("Customer", "orders", "Order", RelationshipCardinality.OneToMany));
+        await Assert.That(edges[2]).IsEqualTo(new OwnedEdge("Order", "lines", "Line", RelationshipCardinality.OneToMany));
+    }
+
+    [Test]
+    public async Task OwnerEdgesOf_ReturnsTheOneOwnerEdge() {
+        var (domain, analysis) = Analyze("""
+            domain Test
+            Customer: entity {
+              Name: Text
+              orders: many owned Order
+            }
+            Order: entity { Total: Number }
+            """);
+
+        var meta = analysis.GetMetadata<OwnershipAggregateMetadata>(domain)!;
+        var owners = meta.OwnerEdgesOf("Order");
+        await Assert.That(owners.Count).IsEqualTo(1);
+        await Assert.That(owners[0].SourceEntity).IsEqualTo("Customer");
+        await Assert.That(owners[0].NavName).IsEqualTo("orders");
+        await Assert.That(meta.OwnerEdgesOf("Customer")).IsEmpty();
+    }
+
+    [Test]
+    public async Task OwnedEdges_SelfOwnership_IsOneEdge() {
+        var (domain, analysis) = Analyze("""
+            domain Test
+            Node: entity {
+              Name: Text
+              children: many owned Node
+            }
+            """);
+
+        var edges = Edges(analysis, domain);
+        await Assert.That(edges.Count).IsEqualTo(1);
+        await Assert.That(edges[0]).IsEqualTo(new OwnedEdge("Node", "children", "Node", RelationshipCardinality.OneToMany));
+    }
+
+    /// <summary>Pin: green against the empty stub — a plain reference is not an owner edge.</summary>
+    [Test]
+    public async Task OwnedEdges_PlainReferencesAreNotEdges_Pin() {
+        var (domain, analysis) = Analyze("""
+            domain Test
+            Order: entity {
+              Total: Number
+              customer: Customer
+              lines: many Line
+            }
+            Customer: entity { Name: Text }
+            Line: entity { Qty: Number }
+            """);
+
+        await Assert.That(Edges(analysis, domain)).IsEmpty();
+    }
+
+    /// <summary>Pin: green against the empty stub — a duplicated target is DMSTR001's, no edge, no cascade.</summary>
+    [Test]
+    public async Task OwnedEdges_DuplicatedTargetType_IsSkipped_Pin() {
+        var (root, analysis) = Run("""
+            domain DuplicatedTarget
+            A: entity {
+              x: owned B
+            }
+            B: entity {
+              Name: Text
+            }
+            B: entity {
+              y: A
+            }
+            """);
+
+        await Assert.That(Errors(analysis, DomainModelDiagnosticCodes.StructuralDuplicate).Count).IsGreaterThan(0);
+        await Assert.That(Errors(analysis, DomainModelDiagnosticCodes.OwnedTargetMultipleOwners)).IsEmpty();
+        if (root is not null && analysis.GetMetadata<OwnershipAggregateMetadata>(root) is { } meta)
+            await Assert.That(meta.OwnedEdges).IsEmpty();
+    }
 }

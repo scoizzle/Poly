@@ -13,7 +13,7 @@ public class Account
     private List<Contact> _contacts = new List<Contact>();
     private List<Opportunity> _opportunities = new List<Opportunity>();
     private List<Ticket> _tickets = new List<Ticket>();
-    private Account(Industry industry, string name, Account? parent = null, Site? hq = null, IEnumerable<Contact>? contacts = null, IEnumerable<Opportunity>? opportunities = null, IEnumerable<Ticket>? tickets = null, long closedTickets = 0L, decimal openPipeline = 0L, long wonCount = 0L)
+    private Account(Industry industry, string name, Account? parent = null, Site? hq = null, IEnumerable<Contact>? contacts = null, IEnumerable<Opportunity>? opportunities = null, IEnumerable<Ticket>? tickets = null, long closedTickets = 0L, decimal openPipeline = 0m, long wonCount = 0L)
     {
         this.Industry = industry;
         this.Name = name;
@@ -219,7 +219,7 @@ public class Account
     {
         this.ClosedTickets = this.ClosedTickets + 1L;
     }
-    public static DomainResult<Account> Create(Industry industry, string name, Account? parent = null, Site? hq = null, IEnumerable<Contact>? contacts = null, IEnumerable<Opportunity>? opportunities = null, IEnumerable<Ticket>? tickets = null, long closedTickets = 0L, decimal openPipeline = 0L, long wonCount = 0L)
+    public static DomainResult<Account> Create(Industry industry, string name, Account? parent = null, Site? hq = null, IEnumerable<Contact>? contacts = null, IEnumerable<Opportunity>? opportunities = null, IEnumerable<Ticket>? tickets = null, long closedTickets = 0L, decimal openPipeline = 0m, long wonCount = 0L)
     {
         if ((object)industry == null)
         {

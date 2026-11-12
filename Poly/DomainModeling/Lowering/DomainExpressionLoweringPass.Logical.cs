@@ -12,19 +12,18 @@ namespace Poly.DomainModeling.Lowering;
 
 public sealed partial class DomainExpressionLoweringPass {
     protected override LoweredExpression Comparison(Comparison c) {
-        var left = Route(c.Left);
-        var right = Route(c.Right);
+        // An enum-typed property on one side decides the other side's type: a string
+        // literal or a bare member name becomes qualified member access, through the
+        // one target-type adapter. The property side adapts to itself, which the
+        // shadow guard leaves as an instance read.
+        var left = EnumTargetOf(c.Right) is { } leftTarget
+            ? AdaptTo(c.Left, leftTarget, _currentSubject)
+            : Route(c.Left);
+        var right = EnumTargetOf(c.Left) is { } rightTarget
+            ? AdaptTo(c.Right, rightTarget, _currentSubject)
+            : Route(c.Right);
         var loweredLeft = left.Value;
         var loweredRight = right.Value;
-
-        // For enum-typed properties, replace string literal with qualified member
-        // access: Status == "Active" becomes Status == PatronStatus.Active
-        if (_enumPropertyNames is { Count: > 0 }) {
-            var fixedLeft = FixEnumLiteral(c.Left, c.Right, loweredRight);
-            var fixedRight = FixEnumLiteral(c.Right, c.Left, loweredLeft);
-            if (fixedLeft is not null) loweredLeft = fixedLeft;
-            if (fixedRight is not null) loweredRight = fixedRight;
-        }
 
         // Count is an int; compare it to an int literal so the printed form is
         // `Count > 0`, not `Count > 0L` (G18). Sum accumulators stay long.
@@ -166,39 +165,5 @@ public sealed partial class DomainExpressionLoweringPass {
         if (seenPaths.Add(hopPath))
             hops.Add(hop);
         CollectValueHops(rn.TargetProperty, hop, hopPath, hops, seenPaths);
-    }
-
-    /// <summary>
-    /// If <paramref name="valueNode"/> is a string literal and <paramref name="otherSide"/>
-    /// is a property access for an enum-typed property, returns a Syntax node that
-    /// references the enum member qualified by the type name (e.g. <c>PatronStatus.Active</c>).
-    /// Returns null if no substitution is needed.
-    /// </summary>
-    private Node? FixEnumLiteral(DomainExpression valueExpr, DomainExpression otherSide, Node otherSideNode) {
-        if (otherSide is not PropertyAccess prop
-            || _enumPropertyNames is null
-            || !_enumPropertyNames.TryGetValue(prop.Name, out var enumTypeName))
-            return null;
-
-        // String form: Status == "Active" → PatronStatus.Active
-        if (valueExpr is Literal { Value: string strVal }
-            && !string.IsNullOrEmpty(strVal)
-            && strVal is not "true" and not "false" and not "null"
-            && !char.IsDigit(strVal[0])) {
-            return new Member(new NamedTypeReference(enumTypeName), strVal);
-        }
-
-        // Bare member form: Status is Active → PatronStatus.Active. A bare name that
-        // is itself a property stays an instance read (an enum-to-enum comparison).
-        if (valueExpr is PropertyAccess memberAccess
-            && !_enumPropertyNames.ContainsKey(memberAccess.Name)
-            && _propertyTypeResolver?.Invoke(memberAccess.Name) is null
-            && _domain.Types.OfType<EnumType>().Any(e =>
-                string.Equals(e.Name, enumTypeName, StringComparison.Ordinal)
-                && e.MemberNames.Contains(memberAccess.Name, StringComparer.Ordinal))) {
-            return new Member(new NamedTypeReference(enumTypeName), memberAccess.Name);
-        }
-
-        return null;
     }
 }

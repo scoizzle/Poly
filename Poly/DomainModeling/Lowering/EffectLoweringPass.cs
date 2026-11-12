@@ -35,7 +35,6 @@ public sealed partial class EffectLoweringPass : EffectDispatch<Node?> {
     private readonly IReadOnlySet<string>? _postTransitionNotifyStages;
     private readonly IReadOnlySet<string>? _previousStageNotifyStages;
     private string? _sourceStageName;
-    private readonly IReadOnlyDictionary<string, string>? _enumPropertyNames;
     private readonly string? _lifecyclePropertyName;
     private readonly string? _lifecycleEnumTypeName;
     private readonly LoweringContext _context;
@@ -69,7 +68,6 @@ public sealed partial class EffectLoweringPass : EffectDispatch<Node?> {
         _postTransitionNotifyStages = context.PostTransitionNotifyStages;
         _previousStageNotifyStages = context.PreviousStageNotifyStages;
         _sourceStageName = context.SourceStageName;
-        _enumPropertyNames = context.EnumPropertyNames;
         _lifecyclePropertyName = context.LifecyclePropertyName;
         _lifecycleEnumTypeName = context.LifecycleEnumTypeName;
         _emitAutomaticStageGuard = EffectHelpers.HasAutomaticTransitions(entity);

@@ -74,12 +74,15 @@ public sealed class ParityScenario {
     readonly Domain _printedDomain;
     readonly Assembly _assembly;
     readonly IReadOnlySet<string> _recordedExceptions;
+    readonly bool _recordPostThrowState;
 
-    ParityScenario(Domain domain, Domain printedDomain, Assembly assembly, IReadOnlySet<string> recordedExceptions) {
+    ParityScenario(Domain domain, Domain printedDomain, Assembly assembly, IReadOnlySet<string> recordedExceptions,
+        bool recordPostThrowState) {
         _domain = domain;
         _printedDomain = printedDomain;
         _assembly = assembly;
         _recordedExceptions = recordedExceptions;
+        _recordPostThrowState = recordPostThrowState;
     }
 
     /// <summary>The names of the sides the last <see cref="Run"/> executed, in order.</summary>
@@ -107,9 +110,14 @@ public sealed class ParityScenario {
     /// <paramref name="recordedExceptions"/> names exception types (the printed C# defines its own
     /// types, so names, not <see cref="Type"/>) a scenario records as an outcome instead of a
     /// harness fault; the default set is unchanged for every existing row.
+    /// <paramref name="recordPostThrowState"/> opts a scenario into reporting the current entity's
+    /// state after a step throws. It is off by default because a row that used to compare two empty
+    /// states would start comparing post-throw state, and every such flip is a finding for its own
+    /// slice, not a harness change (see the loop-guard row in ExitBlockTransitionTests).
     /// </summary>
     public static ParityScenario FromDsls(
-        string simulateDsl, string printedDsl, string assemblyName, params string[] recordedExceptions) {
+        string simulateDsl, string printedDsl, string assemblyName,
+        string[]? recordedExceptions = null, bool recordPostThrowState = false) {
         var simulate = EvolvedDomain.FromDsl(simulateDsl).Domain;
         var ids = simulate.Extensions.Count > 0 ? simulate.Extensions : ExtensionCatalog.ProductAuthoring;
 
@@ -125,22 +133,23 @@ public sealed class ParityScenario {
                 .Select(d => d.Message)));
         var cs = new CSharpGenerator().Generate(printedSession.Lower(evolved.Root!, evolved.Analysis));
         return new(simulate, evolved.Root!, ExportedCSharp.CompileAndLoad(cs, assemblyName),
-            new HashSet<string>(recordedExceptions, StringComparer.Ordinal));
+            new HashSet<string>(recordedExceptions ?? [], StringComparer.Ordinal), recordPostThrowState);
     }
 
-    public static ParityScenario FromDsl(string dsl, string assemblyName, params string[] recordedExceptions) =>
-        FromDsls(dsl, dsl, assemblyName, recordedExceptions);
+    public static ParityScenario FromDsl(
+        string dsl, string assemblyName, string[]? recordedExceptions = null, bool recordPostThrowState = false) =>
+        FromDsls(dsl, dsl, assemblyName, recordedExceptions, recordPostThrowState);
 
     /// <summary>For domains built or edited through the API, which the DSL cannot always express. No storage library: such a domain holds no unique key.</summary>
     public static ParityScenario FromDomain(Domain domain, string assemblyName) {
         var analysis = DomainModelAnalyzer.Analyze(domain);
         var cs = new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis));
-        return new(domain, domain, ExportedCSharp.CompileAndLoad(cs, assemblyName), new HashSet<string>(StringComparer.Ordinal));
+        return new(domain, domain, ExportedCSharp.CompileAndLoad(cs, assemblyName), new HashSet<string>(StringComparer.Ordinal), false);
     }
 
     public (IReadOnlyList<ParityOutcome> Simulate, IReadOnlyList<ParityOutcome> Printed) Run(Action<ParitySide> steps) {
-        var simulate = new SimulateSide(_domain, _recordedExceptions);
-        var printed = new PrintedSide(_domain, _assembly, _recordedExceptions);
+        var simulate = new SimulateSide(_domain, _recordedExceptions, _recordPostThrowState);
+        var printed = new PrintedSide(_domain, _assembly, _recordedExceptions, _recordPostThrowState);
         Sides = [simulate.Name, printed.Name];
         steps(simulate);
         steps(printed);
@@ -193,7 +202,8 @@ public sealed class ParityScenario {
 /// <see cref="ConstraintFailureException"/> is an outcome, as is a type the scenario opts into by
 /// name; any other exception is a harness fault and fails the row.
 /// </summary>
-public abstract class ParitySide(Domain domain, IReadOnlySet<string>? recordedExceptions = null) {
+public abstract class ParitySide(
+    Domain domain, IReadOnlySet<string>? recordedExceptions = null, bool recordPostThrowState = false) {
     public List<ParityOutcome> Outcomes { get; } = [];
     protected Domain Domain { get; } = domain;
     Entity? _model;
@@ -272,12 +282,13 @@ public abstract class ParitySide(Domain domain, IReadOnlySet<string>? recordedEx
     }
 
     /// <summary>
-    /// A step that throws still leaves its subject readable when the subject already exists, so a
-    /// thrown step reports that state instead of an empty dictionary. A failed create has no entity
-    /// of its own, so it still reports none.
+    /// A scenario that opts in reports the state its throwing step left behind: the subject exists,
+    /// so its state is readable even though the step failed. A failed create has no entity of its
+    /// own, so it still reports none. The default is unchanged (an empty state for a throw), because
+    /// turning this on everywhere would flip rows that compare two empty states today.
     /// </summary>
     IReadOnlyDictionary<string, string?> StateAfterThrow(Entity? created) =>
-        created is not null || _current is null || _model is null
+        !recordPostThrowState || created is not null || _current is null || _model is null
             ? new Dictionary<string, string?>()
             : StateOf(_current, _model);
 

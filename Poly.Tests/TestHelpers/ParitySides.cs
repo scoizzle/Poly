@@ -7,7 +7,8 @@ using StepResult = (bool Success, string? Message, object? Value);
 
 namespace Poly.Tests.TestHelpers;
 
-sealed class SimulateSide(Domain domain, IReadOnlySet<string>? recordedExceptions = null) : ParitySide(domain, recordedExceptions) {
+sealed class SimulateSide(Domain domain, IReadOnlySet<string>? recordedExceptions = null, bool recordPostThrowState = false)
+    : ParitySide(domain, recordedExceptions, recordPostThrowState) {
     readonly ModuleInstanceExecutor _exec = ModuleExec.For(domain);
 
     public override string Name => "simulate";
@@ -97,7 +98,8 @@ sealed class SimulateSide(Domain domain, IReadOnlySet<string>? recordedException
     }
 }
 
-sealed class PrintedSide(Domain domain, Assembly assembly, IReadOnlySet<string>? recordedExceptions = null) : ParitySide(domain, recordedExceptions) {
+sealed class PrintedSide(Domain domain, Assembly assembly, IReadOnlySet<string>? recordedExceptions = null, bool recordPostThrowState = false)
+    : ParitySide(domain, recordedExceptions, recordPostThrowState) {
     internal RecordingStoragePort Port { get; } = new();
 
     public override string Name => "printed";

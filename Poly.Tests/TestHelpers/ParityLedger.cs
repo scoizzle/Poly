@@ -6,7 +6,7 @@ namespace Poly.Tests.TestHelpers;
 /// </summary>
 public sealed record ParityCase(
     string Name, int Issue, string SimulateDsl, string PrintedDsl, Action<ParitySide> Steps,
-    string[] RecordedExceptions);
+    string[] RecordedExceptions, bool PostThrowState = false);
 
 /// <summary>
 /// One known simulate/printed divergence: the scenario that reproduces it, the sides that ran, and
@@ -172,7 +172,7 @@ public static class DomainParityScenarios {
                 side.Link("lefts", left);
                 side.Invoke("Poke");
                 side.Use(left);
-            }, []),
+            }, [], PostThrowState: true),
 
         new("handler-range-after-transition", 617, """
             domain M
@@ -365,7 +365,7 @@ public static class DomainParityScenarios {
                 side.Use(inv);
                 side.Link("lines", line);
                 side.Invoke("Grow");
-            }, []),
+            }, [], PostThrowState: true),
     ];
 
     static readonly Lazy<IReadOnlyDictionary<string, ParityRun>> Runs = new(Build, LazyThreadSafetyMode.ExecutionAndPublication);
@@ -384,7 +384,7 @@ public static class DomainParityScenarios {
 
     static ParityRun Execute(ParityCase seed) {
         var scenario = ParityScenario.FromDsls(
-            seed.SimulateDsl, seed.PrintedDsl, $"ParityLedger{seed.Issue}", seed.RecordedExceptions);
+            seed.SimulateDsl, seed.PrintedDsl, $"ParityLedger{seed.Issue}", seed.RecordedExceptions, seed.PostThrowState);
         var (simulate, printed) = scenario.Run(seed.Steps);
         return new(scenario.Sides, ParityScenario.DifferenceSet(simulate, printed), simulate, printed, scenario);
     }

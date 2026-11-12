@@ -11,8 +11,7 @@ using Poly.Mcp.Surface;
 namespace Poly.Mcp;
 
 /// <summary>
-/// The one MCP host entry. <c>polyc mcp</c> calls it, and so does the <c>Poly.Mcp</c> forwarder
-/// that keeps the old launch path working for a release. Stdio transport, logs to stderr, the two
+/// The one MCP host entry. <c>polyc mcp</c> calls it. Stdio transport, logs to stderr, the two
 /// call filters, and the seven outcome tools.
 /// </summary>
 public static class PolyMcpHost {

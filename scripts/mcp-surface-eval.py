@@ -18,13 +18,13 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-BIN = ROOT / "Poly.Mcp/bin/Debug/net10.0/Poly.Mcp"
+BIN = ROOT / "src/polyc/bin/Debug/net10.0/polyc"
 
 
 class Client:
     def __init__(self, surface: int):
         self.proc = subprocess.Popen(
-            [str(BIN)], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+            [str(BIN), "mcp"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL, text=True, bufsize=1)
         self.next_id = 0
         self.calls = 0
@@ -318,7 +318,7 @@ def run(surface: int):
 
 def main() -> int:
     if not BIN.exists():
-        print(f"missing {BIN}; build Poly.Mcp first", file=sys.stderr)
+        print(f"missing {BIN}; build polyc first", file=sys.stderr)
         return 1
 
     summary = {}

@@ -171,6 +171,7 @@ Host-neutral types/members (`Poly/Introspection/`); CLR is first provider. Consu
 
 | Piece | Location |
 |-------|----------|
+| Host | `src/polyc/` — `polyc mcp` (stdio) is the only MCP host; `Poly.Mcp/` is a class library with no entry point |
 | Tools / sessions | `Poly.Mcp/` — `PolySurfaceTools` is the only `[McpServerToolType]`; the v1 tool classes in `Poly.Mcp/Tools/` are internal adapters it delegates to, not registered as MCP tools |
 | Compile session | `DomainSession` in `Poly/DomainModeling/` (MCP holds it) |
 | Libraries | `IDomainLibrary` — `uses` loads analyzers/maps/contributors |

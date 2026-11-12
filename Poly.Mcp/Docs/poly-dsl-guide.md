@@ -505,7 +505,7 @@ Customer: entity {
 ```
 
 Cardinality: `one` (default, can be omitted), `many`.
-Ownership: `owned` marks `SourceOwnsTarget = true`.
+Ownership: `owned` marks `SourceOwnsTarget = true`. Export writes `one ` explicitly for a one-to-one navigation (`invoice: Invoice` prints as `invoice: one Invoice`), because the bare form re-reads as a typed property line.
 
 **Which entity is the root.** A collection nav (`children: many Child`) means the
 declaring entity owns the target. `owned` marks composition explicitly. A plain singular

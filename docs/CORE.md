@@ -155,6 +155,8 @@ Expand to **generic** Syntax (no domain opcodes). StageTransition / self-invoke 
 
 **Contract tolerance (#422).** The same acknowledgement covers the decision-8 contract findings: `DMCON002` (unclosed public signature), `DMCON003` (public action on an internal entity), `DMCON004` (platform target), `DMCON005` (bind names an unregistered contract), `DMCON010` (pin mismatch), and `DMCON013` (endpoint not on the surface). A match reports the finding as a warning on the same record and stores one `ContractToleranceMetadata` fact per (code, element path) on the domain. Lower, Emit, Compile, and direct projection then refuse through `ContractToleranceGate`, naming the fact; a non-`Bound` `ContractBindingMetadata.Status` also refuses in the splice. This is not the deleted #430 flow gate: the fact exists only when an acknowledged contract finding was recorded, it covers contract findings only, and it never re-derives severity from a rules table. A tolerated flow finding still lowers. `DMCON012`, the package-metadata `DMCON001` errors, and flow codes are not acknowledgeable through this arm. `InternalDomainProducer` takes no analysis and is not a gate.
 
+**Runtime contract: failure status and the concurrency token.** `Poly.Runtime.DomainFailureStatus.Http(kind)` is the only kind→status table: `Unique`, `Link` and `Conflict` are 409, `Cascade` is 500, the other ten kinds are 400, and an unknown kind throws rather than inheriting 400. A host maps a failure through it — it never parses failure text (`MinimalApiGenerator.Host.cs`'s `message.Contains(...)` `FailureStatus` is the shim P-14 deletes) and never prints a second table (#677 g.10). `Link` → 409 means an occupied to-one link only, and `Stage`/`Policy` at 400 are provisional and unruled. `Poly.Runtime.IVersioned { long Version { get; } }` is the optimistic-concurrency token: P-09 binds it and owns the shadow column and the save-time bump, while generated plain C# entities are not thread-safe by contract (#574), so concurrent writes stay the store's concern, not the entity's. ADR: [`docs/decisions/2026-11-12-runtime-contract-package.md`](decisions/2026-11-12-runtime-contract-package.md).
+
 **Instance handles, not runtime types.** `ModuleInstance` (`Runtime/ModuleInstance.cs`) is a public record of `(Id, EntityName, Bag)` — the executor's handle onto the dictionary the interpreter already runs. It carries no behaviour: no methods, no dispatch, no lifecycle. That is the line the tenet draws. "There is no instance runtime type" means no second object model with its own semantics; a bag handle is the host's index into the module's dictionary and is not one.
 
 ### 3.5 Introspection
@@ -190,6 +192,7 @@ Simulate = Interpreter on lowered module bodies with caller-supplied context —
 | Product door | Opt-in `uses` + `IArtifactContributor` | Core `Program.cs` |
 | Domain mutation | `DomainEvolution`…`Apply` | In-place graph edits |
 | New domain feature | Lower to existing Syntax (+ analyze/replace) | Domain opcodes; ABI one-offs |
+| HTTP status for a domain failure | `Poly.Runtime.DomainFailureStatus.Http(kind)` | Failure message text parsed in a host; a second kind→status table |
 | Why / multi-step work | `docs/decisions/` · GitHub issues | Expanding CORE or AGENTS into a plan |
 
 ---

@@ -13,11 +13,14 @@ namespace Poly.DomainModeling.Analysis;
 /// "proven" while a write is unverified.
 /// </summary>
 public enum CheckVerdict {
+    /// <summary>
+    /// At least one write could not be decided, so the model is not proven. This is the zero value,
+    /// so a defaulted verdict fails closed to Unknown rather than reading Proven.
+    /// </summary>
+    Unknown,
+
     /// <summary>Every write is decided inside its constraint and no error is in scope.</summary>
     Proven,
-
-    /// <summary>At least one write could not be decided, so the model is not proven.</summary>
-    Unknown,
 
     /// <summary>A write is proven outside its constraint, or an error is in scope.</summary>
     Violated,
@@ -27,7 +30,10 @@ public enum CheckVerdict {
 /// One write the summary could not prove inside its constraint, projected from a finding and
 /// enriched from the recorded fact on the same node (A2). <see cref="Path"/> is the finding's
 /// element path; <see cref="Property"/>, <see cref="Constraint"/> and <see cref="Reason"/> are
-/// null when no fact is attached to that node.
+/// null when no fact is attached to that node — a call-chain warning and a non-Range parameter-arm
+/// warning record no fact, and a <c>DMCS003</c> row may not be a write finding at all
+/// (<c>ConstraintQualityAnalyzer</c> reports that code too), so the three fields are optional on
+/// every row, not only on those.
 /// </summary>
 public sealed record UnverifiedWriteFact(
     string Path,
@@ -41,6 +47,13 @@ public sealed record UnverifiedWriteFact(
 /// The derived verdict for one scope of one domain (V-04). <see cref="VerifiedWrites"/> is the
 /// whole domain's count — V-03 records it without a node, so a scoped summary cannot narrow it —
 /// while <see cref="UnverifiedWrites"/> and <see cref="Violations"/> are the in-scope rows.
+/// <para>
+/// <see cref="Violations"/> counts distinct nodes carrying a violation fact <em>or</em> any
+/// <see cref="DiagnosticSeverity.Error"/> of any code, so it is deliberately larger than the
+/// fact-backed <c>WriteVerificationFacts.Violations</c> until the call chain records facts (V-05).
+/// With a facts bucket and a scope that names an element, <see cref="CheckVerdict.Unknown"/> implies
+/// at least one row: a recorded fact with no finding is synthesised into one.
+/// </para>
 /// </summary>
 public sealed record VerificationSummary(
     CheckVerdict Verdict,
@@ -58,6 +71,12 @@ public static class VerificationSummaryExtensions {
     /// The verdict for <paramref name="domain"/>, optionally narrowed to <paramref name="path"/>
     /// (the MCP select form: <c>Entity</c> or <c>Entity.Member</c>, dot or slash, with an optional
     /// domain prefix). A missing facts bucket fails closed to <see cref="CheckVerdict.Unknown"/>.
+    /// <para>
+    /// A call-chain finding is attributed to the <em>callee</em> path — the effect the callee
+    /// assigns, not the caller that invokes it — so a caller-scoped select can read
+    /// <see cref="CheckVerdict.Proven"/> while the whole domain reads
+    /// <see cref="CheckVerdict.Violated"/>. Narrow the scope on the callee, or read the whole domain.
+    /// </para>
     /// </summary>
     public static VerificationSummary GetVerification(
         this AnalysisResult analysis, Domain domain, string? path = null) {
@@ -78,10 +97,11 @@ public static class VerificationSummaryExtensions {
 
         var rows = UnverifiedRows(analysis, domain, facts, scope);
         var violations = ViolationNodes(analysis, domain, facts, scope);
-        var unverifiedFacts = facts.Unverified.Count(write => scope.Contains(domain, write.Effect));
+        // Every in-scope unverified fact has a row (a finding, or a synthesised one), so rows alone
+        // decide the middle arm.
         var verdict = violations.Count > 0
             ? CheckVerdict.Violated
-            : rows.Count > 0 || unverifiedFacts > 0
+            : rows.Count > 0
                 ? CheckVerdict.Unknown
                 : CheckVerdict.Proven;
         return new VerificationSummary(verdict, facts.Verified, rows, violations.Count);
@@ -111,8 +131,10 @@ public static class VerificationSummaryExtensions {
     /// <summary>
     /// A2: the rows are the write findings, not the facts — a non-Range kind (V-08) and the
     /// call-chain path (V-05) report a diagnostic and record no fact, and the summary must show
-    /// them. A fact on the same node supplies the property, constraint and reason; rows are
-    /// de-duplicated by (node, code) so one write is one row.
+    /// them. A fact on the same node <em>and</em> with the same reported code supplies the property,
+    /// constraint and reason, so two findings on one node keep their own (E4). A fact with no finding
+    /// is synthesised into a row, so <see cref="CheckVerdict.Unknown"/> always has something to show
+    /// (E5a). Rows are de-duplicated by (node, code) so one write is one row.
     /// </summary>
     private static List<UnverifiedWriteFact> UnverifiedRows(
         AnalysisResult analysis, Domain domain, WriteVerificationFacts facts, SelectScope scope) {
@@ -127,7 +149,9 @@ public static class VerificationSummaryExtensions {
             if (!seen.Add((diagnostic.Node, code)))
                 continue;
 
-            var fact = facts.Unverified.FirstOrDefault(f => ReferenceEquals(f.Effect, diagnostic.Node));
+            var fact = facts.Unverified.FirstOrDefault(f =>
+                ReferenceEquals(f.Effect, diagnostic.Node)
+                && string.Equals(f.ReportedCode, code, StringComparison.Ordinal));
             rows.Add(new UnverifiedWriteFact(
                 DomainElementPath.Resolve(domain, diagnostic.Node),
                 code,
@@ -135,6 +159,20 @@ public static class VerificationSummaryExtensions {
                 fact?.TargetProperty,
                 fact?.Constraint,
                 fact?.Reason));
+        }
+
+        // A recorded fact whose finding did not surface still means Unknown; without a row the
+        // verdict would say not-proven and show nothing.
+        foreach (var fact in facts.Unverified) {
+            if (!scope.Contains(domain, fact.Effect) || !seen.Add((fact.Effect, fact.ReportedCode)))
+                continue;
+            rows.Add(new UnverifiedWriteFact(
+                DomainElementPath.Resolve(domain, fact.Effect),
+                fact.ReportedCode,
+                $"Write to '{fact.TargetProperty}' against {fact.Constraint} is not verified: {fact.Reason}.",
+                fact.TargetProperty,
+                fact.Constraint,
+                fact.Reason));
         }
         return rows;
     }

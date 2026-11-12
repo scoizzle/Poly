@@ -108,7 +108,7 @@ internal readonly record struct WriteVerdict(WriteOutcome Outcome, UnverifiedRea
 /// <summary>
 /// Why a write could not be verified (the fourth outcome's discriminator, D2). A definite
 /// violation stays a separate DMEFF008 error and is recorded in
-/// <see cref="WriteVerificationFacts.Violations"/>.
+/// <c>WriteVerificationFacts.Violations</c> (internal; the public surface exposes the reason only).
 /// </summary>
 public enum UnverifiedReason {
     /// <summary>A known value range overlaps the constraint: it can fall outside (DMEFF008 warning).</summary>
@@ -139,7 +139,17 @@ internal sealed record UnverifiedWrite(
     Node Effect,
     string TargetProperty,
     string Constraint,
-    UnverifiedReason? Reason);
+    UnverifiedReason? Reason) {
+    /// <summary>
+    /// The code the recorder reports this write under: a known range that can fall outside is a
+    /// <c>DMEFF008</c> warning and anything else is <c>DMCS003</c> (V-03's rule). The summary matches
+    /// a fact to its finding on this code, so two flows of different kinds into one target keep
+    /// their own reasons (V-04 fix round 1, E4).
+    /// </summary>
+    public string ReportedCode => Reason == UnverifiedReason.PossibleViolation
+        ? DomainModelDiagnosticCodes.EffectConstraintViolation
+        : DomainModelDiagnosticCodes.ConstraintUndecided;
+}
 
 /// <summary>
 /// The analysis-side record of every constrained write in one domain (V-03 / A2-A4), keyed on the

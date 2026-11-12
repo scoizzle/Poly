@@ -546,4 +546,56 @@ public class VerificationSummaryTests {
         await Assert.That(() => WriteVerdict.Unverified((UnverifiedReason)99).Worst(WriteVerdict.Satisfied))
             .Throws<ArgumentOutOfRangeException>();
     }
+
+    // ── fix round 1: row enrichment, orphan facts, verdict defaults ───────
+
+    [Test]
+    public async Task TwoFlowsOfDifferentKindsIntoOneTarget_EachRowCarriesItsOwnReason_F4() {
+        // Two flows into one target property: one source carries no range (DMCS003, UnknownBound) and
+        // one is wider than the target (DMEFF008, PossibleViolation, downgraded by the allowance so it
+        // is a row). Each row must take the fact of ITS OWN finding, not the first fact on the node.
+        var (domain, analysis) = RunFlowed("""
+            domain Orders
+            Wide: entity {
+              Amount: Number range(0, 20)
+            }
+            Unbounded: entity {
+              Amount: Number
+            }
+            Order: entity {
+              Amount: Number range(0, 10)
+            }
+            """, [
+                new ObservedFlow("Unbounded.Amount", "Order.Amount"),
+                new ObservedFlow("Wide.Amount", "Order.Amount"),
+            ], [new DiagnosticAllowance(
+                DomainModelDiagnosticCodes.EffectConstraintViolation, "Orders/Order/Amount", ["plsql-1"])]);
+
+        var summary = analysis.GetVerification(domain);
+
+        await Assert.That(summary.Verdict).IsEqualTo(CheckVerdict.Unknown);
+        await Assert.That(summary.UnverifiedWrites.Count).IsEqualTo(2);
+        var undecided = summary.UnverifiedWrites.Single(row => row.Code == DomainModelDiagnosticCodes.ConstraintUndecided);
+        var wider = summary.UnverifiedWrites.Single(row => row.Code == DomainModelDiagnosticCodes.EffectConstraintViolation);
+        await Assert.That(undecided.Reason).IsEqualTo(UnverifiedReason.UnknownBound);
+        await Assert.That(wider.Reason).IsEqualTo(UnverifiedReason.PossibleViolation);
+        await Assert.That(wider.Property).IsEqualTo("Amount");
+    }
+
+    [Test]
+    public async Task FactWithNoDiagnostic_IsUnknown_S1() {
+        // S1/A2: a recorded fact with no finding still means Unknown, and still shows a row — Unknown
+        // never has an empty row list when the bucket exists and the scope names an element.
+        var result = Parse(UnboundedWrite);
+        var stripped = result.Analysis with { Diagnostics = [] };
+
+        var summary = stripped.GetVerification(result.Root);
+
+        await Assert.That(summary.Verdict).IsEqualTo(CheckVerdict.Unknown);
+        var row = summary.UnverifiedWrites.Single();
+        await Assert.That(row.Code).IsEqualTo(DomainModelDiagnosticCodes.ConstraintUndecided);
+        await Assert.That(row.Property).IsEqualTo("Reserved");
+        await Assert.That(row.Constraint).IsEqualTo("range(0, 100000)");
+        await Assert.That(row.Reason).IsEqualTo(UnverifiedReason.UnknownBound);
+    }
 }

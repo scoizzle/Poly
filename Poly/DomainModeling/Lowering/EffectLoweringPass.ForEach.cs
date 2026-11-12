@@ -55,10 +55,10 @@ public sealed partial class EffectLoweringPass {
             CollectNode(loopBody, loopLocals, lowered);
         }
 
-        // A body that can transition leaves the runtime stage unknown once the loop
-        // ends, so the enclosing cursor is dynamic for the rest of this body too.
-        if (EffectHelpers.FlattenEffects(e.Body).Any(x => x is StageTransitionEffect))
-            _sourceStageName = null;
+        // A body that can change stage (a hop, or a self-invoke whose callee hops) leaves the
+        // runtime stage unknown once the loop ends: the body's own cursor is a separate pass,
+        // so the enclosing cursor is dynamic for the rest of this body too.
+        ClearCursorIf(CanChangeStage(e.Body));
 
         return new Block([new ForEachLoop(loopVar, navMember, new Block(loopBody, loopLocals))]);
     }

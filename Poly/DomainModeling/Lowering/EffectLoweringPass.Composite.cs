@@ -31,8 +31,9 @@ public sealed partial class EffectLoweringPass {
     }
     protected override Node? Conditional(ConditionalEffect c) {
         var condition = _expressionPass.LowerExpression(c.Condition, Subject);
-        var canTransition = ContainsHop(c.ThenEffects)
-            || (c.ElseEffects is { Count: > 0 } && ContainsHop(c.ElseEffects));
+        var canTransition = CanChangeStage(c.ThenEffects)
+            || (c.ElseEffects is { Count: > 0 } && CanChangeStage(c.ElseEffects));
+        var entryStage = _sourceStageName;
         var thenNodes = new List<Node>();
         var thenVars = new List<Node>();
         foreach (var sub in c.ThenEffects) {
@@ -48,6 +49,9 @@ public sealed partial class EffectLoweringPass {
             return condition.Before(new IfStatement(condition.Value, new Block(thenNodes, thenVars)));
         }
 
+        // The else branch runs only when the then-branch did not, so it starts from the
+        // stage the conditional was entered in, not the one a then-hop advanced to.
+        _sourceStageName = entryStage;
         var elseNodes = new List<Node>();
         var elseVars = new List<Node>();
         foreach (var sub in c.ElseEffects) {
@@ -73,7 +77,11 @@ public sealed partial class EffectLoweringPass {
             _sourceStageName = null;
     }
 
-    /// <summary>True when the list holds a transition, however deeply nested.</summary>
-    private static bool ContainsHop(IEnumerable<Effect> effects) =>
-        EffectHelpers.FlattenEffects(effects).Any(e => e is StageTransitionEffect);
+    /// <summary>
+    /// True when the list holds a transition or a self-invoke (whose callee may transition,
+    /// directly or transitively), however deeply nested.
+    /// </summary>
+    private static bool CanChangeStage(IEnumerable<Effect> effects) =>
+        EffectHelpers.FlattenEffects(effects).Any(e =>
+            e is StageTransitionEffect or InvokeActionEffect { TargetRelationship: null });
 }

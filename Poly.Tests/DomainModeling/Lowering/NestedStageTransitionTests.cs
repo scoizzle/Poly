@@ -74,6 +74,8 @@ public class NestedStageTransitionTests {
         var outcomes = await ParityScenario.FromDsl(EntryChain, "NestedChain")
             .AssertAgree(side => side.Create("Z"));
 
+        // AssertAgree keeps simulate and printed C# in step: both consume the one lowered tree.
+        await Assert.That(outcomes[0].Success).IsTrue();
         await Assert.That(outcomes[0].State["ACount"]).IsEqualTo("1");
         await Assert.That(outcomes[0].State["BCount"]).IsEqualTo("1");
         await Assert.That(outcomes[0].State["Stage"]).IsEqualTo("C");
@@ -149,16 +151,6 @@ public class NestedStageTransitionTests {
         await Assert.That(zero[1].State["ACount"]).IsEqualTo("1");
         await Assert.That(zero[1].State["BCount"]).IsEqualTo("0");
         await Assert.That(zero[1].State["Stage"]).IsEqualTo("C");
-    }
-
-    [Test]
-    public async Task Create_NestedEntryChain_SimulateAndPrintedAgree() {
-        // Green on master by design: both hosts consume the one lowered tree. A guard, not the oracle.
-        var outcomes = await ParityScenario.FromDsl(EntryChain, "NestedChainParity")
-            .AssertAgree(side => side.Create("Z"));
-
-        await Assert.That(outcomes[0].Success).IsTrue();
-        await Assert.That(outcomes[0].State["Stage"]).IsEqualTo("C");
     }
 
     [Test]

@@ -299,14 +299,12 @@ internal static class ContractBoundaryCheck {
             case PatternConstraint pattern:
                 if (value is not string text)
                     return ContractBoundaryVerdict.Unknown;
-                try {
-                    return Regex.IsMatch(text, pattern.Pattern)
-                        ? ContractBoundaryVerdict.Proven
-                        : ContractBoundaryVerdict.Violated;
-                }
-                catch (RegexParseException) {
+                // Validity is PatternShape's decision; an unparsable pattern proves nothing.
+                if (!PatternShape.Of(pattern.Pattern).IsValid)
                     return ContractBoundaryVerdict.Unknown;
-                }
+                return PatternSemantics.TryMatch(text, pattern.Pattern)
+                    ? ContractBoundaryVerdict.Proven
+                    : ContractBoundaryVerdict.Violated;
             case EqualityConstraint equality:
                 return NumberEquals(value, equality.ExpectedValue) is { } equal
                     ? equal ? ContractBoundaryVerdict.Proven : ContractBoundaryVerdict.Violated

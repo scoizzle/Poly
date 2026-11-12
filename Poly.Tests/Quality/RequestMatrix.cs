@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 
 using Poly.Tests.TestHelpers;
@@ -46,10 +47,7 @@ public static class RequestMatrix {
             """{"Email":"a@example.com","Name":"Alice"}""",
             """{"Email":"a@example.com","Name":"A"}""",
             A("ShipAll"))]),
-        new("clinic", [E("Doctor", "/api/doctors", "LicenseNo",
-            """{"Name":"Doc Who","LicenseNo":"MD-123456"}""",
-            """{"Name":"Doc Who","LicenseNo":"nope"}""",
-            A("StartShift"))]),
+        new("clinic", [E("Patient", "/api/patients", null, """{"Name":"Pat"}""", """{}""", A("CheckInAll"))]),
         new("mcp-library", [
             E("Patron", "/api/patrons", null, """{"Name":"Ann"}""", """{}"""),
             E("Book", "/api/books", "Isbn", """{"Title":"Dune","Isbn":"978-0441013593"}""", """{"Title":"Dune"}"""),
@@ -59,8 +57,8 @@ public static class RequestMatrix {
             """{"Name":"Ada","Email":"nope"}""",
             A("GoOnLeave"))]),
         new("crm", [E("Product", "/api/products", "Sku",
-            """{"Sku":"ABC-1","Name":"Widget","ListPrice":10.5}""",
-            """{"Sku":"A","Name":"Widget","ListPrice":10.5}""")]),
+            """{"Sku":"ABC-1","Name":"Widget","ListPrice":9}""",
+            """{"Sku":"A","Name":"Widget","ListPrice":9}""")]),
         new("hotel", [
             E("RoomType", "/api/roomtypes", null,
                 """{"Name":"Standard","NightlyRate":100.5,"MaxOccupancy":2}""",
@@ -83,8 +81,60 @@ public static class RequestMatrix {
             .Where(p => p != "ActionRejected" || e.Action?.Rejected is not null)
             .Select(p => $"{e.Entity}.{p}"))];
 
-    public static Task<IReadOnlyList<ProbeObservation>> RunAsync(HttpSide side, DomainMatrix matrix) =>
-        Task.FromResult<IReadOnlyList<ProbeObservation>>([]);
+    /// <summary>Runs every entity's probes in order against one booted host. Valid create comes first, so the read and
+    /// the action act on the created row; a row without a <c>Location</c> cannot be followed, which is itself the observation.</summary>
+    public static async Task<IReadOnlyList<ProbeObservation>> RunAsync(HttpSide side, DomainMatrix matrix) {
+        var observations = new List<ProbeObservation>();
+        foreach (var entity in matrix.Entities) {
+            var list = await Send(() => side.ListAsync(entity.Route));
+            observations.Add(Observe($"{entity.Entity}.List", list, list.Status == 200 && list.Json?.ValueKind == JsonValueKind.Array));
+
+            var created = await Send(() => side.CreateAsync(entity.Route, entity.Valid));
+            observations.Add(Observe($"{entity.Entity}.CreateValid", created, created.Status == 201 && created.Location is not null));
+
+            var location = created.Location;
+            var read = location is null ? None : await Send(() => side.GetAsync(location));
+            observations.Add(Observe($"{entity.Entity}.ReadCreated", read, read.Status == 200));
+
+            var invalid = await Send(() => side.CreateAsync(entity.Route, entity.Invalid));
+            observations.Add(Observe($"{entity.Entity}.CreateInvalid", invalid, invalid.Status == 400));
+
+            if (entity.Action is not { } action)
+                continue;
+            var route = action.Name.ToLowerInvariant();
+            var success = location is null ? None : await Send(() => side.InvokeAsync(location, route, action.Valid));
+            observations.Add(Observe($"{entity.Entity}.ActionSuccess", success, success.Status == 200));
+
+            if (action.Rejected is { } rejectedArguments) {
+                var rejected = location is null ? None : await Send(() => side.InvokeAsync(location, route, rejectedArguments));
+                observations.Add(Observe($"{entity.Entity}.ActionRejected", rejected, rejected.Status is >= 400 and < 500));
+            }
+        }
+        return observations;
+    }
+
+    /// <summary>The outcome of a request that was never sent (no <c>Location</c> to follow): status 0.</summary>
+    private static readonly HttpOutcome None = new(0, null, null, "");
+
+    private static async Task<HttpOutcome> Send(Func<Task<HttpOutcome>> request) {
+        try {
+            return await request();
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException) {
+            return None;
+        }
+    }
+
+    private static ProbeObservation Observe(string probe, HttpOutcome outcome, bool passed) {
+        var json = outcome.Json?.ValueKind switch {
+            null => "none",
+            JsonValueKind.Array => "array",
+            JsonValueKind.Object => "object",
+            _ => "other",
+        };
+        return new ProbeObservation(probe, passed,
+            $"status={outcome.Status};location={(outcome.Location is null ? "none" : "yes")};json={json}");
+    }
 }
 
 /// <summary>One memoised observation per <c>(provider, domain)</c>, so every test reads the same boot.</summary>

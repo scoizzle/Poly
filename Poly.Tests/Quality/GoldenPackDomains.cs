@@ -28,6 +28,12 @@ public static class GoldenPackDomains {
 
     public static PackOracleDomain FromGolden(GoldenDomain golden) {
         ArgumentNullException.ThrowIfNull(golden);
-        return new PackOracleDomain("golden-" + golden.Name, golden.Poly, RequestMatrix.For(golden.Name).Entities[0].Route);
+        var lines = golden.Poly.ReplaceLineEndings("\n").Split('\n').ToList();
+        lines.RemoveAll(l => l.Trim() is "uses persistence" or "uses sqlite" or "uses http");
+        var at = lines.FindLastIndex(l => l.TrimStart().StartsWith("uses ", StringComparison.Ordinal));
+        if (at < 0)
+            at = lines.FindIndex(l => l.TrimStart().StartsWith("domain ", StringComparison.Ordinal));
+        lines.InsertRange(at + 1, ["uses http", "uses sqlite"]);
+        return new PackOracleDomain("golden-" + golden.Name, string.Join('\n', lines), RequestMatrix.For(golden.Name).Entities[0].Route);
     }
 }

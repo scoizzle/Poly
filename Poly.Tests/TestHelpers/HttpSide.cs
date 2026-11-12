@@ -20,12 +20,29 @@ public sealed class HttpSide(HttpClient client) {
         return new HttpSide(oracle.Client);
     }
 
-    public Task<HttpOutcome> CreateAsync(string route, JsonObject body) => Task.FromResult(new HttpOutcome(0, null, null, ""));
+    public Task<HttpOutcome> CreateAsync(string route, JsonObject body) => SendAsync(HttpMethod.Post, route, body);
 
-    public Task<HttpOutcome> GetAsync(string path) => Task.FromResult(new HttpOutcome(0, null, null, ""));
+    public Task<HttpOutcome> GetAsync(string path) => SendAsync(HttpMethod.Get, path, null);
 
-    public Task<HttpOutcome> ListAsync(string route) => Task.FromResult(new HttpOutcome(0, null, null, ""));
+    public Task<HttpOutcome> ListAsync(string route) => SendAsync(HttpMethod.Get, route, null);
 
     public Task<HttpOutcome> InvokeAsync(string route, string action, JsonObject? arguments = null) =>
-        Task.FromResult(new HttpOutcome(0, null, null, ""));
+        SendAsync(HttpMethod.Post, $"{route.TrimEnd('/')}/{action}", arguments ?? []);
+
+    private async Task<HttpOutcome> SendAsync(HttpMethod method, string path, JsonObject? body) {
+        using var request = new HttpRequestMessage(method, new Uri(path, UriKind.RelativeOrAbsolute));
+        if (body is not null)
+            request.Content = new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json");
+        using var response = await Client.SendAsync(request);
+        var raw = await response.Content.ReadAsStringAsync();
+        JsonElement? json = null;
+        try {
+            using var document = JsonDocument.Parse(raw);
+            json = document.RootElement.Clone();
+        }
+        catch (JsonException) {
+            // not JSON: the raw text is the only body
+        }
+        return new HttpOutcome((int)response.StatusCode, response.Headers.Location?.ToString(), json, raw);
+    }
 }

@@ -289,6 +289,6 @@ public class PackOracleMatrixTests {
     [Timeout(300_000)]
     public async Task DecimalRange_PostValidValue_Succeeds(CancellationToken cancellationToken) {
         _ = cancellationToken;
-        await AssertProbeMatchesLedgerOrContract("hotel", "RoomType.CreateValid", "status=201");
+        await AssertProbeMatchesLedgerOrContract("crm", "Product.CreateValid", "status=201");
     }
 }

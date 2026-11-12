@@ -52,7 +52,7 @@ public sealed partial class ModuleInstanceExecutor {
 
     private static ITypeDefinitionProvider BuildTypes(IReadOnlyList<TypeDefinitionNode> module) {
         // The AST definitions capture this context's provider at construction, so the
-        // CLR DomainResult pair must be in the context before the module types are
+        // CLR DomainResult pair (Poly.Runtime) must be in the context before the module types are
         // registered.
         var ctx = new AnalysisContext(
             DomainResultTypeProvider.Wrap(AnalysisContext.CreateDefault().TypeDefinitions));
@@ -186,7 +186,7 @@ public sealed partial class ModuleInstanceExecutor {
 
     /// <param name="constraintThrows">
     /// Void contexts throw <see cref="ConstraintFailureException"/> instead of returning
-    /// a failed <see cref="DomainResult"/>. Create rolls the partial factory back and
+    /// a failed <see cref="Poly.Runtime.DomainResult"/>. Create rolls the partial factory back and
     /// rethrows. Invoke from a subscription keeps the transition that fired it.
     /// </param>
     private ModuleOutcome Transact(
@@ -293,9 +293,6 @@ public sealed partial class ModuleInstanceExecutor {
     private void CaptureBorn(Poly.Interpretation.Vm.VmManagedObjectHeap heap) {
         for (var i = 1; i < heap.Count; i++) {
             switch (heap.Get(i)) {
-                case DomainResult { IsSuccess: true, Value: IDictionary<string, object?> bag }:
-                    _born.Add(bag);
-                    break;
                 case IDictionary<string, object?> dict:
                     _born.Add(dict);
                     break;

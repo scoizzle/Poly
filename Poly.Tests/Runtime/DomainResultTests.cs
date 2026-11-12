@@ -12,10 +12,9 @@ namespace Poly.Tests.Runtime;
 /// before any consumer binds them (R-03 binds, R-04 lowers), so this suite pins the
 /// contract shape and the render/read invariants alone.
 /// <para>
-/// The file never adds <c>using Poly.Runtime;</c>: the global
-/// <c>using Poly.DomainModeling.Runtime;</c> exports the VM <c>DomainResult</c> twin,
-/// and the namespace <c>Poly.Tests.Runtime</c> shadows the <c>Runtime</c> segment, so
-/// the runtime types are aliased or fully qualified.
+/// The file never adds <c>using Poly.Runtime;</c>: the namespace
+/// <c>Poly.Tests.Runtime</c> shadows the <c>Runtime</c> segment, so the runtime types
+/// are aliased or fully qualified.
 /// </para>
 /// </summary>
 public class DomainResultTests {

@@ -890,6 +890,12 @@ internal static class AstTypeReferenceResolver {
         if (args.Length == 1 && TryCollectionKind(named.TypeName, out var kind))
             return CloseCollection(args[0], kind, clr);
 
+        // A provider that declares an arity key as an already-constructed CLR generic
+        // (the VM's DomainResult`1 -> DomainResult<object>) is the answer itself: closing
+        // it again over the argument types would rebuild a different closed type.
+        if (LookupConstructedGeneric(named, args.Length, provider) is { } constructed)
+            return constructed;
+
         var open = LookupOpenGeneric(named, args.Length, provider)
             ?? LookupNamed(named, provider, clr, enclosing, allowTypeParameter: false);
         if (open is null)
@@ -907,6 +913,27 @@ internal static class AstTypeReferenceResolver {
         return null;
     }
 
+    private static ITypeDefinition? LookupConstructedGeneric(
+        NamedTypeReference named,
+        int arity,
+        ITypeDefinitionProvider provider) {
+        if (arity <= 0)
+            return null;
+
+        if (AsConstructedClr(provider.GetTypeDefinition(AstTypeRegistry.Key(named.FullName, arity))) is { } full)
+            return full;
+        return named.FullName == named.TypeName
+            ? null
+            : AsConstructedClr(provider.GetTypeDefinition(AstTypeRegistry.Key(named.TypeName, arity)));
+    }
+
+    private static ITypeDefinition? AsConstructedClr(ITypeDefinition? definition) =>
+        // An AST definition also reports a constructed CLR RuntimeType (IDictionary<,>); it closes through its own substitution map.
+        definition is not AstTypeDefinition
+            and IClrTypeDefinition { RuntimeType: { IsConstructedGenericType: true, ContainsGenericParameters: false } }
+            ? definition
+            : null;
+
     private static ITypeDefinition? LookupOpenGeneric(
         NamedTypeReference named,
         int arity,
@@ -914,8 +941,9 @@ internal static class AstTypeReferenceResolver {
         if (arity <= 0)
             return null;
 
-        // Arity keys are an AST-registry fact. A CLR hit on `Name`1` (a loaded
-        // DomainResult<T>) must not steal the call from the non-generic runtime type.
+        // Arity keys are an AST-registry fact here. A CLR hit on `Name`1` is accepted only
+        // through LookupConstructedGeneric, so it cannot steal the call from a non-generic
+        // runtime type or be closed a second time.
         var fullKey = AstTypeRegistry.Key(named.FullName, arity);
         if (provider.GetTypeDefinition(fullKey) is AstTypeDefinition full)
             return full;

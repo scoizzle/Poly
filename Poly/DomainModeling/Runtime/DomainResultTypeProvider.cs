@@ -5,7 +5,8 @@ using Poly.Introspection.CommonLanguageRuntime;
 namespace Poly.DomainModeling.Runtime;
 
 /// <summary>
-/// Resolves the short names <c>DomainResult</c>,
+/// Resolves the short names <c>DomainResult</c> (and its arity key, erased to
+/// <c>DomainResult&lt;object&gt;</c>),
 /// <c>ConstraintFailureException</c>, <c>string</c>, and
 /// <c>System.Text.RegularExpressions.Regex</c> to the runtime CLR types so
 /// <c>Invoke(Member(TypeReference("DomainResult"), "Failure"), …)</c>
@@ -16,7 +17,11 @@ namespace Poly.DomainModeling.Runtime;
 internal sealed class DomainResultTypeProvider(ITypeDefinitionProvider inner) : ITypeDefinitionProvider {
     public ITypeDefinition? GetTypeDefinition(string name) {
         if (string.Equals(name, "DomainResult", StringComparison.Ordinal))
-            return ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(typeof(DomainResult));
+            return ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(typeof(Poly.Runtime.DomainResult));
+        // The generic name erases to DomainResult<object>: the VM is untyped, so one closed
+        // CLR type serves every DomainResult<Entity>. The analyzer accepts this hit as-is.
+        if (string.Equals(name, AstTypeRegistry.Key("DomainResult", 1), StringComparison.Ordinal))
+            return ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(typeof(Poly.Runtime.DomainResult<object>));
         if (string.Equals(name, "ConstraintFailureException", StringComparison.Ordinal))
             return ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(typeof(ConstraintFailureException));
         // Factory Create Ifs name string / Regex; assign lowering uses ClrTypeReference.

@@ -204,6 +204,21 @@ public class PolycCompileTests {
     }
 
     /// <summary>
+    /// FX1 pin: the explicit <c>authoring</c> seed is <c>[storage]</c>, while an omitted seed
+    /// is the product implicit set. The two diverge until C-04 folds them together.
+    /// </summary>
+    [Test]
+    public async Task ExplicitAuthoringSeed_IsStorageOnly_WhileOmittedSeedIsTheImplicitSet() {
+        var explicitAuthoring = global::Polyc.Options.CreateCompiler("authoring")
+            .Compile("domain D\nA: entity {\n  X: Text\n}\n", "x.poly");
+        await Assert.That(explicitAuthoring.Session!.Extensions).IsEquivalentTo(new[] { "storage" });
+
+        var omitted = global::Polyc.Options.CreateCompiler(null)
+            .Compile("domain D\nA: entity {\n  X: Text\n}\n", "x.poly");
+        await Assert.That(omitted.Session!.Extensions).IsEquivalentTo(new[] { "storage", "persistence" });
+    }
+
+    /// <summary>
     /// C-03 R11 (B4): one owner for the implicit set. No host constructs the compiler or
     /// names the authoring seed itself; <c>src/polyc/Options.cs</c> is the only
     /// <c>new PolyCompiler(</c> in polyc.

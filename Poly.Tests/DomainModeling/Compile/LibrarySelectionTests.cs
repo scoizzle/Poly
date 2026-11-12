@@ -462,10 +462,14 @@ public sealed class LibrarySelectionTests {
         await Assert.That(counting.Registrations).IsEqualTo(2);
     }
 
-    /// <summary>C-02 carry-over 3: a throwing <c>Register</c> propagates, and the failure is cached.</summary>
+    /// <summary>
+    /// C-02 carry-over 3 / FX3: a throwing <c>Register</c> propagates, the failure is cached
+    /// (one registration), and <c>ProvidersOf</c> re-runs its own <c>Applies</c> per call.
+    /// </summary>
     [Test]
     public async Task Probe_ThrowingRegister_PropagatesAndIsCached() {
-        var catalog = new ExtensionCatalog().With(new ThrowingLibrary("boom"));
+        var throwing = new ThrowingLibrary("boom");
+        var catalog = new ExtensionCatalog().With(throwing);
 
         await Assert.That(() => catalog.Info("boom"))
             .Throws<InvalidOperationException>()
@@ -473,6 +477,46 @@ public sealed class LibrarySelectionTests {
         await Assert.That(() => catalog.Info("boom"))
             .Throws<InvalidOperationException>()
             .WithMessageContaining("boom-probe");
+        await Assert.That(throwing.Registrations).IsEqualTo(1);
+    }
+
+    /// <summary>FX3: a throwing <c>Applies</c> propagates out of <c>ProvidersOf</c>.</summary>
+    [Test]
+    public async Task ProvidersOf_ThrowingApplies_Propagates() {
+        var catalog = new ExtensionCatalog().With(new ThrowingAppliesLibrary("angry"));
+
+        await Assert.That(() => catalog.ProvidersOf(new UniqueConstraint()))
+            .Throws<InvalidOperationException>()
+            .WithMessageContaining("applies-boom");
+    }
+
+    /// <summary>
+    /// FX7: the implicit set is read-only by type, not an array a caller can cast and mutate.
+    /// </summary>
+    [Test]
+    public async Task ImplicitIds_IsNotACastableStringArray() {
+        await Assert.That(ProductCatalog.ImplicitIds is string[]).IsFalse();
+    }
+
+    /// <summary>
+    /// FX2: the replace rule is a Produce rule. MCP execution adds <c>persistence</c>, so a
+    /// document that lists only <c>storage</c> still guards <c>unique</c> through the C# export.
+    /// </summary>
+    [Test]
+    public async Task UsesStorageAlone_McpCSharpExport_StillGuardsUnique() {
+        var (sessionId, _) = McpTestTools.Store.Create("StorageUnique");
+        var applied = McpTestTools.Dsl.ApplyDsl(
+            sessionId, "domain StorageUnique\nuses storage\n\nAgent: entity {\n  Handle: Text unique\n}\n");
+        await Assert.That(applied.Success).IsTrue();
+
+        var first = McpTestTools.Runtime.CreateInstance(sessionId, "Agent", """{"Handle":"sam"}""");
+        await Assert.That(first.Success).IsTrue();
+        var exported = McpTestTools.Oracle.ExportDomainToCSharp(sessionId);
+        await Assert.That(exported.Success).IsTrue();
+
+        var duplicate = McpTestTools.Runtime.CreateInstance(sessionId, "Agent", """{"Handle":"sam"}""");
+        await Assert.That(duplicate.Success).IsFalse();
+        await Assert.That(duplicate.Message).Contains("Unique constraint");
     }
 
     private sealed class AliasedCompilerLibrary(string id, string compilerLibraryId) : IDomainLibrary {
@@ -486,6 +530,23 @@ public sealed class LibrarySelectionTests {
         public string LibraryId => libraryId;
 
         public bool Applies(Constraint constraint) => constraint is UniqueConstraint;
+
+        ConstraintContribution IConstraintCompiler.Compile(ConstraintCompileRequest request) =>
+            throw new NotSupportedException();
+    }
+
+    private sealed class ThrowingAppliesLibrary(string id) : IDomainLibrary {
+        public string Id => id;
+
+        public void Register(SessionBuilder builder) =>
+            builder.AddConstraintCompiler(new ThrowingAppliesCompiler());
+    }
+
+    private sealed class ThrowingAppliesCompiler : IConstraintCompiler {
+        public string LibraryId => "throwing-applies";
+
+        public bool Applies(Constraint constraint) =>
+            throw new InvalidOperationException("applies-boom");
 
         ConstraintContribution IConstraintCompiler.Compile(ConstraintCompileRequest request) =>
             throw new NotSupportedException();
@@ -509,10 +570,17 @@ public sealed class LibrarySelectionTests {
         }
     }
 
-    private sealed class ThrowingLibrary(string id) : IDomainLibrary {        public string Id => id;
+    private sealed class ThrowingLibrary(string id) : IDomainLibrary {
+        private int _registrations;
 
-        public void Register(SessionBuilder builder) =>
+        public string Id => id;
+
+        public int Registrations => Volatile.Read(ref _registrations);
+
+        public void Register(SessionBuilder builder) {
+            _ = Interlocked.Increment(ref _registrations);
             throw new InvalidOperationException("boom-probe");
+        }
     }
 
     private sealed class CountingLibrary(string id) : IDomainLibrary {

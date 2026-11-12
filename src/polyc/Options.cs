@@ -33,9 +33,10 @@ internal sealed class Options {
 
         A directory means every *.poly directly inside it (not recursive); each file is its own
         compilation unit. With no path and piped stdin, stdin is one document.
-        Seeds: authoring (the implicit set [storage, persistence]) is the default; language
-        seeds nothing. A document's non-empty `uses` list replaces the implicit set, so a
-        `unique` property needs persistence or a vendor library in that list.
+        Seeds: omitting --seed loads the implicit set [storage, persistence]; --seed authoring
+        loads [storage] only, and --seed language loads no ids. A document's non-empty `uses`
+        list replaces the seed, so a `unique` property needs persistence or a vendor library
+        in that list.
         --target is the host target (for example posix or windows). It is a host fact the
         driver forwards; `uses` never chooses it, and a platform package without it is an error.
         Exit codes: 0 no errors, 1 errors or usage, 2 unexpected failure.

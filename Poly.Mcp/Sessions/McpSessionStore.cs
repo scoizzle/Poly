@@ -156,8 +156,8 @@ internal sealed class McpSessionStore(
     private long NowTicks => time.GetUtcNow().UtcTicks;
 
     /// <summary>
-    /// Creates a new session with a bootstrapped domain and the product authoring
-    /// session (Temporal language + storage annotations). Overwrites an existing id.
+    /// Creates a new session with a bootstrapped domain and the product implicit set
+    /// (<c>storage</c> annotations plus <c>persistence</c>). Overwrites an existing id.
     /// </summary>
     public (string SessionId, McpSessionState State) Create(string domainName, string? preferredSessionId = null) {
         var sessionId = string.IsNullOrWhiteSpace(preferredSessionId)

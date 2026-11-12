@@ -95,6 +95,22 @@ public class McpSmokeTests {
         await Assert.That(data.Aggregates).IsNotNull();
     }
 
+    /// <summary>
+    /// FX5 counter-test: a session whose <c>uses</c> omits persistence has no storage mapping.
+    /// </summary>
+    [Test]
+    public async Task GetDomainAnalysis_UsesWithoutPersistence_ReportsNoStorageMapping() {
+        var (sessionId, _) = McpTestTools.Store.Create("NoMapping");
+        var applied = McpTestTools.Dsl.ApplyDsl(
+            sessionId, "domain NoMapping\nuses temporal\n\nOrder: entity { Total: Number }\n");
+        await Assert.That(applied.Success).IsTrue();
+
+        var response = McpTestTools.Query.GetDomainAnalysis(sessionId);
+        await Assert.That(response.Success).IsTrue();
+        var data = (AnalysisData)response.Data!;
+        await Assert.That(data.HasStorageMapping).IsFalse();
+    }
+
     [Test]
     public async Task GetDomainAnalysis_WithParentChildBackReference_TerminatesAndAggregates() {
         // A parent/child back-reference (Patron.loans + Loan.patron) makes the

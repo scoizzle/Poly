@@ -58,7 +58,7 @@ plan: L (constructor start stage, create-in notify), S, X, M (`RuntimeTool`), Q 
 | Slice | What it lands | Source |
 |---|---|---|
 | F-02 | Initial-stage accessor: every `Stages[0]` replaced by `EntityStages.InitialStage`, no behaviour change | theme F slice table |
-| F-03 | Explicit initial-stage designation `initial(Stage)`; [#675](https://github.com/scoizzle/Poly/issues/675)'s HTTP pack-oracle leg stays with P | theme F slice table |
+| F-03 | Explicit initial-stage designation `initial(Stage)`; [#675](https://github.com/scoizzle/Poly/issues/675)'s HTTP leg is open: the owner decides between (a) a follow-up POST test in the pack oracle and (b) leaving it with P; see the F-03 PR | theme F slice table |
 
 F-03 depends on F-02 and on the G-00a / G-00b syntax-seam slices in the plan.
 

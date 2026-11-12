@@ -203,11 +203,13 @@ public sealed partial class DomainExpressionLoweringPass : DomainExpressionDispa
                 return LoweredExpression.Of(new Member(new NamedTypeReference(enumType.Name), access.Name));
         }
 
-        // No node-level rewrite for the general case: an integral literal written for a
-        // Decimal slot is left as-is (the corpus prints 0L there and the VM accepts it),
-        // so the only Decimal constant lowering rewrites is the default-constant arm in
-        // LowerDefaultConstantNode (#511, E5). TargetTypeAdapter.Adapt stays the #683
-        // contract for consumers that adapt an already-lowered value.
+        // No node-level rewrite for the general case: an integral literal assigned to a
+        // Decimal slot is left as-is (the corpus prints 0L there; the analyzer wraps the
+        // Assignment in the implicit conversion). A Conditional arm gets no such wrap, so
+        // match arms are adapted in LowerMatch's Arm (#605). The only other Decimal constant
+        // lowering rewrites is the default-constant arm in LowerDefaultConstantNode (#511, E5).
+        // TargetTypeAdapter.Adapt stays the #683 contract for consumers that adapt an
+        // already-lowered value.
         return Route(value);
     }
 

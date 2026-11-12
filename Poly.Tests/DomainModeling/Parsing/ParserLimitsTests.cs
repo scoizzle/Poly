@@ -46,6 +46,12 @@ public class ParserLimitsTests {
         return "Kids where (" + body + ")";
     }
 
+    /// <summary>A document whose one policy is <paramref name="nots"/> <c>not</c>s over <c>Flag</c>:
+    /// exactly <paramref name="nots"/> nesting levels, so 256 is the success case at the limit. The
+    /// policy grammar rejects a trailing <c>is true</c> before depth matters.</summary>
+    internal static string PolicyDocument(int nots) =>
+        "domain Deep\n\nA: entity {\n  Flag: Boolean\n  Ok: policy { " + Nots(nots) + "Flag }\n}\n";
+
     private static (DomainExpression? Parsed, Exception? Failure) ParseOn(string text, int stackBytes) {
         DomainExpression? parsed = null;
         Exception? failure = null;
@@ -88,6 +94,41 @@ public class ParserLimitsTests {
 
         await Assert.That(result.IsAborted).IsFalse();
         // The probe asserts all three parses returned; a non-zero or aborted child is the failure.
+        await Assert.That(result.ExitCode).IsEqualTo(0);
+    }
+
+    // ── F1: the resolve seam gets the same stack, so the facade cannot bypass the limit ──
+
+    [Test]
+    public async Task ChildProbe_PolyDslParserOn1MbCallerThread_Returns() {
+        if (Environment.GetEnvironmentVariable("POLY_CHILD_PROBE") is null)
+            return;
+
+        var document = PolicyDocument(Limit);
+        var changes = 0;
+        Exception? failure = null;
+        var thread = new Thread(() => {
+            try {
+                changes = new PolyDslParser(document).Parse().Count;
+            }
+            catch (Exception ex) {
+                failure = ex;
+            }
+        }, SmallCallerStackBytes);
+        thread.Start();
+        thread.Join();
+
+        await Assert.That(failure).IsNull();
+        await Assert.That(changes).IsGreaterThan(0);
+    }
+
+    [Test]
+    public async Task RunTestInChild_PolyDslParserOn1MbCallerThread_ReturnsWithoutCrash() {
+        var result = await PolycProcess.RunTestInChildAsync(
+            $"/*/*/{nameof(ParserLimitsTests)}/{nameof(ChildProbe_PolyDslParserOn1MbCallerThread_Returns)}",
+            new Dictionary<string, string?> { ["POLY_CHILD_PROBE"] = "g09-resolve" });
+
+        await Assert.That(result.IsAborted).IsFalse();
         await Assert.That(result.ExitCode).IsEqualTo(0);
     }
 

@@ -196,8 +196,12 @@ public class DomainToCSharpExporterTests {
         foreach (var field in patronStatus.Fields!) {
             await Assert.That(field.IsStatic).IsTrue();
             await Assert.That(field.IsConst).IsTrue();
-            await Assert.That(((PrimitiveTypeReference)field.FieldType).PrimitiveId)
-                .IsEqualTo(Poly.Introspection.PrimitiveType.String);
+            // The member carries the enum type (#485 D1): a lowered enum argument
+            // must resolve against the Create signature. The old expectation
+            // (PrimitiveId == String) encoded the bug. The value stays the member
+            // name, which the printer and the VM both read as text.
+            await Assert.That(((NamedTypeReference)field.FieldType).TypeName)
+                .IsEqualTo(patronStatus.Name);
             await Assert.That((field.DefaultValue as Constant)?.Value).IsEqualTo(field.Name);
         }
     }
@@ -400,8 +404,9 @@ public class DomainToCSharpExporterTests {
         foreach (var field in patronStage.Fields!) {
             await Assert.That(field.IsStatic).IsTrue();
             await Assert.That(field.IsConst).IsTrue();
-            await Assert.That(((PrimitiveTypeReference)field.FieldType).PrimitiveId)
-                .IsEqualTo(Poly.Introspection.PrimitiveType.String);
+            // Same shape pin as the domain enum: the stage member carries its enum type.
+            await Assert.That(((NamedTypeReference)field.FieldType).TypeName)
+                .IsEqualTo(patronStage.Name);
             await Assert.That((field.DefaultValue as Constant)?.Value).IsEqualTo(field.Name);
         }
     }

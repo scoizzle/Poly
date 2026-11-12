@@ -192,7 +192,7 @@ internal sealed class ConstraintPropagationAnalyzer : INodeAnalyzer {
         }
     }
 
-    private static RangeConstraint? AdjustRangeRange(RangeConstraint original, long offset) {
+    internal static RangeConstraint? AdjustRangeRange(RangeConstraint original, long offset) {
         object? newMin = original.Minimum is not null && TryConvertToDouble(original.Minimum) is double minVal
             ? minVal - offset : null;
         object? newMax = original.Maximum is not null && TryConvertToDouble(original.Maximum) is double maxVal

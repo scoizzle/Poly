@@ -284,7 +284,7 @@ internal static class ContractBoundaryCheck {
     /// checked against is decided; a type mismatch, or a kind with no static check, is unknown
     /// so a body is never called violated on a comparison the walk cannot make.
     /// </summary>
-    private static ContractBoundaryVerdict ConstantVerdict(Constraint constraint, object value) {
+    internal static ContractBoundaryVerdict ConstantVerdict(Constraint constraint, object value) {
         switch (constraint) {
             case RequiredConstraint or OptionalConstraint or DefaultValueConstraint:
                 return ContractBoundaryVerdict.Proven;
@@ -694,7 +694,7 @@ internal static class ContractBoundaryCheck {
     /// Numeric bounds only. The caller's range (or equality) must decide the comparison;
     /// anything else is unknown, so a strict bound is never widened into a proof.
     /// </summary>
-    private static ContractBoundaryVerdict ComparisonVerdict(
+    internal static ContractBoundaryVerdict ComparisonVerdict(
         IReadOnlyList<Constraint> constraints,
         ComparisonKind kind,
         object value) {

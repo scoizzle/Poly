@@ -72,7 +72,7 @@ internal sealed partial class EffectAnalyzer {
     /// <summary>
     /// Only literals and comparisons of literals — anything that reads state is not proven.
     /// </summary>
-    private static bool IsProvablyAlwaysTrue(DomainExpression expression) => expression switch {
+    internal static bool IsProvablyAlwaysTrue(DomainExpression expression) => expression switch {
         Literal { Value: bool b } => b,
         global::Poly.DomainModeling.Ontology.Not n => IsProvablyAlwaysFalse(n.Operand),
         global::Poly.DomainModeling.Ontology.And a => IsProvablyAlwaysTrue(a.Left) && IsProvablyAlwaysTrue(a.Right),
@@ -92,7 +92,7 @@ internal sealed partial class EffectAnalyzer {
         _ => false
     };
 
-    private static bool IsProvablyAlwaysFalse(DomainExpression expression) => expression switch {
+    internal static bool IsProvablyAlwaysFalse(DomainExpression expression) => expression switch {
         Literal { Value: bool b } => !b,
         global::Poly.DomainModeling.Ontology.Not n => IsProvablyAlwaysTrue(n.Operand),
         global::Poly.DomainModeling.Ontology.And a => IsProvablyAlwaysFalse(a.Left) || IsProvablyAlwaysFalse(a.Right),

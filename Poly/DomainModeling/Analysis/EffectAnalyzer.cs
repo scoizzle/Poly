@@ -1253,12 +1253,14 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
         var meta = context.GetMetadata<ActionInvariantMetadata>(action);
         if (meta is null) return;
 
-        // One fact per callee effect, deduped by effect node: the same callee write is reachable from
-        // several stage contexts of the caller, and V-04 counts writes, not contexts (V-05b B1).
-        var recorded = new HashSet<Node>(ReferenceEqualityComparer.Instance);
-        // One diagnostic per (callee effect, call): two invokes of one callee each report, but the same call
-        // seen from several stage contexts reports once (V-03 A2).
-        var reported = new HashSet<(Node Effect, int Call)>();
+        // The same callee write is reachable from several stage contexts of the caller, and each context
+        // folds its own policies into the written range, so the contexts can disagree. One finding per
+        // (callee effect, call) carries the WORST verdict over every context (Violated beats Undecided),
+        // and one fact per callee effect carries the worst of its calls: V-04 counts writes, not contexts
+        // (V-05b B1, V-03 A2). The call is the occurrence index of the effect in a context's postconditions;
+        // two invokes of one callee each report.
+        var findings = new Dictionary<(Node Effect, int Call), (EffectPostcondition Post, RangeConstraint Range, ValueRange Value, bool Violated)>();
+        var order = new List<(Node Effect, int Call)>();
 
         foreach (var stageCtx in meta.StageContexts()) {
             var calls = new Dictionary<Node, int>(ReferenceEqualityComparer.Instance);
@@ -1285,34 +1287,44 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
                 var verdict = WriteVerification.DecideRange(range, value);
                 if (verdict == ConstraintVerdict.Satisfied) continue;
 
-                if (!reported.Add((post.Effect, call))) continue;
-
-                if (recorded.Add(post.Effect))
-                    WriteRecorder.Record(
-                        context, domain, post.Effect, post.TargetProperty,
-                        ConstraintValidation.Describe(range),
-                        verdict == ConstraintVerdict.Violated
-                            ? WriteVerdict.Violated
-                            : WriteVerdict.Unverified(
-                                UnverifiedReason.PossibleViolation,
-                                DomainModelDiagnosticCodes.EffectConstraintViolation));
-
-                if (verdict == ConstraintVerdict.Violated) {
-                    context.ReportError(
-                        post.Effect,
-                        $"Call-chain postcondition ({action.Name} → {post.DeclaringAction.Name}): assigned value range " +
-                        $"[{FormatBound(vr.Min, lower: true)}, {FormatBound(vr.Max, lower: false)}] is entirely outside constraint " +
-                        $"{ConstraintValidation.Describe(range)} on property '{post.TargetProperty}'.",
-                        DomainModelDiagnosticCodes.EffectConstraintViolation);
-                    continue;
+                var key = (post.Effect, call);
+                var violated = verdict == ConstraintVerdict.Violated;
+                if (!findings.TryGetValue(key, out var existing)) {
+                    findings[key] = (post, range, vr, violated);
+                    order.Add(key);
                 }
-                context.ReportWarning(
-                    post.Effect,
-                    $"Call-chain postcondition ({action.Name} → {post.DeclaringAction.Name}): assigned value range " +
-                    $"[{FormatBound(vr.Min, lower: true)}, {FormatBound(vr.Max, lower: false)}] can fall outside constraint " +
-                    $"{ConstraintValidation.Describe(range)} on property '{post.TargetProperty}'.",
-                    DomainModelDiagnosticCodes.EffectConstraintViolation);
+                else if (violated && !existing.Violated)
+                    findings[key] = (post, range, vr, true);
             }
+        }
+
+        var recorded = new HashSet<Node>(ReferenceEqualityComparer.Instance);
+        foreach (var effect in order.Select(k => k.Effect).Distinct(ReferenceEqualityComparer.Instance).Cast<Node>()) {
+            var calls = order.Where(k => ReferenceEquals(k.Effect, effect)).Select(k => findings[k]).ToList();
+            var worst = calls.FirstOrDefault(f => f.Violated);
+            if (worst.Post is null) worst = calls[0];
+            if (!recorded.Add(effect)) continue;
+            WriteRecorder.Record(
+                context, domain, effect, worst.Post.TargetProperty,
+                ConstraintValidation.Describe(worst.Range),
+                worst.Violated
+                    ? WriteVerdict.Violated
+                    : WriteVerdict.Unverified(
+                        UnverifiedReason.PossibleViolation,
+                        DomainModelDiagnosticCodes.EffectConstraintViolation));
+        }
+
+        foreach (var key in order) {
+            var (post, range, vr, violated) = findings[key];
+            var message =
+                $"Call-chain postcondition ({action.Name} → {post.DeclaringAction.Name}): assigned value range " +
+                $"[{FormatBound(vr.Min, lower: true)}, {FormatBound(vr.Max, lower: false)}] " +
+                (violated ? "is entirely outside" : "can fall outside") +
+                $" constraint {ConstraintValidation.Describe(range)} on property '{post.TargetProperty}'.";
+            if (violated)
+                context.ReportError(post.Effect, message, DomainModelDiagnosticCodes.EffectConstraintViolation);
+            else
+                context.ReportWarning(post.Effect, message, DomainModelDiagnosticCodes.EffectConstraintViolation);
         }
     }
 

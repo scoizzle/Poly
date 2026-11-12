@@ -357,6 +357,32 @@ public class DbContextGeneratorTests {
         await Assert.That(checks[0]).Contains("price <= 1.5");
     }
 
+    /// <summary>V-05b fix round 2: a tiny finite double bound must not round to 0 in the CHECK; an open
+    /// side is the sound one.</summary>
+    [Test]
+    public async Task CheckSql_TinyDoubleMaximum_IsOpenNotZero() {
+        var price = new Property("Price", new DomainTypeReference("Decimal"), [new RangeConstraint(null, 1e-30d)]);
+        var domain = DomainTestFactory.Create("Test", [new Entity("Item", [price], [], [], [])], [])
+            with { Extensions = ["persistence"] };
+
+        var checks = CheckConstraints(domain);
+
+        await Assert.That(checks.Any(c => c.Contains("<= 0", StringComparison.Ordinal))).IsFalse();
+    }
+
+    /// <summary>V-05b fix round 2: a ulong bound above long.MaxValue converts exactly, never dropped.</summary>
+    [Test]
+    public async Task CheckSql_UlongBoundAboveLongMax_IsExact() {
+        var price = new Property("Price", new DomainTypeReference("Decimal"), [new RangeConstraint(0L, 18446744073709551615UL)]);
+        var domain = DomainTestFactory.Create("Test", [new Entity("Item", [price], [], [], [])], [])
+            with { Extensions = ["persistence"] };
+
+        var checks = CheckConstraints(domain);
+
+        await Assert.That(checks.Count).IsEqualTo(1);
+        await Assert.That(checks[0]).Contains("price <= 18446744073709551615");
+    }
+
     private static IEnumerable<Node> Descendants(Node node) {
         yield return node;
         foreach (var child in node.Children) {

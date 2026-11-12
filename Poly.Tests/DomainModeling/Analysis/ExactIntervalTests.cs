@@ -546,4 +546,45 @@ public class ExactIntervalTests {
 
         await Assert.That(product is null || (product.Min is null && product.Max is null)).IsTrue();
     }
+
+    // ── V-05b fix round 2: the worst verdict across stage contexts wins ───
+
+    private static Domain TwoStageChainDomain(bool violatedStageFirst) {
+        var qty = new Property("Qty", new DomainTypeReference("Number"), [new RangeConstraint(0L, 100L)]);
+        var d = new Property("D", new DomainTypeReference("Number"), [new RangeConstraint(0L, 100L)]);
+        var set = new Poly.DomainModeling.Ontology.Action("Set", InvocationResult.Void,
+            [new Property("amount", new DomainTypeReference("Number"), [])],
+            [new AssignEffect(DomainExpression.Property("D"), DomainExpression.Parameter("amount"))], []);
+        var go = new Poly.DomainModeling.Ontology.Action("Go", InvocationResult.Void, [],
+            [new InvokeActionEffect("Set", [new PropertyBinding("amount",
+                DomainExpression.Add(DomainExpression.Property("Qty"), DomainExpression.Literal(10L)))])], []);
+        var undecided = new Stage("A", Actions: [], Policies: [
+            new Policy("Low", DomainExpression.LessThanOrEqual(DomainExpression.Property("Qty"), DomainExpression.Literal(95L)))
+        ], OnEntryEffects: [], OnExitEffects: []);
+        var violated = new Stage("B", Actions: [], Policies: [
+            new Policy("High", DomainExpression.GreaterThanOrEqual(DomainExpression.Property("Qty"), DomainExpression.Literal(91L)))
+        ], OnEntryEffects: [], OnExitEffects: []);
+        Stage[] stages = violatedStageFirst ? [violated, undecided] : [undecided, violated];
+        return DomainTestFactory.Create("Test", [new Entity("Item", [qty, d], [set, go], [], stages)], []);
+    }
+
+    private static async Task AssertViolatedWins(Domain domain) {
+        var analysis = DomainModelAnalyzer.Analyze(domain);
+
+        var errors = analysis.Diagnostics.Where(x =>
+            x.Code == DomainModelDiagnosticCodes.EffectConstraintViolation
+            && x.Severity == DiagnosticSeverity.Error
+            && x.Message.Contains("Call-chain postcondition (Go → Set)", StringComparison.Ordinal)
+            && x.Message.Contains("entirely outside", StringComparison.Ordinal)).ToList();
+        await Assert.That(errors.Count).IsEqualTo(1);
+        await Assert.That(analysis.GetVerification(domain).Verdict).IsEqualTo(CheckVerdict.Violated);
+    }
+
+    [Test]
+    public async Task CallChain_ViolatedStageAfterUndecidedStage_IsReportedAsError() =>
+        await AssertViolatedWins(TwoStageChainDomain(violatedStageFirst: false));
+
+    [Test]
+    public async Task CallChain_ViolatedStageBeforeUndecidedStage_IsReportedAsError() =>
+        await AssertViolatedWins(TwoStageChainDomain(violatedStageFirst: true));
 }

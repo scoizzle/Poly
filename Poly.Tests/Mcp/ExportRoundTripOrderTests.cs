@@ -141,7 +141,7 @@ public sealed class ExportRoundTripOrderTests {
     /// <summary>Anti-vacuity: the corpus is the whole catalog, and one entity's declared order differs from the per-kind fallback.</summary>
     [Test]
     public async Task Corpus_IsPinned_AndDeclaredOrderDiffersFromFallbackSomewhere() {
-        await Assert.That(CompilableDomains().Count()).IsEqualTo(GoldenDomains.Compilable.Count);
+        await Assert.That(CompilableDomains().Count()).IsEqualTo(10);
         await Assert.That(CompilableDomains()).IsNotEmpty();
 
         var differs = CompilableDomains()

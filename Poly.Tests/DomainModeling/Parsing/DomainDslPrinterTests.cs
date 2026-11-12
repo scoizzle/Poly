@@ -229,7 +229,7 @@ public sealed class DomainDslPrinterTests {
     }
 
     [Test]
-    public async Task Print_ContractsAndBindings_KeepModelOrder() {
+    public async Task Print_EnumsValueTypesAndEntities_KeepModelOrder() {
         const string poly = """
             domain D
             Zeta: enum { A, B }
@@ -257,6 +257,45 @@ public sealed class DomainDslPrinterTests {
         await Assert.That(valueOrder).IsTrue();
         await Assert.That(entityOrder).IsTrue();
         await Assert.That(result.Root.ContractBindings.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task Print_ContractsAndBindings_KeepModelOrder() {
+        var (_, text) = Generate("""
+            domain D
+            Zed: contract internal zed v1 {
+              ZReq: value {
+                Amount: Number
+              }
+              Charge: outbound operation ZReq
+            }
+            Alpha: contract internal alpha v1 {
+              AReq: value {
+                Amount: Number
+              }
+              Charge: outbound operation AReq
+            }
+            Deal: entity {
+              Amount: Number
+              Active: stage {
+                PayZ: action (request: ZReq) {
+                  assign Amount to Amount
+                }
+                PayA: action (request: AReq) {
+                  assign Amount to Amount
+                }
+              }
+            }
+            ZedBind: bind Zed Charge to PayZ request
+            AlphaBind: bind Alpha Charge to PayA request
+            """);
+
+        await Assert.That(text.IndexOf("Zed: contract", StringComparison.Ordinal)).IsGreaterThan(-1);
+        await Assert.That(text.IndexOf("Zed: contract", StringComparison.Ordinal))
+            .IsLessThan(text.IndexOf("Alpha: contract", StringComparison.Ordinal));
+        await Assert.That(text.IndexOf("ZedBind:", StringComparison.Ordinal)).IsGreaterThan(-1);
+        await Assert.That(text.IndexOf("ZedBind:", StringComparison.Ordinal))
+            .IsLessThan(text.IndexOf("AlphaBind:", StringComparison.Ordinal));
     }
 
     [Test]

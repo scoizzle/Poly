@@ -143,6 +143,40 @@ public sealed class CSharpExportCompileTests {
     }
 
     [Test]
+    public async Task Export_Issue604Repro_HidesInternalAndKeepsPublicSurface() {
+        var e = Export("""
+            domain Vis
+
+            Money: value {
+              Amount: Number
+            }
+
+            public value Pub {
+              Amount: Number
+            }
+
+            Hidden: entity {
+              Total: Number
+              Bump: action (n: Number) { assign Total to n }
+            }
+
+            public entity Shown {
+              Total: Number
+              public action Set (n: Number, p: Pub) { assign Total to n }
+              Secret: action (n: Number) { assign Total to n }
+            }
+            """);
+
+        await Assert.That(e.Type("Hidden").DeclaredAccessibility).IsEqualTo(Accessibility.Internal);
+        await Assert.That(e.Type("Money").DeclaredAccessibility).IsEqualTo(Accessibility.Internal);
+        await Assert.That(e.Type("Shown").DeclaredAccessibility).IsEqualTo(Accessibility.Public);
+        await Assert.That(e.Type("Pub").DeclaredAccessibility).IsEqualTo(Accessibility.Public);
+        await Assert.That(e.Methods("Shown", "Set").Single().DeclaredAccessibility).IsEqualTo(Accessibility.Public);
+        await Assert.That(e.Methods("Shown", "Secret").Single().DeclaredAccessibility).IsEqualTo(Accessibility.Internal);
+        await Assert.That(e.Diagnostics).IsEmpty();
+    }
+
+    [Test]
     public async Task Export_WhenActionNotPublic_PrintsInternalMethod() {
         var text = Export(Repro604).AllText;
 

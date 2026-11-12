@@ -785,6 +785,38 @@ public class SubscriptionAnalysisTests {
     }
 
     [Test]
+    public async Task SubscriptionToNeverEnteredStage_MessageDeniesInitialStage() {
+        var domain = ParseDomain(ShipmentWatch(
+            """
+              Packed: stage { Ship: action { transition to Delivered } }
+              Delivered: stage { }
+              Phantom: stage { }
+            """,
+            """  when shipments Phantom { assign Note to "x" }"""));
+        var diag = NeverEntered(domain).Single();
+
+        await Assert.That(diag.Message).Contains("is not the initial stage");
+        await Assert.That(diag.Message).DoesNotContain("it is the initial stage");
+    }
+
+    [Test]
+    public async Task SubscriptionToDeadAndLiveStage_WarnsOnlyForDeadStage_WithoutClaimingHandlerDead() {
+        var domain = ParseDomain(ShipmentWatch(
+            """
+              Packed: stage { Ship: action { transition to Delivered } }
+              Delivered: stage { }
+              Phantom: stage { }
+            """,
+            """  when shipments Phantom, Delivered { assign Note to "x" }"""));
+        var diags = NeverEntered(domain);
+
+        await Assert.That(diags.Count).IsEqualTo(1);
+        await Assert.That(diags[0].Message).Contains("can never fire for 'Phantom'");
+        await Assert.That(diags[0].Message).DoesNotContain("'Delivered'");
+        await Assert.That(diags[0].Message).DoesNotContain("this handler can never fire");
+    }
+
+    [Test]
     public async Task SubscriptionToTwoNeverEnteredStages_WarnsOnce() {
         var domain = ParseDomain(ShipmentWatch(
             """

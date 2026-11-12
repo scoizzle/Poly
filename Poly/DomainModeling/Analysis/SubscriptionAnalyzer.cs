@@ -271,8 +271,8 @@ internal sealed class SubscriptionAnalyzer : INodeAnalyzer {
                 subscription,
                 $"Stage subscription '{subscription.RelationshipName}' watches {names} on entity " +
                 $"'{targetEntity.Name}', but nothing transitions into {(neverEntered.Count == 1 ? "that stage" : "those stages")} " +
-                $"and {(neverEntered.Count == 1 ? "it is" : "none is")} the initial stage ('{initialName}') — " +
-                "this handler can never fire.",
+                $"and {(neverEntered.Count == 1 ? "it is not" : "none is")} the initial stage ('{initialName}') — " +
+                $"the handler can never fire for {names}.",
                 DomainModelDiagnosticCodes.SubscriptionToNeverEnteredStage);
         }
 

@@ -1003,7 +1003,7 @@ same effect-binding fail-closed checks.
 Two `when`s in the same scope (entity level, or one stage) with the same relationship,
 quantifier, peer binder and stage set warn **`DMSS006`**. Nothing is removed: both run, in
 declaration order. A `when` that names a stage nothing transitions into, and that is not the
-target's initial stage, warns **`DMSS007`**: it can never fire. The check is syntactic (no
+target's initial stage, warns **`DMSS007`**: a stage in it can never trigger it. The check is syntactic (no
 transition into the stage at all), not reachability.
 
 ### Two shapes

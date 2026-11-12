@@ -43,6 +43,7 @@ internal static class ConstraintCompilation {
         AnalysisResult analysis,
         IReadOnlyList<IConstraintCompiler> compilers) {
         var storage = analysis.GetMetadata<StorageMappingMetadata>(domain)?.Storage;
+        // Declaration order within a library relies on pending being insertion-ordered (a Dictionary with no removals); the C-10 tests (a)-(d) in ContributedMethodTests pin it.
         var pending = new Dictionary<(string Library, string Type, string Method, ContributionPlacement Placement), Pending>(PendingKey.Comparer);
         foreach (var entity in domain.Types.OfType<Entity>()) {
             var type = FindType(module, entity.Name);

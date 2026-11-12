@@ -351,8 +351,11 @@ public class ContributedMethodTests {
         var (domain, analysis, session) = Compile(PolyZedAlpha, new NoOpLibrary());
         var widget = session.Emit(domain, analysis).Single(f => f.FileName == "Widget.cs").Source;
 
-        await Assert.That(widget.IndexOf("ExistsWithZed", StringComparison.Ordinal))
-            .IsLessThan(widget.IndexOf("ExistsWithAlpha", StringComparison.Ordinal));
+        var zedAt = widget.IndexOf("ExistsWithZed", StringComparison.Ordinal);
+        var alphaAt = widget.IndexOf("ExistsWithAlpha", StringComparison.Ordinal);
+        await Assert.That(zedAt).IsGreaterThanOrEqualTo(0);
+        await Assert.That(alphaAt).IsGreaterThanOrEqualTo(0);
+        await Assert.That(zedAt).IsLessThan(alphaAt);
     }
 
     [Test]

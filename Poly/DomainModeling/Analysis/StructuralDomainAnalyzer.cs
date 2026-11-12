@@ -87,6 +87,9 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
         // cannot honour is an analysis error.
         ReportInverseDeclarations(context, domain);
 
+        // S-12 (#585): an owned target has exactly one owner navigation.
+        ReportOwnedTargetOwners(context, domain);
+
         ReportStoredValueTypeProperties(context, domain);
 
         ReportKeyDesignations(context, domain);
@@ -451,6 +454,26 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
             context, nav,
             $"Navigations '{source.Name}.{nav.Name}' and '{target.Name}.{inverseName}' are paired " +
             "by 'via' and both are owned; exactly one side may own the target.");
+    }
+
+    /// <summary>
+    /// S-12 (#585): two or more <c>owned</c> navigations to one entity type leave the
+    /// single-owner rule unlowerable. One <see cref="DomainModelDiagnosticCodes.OwnedTargetMultipleOwners"/>
+    /// per target, on the second owner navigation in declaration order, naming all of them.
+    /// </summary>
+    private static void ReportOwnedTargetOwners(AnalysisContext context, Domain domain) {
+        foreach (var group in OwnershipAggregatePass.OwnedEdges(domain)
+                     .GroupBy(static e => e.Nav.Target.TypeName, StringComparer.Ordinal)) {
+            var owners = group.ToList();
+            if (owners.Count < 2)
+                continue;
+            var names = string.Join(", ", owners.Select(static o => $"'{o.Source.Name}.{o.Nav.Name}'"));
+            context.ReportError(
+                owners[1].Nav,
+                $"Entity '{group.Key}' is owned by more than one navigation ({names}); an owned entity has exactly one owner. " +
+                "Keep one navigation 'owned' and make the others plain references.",
+                DomainModelDiagnosticCodes.OwnedTargetMultipleOwners);
+        }
     }
 
     private static void ReportContradictory(AnalysisContext context, Relationship nav, string message) =>

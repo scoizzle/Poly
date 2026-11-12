@@ -357,4 +357,134 @@ public class OwnershipAggregateAnalysisTests {
         if (root is not null && analysis.GetMetadata<OwnershipAggregateMetadata>(root) is { } meta)
             await Assert.That(meta.OwnedEdges).IsEmpty();
     }
+
+    private const string Dmstr010 = DomainModelDiagnosticCodes.OwnedTargetMultipleOwners;
+
+    [Test]
+    public async Task TwoOwnerNavigationsToOneTarget_IsDMSTR010() {
+        var (_, analysis) = Run("""
+            domain Test
+            Customer: entity {
+              Name: Text
+              profile: owned Profile
+            }
+            Supplier: entity {
+              Name: Text
+              profile: owned Profile
+            }
+            Profile: entity { Bio: Text }
+            """);
+
+        var errors = Errors(analysis, Dmstr010);
+        await Assert.That(errors.Count).IsEqualTo(1);
+        await Assert.That(AllErrors(analysis).Count).IsEqualTo(1);
+        var nav = (Relationship)errors[0].Node;
+        await Assert.That(nav.Name).IsEqualTo("profile");
+        await Assert.That(nav.Source.TypeName).IsEqualTo("Supplier");
+        await Assert.That(errors[0].Message).Contains("Profile");
+        await Assert.That(errors[0].Message).Contains("Customer.profile");
+        await Assert.That(errors[0].Message).Contains("Supplier.profile");
+        await Assert.That(errors[0].Message).Contains("plain reference");
+    }
+
+    [Test]
+    public async Task TwoOwnerNavigationsOnOneSource_IsDMSTR010() {
+        var (_, analysis) = Run("""
+            domain Test
+            Peer: entity {
+              Name: Text
+              primary: owned Address
+              secondary: owned Address
+            }
+            Address: entity { Line: Text }
+            """);
+
+        var errors = Errors(analysis, Dmstr010);
+        await Assert.That(errors.Count).IsEqualTo(1);
+        await Assert.That(AllErrors(analysis).Count).IsEqualTo(1);
+        await Assert.That(((Relationship)errors[0].Node).Name).IsEqualTo("secondary");
+    }
+
+    [Test]
+    public async Task ThreeOwners_ReportOncePerTargetNamingAll() {
+        var (_, analysis) = Run("""
+            domain Test
+            A: entity { x: owned T }
+            B: entity { x: owned T }
+            C: entity { x: owned T }
+            T: entity { Name: Text }
+            """);
+
+        var errors = Errors(analysis, Dmstr010);
+        await Assert.That(errors.Count).IsEqualTo(1);
+        await Assert.That(AllErrors(analysis).Count).IsEqualTo(1);
+        await Assert.That(errors[0].Message).Contains("A.x");
+        await Assert.That(errors[0].Message).Contains("B.x");
+        await Assert.That(errors[0].Message).Contains("C.x");
+    }
+
+    /// <summary>Pin: green on the stub — one owner plus a plain reference is clean.</summary>
+    [Test]
+    public async Task OneOwnerPlusPlainReference_IsClean_Pin() {
+        var (_, analysis) = Run("""
+            domain Test
+            Customer: entity {
+              Name: Text
+              profile: owned Profile
+            }
+            Supplier: entity {
+              Name: Text
+              profile: Profile
+            }
+            Profile: entity { Bio: Text }
+            """);
+
+        await Assert.That(AllErrors(analysis)).IsEmpty();
+    }
+
+    /// <summary>Pin: green on the stub — two owned navs to different targets are clean.</summary>
+    [Test]
+    public async Task TwoOwnedNavsToDifferentTargets_IsClean_Pin() {
+        var (_, analysis) = Run("""
+            domain Test
+            Order: entity {
+              Total: Number
+              header: owned Header
+              line: owned Line
+            }
+            Header: entity { Name: Text }
+            Line: entity { Qty: Number }
+            """);
+
+        await Assert.That(AllErrors(analysis)).IsEmpty();
+    }
+
+    /// <summary>Pin: green on the stub — a self-owning navigation is one edge (OQ-14).</summary>
+    [Test]
+    public async Task SelfOwning_IsClean_Pin() {
+        var (_, analysis) = Run("""
+            domain Test
+            Node: entity {
+              Name: Text
+              children: many owned Node
+            }
+            """);
+
+        await Assert.That(AllErrors(analysis)).IsEmpty();
+    }
+
+    /// <summary>Pin: green on the stub — a duplicated target is DMSTR001's alone.</summary>
+    [Test]
+    public async Task DuplicatedTarget_ReportsOnlyStructural_Pin() {
+        var (_, analysis) = Run("""
+            domain Test
+            A: entity { x: owned B }
+            C: entity { y: owned B }
+            B: entity { Name: Text }
+            B: entity { Other: Text }
+            """);
+
+        await Assert.That(Errors(analysis, DomainModelDiagnosticCodes.StructuralDuplicate).Count).IsGreaterThan(0);
+        await Assert.That(Errors(analysis, Dmstr010)).IsEmpty();
+    }
 }

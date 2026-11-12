@@ -6,7 +6,12 @@ using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Lowering;
+using Poly.DslCompiler;
 using Poly.Interpretation.CSharp;
+
+using CompileMode = Poly.DslCompiler.CompileMode;
+using Compiler = Poly.DslCompiler.DslCompiler;
+using DbmsPack = Poly.DslCompiler.DbmsPack;
 
 namespace Poly.Tests.DomainModeling.Lowering;
 
@@ -104,6 +109,16 @@ public class ActionScopeEmitTests {
         await Assert.That(Read(group, "Tag")).IsEqualTo("t");
         await Assert.That(Read(group, "Label")).IsEqualTo("g");
         await Assert.That(Count(group, "Items")).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task Dsl_CompilesThroughDslCompiler_WithNoErrorsOnThePrintedModule() {
+        // The analyzer resolves every member the snapshot calls: the synthetic entity-list type
+        // exposes only Item, Count, constructors and Add, so a ToArray/Clear/AddRange call on an
+        // entity list is rejected here and nowhere in the print-and-Roslyn path.
+        var result = new Compiler().Compile(Dsl, CompileMode.All, DbmsPack.Sqlite);
+        await Assert.That(string.Join("; ", result.Errors ?? [])).IsEqualTo("");
+        await Assert.That(result.Success).IsTrue();
     }
 
     [Test]

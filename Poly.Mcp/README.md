@@ -4,7 +4,7 @@
 
 Lock: [`docs/decisions/2026-08-15-domain-library-extensions-mcp-harness.md`](../docs/decisions/2026-08-15-domain-library-extensions-mcp-harness.md). Frozen core: [`docs/CORE.md`](../docs/CORE.md) §0. Mechanisms: [`docs/CORE.md`](../docs/CORE.md) §3.6.
 
-Launch: `polyc mcp` (stdio). `dotnet run --project Poly.Mcp` runs the same host entry for one release.
+Launch: `polyc mcp` (stdio). `Poly.Mcp` is a class library with no entry point; the host is `src/polyc`.
 
 ## Tool Surface
 
@@ -82,7 +82,7 @@ Color: enum iri("https://example.com/Color") {
 
 ## Harness Runtime
 
-`Program.cs` composes the server through the host's DI container:
+`PolyMcpHost.cs` composes the server through the host's DI container:
 
 - **Store:** `ISessionStore` is a singleton (`McpSessionStore`). Sessions are in memory only; a restart loses them. Each session has its own lock.
 - **Eviction:** sessions idle longer than `Mcp:Sessions:IdleTimeout` (default 8h) are removed by `SessionEvictionService`; `SweepInterval` (default 15m) controls the sweep. Set `IdleTimeout` to zero to disable eviction.

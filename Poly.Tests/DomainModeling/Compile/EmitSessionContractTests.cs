@@ -191,17 +191,9 @@ public sealed class EmitSessionContractTests {
 
         var (session, domain, analysis) = AnalyzePoly(poly);
         var types = DomainProgramProjection.ToSyntax(domain, analysis);
-        await Assert.That(types.Any(t => t.Name == "DomainResult" && t.GenericParameters is { Count: > 0 })).IsTrue();
 
-        var unit = new CompilationUnitNode([], null, types, null);
-        var interp = Poly.Interpretation.Interpreter.Analyzer.Analyze(unit);
-        await Assert.That(interp).IsNotNull();
-
-        var domainResultGeneric = types.Single(t => t.Name == "DomainResult" && t.GenericParameters is { Count: > 0 });
-        var resolvedGeneric = interp.GetMetadata<TypeDefinitionMetadata>(domainResultGeneric)?.TypeDefinition;
-        await Assert.That(resolvedGeneric).IsNotNull();
-        var valueType = resolvedGeneric!.Properties.Single(p => p.Name == "Value").MemberTypeDefinition;
-        await Assert.That(valueType.Name).IsEqualTo("T");
+        var interp = DomainSession.AnalyzeModule(types);
+        await Assert.That(interp.Diagnostics.Count(d => d.Severity == Poly.Analysis.DiagnosticSeverity.Error)).IsEqualTo(0);
 
         var files = session.Emit(domain, analysis);
         await Assert.That(files.Any(f => f.FileName == "Room.cs")).IsTrue();

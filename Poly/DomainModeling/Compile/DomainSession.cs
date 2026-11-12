@@ -4,6 +4,7 @@ using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Libraries.Storage;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
+using Poly.DomainModeling.Runtime;
 using Poly.Grammar;
 using Poly.Interpretation;
 using Poly.Interpretation.CSharp;
@@ -432,11 +433,23 @@ public sealed partial class DomainSession {
                 && ReferenceEquals(cached.Module, module))
                 return cached;
 
-            var vm = Interpreter.Analyzer.Analyze(new CompilationUnitNode([], null, module, null));
+            var vm = AnalyzeModule(module);
             VmAnalysisCount++;
             _compiled = new CompiledDomain(domain, analysis, module, vm);
             return _compiled;
         }
+    }
+
+    /// <summary>
+    /// Analyzes a lowered operation module the way the runtime host does: the shared
+    /// <c>Poly.Runtime</c> result family is bound through <see cref="DomainResultTypeProvider"/>
+    /// over the default registry, and a module's own declarations still win over it.
+    /// </summary>
+    public static AnalysisResult AnalyzeModule(IReadOnlyList<TypeDefinitionNode> module) {
+        ArgumentNullException.ThrowIfNull(module);
+        return Interpreter.Analyzer.Analyze(
+            new CompilationUnitNode([], null, module, null),
+            typeDefinitions: DomainResultTypeProvider.Wrap(AnalysisContext.CreateDefault().TypeDefinitions));
     }
 
     /// <summary>

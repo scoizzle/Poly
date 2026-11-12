@@ -789,7 +789,7 @@ public sealed class NameScopeTests {
             throw new InvalidOperationException($"Probe DSL did not apply: {mutation.FailureSummary}");
         analysis = session.Analyze(mutation.Root);
         var module = DomainProgramProjection.ToSyntax(mutation.Root, (INodeMetadataProvider)analysis);
-        var vm = Interpreter.Analyzer.Analyze(new CompilationUnitNode([], null, module, null));
+        var vm = DomainSession.AnalyzeModule(module);
         var source = new CSharpWriter(vm).Write(module);
         return ExportedCSharp.CompileWithWarningsAsErrors("S02Probe", [("Probe.cs", source)]);
     }

@@ -129,7 +129,7 @@ public sealed class DomainResultErasureTests {
         ModuleReport(string poly) {
         var (domain, analysis, session) = LowerWithSession(poly);
         var module = RuntimeAnalysisCache.GetOrLower(domain, session, analysis);
-        var vm = Interpreter.Analyzer.Analyze(new CompilationUnitNode([], null, module, null));
+        var vm = DomainSession.AnalyzeModule(module);
 
         return (
             vm.Diagnostics.Count(d => d.Severity == DiagnosticSeverity.Error),
@@ -155,6 +155,24 @@ public sealed class DomainResultErasureTests {
         await Assert.That(errors).IsEqualTo(0);
         await Assert.That(warnings).IsEqualTo(0);
         await Assert.That(module.Any(t => t.Name == "DomainResult")).IsFalse();
+    }
+
+    [Test]
+    public async Task AnalyzeModule_ModuleWithoutResultTwins_ResolvesPolyRuntime() {
+        // S2b seam pin: the seam wraps the default registry with DomainResultTypeProvider, so a
+        // module that declares none of the result family still analyzes clean. Run while the
+        // real module still carries the twins, so this proves the wiring before S3 drops them.
+        var (domain, analysis, session) = LowerWithSession(McpLibraryPoly());
+        var module = RuntimeAnalysisCache.GetOrLower(domain, session, analysis);
+        var withoutTwins = module
+            .Where(t => t.Name is not ("DomainResult" or "ConstraintFailureException"))
+            .ToList();
+        await Assert.That(withoutTwins.Count).IsLessThan(module.Count);
+
+        var vm = DomainSession.AnalyzeModule(withoutTwins);
+
+        await Assert.That(vm.Diagnostics.Count(d => d.Severity == DiagnosticSeverity.Error)).IsEqualTo(0);
+        await Assert.That(vm.Diagnostics.Count(d => d.Severity == DiagnosticSeverity.Warning)).IsEqualTo(0);
     }
 
     private static (Domain Domain, AnalysisResult Analysis, DomainSession Session)

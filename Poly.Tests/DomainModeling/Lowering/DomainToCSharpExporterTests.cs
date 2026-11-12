@@ -3840,7 +3840,7 @@ public class DomainToCSharpExporterTests {
               children: many Child
               Flag: Text
               P: stage {
-                Add: action { create in children { Name: "n" } }
+                Add: action { create in children { } }
                 when children A { assign Flag to "y" }
               }
             }

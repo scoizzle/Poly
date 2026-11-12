@@ -1294,7 +1294,7 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
     }
 
     private static string FormatRangeValue(decimal d) =>
-        d == decimal.Truncate(d) ? d.ToString("F0", System.Globalization.CultureInfo.InvariantCulture) : d.ToString("G", System.Globalization.CultureInfo.InvariantCulture);
+        d.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
     /// <summary>A written edge of a value range. An absent side is unbounded and prints as the
     /// <see cref="ConstraintValidation"/> glyph, never as the number 0 (#475).</summary>

@@ -164,6 +164,28 @@ public class OpenRangeBoundTests {
         await Assert.That(column.IsRangeVerified).IsFalse();
     }
 
+    /// <summary>V-05b T13 (A6): a writer with no range is a violating writer. <c>U</c> is unbounded, so
+    /// <c>U + 1</c> has no interval; a CHECK built from <c>range(0, 100)</c> would false-reject.</summary>
+    [Test]
+    public async Task VerifiedRange_UnboundedWriter_IsNotVerified() {
+        var result = Parse("""
+            domain Test
+            Item: entity {
+              D: Number range(0, 100)
+              U: Number
+              Dep: action { assign D to U + 1 }
+            }
+            """);
+
+        var topology = EffectTopologyPass.Scan(result.Root);
+        var aggregate = OwnershipAggregatePass.BuildAggregate(result.Root, null, topology);
+        var storage = new StorageAnalyzer(result.Root, result.Analysis).Analyze(aggregate, topology);
+        var column = storage.Entities[0].Columns.Single(c => c.Name == "D");
+
+        await Assert.That(column.IsRangeVerified).IsFalse();
+        await Assert.That(column.VerifiedRange).IsNull();
+    }
+
     // ── B6: the authoring door ───────────────────────────────────────────
 
     [Test]

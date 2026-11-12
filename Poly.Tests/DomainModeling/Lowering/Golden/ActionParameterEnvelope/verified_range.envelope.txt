@@ -1,2 +1,2 @@
-Gauge.SetLevel(v): RequiredConstraint;Range(0:Decimal,100:Decimal)
+Gauge.SetLevel(v): RequiredConstraint;Range(0:Int64,100:Int64)
 Gauge.SetPeak(v): RequiredConstraint;Range(0:Int64,100:Int64)

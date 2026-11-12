@@ -369,4 +369,21 @@ public class ExactIntervalTests {
         await Assert.That(constraint.Maximum!.GetType()).IsEqualTo(typeof(decimal));
         await Assert.That(AbstractValue.From([constraint]).NumericRange).IsEqualTo(range);
     }
+
+    // ── V-05b S3: A13 boundary pins for the endpoint type ────────────────
+
+    /// <summary>A13: a bool literal carries no numeric range — it is not <c>1</c>/<c>0</c>.</summary>
+    [Test]
+    public async Task BoolLiteral_HasNoRange() {
+        await Assert.That(Infer(DomainExpression.Literal(true))).IsEqualTo(((decimal?)null, (decimal?)null));
+        await Assert.That(Infer(DomainExpression.Literal(false))).IsEqualTo(((decimal?)null, (decimal?)null));
+    }
+
+    /// <summary>A13: an API-built fractional <c>double</c> bound has no exact endpoint, so the value
+    /// carries no interval at all. Ordering still falls back to master's double comparison (V-05a FX4),
+    /// so this is an interval fact, not a new violated verdict.</summary>
+    [Test]
+    public async Task FractionalDoubleBound_IsUnorderable() {
+        await Assert.That(AbstractValue.From([new RangeConstraint(0.5d, null)]).NumericRange).IsNull();
+    }
 }

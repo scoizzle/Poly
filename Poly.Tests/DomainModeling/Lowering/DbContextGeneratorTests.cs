@@ -302,6 +302,46 @@ public class DbContextGeneratorTests {
         }
     }
 
+    /// <summary>The CHECK SQL text of every emitted <c>HasCheckConstraint</c>, in order.</summary>
+    private static List<string> CheckConstraints(Domain domain) =>
+        OnModelCreating(domain).FindInvocations("HasCheckConstraint")
+            .Select(i => i.Arguments[1] is Constant { Value: string sql } ? sql : "")
+            .ToList();
+
+    /// <summary>V-05b T3: a declared bound above 2^53 reaches the CHECK text exactly, never rounded
+    /// through <c>double</c> to <c>…992</c>.</summary>
+    [Test]
+    public async Task CheckSql_BoundAbove2Pow53_IsExact() {
+        var domain = ParseDomain("""
+            domain Test
+            Item: entity {
+              Price: Decimal range(0, 9007199254740993)
+            }
+            """);
+
+        var checks = CheckConstraints(domain);
+        await Assert.That(checks.Count).IsEqualTo(1);
+        await Assert.That(checks[0]).Contains("price >= 0");
+        await Assert.That(checks[0]).Contains("price <= 9007199254740993");
+    }
+
+    /// <summary>V-05b A13: the CHECK text keeps the declared decimal scale
+    /// (<c>range(0.00, 100.00)</c> is <c>&gt;= 0.00</c>, not <c>&gt;= 0</c>).</summary>
+    [Test]
+    public async Task CheckSql_DeclaredScale_IsKept() {
+        var domain = ParseDomain("""
+            domain Test
+            Item: entity {
+              Price: Decimal range(0.00, 100.00)
+            }
+            """);
+
+        var checks = CheckConstraints(domain);
+        await Assert.That(checks.Count).IsEqualTo(1);
+        await Assert.That(checks[0]).Contains("price >= 0.00");
+        await Assert.That(checks[0]).Contains("price <= 100.00");
+    }
+
     private static IEnumerable<Node> Descendants(Node node) {
         yield return node;
         foreach (var child in node.Children) {

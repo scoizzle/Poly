@@ -36,7 +36,13 @@ public sealed partial class EffectLoweringPass {
         var binders = new Dictionary<string, Node>(_loopBinders ?? new Dictionary<string, Node>(), StringComparer.Ordinal) {
             [e.BinderName] = loopVar
         };
-        var bodyPass = new EffectLoweringPass(_entity, bodyContext) { _loopBinders = binders };
+        // The fresh pass has an empty _exitsInlining: carry the exit-inline flags so a hop in
+        // a for inside an exit block does not re-inline that exit without end.
+        var bodyPass = new EffectLoweringPass(_entity, bodyContext) {
+            _loopBinders = binders,
+            _inSourceExitInline = _inSourceExitInline,
+            _enclosingHopTarget = _enclosingHopTarget
+        };
 
         var loopBody = new List<Node>();
         var loopLocals = new List<Node>();

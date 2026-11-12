@@ -75,11 +75,11 @@ public class Enrollment
             var assignValue0 = score;
             if (assignValue0 < 0L)
             {
-                return DomainResult.Failure("'Grade' must be >= 0.");
+                return DomainResult.Failure(Poly.Runtime.DomainFailure.Range("'Grade' must be >= 0.", "Enrollment.Grade"));
             }
             if (assignValue0 > 100L)
             {
-                return DomainResult.Failure("'Grade' must be <= 100.");
+                return DomainResult.Failure(Poly.Runtime.DomainFailure.Range("'Grade' must be <= 100.", "Enrollment.Grade"));
             }
             this.Grade = assignValue0;
         }
@@ -237,11 +237,11 @@ public class Enrollment
     {
         if (grade < 0L)
         {
-            return DomainResult<Enrollment>.Failure("'Grade' must be >= 0.");
+            return DomainResult<Enrollment>.Failure(Poly.Runtime.DomainFailure.Range("'Grade' must be >= 0.", "Enrollment.Grade"));
         }
         if (grade > 100L)
         {
-            return DomainResult<Enrollment>.Failure("'Grade' must be <= 100.");
+            return DomainResult<Enrollment>.Failure(Poly.Runtime.DomainFailure.Range("'Grade' must be <= 100.", "Enrollment.Grade"));
         }
         var created = new Enrollment(section, student, enrolledOn, dueDate, grade);
         if (section != null)

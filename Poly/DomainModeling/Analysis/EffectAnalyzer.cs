@@ -529,7 +529,8 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
                     e,
                     $"Assign targets state of loop binder '{root}', which belongs to another entity. " +
                     $"Only '{entity.Name}' may assign its own state; cross-entity access is read-only. " +
-                    $"Invoke an action on the other entity instead (e.g. 'invoke {root}.SomeAction').",
+                    $"Invoke an action on the other entity instead (e.g. 'invoke {root}.SomeAction'); in an exit block, " +
+                    $"move that work into an action — an exit block rejects 'invoke', 'create' and 'for … invoke' (DMEFF018).",
                     DomainModelDiagnosticCodes.EffectCrossEntityMutation);
                 return null;
             }

@@ -172,31 +172,31 @@ public class Patron
     {
         if (string.IsNullOrEmpty(name))
         {
-            return DomainResult<Patron>.Failure("'Name' is required.");
+            return DomainResult<Patron>.Failure(Poly.Runtime.DomainFailure.Required("'Name' is required.", "Patron.Name"));
         }
         if (string.IsNullOrEmpty(email))
         {
-            return DomainResult<Patron>.Failure("'Email' is required.");
+            return DomainResult<Patron>.Failure(Poly.Runtime.DomainFailure.Required("'Email' is required.", "Patron.Email"));
         }
         if (!System.Text.RegularExpressions.Regex.IsMatch(email, "^[^@]+@[^@]+\\z"))
         {
-            return DomainResult<Patron>.Failure("'Email' does not match the required pattern.");
+            return DomainResult<Patron>.Failure(Poly.Runtime.DomainFailure.Pattern("'Email' does not match the required pattern.", "Patron.Email"));
         }
         if (status != PatronStatus.Active && status != PatronStatus.Suspended && status != PatronStatus.Closed)
         {
-            return DomainResult<Patron>.Failure(string.Concat("'", status, "' is not a valid member of PatronStatus for property 'Status'."));
+            return DomainResult<Patron>.Failure(Poly.Runtime.DomainFailure.Enum(string.Concat("'", status, "' is not a valid member of PatronStatus for property 'Status'."), "Patron.Status"));
         }
         if (maxItems < 0L)
         {
-            return DomainResult<Patron>.Failure("'MaxItems' must be >= 0.");
+            return DomainResult<Patron>.Failure(Poly.Runtime.DomainFailure.Range("'MaxItems' must be >= 0.", "Patron.MaxItems"));
         }
         if (maxItems > 20L)
         {
-            return DomainResult<Patron>.Failure("'MaxItems' must be <= 20.");
+            return DomainResult<Patron>.Failure(Poly.Runtime.DomainFailure.Range("'MaxItems' must be <= 20.", "Patron.MaxItems"));
         }
         if (Patron.ExistsWithEmail(db, email))
         {
-            return DomainResult<Patron>.Failure("Unique constraint violated: 'Email' value is already used on another 'Patron'.");
+            return DomainResult<Patron>.Failure(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'Email' value is already used on another 'Patron'.", "Patron.Email"));
         }
         var created = new Patron(name, email, maxItems, loans, fines, memberSince, status, currentBorrowCount, outstandingFines);
         db.Record("Patron", "Email", email);

@@ -103,6 +103,18 @@ public sealed class ReservedGeneratedNameTests {
     }
 
     [Test]
+    public async Task PolyMember_IsAnalyzeError() {
+        var analysis = Analyze("""
+            domain Clash
+            Widget: entity { Poly: Text }
+            """);
+
+        var errors = Errors(analysis, DomainModelDiagnosticCodes.ReservedMemberName);
+        await Assert.That(errors.Count).IsGreaterThanOrEqualTo(1);
+        await Assert.That(errors[0].Message).Contains("would shadow the generated C# type 'Poly'");
+    }
+
+    [Test]
     public async Task PolyEnum_IsAnalyzeError() {
         var analysis = Analyze("""
             domain Clash

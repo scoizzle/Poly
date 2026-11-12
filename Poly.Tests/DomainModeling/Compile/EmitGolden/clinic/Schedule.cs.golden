@@ -20,11 +20,11 @@ public class Schedule
     {
         if (string.IsNullOrEmpty(day))
         {
-            return DomainResult<Schedule>.Failure("'Day' is required.");
+            return DomainResult<Schedule>.Failure(Poly.Runtime.DomainFailure.Required("'Day' is required.", "Schedule.Day"));
         }
         if (string.IsNullOrEmpty(state))
         {
-            return DomainResult<Schedule>.Failure("'State' is required.");
+            return DomainResult<Schedule>.Failure(Poly.Runtime.DomainFailure.Required("'State' is required.", "Schedule.State"));
         }
         var created = new Schedule(day, state);
         return DomainResult<Schedule>.Success(created);

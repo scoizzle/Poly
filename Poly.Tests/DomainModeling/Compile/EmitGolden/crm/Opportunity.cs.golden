@@ -160,11 +160,11 @@ public class Opportunity
             var assignValue0 = this.Amount + qty * sku.ListPrice;
             if (assignValue0 < 0m)
             {
-                return DomainResult<Line>.Failure("'Amount' must be >= 0.");
+                return DomainResult<Line>.Failure(Poly.Runtime.DomainFailure.Range("'Amount' must be >= 0.", "Opportunity.Amount"));
             }
             if (assignValue0 > 100000000m)
             {
-                return DomainResult<Line>.Failure("'Amount' must be <= 100000000.");
+                return DomainResult<Line>.Failure(Poly.Runtime.DomainFailure.Range("'Amount' must be <= 100000000.", "Opportunity.Amount"));
             }
             this.Amount = assignValue0;
             var create1 = this.CreateLines(qty, sku.ListPrice, sku);
@@ -225,11 +225,11 @@ public class Opportunity
         var assignValue0 = this.Amount;
         if (assignValue0 < 0m)
         {
-            return DomainResult.Failure("'Amount' must be >= 0.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Range("'Amount' must be >= 0.", "Opportunity.Amount"));
         }
         if (assignValue0 > 100000000m)
         {
-            return DomainResult.Failure("'Amount' must be <= 100000000.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Range("'Amount' must be <= 100000000.", "Opportunity.Amount"));
         }
         this.Amount = assignValue0;
         return DomainResult.Success();
@@ -340,15 +340,15 @@ public class Opportunity
     {
         if (string.IsNullOrEmpty(title))
         {
-            return DomainResult<Opportunity>.Failure("'Title' is required.");
+            return DomainResult<Opportunity>.Failure(Poly.Runtime.DomainFailure.Required("'Title' is required.", "Opportunity.Title"));
         }
         if (amount < 0m)
         {
-            return DomainResult<Opportunity>.Failure("'Amount' must be >= 0.");
+            return DomainResult<Opportunity>.Failure(Poly.Runtime.DomainFailure.Range("'Amount' must be >= 0.", "Opportunity.Amount"));
         }
         if (amount > 100000000m)
         {
-            return DomainResult<Opportunity>.Failure("'Amount' must be <= 100000000.");
+            return DomainResult<Opportunity>.Failure(Poly.Runtime.DomainFailure.Range("'Amount' must be <= 100000000.", "Opportunity.Amount"));
         }
         var created = new Opportunity(title, amount, account, contact, activities, lines, quotes, closeBy);
         if (account != null)

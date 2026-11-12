@@ -226,15 +226,15 @@ public class Account
     {
         if (string.IsNullOrEmpty(name))
         {
-            return DomainResult<Account>.Failure("'Name' is required.");
+            return DomainResult<Account>.Failure(Poly.Runtime.DomainFailure.Required("'Name' is required.", "Account.Name"));
         }
         if ((object)industry == null)
         {
-            return DomainResult<Account>.Failure("'Industry' is required.");
+            return DomainResult<Account>.Failure(Poly.Runtime.DomainFailure.Required("'Industry' is required.", "Account.Industry"));
         }
         if (industry != Industry.Technology && industry != Industry.Healthcare && industry != Industry.Finance && industry != Industry.Other)
         {
-            return DomainResult<Account>.Failure(string.Concat("'", industry, "' is not a valid member of Industry for property 'Industry'."));
+            return DomainResult<Account>.Failure(Poly.Runtime.DomainFailure.Enum(string.Concat("'", industry, "' is not a valid member of Industry for property 'Industry'."), "Account.Industry"));
         }
         var created = new Account(name, industry, parent, hq, contacts, opportunities, tickets, wonCount, openPipeline, closedTickets);
         return DomainResult<Account>.Success(created);

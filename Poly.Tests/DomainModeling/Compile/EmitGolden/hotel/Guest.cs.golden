@@ -148,31 +148,31 @@ public class Guest
     {
         if (string.IsNullOrEmpty(name))
         {
-            return DomainResult<Guest>.Failure("'Name' is required.");
+            return DomainResult<Guest>.Failure(Poly.Runtime.DomainFailure.Required("'Name' is required.", "Guest.Name"));
         }
         if (string.IsNullOrEmpty(email))
         {
-            return DomainResult<Guest>.Failure("'Email' is required.");
+            return DomainResult<Guest>.Failure(Poly.Runtime.DomainFailure.Required("'Email' is required.", "Guest.Email"));
         }
         if (!System.Text.RegularExpressions.Regex.IsMatch(email, "^[^@]+@[^@]+\\z"))
         {
-            return DomainResult<Guest>.Failure("'Email' does not match the required pattern.");
+            return DomainResult<Guest>.Failure(Poly.Runtime.DomainFailure.Pattern("'Email' does not match the required pattern.", "Guest.Email"));
         }
         if (string.IsNullOrEmpty(phone))
         {
-            return DomainResult<Guest>.Failure("'Phone' is required.");
+            return DomainResult<Guest>.Failure(Poly.Runtime.DomainFailure.Required("'Phone' is required.", "Guest.Phone"));
         }
         if (phone.Length < 7L)
         {
-            return DomainResult<Guest>.Failure("'Phone' must be at least 7 characters.");
+            return DomainResult<Guest>.Failure(Poly.Runtime.DomainFailure.Length("'Phone' must be at least 7 characters.", "Guest.Phone"));
         }
         if (phone.Length > 20L)
         {
-            return DomainResult<Guest>.Failure("'Phone' must be at most 20 characters.");
+            return DomainResult<Guest>.Failure(Poly.Runtime.DomainFailure.Length("'Phone' must be at most 20 characters.", "Guest.Phone"));
         }
         if (Guest.ExistsWithEmail(db, email))
         {
-            return DomainResult<Guest>.Failure("Unique constraint violated: 'Email' value is already used on another 'Guest'.");
+            return DomainResult<Guest>.Failure(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'Email' value is already used on another 'Guest'.", "Guest.Email"));
         }
         var created = new Guest(name, email, phone, events, reservations, stayCount, nightCount, eventCount);
         db.Record("Guest", "Email", email);

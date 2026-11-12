@@ -358,7 +358,7 @@ public sealed partial class DomainToCSharpExporter {
     /// <summary>
     /// Builds constraint-validation guard clauses for the <c>Create</c> factory method.
     /// Each constraint on a constructor-parameter property produces an early-return
-    /// guard: <c>if (violation) return DomainResult&lt;T&gt;.Failure("'Prop' ...");</c>
+    /// guard: <c>if (violation) return DomainResult&lt;T&gt;.Failure(DomainFailure.&lt;Kind&gt;("'Prop' ...", "Entity.Prop"));</c>
     /// Enum-typed properties get a not-any-member guard from the same Member + NotEqual
     /// nodes as assign.
     ///
@@ -377,9 +377,6 @@ public sealed partial class DomainToCSharpExporter {
         var entityTypeRef = new NamedTypeReference(entity.Name);
         var resultType = new NamedTypeReference("DomainResult",
             TypeArguments: [entityTypeRef]);
-
-        Node Failure(Node msg) => new Return(
-            new Invoke(new Member(resultType, "Failure"), msg));
 
         foreach (var prop in entity.Properties) {
             // Entry-assigned props are body-initialized by the ctor's stage-entry effects
@@ -408,10 +405,11 @@ public sealed partial class DomainToCSharpExporter {
                          ConstraintCheckWriter.ConstraintCheckStyle.Create,
                          paramRef, nullableParam, valueHasDefault, includeRequired)) {
                 checks.Add(BuiltinConstraintCompiler.Claims(check.Kind)
-                    ? BuiltinConstraintCompiler.CreateGuard(entity.Name, check)
+                    ? BuiltinConstraintCompiler.CreateGuard(entity.Name, prop.Name, check)
                     : new IfStatement(
                         check.GuardedCondition,
-                        new Block([Failure(check.Message)])));
+                        new Block([FailureLowering.Return(
+                            resultType, ConstraintCheckWriter.FailureSpec(check, entity.Name, prop.Name))])));
             }
         }
 

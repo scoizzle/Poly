@@ -59,7 +59,9 @@ internal static class DomainModelDiagnosticCodes {
     /// the <c>{Entity}Stage</c> enum) or the entity's own name (CS0542). On an enum it is a
     /// name C# reserves on every enum member list: <c>value__</c>, the backing field, which is
     /// CS0076 (S-02, #530). The enum's own name is not reserved — an enum member is a value,
-    /// not a nested member, so <c>E: enum { E }</c> compiles.
+    /// not a nested member, so <c>E: enum { E }</c> compiles. An action parameter named like a
+    /// generated reference (<c>Poly</c>, <c>System</c>) shadows it inside the method body and is
+    /// reported under this code too.
     /// </summary>
     public const string ReservedMemberName = "DMSTR009";
 

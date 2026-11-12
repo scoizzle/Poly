@@ -43,11 +43,11 @@ public class Truck
         var assignValue0 = this.CurrentLoad + weight;
         if (assignValue0 < 0L)
         {
-            return DomainResult.Failure("'CurrentLoad' must be >= 0.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Range("'CurrentLoad' must be >= 0.", "Truck.CurrentLoad"));
         }
         if (assignValue0 > 40000L)
         {
-            return DomainResult.Failure("'CurrentLoad' must be <= 40000.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Range("'CurrentLoad' must be <= 40000.", "Truck.CurrentLoad"));
         }
         this.CurrentLoad = assignValue0;
         return DomainResult.Success();
@@ -63,43 +63,43 @@ public class Truck
     {
         if (string.IsNullOrEmpty(vin))
         {
-            return DomainResult<Truck>.Failure("'Vin' is required.");
+            return DomainResult<Truck>.Failure(Poly.Runtime.DomainFailure.Required("'Vin' is required.", "Truck.Vin"));
         }
         if (vin.Length < 17L)
         {
-            return DomainResult<Truck>.Failure("'Vin' must be at least 17 characters.");
+            return DomainResult<Truck>.Failure(Poly.Runtime.DomainFailure.Length("'Vin' must be at least 17 characters.", "Truck.Vin"));
         }
         if (vin.Length > 17L)
         {
-            return DomainResult<Truck>.Failure("'Vin' must be at most 17 characters.");
+            return DomainResult<Truck>.Failure(Poly.Runtime.DomainFailure.Length("'Vin' must be at most 17 characters.", "Truck.Vin"));
         }
         if (!System.Text.RegularExpressions.Regex.IsMatch(vin, "^[A-HJ-NPR-Z0-9]{17}\\z"))
         {
-            return DomainResult<Truck>.Failure("'Vin' does not match the required pattern.");
+            return DomainResult<Truck>.Failure(Poly.Runtime.DomainFailure.Pattern("'Vin' does not match the required pattern.", "Truck.Vin"));
         }
         if (maxLoad < 1L)
         {
-            return DomainResult<Truck>.Failure("'MaxLoad' must be >= 1.");
+            return DomainResult<Truck>.Failure(Poly.Runtime.DomainFailure.Range("'MaxLoad' must be >= 1.", "Truck.MaxLoad"));
         }
         if (maxLoad > 40000L)
         {
-            return DomainResult<Truck>.Failure("'MaxLoad' must be <= 40000.");
+            return DomainResult<Truck>.Failure(Poly.Runtime.DomainFailure.Range("'MaxLoad' must be <= 40000.", "Truck.MaxLoad"));
         }
         if (currentLoad < 0L)
         {
-            return DomainResult<Truck>.Failure("'CurrentLoad' must be >= 0.");
+            return DomainResult<Truck>.Failure(Poly.Runtime.DomainFailure.Range("'CurrentLoad' must be >= 0.", "Truck.CurrentLoad"));
         }
         if (currentLoad > 40000L)
         {
-            return DomainResult<Truck>.Failure("'CurrentLoad' must be <= 40000.");
+            return DomainResult<Truck>.Failure(Poly.Runtime.DomainFailure.Range("'CurrentLoad' must be <= 40000.", "Truck.CurrentLoad"));
         }
         if (status != TruckStatus.Idle && status != TruckStatus.EnRoute && status != TruckStatus.Maintenance && status != TruckStatus.OutOfService)
         {
-            return DomainResult<Truck>.Failure(string.Concat("'", status, "' is not a valid member of TruckStatus for property 'Status'."));
+            return DomainResult<Truck>.Failure(Poly.Runtime.DomainFailure.Enum(string.Concat("'", status, "' is not a valid member of TruckStatus for property 'Status'."), "Truck.Status"));
         }
         if (Truck.ExistsWithVin(db, vin))
         {
-            return DomainResult<Truck>.Failure("Unique constraint violated: 'Vin' value is already used on another 'Truck'.");
+            return DomainResult<Truck>.Failure(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'Vin' value is already used on another 'Truck'.", "Truck.Vin"));
         }
         var created = new Truck(vin, maxLoad, warehouse, deliveries, currentLoad, status);
         if (warehouse != null)

@@ -17,19 +17,19 @@ public class OrderItem
     {
         if (string.IsNullOrEmpty(sku))
         {
-            return DomainResult<OrderItem>.Failure("'Sku' is required.");
+            return DomainResult<OrderItem>.Failure(Poly.Runtime.DomainFailure.Required("'Sku' is required.", "OrderItem.Sku"));
         }
         if (!System.Text.RegularExpressions.Regex.IsMatch(sku, "^[A-Z]{3}-[0-9]{4}\\z"))
         {
-            return DomainResult<OrderItem>.Failure("'Sku' does not match the required pattern.");
+            return DomainResult<OrderItem>.Failure(Poly.Runtime.DomainFailure.Pattern("'Sku' does not match the required pattern.", "OrderItem.Sku"));
         }
         if (qty < 1L)
         {
-            return DomainResult<OrderItem>.Failure("'Qty' must be >= 1.");
+            return DomainResult<OrderItem>.Failure(Poly.Runtime.DomainFailure.Range("'Qty' must be >= 1.", "OrderItem.Qty"));
         }
         if (qty > 1000L)
         {
-            return DomainResult<OrderItem>.Failure("'Qty' must be <= 1000.");
+            return DomainResult<OrderItem>.Failure(Poly.Runtime.DomainFailure.Range("'Qty' must be <= 1000.", "OrderItem.Qty"));
         }
         var created = new OrderItem(sku, qty, order);
         if (order != null)

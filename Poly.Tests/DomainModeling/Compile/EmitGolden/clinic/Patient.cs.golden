@@ -41,7 +41,7 @@ public class Patient
     {
         if (string.IsNullOrEmpty(name))
         {
-            return DomainResult<Patient>.Failure("'Name' is required.");
+            return DomainResult<Patient>.Failure(Poly.Runtime.DomainFailure.Required("'Name' is required.", "Patient.Name"));
         }
         var created = new Patient(name, visits);
         return DomainResult<Patient>.Success(created);

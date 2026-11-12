@@ -19,19 +19,19 @@ public class Line
     {
         if (qty < 1L)
         {
-            return DomainResult<Line>.Failure("'Qty' must be >= 1.");
+            return DomainResult<Line>.Failure(Poly.Runtime.DomainFailure.Range("'Qty' must be >= 1.", "Line.Qty"));
         }
         if (qty > 10000L)
         {
-            return DomainResult<Line>.Failure("'Qty' must be <= 10000.");
+            return DomainResult<Line>.Failure(Poly.Runtime.DomainFailure.Range("'Qty' must be <= 10000.", "Line.Qty"));
         }
         if (unitPrice < 0m)
         {
-            return DomainResult<Line>.Failure("'UnitPrice' must be >= 0.");
+            return DomainResult<Line>.Failure(Poly.Runtime.DomainFailure.Range("'UnitPrice' must be >= 0.", "Line.UnitPrice"));
         }
         if (unitPrice > 100000000m)
         {
-            return DomainResult<Line>.Failure("'UnitPrice' must be <= 100000000.");
+            return DomainResult<Line>.Failure(Poly.Runtime.DomainFailure.Range("'UnitPrice' must be <= 100000000.", "Line.UnitPrice"));
         }
         var created = new Line(qty, unitPrice, product, opportunity);
         if (opportunity != null)

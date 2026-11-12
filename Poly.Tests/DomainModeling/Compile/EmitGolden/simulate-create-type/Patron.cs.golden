@@ -37,7 +37,7 @@ public class Patron
     {
         if (string.IsNullOrEmpty(name))
         {
-            return DomainResult<Patron>.Failure("'Name' is required.");
+            return DomainResult<Patron>.Failure(Poly.Runtime.DomainFailure.Required("'Name' is required.", "Patron.Name"));
         }
         var created = new Patron(name, fines);
         return DomainResult<Patron>.Success(created);

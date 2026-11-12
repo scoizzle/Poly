@@ -167,7 +167,7 @@ internal static class ArgumentValidator {
 /// The one argument-validation filter. It reads each tool's published inputSchema through
 /// <see cref="ArgumentSpecCatalog"/> and runs <see cref="ArgumentValidator"/> before the SDK
 /// binder, so a caller mistake becomes a typed envelope instead of INTERNAL_ERROR. It replaces
-/// the hand-maintained <c>UnknownArgumentFilter</c> allow-list in the same slot.
+/// the hand-maintained allow-list in the same slot.
 /// </summary>
 internal static class ArgumentValidationFilter {
     public static McpRequestHandler<CallToolRequestParams, CallToolResult> Filter(

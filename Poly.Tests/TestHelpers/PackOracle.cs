@@ -17,17 +17,12 @@ using Poly.Tests.DomainModeling.Lowering;
 
 namespace Poly.Tests.TestHelpers;
 
-/// <summary>Knobs for one boot. The defaults are the production budgets; every override exists for a
-/// harness test that must trip a bound or an orphan guard deterministically.</summary>
+/// <summary>Knobs for one boot. The defaults are the production budgets; every override here exists for a
+/// harness test that must trip a bound or a guard deterministically (the slot wait and the HTTP timeout are
+/// fixed budgets, not knobs).</summary>
 public sealed class PackOracleBootOptions {
-    /// <summary>How long to wait for a free child slot (at most two children live at once).</summary>
-    public TimeSpan SlotWait { get; init; } = TimeSpan.FromSeconds(30);
-
     /// <summary>How long to wait for "Now listening on".</summary>
-    public TimeSpan Readiness { get; init; } = TimeSpan.FromSeconds(60);
-
-    /// <summary>Per-request HttpClient timeout.</summary>
-    public TimeSpan Http { get; init; } = TimeSpan.FromSeconds(30);
+    public TimeSpan Readiness { get; init; } = TimeSpan.FromSeconds(30);
 
     /// <summary>The child's own lifetime cap, enforced by the startup hook.</summary>
     public TimeSpan Deadline { get; init; } = TimeSpan.FromMinutes(10);
@@ -61,14 +56,17 @@ public sealed record CompiledApp(string Directory, string AppDll, string DomainN
 /// would share one file and none could be stopped.
 ///
 /// Bounds, all of them because a spawn-heavy harness froze the machine once:
-/// at most two live children; a 60 s compile cancel; budgets that fit the 180 s test timeout; a startup
-/// hook in the child that kills it when the parent's stdin pipe closes (parent death) or after a
-/// deadline; a pidfile sweep for children whose host died without cleanup.
+/// at most two live children; one gated polyc compile (30 s) and one gated Roslyn emit (30 s); a 25 s slot
+/// wait, 30 s readiness, 10 s kill wait and 10 s per-request HTTP budget. A worst-case boot is
+/// 30 + 30 + 25 + 30 + 10 + 10 = 135 s, inside the assembly's 180 s test timeout with 45 s of margin; the
+/// tests that boot twice carry their own explicit <c>[Timeout]</c>.
 /// </summary>
 public sealed class PackOracle : IAsyncDisposable {
     private const string HookFileName = "PackOracleHook.dll";
     private const string LayoutVersion = "2";
-    private static readonly TimeSpan _compileBudget = TimeSpan.FromSeconds(60);
+    private static readonly TimeSpan _compileBudget = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan _slotWait = TimeSpan.FromSeconds(25);
+    private static readonly TimeSpan _httpTimeout = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan _staleAfter = TimeSpan.FromDays(1);
     private static readonly string[] _reflectionLoadedSqlite = ["SQLitePCLRaw.batteries_v2", "SQLitePCLRaw.provider.e_sqlite3"];
     private static readonly JsonSerializerOptions _json = new(JsonSerializerDefaults.Web);
@@ -81,6 +79,7 @@ public sealed class PackOracle : IAsyncDisposable {
     private static readonly ConcurrentDictionary<string, Lazy<Task<CompiledApp>>> _apps = new();
     private static readonly ConcurrentDictionary<PackOracle, byte> _live = new();
     private static readonly ConcurrentBag<int> _recordedChildPids = [];
+    private static readonly AsyncLocal<string?> _launcherOverride = new();
     private static readonly Lazy<bool> _initialised = new(Initialise);
     private static readonly Lazy<string> _hookPath = new(EmitHook);
     private static readonly Lazy<IReadOnlyList<ReferenceFile>> _references = new(LoadReferences);
@@ -112,6 +111,18 @@ public sealed class PackOracle : IAsyncDisposable {
     public string ErrorTail => _stderr.Tail();
 
     public int ChildPid { get; }
+
+    /// <summary>The child's exit code once it has exited, or null while it runs (or if it never started).</summary>
+    public int? ChildExitCode {
+        get {
+            try {
+                return _process.HasExited ? _process.ExitCode : null;
+            }
+            catch (InvalidOperationException) {
+                return null;
+            }
+        }
+    }
 
     /// <summary>The child's SQLite file in its run directory, once the host has created it.</summary>
     public string? DatabasePath =>
@@ -150,17 +161,18 @@ public sealed class PackOracle : IAsyncDisposable {
         var app = await CompileAsync(fixture);
         var hook = _hookPath.Value;
 
-        using (var slotWait = new CancellationTokenSource(options.SlotWait)) {
+        using (var slotWait = new CancellationTokenSource(_slotWait)) {
             try {
                 await _childSlots.WaitAsync(slotWait.Token);
             }
             catch (OperationCanceledException) {
                 throw new TimeoutException(
-                    $"No child slot free within {options.SlotWait.TotalSeconds:0} s (at most 2 live children).");
+                    $"No child slot free within {_slotWait.TotalSeconds:0} s (at most 2 live children).");
             }
         }
 
         var slotHeld = true;
+        var started = false;
         string? runDirectory = null;
         string? pidFile = null;
         Process? process = null;
@@ -189,14 +201,18 @@ public sealed class PackOracle : IAsyncDisposable {
             };
             process.Exited += (_, _) => crashed.TrySetResult(true);
 
+            var launchedUtc = DateTime.UtcNow;
             process.Start();
+            started = true;
             _recordedChildPids.Add(process.Id);
-            pidFile = WritePidFile(process, runDirectory, app.Directory);
+            // Drain both pipes before any file work: a chatty child must never block on a full pipe while
+            // the harness reads StartTime and writes the pidfile.
             process.BeginOutputReadLine();
             process.BeginErrorReadLine();
+            pidFile = WritePidFile(process, runDirectory, app.Directory, launchedUtc);
 
             if (!options.WaitForReady) {
-                var detached = new PackOracle(process, NewClient(null, options), stdout, stderr, runDirectory, pidFile);
+                var detached = new PackOracle(process, NewClient(null), stdout, stderr, runDirectory, pidFile);
                 _live[detached] = 0;
                 slotHeld = false;
                 return detached;
@@ -210,38 +226,49 @@ public sealed class PackOracle : IAsyncDisposable {
                     process.Id, runDirectory, stderr.Tail());
             }
 
-            var oracle = new PackOracle(process, NewClient(new Uri(ready.Task.Result), options), stdout, stderr, runDirectory, pidFile);
+            var oracle = new PackOracle(process, NewClient(new Uri(ready.Task.Result)), stdout, stderr, runDirectory, pidFile);
             _live[oracle] = 0;
             slotHeld = false;
             return oracle;
         }
-        catch (TimeoutException ex) when (process is not null) {
-            await KillAndWaitAsync(process);
+        catch (TimeoutException ex) when (started) {
+            await KillAndWaitAsync(process!);
             throw new PackOracleBootException(
                 $"'{app.DomainName}' did not listen within {options.Readiness.TotalSeconds:0.#} s; child killed.\n{Diagnostics(stdout, stderr)}",
-                process.Id, runDirectory, stderr.Tail(), ex);
+                process!.Id, runDirectory, stderr.Tail(), ex);
         }
         finally {
             if (slotHeld) {
-                if (process is { HasExited: false })
-                    await KillAndWaitAsync(process);
-                process?.Dispose();
-                Cleanup(runDirectory, pidFile);
-                _childSlots.Release();
+                // `started` guards HasExited: a Process that failed to Start throws there and would mask the
+                // real error. Release sits in the innermost finally so a failed kill or cleanup can never
+                // leak the slot: a leak caps the whole process at one live child for the rest of the run.
+                try {
+                    if (started && !SafeHasExited(process!))
+                        await KillAndWaitAsync(process!);
+                }
+                finally {
+                    try {
+                        process?.Dispose();
+                        Cleanup(runDirectory, pidFile);
+                    }
+                    finally {
+                        _childSlots.Release();
+                    }
+                }
             }
         }
     }
 
-    private static HttpClient NewClient(Uri? baseAddress, PackOracleBootOptions options) {
+    private static HttpClient NewClient(Uri? baseAddress) {
         var handler = new SocketsHttpHandler { PooledConnectionLifetime = TimeSpan.FromMinutes(1) };
-        var client = new HttpClient(handler) { Timeout = options.Http };
+        var client = new HttpClient(handler) { Timeout = _httpTimeout };
         if (baseAddress is not null)
             client.BaseAddress = baseAddress;
         return client;
     }
 
     private static ProcessStartInfo LaunchInfo(CompiledApp app, string runDirectory, string hook, PackOracleBootOptions options) {
-        var info = new ProcessStartInfo(LauncherPath()) {
+        var info = new ProcessStartInfo(LauncherPathOverride ?? LauncherPath()) {
             WorkingDirectory = runDirectory,
             UseShellExecute = false,
             RedirectStandardInput = true,
@@ -287,6 +314,16 @@ public sealed class PackOracle : IAsyncDisposable {
         return beside is not null && File.Exists(beside) ? beside : exe;
     }
 
+    /// <summary>Test only: overrides the launcher for this asynchronous flow, so one boot can be made to fail
+    /// at <c>Process.Start</c> without touching the machine or any test that runs beside it.</summary>
+    internal static string? LauncherPathOverride {
+        get => _launcherOverride.Value;
+        set => _launcherOverride.Value = value;
+    }
+
+    /// <summary>Test only: the directory the pidfile sweeps read, so a test can write a record and drive a sweep.</summary>
+    internal static string PidDirectoryForTests => PidRoot;
+
     private static string Diagnostics(RingBuffer stdout, RingBuffer stderr) =>
         $"--- child stderr tail ---\n{stderr.Tail()}\n--- child stdout tail ---\n{stdout.Tail()}";
 
@@ -315,7 +352,8 @@ public sealed class PackOracle : IAsyncDisposable {
         }
     }
 
-    /// <summary>kill -0 semantics: does a process with this pid exist and run?</summary>
+    /// <summary>kill -0 semantics: does a process with this pid exist and run? A process that exists but
+    /// cannot be inspected is treated as alive, because the sweep's next move is a kill.</summary>
     public static bool IsProcessAlive(int pid) {
         try {
             using var p = Process.GetProcessById(pid);
@@ -326,6 +364,12 @@ public sealed class PackOracle : IAsyncDisposable {
         }
         catch (InvalidOperationException) {
             return false;
+        }
+        catch (System.ComponentModel.Win32Exception) {
+            return true;
+        }
+        catch (UnauthorizedAccessException) {
+            return true;
         }
     }
 
@@ -346,11 +390,14 @@ public sealed class PackOracle : IAsyncDisposable {
 
     private static async Task KillAndWaitAsync(Process process) {
         try {
-            if (!process.HasExited)
+            if (!SafeHasExited(process))
                 process.Kill(entireProcessTree: true);
         }
         catch (InvalidOperationException) {
             // Already gone.
+        }
+        catch (System.ComponentModel.Win32Exception) {
+            // Already gone, or not ours to signal.
         }
         try {
             await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(10));
@@ -360,6 +407,15 @@ public sealed class PackOracle : IAsyncDisposable {
         }
         catch (InvalidOperationException) {
             // Never started or already disposed.
+        }
+    }
+
+    private static bool SafeHasExited(Process process) {
+        try {
+            return process.HasExited;
+        }
+        catch (InvalidOperationException) {
+            return true; // never started, or already disposed: nothing to kill
         }
     }
 
@@ -397,10 +453,21 @@ public sealed class PackOracle : IAsyncDisposable {
 
     private sealed record PidRecord(int HostPid, int ChildPid, DateTime StartedUtc, string RunDir, string? AppDir);
 
-    private static string WritePidFile(Process child, string runDirectory, string appDirectory) {
+    /// <summary>Writes the record after the child is running. <paramref name="launchedUtc"/> is the parent's
+    /// clock at <c>Start</c>, used when the child died before its own start time could be read.</summary>
+    private static string WritePidFile(Process child, string runDirectory, string appDirectory, DateTime launchedUtc) {
+        DateTime started;
+        try {
+            started = child.StartTime.ToUniversalTime();
+        }
+        catch (InvalidOperationException) {
+            // A child that exited this fast has no readable start time; the parent's clock is within seconds,
+            // which is all the sweep's 5 s match window needs.
+            started = launchedUtc;
+        }
         Directory.CreateDirectory(PidRoot);
         var path = Path.Combine(PidRoot, Guid.NewGuid().ToString("N") + ".json");
-        var record = new PidRecord(Environment.ProcessId, child.Id, child.StartTime.ToUniversalTime(), runDirectory, appDirectory);
+        var record = new PidRecord(Environment.ProcessId, child.Id, started, runDirectory, appDirectory);
         var temp = path + ".tmp";
         File.WriteAllText(temp, JsonSerializer.Serialize(record, _json));
         File.Move(temp, path);
@@ -417,41 +484,56 @@ public sealed class PackOracle : IAsyncDisposable {
         catch (IOException) {
             return null;
         }
+        catch (UnauthorizedAccessException) {
+            return null;
+        }
     }
 
     /// <summary>
     /// For every pidfile whose host process is dead: kill its child, but only when that pid is still the
     /// process the record names (start time within seconds, name <c>dotnet</c>, command line under
     /// <c>poly-oracle</c>), otherwise only delete the record; then delete its run directory.
-    /// Returns how many children were killed. Live hosts' records are never touched.
+    /// A corrupt or unreadable record cannot name a live child, so it is dropped at once. Returns how many
+    /// children were killed. A live host's record is never touched, and one bad record never aborts the sweep.
     /// </summary>
     public static int SweepOrphans() {
         if (!Directory.Exists(PidRoot))
             return 0;
         var killed = 0;
-        foreach (var file in Directory.EnumerateFiles(PidRoot, "*.json")) {
-            var record = ReadPidFile(file);
-            if (record is null) {
-                if (File.GetLastWriteTimeUtc(file) < DateTime.UtcNow - _staleAfter)
+        List<string> files;
+        try {
+            files = Directory.EnumerateFiles(PidRoot, "*.json").ToList();
+        }
+        catch (Exception ex) when (IsPidStoreFailure(ex)) {
+            return 0;
+        }
+        foreach (var file in files) {
+            try {
+                var record = ReadPidFile(file);
+                if (record is null) {
                     TryDeleteFile(file);
-                continue;
+                    continue;
+                }
+                if (IsProcessAlive(record.HostPid))
+                    continue;
+                if (ChildStillMatches(record)) {
+                    try {
+                        using var child = Process.GetProcessById(record.ChildPid);
+                        child.Kill(entireProcessTree: true);
+                        child.WaitForExit(5000);
+                        killed++;
+                    }
+                    catch (ArgumentException) {
+                    }
+                    catch (InvalidOperationException) {
+                    }
+                }
+                TryDeleteDirectory(record.RunDir);
+                TryDeleteFile(file);
             }
-            if (IsProcessAlive(record.HostPid))
-                continue;
-            if (ChildStillMatches(record)) {
-                try {
-                    using var child = Process.GetProcessById(record.ChildPid);
-                    child.Kill(entireProcessTree: true);
-                    child.WaitForExit(5000);
-                    killed++;
-                }
-                catch (ArgumentException) {
-                }
-                catch (InvalidOperationException) {
-                }
+            catch (Exception ex) when (IsPidStoreFailure(ex)) {
+                // One damaged record must never fault the sweep (nor the Lazy Initialise that runs it).
             }
-            TryDeleteDirectory(record.RunDir);
-            TryDeleteFile(file);
         }
         return killed;
     }
@@ -475,8 +557,13 @@ public sealed class PackOracle : IAsyncDisposable {
         catch (InvalidOperationException) {
             return false;
         }
+        catch (System.ComponentModel.Win32Exception) {
+            return false;
+        }
     }
 
+    /// <summary>The child's command line, or null when it cannot be read. The 5 s bound is real: a <c>ps</c>
+    /// that does not answer is killed, and a timeout reads as "does not match" so the sweep never kills on it.</summary>
     private static string? CommandLineOf(int pid) {
         if (OperatingSystem.IsWindows())
             return null;
@@ -489,44 +576,87 @@ public sealed class PackOracle : IAsyncDisposable {
             using var ps = Process.Start(info);
             if (ps is null)
                 return null;
-            var text = ps.StandardOutput.ReadToEnd();
-            ps.WaitForExit(5000);
-            return text;
+            var text = ps.StandardOutput.ReadToEndAsync();
+            if (!ps.WaitForExit(5000)) {
+                try {
+                    ps.Kill(entireProcessTree: true);
+                }
+                catch (InvalidOperationException) {
+                }
+                return null;
+            }
+            return text.GetAwaiter().GetResult();
         }
         catch (System.ComponentModel.Win32Exception) {
             return null;
         }
+        catch (IOException) {
+            return null;
+        }
     }
 
-    /// <summary>Removes cache, hook and work directories not used for a day, except any a live pidfile names.</summary>
+    /// <summary>Removes cache, hook and work directories not used for a day, except any a live pidfile names.
+    /// A disappearing directory or an unreadable record is skipped, never thrown.</summary>
     private static void AgeSweep() {
         var protectedDirs = new HashSet<string>(StringComparer.Ordinal);
-        if (Directory.Exists(PidRoot)) {
-            foreach (var file in Directory.EnumerateFiles(PidRoot, "*.json")) {
-                var record = ReadPidFile(file);
-                if (record is null)
-                    continue;
-                protectedDirs.Add(record.RunDir);
-                if (record.AppDir is not null)
-                    protectedDirs.Add(record.AppDir);
-            }
+        List<string> records;
+        try {
+            records = Directory.Exists(PidRoot) ? Directory.EnumerateFiles(PidRoot, "*.json").ToList() : [];
+        }
+        catch (Exception ex) when (IsPidStoreFailure(ex)) {
+            records = [];
+        }
+        foreach (var file in records) {
+            var record = ReadPidFile(file);
+            if (record is null)
+                continue;
+            protectedDirs.Add(record.RunDir);
+            if (record.AppDir is not null)
+                protectedDirs.Add(record.AppDir);
         }
         foreach (var root in new[] { AppRoot, HookRoot, WorkRoot }) {
-            if (!Directory.Exists(root))
-                continue;
-            foreach (var dir in Directory.EnumerateDirectories(root)) {
-                if (protectedDirs.Contains(dir))
+            List<string> dirs;
+            try {
+                if (!Directory.Exists(root))
                     continue;
-                if (Directory.GetLastWriteTimeUtc(dir) < DateTime.UtcNow - _staleAfter)
-                    TryDeleteDirectory(dir);
+                dirs = Directory.EnumerateDirectories(root).ToList();
+            }
+            catch (Exception ex) when (IsPidStoreFailure(ex)) {
+                continue;
+            }
+            foreach (var dir in dirs) {
+                try {
+                    if (protectedDirs.Contains(dir))
+                        continue;
+                    if (Directory.GetLastWriteTimeUtc(dir) < DateTime.UtcNow - _staleAfter)
+                        TryDeleteDirectory(dir);
+                }
+                catch (Exception ex) when (IsPidStoreFailure(ex)) {
+                }
             }
         }
     }
+
+    /// <summary>True for the failures a pid store can raise on a machine we do not own: a corrupt record, a
+    /// permission wall, or a process/ps race. None of them may fault the Lazy that boots every fixture.</summary>
+    private static bool IsPidStoreFailure(Exception exception) =>
+        exception is IOException or UnauthorizedAccessException or JsonException
+            or System.ComponentModel.Win32Exception or InvalidOperationException or ArgumentException;
 
     private static bool Initialise() {
         Directory.CreateDirectory(Root);
-        SweepOrphans();
-        AgeSweep();
+        // Lazy caches a thrown exception for the process's life: a corrupt record or an unreadable store must
+        // degrade to "no sweep", never to "every boot in this run fails".
+        try {
+            SweepOrphans();
+        }
+        catch (Exception ex) when (IsPidStoreFailure(ex)) {
+        }
+        try {
+            AgeSweep();
+        }
+        catch (Exception ex) when (IsPidStoreFailure(ex)) {
+        }
         AppDomain.CurrentDomain.ProcessExit += (_, _) => {
             foreach (var oracle in _live.Keys) {
                 try {
@@ -534,6 +664,8 @@ public sealed class PackOracle : IAsyncDisposable {
                         oracle._process.Kill(entireProcessTree: true);
                 }
                 catch (InvalidOperationException) {
+                }
+                catch (System.ComponentModel.Win32Exception) {
                 }
                 Cleanup(oracle._runDirectory, oracle._pidFilePath);
             }
@@ -551,17 +683,37 @@ public sealed class PackOracle : IAsyncDisposable {
 
         var (domainName, sources) = await RunGatedAsync(ct => Task.Run(() => PolyCompile(fixture, ct), ct));
         var key = ComputeKey(sources);
-        var lazy = _apps.GetOrAdd(key, k => new Lazy<Task<CompiledApp>>(
-            () => RunGatedAsync(ct => Task.Run(() => BuildApp(k, domainName, sources, ct), ct))));
+        Lazy<Task<CompiledApp>> Entry() => new(
+            () => RunGatedAsync(ct => Task.Run(() => BuildApp(key, domainName, sources, ct), ct)));
+        var lazy = _apps.GetOrAdd(key, _ => Entry());
         try {
-            return await lazy.Value;
+            var app = await lazy.Value;
+            if (CacheEntryBootable(app.Directory))
+                return app;
         }
         catch {
             // A faulted or cancelled entry must not poison the next caller.
             _apps.TryRemove(new KeyValuePair<string, Lazy<Task<CompiledApp>>>(key, lazy));
             throw;
         }
+
+        // A hit must be bootable, in memory and on disk: a damaged directory (or an entry that outlived one)
+        // is rebuilt once through BuildApp, which verifies the layout before it publishes.
+        _apps.TryRemove(new KeyValuePair<string, Lazy<Task<CompiledApp>>>(key, lazy));
+        var rebuilt = _apps.GetOrAdd(key, _ => Entry());
+        try {
+            return await rebuilt.Value;
+        }
+        catch {
+            _apps.TryRemove(new KeyValuePair<string, Lazy<Task<CompiledApp>>>(key, rebuilt));
+            throw;
+        }
     }
+
+    /// <summary>True when a cached directory holds what a child needs to start.</summary>
+    private static bool CacheEntryBootable(string directory) =>
+        File.Exists(Path.Combine(directory, "app.dll"))
+        && File.Exists(Path.Combine(directory, "app.runtimeconfig.json"));
 
     private static async Task<T> RunGatedAsync<T>(Func<CancellationToken, Task<T>> work) {
         using var cts = new CancellationTokenSource(_compileBudget);
@@ -594,9 +746,16 @@ public sealed class PackOracle : IAsyncDisposable {
 
     private static string ComputeKey(IReadOnlyList<(string FileName, string Source)> sources) {
         var text = new StringBuilder();
-        // The app directory's layout is a function of this harness too: bump LayoutVersion when AssembleDependencies changes.
+        // The app directory's contents are a function of this harness, not only of the emitted sources.
+        // Bump LayoutVersion when one of these changes without a matching keyed input: AssembleDependencies
+        // (the files it copies, or the closure rule), EmitApp or the implicit usings, the runtimeconfig
+        // template, the native-sqlite discovery rule, or the published layout (temp dir + move).
+        // The startup hook has its own hash in EmitHook.
         text.Append(LayoutVersion).Append('|').Append(string.Join(',', _reflectionLoadedSqlite)).Append('\n');
         text.Append(RuntimeInformation.FrameworkDescription).Append('|').Append(RuntimeInformation.RuntimeIdentifier).Append('\n');
+        text.Append(ImplicitUsings).Append('\n');
+        text.Append(RuntimeConfig()).Append('\n');
+        text.Append(NativeSqliteFingerprint()).Append('\n');
         foreach (var reference in _references.Value.Where(r => r.InKey))
             text.Append(reference.Name).Append(':').Append(reference.Mvid).Append('\n');
         foreach (var (name, source) in sources)
@@ -604,12 +763,23 @@ public sealed class PackOracle : IAsyncDisposable {
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text.ToString()))).ToLowerInvariant()[..32];
     }
 
+    /// <summary>The native files that land in the app directory, by name and size: the key must change when
+    /// the resolved e_sqlite3 does.</summary>
+    private static string NativeSqliteFingerprint() =>
+        string.Join(',', FindNativeSqlite().Select(f => $"{Path.GetFileName(f)}:{new FileInfo(f).Length}"));
+
     private static CompiledApp BuildApp(
         string key, string domainName, IReadOnlyList<(string FileName, string Source)> sources, CancellationToken cancel) {
         var final = Path.Combine(AppRoot, key);
+        var appDll = Path.Combine(final, "app.dll");
         if (Directory.Exists(final)) {
-            Directory.SetLastWriteTimeUtc(final, DateTime.UtcNow);
-            return new CompiledApp(final, Path.Combine(final, "app.dll"), domainName, key);
+            if (CacheEntryBootable(final)) {
+                Directory.SetLastWriteTimeUtc(final, DateTime.UtcNow);
+                return new CompiledApp(final, appDll, domainName, key);
+            }
+            // A cache hit must be bootable: a half-published or damaged directory is rebuilt, never handed
+            // to a child that cannot start.
+            TryDeleteDirectory(final);
         }
 
         Directory.CreateDirectory(AppRoot);
@@ -708,6 +878,8 @@ public sealed class PackOracle : IAsyncDisposable {
     private static Guid MvidOf(string path) {
         using var stream = File.OpenRead(path);
         using var pe = new PEReader(stream);
+        if (!pe.HasMetadata)
+            return Guid.Empty; // a native or mixed-mode file has no MVID; it can never be a managed reference
         var reader = pe.GetMetadataReader();
         return reader.GetGuid(reader.GetModuleDefinition().Mvid);
     }
@@ -917,22 +1089,26 @@ public sealed class PackOracle : IAsyncDisposable {
 
     // ───────────────────────────── output ring ─────────────────────────────
 
-    /// <summary>The last 200 lines, capped at 32 KB, thread-safe.</summary>
+    /// <summary>The last 200 lines, at most 4 KB each and 32 KB of text in total, thread-safe.</summary>
     private sealed class RingBuffer {
         private const int MaxLines = 200;
-        private const int MaxBytes = 32 * 1024;
+        private const int MaxLineChars = 4 * 1024;
+        private const int MaxChars = 32 * 1024;
         private readonly Queue<string> _lines = new();
         private readonly object _gate = new();
-        private int _bytes;
+        private int _chars;
 
         public void Add(string line) {
+            // A single unbounded line (a stack trace, a dumped payload) would break the 32 KB bound on its own.
+            if (line.Length > MaxLineChars)
+                line = line[..MaxLineChars];
             lock (_gate) {
                 _lines.Enqueue(line);
-                _bytes += line.Length;
-                while (_lines.Count > MaxLines || _bytes > MaxBytes) {
+                _chars += line.Length;
+                while (_lines.Count > MaxLines || _chars > MaxChars) {
                     if (_lines.Count <= 1)
                         break;
-                    _bytes -= _lines.Dequeue().Length;
+                    _chars -= _lines.Dequeue().Length;
                 }
             }
         }

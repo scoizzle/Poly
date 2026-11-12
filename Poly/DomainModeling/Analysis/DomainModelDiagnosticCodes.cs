@@ -379,6 +379,14 @@ internal static class DomainModelDiagnosticCodes {
     public const string CreateSuppliesEntryAssignedProperty = "DMEFF019";
 
     /// <summary>
+    /// <c>link Rel to binder</c> and <c>unlink Rel from binder</c> (#407, F-16) parse, print and
+    /// pass every legality check, but no lowering exists yet (L-13); Analyze rejects each use so
+    /// nothing unlowerable ships. An error that no <see cref="DiagnosticAllowance"/> acknowledges.
+    /// L-13 deletes this code.
+    /// </summary>
+    public const string EffectLinkNotLowerable = "DMEFF020";
+
+    /// <summary>
     /// A <c>match</c> arm condition (#409) is not Boolean. An error.
     /// </summary>
     public const string MatchConditionNotBoolean = "DMMAT001";

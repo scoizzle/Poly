@@ -49,9 +49,9 @@ app.MapPost("/api/gauges/{id}/setlevel", async (int id, SetLevelDto dto, TDbCtx 
     try
     {
         var result = entity.SetLevel(dto.V);
-        await db.SaveChangesAsync();
         if (result.IsSuccess)
         {
+            await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
         else
@@ -74,9 +74,9 @@ app.MapPost("/api/gauges/{id}/setpeak", async (int id, SetPeakDto dto, TDbCtx db
     try
     {
         var result = entity.SetPeak(dto.V);
-        await db.SaveChangesAsync();
         if (result.IsSuccess)
         {
+            await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
         else
@@ -99,9 +99,9 @@ app.MapPost("/api/gauges/{id}/surge", async (int id, TDbCtx db) => {
     try
     {
         var result = entity.Surge();
-        await db.SaveChangesAsync();
         if (result.IsSuccess)
         {
+            await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
         else
@@ -131,7 +131,7 @@ static async System.Threading.Tasks.Task SeedAsync(TDbCtx db)
     {
         return;
     }
-    var gaugeResult = Gauge.Create(1, 1);
+    var gaugeResult = Gauge.Create(50, 50);
     if (gaugeResult.IsSuccess)
     {
         db.Add(gaugeResult.Value);

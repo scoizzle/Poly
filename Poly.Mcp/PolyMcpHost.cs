@@ -1,6 +1,9 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+
+using ModelContextProtocol.Server;
 
 using Poly.Mcp.Sessions;
 using Poly.Mcp.Surface;
@@ -31,7 +34,7 @@ public static class PolyMcpHost {
             .WithStdioServerTransport()
             .WithRequestFilters(filters => filters
                 .AddCallToolFilter(ToolExceptionBoundary.Filter)
-                .AddCallToolFilter(UnknownArgumentFilter.Filter)
+                .AddCallToolFilter(ArgumentValidationFilter.Filter)
                 // Registered last = innermost: it sees the tool result before the outer filters.
                 .AddCallToolFilter(EnvelopeTextFilter.Filter));
 
@@ -39,6 +42,14 @@ public static class PolyMcpHost {
         // internal to PolySurfaceTools and are not registered as MCP tools.
         mcp.WithTools<PolySurfaceTools>();
 
-        await builder.Build().RunAsync(cancel);
+        var app = builder.Build();
+
+        // Startup self-check: every registered tool's published inputSchema must map, or the host
+        // refuses to serve. An unmapped tool would let a caller error reach the binder untyped.
+        ArgumentSpecCatalog.SelfCheck(
+            app.Services.GetRequiredService<IOptions<McpServerOptions>>().Value.ToolCollection
+            ?? throw new InvalidOperationException("The MCP host has no tool collection to validate."));
+
+        await app.RunAsync(cancel);
     }
 }

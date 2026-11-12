@@ -1,17 +1,17 @@
 #nullable enable
 public class Section
 {
-    private Section(long capacity, decimal dayRate, string name, Hall? hall = null, bool occupied = false)
+    private Section(string name, long capacity, decimal dayRate, Hall? hall = null, bool occupied = false)
     {
+        this.Name = name;
         this.Capacity = capacity;
         this.DayRate = dayRate;
-        this.Name = name;
         this.Occupied = occupied;
         this.Hall = hall;
     }
+    public string Name { get; private set; } = default!;
     public long Capacity { get; private set; }
     public decimal DayRate { get; private set; }
-    public string Name { get; private set; } = default!;
     public bool Occupied { get; private set; }
     public Hall? Hall { get; private set; }
     public DomainResult Occupy()
@@ -62,8 +62,20 @@ public class Section
     public bool IsOccupied() => this.Occupied;
     public bool ParentFree() => this.Hall != null && (!this.Hall!.Occupied && !this.Hall!.Offline);
     public bool CanBook() => !this.Occupied;
-    public static DomainResult<Section> Create(long capacity, decimal dayRate, string name, Hall? hall = null, bool occupied = false)
+    public static DomainResult<Section> Create(string name, long capacity, decimal dayRate, Hall? hall = null, bool occupied = false)
     {
+        if (string.IsNullOrEmpty(name))
+        {
+            return DomainResult<Section>.Failure("'Name' is required.");
+        }
+        if (name.Length < 1L)
+        {
+            return DomainResult<Section>.Failure("'Name' must be at least 1 characters.");
+        }
+        if (name.Length > 80L)
+        {
+            return DomainResult<Section>.Failure("'Name' must be at most 80 characters.");
+        }
         if (capacity < 1L)
         {
             return DomainResult<Section>.Failure("'Capacity' must be >= 1.");
@@ -80,19 +92,7 @@ public class Section
         {
             return DomainResult<Section>.Failure("'DayRate' must be <= 100000.");
         }
-        if (string.IsNullOrEmpty(name))
-        {
-            return DomainResult<Section>.Failure("'Name' is required.");
-        }
-        if (name.Length < 1L)
-        {
-            return DomainResult<Section>.Failure("'Name' must be at least 1 characters.");
-        }
-        if (name.Length > 80L)
-        {
-            return DomainResult<Section>.Failure("'Name' must be at most 80 characters.");
-        }
-        var created = new Section(capacity, dayRate, name, hall, occupied);
+        var created = new Section(name, capacity, dayRate, hall, occupied);
         if (hall != null)
         {
             hall.AttachSections(created);

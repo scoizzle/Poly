@@ -284,7 +284,7 @@ internal static class ContractBoundaryCheck {
     /// checked against is decided; a type mismatch, or a kind with no static check, is unknown
     /// so a body is never called violated on a comparison the walk cannot make.
     /// </summary>
-    private static ContractBoundaryVerdict ConstantVerdict(Constraint constraint, object value) {
+    internal static ContractBoundaryVerdict ConstantVerdict(Constraint constraint, object value) {
         switch (constraint) {
             case RequiredConstraint or OptionalConstraint or DefaultValueConstraint:
                 return ContractBoundaryVerdict.Proven;
@@ -299,14 +299,12 @@ internal static class ContractBoundaryCheck {
             case PatternConstraint pattern:
                 if (value is not string text)
                     return ContractBoundaryVerdict.Unknown;
-                try {
-                    return Regex.IsMatch(text, pattern.Pattern)
-                        ? ContractBoundaryVerdict.Proven
-                        : ContractBoundaryVerdict.Violated;
-                }
-                catch (RegexParseException) {
+                // Validity is PatternShape's decision; an unparsable pattern proves nothing.
+                if (!PatternShape.Of(pattern.Pattern).IsValid)
                     return ContractBoundaryVerdict.Unknown;
-                }
+                return PatternSemantics.TryMatch(text, pattern.Pattern)
+                    ? ContractBoundaryVerdict.Proven
+                    : ContractBoundaryVerdict.Violated;
             case EqualityConstraint equality:
                 return NumberEquals(value, equality.ExpectedValue) is { } equal
                     ? equal ? ContractBoundaryVerdict.Proven : ContractBoundaryVerdict.Violated
@@ -317,11 +315,10 @@ internal static class ContractBoundaryCheck {
         }
     }
 
-    private static bool? NumberEquals(object value, object? expected) {
-        if (IsNumber(value) && IsNumber(expected))
-            return Convert.ToDouble(value) == Convert.ToDouble(expected);
-        return null;
-    }
+    private static bool? NumberEquals(object value, object? expected) =>
+        IsNumber(value) && IsNumber(expected) && ExactNumber.Compare(value, expected) is { } order
+            ? order == 0
+            : null;
 
     private static bool HasNumericBounds(RangeConstraint range) =>
         (range.Minimum is null || IsNumber(range.Minimum))
@@ -696,15 +693,15 @@ internal static class ContractBoundaryCheck {
     /// Numeric bounds only. The caller's range (or equality) must decide the comparison;
     /// anything else is unknown, so a strict bound is never widened into a proof.
     /// </summary>
-    private static ContractBoundaryVerdict ComparisonVerdict(
+    internal static ContractBoundaryVerdict ComparisonVerdict(
         IReadOnlyList<Constraint> constraints,
         ComparisonKind kind,
         object value) {
-        if (!TryToDouble(value, out var bound))
+        if (!TryToExact(value, out var bound))
             return ContractBoundaryVerdict.Unknown;
 
         if (constraints.OfType<EqualityConstraint>().FirstOrDefault() is { } equality) {
-            return TryToDouble(equality.ExpectedValue, out var equal)
+            return TryToExact(equality.ExpectedValue, out var equal)
                 ? CompareInterval(equal, equal, kind, bound)
                 : ContractBoundaryVerdict.Unknown;
         }
@@ -712,16 +709,16 @@ internal static class ContractBoundaryCheck {
         if (constraints.OfType<RangeConstraint>().FirstOrDefault() is not { } range)
             return ContractBoundaryVerdict.Unknown;
 
-        var minimum = range.Minimum is not null && TryToDouble(range.Minimum, out var low) ? low : (double?)null;
-        var maximum = range.Maximum is not null && TryToDouble(range.Maximum, out var high) ? high : (double?)null;
+        var minimum = range.Minimum is not null && TryToExact(range.Minimum, out var low) ? low : (decimal?)null;
+        var maximum = range.Maximum is not null && TryToExact(range.Maximum, out var high) ? high : (decimal?)null;
         return CompareInterval(minimum, maximum, kind, bound);
     }
 
     private static ContractBoundaryVerdict CompareInterval(
-        double? minimum,
-        double? maximum,
+        decimal? minimum,
+        decimal? maximum,
         ComparisonKind kind,
-        double bound) {
+        decimal bound) {
         return kind switch {
             ComparisonKind.GreaterThan => minimum > bound
                 ? ContractBoundaryVerdict.Proven
@@ -744,14 +741,18 @@ internal static class ContractBoundaryCheck {
         };
     }
 
-    private static bool TryToDouble(object value, out double result) {
+    private static bool TryToExact(object value, out decimal result) {
         switch (value) {
             case sbyte or byte or short or ushort or int or uint or long or ulong
                 or float or double or decimal:
-                result = Convert.ToDouble(value);
-                return true;
+                if (ExactNumber.TryFrom(value) is { } exact) {
+                    result = exact.ToDecimal();
+                    return true;
+                }
+                result = 0m;
+                return false;
             default:
-                result = 0;
+                result = 0m;
                 return false;
         }
     }

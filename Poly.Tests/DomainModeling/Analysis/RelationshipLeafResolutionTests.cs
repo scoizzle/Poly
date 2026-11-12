@@ -28,12 +28,12 @@ public class RelationshipLeafResolutionTests {
             .Where(d => d.Severity != DiagnosticSeverity.Hint)
             .Select(d => $"{d.Severity} {d.Code}: {d.Message}")];
 
-    private static string Order(string callerAmount, string related, string rhs) => $$"""
+    private static string Order(string callerAmount, string related, string rhs, string totalRange = "range(0, 200)") => $$"""
         domain Test
         Customer: entity { {{related}} }
         Order: entity {
           {{callerAmount}}
-          Total: Number range(0, 200)
+          Total: Number {{totalRange}}
           cust: one Customer
           Run: action { assign Total to {{rhs}} }
         }
@@ -41,7 +41,9 @@ public class RelationshipLeafResolutionTests {
 
     [Test]
     public async Task Assign_CallerAmountSmaller_UsesRelatedDeclaredRange() {
-        var r = Parse(Order("Amount: Number range(0, 100)", "Amount: Number range(1000, 2000)", "cust Amount"));
+        // Total's range holds the related [1000, 2000]: a bare related read is a decided write now (Q4),
+        // so a Total that cannot hold it is a DMEFF008 error that rolls the model back.
+        var r = Parse(Order("Amount: Number range(0, 100)", "Amount: Number range(1000, 2000)", "cust Amount", "range(0, 5000)"));
         var range = TotalRange(r);
         await Assert.That(range!.Min).IsEqualTo(1000d);
         await Assert.That(range.Max).IsEqualTo(2000d);
@@ -66,7 +68,8 @@ public class RelationshipLeafResolutionTests {
 
     [Test]
     public async Task Assign_DistinctName_ReadsRelatedDeclaredRange() {
-        var r = Parse(Order("Other: Number range(0, 5)", "Credit: Number range(1000, 2000)", "cust Credit"));
+        // See Assign_CallerAmountSmaller_UsesRelatedDeclaredRange: Total must hold the related range (Q4).
+        var r = Parse(Order("Other: Number range(0, 5)", "Credit: Number range(1000, 2000)", "cust Credit", "range(0, 5000)"));
         var range = TotalRange(r);
         await Assert.That(range!.Min).IsEqualTo(1000d);
         await Assert.That(range.Max).IsEqualTo(2000d);
@@ -100,10 +103,15 @@ public class RelationshipLeafResolutionTests {
     [Test]
     public async Task Invoke_Binding_ReadsRelatedLevel_NotCallers() {
         // Caller Level is [50,60] (outside Slot's range(0,10)); the related Level is [0,10]. The argument is
-        // the related one, so there is no DMEFF008.
+        // the related one, so there is no DMEFF008. The only finding is Customer.Act's own unbound write:
+        // `P` reads as a property that does not resolve, so `assign Slot to P` has no bound and is an
+        // unverified write (DMCS003, Q4) that the invoke argument does not influence.
         var r = Parse(InvokeProgram.Replace("{0}", "Level: Number range(50, 60)"));
         await Assert.That(r.Succeeded).IsTrue();
-        await Assert.That(Problems(r).Count).IsEqualTo(0);
+        var problems = Problems(r);
+        await Assert.That(problems.Count).IsEqualTo(1);
+        await Assert.That(problems[0]).StartsWith("Warning DMCS003:");
+        await Assert.That(problems[0]).Contains("assign Slot to P");
     }
 
     [Test]

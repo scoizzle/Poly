@@ -28,6 +28,11 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
     }
 
     private static void ValidateDomainEffects(AnalysisContext context, Domain domain) {
+        // Fail-closed for V-04 (review H3): the facts bucket exists from the moment the domain pass
+        // starts, so a missing bucket means this analyzer never ran — never "there was nothing to
+        // report".
+        WriteVerificationFactsStore.For(context, domain);
+
         var lookup = ResolveTypeLookup(context, domain);
         if (lookup is null) {
             // Fail closed (review F1): domain-bound validation without any type
@@ -80,6 +85,8 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
     /// else DMEFF008 on the target property (a matching allowance makes it a warning), and an
     /// optional source cannot flow into a required target (DMEFF014, #439): an observed flow has no
     /// guard site, so no allowance or guard clears it. Nothing is inserted into the tree.
+    /// A flow whose source carries no same-kind constraint is NOT verified (the copy can carry any
+    /// value of that kind); it is deferred, not silently skipped — see the comment at the skip.
     /// </summary>
     private static void ValidateObservedFlows(AnalysisContext context, Domain domain) {
         foreach (var flow in RuntimeAnalysisCache.Session(domain).ObservedFlows) {
@@ -100,6 +107,11 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
                     continue;
                 var sourceConstraint = source.Value.Property.Constraints
                     .FirstOrDefault(c => c.GetType() == targetConstraint.GetType());
+                // A source with NO same-kind constraint is not verified: the flow can carry any value
+                // of that kind. Deferred, not silently skipped — routing an observed flow through
+                // WriteRecorder needs an effect node to key the fact on and an agreement with the
+                // allowance regime (#444), and V-04 owns that. Pinned by
+                // DiagnosticAllowanceTests.ObservedFlow_UnboundedSource_IsNotYetVerified.
                 if (sourceConstraint is null || IsConstraintSubsumed(sourceConstraint, targetConstraint))
                     continue;
                 var severity = ObservedFlowChecks.SeverityFor(
@@ -124,17 +136,6 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
                     DomainModelDiagnosticCodes.ObservedFlowNullability);
                 ObservedFlowChecks.NoteNullabilityFinding(context, domain, target.Value.Property);
             }
-        }
-    }
-
-    private static bool TryToDouble(object? value, out double d) {
-        switch (value) {
-            case double x: d = x; return true;
-            case float f: d = f; return true;
-            case int i: d = i; return true;
-            case long l: d = l; return true;
-            case decimal m: d = (double)m; return true;
-            default: d = 0; return false;
         }
     }
 
@@ -429,12 +430,12 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
         }
 
         protected override object? CreateEntityInstance(CreateEntityInstance e) {
-            ValidateCreateEntityInstance(context, e, entity, lookup, domain);
+            ValidateCreateEntityInstance(context, e, entity, lookup, domain, action);
             return null;
         }
 
         protected override object? CreateEntityInRelationship(CreateEntityInRelationshipEffect e) {
-            ValidateCreateEntityInRelationship(context, e, entity, domain, lookup);
+            ValidateCreateEntityInRelationship(context, e, entity, domain, lookup, action);
             return null;
         }
 
@@ -493,7 +494,7 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
                     DomainModelDiagnosticCodes.EffectCrossEntityMutation);
                 return null;
             }
-            ValidateAssign(context, e, action, entity, peerBinding);
+            ValidateAssign(context, e, action, entity, domain, peerBinding);
             return null;
         }
 
@@ -512,7 +513,7 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
     }
 
     private static void ValidateCreateEntityInstance(
-        AnalysisContext context, CreateEntityInstance cei, Entity actionEntity, DomainTypeLookupMetadata lookup, Domain domain) {
+        AnalysisContext context, CreateEntityInstance cei, Entity actionEntity, DomainTypeLookupMetadata lookup, Domain domain, Action? action) {
         if (!TryResolveDomainType(context, cei.Type, lookup, cei, out var resolvedType)) {
             return;
         }
@@ -537,15 +538,10 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
 
                 if (targetProp is null) continue; // nav binding — no property constraints to check
 
-                // Validate literal initializer values against property constraints
-                if (initializer.Expression is Literal lit && targetProp.Constraints.Count > 0) {
-                    ValidateLiteralAgainstConstraints(context, initializer, lit.Value, targetProp);
-                }
-
-                // Propagate the target's range onto derived (arithmetic) initializer values
-                if (initializer.Expression is Add or Subtract or Multiply && targetProp.Constraints.Count > 0) {
-                    ValidateDerivedValueRange(context, initializer, initializer.Expression, actionEntity, action: null, targetProp);
-                }
+                // Every initializer write gets exactly one verdict, recorded once (A3): a literal
+                // through the constraint evaluator, every other value through the flow channel.
+                // The value is inferred in the CREATOR's scope, with the creating action in scope (A1).
+                ValidateInitializerValue(context, domain, initializer, actionEntity, action, targetEntity, targetProp);
             }
 
             // P2′.2: Reject bare create of exclusively-owned entity types
@@ -698,7 +694,7 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
             DomainModelDiagnosticCodes.SemanticReferenceResolution);
 
     private static void ValidateCreateEntityInRelationship(
-        AnalysisContext context, CreateEntityInRelationshipEffect createIn, Entity entity, Domain domain, DomainTypeLookupMetadata lookup) {
+        AnalysisContext context, CreateEntityInRelationshipEffect createIn, Entity entity, Domain domain, DomainTypeLookupMetadata lookup, Action? action) {
         // amu-w1-1 / F1: catalog+RLM name resolve (no domain.Relationships scan);
         // bag-missing reports a structural failure (fail-closed) before returning.
         if (!TryResolveRelationship(context, domain, entity.Name, createIn.RelationshipName, createIn, out var relationship)) {
@@ -752,15 +748,8 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
 
             if (targetProp is null) continue; // nav binding — no property constraints to check
 
-            // Validate literal initializer values against property constraints
-            if (initializer.Expression is Literal lit && targetProp.Constraints.Count > 0) {
-                ValidateLiteralAgainstConstraints(context, initializer, lit.Value, targetProp);
-            }
-
-            // Propagate the target's range onto derived (arithmetic) initializer values
-            if (initializer.Expression is Add or Subtract or Multiply && targetProp.Constraints.Count > 0) {
-                ValidateDerivedValueRange(context, initializer, initializer.Expression, entity, action: null, targetProp);
-            }
+            // Same channel, same creator scope: `create in` runs inside the source entity's action.
+            ValidateInitializerValue(context, domain, initializer, entity, action, targetEntity, targetProp);
         }
 
         // D: every required property must be provided — the back-reference nav
@@ -785,7 +774,7 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
     /// <summary>
     /// DMEFF011: a <c>create</c> / <c>create in</c> must provide a value for every
     /// required property of the created entity — a property without <c>optional</c> —
-    /// unless the property has a <c>default</c>, is initialized by the first stage's
+    /// unless the property has a <c>default</c>, is initialized by the initial stage's
     /// entry effects, or is the auto-wired back-reference navigation (the target's nav
     /// typed as the create-in source entity). Without this, the generated <c>Create</c>
     /// factory would fail at runtime on a missing required value — analysis catches the
@@ -1243,7 +1232,7 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
                 double lo = vr.Min ?? double.NegativeInfinity, hi = vr.Max ?? double.PositiveInfinity;
                 bool fullyBelow = tmin is not null && hi < tmin.Value;
                 bool fullyAbove = tmax is not null && lo > tmax.Value;
-                if (fullyBelow || fullyAbove || HasUnorderableBound(range)) {
+                if (fullyBelow || fullyAbove || WriteVerification.HasUnorderableBound(range)) {
                     context.ReportError(
                         post.Effect,
                         $"Call-chain postcondition ({action.Name} → {post.DeclaringAction.Name}): assigned value range " +

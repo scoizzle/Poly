@@ -9,9 +9,9 @@ public class Delivery
         this.Notes = notes;
         this.Truck = truck;
     }
-    public string Notes { get; private set; } = default!;
     public string Reference { get; private set; } = default!;
     public long Weight { get; private set; }
+    public string Notes { get; private set; } = default!;
     public Truck? Truck { get; private set; }
     public DomainResult Confirm(string notes)
     {
@@ -25,10 +25,6 @@ public class Delivery
     }
     public static DomainResult<Delivery> Create(string reference, long weight, string notes = "", Truck? truck = null)
     {
-        if (string.IsNullOrEmpty(notes))
-        {
-            return DomainResult<Delivery>.Failure("'Notes' is required.");
-        }
         if (string.IsNullOrEmpty(reference))
         {
             return DomainResult<Delivery>.Failure("'Reference' is required.");
@@ -48,6 +44,10 @@ public class Delivery
         if (weight > 40000L)
         {
             return DomainResult<Delivery>.Failure("'Weight' must be <= 40000.");
+        }
+        if (string.IsNullOrEmpty(notes))
+        {
+            return DomainResult<Delivery>.Failure("'Notes' is required.");
         }
         var created = new Delivery(reference, weight, notes, truck);
         if (truck != null)

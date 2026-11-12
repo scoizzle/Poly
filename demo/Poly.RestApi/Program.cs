@@ -17,7 +17,7 @@ builder.Services.ConfigureHttpJsonOptions(options => {
 
 builder.Services.AddDbContext<LibraryDbContext>(options => options.UseSqlite("Data Source=library.db"));
 
-builder.Services.AddScoped<Poly.DomainModeling.Runtime.IStoragePort, LibraryDbContext>();
+builder.Services.AddScoped<Poly.Runtime.IStoragePort, LibraryDbContext>();
 
 var app = builder.Build();
 
@@ -33,7 +33,7 @@ app.MapGet("/api/books", async (LibraryDbContext db) => await db.Books.ToListAsy
 app.MapGet("/api/books/{isbn}", async (string isbn, LibraryDbContext db) => (await db.Books.FirstOrDefaultAsync(e => e.ISBN == isbn) is Book book ? Results.Ok(book) : Results.NotFound()));
 
 app.MapPost("/api/books", async (BookDto dto, LibraryDbContext db) => {
-    var bookResult = Book.Create(dto.Author, dto.Genre, dto.ISBN, dto.Pages, dto.Title, db);
+    var bookResult = Book.Create(dto.Title, dto.Author, dto.ISBN, dto.Pages, dto.Genre, db);
     if (!bookResult.IsSuccess)
     {
         return FailureStatus(bookResult.ErrorMessage);
@@ -48,7 +48,7 @@ app.MapGet("/api/patrons", async (LibraryDbContext db) => await db.Patrons.ToLis
 app.MapGet("/api/patrons/{email}", async (string email, LibraryDbContext db) => (await db.Patrons.FirstOrDefaultAsync(e => e.Email == email) is Patron patron ? Results.Ok(patron) : Results.NotFound()));
 
 app.MapPost("/api/patrons", async (PatronDto dto, LibraryDbContext db) => {
-    var patronResult = Patron.Create(dto.Email, dto.Name, db, dto.MaxItems, Enumerable.Empty<Loan>(), Enumerable.Empty<Fine>());
+    var patronResult = Patron.Create(dto.Name, dto.Email, db, dto.MaxItems, Enumerable.Empty<Loan>(), Enumerable.Empty<Fine>());
     if (!patronResult.IsSuccess)
     {
         return FailureStatus(patronResult.ErrorMessage);
@@ -63,7 +63,7 @@ app.MapGet("/api/premiumpatrons", async (LibraryDbContext db) => await db.Premiu
 app.MapGet("/api/premiumpatrons/{email}", async (string email, LibraryDbContext db) => (await db.PremiumPatrons.FirstOrDefaultAsync(e => e.Email == email) is PremiumPatron premiumPatron ? Results.Ok(premiumPatron) : Results.NotFound()));
 
 app.MapPost("/api/premiumpatrons", async (PremiumPatronDto dto, LibraryDbContext db) => {
-    var premiumPatronResult = PremiumPatron.Create(dto.Email, dto.Name, dto.PriorityAccess, dto.RewardPoints, db);
+    var premiumPatronResult = PremiumPatron.Create(dto.Name, dto.Email, dto.RewardPoints, dto.PriorityAccess, db);
     if (!premiumPatronResult.IsSuccess)
     {
         return FailureStatus(premiumPatronResult.ErrorMessage);
@@ -139,9 +139,9 @@ app.MapPost("/api/patrons/{email}/checkout", async (string email, CheckOutDto dt
             return Results.NotFound("Book not found");
         }
         var result = entity.CheckOut(book);
-        await db.SaveChangesAsync();
         if (result.IsSuccess)
         {
+            await db.SaveChangesAsync();
             return Results.Ok(result.Value);
         }
         else
@@ -166,9 +166,9 @@ app.MapPost("/api/patrons/{email}/suspend", async (string email, LibraryDbContex
     try
     {
         var result = entity.Suspend();
-        await db.SaveChangesAsync();
         if (result.IsSuccess)
         {
+            await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
         else
@@ -193,9 +193,9 @@ app.MapPost("/api/patrons/{email}/closeaccount", async (string email, LibraryDbC
     try
     {
         var result = entity.CloseAccount();
-        await db.SaveChangesAsync();
         if (result.IsSuccess)
         {
+            await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
         else
@@ -220,9 +220,9 @@ app.MapPost("/api/patrons/{email}/reinstate", async (string email, LibraryDbCont
     try
     {
         var result = entity.Reinstate();
-        await db.SaveChangesAsync();
         if (result.IsSuccess)
         {
+            await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
         else
@@ -255,9 +255,9 @@ app.MapPost("/api/patrons/{email}/loans/{id}/renew", async (string email, int id
     try
     {
         var result = entity.Renew();
-        await db.SaveChangesAsync();
         if (result.IsSuccess)
         {
+            await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
         else
@@ -290,9 +290,9 @@ app.MapPost("/api/patrons/{email}/loans/{id}/return", async (string email, int i
     try
     {
         var result = entity.Return();
-        await db.SaveChangesAsync();
         if (result.IsSuccess)
         {
+            await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
         else
@@ -325,9 +325,9 @@ app.MapPost("/api/patrons/{email}/fines/{id}/pay", async (string email, int id, 
     try
     {
         var result = entity.Pay();
-        await db.SaveChangesAsync();
         if (result.IsSuccess)
         {
+            await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
         else
@@ -360,9 +360,9 @@ app.MapPost("/api/patrons/{email}/fines/{id}/waive", async (string email, int id
     try
     {
         var result = entity.Waive();
-        await db.SaveChangesAsync();
         if (result.IsSuccess)
         {
+            await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
         else
@@ -392,17 +392,17 @@ static async System.Threading.Tasks.Task SeedAsync(LibraryDbContext db)
     {
         return;
     }
-    var bookResult = Book.Create("Sample", Genre.Fiction, "XXXXXXXXXX", 1, "Sample", db);
+    var bookResult = Book.Create("Sample", "Sample", "XXXXXXXXXX", 1, Genre.Fiction, db);
     if (bookResult.IsSuccess)
     {
         db.Add(bookResult.Value);
     }
-    var patronResult = Patron.Create("user@test.com", "Sample", db, 1, Enumerable.Empty<Loan>(), Enumerable.Empty<Fine>());
+    var patronResult = Patron.Create("Sample", "user@test.com", db, 10, Enumerable.Empty<Loan>(), Enumerable.Empty<Fine>());
     if (patronResult.IsSuccess)
     {
         db.Add(patronResult.Value);
     }
-    var premiumPatronResult = PremiumPatron.Create("user@test.com", "Sample", false, 1, db);
+    var premiumPatronResult = PremiumPatron.Create("Sample", "user@test.com", 1, false, db);
     if (premiumPatronResult.IsSuccess)
     {
         db.Add(premiumPatronResult.Value);
@@ -417,26 +417,26 @@ app.Run();
 public record BookDto
 {
     [Required]
+    public string Title { get; init; } = default!;
+    [Required]
     public string Author { get; init; } = default!;
-    [EnumDataType(typeof(Genre))]
-    public Genre Genre { get; init; }
     [Required]
     [MinLength(10)]
     [MaxLength(17)]
     public string ISBN { get; init; } = default!;
     [Range(1, 10000)]
     public long Pages { get; init; }
-    [Required]
-    public string Title { get; init; } = default!;
+    [EnumDataType(typeof(Genre))]
+    public Genre Genre { get; init; }
 }
 
 public record PatronDto
 {
     [Required]
+    public string Name { get; init; } = default!;
+    [Required]
     [RegularExpression("^[^@]+@[^@]+$")]
     public string Email { get; init; } = default!;
-    [Required]
-    public string Name { get; init; } = default!;
     [Range(0, 20)]
     public long MaxItems { get; init; }
 }
@@ -444,12 +444,12 @@ public record PatronDto
 public record PremiumPatronDto
 {
     [Required]
+    public string Name { get; init; } = default!;
+    [Required]
     [RegularExpression("^[^@]+@[^@]+$")]
     public string Email { get; init; } = default!;
-    [Required]
-    public string Name { get; init; } = default!;
-    public bool PriorityAccess { get; init; }
     public long RewardPoints { get; init; }
+    public bool PriorityAccess { get; init; }
 }
 
 public record CheckOutDto

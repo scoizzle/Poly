@@ -44,8 +44,8 @@ method's first optional parameter, so no library walks callers
 
 The type is `Principal` in `Poly.Runtime` (R-09), with members `Id`, `Roles` and `Claims`. It is in
 namespace `Poly.Runtime`, like the R-02 types (`DomainFailure`, `DomainResult`). Only the moved
-`IStoragePort` and `ConstraintFailureException` keep `Poly.DomainModeling.Runtime` until R-05/R-07,
-because the emitted C# surface derives names from the full name. Additive members need no new ADR.
+`ConstraintFailureException` keeps `Poly.DomainModeling.Runtime`, until R-07, because the emitted
+C# surface derives names from the full name; `IStoragePort` moved to `Poly.Runtime` in R-05. Additive members need no new ADR.
 Every host entry point that can invoke a guarded action or evaluate a policy carries it:
 `ModuleInstanceExecutor.Create` (`Poly/DomainModeling/Runtime/ModuleInstanceExecutor.Create.cs:12`),
 `.Invoke` (`…/ModuleInstanceExecutor.Invoke.cs:12`), `.EvaluatePolicy`

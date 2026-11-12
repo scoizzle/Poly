@@ -112,6 +112,24 @@ public sealed record SetEntityKeyChange(
     internal override string GetDescription() => $"Set key({string.Join(", ", KeyProperties)}) on Entity '{EntityName}'";
 }
 
+/// <summary>
+/// Sets an Entity's initial-stage designation (#675): the stage name a new instance starts in. The
+/// name is resolved by <see cref="Ontology.EntityStages.InitialStage"/> and checked by analysis, not
+/// here; a name that matches no stage falls back to the first declared stage and is reported.
+/// </summary>
+public sealed record SetEntityInitialStageChange(
+    string EntityName,
+    string StageName
+) : DomainChange {
+    internal override void ApplyTo(DomainMutationContext context) {
+        context.RequireUpdate(
+            context.ReplaceInEntity(EntityName, _ => true, e => e with { InitialStageName = StageName }),
+            $"Entity '{EntityName}' not found — cannot set initial stage");
+    }
+
+    internal override string GetDescription() => $"Set initial({StageName}) on Entity '{EntityName}'";
+}
+
 public sealed record RemoveEntityChange(
     string Name
 ) : DomainChange {
@@ -457,11 +475,13 @@ public sealed record AddRelationshipChange(
     DomainTypeReference Target,
     RelationshipCardinality Cardinality,
     IReadOnlyList<Property> Properties,
-    bool SourceOwnsTarget = false
+    bool SourceOwnsTarget = false,
+    string? Inverse = null
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
         var newRel = new Relationship(Name, Source, Target, Cardinality, Properties) {
-            SourceOwnsTarget = SourceOwnsTarget
+            SourceOwnsTarget = SourceOwnsTarget,
+            Inverse = Inverse
         };
         var added = context.ReplaceInEntity(Source.TypeName,
             _ => true,
@@ -1370,4 +1390,24 @@ public sealed record AddEntitySubscriptionChange(
 
     internal override string GetDescription() =>
         $"Add entity subscription '{Subscription.RelationshipName} -> {string.Join("/", Subscription.StageNames)}' to Entity '{EntityName}'";
+}
+
+/// <summary>
+/// Sets an Entity's authored member order (S-15, Q12): every member the document declared, in
+/// document order, as <c>(Kind, Name)</c> pairs. Names are not checked here — analysis owns
+/// duplicate and reference rules — and the order is authoritative only when it covers every
+/// member, because builder evolution can leave it partial.
+/// </summary>
+internal sealed record SetEntityMemberOrderChange(
+    string EntityName,
+    IReadOnlyList<EntityMemberRef> MemberOrder
+) : DomainChange {
+    internal override void ApplyTo(DomainMutationContext context) {
+        context.RequireUpdate(
+            context.ReplaceInEntity(EntityName, _ => true, e => e with { MemberOrder = MemberOrder }),
+            $"Entity '{EntityName}' not found — cannot set member order");
+    }
+
+    internal override string GetDescription() =>
+        $"Set member order ({MemberOrder.Count} members) on Entity '{EntityName}'";
 }

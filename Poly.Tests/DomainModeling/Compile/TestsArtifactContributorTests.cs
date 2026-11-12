@@ -51,6 +51,22 @@ public sealed class TestsArtifactContributorTests {
         }
         """;
 
+    /// <summary>A designated entity with no entry-assigned properties (TestsArtifactContributor.Arguments' arity).</summary>
+    private const string DesignatedShop = """
+        domain Shop
+        uses tests
+        Order: entity initial(Active) {
+          Reference: Text
+          Draft: stage {
+            Submit: action { transition to Active }
+          }
+          Active: stage {
+            Ship: action { transition to Shipped }
+          }
+          Shipped: stage { }
+        }
+        """;
+
     // Smallest TUnit surface the generated suite uses.
     private const string TUnitStub = """
         using System;
@@ -104,6 +120,19 @@ public sealed class TestsArtifactContributorTests {
 
         await Assert.That(session.ArtifactCatalog.Artifacts.Any(a => a.Descriptor.Id.Type.StartsWith("test-", StringComparison.Ordinal)))
             .IsFalse();
+    }
+
+    [Test]
+    public async Task InitialStage_Designated_TestsArtifactAssertsDesignatedStage() {
+        var text = TestText(DesignatedShop);
+
+        // Create asserts the designated stage, not the first declared one.
+        await Assert.That(text).Contains("OrderStage.Active");
+        // Refused actions are the later stages' actions; Active is initial, so Draft's Submit is refused.
+        await Assert.That(text).Contains("Submit_FromActive_IsRefused");
+        await Assert.That(text).DoesNotContain("Submit_FromDraft_IsRefused");
+        // Active's own action is covered by the initial stage and is not refused.
+        await Assert.That(text).DoesNotContain("Ship_FromActive_IsRefused");
     }
 
     [Test]

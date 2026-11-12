@@ -2,14 +2,14 @@
 public class Doctor
 {
     private Doctor() { }
-    private Doctor(string licenseNo, string name, Schedule? schedule = null)
+    private Doctor(string name, string licenseNo, Schedule? schedule = null)
     {
-        this.LicenseNo = licenseNo;
         this.Name = name;
+        this.LicenseNo = licenseNo;
         this.Schedule = schedule;
     }
-    public string LicenseNo { get; private set; } = default!;
     public string Name { get; private set; } = default!;
+    public string LicenseNo { get; private set; } = default!;
     public Schedule? Schedule { get; private set; }
     public DomainResult StartShift()
     {
@@ -24,16 +24,8 @@ public class Doctor
         }
         return DomainResult.Success();
     }
-    public static DomainResult<Doctor> Create(string licenseNo, string name, Poly.DomainModeling.Runtime.IStoragePort db, Schedule? schedule = null)
+    public static DomainResult<Doctor> Create(string name, string licenseNo, Poly.Runtime.IStoragePort db, Schedule? schedule = null)
     {
-        if (string.IsNullOrEmpty(licenseNo))
-        {
-            return DomainResult<Doctor>.Failure("'LicenseNo' is required.");
-        }
-        if (!System.Text.RegularExpressions.Regex.IsMatch(licenseNo, "^MD-[0-9]{6}\\z"))
-        {
-            return DomainResult<Doctor>.Failure("'LicenseNo' does not match the required pattern.");
-        }
         if (string.IsNullOrEmpty(name))
         {
             return DomainResult<Doctor>.Failure("'Name' is required.");
@@ -46,11 +38,19 @@ public class Doctor
         {
             return DomainResult<Doctor>.Failure("'Name' must be at most 60 characters.");
         }
+        if (string.IsNullOrEmpty(licenseNo))
+        {
+            return DomainResult<Doctor>.Failure("'LicenseNo' is required.");
+        }
+        if (!System.Text.RegularExpressions.Regex.IsMatch(licenseNo, "^MD-[0-9]{6}\\z"))
+        {
+            return DomainResult<Doctor>.Failure("'LicenseNo' does not match the required pattern.");
+        }
         if (Doctor.ExistsWithLicenseNo(db, licenseNo))
         {
             return DomainResult<Doctor>.Failure("Unique constraint violated: 'LicenseNo' value is already used on another 'Doctor'.");
         }
-        var created = new Doctor(licenseNo, name, schedule);
+        var created = new Doctor(name, licenseNo, schedule);
         db.Record("Doctor", "LicenseNo", licenseNo);
         return DomainResult<Doctor>.Success(created);
     }
@@ -66,5 +66,5 @@ public class Doctor
         }
         return DomainResult.Failure("A unique assign needs the storage port.");
     }
-    public static System.Boolean ExistsWithLicenseNo(Poly.DomainModeling.Runtime.IStoragePort db, System.String licenseNo) => db.Exists("Doctor", "LicenseNo", licenseNo);
+    public static System.Boolean ExistsWithLicenseNo(Poly.Runtime.IStoragePort db, System.String licenseNo) => db.Exists("Doctor", "LicenseNo", licenseNo);
 }

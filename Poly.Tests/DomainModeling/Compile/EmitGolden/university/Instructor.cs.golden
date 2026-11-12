@@ -7,14 +7,14 @@ public enum InstructorStage
 
 public class Instructor
 {
-    private Instructor(string email, string name)
+    private Instructor(string name, string email)
     {
-        this.Email = email;
         this.Name = name;
+        this.Email = email;
         this.CurrentStage = InstructorStage.Ready;
     }
-    public string Email { get; private set; } = default!;
     public string Name { get; private set; } = default!;
+    public string Email { get; private set; } = default!;
     public InstructorStage CurrentStage { get; private set; }
     public DomainResult GoOnLeave()
     {
@@ -34,8 +34,12 @@ public class Instructor
         this.CurrentStage = InstructorStage.Ready;
         return DomainResult.Success();
     }
-    public static DomainResult<Instructor> Create(string email, string name)
+    public static DomainResult<Instructor> Create(string name, string email)
     {
+        if (string.IsNullOrEmpty(name))
+        {
+            return DomainResult<Instructor>.Failure("'Name' is required.");
+        }
         if (string.IsNullOrEmpty(email))
         {
             return DomainResult<Instructor>.Failure("'Email' is required.");
@@ -44,11 +48,7 @@ public class Instructor
         {
             return DomainResult<Instructor>.Failure("'Email' does not match the required pattern.");
         }
-        if (string.IsNullOrEmpty(name))
-        {
-            return DomainResult<Instructor>.Failure("'Name' is required.");
-        }
-        var created = new Instructor(email, name);
+        var created = new Instructor(name, email);
         return DomainResult<Instructor>.Success(created);
     }
     public DomainResult EnsureUnique(string propertyName, object value)

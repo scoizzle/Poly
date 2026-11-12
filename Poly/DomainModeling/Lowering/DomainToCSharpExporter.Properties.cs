@@ -56,8 +56,20 @@ public sealed partial class DomainToCSharpExporter {
         Property prop,
         Domain domain,
         INodeMetadataProvider metadata) {
-        if (defaultValue.Expression is Literal lit)
+        if (defaultValue.Expression is Literal lit) {
+            // A Decimal property's literal default becomes a Decimal constant, so the
+            // VM's range guard compares Decimal to Decimal (#511). The arm is local
+            // because this function's inputs are (domain, metadata) only.
+            if (TargetTypeAdapter.IsDecimal(domain, prop.Type.TypeName)) {
+                switch (lit.Value) {
+                    case long integral:
+                        return new Constant((decimal)integral);
+                    case int narrow:
+                        return new Constant((decimal)narrow);
+                }
+            }
             return new Constant(lit.Value);
+        }
         if (defaultValue.Expression is PropertyAccess pa) {
             if (TryResolveEnumType(domain, metadata, prop.Type.TypeName, out var enumType)
                 && enumType is not null
@@ -75,8 +87,9 @@ public sealed partial class DomainToCSharpExporter {
     }
 
     /// <summary>
-    /// Emits the scalar property definitions (sorted for deterministic output) and
+    /// Emits the scalar property definitions in declaration order and
     /// collects the constructor parameters and assignments they imply.
+    /// The trailing defaulted block this builds is L-08's to remove.
     /// </summary>
     private static void AddEntityProperties(
         Entity entity, Domain domain, INodeMetadataProvider metadata,
@@ -84,8 +97,8 @@ public sealed partial class DomainToCSharpExporter {
         List<PropertyDefinitionNode> props,
         List<Parameter> ctorParams, List<Node> ctorAssignments,
         List<Parameter> defaultedCtorParams) {
-        // ── Entity properties (sorted for deterministic output) ──
-        foreach (var prop in entity.Properties.OrderBy(p => p.Name)) {
+        // ── Entity properties (declaration order; L-08 removes the trailing split) ──
+        foreach (var prop in entity.Properties) {
             var propRef = MapDomainTypeRef(prop.Type, domain, metadata);
             // Requiredness is the published fact: required is the default, `optional`
             // is its opt-out. No constraint re-scan decides nullability.
@@ -174,14 +187,17 @@ public sealed partial class DomainToCSharpExporter {
 
     /// <summary>
     /// Scalar constructor slots in the published ESM order: required scalars first,
-    /// then optional assign-only scalars. Defaulted properties are not in this list;
-    /// they stay in the trailing defaulted params.
+    /// then optional assign-only scalars, each in declaration order. Defaulted
+    /// properties are not in this list; they stay in the trailing defaulted params
+    /// (L-08 makes every Create parameter optional in declaration order, which
+    /// removes the required/trailing block split this ordering preserves).
     /// </summary>
     private static void OrderScalarCtorSlots(
         EntityStructureMetadata esm, List<Parameter> ctorParams, List<Node> ctorAssignments) {
         // ── Scalar constructor slots in the published ESM order ──
-        // Required scalars first, then optional assign-only scalars. Defaulted
-        // properties are not in this list; they stay in defaultedCtorParams.
+        // Required scalars first, then optional assign-only scalars, each in
+        // declaration order. Defaulted properties are not in this list; they stay
+        // in defaultedCtorParams (L-08 removes that split).
         var scalarOrder = esm.ConstructorParameters.Where(p => !p.IsNavigation).ToList();
         if (scalarOrder.Count > 0 && ctorParams.Count > 0) {
             var paramsByName = ctorParams.ToDictionary(p => p.Name, StringComparer.Ordinal);

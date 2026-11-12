@@ -2,25 +2,17 @@
 public class OrderItem
 {
     private OrderItem() { }
-    private OrderItem(long qty, string sku, Order? order = null)
+    private OrderItem(string sku, long qty, Order? order = null)
     {
-        this.Qty = qty;
         this.Sku = sku;
+        this.Qty = qty;
         this.Order = order;
     }
-    public long Qty { get; private set; }
     public string Sku { get; private set; } = default!;
+    public long Qty { get; private set; }
     public Order? Order { get; private set; }
-    public static DomainResult<OrderItem> Create(long qty, string sku, Order? order = null)
+    public static DomainResult<OrderItem> Create(string sku, long qty, Order? order = null)
     {
-        if (qty < 1L)
-        {
-            return DomainResult<OrderItem>.Failure("'Qty' must be >= 1.");
-        }
-        if (qty > 1000L)
-        {
-            return DomainResult<OrderItem>.Failure("'Qty' must be <= 1000.");
-        }
         if (string.IsNullOrEmpty(sku))
         {
             return DomainResult<OrderItem>.Failure("'Sku' is required.");
@@ -29,7 +21,15 @@ public class OrderItem
         {
             return DomainResult<OrderItem>.Failure("'Sku' does not match the required pattern.");
         }
-        var created = new OrderItem(qty, sku, order);
+        if (qty < 1L)
+        {
+            return DomainResult<OrderItem>.Failure("'Qty' must be >= 1.");
+        }
+        if (qty > 1000L)
+        {
+            return DomainResult<OrderItem>.Failure("'Qty' must be <= 1000.");
+        }
+        var created = new OrderItem(sku, qty, order);
         if (order != null)
         {
             order.AttachItems(created);

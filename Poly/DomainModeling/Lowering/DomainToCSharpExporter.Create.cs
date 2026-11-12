@@ -242,18 +242,18 @@ public sealed partial class DomainToCSharpExporter {
             }
         }
 
-        // A create-in lands the child in its first stage. When a subscription watches
+        // A create-in lands the child in its initial stage. When a subscription watches
         // that stage, no transition occurs, so no previousStage notify runs. One call
         // here covers both wired and unwired cases.
         if (metadata.GetStructure(targetEntity)?.HasStages == true) {
-            var firstStage = targetEntity.Stages[0].Name;
+            var initialStage = targetEntity.InitialStage()!.Name;
             if (subscriberSubs is { Count: > 0 }
                 && subscriberSubs.Any(i =>
                     string.Equals(i.Relationship.Name, rel.Name, StringComparison.Ordinal)
-                    && string.Equals(i.StageName, firstStage, StringComparison.Ordinal))) {
-                var needsPrevious = StageGroupNeedsPrevious(targetEntity, firstStage, domain);
+                    && string.Equals(i.StageName, initialStage, StringComparison.Ordinal))) {
+                var needsPrevious = StageGroupNeedsPrevious(targetEntity, initialStage, domain);
                 bodyNodes.Add(new Invoke(
-                    new Member(local, $"Notify{firstStage}Subscribers"),
+                    new Member(local, $"Notify{initialStage}Subscribers"),
                     needsPrevious ? [new Constant(null)] : []));
             }
         }
@@ -319,7 +319,10 @@ public sealed partial class DomainToCSharpExporter {
 
     /// <summary>
     /// Trailing omittable Create/ctor parameters: defaulted or optional properties
-    /// that are not entry-assigned, in the order the Create factory appends them.
+    /// that are not entry-assigned, in declaration order — the order the Create
+    /// factory appends them. The two producers of the trailing block (this list and
+    /// <c>AddEntityProperties</c>' defaultedCtorParams) must stay in that one order;
+    /// L-08 removes the block split entirely.
     /// </summary>
     internal static List<Property> TrailingOmittableProperties(
         Entity entity,
@@ -328,7 +331,7 @@ public sealed partial class DomainToCSharpExporter {
         var entryAssigned = structure.EntryAssignedPropertyNames;
         var required = structure.RequiredPropertyNames;
         var list = new List<Property>();
-        foreach (var prop in entity.Properties.OrderBy(p => p.Name)) {
+        foreach (var prop in entity.Properties) {
             if (required.Contains(prop.Name)
                 && !prop.Constraints.OfType<DefaultValueConstraint>().Any())
                 continue;
@@ -360,7 +363,8 @@ public sealed partial class DomainToCSharpExporter {
     /// nodes as assign.
     ///
     /// Only entity properties (not navigation properties) are validated — navs do not
-    /// carry constraints in the current domain model. Requiredness guards come from the
+    /// carry constraints in the current domain model. Guards follow declaration order,
+    /// so the first declared violated constraint is the message the caller sees. Requiredness guards come from the
     /// published fact; a defaulted property's own default supplies the value. Other
     /// constraint guards still apply to defaulted params. Entry-assigned props are
     /// body-initialized, never ctor params, so they are skipped.
@@ -377,7 +381,7 @@ public sealed partial class DomainToCSharpExporter {
         Node Failure(Node msg) => new Return(
             new Invoke(new Member(resultType, "Failure"), msg));
 
-        foreach (var prop in entity.Properties.OrderBy(p => p.Name)) {
+        foreach (var prop in entity.Properties) {
             // Entry-assigned props are body-initialized by the ctor's stage-entry effects
             // — not constructor params, so no guard to attach.
             if (entryAssignedProps.Contains(prop.Name)) continue;
@@ -436,18 +440,18 @@ public sealed partial class DomainToCSharpExporter {
         bodyNodes.AddRange(ctorAssignments);
 
         if (esm.HasStages) {
-            var firstStage = entity.Stages[0];
+            var initialStage = entity.InitialStage()!;
             bodyNodes.Add(new Assignment(
                 new Member(new ThisReference(), "CurrentStage"),
                 new Member(
                     new NamedTypeReference(stageEnumTypeName!),
-                    firstStage.Name)));
+                    initialStage.Name)));
 
             // Apply the initial stage's entry effects in the constructor.
             // This ensures properties set by entry effects (e.g. "entry { assign
             // CheckedOutAt to now }" on Loan.Active) are initialized during
             // construction, not just during explicit stage transitions.
-            if (firstStage.OnEntryEffects.Count > 0) {
+            if (initialStage.OnEntryEffects.Count > 0) {
                 var entryCtx = new LoweringContext(
                     new ThisReference(),
                     Analysis: metadata,
@@ -458,9 +462,9 @@ public sealed partial class DomainToCSharpExporter {
                     LifecycleEnumTypeName: esm.LifecycleEnumTypeName,
                     PostTransitionNotifyStages: postTransitionNotifyStages,
                     PreviousStageNotifyStages: previousStageNotifyStages,
-                    SourceStageName: firstStage.Name);
+                    SourceStageName: initialStage.Name);
                 var entryPass = new EffectLoweringPass(entity, entryCtx);
-                entryPass.AppendInlinedStageEffects(firstStage.OnEntryEffects, bodyNodes);
+                entryPass.AppendInlinedStageEffects(initialStage.OnEntryEffects, bodyNodes);
             }
         }
 

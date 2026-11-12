@@ -3,6 +3,7 @@ using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Dispatch;
 using Poly.DomainModeling.Meaning;
 using Poly.DomainModeling.Ontology;
+using Poly.DomainModeling.Ontology.Constraints;
 using Poly.DomainModeling.Runtime;
 
 using Syntactic = Poly.Ast.Nodes;
@@ -13,54 +14,18 @@ namespace Poly.DomainModeling.Lowering;
 public sealed partial class EffectLoweringPass {
     protected override Node? Assign(AssignEffect a) {
         var target = _expressionPass.LowerExpression(a.Target, Subject);
-        var value = _expressionPass.LowerExpression(a.Value, Subject);
+        // The target property decides the value's type: enum members, string literals,
+        // the default(...) fold, Decimal literals and clock/session folds all adapt here.
+        var assignProp = a.Target is PropertyAccess propAccess
+            ? _entity.Properties.FirstOrDefault(p =>
+                string.Equals(p.Name, propAccess.Name, StringComparison.Ordinal))
+            : null;
+        var value = assignProp is not null
+            ? _expressionPass.AdaptTo(a.Value, assignProp.Type, Subject)
+            : _expressionPass.LowerExpression(a.Value, Subject);
 
-        // Convert enum-valued RHS to qualified enum member access when the
-        // target property is enum-typed:  assign Status to "Suspended"
-        // on PatronStatus-typed property →  this.Status = PatronStatus.Suspended;
-        // and a bare identifier member (assign Status to Suspended) → same.
-        // Only in C# export mode (EnumPropertyNames present) — the generated C#
-        // must reference the enum type. On the runtime path enum values are stored
-        // as strings, so a bare enum member identifier lowers to its name string
-        // and a string literal is already a string constant (no qualification).
-        if (a.Target is PropertyAccess propAccess) {
-            var entityProp = _entity.Properties.FirstOrDefault(p =>
-                string.Equals(p.Name, propAccess.Name, StringComparison.Ordinal));
-
-            // Clock IR / session ident folds in an assign RHS must adapt to the
-            // TARGET property's CLR type via Meaning.Defaults.
-            if (entityProp is not null) {
-                var adapted = LowerDefault(
-                    a.Value, new NamedTypeReference(entityProp.Type.TypeName));
-                if (adapted is not null) value = value with { Value = adapted };
-            }
-
-            if (entityProp is not null
-                && DomainToCSharpExporter.TryResolveEnumType(_domain, _analysis, entityProp.Type.TypeName, out var enumType)
-                && enumType is not null) {
-                if (_enumPropertyNames is not null) {
-                    if (a.Value is Literal { Value: string strVal }
-                        && !string.IsNullOrEmpty(strVal)) {
-                        value = value with {
-                            Value = new Member(new NamedTypeReference(enumType.Name), strVal)
-                        };
-                    }
-                    else if (a.Value is PropertyAccess pa
-                        && enumType.MemberNames.Contains(pa.Name, StringComparer.Ordinal)) {
-                        value = value with {
-                            Value = new Member(new NamedTypeReference(enumType.Name), pa.Name)
-                        };
-                    }
-                }
-                else if (a.Value is PropertyAccess pa
-                    && enumType.MemberNames.Contains(pa.Name, StringComparer.Ordinal)) {
-                    value = value with { Value = new Constant(pa.Name) };
-                }
-            }
-
-            // Date arithmetic (DueDate + 14 → AddDays) is lowered by the expression
-            // pass (Add/Subtract) so it applies in every context — nothing more here.
-        }
+        // Date arithmetic (DueDate + 14 → AddDays) is lowered by the expression
+        // pass (Add/Subtract) so it applies in every context — nothing more here.
 
         if (_analysis.GetMetadata<AssignedMemberConversionMetadata>(a) is { } conversion) {
             value = value with {
@@ -74,14 +39,9 @@ public sealed partial class EffectLoweringPass {
         // Item 6: assign-time required/range/length/pattern/enum (+ unique) in the
         // same Lower tree as simulate + C# print. Evaluate RHS once, fail-before-
         // mutate, then assign (EnsureUnique when unique).
-        Property? assignProp = null;
-        string? uniqueName = null;
-        if (a.Target is PropertyAccess assignTarget) {
-            assignProp = _entity.Properties.FirstOrDefault(p =>
-                string.Equals(p.Name, assignTarget.Name, StringComparison.Ordinal));
-            if (IsUniqueProperty(assignTarget.Name))
-                uniqueName = assignTarget.Name;
-        }
+        var uniqueName = assignProp is not null && IsUniqueProperty(assignProp.Name)
+            ? assignProp.Name
+            : null;
 
         var needsConstraintWrap = assignProp is not null
             && HasAssignableConstraints(assignProp)
@@ -111,9 +71,13 @@ public sealed partial class EffectLoweringPass {
         foreach (var constraint in prop.Constraints) {
             switch (constraint) {
                 case RangeConstraint range when TryNumeric(value, out var number):
-                    if (range.Minimum is not null && number < Convert.ToDouble(range.Minimum))
+                    // Exact comparison: a bound and a value above 2^53 compare equal through double,
+                    // which would elide a guard that must fire (#643).
+                    if (range.Minimum is not null
+                        && (ExactNumber.Compare(number, range.Minimum) is not { } minCompare || minCompare < 0))
                         return false;
-                    if (range.Maximum is not null && number > Convert.ToDouble(range.Maximum))
+                    if (range.Maximum is not null
+                        && (ExactNumber.Compare(number, range.Maximum) is not { } maxCompare || maxCompare > 0))
                         return false;
                     break;
                 case RangeConstraint:
@@ -125,7 +89,7 @@ public sealed partial class EffectLoweringPass {
                 case LengthConstraint:
                     return false;
                 case PatternConstraint pattern when value is Constant { Value: string text }:
-                    if (!System.Text.RegularExpressions.Regex.IsMatch(text, pattern.Pattern))
+                    if (!PatternSemantics.TryMatch(text, pattern.Pattern))
                         return false;
                     break;
                 case PatternConstraint:
@@ -241,11 +205,11 @@ public sealed partial class EffectLoweringPass {
                         return false;
                     if (range.Minimum is not null
                         && !sourceRanges.Any(s => s.Intervals is null && s.Minimum is not null
-                            && TryCompare(s.Minimum, range.Minimum) is >= 0))
+                            && ConstraintMerge.TryCompare(s.Minimum, range.Minimum) is >= 0))
                         return false;
                     if (range.Maximum is not null
                         && !sourceRanges.Any(s => s.Intervals is null && s.Maximum is not null
-                            && TryCompare(s.Maximum, range.Maximum) is <= 0))
+                            && ConstraintMerge.TryCompare(s.Maximum, range.Maximum) is <= 0))
                         return false;
                     break;
                 case LengthConstraint length when isText:
@@ -272,31 +236,10 @@ public sealed partial class EffectLoweringPass {
         return true;
     }
 
-    /// <summary>Exact integer compare when both bounds are integral, otherwise double (the guard's own domain); null when not numeric.</summary>
-    private static int? TryCompare(object left, object right) {
-        try {
-            if (left is int or long && right is int or long)
-                return Convert.ToInt64(left).CompareTo(Convert.ToInt64(right));
-            return Convert.ToDouble(left).CompareTo(Convert.ToDouble(right));
-        }
-        catch (Exception e) when (e is InvalidCastException or FormatException or OverflowException) {
-            return null;
-        }
-    }
-
-    private static bool TryNumeric(Node value, out double number) {
+    private static bool TryNumeric(Node value, out object number) {
         switch (value) {
-            case Constant { Value: long l }:
-                number = l;
-                return true;
-            case Constant { Value: int i }:
-                number = i;
-                return true;
-            case Constant { Value: double d }:
-                number = d;
-                return true;
-            case Constant { Value: decimal m }:
-                number = (double)m;
+            case Constant { Value: long or int or double or decimal } constant:
+                number = constant.Value!;
                 return true;
             default:
                 number = 0;

@@ -107,12 +107,18 @@ public class UniqueModuleNamesOnlyStoragePortTests {
         private readonly HashSet<(string, string, string)> _keys = [];
         public List<(string, string, string)> ExistsCalls { get; } = [];
         public List<(string, string, string)> RecordCalls { get; } = [];
+        public List<(string, string, string)> TryReserveCalls { get; } = [];
 
         public void Seed(string entity, string property, string value) => _keys.Add((entity, property, value));
 
         public bool Exists(string entity, string property, string value) {
             ExistsCalls.Add((entity, property, value));
             return _keys.Contains((entity, property, value));
+        }
+
+        public bool TryReserve(string entity, string property, string value) {
+            TryReserveCalls.Add((entity, property, value));
+            return _keys.Add((entity, property, value));
         }
 
         public void Record(string entity, string property, string value) {

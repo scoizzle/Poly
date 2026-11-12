@@ -188,7 +188,10 @@ public class SimulateCreateDogfoodTests {
     }
 
     [Test]
-    public async Task TypeOnly_AmbiguousManyRel_ListsButDoesNotLink() {
+    public async Task TypeOnly_AmbiguousManyRel_RejectedByApplyDsl() {
+        // Flip (Q10, #659): S-11 makes the undeclared ambiguous pairing an error, so
+        // apply_dsl refuses the document. The old assertion applied it and ran the
+        // create: the Fine was listed under neither collection ("lists but does not link").
         var (sessionId, _) = McpTestTools.Store.Create("SimulateCreateAmbiguous");
         var dsl = """
             domain SimulateCreateAmbiguous
@@ -216,21 +219,13 @@ public class SimulateCreateDogfoodTests {
               patron: Patron
             }
             """;
-        await Assert.That(McpTestTools.Dsl.ApplyDsl(sessionId, dsl).Success).IsTrue();
-
-        var patronId = CreateAndId(sessionId, "Patron", """{"Name":"Dana"}""");
-        var invoke = McpTestTools.Runtime.InvokeAction(sessionId, patronId, "AssessByType");
-        await Assert.That(invoke.Success).IsTrue();
-        var fineId = ExtractReturnInstanceId(invoke);
-        await Assert.That(fineId).IsNotNull();
-
-        await Assert.That(ListFineCount(sessionId)).IsEqualTo(1);
-        await AssertPolicies(sessionId, patronId, hasFines: false, noFines: true);
-
-        var (patron, fine, store) = ResolvePatronFine(sessionId, patronId, fineId);
-        await Assert.That(store.GetRelatedInstances("fines", patron).Count).IsEqualTo(0);
-        await Assert.That(store.GetRelatedInstances("waived", patron).Count).IsEqualTo(0);
-        _ = fine; // registered but unlinked
+        var applied = McpTestTools.Dsl.ApplyDsl(sessionId, dsl);
+        await Assert.That(applied.Success).IsFalse();
+        var findings = applied.Diagnostics ?? [];
+        await Assert.That(findings.Count(static d => d.Contains("DMREL005"))).IsEqualTo(1);
+        var finding = findings.First(static d => d.Contains("DMREL005"));
+        await Assert.That(finding).Contains("'fines'");
+        await Assert.That(finding).Contains("'waived'");
     }
 
     [Test]

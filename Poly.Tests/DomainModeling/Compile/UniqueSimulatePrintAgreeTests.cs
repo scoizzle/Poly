@@ -53,7 +53,7 @@ public class UniqueSimulatePrintAgreeTests {
         var module = session.Lower(domain, analysis);
         var source = new CSharpGenerator().Generate(module);
         var assembly = WhenAnySimulatePrintAgreeTests.CompileGenerated(source, "UniqueParity");
-        var port = new TestPort();
+        var port = new InMemoryStoragePort();
         var printedLot = WhenAnySimulatePrintAgreeTests.CreateEntity(assembly, "Lot", ("db", port));
         var printedFirst = Invoke(printedLot, "Issue", ("code", "A"), ("db", port));
         var printedSecond = Invoke(printedLot, "Issue", ("code", "A"), ("db", port));
@@ -81,7 +81,7 @@ public class UniqueSimulatePrintAgreeTests {
         var module = session.Lower(domain, analysis);
         var source = new CSharpGenerator().Generate(module);
         var assembly = WhenAnySimulatePrintAgreeTests.CompileGenerated(source, "UniqueParityNested");
-        var port = new TestPort();
+        var port = new InMemoryStoragePort();
         var printedLot = WhenAnySimulatePrintAgreeTests.CreateEntity(assembly, "Lot", ("db", port));
         var printed = Invoke(printedLot, "Double", ("code", "A"), ("db", port));
 
@@ -129,7 +129,7 @@ public class UniqueSimulatePrintAgreeTests {
         var module = session.Lower(domain, analysis);
         var source = new CSharpGenerator().Generate(module);
         var assembly = WhenAnySimulatePrintAgreeTests.CompileGenerated(source, "UniqueAssignParity");
-        var port = new TestPort();
+        var port = new InMemoryStoragePort();
         var printedFirst = WhenAnySimulatePrintAgreeTests.CreateEntity(assembly, "Widget", ("code", "A"), ("db", port));
         var printedSecond = WhenAnySimulatePrintAgreeTests.CreateEntity(assembly, "Widget", ("code", "B"), ("db", port));
         var printedMoved = Invoke(printedFirst, "Relabel", ("code", "C"), ("db", port));
@@ -196,17 +196,4 @@ public class UniqueSimulatePrintAgreeTests {
 
     private static string? CodeOf(object instance) =>
         instance.GetType().GetProperty("Code")!.GetValue(instance) as string;
-
-    private sealed class TestPort : IStoragePort {
-        private readonly HashSet<string> _keys = new(StringComparer.Ordinal);
-
-        public bool Exists(string entity, string property, string value) =>
-            _keys.Contains(entity + "\u001f" + property + "\u001f" + value);
-
-        public void Record(string entity, string property, string value) =>
-            _keys.Add(entity + "\u001f" + property + "\u001f" + value);
-
-        public void Release(string entity, string property, string value) =>
-            _keys.Remove(entity + "\u001f" + property + "\u001f" + value);
-    }
 }

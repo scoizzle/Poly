@@ -2,32 +2,28 @@
 public class Book
 {
     private Book() { }
-    private Book(string author, Genre genre, string isbn, long pages, string title)
+    private Book(string title, string author, string isbn, long pages, Genre genre)
     {
+        this.Title = title;
         this.Author = author;
-        this.Genre = genre;
         this.ISBN = isbn;
         this.Pages = pages;
-        this.Title = title;
+        this.Genre = genre;
     }
+    public string Title { get; private set; } = default!;
     public string Author { get; private set; } = default!;
-    public Genre Genre { get; private set; }
     public string ISBN { get; private set; } = default!;
     public long Pages { get; private set; }
-    public string Title { get; private set; } = default!;
-    public static DomainResult<Book> Create(string author, Genre genre, string isbn, long pages, string title, Poly.DomainModeling.Runtime.IStoragePort db)
+    public Genre Genre { get; private set; }
+    public static DomainResult<Book> Create(string title, string author, string isbn, long pages, Genre genre, Poly.Runtime.IStoragePort db)
     {
+        if (string.IsNullOrEmpty(title))
+        {
+            return DomainResult<Book>.Failure("'Title' is required.");
+        }
         if (string.IsNullOrEmpty(author))
         {
             return DomainResult<Book>.Failure("'Author' is required.");
-        }
-        if ((object)genre == null)
-        {
-            return DomainResult<Book>.Failure("'Genre' is required.");
-        }
-        if (genre != Genre.Fiction && genre != Genre.NonFiction && genre != Genre.Reference)
-        {
-            return DomainResult<Book>.Failure(string.Concat("'", genre, "' is not a valid member of Genre for property 'Genre'."));
         }
         if (string.IsNullOrEmpty(isbn))
         {
@@ -49,15 +45,19 @@ public class Book
         {
             return DomainResult<Book>.Failure("'Pages' must be <= 10000.");
         }
-        if (string.IsNullOrEmpty(title))
+        if ((object)genre == null)
         {
-            return DomainResult<Book>.Failure("'Title' is required.");
+            return DomainResult<Book>.Failure("'Genre' is required.");
+        }
+        if (genre != Genre.Fiction && genre != Genre.NonFiction && genre != Genre.Reference)
+        {
+            return DomainResult<Book>.Failure(string.Concat("'", genre, "' is not a valid member of Genre for property 'Genre'."));
         }
         if (Book.ExistsWithISBN(db, isbn))
         {
             return DomainResult<Book>.Failure("Unique constraint violated: 'ISBN' value is already used on another 'Book'.");
         }
-        var created = new Book(author, genre, isbn, pages, title);
+        var created = new Book(title, author, isbn, pages, genre);
         db.Record("Book", "ISBN", isbn);
         return DomainResult<Book>.Success(created);
     }
@@ -73,5 +73,5 @@ public class Book
         }
         return DomainResult.Failure("A unique assign needs the storage port.");
     }
-    public static System.Boolean ExistsWithISBN(Poly.DomainModeling.Runtime.IStoragePort db, System.String isbn) => db.Exists("Book", "ISBN", isbn);
+    public static System.Boolean ExistsWithISBN(Poly.Runtime.IStoragePort db, System.String isbn) => db.Exists("Book", "ISBN", isbn);
 }

@@ -40,6 +40,12 @@ public sealed class RangeIntervals : IReadOnlyList<RangeInterval>, IEquatable<Ra
 /// disjoint ranges additionally carries <see cref="Intervals"/>, the exact union (#367 A-4);
 /// null means a plain single interval.
 /// </summary>
+/// <remarks>
+/// The bounds are declared (DSL-parsed) values: a <c>Number</c>/<c>Int</c>/<c>Int64</c> bound is a
+/// <see cref="long"/>, and a <c>Decimal</c> or any other non-Number-family bound is a
+/// <see cref="decimal"/> — never a <see cref="double"/> (#643). Derived bounds (analysis arithmetic)
+/// carry other types.
+/// </remarks>
 public sealed record RangeConstraint(object? Minimum, object? Maximum) : Constraint {
     public RangeIntervals? Intervals { get; init; }
 }

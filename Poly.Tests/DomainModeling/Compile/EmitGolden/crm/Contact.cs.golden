@@ -7,15 +7,15 @@ public enum ContactStage
 
 public class Contact
 {
-    private Contact(string email, string name, Account? account = null)
+    private Contact(string name, string email, Account? account = null)
     {
-        this.Email = email;
         this.Name = name;
+        this.Email = email;
         this.Account = account;
         this.CurrentStage = ContactStage.Active;
     }
-    public string Email { get; private set; } = default!;
     public string Name { get; private set; } = default!;
+    public string Email { get; private set; } = default!;
     public Account? Account { get; private set; }
     public ContactStage CurrentStage { get; private set; }
     public DomainResult Retire()
@@ -36,8 +36,12 @@ public class Contact
         this.CurrentStage = ContactStage.Active;
         return DomainResult.Success();
     }
-    public static DomainResult<Contact> Create(string email, string name, Account? account = null)
+    public static DomainResult<Contact> Create(string name, string email, Account? account = null)
     {
+        if (string.IsNullOrEmpty(name))
+        {
+            return DomainResult<Contact>.Failure("'Name' is required.");
+        }
         if (string.IsNullOrEmpty(email))
         {
             return DomainResult<Contact>.Failure("'Email' is required.");
@@ -46,11 +50,7 @@ public class Contact
         {
             return DomainResult<Contact>.Failure("'Email' does not match the required pattern.");
         }
-        if (string.IsNullOrEmpty(name))
-        {
-            return DomainResult<Contact>.Failure("'Name' is required.");
-        }
-        var created = new Contact(email, name, account);
+        var created = new Contact(name, email, account);
         if (account != null)
         {
             account.AttachContacts(created);

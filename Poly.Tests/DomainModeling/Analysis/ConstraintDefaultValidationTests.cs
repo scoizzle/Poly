@@ -90,6 +90,9 @@ public class ConstraintDefaultValidationTests {
 
     [Test]
     public async Task DoubleDefault_WithinRange_IsClean() {
+        // Restored: the V-05a fix-round restatement retargeted this input to 15d and pinned 15.5d
+        // as rejected. That was wrong on two counts (F1/F2): 15.5 is inside [10, 20], and TryCompare
+        // still falls back to master's double comparison for a double operand until V-05b.
         await Assert.That(ApiErrors(15.5d).Any(m => m.Contains("default value"))).IsFalse();
     }
 

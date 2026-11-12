@@ -19,6 +19,7 @@ public static class DomainModelAnalyzer {
         ExpressionMeaning? meaning = null,
         ExpressionFormRegistry? forms = null) => [
         new StructuralDomainAnalyzer(),
+        new InitialStageAnalyzer(),
         new DomainCatalogPass(),
         new ExpressionTypeAnalyzer(meaning, forms),
         new PolicyConstraintAnalyzer(),

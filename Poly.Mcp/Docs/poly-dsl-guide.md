@@ -31,6 +31,7 @@ A navigation property (`book: Book`) is a first-class link. A string field that 
 identifier (`BookIsbn: Text`) is a code smell — it creates a manual join that analysis
 cannot track, validate, or use for subscription routing.
 
+<!-- poly-verify: skip:illustration owner:M-02 -->
 ```poly
 // ✅ Correct — Loan references Book through a navigation property
 Loan: entity {
@@ -58,6 +59,7 @@ two entities, not on either endpoint.
 | Order | Customer ↔ Order ↔ LineItem | Order |
 | Reservation | Patron ↔ Reservation ↔ Book | Reservation |
 
+<!-- poly-verify: skip:illustration owner:M-02 -->
 ```poly
 // ✅ Correct — Loan carries the lifecycle
 Loan: entity {
@@ -80,6 +82,7 @@ When you create an entity in a navigation property, the runtime store links the 
 instance to the source — the child becomes reachable from the source through the
 relationship. You only specify the *other* property initializers.
 
+<!-- poly-verify: fragment:top wrapper:patron-loans -->
 ```poly
 Patron: entity {
   loans: many Loan
@@ -95,21 +98,23 @@ drives path-prefix reads, quantifiers, and subscriptions from the source. The
 **C# export auto-wires the child's back-reference** when the target entity has
 exactly one singular navigation pointing back to the source (e.g. `borrower`
 on `Loan` → `Patron`): the generated `Create{Nav}` factory passes `this` and the
-back-ref is not a constructor parameter. When the back-ref is ambiguous (multiple
-singular navs to the source) or a collection, it stays an unset constructor
-parameter. To-one navigation bindings in `create in` initializers are **legal**
+back-ref is not a constructor parameter. When the back-ref is a collection, it stays an
+unset constructor parameter. Two or more singular navigations back to the source with no
+`via` pairing is a **DMREL005** analysis error, so that shape never reaches export. To-one
+navigation bindings in `create in` initializers are **legal**
 (e.g. `create in loans { book: book }`) — the binding flows into the child's
 value bag / constructor parameter like a scalar initializer.
 
 **Required coverage (DMEFF011):** every property **without** `optional` on the
 created entity must be provided in the `create` / `create in` initializers,
-unless it has a `default` or the first stage's `entry` effects assign it. Only
+unless it has a `default` or the initial stage's `entry` effects assign it. Only
 scalar/enum-typed properties carry constraints — navigation properties cannot be
 marked `optional` (`nav: Type optional` is a parse error), and `required` is not
 a constraint word, so the back-reference exemption simply means the auto-wired nav needs no
 initializer value. Analysis rejects a create that omits a required property — the
 generated `Create` factory would otherwise throw at runtime.
 
+<!-- poly-verify: fragment:top wrapper:top-default -->
 ```poly
 // ✅ Correct — both props provided (a property is required by default)
 Token: entity { Lexeme: Text Kind: Text }
@@ -144,6 +149,7 @@ If entity A changing stage should produce an effect on entity B, use a stage
 subscription (`when`). Don't put `create Fine` inside a Loan action — put it
 where the effect belongs, in the entity that owns the fine.
 
+<!-- poly-verify: skip:illustration owner:M-02 -->
 ```poly
 // ✅ Correct — Patron subscribes to its own loans
 Patron: entity {
@@ -167,6 +173,7 @@ Loan: entity {
 Business rules that gate an action should be named policies. Compound conditions
 compose naturally.
 
+<!-- poly-verify: skip:illustration owner:M-02 -->
 ```poly
 // ✅ Correct — clear, testable guards
 CheckOut: action (book: Book)
@@ -189,6 +196,7 @@ CheckOut: action (book: Book) {
 When entry and exit effects must happen in a specific order, use comments
 to document why. Do not rely on effect-list ordering alone.
 
+<!-- poly-verify: skip:illustration owner:M-02 -->
 ```poly
 Suspended: stage {
   entry { assign MaxItems to 0 }    // freeze borrowing capacity first
@@ -200,18 +208,19 @@ Suspended: stage {
 ---
 
 Every valid `.poly` document starts with a domain name. Optional `uses` lines list
-**extension ids** this compilation unit depends on (additive facts). Product `apply_dsl`
-seeds `storage` when none are listed. Temporal is implicit: Load always registers it, and
-the printer never writes `uses temporal`. Unknown or duplicate ids fail closed.
+**extension ids** this compilation unit depends on. `polyc build` loads the implicit set
+`[storage, persistence]` when none are listed; a non-empty list replaces it, so `unique`
+needs `persistence` or a vendor library there. MCP execution (`apply_dsl`) and C# export add
+`persistence`, so `uses storage` still guards `unique`. Temporal is implicit; unknown or duplicate ids fail closed.
 `uses <id>` loads the library's export package, never a sibling `.poly`. A package boundary
-pins the public surface with `uses billing 2024-11-20` (same-line token run after the id).
-A `contract` block remains for a surface no library contributes.
+pins the surface with `uses billing 2024-11-20`; a `contract` block covers what no library contributes.
 
 A package may declare the host targets it is for (target ids such as `posix`); the host passes
 its target on the compile (`polyc --target`). `uses posix` names the package, never the OS, and
 a package whose targets omit the host target (or a host with no target) is `DMCON004`.
 
 
+<!-- poly-verify: valid -->
 ```poly
 domain MyDomain
 uses storage
@@ -222,6 +231,7 @@ uses storage
 Enum types are declared at the top level, before entities that reference them.
 Members are bare identifiers separated by optional commas (trailing comma allowed).
 
+<!-- poly-verify: fragment:top wrapper:top-default -->
 ```poly
 Color: enum {
   Red,
@@ -249,6 +259,7 @@ action parameter** — it has no storage representation and cannot be a stored e
 property. Analysis fails closed on a property typed as one. `public` is optional and
 omitted by default (`public value Money { … }`). It is stored as `Visibility.Public` and printed; export filtering is a later slice:
 
+<!-- poly-verify: invalid:DMSTR006 wrapper:top-default -->
 ```poly
 Money: value {
   Amount: Number
@@ -275,6 +286,7 @@ OpenAPI pack will emit this same IR later. No generated client.
 Value types declared **inside** the contract belong to that sub-domain. Action
 parameters at the bind seam may use those types. **Stored entity properties may not.**
 
+<!-- poly-verify: skip:drift:DMEFF001 owner:M-02 -->
 ```poly
 Billing: contract internal billing v1 {
   ChargeRequest: value {
@@ -330,10 +342,13 @@ the contract and endpoint; it is never erased.
 ## 3. Entities and Properties
 
 ```
-["public"] "entity" entity-name annotation* [key-clause] "{" property* stage* action* policy* "}"
-entity-name ":" "entity" annotation* [key-clause] "{" property* stage* action* policy* "}"
+["public"] "entity" entity-name annotation* [initial-clause] [key-clause] "{" property* stage* action* policy* "}"
+entity-name ":" "entity" annotation* [initial-clause] [key-clause] "{" property* stage* action* policy* "}"
+initial-clause = "initial" "(" stage-name ")"
 key-clause = "key" "(" member ("," member)* ")"
 ```
+
+**Initial stage.** `initial(Active)` designates which stage a new instance starts in. It is a header clause that sits **before** `key(...)` and the opening `{`, after any annotations: `Order: entity initial(Active) key(Code) {`. It is not a body member and adds nothing to the entity: the name must be one of the entity's own stages. With no designation the first declared stage is initial, which is the old rule. The designation is honoured on create by the simulator and by the generated C# `Create` and its constructor, so the designated stage's `entry` effects run on creation. The generated test suite treats that stage as the covered one: its create test asserts the designated stage, and it refuses actions that exist only on other stages. An empty clause, a non-identifier, a second `initial(...)` clause, or a clause placed after `key(...)` is a positioned parse error; a name that matches no stage (or an entity with no stages) is **`DMINI001`**, and the create path falls back to the first declared stage meanwhile. The printer writes the clause in the same position.
 
 **Key (identity).** `key(a, b)` designates existing members as the entity's identity. It is a header clause that sits **immediately before the opening `{`**, after any annotations: `Order: entity table("ORDERS") key(Code, Region) {` or `public entity Order key(Code) {`. It is not a body member and adds nothing to the entity; each name is one of the entity's own properties or singular navigations, and names are scoped to the entity. Analysis rejects an unknown member, a blank one, an `optional` or action-assigned key property, a collection navigation, or a navigation to an unkeyed entity (`DMSTR007`), a repeated member (`DMSTR001`), and a key cycle (`DMSTR002`). An empty `key()`, a doubled or trailing comma, an unclosed list, or a second `key(...)` clause is a positioned parse error. The printer writes the clause in the same position. Scoped **value** uniqueness (`unique_by` / `unique(scope, value)`) is **not implemented**, and nothing enforces a key at runtime yet.
 
@@ -353,9 +368,12 @@ An exported signature must be closed. A `public` action's parameter and result t
 
 `Number` is a 64-bit integer (`long`). A fractional value such as `0.25` is rejected and is not stored as `0`. `1` and an integral JSON number such as `1.0` are accepted. `Decimal` is `decimal` and accepts a fraction. A fractional literal or bound on `Number` is an error that names `Decimal`.
 
+`range` bounds are exact at parse and in the assign guard: a `Number` bound is a `long`, a `Decimal` or any other non-Number-family bound is a `decimal`, and no bound is a `double`. A `Number` bound outside the `long` range (for example `9223372036854775808`) is a positioned parse error, not a silent widening, and the exported DSL and the generated validation messages keep the declared bound text. The generated data-annotation attribute is still `[Range(double, double)]` for integral members, so a `long` bound beyond `int` is rounded in that attribute only; decimal members use `[Range(typeof(decimal), "min", "max")]` (the integral attribute is a follow-up). Analysis-time bound arithmetic is still `double` and moves to an exact representation in a later slice.
+
 Properties can reference enum types by name as their type, and use `default(MemberName)`
 to set a default value:
 
+<!-- poly-verify: fragment:top wrapper:enum-defaults -->
 ```poly
 Color: enum { Red, Green, Blue }
 
@@ -376,6 +394,7 @@ of the create DTO), so a `create` / `create in` / `create_instance` must supply 
 signature, prints as `T?`, and stores `null` when omitted. `default(...)` still supplies
 a value when the property is omitted; the default wins over the omitted `null`.
 
+<!-- poly-verify: fragment:top wrapper:top-default -->
 ```poly
 Token: entity {
   Lexeme: Text                 // required at create
@@ -411,6 +430,7 @@ Sql annotation pack (enabled by default in MCP `apply_dsl` and the DslCompiler).
 Annotations interleave with built-in constraints in the property tail. Order does
 not matter:
 
+<!-- poly-verify: fragment:top wrapper:top-default -->
 ```poly
 Item: entity table("INVENTORY") {
   Code: Text unique column("CODE", "VARCHAR2(20)")
@@ -440,6 +460,7 @@ Each takes **exactly one non-empty string**. `iri` must be absolute (`http`, `ht
 A number, a boolean, an empty list, an empty string, or a duplicate key is a positioned
 parse error; a typo never becomes a silent term.
 
+<!-- poly-verify: fragment:top wrapper:top-default -->
 ```poly
 Color: enum iri("https://example.com/Color") {
   Red iri("https://example.com/Color/Red") term("red"),
@@ -466,6 +487,7 @@ reference onto the element IRI.
 Relationships are declared as **inline navigation properties** on the source entity.
 The legacy `relationship { }` top-level form is **not supported**.
 
+<!-- poly-verify: skip:drift:DSL0001 owner:M-02 -->
 ```poly
 Orders: entity {
   //One-to-many navigation to Customer
@@ -510,6 +532,7 @@ colliding with a property of the same name on that entity. Relationship referenc
 policies, subscriptions, `create in`, and `invoke` always resolve relative to the
 entity they are authored on.
 
+<!-- poly-verify: fragment:top wrapper:order-minimal -->
 ```poly
 OrderLine: entity {
   order: Order
@@ -520,6 +543,33 @@ Note: entity {
 }
 ```
 
+**Inverse navigation.** `via <name>` names the navigation property on the target entity
+that points back, so a pair can name both directions explicitly:
+
+<!-- poly-verify: fragment:top wrapper:top-default -->
+```poly
+Department: entity {
+  reports: many Employee via manager
+}
+
+Employee: entity {
+  manager: Department via reports
+}
+```
+
+`via` is recorded on the relationship as `Inverse` and is validated by analysis:
+`DMREL003` when the name is not a navigation on the target entity, `DMREL004` when the
+two sides contradict (the named navigation points elsewhere, declares a different
+inverse, is the navigation itself, both ends are owned, or two navigations on one entity
+claim the same undeclared inverse), and `DMREL005` when two or more navigations of one
+cardinality class pair with a side that declares none. Lowering does not dispatch from
+the declared inverse yet — that is a later slice. `via <name>` is legal on an owned
+navigation too — that is how the back-reference names its owner, and only one side of a
+pair may own it. A member may still be named `via` (`via: Text`, `via(x: Text): action { }`): the
+clause starts whenever `via` is followed by anything other than `:` or `(`, so `via 123`
+enters the clause and then fails as a missing name. A `via` with no name, or a second
+`via` on the same navigation, is a positioned parse error.
+
 ## 5. Lifecycle Stages
 
 ```
@@ -528,6 +578,7 @@ stage-name ":" "stage" "{" stage-member-list "}"
 
 Stages contain actions and subscriptions. Stages are **flat** — no parent/child hierarchy.
 
+<!-- poly-verify: fragment:entity wrapper:entity-stage-list -->
 ```poly
 Draft: stage {
   Submit: action { transition to Active }
@@ -544,6 +595,7 @@ inside the stage. A `require` that proves a property present (`Note is not null`
 copies of that optional property into a required one (DMEFF014) in the stage's actions; an action
 that can assign null to it is DMEFF015.
 
+<!-- poly-verify: fragment:entity wrapper:entity-stage-require -->
 ```poly
 HasNote: policy { Note is not null }
 Open: stage require HasNote {
@@ -553,6 +605,7 @@ Open: stage require HasNote {
 
 ### Entry/Exit Effects
 
+<!-- poly-verify: fragment:entity wrapper:entity-stage-effects -->
 ```poly
 Active: stage {
   entry {
@@ -564,6 +617,36 @@ Active: stage {
   DoStuff: action { transition to Done }
 }
 ```
+
+### Explicit Initial Stage
+
+`initial(Stage)` belongs to the entity header, not to a stage: it names the stage a new instance
+starts in. With no clause the first declared stage is initial. A stage named `initial` is an
+ordinary stage — the word is contextual only in header position, before `key(...)`.
+
+<!-- poly-verify: valid -->
+```poly
+domain Orders
+
+Order: entity initial(Active) {
+  Number: Text
+  Status: Text optional
+  Draft: stage {
+    Activate: action {
+      transition to Active
+    }
+  }
+  Active: stage {
+    entry {
+      assign Status to "entered_active"
+    }
+  }
+}
+```
+
+`Create` starts the instance in `Active` and runs `Active`'s `entry` effects even though `Draft` is
+declared first; the generated test suite asserts `Active` as the create stage and refuses `Draft`'s actions. A
+name that matches no stage is `DMINI001`.
 
 ## 6. Actions
 
@@ -580,6 +663,7 @@ Parameters (optional) appear **after** `: action`, keeping the uniform `Name: ki
 
 Same action name may appear on multiple stages; each stage's body and `require` gates are independent (effects are not copied onto earlier stages).
 
+<!-- poly-verify: fragment:entity wrapper:entity-bodies -->
 ```poly
 Tag: action (value: Text) {
   assign Label to value
@@ -593,6 +677,7 @@ Return type (optional) appears after parameters using `-> TypeName`.
 `InvokeAction` returns the created instance; MCP `invoke_action` exposes
 `returnTypeName` and `returnInstanceId` for the registered child.
 
+<!-- poly-verify: fragment:entity wrapper:entity-bodies -->
 ```poly
 PlaceOrder: action -> Order {
   create in orders { Total: 100 }
@@ -606,6 +691,7 @@ statement of the action body (or every branch of a final `if … else` must prod
 This pins the contract the C# export relies on (return value = last statement's created
 instance) and the runtime return (`InvokeAction` returns the created instance):
 
+<!-- poly-verify: fragment:entity wrapper:entity-bodies -->
 ```poly
 // ✅ Correct — create is the final statement
 PlaceOrder: action -> Order {
@@ -631,6 +717,7 @@ Place: action -> Order {
 
 Primitive returns (`-> Number`) and “last assign is return” are **not** product — prefer entity create return or void.
 
+<!-- poly-verify: skip:illustration owner:M-02 -->
 ```poly
 // Not product: -> Number from assign alone (analysis error)
 // ComputeDiscount: action (total: Number) -> Number { assign Result to total * 0.1 }
@@ -650,6 +737,7 @@ Effects in an action body:
 | General for | `for name in Rel [where expr] { effects }` — executable; fail-fast, zero records is a no-op (see "General `for`" below) |
 | Conditional | `if (expr) { effects } [else if (expr) { effects }]* [else { effects }]` |
 
+<!-- poly-verify: fragment:entity wrapper:entity-bodies -->
 ```poly
 PlaceOrder: action {
   assign Status to "processing"
@@ -756,6 +844,7 @@ once per record whose `where` holds.
   at the `for`.
 - Still missing: `first` / `filter`; `create in` inside the body is not exercised yet.
 
+<!-- poly-verify: skip:drift:DSL0001 owner:M-02 -->
 ```poly
 invoke Validate                              # self-only
 invoke Validate(status: "ready")             # self-only with args (all params required)
@@ -775,6 +864,7 @@ Named policies are predicates — they do **not** automatically gate every actio
 An action is blocked by a policy only when it lists `require PolicyName`.
 `require not PolicyName` negates the policy.
 
+<!-- poly-verify: fragment:entity wrapper:policy-gate -->
 ```poly
 PositiveTotal: policy { Total > 0 }
 
@@ -820,6 +910,7 @@ target enters a matching stage. Omit it for the default **`Each`**:
 - Peer binder (`as name`) remains valid with `any`/`all`; the peer is the
   **transitioned** instance for that firing (same as `Each` today).
 
+<!-- poly-verify: fragment:entity wrapper:stage-subscriptions -->
 ```poly
 Pending: stage {
   when any orders Active {      // once any linked order is Active
@@ -887,6 +978,7 @@ entity-level `when`.
   parameter (`order.Code`). Notification-only `when` stays zero-arg. Nested path-prefix
   under the binder is rejected (analysis + export).
 
+<!-- poly-verify: skip:illustration owner:M-02 -->
 ```poly
 // Notification-only — peer values not needed
 Pending: stage {
@@ -925,6 +1017,7 @@ effect still returns `DomainResult.Failure`.
 
 Policies are named boolean guard expressions attached to an entity.
 
+<!-- poly-verify: fragment:entity wrapper:policy-facts -->
 ```poly
 IsAdult: policy { Age >= 18 }
 CanProcess: policy { isActive is true and role is "admin" }
@@ -948,6 +1041,7 @@ The DSL accepts boolean and scalar expressions through the following precedence 
 | `or` | Binary, left-assoc | `Total > 0 or Rush is true` |
 
 Valid expressions:
+<!-- poly-verify: skip:illustration owner:M-02 -->
 ```poly
 Age >= 18
 isActive is true and role is "admin"
@@ -969,6 +1063,7 @@ Cross-entity **writes** via assign are **banned** — only local entity properti
 | Absence | `not certificate exists` | `Not(Exists(...))` / `NotExists` — store-aware when target is a relationship |
 | Multi-predicate | `customer where Status is "Active" and CreditLimit >= 1000` | `RelationshipNavigation` with `And` body |
 
+<!-- poly-verify: skip:illustration owner:M-02 -->
 ```poly
 assignee Active
 customer Tier is "VIP"
@@ -1010,6 +1105,7 @@ of `Prop`, a **Number** property on the related entity, over the related set; `s
 | `count Rel` | `0` |
 | `sum Rel Prop` | `0` |
 
+<!-- poly-verify: fragment:entity wrapper:policy-quantifiers -->
 ```poly
 HasPriorityOrder: policy { any orders where Priority > 5 }
 AllHighValue: policy { all orders where Total > 100 }
@@ -1029,6 +1125,7 @@ owns the **Date**, **Time**, **DateTime**, and **Duration** catalog types, clock
 relative date arithmetic. These spellings parse to `Now` / `Today` / `DateOperation` IR, pass
 analysis, round-trip through `export_dsl`, and are authorable in **assign RHS and policy comparisons**:
 
+<!-- poly-verify: skip:drift:DMSEM003 wrapper:time-facts owner:M-02 -->
 ```poly
 Renew: action {
   assign DueDate to Now - 12 Days
@@ -1108,8 +1205,11 @@ diverging:
   create factory and any action that assigns the property take an `IStoragePort db`
   parameter and return `Unique constraint violated` before the write — the guard is the
   module's, not a separate export-only stub. This is the same body a source that writes
-  `uses persistence` prints; the overlay is implicit in MCP so `unique` behaves
-  identically either way. The printed `EnsureUnique` member is a residual with no
+  `uses persistence` prints. For `polyc build` (Produce) a non-empty `uses` list replaces the
+  implicit set `[storage, persistence]`, so `unique` needs `persistence` or a vendor library
+  in that list. MCP execution and the C# export add `persistence` themselves
+  (`McpSessionStore.EnsureExecution`), so in MCP a `uses storage` or `uses http` document
+  still guards `unique`. The printed `EnsureUnique` member is a residual with no
   caller: it refuses with "A unique assign needs the storage port." The EF model uses a
   synthetic integer `Id` key. Every `unique` property, including a second one on the
   same entity, is `HasIndex(...).IsUnique()`. Duplicate values fail loud at the session
@@ -1120,8 +1220,9 @@ diverging:
   policy is still rejected at analysis ("property does not exist").
 - **`pattern(regex)` validates stored values at write time** (create/assign) — it is a
   constraint, not a query/read filter. A body .NET cannot parse is rejected at define as
-  `DMSEM004`, one positioned error per distinct body. Grep-style read-time matching against stored text
-  is not expressible.
+  `DMSEM004`, one positioned error per distinct body. A trailing unescaped `$` means
+  absolute end of input (the guard is anchored as `\z`), so a final newline is rejected.
+  Grep-style read-time matching against stored text is not expressible.
 - **Quantifiers lower to foreach on both paths.** The C# export and the simulator both
   lower `any`/`all`/`none`/`count … where` to a foreach over the collection navigation
   (the host supplies the collection). Path-prefix reads and `Rel exists` / `not Rel exists`
@@ -1139,18 +1240,36 @@ diverging:
   arithmetic, and defaults (e.g. `Name >= 18` on a `Text` property, `default(Today)` on
   a `Number` property) are rejected at authoring time — the export and runtime no longer
   receive type-confused expressions.
-- **Property constraints propagate onto effects.** An effect that assigns a value to a
-  constrained property is checked against the property's constraints at analysis:
-  a literal value (or a derived expression whose inferred value range is entirely
-  outside, e.g. `assign Age to Age + 200` on `Age: Number range(0, 150)`) is an
-  **error**; a derived expression that *can* fall outside (e.g. `assign Qty to Qty - 100`
-  on `Qty: Number range(0, 100)`) is a **warning**. This covers `assign`, entry/exit
-  effects, and `create`/`create in` initializers. The action's guard policies are
+- **Property constraints propagate onto effects, and every write gets a verdict.**
+  An effect that writes a property with a `range(...)` constraint is checked against it at
+  analysis: a literal value (or a derived expression whose inferred value range is entirely
+  outside, e.g. `assign Age to Age + 200` on `Age: Number range(0, 150)`) is a
+  **`DMEFF008` error**; an expression that *can* fall outside (e.g. `assign Qty to Qty - 100`
+  on `Qty: Number range(0, 100)`) is a **`DMEFF008` warning**. This covers `assign`,
+  entry/exit and `when` effects, and `create`/`create in` initializers, which are evaluated
+  in the **creator's** scope (the creating action's properties and parameters), never the
+  created entity's. The action's guard policies are
   considered **additively**: a `require` gate that
   narrows a property's value range is combined with the property's own constraints before
   judging the downstream violation — e.g. `assign Qty to Qty + 10` under
   `require Qty <= 80` on `Qty: Number range(0, 90)` is provably within range and produces
   no diagnostic.
+- **Silence means verified (Q4).** A write analysis cannot decide — a bare
+  property or parameter with no bound, an operator the interval flow does not model
+  (`/`, a call, `match`), or a constraint kind with no flow decision — is a **`DMCS003`
+  warning** naming the write, the property and the constraint. So with
+  `A: Number range(0, 10)` and `B: Number range(5, 20)`, `assign A to B` warns
+  (`DMEFF008`, "can fall outside"), and `assign A to U + 1` with an unbounded `U` warns
+  (`DMCS003`, no usable bound). One **fact** is recorded per write; the worst verdict
+  across every stage context the action can run in decides the reported code, and the
+  literal and parameter arms report one diagnostic per violated constraint. Observed
+  flows are the exception — a flow whose source carries no same-kind constraint is not
+  yet verified (deferred; V-04). An initializer is judged against the declared ranges
+  only: unlike an assign, it gets no `require` narrowing and no stage invariants, because
+  a `create` has no stage context. Only `range(...)` is decided against a computed value
+  in this slice; `length(...)`, `pattern(...)` and `equals(...)` writes are not
+  flow-checked yet. `poly_check` still prints `proven` for a model whose only findings are
+  warnings (the verdict flip is M-05), so read the findings, not the verdict word.
 - **Invariant verification is per-stage-context and combinatory.** An action valid in
   multiple stages is analyzed once per stage: each stage's policies (plus the action's
   require gates) combine to a **net constraint per constraint type**
@@ -1324,6 +1443,7 @@ A top-level `function` declares a pure named member of the domain: parameters, a
 type, and one expression body. The form is what `export_dsl` prints (spaces around `=`
 included), so parse → print → parse is lossless:
 
+<!-- poly-verify: fragment:top wrapper:top-default -->
 ```poly
 function Add(a: Number, b: Number): Number = a + b
 
@@ -1351,6 +1471,7 @@ A call is `Name(arg, arg, …)` — the function name, `(`, comma-separated expr
 in policies, in `assign` values, and as arguments of other calls or in function bodies. Other
 expression positions share the same parser and lowering but are not covered by tests yet.
 
+<!-- poly-verify: fragment:top wrapper:top-default -->
 ```poly
 Cart: entity {
   Total: Number default(0)
@@ -1390,6 +1511,7 @@ Actions can declare typed parameters. There is no `param` keyword: a parameter i
 
 Canonical form puts parameters after `: action` so members stay `Name: kind` (matches `export_dsl`):
 
+<!-- poly-verify: fragment:entity wrapper:entity-bodies -->
 ```poly
 SetName: action (newName: Text) {
   assign Name to newName
@@ -1577,6 +1699,7 @@ comment describing the old member.
 
 ## 13. Example (Round-Trip Safe)
 
+<!-- poly-verify: valid -->
 ```poly
 domain Orders
 uses storage

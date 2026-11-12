@@ -1,0 +1,12 @@
+domain GuideStageSubscriptions
+
+Order: entity {
+  Active: stage { }
+  Completed: stage { }
+}
+
+Cart: entity {
+  Status: Text optional
+  orders: many Order
+// <<guide-block:entity>>
+}

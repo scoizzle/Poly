@@ -49,9 +49,9 @@ app.MapPost("/api/books/{id}/shift", async (int id, ShiftDto dto, TDbCtx db) => 
     try
     {
         var result = entity.Shift(dto.P);
-        await db.SaveChangesAsync();
         if (result.IsSuccess)
         {
+            await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
         else
@@ -81,7 +81,7 @@ static async System.Threading.Tasks.Task SeedAsync(TDbCtx db)
     {
         return;
     }
-    var bookResult = Book.Create(1);
+    var bookResult = Book.Create(500);
     if (bookResult.IsSuccess)
     {
         db.Add(bookResult.Value);

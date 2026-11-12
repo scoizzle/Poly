@@ -28,6 +28,15 @@ public class OpenRangeBoundTests {
             .Where(d => d.Code == DomainModelDiagnosticCodes.EffectConstraintViolation)
             .ToList();
 
+    private static List<Poly.Analysis.Diagnostic> Undecided(EvolutionResult result) =>
+        result.Analysis.Diagnostics
+            .Where(d => d.Code == DomainModelDiagnosticCodes.ConstraintUndecided)
+            .ToList();
+
+    private static WriteVerificationFacts Facts(EvolutionResult result) =>
+        result.Analysis.GetMetadata<WriteVerificationFacts>(result.Root)
+        ?? throw new InvalidOperationException("no write-verification facts were recorded");
+
     // ── B1: an open bound is absent, not 0 ───────────────────────────────
 
     [Test]
@@ -196,7 +205,8 @@ public class OpenRangeBoundTests {
 
     [Test]
     public async Task Assign_MultiplyOpenOperand_ReportsNoDMEFF008() {
-        // Pin: `*` on an open operand stays fail-open (Unknown), silent until V-03/V-05 own it.
+        // Pin: `*` on an open operand stays fail-open (no interval), so there is no DMEFF008.
+        // Q4 (V-03): silence is reserved for verified writes, so the write is DMCS003 instead.
         var result = Parse("""
             domain Test
             A: entity {
@@ -207,13 +217,16 @@ public class OpenRangeBoundTests {
 
         await Assert.That(result.Succeeded).IsTrue();
         await Assert.That(EffectViolations(result)).IsEmpty();
+        await Assert.That(Undecided(result).Count).IsEqualTo(1);
+        await Assert.That(Facts(result).Unverified.Single().Reason).IsEqualTo(UnverifiedReason.UnknownBound);
     }
 
     [Test]
     public async Task CreateInitializer_UnknownArithmetic_ReportsNoDMEFF008() {
         // Pin (O1): an Unknown arithmetic initializer carries no range at all (both sides absent),
         // not an open one, so it is not compared against the target's declared range. Green on
-        // master via the both-null return, and red under a naive ±∞ substitution.
+        // master via the both-null return, and red under a naive ±∞ substitution. Q4 (S4): the
+        // initializer now goes through the write channel, so it is DMCS003, never silent.
         var result = Parse("""
             domain Test
             A: entity { Qty: Number range(0, 100) }
@@ -225,6 +238,10 @@ public class OpenRangeBoundTests {
             """);
 
         await Assert.That(EffectViolations(result)).IsEmpty();
+        var undecided = Undecided(result);
+        await Assert.That(undecided.Count).IsEqualTo(1);
+        await Assert.That(undecided[0].Message).Contains("'Qty'");
+        await Assert.That(Facts(result).Unverified.Single().Reason).IsEqualTo(UnverifiedReason.UnknownBound);
     }
 
     [Test]
@@ -242,5 +259,124 @@ public class OpenRangeBoundTests {
             """);
 
         await Assert.That(EffectViolations(result).Any(d => d.Severity == DiagnosticSeverity.Error)).IsFalse();
+    }
+
+    // ── V-03 S6: the rest of V-01's follow-ups ───────────────────────────
+    // Everything in this section is a PIN, not a red: it passes on master (V-01) and after V-03.
+    // The one expectation Q4 makes wrong is the old "pin today's silence" for A - B, replaced
+    // below by a DMCS003 assertion: under Q4 silence means verified, and two open operands are
+    // not verified.
+
+    [Test]
+    public async Task TwoOpenOperands_IsOneUnverifiedWrite() {
+        // `A - B` with both operands open: the difference has no bound at all, so nothing is known
+        // outside the target's range. Q4 makes the old "today's silence" expectation wrong — the
+        // write is DMCS003 (Unverified, UnknownBound), exactly one finding and one fact.
+        var result = Parse("""
+            domain Test
+            A: entity {
+              X: Number range(0, )
+              Y: Number range(0, )
+              Dep: action { assign X to X - Y }
+            }
+            """);
+
+        await Assert.That(result.Succeeded).IsTrue();
+        await Assert.That(EffectViolations(result)).IsEmpty();
+        var undecided = Undecided(result);
+        await Assert.That(undecided.Count).IsEqualTo(1);
+        await Assert.That(undecided[0].Severity).IsEqualTo(DiagnosticSeverity.Warning);
+        var facts = Facts(result);
+        await Assert.That(facts.Unverified.Single().Reason).IsEqualTo(UnverifiedReason.UnknownBound);
+        await Assert.That(facts.Verified).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task OpenOperandShapes_AreRecordedAsUnverifiedWrites() {
+        // The mixed-side, `*` and bare-copy shapes V-01 pinned as silent are recorded, one write
+        // each: two have no bound at all (DMCS003), one is a known range that can fall outside
+        // (DMEFF008 warning). None of them is a verified write.
+        var result = Parse("""
+            domain Test
+            A: entity {
+              Open: Number range(0, )
+              Open2: Number range(0, )
+              Closed: Number range(0, 100)
+              Difference: action { assign Closed to Open - Open2 }
+              Scaled: action { assign Closed to Open * 2 }
+              Copy: action { assign Closed to Open }
+            }
+            """);
+
+        await Assert.That(result.Succeeded).IsTrue();
+        var findings = result.Analysis.Diagnostics
+            .Where(d => d.Message.Contains("'Closed'", StringComparison.Ordinal)
+                && d.Code is DomainModelDiagnosticCodes.ConstraintUndecided
+                    or DomainModelDiagnosticCodes.EffectConstraintViolation)
+            .ToList();
+        await Assert.That(findings.Count).IsEqualTo(3);
+        await Assert.That(Undecided(result).Count).IsEqualTo(2);
+        var facts = Facts(result);
+        await Assert.That(facts.Unverified.Count).IsEqualTo(3);
+        await Assert.That(facts.Verified).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task CallChainPostcondition_AddToOpenLowerBound_WarnsNotErrors() {
+        // (-∞, 100] + 1 is (-∞, 101]: above the target's upper bound, but the lower side is open, so
+        // it can fall outside — a warning on the caller chain, never an error. The counterpart of
+        // CallChainPostcondition_SubtractFromOpenUpperBound_WarnsNotErrors.
+        var result = Parse("""
+            domain Test
+            A: entity {
+              D: Number range(, 100)
+              Set: action { assign D to D + 1 }
+              Go: action { invoke Set }
+            }
+            """);
+
+        var chain = result.Analysis.Diagnostics
+            .Where(d => d.Message.Contains("Call-chain postcondition (Go → Set)", StringComparison.Ordinal))
+            .ToList();
+
+        await Assert.That(chain.Any(d => d.Severity == DiagnosticSeverity.Error)).IsFalse();
+        await Assert.That(chain.Any(d => d.Severity == DiagnosticSeverity.Warning)).IsTrue();
+    }
+
+    [Test]
+    public async Task Assign_OpenValueLowerEnd_WarnsWithMinusInfinity() {
+        // (-∞, 50] + 0 into [0, 100]: the value's lower endpoint is absent, so it can fall outside
+        // and the message names that side −∞ rather than guessing a number.
+        var result = Parse("""
+            domain Test
+            A: entity {
+              D: Number range(0, 100)
+              E: Number range(, 50)
+              Dep: action { assign D to E + 0 }
+            }
+            """);
+
+        var warnings = EffectViolations(result);
+        await Assert.That(warnings.Count).IsEqualTo(1);
+        await Assert.That(warnings[0].Severity).IsEqualTo(DiagnosticSeverity.Warning);
+        await Assert.That(warnings[0].Message).Contains("−∞");
+    }
+
+    [Test]
+    public async Task Assign_AddToOpenUpperEnd_WarnsNotErrors() {
+        // [0, +∞) + 1 = [1, +∞) against [0, 100]: the upper side is open, so it can fall outside —
+        // a warning, never a definite violation.
+        var result = Parse("""
+            domain Test
+            A: entity {
+              D: Number range(0, 100)
+              E: Number range(0, )
+              Dep: action { assign D to E + 1 }
+            }
+            """);
+
+        var warnings = EffectViolations(result);
+        await Assert.That(warnings.Count).IsEqualTo(1);
+        await Assert.That(warnings[0].Severity).IsEqualTo(DiagnosticSeverity.Warning);
     }
 }

@@ -12,20 +12,20 @@ public class Truck
 {
     private List<Delivery> _deliveries = new List<Delivery>();
     private Truck() { }
-    private Truck(long maxLoad, string vin, Warehouse? warehouse = null, IEnumerable<Delivery>? deliveries = null, long currentLoad = 0L, TruckStatus status = TruckStatus.Idle)
+    private Truck(string vin, long maxLoad, Warehouse? warehouse = null, IEnumerable<Delivery>? deliveries = null, long currentLoad = 0L, TruckStatus status = TruckStatus.Idle)
     {
-        this.MaxLoad = maxLoad;
         this.Vin = vin;
+        this.MaxLoad = maxLoad;
         this.CurrentLoad = currentLoad;
         this.Status = status;
         this.Warehouse = warehouse;
         this._deliveries = new List<Delivery>(deliveries ?? new List<Delivery>());
         this.CurrentStage = TruckStage.Idle;
     }
-    public long CurrentLoad { get; private set; }
-    public long MaxLoad { get; private set; }
-    public TruckStatus Status { get; private set; }
     public string Vin { get; private set; } = default!;
+    public long MaxLoad { get; private set; }
+    public long CurrentLoad { get; private set; }
+    public TruckStatus Status { get; private set; }
     public Warehouse? Warehouse { get; private set; }
     public IReadOnlyList<Delivery> Deliveries
     {
@@ -57,28 +57,8 @@ public class Truck
         return DomainResult.Success();
     }
     public bool IsOverloaded() => this.CurrentLoad > this.MaxLoad;
-    public static DomainResult<Truck> Create(long maxLoad, string vin, Poly.DomainModeling.Runtime.IStoragePort db, Warehouse? warehouse = null, IEnumerable<Delivery>? deliveries = null, long currentLoad = 0L, TruckStatus status = TruckStatus.Idle)
+    public static DomainResult<Truck> Create(string vin, long maxLoad, Poly.Runtime.IStoragePort db, Warehouse? warehouse = null, IEnumerable<Delivery>? deliveries = null, long currentLoad = 0L, TruckStatus status = TruckStatus.Idle)
     {
-        if (currentLoad < 0L)
-        {
-            return DomainResult<Truck>.Failure("'CurrentLoad' must be >= 0.");
-        }
-        if (currentLoad > 40000L)
-        {
-            return DomainResult<Truck>.Failure("'CurrentLoad' must be <= 40000.");
-        }
-        if (maxLoad < 1L)
-        {
-            return DomainResult<Truck>.Failure("'MaxLoad' must be >= 1.");
-        }
-        if (maxLoad > 40000L)
-        {
-            return DomainResult<Truck>.Failure("'MaxLoad' must be <= 40000.");
-        }
-        if (status != TruckStatus.Idle && status != TruckStatus.EnRoute && status != TruckStatus.Maintenance && status != TruckStatus.OutOfService)
-        {
-            return DomainResult<Truck>.Failure(string.Concat("'", status, "' is not a valid member of TruckStatus for property 'Status'."));
-        }
         if (string.IsNullOrEmpty(vin))
         {
             return DomainResult<Truck>.Failure("'Vin' is required.");
@@ -95,11 +75,31 @@ public class Truck
         {
             return DomainResult<Truck>.Failure("'Vin' does not match the required pattern.");
         }
+        if (maxLoad < 1L)
+        {
+            return DomainResult<Truck>.Failure("'MaxLoad' must be >= 1.");
+        }
+        if (maxLoad > 40000L)
+        {
+            return DomainResult<Truck>.Failure("'MaxLoad' must be <= 40000.");
+        }
+        if (currentLoad < 0L)
+        {
+            return DomainResult<Truck>.Failure("'CurrentLoad' must be >= 0.");
+        }
+        if (currentLoad > 40000L)
+        {
+            return DomainResult<Truck>.Failure("'CurrentLoad' must be <= 40000.");
+        }
+        if (status != TruckStatus.Idle && status != TruckStatus.EnRoute && status != TruckStatus.Maintenance && status != TruckStatus.OutOfService)
+        {
+            return DomainResult<Truck>.Failure(string.Concat("'", status, "' is not a valid member of TruckStatus for property 'Status'."));
+        }
         if (Truck.ExistsWithVin(db, vin))
         {
             return DomainResult<Truck>.Failure("Unique constraint violated: 'Vin' value is already used on another 'Truck'.");
         }
-        var created = new Truck(maxLoad, vin, warehouse, deliveries, currentLoad, status);
+        var created = new Truck(vin, maxLoad, warehouse, deliveries, currentLoad, status);
         if (warehouse != null)
         {
             warehouse.AttachTrucks(created);
@@ -119,5 +119,5 @@ public class Truck
         }
         return DomainResult.Failure("A unique assign needs the storage port.");
     }
-    public static System.Boolean ExistsWithVin(Poly.DomainModeling.Runtime.IStoragePort db, System.String vin) => db.Exists("Truck", "Vin", vin);
+    public static System.Boolean ExistsWithVin(Poly.Runtime.IStoragePort db, System.String vin) => db.Exists("Truck", "Vin", vin);
 }

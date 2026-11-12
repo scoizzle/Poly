@@ -12,16 +12,16 @@ public enum QuoteStage
 public class Quote
 {
     private List<QuoteLine> _lines = new List<QuoteLine>();
-    private Quote(decimal amount, string title, Opportunity? opportunity = null, IEnumerable<QuoteLine>? lines = null)
+    private Quote(string title, decimal amount, Opportunity? opportunity = null, IEnumerable<QuoteLine>? lines = null)
     {
-        this.Amount = amount;
         this.Title = title;
+        this.Amount = amount;
         this.Opportunity = opportunity;
         this._lines = new List<QuoteLine>(lines ?? new List<QuoteLine>());
         this.CurrentStage = QuoteStage.Draft;
     }
-    public decimal Amount { get; private set; }
     public string Title { get; private set; } = default!;
+    public decimal Amount { get; private set; }
     public Opportunity? Opportunity { get; private set; }
     public IReadOnlyList<QuoteLine> Lines
     {
@@ -93,8 +93,12 @@ public class Quote
         this.CurrentStage = QuoteStage.Rejected;
         return DomainResult.Success();
     }
-    public static DomainResult<Quote> Create(decimal amount, string title, Opportunity? opportunity = null, IEnumerable<QuoteLine>? lines = null)
+    public static DomainResult<Quote> Create(string title, decimal amount, Opportunity? opportunity = null, IEnumerable<QuoteLine>? lines = null)
     {
+        if (string.IsNullOrEmpty(title))
+        {
+            return DomainResult<Quote>.Failure("'Title' is required.");
+        }
         if (amount < 0m)
         {
             return DomainResult<Quote>.Failure("'Amount' must be >= 0.");
@@ -103,11 +107,7 @@ public class Quote
         {
             return DomainResult<Quote>.Failure("'Amount' must be <= 100000000.");
         }
-        if (string.IsNullOrEmpty(title))
-        {
-            return DomainResult<Quote>.Failure("'Title' is required.");
-        }
-        var created = new Quote(amount, title, opportunity, lines);
+        var created = new Quote(title, amount, opportunity, lines);
         if (opportunity != null)
         {
             opportunity.AttachQuotes(created);

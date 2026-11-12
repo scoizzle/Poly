@@ -145,7 +145,7 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
     }
 
     /// <summary>
-    /// Names of entity properties assigned by the FIRST stage's entry effects. The
+    /// Names of entity properties assigned by the initial stage's entry effects. The
     /// exported constructor runs those effects after setting CurrentStage, so these
     /// props are body-initialized — never ctor params (a param would be dead + written
     /// twice, e.g. StartedAt). Published on <see cref="EntityStructureMetadata.EntryAssignedPropertyNames"/>
@@ -154,7 +154,7 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
     internal static IReadOnlySet<string> ComputeEntryAssignedPropertyNames(Entity entity) {
         var names = new HashSet<string>(StringComparer.Ordinal);
         if (entity.Stages.Count > 0) {
-            foreach (var effect in entity.Stages[0].OnEntryEffects) {
+            foreach (var effect in entity.InitialStage()!.OnEntryEffects) {
                 if (effect is AssignEffect ae && ae.Target is PropertyAccess pa)
                     names.Add(pa.Name);
             }
@@ -229,7 +229,7 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
     internal static bool IsImplicitStage(Entity entity, Domain? domain = null) {
         if (entity.Stages.Count != 1)
             return false;
-        var stage = entity.Stages[0];
+        var stage = entity.InitialStage()!;
         if (stage.OnEntryEffects.Count > 0
             || stage.OnExitEffects.Count > 0
             || stage.Policies.Count > 0
@@ -286,14 +286,17 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
         var required = new List<ConstructorParameterOrder>();
         var optional = new List<ConstructorParameterOrder>();
 
-        // Props assigned by the FIRST stage's entry effects are body-initialized in
+        // Props assigned by the initial stage's entry effects are body-initialized in
         // the exported ctor (which runs those effects after setting CurrentStage) —
         // they are NOT ctor params. Shared rule published as
         // EntityStructureMetadata.EntryAssignedPropertyNames (single source of truth).
         var entryAssignedProps = ComputeEntryAssignedPropertyNames(entity);
         var requiredProps = ComputeRequiredPropertyNames(entity);
 
-        foreach (var prop in entity.Properties.OrderBy(p => p.Name)) {
+        // Declaration order. The required/optional block split is C#-mandated
+        // (defaulted parameters must be last); L-08 removes it by emitting every
+        // Create parameter as `T? x = default` in declaration order.
+        foreach (var prop in entity.Properties) {
             // Optional properties are trailing `T? = null` parameters, added after
             // the required scalar and navigation parameters.
             if (!requiredProps.Contains(prop.Name)) continue;

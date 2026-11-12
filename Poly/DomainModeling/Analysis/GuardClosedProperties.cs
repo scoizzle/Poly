@@ -1,4 +1,5 @@
 using Poly.DomainModeling.Ontology;
+using Poly.DomainModeling.Ontology.Constraints;
 
 namespace Poly.DomainModeling.Analysis;
 
@@ -19,7 +20,7 @@ namespace Poly.DomainModeling.Analysis;
 ///     <c>invoke</c> is just another action of its own entity, so it is one of these): proven only for a literal
 ///     that satisfies every constraint. A parameter, property copy or arithmetic value is NOT proven — action
 ///     parameter constraints are not enforced when an action runs, and the assign guard is the thing C-1 elides.</item>
-///   <item><b>Entry-assigned</b> (first stage's top-level entry assign): not a Create argument; the entry assign
+///   <item><b>Entry-assigned</b> (initial stage's top-level entry assign): not a Create argument; the entry assign
 ///     overwrites the CLR default and is proven as an assign.</item>
 /// </list>
 /// Entity-wide blockers (every property false): an action bound to an imported contract (library-contributed body is
@@ -217,11 +218,11 @@ internal static class GuardClosedProperties {
                         return false;
                     if (range.Minimum is not null
                         && !sourceRanges.Any(s => s.Intervals is null && s.Minimum is not null
-                            && TryCompare(s.Minimum, range.Minimum) is >= 0))
+                            && ConstraintMerge.TryCompare(s.Minimum, range.Minimum) is >= 0))
                         return false;
                     if (range.Maximum is not null
                         && !sourceRanges.Any(s => s.Intervals is null && s.Maximum is not null
-                            && TryCompare(s.Maximum, range.Maximum) is <= 0))
+                            && ConstraintMerge.TryCompare(s.Maximum, range.Maximum) is <= 0))
                         return false;
                     break;
                 case LengthConstraint length when isText:
@@ -246,17 +247,6 @@ internal static class GuardClosedProperties {
             }
         }
         return true;
-    }
-
-    private static int? TryCompare(object left, object right) {
-        try {
-            if (left is int or long && right is int or long)
-                return Convert.ToInt64(left).CompareTo(Convert.ToInt64(right));
-            return Convert.ToDouble(left).CompareTo(Convert.ToDouble(right));
-        }
-        catch (Exception e) when (e is InvalidCastException or FormatException or OverflowException) {
-            return null;
-        }
     }
 
     /// <summary>Why the create guard does not fully cover <paramref name="constraint"/>, or null when it does.</summary>

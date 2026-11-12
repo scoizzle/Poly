@@ -49,9 +49,9 @@ app.MapPost("/api/notes/{id}/setbody", async (int id, SetBodyDto dto, TDbCtx db)
     try
     {
         var result = entity.SetBody(dto.V);
-        await db.SaveChangesAsync();
         if (result.IsSuccess)
         {
+            await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
         else
@@ -74,9 +74,9 @@ app.MapPost("/api/notes/{id}/setmemo", async (int id, SetMemoDto dto, TDbCtx db)
     try
     {
         var result = entity.SetMemo(dto.V);
-        await db.SaveChangesAsync();
         if (result.IsSuccess)
         {
+            await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
         else

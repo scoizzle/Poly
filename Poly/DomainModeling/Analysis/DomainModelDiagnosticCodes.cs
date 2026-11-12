@@ -38,6 +38,13 @@ internal static class DomainModelDiagnosticCodes {
     public const string InvalidKeyDesignation = "DMSTR007";
 
     /// <summary>
+    /// An entity's <c>initial(Stage)</c> designation (#675) names no stage of that entity, or the
+    /// entity declares none. <see cref="Ontology.EntityStages.InitialStage"/> falls back to the first
+    /// declared stage so create still works; this is the error that says the designation is wrong.
+    /// </summary>
+    public const string InvalidInitialStageDesignation = "DMINI001";
+
+    /// <summary>
     /// Two members of one entity share a generated identifier: the C# member name (a
     /// property keeps its name, a navigation is PascalCased, an action and a policy keep
     /// theirs) or the constructor-parameter name (<c>ToCamelCase</c>). The two names differ
@@ -222,6 +229,28 @@ internal static class DomainModelDiagnosticCodes {
     /// dispatch plan cannot fire, the loop matches nothing, and the expression reads an empty
     /// set. Only an explicit link (or a host) can populate it.
     public const string UnwrittenRelationship = "DMREL002";
+
+    /// <summary>
+    /// A navigation's <c>via</c> clause names something the target entity does not
+    /// declare as a navigation. A property of that name does not pair: the clause
+    /// names the navigation that points back.
+    /// </summary>
+    public const string InverseUnknown = "DMREL003";
+
+    /// <summary>
+    /// Two sides of a <c>via</c> pairing contradict each other: the named navigation
+    /// points elsewhere, declares a different inverse, is the navigation itself, is
+    /// owned on both ends, or two navigations on one entity claim the same undeclared
+    /// inverse.
+    /// </summary>
+    public const string InverseContradictory = "DMREL004";
+
+    /// <summary>
+    /// Two or more navigations from one entity to the same target (same cardinality
+    /// class) with a navigation on the target pointing back, and no side declaring
+    /// <c>via</c>. The pairing is undeclared and ambiguous — declare <c>via</c>.
+    /// </summary>
+    public const string InverseAmbiguous = "DMREL005";
 
     // Retired: nested invoke/create/transition now lower (session.Lower). Kept so
     // historical messages remain identifiable; analysis no longer reports it.

@@ -13,13 +13,13 @@ public class Account
     private List<Contact> _contacts = new List<Contact>();
     private List<Opportunity> _opportunities = new List<Opportunity>();
     private List<Ticket> _tickets = new List<Ticket>();
-    private Account(Industry industry, string name, Account? parent = null, Site? hq = null, IEnumerable<Contact>? contacts = null, IEnumerable<Opportunity>? opportunities = null, IEnumerable<Ticket>? tickets = null, long closedTickets = 0L, decimal openPipeline = 0L, long wonCount = 0L)
+    private Account(string name, Industry industry, Account? parent = null, Site? hq = null, IEnumerable<Contact>? contacts = null, IEnumerable<Opportunity>? opportunities = null, IEnumerable<Ticket>? tickets = null, long wonCount = 0L, decimal openPipeline = 0m, long closedTickets = 0L)
     {
-        this.Industry = industry;
         this.Name = name;
-        this.ClosedTickets = closedTickets;
-        this.OpenPipeline = openPipeline;
+        this.Industry = industry;
         this.WonCount = wonCount;
+        this.OpenPipeline = openPipeline;
+        this.ClosedTickets = closedTickets;
         this.Parent = parent;
         this.Hq = hq;
         this._contacts = new List<Contact>(contacts ?? new List<Contact>());
@@ -28,11 +28,11 @@ public class Account
         this.CurrentStage = AccountStage.Open;
         this.InitializeSubscriptions();
     }
-    public long ClosedTickets { get; private set; }
-    public Industry Industry { get; private set; }
     public string Name { get; private set; } = default!;
-    public decimal OpenPipeline { get; private set; }
+    public Industry Industry { get; private set; }
     public long WonCount { get; private set; }
+    public decimal OpenPipeline { get; private set; }
+    public long ClosedTickets { get; private set; }
     public Account? Parent { get; private set; }
     public Site? Hq { get; private set; }
     public IReadOnlyList<Contact> Contacts
@@ -59,9 +59,9 @@ public class Account
         this.Hq = site;
         return DomainResult<Site>.Success(site);
     }
-    public DomainResult<Contact> CreateContacts(string email, string name)
+    public DomainResult<Contact> CreateContacts(string name, string email)
     {
-        var contactResult = Contact.Create(email, name, this);
+        var contactResult = Contact.Create(name, email, this);
         if (!contactResult.IsSuccess)
         {
             return DomainResult<Contact>.Failure(contactResult.ErrorMessage ?? "");
@@ -73,9 +73,9 @@ public class Account
     {
         this._contacts.Add(child);
     }
-    public DomainResult<Opportunity> CreateOpportunities(decimal amount, string title, Contact? contact = null, DateOnly? closeBy = null)
+    public DomainResult<Opportunity> CreateOpportunities(string title, decimal amount, Contact? contact = null, DateOnly? closeBy = null)
     {
-        var opportunityResult = Opportunity.Create(amount, title, this, contact, new List<Activity>(), new List<Line>(), new List<Quote>(), closeBy);
+        var opportunityResult = Opportunity.Create(title, amount, this, contact, new List<Activity>(), new List<Line>(), new List<Quote>(), closeBy);
         if (!opportunityResult.IsSuccess)
         {
             return DomainResult<Opportunity>.Failure(opportunityResult.ErrorMessage ?? "");
@@ -129,7 +129,7 @@ public class Account
         {
             return DomainResult<Contact>.Failure("'AddContact' requires stage 'Open' on entity 'Account'.");
         }
-        var create0 = this.CreateContacts(email, name);
+        var create0 = this.CreateContacts(name, email);
         if (!create0.IsSuccess)
         {
             return DomainResult<Contact>.Failure(create0.ErrorMessage ?? "");
@@ -143,7 +143,7 @@ public class Account
         {
             return DomainResult<Contact>.Failure("'ConvertLead' requires stage 'Open' on entity 'Account'.");
         }
-        var create0 = this.CreateContacts(lead.Email, lead.Name);
+        var create0 = this.CreateContacts(lead.Name, lead.Email);
         if (!create0.IsSuccess)
         {
             return DomainResult<Contact>.Failure(create0.ErrorMessage ?? "");
@@ -157,7 +157,7 @@ public class Account
         {
             return DomainResult<Opportunity>.Failure("'OpenDeal' requires stage 'Open' on entity 'Account'.");
         }
-        var create0 = this.CreateOpportunities(amount, title);
+        var create0 = this.CreateOpportunities(title, amount);
         if (!create0.IsSuccess)
         {
             return DomainResult<Opportunity>.Failure(create0.ErrorMessage ?? "");
@@ -219,8 +219,12 @@ public class Account
     {
         this.ClosedTickets = this.ClosedTickets + 1L;
     }
-    public static DomainResult<Account> Create(Industry industry, string name, Account? parent = null, Site? hq = null, IEnumerable<Contact>? contacts = null, IEnumerable<Opportunity>? opportunities = null, IEnumerable<Ticket>? tickets = null, long closedTickets = 0L, decimal openPipeline = 0L, long wonCount = 0L)
+    public static DomainResult<Account> Create(string name, Industry industry, Account? parent = null, Site? hq = null, IEnumerable<Contact>? contacts = null, IEnumerable<Opportunity>? opportunities = null, IEnumerable<Ticket>? tickets = null, long wonCount = 0L, decimal openPipeline = 0m, long closedTickets = 0L)
     {
+        if (string.IsNullOrEmpty(name))
+        {
+            return DomainResult<Account>.Failure("'Name' is required.");
+        }
         if ((object)industry == null)
         {
             return DomainResult<Account>.Failure("'Industry' is required.");
@@ -229,11 +233,7 @@ public class Account
         {
             return DomainResult<Account>.Failure(string.Concat("'", industry, "' is not a valid member of Industry for property 'Industry'."));
         }
-        if (string.IsNullOrEmpty(name))
-        {
-            return DomainResult<Account>.Failure("'Name' is required.");
-        }
-        var created = new Account(industry, name, parent, hq, contacts, opportunities, tickets, closedTickets, openPipeline, wonCount);
+        var created = new Account(name, industry, parent, hq, contacts, opportunities, tickets, wonCount, openPipeline, closedTickets);
         return DomainResult<Account>.Success(created);
     }
     private void InitializeSubscriptions()

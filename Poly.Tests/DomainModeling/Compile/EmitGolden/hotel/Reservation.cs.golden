@@ -20,30 +20,30 @@ public class Reservation
     private List<Room>? _roomStaysNoShowSubscribers;
     private List<Guest>? _guestReservationsDepartedSubscribers;
     private int _notifyDepth;
-    private Reservation(DateOnly checkInDate, DateOnly checkOutDate, long maxOccupancy, decimal nightlyRate, long nights, long partySize, Folio? folio = null, Guest? guest = null, Room? room = null)
+    private Reservation(long partySize, long nights, decimal nightlyRate, long maxOccupancy, DateOnly checkInDate, DateOnly checkOutDate, Folio? folio = null, Guest? guest = null, Room? room = null)
     {
+        this.PartySize = partySize;
+        this.Nights = nights;
+        this.NightlyRate = nightlyRate;
+        this.MaxOccupancy = maxOccupancy;
         this.CheckInDate = checkInDate;
         this.CheckOutDate = checkOutDate;
-        this.MaxOccupancy = maxOccupancy;
-        this.NightlyRate = nightlyRate;
-        this.Nights = nights;
-        this.PartySize = partySize;
         this.Folio = folio;
         this.Guest = guest;
         this.Room = room;
         this.CurrentStage = ReservationStage.Requested;
     }
+    public long PartySize { get; private set; }
+    public long Nights { get; private set; }
+    public decimal NightlyRate { get; private set; }
+    public long MaxOccupancy { get; private set; }
     public DateOnly CheckInDate { get; private set; }
     public DateOnly CheckOutDate { get; private set; }
-    public long MaxOccupancy { get; private set; }
-    public decimal NightlyRate { get; private set; }
-    public long Nights { get; private set; }
-    public long PartySize { get; private set; }
     public Folio? Folio { get; private set; }
     public Guest? Guest { get; private set; }
     public Room? Room { get; private set; }
     public ReservationStage CurrentStage { get; private set; }
-    public DomainResult<Folio> CreateFolio(decimal balance = 0L)
+    public DomainResult<Folio> CreateFolio(decimal balance = 0m)
     {
         var folioResult = Folio.Create(this, balance);
         if (!folioResult.IsSuccess)
@@ -331,23 +331,15 @@ public class Reservation
             this.ExitNotifyCascade();
         }
     }
-    public static DomainResult<Reservation> Create(DateOnly checkInDate, DateOnly checkOutDate, long maxOccupancy, decimal nightlyRate, long nights, long partySize, Folio? folio = null, Guest? guest = null, Room? room = null)
+    public static DomainResult<Reservation> Create(long partySize, long nights, decimal nightlyRate, long maxOccupancy, DateOnly checkInDate, DateOnly checkOutDate, Folio? folio = null, Guest? guest = null, Room? room = null)
     {
-        if (maxOccupancy < 1L)
+        if (partySize < 1L)
         {
-            return DomainResult<Reservation>.Failure("'MaxOccupancy' must be >= 1.");
+            return DomainResult<Reservation>.Failure("'PartySize' must be >= 1.");
         }
-        if (maxOccupancy > 8L)
+        if (partySize > 8L)
         {
-            return DomainResult<Reservation>.Failure("'MaxOccupancy' must be <= 8.");
-        }
-        if (nightlyRate < 0m)
-        {
-            return DomainResult<Reservation>.Failure("'NightlyRate' must be >= 0.");
-        }
-        if (nightlyRate > 10000m)
-        {
-            return DomainResult<Reservation>.Failure("'NightlyRate' must be <= 10000.");
+            return DomainResult<Reservation>.Failure("'PartySize' must be <= 8.");
         }
         if (nights < 1L)
         {
@@ -357,15 +349,23 @@ public class Reservation
         {
             return DomainResult<Reservation>.Failure("'Nights' must be <= 60.");
         }
-        if (partySize < 1L)
+        if (nightlyRate < 0m)
         {
-            return DomainResult<Reservation>.Failure("'PartySize' must be >= 1.");
+            return DomainResult<Reservation>.Failure("'NightlyRate' must be >= 0.");
         }
-        if (partySize > 8L)
+        if (nightlyRate > 10000m)
         {
-            return DomainResult<Reservation>.Failure("'PartySize' must be <= 8.");
+            return DomainResult<Reservation>.Failure("'NightlyRate' must be <= 10000.");
         }
-        var created = new Reservation(checkInDate, checkOutDate, maxOccupancy, nightlyRate, nights, partySize, folio, guest, room);
+        if (maxOccupancy < 1L)
+        {
+            return DomainResult<Reservation>.Failure("'MaxOccupancy' must be >= 1.");
+        }
+        if (maxOccupancy > 8L)
+        {
+            return DomainResult<Reservation>.Failure("'MaxOccupancy' must be <= 8.");
+        }
+        var created = new Reservation(partySize, nights, nightlyRate, maxOccupancy, checkInDate, checkOutDate, folio, guest, room);
         if (guest != null)
         {
             guest.AttachReservations(created);

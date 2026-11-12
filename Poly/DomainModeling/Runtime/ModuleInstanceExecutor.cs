@@ -10,6 +10,7 @@ using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.Vm;
 using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
+using Poly.Runtime;
 
 using Action = Poly.DomainModeling.Ontology.Action;
 
@@ -168,13 +169,12 @@ public sealed partial class ModuleInstanceExecutor {
                     instance.Bag[name] = value;
                     return;
                 }
-                if (_port.Exists(instance.EntityName, name, text))
+                if (!_port.TryReserve(instance.EntityName, name, text))
                     throw new InvalidOperationException(
                         $"Unique constraint violated: '{name}' value is already used on another '{instance.EntityName}'.");
                 if (current is not null)
                     _port.Release(instance.EntityName, name,
                         Convert.ToString(current, System.Globalization.CultureInfo.InvariantCulture) ?? "");
-                _port.Record(instance.EntityName, name, text);
             }
             instance.Bag[name] = value;
         }

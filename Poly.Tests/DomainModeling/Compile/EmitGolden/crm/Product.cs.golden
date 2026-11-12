@@ -1,29 +1,17 @@
 #nullable enable
 public class Product
 {
-    private Product(decimal listPrice, string name, string sku)
+    private Product(string sku, string name, decimal listPrice)
     {
-        this.ListPrice = listPrice;
-        this.Name = name;
         this.Sku = sku;
+        this.Name = name;
+        this.ListPrice = listPrice;
     }
-    public decimal ListPrice { get; private set; }
-    public string Name { get; private set; } = default!;
     public string Sku { get; private set; } = default!;
-    public static DomainResult<Product> Create(decimal listPrice, string name, string sku)
+    public string Name { get; private set; } = default!;
+    public decimal ListPrice { get; private set; }
+    public static DomainResult<Product> Create(string sku, string name, decimal listPrice)
     {
-        if (listPrice < 0m)
-        {
-            return DomainResult<Product>.Failure("'ListPrice' must be >= 0.");
-        }
-        if (listPrice > 100000000m)
-        {
-            return DomainResult<Product>.Failure("'ListPrice' must be <= 100000000.");
-        }
-        if (string.IsNullOrEmpty(name))
-        {
-            return DomainResult<Product>.Failure("'Name' is required.");
-        }
         if (string.IsNullOrEmpty(sku))
         {
             return DomainResult<Product>.Failure("'Sku' is required.");
@@ -36,7 +24,19 @@ public class Product
         {
             return DomainResult<Product>.Failure("'Sku' must be at most 32 characters.");
         }
-        var created = new Product(listPrice, name, sku);
+        if (string.IsNullOrEmpty(name))
+        {
+            return DomainResult<Product>.Failure("'Name' is required.");
+        }
+        if (listPrice < 0m)
+        {
+            return DomainResult<Product>.Failure("'ListPrice' must be >= 0.");
+        }
+        if (listPrice > 100000000m)
+        {
+            return DomainResult<Product>.Failure("'ListPrice' must be <= 100000000.");
+        }
+        var created = new Product(sku, name, listPrice);
         return DomainResult<Product>.Success(created);
     }
     public DomainResult EnsureUnique(string propertyName, object value)

@@ -11,16 +11,16 @@ public class Property
 {
     private List<Hall> _halls = new List<Hall>();
     private List<Room> _rooms = new List<Room>();
-    private Property(string city, string name, IEnumerable<Hall>? halls = null, IEnumerable<Room>? rooms = null)
+    private Property(string name, string city, IEnumerable<Hall>? halls = null, IEnumerable<Room>? rooms = null)
     {
-        this.City = city;
         this.Name = name;
+        this.City = city;
         this._halls = new List<Hall>(halls ?? new List<Hall>());
         this._rooms = new List<Room>(rooms ?? new List<Room>());
         this.CurrentStage = PropertyStage.Open;
     }
-    public string City { get; private set; } = default!;
     public string Name { get; private set; } = default!;
+    public string City { get; private set; } = default!;
     public IReadOnlyList<Hall> Halls
     {
         get => this._halls;
@@ -30,9 +30,9 @@ public class Property
         get => this._rooms;
     }
     public PropertyStage CurrentStage { get; private set; }
-    public DomainResult<Hall> CreateHalls(long capacity, decimal dayRate, string name, long busySections = 0L, bool occupied = false, bool offline = false)
+    public DomainResult<Hall> CreateHalls(string name, long capacity, decimal dayRate, bool occupied = false, bool offline = false, long busySections = 0L)
     {
-        var hallResult = Hall.Create(capacity, dayRate, name, this, new List<Section>(), busySections, occupied, offline);
+        var hallResult = Hall.Create(name, capacity, dayRate, this, new List<Section>(), occupied, offline, busySections);
         if (!hallResult.IsSuccess)
         {
             return DomainResult<Hall>.Failure(hallResult.ErrorMessage ?? "");
@@ -54,7 +54,7 @@ public class Property
         {
             return DomainResult<Hall>.Failure("'AddHall' requires stage 'Open' on entity 'Property'.");
         }
-        var create0 = this.CreateHalls(seats, rate, name);
+        var create0 = this.CreateHalls(name, seats, rate);
         if (!create0.IsSuccess)
         {
             return DomainResult<Hall>.Failure(create0.ErrorMessage ?? "");
@@ -81,20 +81,8 @@ public class Property
         return DomainResult.Success();
     }
     public bool HasHalls() => this.Halls.Count > 0;
-    public static DomainResult<Property> Create(string city, string name, IEnumerable<Hall>? halls = null, IEnumerable<Room>? rooms = null)
+    public static DomainResult<Property> Create(string name, string city, IEnumerable<Hall>? halls = null, IEnumerable<Room>? rooms = null)
     {
-        if (string.IsNullOrEmpty(city))
-        {
-            return DomainResult<Property>.Failure("'City' is required.");
-        }
-        if (city.Length < 1L)
-        {
-            return DomainResult<Property>.Failure("'City' must be at least 1 characters.");
-        }
-        if (city.Length > 60L)
-        {
-            return DomainResult<Property>.Failure("'City' must be at most 60 characters.");
-        }
         if (string.IsNullOrEmpty(name))
         {
             return DomainResult<Property>.Failure("'Name' is required.");
@@ -107,7 +95,19 @@ public class Property
         {
             return DomainResult<Property>.Failure("'Name' must be at most 80 characters.");
         }
-        var created = new Property(city, name, halls, rooms);
+        if (string.IsNullOrEmpty(city))
+        {
+            return DomainResult<Property>.Failure("'City' is required.");
+        }
+        if (city.Length < 1L)
+        {
+            return DomainResult<Property>.Failure("'City' must be at least 1 characters.");
+        }
+        if (city.Length > 60L)
+        {
+            return DomainResult<Property>.Failure("'City' must be at most 60 characters.");
+        }
+        var created = new Property(name, city, halls, rooms);
         return DomainResult<Property>.Success(created);
     }
 }

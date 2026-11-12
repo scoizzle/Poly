@@ -7,8 +7,11 @@ using StepResult = (bool Success, string? Message, object? Value);
 
 namespace Poly.Tests.TestHelpers;
 
-sealed class SimulateSide(Domain domain) : ParitySide(domain) {
+sealed class SimulateSide(Domain domain, IReadOnlySet<string>? recordedExceptions = null, bool recordPostThrowState = false)
+    : ParitySide(domain, recordedExceptions, recordPostThrowState) {
     readonly ModuleInstanceExecutor _exec = ModuleExec.For(domain);
+
+    public override string Name => "simulate";
 
     protected override StepResult CreateCore(Entity model, (string Name, object? Value)[] values) {
         var properties = values.Where(v => LinksOf(v.Value) is null)
@@ -53,6 +56,15 @@ sealed class SimulateSide(Domain domain) : ParitySide(domain) {
         return (result.Succeeded, result.Error, null);
     }
 
+    protected override StepResult LinkCore(string relationship, object?[] targets) {
+        foreach (var target in targets) {
+            var outcome = _exec.Link(relationship, (ModuleInstance)Current, (ModuleInstance)target!);
+            if (!outcome.Succeeded)
+                return (false, outcome.Error, null);
+        }
+        return (true, null, null);
+    }
+
     protected override object? EvaluateCore(string policy) =>
         _exec.EvaluatePolicy((ModuleInstance)Current, policy);
 
@@ -86,8 +98,11 @@ sealed class SimulateSide(Domain domain) : ParitySide(domain) {
     }
 }
 
-sealed class PrintedSide(Domain domain, Assembly assembly) : ParitySide(domain) {
+sealed class PrintedSide(Domain domain, Assembly assembly, IReadOnlySet<string>? recordedExceptions = null, bool recordPostThrowState = false)
+    : ParitySide(domain, recordedExceptions, recordPostThrowState) {
     internal RecordingStoragePort Port { get; } = new();
+
+    public override string Name => "printed";
 
     protected override StepResult CreateCore(Entity model, (string Name, object? Value)[] values) {
         var arguments = values.Select(v => {
@@ -134,6 +149,18 @@ sealed class PrintedSide(Domain domain, Assembly assembly) : ParitySide(domain) 
     }
 
     protected override object? EvaluateCore(string policy) => Method(policy).Invoke(Current, null);
+
+    /// <summary>The printed inverse of a create-in: <c>Attach&lt;Nav&gt;(child)</c>, internal, void.</summary>
+    protected override StepResult LinkCore(string relationship, object?[] targets) {
+        var name = "Attach" + char.ToUpperInvariant(relationship[0]) + relationship[1..];
+        var method = Current.GetType()
+            .GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+            .FirstOrDefault(m => m.Name == name && m.GetParameters().Length == 1)
+            ?? throw new ArgumentException($"Printed type '{Current.GetType().Name}' has no '{name}'.");
+        foreach (var target in targets)
+            method.Invoke(Current, [target]);
+        return (true, null, null);
+    }
 
     protected override string TypeName(object entity) => entity.GetType().Name;
 

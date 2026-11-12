@@ -22,6 +22,29 @@ internal static class ConstraintValidation {
         return ConstraintKinds.Of(constraint)?.Evaluate(constraint, value) ?? ConstraintVerdict.Undecided;
     }
 
+    /// <summary>The flow-side default for a kind that has no decision: never Satisfied (fail closed).</summary>
+    internal static ConstraintVerdict Undecided(Constraint constraint, AbstractValue value) =>
+        ConstraintVerdict.Undecided;
+
+    /// <summary>
+    /// Decides whether a non-literal <paramref name="value"/> can satisfy <paramref name="constraint"/>.
+    /// An unregistered kind is Undecided (fail closed), exactly like <see cref="Evaluate"/>.
+    /// </summary>
+    internal static ConstraintVerdict Decide(Constraint constraint, AbstractValue value) {
+        ArgumentNullException.ThrowIfNull(constraint);
+        ArgumentNullException.ThrowIfNull(value);
+        return ConstraintKinds.Of(constraint)?.Decide(constraint, value) ?? ConstraintVerdict.Undecided;
+    }
+
+    /// <summary>
+    /// Whether a non-literal write must be verified against <paramref name="constraint"/>. An unregistered
+    /// kind is relevant (fail closed): a kind nobody models warns instead of being skipped.
+    /// </summary>
+    internal static bool IsWriteRelevant(Constraint constraint) {
+        ArgumentNullException.ThrowIfNull(constraint);
+        return ConstraintKinds.Of(constraint)?.WriteRelevant ?? true;
+    }
+
     /// <summary>Reports the shared DMCS003 warning for a constraint kind analysis does not model.</summary>
     public static void ReportUndecided(AnalysisContext context, Node node, Constraint constraint, string where) =>
         context.ReportWarning(
@@ -71,27 +94,65 @@ internal static class ConstraintValidation {
         return $"range({lo}, {hi})";
     }
 
-    private static string FormatValue(object v) => v switch {
-        double d => d == Math.Floor(d) ? d.ToString("F0") : d.ToString("G"),
-        _ => v.ToString() ?? "?"
-    };
+    private static string FormatValue(object v) => v.ToString() ?? "?";
 
     // ── Individual constraint checks ──────────────────────────────────────
 
-    /// <summary>In any interval of a union (exact), or in the single interval of a plain range.</summary>
+    /// <summary>In any interval of a union, or in the single interval of a plain range.</summary>
     internal static bool IsInRangeUnion(object? value, RangeConstraint range) =>
-        range.Intervals is { } set
-            ? set.Any(i => IsInRange(value, i.Minimum, i.Maximum))
-            : IsInRange(value, range.Minimum, range.Maximum);
+        RangeVerdict(range, value) == ConstraintVerdict.Satisfied;
 
-    internal static bool IsInRange(object? value, object? min, object? max) {
-        if (value is null) return false; // null is never in range
-        // Same ordering rule as the merge/join (ConstraintMerge.TryCompare); a value that cannot be
-        // ordered against a bound is not in range (fail closed), never coerced or skipped.
-        if (min is not null && ConstraintMerge.TryCompare(value, min) is not >= 0) return false;
-        if (max is not null && ConstraintMerge.TryCompare(value, max) is not <= 0) return false;
-        return true;
+    /// <summary>
+    /// Tri-state range membership over a range's intervals. A value that cannot be ordered against a
+    /// bound is <c>Undecided</c>, never <c>Violated</c>: an ordering analysis cannot make is not proof
+    /// that the value lies outside (#680 F2).
+    /// </summary>
+    internal static ConstraintVerdict RangeVerdict(RangeConstraint range, object? value) {
+        if (value is null) return ConstraintVerdict.Violated; // null is never in range
+        var undecided = false;
+        foreach (var (min, max) in IntervalsOf(range)) {
+            switch (InInterval(value, min, max)) {
+                case ConstraintVerdict.Satisfied:
+                    return ConstraintVerdict.Satisfied;
+                case ConstraintVerdict.Undecided:
+                    undecided = true;
+                    break;
+            }
+        }
+        return undecided ? ConstraintVerdict.Undecided : ConstraintVerdict.Violated;
     }
+
+    private static IEnumerable<(object? Min, object? Max)> IntervalsOf(RangeConstraint range) =>
+        range.Intervals is { } set
+            ? set.Select(interval => (interval.Minimum, interval.Maximum))
+            : [(range.Minimum, range.Maximum)];
+
+    internal static bool IsInRange(object? value, object? min, object? max) =>
+        value is not null && InInterval(value, min, max) == ConstraintVerdict.Satisfied;
+
+    /// <summary>One interval's membership. Same ordering rule as the merge/join
+    /// (ConstraintMerge.TryCompare). A numeric pair that cannot be ordered is Undecided, never
+    /// coerced or skipped; a value from another type family is definitely not in a numeric range.</summary>
+    private static ConstraintVerdict InInterval(object value, object? min, object? max) {
+        if (min is not null) {
+            if (ConstraintMerge.TryCompare(value, min) is not { } lower) return Unorderable(value, min);
+            if (lower < 0) return ConstraintVerdict.Violated;
+        }
+        if (max is not null) {
+            if (ConstraintMerge.TryCompare(value, max) is not { } upper) return Unorderable(value, max);
+            if (upper > 0) return ConstraintVerdict.Violated;
+        }
+        return ConstraintVerdict.Satisfied;
+    }
+
+    /// <summary>Two numbers whose order analysis cannot decide are Undecided; anything else is a
+    /// different type family and cannot be in the range at all.</summary>
+    private static ConstraintVerdict Unorderable(object value, object bound) =>
+        IsNumeric(value) && IsNumeric(bound) ? ConstraintVerdict.Undecided : ConstraintVerdict.Violated;
+
+    private static bool IsNumeric(object? value) =>
+        value is sbyte or byte or short or ushort or int or uint or long or ulong
+            or float or double or decimal;
 
     internal static bool IsValidLength(object? value, int minLength, int maxLength) {
         if (value is not string s) return false;
@@ -100,11 +161,6 @@ internal static class ConstraintValidation {
 
     internal static bool IsValidPattern(object? value, string pattern) {
         if (value is not string s) return false;
-        try {
-            return Regex.IsMatch(s, pattern);
-        }
-        catch (RegexParseException) {
-            return false;
-        }
+        return PatternSemantics.TryMatch(s, pattern);
     }
 }

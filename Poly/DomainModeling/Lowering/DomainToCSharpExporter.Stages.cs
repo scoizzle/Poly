@@ -11,12 +11,16 @@ namespace Poly.DomainModeling.Lowering;
 // Stages: the stage enum, CurrentStage membership, and the automatic-transition loop guard.
 public sealed partial class DomainToCSharpExporter {
     /// <summary>
-    /// Enumeration type with a static const string field per member, defaulted to the member name.
+    /// Enumeration type with a static const field per member, typed as the enum and
+    /// defaulted to the member name. The printer reads the member name only, so the
+    /// printed C# is unchanged; the VM reads the const as a boxed object, so stored
+    /// values stay the member name string. The declared type is what lets a lowered
+    /// enum argument resolve against the Create signature (#485, D1).
     /// </summary>
     internal static TypeDefinitionNode BuildEnumTypeDef(string name, IEnumerable<string> memberNames) {
         var fields = memberNames.Select(memberName => new FieldDefinitionNode(
             memberName,
-            new PrimitiveTypeReference(PrimType.String),
+            new NamedTypeReference(name),
             DefaultValue: new Constant(memberName),
             IsStatic: true,
             IsConst: true,

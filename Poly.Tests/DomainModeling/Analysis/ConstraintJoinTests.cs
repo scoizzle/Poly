@@ -79,7 +79,13 @@ public class ConstraintJoinTests {
     }
 
     [Test]
-    public async Task Join_CrossNumericBounds_UseDouble() {
+    public async Task Join_CrossNumericBounds_UseExactOrdering() {
+        // V-05a: two numeric types compare through ExactNumber, so an integral cross-numeric pair
+        // still joins to its hull. The V-05a fix-round restatement flipped the fractional-double case
+        // to null; that was the same F1 loss of the range axis, so the hull is restored.
+        var joined = (RangeConstraint)R(1, 2).Join(R(0L, 3L))!;
+        await Assert.That(joined.Minimum).IsEqualTo(0L);
+        await Assert.That(joined.Maximum).IsEqualTo(3L);
         await Assert.That(Same(R(1, 2).Join(R(0.5, 3.5)), R(0.5, 3.5))).IsTrue();
     }
 

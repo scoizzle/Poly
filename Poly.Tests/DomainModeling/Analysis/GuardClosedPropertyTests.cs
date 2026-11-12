@@ -364,4 +364,16 @@ public class GuardClosedPropertyTests {
         await Assert.That(result.Closed.Contains("Qty")).IsFalse();
         await Assert.That(result.Closed.Contains("Score")).IsFalse();
     }
+
+    [Test]
+    public async Task GuardElided_DecimalBoundAbove2Pow53_IsNotClosed() {
+        // V-05a T8: the source maximum ...992.0000001 is above the target maximum ...992, so the
+        // source does not imply the target. Both round to ...992.0 through double, which proves it.
+        var result = Compute(
+            [Prop("S", "Decimal", new RangeConstraint(0m, 9007199254740992.0000001m)),
+             Prop("T", "Decimal", new RangeConstraint(0m, 9007199254740992m))],
+            [Act("Copy", null, Copy("T", "S"))]);
+
+        await Assert.That(result.Closed.Contains("T")).IsFalse();
+    }
 }

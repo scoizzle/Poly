@@ -129,13 +129,19 @@ public class RangeBoundExactnessTests {
 
     [Test]
     public async Task NonNumberFamilyBounds_AreBothDecimal_AndOrderIsStillChecked() {
-        var result = Apply(Entity("Double range(3, 2.6)"));
-        var range = Bind(result.Root!);
+        var poly = Entity("Text range(3, 2.6)");
+        var range = new PolyDslParser(poly).Parse()
+            .OfType<AddConstraintToPropertyChange>()
+            .Select(c => c.Constraint)
+            .OfType<RangeConstraint>()
+            .Single();
 
         await Assert.That(range.Minimum).IsTypeOf<decimal>();
         await Assert.That(range.Maximum).IsTypeOf<decimal>();
         await Assert.That((decimal)range.Minimum!).IsEqualTo(3m);
         await Assert.That((decimal)range.Maximum!).IsEqualTo(2.6m);
+
+        var result = Apply(poly);
         await Assert.That(result.Analysis.Diagnostics.Any(d =>
             d.Code == DomainModelDiagnosticCodes.ConstraintSatisfiability
             && d.Message.Contains("minimum exceeds maximum"))).IsTrue();
@@ -153,20 +159,17 @@ public class RangeBoundExactnessTests {
         """;
 
     [Test]
-    public async Task Assign_ConstantAboveExactBound_IsRejected_NotGuardElided() {
-        var (domain, analysis, session) = Evolve(AssignDsl);
-        var exec = ModuleExec.For(domain);
-        var q = exec.Create("Q", new Dictionary<string, object?>());
-        var simulated = exec.Invoke(q.Instance!, "Bump", new Dictionary<string, object?>());
+    public async Task Assign_ConstantAboveExactBound_IsRejectedBeforeLowering() {
+        // The probe reproduced on master (the sim accepted …807); the exact bound parse now makes
+        // the analysis gate reject the literal before any guard is elided. The lowering guard's
+        // double comparison stays as defense-in-depth (see EffectLoweringPass.Assign.cs).
+        var result = ApplySession(AssignDsl, out _);
+        var violation = result.Analysis.Diagnostics.Single(d =>
+            d.Code == DomainModelDiagnosticCodes.EffectConstraintViolation);
 
-        var source = new CSharpGenerator().Generate(session.Lower(domain, analysis));
-        var assembly = WhenAnySimulatePrintAgreeTests.CompileGenerated(source, "RangeAssignParity");
-        var port = new InMemoryStoragePort();
-        var printed = TryCreate(assembly, "Q", ("db", (object?)port));
-        var printedBump = TryInvoke(printed.Instance!, "Bump", ("db", (object?)port));
-
-        await Assert.That(simulated.Succeeded).IsFalse();
-        await Assert.That(printedBump.Succeeded).IsFalse();
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(violation.Message).Contains("9223372036854775807");
+        await Assert.That(violation.Message).Contains("range(0, 9223372036854775806)");
     }
 
     // ── helpers ──────────────────────────────────────────────────────────
@@ -181,15 +184,19 @@ public class RangeBoundExactnessTests {
     }
 
     private static (Domain Domain, AnalysisResult Analysis, DomainSession Session) Evolve(string poly) {
-        var session = DomainSession.ForSource(poly, [.. ExtensionCatalog.ProductAuthoring, "persistence"]);
-        var changes = new PolyDslParser(poly, session).Parse();
-        var result = new DomainEvolution(DomainTestFactory.Create("_", [], []))
-            .ApplyAndAnalyze(changes, session: session);
+        var result = ApplySession(poly, out var session);
         if (!result.Succeeded)
             throw new InvalidOperationException(string.Join("; ", result.Analysis.Diagnostics
                 .Where(d => d.Severity == DiagnosticSeverity.Error)
                 .Select(d => d.Message)));
         return (result.Root!, result.Analysis, session);
+    }
+
+    private static EvolutionResult ApplySession(string poly, out DomainSession session) {
+        session = DomainSession.ForSource(poly, [.. ExtensionCatalog.ProductAuthoring, "persistence"]);
+        var changes = new PolyDslParser(poly, session).Parse();
+        return new DomainEvolution(DomainTestFactory.Create("_", [], []))
+            .ApplyAndAnalyze(changes, session: session);
     }
 
     private static Domain Reparse(string poly) {
@@ -242,29 +249,9 @@ public class RangeBoundExactnessTests {
         var result = create.Invoke(null, args)!;
         var succeeded = (bool)result.GetType().GetProperty("IsSuccess")!.GetValue(result)!;
         var message = result.GetType().GetProperty("ErrorMessage")!.GetValue(result) as string;
-        var instance = result.GetType().GetProperty("Value")!.GetValue(result);
+        var instance = succeeded
+            ? result.GetType().GetProperty("Value")!.GetValue(result)
+            : null;
         return (succeeded, message, instance);
-    }
-
-    private static (bool Succeeded, string? Message) TryInvoke(
-        object instance, string name, params (string Name, object? Value)[] named) {
-        var method = instance.GetType().GetMethod(name, BindingFlags.Instance | BindingFlags.Public)
-            ?? throw new InvalidOperationException($"missing action {name}");
-        var parameters = method.GetParameters();
-        var byName = named.ToDictionary(n => n.Name, n => n.Value, StringComparer.OrdinalIgnoreCase);
-        var args = new object?[parameters.Length];
-        for (var i = 0; i < parameters.Length; i++) {
-            var parameter = parameters[i];
-            if (byName.TryGetValue(parameter.Name!, out var value))
-                args[i] = value;
-            else if (parameter.HasDefaultValue)
-                args[i] = parameter.DefaultValue;
-            else
-                args[i] = null;
-        }
-        var result = method.Invoke(instance, args)!;
-        var succeeded = (bool)result.GetType().GetProperty("IsSuccess")!.GetValue(result)!;
-        var message = result.GetType().GetProperty("ErrorMessage")!.GetValue(result) as string;
-        return (succeeded, message);
     }
 }

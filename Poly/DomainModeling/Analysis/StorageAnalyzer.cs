@@ -346,7 +346,8 @@ public sealed class StorageAnalyzer {
                 rel,
                 DomainTypeMapping.ToPascalCase(rel.Name),
                 isCollection,
-                inverse is null ? null : DomainTypeMapping.ToPascalCase(inverse.Name));
+                inverse is null ? null : DomainTypeMapping.ToPascalCase(inverse.Name),
+                inverse?.Cardinality is RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany);
             if (isCollection) collections.Add(nav);
             else references.Add(nav);
         }

@@ -124,6 +124,23 @@ internal sealed class ContractIntegrationAnalyzer : INodeAnalyzer {
     /// silently, and printing it public is CS0053: an error (not acknowledgeable), positioned on the property.
     /// </summary>
     private static void ValidatePublicEntityTypedProperties(AnalysisContext context, Domain domain, Entity entity) {
+        // A many-to-many navigation to an internal entity prints internal, but the pack's explicit mapping cannot
+        // prove an EF skip navigation over a non-public member, so it fails closed rather than map it as one-to-many.
+        foreach (var navigation in entity.Navigations) {
+            if (navigation.Cardinality is not RelationshipCardinality.ManyToMany
+                || context.GetMetadata<ResolvedTypeReferenceMetadata>(navigation.Target)
+                    is not ResolvedTypeReferenceMetadata { Type: Entity target }
+                || !IsDeclaredInDomain(domain, target)
+                || target.Visibility == Visibility.Public)
+                continue;
+
+            context.ReportError(
+                navigation,
+                $"Public entity '{entity.Name}' many-to-many navigation '{navigation.Name}' targets internal entity " +
+                $"'{target.Name}'; that mapping is not supported. Mark '{target.Name}' public, or remove the public mark from '{entity.Name}'.",
+                DomainModelDiagnosticCodes.PublicEntityPropertyTypedInternalEntity);
+        }
+
         foreach (var property in entity.Properties) {
             var target = context.GetMetadata<ResolvedTypeReferenceMetadata>(property.Type)?.Type as Entity
                 ?? domain.Types.OfType<Entity>().FirstOrDefault(e => e.Name == property.Type.TypeName);

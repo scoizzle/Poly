@@ -113,8 +113,7 @@ public sealed partial class DbContextGenerator {
             new Member(bParam, nav.IsCollection ? "HasMany" : "HasOne"),
             new Lambda([eParam], new Member(eParam, nav.PropertyName)));
 
-        var inverseIsCollection = nav.InversePropertyName is { } inverse
-            && _storageLookup[nav.TargetEntityName].CollectionNavigations.Any(n => n.PropertyName == inverse);
+        var inverseIsCollection = nav.InverseIsCollection;
         // The many side of a one-to-many is entered with WithOne; the one side of a many-to-one with WithMany.
         var withMany = nav.IsCollection ? inverseIsCollection : nav.InversePropertyName is null || inverseIsCollection;
 

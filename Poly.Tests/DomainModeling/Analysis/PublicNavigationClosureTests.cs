@@ -221,6 +221,40 @@ public sealed class PublicNavigationClosureTests {
         await Assert.That(result.Succeeded).IsTrue();
     }
 
+    // F2 (fix round 1): a ManyToMany navigation from a public entity to an internal one is not expressible in the
+    // DSL (model API only) and the pack's explicit mapping cannot prove a skip navigation over a non-public member, so it
+    // fails closed under DMCON019, positioned on the navigation. A one-to-many navigation stays legal.
+    [Test]
+    public async Task Analyze_WhenPublicEntityHasManyToManyNavToInternalEntity_ReportsDMCON019OnTheNavigation() {
+        var item = new Entity("Item", [], [], [], []);
+        var order = new Entity("Order", [], [], [], []) with { Visibility = Visibility.Public };
+        var navigation = new Relationship(
+            "items", new DomainTypeReference("Order"), new DomainTypeReference("Item"),
+            RelationshipCardinality.ManyToMany, []);
+        var domain = DomainTestFactory.Create("T", [item, order], [navigation]);
+
+        var errors = DomainModelAnalyzer.Analyze(domain).Diagnostics
+            .Where(d => d.Severity == DiagnosticSeverity.Error && d.Code == "DMCON019")
+            .ToList();
+
+        await Assert.That(errors.Count).IsEqualTo(1);
+        await Assert.That(errors[0].Node is Relationship { Name: "items" }).IsTrue();
+        await Assert.That(errors[0].Message).Contains("many-to-many");
+    }
+
+    [Test]
+    public async Task Analyze_WhenInternalEntityHasManyToManyNavToInternalEntity_IsNotReported() {
+        var item = new Entity("Item", [], [], [], []);
+        var order = new Entity("Order", [], [], [], []);
+        var navigation = new Relationship(
+            "items", new DomainTypeReference("Order"), new DomainTypeReference("Item"),
+            RelationshipCardinality.ManyToMany, []);
+        var domain = DomainTestFactory.Create("T", [item, order], [navigation]);
+
+        await Assert.That(DomainModelAnalyzer.Analyze(domain).Diagnostics
+            .Count(d => d.Code == "DMCON019")).IsEqualTo(0);
+    }
+
     // P3: an enum has no visibility mark and is always public, so an enum-typed property on a public entity
     // is not a finding.
     [Test]

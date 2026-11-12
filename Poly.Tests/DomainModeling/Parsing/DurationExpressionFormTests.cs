@@ -210,6 +210,24 @@ public class DurationExpressionFormTests {
     }
 
     [Test]
+    [Arguments("F(1 x)", "x")]
+    [Arguments("match { Price > 1 -> 3 Foo, else -> 0 }", "Foo")]
+    [Arguments("(3 Foo)", "Foo")]
+    public async Task NearMiss_NumberThenWord_ReportsPositionedUnit(string fragment, string word) {
+        // A number followed by an unknown word inside a call argument, a match arm or a group
+        // fails closed with the positioned unit error from that nested parse; it never reaches
+        // the caller's own trailing-token check.
+        var error = Assert.Throws<GrammarException>(
+            () => DslExpressionFragment.ParseExpressionFragment(fragment))!;
+
+        await Assert.That(error.Detail).Contains($"Unknown duration unit '{word}'").Because(fragment);
+        await Assert.That(error.Line).IsEqualTo(1).Because(fragment);
+        await Assert.That(error.Column)
+            .IsEqualTo(fragment.IndexOf(word, StringComparison.Ordinal) + 1)
+            .Because(fragment);
+    }
+
+    [Test]
     public async Task Duration_QuotedUnit_IsNotDuration() {
         await Assert.That(() => DslExpressionFragment.ParseExpressionFragment("Now - 3 \"Days\""))
             .Throws<FormatException>()

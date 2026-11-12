@@ -316,7 +316,10 @@ public sealed class DslExpressionParser {
         var nested = new DslCursor(reader, new Matcher<DslToken, DslTokenKind>(_c.Grammar, reader)) {
             InWhereBody = inWhere,
         };
-        return new DslExpressionParser(nested, _forms, _folds).ParseExpression();
+        var parsed = new DslExpressionParser(nested, _forms, _folds).ParseExpression();
+        if (nested.Current.Kind != DslTokenKind.EndOfFile)
+            throw nested.Error($"Unexpected '{nested.Current.Text}' in group");
+        return parsed;
     }
 
     private DomainExpression FoldWhereNav(MatchResult<DslToken, DslTokenKind> match, bool inWhere = false) {

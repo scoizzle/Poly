@@ -90,10 +90,12 @@ public class PolycCompileTests {
 
     [Test]
     public async Task Compile_AuthoringSeed_IsDefaultWhenNoUses() {
-        var result = Compiler().Compile(PolycTestSupport.Orders, "orders.poly");
+        // A uniqueless document: a bare seed would be DMLIB001 for `unique` (C-05), and this test
+        // pins seed selection, not the constraint-compiler rule.
+        var result = Compiler().Compile(PolycTestSupport.UniquelessOrders, "orders.poly");
         await Assert.That(result.Succeeded).IsTrue();
         await Assert.That(result.Domain!.Extensions).Contains("storage");
-        var language = Compiler("language").Compile(PolycTestSupport.Orders, "orders.poly");
+        var language = Compiler("language").Compile(PolycTestSupport.UniquelessOrders, "orders.poly");
         await Assert.That(language.Succeeded).IsTrue();
         await Assert.That(language.Domain!.Extensions).DoesNotContain("storage");
     }

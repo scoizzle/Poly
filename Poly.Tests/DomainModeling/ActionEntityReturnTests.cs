@@ -391,6 +391,7 @@ public class ActionEntityReturnTests {
     public async Task InvokeAction_CreateInNavInitializerUniqueCollision_IsFailure() {
         var (domain, _) = Evolve("""
             domain Test
+            uses persistence
             Book: entity { ISBN: Text unique }
             Patron: entity {
               loans: many Loan
@@ -445,6 +446,7 @@ public class ActionEntityReturnTests {
     public async Task InvokeAction_CreateInUniqueCollision_DoesNotApplyPriorAssigns() {
         var (domain, _) = Evolve("""
             domain Parking
+            uses persistence
             Permit: entity {
               Plate: Text unique
             }
@@ -473,6 +475,7 @@ public class ActionEntityReturnTests {
     public async Task InvokeAction_CreateInUniqueDefaultCollision_DoesNotApplyPriorAssigns() {
         var (domain, _) = Evolve("""
             domain Parking
+            uses persistence
             Permit: entity {
               Plate: Text unique default("STD")
             }
@@ -501,6 +504,7 @@ public class ActionEntityReturnTests {
     public async Task InvokeAction_AssignUniqueCollision_DoesNotMutate() {
         var (domain, _) = Evolve("""
             domain Parking
+            uses persistence
             Permit: entity {
               Plate: Text unique
               Relabel: action (plate: Text) {
@@ -522,6 +526,7 @@ public class ActionEntityReturnTests {
     public async Task InvokeAction_ConditionalCreateUniqueCollision_DoesNotApplyPriorAssigns() {
         var (domain, _) = Evolve("""
             domain Parking
+            uses persistence
             Permit: entity {
               Plate: Text unique
             }
@@ -552,6 +557,7 @@ public class ActionEntityReturnTests {
     public async Task SetProperty_UniqueCollision_ThrowsBeforeMutate() {
         var (domain, _) = Evolve("""
             domain Parking
+            uses persistence
             Permit: entity {
               Plate: Text unique
             }
@@ -576,6 +582,7 @@ public class ActionEntityReturnTests {
     public async Task InvokeAction_ConditionalAssignUniqueCollision_DoesNotMutate() {
         var (domain, _) = Evolve("""
             domain Parking
+            uses persistence
             Permit: entity {
               Plate: Text unique
               Relabel: action (plate: Text) {
@@ -599,6 +606,7 @@ public class ActionEntityReturnTests {
     public async Task InvokeAction_ElseAssignUniqueCollision_DoesNotMutate() {
         var (domain, _) = Evolve("""
             domain Parking
+            uses persistence
             Permit: entity {
               Plate: Text unique
               Relabel: action (plate: Text) {
@@ -623,6 +631,7 @@ public class ActionEntityReturnTests {
     public async Task InvokeAction_NestedIfAssignUniqueCollision_DoesNotMutate() {
         var (domain, _) = Evolve("""
             domain Parking
+            uses persistence
             Permit: entity {
               Plate: Text unique
               Relabel: action (plate: Text) {
@@ -648,6 +657,7 @@ public class ActionEntityReturnTests {
     public async Task InvokeAction_ConditionDrift_AssignThenIfCreate_DoesNotApplyPriorAssigns() {
         var (domain, _) = Evolve("""
             domain Parking
+            uses persistence
             Permit: entity {
               Plate: Text unique
             }
@@ -694,6 +704,7 @@ public class ActionEntityReturnTests {
     public async Task InvokeAction_ConditionDrift_AssignFalseSkipsCreate_Succeeds() {
         var (domain, _) = Evolve("""
             domain Parking
+            uses persistence
             Permit: entity {
               Plate: Text unique
             }

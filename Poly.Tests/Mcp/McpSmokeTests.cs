@@ -896,6 +896,7 @@ public class McpSmokeTests {
 
         var response = McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain Orders
+            uses persistence
 
             Product: entity {
               SKU: Text unique
@@ -996,6 +997,7 @@ public class McpSmokeTests {
 
         McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain Test
+            uses persistence
 
             Item: entity {
               SKU: Text unique
@@ -1542,6 +1544,7 @@ public class McpSmokeTests {
         var (sessionId, _) = McpTestTools.Store.Create("Support");
         var dsl = McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain Support
+            uses persistence
             Agent: entity {
               Handle: Text unique
             }
@@ -3379,6 +3382,7 @@ E: entity {{
 
         var apply = McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain Test
+            uses persistence
             Item: entity {
               Code: Text unique column("CODE", "VARCHAR2(20)")
               Name: Text column("NAME")
@@ -3438,6 +3442,7 @@ E: entity {{
 
         var apply = McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain Test
+            uses persistence
             Item: entity {
               Code: Text unique column("C")
               Name: Text column("N")

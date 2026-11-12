@@ -44,13 +44,14 @@ public class StoreBindUniqueTests {
     [Test]
     public async Task Export_CreateFactory_NamesNoDeiRuntime() {
         var entity = PermitEntity();
-        var domain = ValidDomain.Create("Parking", [entity]);
+        // C-05: a bare session is DMLIB001 for `unique`, so the domain names the library that
+        // compiles it. The guard the export then holds is the storage port's, and it never names
+        // the DEI runtime.
+        var domain = ValidDomain.Create("Parking", [entity], extensions: ["persistence"]);
         var analysis = DomainModelAnalyzer.Analyze(domain);
         var cs = new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis));
         var create = ExportedCSharp.ExtractMethod(cs, "static DomainResult<Permit> Create(");
         await Assert.That(create).Contains("var created = new Permit(");
-        // The unique check on Create is the storage library's guard on the IStoragePort;
-        // the bare export holds none and never names the DEI runtime.
         await Assert.That(create).DoesNotContain("CheckUnique");
         await Assert.That(cs).DoesNotContain("DomainInstanceStore");
         await Assert.That(cs).DoesNotContain("PrintedCollision");
@@ -97,6 +98,7 @@ public class StoreBindUniqueTests {
     public async Task UniqueAssign_WithStorageBag_LowersToEnsureUnique() {
         var (domain, analysis) = Evolve("""
             domain Parking
+            uses persistence
             Permit: entity {
               Plate: Text unique
               Relabel: action (plate: Text) {
@@ -121,6 +123,7 @@ public class StoreBindUniqueTests {
     public async Task Store_EnsureUnique_Collision_IsFailureWithoutMutatingCaller() {
         var exec = ModuleExec.For(Evolve("""
             domain Parking
+            uses persistence
             Permit: entity {
               Plate: Text unique
               Relabel: action (plate: Text) { assign Plate to plate }
@@ -138,6 +141,7 @@ public class StoreBindUniqueTests {
     public async Task Store_EnsureUnique_SelfValue_IsSuccess() {
         var exec = ModuleExec.For(Evolve("""
             domain Parking
+            uses persistence
             Permit: entity {
               Plate: Text unique
               Relabel: action (plate: Text) { assign Plate to plate }
@@ -168,6 +172,7 @@ public class StoreBindUniqueTests {
     public async Task ConditionalUniqueAssign_Runtime_LowersEnsureUniqueInsideIf() {
         var (domain, analysis) = Evolve("""
             domain Parking
+            uses persistence
             Permit: entity {
               Plate: Text unique
               Relabel: action (plate: Text) {

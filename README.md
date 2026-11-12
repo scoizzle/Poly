@@ -96,8 +96,9 @@ each its own compilation unit; with no path and piped stdin, stdin is one docume
 - **`uses` resolution:** with no `uses`, omitting `--seed` loads the implicit set
   `[storage, persistence]`; `--seed authoring` loads `[storage]` only and `--seed language`
   loads no ids. A document's non-empty `uses` list replaces the seed, so a `unique` property
-  needs `persistence` or a vendor library (`sqlite`, `sqlserver`) in that list. MCP execution
-  and C# export add `persistence` themselves, so in MCP `uses storage` still guards `unique`.
+  needs `persistence` or a vendor library (`sqlite`, `sqlserver`) in that list: a loaded library
+  that compiles no `unique` is `DMLIB001` at define time in `polyc`, `poly_define`,
+  `validate_dsl` and the DslCompiler facade, rather than a silently dropped constraint.
   An unknown id is `DSL0002` on its header token.
 - **`polyc build` output:** a domain that lists no `uses` writes `<Domain>DbContext.cs`
   (persistence is implicit), and a `unique` entity's `Create` gains a `db` parameter.

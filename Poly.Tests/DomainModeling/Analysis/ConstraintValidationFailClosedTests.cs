@@ -53,7 +53,11 @@ public class ConstraintValidationFailClosedTests {
             d.Severity == DiagnosticSeverity.Warning)).IsTrue();
         await Assert.That(analysis.Diagnostics.Any(d =>
             d.Code == DomainModelDiagnosticCodes.EffectConstraintViolation)).IsFalse();
-        await Assert.That(analysis.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error)).IsFalse();
+        // The fixture's own record has no compiler and no coverage row, so C-05 reports it: the
+        // fixture used to rely on the pass being silent about a constraint nothing compiles.
+        await Assert.That(analysis.Diagnostics.Any(d =>
+            d.Code == DomainModelDiagnosticCodes.ConstraintNoCompiler
+            && d.Severity == DiagnosticSeverity.Error)).IsTrue();
     }
 
     [Test]
@@ -71,6 +75,10 @@ public class ConstraintValidationFailClosedTests {
         await Assert.That(analysis.Diagnostics.Any(d =>
             d.Code == DomainModelDiagnosticCodes.ConstraintUndecided &&
             d.Severity == DiagnosticSeverity.Warning)).IsTrue();
-        await Assert.That(analysis.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error)).IsFalse();
+        // C-05: the fixture's record has no compiler, so this is a DMLIB001 error too. Its premise
+        // ("an unmodelled kind never errors") was written against the silent drop the pass removes.
+        await Assert.That(analysis.Diagnostics.Any(d =>
+            d.Code == DomainModelDiagnosticCodes.ConstraintNoCompiler
+            && d.Severity == DiagnosticSeverity.Error)).IsTrue();
     }
 }

@@ -49,9 +49,9 @@ app.MapPost("/api/books/{id}/restock", async (int id, RestockDto dto, TDbCtx db)
     try
     {
         var result = entity.Restock(dto.Amount);
-        await db.SaveChangesAsync();
         if (result.IsSuccess)
         {
+            await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
         else
@@ -74,9 +74,9 @@ app.MapPost("/api/books/{id}/rename", async (int id, RenameDto dto, TDbCtx db) =
     try
     {
         var result = entity.Rename(dto.Value);
-        await db.SaveChangesAsync();
         if (result.IsSuccess)
         {
+            await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
         else
@@ -99,9 +99,9 @@ app.MapPost("/api/books/{id}/setcode", async (int id, SetCodeDto dto, TDbCtx db)
     try
     {
         var result = entity.SetCode(dto.Value);
-        await db.SaveChangesAsync();
         if (result.IsSuccess)
         {
+            await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
         else

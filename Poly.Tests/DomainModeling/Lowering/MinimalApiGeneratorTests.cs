@@ -1,5 +1,6 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
@@ -237,6 +238,56 @@ public class MinimalApiGeneratorTests {
         var rendered = Render(d);
         await Assert.That(rendered.Contains("IsSuccess")).IsTrue();
         await Assert.That(rendered.Contains("Conflict")).IsTrue();
+    }
+
+    /// <summary>P-03 (A4): every action handler saves inside its <c>if (result.IsSuccess)</c> true-branch
+    /// and nowhere else, and each action handler saves exactly once. The domain carries one non-void
+    /// (Patron.CheckOut -> Loan) and one void (Loan.Return) action: no booting oracle fixture exercises the
+    /// non-void arm, so this structural check is its only automated, PR-tier oracle.</summary>
+    [Test]
+    public async Task ActionHandlers_SaveOnlyInsideSuccessBranch() {
+        var d = ParseDomain("""
+            domain T
+            Patron: entity {
+              Email: Text unique
+              loans: many Loan
+              CheckOut: action -> Loan { create in loans { DueDate: 30 } }
+            }
+            Loan: entity {
+              DueDate: Number
+              borrower: Patron
+              Return: action { }
+            }
+            """);
+        var root = CSharpSyntaxTree.ParseText(Render(d)).GetRoot();
+
+        // Action routes are the MapPost routes below a route key: /api/x/{k}/action (create is /api/x).
+        var actionHandlers = root.DescendantNodes()
+            .OfType<InvocationExpressionSyntax>()
+            .Where(i => i.Expression is MemberAccessExpressionSyntax { Name.Identifier.ValueText: "MapPost" })
+            .Where(i => i.ArgumentList.Arguments[0].Expression is LiteralExpressionSyntax literal
+                && literal.IsKind(SyntaxKind.StringLiteralExpression)
+                && literal.Token.ValueText.Split('/').Length >= 4)
+            .ToList();
+        await Assert.That(actionHandlers.Count).IsEqualTo(2);
+
+        var saves = new List<InvocationExpressionSyntax>();
+        foreach (var handler in actionHandlers) {
+            var handlerSaves = handler.DescendantNodes()
+                .OfType<InvocationExpressionSyntax>()
+                .Where(i => i.Expression.ToString().EndsWith(".SaveChangesAsync", StringComparison.Ordinal))
+                .ToList();
+            await Assert.That(handlerSaves.Count).IsEqualTo(1);
+            var save = handlerSaves[0];
+            var branch = save.FirstAncestorOrSelf<IfStatementSyntax>();
+            await Assert.That(branch).IsNotNull();
+            await Assert.That(branch!.Condition.ToString()).Contains("IsSuccess");
+            await Assert.That(branch.Statement.Span.Contains(save.Span)).IsTrue();
+            saves.Add(save);
+        }
+
+        // A handler's save count equals the number of action handlers: none escapes a handler.
+        await Assert.That(saves.Count).IsEqualTo(actionHandlers.Count);
     }
 
     [Test]

@@ -139,9 +139,9 @@ app.MapPost("/api/patrons/{email}/checkout", async (string email, CheckOutDto dt
             return Results.NotFound("Book not found");
         }
         var result = entity.CheckOut(book);
-        await db.SaveChangesAsync();
         if (result.IsSuccess)
         {
+            await db.SaveChangesAsync();
             return Results.Ok(result.Value);
         }
         else
@@ -166,9 +166,9 @@ app.MapPost("/api/patrons/{email}/suspend", async (string email, LibraryDbContex
     try
     {
         var result = entity.Suspend();
-        await db.SaveChangesAsync();
         if (result.IsSuccess)
         {
+            await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
         else
@@ -193,9 +193,9 @@ app.MapPost("/api/patrons/{email}/closeaccount", async (string email, LibraryDbC
     try
     {
         var result = entity.CloseAccount();
-        await db.SaveChangesAsync();
         if (result.IsSuccess)
         {
+            await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
         else
@@ -220,9 +220,9 @@ app.MapPost("/api/patrons/{email}/reinstate", async (string email, LibraryDbCont
     try
     {
         var result = entity.Reinstate();
-        await db.SaveChangesAsync();
         if (result.IsSuccess)
         {
+            await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
         else
@@ -255,9 +255,9 @@ app.MapPost("/api/patrons/{email}/loans/{id}/renew", async (string email, int id
     try
     {
         var result = entity.Renew();
-        await db.SaveChangesAsync();
         if (result.IsSuccess)
         {
+            await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
         else
@@ -290,9 +290,9 @@ app.MapPost("/api/patrons/{email}/loans/{id}/return", async (string email, int i
     try
     {
         var result = entity.Return();
-        await db.SaveChangesAsync();
         if (result.IsSuccess)
         {
+            await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
         else
@@ -325,9 +325,9 @@ app.MapPost("/api/patrons/{email}/fines/{id}/pay", async (string email, int id, 
     try
     {
         var result = entity.Pay();
-        await db.SaveChangesAsync();
         if (result.IsSuccess)
         {
+            await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
         else
@@ -360,9 +360,9 @@ app.MapPost("/api/patrons/{email}/fines/{id}/waive", async (string email, int id
     try
     {
         var result = entity.Waive();
-        await db.SaveChangesAsync();
         if (result.IsSuccess)
         {
+            await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
         else

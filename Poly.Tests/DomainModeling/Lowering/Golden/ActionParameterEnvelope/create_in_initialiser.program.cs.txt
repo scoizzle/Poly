@@ -75,9 +75,9 @@ app.MapPost("/api/orders/{id}/addline", async (int id, AddLineDto dto, TDbCtx db
     try
     {
         var result = entity.AddLine(dto.Q);
-        await db.SaveChangesAsync();
         if (result.IsSuccess)
         {
+            await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
         else

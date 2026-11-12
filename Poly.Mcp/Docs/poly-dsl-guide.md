@@ -1119,7 +1119,8 @@ diverging:
   executes as `DateTime.UtcNow` / `DateOnly.FromDateTime`. A bare lowercase `now`/`guid` in a
   policy is still rejected at analysis ("property does not exist").
 - **`pattern(regex)` validates stored values at write time** (create/assign) — it is a
-  constraint, not a query/read filter. Grep-style read-time matching against stored text
+  constraint, not a query/read filter. A body .NET cannot parse is rejected at define as
+  `DMSEM004`, one positioned error per distinct body. Grep-style read-time matching against stored text
   is not expressible.
 - **Quantifiers lower to foreach on both paths.** The C# export and the simulator both
   lower `any`/`all`/`none`/`count … where` to a foreach over the collection navigation
@@ -1341,8 +1342,8 @@ function Pi(): Number = 3
   prints without one.
 - A declaration missing its `=` or its body fails closed with a positioned error; the
   parser never folds the following declaration into the body. `function` is not a path hop
-  (`a b c` navigation), so an expression that ends in an identifier ends at the next
-  `function` declaration.
+  (`a b c` navigation) and is not a duration unit, so an expression that ends in an
+  identifier or a number ends at the next `function` declaration.
 
 #### Calling a function
 

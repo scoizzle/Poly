@@ -329,48 +329,27 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
 
     // ── 5. inspect ──────────────────────────────────────────────
 
-    [McpServerTool(Name = "poly_inspect", Title = "Inspect the model", ReadOnly = true, Idempotent = true, OpenWorld = false, UseStructuredContent = true, OutputSchemaType = typeof(PolyOutputSchema)), Description("Reads one part of the model: omit select for an overview, pass an entity name for that entity, or pass \"Entity.Member\" for one action, stage, or policy. Brief by default returns the one-line summary; detail=\"full\" returns the full element. Read-only.")]
+    [McpServerTool(Name = "poly_inspect", Title = "Inspect the model", ReadOnly = true, Idempotent = true, OpenWorld = false, UseStructuredContent = true, OutputSchemaType = typeof(PolyOutputSchema)), Description("Reads one part of the model: omit select for an overview, or pass one element path — an entity, enum, value type or function by name, \"Entity.Member\" for a property, navigation, stage, action or policy, or \"Entity.Stage.Action\" for a stage action. A path that is unknown, ambiguous or not addressable returns ELEMENT_NOT_FOUND with the reason and candidates. Brief by default returns the one-line summary; detail=\"full\" returns the full element. Read-only.")]
     public PolyResponse Inspect(
         [Description("Workspace handle from poly_workspace.")] string workspace,
-        [Description("Optional \"Entity\" or \"Entity.Member\" path.")] string? select = null,
+        [Description("Optional element path: \"Entity\", \"Entity.Member\", \"Entity.Stage.Action\", or an enum, value type or function name. Case-sensitive; \".\" and \"/\" both separate segments.")] string? select = null,
         [Description("brief (default) or full.")] string? detail = null) {
         if (!TryWorkspace(workspace, out var state))
             return WorkspaceRequired();
 
-        DomainToolResponse response;
-        if (string.IsNullOrWhiteSpace(select)) {
-            response = _query.GetDomainOverview(workspace);
-        }
-        else {
-            var parts = select.Split('.', 2, StringSplitOptions.TrimEntries);
-            if (parts.Length == 1) {
-                response = _query.GetEntityDetail(workspace, parts[0]);
-            }
-            else {
-                var entity = state.Domain.Types.OfType<Entity>()
-                    .FirstOrDefault(e => string.Equals(e.Name, parts[0], StringComparison.Ordinal));
-                var kind = entity is not null
-                    && entity.Stages.Any(s => string.Equals(s.Name, parts[1], StringComparison.Ordinal))
-                        ? "stage"
-                        : entity is not null
-                            && entity.Policies.Any(p => string.Equals(p.Name, parts[1], StringComparison.Ordinal))
-                                ? "policy"
-                                : "action";
-                response = _oracle.DescribeDomainElement(workspace, kind, parts[1], parts[0]);
-            }
-        }
-
+        var outcome = InspectService.Inspect(workspace, state, select, _query);
         var brief = !string.Equals(detail, "full", StringComparison.OrdinalIgnoreCase);
-        var data = string.IsNullOrWhiteSpace(select) || !brief
-            ? response.Data
-            : new { description = response.Message };
+        var data = !string.IsNullOrWhiteSpace(select) && brief && outcome.ErrorCode is null
+            ? new { description = outcome.Summary }
+            : outcome.Data;
         return new PolyResponse(
-            Ok: response.Success,
-            Summary: response.Message,
-            Findings: FindingsFrom(response),
+            Ok: outcome.Ok,
+            Summary: outcome.Summary,
+            Findings: [],
             Data: data,
-            Next: response.Success ? Next(workspace, "poly_inspect", "poly_check") : Next(workspace, "poly_check"),
-            State: StateOf(workspace));
+            Next: outcome.Ok ? Next(workspace, "poly_inspect", "poly_check") : Next(workspace, "poly_check"),
+            State: StateOf(workspace),
+            ErrorCode: outcome.ErrorCode);
     }
 
     // ── 6. export ───────────────────────────────────────────────

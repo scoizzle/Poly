@@ -1,6 +1,7 @@
 using Poly.DomainModeling.Libraries.Storage;
 using Poly.DomainModeling.Libraries.Temporal;
 using Poly.DomainModeling.Libraries.Tests;
+using Poly.DomainModeling.Ontology;
 
 namespace Poly.DomainModeling.Compile;
 
@@ -81,4 +82,19 @@ public sealed class ExtensionCatalog {
     /// <summary>True when this catalog can resolve <paramref name="id"/>.</summary>
     public bool Contains(string id) =>
         id is not null && _libraries.ContainsKey(id);
+
+    public IReadOnlyList<string> KnownIds => [];
+
+    public IReadOnlyList<string> KnownTargets => [];
+
+    public LibraryInfo Info(string id) {
+        ArgumentException.ThrowIfNullOrWhiteSpace(id);
+        _ = Resolve(id);
+        return new LibraryInfo(id, [], [], []);
+    }
+
+    public IReadOnlyList<string> ProvidersOf(Constraint constraint) {
+        ArgumentNullException.ThrowIfNull(constraint);
+        return [];
+    }
 }

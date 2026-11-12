@@ -140,6 +140,10 @@ public static class RequestMatrix {
 /// <summary>One memoised observation per <c>(provider, domain)</c>, so every test reads the same boot.</summary>
 public static class MatrixObservations {
     private static readonly ConcurrentDictionary<string, Lazy<Task<DomainObservation>>> Runs = new();
+    private static readonly ConcurrentBag<int> Booted = new();
+
+    /// <summary>The children this matrix booted. <c>PackOracle.RecordedChildPids</c> is process-wide, so another class's live child must not fail this class.</summary>
+    public static IReadOnlyCollection<int> BootedChildPids => Booted;
 
     public static Task<DomainObservation> ObserveAsync(string provider, GoldenDomain golden) =>
         Runs.GetOrAdd($"{provider}/{golden.Name}", _ => new Lazy<Task<DomainObservation>>(() => RunCoreAsync(provider, golden))).Value;
@@ -151,6 +155,7 @@ public static class MatrixObservations {
             _ = await PackOracle.CompileAsync(fixture);
             phase = "boot";
             await using var oracle = await PackOracle.BootAsync(fixture, provider);
+            Booted.Add(oracle.ChildPid);
             phase = "probe";
             var probes = await RequestMatrix.RunAsync(HttpSide.On(oracle), RequestMatrix.For(golden.Name));
             return new DomainObservation(provider, golden.Name, null, probes);

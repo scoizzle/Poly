@@ -13,8 +13,11 @@ namespace Poly.Tests.Quality;
 /// derived into an app (<c>uses http</c> and <c>uses sqlite</c>), booted once by <see cref="PackOracle"/> and driven
 /// through the <see cref="RequestMatrix"/>. The failing probes must equal <see cref="KnownPackDivergences"/>: a probe
 /// that fails and is not listed, or a row whose probe passes, fails the run. The fixing slice deletes its rows.
+/// The class runs after <c>PackOracleTests</c>: that class's <c>[After(Class)]</c> checks every recorded child, so a
+/// child this matrix still had alive would fail it.
 /// </summary>
 [NotInParallel("PackOracleMatrix")]
+[DependsOn(typeof(Poly.Tests.DomainModeling.Packs.PackOracleTests), ProceedOnFailure = true)]
 public class PackOracleMatrixTests {
     public static IEnumerable<Func<string>> SubsetDomains() =>
         GoldenPackDomains.Subset.Select<GoldenDomain, Func<string>>(d => () => d.Name);
@@ -26,7 +29,7 @@ public class PackOracleMatrixTests {
 
     [After(Class)]
     public static async Task NoRecordedChildSurvivesTheClass() {
-        var alive = PackOracle.RecordedChildPids.Where(PackOracle.IsProcessAlive).ToArray();
+        var alive = MatrixObservations.BootedChildPids.Where(PackOracle.IsProcessAlive).ToArray();
         await Assert.That(alive).IsEmpty();
     }
 

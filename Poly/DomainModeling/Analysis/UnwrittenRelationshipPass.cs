@@ -122,8 +122,13 @@ internal sealed class UnwrittenRelationshipPass : INodeAnalyzer {
     /// conditions, assign RHS, create initializers, and subscription / entry / exit effects alike.
     /// </summary>
     private static IEnumerable<ExpressionRead> ExpressionReadsOf(Entity entity) {
+        // #483: a `require P` copy holds P's expression object, so the same node is reachable by
+        // two paths and would be read — and warned about — twice. Per walk: the pass instance is
+        // reused by every analysis of a session.
+        var seen = new HashSet<Node>(ReferenceEqualityComparer.Instance);
         foreach (var node in Descendants(entity)) {
             if (node is not DomainExpression expr) continue;
+            if (!seen.Add(expr)) continue;
             if (ReadOf(expr) is { } read)
                 yield return new ExpressionRead(expr, read.RelationshipName, read.Reader);
         }

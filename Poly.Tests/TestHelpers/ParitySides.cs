@@ -140,7 +140,7 @@ sealed class PrintedSide(Domain domain, Assembly assembly, IReadOnlySet<string>?
         var method = Current.GetType().GetMethods(AnyInstance)
             .FirstOrDefault(m => m.Name == action && m.GetParameters().Count(p => !IsPort(p)) == args.Length)
             ?? throw new ArgumentException(
-                $"Printed type '{Current.GetType().Name}' has no public '{action}' with {args.Length} parameter(s).");
+                $"Printed type '{Current.GetType().Name}' has no '{action}' with {args.Length} parameter(s).");
         var parameters = method.GetParameters();
         var callArgs = new object?[parameters.Length];
         for (var i = 0; i < parameters.Length; i++) {
@@ -204,7 +204,7 @@ sealed class PrintedSide(Domain domain, Assembly assembly, IReadOnlySet<string>?
     }
 
     MethodInfo Method(string name) => Current.GetType().GetMethod(name, AnyInstance, Type.EmptyTypes)
-        ?? throw new ArgumentException($"Printed type '{Current.GetType().Name}' has no public '{name}()'.");
+        ?? throw new ArgumentException($"Printed type '{Current.GetType().Name}' has no '{name}()'.");
 
     /// <summary>A value outside every declared member, for a caller passing an out-of-range cast.</summary>
     const int UndefinedEnumMember = 42;
@@ -237,7 +237,7 @@ sealed class PrintedSide(Domain domain, Assembly assembly, IReadOnlySet<string>?
         return instance;
     }
 
-    // Printed members are public; names match ignoring case because navigations print in PascalCase. An entity without stages has no CurrentStage.
+    // Printed members may be public or internal; names match ignoring case because navigations print in PascalCase. An entity without stages has no CurrentStage.
     static object? Read(object entity, string name) => entity.GetType().GetProperties(AnyInstance)
         .FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase))?.GetValue(entity);
 

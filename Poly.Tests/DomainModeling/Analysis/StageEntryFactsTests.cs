@@ -4,6 +4,7 @@ using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Ontology.Effects;
+using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.DomainModeling.Analysis;
 
@@ -30,7 +31,10 @@ public class StageEntryFactsTests {
         domain.Types.OfType<Entity>().Single(e => string.Equals(e.Name, name, StringComparison.Ordinal));
 
     private static IReadOnlySet<string> EntryAssigned(string dsl, string entityName) =>
-        StageEntryFacts.EntryAssignedProperties(EntityNamed(Apply(dsl), entityName));
+        EntryAssigned(Apply(dsl), entityName);
+
+    private static IReadOnlySet<string> EntryAssigned(Domain domain, string entityName) =>
+        StageEntryFacts.EntryAssignedProperties(EntityNamed(domain, entityName), domain);
 
     // Replaces a stage's entry effects with API-built effects the parser cannot produce.
     private static Domain WithEntryEffects(Domain domain, string entityName, string stageName, params Effect[] effects) =>
@@ -110,7 +114,7 @@ public class StageEntryFactsTests {
     }
 
     [Test]
-    public async Task EntryAssignedProperties_IgnoresExitAndActionAssigns() {
+    public async Task EntryAssignedProperties_IgnoresNeverDepartedExitAndUninvokedActionAssigns() {
         var assigned = EntryAssigned("""
             domain ExitAndAction
             Order: entity {
@@ -203,7 +207,7 @@ public class StageEntryFactsTests {
                 new RelationshipNavigation("owner", DomainExpression.Property("Balance")),
                 DomainExpression.Literal(0L)));
 
-        var assigned = StageEntryFacts.EntryAssignedProperties(EntityNamed(domain, "Ticket"));
+        var assigned = EntryAssigned(domain, "Ticket");
 
         await Assert.That(assigned).IsEquivalentTo(new[] { "N" }, StringComparer.Ordinal);
     }
@@ -213,26 +217,28 @@ public class StageEntryFactsTests {
     // a strict subset. Both halves fail against an empty stub.
     [Test]
     public async Task EntryAssignedProperties_IsSupersetOfFlatHelper() {
-        var topLevelOnly = EntityNamed(Apply("""
+        var domainOnly = Apply("""
             domain ParityFlat
             Ticket: entity {
               N: Number
               Draft: stage { entry { assign N to 1 } }
             }
-            """), "Ticket");
-        var nested = EntityNamed(Apply("""
+            """);
+        var topLevelOnly = EntityNamed(domainOnly, "Ticket");
+        var domainNested = Apply("""
             domain ParityNested
             Ticket: entity {
               N: Number
               M: Number
               Draft: stage { entry { assign N to 1  if (N > 0) { assign M to 2 } } }
             }
-            """), "Ticket");
+            """);
+        var nested = EntityNamed(domainNested, "Ticket");
 
         var flatOnly = EntityStructureAnalyzer.ComputeEntryAssignedPropertyNames(topLevelOnly);
-        var deepOnly = StageEntryFacts.EntryAssignedProperties(topLevelOnly);
+        var deepOnly = StageEntryFacts.EntryAssignedProperties(topLevelOnly, domainOnly);
         var flatNested = EntityStructureAnalyzer.ComputeEntryAssignedPropertyNames(nested);
-        var deepNested = StageEntryFacts.EntryAssignedProperties(nested);
+        var deepNested = StageEntryFacts.EntryAssignedProperties(nested, domainNested);
 
         await Assert.That(deepOnly).IsEquivalentTo(flatOnly, StringComparer.Ordinal);
         await Assert.That(flatNested).IsEquivalentTo(new[] { "N" }, StringComparer.Ordinal);
@@ -270,7 +276,7 @@ public class StageEntryFactsTests {
             foreach (var entity in applied.Root.Types.OfType<Entity>()) {
                 entities++;
                 var flat = EntityStructureAnalyzer.ComputeEntryAssignedPropertyNames(entity);
-                var deep = StageEntryFacts.EntryAssignedProperties(entity);
+                var deep = StageEntryFacts.EntryAssignedProperties(entity, applied.Root);
                 var flatOnly = flat.Where(name => !deep.Contains(name)).Order(StringComparer.Ordinal).ToList();
                 if (flatOnly.Count > 0)
                     mismatches.Add($"{relative}: {entity.Name}: flat-only {{{string.Join(", ", flatOnly)}}}");
@@ -282,12 +288,11 @@ public class StageEntryFactsTests {
         await Assert.That(skipped.Count).IsLessThanOrEqualTo(20);
     }
 
-    // N3 (known gap, characterized not fixed): the constructor inlines the initial entry, so an
-    // entry transition runs the departed stage's exit effects at create time. Q20 and the #681
-    // contract say OnEntry only, so this fact excludes them; S-14 and L-09 cannot rely on
-    // either answer until the owner rules. This test pins the current choice.
+    // N3 (flipped by S-04b, Q12 option (b)): the constructor inlines the initial entry, so an
+    // entry transition runs the departed stage's exit effects at create time, and the fact
+    // follows Lower's source cursor to include them.
     [Test]
-    public async Task EntryAssignedProperties_EntryTransition_ExcludesDepartedStageExitAssigns() {
+    public async Task EntryAssignedProperties_EntryTransition_InlinesDepartedStageExitAssigns() {
         var assigned = EntryAssigned("""
             domain DepartedExit
             Order: entity {
@@ -301,8 +306,306 @@ public class StageEntryFactsTests {
             }
             """, "Order");
 
-        await Assert.That(assigned).IsEquivalentTo(new[] { "M" }, StringComparer.Ordinal);
-        await Assert.That(assigned.Contains("X")).IsFalse();
+        await Assert.That(assigned).IsEquivalentTo(new[] { "M", "X" }, StringComparer.Ordinal);
+    }
+
+    // R1: each hop exits its own source (A -> B -> C), so the chain inlines exit(A) and exit(B)
+    // but never exit(C), which no hop leaves. Supersedes the pre-#765 "exit(A) twice" quirk.
+    [Test]
+    public async Task EntryAssignedProperties_NestedEntryChain_ExitsEachSourceOnce() {
+        var assigned = EntryAssigned("""
+            domain Chain3
+            Z: entity {
+              N: Number
+              X: Number
+              Y: Number
+              Q: Number
+              A: stage {
+                entry { assign N to 1  transition to B }
+                exit { assign X to 1 }
+              }
+              B: stage {
+                entry { transition to C }
+                exit { assign Y to 1 }
+              }
+              C: stage { exit { assign Q to 1 } }
+            }
+            """, "Z");
+
+        await Assert.That(assigned).IsEquivalentTo(new[] { "N", "X", "Y" }, StringComparer.Ordinal);
+        await Assert.That(assigned.Contains("Q")).IsFalse();
+    }
+
+    // R2: G7 adds the lifecycle name once per resolved hop, even when the target's entry never
+    // assigns it, and only when a hop resolves.
+    [Test]
+    public async Task EntryAssignedProperties_LifecycleProperty_AddedPerResolvedHop() {
+        const string Hop = """
+            domain Lifecycle
+            OrderState: enum { Pending, Paid }
+            Z: entity {
+              N: Number
+              State: OrderState default(Pending)
+              Pending: stage { entry { assign N to 1  transition to Paid } }
+              Paid: stage { }
+            }
+            """;
+        const string TargetAssigns = """
+            domain LifecycleAssigned
+            OrderState: enum { Pending, Paid }
+            Z: entity {
+              N: Number
+              State: OrderState default(Pending)
+              Pending: stage { entry { assign N to 1  transition to Paid } }
+              Paid: stage { entry { assign State to Paid } }
+            }
+            """;
+        const string NoHop = """
+            domain LifecycleNoHop
+            OneState: enum { Only }
+            Z: entity {
+              N: Number
+              State: OneState default(Only)
+              Only: stage { entry { assign N to 1 } }
+            }
+            """;
+
+        await Assert.That(EntryAssigned(Hop, "Z")).IsEquivalentTo(new[] { "N", "State" }, StringComparer.Ordinal);
+        await Assert.That(EntryAssigned(TargetAssigns, "Z")).IsEquivalentTo(new[] { "N", "State" }, StringComparer.Ordinal);
+        await Assert.That(EntryAssigned(NoHop, "Z")).IsEquivalentTo(new[] { "N" }, StringComparer.Ordinal);
+    }
+
+    // R3: a self invoke contributes the callee's own assigns.
+    [Test]
+    public async Task EntryAssignedProperties_SelfInvoke_FollowsCalleeAssigns() {
+        var assigned = EntryAssigned("""
+            domain Invoke
+            Z: entity {
+              N: Number
+              M: Number
+              Seed: action { assign M to 2 }
+              Draft: stage { entry { assign N to 1  invoke Seed } }
+            }
+            """, "Z");
+
+        await Assert.That(assigned).IsEquivalentTo(new[] { "N", "M" }, StringComparer.Ordinal);
+    }
+
+    // R4: the invoke closure is transitive and a mutually recursive pair terminates. Fact-only:
+    // the cycle may not analyze, so it has no Lower oracle.
+    [Test]
+    [Timeout(10_000)]
+    public async Task EntryAssignedProperties_InvokeCycle_TerminatesWithClosure(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        var domain = Apply("""
+            domain InvokeCycle
+            Z: entity {
+              N: Number
+              M: Number
+              Init: action { invoke Seed }
+              Seed: action {
+                assign M to 2
+                invoke Init
+              }
+              Draft: stage { entry { assign N to 1  invoke Init } }
+            }
+            """);
+
+        var assigned = await Task.Run(() => EntryAssigned(domain, "Z"), cancellationToken)
+            .WaitAsync(TimeSpan.FromSeconds(10), cancellationToken);
+
+        await Assert.That(assigned).IsEquivalentTo(new[] { "N", "M" }, StringComparer.Ordinal);
+    }
+
+    // C3: more than one lifecycle candidate yields none from the fact, and analysis rejects the
+    // entity first, so the fact's state is unreachable through the pipeline.
+    [Test]
+    public async Task LifecyclePropertyName_TwoCandidates_IsNoneAndUnreachableThroughAnalysis() {
+        const string dsl = """
+            domain TwoCandidates
+            S: enum { A, B }
+            Z: entity {
+              One: S default(A)
+              Two: S default(A)
+              A: stage { entry { transition to B } }
+              B: stage { }
+            }
+            """;
+        var domain = Apply(dsl);
+
+        await Assert.That(StageEntryFacts.LifecyclePropertyName(EntityNamed(domain, "Z"), domain)).IsNull();
+        await Assert.That(() => EvolvedDomain.FromDsl(dsl)).Throws<InvalidOperationException>();
+    }
+
+    // A hop to a stage the entity does not have is Lower's fail-closed boundary (it throws), so the
+    // fact throws too instead of silently skipping. Apply-built: analysis would reject the model.
+    [Test]
+    public async Task EntryAssignedProperties_HopToUnresolvableStage_Throws() {
+        var domain = WithEntryEffects(Apply("""
+            domain Dangling
+            Z: entity {
+              N: Number
+              A: stage { entry { assign N to 1 } }
+            }
+            """), "Z", "A", new StageTransitionEffect(new StageReference("Nowhere")));
+
+        await Assert.That(() => EntryAssigned(domain, "Z")).Throws<InvalidOperationException>();
+    }
+
+    // The resolver is gated like the analyzer (hasStages): one effect-free stage is implicit, so
+    // a matching enum property is not a lifecycle property for either.
+    [Test]
+    public async Task LifecyclePropertyName_ImplicitSingleStage_IsNullForFactAndAnalyzer() {
+        var (domain, analysis) = EvolvedDomain.FromDsl("""
+            domain ImplicitLifecycle
+            OneState: enum { Only }
+            Z: entity {
+              N: Number
+              State: OneState default(Only)
+              Only: stage { }
+            }
+            """);
+        var entity = EntityNamed(domain, "Z");
+
+        await Assert.That(analysis.GetStructure(entity)!.LifecyclePropertyName).IsNull();
+        await Assert.That(StageEntryFacts.LifecyclePropertyName(entity, domain)).IsNull();
+    }
+
+    // B3: the fact's resolver must equal the analyzer's published lifecycle property on every
+    // entity of every corpus file that analyzes. The counts keep the pass from being vacuous.
+    [Test]
+    public async Task LifecyclePropertyName_MatchesAnalyzer_AcrossCorpus() {
+        var root = FindRepoRoot();
+        var mismatches = new List<string>();
+        var staged = 0;
+        var withLifecycle = 0;
+
+        foreach (var path in Directory.EnumerateFiles(root, "*.poly", SearchOption.AllDirectories)
+                     .Where(p => !IsBuildOutput(root, p))
+                     .Order(StringComparer.Ordinal)) {
+            var relative = Path.GetRelativePath(root, path).Replace('\\', '/');
+            Domain domain;
+            AnalysisResult analysis;
+            try {
+                var evolved = new DomainEvolution(DomainTestFactory.Create("_", [], []))
+                    .ApplyAndAnalyze(new PolyDslParser(File.ReadAllText(path)).Parse());
+                if (!evolved.Succeeded)
+                    continue;
+                domain = evolved.Root!;
+                analysis = DomainModelAnalyzer.Analyze(domain);
+            }
+            catch (Exception) {
+                continue;
+            }
+            foreach (var entity in domain.Types.OfType<Entity>()) {
+                if (analysis.GetStructure(entity) is not { HasStages: true } structure)
+                    continue;
+                staged++;
+                var resolved = StageEntryFacts.LifecyclePropertyName(entity, domain);
+                if (resolved is not null)
+                    withLifecycle++;
+                if (!string.Equals(resolved, structure.LifecyclePropertyName, StringComparison.Ordinal))
+                    mismatches.Add($"{relative}: {entity.Name}: fact '{resolved}' vs analyzer '{structure.LifecyclePropertyName}'");
+            }
+        }
+
+        await Assert.That(mismatches).IsEmpty();
+        await Assert.That(staged).IsGreaterThan(0);
+        Console.WriteLine($"LIFECYCLE_LOCKSTEP staged={staged} withLifecycle={withLifecycle}");
+    }
+
+    // B3: the corpus has no lifecycle-enum entity (withLifecycle=0), so the lockstep is also pinned
+    // on fixtures with, and without, the lifecycle enum.
+    [Test]
+    public async Task LifecyclePropertyName_MatchesAnalyzer_OnFixtures() {
+        var withEnum = EvolvedDomain.FromDsl("""
+            domain LockstepEnum
+            OrderState: enum { Pending, Paid }
+            Z: entity {
+              N: Number
+              State: OrderState default(Pending)
+              Pending: stage { entry { assign N to 1  transition to Paid } }
+              Paid: stage { }
+            }
+            """);
+        var noEnum = EvolvedDomain.FromDsl("""
+            domain LockstepNoEnum
+            Z: entity {
+              N: Number
+              Pending: stage { entry { assign N to 1  transition to Paid } }
+              Paid: stage { }
+            }
+            """);
+
+        foreach (var (domain, analysis, expected) in new[] { (withEnum.Domain, withEnum.Analysis, "State"), (noEnum.Domain, noEnum.Analysis, (string?)null) }) {
+            var entity = EntityNamed(domain, "Z");
+            await Assert.That(analysis.GetStructure(entity)!.LifecyclePropertyName).IsEqualTo(expected);
+            await Assert.That(StageEntryFacts.LifecyclePropertyName(entity, domain)).IsEqualTo(expected);
+        }
+    }
+
+    // S-04's OnEntry-chain-only walk, kept test-local so the corpus delta can be computed.
+    private static HashSet<string> OnEntryChainOnly(Entity entity) {
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        if (entity.InitialStage() is not { } initial)
+            return names;
+        var visited = new HashSet<string>(StringComparer.Ordinal);
+        var pending = new Queue<Stage>();
+        pending.Enqueue(initial);
+        while (pending.Count > 0) {
+            var stage = pending.Dequeue();
+            if (!visited.Add(stage.Name))
+                continue;
+            foreach (var effect in EffectHelpers.FlattenEffects(stage.OnEntryEffects)) {
+                switch (effect) {
+                    case AssignEffect { Target: PropertyAccess property }:
+                        names.Add(property.Name);
+                        break;
+                    case StageTransitionEffect transition when entity.Stages.FirstOrDefault(
+                        candidate => string.Equals(candidate.Name, transition.TargetStage.StageName, StringComparison.Ordinal)) is { } next:
+                        pending.Enqueue(next);
+                        break;
+                }
+            }
+        }
+        return names;
+    }
+
+    // S7: the corpus delta. Entities whose create-time set now exceeds S-04's OnEntry-chain-only
+    // set, i.e. the models whose verdict changes when S-14 consumes the fact.
+    [Test]
+    public async Task EntryAssignedProperties_CorpusDelta_AgainstOnEntryChainOnly() {
+        var root = FindRepoRoot();
+        var delta = new List<string>();
+        var entities = 0;
+
+        foreach (var path in Directory.EnumerateFiles(root, "*.poly", SearchOption.AllDirectories)
+                     .Where(p => !IsBuildOutput(root, p))
+                     .Order(StringComparer.Ordinal)) {
+            var relative = Path.GetRelativePath(root, path).Replace('\\', '/');
+            MutationResult applied;
+            try {
+                applied = new DomainEvolution(DomainTestFactory.Create("_", [], []))
+                    .Apply(new PolyDslParser(File.ReadAllText(path)).Parse());
+            }
+            catch (Exception) {
+                continue;
+            }
+            if (!applied.Succeeded)
+                continue;
+            foreach (var entity in applied.Root.Types.OfType<Entity>()) {
+                entities++;
+                var widened = StageEntryFacts.EntryAssignedProperties(entity, applied.Root)
+                    .Where(name => !OnEntryChainOnly(entity).Contains(name))
+                    .Order(StringComparer.Ordinal)
+                    .ToList();
+                if (widened.Count > 0)
+                    delta.Add($"{relative}:{entity.Name}:{{{string.Join(",", widened)}}}");
+            }
+        }
+
+        await Assert.That(entities).IsGreaterThanOrEqualTo(50);
+        await Assert.That(delta).IsEquivalentTo(Array.Empty<string>(), StringComparer.Ordinal);
     }
 
     private static bool IsBuildOutput(string root, string path) =>

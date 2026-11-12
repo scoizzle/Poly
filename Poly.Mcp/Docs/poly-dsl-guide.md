@@ -1013,6 +1013,8 @@ target enters a matching stage. Omit it for the default **`Each`**:
   `all`, `none`, or `count` is **rejected at analysis** (structural failure) because
   it would be silently consumed as the quantifier in every read. Rename such
   relationships (e.g. `anyOrders`).
+  `link` and `unlink` are likewise reserved (lowercase only) as effect keywords; a member or
+  relationship named `link` or `unlink` is a parse error until contextual keywords land.
 - Peer binder (`as name`) remains valid with `any`/`all`; the peer is the
   **transitioned** instance for that firing (same as `Each` today).
 
@@ -1502,7 +1504,23 @@ assign Tier to match { Qty > 100 -> "big", Qty > 10 -> "mid", else -> "small" }
 
 A `transition` in an exit block must target the stage every hop leaving that stage targets (`DMEFF017`; see Entry/Exit Effects). The action-only effects above are rejected in an exit block (`DMEFF018`). A `create` or `create in` initializer may not supply a property the new instance's entry chain may assign (`DMEFF019`; see Entry/Exit Effects).
 
-**Linking existing instances:** graph wiring happens through `create in Rel { … }`, which the module's own body links on the instance. To connect already-existing instances, the MCP `link_instances` and `unlink_instances` tools write the relationship field on the instance (the session executor's `Link` / `Unlink`) with relationship + entity-type validation at the tool boundary. `unlink_instances` refuses to drop the last owner of an `owned` target (see §4). There is no Link/Unlink **Effect IR** — linking existing instances is a host/tool operation only.
+**Linking existing instances:** graph wiring happens through `create in Rel { … }`, which the module's own body links on the instance. To connect already-existing instances, the MCP `link_instances` and `unlink_instances` tools write the relationship field on the instance (the session executor's `Link` / `Unlink`) with relationship + entity-type validation at the tool boundary. `unlink_instances` refuses to drop the last owner of an `owned` target (see §4).
+
+**`link` / `unlink` effects (syntax and analysis only):** `link Rel to binder` and `unlink Rel from binder` parse, print and round-trip, but analysis refuses every use with `DMEFF020` until the lowering lands (L-13). Use the MCP link tools until then. The target is a bare binder of an enclosing `for x in Rel { … }`; the relationship must be declared on the action's entity and hold the binder's type. An owned navigation's owner is fixed, so `link` / `unlink` on one is refused (`DMEFF001`): it is written only by `create in`. `link` and `unlink` are reserved lowercase words until contextual keywords land (G-21); `Link` is still an ordinary name.
+
+<!-- poly-verify: invalid:DMEFF020 -->
+```poly
+domain Board
+
+Task: entity { Name: Text }
+Board: entity {
+  Backlog: many Task
+  Active: many Task
+  Move: action {
+    for t in Backlog { link Active to t }   // error DMEFF020: not lowerable until L-13
+  }
+}
+```
 
 ## 10. Do NOT Use (Unsupported in Phase 1a/1b)
 

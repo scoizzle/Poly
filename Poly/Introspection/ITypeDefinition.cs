@@ -87,4 +87,18 @@ public interface ITypeDefinition {
     /// <see cref="PrimitiveType"/> and every other kind reports null.
     /// </summary>
     TypeKind Kind { get; }
+
+    /// <summary>
+    /// The conversion from <paramref name="source"/> to this type that the platform defines, or null.
+    /// Declared operators and built-in rules both answer here. The public
+    /// <see cref="TypeDefinitionExtensions.GetConversionFrom"/> door is unchanged.
+    /// </summary>
+    internal TypeConversion? ResolveConversionFrom(ITypeDefinition source) =>
+        this.GetConversionFrom(source) is { } conversion ? new TypeConversion(conversion.Kind, conversion.Method) : null;
+
+    /// <summary>
+    /// The operators of <paramref name="kind"/> this definition declares. Modeled definitions
+    /// declare static <c>op_*</c> members; a platform adds the operators it leaves to its compiler.
+    /// </summary>
+    internal IEnumerable<DeclaredOperator> GetOperators(OperatorKind kind) => ModeledOperators.Find(this, kind);
 }

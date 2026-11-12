@@ -58,7 +58,7 @@ plan: L (constructor start stage, create-in notify), S, X, M (`RuntimeTool`), Q 
 | Slice | What it lands | Source |
 |---|---|---|
 | F-02 | Initial-stage accessor: every `Stages[0]` replaced by `EntityStages.InitialStage`, no behaviour change | theme F slice table |
-| F-03 | Explicit initial-stage designation `initial(Stage)`; closes [#675](https://github.com/scoizzle/Poly/issues/675) | theme F slice table |
+| F-03 | Explicit initial-stage designation `initial(Stage)`; [#675](https://github.com/scoizzle/Poly/issues/675)'s HTTP pack-oracle leg stays with P | theme F slice table |
 
 F-03 depends on F-02 and on the G-00a / G-00b syntax-seam slices in the plan.
 
@@ -73,6 +73,22 @@ F-03 depends on F-02 and on the G-00a / G-00b syntax-seam slices in the plan.
 - **What "first declared" means after a change list.** The ruling names declaration order; how a stage
   added by an evolution change interacts with the designation is not stated. Open: the ordering rule for
   an entity whose stages arrive through more than one declaration - decided in slice F-03.
+
+### Resolved by F-03
+
+The three *Open* items above are settled by slice F-03, which implements them; the ruling itself is
+unchanged.
+
+- **Spelling: a header clause.** The designation is `initial(Stage)` in the entity header, before
+  `key(...)` and the opening `{`, mirroring `key(...)` rather than marking a stage. A stage marker
+  could not express "names a stage that does not exist", which #675's *Scope* makes fail-closed.
+- **Duplicate designation: a parse error.** A second `initial(...)` clause is a positioned parse
+  error at the second `initial` token, matching the second-`key(...)` refusal. It cannot be an analysis
+  error: the IR carries one name (`Entity.InitialStageName`), so a change list has nothing to hold two.
+- **Ordering after a change list: `Stages[0]` stays first-declared.** An evolution change list appends
+  stages, so append order is declaration order and "first declared" needs no new rule. Removing the
+  designated stage leaves a dangling name, which analysis reports as DMINI001 while the create path
+  falls back to the first declared stage.
 
 ## What this file does not decide
 

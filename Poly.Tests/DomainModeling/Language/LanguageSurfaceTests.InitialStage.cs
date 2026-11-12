@@ -6,6 +6,7 @@ using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
 using Poly.Grammar;
 using Poly.Interpretation.CSharp;
+using Poly.Tests.Polyc;
 using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.DomainModeling.Language;
@@ -133,6 +134,17 @@ public sealed partial class LanguageSurfaceTests {
         if (!mutation.Succeeded)
             throw new InvalidOperationException(string.Join("; ", mutation.MutationErrors));
         return (mutation.Root, DomainModelAnalyzer.Analyze(mutation.Root));
+    }
+
+    [Test]
+    public async Task InitialStage_GuideExample_ParsesAndRoundTrips() {
+        var guide = await File.ReadAllTextAsync(Path.Combine(PolycTestSupport.RepoRoot(), "Poly.Mcp", "Docs", "poly-dsl-guide.md"));
+        await Assert.That(guide).Contains("```poly\n" + DesignatedDocument + "\n```").Because("§5's example is the same text this document prints");
+
+        var (domain, analysis) = InitialStageEvolve(DesignatedDocument);
+        await Assert.That(analysis.HasErrors).IsFalse();
+        var printed = InitialStagePrint(domain);
+        await Assert.That(InitialStagePrint(InitialStageEvolve(printed).Domain)).IsEqualTo(printed);
     }
 
     [Test]

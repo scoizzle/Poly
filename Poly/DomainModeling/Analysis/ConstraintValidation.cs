@@ -22,6 +22,29 @@ internal static class ConstraintValidation {
         return ConstraintKinds.Of(constraint)?.Evaluate(constraint, value) ?? ConstraintVerdict.Undecided;
     }
 
+    /// <summary>The flow-side default for a kind that has no decision: never Satisfied (fail closed).</summary>
+    internal static ConstraintVerdict Undecided(Constraint constraint, AbstractValue value) =>
+        ConstraintVerdict.Undecided;
+
+    /// <summary>
+    /// Decides whether a non-literal <paramref name="value"/> can satisfy <paramref name="constraint"/>.
+    /// An unregistered kind is Undecided (fail closed), exactly like <see cref="Evaluate"/>.
+    /// </summary>
+    internal static ConstraintVerdict Decide(Constraint constraint, AbstractValue value) {
+        ArgumentNullException.ThrowIfNull(constraint);
+        ArgumentNullException.ThrowIfNull(value);
+        return ConstraintKinds.Of(constraint)?.Decide(constraint, value) ?? ConstraintVerdict.Undecided;
+    }
+
+    /// <summary>
+    /// Whether a non-literal write must be verified against <paramref name="constraint"/>. An unregistered
+    /// kind is relevant (fail closed): a kind nobody models warns instead of being skipped.
+    /// </summary>
+    internal static bool IsWriteRelevant(Constraint constraint) {
+        ArgumentNullException.ThrowIfNull(constraint);
+        return ConstraintKinds.Of(constraint)?.WriteRelevant ?? true;
+    }
+
     /// <summary>Reports the shared DMCS003 warning for a constraint kind analysis does not model.</summary>
     public static void ReportUndecided(AnalysisContext context, Node node, Constraint constraint, string where) =>
         context.ReportWarning(

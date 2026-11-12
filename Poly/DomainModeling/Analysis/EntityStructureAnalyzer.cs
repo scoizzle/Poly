@@ -261,7 +261,14 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
         return false;
     }
 
-    private static bool TransitionsTo(Entity entity, string stageName) {
+    /// <summary>
+    /// True when anything in <paramref name="entity"/> transitions into <paramref name="stageName"/>:
+    /// entity and stage actions, entity and stage subscriptions, entry and exit effects, through
+    /// nested composite, conditional and for-each effects. Also read by
+    /// <c>SubscriptionAnalyzer</c> for DMSS007. <c>SubscriptionAnalyzer.TargetHasTransitionTo</c> is a
+    /// narrower, actions-only walk for causality edges and must not be used for that.
+    /// </summary>
+    internal static bool TransitionsTo(Entity entity, string stageName) {
         static bool In(IEnumerable<Effect> effects, string target) =>
             effects.Any(effect => effect switch {
                 StageTransitionEffect transition =>

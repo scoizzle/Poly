@@ -1,4 +1,5 @@
 using System.Reflection;
+using Poly.Tests.TestHelpers;
 
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
@@ -172,7 +173,7 @@ public class UniqueSimulatePrintAgreeTests {
     }
 
     private static object Invoke(object instance, string name, params (string Name, object? Value)[] arguments) {
-        var method = instance.GetType().GetMethod(name, BindingFlags.Instance | BindingFlags.Public)
+        var method = instance.GetType().GetMethod(name, PrintedMembers.Any)
             ?? throw new InvalidOperationException($"missing action {name}");
         var parameters = method.GetParameters();
         var args = new object?[parameters.Length];
@@ -189,11 +190,11 @@ public class UniqueSimulatePrintAgreeTests {
     }
 
     private static bool Success(object result) =>
-        (bool)result.GetType().GetProperty("IsSuccess")!.GetValue(result)!;
+        (bool)result.GetType().GetProperty("IsSuccess", PrintedMembers.Any)!.GetValue(result)!;
 
     private static string? Message(object result) =>
-        result.GetType().GetProperty("ErrorMessage")!.GetValue(result) as string;
+        result.GetType().GetProperty("ErrorMessage", PrintedMembers.Any)!.GetValue(result) as string;
 
     private static string? CodeOf(object instance) =>
-        instance.GetType().GetProperty("Code")!.GetValue(instance) as string;
+        instance.GetType().GetProperty("Code", PrintedMembers.Any)!.GetValue(instance) as string;
 }

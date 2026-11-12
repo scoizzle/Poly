@@ -181,6 +181,7 @@ public sealed partial class DomainToCSharpExporter {
             Methods: methods.Count > 0 ? methods : null,
             Fields: fields.Count > 0 ? fields : null,
             Interfaces: [new NamedTypeReference("Poly.Runtime.IActionScoped")],
+            AccessModifier: DomainAccess.ForEntity(entity),
             Semantics: Syntactic.TypeDefinitionSemantics.MutableReference
         ));
 

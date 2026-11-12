@@ -17,7 +17,8 @@ public sealed partial class DomainToCSharpExporter {
     /// values stay the member name string. The declared type is what lets a lowered
     /// enum argument resolve against the Create signature (#485, D1).
     /// </summary>
-    internal static TypeDefinitionNode BuildEnumTypeDef(string name, IEnumerable<string> memberNames) {
+    internal static TypeDefinitionNode BuildEnumTypeDef(
+        string name, IEnumerable<string> memberNames, AccessModifier access) {
         var fields = memberNames.Select(memberName => new FieldDefinitionNode(
             memberName,
             new NamedTypeReference(name),
@@ -30,6 +31,7 @@ public sealed partial class DomainToCSharpExporter {
             name,
             Fields: fields,
             Kind: TypeKind.Enum,
+            AccessModifier: access,
             Semantics: Syntactic.TypeDefinitionSemantics.MutableReference
         );
     }
@@ -103,7 +105,7 @@ public sealed partial class DomainToCSharpExporter {
         // ── Stage enum + CurrentStage property ────────────────────
         if (esm.HasStages) {
             var enumTypeName = stageEnumTypeName!;
-            typeDefs.Add(BuildEnumTypeDef(enumTypeName, entity.Stages.Select(s => s.Name)));
+            typeDefs.Add(BuildEnumTypeDef(enumTypeName, entity.Stages.Select(s => s.Name), DomainAccess.ForEntity(entity)));
 
             props.Add(new PropertyDefinitionNode(
                 "CurrentStage",

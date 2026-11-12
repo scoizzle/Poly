@@ -31,10 +31,10 @@ public class EnumMemberAgreeTests {
             ("status", Enum.Parse(asm.GetType("PatronStatus")!, "Suspended")));
 
         await Assert.That(exec.EvaluatePolicy(active, (policy).Name)).IsTrue();
-        await Assert.That((bool)printedActive.GetType().GetMethod("IsActive")!.Invoke(printedActive, null)!)
+        await Assert.That((bool)printedActive.GetType().GetMethod("IsActive", PrintedMembers.Any)!.Invoke(printedActive, null)!)
             .IsTrue();
         await Assert.That(exec.EvaluatePolicy(suspended, (policy).Name)).IsFalse();
-        await Assert.That((bool)printedSuspended.GetType().GetMethod("IsActive")!.Invoke(printedSuspended, null)!)
+        await Assert.That((bool)printedSuspended.GetType().GetMethod("IsActive", PrintedMembers.Any)!.Invoke(printedSuspended, null)!)
             .IsFalse();
     }
 
@@ -60,10 +60,10 @@ public class EnumMemberAgreeTests {
             ("status", Enum.Parse(asm.GetType("PatronStatus")!, "Suspended")));
 
         await Assert.That(exec.EvaluatePolicy(active, (policy).Name)).IsTrue();
-        await Assert.That((bool)printedActive.GetType().GetMethod("IsActive")!.Invoke(printedActive, null)!)
+        await Assert.That((bool)printedActive.GetType().GetMethod("IsActive", PrintedMembers.Any)!.Invoke(printedActive, null)!)
             .IsTrue();
         await Assert.That(exec.EvaluatePolicy(suspended, (policy).Name)).IsFalse();
-        await Assert.That((bool)printedSuspended.GetType().GetMethod("IsActive")!.Invoke(printedSuspended, null)!)
+        await Assert.That((bool)printedSuspended.GetType().GetMethod("IsActive", PrintedMembers.Any)!.Invoke(printedSuspended, null)!)
             .IsFalse();
     }
 
@@ -89,10 +89,10 @@ public class EnumMemberAgreeTests {
             new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis)));
         var printed = ExportedCSharp.CreateEntity(asm, "Patron");
         var statusType = asm.GetType("PatronStatus")!;
-        var result = printed.GetType().GetMethod("SetStatus")!
+        var result = printed.GetType().GetMethod("SetStatus", PrintedMembers.Any)!
             .Invoke(printed, [Enum.Parse(statusType, "Suspended")])!;
-        await Assert.That((bool)result.GetType().GetProperty("IsSuccess")!.GetValue(result)!).IsTrue();
-        await Assert.That(printed.GetType().GetProperty("Status")!.GetValue(printed)!.ToString())
+        await Assert.That((bool)result.GetType().GetProperty("IsSuccess", PrintedMembers.Any)!.GetValue(result)!).IsTrue();
+        await Assert.That(printed.GetType().GetProperty("Status", PrintedMembers.Any)!.GetValue(printed)!.ToString())
             .IsEqualTo("Suspended");
     }
 
@@ -115,9 +115,9 @@ public class EnumMemberAgreeTests {
         var asm = ExportedCSharp.CompileAndLoad(
             new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis)));
         var printed = ExportedCSharp.CreateEntity(asm, "Patron");
-        var result = printed.GetType().GetMethod("Suspend")!.Invoke(printed, null)!;
-        await Assert.That((bool)result.GetType().GetProperty("IsSuccess")!.GetValue(result)!).IsTrue();
-        await Assert.That(printed.GetType().GetProperty("Status")!.GetValue(printed)!.ToString())
+        var result = printed.GetType().GetMethod("Suspend", PrintedMembers.Any)!.Invoke(printed, null)!;
+        await Assert.That((bool)result.GetType().GetProperty("IsSuccess", PrintedMembers.Any)!.GetValue(result)!).IsTrue();
+        await Assert.That(printed.GetType().GetProperty("Status", PrintedMembers.Any)!.GetValue(printed)!.ToString())
             .IsEqualTo("Suspended");
     }
 
@@ -143,10 +143,10 @@ public class EnumMemberAgreeTests {
         var asm = ExportedCSharp.CompileAndLoad(
             new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis)));
         var printed = ExportedCSharp.CreateEntity(asm, "Item");
-        var result = printed.GetType().GetMethod("Submit")!.Invoke(printed, null)!;
-        await Assert.That((bool)result.GetType().GetProperty("IsSuccess")!.GetValue(result)!).IsTrue();
-        await Assert.That(printed.GetType().GetProperty("CurrentStage")!.GetValue(printed)!.ToString())
+        var result = printed.GetType().GetMethod("Submit", PrintedMembers.Any)!.Invoke(printed, null)!;
+        await Assert.That((bool)result.GetType().GetProperty("IsSuccess", PrintedMembers.Any)!.GetValue(result)!).IsTrue();
+        await Assert.That(printed.GetType().GetProperty("CurrentStage", PrintedMembers.Any)!.GetValue(printed)!.ToString())
             .IsEqualTo("Placed");
-        await Assert.That((long)printed.GetType().GetProperty("Count")!.GetValue(printed)!).IsEqualTo(1L);
+        await Assert.That((long)printed.GetType().GetProperty("Count", PrintedMembers.Any)!.GetValue(printed)!).IsEqualTo(1L);
     }
 }

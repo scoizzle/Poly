@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Runtime.Loader;
+using Poly.Tests.TestHelpers;
 
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -207,7 +208,7 @@ public class WhenAnySimulatePrintAgreeTests {
     internal static object CreateEntity(Assembly asm, string typeName, params (string Name, object? Value)[] named) {
         var type = asm.GetType(typeName)
             ?? throw new InvalidOperationException($"missing type {typeName}");
-        var create = type.GetMethods(BindingFlags.Public | BindingFlags.Static)
+        var create = type.GetMethods(PrintedMembers.Any)
             .Where(m => m.Name == "Create")
             .OrderByDescending(m => m.GetParameters().Length)
             .First();
@@ -227,11 +228,11 @@ public class WhenAnySimulatePrintAgreeTests {
                 callArgs[i] = null;
         }
         var result = create.Invoke(null, callArgs)!;
-        var ok = (bool)result.GetType().GetProperty("IsSuccess")!.GetValue(result)!;
+        var ok = (bool)result.GetType().GetProperty("IsSuccess", PrintedMembers.Any)!.GetValue(result)!;
         if (!ok)
             throw new InvalidOperationException(
-                result.GetType().GetProperty("ErrorMessage")!.GetValue(result) as string ?? "Create failed");
-        return result.GetType().GetProperty("Value")!.GetValue(result)!;
+                result.GetType().GetProperty("ErrorMessage", PrintedMembers.Any)!.GetValue(result) as string ?? "Create failed");
+        return result.GetType().GetProperty("Value", PrintedMembers.Any)!.GetValue(result)!;
     }
 
     internal static void Attach(object parent, string navPascal, object child) {
@@ -243,18 +244,18 @@ public class WhenAnySimulatePrintAgreeTests {
     }
 
     internal static void InvokeAction(object instance, string name) {
-        var method = instance.GetType().GetMethod(name, BindingFlags.Instance | BindingFlags.Public)
+        var method = instance.GetType().GetMethod(name, PrintedMembers.Any)
             ?? throw new InvalidOperationException($"missing action {name}");
         var result = method.Invoke(instance, null)!;
-        var ok = (bool)result.GetType().GetProperty("IsSuccess")!.GetValue(result)!;
+        var ok = (bool)result.GetType().GetProperty("IsSuccess", PrintedMembers.Any)!.GetValue(result)!;
         if (!ok)
             throw new InvalidOperationException(
-                result.GetType().GetProperty("ErrorMessage")!.GetValue(result) as string
+                result.GetType().GetProperty("ErrorMessage", PrintedMembers.Any)!.GetValue(result) as string
                 ?? $"{name} failed");
     }
 
     internal static long GetLong(object instance, string property) {
-        var value = instance.GetType().GetProperty(property)!.GetValue(instance);
+        var value = instance.GetType().GetProperty(property, PrintedMembers.Any)!.GetValue(instance);
         return Convert.ToInt64(value);
     }
 }

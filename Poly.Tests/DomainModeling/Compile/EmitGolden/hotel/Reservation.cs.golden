@@ -4,7 +4,7 @@ using System.Collections.Generic;
 
 using Poly.Runtime;
 
-public enum ReservationStage
+internal enum ReservationStage
 {
     Requested = 0,
     Confirmed = 1,
@@ -14,7 +14,7 @@ public enum ReservationStage
     NoShow = 5
 }
 
-public class Reservation : Poly.Runtime.IActionScoped
+internal class Reservation : Poly.Runtime.IActionScoped
 {
     private List<Room>? _roomStaysInHouseSubscribers;
     private List<Room>? _roomStaysDepartedSubscribers;
@@ -46,7 +46,7 @@ public class Reservation : Poly.Runtime.IActionScoped
     public Guest? Guest { get; private set; }
     public Room? Room { get; private set; }
     public ReservationStage CurrentStage { get; private set; }
-    public DomainResult<Folio> CreateFolio(decimal balance = 0m)
+    internal DomainResult<Folio> CreateFolio(decimal balance = 0m)
     {
         var folioResult = Folio.Create(this, balance);
         if (!folioResult.IsSuccess)
@@ -57,7 +57,7 @@ public class Reservation : Poly.Runtime.IActionScoped
         this.Folio = folio;
         return DomainResult<Folio>.Success(folio);
     }
-    public DomainResult Confirm()
+    internal DomainResult Confirm()
     {
         if (this.CurrentStage != ReservationStage.Requested)
         {
@@ -78,7 +78,7 @@ public class Reservation : Poly.Runtime.IActionScoped
         this.CurrentStage = ReservationStage.Confirmed;
         return DomainResult.Success();
     }
-    public DomainResult Cancel()
+    internal DomainResult Cancel()
     {
         if (this.CurrentStage == ReservationStage.Requested || this.CurrentStage == ReservationStage.Confirmed)
         {
@@ -88,7 +88,7 @@ public class Reservation : Poly.Runtime.IActionScoped
         }
         return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Cancel' is not valid for the current stage on entity 'Reservation'.", "Reservation.Cancel"));
     }
-    public DomainResult CheckIn()
+    internal DomainResult CheckIn()
     {
         if (this.CurrentStage != ReservationStage.Confirmed)
         {
@@ -119,7 +119,7 @@ public class Reservation : Poly.Runtime.IActionScoped
         this.NotifyInHouseSubscribers();
         return DomainResult.Success();
     }
-    public DomainResult MarkNoShow()
+    internal DomainResult MarkNoShow()
     {
         if (this.CurrentStage != ReservationStage.Confirmed)
         {
@@ -129,7 +129,7 @@ public class Reservation : Poly.Runtime.IActionScoped
         this.NotifyNoShowSubscribers();
         return DomainResult.Success();
     }
-    public DomainResult PostStayCharge()
+    internal DomainResult PostStayCharge()
     {
         if (this.CurrentStage != ReservationStage.InHouse)
         {
@@ -150,7 +150,7 @@ public class Reservation : Poly.Runtime.IActionScoped
         }
         return DomainResult.Success();
     }
-    public DomainResult CheckOut()
+    internal DomainResult CheckOut()
     {
         if (this.CurrentStage != ReservationStage.InHouse)
         {
@@ -334,7 +334,7 @@ public class Reservation : Poly.Runtime.IActionScoped
             this.ExitNotifyCascade();
         }
     }
-    public static DomainResult<Reservation> Create(long partySize, long nights, decimal nightlyRate, long maxOccupancy, DateOnly checkInDate, DateOnly checkOutDate, Folio? folio = null, Guest? guest = null, Room? room = null)
+    internal static DomainResult<Reservation> Create(long partySize, long nights, decimal nightlyRate, long maxOccupancy, DateOnly checkInDate, DateOnly checkOutDate, Folio? folio = null, Guest? guest = null, Room? room = null)
     {
         if (partySize < 1L)
         {

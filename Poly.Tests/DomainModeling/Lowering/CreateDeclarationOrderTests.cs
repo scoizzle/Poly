@@ -6,6 +6,7 @@ using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
 using Poly.Interpretation.CSharp;
+using Poly.Tests.TestHelpers;
 
 using TUnit.Assertions.Enums;
 
@@ -82,7 +83,7 @@ public sealed class CreateDeclarationOrderTests {
         var asm = ExportedCSharp.CompileAndLoad(Print(domain, analysis));
         var create = CreateMethodInfo(asm.GetType("Gate")!);
         var failure = create.Invoke(null, [5L, 5L])!;
-        var message = (string?)failure.GetType().GetProperty("ErrorMessage")!.GetValue(failure);
+        var message = (string?)failure.GetType().GetProperty("ErrorMessage", PrintedMembers.Any)!.GetValue(failure);
 
         await Assert.That(message).Contains("'Zed'");
     }
@@ -114,7 +115,7 @@ public sealed class CreateDeclarationOrderTests {
         var asm = ExportedCSharp.CompileAndLoad(Print(domain, analysis));
         var shelf = ExportedCSharp.CreateEntity(asm, "Shelf", ("name", "s"));
         var method = shelf.GetType().GetMethod(
-            "CreateWidgets", BindingFlags.Public | BindingFlags.Instance)!;
+            "CreateWidgets", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)!;
 
         // Named values, so a reordered parameter list still finds both slots.
         var args = new object?[method.GetParameters().Length];
@@ -127,7 +128,7 @@ public sealed class CreateDeclarationOrderTests {
         }
 
         var result = method.Invoke(shelf, args)!;
-        await Assert.That((bool)result.GetType().GetProperty("IsSuccess")!.GetValue(result)!).IsTrue();
+        await Assert.That((bool)result.GetType().GetProperty("IsSuccess", PrintedMembers.Any)!.GetValue(result)!).IsTrue();
 
         var widgets = (System.Collections.IEnumerable)shelf.GetType()
             .GetField("_widgets", BindingFlags.NonPublic | BindingFlags.Instance)!
@@ -135,8 +136,8 @@ public sealed class CreateDeclarationOrderTests {
         var widget = widgets.Cast<object>().Single();
 
         // The Abe override must land on Abe, not on its declared neighbour Zed.
-        await Assert.That(widget.GetType().GetProperty("Zed")!.GetValue(widget)).IsEqualTo(1L);
-        await Assert.That(widget.GetType().GetProperty("Abe")!.GetValue(widget)).IsEqualTo(42L);
+        await Assert.That(widget.GetType().GetProperty("Zed", PrintedMembers.Any)!.GetValue(widget)).IsEqualTo(1L);
+        await Assert.That(widget.GetType().GetProperty("Abe", PrintedMembers.Any)!.GetValue(widget)).IsEqualTo(42L);
     }
 
     // ── S4: #558's literal repro — positional args in declaration order ──────────
@@ -162,11 +163,11 @@ public sealed class CreateDeclarationOrderTests {
         var asm = ExportedCSharp.CompileAndLoad(Print(domain, analysis));
         var printed = CreateMethodInfo(asm.GetType("Product")!);
         var result = printed.Invoke(null, ["A", 95L, 5L, 3L])!;
-        await Assert.That((bool)result.GetType().GetProperty("IsSuccess")!.GetValue(result)!).IsTrue();
+        await Assert.That((bool)result.GetType().GetProperty("IsSuccess", PrintedMembers.Any)!.GetValue(result)!).IsTrue();
 
-        var instance = result.GetType().GetProperty("Value")!.GetValue(result)!;
+        var instance = result.GetType().GetProperty("Value", PrintedMembers.Any)!.GetValue(result)!;
         foreach (var (name, expected) in new (string, object)[] { ("Sku", "A"), ("Price", 95L), ("OnHand", 5L), ("Reserved", 3L) })
-            await Assert.That(instance.GetType().GetProperty(name)!.GetValue(instance)).IsEqualTo(expected)
+            await Assert.That(instance.GetType().GetProperty(name, PrintedMembers.Any)!.GetValue(instance)).IsEqualTo(expected)
                 .Because($"positional argument in declaration order binds {name}");
 
         // The simulator takes the same declared values by name; both sides hold the
@@ -197,7 +198,7 @@ public sealed class CreateDeclarationOrderTests {
 
     /// <summary>The widest public static Create factory (one per entity).</summary>
     private static MethodInfo CreateMethodInfo(Type type) =>
-        type.GetMethods(BindingFlags.Public | BindingFlags.Static)
+        type.GetMethods(PrintedMembers.Any)
             .Where(m => m.Name == "Create")
             .OrderByDescending(m => m.GetParameters().Length)
             .First();

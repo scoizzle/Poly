@@ -3,13 +3,13 @@ using System.Collections.Generic;
 
 using Poly.Runtime;
 
-public enum CampaignStage
+internal enum CampaignStage
 {
     Active = 0,
     Ended = 1
 }
 
-public class Campaign : Poly.Runtime.IActionScoped
+internal class Campaign : Poly.Runtime.IActionScoped
 {
     private List<CampaignMember> _members = new List<CampaignMember>();
     private Campaign() { }
@@ -25,7 +25,7 @@ public class Campaign : Poly.Runtime.IActionScoped
         get => this._members;
     }
     public CampaignStage CurrentStage { get; private set; }
-    public DomainResult<CampaignMember> CreateMembers(Contact? contact = null)
+    internal DomainResult<CampaignMember> CreateMembers(Contact? contact = null)
     {
         var campaignMemberResult = CampaignMember.Create(contact, this);
         if (!campaignMemberResult.IsSuccess)
@@ -39,7 +39,7 @@ public class Campaign : Poly.Runtime.IActionScoped
     {
         this._members.Add(child);
     }
-    public DomainResult<CampaignMember> Enroll(Contact who)
+    internal DomainResult<CampaignMember> Enroll(Contact who)
     {
         if (this.CurrentStage != CampaignStage.Active)
         {
@@ -53,7 +53,7 @@ public class Campaign : Poly.Runtime.IActionScoped
         var created1 = create0.Value;
         return DomainResult<CampaignMember>.Success(created1);
     }
-    public DomainResult End()
+    internal DomainResult End()
     {
         if (this.CurrentStage != CampaignStage.Active)
         {
@@ -62,7 +62,7 @@ public class Campaign : Poly.Runtime.IActionScoped
         this.CurrentStage = CampaignStage.Ended;
         return DomainResult.Success();
     }
-    public static DomainResult<Campaign> Create(string name, IEnumerable<CampaignMember>? members = null)
+    internal static DomainResult<Campaign> Create(string name, IEnumerable<CampaignMember>? members = null)
     {
         if (string.IsNullOrEmpty(name))
         {

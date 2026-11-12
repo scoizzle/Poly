@@ -118,19 +118,19 @@ static async System.Threading.Tasks.Task SeedAsync(TDbCtx db)
 app.Run();
 
 
-public record NoteDto
+internal record NoteDto
 {
     [Required]
     public string Body { get; init; } = default!;
 }
 
-public record SetBodyDto
+internal record SetBodyDto
 {
     [Required]
     public string V { get; init; } = default!;
 }
 
-public record SetMemoDto
+internal record SetMemoDto
 {
     public string V { get; init; } = default!;
 }

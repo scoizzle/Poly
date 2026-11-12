@@ -3,6 +3,7 @@ using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Ontology.Contract;
 
+using AccessModifier = Poly.Introspection.AccessModifier;
 using ValueType = Poly.DomainModeling.Ontology.ValueType;
 
 namespace Poly.DomainModeling.Lowering;
@@ -92,13 +93,13 @@ public static class DomainProgramProjection {
 
         // ── Build enum type definitions ────────────────────────
         foreach (var enumType in domain.Types.OfType<EnumType>())
-            result.Add(DomainToCSharpExporter.BuildEnumTypeDef(enumType.Name, enumType.MemberNames));
+            result.Add(DomainToCSharpExporter.BuildEnumTypeDef(enumType.Name, enumType.MemberNames, AccessModifier.Public));
 
         foreach (var valueType in domain.Types.OfType<ValueType>())
-            result.Add(DomainToCSharpExporter.BuildValueTypeTypeDef(valueType, domain, metadata));
+            result.Add(DomainToCSharpExporter.BuildValueTypeTypeDef(valueType, domain, metadata, DomainAccess.ForValue(valueType)));
         foreach (var contract in domain.ImportedContracts) {
             foreach (var valueType in contract.Types)
-                result.Add(DomainToCSharpExporter.BuildValueTypeTypeDef(valueType, domain, metadata));
+                result.Add(DomainToCSharpExporter.BuildValueTypeTypeDef(valueType, domain, metadata, AccessModifier.Public));
         }
 
         // ── Build entity type definitions ─────────────────────────

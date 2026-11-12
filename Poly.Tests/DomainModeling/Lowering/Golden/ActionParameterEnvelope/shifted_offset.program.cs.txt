@@ -93,13 +93,13 @@ static async System.Threading.Tasks.Task SeedAsync(TDbCtx db)
 app.Run();
 
 
-public record BookDto
+internal record BookDto
 {
     [Range(0, 1000)]
     public long Stock { get; init; }
 }
 
-public record ShiftDto
+internal record ShiftDto
 {
     public long P { get; init; }
 }

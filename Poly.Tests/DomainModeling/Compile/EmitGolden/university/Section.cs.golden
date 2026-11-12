@@ -3,13 +3,13 @@ using System.Collections.Generic;
 
 using Poly.Runtime;
 
-public enum SectionStage
+internal enum SectionStage
 {
     Open = 0,
     Closed = 1
 }
 
-public class Section : Poly.Runtime.IActionScoped
+internal class Section : Poly.Runtime.IActionScoped
 {
     private List<Enrollment> _enrollments = new List<Enrollment>();
     private List<WaitOffer> _waitlist = new List<WaitOffer>();
@@ -50,7 +50,7 @@ public class Section : Poly.Runtime.IActionScoped
         child.RegisterSectionEnrollmentsRegisteredSubscriber(this);
         child.RegisterSectionEnrollmentsDroppedSubscriber(this);
     }
-    public DomainResult<WaitOffer> CreateWaitlist(Student? student = null)
+    internal DomainResult<WaitOffer> CreateWaitlist(Student? student = null)
     {
         var waitOfferResult = WaitOffer.Create(student, this);
         if (!waitOfferResult.IsSuccess)
@@ -66,7 +66,7 @@ public class Section : Poly.Runtime.IActionScoped
         child.RegisterSectionWaitlistOfferedSubscriber(this);
         child.RegisterSectionWaitlistCancelledSubscriber(this);
     }
-    public DomainResult Close()
+    internal DomainResult Close()
     {
         if (this.CurrentStage != SectionStage.Open)
         {
@@ -79,7 +79,7 @@ public class Section : Poly.Runtime.IActionScoped
         this.CurrentStage = SectionStage.Closed;
         return DomainResult.Success();
     }
-    public DomainResult<WaitOffer> Queue(Student who)
+    internal DomainResult<WaitOffer> Queue(Student who)
     {
         if (this.CurrentStage != SectionStage.Open)
         {
@@ -93,7 +93,7 @@ public class Section : Poly.Runtime.IActionScoped
         var created1 = create0.Value;
         return DomainResult<WaitOffer>.Success(created1);
     }
-    public DomainResult StaffLeave()
+    internal DomainResult StaffLeave()
     {
         if (this.CurrentStage != SectionStage.Open)
         {
@@ -114,7 +114,7 @@ public class Section : Poly.Runtime.IActionScoped
         }
         return DomainResult.Success();
     }
-    public DomainResult Reopen()
+    internal DomainResult Reopen()
     {
         if (this.CurrentStage != SectionStage.Closed)
         {
@@ -171,7 +171,7 @@ public class Section : Poly.Runtime.IActionScoped
         }
         this.WaitCleared = 1L;
     }
-    public static DomainResult<Section> Create(long cap, Term offeringTerm, Course? course = null, Instructor? instructor = null, IEnumerable<Enrollment>? enrollments = null, IEnumerable<WaitOffer>? waitlist = null, long seatsTaken = 0L, long offeredSeats = 0L, long waitCleared = 0L)
+    internal static DomainResult<Section> Create(long cap, Term offeringTerm, Course? course = null, Instructor? instructor = null, IEnumerable<Enrollment>? enrollments = null, IEnumerable<WaitOffer>? waitlist = null, long seatsTaken = 0L, long offeredSeats = 0L, long waitCleared = 0L)
     {
         if (cap < 1L)
         {

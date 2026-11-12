@@ -1,13 +1,13 @@
 #nullable enable
 using Poly.Runtime;
 
-public enum FolioStage
+internal enum FolioStage
 {
     Open = 0,
     Settled = 1
 }
 
-public class Folio : Poly.Runtime.IActionScoped
+internal class Folio : Poly.Runtime.IActionScoped
 {
     private Folio() { }
     private Folio(Reservation? reservation = null, decimal balance = 0m)
@@ -19,7 +19,7 @@ public class Folio : Poly.Runtime.IActionScoped
     public decimal Balance { get; private set; }
     public Reservation? Reservation { get; private set; }
     public FolioStage CurrentStage { get; private set; }
-    public DomainResult PostRoomNight(decimal amount)
+    internal DomainResult PostRoomNight(decimal amount)
     {
         if (this.CurrentStage != FolioStage.Open)
         {
@@ -37,7 +37,7 @@ public class Folio : Poly.Runtime.IActionScoped
         this.Balance = assignValue0;
         return DomainResult.Success();
     }
-    public DomainResult PostCharge(long amount)
+    internal DomainResult PostCharge(long amount)
     {
         if (this.CurrentStage != FolioStage.Open)
         {
@@ -55,7 +55,7 @@ public class Folio : Poly.Runtime.IActionScoped
         this.Balance = assignValue0;
         return DomainResult.Success();
     }
-    public DomainResult Settle()
+    internal DomainResult Settle()
     {
         if (this.CurrentStage != FolioStage.Open)
         {
@@ -69,7 +69,7 @@ public class Folio : Poly.Runtime.IActionScoped
         this.CurrentStage = FolioStage.Settled;
         return DomainResult.Success();
     }
-    public DomainResult CloseEmpty()
+    internal DomainResult CloseEmpty()
     {
         if (this.CurrentStage != FolioStage.Open)
         {
@@ -84,7 +84,7 @@ public class Folio : Poly.Runtime.IActionScoped
     }
     public bool HasBalance() => this.Balance > 0L;
     public bool IsSettled() => this.Balance == 0L;
-    public static DomainResult<Folio> Create(Reservation? reservation = null, decimal balance = 0m)
+    internal static DomainResult<Folio> Create(Reservation? reservation = null, decimal balance = 0m)
     {
         if (balance < 0m)
         {

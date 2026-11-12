@@ -1,7 +1,7 @@
 #nullable enable
 using Poly.Runtime;
 
-public class PremiumPatron : Poly.Runtime.IActionScoped
+internal class PremiumPatron : Poly.Runtime.IActionScoped
 {
     private PremiumPatron() { }
     private PremiumPatron(string name, string email, long rewardPoints, bool priorityAccess, PremiumTier tier = PremiumTier.Silver)
@@ -20,7 +20,7 @@ public class PremiumPatron : Poly.Runtime.IActionScoped
     public bool IsLoyal() => this.RewardPoints >= 100L;
     public bool HasPriority() => this.PriorityAccess;
     public bool UnlimitedItems() => this.Tier == PremiumTier.Platinum || this.PriorityAccess;
-    public static DomainResult<PremiumPatron> Create(string name, string email, long rewardPoints, bool priorityAccess, Poly.Runtime.IStoragePort db, PremiumTier tier = PremiumTier.Silver)
+    internal static DomainResult<PremiumPatron> Create(string name, string email, long rewardPoints, bool priorityAccess, Poly.Runtime.IStoragePort db, PremiumTier tier = PremiumTier.Silver)
     {
         if (string.IsNullOrEmpty(name))
         {

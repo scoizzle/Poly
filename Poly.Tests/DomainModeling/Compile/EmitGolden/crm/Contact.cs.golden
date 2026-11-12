@@ -1,13 +1,13 @@
 #nullable enable
 using Poly.Runtime;
 
-public enum ContactStage
+internal enum ContactStage
 {
     Active = 0,
     Inactive = 1
 }
 
-public class Contact : Poly.Runtime.IActionScoped
+internal class Contact : Poly.Runtime.IActionScoped
 {
     private Contact() { }
     private Contact(string name, string email, Account? account = null)
@@ -21,7 +21,7 @@ public class Contact : Poly.Runtime.IActionScoped
     public string Email { get; private set; } = default!;
     public Account? Account { get; private set; }
     public ContactStage CurrentStage { get; private set; }
-    public DomainResult Retire()
+    internal DomainResult Retire()
     {
         if (this.CurrentStage != ContactStage.Active)
         {
@@ -30,7 +30,7 @@ public class Contact : Poly.Runtime.IActionScoped
         this.CurrentStage = ContactStage.Inactive;
         return DomainResult.Success();
     }
-    public DomainResult Reactivate()
+    internal DomainResult Reactivate()
     {
         if (this.CurrentStage != ContactStage.Inactive)
         {
@@ -39,7 +39,7 @@ public class Contact : Poly.Runtime.IActionScoped
         this.CurrentStage = ContactStage.Active;
         return DomainResult.Success();
     }
-    public static DomainResult<Contact> Create(string name, string email, Poly.Runtime.IStoragePort db, Account? account = null)
+    internal static DomainResult<Contact> Create(string name, string email, Poly.Runtime.IStoragePort db, Account? account = null)
     {
         if (string.IsNullOrEmpty(name))
         {

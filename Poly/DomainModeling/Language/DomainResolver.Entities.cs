@@ -26,6 +26,30 @@ public sealed partial class DomainResolver {
 
     private const string KeyKeyword = "key";
 
+    private const string InitialKeyword = "initial";
+
+    /// <summary>
+    /// True at the header clause <c>initial(Stage)</c>. The word is contextual: only in header
+    /// position and only when followed by <c>(</c>, so a stage or property named <c>initial</c>
+    /// is unaffected.
+    /// </summary>
+    private bool IsInitialStageClause() =>
+        Current.Kind == TokenKind.Identifier && Current.Text == InitialKeyword && PeekIs(TokenKind.LParen);
+
+    /// <summary>
+    /// Parses <c>initial(Stage)</c> after the header annotations and before <c>key(...)</c>. The stage
+    /// name is resolved by analysis, not here; an empty or non-identifier clause fails closed.
+    /// </summary>
+    private string ParseInitialStageClause() {
+        Advance(); // 'initial'
+        Expect(TokenKind.LParen);
+        var name = ExpectIdentifier(TokenKind.Identifier, "initial stage name");
+        if (Current.Kind == TokenKind.Comma)
+            throw Error("The 'initial(...)' clause names exactly one stage; found a comma.");
+        Expect(TokenKind.RParen);
+        return name;
+    }
+
     /// <summary>
     /// Parses <c>key(a, b)</c> after the header annotations. The member names are checked by
     /// analysis, not here; a malformed list (empty, doubled or trailing comma, unclosed) fails closed.
@@ -70,9 +94,22 @@ public sealed partial class DomainResolver {
             ValidateTermFacet(headerFacet, termKeywords, $"entity '{entityName}'", allowTerm: false);
             changes.Add(new AddFacetToDomainTypeChange(entityName, headerFacet));
         }
+        // #675 initial-stage clause: after the annotations, before key(...) and '{'.
+        string? initialStage = null;
+        if (IsInitialStageClause())
+            initialStage = ParseInitialStageClause();
+        if (initialStage is not null)
+            changes.Add(new SetEntityInitialStageChange(entityName, initialStage));
         // #405 key clause: the last header element, immediately before '{'.
         if (Current.Kind == TokenKind.Identifier && Current.Text == KeyKeyword && PeekIs(TokenKind.LParen)) {
             changes.Add(new SetEntityKeyChange(entityName, ParseKeyClause()));
+        }
+        if (IsInitialStageClause()) {
+            // Declared before LooksLikeAnnotationCall so the clause is not reported as an unknown
+            // annotation: placement and repetition are the real failures.
+            if (initialStage is not null)
+                throw Error($"Entity '{entityName}' declares more than one 'initial(...)' clause.");
+            throw Error("The 'initial(...)' clause must come before 'key(...)'.");
         }
         if (LooksLikeAnnotationCall()) {
             throw Error(

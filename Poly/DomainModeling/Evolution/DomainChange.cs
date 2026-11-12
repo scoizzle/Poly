@@ -112,6 +112,24 @@ public sealed record SetEntityKeyChange(
     internal override string GetDescription() => $"Set key({string.Join(", ", KeyProperties)}) on Entity '{EntityName}'";
 }
 
+/// <summary>
+/// Sets an Entity's initial-stage designation (#675): the stage name a new instance starts in. The
+/// name is resolved by <see cref="Ontology.EntityStages.InitialStage"/> and checked by analysis, not
+/// here; a name that matches no stage falls back to the first declared stage and is reported.
+/// </summary>
+public sealed record SetEntityInitialStageChange(
+    string EntityName,
+    string StageName
+) : DomainChange {
+    internal override void ApplyTo(DomainMutationContext context) {
+        context.RequireUpdate(
+            context.ReplaceInEntity(EntityName, _ => true, e => e with { InitialStageName = StageName }),
+            $"Entity '{EntityName}' not found — cannot set initial stage");
+    }
+
+    internal override string GetDescription() => $"Set initial({StageName}) on Entity '{EntityName}'";
+}
+
 public sealed record RemoveEntityChange(
     string Name
 ) : DomainChange {

@@ -19,7 +19,7 @@ public class ExitBlockTransitionTargetTests {
         var result = new DomainEvolution(DomainTestFactory.Create("_", [], []))
             .ApplyAndAnalyze(new PolyDslParser(dsl).Parse());
         return result.Analysis.Diagnostics
-            .Where(d => d.Severity == DiagnosticSeverity.Error && d.Code == "DMEFF017")
+            .Where(d => d.Severity == DiagnosticSeverity.Error && d.Code == DomainModelDiagnosticCodes.ExitBlockTransitionTargetOverridden)
             .ToList();
     }
 
@@ -180,7 +180,7 @@ public class ExitBlockTransitionTargetTests {
               B: stage { }
               C: stage { }
             }
-            """, "C", "the entry block of 'A' leaves it for 'B'");
+            """, "C", "the entry block of 'A' leaves 'A' for 'B'");
 
     private const string PeerDsl = """
         Paper: entity {
@@ -202,7 +202,7 @@ public class ExitBlockTransitionTargetTests {
               C: stage { }
               D: stage { }
             }
-            """, "C", "the 'when' subscription on 'A' leaves it for 'D'");
+            """, "C", "the 'when' subscription on 'A' leaves 'A' for 'D'");
 
     [Test]
     public async Task Analyze_ExitTransitionVsEntityWhenHop_IsRejected() =>

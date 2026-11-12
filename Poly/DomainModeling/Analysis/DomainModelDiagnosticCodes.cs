@@ -321,6 +321,14 @@ internal static class DomainModelDiagnosticCodes {
     public const string EffectForNotLowerable = "DMEFF016";
 
     /// <summary>
+    /// A transition in a stage's exit block targets a stage that can differ from the target of a hop
+    /// that leaves the same stage. The hop assigns <c>CurrentStage</c> after the inlined exit block,
+    /// so the exit-block target is overridden. The shipped shape is the same target on both. An error
+    /// that no <see cref="DiagnosticAllowance"/> acknowledges.
+    /// </summary>
+    public const string ExitBlockTransitionTargetOverridden = "DMEFF017";
+
+    /// <summary>
     /// A <c>match</c> arm condition (#409) is not Boolean. An error.
     /// </summary>
     public const string MatchConditionNotBoolean = "DMMAT001";

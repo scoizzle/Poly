@@ -91,6 +91,25 @@ public class DiagnosticAllowanceTests {
     }
 
     [Test]
+    public async Task Promotion_RePromotesAnAllowanceDowngradedFinding() {
+        // A9/F1 (recorded on #684 for C-11): the allowance picks a finding's severity at report
+        // time, and strict mode is a code-level policy applied after the report — so an
+        // acknowledged finding of a promoted code is promoted back to an error, and the analysis
+        // itself keeps the warning it reported.
+        var (_, _, analysis) = Run(NotesDomain, [NotesFlow()], [Allow("DMEFF008", NotesPath)]);
+        var finding = Of(analysis, "DMEFF008").Single();
+        await Assert.That(finding.Severity).IsEqualTo(DiagnosticSeverity.Warning);
+
+        var promoted = WarningPromotion.Apply(
+            analysis.Diagnostics, new HashSet<string>(StringComparer.Ordinal) { "DMEFF008" });
+
+        var after = promoted.Single(d => ReferenceEquals(d.Node, finding.Node) && d.Code == "DMEFF008");
+        await Assert.That(after.Severity).IsEqualTo(DiagnosticSeverity.Error);
+        await Assert.That(after.Message).IsEqualTo(finding.Message);
+        await Assert.That(Of(analysis, "DMEFF008").Single().Severity).IsEqualTo(DiagnosticSeverity.Warning);
+    }
+
+    [Test]
     public async Task WidthNarrowing_NoAllowance_IsDMEFF008Error_AndLowerRefuses() {
         var (session, domain, analysis) = Run(NotesDomain, [NotesFlow()]);
 

@@ -446,4 +446,104 @@ public class VerificationSummaryTests {
         await Assert.That(summary.UnverifiedWrites.Count).IsEqualTo(1);
         await Assert.That(summary.UnverifiedWrites.Single().Path).IsEqualTo("Orders/Order/Notes");
     }
+
+    // ── S6: the warn-as-error primitive (D8) ──────────────────────────────
+
+    private const string UnboundedWrite = """
+        domain Test
+        Stock: entity {
+          Reserved: Number range(0, 100000)
+          Release: action (qty: Number) { assign Reserved to Reserved - qty }
+        }
+        """;
+
+    private static Diagnostic Rewritten(IReadOnlyList<Diagnostic> diagnostics, Diagnostic original) =>
+        diagnostics.Single(d => ReferenceEquals(d.Node, original.Node) && d.Code == original.Code);
+
+    [Test]
+    public async Task WarningPromotion_PromotesTheListedCode() {
+        var result = Parse(UnboundedWrite);
+        var before = WithCode(result.Analysis, DomainModelDiagnosticCodes.ConstraintUndecided).Single();
+        await Assert.That(before.Severity).IsEqualTo(DiagnosticSeverity.Warning);
+
+        var promoted = WarningPromotion.Apply(
+            result.Analysis.Diagnostics, new HashSet<string>(StringComparer.Ordinal) { "DMCS003" });
+
+        var after = Rewritten(promoted, before);
+        await Assert.That(after.Severity).IsEqualTo(DiagnosticSeverity.Error);
+        await Assert.That(after.Message).IsEqualTo(before.Message);
+        await Assert.That(ReferenceEquals(after.Node, before.Node)).IsTrue();
+        // The result is a copy: the analysis keeps the reported severity.
+        await Assert.That(Rewritten(result.Analysis.Diagnostics, before).Severity)
+            .IsEqualTo(DiagnosticSeverity.Warning);
+    }
+
+    [Test]
+    public async Task WarningPromotion_LeavesAnUnlistedCodeAlone() {
+        var (_, analysis) = RunFlowed(
+            FlowedDomain,
+            [new ObservedFlow("Customer.Notes", "Order.Notes")],
+            [new DiagnosticAllowance(
+                DomainModelDiagnosticCodes.EffectConstraintViolation, "Orders/Order/Notes", ["plsql-1"])]);
+        var before = WithCode(analysis, DomainModelDiagnosticCodes.EffectConstraintViolation).Single();
+        await Assert.That(before.Severity).IsEqualTo(DiagnosticSeverity.Warning);
+
+        var promoted = WarningPromotion.Apply(
+            analysis.Diagnostics, new HashSet<string>(StringComparer.Ordinal) { "DMCS003" });
+
+        await Assert.That(Rewritten(promoted, before).Severity).IsEqualTo(DiagnosticSeverity.Warning);
+    }
+
+    [Test]
+    public async Task WarningPromotion_WithoutCodes_PromotesEveryWarning() {
+        var (_, analysis) = RunFlowed(
+            FlowedDomain,
+            [new ObservedFlow("Customer.Notes", "Order.Notes")],
+            [new DiagnosticAllowance(
+                DomainModelDiagnosticCodes.EffectConstraintViolation, "Orders/Order/Notes", ["plsql-1"])]);
+
+        var promoted = WarningPromotion.Apply(analysis.Diagnostics);
+
+        await Assert.That(promoted.Count).IsEqualTo(analysis.Diagnostics.Count);
+        await Assert.That(promoted.Any(d => d.Severity == DiagnosticSeverity.Warning)).IsFalse();
+        await Assert.That(promoted.Count(d => d.Severity == DiagnosticSeverity.Error))
+            .IsEqualTo(analysis.Diagnostics.Count(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
+    }
+
+    [Test]
+    public async Task WarningPromotion_DoesNotChangeTheVerdict() {
+        // Promotion runs on produced diagnostics; the summary reads the unpromoted result, so a
+        // promoted list cannot turn "not decided" into "violated".
+        var result = Parse(UnboundedWrite);
+
+        var promoted = WarningPromotion.Apply(result.Analysis.Diagnostics);
+
+        await Assert.That(promoted.Any(d => d.Code == DomainModelDiagnosticCodes.ConstraintUndecided
+            && d.Severity == DiagnosticSeverity.Error)).IsTrue();
+        var summary = result.Analysis.GetVerification(result.Root);
+        await Assert.That(summary.Verdict).IsEqualTo(CheckVerdict.Unknown);
+    }
+
+    [Test]
+    public async Task EveryUnverifiedReason_HasAnExplicitRank() {
+        // A2: each reason names its own rank, so a new one cannot silently tie with PossibleViolation,
+        // and an undeclared value is a guard failure rather than a rank of zero.
+        var ladder = new[] {
+            UnverifiedReason.PossibleViolation,
+            UnverifiedReason.UnknownBound,
+            UnverifiedReason.UnsupportedOperator,
+            UnverifiedReason.NonFlowCheckedKind,
+            UnverifiedReason.RecursionCut,
+        };
+        await Assert.That(Enum.GetValues<UnverifiedReason>()).IsEquivalentTo(ladder);
+
+        for (var i = 1; i < ladder.Length; i++) {
+            var lower = WriteVerdict.Unverified(ladder[i - 1]);
+            var higher = WriteVerdict.Unverified(ladder[i]);
+            await Assert.That(lower.Worst(higher)).IsEqualTo(higher);
+            await Assert.That(higher.Worst(lower)).IsEqualTo(higher);
+        }
+        await Assert.That(() => WriteVerdict.Unverified((UnverifiedReason)99).Worst(WriteVerdict.Satisfied))
+            .Throws<ArgumentOutOfRangeException>();
+    }
 }

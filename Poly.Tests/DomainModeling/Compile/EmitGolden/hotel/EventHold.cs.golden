@@ -4,7 +4,7 @@ using System.Collections.Generic;
 
 using Poly.Runtime;
 
-public enum EventHoldStage
+internal enum EventHoldStage
 {
     Requested = 0,
     Confirmed = 1,
@@ -13,7 +13,7 @@ public enum EventHoldStage
     Cancelled = 4
 }
 
-public class EventHold : Poly.Runtime.IActionScoped
+internal class EventHold : Poly.Runtime.IActionScoped
 {
     private List<Guest>? _guestEventsReleasedSubscribers;
     private int _notifyDepth;
@@ -39,30 +39,7 @@ public class EventHold : Poly.Runtime.IActionScoped
     public Hall? Hall { get; private set; }
     public Section? Section { get; private set; }
     public EventHoldStage CurrentStage { get; private set; }
-    public DomainResult Confirm()
-    {
-        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
-        var __done = false;
-        try
-        {
-            var __result = this.__BodyOfConfirm();
-            if (!__result.IsSuccess)
-            {
-                return __result;
-            }
-            Poly.Runtime.ActionScope.Commit(__scope);
-            __done = true;
-            return __result;
-        }
-        finally
-        {
-            if (!__done)
-            {
-                Poly.Runtime.ActionScope.Rollback(__scope);
-            }
-        }
-    }
-    private DomainResult __BodyOfConfirm()
+    internal DomainResult Confirm()
     {
         if (this.CurrentStage != EventHoldStage.Requested)
         {
@@ -83,30 +60,7 @@ public class EventHold : Poly.Runtime.IActionScoped
         this.CurrentStage = EventHoldStage.Confirmed;
         return DomainResult.Success();
     }
-    public DomainResult Cancel()
-    {
-        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
-        var __done = false;
-        try
-        {
-            var __result = this.__BodyOfCancel();
-            if (!__result.IsSuccess)
-            {
-                return __result;
-            }
-            Poly.Runtime.ActionScope.Commit(__scope);
-            __done = true;
-            return __result;
-        }
-        finally
-        {
-            if (!__done)
-            {
-                Poly.Runtime.ActionScope.Rollback(__scope);
-            }
-        }
-    }
-    private DomainResult __BodyOfCancel()
+    internal DomainResult Cancel()
     {
         if (this.CurrentStage == EventHoldStage.Requested || this.CurrentStage == EventHoldStage.Confirmed)
         {
@@ -115,30 +69,7 @@ public class EventHold : Poly.Runtime.IActionScoped
         }
         return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Cancel' is not valid for the current stage on entity 'EventHold'.", "EventHold.Cancel"));
     }
-    public DomainResult StartHall()
-    {
-        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
-        var __done = false;
-        try
-        {
-            var __result = this.__BodyOfStartHall();
-            if (!__result.IsSuccess)
-            {
-                return __result;
-            }
-            Poly.Runtime.ActionScope.Commit(__scope);
-            __done = true;
-            return __result;
-        }
-        finally
-        {
-            if (!__done)
-            {
-                Poly.Runtime.ActionScope.Rollback(__scope);
-            }
-        }
-    }
-    private DomainResult __BodyOfStartHall()
+    internal DomainResult StartHall()
     {
         if (this.CurrentStage != EventHoldStage.Confirmed)
         {
@@ -164,30 +95,7 @@ public class EventHold : Poly.Runtime.IActionScoped
         this.CurrentStage = EventHoldStage.InUse;
         return DomainResult.Success();
     }
-    public DomainResult StartSection()
-    {
-        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
-        var __done = false;
-        try
-        {
-            var __result = this.__BodyOfStartSection();
-            if (!__result.IsSuccess)
-            {
-                return __result;
-            }
-            Poly.Runtime.ActionScope.Commit(__scope);
-            __done = true;
-            return __result;
-        }
-        finally
-        {
-            if (!__done)
-            {
-                Poly.Runtime.ActionScope.Rollback(__scope);
-            }
-        }
-    }
-    private DomainResult __BodyOfStartSection()
+    internal DomainResult StartSection()
     {
         if (this.CurrentStage != EventHoldStage.Confirmed)
         {
@@ -209,30 +117,7 @@ public class EventHold : Poly.Runtime.IActionScoped
         this.CurrentStage = EventHoldStage.InUse;
         return DomainResult.Success();
     }
-    public DomainResult ReleaseHall()
-    {
-        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
-        var __done = false;
-        try
-        {
-            var __result = this.__BodyOfReleaseHall();
-            if (!__result.IsSuccess)
-            {
-                return __result;
-            }
-            Poly.Runtime.ActionScope.Commit(__scope);
-            __done = true;
-            return __result;
-        }
-        finally
-        {
-            if (!__done)
-            {
-                Poly.Runtime.ActionScope.Rollback(__scope);
-            }
-        }
-    }
-    private DomainResult __BodyOfReleaseHall()
+    internal DomainResult ReleaseHall()
     {
         if (this.CurrentStage != EventHoldStage.InUse)
         {
@@ -259,30 +144,7 @@ public class EventHold : Poly.Runtime.IActionScoped
         this.NotifyReleasedSubscribers();
         return DomainResult.Success();
     }
-    public DomainResult ReleaseSection()
-    {
-        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
-        var __done = false;
-        try
-        {
-            var __result = this.__BodyOfReleaseSection();
-            if (!__result.IsSuccess)
-            {
-                return __result;
-            }
-            Poly.Runtime.ActionScope.Commit(__scope);
-            __done = true;
-            return __result;
-        }
-        finally
-        {
-            if (!__done)
-            {
-                Poly.Runtime.ActionScope.Rollback(__scope);
-            }
-        }
-    }
-    private DomainResult __BodyOfReleaseSection()
+    internal DomainResult ReleaseSection()
     {
         if (this.CurrentStage != EventHoldStage.InUse)
         {
@@ -343,7 +205,7 @@ public class EventHold : Poly.Runtime.IActionScoped
             this.ExitNotifyCascade();
         }
     }
-    public static DomainResult<EventHold> Create(long headcount, long capacity, decimal dayRate, DateOnly startDate, DateOnly endDate, Guest? guest = null, Hall? hall = null, Section? section = null)
+    internal static DomainResult<EventHold> Create(long headcount, long capacity, decimal dayRate, DateOnly startDate, DateOnly endDate, Guest? guest = null, Hall? hall = null, Section? section = null)
     {
         if (headcount < 1L)
         {

@@ -34,7 +34,7 @@ internal sealed class Options {
         A directory means every *.poly directly inside it (not recursive); each file is its own
         compilation unit. With no path and piped stdin, stdin is one document.
         Seeds: omitting --seed loads the implicit set [storage, persistence]; --seed authoring
-        loads [storage] only, and --seed language loads no ids. A document's non-empty `uses`
+        is an alias for it, and --seed language loads no ids. A document's non-empty `uses`
         list replaces the seed, so a `unique` property needs persistence or a vendor library
         in that list.
         --target is the host target (for example posix or windows). It is a host fact the
@@ -46,12 +46,19 @@ internal sealed class Options {
 
     /// <summary>
     /// The one compiler factory: a named seed, or the product implicit set when the
-    /// driver names none. The LSP server and <c>polyc</c> both build through it.
+    /// driver names none. The LSP server and <c>polyc</c> both build through it. The CLI word
+    /// <c>authoring</c> is an alias for the implicit set (the facet pack is a compile fact now,
+    /// not a seed); <c>ExtensionCatalog.Seed("authoring")</c> in the library API stays
+    /// <c>[storage]</c>.
     /// </summary>
     internal static PolyCompiler CreateCompiler(string? seed) =>
         new PolyCompiler(
             ProductCatalog.Catalog,
-            seed is null ? ProductCatalog.ImplicitIds : ExtensionCatalog.Seed(seed));
+            new SessionOptions(
+                ProductCatalog.Catalog,
+                seed is null || string.Equals(seed.Trim(), "authoring", StringComparison.OrdinalIgnoreCase)
+                    ? ProductCatalog.ImplicitIds
+                    : ExtensionCatalog.Seed(seed)));
 
     /// <summary>Returns null with <paramref name="error"/> set on a usage problem.</summary>
     public static Options? Parse(string[] args, out string? error) {

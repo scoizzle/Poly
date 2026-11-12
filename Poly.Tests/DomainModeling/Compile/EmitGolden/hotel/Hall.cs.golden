@@ -3,13 +3,13 @@ using System.Collections.Generic;
 
 using Poly.Runtime;
 
-public enum HallStage
+internal enum HallStage
 {
     InService = 0,
     OutOfService = 1
 }
 
-public class Hall : Poly.Runtime.IActionScoped
+internal class Hall : Poly.Runtime.IActionScoped
 {
     private List<Section> _sections = new List<Section>();
     private Hall() { }
@@ -41,30 +41,7 @@ public class Hall : Poly.Runtime.IActionScoped
     {
         this._sections.Add(child);
     }
-    public DomainResult Occupy()
-    {
-        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
-        var __done = false;
-        try
-        {
-            var __result = this.__BodyOfOccupy();
-            if (!__result.IsSuccess)
-            {
-                return __result;
-            }
-            Poly.Runtime.ActionScope.Commit(__scope);
-            __done = true;
-            return __result;
-        }
-        finally
-        {
-            if (!__done)
-            {
-                Poly.Runtime.ActionScope.Rollback(__scope);
-            }
-        }
-    }
-    private DomainResult __BodyOfOccupy()
+    internal DomainResult Occupy()
     {
         if (this.CurrentStage != HallStage.InService)
         {
@@ -77,30 +54,7 @@ public class Hall : Poly.Runtime.IActionScoped
         this.Occupied = true;
         return DomainResult.Success();
     }
-    public DomainResult Vacate()
-    {
-        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
-        var __done = false;
-        try
-        {
-            var __result = this.__BodyOfVacate();
-            if (!__result.IsSuccess)
-            {
-                return __result;
-            }
-            Poly.Runtime.ActionScope.Commit(__scope);
-            __done = true;
-            return __result;
-        }
-        finally
-        {
-            if (!__done)
-            {
-                Poly.Runtime.ActionScope.Rollback(__scope);
-            }
-        }
-    }
-    private DomainResult __BodyOfVacate()
+    internal DomainResult Vacate()
     {
         if (this.CurrentStage != HallStage.InService)
         {
@@ -113,30 +67,7 @@ public class Hall : Poly.Runtime.IActionScoped
         this.Occupied = false;
         return DomainResult.Success();
     }
-    public DomainResult MarkChildBusy()
-    {
-        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
-        var __done = false;
-        try
-        {
-            var __result = this.__BodyOfMarkChildBusy();
-            if (!__result.IsSuccess)
-            {
-                return __result;
-            }
-            Poly.Runtime.ActionScope.Commit(__scope);
-            __done = true;
-            return __result;
-        }
-        finally
-        {
-            if (!__done)
-            {
-                Poly.Runtime.ActionScope.Rollback(__scope);
-            }
-        }
-    }
-    private DomainResult __BodyOfMarkChildBusy()
+    internal DomainResult MarkChildBusy()
     {
         if (this.CurrentStage != HallStage.InService)
         {
@@ -145,30 +76,7 @@ public class Hall : Poly.Runtime.IActionScoped
         this.BusySections = this.BusySections + 1L;
         return DomainResult.Success();
     }
-    public DomainResult ClearChildBusy()
-    {
-        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
-        var __done = false;
-        try
-        {
-            var __result = this.__BodyOfClearChildBusy();
-            if (!__result.IsSuccess)
-            {
-                return __result;
-            }
-            Poly.Runtime.ActionScope.Commit(__scope);
-            __done = true;
-            return __result;
-        }
-        finally
-        {
-            if (!__done)
-            {
-                Poly.Runtime.ActionScope.Rollback(__scope);
-            }
-        }
-    }
-    private DomainResult __BodyOfClearChildBusy()
+    internal DomainResult ClearChildBusy()
     {
         if (this.CurrentStage != HallStage.InService)
         {
@@ -177,30 +85,7 @@ public class Hall : Poly.Runtime.IActionScoped
         this.BusySections = this.BusySections - 1L;
         return DomainResult.Success();
     }
-    public DomainResult TakeOffline()
-    {
-        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
-        var __done = false;
-        try
-        {
-            var __result = this.__BodyOfTakeOffline();
-            if (!__result.IsSuccess)
-            {
-                return __result;
-            }
-            Poly.Runtime.ActionScope.Commit(__scope);
-            __done = true;
-            return __result;
-        }
-        finally
-        {
-            if (!__done)
-            {
-                Poly.Runtime.ActionScope.Rollback(__scope);
-            }
-        }
-    }
-    private DomainResult __BodyOfTakeOffline()
+    internal DomainResult TakeOffline()
     {
         if (this.CurrentStage != HallStage.InService)
         {
@@ -218,30 +103,7 @@ public class Hall : Poly.Runtime.IActionScoped
         this.CurrentStage = HallStage.OutOfService;
         return DomainResult.Success();
     }
-    public DomainResult ReturnToService()
-    {
-        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
-        var __done = false;
-        try
-        {
-            var __result = this.__BodyOfReturnToService();
-            if (!__result.IsSuccess)
-            {
-                return __result;
-            }
-            Poly.Runtime.ActionScope.Commit(__scope);
-            __done = true;
-            return __result;
-        }
-        finally
-        {
-            if (!__done)
-            {
-                Poly.Runtime.ActionScope.Rollback(__scope);
-            }
-        }
-    }
-    private DomainResult __BodyOfReturnToService()
+    internal DomainResult ReturnToService()
     {
         if (this.CurrentStage != HallStage.OutOfService)
         {
@@ -255,7 +117,7 @@ public class Hall : Poly.Runtime.IActionScoped
     public bool ChildrenFree() => this.BusySections == 0L;
     public bool CanBook() => !this.Occupied && !this.Offline && this.BusySections == 0L;
     public bool IsOccupied() => this.Occupied;
-    public static DomainResult<Hall> Create(string name, long capacity, decimal dayRate, Property? property = null, IEnumerable<Section>? sections = null, bool occupied = false, bool offline = false, long busySections = 0L)
+    internal static DomainResult<Hall> Create(string name, long capacity, decimal dayRate, Property? property = null, IEnumerable<Section>? sections = null, bool occupied = false, bool offline = false, long busySections = 0L)
     {
         if (string.IsNullOrEmpty(name))
         {

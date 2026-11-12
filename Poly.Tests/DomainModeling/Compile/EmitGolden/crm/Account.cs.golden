@@ -4,13 +4,13 @@ using System.Collections.Generic;
 
 using Poly.Runtime;
 
-public enum AccountStage
+internal enum AccountStage
 {
     Open = 0,
     Archived = 1
 }
 
-public class Account : Poly.Runtime.IActionScoped
+internal class Account : Poly.Runtime.IActionScoped
 {
     private List<Contact> _contacts = new List<Contact>();
     private List<Opportunity> _opportunities = new List<Opportunity>();
@@ -51,7 +51,7 @@ public class Account : Poly.Runtime.IActionScoped
         get => this._tickets;
     }
     public AccountStage CurrentStage { get; private set; }
-    public DomainResult<Site> CreateHq(string city, string region)
+    internal DomainResult<Site> CreateHq(string city, string region)
     {
         var siteResult = Site.Create(city, region);
         if (!siteResult.IsSuccess)
@@ -62,7 +62,7 @@ public class Account : Poly.Runtime.IActionScoped
         this.Hq = site;
         return DomainResult<Site>.Success(site);
     }
-    public DomainResult<Contact> CreateContacts(string name, string email, Poly.Runtime.IStoragePort db)
+    internal DomainResult<Contact> CreateContacts(string name, string email, Poly.Runtime.IStoragePort db)
     {
         var contactResult = Contact.Create(name, email, db, this);
         if (!contactResult.IsSuccess)
@@ -76,7 +76,7 @@ public class Account : Poly.Runtime.IActionScoped
     {
         this._contacts.Add(child);
     }
-    public DomainResult<Opportunity> CreateOpportunities(string title, decimal amount, Contact? contact = null, DateOnly? closeBy = null)
+    internal DomainResult<Opportunity> CreateOpportunities(string title, decimal amount, Contact? contact = null, DateOnly? closeBy = null)
     {
         var opportunityResult = Opportunity.Create(title, amount, this, contact, new List<Activity>(), new List<Line>(), new List<Quote>(), closeBy);
         if (!opportunityResult.IsSuccess)
@@ -93,7 +93,7 @@ public class Account : Poly.Runtime.IActionScoped
         child.RegisterAccountOpportunitiesProposeSubscriber(this);
         child.RegisterAccountOpportunitiesLostSubscriber(this);
     }
-    public DomainResult<Ticket> CreateTickets(string subject)
+    internal DomainResult<Ticket> CreateTickets(string subject)
     {
         var ticketResult = Ticket.Create(subject, this);
         if (!ticketResult.IsSuccess)
@@ -108,30 +108,7 @@ public class Account : Poly.Runtime.IActionScoped
         this._tickets.Add(child);
         child.RegisterAccountTicketsClosedSubscriber(this);
     }
-    public DomainResult<Site> PlaceHq(string city, string region)
-    {
-        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
-        var __done = false;
-        try
-        {
-            var __result = this.__BodyOfPlaceHq(city, region);
-            if (!__result.IsSuccess)
-            {
-                return __result;
-            }
-            Poly.Runtime.ActionScope.Commit(__scope);
-            __done = true;
-            return __result;
-        }
-        finally
-        {
-            if (!__done)
-            {
-                Poly.Runtime.ActionScope.Rollback(__scope);
-            }
-        }
-    }
-    private DomainResult<Site> __BodyOfPlaceHq(string city, string region)
+    internal DomainResult<Site> PlaceHq(string city, string region)
     {
         if (this.CurrentStage != AccountStage.Open)
         {
@@ -149,30 +126,7 @@ public class Account : Poly.Runtime.IActionScoped
         var created1 = create0.Value;
         return DomainResult<Site>.Success(created1);
     }
-    public DomainResult<Contact> AddContact(string name, string email, Poly.Runtime.IStoragePort db)
-    {
-        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
-        var __done = false;
-        try
-        {
-            var __result = this.__BodyOfAddContact(name, email, db);
-            if (!__result.IsSuccess)
-            {
-                return __result;
-            }
-            Poly.Runtime.ActionScope.Commit(__scope);
-            __done = true;
-            return __result;
-        }
-        finally
-        {
-            if (!__done)
-            {
-                Poly.Runtime.ActionScope.Rollback(__scope);
-            }
-        }
-    }
-    private DomainResult<Contact> __BodyOfAddContact(string name, string email, Poly.Runtime.IStoragePort db)
+    internal DomainResult<Contact> AddContact(string name, string email, Poly.Runtime.IStoragePort db)
     {
         if (this.CurrentStage != AccountStage.Open)
         {
@@ -186,30 +140,7 @@ public class Account : Poly.Runtime.IActionScoped
         var created1 = create0.Value;
         return DomainResult<Contact>.Success(created1);
     }
-    public DomainResult<Contact> ConvertLead(Lead lead, Poly.Runtime.IStoragePort db)
-    {
-        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
-        var __done = false;
-        try
-        {
-            var __result = this.__BodyOfConvertLead(lead, db);
-            if (!__result.IsSuccess)
-            {
-                return __result;
-            }
-            Poly.Runtime.ActionScope.Commit(__scope);
-            __done = true;
-            return __result;
-        }
-        finally
-        {
-            if (!__done)
-            {
-                Poly.Runtime.ActionScope.Rollback(__scope);
-            }
-        }
-    }
-    private DomainResult<Contact> __BodyOfConvertLead(Lead lead, Poly.Runtime.IStoragePort db)
+    internal DomainResult<Contact> ConvertLead(Lead lead, Poly.Runtime.IStoragePort db)
     {
         if (this.CurrentStage != AccountStage.Open)
         {
@@ -223,30 +154,7 @@ public class Account : Poly.Runtime.IActionScoped
         var created1 = create0.Value;
         return DomainResult<Contact>.Success(created1);
     }
-    public DomainResult<Opportunity> OpenDeal(string title, long amount)
-    {
-        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
-        var __done = false;
-        try
-        {
-            var __result = this.__BodyOfOpenDeal(title, amount);
-            if (!__result.IsSuccess)
-            {
-                return __result;
-            }
-            Poly.Runtime.ActionScope.Commit(__scope);
-            __done = true;
-            return __result;
-        }
-        finally
-        {
-            if (!__done)
-            {
-                Poly.Runtime.ActionScope.Rollback(__scope);
-            }
-        }
-    }
-    private DomainResult<Opportunity> __BodyOfOpenDeal(string title, long amount)
+    internal DomainResult<Opportunity> OpenDeal(string title, long amount)
     {
         if (this.CurrentStage != AccountStage.Open)
         {
@@ -260,30 +168,7 @@ public class Account : Poly.Runtime.IActionScoped
         var created1 = create0.Value;
         return DomainResult<Opportunity>.Success(created1);
     }
-    public DomainResult Archive()
-    {
-        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
-        var __done = false;
-        try
-        {
-            var __result = this.__BodyOfArchive();
-            if (!__result.IsSuccess)
-            {
-                return __result;
-            }
-            Poly.Runtime.ActionScope.Commit(__scope);
-            __done = true;
-            return __result;
-        }
-        finally
-        {
-            if (!__done)
-            {
-                Poly.Runtime.ActionScope.Rollback(__scope);
-            }
-        }
-    }
-    private DomainResult __BodyOfArchive()
+    internal DomainResult Archive()
     {
         if (this.CurrentStage != AccountStage.Open)
         {
@@ -292,30 +177,7 @@ public class Account : Poly.Runtime.IActionScoped
         this.CurrentStage = AccountStage.Archived;
         return DomainResult.Success();
     }
-    public DomainResult<Ticket> OpenTicket(string subject)
-    {
-        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
-        var __done = false;
-        try
-        {
-            var __result = this.__BodyOfOpenTicket(subject);
-            if (!__result.IsSuccess)
-            {
-                return __result;
-            }
-            Poly.Runtime.ActionScope.Commit(__scope);
-            __done = true;
-            return __result;
-        }
-        finally
-        {
-            if (!__done)
-            {
-                Poly.Runtime.ActionScope.Rollback(__scope);
-            }
-        }
-    }
-    private DomainResult<Ticket> __BodyOfOpenTicket(string subject)
+    internal DomainResult<Ticket> OpenTicket(string subject)
     {
         if (this.CurrentStage != AccountStage.Open)
         {
@@ -329,30 +191,7 @@ public class Account : Poly.Runtime.IActionScoped
         var created1 = create0.Value;
         return DomainResult<Ticket>.Success(created1);
     }
-    public DomainResult Restore()
-    {
-        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
-        var __done = false;
-        try
-        {
-            var __result = this.__BodyOfRestore();
-            if (!__result.IsSuccess)
-            {
-                return __result;
-            }
-            Poly.Runtime.ActionScope.Commit(__scope);
-            __done = true;
-            return __result;
-        }
-        finally
-        {
-            if (!__done)
-            {
-                Poly.Runtime.ActionScope.Rollback(__scope);
-            }
-        }
-    }
-    private DomainResult __BodyOfRestore()
+    internal DomainResult Restore()
     {
         if (this.CurrentStage != AccountStage.Archived)
         {
@@ -383,7 +222,7 @@ public class Account : Poly.Runtime.IActionScoped
     {
         this.ClosedTickets = this.ClosedTickets + 1L;
     }
-    public static DomainResult<Account> Create(string name, Industry industry, Account? parent = null, Site? hq = null, IEnumerable<Contact>? contacts = null, IEnumerable<Opportunity>? opportunities = null, IEnumerable<Ticket>? tickets = null, long wonCount = 0L, decimal openPipeline = 0m, long closedTickets = 0L)
+    internal static DomainResult<Account> Create(string name, Industry industry, Account? parent = null, Site? hq = null, IEnumerable<Contact>? contacts = null, IEnumerable<Opportunity>? opportunities = null, IEnumerable<Ticket>? tickets = null, long wonCount = 0L, decimal openPipeline = 0m, long closedTickets = 0L)
     {
         if (string.IsNullOrEmpty(name))
         {

@@ -43,12 +43,19 @@ public sealed partial class DomainToCSharpExporter {
         }
     }
 
+    private static AccessModifier ActionGroupAccess(
+        IReadOnlyList<(Action Action, string? SourceStage)> variants) =>
+        variants.Any(v => DomainAccess.ForAction(v.Action) == AccessModifier.Public)
+            ? AccessModifier.Public
+            : AccessModifier.Internal;
+
     private static void AddActionMethod(Entity entity, Action action,
         List<MethodDefinitionNode> methods, string? stageEnumTypeName,
         IReadOnlySet<string>? postTransitionNotifyStages,
         IReadOnlySet<string>? previousStageNotifyStages,
         string? sourceStageName, Domain domain,
-        INodeMetadataProvider analysis, ContractSplicePlan? splice = null) {
+        INodeMetadataProvider analysis, ContractSplicePlan? splice = null,
+        AccessModifier? access = null) {
         var isVoid = action.Result is not { Members.Count: > 0 };
         var body = BuildFullActionBody(entity, action, stageEnumTypeName,
             postTransitionNotifyStages, previousStageNotifyStages,
@@ -71,7 +78,10 @@ public sealed partial class DomainToCSharpExporter {
             action.Parameters
                 .Select(p => new Parameter(p.Name, MapDomainTypeRef(p.Type, domain, analysis)))
                 .ToList(),
-            body);
+            body,
+            DomainAccess.Demote(
+                access ?? DomainAccess.ForAction(action), domain,
+                [.. action.Parameters.Select(p => MapDomainTypeRef(p.Type, domain, analysis)), returnType]));
     }
 
     private const string ActionBodyPrefix = "__BodyOf";
@@ -80,7 +90,7 @@ public sealed partial class DomainToCSharpExporter {
         new Invoke(new Member(new ClrTypeReference(typeof(ActionScope)), member), arguments);
 
     /// <summary>
-    /// An action is atomic: the public method is a wrapper that opens an <see cref="ActionScope"/>,
+    /// An action is atomic: the action's method (at the action's own access) is a wrapper that opens an <see cref="ActionScope"/>,
     /// calls the private body method that holds the lowered action, and commits on success.
     /// A failed result, an exception, or a throwing commit leaves <c>__done</c> false, so the
     /// <c>finally</c> rolls the still-open frame back. The wrapper's locals begin with <c>__</c>,
@@ -89,7 +99,7 @@ public sealed partial class DomainToCSharpExporter {
     /// type, and an unresolved first write makes the analysis of the same body reject itself on re-entry.
     /// </summary>
     private static void AddScopedActionMethods(List<MethodDefinitionNode> methods, string name,
-        Node returnType, List<Parameter> parameters, Block body) {
+        Node returnType, List<Parameter> parameters, Block body, AccessModifier access) {
         var bodyName = ActionBodyPrefix + name;
         var scope = new Variable("__scope");
         var done = new Variable("__done");
@@ -119,7 +129,7 @@ public sealed partial class DomainToCSharpExporter {
             returnType,
             Parameters: parameters,
             Body: wrapper,
-            AccessModifier: AccessModifier.Public));
+            AccessModifier: access));
 
         methods.Add(new MethodDefinitionNode(
             bodyName,
@@ -208,7 +218,8 @@ public sealed partial class DomainToCSharpExporter {
                 : entityLevel ?? stageAction ?? variants[0].Action;
             AddActionMethod(entity, chosen, methods,
                 stageEnumTypeName, postTransitionNotifyStages, previousStageNotifyStages,
-                sourceStageName: null, domain, analysis, splice);
+                sourceStageName: null, domain, analysis, splice,
+                access: ActionGroupAccess(variants));
             return;
         }
 
@@ -282,7 +293,10 @@ public sealed partial class DomainToCSharpExporter {
             representative.Parameters
                 .Select(p => new Parameter(p.Name, MapDomainTypeRef(p.Type, domain, analysis)))
                 .ToList(),
-            new Block(nodes, locals));
+            new Block(nodes, locals),
+            DomainAccess.Demote(
+                ActionGroupAccess(variants), domain,
+                [.. representative.Parameters.Select(p => MapDomainTypeRef(p.Type, domain, analysis)), returnType]));
     }
 
     // ── Lowering helpers ────────────────────────────────────────

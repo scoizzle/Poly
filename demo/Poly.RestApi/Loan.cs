@@ -4,14 +4,14 @@ using System.Collections.Generic;
 
 using Poly.Runtime;
 
-public enum LoanStage
+internal enum LoanStage
 {
     Active = 0,
     Overdue = 1,
     Returned = 2
 }
 
-public class Loan : Poly.Runtime.IActionScoped
+internal class Loan : Poly.Runtime.IActionScoped
 {
     private List<Patron>? _patronLoansOverdueSubscribers;
     private List<Patron>? _patronLoansReturnedSubscribers;
@@ -36,30 +36,7 @@ public class Loan : Poly.Runtime.IActionScoped
     public Book? Book { get; private set; }
     public Patron? Borrower { get; private set; }
     public LoanStage CurrentStage { get; private set; }
-    public DomainResult Renew()
-    {
-        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
-        var __done = false;
-        try
-        {
-            var __result = this.__BodyOfRenew();
-            if (!__result.IsSuccess)
-            {
-                return __result;
-            }
-            Poly.Runtime.ActionScope.Commit(__scope);
-            __done = true;
-            return __result;
-        }
-        finally
-        {
-            if (!__done)
-            {
-                Poly.Runtime.ActionScope.Rollback(__scope);
-            }
-        }
-    }
-    private DomainResult __BodyOfRenew()
+    internal DomainResult Renew()
     {
         if (this.CurrentStage != LoanStage.Active)
         {
@@ -69,30 +46,7 @@ public class Loan : Poly.Runtime.IActionScoped
         this.TimesRenewed = this.TimesRenewed + 1L;
         return DomainResult.Success();
     }
-    public DomainResult Return()
-    {
-        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
-        var __done = false;
-        try
-        {
-            var __result = this.__BodyOfReturn();
-            if (!__result.IsSuccess)
-            {
-                return __result;
-            }
-            Poly.Runtime.ActionScope.Commit(__scope);
-            __done = true;
-            return __result;
-        }
-        finally
-        {
-            if (!__done)
-            {
-                Poly.Runtime.ActionScope.Rollback(__scope);
-            }
-        }
-    }
-    private DomainResult __BodyOfReturn()
+    internal DomainResult Return()
     {
         if (this.CurrentStage != LoanStage.Active)
         {
@@ -169,7 +123,7 @@ public class Loan : Poly.Runtime.IActionScoped
             this.ExitNotifyCascade();
         }
     }
-    public static DomainResult<Loan> Create(Book? book = null, Patron? borrower = null, string? status = null, DateTime? dueDate = null, DateTime? returnedAt = null, long? timesRenewed = null)
+    internal static DomainResult<Loan> Create(Book? book = null, Patron? borrower = null, string? status = null, DateTime? dueDate = null, DateTime? returnedAt = null, long? timesRenewed = null)
     {
         var created = new Loan(book, borrower, status, dueDate, returnedAt, timesRenewed);
         if (borrower != null)

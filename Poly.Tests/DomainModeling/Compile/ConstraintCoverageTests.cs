@@ -107,8 +107,8 @@ public class ConstraintCoverageTests {
 
     [Test]
     public async Task SameDocument_IsCleanUnderImplicitIds_AndDMLIB001InABareSession() {
-        var withImplicit = new PolyCompiler(ProductCatalog.Catalog, ProductCatalog.ImplicitIds).Analyze(Document);
-        var bare = new PolyCompiler(ExtensionCatalog.Core, []).Analyze(Document);
+        var withImplicit = new PolyCompiler(ProductCatalog.Catalog, new SessionOptions(ProductCatalog.Catalog, ProductCatalog.ImplicitIds)).Analyze(Document);
+        var bare = new PolyCompiler(ExtensionCatalog.Core, SessionOptions.Bare(ExtensionCatalog.Core)).Analyze(Document);
 
         await Assert.That(ErrorCodes(withImplicit)).IsEmpty();
 
@@ -199,7 +199,7 @@ public class ConstraintCoverageTests {
     public async Task Polyc_UsesHttpAlone_Unique_IsPlacedDMLIB001() {
         const string Text = "domain HttpOnly\nuses http\n\nAccount: entity {\n  Email: Text unique\n}\n";
 
-        var result = new PolyCompiler(ProductCatalog.Catalog, ProductCatalog.ImplicitIds).Compile(Text, "http-only.poly");
+        var result = new PolyCompiler(ProductCatalog.Catalog, new SessionOptions(ProductCatalog.Catalog, ProductCatalog.ImplicitIds)).Compile(Text, "http-only.poly");
 
         var errors = result.Diagnostics.Where(d => d.IsError).ToList();
         await Assert.That(errors.Count).IsEqualTo(1);
@@ -231,7 +231,7 @@ public class ConstraintCoverageTests {
     public async Task UsesHttpAlone_NamesEveryVendorLibraryInTheHint() {
         const string Text = "domain HttpOnly\nuses http\n\nAccount: entity {\n  Email: Text unique\n}\n";
 
-        var result = new PolyCompiler(ProductCatalog.Catalog, ProductCatalog.ImplicitIds).Compile(Text, "http-only.poly");
+        var result = new PolyCompiler(ProductCatalog.Catalog, new SessionOptions(ProductCatalog.Catalog, ProductCatalog.ImplicitIds)).Compile(Text, "http-only.poly");
 
         var error = result.Diagnostics.Single(d => d.IsError);
         await Assert.That(error.Message).IsEqualTo(
@@ -260,7 +260,7 @@ public class ConstraintCoverageTests {
     public async Task UsesSqliteAlone_CoversUnique_WithNoDMLIB001() {
         const string Text = "domain VendorOnly\nuses sqlite\n\nAccount: entity {\n  Email: Text unique\n}\n";
 
-        var result = new PolyCompiler(ProductCatalog.Catalog, ProductCatalog.ImplicitIds).Analyze(Text, "sqlite.poly");
+        var result = new PolyCompiler(ProductCatalog.Catalog, new SessionOptions(ProductCatalog.Catalog, ProductCatalog.ImplicitIds)).Analyze(Text, "sqlite.poly");
 
         await Assert.That(result.Diagnostics.Any(d => d.Code == "DMLIB001")).IsFalse();
         await Assert.That(result.Diagnostics.Any(d => d.IsError)).IsFalse();

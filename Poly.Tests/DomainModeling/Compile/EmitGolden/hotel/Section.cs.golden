@@ -1,7 +1,7 @@
 #nullable enable
 using Poly.Runtime;
 
-public class Section : Poly.Runtime.IActionScoped
+internal class Section : Poly.Runtime.IActionScoped
 {
     private Section() { }
     private Section(string name, long capacity, decimal dayRate, Hall? hall = null, bool occupied = false)
@@ -17,30 +17,7 @@ public class Section : Poly.Runtime.IActionScoped
     public decimal DayRate { get; private set; }
     public bool Occupied { get; private set; }
     public Hall? Hall { get; private set; }
-    public DomainResult Occupy()
-    {
-        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
-        var __done = false;
-        try
-        {
-            var __result = this.__BodyOfOccupy();
-            if (!__result.IsSuccess)
-            {
-                return __result;
-            }
-            Poly.Runtime.ActionScope.Commit(__scope);
-            __done = true;
-            return __result;
-        }
-        finally
-        {
-            if (!__done)
-            {
-                Poly.Runtime.ActionScope.Rollback(__scope);
-            }
-        }
-    }
-    private DomainResult __BodyOfOccupy()
+    internal DomainResult Occupy()
     {
         if (!this.CanBook())
         {
@@ -66,30 +43,7 @@ public class Section : Poly.Runtime.IActionScoped
         }
         return DomainResult.Success();
     }
-    public DomainResult Vacate()
-    {
-        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
-        var __done = false;
-        try
-        {
-            var __result = this.__BodyOfVacate();
-            if (!__result.IsSuccess)
-            {
-                return __result;
-            }
-            Poly.Runtime.ActionScope.Commit(__scope);
-            __done = true;
-            return __result;
-        }
-        finally
-        {
-            if (!__done)
-            {
-                Poly.Runtime.ActionScope.Rollback(__scope);
-            }
-        }
-    }
-    private DomainResult __BodyOfVacate()
+    internal DomainResult Vacate()
     {
         if (!this.IsOccupied())
         {
@@ -111,7 +65,7 @@ public class Section : Poly.Runtime.IActionScoped
     public bool IsOccupied() => this.Occupied;
     public bool ParentFree() => this.Hall != null && (!this.Hall!.Occupied && !this.Hall!.Offline);
     public bool CanBook() => !this.Occupied;
-    public static DomainResult<Section> Create(string name, long capacity, decimal dayRate, Hall? hall = null, bool occupied = false)
+    internal static DomainResult<Section> Create(string name, long capacity, decimal dayRate, Hall? hall = null, bool occupied = false)
     {
         if (string.IsNullOrEmpty(name))
         {

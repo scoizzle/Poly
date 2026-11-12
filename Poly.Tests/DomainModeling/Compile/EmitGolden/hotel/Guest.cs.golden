@@ -4,13 +4,13 @@ using System.Collections.Generic;
 
 using Poly.Runtime;
 
-public enum GuestStage
+internal enum GuestStage
 {
     Active = 0,
     Blocked = 1
 }
 
-public class Guest : Poly.Runtime.IActionScoped
+internal class Guest : Poly.Runtime.IActionScoped
 {
     private List<EventHold> _events = new List<EventHold>();
     private List<Reservation> _reservations = new List<Reservation>();
@@ -43,7 +43,7 @@ public class Guest : Poly.Runtime.IActionScoped
         get => this._reservations;
     }
     public GuestStage CurrentStage { get; private set; }
-    public DomainResult<EventHold> CreateEvents(long headcount, long capacity, decimal dayRate, DateOnly startDate, DateOnly endDate, Hall? hall = null, Section? section = null)
+    internal DomainResult<EventHold> CreateEvents(long headcount, long capacity, decimal dayRate, DateOnly startDate, DateOnly endDate, Hall? hall = null, Section? section = null)
     {
         var eventHoldResult = EventHold.Create(headcount, capacity, dayRate, startDate, endDate, this, hall, section);
         if (!eventHoldResult.IsSuccess)
@@ -58,7 +58,7 @@ public class Guest : Poly.Runtime.IActionScoped
         this._events.Add(child);
         child.RegisterGuestEventsReleasedSubscriber(this);
     }
-    public DomainResult<Reservation> CreateReservations(long partySize, long nights, decimal nightlyRate, long maxOccupancy, DateOnly checkInDate, DateOnly checkOutDate, Folio? folio = null, Room? room = null)
+    internal DomainResult<Reservation> CreateReservations(long partySize, long nights, decimal nightlyRate, long maxOccupancy, DateOnly checkInDate, DateOnly checkOutDate, Folio? folio = null, Room? room = null)
     {
         var reservationResult = Reservation.Create(partySize, nights, nightlyRate, maxOccupancy, checkInDate, checkOutDate, folio, this, room);
         if (!reservationResult.IsSuccess)
@@ -73,30 +73,7 @@ public class Guest : Poly.Runtime.IActionScoped
         this._reservations.Add(child);
         child.RegisterGuestReservationsDepartedSubscriber(this);
     }
-    public DomainResult<Reservation> BookStay(Room room, long party, long nights, DateOnly arrive, DateOnly depart)
-    {
-        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
-        var __done = false;
-        try
-        {
-            var __result = this.__BodyOfBookStay(room, party, nights, arrive, depart);
-            if (!__result.IsSuccess)
-            {
-                return __result;
-            }
-            Poly.Runtime.ActionScope.Commit(__scope);
-            __done = true;
-            return __result;
-        }
-        finally
-        {
-            if (!__done)
-            {
-                Poly.Runtime.ActionScope.Rollback(__scope);
-            }
-        }
-    }
-    private DomainResult<Reservation> __BodyOfBookStay(Room room, long party, long nights, DateOnly arrive, DateOnly depart)
+    internal DomainResult<Reservation> BookStay(Room room, long party, long nights, DateOnly arrive, DateOnly depart)
     {
         if (this.CurrentStage != GuestStage.Active)
         {
@@ -110,30 +87,7 @@ public class Guest : Poly.Runtime.IActionScoped
         var created1 = create0.Value;
         return DomainResult<Reservation>.Success(created1);
     }
-    public DomainResult<EventHold> BookHall(Hall hall, long party, DateOnly arrive, DateOnly depart)
-    {
-        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
-        var __done = false;
-        try
-        {
-            var __result = this.__BodyOfBookHall(hall, party, arrive, depart);
-            if (!__result.IsSuccess)
-            {
-                return __result;
-            }
-            Poly.Runtime.ActionScope.Commit(__scope);
-            __done = true;
-            return __result;
-        }
-        finally
-        {
-            if (!__done)
-            {
-                Poly.Runtime.ActionScope.Rollback(__scope);
-            }
-        }
-    }
-    private DomainResult<EventHold> __BodyOfBookHall(Hall hall, long party, DateOnly arrive, DateOnly depart)
+    internal DomainResult<EventHold> BookHall(Hall hall, long party, DateOnly arrive, DateOnly depart)
     {
         if (this.CurrentStage != GuestStage.Active)
         {
@@ -147,30 +101,7 @@ public class Guest : Poly.Runtime.IActionScoped
         var created1 = create0.Value;
         return DomainResult<EventHold>.Success(created1);
     }
-    public DomainResult<EventHold> BookSection(Section section, Hall hall, long party, DateOnly arrive, DateOnly depart)
-    {
-        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
-        var __done = false;
-        try
-        {
-            var __result = this.__BodyOfBookSection(section, hall, party, arrive, depart);
-            if (!__result.IsSuccess)
-            {
-                return __result;
-            }
-            Poly.Runtime.ActionScope.Commit(__scope);
-            __done = true;
-            return __result;
-        }
-        finally
-        {
-            if (!__done)
-            {
-                Poly.Runtime.ActionScope.Rollback(__scope);
-            }
-        }
-    }
-    private DomainResult<EventHold> __BodyOfBookSection(Section section, Hall hall, long party, DateOnly arrive, DateOnly depart)
+    internal DomainResult<EventHold> BookSection(Section section, Hall hall, long party, DateOnly arrive, DateOnly depart)
     {
         if (this.CurrentStage != GuestStage.Active)
         {
@@ -184,30 +115,7 @@ public class Guest : Poly.Runtime.IActionScoped
         var created1 = create0.Value;
         return DomainResult<EventHold>.Success(created1);
     }
-    public DomainResult Block()
-    {
-        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
-        var __done = false;
-        try
-        {
-            var __result = this.__BodyOfBlock();
-            if (!__result.IsSuccess)
-            {
-                return __result;
-            }
-            Poly.Runtime.ActionScope.Commit(__scope);
-            __done = true;
-            return __result;
-        }
-        finally
-        {
-            if (!__done)
-            {
-                Poly.Runtime.ActionScope.Rollback(__scope);
-            }
-        }
-    }
-    private DomainResult __BodyOfBlock()
+    internal DomainResult Block()
     {
         if (this.CurrentStage != GuestStage.Active)
         {
@@ -216,30 +124,7 @@ public class Guest : Poly.Runtime.IActionScoped
         this.CurrentStage = GuestStage.Blocked;
         return DomainResult.Success();
     }
-    public DomainResult Reinstate()
-    {
-        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
-        var __done = false;
-        try
-        {
-            var __result = this.__BodyOfReinstate();
-            if (!__result.IsSuccess)
-            {
-                return __result;
-            }
-            Poly.Runtime.ActionScope.Commit(__scope);
-            __done = true;
-            return __result;
-        }
-        finally
-        {
-            if (!__done)
-            {
-                Poly.Runtime.ActionScope.Rollback(__scope);
-            }
-        }
-    }
-    private DomainResult __BodyOfReinstate()
+    internal DomainResult Reinstate()
     {
         if (this.CurrentStage != GuestStage.Blocked)
         {
@@ -259,7 +144,7 @@ public class Guest : Poly.Runtime.IActionScoped
     {
         this.EventCount = this.EventCount + 1L;
     }
-    public static DomainResult<Guest> Create(string name, string email, string phone, Poly.Runtime.IStoragePort db, IEnumerable<EventHold>? events = null, IEnumerable<Reservation>? reservations = null, long stayCount = 0L, long nightCount = 0L, long eventCount = 0L)
+    internal static DomainResult<Guest> Create(string name, string email, string phone, Poly.Runtime.IStoragePort db, IEnumerable<EventHold>? events = null, IEnumerable<Reservation>? reservations = null, long stayCount = 0L, long nightCount = 0L, long eventCount = 0L)
     {
         if (string.IsNullOrEmpty(name))
         {

@@ -1,4 +1,5 @@
 using System.Reflection;
+using Poly.Tests.TestHelpers;
 
 using Poly.DomainModeling;
 using Poly.DomainModeling.Compile;
@@ -73,12 +74,12 @@ public class UniqueModuleNamesOnlyStoragePortTests {
         var widget = ExportedCSharp.CreateEntity(type, ("code", "A"), ("db", port));
         port.Seed("Widget", "Code", "B");
 
-        var relabel = type.GetMethod("Relabel")!;
+        var relabel = type.GetMethod("Relabel", PrintedMembers.Any)!;
         var result = relabel.Invoke(widget, ["B", port])!;
 
         await Assert.That(Success(result)).IsFalse();
         await Assert.That(Message(result)).Contains("Unique constraint violated");
-        await Assert.That(type.GetProperty("Code")!.GetValue(widget)).IsEqualTo("A");
+        await Assert.That(type.GetProperty("Code", PrintedMembers.Any)!.GetValue(widget)).IsEqualTo("A");
     }
 
     private static string Lower(string poly) {
@@ -98,10 +99,10 @@ public class UniqueModuleNamesOnlyStoragePortTests {
     }
 
     private static bool Success(object result) =>
-        (bool)result.GetType().GetProperty("IsSuccess")!.GetValue(result)!;
+        (bool)result.GetType().GetProperty("IsSuccess", PrintedMembers.Any)!.GetValue(result)!;
 
     private static string? Message(object result) =>
-        result.GetType().GetProperty("ErrorMessage")!.GetValue(result) as string;
+        result.GetType().GetProperty("ErrorMessage", PrintedMembers.Any)!.GetValue(result) as string;
 
     private sealed class RecordingPort : IStoragePort {
         private readonly HashSet<(string, string, string)> _keys = [];

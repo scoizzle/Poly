@@ -61,13 +61,14 @@ The filter sits where `UnknownArgumentFilter` sat (inside `ToolExceptionBoundary
 
 Within one category the first defect in parameter order is reported.
 
-### 3. Four codes, one boundary
+### 3. Five codes, one boundary
 
 | Code | Meaning | Producer |
 |------|---------|----------|
 | `UNKNOWN_ARGUMENT` | The tool does not declare that name. Text is byte-identical to the old filter (`Valid: topic`). | Pre-binder filter |
 | `INVALID_ARGUMENT` | A declared name with a missing, wrong-typed, or over-limit value. | Pre-binder filter; the boundary's binder classifier |
 | `WORKSPACE_REQUIRED` | No usable workspace handle. A host status, not an argument error. | `PolySurfaceTools.TryWorkspace` |
+| `ELEMENT_NOT_FOUND` | `poly_inspect` select names no single element: `data.reason` is `unknown`, `ambiguous` or `notAddressable`, with `data.candidates`. | `InspectService` (tool body, like `WORKSPACE_REQUIRED`) |
 | `INTERNAL_ERROR` | A defect. The call was well-formed and the server failed. | `ToolExceptionBoundary` |
 
 `UNKNOWN_ARGUMENT` is not folded into `INVALID_ARGUMENT`: the wire, the README and the existing
@@ -136,3 +137,10 @@ spec. No test is deleted or weakened.
 `INTERNAL_ERROR` with the binder's real exception type — and the green typed answers, including
 `MaxItems` on a raw array and the four-code boundary. `PolycMcpTests` adds one stdio test: a wrong
 type is `INVALID_ARGUMENT` and the same host still serves the next call.
+
+### M-03 note: one path grammar, one resolver
+`poly_inspect` parses `ElementPath` and resolves it once through `ElementPathResolver` (`Poly/DomainModeling/Queries/`). The resolver is pure over the domain and returns a ref, a not-found (`unknown` / `notAddressable`, with candidates) or an ambiguity. `poly_check`'s select helpers and `VerificationSummary.SelectScope` are superseded copies that M-04/M-05 repoint.
+
+**Contract change (M-03).** `poly_inspect` `data.kind` is now `navigation`, `entityAction` or `stageAction` (`relationship` and `action` are gone), alongside `entity`, `property`, `enum`, `enumMember`, `valueType`, `policy`, `stage`, `function`. Bare stage, action, policy and relationship names with no entity no longer resolve; write `Entity.Name`. Elements carry `data.path`; an `ELEMENT_NOT_FOUND` carries `data.reason`, `data.candidates`, and when present `data.partial` (deepest resolved path) and `data.matches` (`{kind, path}` per ambiguous match). `InspectService` still takes `QueryTool` for the overview and entity data until M-13 deletes the v1 adapters.
+
+**Same-named entity and stage action (owner ruling 2026-11-12).** The bare `Entity.Action` is `ELEMENT_NOT_FOUND` with `data.reason` `ambiguous` and both matches listed, never a silent entity-level win. The stage action is `Entity.Stage.Action`. The entity-level action has no unambiguous two-segment form, so a leading domain name (`Domain/Entity/Action` or `Domain.Entity.Action`) prefers the entity-level member: it also skips a same-named stage, and the bare stage-action shorthand applies only when no entity-level member has that name. A path the tool offers must select: `data.path` and the ambiguity `matches[].path` / `candidates` are the first form (dotted, else domain-prefixed) that re-resolves to that very element (tests prove it for every kind in the test domain and for the entity-action / stage-action and entity-action / stage collisions); `candidates` are plain paths only. When no form selects an element (a stage and a property of one name), the summary says so and `candidates` omits it. A policy defined on an action is addressable as `Entity.Action.P` / `Entity.Stage.Action.P` (it is a deeper form than A3 allowed; its `AnalysisPath` round-trips).

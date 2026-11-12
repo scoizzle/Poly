@@ -133,9 +133,9 @@ public class UnifiedRemoveTests {
             """{"entityName":"Order","name":"Guard","stageName":"Active"}""");
 
         await Assert.That(response.Success).IsTrue();
-        var desc = McpTestTools.Oracle.DescribeDomainElement(sessionId, "policy", "Guard", entityName: "Order");
-        await Assert.That(desc.Success).IsFalse();
-        await Assert.That(desc.Message).Contains("not found");
+        var desc = InspectPathTests.Describe(sessionId, "Order.Guard");
+        await Assert.That(desc.Ok).IsFalse();
+        await Assert.That(desc.Summary).Contains("not found");
     }
 
     [Test]
@@ -158,9 +158,9 @@ public class UnifiedRemoveTests {
             """{"entityName":"Order","name":"Guard","actionName":"Submit"}""");
 
         await Assert.That(response.Success).IsTrue();
-        var desc = McpTestTools.Oracle.DescribeDomainElement(sessionId, "policy", "Guard", entityName: "Order");
-        await Assert.That(desc.Success).IsFalse();
-        await Assert.That(desc.Message).Contains("not found");
+        var desc = InspectPathTests.Describe(sessionId, "Order.Guard");
+        await Assert.That(desc.Ok).IsFalse();
+        await Assert.That(desc.Summary).Contains("not found");
     }
 
     [Test]

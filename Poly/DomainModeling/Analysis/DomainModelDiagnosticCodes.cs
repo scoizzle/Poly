@@ -65,6 +65,15 @@ internal static class DomainModelDiagnosticCodes {
     /// </summary>
     public const string ReservedMemberName = "DMSTR009";
 
+    /// <summary>
+    /// An entity type is the target of two or more owner navigations (S-12, #585): an owned
+    /// target has exactly one owner navigation. Two <c>owned</c> navigations to one type —
+    /// on different entities or on one — leave the single-owner rule unlowerable. Keep one
+    /// <c>owned</c> and make the other a plain reference. A self-owning navigation is one
+    /// edge and is legal.
+    /// </summary>
+    public const string OwnedTargetMultipleOwners = "DMSTR010";
+
     public const string SemanticTypeCompatibility = "DMSEM003";
     public const string SemanticConstraintMismatch = "DMSEM004";
     public const string SemanticReferenceResolution = "DMSEM005";
@@ -208,6 +217,14 @@ internal static class DomainModelDiagnosticCodes {
     public const string ContractBindActionAlreadyBound = "DMCON018";
 
     /// <summary>
+    /// #604 L-22: a public entity navigates to an entity that is internal to the declaring domain.
+    /// The printed navigation would have to be internal to keep the public surface closed, and EF
+    /// maps only public navigations, so the shape is rejected: mark the target <c>public</c>.
+    /// An error positioned on the navigation, not acknowledgeable.
+    /// </summary>
+    public const string PublicEntityNavigatesToInternalEntity = "DMCON019";
+
+    /// <summary>
     /// #684 C-05: a constraint no loaded library compiles. <c>unique</c> is the one
     /// shipped record: its guard is the storage port, so a document that lists
     /// <c>uses</c> without <c>persistence</c> or a vendor library would have it
@@ -264,8 +281,8 @@ internal static class DomainModelDiagnosticCodes {
     /// <summary>
     /// Two sides of a <c>via</c> pairing contradict each other: the named navigation
     /// points elsewhere, declares a different inverse, is the navigation itself, is
-    /// owned on both ends, or two navigations on one entity claim the same undeclared
-    /// inverse.
+    /// owned on both ends, pairs an owned navigation with a collection inverse (S-12), or
+    /// two navigations on one entity claim the same undeclared inverse.
     /// </summary>
     public const string InverseContradictory = "DMREL004";
 

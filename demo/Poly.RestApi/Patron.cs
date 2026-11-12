@@ -5,14 +5,14 @@ using System.Collections.Generic;
 using Poly.DomainModeling.Runtime;
 using Poly.Runtime;
 
-public enum PatronStage
+internal enum PatronStage
 {
     Active = 0,
     Suspended = 1,
     Closed = 2
 }
 
-public class Patron : Poly.Runtime.IActionScoped
+internal class Patron : Poly.Runtime.IActionScoped
 {
     private List<Loan> _loans = new List<Loan>();
     private List<Fine> _fines = new List<Fine>();
@@ -47,7 +47,7 @@ public class Patron : Poly.Runtime.IActionScoped
         get => this._fines;
     }
     public PatronStage CurrentStage { get; private set; }
-    public DomainResult<Loan> CreateLoans(Book? book = null, string? status = null, DateTime? dueDate = null, DateTime? returnedAt = null, long? timesRenewed = null)
+    internal DomainResult<Loan> CreateLoans(Book? book = null, string? status = null, DateTime? dueDate = null, DateTime? returnedAt = null, long? timesRenewed = null)
     {
         var loanResult = Loan.Create(book, this, status, dueDate, returnedAt, timesRenewed);
         if (!loanResult.IsSuccess)
@@ -68,30 +68,7 @@ public class Patron : Poly.Runtime.IActionScoped
         this._fines.Add(child);
         child.RegisterPatronFinesResolvedSubscriber(this);
     }
-    public DomainResult<Loan> CheckOut(Book book)
-    {
-        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
-        var __done = false;
-        try
-        {
-            var __result = this.__BodyOfCheckOut(book);
-            if (!__result.IsSuccess)
-            {
-                return __result;
-            }
-            Poly.Runtime.ActionScope.Commit(__scope);
-            __done = true;
-            return __result;
-        }
-        finally
-        {
-            if (!__done)
-            {
-                Poly.Runtime.ActionScope.Rollback(__scope);
-            }
-        }
-    }
-    private DomainResult<Loan> __BodyOfCheckOut(Book book)
+    internal DomainResult<Loan> CheckOut(Book book)
     {
         if (this.CurrentStage != PatronStage.Active)
         {
@@ -118,30 +95,7 @@ public class Patron : Poly.Runtime.IActionScoped
         var created1 = create0.Value;
         return DomainResult<Loan>.Success(created1);
     }
-    public DomainResult Suspend()
-    {
-        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
-        var __done = false;
-        try
-        {
-            var __result = this.__BodyOfSuspend();
-            if (!__result.IsSuccess)
-            {
-                return __result;
-            }
-            Poly.Runtime.ActionScope.Commit(__scope);
-            __done = true;
-            return __result;
-        }
-        finally
-        {
-            if (!__done)
-            {
-                Poly.Runtime.ActionScope.Rollback(__scope);
-            }
-        }
-    }
-    private DomainResult __BodyOfSuspend()
+    internal DomainResult Suspend()
     {
         if (this.CurrentStage != PatronStage.Active)
         {
@@ -154,30 +108,7 @@ public class Patron : Poly.Runtime.IActionScoped
         this.MaxItems = 0L;
         return DomainResult.Success();
     }
-    public DomainResult CloseAccount()
-    {
-        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
-        var __done = false;
-        try
-        {
-            var __result = this.__BodyOfCloseAccount();
-            if (!__result.IsSuccess)
-            {
-                return __result;
-            }
-            Poly.Runtime.ActionScope.Commit(__scope);
-            __done = true;
-            return __result;
-        }
-        finally
-        {
-            if (!__done)
-            {
-                Poly.Runtime.ActionScope.Rollback(__scope);
-            }
-        }
-    }
-    private DomainResult __BodyOfCloseAccount()
+    internal DomainResult CloseAccount()
     {
         if (this.CurrentStage != PatronStage.Active)
         {
@@ -187,30 +118,7 @@ public class Patron : Poly.Runtime.IActionScoped
         this.Status = PatronStatus.Closed;
         return DomainResult.Success();
     }
-    public DomainResult Reinstate()
-    {
-        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
-        var __done = false;
-        try
-        {
-            var __result = this.__BodyOfReinstate();
-            if (!__result.IsSuccess)
-            {
-                return __result;
-            }
-            Poly.Runtime.ActionScope.Commit(__scope);
-            __done = true;
-            return __result;
-        }
-        finally
-        {
-            if (!__done)
-            {
-                Poly.Runtime.ActionScope.Rollback(__scope);
-            }
-        }
-    }
-    private DomainResult __BodyOfReinstate()
+    internal DomainResult Reinstate()
     {
         if (this.CurrentStage != PatronStage.Suspended)
         {
@@ -260,7 +168,7 @@ public class Patron : Poly.Runtime.IActionScoped
     {
         this.OutstandingFines = this.OutstandingFines - 5L;
     }
-    public static DomainResult<Patron> Create(string name, string email, Poly.Runtime.IStoragePort db, long maxItems = 0L, IEnumerable<Loan>? loans = null, IEnumerable<Fine>? fines = null, DateOnly? memberSince = null, PatronStatus status = PatronStatus.Active, long currentBorrowCount = 0L, long outstandingFines = 0L)
+    internal static DomainResult<Patron> Create(string name, string email, Poly.Runtime.IStoragePort db, long maxItems = 0L, IEnumerable<Loan>? loans = null, IEnumerable<Fine>? fines = null, DateOnly? memberSince = null, PatronStatus status = PatronStatus.Active, long currentBorrowCount = 0L, long outstandingFines = 0L)
     {
         if (string.IsNullOrEmpty(name))
         {

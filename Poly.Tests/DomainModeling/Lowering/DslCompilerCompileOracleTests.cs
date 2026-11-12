@@ -206,7 +206,7 @@ public class DslCompilerCompileOracleTests {
 
         var order = result.Files!.Single(f => f.FileName == "Order.cs").Source;
         await Assert.That(order.Contains("BillingAdapters", StringComparison.Ordinal)).IsFalse();
-        await Assert.That(order).Contains("public DomainResult Pay(ChargeRequest request)");
+        await Assert.That(order).Contains("internal DomainResult Pay(ChargeRequest request)");
         var types = result.Files!.Single(f => f.FileName == "Poly.Types.cs").Source;
         await Assert.That(types.Contains("class BillingAdapters", StringComparison.Ordinal)).IsFalse();
         await Assert.That(types).Contains("ChargeRequest");

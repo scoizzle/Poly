@@ -1355,7 +1355,7 @@ static async System.Threading.Tasks.Task SeedAsync(CrmDbContext db)
 app.Run();
 
 
-public record ProductDto
+internal record ProductDto
 {
     [Required]
     [MinLength(3)]
@@ -1367,7 +1367,7 @@ public record ProductDto
     public decimal ListPrice { get; init; }
 }
 
-public record LeadDto
+internal record LeadDto
 {
     [Required]
     public string Name { get; init; } = default!;
@@ -1378,7 +1378,7 @@ public record LeadDto
     public string Company { get; init; } = default!;
 }
 
-public record AccountDto
+internal record AccountDto
 {
     [Required]
     public string Name { get; init; } = default!;
@@ -1386,63 +1386,63 @@ public record AccountDto
     public Industry Industry { get; init; }
 }
 
-public record CampaignDto
+internal record CampaignDto
 {
     [Required]
     public string Name { get; init; } = default!;
 }
 
-public record PlaceHqDto
+internal record PlaceHqDto
 {
     public string City { get; init; } = default!;
     public string Region { get; init; } = default!;
 }
 
-public record AddContactDto
+internal record AddContactDto
 {
     public string Name { get; init; } = default!;
     public string Email { get; init; } = default!;
 }
 
-public record ConvertLeadDto
+internal record ConvertLeadDto
 {
     public string LeadId { get; init; } = default!;
 }
 
-public record OpenDealDto
+internal record OpenDealDto
 {
     public string Title { get; init; } = default!;
     public long Amount { get; init; }
 }
 
-public record OpenTicketDto
+internal record OpenTicketDto
 {
     public string Subject { get; init; } = default!;
 }
 
-public record OpportunityLogDto
+internal record OpportunityLogDto
 {
     public string Subject { get; init; } = default!;
 }
 
-public record OpportunityAddLineDto
+internal record OpportunityAddLineDto
 {
     public string SkuId { get; init; } = default!;
     public long Qty { get; init; }
 }
 
-public record CaptureDto
+internal record CaptureDto
 {
     public ChargeRequest Request { get; init; } = default!;
 }
 
-public record QuoteAddLineDto
+internal record QuoteAddLineDto
 {
     public string SkuId { get; init; } = default!;
     public long Qty { get; init; }
 }
 
-public record EnrollDto
+internal record EnrollDto
 {
     public string WhoId { get; init; } = default!;
 }

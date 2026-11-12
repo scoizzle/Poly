@@ -81,9 +81,6 @@ public static class KnownDomainDivergences {
         new(599, "L-05", "guarded-cycle-loop-guard", ["simulate", "printed"], [
             new(1, "invoke Go", "state:Stage", "A", "C"),
         ]),
-        new(605, "T-09", "match-decimal-else", ["simulate", "printed"], [
-            new(1, "invoke Price", "state:Dec", null, "2"),
-        ]),
         new(607, "L-25", "create-in-iterated-collection", ["simulate", "printed"], [
             new(4, "invoke Grow", "state:lines", "1", "2"),
         ]),
@@ -93,6 +90,8 @@ public static class KnownDomainDivergences {
 /// <summary>Seeds that do not diverge through the module, with the owner that has to fix them.</summary>
 public static class DomainParityExclusions {
     public static IReadOnlyList<DomainParityExclusion> All { get; } = [
+        new(585, "L-13", "Both sides accept a second owner, so the module has no divergence to ratchet; "
+            + "absolute single-owner state is S-12b's done-when."),
         new(611, "L-11", "Both sides throw NullReferenceException on the unset optional unique Text, so the "
             + "module has no divergence to ratchet."),
         new(617, "L-05", "The sides agree; absolute atomicity is L-05's done-when."),
@@ -138,6 +137,27 @@ public static class DomainParityScenarios {
             side => {
                 side.Create("Member");
                 side.Invoke("Settle", ("amount", 10L));
+            }, []),
+
+        new("owned-second-owner", 585, """
+            domain Shop
+            Order: entity { Total: Number default(0) }
+            Customer: entity {
+              Name: Text
+              orders: many owned Order
+            }
+            """, """
+            domain Shop
+            Order: entity { Total: Number default(0) }
+            Customer: entity {
+              Name: Text
+              orders: many owned Order
+            }
+            """,
+            side => {
+                var order = side.Create("Order");
+                side.Create("Customer", ("Name", "Ann"), ("orders", new[] { order }));
+                side.Create("Customer", ("Name", "Bob"), ("orders", new[] { order }));
             }, []),
 
         new("cascade-overflow", 599, """
@@ -257,32 +277,6 @@ public static class DomainParityScenarios {
                 side.Use(emp);
                 side.Invoke("Leave");
                 side.Invoke("Leave");
-            }, []),
-
-        new("match-decimal-else", 605, """
-            domain P
-
-            Inv: entity {
-              Qty: Number default(0)
-              Dec: Decimal default(0)
-              A: stage {
-                Price: action { assign Dec to match { Qty > 1 -> 1.5, else -> 2.0 } }
-              }
-            }
-            """, """
-            domain P
-
-            Inv: entity {
-              Qty: Number default(0)
-              Dec: Decimal default(0)
-              A: stage {
-                Price: action { assign Dec to match { Qty > 1 -> 1.5, else -> 2.0 } }
-              }
-            }
-            """,
-            side => {
-                side.Create("Inv");
-                side.Invoke("Price");
             }, []),
 
         new("omitted-required-value-types", 621, """

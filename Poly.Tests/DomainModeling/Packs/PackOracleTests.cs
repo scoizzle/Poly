@@ -44,6 +44,27 @@ public class PackOracleTests {
     }
 
     [Test]
+    public async Task PublicEntityWithInternalNav_IsRejectedByAnalysis_NotBooted() {
+        var result = new Poly.DslCompiler.DslCompiler()
+            .Load(new Poly.DomainModeling.Libraries.Http.HttpLibrary())
+            .Compile(PackOracleDomains.PublicOrderInternalLine604.Poly, Poly.DslCompiler.CompileMode.All, Poly.DslCompiler.DbmsPack.Sqlite);
+
+        await Assert.That(result.Success).IsFalse();
+        await Assert.That(string.Join("\n", result.Errors ?? [])).Contains("navigation 'lines' targets internal entity 'OrderLine'");
+        await Assert.That(PackOracleDomains.PublicOrderInternalLine604.Boots).IsFalse();
+    }
+
+    [Test]
+    public async Task GeneratedPublicEntityWithPublicNav_BootsAndServesOrderList() {
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.PublicOrderPublicLine604);
+
+        using var list = await oracle.Client.GetAsync("/api/orders");
+        await Assert.That(list.StatusCode).IsEqualTo(HttpStatusCode.OK);
+        using var json = JsonDocument.Parse(await list.Content.ReadAsStringAsync());
+        await Assert.That(json.RootElement.ValueKind).IsEqualTo(JsonValueKind.Array);
+    }
+
+    [Test]
     public async Task GeneratedInventoryApp_SeedRow_Present_Pins595() {
         await using var oracle = await PackOracle.BootAsync(PackOracleDomains.Inventory588);
 

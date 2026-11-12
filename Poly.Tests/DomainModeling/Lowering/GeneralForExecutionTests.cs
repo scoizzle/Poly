@@ -6,6 +6,7 @@ using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Ontology.Effects;
 using Poly.DomainModeling.Runtime;
 using Poly.Interpretation.CSharp;
+using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.DomainModeling.Lowering;
 
@@ -151,10 +152,10 @@ public class GeneralForExecutionTests {
         lines.SetValue(ExportedCSharp.CreateEntity(lineType, ("qty", 0L)), 1);
         lines.SetValue(ExportedCSharp.CreateEntity(lineType, ("qty", 1L)), 2);
         var printed = ExportedCSharp.CreateEntity(invoiceType, ("lines", lines));
-        var printedResult = invoiceType.GetMethod("Touch")!.Invoke(printed, null)!;
-        await Assert.That((bool)printedResult.GetType().GetProperty("IsSuccess")!.GetValue(printedResult)!).IsFalse();
-        var after = ((System.Collections.IEnumerable)invoiceType.GetProperty("Lines")!.GetValue(printed)!)
-            .Cast<object>().Select(l => Convert.ToInt64(lineType.GetProperty("Marks")!.GetValue(l))).ToList();
+        var printedResult = invoiceType.GetMethod("Touch", PrintedMembers.Any)!.Invoke(printed, null)!;
+        await Assert.That((bool)printedResult.GetType().GetProperty("IsSuccess", PrintedMembers.Any)!.GetValue(printedResult)!).IsFalse();
+        var after = ((System.Collections.IEnumerable)invoiceType.GetProperty("Lines", PrintedMembers.Any)!.GetValue(printed)!)
+            .Cast<object>().Select(l => Convert.ToInt64(lineType.GetProperty("Marks", PrintedMembers.Any)!.GetValue(l))).ToList();
         await Assert.That(after).IsEquivalentTo(new List<long> { 1L, 0L, 0L });
     }
 
@@ -177,15 +178,15 @@ public class GeneralForExecutionTests {
         lines.SetValue(ExportedCSharp.CreateEntity(lineType, ("qty", 1L)), 0);
         lines.SetValue(ExportedCSharp.CreateEntity(lineType, ("qty", 5L)), 1);
         var printed = ExportedCSharp.CreateEntity(invoiceType, ("lines", lines));
-        var result = invoiceType.GetMethod("Touch")!.Invoke(printed, null)!;
-        await Assert.That((bool)result.GetType().GetProperty("IsSuccess")!.GetValue(result)!).IsTrue();
+        var result = invoiceType.GetMethod("Touch", PrintedMembers.Any)!.Invoke(printed, null)!;
+        await Assert.That((bool)result.GetType().GetProperty("IsSuccess", PrintedMembers.Any)!.GetValue(result)!).IsTrue();
 
-        var after = ((System.Collections.IEnumerable)invoiceType.GetProperty("Lines")!.GetValue(printed)!)
+        var after = ((System.Collections.IEnumerable)invoiceType.GetProperty("Lines", PrintedMembers.Any)!.GetValue(printed)!)
             .Cast<object>().ToList();
-        long PrintedMarks(object l) => Convert.ToInt64(lineType.GetProperty("Marks")!.GetValue(l));
+        long PrintedMarks(object l) => Convert.ToInt64(lineType.GetProperty("Marks", PrintedMembers.Any)!.GetValue(l));
         await Assert.That(PrintedMarks(after[0])).IsEqualTo(Marks(small));
         await Assert.That(PrintedMarks(after[1])).IsEqualTo(Marks(big));
-        await Assert.That(invoiceType.GetProperty("Note")!.GetValue(printed)).IsEqualTo(invoice.Bag["Note"]);
+        await Assert.That(invoiceType.GetProperty("Note", PrintedMembers.Any)!.GetValue(printed)).IsEqualTo(invoice.Bag["Note"]);
     }
 
     [Test]

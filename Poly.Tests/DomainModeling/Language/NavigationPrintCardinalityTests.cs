@@ -177,7 +177,7 @@ public sealed class NavigationPrintCardinalityTests {
 
     /// <summary>Parses, analyses and prints one generation of the document.</summary>
     private static (EvolutionResult Result, string Text) Generate(string poly) {
-        var session = DomainSession.ForDocument(DslSyntaxTree.Parse(poly), []);
+        var session = DomainSession.Create(DslSyntaxTree.Parse(poly).Uses, SessionOptions.Bare(ExtensionCatalog.Core));
         var result = new DomainEvolution(DomainTestFactory.Create("_", [], []))
             .ApplyAndAnalyze(new PolyDslParser(poly, session).Parse(), session: session);
         return (result, new DomainDslPrinter(session).Print(result.Root));

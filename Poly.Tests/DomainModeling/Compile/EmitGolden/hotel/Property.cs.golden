@@ -3,13 +3,13 @@ using System.Collections.Generic;
 
 using Poly.Runtime;
 
-public enum PropertyStage
+internal enum PropertyStage
 {
     Open = 0,
     Closed = 1
 }
 
-public class Property : Poly.Runtime.IActionScoped
+internal class Property : Poly.Runtime.IActionScoped
 {
     private List<Hall> _halls = new List<Hall>();
     private List<Room> _rooms = new List<Room>();
@@ -33,7 +33,7 @@ public class Property : Poly.Runtime.IActionScoped
         get => this._rooms;
     }
     public PropertyStage CurrentStage { get; private set; }
-    public DomainResult<Hall> CreateHalls(string name, long capacity, decimal dayRate, bool occupied = false, bool offline = false, long busySections = 0L)
+    internal DomainResult<Hall> CreateHalls(string name, long capacity, decimal dayRate, bool occupied = false, bool offline = false, long busySections = 0L)
     {
         var hallResult = Hall.Create(name, capacity, dayRate, this, new List<Section>(), occupied, offline, busySections);
         if (!hallResult.IsSuccess)
@@ -51,30 +51,7 @@ public class Property : Poly.Runtime.IActionScoped
     {
         this._rooms.Add(child);
     }
-    public DomainResult<Hall> AddHall(string name, long seats, long rate)
-    {
-        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
-        var __done = false;
-        try
-        {
-            var __result = this.__BodyOfAddHall(name, seats, rate);
-            if (!__result.IsSuccess)
-            {
-                return __result;
-            }
-            Poly.Runtime.ActionScope.Commit(__scope);
-            __done = true;
-            return __result;
-        }
-        finally
-        {
-            if (!__done)
-            {
-                Poly.Runtime.ActionScope.Rollback(__scope);
-            }
-        }
-    }
-    private DomainResult<Hall> __BodyOfAddHall(string name, long seats, long rate)
+    internal DomainResult<Hall> AddHall(string name, long seats, long rate)
     {
         if (this.CurrentStage != PropertyStage.Open)
         {
@@ -88,30 +65,7 @@ public class Property : Poly.Runtime.IActionScoped
         var created1 = create0.Value;
         return DomainResult<Hall>.Success(created1);
     }
-    public DomainResult Close()
-    {
-        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
-        var __done = false;
-        try
-        {
-            var __result = this.__BodyOfClose();
-            if (!__result.IsSuccess)
-            {
-                return __result;
-            }
-            Poly.Runtime.ActionScope.Commit(__scope);
-            __done = true;
-            return __result;
-        }
-        finally
-        {
-            if (!__done)
-            {
-                Poly.Runtime.ActionScope.Rollback(__scope);
-            }
-        }
-    }
-    private DomainResult __BodyOfClose()
+    internal DomainResult Close()
     {
         if (this.CurrentStage != PropertyStage.Open)
         {
@@ -120,30 +74,7 @@ public class Property : Poly.Runtime.IActionScoped
         this.CurrentStage = PropertyStage.Closed;
         return DomainResult.Success();
     }
-    public DomainResult Reopen()
-    {
-        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
-        var __done = false;
-        try
-        {
-            var __result = this.__BodyOfReopen();
-            if (!__result.IsSuccess)
-            {
-                return __result;
-            }
-            Poly.Runtime.ActionScope.Commit(__scope);
-            __done = true;
-            return __result;
-        }
-        finally
-        {
-            if (!__done)
-            {
-                Poly.Runtime.ActionScope.Rollback(__scope);
-            }
-        }
-    }
-    private DomainResult __BodyOfReopen()
+    internal DomainResult Reopen()
     {
         if (this.CurrentStage != PropertyStage.Closed)
         {
@@ -153,7 +84,7 @@ public class Property : Poly.Runtime.IActionScoped
         return DomainResult.Success();
     }
     public bool HasHalls() => this.Halls.Count > 0;
-    public static DomainResult<Property> Create(string name, string city, IEnumerable<Hall>? halls = null, IEnumerable<Room>? rooms = null)
+    internal static DomainResult<Property> Create(string name, string city, IEnumerable<Hall>? halls = null, IEnumerable<Room>? rooms = null)
     {
         if (string.IsNullOrEmpty(name))
         {

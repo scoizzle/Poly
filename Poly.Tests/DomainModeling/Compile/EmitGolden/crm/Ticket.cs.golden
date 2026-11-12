@@ -3,14 +3,14 @@ using System.Collections.Generic;
 
 using Poly.Runtime;
 
-public enum TicketStage
+internal enum TicketStage
 {
     New = 0,
     Working = 1,
     Closed = 2
 }
 
-public class Ticket : Poly.Runtime.IActionScoped
+internal class Ticket : Poly.Runtime.IActionScoped
 {
     private List<Account>? _accountTicketsClosedSubscribers;
     private int _notifyDepth;
@@ -24,30 +24,7 @@ public class Ticket : Poly.Runtime.IActionScoped
     public string Subject { get; private set; } = default!;
     public Account? Account { get; private set; }
     public TicketStage CurrentStage { get; private set; }
-    public DomainResult Work()
-    {
-        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
-        var __done = false;
-        try
-        {
-            var __result = this.__BodyOfWork();
-            if (!__result.IsSuccess)
-            {
-                return __result;
-            }
-            Poly.Runtime.ActionScope.Commit(__scope);
-            __done = true;
-            return __result;
-        }
-        finally
-        {
-            if (!__done)
-            {
-                Poly.Runtime.ActionScope.Rollback(__scope);
-            }
-        }
-    }
-    private DomainResult __BodyOfWork()
+    internal DomainResult Work()
     {
         if (this.CurrentStage != TicketStage.New)
         {
@@ -56,30 +33,7 @@ public class Ticket : Poly.Runtime.IActionScoped
         this.CurrentStage = TicketStage.Working;
         return DomainResult.Success();
     }
-    public DomainResult Close()
-    {
-        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
-        var __done = false;
-        try
-        {
-            var __result = this.__BodyOfClose();
-            if (!__result.IsSuccess)
-            {
-                return __result;
-            }
-            Poly.Runtime.ActionScope.Commit(__scope);
-            __done = true;
-            return __result;
-        }
-        finally
-        {
-            if (!__done)
-            {
-                Poly.Runtime.ActionScope.Rollback(__scope);
-            }
-        }
-    }
-    private DomainResult __BodyOfClose()
+    internal DomainResult Close()
     {
         if (this.CurrentStage == TicketStage.New || this.CurrentStage == TicketStage.Working)
         {
@@ -122,7 +76,7 @@ public class Ticket : Poly.Runtime.IActionScoped
             this.ExitNotifyCascade();
         }
     }
-    public static DomainResult<Ticket> Create(string subject, Account? account = null)
+    internal static DomainResult<Ticket> Create(string subject, Account? account = null)
     {
         if (string.IsNullOrEmpty(subject))
         {

@@ -50,11 +50,11 @@ public class ForeignRootedHopAgreeTests {
             new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis)));
         var printedProduct = ExportedCSharp.CreateEntity(asm, "Product", ("stock", 10L));
         var printedItem = ExportedCSharp.CreateEntity(asm, "Item", ("qty", 1L));
-        printedItem.GetType().GetProperty("Product")!.SetValue(printedItem, printedProduct);
+        printedItem.GetType().GetProperty("Product", PrintedMembers.Any)!.SetValue(printedItem, printedProduct);
         var printedOrder = ExportedCSharp.CreateEntity(asm, "Order");
         printedOrder.GetType().GetMethod("AttachItems", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)!
             .Invoke(printedOrder, [printedItem]);
-        var print = (bool)printedOrder.GetType().GetMethod("HasShortItem")!.Invoke(printedOrder, null)!;
+        var print = (bool)printedOrder.GetType().GetMethod("HasShortItem", PrintedMembers.Any)!.Invoke(printedOrder, null)!;
 
         await Assert.That(sim).IsTrue();
         await Assert.That(print).IsTrue();
@@ -98,9 +98,9 @@ public class ForeignRootedHopAgreeTests {
         var printedCustomer = ExportedCSharp.CreateEntity(asm, "Customer", ("balance", 5L));
         printedCustomer.GetType().GetMethod("AttachOrders", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)!
             .Invoke(printedCustomer, [printedOrder]);
-        var activate = printedOrder.GetType().GetMethod("Activate")!.Invoke(printedOrder, null)!;
-        await Assert.That((bool)activate.GetType().GetProperty("IsSuccess")!.GetValue(activate)!).IsTrue();
-        await Assert.That((bool)printedCustomer.GetType().GetProperty("Flag")!.GetValue(printedCustomer)!).IsTrue();
+        var activate = printedOrder.GetType().GetMethod("Activate", PrintedMembers.Any)!.Invoke(printedOrder, null)!;
+        await Assert.That((bool)activate.GetType().GetProperty("IsSuccess", PrintedMembers.Any)!.GetValue(activate)!).IsTrue();
+        await Assert.That((bool)printedCustomer.GetType().GetProperty("Flag", PrintedMembers.Any)!.GetValue(printedCustomer)!).IsTrue();
     }
 
     [Test]
@@ -138,10 +138,10 @@ public class ForeignRootedHopAgreeTests {
             new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis)));
         var printedMentor = ExportedCSharp.CreateEntity(asm, "Mentor", ("age", 50L));
         var printedAdvisor = ExportedCSharp.CreateEntity(asm, "Advisor", ("age", 40L));
-        printedAdvisor.GetType().GetProperty("Mentor")!.SetValue(printedAdvisor, printedMentor);
+        printedAdvisor.GetType().GetProperty("Mentor", PrintedMembers.Any)!.SetValue(printedAdvisor, printedMentor);
         var printedCustomer = ExportedCSharp.CreateEntity(asm, "Customer");
-        printedCustomer.GetType().GetProperty("Advisor")!.SetValue(printedCustomer, printedAdvisor);
-        var print = (bool)printedCustomer.GetType().GetMethod("ReadyMatchesAdvisor")!.Invoke(printedCustomer, null)!;
+        printedCustomer.GetType().GetProperty("Advisor", PrintedMembers.Any)!.SetValue(printedCustomer, printedAdvisor);
+        var print = (bool)printedCustomer.GetType().GetMethod("ReadyMatchesAdvisor", PrintedMembers.Any)!.Invoke(printedCustomer, null)!;
 
         await Assert.That(sim).IsTrue();
         await Assert.That(print).IsTrue();

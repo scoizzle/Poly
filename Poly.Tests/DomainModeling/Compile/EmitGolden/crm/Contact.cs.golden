@@ -1,13 +1,13 @@
 #nullable enable
 using Poly.Runtime;
 
-public enum ContactStage
+internal enum ContactStage
 {
     Active = 0,
     Inactive = 1
 }
 
-public class Contact : Poly.Runtime.IActionScoped
+internal class Contact : Poly.Runtime.IActionScoped
 {
     private Contact() { }
     private Contact(string name, string email, Account? account = null)
@@ -21,30 +21,7 @@ public class Contact : Poly.Runtime.IActionScoped
     public string Email { get; private set; } = default!;
     public Account? Account { get; private set; }
     public ContactStage CurrentStage { get; private set; }
-    public DomainResult Retire()
-    {
-        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
-        var __done = false;
-        try
-        {
-            var __result = this.__BodyOfRetire();
-            if (!__result.IsSuccess)
-            {
-                return __result;
-            }
-            Poly.Runtime.ActionScope.Commit(__scope);
-            __done = true;
-            return __result;
-        }
-        finally
-        {
-            if (!__done)
-            {
-                Poly.Runtime.ActionScope.Rollback(__scope);
-            }
-        }
-    }
-    private DomainResult __BodyOfRetire()
+    internal DomainResult Retire()
     {
         if (this.CurrentStage != ContactStage.Active)
         {
@@ -53,30 +30,7 @@ public class Contact : Poly.Runtime.IActionScoped
         this.CurrentStage = ContactStage.Inactive;
         return DomainResult.Success();
     }
-    public DomainResult Reactivate()
-    {
-        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
-        var __done = false;
-        try
-        {
-            var __result = this.__BodyOfReactivate();
-            if (!__result.IsSuccess)
-            {
-                return __result;
-            }
-            Poly.Runtime.ActionScope.Commit(__scope);
-            __done = true;
-            return __result;
-        }
-        finally
-        {
-            if (!__done)
-            {
-                Poly.Runtime.ActionScope.Rollback(__scope);
-            }
-        }
-    }
-    private DomainResult __BodyOfReactivate()
+    internal DomainResult Reactivate()
     {
         if (this.CurrentStage != ContactStage.Inactive)
         {
@@ -85,7 +39,7 @@ public class Contact : Poly.Runtime.IActionScoped
         this.CurrentStage = ContactStage.Active;
         return DomainResult.Success();
     }
-    public static DomainResult<Contact> Create(string name, string email, Poly.Runtime.IStoragePort db, Account? account = null)
+    internal static DomainResult<Contact> Create(string name, string email, Poly.Runtime.IStoragePort db, Account? account = null)
     {
         if (string.IsNullOrEmpty(name))
         {

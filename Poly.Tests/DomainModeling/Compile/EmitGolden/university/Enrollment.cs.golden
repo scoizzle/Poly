@@ -4,7 +4,7 @@ using System.Collections.Generic;
 
 using Poly.Runtime;
 
-public enum EnrollmentStage
+internal enum EnrollmentStage
 {
     Pending = 0,
     Registered = 1,
@@ -12,7 +12,7 @@ public enum EnrollmentStage
     Dropped = 3
 }
 
-public class Enrollment : Poly.Runtime.IActionScoped
+internal class Enrollment : Poly.Runtime.IActionScoped
 {
     private List<Student>? _studentEnrollmentsDroppedSubscribers;
     private List<Student>? _studentEnrollmentsCompletedSubscribers;
@@ -35,30 +35,7 @@ public class Enrollment : Poly.Runtime.IActionScoped
     public Section? Section { get; private set; }
     public Student? Student { get; private set; }
     public EnrollmentStage CurrentStage { get; private set; }
-    public DomainResult Confirm()
-    {
-        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
-        var __done = false;
-        try
-        {
-            var __result = this.__BodyOfConfirm();
-            if (!__result.IsSuccess)
-            {
-                return __result;
-            }
-            Poly.Runtime.ActionScope.Commit(__scope);
-            __done = true;
-            return __result;
-        }
-        finally
-        {
-            if (!__done)
-            {
-                Poly.Runtime.ActionScope.Rollback(__scope);
-            }
-        }
-    }
-    private DomainResult __BodyOfConfirm()
+    internal DomainResult Confirm()
     {
         if (this.CurrentStage != EnrollmentStage.Pending)
         {
@@ -77,30 +54,7 @@ public class Enrollment : Poly.Runtime.IActionScoped
         this.NotifyRegisteredSubscribers();
         return DomainResult.Success();
     }
-    public DomainResult Withdraw()
-    {
-        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
-        var __done = false;
-        try
-        {
-            var __result = this.__BodyOfWithdraw();
-            if (!__result.IsSuccess)
-            {
-                return __result;
-            }
-            Poly.Runtime.ActionScope.Commit(__scope);
-            __done = true;
-            return __result;
-        }
-        finally
-        {
-            if (!__done)
-            {
-                Poly.Runtime.ActionScope.Rollback(__scope);
-            }
-        }
-    }
-    private DomainResult __BodyOfWithdraw()
+    internal DomainResult Withdraw()
     {
         if (this.CurrentStage != EnrollmentStage.Pending)
         {
@@ -110,30 +64,7 @@ public class Enrollment : Poly.Runtime.IActionScoped
         this.NotifyDroppedSubscribers();
         return DomainResult.Success();
     }
-    public DomainResult RecordGrade(long score)
-    {
-        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
-        var __done = false;
-        try
-        {
-            var __result = this.__BodyOfRecordGrade(score);
-            if (!__result.IsSuccess)
-            {
-                return __result;
-            }
-            Poly.Runtime.ActionScope.Commit(__scope);
-            __done = true;
-            return __result;
-        }
-        finally
-        {
-            if (!__done)
-            {
-                Poly.Runtime.ActionScope.Rollback(__scope);
-            }
-        }
-    }
-    private DomainResult __BodyOfRecordGrade(long score)
+    internal DomainResult RecordGrade(long score)
     {
         if (this.CurrentStage != EnrollmentStage.Registered)
         {
@@ -158,30 +89,7 @@ public class Enrollment : Poly.Runtime.IActionScoped
         }
         return DomainResult.Success();
     }
-    public DomainResult Complete()
-    {
-        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
-        var __done = false;
-        try
-        {
-            var __result = this.__BodyOfComplete();
-            if (!__result.IsSuccess)
-            {
-                return __result;
-            }
-            Poly.Runtime.ActionScope.Commit(__scope);
-            __done = true;
-            return __result;
-        }
-        finally
-        {
-            if (!__done)
-            {
-                Poly.Runtime.ActionScope.Rollback(__scope);
-            }
-        }
-    }
-    private DomainResult __BodyOfComplete()
+    internal DomainResult Complete()
     {
         if (this.CurrentStage != EnrollmentStage.Registered)
         {
@@ -191,30 +99,7 @@ public class Enrollment : Poly.Runtime.IActionScoped
         this.NotifyCompletedSubscribers();
         return DomainResult.Success();
     }
-    public DomainResult Drop()
-    {
-        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
-        var __done = false;
-        try
-        {
-            var __result = this.__BodyOfDrop();
-            if (!__result.IsSuccess)
-            {
-                return __result;
-            }
-            Poly.Runtime.ActionScope.Commit(__scope);
-            __done = true;
-            return __result;
-        }
-        finally
-        {
-            if (!__done)
-            {
-                Poly.Runtime.ActionScope.Rollback(__scope);
-            }
-        }
-    }
-    private DomainResult __BodyOfDrop()
+    internal DomainResult Drop()
     {
         if (this.CurrentStage != EnrollmentStage.Registered)
         {
@@ -348,7 +233,7 @@ public class Enrollment : Poly.Runtime.IActionScoped
             this.ExitNotifyCascade();
         }
     }
-    public static DomainResult<Enrollment> Create(Section? section = null, Student? student = null, DateOnly? enrolledOn = null, DateOnly? dueDate = null, long grade = 0L)
+    internal static DomainResult<Enrollment> Create(Section? section = null, Student? student = null, DateOnly? enrolledOn = null, DateOnly? dueDate = null, long grade = 0L)
     {
         if (grade < 0L)
         {

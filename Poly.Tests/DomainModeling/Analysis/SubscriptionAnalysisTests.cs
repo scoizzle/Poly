@@ -919,6 +919,70 @@ public class SubscriptionAnalysisTests {
         await Assert.That(diags.Any(d => d.Code == DomainModelDiagnosticCodes.SubscriptionDuplicateHandler)).IsFalse();
     }
 
+    // S-05 carried items (#681): every arm of Resolves is pinned. Each fixture holds two
+    // identical subscriptions that fail one DMSS003 check; the duplicate warning must not fire.
+    private static IReadOnlyList<Diagnostic> DuplicatePairDiagnostics(
+        Func<StageSubscription> subscription,
+        RelationshipCardinality cardinality = RelationshipCardinality.OneToMany,
+        string relationshipName = "Tracks",
+        bool valueTarget = false,
+        string targetStage = "Active") {
+        var hub = new Entity("Hub", [], [], [], [new Stage("Open", [], [], [], [])]) {
+            Subscriptions = [subscription(), subscription()]
+        };
+        DomainType target = valueTarget
+            ? new Poly.DomainModeling.Ontology.ValueType("Parcel", [], [])
+            : new Entity("Parcel", [], [], [], [new Stage(targetStage, [], [], [], [])]);
+        var relationship = new Relationship(
+            relationshipName, new DomainTypeReference("Hub"), new DomainTypeReference("Parcel"), cardinality, []);
+        return DomainModelAnalyzer.Analyze(ValidDomain.Create("Test", [hub, target], [relationship])).Diagnostics;
+    }
+
+    private static async Task AssertSkippedNotWarned(IReadOnlyList<Diagnostic> diags) {
+        await Assert.That(diags.Any(d => d.Code == DomainModelDiagnosticCodes.SubscriptionContractMismatch
+            && d.Severity == DiagnosticSeverity.Error)).IsTrue();
+        await Assert.That(diags.Any(d => d.Code == DomainModelDiagnosticCodes.SubscriptionDuplicateHandler)).IsFalse();
+    }
+
+    private static StageSubscription Sub(string rel, IReadOnlyList<string> stages,
+        StageSubscriptionQuantifier quantifier = StageSubscriptionQuantifier.Each) =>
+        new(rel, stages, quantifier, []);
+
+    [Test]
+    public async Task DuplicateWhens_BlankRelationship_NoDMSS006() =>
+        await AssertSkippedNotWarned(DuplicatePairDiagnostics(
+            () => Sub(" ", ["Active"]), relationshipName: " "));
+
+    [Test]
+    public async Task DuplicateWhens_EmptyStageList_NoDMSS006() =>
+        await AssertSkippedNotWarned(DuplicatePairDiagnostics(() => Sub("Tracks", [])));
+
+    [Test]
+    public async Task DuplicateWhens_BlankStageName_NoDMSS006() =>
+        await AssertSkippedNotWarned(DuplicatePairDiagnostics(
+            () => Sub("Tracks", [" "]), targetStage: " "));
+
+    [Test]
+    public async Task DuplicateWhens_UndefinedQuantifier_NoDMSS006() =>
+        await AssertSkippedNotWarned(DuplicatePairDiagnostics(
+            () => Sub("Tracks", ["Active"], (StageSubscriptionQuantifier)99)));
+
+    [Test]
+    public async Task DuplicateWhens_NonEntityTarget_NoDMSS006() =>
+        await AssertSkippedNotWarned(DuplicatePairDiagnostics(
+            () => Sub("Tracks", ["Active"]), valueTarget: true));
+
+    [Test]
+    public async Task DuplicateWhens_NamingAStageMissingOnTarget_NoDMSS006() =>
+        await AssertSkippedNotWarned(DuplicatePairDiagnostics(
+            () => Sub("Tracks", ["Ghost"])));
+
+    [Test]
+    public async Task DuplicateWhens_NonEachQuantifierOnSingularRelationship_NoDMSS006() =>
+        await AssertSkippedNotWarned(DuplicatePairDiagnostics(
+            () => Sub("Tracks", ["Active"], StageSubscriptionQuantifier.Any),
+            cardinality: RelationshipCardinality.ManyToOne));
+
     [Test]
     public async Task DuplicateWhens_DifferentPeerBinder_AreSilent() {
         await Assert.That(DuplicateCount(

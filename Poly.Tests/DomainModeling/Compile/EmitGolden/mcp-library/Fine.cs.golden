@@ -1,13 +1,13 @@
 #nullable enable
 using Poly.Runtime;
 
-public enum FineStage
+internal enum FineStage
 {
     Resolved = 0,
     Paid = 1
 }
 
-public class Fine : Poly.Runtime.IActionScoped
+internal class Fine : Poly.Runtime.IActionScoped
 {
     private Fine() { }
     private Fine(string reason, long amount = 0L)
@@ -19,30 +19,7 @@ public class Fine : Poly.Runtime.IActionScoped
     public long Amount { get; private set; }
     public string Reason { get; private set; } = default!;
     public FineStage CurrentStage { get; private set; }
-    public DomainResult Resolve()
-    {
-        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
-        var __done = false;
-        try
-        {
-            var __result = this.__BodyOfResolve();
-            if (!__result.IsSuccess)
-            {
-                return __result;
-            }
-            Poly.Runtime.ActionScope.Commit(__scope);
-            __done = true;
-            return __result;
-        }
-        finally
-        {
-            if (!__done)
-            {
-                Poly.Runtime.ActionScope.Rollback(__scope);
-            }
-        }
-    }
-    private DomainResult __BodyOfResolve()
+    internal DomainResult Resolve()
     {
         if (this.CurrentStage != FineStage.Resolved)
         {
@@ -51,7 +28,7 @@ public class Fine : Poly.Runtime.IActionScoped
         this.CurrentStage = FineStage.Paid;
         return DomainResult.Success();
     }
-    public static DomainResult<Fine> Create(string reason, long amount = 0L)
+    internal static DomainResult<Fine> Create(string reason, long amount = 0L)
     {
         if (amount < 0L)
         {

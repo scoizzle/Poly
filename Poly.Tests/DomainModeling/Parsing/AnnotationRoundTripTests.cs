@@ -129,7 +129,9 @@ public class AnnotationRoundTripTests {
         var compiled = new Poly.DslCompiler.DslCompiler().Compile(poly, Poly.DslCompiler.CompileMode.Entities);
         await Assert.That(compiled.Success).IsTrue();
 
-        var session = DomainSession.ForAuthoringSource(poly, ExtensionCatalog.ProductLanguage);
+        var session = LibrarySelection.Load(
+            DslSyntaxTree.Parse(poly),
+            new SessionOptions(ExtensionCatalog.Core, ExtensionCatalog.ProductLanguage) { Authoring = true });
         var changes = new PolyDslParser(poly, session).Parse();
         var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes, session: session);
         await Assert.That(result.Succeeded).IsTrue();

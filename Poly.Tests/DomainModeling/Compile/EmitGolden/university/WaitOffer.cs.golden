@@ -3,14 +3,14 @@ using System.Collections.Generic;
 
 using Poly.Runtime;
 
-public enum WaitOfferStage
+internal enum WaitOfferStage
 {
     Queued = 0,
     Offered = 1,
     Cancelled = 2
 }
 
-public class WaitOffer : Poly.Runtime.IActionScoped
+internal class WaitOffer : Poly.Runtime.IActionScoped
 {
     private List<Section>? _sectionWaitlistOfferedSubscribers;
     private List<Section>? _sectionWaitlistCancelledSubscribers;
@@ -25,30 +25,7 @@ public class WaitOffer : Poly.Runtime.IActionScoped
     public Student? Student { get; private set; }
     public Section? Section { get; private set; }
     public WaitOfferStage CurrentStage { get; private set; }
-    public DomainResult Seat()
-    {
-        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
-        var __done = false;
-        try
-        {
-            var __result = this.__BodyOfSeat();
-            if (!__result.IsSuccess)
-            {
-                return __result;
-            }
-            Poly.Runtime.ActionScope.Commit(__scope);
-            __done = true;
-            return __result;
-        }
-        finally
-        {
-            if (!__done)
-            {
-                Poly.Runtime.ActionScope.Rollback(__scope);
-            }
-        }
-    }
-    private DomainResult __BodyOfSeat()
+    internal DomainResult Seat()
     {
         if (this.CurrentStage != WaitOfferStage.Queued)
         {
@@ -58,30 +35,7 @@ public class WaitOffer : Poly.Runtime.IActionScoped
         this.NotifyOfferedSubscribers();
         return DomainResult.Success();
     }
-    public DomainResult Cancel()
-    {
-        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
-        var __done = false;
-        try
-        {
-            var __result = this.__BodyOfCancel();
-            if (!__result.IsSuccess)
-            {
-                return __result;
-            }
-            Poly.Runtime.ActionScope.Commit(__scope);
-            __done = true;
-            return __result;
-        }
-        finally
-        {
-            if (!__done)
-            {
-                Poly.Runtime.ActionScope.Rollback(__scope);
-            }
-        }
-    }
-    private DomainResult __BodyOfCancel()
+    internal DomainResult Cancel()
     {
         if (this.CurrentStage == WaitOfferStage.Queued || this.CurrentStage == WaitOfferStage.Offered)
         {
@@ -158,7 +112,7 @@ public class WaitOffer : Poly.Runtime.IActionScoped
             this.ExitNotifyCascade();
         }
     }
-    public static DomainResult<WaitOffer> Create(Student? student = null, Section? section = null)
+    internal static DomainResult<WaitOffer> Create(Student? student = null, Section? section = null)
     {
         var created = new WaitOffer(student, section);
         if (section != null)

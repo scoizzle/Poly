@@ -4,11 +4,11 @@ using Poly.Mcp.Tools;
 namespace Poly.Tests.Mcp;
 
 /// <summary>
-/// Tests for OracleTool: describe_domain_element and oracle_expression.
+/// Tests for OracleTool oracle_expression, and the element descriptions that moved to InspectService (M-03).
 /// </summary>
 public class OracleToolTests {
     [Test]
-    public async Task DescribeDomainElement_Entity_AfterAdd() {
+    public async Task InspectService_Entity_AfterAdd() {
         var response = McpTestTools.Session.CreateDomainSession("OracleTest");
         await Assert.That(response.Success).IsTrue();
         var sessionId = response.SessionId!;
@@ -22,35 +22,37 @@ public class OracleToolTests {
         await Assert.That(r3.Success).IsTrue();
 
         // Now describe the entity
-        var desc = McpTestTools.Oracle.DescribeDomainElement(sessionId, "entity", "Widget");
-        await Assert.That(desc.Success).IsTrue();
+        var desc = InspectPathTests.Describe(sessionId, "Widget");
+        await Assert.That(desc.Ok).IsTrue();
         await Assert.That(desc.Data).IsNotNull();
 
         var descJson = System.Text.Json.JsonSerializer.Serialize(desc.Data);
         await Assert.That(descJson).Contains("Widget");
-        await Assert.That(descJson).Contains("1 stages");
+        await Assert.That(desc.Summary).Contains("1 stages");
     }
 
     [Test]
-    public async Task DescribeDomainElement_Unknown_Fails() {
+    public async Task InspectService_Unknown_Fails() {
         var (sessionId, _) = McpTestTools.Store.Create("OracleTest");
 
-        var desc = McpTestTools.Oracle.DescribeDomainElement(sessionId, "entity", "NonExistent");
-        await Assert.That(desc.Success).IsFalse();
+        var desc = InspectPathTests.Describe(sessionId, "NonExistent");
+        await Assert.That(desc.Ok).IsFalse();
+        await Assert.That(desc.ErrorCode).IsEqualTo("ELEMENT_NOT_FOUND");
     }
 
     [Test]
-    public async Task DescribeDomainElement_UnknownKind_Fails() {
+    public async Task InspectService_GarbagePath_IsElementNotFound() {
         var (sessionId, _) = McpTestTools.Store.Create("OracleTest");
 
-        var desc = McpTestTools.Oracle.DescribeDomainElement(sessionId, "garbage", "something");
-        await Assert.That(desc.Success).IsFalse();
+        var desc = InspectPathTests.Describe(sessionId, "garbage.something");
+        await Assert.That(desc.Ok).IsFalse();
+        await Assert.That(desc.ErrorCode).IsEqualTo("ELEMENT_NOT_FOUND");
     }
 
     // ── V0′.2: Policy describe smoke test ──────────────────────
 
     [Test]
-    public async Task DescribeDomainElement_Policy_IncludesExpressionEnglish() {
+    public async Task InspectService_Policy_IncludesExpressionEnglish() {
         var (sessionId, _) = McpTestTools.Store.Create("OracleTest");
 
         // Add entity with a property and policy
@@ -61,8 +63,8 @@ public class OracleToolTests {
         var r2 = McpTestTools.Evolve.Add(sessionId, "policy", """{"entityName":"Person","name":"Adult","expression":"Age >= 18"}""");
         await Assert.That(r2.Success).IsTrue();
 
-        var desc = McpTestTools.Oracle.DescribeDomainElement(sessionId, "policy", "Adult");
-        await Assert.That(desc.Success).IsTrue();
+        var desc = InspectPathTests.Describe(sessionId, "Person.Adult");
+        await Assert.That(desc.Ok).IsTrue();
 
         // The plain-English description should mention the expression
         var descJson = System.Text.Json.JsonSerializer.Serialize(desc.Data);
@@ -71,7 +73,7 @@ public class OracleToolTests {
     }
 
     [Test]
-    public async Task DescribeDomainElement_Stage_WithEntityName_Disambiguates() {
+    public async Task InspectService_Stage_NeedsTheEntityToDisambiguate() {
         var (sessionId, _) = McpTestTools.Store.Create("OracleTest");
 
         // Create two entities with same-named stage
@@ -80,13 +82,14 @@ public class OracleToolTests {
         McpTestTools.Evolve.Add(sessionId, "entity", """{"name":"Invoice"}""");
         McpTestTools.Evolve.Add(sessionId, "stage", """{"entityName":"Invoice","name":"Active"}""");
 
-        // Without entityName, should find first match
-        var desc = McpTestTools.Oracle.DescribeDomainElement(sessionId, "stage", "Active");
-        await Assert.That(desc.Success).IsTrue();
+        // A bare stage name is no longer a path: not found, with a code
+        var desc = InspectPathTests.Describe(sessionId, "Active");
+        await Assert.That(desc.Ok).IsFalse();
+        await Assert.That(desc.ErrorCode).IsEqualTo("ELEMENT_NOT_FOUND");
 
-        // With entityName, should find the specific one
-        var desc2 = McpTestTools.Oracle.DescribeDomainElement(sessionId, "stage", "Active", entityName: "Invoice");
-        await Assert.That(desc2.Success).IsTrue();
+        // With the entity, the specific one
+        var desc2 = InspectPathTests.Describe(sessionId, "Invoice.Active");
+        await Assert.That(desc2.Ok).IsTrue();
         var json2 = System.Text.Json.JsonSerializer.Serialize(desc2.Data);
         await Assert.That(json2).Contains("Invoice");
     }

@@ -4,13 +4,13 @@ using System.Collections.Generic;
 
 using Poly.Runtime;
 
-public enum FineStage
+internal enum FineStage
 {
     Unpaid = 0,
     Resolved = 1
 }
 
-public class Fine : Poly.Runtime.IActionScoped
+internal class Fine : Poly.Runtime.IActionScoped
 {
     private List<Patron>? _patronFinesResolvedSubscribers;
     private int _notifyDepth;
@@ -30,30 +30,7 @@ public class Fine : Poly.Runtime.IActionScoped
     public bool? Paid { get; private set; }
     public Patron? Patron { get; private set; }
     public FineStage CurrentStage { get; private set; }
-    public DomainResult Pay()
-    {
-        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
-        var __done = false;
-        try
-        {
-            var __result = this.__BodyOfPay();
-            if (!__result.IsSuccess)
-            {
-                return __result;
-            }
-            Poly.Runtime.ActionScope.Commit(__scope);
-            __done = true;
-            return __result;
-        }
-        finally
-        {
-            if (!__done)
-            {
-                Poly.Runtime.ActionScope.Rollback(__scope);
-            }
-        }
-    }
-    private DomainResult __BodyOfPay()
+    internal DomainResult Pay()
     {
         if (this.CurrentStage != FineStage.Unpaid)
         {
@@ -72,30 +49,7 @@ public class Fine : Poly.Runtime.IActionScoped
         this.NotifyResolvedSubscribers();
         return DomainResult.Success();
     }
-    public DomainResult Waive()
-    {
-        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
-        var __done = false;
-        try
-        {
-            var __result = this.__BodyOfWaive();
-            if (!__result.IsSuccess)
-            {
-                return __result;
-            }
-            Poly.Runtime.ActionScope.Commit(__scope);
-            __done = true;
-            return __result;
-        }
-        finally
-        {
-            if (!__done)
-            {
-                Poly.Runtime.ActionScope.Rollback(__scope);
-            }
-        }
-    }
-    private DomainResult __BodyOfWaive()
+    internal DomainResult Waive()
     {
         if (this.CurrentStage != FineStage.Unpaid)
         {
@@ -141,7 +95,7 @@ public class Fine : Poly.Runtime.IActionScoped
             this.ExitNotifyCascade();
         }
     }
-    public static DomainResult<Fine> Create(string reason, long amount = 0L, Patron? patron = null, DateTime? dateIssued = null, bool? paid = null)
+    internal static DomainResult<Fine> Create(string reason, long amount = 0L, Patron? patron = null, DateTime? dateIssued = null, bool? paid = null)
     {
         if (string.IsNullOrEmpty(reason))
         {

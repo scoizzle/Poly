@@ -1,7 +1,7 @@
 #nullable enable
 using Poly.Runtime;
 
-public enum VisitStage
+internal enum VisitStage
 {
     Scheduled = 0,
     CheckedIn = 1,
@@ -10,7 +10,7 @@ public enum VisitStage
     NoShow = 4
 }
 
-public class Visit : Poly.Runtime.IActionScoped
+internal class Visit : Poly.Runtime.IActionScoped
 {
     private Visit() { }
     private Visit(string reason, Patient? patient = null, Doctor? primaryDoctor = null, VisitState state = VisitState.Scheduled)
@@ -26,58 +26,12 @@ public class Visit : Poly.Runtime.IActionScoped
     public Patient? Patient { get; private set; }
     public Doctor? PrimaryDoctor { get; private set; }
     public VisitStage CurrentStage { get; private set; }
-    public DomainResult AssignDoctor(Doctor doctor)
-    {
-        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
-        var __done = false;
-        try
-        {
-            var __result = this.__BodyOfAssignDoctor(doctor);
-            if (!__result.IsSuccess)
-            {
-                return __result;
-            }
-            Poly.Runtime.ActionScope.Commit(__scope);
-            __done = true;
-            return __result;
-        }
-        finally
-        {
-            if (!__done)
-            {
-                Poly.Runtime.ActionScope.Rollback(__scope);
-            }
-        }
-    }
-    private DomainResult __BodyOfAssignDoctor(Doctor doctor)
+    internal DomainResult AssignDoctor(Doctor doctor)
     {
         this.Reason = "assigned";
         return DomainResult.Success();
     }
-    public DomainResult CheckIn()
-    {
-        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
-        var __done = false;
-        try
-        {
-            var __result = this.__BodyOfCheckIn();
-            if (!__result.IsSuccess)
-            {
-                return __result;
-            }
-            Poly.Runtime.ActionScope.Commit(__scope);
-            __done = true;
-            return __result;
-        }
-        finally
-        {
-            if (!__done)
-            {
-                Poly.Runtime.ActionScope.Rollback(__scope);
-            }
-        }
-    }
-    private DomainResult __BodyOfCheckIn()
+    internal DomainResult CheckIn()
     {
         if (this.CurrentStage != VisitStage.Scheduled)
         {
@@ -87,7 +41,7 @@ public class Visit : Poly.Runtime.IActionScoped
         this.State = VisitState.CheckedIn;
         return DomainResult.Success();
     }
-    public static DomainResult<Visit> Create(string reason, Patient? patient = null, Doctor? primaryDoctor = null, VisitState state = VisitState.Scheduled)
+    internal static DomainResult<Visit> Create(string reason, Patient? patient = null, Doctor? primaryDoctor = null, VisitState state = VisitState.Scheduled)
     {
         if (string.IsNullOrEmpty(reason))
         {

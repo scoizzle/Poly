@@ -157,7 +157,7 @@ public sealed class ContractBindScopeTests {
     /// </summary>
     [Test]
     public async Task Polyc_PlacesSecondBindOnSameActionOnTheSecondDeclaration() {
-        var compiler = new PolyCompiler(ProductCatalog.Catalog, "authoring");
+        var compiler = new PolyCompiler(ProductCatalog.Catalog, new SessionOptions(ProductCatalog.Catalog, ExtensionCatalog.ProductAuthoring));
         var result = compiler.Compile(SecondBindOnSameActionDsl, "bind-scope.poly");
 
         var errors = result.Diagnostics

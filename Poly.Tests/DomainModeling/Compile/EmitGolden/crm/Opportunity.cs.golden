@@ -4,7 +4,7 @@ using System.Collections.Generic;
 
 using Poly.Runtime;
 
-public enum OpportunityStage
+internal enum OpportunityStage
 {
     Qualify = 0,
     Propose = 1,
@@ -13,7 +13,7 @@ public enum OpportunityStage
     Lost = 4
 }
 
-public class Opportunity : Poly.Runtime.IActionScoped
+internal class Opportunity : Poly.Runtime.IActionScoped
 {
     private List<Activity> _activities = new List<Activity>();
     private List<Line> _lines = new List<Line>();
@@ -55,7 +55,7 @@ public class Opportunity : Poly.Runtime.IActionScoped
         get => this._quotes;
     }
     public OpportunityStage CurrentStage { get; private set; }
-    public DomainResult<Activity> CreateActivities(string subject, DateOnly? dueOn = null)
+    internal DomainResult<Activity> CreateActivities(string subject, DateOnly? dueOn = null)
     {
         var activityResult = Activity.Create(subject, this, dueOn);
         if (!activityResult.IsSuccess)
@@ -69,7 +69,7 @@ public class Opportunity : Poly.Runtime.IActionScoped
     {
         this._activities.Add(child);
     }
-    public DomainResult<Line> CreateLines(long qty, decimal unitPrice, Product? product = null)
+    internal DomainResult<Line> CreateLines(long qty, decimal unitPrice, Product? product = null)
     {
         var lineResult = Line.Create(qty, unitPrice, product, this);
         if (!lineResult.IsSuccess)
@@ -83,7 +83,7 @@ public class Opportunity : Poly.Runtime.IActionScoped
     {
         this._lines.Add(child);
     }
-    public DomainResult<Quote> CreateQuotes(string title, decimal amount)
+    internal DomainResult<Quote> CreateQuotes(string title, decimal amount)
     {
         var quoteResult = Quote.Create(title, amount, this, new List<QuoteLine>());
         if (!quoteResult.IsSuccess)
@@ -97,30 +97,7 @@ public class Opportunity : Poly.Runtime.IActionScoped
     {
         this._quotes.Add(child);
     }
-    public DomainResult CompleteOpenWork()
-    {
-        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
-        var __done = false;
-        try
-        {
-            var __result = this.__BodyOfCompleteOpenWork();
-            if (!__result.IsSuccess)
-            {
-                return __result;
-            }
-            Poly.Runtime.ActionScope.Commit(__scope);
-            __done = true;
-            return __result;
-        }
-        finally
-        {
-            if (!__done)
-            {
-                Poly.Runtime.ActionScope.Rollback(__scope);
-            }
-        }
-    }
-    private DomainResult __BodyOfCompleteOpenWork()
+    internal DomainResult CompleteOpenWork()
     {
         foreach (var target0 in this.Activities)
         {
@@ -136,30 +113,7 @@ public class Opportunity : Poly.Runtime.IActionScoped
         }
         return DomainResult.Success();
     }
-    public DomainResult Propose()
-    {
-        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
-        var __done = false;
-        try
-        {
-            var __result = this.__BodyOfPropose();
-            if (!__result.IsSuccess)
-            {
-                return __result;
-            }
-            Poly.Runtime.ActionScope.Commit(__scope);
-            __done = true;
-            return __result;
-        }
-        finally
-        {
-            if (!__done)
-            {
-                Poly.Runtime.ActionScope.Rollback(__scope);
-            }
-        }
-    }
-    private DomainResult __BodyOfPropose()
+    internal DomainResult Propose()
     {
         if (this.CurrentStage != OpportunityStage.Qualify)
         {
@@ -174,30 +128,7 @@ public class Opportunity : Poly.Runtime.IActionScoped
         this.NotifyProposeSubscribers();
         return DomainResult.Success();
     }
-    public DomainResult Lose()
-    {
-        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
-        var __done = false;
-        try
-        {
-            var __result = this.__BodyOfLose();
-            if (!__result.IsSuccess)
-            {
-                return __result;
-            }
-            Poly.Runtime.ActionScope.Commit(__scope);
-            __done = true;
-            return __result;
-        }
-        finally
-        {
-            if (!__done)
-            {
-                Poly.Runtime.ActionScope.Rollback(__scope);
-            }
-        }
-    }
-    private DomainResult __BodyOfLose()
+    internal DomainResult Lose()
     {
         if (this.CurrentStage == OpportunityStage.Qualify || this.CurrentStage == OpportunityStage.Propose || this.CurrentStage == OpportunityStage.Commit)
         {
@@ -208,30 +139,7 @@ public class Opportunity : Poly.Runtime.IActionScoped
         }
         return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Lose' is not valid for the current stage on entity 'Opportunity'.", "Opportunity.Lose"));
     }
-    public DomainResult<Activity> Log(string subject)
-    {
-        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
-        var __done = false;
-        try
-        {
-            var __result = this.__BodyOfLog(subject);
-            if (!__result.IsSuccess)
-            {
-                return __result;
-            }
-            Poly.Runtime.ActionScope.Commit(__scope);
-            __done = true;
-            return __result;
-        }
-        finally
-        {
-            if (!__done)
-            {
-                Poly.Runtime.ActionScope.Rollback(__scope);
-            }
-        }
-    }
-    private DomainResult<Activity> __BodyOfLog(string subject)
+    internal DomainResult<Activity> Log(string subject)
     {
         if (this.CurrentStage == OpportunityStage.Qualify || this.CurrentStage == OpportunityStage.Propose || this.CurrentStage == OpportunityStage.Commit)
         {
@@ -245,30 +153,7 @@ public class Opportunity : Poly.Runtime.IActionScoped
         }
         return DomainResult<Activity>.Failure(Poly.Runtime.DomainFailure.Stage("'Log' is not valid for the current stage on entity 'Opportunity'.", "Opportunity.Log"));
     }
-    public DomainResult<Line> AddLine(Product sku, long qty)
-    {
-        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
-        var __done = false;
-        try
-        {
-            var __result = this.__BodyOfAddLine(sku, qty);
-            if (!__result.IsSuccess)
-            {
-                return __result;
-            }
-            Poly.Runtime.ActionScope.Commit(__scope);
-            __done = true;
-            return __result;
-        }
-        finally
-        {
-            if (!__done)
-            {
-                Poly.Runtime.ActionScope.Rollback(__scope);
-            }
-        }
-    }
-    private DomainResult<Line> __BodyOfAddLine(Product sku, long qty)
+    internal DomainResult<Line> AddLine(Product sku, long qty)
     {
         if (this.CurrentStage == OpportunityStage.Qualify || this.CurrentStage == OpportunityStage.Propose || this.CurrentStage == OpportunityStage.Commit)
         {
@@ -292,30 +177,7 @@ public class Opportunity : Poly.Runtime.IActionScoped
         }
         return DomainResult<Line>.Failure(Poly.Runtime.DomainFailure.Stage("'AddLine' is not valid for the current stage on entity 'Opportunity'.", "Opportunity.AddLine"));
     }
-    public DomainResult<Quote> QuoteDeal()
-    {
-        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
-        var __done = false;
-        try
-        {
-            var __result = this.__BodyOfQuoteDeal();
-            if (!__result.IsSuccess)
-            {
-                return __result;
-            }
-            Poly.Runtime.ActionScope.Commit(__scope);
-            __done = true;
-            return __result;
-        }
-        finally
-        {
-            if (!__done)
-            {
-                Poly.Runtime.ActionScope.Rollback(__scope);
-            }
-        }
-    }
-    private DomainResult<Quote> __BodyOfQuoteDeal()
+    internal DomainResult<Quote> QuoteDeal()
     {
         if (this.CurrentStage != OpportunityStage.Qualify)
         {
@@ -329,30 +191,7 @@ public class Opportunity : Poly.Runtime.IActionScoped
         var created1 = create0.Value;
         return DomainResult<Quote>.Success(created1);
     }
-    public DomainResult Commit()
-    {
-        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
-        var __done = false;
-        try
-        {
-            var __result = this.__BodyOfCommit();
-            if (!__result.IsSuccess)
-            {
-                return __result;
-            }
-            Poly.Runtime.ActionScope.Commit(__scope);
-            __done = true;
-            return __result;
-        }
-        finally
-        {
-            if (!__done)
-            {
-                Poly.Runtime.ActionScope.Rollback(__scope);
-            }
-        }
-    }
-    private DomainResult __BodyOfCommit()
+    internal DomainResult Commit()
     {
         if (this.CurrentStage != OpportunityStage.Propose)
         {
@@ -366,30 +205,7 @@ public class Opportunity : Poly.Runtime.IActionScoped
         this.Probability = 80L;
         return DomainResult.Success();
     }
-    public DomainResult Win()
-    {
-        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
-        var __done = false;
-        try
-        {
-            var __result = this.__BodyOfWin();
-            if (!__result.IsSuccess)
-            {
-                return __result;
-            }
-            Poly.Runtime.ActionScope.Commit(__scope);
-            __done = true;
-            return __result;
-        }
-        finally
-        {
-            if (!__done)
-            {
-                Poly.Runtime.ActionScope.Rollback(__scope);
-            }
-        }
-    }
-    private DomainResult __BodyOfWin()
+    internal DomainResult Win()
     {
         if (this.CurrentStage != OpportunityStage.Commit)
         {
@@ -400,30 +216,7 @@ public class Opportunity : Poly.Runtime.IActionScoped
         this.NotifyWonSubscribers();
         return DomainResult.Success();
     }
-    public DomainResult Capture(ChargeRequest request)
-    {
-        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
-        var __done = false;
-        try
-        {
-            var __result = this.__BodyOfCapture(request);
-            if (!__result.IsSuccess)
-            {
-                return __result;
-            }
-            Poly.Runtime.ActionScope.Commit(__scope);
-            __done = true;
-            return __result;
-        }
-        finally
-        {
-            if (!__done)
-            {
-                Poly.Runtime.ActionScope.Rollback(__scope);
-            }
-        }
-    }
-    private DomainResult __BodyOfCapture(ChargeRequest request)
+    internal DomainResult Capture(ChargeRequest request)
     {
         if (this.CurrentStage != OpportunityStage.Commit)
         {
@@ -543,7 +336,7 @@ public class Opportunity : Poly.Runtime.IActionScoped
             this.ExitNotifyCascade();
         }
     }
-    public static DomainResult<Opportunity> Create(string title, decimal amount, Account? account = null, Contact? contact = null, IEnumerable<Activity>? activities = null, IEnumerable<Line>? lines = null, IEnumerable<Quote>? quotes = null, DateOnly? closeBy = null)
+    internal static DomainResult<Opportunity> Create(string title, decimal amount, Account? account = null, Contact? contact = null, IEnumerable<Activity>? activities = null, IEnumerable<Line>? lines = null, IEnumerable<Quote>? quotes = null, DateOnly? closeBy = null)
     {
         if (string.IsNullOrEmpty(title))
         {

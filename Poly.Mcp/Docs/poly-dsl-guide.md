@@ -11,6 +11,7 @@
 > **MCP surface:** `poly_guide`, `poly_workspace`, `poly_define`, `poly_check`,
 > `poly_inspect`, `poly_export`, `poly_simulate`. The 30-tool v1 surface was removed;
 > names such as `apply_dsl` in older sections refer to it historically.
+> `poly_inspect` takes one element path as `select`: `Entity`, `Entity.Member`, `Entity.Stage.Action`, `Enum.Member`, or an enum, value type or function name; an unresolvable path returns `ELEMENT_NOT_FOUND` with candidates. A same-named entity action and stage action make `Entity.Action` ambiguous: use `Entity.Stage.Action`, or the domain-prefixed `Domain/Entity/Action` (which prefers the entity-level member) for the entity-level one.
 > `poly_check` with `select: "Entity.Action"` adds `data.witness`: one entry per stage context
 > (`stageName`, `preconditions`, `properties[].min/max`, `postconditions`) copied from the
 > analyzer's range/precondition facts; absent when the analysis published none. Only an
@@ -257,7 +258,7 @@ A policy compares an enum property to a member name: `Outcome == Pending` and
 Named records without identity or lifecycle. A value type is a **contract payload or
 action parameter** — it has no storage representation and cannot be a stored entity
 property. Analysis fails closed on a property typed as one. `public` is optional and
-omitted by default (`public value Money { … }`). It is stored as `Visibility.Public` and printed; export filtering is a later slice:
+omitted by default (`public value Money { … }`). Generated C# honours it (see **Visibility in generated C#** under entities): an unmarked value type prints `internal`.
 
 <!-- poly-verify: invalid:DMSTR006 wrapper:top-default -->
 ```poly
@@ -352,9 +353,22 @@ key-clause = "key" "(" member ("," member)* ")"
 
 **Key (identity).** `key(a, b)` designates existing members as the entity's identity. It is a header clause that sits **immediately before the opening `{`**, after any annotations: `Order: entity table("ORDERS") key(Code, Region) {` or `public entity Order key(Code) {`. It is not a body member and adds nothing to the entity; each name is one of the entity's own properties or singular navigations, and names are scoped to the entity. Analysis rejects an unknown member, a blank one, an `optional` or action-assigned key property, a collection navigation, or a navigation to an unkeyed entity (`DMSTR007`), a repeated member (`DMSTR001`), and a key cycle (`DMSTR002`). An empty `key()`, a doubled or trailing comma, an unclosed list, or a second `key(...)` clause is a positioned parse error. The printer writes the clause in the same position. Scoped **value** uniqueness (`unique_by` / `unique(scope, value)`) is **not implemented**, and nothing enforces a key at runtime yet.
 
-`public` is an optional leading modifier before the kind keyword (`public entity Order { … }`). Omitting it is `Visibility.Internal` and keeps `Order: entity`. It is stored as `Visibility` and printed; export filtering is a later slice. `public` is a keyword, so it is not a property name. The mark may appear anywhere among the header annotations; the printer writes it first.
+`public` is an optional leading modifier before the kind keyword (`public entity Order { … }`). Omitting it is `Visibility.Internal` and keeps `Order: entity`. `public` is a keyword, so it is not a property name. The mark may appear anywhere among the header annotations; the printer writes it first.
 
 An exported signature must be closed. A `public` action's parameter and result types, and a `public` value type's field types, must themselves be `public`; primitives and enum payloads are always available, and a used contract's value types are already on that contract's surface. Analysis reports **`DMCON002`** and names the internal type. The fix is to mark the type `public`, not to add an exception.
+
+**Visibility in generated C#.** Only a `public` entity, value type or action prints `public`; every unmarked one prints `internal`, so a domain with no `public` mark has no public surface and a consumer in another assembly needs the mark. Enums carry no mark and stay public, and a stage enum follows its entity. A public entity's properties, `Create` and policies stay public, and a member that would name an internal type is `internal`. An internal entity's `Create` and `Create{Nav}` are `internal` too. A stage-dispatched action is one method that is `public` if any stage variant is public; a public stage group is rejected (`DMCON002`, on the offending copy) when any of its copies returns an internal entity. The generated DbContext is `internal` when any entity is internal, and a generated DTO is `internal` when its entity or any domain type it names is. For now a public entity may not navigate to an internal entity (an interim rule: a later slice, L-22b, allows it by generating the persistence mapping for a non-public navigation): analysis reports **`DMCON019`** on the navigation, and on an entity-typed property, and the fix is to mark the target `public`.
+
+<!-- poly-verify: invalid:DMCON019 wrapper:top-default -->
+```poly
+Line: entity {
+  Qty: Number default(1)
+}
+
+public entity Order {
+  lines: many Line   // error: Order is public, Line is internal (interim, L-22b)
+}
+```
 
 | Constraint | Syntax | Example |
 |-----------|--------|---------|
@@ -482,6 +496,13 @@ same facts as a self-contained page for a person; an untagged element gets a sta
 `urn:poly:` IRI. The IRI is `x-poly-iri`, not a subschema `$id`: in JSON Schema 2020-12 a
 `$defs` `$id` starts an embedded resource and would rebase every local `#/$defs/…`
 reference onto the element IRI.
+
+### Export order and `uses`
+
+`export_dsl` prints declarations in the order they were authored. Top-level declarations are grouped by kind (enums, value types, entities, functions, contracts, bindings), each kind in model order. Entity members (properties, navigations, stages, actions, policies) print in authored order, with subscriptions last. Members added through incremental MCP tools print after the authored ones. A `uses` line is printed only when the domain's extension list differs from the implicit set (`storage`, `persistence`, in that order) or a `uses <id> <version>` pin is present, so a document that listed no `uses` exports without one. Export drops `uses temporal`; reading re-supplies it.
+
+Two consequences of the `uses` rule. First, a document that spells exactly the implicit set (`uses storage` then `uses persistence`) exports without those lines: the model is equal, the text is not. Second, an export without `uses` is not self-describing: applying it into a session that already holds other libraries keeps them (for example `uses http`), and `polyc --seed language` loads no libraries (`--seed authoring` is an alias for the implicit set). Write the `uses` lines you need into the document. This is an interim rule until the implicit set stops being recorded in the extension list.
+
 ## 4. Navigation Properties (N1 Relationships Only)
 
 Relationships are declared as **inline navigation properties** on the source entity.
@@ -505,7 +526,7 @@ Customer: entity {
 ```
 
 Cardinality: `one` (default, can be omitted), `many`.
-Ownership: `owned` marks `SourceOwnsTarget = true`. Export writes `one ` explicitly for a one-to-one navigation (`invoice: Invoice` prints as `invoice: one Invoice`), because the bare form re-reads as a typed property line.
+Ownership: `owned` marks `SourceOwnsTarget = true`. Export writes `one ` explicitly for a one-to-one navigation (`invoice: Invoice` prints as `invoice: one Invoice`), because a bare `x: T` also reads back as one-to-one but fails closed when `T` is a Phase 1a keyword (`actor`, `schedule`, `parallel`, `for`, `function`; matched case-insensitively); `one T` is unambiguous.
 
 **Which entity is the root.** A collection nav (`children: many Child`) means the
 declaring entity owns the target. `owned` marks composition explicitly. A plain singular
@@ -524,6 +545,36 @@ endpoints.
 inbound link of an `owned` target (minimum one owner): "Cannot unlink '<rel>': the
 owned target must keep its owner." Non-owned links stay minimum zero, and removing
 the owner instance entirely is not an unlink, so it is exempt from the minimum.
+
+**An owned entity has exactly one owner navigation** (`DMSTR010`). Two `owned`
+navigations to one entity type are an analysis error, whether they sit on different
+entities or on one, and the message names every owner:
+
+<!-- poly-verify: invalid:DMSTR010 wrapper:top-default -->
+```poly
+Customer: entity {
+  Name: Text
+  profile: owned Profile
+}
+
+Supplier: entity {
+  Name: Text
+  profile: owned Profile   // error: Profile already has an owner, Customer.profile
+}
+
+Profile: entity {
+  Bio: Text
+}
+```
+
+Keep one navigation `owned` and make the other a plain reference. The rule is by
+navigation, so `Order.billing: owned Address` plus `Order.shipping: owned Address`
+is rejected too: make one a plain reference, or model the address as two entity types.
+A self-owning navigation (`Node.children: many owned Node`) is one owner edge and is
+legal, but a container that owns a recursive type (`Folder.items: many owned Item` plus
+`Item.children: many owned Item`) gives `Item` two owner navigations and is rejected;
+make `Item.children` a plain reference, or declare the tree node as its own type.
+This is a type-level check only: a second owner *instance* is not refused yet.
 
 **Relationship names are scoped to their source entity.** The same navigation name may
 be declared on different source entities — e.g. two children each back-reference their
@@ -560,8 +611,8 @@ Employee: entity {
 `via` is recorded on the relationship as `Inverse` and is validated by analysis:
 `DMREL003` when the name is not a navigation on the target entity, `DMREL004` when the
 two sides contradict (the named navigation points elsewhere, declares a different
-inverse, is the navigation itself, both ends are owned, or two navigations on one entity
-claim the same undeclared inverse), and `DMREL005` when two or more navigations of one
+inverse, is the navigation itself, both ends are owned, an owned navigation is paired with a
+collection inverse, or two navigations on one entity claim the same undeclared inverse), and `DMREL005` when two or more navigations of one
 cardinality class pair with a side that declares none. Lowering does not dispatch from
 the declared inverse yet — that is a later slice. `via <name>` is legal on an owned
 navigation too — that is how the back-reference names its owner, and only one side of a
@@ -710,7 +761,7 @@ name that matches no stage is `DMINI001`.
 action-name ":" "action" ["(" param-name ":" Type ("," ...)? ")"] ["->" ret-type] ["require" ...] "{" effect* "}"
 ```
 
-`public` is an optional leading modifier (`public action Pay (bill: Money) { … }`). Omitting it is internal. Export filtering is a later slice. `public` is a keyword, so it is not a parameter name.
+`public` is an optional leading modifier (`public action Pay (bill: Money) { … }`). Omitting it is internal, and the generated method prints `internal` to match. `public` is a keyword, so it is not a parameter name.
 
 Parameters (optional) appear **after** `: action`, keeping the uniform `Name: kind` member form (matches `export_dsl`). Parameter names cannot be DSL keywords (`when`, `require`, `action`, `stage`, `policy`, `entity`, `public`).
 
@@ -1003,7 +1054,7 @@ same effect-binding fail-closed checks.
 Two `when`s in the same scope (entity level, or one stage) with the same relationship,
 quantifier, peer binder and stage set warn **`DMSS006`**. Nothing is removed: both run, in
 declaration order. A `when` that names a stage nothing transitions into, and that is not the
-target's initial stage, warns **`DMSS007`**: a stage in it can never trigger it. The check is syntactic (no
+target's initial stage, warns **`DMSS007`**: a stage it names can never trigger it. The check is syntactic (no
 transition into the stage at all), not reachability.
 
 ### Two shapes
@@ -1787,8 +1838,6 @@ comment describing the old member.
 <!-- poly-verify: valid -->
 ```poly
 domain Orders
-uses storage
-uses persistence
 
 Customer: entity {
   Name: Text

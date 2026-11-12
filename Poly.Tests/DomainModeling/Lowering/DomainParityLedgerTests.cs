@@ -11,7 +11,7 @@ namespace Poly.Tests.DomainModeling.Lowering;
 public class DomainParityLedgerTests {
     const string ThemeFormat = @"\A[A-Z]{1,2}-[0-9]{2}\z";
 
-    static bool IsSliceId(string value) => System.Text.RegularExpressions.Regex.IsMatch(value, ThemeFormat);
+    internal static bool IsSliceId(string value) => System.Text.RegularExpressions.Regex.IsMatch(value, ThemeFormat);
 
     /// <summary>One measurement line per seed, so a failure is also the table the row records.</summary>
     static string Table() =>

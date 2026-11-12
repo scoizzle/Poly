@@ -378,7 +378,7 @@ public class AbsenceParityTests {
         // written value. A dropped trailing run would carry only the value.
         var (domain, analysis) = EvolvedDomain.FromDsl(OptionalScalarHolesDsl);
         var printed = new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis));
-        var add = ExportedCSharp.ExtractMethod(printed, "public DomainResult Add(");
+        var add = ExportedCSharp.ExtractMethod(printed, "internal DomainResult Add(");
         await Assert.That(add).Contains("(decimal?)null");
         await Assert.That(add).Contains("(long?)null");
 

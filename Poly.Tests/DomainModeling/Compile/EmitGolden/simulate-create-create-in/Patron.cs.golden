@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 using Poly.Runtime;
 
-public class Patron : Poly.Runtime.IActionScoped
+internal class Patron : Poly.Runtime.IActionScoped
 {
     private List<Fine> _fines = new List<Fine>();
     private Patron(string name, IEnumerable<Fine>? fines = null)
@@ -16,7 +16,7 @@ public class Patron : Poly.Runtime.IActionScoped
     {
         get => this._fines;
     }
-    public DomainResult<Fine> CreateFines(long amount, string reason)
+    internal DomainResult<Fine> CreateFines(long amount, string reason)
     {
         var fineResult = Fine.Create(amount, reason, this);
         if (!fineResult.IsSuccess)
@@ -30,30 +30,7 @@ public class Patron : Poly.Runtime.IActionScoped
     {
         this._fines.Add(child);
     }
-    public DomainResult<Fine> AssessByType()
-    {
-        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
-        var __done = false;
-        try
-        {
-            var __result = this.__BodyOfAssessByType();
-            if (!__result.IsSuccess)
-            {
-                return __result;
-            }
-            Poly.Runtime.ActionScope.Commit(__scope);
-            __done = true;
-            return __result;
-        }
-        finally
-        {
-            if (!__done)
-            {
-                Poly.Runtime.ActionScope.Rollback(__scope);
-            }
-        }
-    }
-    private DomainResult<Fine> __BodyOfAssessByType()
+    internal DomainResult<Fine> AssessByType()
     {
         var create0 = Fine.Create(5L, "TypeCreate");
         if (!create0.IsSuccess)
@@ -63,30 +40,7 @@ public class Patron : Poly.Runtime.IActionScoped
         var created1 = create0.Value;
         return DomainResult<Fine>.Success(created1);
     }
-    public DomainResult<Fine> AssessByRel()
-    {
-        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
-        var __done = false;
-        try
-        {
-            var __result = this.__BodyOfAssessByRel();
-            if (!__result.IsSuccess)
-            {
-                return __result;
-            }
-            Poly.Runtime.ActionScope.Commit(__scope);
-            __done = true;
-            return __result;
-        }
-        finally
-        {
-            if (!__done)
-            {
-                Poly.Runtime.ActionScope.Rollback(__scope);
-            }
-        }
-    }
-    private DomainResult<Fine> __BodyOfAssessByRel()
+    internal DomainResult<Fine> AssessByRel()
     {
         var create0 = this.CreateFines(7L, "CreateIn");
         if (!create0.IsSuccess)
@@ -99,7 +53,7 @@ public class Patron : Poly.Runtime.IActionScoped
     public bool HasFines() => this.Fines.Count != 0;
     public bool HasFineCount() => this.Fines.Count > 0;
     public bool NoFines() => this.Fines.Count == 0;
-    public static DomainResult<Patron> Create(string name, IEnumerable<Fine>? fines = null)
+    internal static DomainResult<Patron> Create(string name, IEnumerable<Fine>? fines = null)
     {
         if (string.IsNullOrEmpty(name))
         {

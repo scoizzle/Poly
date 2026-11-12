@@ -1,7 +1,7 @@
 #nullable enable
 using Poly.Runtime;
 
-public class Line : Poly.Runtime.IActionScoped
+internal class Line : Poly.Runtime.IActionScoped
 {
     private Line() { }
     private Line(long qty, decimal unitPrice, Product? product = null, Opportunity? opportunity = null)
@@ -15,7 +15,7 @@ public class Line : Poly.Runtime.IActionScoped
     public decimal UnitPrice { get; private set; }
     public Product? Product { get; private set; }
     public Opportunity? Opportunity { get; private set; }
-    public static DomainResult<Line> Create(long qty, decimal unitPrice, Product? product = null, Opportunity? opportunity = null)
+    internal static DomainResult<Line> Create(long qty, decimal unitPrice, Product? product = null, Opportunity? opportunity = null)
     {
         if (qty < 1L)
         {

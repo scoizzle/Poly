@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using Poly.DomainModeling.Runtime;
 using Poly.Runtime;
 
-public class Patron : Poly.Runtime.IActionScoped
+internal class Patron : Poly.Runtime.IActionScoped
 {
     private List<Loan> _loans = new List<Loan>();
     private List<Fine> _fines = new List<Fine>();
@@ -27,7 +27,7 @@ public class Patron : Poly.Runtime.IActionScoped
     {
         get => this._fines;
     }
-    public DomainResult<Loan> CreateLoans(Book? book = null, long amount = 0L)
+    internal DomainResult<Loan> CreateLoans(Book? book = null, long amount = 0L)
     {
         var loanResult = Loan.Create(book, amount);
         if (!loanResult.IsSuccess)
@@ -44,7 +44,7 @@ public class Patron : Poly.Runtime.IActionScoped
         this._loans.Add(child);
         child.RegisterPatronLoansOverdueSubscriber(this);
     }
-    public DomainResult<Fine> CreateFines(string reason, long amount = 0L)
+    internal DomainResult<Fine> CreateFines(string reason, long amount = 0L)
     {
         var fineResult = Fine.Create(reason, amount);
         if (!fineResult.IsSuccess)
@@ -59,30 +59,7 @@ public class Patron : Poly.Runtime.IActionScoped
     {
         this._fines.Add(child);
     }
-    public DomainResult<Loan> CheckOut(Book book)
-    {
-        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
-        var __done = false;
-        try
-        {
-            var __result = this.__BodyOfCheckOut(book);
-            if (!__result.IsSuccess)
-            {
-                return __result;
-            }
-            Poly.Runtime.ActionScope.Commit(__scope);
-            __done = true;
-            return __result;
-        }
-        finally
-        {
-            if (!__done)
-            {
-                Poly.Runtime.ActionScope.Rollback(__scope);
-            }
-        }
-    }
-    private DomainResult<Loan> __BodyOfCheckOut(Book book)
+    internal DomainResult<Loan> CheckOut(Book book)
     {
         if (!this.GoodStanding())
         {
@@ -105,7 +82,7 @@ public class Patron : Poly.Runtime.IActionScoped
             throw new ConstraintFailureException(create0.ErrorMessage ?? "");
         }
     }
-    public static DomainResult<Patron> Create(string name, IEnumerable<Loan>? loans = null, IEnumerable<Fine>? fines = null, string status = "Active")
+    internal static DomainResult<Patron> Create(string name, IEnumerable<Loan>? loans = null, IEnumerable<Fine>? fines = null, string status = "Active")
     {
         if (string.IsNullOrEmpty(name))
         {

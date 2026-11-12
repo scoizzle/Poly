@@ -119,6 +119,11 @@ internal static class ReservedNames {
         // some shapes collide, and enumerating them would twin the writer's decisions.
         new("System", ReservedKind.GeneratedReference,
             "shadows the System namespace the generated member bodies call"),
+        // FailureLowering.Call — constraint failures print `Poly.Runtime.DomainFailure.<Kind>(...)`
+        // from expression position inside the entity, where a member named Poly wins the name
+        // (CS0120). Unconditional like System: the language shrinks by one member name.
+        new("Poly", ReservedKind.GeneratedReference,
+            "shadows the Poly.Runtime namespace the generated member bodies call"),
     ];
 
     /// <summary>
@@ -146,6 +151,25 @@ internal static class ReservedNames {
         // `value__` instance field of its own, so a member of that name is CS0076.
         new("value__", ReservedKind.Language, "the backing field every enum carries, CS0076"),
     ];
+
+    /// <summary>
+    /// True when <paramref name="identity"/> is a name an action method body calls from
+    /// expression position (<c>Poly.Runtime…</c>, <c>System.…</c>): an action parameter of that name
+    /// shadows it inside the body. Only the unconditional <see cref="ReservedKind.GeneratedReference"/>
+    /// rows qualify, so the rule does not depend on the action's shape.
+    /// </summary>
+    public static bool TryReservedAsActionParameter(string identity, out ReservedName row) {
+        foreach (var candidate in Fixed) {
+            if (candidate.Kind != ReservedKind.GeneratedReference || candidate.AppliesTo is not null)
+                continue;
+            if (!string.Equals(candidate.Name, identity, StringComparison.Ordinal))
+                continue;
+            row = candidate;
+            return true;
+        }
+        row = null!;
+        return false;
+    }
 
     /// <summary>True when <paramref name="identity"/> is reserved on <paramref name="owner"/>.</summary>
     public static bool TryReserved(string identity, EnumType owner, out ReservedName row) {

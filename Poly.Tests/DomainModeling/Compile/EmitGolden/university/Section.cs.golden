@@ -175,19 +175,19 @@ public class Section
     {
         if (cap < 1L)
         {
-            return DomainResult<Section>.Failure("'Cap' must be >= 1.");
+            return DomainResult<Section>.Failure(Poly.Runtime.DomainFailure.Range("'Cap' must be >= 1.", "Section.Cap"));
         }
         if (cap > 200L)
         {
-            return DomainResult<Section>.Failure("'Cap' must be <= 200.");
+            return DomainResult<Section>.Failure(Poly.Runtime.DomainFailure.Range("'Cap' must be <= 200.", "Section.Cap"));
         }
         if ((object)offeringTerm == null)
         {
-            return DomainResult<Section>.Failure("'OfferingTerm' is required.");
+            return DomainResult<Section>.Failure(Poly.Runtime.DomainFailure.Required("'OfferingTerm' is required.", "Section.OfferingTerm"));
         }
         if (offeringTerm != Term.Fall && offeringTerm != Term.Spring && offeringTerm != Term.Summer)
         {
-            return DomainResult<Section>.Failure(string.Concat("'", offeringTerm, "' is not a valid member of Term for property 'OfferingTerm'."));
+            return DomainResult<Section>.Failure(Poly.Runtime.DomainFailure.Enum(string.Concat("'", offeringTerm, "' is not a valid member of Term for property 'OfferingTerm'."), "Section.OfferingTerm"));
         }
         var created = new Section(cap, offeringTerm, course, instructor, enrollments, waitlist, seatsTaken, offeredSeats, waitCleared);
         return DomainResult<Section>.Success(created);

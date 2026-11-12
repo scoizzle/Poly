@@ -51,23 +51,23 @@ public class Lead
     {
         if (string.IsNullOrEmpty(name))
         {
-            return DomainResult<Lead>.Failure("'Name' is required.");
+            return DomainResult<Lead>.Failure(Poly.Runtime.DomainFailure.Required("'Name' is required.", "Lead.Name"));
         }
         if (string.IsNullOrEmpty(email))
         {
-            return DomainResult<Lead>.Failure("'Email' is required.");
+            return DomainResult<Lead>.Failure(Poly.Runtime.DomainFailure.Required("'Email' is required.", "Lead.Email"));
         }
         if (!System.Text.RegularExpressions.Regex.IsMatch(email, "^[^@]+@[^@]+\\z"))
         {
-            return DomainResult<Lead>.Failure("'Email' does not match the required pattern.");
+            return DomainResult<Lead>.Failure(Poly.Runtime.DomainFailure.Pattern("'Email' does not match the required pattern.", "Lead.Email"));
         }
         if (string.IsNullOrEmpty(company))
         {
-            return DomainResult<Lead>.Failure("'Company' is required.");
+            return DomainResult<Lead>.Failure(Poly.Runtime.DomainFailure.Required("'Company' is required.", "Lead.Company"));
         }
         if (Lead.ExistsWithEmail(db, email))
         {
-            return DomainResult<Lead>.Failure("Unique constraint violated: 'Email' value is already used on another 'Lead'.");
+            return DomainResult<Lead>.Failure(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'Email' value is already used on another 'Lead'.", "Lead.Email"));
         }
         var created = new Lead(name, email, company, account);
         db.Record("Lead", "Email", email);

@@ -103,7 +103,7 @@ internal sealed class AuthoringSuggestionAnalyzer : INodeAnalyzer {
             entity,
             $"Entity '{entity.Name}' has {entity.Stages.Count} {stageNoun} but no actions declared on any stage. " +
             "Actions define what operations can be performed in each state; declare them inside the stage, " +
-            $"e.g. '{entity.Stages[0].Name}: stage {{ Submit: action {{ ... }} }}'.",
+            $"e.g. '{entity.InitialStage()!.Name}: stage {{ Submit: action {{ ... }} }}'.",
             DomainModelDiagnosticCodes.AuthoringSuggestion);
     }
 

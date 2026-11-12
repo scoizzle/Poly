@@ -1,4 +1,7 @@
+using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Evolution;
+using Poly.DomainModeling.Ontology;
 
 namespace Poly.Tests.DomainModeling.Analysis;
 
@@ -203,5 +206,167 @@ public class ExactIntervalTests {
     public async Task ToRangeConstraint_BothEndpointsOpen_IsNoConstraint() {
         await Assert.That(Range(null, null).ToRangeConstraint()).IsNull();
         await Assert.That(Range(0m, 10m).ToRangeConstraint()!.Minimum).IsEqualTo(0m);
+    }
+
+    // ── V-05b S2: the coupled invariants of the exact evaluation path ─────
+    // One shared evaluator: the literal arm, Refine, NumericRange, the transfer table, X − X and the
+    // ToRangeConstraint round-trip. Each invariant is pinned by a test named in the S2 commit message.
+
+    private static EvolutionResult Parse(string dsl) {
+        var changes = new PolyDslParser(dsl).Parse();
+        return new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes);
+    }
+
+    private static List<Poly.Analysis.Diagnostic> EffectErrors(EvolutionResult result) =>
+        result.Analysis.Diagnostics
+            .Where(d => d.Code == DomainModelDiagnosticCodes.EffectConstraintViolation
+                && d.Severity == DiagnosticSeverity.Error)
+            .ToList();
+
+    private static Entity NumberEntity() =>
+        new("Item", [new Property("U", new DomainTypeReference("Number"), [])], [], [], []);
+
+    private static (decimal? Min, decimal? Max) Infer(DomainExpression expression) =>
+        EffectInvariantAnalyzer.InferNumericRange(expression, NumberEntity(), action: null);
+
+    /// <summary>Invariant 3 (T1): <see cref="AbstractValue.NumericRange"/> keeps a bound above 2^53.</summary>
+    [Test]
+    public async Task ValueRange_BoundsAbove2Pow53_AreExact() {
+        var range = AbstractValue.From([new RangeConstraint(9007199254740993L, null)]).NumericRange;
+
+        await Assert.That(range!.Min).IsEqualTo(9007199254740993m);
+        await Assert.That(range.Max).IsNull();
+    }
+
+    /// <summary>Invariant 1 (T2): the literal arm keeps its declared bound; it is not rounded through double.</summary>
+    [Test]
+    public async Task Assign_LiteralAbove2Pow53_PlusZero_IsError() {
+        var result = Parse("""
+            domain Test
+            A: entity {
+              N: Number range(0, 9007199254740992)
+              Dep: action { assign N to 9007199254740993 + 0 }
+            }
+            """);
+
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(EffectErrors(result).Count).IsEqualTo(1);
+    }
+
+    /// <summary>Invariant 4 (T5): the transfer table decides 0 · unknown = 0.</summary>
+    [Test]
+    public async Task Mul_UnboundedOperandByZero_IsZero() {
+        var product = Infer(DomainExpression.Multiply(DomainExpression.Property("U"), DomainExpression.Literal(0L)));
+
+        await Assert.That(product).IsEqualTo(((decimal?)0m, (decimal?)0m));
+    }
+
+    /// <summary>Invariant 4 (T5 E2E): <c>U * 0</c> is 0 and outside <c>range(5, 20)</c>.</summary>
+    [Test]
+    public async Task Assign_UnboundedPropertyTimesZero_IsError() {
+        var result = Parse("""
+            domain Test
+            A: entity {
+              U: Number
+              B: Number range(5, 20)
+              Dep: action { assign B to U * 0 }
+            }
+            """);
+
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(EffectErrors(result).Count).IsEqualTo(1);
+    }
+
+    /// <summary>Invariant 5 (T6): <c>U − U</c> cancels to 0 before the (absent) range is consulted.</summary>
+    [Test]
+    public async Task Sub_SamePropertyOperands_IsZero() {
+        var result = Parse("""
+            domain Test
+            A: entity {
+              U: Number
+              B: Number range(5, 20)
+              Dep: action { assign B to U - U }
+            }
+            """);
+
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(EffectErrors(result).Count).IsEqualTo(1);
+    }
+
+    /// <summary>Invariant 5: structurally equal pure subtrees cancel, ignoring node ids.</summary>
+    [Test]
+    public async Task Sub_NestedEqualSubtrees_IsZero() {
+        var result = Parse("""
+            domain Test
+            A: entity {
+              U: Number
+              B: Number range(5, 20)
+              Dep: action { assign B to (U + 1) - (U + 1) }
+            }
+            """);
+
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(EffectErrors(result).Count).IsEqualTo(1);
+        await Assert.That(Infer(DomainExpression.Subtract(
+            DomainExpression.Add(DomainExpression.Property("U"), DomainExpression.Literal(1L)),
+            DomainExpression.Add(DomainExpression.Property("U"), DomainExpression.Literal(1L)))))
+            .IsEqualTo(((decimal?)0m, (decimal?)0m));
+    }
+
+    /// <summary>Invariant 5: an operand with an unmodelled operator is not known to be pure, so
+    /// <c>f() − f()</c> does not cancel (the shared purity gate, B7).</summary>
+    [Test]
+    public async Task Sub_ImpureOperands_DoNotCancel() {
+        var call = DomainExpression.Call("f", []);
+
+        await Assert.That(Infer(DomainExpression.Subtract(call, DomainExpression.Call("f", []))))
+            .IsEqualTo(((decimal?)null, (decimal?)null));
+        await Assert.That(Infer(DomainExpression.Subtract(
+            DomainExpression.Add(call, DomainExpression.Literal(1L)),
+            DomainExpression.Add(DomainExpression.Call("f", []), DomainExpression.Literal(1L)))))
+            .IsEqualTo(((decimal?)null, (decimal?)null));
+    }
+
+    private static async Task<ValueRange?> NarrowedQty(DomainExpression condition, RangeConstraint declared) {
+        var qty = new Property("Qty", new DomainTypeReference("Decimal"), [declared]);
+        var act = new Poly.DomainModeling.Ontology.Action("Touch", InvocationResult.Void, [], [], [new Policy("Guard", condition)]);
+        var entity = new Entity("Item", [qty], [act], [], []);
+        var analysis = DomainModelAnalyzer.Analyze(DomainTestFactory.Create("Test", [entity], []));
+        var context = analysis.GetActionInvariants(act)!.StageContexts().Single();
+        return await Task.FromResult(context.NarrowedRanges["Qty"]);
+    }
+
+    /// <summary>Invariant 2 (T10): a strict bound on a Decimal axis is the inclusive bound, exactly, and
+    /// the declared minimum survives (the range axis is not dropped).</summary>
+    [Test]
+    public async Task StrictLessThan_Decimal_RefinesToInclusiveBound_Sound() {
+        var narrowed = await NarrowedQty(
+            DomainExpression.LessThan(DomainExpression.Property("Qty"), DomainExpression.Literal(5.5m)),
+            new RangeConstraint(0m, 100m));
+
+        await Assert.That(narrowed!.Min).IsEqualTo(0m);
+        await Assert.That(narrowed.Max).IsEqualTo(5.5m);
+    }
+
+    /// <summary>Invariant 2: a refinement bound above 2^53 is not rounded through double.</summary>
+    [Test]
+    public async Task RefineNarrowedValue_KeepsDeclaredRangeAxis() {
+        var narrowed = await NarrowedQty(
+            DomainExpression.LessThanOrEqual(DomainExpression.Property("Qty"), DomainExpression.Literal(9007199254740993L)),
+            new RangeConstraint(0L, 9007199254740994L));
+
+        await Assert.That(narrowed!.Min).IsEqualTo(0m);
+        await Assert.That(narrowed.Max).IsEqualTo(9007199254740993m);
+    }
+
+    /// <summary>Invariant 6 (A1): the round trip keeps CLR decimal bounds; an ExactNumber is never boxed.</summary>
+    [Test]
+    public async Task ToRangeConstraint_RoundTripsAsDecimalBounds() {
+        var range = Range(5.5m, 9007199254740993m);
+        var constraint = range.ToRangeConstraint()!;
+
+        await Assert.That(constraint.Minimum!.GetType()).IsEqualTo(typeof(decimal));
+        await Assert.That(constraint.Maximum!.GetType()).IsEqualTo(typeof(decimal));
+        await Assert.That(AbstractValue.From([constraint]).NumericRange).IsEqualTo(range);
     }
 }

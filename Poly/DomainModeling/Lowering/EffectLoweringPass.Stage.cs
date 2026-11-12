@@ -20,8 +20,11 @@ public sealed partial class EffectLoweringPass {
     /// The exit runs before the cursor moves, so each hop exits its own source.
     /// <see cref="_sourceStageName"/> is then advanced to the target <em>before</em> the
     /// entry effects inline and is never overwritten afterwards, so a nested entry chain
-    /// ends on its innermost target. A static approximation: a guarded hop advances the
-    /// cursor whether or not it runs.
+    /// ends on its innermost target. A guarded hop advances the cursor only within its own
+    /// branch (the else branch restarts from the entry stage). The cursor is null — the
+    /// per-stage exit switch — in and after a <c>for</c> whose body holds a hop or a
+    /// self-<c>invoke</c>, after a branch holding a hop or a self-<c>invoke</c>, and after
+    /// every self-<c>invoke</c>.
     /// Does not emit instance <c>Notify</c> — that method exists only on the
     /// simulator heap object; printed classes do not have one. Emits
     /// <c>NoteAutomaticStage</c> before the assign so simulate and printed C#

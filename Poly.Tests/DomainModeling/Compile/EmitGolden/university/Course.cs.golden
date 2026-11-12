@@ -1,7 +1,7 @@
 #nullable enable
 using Poly.Runtime;
 
-public class Course
+public class Course : Poly.Runtime.IActionScoped
 {
     private Course() { }
     private Course(string code, string title)
@@ -48,6 +48,19 @@ public class Course
             return DomainResult.Success();
         }
         return DomainResult.Failure(Poly.Runtime.DomainFailure.Constraint("A unique assign needs the storage port.", "Course"));
+    }
+    public object __Snapshot()
+    {
+        var __state = new object?[2];
+        __state[0] = this.Code;
+        __state[1] = this.Title;
+        return __state;
+    }
+    public void __Restore(object state)
+    {
+        var __saved = (object?[])state;
+        this.Code = (string)__saved[0]!;
+        this.Title = (string)__saved[1]!;
     }
     public static System.Boolean ExistsWithCode(Poly.Runtime.IStoragePort db, System.String code) => db.Exists("Course", "Code", code);
 }

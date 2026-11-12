@@ -9,7 +9,7 @@ public enum ActivityStage
     Done = 1
 }
 
-public class Activity
+public class Activity : Poly.Runtime.IActionScoped
 {
     private Activity() { }
     private Activity(string subject, Opportunity? opportunity = null, DateOnly? dueOn = null)
@@ -53,5 +53,22 @@ public class Activity
             opportunity.AttachActivities(created);
         }
         return DomainResult<Activity>.Success(created);
+    }
+    public object __Snapshot()
+    {
+        var __state = new object?[4];
+        __state[0] = this.Subject;
+        __state[1] = this.DueOn;
+        __state[2] = this.Opportunity;
+        __state[3] = this.CurrentStage;
+        return __state;
+    }
+    public void __Restore(object state)
+    {
+        var __saved = (object?[])state;
+        this.Subject = (string)__saved[0]!;
+        this.DueOn = (DateOnly)__saved[1]!;
+        this.Opportunity = (Opportunity?)__saved[2]!;
+        this.CurrentStage = (ActivityStage)__saved[3]!;
     }
 }

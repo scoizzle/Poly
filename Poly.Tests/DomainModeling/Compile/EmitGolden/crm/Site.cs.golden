@@ -1,7 +1,7 @@
 #nullable enable
 using Poly.Runtime;
 
-public class Site
+public class Site : Poly.Runtime.IActionScoped
 {
     private Site() { }
     private Site(string city, string region)
@@ -23,5 +23,18 @@ public class Site
         }
         var created = new Site(city, region);
         return DomainResult<Site>.Success(created);
+    }
+    public object __Snapshot()
+    {
+        var __state = new object?[2];
+        __state[0] = this.City;
+        __state[1] = this.Region;
+        return __state;
+    }
+    public void __Restore(object state)
+    {
+        var __saved = (object?[])state;
+        this.City = (string)__saved[0]!;
+        this.Region = (string)__saved[1]!;
     }
 }

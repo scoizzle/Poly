@@ -1,7 +1,7 @@
 #nullable enable
 using Poly.Runtime;
 
-public class RoomType
+public class RoomType : Poly.Runtime.IActionScoped
 {
     private RoomType() { }
     private RoomType(string name, decimal nightlyRate, long maxOccupancy)
@@ -45,5 +45,20 @@ public class RoomType
         }
         var created = new RoomType(name, nightlyRate, maxOccupancy);
         return DomainResult<RoomType>.Success(created);
+    }
+    public object __Snapshot()
+    {
+        var __state = new object?[3];
+        __state[0] = this.Name;
+        __state[1] = this.NightlyRate;
+        __state[2] = this.MaxOccupancy;
+        return __state;
+    }
+    public void __Restore(object state)
+    {
+        var __saved = (object?[])state;
+        this.Name = (string)__saved[0]!;
+        this.NightlyRate = (decimal)__saved[1]!;
+        this.MaxOccupancy = (long)__saved[2]!;
     }
 }

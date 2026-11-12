@@ -1,7 +1,7 @@
 #nullable enable
 using Poly.Runtime;
 
-public class Section
+public class Section : Poly.Runtime.IActionScoped
 {
     private Section() { }
     private Section(string name, long capacity, decimal dayRate, Hall? hall = null, bool occupied = false)
@@ -101,5 +101,24 @@ public class Section
             hall.AttachSections(created);
         }
         return DomainResult<Section>.Success(created);
+    }
+    public object __Snapshot()
+    {
+        var __state = new object?[5];
+        __state[0] = this.Name;
+        __state[1] = this.Capacity;
+        __state[2] = this.DayRate;
+        __state[3] = this.Occupied;
+        __state[4] = this.Hall;
+        return __state;
+    }
+    public void __Restore(object state)
+    {
+        var __saved = (object?[])state;
+        this.Name = (string)__saved[0]!;
+        this.Capacity = (long)__saved[1]!;
+        this.DayRate = (decimal)__saved[2]!;
+        this.Occupied = (bool)__saved[3]!;
+        this.Hall = (Hall?)__saved[4]!;
     }
 }

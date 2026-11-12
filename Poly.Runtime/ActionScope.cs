@@ -302,9 +302,10 @@ public readonly struct ActionScopeToken {
 }
 
 /// <summary>
-/// The snapshot pair a generated entity implements so an action scope can restore it. The members
-/// are explicit implementations on generated entities, so no name enters the type's declaration
-/// space, and neither may call the storage port.
+/// The snapshot pair a generated entity implements so an action scope can restore it. Generated
+/// entities implement the members implicitly (public methods under the reserved <c>__</c> prefix,
+/// which the DSL refuses for member and action-parameter names); an explicit implementation would
+/// need an explicit-interface member in the AST and writer. Neither may call the storage port.
 /// </summary>
 public interface IActionScoped {
     /// <summary>The entity's current state, opaque to the scope.</summary>

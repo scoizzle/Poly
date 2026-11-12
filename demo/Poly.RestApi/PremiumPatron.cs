@@ -1,7 +1,7 @@
 #nullable enable
 using Poly.Runtime;
 
-public class PremiumPatron
+public class PremiumPatron : Poly.Runtime.IActionScoped
 {
     private PremiumPatron() { }
     private PremiumPatron(string name, string email, long rewardPoints, bool priorityAccess, PremiumTier tier = PremiumTier.Silver)
@@ -57,6 +57,25 @@ public class PremiumPatron
             return DomainResult.Success();
         }
         return DomainResult.Failure(Poly.Runtime.DomainFailure.Constraint("A unique assign needs the storage port.", "PremiumPatron"));
+    }
+    public object __Snapshot()
+    {
+        var __state = new object?[5];
+        __state[0] = this.Name;
+        __state[1] = this.Email;
+        __state[2] = this.RewardPoints;
+        __state[3] = this.Tier;
+        __state[4] = this.PriorityAccess;
+        return __state;
+    }
+    public void __Restore(object state)
+    {
+        var __saved = (object?[])state;
+        this.Name = (string)__saved[0]!;
+        this.Email = (string)__saved[1]!;
+        this.RewardPoints = (long)__saved[2]!;
+        this.Tier = (PremiumTier)__saved[3]!;
+        this.PriorityAccess = (bool)__saved[4]!;
     }
     public static System.Boolean ExistsWithEmail(Poly.Runtime.IStoragePort db, System.String email) => db.Exists("PremiumPatron", "Email", email);
 }

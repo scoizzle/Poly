@@ -10,7 +10,7 @@ public enum VisitStage
     NoShow = 4
 }
 
-public class Visit
+public class Visit : Poly.Runtime.IActionScoped
 {
     private Visit() { }
     private Visit(string reason, Patient? patient = null, Doctor? primaryDoctor = null, VisitState state = VisitState.Scheduled)
@@ -65,5 +65,24 @@ public class Visit
             patient.AttachVisits(created);
         }
         return DomainResult<Visit>.Success(created);
+    }
+    public object __Snapshot()
+    {
+        var __state = new object?[5];
+        __state[0] = this.Reason;
+        __state[1] = this.State;
+        __state[2] = this.Patient;
+        __state[3] = this.PrimaryDoctor;
+        __state[4] = this.CurrentStage;
+        return __state;
+    }
+    public void __Restore(object state)
+    {
+        var __saved = (object?[])state;
+        this.Reason = (string)__saved[0]!;
+        this.State = (VisitState)__saved[1]!;
+        this.Patient = (Patient?)__saved[2]!;
+        this.PrimaryDoctor = (Doctor?)__saved[3]!;
+        this.CurrentStage = (VisitStage)__saved[4]!;
     }
 }

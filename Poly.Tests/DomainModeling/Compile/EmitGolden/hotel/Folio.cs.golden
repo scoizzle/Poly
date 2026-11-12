@@ -7,7 +7,7 @@ public enum FolioStage
     Settled = 1
 }
 
-public class Folio
+public class Folio : Poly.Runtime.IActionScoped
 {
     private Folio() { }
     private Folio(Reservation? reservation = null, decimal balance = 0m)
@@ -96,5 +96,20 @@ public class Folio
         }
         var created = new Folio(reservation, balance);
         return DomainResult<Folio>.Success(created);
+    }
+    public object __Snapshot()
+    {
+        var __state = new object?[3];
+        __state[0] = this.Balance;
+        __state[1] = this.Reservation;
+        __state[2] = this.CurrentStage;
+        return __state;
+    }
+    public void __Restore(object state)
+    {
+        var __saved = (object?[])state;
+        this.Balance = (decimal)__saved[0]!;
+        this.Reservation = (Reservation?)__saved[1]!;
+        this.CurrentStage = (FolioStage)__saved[2]!;
     }
 }

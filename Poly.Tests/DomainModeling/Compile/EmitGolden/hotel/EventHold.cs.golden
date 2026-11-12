@@ -13,7 +13,7 @@ public enum EventHoldStage
     Cancelled = 4
 }
 
-public class EventHold
+public class EventHold : Poly.Runtime.IActionScoped
 {
     private List<Guest>? _guestEventsReleasedSubscribers;
     private int _notifyDepth;
@@ -249,5 +249,51 @@ public class EventHold
     private void ExitNotifyCascade()
     {
         this._notifyDepth = this._notifyDepth - 1;
+    }
+    public object __Snapshot()
+    {
+        var __state = new object?[11];
+        __state[0] = this.Headcount;
+        __state[1] = this.Capacity;
+        __state[2] = this.DayRate;
+        __state[3] = this.StartDate;
+        __state[4] = this.EndDate;
+        __state[5] = this.Guest;
+        __state[6] = this.Hall;
+        __state[7] = this.Section;
+        __state[8] = this.CurrentStage;
+        __state[9] = (this._guestEventsReleasedSubscribers == null ? null : new List<Guest>(this._guestEventsReleasedSubscribers));
+        __state[10] = this._notifyDepth;
+        return __state;
+    }
+    public void __Restore(object state)
+    {
+        var __saved = (object?[])state;
+        this.Headcount = (long)__saved[0]!;
+        this.Capacity = (long)__saved[1]!;
+        this.DayRate = (decimal)__saved[2]!;
+        this.StartDate = (DateOnly)__saved[3]!;
+        this.EndDate = (DateOnly)__saved[4]!;
+        this.Guest = (Guest?)__saved[5]!;
+        this.Hall = (Hall?)__saved[6]!;
+        this.Section = (Section?)__saved[7]!;
+        this.CurrentStage = (EventHoldStage)__saved[8]!;
+        if (__saved[9] == null)
+        {
+            this._guestEventsReleasedSubscribers = null;
+        }
+        else
+        {
+            if (this._guestEventsReleasedSubscribers == null)
+            {
+                this._guestEventsReleasedSubscribers = new List<Guest>();
+            }
+            ((System.Collections.IList)this._guestEventsReleasedSubscribers).Clear();
+            foreach (var __item9 in(List<Guest>)__saved[9]!)
+            {
+                this._guestEventsReleasedSubscribers.Add(__item9);
+            }
+        }
+        this._notifyDepth = (int)__saved[10]!;
     }
 }

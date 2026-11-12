@@ -14,7 +14,7 @@ public enum ReservationStage
     NoShow = 5
 }
 
-public class Reservation
+public class Reservation : Poly.Runtime.IActionScoped
 {
     private List<Room>? _roomStaysInHouseSubscribers;
     private List<Room>? _roomStaysDepartedSubscribers;
@@ -390,5 +390,121 @@ public class Reservation
     private void ExitNotifyCascade()
     {
         this._notifyDepth = this._notifyDepth - 1;
+    }
+    public object __Snapshot()
+    {
+        var __state = new object?[16];
+        __state[0] = this.PartySize;
+        __state[1] = this.Nights;
+        __state[2] = this.NightlyRate;
+        __state[3] = this.MaxOccupancy;
+        __state[4] = this.CheckInDate;
+        __state[5] = this.CheckOutDate;
+        __state[6] = this.Folio;
+        __state[7] = this.Guest;
+        __state[8] = this.Room;
+        __state[9] = this.CurrentStage;
+        __state[10] = (this._roomStaysInHouseSubscribers == null ? null : new List<Room>(this._roomStaysInHouseSubscribers));
+        __state[11] = (this._roomStaysDepartedSubscribers == null ? null : new List<Room>(this._roomStaysDepartedSubscribers));
+        __state[12] = (this._roomStaysCancelledSubscribers == null ? null : new List<Room>(this._roomStaysCancelledSubscribers));
+        __state[13] = (this._roomStaysNoShowSubscribers == null ? null : new List<Room>(this._roomStaysNoShowSubscribers));
+        __state[14] = (this._guestReservationsDepartedSubscribers == null ? null : new List<Guest>(this._guestReservationsDepartedSubscribers));
+        __state[15] = this._notifyDepth;
+        return __state;
+    }
+    public void __Restore(object state)
+    {
+        var __saved = (object?[])state;
+        this.PartySize = (long)__saved[0]!;
+        this.Nights = (long)__saved[1]!;
+        this.NightlyRate = (decimal)__saved[2]!;
+        this.MaxOccupancy = (long)__saved[3]!;
+        this.CheckInDate = (DateOnly)__saved[4]!;
+        this.CheckOutDate = (DateOnly)__saved[5]!;
+        this.Folio = (Folio?)__saved[6]!;
+        this.Guest = (Guest?)__saved[7]!;
+        this.Room = (Room?)__saved[8]!;
+        this.CurrentStage = (ReservationStage)__saved[9]!;
+        if (__saved[10] == null)
+        {
+            this._roomStaysInHouseSubscribers = null;
+        }
+        else
+        {
+            if (this._roomStaysInHouseSubscribers == null)
+            {
+                this._roomStaysInHouseSubscribers = new List<Room>();
+            }
+            ((System.Collections.IList)this._roomStaysInHouseSubscribers).Clear();
+            foreach (var __item10 in(List<Room>)__saved[10]!)
+            {
+                this._roomStaysInHouseSubscribers.Add(__item10);
+            }
+        }
+        if (__saved[11] == null)
+        {
+            this._roomStaysDepartedSubscribers = null;
+        }
+        else
+        {
+            if (this._roomStaysDepartedSubscribers == null)
+            {
+                this._roomStaysDepartedSubscribers = new List<Room>();
+            }
+            ((System.Collections.IList)this._roomStaysDepartedSubscribers).Clear();
+            foreach (var __item11 in(List<Room>)__saved[11]!)
+            {
+                this._roomStaysDepartedSubscribers.Add(__item11);
+            }
+        }
+        if (__saved[12] == null)
+        {
+            this._roomStaysCancelledSubscribers = null;
+        }
+        else
+        {
+            if (this._roomStaysCancelledSubscribers == null)
+            {
+                this._roomStaysCancelledSubscribers = new List<Room>();
+            }
+            ((System.Collections.IList)this._roomStaysCancelledSubscribers).Clear();
+            foreach (var __item12 in(List<Room>)__saved[12]!)
+            {
+                this._roomStaysCancelledSubscribers.Add(__item12);
+            }
+        }
+        if (__saved[13] == null)
+        {
+            this._roomStaysNoShowSubscribers = null;
+        }
+        else
+        {
+            if (this._roomStaysNoShowSubscribers == null)
+            {
+                this._roomStaysNoShowSubscribers = new List<Room>();
+            }
+            ((System.Collections.IList)this._roomStaysNoShowSubscribers).Clear();
+            foreach (var __item13 in(List<Room>)__saved[13]!)
+            {
+                this._roomStaysNoShowSubscribers.Add(__item13);
+            }
+        }
+        if (__saved[14] == null)
+        {
+            this._guestReservationsDepartedSubscribers = null;
+        }
+        else
+        {
+            if (this._guestReservationsDepartedSubscribers == null)
+            {
+                this._guestReservationsDepartedSubscribers = new List<Guest>();
+            }
+            ((System.Collections.IList)this._guestReservationsDepartedSubscribers).Clear();
+            foreach (var __item14 in(List<Guest>)__saved[14]!)
+            {
+                this._guestReservationsDepartedSubscribers.Add(__item14);
+            }
+        }
+        this._notifyDepth = (int)__saved[15]!;
     }
 }

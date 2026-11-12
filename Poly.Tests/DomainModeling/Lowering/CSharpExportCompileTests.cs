@@ -200,22 +200,177 @@ public sealed class CSharpExportCompileTests {
         await Assert.That(e.Diagnostics).IsEmpty();
     }
 
+    private static string DbContextText(Exported e) =>
+        e.Files.Single(f => f.FileName.EndsWith("DbContext.cs", StringComparison.Ordinal)).Source;
+
+    // L-22b: the navigation prints internal (the surface stays closed), the pack maps it explicitly, and the whole
+    // host compiles with warnings as errors. A8 pins the F2 consequence: Create and Create{Nav} are internal too.
     [Test]
-    public async Task Export_WhenPublicEntityNavigatesToInternalEntity_IsRejectedBeforeLowering() {
-        var ex = Assert.Throws<InvalidOperationException>(() => Export("""
+    public async Task Export_WhenPublicEntityHasManyNavToInternalEntity_NavigationIsInternalAndMappedAndCompiles() {
+        var e = ExportHost("""
             domain Shop
+            uses sqlite
+            uses http
 
             Line: entity {
-              Qty: Number default(1)
+              Qty: Number range(1, 100)
             }
 
             public entity Order {
-              Total: Number default(0)
+              Code: Text unique length(3, 8)
+              lines: many Line
+              public action AddLine (qty: Number) { create in lines { Qty: qty } }
+            }
+            """);
+
+        await Assert.That(e.Type("Order").GetMembers("Lines").Single().DeclaredAccessibility).IsEqualTo(Accessibility.Internal);
+        await Assert.That(e.Methods("Order", "Create").Single().DeclaredAccessibility).IsEqualTo(Accessibility.Internal);
+        await Assert.That(e.Methods("Order", "CreateLines").Single().DeclaredAccessibility).IsEqualTo(Accessibility.Internal);
+        await Assert.That(e.Methods("Order", "AddLine").Single().DeclaredAccessibility).IsEqualTo(Accessibility.Public);
+        var db = DbContextText(e);
+        await Assert.That(db).Contains("b.HasMany(e => e.Lines).WithOne()");
+        await Assert.That(db.IndexOf("HasMany(", StringComparison.Ordinal))
+            .IsLessThan(db.IndexOf("FindNavigation(nameof(Order.Lines))", StringComparison.Ordinal));
+        await Assert.That(e.Diagnostics).IsEmpty();
+    }
+
+    [Test]
+    public async Task Export_WhenPublicEntityHasSingularNavToInternalEntity_NavigationIsInternalAndMappedAndCompiles() {
+        var e = ExportHost("""
+            domain Shop
+            uses sqlite
+            uses http
+
+            Receipt: entity {
+              Note: Text
+            }
+
+            public entity Order {
+              Code: Text unique length(3, 8)
+              receipt: one Receipt
+              public action Issue (note: Text) { create in receipt { Note: note } }
+            }
+            """);
+
+        await Assert.That(e.Type("Order").GetMembers("Receipt").Single().DeclaredAccessibility).IsEqualTo(Accessibility.Internal);
+        await Assert.That(e.Methods("Order", "Create").Single().DeclaredAccessibility).IsEqualTo(Accessibility.Internal);
+        await Assert.That(e.Methods("Order", "CreateReceipt").Single().DeclaredAccessibility).IsEqualTo(Accessibility.Internal);
+        await Assert.That(DbContextText(e)).Contains("b.HasOne(e => e.Receipt).WithMany()");
+        await Assert.That(e.Diagnostics).IsEmpty();
+    }
+
+    // The peer declares the pairing (`via` on the target): analysis resolves it once, the pack reads that fact.
+    [Test]
+    public async Task Export_WhenPeerDeclaresVia_ManyNavMapsWithTheResolvedInverse() {
+        var e = ExportHost("""
+            domain Shop
+            uses sqlite
+            uses http
+
+            Line: entity {
+              Qty: Number range(1, 100)
+              order: Order via lines
+            }
+
+            public entity Order {
+              Code: Text unique length(3, 8)
+              lines: many owned Line
+              public action AddLine (qty: Number) { create in lines { Qty: qty } }
+            }
+            """);
+
+        await Assert.That(e.Type("Order").GetMembers("Lines").Single().DeclaredAccessibility).IsEqualTo(Accessibility.Internal);
+        await Assert.That(e.Type("Line").GetMembers("Order").Single().DeclaredAccessibility).IsEqualTo(Accessibility.Public);
+        await Assert.That(e.Methods("Order", "Create").Single().DeclaredAccessibility).IsEqualTo(Accessibility.Internal);
+        await Assert.That(e.Methods("Order", "CreateLines").Single().DeclaredAccessibility).IsEqualTo(Accessibility.Internal);
+        await Assert.That(DbContextText(e)).Contains("b.HasMany(e => e.Lines).WithOne(i => i.Order)");
+        await Assert.That(e.Diagnostics).IsEmpty();
+    }
+
+    // Reverse shape: the public entity is the child; its singular nav to the internal parent is the internal one.
+    [Test]
+    public async Task Export_WhenPublicChildNavigatesToInternalParent_SingularNavIsInternalAndMapsWithItsCollectionInverse() {
+        var e = ExportHost("""
+            domain Shop
+            uses sqlite
+            uses http
+
+            Order: entity {
+              Code: Text unique length(3, 8)
               lines: many Line
             }
-            """));
 
-        await Assert.That(ex.Message).Contains("targets internal entity 'Line'");
+            public entity Line {
+              Qty: Number range(1, 100)
+              order: Order
+            }
+            """);
+
+        await Assert.That(e.Type("Line").GetMembers("Order").Single().DeclaredAccessibility).IsEqualTo(Accessibility.Internal);
+        await Assert.That(e.Type("Order").GetMembers("Lines").Single().DeclaredAccessibility).IsEqualTo(Accessibility.Public);
+        await Assert.That(e.Methods("Line", "Create").Single().DeclaredAccessibility).IsEqualTo(Accessibility.Internal);
+        var db = DbContextText(e);
+        await Assert.That(db).Contains("b.HasOne(e => e.Order).WithMany(i => i.Lines)");
+        await Assert.That(e.Diagnostics).IsEmpty();
+    }
+
+    // The predicate is exactly "owner public AND target internal": every other pairing prints and maps as before.
+    [Test]
+    [Arguments("public entity", "public entity")]
+    [Arguments("", "")]
+    [Arguments("", "public entity")]
+    public async Task Export_WhenNavigationIsNotPublicOwnerToInternalTarget_EmitsNoExplicitMapping(string ownerHeader, string lineHeader) {
+        var owner = ownerHeader.Length == 0 ? "Order: entity" : ownerHeader + " Order";
+        var line = lineHeader.Length == 0 ? "Line: entity" : lineHeader + " Line";
+        var e = ExportHost($$"""
+            domain Shop
+            uses sqlite
+            uses http
+
+            {{line}} {
+              Qty: Number range(1, 100)
+            }
+
+            {{owner}} {
+              Code: Text unique length(3, 8)
+              lines: many Line
+            }
+            """);
+
+        await Assert.That(e.Type("Order").GetMembers("Lines").Single().DeclaredAccessibility).IsEqualTo(Accessibility.Public);
+        var db = DbContextText(e);
+        await Assert.That(db).DoesNotContain("HasMany(");
+        await Assert.That(db).DoesNotContain("HasOne(");
+        await Assert.That(e.Diagnostics).IsEmpty();
+    }
+
+    [Test]
+    [Arguments("public entity", "public entity")]
+    [Arguments("", "")]
+    [Arguments("", "public entity")]
+    public async Task Export_WhenSingularNavigationIsNotPublicOwnerToInternalTarget_EmitsNoExplicitMapping(string ownerHeader, string targetHeader) {
+        var owner = ownerHeader.Length == 0 ? "Order: entity" : ownerHeader + " Order";
+        var target = targetHeader.Length == 0 ? "Receipt: entity" : targetHeader + " Receipt";
+        var e = ExportHost($$"""
+            domain Shop
+            uses sqlite
+            uses http
+
+            {{target}} {
+              Note: Text
+            }
+
+            {{owner}} {
+              Code: Text unique length(3, 8)
+              receipt: one Receipt
+            }
+            """);
+
+        await Assert.That(e.Type("Order").GetMembers("Receipt").Single().DeclaredAccessibility).IsEqualTo(Accessibility.Public);
+        var db = DbContextText(e);
+        await Assert.That(db).DoesNotContain("HasMany(");
+        await Assert.That(db).DoesNotContain("HasOne(");
+        await Assert.That(e.Diagnostics).IsEmpty();
     }
 
     [Test]

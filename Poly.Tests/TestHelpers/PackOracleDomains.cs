@@ -160,8 +160,8 @@ public static class PackOracleDomains {
         """,
         "/api/orders");
 
-    /// <summary>L-22 (#604), A11 owner gate. A public entity navigates to an internal entity: EF maps only public
-    /// navigations, so analysis rejects it (DMCON019, ruling on #683) and there is nothing to boot.</summary>
+    /// <summary>L-22b (#604), A11 owner ruling. A public entity navigates to an internal entity: the navigation
+    /// prints internal and the pack maps it explicitly, so the app boots and the nested route reads the lines.</summary>
     public static PackOracleDomain PublicOrderInternalLine604 { get; } = new(
         "PublicOrderInternalLine604",
         """
@@ -177,12 +177,121 @@ public static class PackOracleDomains {
           Code: Text unique length(3, 8)
           Total: Number default(0)
           lines: many OrderLine
-          public action Reset { assign Total to 0 }
+          public action AddLine (qty: Number) { create in lines { Qty: qty } }
+        }
+        """,
+        "/api/orders");
+
+    /// <summary>L-22b: an owned many navigation to an internal entity whose own side declares the inverse (<c>via</c> on the
+    /// target). The line is an aggregate child, so the nested route reads it back.</summary>
+    public static PackOracleDomain PublicOrderOwnedInternalLine604 { get; } = new(
+        "PublicOrderOwnedInternalLine604",
+        """
+        domain Shop
+        uses sqlite
+        uses http
+
+        OrderLine: entity {
+          Qty: Number range(1, 100)
+          order: Order via lines
+        }
+
+        public entity Order {
+          Code: Text unique length(3, 8)
+          lines: many owned OrderLine
+          public action AddLine (qty: Number) { create in lines { Qty: qty } }
+        }
+        """,
+        "/api/orders");
+
+    /// <summary>L-22b: a one-to-one navigation from a public entity to an internal one.</summary>
+    public static PackOracleDomain PublicOrderInternalReceipt604 { get; } = new(
+        "PublicOrderInternalReceipt604",
+        """
+        domain Shop
+        uses sqlite
+        uses http
+
+        Receipt: entity {
+          Note: Text
+        }
+
+        public entity Order {
+          Code: Text unique length(3, 8)
+          receipt: one Receipt
+          public action Issue (note: Text) { create in receipt { Note: note } }
+        }
+        """,
+        "/api/orders");
+
+    /// <summary>L-22b, reverse shape: the public entity is the child; its singular navigation to the internal parent
+    /// is the one that prints internal, and it pairs with the parent's public collection.</summary>
+    public static PackOracleDomain PublicLineInternalOrder604 { get; } = new(
+        "PublicLineInternalOrder604",
+        """
+        domain Shop
+        uses sqlite
+        uses http
+
+        Order: entity {
+          Code: Text unique length(3, 8)
+          lines: many owned Line
+          AddLine: action (qty: Number) { create in lines { Qty: qty } }
+        }
+
+        public entity Line {
+          Qty: Number range(1, 100)
+          order: Order via lines
+        }
+        """,
+        "/api/orders");
+
+    /// <summary>L-22b F4: a BIDIRECTIONAL owned one-to-one from a public entity to an internal one. It was an analysis
+    /// error before L-22b and is now the same boot failure as every all-public bidirectional one-to-one (#791).</summary>
+    public static PackOracleDomain PublicOrderInternalReceiptBidirectional604 { get; } = new(
+        "PublicOrderInternalReceiptBidirectional604",
+        """
+        domain Shop
+        uses sqlite
+        uses http
+
+        Receipt: entity {
+          Note: Text
+          order: Order via receipt
+        }
+
+        public entity Order {
+          Code: Text unique length(3, 8)
+          receipt: one owned Receipt
+          public action Issue (note: Text) { create in receipt { Note: note } }
         }
         """,
         "/api/orders",
         Boots: false,
-        NotBootingReason: "DMCON019: a public entity may not navigate to an internal entity (L-22, #604)");
+        NotBootingReason: "#791: EF cannot determine the dependent side of a bidirectional one-to-one");
+
+    /// <summary>L-22b closing round: the same two-way one-to-one without `owned` also fails to boot (#791).</summary>
+    public static PackOracleDomain PublicOrderInternalReceiptTwoWay604 { get; } = new(
+        "PublicOrderInternalReceiptTwoWay604",
+        """
+        domain Shop
+        uses sqlite
+        uses http
+
+        Receipt: entity {
+          Note: Text
+          order: Order via receipt
+        }
+
+        public entity Order {
+          Code: Text unique length(3, 8)
+          receipt: one Receipt
+          public action Issue (note: Text) { create in receipt { Note: note } }
+        }
+        """,
+        "/api/orders",
+        Boots: false,
+        NotBootingReason: "#791: EF cannot determine the dependent side of a two-way one-to-one");
 
     /// <summary>L-22 (#604): the same domain with the target marked public. It boots and serves the list route.</summary>
     public static PackOracleDomain PublicOrderPublicLine604 { get; } = new(

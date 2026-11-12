@@ -41,11 +41,11 @@ public static class RequestMatrix {
     public static IReadOnlyList<DomainMatrix> All { get; } = [
         new("warehouse", [E("Warehouse", "/api/warehouses", "Code",
             """{"Code":"WH-001","Name":"Main hub","Zip":"12345","Capacity":10}""",
-            """{"Code":"WH-001","Name":"Main hub","Zip":"12345","Capacity":0}""",
+            """{"Code":"WH-002","Name":"Main hub","Zip":"12345","Capacity":0}""",
             A("AdjustCapacity", """{"delta":1}""", """{"delta":100000}"""))]),
         new("orders", [E("Customer", "/api/customers", "Email",
             """{"Email":"a@example.com","Name":"Alice"}""",
-            """{"Email":"a@example.com","Name":"A"}""",
+            """{"Email":"b@example.com","Name":"A"}""",
             A("ShipAll"))]),
         new("clinic", [E("Patient", "/api/patients", null, """{"Name":"Pat"}""", """{}""", A("CheckInAll"))]),
         new("mcp-library", [
@@ -94,7 +94,7 @@ public static class RequestMatrix {
 
             var location = created.Location;
             var read = location is null ? None : await Send(() => side.GetAsync(location));
-            observations.Add(Observe($"{entity.Entity}.ReadCreated", read, read.Status == 200));
+            observations.Add(Observe($"{entity.Entity}.ReadCreated", read, read.Status == 200 && IsCreatedRow(read, entity.Valid)));
 
             var invalid = await Send(() => side.CreateAsync(entity.Route, entity.Invalid));
             observations.Add(Observe($"{entity.Entity}.CreateInvalid", invalid, invalid.Status == 400));
@@ -107,33 +107,44 @@ public static class RequestMatrix {
 
             if (action.Rejected is { } rejectedArguments) {
                 var rejected = location is null ? None : await Send(() => side.InvokeAsync(location, route, rejectedArguments));
-                observations.Add(Observe($"{entity.Entity}.ActionRejected", rejected, rejected.Status is >= 400 and < 500));
+                observations.Add(Observe($"{entity.Entity}.ActionRejected", rejected, rejected.Status is 400 or 409 or 422));
             }
         }
         return observations;
     }
 
+    /// <summary>The read body is the created row: every string the valid body sent comes back under the same (case-insensitive) property.</summary>
+    private static bool IsCreatedRow(HttpOutcome read, JsonObject valid) {
+        if (read.Json is not { ValueKind: JsonValueKind.Object } row)
+            return false;
+        foreach (var (name, value) in valid) {
+            if (value is not JsonValue sent || !sent.TryGetValue<string>(out var text))
+                continue;
+            var found = row.EnumerateObject().Where(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase)).ToList();
+            if (found.Count != 1 || found[0].Value.ValueKind != JsonValueKind.String || found[0].Value.GetString() != text)
+                return false;
+        }
+        return true;
+    }
+
     /// <summary>The outcome of a request that was never sent (no <c>Location</c> to follow): status 0.</summary>
     private static readonly HttpOutcome None = new(0, null, null, "");
+
+    /// <summary>A transport failure (connection refused, timeout): a distinct status so it is never read as "not sent".</summary>
+    private static readonly HttpOutcome Transport = new(-1, null, null, "");
 
     private static async Task<HttpOutcome> Send(Func<Task<HttpOutcome>> request) {
         try {
             return await request();
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException) {
-            return None;
+            return Transport;
         }
     }
 
     private static ProbeObservation Observe(string probe, HttpOutcome outcome, bool passed) {
-        var json = outcome.Json?.ValueKind switch {
-            null => "none",
-            JsonValueKind.Array => "array",
-            JsonValueKind.Object => "object",
-            _ => "other",
-        };
         return new ProbeObservation(probe, passed,
-            $"status={outcome.Status};location={(outcome.Location is null ? "none" : "yes")};json={json}");
+            $"status={(outcome.Status < 0 ? "err" : outcome.Status.ToString(System.Globalization.CultureInfo.InvariantCulture))};location={(outcome.Location is null ? "none" : "yes")}");
     }
 }
 
@@ -154,7 +165,15 @@ public static class MatrixObservations {
             var fixture = GoldenPackDomains.FromGolden(golden);
             _ = await PackOracle.CompileAsync(fixture);
             phase = "boot";
-            await using var oracle = await PackOracle.BootAsync(fixture, provider);
+            PackOracle oracle;
+            try {
+                oracle = await PackOracle.BootAsync(fixture, provider);
+            }
+            catch (PackOracleBootException failure) when (failure.ChildPid is int failedPid) {
+                Booted.Add(failedPid);
+                throw;
+            }
+            await using var owned = oracle;
             Booted.Add(oracle.ChildPid);
             phase = "probe";
             var probes = await RequestMatrix.RunAsync(HttpSide.On(oracle), RequestMatrix.For(golden.Name));

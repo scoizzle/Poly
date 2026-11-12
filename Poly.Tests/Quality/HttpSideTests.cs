@@ -79,4 +79,39 @@ public class HttpSideTests {
         await Assert.That(handler.Requests.Single().Uri).EndsWith("/api/warehouses/WH-001/adjustCapacity");
         await Assert.That(handler.Requests.Single().Body).Contains("\"delta\"");
     }
+
+    [Test]
+    public async Task HttpSide_NoContent_EmptyBody_HasNoJsonAndNoLocation() {
+        var handler = new FakeHandler(_ => new HttpResponseMessage(HttpStatusCode.NoContent));
+
+        var outcome = await Side(handler).InvokeAsync("/api/tallies/a", "bump");
+
+        await Assert.That(outcome.Status).IsEqualTo(204);
+        await Assert.That(outcome.Json).IsNull();
+        await Assert.That(outcome.Raw).IsEqualTo("");
+        await Assert.That(outcome.Location).IsNull();
+    }
+
+    [Test]
+    public async Task HttpSide_AbsoluteLocation_IsKeptAsWritten() {
+        var handler = new FakeHandler(_ => {
+            var response = new HttpResponseMessage(HttpStatusCode.Created);
+            response.Headers.Location = new Uri("http://localhost:5000/api/books/978", UriKind.Absolute);
+            return response;
+        });
+
+        var outcome = await Side(handler).CreateAsync("/api/books", new JsonObject());
+
+        await Assert.That(outcome.Location).IsEqualTo("http://localhost:5000/api/books/978");
+    }
+
+    [Test]
+    public async Task HttpSide_Invoke_NullArguments_PostsAnEmptyObject() {
+        var handler = new FakeHandler(_ => new HttpResponseMessage(HttpStatusCode.OK));
+
+        await Side(handler).InvokeAsync("/api/tallies/a/", "bump", null);
+
+        await Assert.That(handler.Requests.Single().Body).IsEqualTo("{}");
+        await Assert.That(handler.Requests.Single().Uri).IsEqualTo("http://localhost:5000/api/tallies/a/bump");
+    }
 }

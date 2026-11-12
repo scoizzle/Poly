@@ -4,6 +4,7 @@ using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Ontology;
+using Poly.Tests.DomainModeling.Lowering;
 using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Quality;
@@ -13,11 +14,10 @@ namespace Poly.Tests.Quality;
 /// derived into an app (<c>uses http</c> and <c>uses sqlite</c>), booted once by <see cref="PackOracle"/> and driven
 /// through the <see cref="RequestMatrix"/>. The failing probes must equal <see cref="KnownPackDivergences"/>: a probe
 /// that fails and is not listed, or a row whose probe passes, fails the run. The fixing slice deletes its rows.
-/// The class runs after <c>PackOracleTests</c>: that class's <c>[After(Class)]</c> checks every recorded child, so a
-/// child this matrix still had alive would fail it.
+/// The boot-class tests run after <c>PackOracleTests</c>: that class's <c>[After(Class)]</c> checks every recorded
+/// child, so a child this matrix still had alive would fail it. The pure tests do not wait.
 /// </summary>
 [NotInParallel("PackOracleMatrix")]
-[DependsOn(typeof(Poly.Tests.DomainModeling.Packs.PackOracleTests), ProceedOnFailure = true)]
 public class PackOracleMatrixTests {
     public static IEnumerable<Func<string>> SubsetDomains() =>
         GoldenPackDomains.Subset.Select<GoldenDomain, Func<string>>(d => () => d.Name);
@@ -25,7 +25,7 @@ public class PackOracleMatrixTests {
     public static IEnumerable<Func<string>> FullDomains() =>
         GoldenPackDomains.Full.Select<GoldenDomain, Func<string>>(d => () => d.Name);
 
-    private static readonly Regex ObservedShape = new(@"\Astatus=[0-9]{1,3};location=(yes|none);json=(array|object|none|other)\z");
+    private static readonly Regex ObservedShape = new(@"\Astatus=([0-9]{1,3}|err);location=(yes|none)\z");
 
     [After(Class)]
     public static async Task NoRecordedChildSurvivesTheClass() {
@@ -106,7 +106,7 @@ public class PackOracleMatrixTests {
         foreach (var domain in covered.Concat(noBoot).Where(n => GoldenDomains.Compilable.All(g => g.Name != n)))
             problems.Add($"'{domain}': not a Compilable golden domain.");
         foreach (var n in GoldenPackDomains.NoBoot) {
-            if (n.Issue <= 0 || !KnownPackDivergences.IsSliceId(n.Owner) || n.Reason.Length < 20
+            if (n.Issue <= 0 || !DomainParityLedgerTests.IsSliceId(n.Owner) || n.Reason.Length < 20
                 || !n.Reason.StartsWith($"#{n.Issue}:", StringComparison.Ordinal))
                 problems.Add($"NoBoot '{n.Domain}': needs Issue > 0, a slice-id Owner and a Reason of at least 20 characters starting '#{n.Issue}:'.");
         }
@@ -182,7 +182,7 @@ public class PackOracleMatrixTests {
         foreach (var row in all) {
             if (row.Issue <= 0)
                 problems.Add($"{row.Domain} {row.Probe}: Issue must be a real issue number.");
-            if (!KnownPackDivergences.IsSliceId(row.Owner))
+            if (!DomainParityLedgerTests.IsSliceId(row.Owner))
                 problems.Add($"#{row.Issue}: Owner '{row.Owner}' is not a slice id.");
             if (row.Provider != GoldenPackDomains.Provider)
                 problems.Add($"#{row.Issue}: Provider '{row.Provider}' is not 'sqlite'.");
@@ -197,25 +197,25 @@ public class PackOracleMatrixTests {
     }
 
     [Test]
-    public async Task IsSliceId_MatchesQ06Shape() {
-        await Assert.That(KnownPackDivergences.IsSliceId("P-12")).IsTrue();
-        await Assert.That(KnownPackDivergences.IsSliceId("QQ-07")).IsTrue();
-        await Assert.That(KnownPackDivergences.IsSliceId("p-12")).IsFalse();
-        await Assert.That(KnownPackDivergences.IsSliceId("P-1")).IsFalse();
-        await Assert.That(KnownPackDivergences.IsSliceId("PPP-12")).IsFalse();
-        await Assert.That(KnownPackDivergences.IsSliceId("P-12\n")).IsFalse();
+    public async Task IsSliceId_SharedWithQ06_MatchesTheShape() {
+        await Assert.That(DomainParityLedgerTests.IsSliceId("P-12")).IsTrue();
+        await Assert.That(DomainParityLedgerTests.IsSliceId("QQ-07")).IsTrue();
+        await Assert.That(DomainParityLedgerTests.IsSliceId("p-12")).IsFalse();
+        await Assert.That(DomainParityLedgerTests.IsSliceId("P-1")).IsFalse();
+        await Assert.That(DomainParityLedgerTests.IsSliceId("PPP-12")).IsFalse();
+        await Assert.That(DomainParityLedgerTests.IsSliceId("P-12\n")).IsFalse();
     }
 
     [Test]
     public async Task Compare_ClassifiesStaleWidenedValueChangedAndMissingProbe() {
-        var row = new KnownPackDivergence(1, "P-01", "sqlite", "d", "E.CreateValid", "status=500;location=none;json=none");
+        var row = new KnownPackDivergence(1, "P-01", "sqlite", "d", "E.CreateValid", "status=500;location=none");
         string[] names = ["E.List", "E.CreateValid"];
-        ProbeObservation Ok(string p) => new(p, true, "status=200;location=none;json=array");
+        ProbeObservation Ok(string p) => new(p, true, "status=200;location=none");
         ProbeObservation Bad(string p, string v) => new(p, false, v);
 
         var stale = PackDivergenceSet.Compare([row], new("sqlite", "d", null, [Ok("E.List"), Ok("E.CreateValid")]), names);
-        var widened = PackDivergenceSet.Compare([], new("sqlite", "d", null, [Bad("E.List", "status=500;location=none;json=none"), Ok("E.CreateValid")]), names);
-        var changed = PackDivergenceSet.Compare([row], new("sqlite", "d", null, [Ok("E.List"), Bad("E.CreateValid", "status=200;location=none;json=none")]), names);
+        var widened = PackDivergenceSet.Compare([], new("sqlite", "d", null, [Bad("E.List", "status=500;location=none"), Ok("E.CreateValid")]), names);
+        var changed = PackDivergenceSet.Compare([row], new("sqlite", "d", null, [Ok("E.List"), Bad("E.CreateValid", "status=200;location=none")]), names);
         var missing = PackDivergenceSet.Compare([row], new("sqlite", "d", null, [Ok("E.List")]), names);
         var exact = PackDivergenceSet.Compare([row], new("sqlite", "d", null, [Ok("E.List"), Bad("E.CreateValid", row.Observed)]), names);
         var fault = PackDivergenceSet.Compare([], new("sqlite", "d", "boot: x", []), names);
@@ -240,6 +240,7 @@ public class PackOracleMatrixTests {
     [Test]
     [Category("OracleSubset")]
     [Timeout(300_000)]
+    [DependsOn(typeof(Poly.Tests.DomainModeling.Packs.PackOracleTests), ProceedOnFailure = true)]
     [MethodDataSource(nameof(SubsetDomains))]
     public async Task Boot_SubsetDomain_BaselineMatrix_MatchesLedger(string domain, CancellationToken cancellationToken) {
         _ = cancellationToken;
@@ -249,6 +250,7 @@ public class PackOracleMatrixTests {
     [Test]
     [Category("OracleFull")]
     [Timeout(300_000)]
+    [DependsOn(typeof(Poly.Tests.DomainModeling.Packs.PackOracleTests), ProceedOnFailure = true)]
     [MethodDataSource(nameof(FullDomains))]
     public async Task Boot_FullSetDomain_BaselineMatrix_MatchesLedger(string domain, CancellationToken cancellationToken) {
         _ = cancellationToken;
@@ -258,6 +260,7 @@ public class PackOracleMatrixTests {
     [Test]
     [Category("OracleFull")]
     [Timeout(300_000)]
+    [DependsOn(typeof(Poly.Tests.DomainModeling.Packs.PackOracleTests), ProceedOnFailure = true)]
     public async Task Ledger_EveryEntry_StillDiverges(CancellationToken cancellationToken) {
         _ = cancellationToken;
         var problems = new List<string>();
@@ -293,6 +296,7 @@ public class PackOracleMatrixTests {
     [Test]
     [Category("OracleSubset")]
     [Timeout(300_000)]
+    [DependsOn(typeof(Poly.Tests.DomainModeling.Packs.PackOracleTests), ProceedOnFailure = true)]
     public async Task Library_PostThenGetById_RoundTripsOnSqlite(CancellationToken cancellationToken) {
         _ = cancellationToken;
         await AssertProbeMatchesLedgerOrContract("mcp-library", "Patron.CreateValid", "status=201;location=yes");
@@ -302,8 +306,25 @@ public class PackOracleMatrixTests {
     [Test]
     [Category("OracleFull")]
     [Timeout(300_000)]
+    [DependsOn(typeof(Poly.Tests.DomainModeling.Packs.PackOracleTests), ProceedOnFailure = true)]
     public async Task DecimalRange_PostValidValue_Succeeds(CancellationToken cancellationToken) {
         _ = cancellationToken;
+        // Product.ListPrice 9 fails #559 deterministically (TEXT compare: "9" > "100000000"); 10.5 would pass by luck.
         await AssertProbeMatchesLedgerOrContract("crm", "Product.CreateValid", "status=201");
+    }
+
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    [DependsOn(typeof(Poly.Tests.DomainModeling.Packs.PackOracleTests), ProceedOnFailure = true)]
+    public async Task NoBoot_EveryEntry_StillFailsToBoot(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        var problems = new List<string>();
+        foreach (var row in GoldenPackDomains.NoBoot) {
+            var live = await MatrixObservations.ObserveAsync(GoldenPackDomains.Provider, Golden(row.Domain));
+            if (live.Fault is null || !live.Fault.StartsWith("boot:", StringComparison.Ordinal))
+                problems.Add($"#{row.Issue} {row.Domain}: no longer fails to boot ({live.Fault ?? "it boots"}); delete the NoBoot row.");
+        }
+        await Assert.That(problems).IsEmpty();
     }
 }

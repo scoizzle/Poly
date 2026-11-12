@@ -203,6 +203,7 @@ Tool arguments are validated before the SDK binder from each tool's published `i
 | New domain feature | Lower to existing Syntax (+ analyze/replace) | Domain opcodes; ABI one-offs |
 | Build a failure in lowering | `FailureLowering.Call` / `Return` / `Propagate` / `Throw` | `DomainResult.Failure("…")` by hand; `ErrorMessage ?? ""` rewrap |
 | HTTP status for a domain failure | `Poly.Runtime.DomainFailureStatus.Http(kind)` | Failure message text parsed in a host; a second kind→status table |
+| Declaration order of a domain's types and entity members | `EntityDeclarationOrder` (`Members`, `Properties`, `Navigations`) and `DomainExportOrder.Types` | `OrderBy`/`ThenBy` over model names for determinism; a second order rule in a producer |
 | Why / multi-step work | `docs/decisions/` · GitHub issues | Expanding CORE or AGENTS into a plan |
 
 ---

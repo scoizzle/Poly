@@ -90,15 +90,10 @@ public class ConstraintDefaultValidationTests {
 
     [Test]
     public async Task DoubleDefault_WithinRange_IsClean() {
-        // An integral double is exactly representable, so it is ordered exactly against the range.
-        await Assert.That(ApiErrors(15d).Any(m => m.Contains("default value"))).IsFalse();
-    }
-
-    [Test]
-    public async Task DoubleDefault_Fractional_IsRejected() {
-        // A fractional double is not exactly representable: the default cannot be ordered against
-        // the range, so it is rejected rather than silently rounded (V-05a, fail closed).
-        await Assert.That(ApiErrors(15.5d).Any(m => m.Contains("default value"))).IsTrue();
+        // Restored: the V-05a fix-round restatement retargeted this input to 15d and pinned 15.5d
+        // as rejected. That was wrong on two counts (F1/F2): 15.5 is inside [10, 20], and TryCompare
+        // still falls back to master's double comparison for a double operand until V-05b.
+        await Assert.That(ApiErrors(15.5d).Any(m => m.Contains("default value"))).IsFalse();
     }
 
     [Test]

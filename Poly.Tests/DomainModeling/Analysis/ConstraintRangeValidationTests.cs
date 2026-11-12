@@ -52,10 +52,11 @@ public class ConstraintRangeValidationTests {
     [Test]
     public async Task CrossNumeric_ComparesExactly() {
         // V-05a: two numeric types compare through ExactNumber, so a fractional decimal is exact.
+        // The V-05a fix-round restatement made the fractional-double line Violated; that was wrong
+        // (F2): undecidable is not "outside", and TryCompare keeps master's double fallback for a
+        // double/float operand until V-05b removes those producers (F1). Satisfied again.
         await Assert.That(Eval(1, 10, 5.5m)).IsEqualTo(ConstraintVerdict.Satisfied);
-        // A fractional double is not exactly representable, so it is unorderable: fail closed.
-        // (Before V-05a this compared as double and was Satisfied.)
-        await Assert.That(Eval(1, 10, 5.5)).IsEqualTo(ConstraintVerdict.Violated);
+        await Assert.That(Eval(1, 10, 5.5)).IsEqualTo(ConstraintVerdict.Satisfied);
         await Assert.That(Eval(1.5, 10, 1)).IsEqualTo(ConstraintVerdict.Violated);
         await Assert.That(Eval(0L, 10L, 5)).IsEqualTo(ConstraintVerdict.Satisfied);
     }

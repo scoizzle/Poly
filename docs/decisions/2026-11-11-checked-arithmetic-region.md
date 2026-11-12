@@ -42,8 +42,9 @@ every other guard.
 
 ### Language surface
 
-- The DSL spells the region as an **effect region**, `checked { ... }` (#674's *Scope*: grammar table
-  entry, parser, printer, guide section, and a fail-closed case for malformed use, all in lockstep).
+- The DSL half the theme plan schedules is the **effect region**, `checked { ... }` (#674's *Scope*:
+  grammar table entry, parser, printer, guide section, and a fail-closed case for malformed use, all in
+  lockstep); an expression form is left open below.
 - C# parity is spelled `checked(e)` and `checked { }`; the Syntax layer carries it as
   `CheckedExpression(Node Operand)` and `CheckedBlock(Block Body)` with a VM
   `Context.CheckedArithmetic` flag (theme F *Contracts*: `CheckedExpression` provider F-06, consumer

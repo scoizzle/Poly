@@ -16,11 +16,11 @@ namespace Poly.Tests.Quality;
 /// </summary>
 [NotInParallel("PackOracleMatrix")]
 public class PackOracleMatrixTests {
-    public static IEnumerable<Func<GoldenDomain>> SubsetDomains() =>
-        GoldenPackDomains.Subset.Select<GoldenDomain, Func<GoldenDomain>>(d => () => d);
+    public static IEnumerable<Func<string>> SubsetDomains() =>
+        GoldenPackDomains.Subset.Select<GoldenDomain, Func<string>>(d => () => d.Name);
 
-    public static IEnumerable<Func<GoldenDomain>> FullDomains() =>
-        GoldenPackDomains.Full.Select<GoldenDomain, Func<GoldenDomain>>(d => () => d);
+    public static IEnumerable<Func<string>> FullDomains() =>
+        GoldenPackDomains.Full.Select<GoldenDomain, Func<string>>(d => () => d.Name);
 
     private static readonly Regex ObservedShape = new(@"\Astatus=[0-9]{1,3};location=(yes|none);json=(array|object|none|other)\z");
 
@@ -226,18 +226,18 @@ public class PackOracleMatrixTests {
     [Category("OracleSubset")]
     [Timeout(300_000)]
     [MethodDataSource(nameof(SubsetDomains))]
-    public async Task Boot_SubsetDomain_BaselineMatrix_MatchesLedger(GoldenDomain golden, CancellationToken cancellationToken) {
+    public async Task Boot_SubsetDomain_BaselineMatrix_MatchesLedger(string domain, CancellationToken cancellationToken) {
         _ = cancellationToken;
-        await AssertBaselineMatchesLedger(golden);
+        await AssertBaselineMatchesLedger(Golden(domain));
     }
 
     [Test]
     [Category("OracleFull")]
     [Timeout(300_000)]
     [MethodDataSource(nameof(FullDomains))]
-    public async Task Boot_FullSetDomain_BaselineMatrix_MatchesLedger(GoldenDomain golden, CancellationToken cancellationToken) {
+    public async Task Boot_FullSetDomain_BaselineMatrix_MatchesLedger(string domain, CancellationToken cancellationToken) {
         _ = cancellationToken;
-        await AssertBaselineMatchesLedger(golden);
+        await AssertBaselineMatchesLedger(Golden(domain));
     }
 
     [Test]

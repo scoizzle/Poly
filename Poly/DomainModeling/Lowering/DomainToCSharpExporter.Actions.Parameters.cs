@@ -15,9 +15,9 @@ public sealed partial class DomainToCSharpExporter {
     /// <c>adapterResult = &lt;final expression&gt;</c> and
     /// <c>if (!adapterResult.IsSuccess) return</c> that Failure (void <c>DomainResult</c>) or
     /// <c>DomainResult&lt;T&gt;.Failure(ErrorMessage)</c> (typed). A surface-only in-solution
-    /// contribution erases the call and leaves the local action body untouched. A hand-built
-    /// domain's authored name is the fallback when analysis published no resolved endpoint; a recorded non-<c>Bound</c>
-    /// binding fact (#422) refuses instead of silently erasing the call.
+    /// contribution erases the call and leaves the local action body untouched. The resolved
+    /// endpoint is the binding fact lowering reads: a missing fact refuses, and a recorded
+    /// non-<c>Bound</c> binding fact (#422) refuses instead of silently erasing the call.
     /// </summary>
     private static Node? SpliceContractBody(
         Domain domain, Action action, Node? effectsBody, bool isVoid,
@@ -26,20 +26,27 @@ public sealed partial class DomainToCSharpExporter {
         var binding = domain.ContractBindings.FirstOrDefault(b =>
             string.Equals(b.ActionName, action.Name, StringComparison.Ordinal));
         if (binding is null) return effectsBody;
-        // #422: an acknowledged bind failure is stored, not hidden. This must precede the
-        // contract/endpoint early returns, which would otherwise erase the call silently.
-        if (analysis.GetMetadata<ContractBindingMetadata>(binding) is { Status: not ContractBindingStatus.Bound } refused)
+        // The splice target is the published binding fact. A missing fact refuses: the
+        // authored name may differ from the resolved exported identity (#420), so there is
+        // nothing safe to guess with. This precedes the contract/endpoint early returns,
+        // which would otherwise erase the call silently.
+        var fact = analysis.GetMetadata<ContractBindingMetadata>(binding)
+            ?? throw new InvalidOperationException(
+                $"Contract binding '{binding.Name}' has no recorded binding fact, so the splice target is unknown. " +
+                "Re-analyze the domain or remove the bind.");
+        // #422: an acknowledged bind failure is stored, not hidden.
+        if (fact.Status is not ContractBindingStatus.Bound)
             throw new InvalidOperationException(
-                $"Contract binding '{binding.Name}' is recorded as '{refused.Status}' and cannot be lowered. " +
+                $"Contract binding '{binding.Name}' is recorded as '{fact.Status}' and cannot be lowered. " +
                 "Resolve the finding (the contract, endpoint, parameter, or pin) or remove the acknowledgement.");
+        var resolvedEndpoint = fact.Endpoint
+            ?? throw new InvalidOperationException(
+                $"Contract binding '{binding.Name}' is recorded as Bound but has no resolved endpoint. " +
+                "Re-analyze the domain or remove the bind.");
         var contract = domain.ImportedContracts.FirstOrDefault(c =>
             string.Equals(c.Name, binding.ContractName, StringComparison.Ordinal));
         if (contract is null) return effectsBody;
-        // #420: analysis recorded the resolved exported identity (an original action name may
-        // map to a suffixed endpoint). Splice that identity; the authored text is the fallback
-        // when analysis published none.
-        var resolvedEndpoint = analysis.GetMetadata<ContractBindingMetadata>(binding)?.Endpoint
-            ?? binding.EndpointName;
+        // #420: splice the recorded exported identity only; it may differ from the authored name.
         var endpoint = contract.Endpoints.FirstOrDefault(e =>
             string.Equals(e.Name, resolvedEndpoint, StringComparison.Ordinal));
         if (endpoint is null) return effectsBody;

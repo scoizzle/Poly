@@ -172,6 +172,33 @@ public class RangeBoundExactnessTests {
         await Assert.That(violation.Message).Contains("range(0, 9223372036854775806)");
     }
 
+    [Test]
+    public async Task Assign_LongLiteralAboveDecimalBound_IsRejectedByGuardAndPrint() {
+        // F2 forcing test (#643): a Decimal target keeps analysis on the mixed-type path
+        // (long literal vs decimal bound compares through double and reads equal), so the
+        // lowering guard is the only defence. It must compare exactly.
+        const string dsl = """
+            domain Rb
+
+            D: entity {
+              N: Decimal range(0, 9223372036854775806) default(0)
+              Bump: action { assign N to 9223372036854775807 }
+            }
+            """;
+        var (domain, analysis, session) = Evolve(dsl);
+        var exec = ModuleExec.For(domain);
+        var instance = exec.Create("D", new Dictionary<string, object?>());
+        var simulated = exec.Invoke(instance.Instance!, "Bump", new Dictionary<string, object?>());
+
+        var source = new CSharpGenerator().Generate(session.Lower(domain, analysis));
+        var assembly = WhenAnySimulatePrintAgreeTests.CompileGenerated(source, "DecimalBoundGuard");
+        var printed = TryCreate(assembly, "D", ("db", (object?)new InMemoryStoragePort()));
+        var printedBump = TryInvoke(printed.Instance!, "Bump");
+
+        await Assert.That(simulated.Succeeded).IsFalse();
+        await Assert.That(printedBump.Succeeded).IsFalse();
+    }
+
     // ── A3: ExactNumber ops ──────────────────────────────────────────────
 
     [Test]
@@ -309,5 +336,27 @@ public class RangeBoundExactnessTests {
             ? result.GetType().GetProperty("Value")!.GetValue(result)
             : null;
         return (succeeded, message, instance);
+    }
+
+    private static (bool Succeeded, string? Message) TryInvoke(
+        object instance, string name, params (string Name, object? Value)[] named) {
+        var method = instance.GetType().GetMethod(name, BindingFlags.Instance | BindingFlags.Public)
+            ?? throw new InvalidOperationException($"missing action {name}");
+        var parameters = method.GetParameters();
+        var byName = named.ToDictionary(n => n.Name, n => n.Value, StringComparer.OrdinalIgnoreCase);
+        var args = new object?[parameters.Length];
+        for (var i = 0; i < parameters.Length; i++) {
+            var parameter = parameters[i];
+            if (byName.TryGetValue(parameter.Name!, out var value))
+                args[i] = value;
+            else if (parameter.HasDefaultValue)
+                args[i] = parameter.DefaultValue;
+            else
+                args[i] = null;
+        }
+        var result = method.Invoke(instance, args)!;
+        var succeeded = (bool)result.GetType().GetProperty("IsSuccess")!.GetValue(result)!;
+        var message = result.GetType().GetProperty("ErrorMessage")!.GetValue(result) as string;
+        return (succeeded, message);
     }
 }

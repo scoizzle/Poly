@@ -1,7 +1,6 @@
 # Domain type model and numeric rules (Q5, Q6, OQ-3, OQ-6, OQ-11)
 
-Status: **Transcription of owner rulings Q5, Q6, OQ-3, OQ-6, OQ-11; this file adds no new decision.**
-T-02 decided two items that were open (see *Open*, below).
+Status: **Transcription of owner rulings Q5, Q6, OQ-3, OQ-6, OQ-11, plus the two contract clauses T-02 decided (see *Open or newly decided*, below).**
 
 Recorded by slice T-01 of theme T ([#679](https://github.com/scoizzle/Poly/issues/679), epic
 [#677](https://github.com/scoizzle/Poly/issues/677)) so the slices that implement the model are held to the

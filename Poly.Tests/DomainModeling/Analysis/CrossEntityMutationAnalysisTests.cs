@@ -266,4 +266,33 @@ public class CrossEntityMutationAnalysisTests {
         await Assert.That(errors[0].Message).Contains("peer binder 'line'");
         await Assert.That(errors[0].Message).DoesNotContain("invoke");
     }
+
+    private const string ExitBlockAdvice =
+        "Invoke an action on the other entity instead (e.g. 'invoke {0}.SomeAction'); in an exit block, " +
+        "move that work into an action — an exit block rejects 'invoke', 'create' and 'for … invoke' (DMEFF018).";
+
+    // The relationship-assign message points exit-block authors at an action (DMEFF018 forbids invoke there).
+    [Test]
+    public async Task CrossEntityAssign_MessageAdvisesAnActionForExitBlocks() {
+        var errors = CrossEntityErrors(WithTouchEffects(Parse(Dsl), CrossEntityAssign)).ToList();
+
+        await Assert.That(errors.Count).IsEqualTo(1);
+        await Assert.That(errors[0].Message).IsEqualTo(
+            "Assign targets state reached through relationship 'customer', which belongs to another entity. " +
+            "Only 'Invoice' and its own actions, entry, exit and when blocks may assign its state; " +
+            "cross-entity access is read-only. " + string.Format(ExitBlockAdvice, "customer"));
+    }
+
+    [Test]
+    public async Task LoopBinderAssign_MessageAdvisesAnActionForExitBlocks() {
+        var loop = new ForEachEffect("l", "lines", null,
+            [new AssignEffect(new RelationshipNavigation("l", DomainExpression.Property("Sku")), DomainExpression.Literal("x"))]);
+        var errors = CrossEntityErrors(WithTouchEffects(Parse(Dsl), loop)).ToList();
+
+        await Assert.That(errors.Count).IsEqualTo(1);
+        await Assert.That(errors[0].Message).IsEqualTo(
+            "Assign targets state of loop binder 'l', which belongs to another entity. " +
+            "Only 'Invoice' may assign its own state; cross-entity access is read-only. " +
+            string.Format(ExitBlockAdvice, "l"));
+    }
 }

@@ -25,7 +25,7 @@ public sealed record SessionOptions(
     /// re-checked by <see cref="LibrarySelection.Resolve"/>.
     /// </summary>
     public IReadOnlyList<string> ImplicitIds { get; init; } =
-        ValidateImplicitIds(ImplicitIds);
+        ValidateIds(ImplicitIds, nameof(ImplicitIds));
 
     /// <summary>
     /// The facet pack (<c>column</c>/<c>table</c>) as a session fact rather than a
@@ -49,7 +49,7 @@ public sealed record SessionOptions(
     /// </summary>
     public IReadOnlyList<string> HostIds {
         get => _hostIds;
-        init => _hostIds = ValidateImplicitIds(value);
+        init => _hostIds = ValidateIds(value, nameof(HostIds));
     }
 
     private readonly IReadOnlyList<string> _hostIds = [];
@@ -64,15 +64,15 @@ public sealed record SessionOptions(
     /// point: a blank id is an <see cref="ArgumentException"/>, a repeated one an
     /// <see cref="InvalidOperationException"/>.
     /// </summary>
-    internal static IReadOnlyList<string> ValidateImplicitIds(IReadOnlyList<string>? implicitIds) {
+    internal static IReadOnlyList<string> ValidateIds(IReadOnlyList<string>? implicitIds, string property) {
         ArgumentNullException.ThrowIfNull(implicitIds);
         var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var id in implicitIds) {
             if (string.IsNullOrWhiteSpace(id))
-                throw new ArgumentException("Domain extension id must be non-empty.", nameof(implicitIds));
+                throw new ArgumentException("Domain extension id must be non-empty.", property);
             if (!seen.Add(id))
                 throw new InvalidOperationException(
-                    $"Implicit ids list extension '{id}' more than once.");
+                    $"{property} lists extension '{id}' more than once.");
         }
         return implicitIds;
     }

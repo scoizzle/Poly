@@ -564,6 +564,58 @@ public sealed class LibrarySelectionTests {
             .WithMessageContaining("applies-boom");
     }
 
+    /// <summary>C-04 F4: Resolve over its own output changes nothing, for every A2 row.</summary>
+    [Test]
+    [Arguments("sqlite", new string[0], new string[0])]
+    [Arguments("sqlite", new[] { "temporal", "persistence" }, new string[0])]
+    [Arguments("sqlite", new[] { "http" }, new string[0])]
+    [Arguments("sqlite", new[] { "sqlserver" }, new string[0])]
+    [Arguments("sqlite", new[] { "persistence", "sqlite" }, new string[0])]
+    [Arguments("sqlite", new[] { "sqlserver", "persistence" }, new string[0])]
+    [Arguments("sqlite", new[] { "http" }, new[] { "x" })]
+    [Arguments("persistence", new string[0], new string[0])]
+    [Arguments("persistence", new[] { "http" }, new string[0])]
+    [Arguments("persistence", new[] { "temporal", "sqlite" }, new string[0])]
+    [Arguments("persistence", new string[0], new[] { "sqlite" })]
+    [Arguments("persistence", new string[0], new[] { "http" })]
+    public async Task Resolve_IsIdempotent_OverItsOwnOutput(string vendor, string[] uses, string[] host) {
+        var options = new SessionOptions(VendorCatalog(), ProductCatalog.ImplicitIds) {
+            StorageVendor = vendor,
+            HostIds = host,
+        };
+        var once = LibrarySelection.Resolve(uses, options);
+        var twice = LibrarySelection.Resolve(once, options);
+
+        await Assert.That(twice.SequenceEqual(once)).IsTrue().Because(string.Join(",", once) + " vs " + string.Join(",", twice));
+    }
+
+    /// <summary>C-04 F5: a storage vendor must be a storage library; anything else fails closed.</summary>
+    [Test]
+    public async Task StorageVendor_NotAStorageLibrary_FailsClosed() {
+        var options = new SessionOptions(VendorCatalog(), ProductCatalog.ImplicitIds) { StorageVendor = "http" };
+
+        await Assert.That(() => LibrarySelection.Resolve([], options))
+            .Throws<InvalidOperationException>()
+            .WithMessageContaining("not a storage library");
+    }
+
+    /// <summary>C-04 F4: with no storage vendor, Resolve never probes the catalog's compilers.</summary>
+    [Test]
+    public async Task HostIds_WithoutAStorageVendor_DoNotProbeApplies() {
+        var catalog = new ExtensionCatalog().With(new ThrowingAppliesLibrary("angry"));
+        var options = new SessionOptions(catalog, []) { HostIds = ["angry"] };
+
+        await Assert.That(LibrarySelection.Resolve([], options).SequenceEqual(["angry"])).IsTrue();
+    }
+
+    /// <summary>C-04 F8: a repeated host id names HostIds, not the implicit set.</summary>
+    [Test]
+    public async Task HostIds_RepeatedId_NamesTheProperty() {
+        await Assert.That(() => _ = new SessionOptions(VendorCatalog(), []) { HostIds = ["x", "x"] })
+            .Throws<InvalidOperationException>()
+            .WithMessageContaining("HostIds");
+    }
+
     /// <summary>FX3: a throwing <c>Applies</c> propagates out of <c>ProvidersOf</c>.</summary>
     [Test]
     public async Task ProvidersOf_ThrowingApplies_Propagates() {

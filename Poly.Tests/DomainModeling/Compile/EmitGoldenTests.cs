@@ -19,7 +19,7 @@ public sealed class EmitGoldenTests {
         .With(new SqliteLibrary())
         .With(new HttpLibrary());
 
-    // DslCompiler seed for CompileMode.All + DbmsPack.Sqlite (HttpLibrary is catalog-only here).
+    // Test-local seed: the ids a Db/All + Sqlite document loads (HttpLibrary is catalog-only here).
     private static readonly string[] Seed = [.. ExtensionCatalog.ProductAuthoring, "sqlite"];
 
     public static IEnumerable<string> SampleDomains() => GoldenDomains.Compilable.Select(d => d.Path);
@@ -65,7 +65,7 @@ public sealed class EmitGoldenTests {
 
     /// <summary>
     /// The document's <c>uses</c> order decides which vendor type map wins when the facade
-    /// resolves <c>persistence</c> to <c>sqlite</c> (<c>SwapPersistence</c>, Db/All modes): the
+    /// resolves <c>persistence</c> to <c>sqlite</c> (<c>StorageVendor</c>, Db/All modes): the
     /// vendor library must come last, so <c>uses temporal</c> precedes <c>uses persistence</c>
     /// and the sqlite map keeps <c>closeBy</c> a <c>TEXT</c> column
     /// (docs/decisions/2026-10-15-multi-vendor-storage-layout.md:206,596).
@@ -88,7 +88,7 @@ public sealed class EmitGoldenTests {
 
     /// <summary>
     /// The same load-order hazard on the second dogfood document: with `uses persistence`
-    /// before `uses temporal` the facade's `SwapPersistence` resolves the first vendor and the
+    /// before `uses temporal` the facade's storage vendor resolves the first vendor and the
     /// sqlite map turns every `Date` column into `date`. The vendor must come last, so the
     /// document's `uses` block ends with `uses persistence`.
     /// </summary>

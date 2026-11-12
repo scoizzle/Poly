@@ -25,8 +25,8 @@ public static class LibrarySelection {
         var catalog = options.Catalog;
         ArgumentNullException.ThrowIfNull(catalog);
         // `with` bypasses SessionOptions' property validation, so re-check here.
-        SessionOptions.ValidateImplicitIds(options.ImplicitIds);
-        SessionOptions.ValidateImplicitIds(options.HostIds);
+        SessionOptions.ValidateIds(options.ImplicitIds, nameof(SessionOptions.ImplicitIds));
+        SessionOptions.ValidateIds(options.HostIds, nameof(SessionOptions.HostIds));
         var fromDocument = documentUses.Count > 0;
         if (fromDocument)
             ValidateDocumentUses(documentUses);
@@ -59,6 +59,9 @@ public static class LibrarySelection {
         List<string> ids, string vendor, bool fromDocument, ExtensionCatalog catalog) {
         catalog.Resolve(vendor);
         var providers = catalog.ProvidersOf(new UniqueConstraint());
+        if (!providers.Contains(vendor, StringComparer.Ordinal))
+            throw new InvalidOperationException(
+                $"Storage vendor '{vendor}' is not a storage library: it installs no compiler for a unique constraint.");
         var persistence = ids.IndexOf(PersistenceEmitLibrary.LibraryId);
         var other = ids.Exists(id =>
             !string.Equals(id, PersistenceEmitLibrary.LibraryId, StringComparison.Ordinal)

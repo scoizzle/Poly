@@ -102,7 +102,7 @@ public class PolycCompileTests {
     }
 
     [Test]
-    public async Task Compile_UnknownSeed_FailsClosed() {
+    public async Task Seed_UnknownName_FailsClosed() {
         Assert.Throws<ArgumentException>(() => ExtensionCatalog.Seed("nope"));
         await Assert.That(ExtensionCatalog.Seed("Authoring")).IsEqualTo(ExtensionCatalog.ProductAuthoring);
     }

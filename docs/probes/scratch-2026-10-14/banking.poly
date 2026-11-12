@@ -1,4 +1,5 @@
 domain Banking
+uses persistence
 uses temporal
 uses http
 

@@ -1,4 +1,5 @@
 domain Crm
+uses persistence
 uses temporal
 
 // Surface-only sibling: Lower erases the bind and Capture still runs.

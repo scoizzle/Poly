@@ -1,4 +1,5 @@
 domain Roastery
+uses persistence
 uses temporal
 uses http
 

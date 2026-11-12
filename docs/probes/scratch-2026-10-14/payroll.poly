@@ -1,4 +1,5 @@
 domain Payroll
+uses persistence
 uses temporal
 
 PayKind: enum { Salaried, Hourly }

@@ -1,4 +1,5 @@
 domain Fleet
+uses persistence
 uses temporal
 uses http
 

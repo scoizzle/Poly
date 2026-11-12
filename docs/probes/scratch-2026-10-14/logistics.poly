@@ -1,4 +1,5 @@
 domain Logistics
+uses persistence
 uses temporal
 uses http
 

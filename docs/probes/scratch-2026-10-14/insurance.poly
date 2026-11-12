@@ -1,4 +1,5 @@
 domain Insurance
+uses persistence
 uses temporal
 
 ClaimStatus: enum { Filed, UnderReview, Approved, Rejected, Settled }

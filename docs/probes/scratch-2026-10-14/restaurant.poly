@@ -1,4 +1,5 @@
 domain Restaurant
+uses persistence
 uses temporal
 
 Zone: enum { Patio, Main, Bar }

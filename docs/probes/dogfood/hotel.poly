@@ -1,4 +1,5 @@
 domain Hotel
+uses persistence
 uses temporal
 
 RoomType: entity {

@@ -1,4 +1,5 @@
 domain Gym
+uses persistence
 uses temporal
 uses http
 

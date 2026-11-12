@@ -14,11 +14,13 @@ namespace Poly.DomainModeling.Runtime;
 /// critical section, so a journal entry always describes the key set it was written against.
 /// <see cref="RollbackTo"/> holds that gate across its whole revert loop and validates its mark
 /// before it changes anything, and it drives the inner port directly, so replaying the journal
-/// never writes new journal entries. One mark is in flight per port: the executor's transaction
-/// is the caller that serialises them, while the public storage property may still reserve inside
-/// a mark — a journal that owns per-operation marks (the token journal) is R-08's.
+/// never writes new journal entries. The journal is flat, so one mark is in flight per port.
+/// <see cref="IStorageJournal"/> is the explicit seam <see cref="ActionScope"/> rolls a failed
+/// action back through: a scope takes its root mark when it opens and holds it until it closes,
+/// so the executor's own mark must sit outside the scope's. The public storage property may
+/// still reserve inside a mark.
 /// </remarks>
-internal sealed class ModuleStoragePort : IStoragePort {
+internal sealed class ModuleStoragePort : IStoragePort, IStorageJournal {
     private readonly object _gate = new();
     private readonly IStoragePort _keys;
     private readonly List<(bool Added, string Entity, string Property, string Value)> _journal = [];
@@ -75,7 +77,6 @@ internal sealed class ModuleStoragePort : IStoragePort {
             if (mark < 0 || mark > _journal.Count)
                 throw new ArgumentOutOfRangeException(nameof(mark), mark,
                     $"The mark must be between 0 and the journal length ({_journal.Count}).");
-
             for (var i = _journal.Count - 1; i >= mark; i--) {
                 var (added, entity, property, value) = _journal[i];
                 if (added)
@@ -86,6 +87,12 @@ internal sealed class ModuleStoragePort : IStoragePort {
             _journal.RemoveRange(mark, _journal.Count - mark);
         }
     }
+
+    // The explicit seam: Poly.Runtime may not name this internal type, and IStoragePort callers
+    // must not acquire a second, wider journal surface by accident.
+    int IStorageJournal.Mark() => Mark();
+
+    void IStorageJournal.RollbackTo(int mark) => RollbackTo(mark);
 
     private static void ThrowIfNull(string entity, string property, string value) {
         ArgumentNullException.ThrowIfNull(entity);

@@ -242,9 +242,11 @@ public static class ConstraintMerge {
     /// double comparison is the fallback so this is never worse than master.
     /// </summary>
     /// <remarks>
-    /// The fallback exists only because the producers (<c>Refine</c>, <c>Eval</c>,
-    /// <c>ComposeArithmetic</c>) still carry a <c>double</c> bound. V-05b makes those endpoints
-    /// <c>decimal</c> and deletes this branch; the S5 grep is what proves it is gone.
+    /// V-05b S2 removed every analysis producer of a <c>double</c> bound (the literal arm, <c>Refine</c> and
+    /// the arithmetic now carry <c>long</c>/<c>decimal</c>). The fallback stays because a public API caller
+    /// can still build <c>new RangeConstraint(0.5, 1.5)</c>, and six V-05a pins (F1, FX2: a fractional
+    /// double against a decimal/long bound) and the cross-numeric join/validation pins assert master's
+    /// ordering for it. Deleting it is a behaviour change for API-built bounds, not an S2 consequence.
     /// </remarks>
     internal static int? TryCompare(object x, object y) {
         if (x.GetType() == y.GetType())

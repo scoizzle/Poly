@@ -146,8 +146,9 @@ internal sealed partial class EffectAnalyzer {
     private static UnverifiedReason OpaqueReason(DomainExpression assigned) =>
         HasUnmodelledOperator(assigned) ? UnverifiedReason.UnsupportedOperator : UnverifiedReason.UnknownBound;
 
-    /// <summary>True when any node of the expression is an operator the interval flow does not model (pre-order).</summary>
-    private static bool HasUnmodelledOperator(DomainExpression expression) => expression switch {
+    /// <summary>True when any node of the expression is an operator the interval flow does not model (pre-order).
+    /// The one purity gate: the shared evaluator's X − X cancellation and the opaque-reason text use it (B7).</summary>
+    internal static bool HasUnmodelledOperator(DomainExpression expression) => expression switch {
         Add add => HasUnmodelledOperator(add.Left) || HasUnmodelledOperator(add.Right),
         Subtract sub => HasUnmodelledOperator(sub.Left) || HasUnmodelledOperator(sub.Right),
         Multiply mul => HasUnmodelledOperator(mul.Left) || HasUnmodelledOperator(mul.Right),

@@ -104,6 +104,14 @@ public partial class InitialStageAccessorTests {
         }
     }
 
+    /// <summary>The whole range is every stage, not the first: it is not an initial-stage read.</summary>
+    [Test]
+    public async Task Offenders_WholeRange_IsNotFlagged() {
+        var offenders = Offenders("Poly/DomainModeling/Lowering/Example.cs", "foreach (var s in entity.Stages[..]) { }").ToList();
+
+        await Assert.That(offenders.Count).IsEqualTo(0);
+    }
+
     /// <summary>A predicate lookup finds a named stage, not the initial one, and must not match.</summary>
     [Test]
     public async Task Offenders_PredicateLookups_AreNotFlagged() {
@@ -115,6 +123,22 @@ public partial class InitialStageAccessorTests {
         }) {
             var offenders = Offenders("Poly/DomainModeling/Lowering/Example.cs", source).ToList();
             await Assert.That(offenders.Count).IsEqualTo(0).Because(source);
+        }
+    }
+
+    /// <summary>
+    /// The receiver need not be a bare identifier: a call, an index and a chain all reach the same
+    /// list. The old receiver-less pattern caught these; a tightened one must not lose them.
+    /// </summary>
+    [Test]
+    public async Task Offenders_NonIdentifierReceiver_IsFlagged() {
+        foreach (var source in new[] {
+            "var s = FindEntity(name)?.Stages[0];",
+            "var s = entities[0].Stages[0];",
+            "var s = domain.Types.OfType<Entity>().First().Stages.First();",
+        }) {
+            var offenders = Offenders("Poly/DomainModeling/Lowering/Example.cs", source).ToList();
+            await Assert.That(offenders.Count).IsEqualTo(1).Because(source);
         }
     }
 
@@ -187,10 +211,12 @@ public partial class InitialStageAccessorTests {
     /// LINQ shapes, a local alias (<c>var stages = entity.Stages;</c>), a list pattern that binds the
     /// first element, and a range that takes only the first. Predicate overloads
     /// (<c>FirstOrDefault(s =&gt; …)</c>, <c>Last(s =&gt; …)</c>) find a named stage, not the initial one,
-    /// so the argument-less forms only. The receiver is captured so an allow-list entry can name one.
+    /// so the argument-less forms only. The receiver is captured so an allow-list entry can name one;
+    /// it is optional because a call, an index or a chain reaches the same list, and an absent receiver
+    /// is never excused. <c>Stages[..]</c> is every stage and does not match.
     /// </summary>
     [GeneratedRegex(
-        @"(?<receiver>[A-Za-z_][A-Za-z0-9_]*)\s*\??\.\s*Stages\s*(?:;\s*|\[\s*0\s*\]|\[\s*\.\.|is\s*\[|\??\.\s*(?:First(?:OrDefault)?\s*\(\s*\)|Single(?:OrDefault)?(?![ \t]*\((?![ \t]*\)))(?:\s*\(\s*\))?|Last(?:OrDefault)?(?![ \t]*\((?![ \t]*\)))(?:\s*\(\s*\))?|ElementAt\s*\(\s*0\s*\)|Skip\s*\(\s*1\s*\)|Take\s*\(\s*1\s*\)))",
+        @"(?:(?<receiver>[A-Za-z_]\w*)\s*)?\??\.\s*Stages\s*(?:;\s*|\[\s*0\s*\]|\[\s*\.\.\s*1\s*\]|is\s*\[|\??\.\s*(?:First(?:OrDefault)?\s*\(\s*\)|Single(?:OrDefault)?(?![ \t]*\((?![ \t]*\)))(?:\s*\(\s*\))?|Last(?:OrDefault)?(?![ \t]*\((?![ \t]*\)))(?:\s*\(\s*\))?|ElementAt\s*\(\s*0\s*\)|Skip\s*\(\s*1\s*\)|Take\s*\(\s*1\s*\)))",
         RegexOptions.Compiled)]
     private static partial Regex FirstStageRead();
 }

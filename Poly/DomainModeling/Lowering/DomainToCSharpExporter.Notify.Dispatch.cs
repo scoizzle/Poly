@@ -190,7 +190,7 @@ public sealed partial class DomainToCSharpExporter {
             // target stage (Student + Section on Enrollment.Dropped) used to emit
             // duplicate _droppedSubscribers / NotifyDroppedSubscribers members.
             foreach (var stageGroup in groups.GroupBy(infos => infos[0].StageName)) {
-                // Nullable: a create-in lands the child in its first stage with no prior
+                // Nullable: a create-in lands the child in its initial stage with no prior
                 // stage, so the caller passes null. `when all` guards read it as
                 // "transitioned from" and a fresh entry must not match.
                 var needsPrevious = stageGroup.Any(infos => infos.Any(NeedsAllPreviousStage));

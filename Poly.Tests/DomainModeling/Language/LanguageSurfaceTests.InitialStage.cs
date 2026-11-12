@@ -148,6 +148,53 @@ public sealed partial class LanguageSurfaceTests {
     }
 
     [Test]
+    public async Task InitialStage_WithKeyClause_RoundTripsInOrder() {
+        const string poly = """
+            domain Orders
+            Order: entity initial(Active) key(Code) {
+              Code: Text
+              Draft: stage { }
+              Active: stage { }
+            }
+            """;
+        var (domain, analysis) = InitialStageEvolve(poly);
+        await Assert.That(analysis.HasErrors).IsFalse();
+
+        var printed = InitialStagePrint(domain);
+        await Assert.That(printed).Contains("Order: entity initial(Active) key(Code) {");
+        await Assert.That(InitialStagePrint(InitialStageEvolve(printed).Domain)).IsEqualTo(printed);
+    }
+
+    [Test]
+    public async Task InitialStage_TwoNames_IsPositionedParseError() {
+        var ex = InitialStageParseFails(
+            "domain Orders\nOrder: entity initial(Draft, Active) {\n  Draft: stage {}\n  Active: stage {}\n}\n");
+
+        await Assert.That(ex.Detail).Contains("exactly one stage");
+        await Assert.That(ex.Line).IsEqualTo(2);
+        await Assert.That(ex.Column).IsEqualTo(28).Because("the comma follows the first stage name");
+    }
+
+    [Test]
+    public async Task InitialStage_DesignationNamingNavigation_IsAnalysisError() {
+        const string poly = """
+            domain Shop
+            Order: entity initial(lines) {
+              Code: Text
+              Draft: stage { }
+              lines: many Line
+            }
+            Line: entity {
+              Code: Text
+            }
+            """;
+        var (_, analysis) = InitialStageAnalyze(poly);
+
+        var finding = analysis.Diagnostics.Single(d => d.Code == "DMINI001");
+        await Assert.That(finding.Message).Contains("navigation, not a stage");
+    }
+
+    [Test]
     public async Task InitialStage_UnknownStage_IsAnalysisError() {
         const string poly = """
             domain Orders

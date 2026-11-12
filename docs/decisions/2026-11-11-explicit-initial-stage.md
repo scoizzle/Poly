@@ -1,6 +1,6 @@
 # An entity may designate its initial stage (Q21, #675)
 
-Status: **transcription of an owner ruling already made 2026-11-11; this file adds no new decision.**
+Status: **transcription of an owner ruling already made 2026-11-11, plus F-03's decision record for the clauses that ruling left open.**
 Recorded by slice F-01 of theme F ([#690](https://github.com/scoizzle/Poly/issues/690)) before the slices
 that implement it. The ruling is quoted verbatim below; prose between quotes is this file's framing only.
 A clause the ruling does not settle appears under *Open* rather than being filled in.
@@ -45,8 +45,9 @@ plan: L (constructor start stage, create-in notify), S, X, M (`RuntimeTool`), Q 
 - An explicit designation on the entity; `Entity.InitialStageName` carries it, and `S-14`, `D-04` and
   `Q-12` consume it (theme F *Contracts*, `EntityStages.InitialStage` provider F-02, `Entity.InitialStageName`
   provider F-03).
-- The designation is honoured **on create in the simulator, generated C# and HTTP**, and it round-trips
-  through the DSL printer (F-03's done-when).
+- The designation is honoured **on create in the simulator and in generated C#**, and it round-trips
+  through the DSL printer (F-03's done-when). HTTP calls the same generated `Create`, so it inherits the
+  behaviour; whether that leg gets its own pack-oracle test is open (see the F-03 PR).
 - Fail-closed: [#675](https://github.com/scoizzle/Poly/issues/675)'s *Scope* names the two bad shapes - a
   second designation, and a designation naming an unknown stage - as positioned errors. That scope is the
   issue's, recorded here as its statement, not as an addition to the ruling.
@@ -92,5 +93,7 @@ unchanged.
 
 ## What this file does not decide
 
-Nothing here adds a keyword, an accessor, a diagnostic or an ordering rule. It records the ruling and
-names the slices; the mechanisms do not exist yet, so `docs/CORE.md` is deliberately untouched.
+The ruling itself added no keyword, accessor, diagnostic or ordering rule; it records the ruling and
+names the slices. F-03 has since implemented the clauses recorded under *Resolved by F-03* — the header
+clause, the accessor the F-02 slice built, `DMINI001` and the `Stages[0]` ordering rule — so
+`docs/CORE.md` now names them. This file records what the ruling settled and what it left to F-03.

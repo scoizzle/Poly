@@ -753,19 +753,34 @@ public sealed class NameScopeTests {
     // ── S-02 (#520 #530): an enum's member list is one C# scope ──────────────
 
     /// <summary>
-    /// A compile probe (S-02 H1): compile the C# enum declaration the exporter builds for the
-    /// probe's <see cref="EnumType"/>, so the analyzer's verdict on a member name can be matched
-    /// against the compiler's own. The declaration is
-    /// <c>DomainToCSharpExporter.BuildEnumTypeDef</c> — the exact call
-    /// <c>DomainProgramProjection.ToSyntax</c> makes for every enum
-    /// (<c>DomainProgramProjection.cs:95</c>) — printed by the same
-    /// <see cref="CSharpWriter"/>. Both <c>Emit</c> and <c>ToSyntax</c> refuse an analysis with
-    /// errors, which is the shape under probe, and no <see cref="DiagnosticAllowance"/> can
-    /// express this: allowances are read only by the observed-flow and contract arms, never by
-    /// <c>StructuralDomainAnalyzer</c>. The full-module <c>Emit</c> path produced the recorded
-    /// outcomes before the rule shipped; every expected verdict here is the one it recorded.
+    /// A compile probe for a shape analysis accepts (S-02 H1): the real session path — parse,
+    /// <c>ApplyAndAnalyze</c>, <c>session.Emit</c> — then compile the emitted module, the shape
+    /// <see cref="SampleRoslynGateTests"/> uses.
     /// </summary>
     private static IReadOnlyList<Microsoft.CodeAnalysis.Diagnostic> EmitAndCompile(
+        string dsl, out AnalysisResult analysis) {
+        var session = DomainSession.ForSource(dsl, ExtensionCatalog.ProductAuthoring);
+        var outcome = new DomainEvolution(new Domain("_", []))
+            .ApplyAndAnalyze(new PolyDslParser(dsl, session).Parse(), session: session);
+        if (!outcome.Succeeded)
+            throw new InvalidOperationException(
+                $"Probe domain has errors: {string.Join("; ", outcome.Analysis.Diagnostics
+                    .Where(d => d.Severity == DiagnosticSeverity.Error).Select(d => d.Message))}");
+        analysis = outcome.Analysis;
+        var files = session.Emit(outcome.Root!, outcome.Analysis);
+        return ExportedCSharp.CompileWithWarningsAsErrors("S02Probe", files);
+    }
+
+    /// <summary>
+    /// A compile probe for a shape analysis rejects (S-02 H1, the <c>value__</c> member):
+    /// <c>Emit</c> refuses an analysis with errors, which is the shape under probe, so this
+    /// projects the same module through the ungated
+    /// <see cref="DomainProgramProjection.ToSyntax(Domain, INodeMetadataProvider)"/> overload and
+    /// prints it with the same <see cref="CSharpWriter"/>. No
+    /// <see cref="DiagnosticAllowance"/> can express this: allowances are read only by the
+    /// observed-flow and contract arms, never by <c>StructuralDomainAnalyzer</c>.
+    /// </summary>
+    private static IReadOnlyList<Microsoft.CodeAnalysis.Diagnostic> ProjectAndCompile(
         string dsl, out AnalysisResult analysis) {
         var session = DomainSession.ForSource(dsl, ExtensionCatalog.ProductAuthoring);
         var mutation = new DomainEvolution(new Domain("_", []))
@@ -773,9 +788,7 @@ public sealed class NameScopeTests {
         if (!mutation.Succeeded)
             throw new InvalidOperationException($"Probe DSL did not apply: {mutation.FailureSummary}");
         analysis = session.Analyze(mutation.Root);
-        var enumType = mutation.Root.Types.OfType<EnumType>().Single();
-        IReadOnlyList<TypeDefinitionNode> module =
-            [DomainToCSharpExporter.BuildEnumTypeDef(enumType.Name, enumType.MemberNames)];
+        var module = DomainProgramProjection.ToSyntax(mutation.Root, (INodeMetadataProvider)analysis);
         var vm = Interpreter.Analyzer.Analyze(new CompilationUnitNode([], null, module, null));
         var source = new CSharpWriter(vm).Write(module);
         return ExportedCSharp.CompileWithWarningsAsErrors("S02Probe", [("Probe.cs", source)]);
@@ -785,10 +798,12 @@ public sealed class NameScopeTests {
     public async Task EnumMemberNamedLikeEnum_MatchesTheEmitter() {
         // H1 probe 1: `E: enum { E, A }` compiled clean, so an enum member may carry the
         // enum's own name — an enum member is a value, not a nested member (CS0542 is a class
-        // and struct rule). Analysis must agree: no diagnostic, and no reserved row.
+        // and struct rule). Analysis must agree: no diagnostic, and no reserved row. The
+        // entity pins the shape the emitter really sees: a property of type E.
         var diagnostics = EmitAndCompile("""
             domain Probe
             E: enum { E, A }
+            X: entity { V: E default(E) }
             """, out var analysis);
         await Assert.That(string.Join(",", diagnostics.Select(d => d.Id).Distinct().Order(StringComparer.Ordinal)))
             .IsEqualTo("");
@@ -806,7 +821,7 @@ public sealed class NameScopeTests {
     public async Task EnumMemberNamedValueUnderscore_MatchesTheEmitter() {
         // H1 probe 2: `E: enum { value__ }` is CS0076 — every enum type carries that backing
         // field. Analysis agrees with exactly one DMSTR009 on the enum node.
-        var diagnostics = EmitAndCompile("""
+        var diagnostics = ProjectAndCompile("""
             domain Probe
             E: enum { value__ }
             """, out var analysis);

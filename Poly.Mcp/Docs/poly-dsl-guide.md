@@ -624,8 +624,16 @@ exit-block target is overridden: the instance lands on the hop's target after th
 target's entry effects ran. Analyze rejects this with `DMEFF017`, positioned on the exit-block
 transition. Entity-level actions, entity-level `when` handlers and a `for` body have no static
 source stage, so a transition there must match every exit-block target. A transition that follows
-another transition, an `invoke`, a `create` or a branch holding a transition counts as leaving
-whatever stage the instance may then be in, so it must match every exit-block target too.
+another transition, an `invoke`, a `create`, a `create in`, a `for … invoke` or a branch holding a
+transition counts as leaving whatever stage the instance may then be in, so it must match every
+exit-block target too. The rule is conservative: guards are not analysed (every existing transition
+counts, including one under an `if`), and an `invoke` before a hop makes it dynamic even when the
+callee is pure. Making the exit-block transition target the same stage as the hop passes the rule,
+but the hop still re-runs that target's entry effects (open on #683), so keep that entry idempotent
+until then.
+
+`invoke`, `create`, `create in` and `for … invoke` are action-only (§9): each one in an exit block is
+rejected with `DMEFF018`, positioned on the effect. Move it into an action.
 
 <!-- poly-verify: invalid:DMEFF017 -->
 ```poly
@@ -1411,7 +1419,7 @@ assign Tier to match { Qty > 100 -> "big", Qty > 10 -> "mid", else -> "small" }
 | `for Rel as name [where policy \| where in stage] invoke name.Action` | action (OneToMany source-only fan-out; fail-fast; zero records is a no-op) |
 | `if (expr) { … } else if … else { … }` | action, entry, exit |
 
-A `transition` in an exit block must target the stage every hop leaving that stage targets (`DMEFF017`; see Entry/Exit Effects).
+A `transition` in an exit block must target the stage every hop leaving that stage targets (`DMEFF017`; see Entry/Exit Effects). The action-only effects above are rejected in an exit block (`DMEFF018`).
 
 **Linking existing instances:** graph wiring happens through `create in Rel { … }`, which the module's own body links on the instance. To connect already-existing instances, the MCP `link_instances` and `unlink_instances` tools write the relationship field on the instance (the session executor's `Link` / `Unlink`) with relationship + entity-type validation at the tool boundary. `unlink_instances` refuses to drop the last owner of an `owned` target (see §4). There is no Link/Unlink **Effect IR** — linking existing instances is a host/tool operation only.
 

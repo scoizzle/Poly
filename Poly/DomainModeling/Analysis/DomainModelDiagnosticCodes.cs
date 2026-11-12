@@ -329,6 +329,15 @@ internal static class DomainModelDiagnosticCodes {
     public const string ExitBlockTransitionTargetOverridden = "DMEFF017";
 
     /// <summary>
+    /// A stage's exit block holds <c>invoke</c>, <c>create</c>, <c>create in</c> or
+    /// <c>for … invoke</c>, which the guide's effect table makes action-only. The exit block inlines
+    /// into every hop that leaves the stage, so a callee or a create could transition the instance
+    /// behind <see cref="ExitBlockTransitionTargetOverridden"/>. An error that no
+    /// <see cref="DiagnosticAllowance"/> acknowledges.
+    /// </summary>
+    public const string ExitBlockEffectNotSupported = "DMEFF018";
+
+    /// <summary>
     /// A <c>match</c> arm condition (#409) is not Boolean. An error.
     /// </summary>
     public const string MatchConditionNotBoolean = "DMMAT001";

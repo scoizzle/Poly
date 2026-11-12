@@ -284,4 +284,32 @@ public class ExitBlockTransitionTargetTests {
             """);
         await Assert.That(errors).IsEmpty();
     }
+
+    private const string Smuggled = """
+        domain F1
+        Z: entity {
+          A: stage {
+            exit { invoke Touch }
+            Touch: action { transition to C }
+            Go: action { transition to B }
+          }
+          B: stage { }
+          C: stage { }
+        }
+        """;
+
+    [Test]
+    public async Task Analyze_ExitTransitionViaInvokeTargetDiffersFromHop_IsRejected() {
+        var errors = ExitTargetErrors(Smuggled);
+        // First run (before DMEFF018) asserted one DMEFF017 and was red at 0; the ruling rejects the
+        // exit-block invoke itself (action-only), so the shape now reports DMEFF018 instead.
+        await Assert.That(errors).IsEmpty();
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], []))
+            .ApplyAndAnalyze(new PolyDslParser(Smuggled).Parse());
+        var rejected = result.Analysis.Diagnostics
+            .Where(d => d.Severity == DiagnosticSeverity.Error && d.Code == DomainModelDiagnosticCodes.ExitBlockEffectNotSupported)
+            .ToList();
+        await Assert.That(rejected.Count).IsEqualTo(1);
+        await Assert.That(rejected[0].Node is InvokeActionEffect).IsTrue();
+    }
 }

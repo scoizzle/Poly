@@ -73,6 +73,7 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
                     ValidateEffects(context, sub.Effects, null, entity, domain, lookup, stage.Name, sub.PeerBinding);
             }
             ValidateUnconditionalAutomaticTransitionCycles(context, entity);
+            ValidateExitBlockEffects(context, entity);
             ValidateExitBlockTransitionTargets(context, entity);
             ProvableGuards.Validate(context, domain, entity);
         });

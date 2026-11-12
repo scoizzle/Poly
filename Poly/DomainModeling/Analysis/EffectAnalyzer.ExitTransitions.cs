@@ -66,6 +66,53 @@ internal sealed partial class EffectAnalyzer {
         }
     }
 
+    /// <summary>
+    /// DMEFF018: the guide's effect table makes <c>invoke</c>, <c>create</c>, <c>create in</c> and
+    /// <c>for … invoke</c> action-only, so each one anywhere in an exit block is rejected.
+    /// </summary>
+    private static void ValidateExitBlockEffects(AnalysisContext context, Entity entity) {
+        foreach (var stage in entity.Stages)
+            ReportActionOnlyEffects(context, stage.OnExitEffects, stage.Name);
+    }
+
+    private static void ReportActionOnlyEffects(AnalysisContext context, IReadOnlyList<Effect> effects, string stage) {
+        foreach (var effect in effects) {
+            switch (effect) {
+                case ConditionalEffect c:
+                    ReportActionOnlyEffects(context, c.ThenEffects, stage);
+                    if (c.ElseEffects is not null)
+                        ReportActionOnlyEffects(context, c.ElseEffects, stage);
+                    break;
+                case CompositeEffect c:
+                    ReportActionOnlyEffects(context, c.Effects, stage);
+                    break;
+                case ForEachEffect f:
+                    ReportActionOnlyEffects(context, f.Body, stage);
+                    break;
+                case InvokeActionEffect:
+                    ReportActionOnly(context, effect, "invoke", stage);
+                    break;
+                case CreateEntityInstance:
+                    ReportActionOnly(context, effect, "create", stage);
+                    break;
+                case CreateEntityInRelationshipEffect:
+                    ReportActionOnly(context, effect, "create in", stage);
+                    break;
+                case ForEachInvokeEffect:
+                    ReportActionOnly(context, effect, "for … invoke", stage);
+                    break;
+            }
+        }
+    }
+
+    private static void ReportActionOnly(AnalysisContext context, Effect effect, string name, string stage) =>
+        context.ReportError(
+            effect,
+            $"The exit block of stage '{stage}' uses '{name}', which is action-only. An exit block inlines into every " +
+            $"hop that leaves '{stage}', so a callee or a create could transition the instance behind the exit-block " +
+            $"target check. Move '{name}' into an action.",
+            DomainModelDiagnosticCodes.ExitBlockEffectNotSupported);
+
     private static string DescribeConflict(TransitionHop other, string stage) {
         var otherTarget = other.Node.TargetStage.StageName;
         if (other.IsExit && other.Home == stage)
@@ -100,23 +147,23 @@ internal sealed partial class EffectAnalyzer {
                     moved = true;
                     break;
                 case ConditionalEffect c: {
-                    var thenMoved = moved;
-                    var elseMoved = moved;
-                    Walk(c.ThenEffects, home, site, loopSite, isExit, inFor, hops, ref thenMoved);
-                    if (c.ElseEffects is not null)
-                        Walk(c.ElseEffects, home, site, loopSite, isExit, inFor, hops, ref elseMoved);
-                    moved = moved || thenMoved || elseMoved;
-                    break;
-                }
+                        var thenMoved = moved;
+                        var elseMoved = moved;
+                        Walk(c.ThenEffects, home, site, loopSite, isExit, inFor, hops, ref thenMoved);
+                        if (c.ElseEffects is not null)
+                            Walk(c.ElseEffects, home, site, loopSite, isExit, inFor, hops, ref elseMoved);
+                        moved = moved || thenMoved || elseMoved;
+                        break;
+                    }
                 case CompositeEffect c:
                     Walk(c.Effects, home, site, loopSite, isExit, inFor, hops, ref moved);
                     break;
                 case ForEachEffect f: {
-                    var bodyMoved = moved;
-                    Walk(f.Body, home, site, loopSite, isExit, inFor: true, hops, ref bodyMoved);
-                    moved = moved || bodyMoved;
-                    break;
-                }
+                        var bodyMoved = moved;
+                        Walk(f.Body, home, site, loopSite, isExit, inFor: true, hops, ref bodyMoved);
+                        moved = moved || bodyMoved;
+                        break;
+                    }
                 case InvokeActionEffect or ForEachInvokeEffect or CreateEntityInstance or CreateEntityInRelationshipEffect:
                     moved = true;
                     break;

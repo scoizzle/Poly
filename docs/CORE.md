@@ -56,7 +56,7 @@ Neurosymbolic platform: author structured domain → lower to symbolic AST → a
 | Shipped ⊆ lowerable | Gaps stay in GitHub issues, not the parser/guide |
 | Always-legal operations | Full tree per op; no `Comment` / `null` / host walk as meaning |
 | AST is symbolic primary | No parallel primitive IR on product paths |
-| VM executes Syntax programs | `Interpreter.Compile` fail-closed; no domain opcodes; C# emit is a projection |
+| VM executes Syntax programs | `Interpreter.Compile` fail-closed (an emit-time backstop: a conditional or coalesce whose arms mix an inline scalar and a heap handle is rejected, #605; analysis owns the conversion, T-09, so a tree that analysed clean never reaches it); no domain opcodes; C# emit is a projection |
 | Domain lowers to generic ops | StageTransition / invoke / create / unique / clocks → existing Syntax + Store jobs on the one module |
 | Product doors are opt-in | `uses`; CLI seeds ids only |
 | MCP is harness | Author / inspect / simulate with caller context — not customer API; `poly_inspect` is a client of `ElementPath` / `ElementPathResolver` (`Poly/DomainModeling/Queries/`), the typed grammar `poly_inspect` uses (`poly_check`'s `NormalizeSelect` and `VerificationSummary.SelectScope` stay until M-04/M-05) |

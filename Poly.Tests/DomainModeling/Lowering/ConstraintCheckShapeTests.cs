@@ -203,7 +203,7 @@ public class ConstraintCheckShapeTests {
 
     private static string PrintCreate(Domain domain, AnalysisResult analysis, string entityName) {
         var cs = new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis));
-        return ExportedCSharp.ExtractMethod(cs, $"public static DomainResult<{entityName}> Create(");
+        return ExportedCSharp.ExtractMethod(cs, $"internal static DomainResult<{entityName}> Create(");
     }
 
     private static string PrintAssign(Domain domain, string entityName, string propertyName, string valueName) {

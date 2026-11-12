@@ -315,4 +315,47 @@ public sealed class CSharpExportCompileTests {
             .IsEqualTo(Accessibility.Public);
         await Assert.That(e.Diagnostics).IsEmpty();
     }
+
+    // F6 (fix round 1): the host clamp's two other branches.
+    [Test]
+    public async Task Export_WhenPublicEntityHasInternalActionWithInternalValueParameter_ActionDtoIsInternal() {
+        var text = ExportHost("""
+            domain Shop
+            uses sqlite
+            uses http
+
+            Money: value {
+              Amount: Number
+            }
+
+            public entity Order {
+              Code: Text length(1, 10)
+              Total: Number default(0)
+              Pay: action (bill: Money) { assign Total to Total + 1 }
+            }
+            """).AllText;
+
+        await Assert.That(text).Contains("internal record PayDto");
+        await Assert.That(text).Contains("public record OrderDto");
+    }
+
+    [Test]
+    public async Task Export_WhenDomainMixesPublicAndInternalEntities_DbContextIsInternalAndPublicEntityDtoStaysPublic() {
+        var text = ExportHost("""
+            domain Shop
+            uses sqlite
+            uses http
+
+            public entity Order {
+              Total: Number range(0, 100)
+            }
+
+            Audit: entity {
+              Note: Text length(1, 50)
+            }
+            """).AllText;
+
+        await Assert.That(text).Contains("internal class ShopDbContext");
+        await Assert.That(text).Contains("public record OrderDto");
+    }
 }

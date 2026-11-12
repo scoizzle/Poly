@@ -1,9 +1,11 @@
 using Poly.Analysis;
+using Poly.Compile;
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Ontology;
+using Poly.Packs.Product;
 
 namespace Poly.Tests.DomainModeling.Analysis;
 
@@ -37,6 +39,7 @@ public sealed class PublicNavigationClosureTests {
 
         await Assert.That(errors.Count).IsEqualTo(1);
         await Assert.That(errors[0].Message).Contains("Order");
+        await Assert.That(errors[0].Node is Relationship { Name: "lines" }).IsTrue();
         await Assert.That(errors[0].Message).Contains("lines");
         await Assert.That(errors[0].Message).Contains("Line");
         await Assert.That(errors[0].Message).Contains("public");
@@ -59,6 +62,7 @@ public sealed class PublicNavigationClosureTests {
 
         await Assert.That(errors.Count).IsEqualTo(1);
         await Assert.That(errors[0].Message).Contains("owner");
+        await Assert.That(errors[0].Node is Relationship { Name: "owner" }).IsTrue();
     }
 
     [Test]
@@ -172,5 +176,32 @@ public sealed class PublicNavigationClosureTests {
 
         await Assert.That(errors.Count).IsEqualTo(1);
         await Assert.That(errors[0].Message).Contains("receipts");
+    }
+
+    // F4 (fix round 1): polyc places DMCON019 on the navigation's line.
+    [Test]
+    public async Task Polyc_ReportsDMCON019PlacedAtTheNavigation() {
+        const string Dsl = """
+            domain Test
+
+            Line: entity {
+              Qty: Number default(1)
+            }
+
+            public entity Order {
+              Total: Number default(0)
+              lines: many Line
+            }
+            """;
+
+        var result = new PolyCompiler(ProductCatalog.Catalog, new SessionOptions(ProductCatalog.Catalog, ExtensionCatalog.ProductAuthoring))
+            .Compile(Dsl, "n.poly");
+
+        var errors = result.Diagnostics.Where(d => d.Code == "DMCON019").ToList();
+        await Assert.That(errors.Count).IsEqualTo(1);
+        await Assert.That(errors[0].Placed).IsTrue();
+        await Assert.That(errors[0].File).IsEqualTo("n.poly");
+        await Assert.That(errors[0].Line).IsEqualTo(9);
+        await Assert.That(result.Succeeded).IsFalse();
     }
 }

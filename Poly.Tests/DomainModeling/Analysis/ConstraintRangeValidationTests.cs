@@ -5,8 +5,10 @@ namespace Poly.Tests.DomainModeling.Analysis;
 
 /// <summary>
 /// #367: range validation compares bounds type-correctly (ConstraintMerge.TryCompare's rule):
-/// same type by its own ordering, two numeric types exactly through ExactNumber, anything else is
-/// not coerced. A value that is not exactly representable (a fractional double) is unorderable.
+/// same type by its own ordering; two numeric types exactly, with master's double comparison as the
+/// fallback when no exact order exists. A pair that still cannot be ordered is Undecided when both
+/// sides are numbers, and Violated for a different type family (a text value is never in a numeric
+/// range).
 /// </summary>
 public class ConstraintRangeValidationTests {
     private static ConstraintVerdict Eval(object? min, object? max, object? value) =>

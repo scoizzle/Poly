@@ -176,6 +176,77 @@ public class ExactCompareTests {
             d.Code == DomainModelDiagnosticCodes.UnconditionalAutomaticTransitionCycle)).IsTrue();
     }
 
+    // ── FX1: the ordering arms must keep master's double fallback ────────
+    //
+    // ExactNumber.Compare rejects every fractional double, so ordering arms on ExactNumber alone
+    // are worse than master for an API-built literal pair. ConstraintMerge.TryCompare is the one
+    // ordering rule: exact first, master's double comparison when the exact order is missing.
+
+    [Test]
+    public async Task IsProvablyAlwaysTrue_FractionalDoubleOrdering_IsTrue_FX1() {
+        var comparison = new Comparison(
+            DomainExpression.Literal(0.5d), DomainExpression.Literal(0.25d), ComparisonKind.GreaterThan);
+
+        await Assert.That(EffectAnalyzer.IsProvablyAlwaysTrue(comparison)).IsTrue();
+        await Assert.That(EffectAnalyzer.IsProvablyAlwaysFalse(comparison)).IsFalse();
+    }
+
+    [Test]
+    public async Task EntryGuard_FractionalDoubleComparison_IsAnUnconditionalCycle_FX1() {
+        var result = Analyze("""
+            domain E6
+            Z: entity {
+              Tag: Text
+              A: stage { entry { if (0.5 > 0.25) { transition to B } } }
+              B: stage { entry { transition to A } }
+            }
+            """);
+
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.Analysis.Diagnostics.Any(d =>
+            d.Code == DomainModelDiagnosticCodes.UnconditionalAutomaticTransitionCycle)).IsTrue();
+    }
+
+    // ── FX2: two numeric types that are not exactly representable keep master's order ──
+
+    [Test]
+    public async Task TryCompare_UlongAboveLongMax_KeepsMasterOrder_FX2() {
+        var order = ConstraintMerge.TryCompare(ulong.MaxValue, 1L);
+
+        await Assert.That(order).IsNotNull();
+        await Assert.That(order!.Value).IsGreaterThan(0);
+    }
+
+    // ── FX3: the order path is for numbers; everything else stays object.Equals ──
+
+    [Test]
+    public async Task IsProvablyAlwaysTrue_SoftHyphenStringEquality_IsNotProven_FX3() {
+        // Ordinal equality, as on master: CompareTo is culture-sensitive and ignores the soft hyphen.
+        var comparison = new Comparison(
+            DomainExpression.Literal("a\u00ADb"), DomainExpression.Literal("ab"), ComparisonKind.Equal);
+
+        await Assert.That(EffectAnalyzer.IsProvablyAlwaysTrue(comparison)).IsFalse();
+        await Assert.That(EffectAnalyzer.IsProvablyAlwaysFalse(comparison)).IsTrue();
+    }
+
+    // ── FX4: a numeric bound is orderable through the fallback ───────────
+
+    [Test]
+    public async Task HasUnorderableBound_FractionalDoubleBound_IsOrderable_FX4() {
+        await Assert.That(WriteVerification.HasUnorderableBound(new RangeConstraint(0.5d, null))).IsFalse();
+        await Assert.That(WriteVerification.HasUnorderableBound(new RangeConstraint(null, 0.5d))).IsFalse();
+        // A non-numeric bound stays unorderable.
+        await Assert.That(WriteVerification.HasUnorderableBound(new RangeConstraint("x", null))).IsTrue();
+    }
+
+    // ── FX5: the type-family split is pinned ─────────────────────────────
+
+    [Test]
+    public async Task Evaluate_TextAgainstNumberRange_IsViolated_FX5() {
+        await Assert.That(ConstraintValidation.Evaluate(new RangeConstraint(1L, 10L), "x"))
+            .IsEqualTo(ConstraintVerdict.Violated);
+    }
+
     private static EvolutionResult Analyze(string dsl) {
         var changes = new PolyDslParser(dsl).Parse();
         return new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes);

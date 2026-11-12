@@ -253,11 +253,11 @@ public static class ConstraintMerge {
             return null;
         if (ExactNumber.Compare(x, y) is { } exact)
             return exact;
-        return x is double or float || y is double or float
-            ? Convert.ToDouble(x).CompareTo(Convert.ToDouble(y))
-            : null;
+        // Both numeric: master's double comparison is the fallback (a fractional double, or a ulong
+        // above long.MaxValue, has no exact form). Numbers only, so it is never worse than master.
+        return IsNumeric(x) ? Convert.ToDouble(x).CompareTo(Convert.ToDouble(y)) : null;
     }
 
-    private static bool IsNumeric(object v) => v is sbyte or byte or short or ushort or int
+    internal static bool IsNumeric(object? v) => v is sbyte or byte or short or ushort or int
         or uint or long or ulong or float or double or decimal;
 }

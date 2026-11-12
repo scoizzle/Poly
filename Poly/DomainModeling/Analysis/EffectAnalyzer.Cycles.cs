@@ -75,8 +75,21 @@ internal sealed partial class EffectAnalyzer {
     /// <c>long</c>/<c>decimal</c> pair above 2^53 is decided by order, not by CLR type. When the two
     /// cannot be ordered the pre-V-05a value equality stands, so this is never worse than master.
     /// </summary>
+    /// <summary>
+    /// Numeric order of two literal values through the shared compare: exact first, master's double
+    /// comparison when the exact order is missing. Null when either side is not a number, so a
+    /// non-numeric pair is never proven (as on master).
+    /// </summary>
+    private static int? CompareNumericLiterals(object? left, object? right) =>
+        ConstraintMerge.IsNumeric(left) && ConstraintMerge.IsNumeric(right)
+            ? ConstraintMerge.TryCompare(left!, right!)
+            : null;
+
     private static bool? LiteralsEqual(object? left, object? right) {
         if (left is null || right is null) return Equals(left, right);
+        // The order path is for numbers; anything else keeps master's value equality, which is
+        // ordinal for strings (CompareTo is culture-sensitive and ignores a soft hyphen).
+        if (!ConstraintMerge.IsNumeric(left) || !ConstraintMerge.IsNumeric(right)) return Equals(left, right);
         return ConstraintMerge.TryCompare(left, right) is { } order ? order == 0 : Equals(left, right);
     }
 
@@ -93,13 +106,13 @@ internal sealed partial class EffectAnalyzer {
         Comparison { Kind: ComparisonKind.NotEqual, Left: Literal l, Right: Literal r } =>
             LiteralsEqual(l.Value, r.Value) is false,
         Comparison { Kind: ComparisonKind.GreaterThanOrEqual, Left: Literal l, Right: Literal r }
-            when ExactNumber.Compare(l.Value, r.Value) is { } order => order >= 0,
+            when CompareNumericLiterals(l.Value, r.Value) is { } order => order >= 0,
         Comparison { Kind: ComparisonKind.GreaterThan, Left: Literal l, Right: Literal r }
-            when ExactNumber.Compare(l.Value, r.Value) is { } order => order > 0,
+            when CompareNumericLiterals(l.Value, r.Value) is { } order => order > 0,
         Comparison { Kind: ComparisonKind.LessThanOrEqual, Left: Literal l, Right: Literal r }
-            when ExactNumber.Compare(l.Value, r.Value) is { } order => order <= 0,
+            when CompareNumericLiterals(l.Value, r.Value) is { } order => order <= 0,
         Comparison { Kind: ComparisonKind.LessThan, Left: Literal l, Right: Literal r }
-            when ExactNumber.Compare(l.Value, r.Value) is { } order => order < 0,
+            when CompareNumericLiterals(l.Value, r.Value) is { } order => order < 0,
         _ => false
     };
 
@@ -113,13 +126,13 @@ internal sealed partial class EffectAnalyzer {
         Comparison { Kind: ComparisonKind.NotEqual, Left: Literal l, Right: Literal r } =>
             LiteralsEqual(l.Value, r.Value) is true,
         Comparison { Kind: ComparisonKind.GreaterThanOrEqual, Left: Literal l, Right: Literal r }
-            when ExactNumber.Compare(l.Value, r.Value) is { } order => order < 0,
+            when CompareNumericLiterals(l.Value, r.Value) is { } order => order < 0,
         Comparison { Kind: ComparisonKind.GreaterThan, Left: Literal l, Right: Literal r }
-            when ExactNumber.Compare(l.Value, r.Value) is { } order => order <= 0,
+            when CompareNumericLiterals(l.Value, r.Value) is { } order => order <= 0,
         Comparison { Kind: ComparisonKind.LessThanOrEqual, Left: Literal l, Right: Literal r }
-            when ExactNumber.Compare(l.Value, r.Value) is { } order => order > 0,
+            when CompareNumericLiterals(l.Value, r.Value) is { } order => order > 0,
         Comparison { Kind: ComparisonKind.LessThan, Left: Literal l, Right: Literal r }
-            when ExactNumber.Compare(l.Value, r.Value) is { } order => order >= 0,
+            when CompareNumericLiterals(l.Value, r.Value) is { } order => order >= 0,
         _ => false
     };
 

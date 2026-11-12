@@ -429,24 +429,43 @@ public class PolySurfaceV2Tests {
         await Assert.That(dry.State!.Revision).IsEqualTo(revision);
     }
 
+    /// <summary>
+    /// The invariant the deleted allow-list used to hold: every tool method's parameters are
+    /// exactly the properties of the inputSchema the server publishes, and every property maps
+    /// to a JSON type. The schema is the source now, so the two cannot drift.
+    /// </summary>
     [Test]
-    public async Task FilterAllowedArguments_MatchTheToolParameters() {
+    public async Task ToolSignatures_HaveAJsonKindMappingForEveryParameter() {
         var tools = typeof(PolySurfaceTools).GetMethods()
             .Select(method => (Method: method, Attribute: method.GetCustomAttribute<McpServerToolAttribute>()))
             .Where(pair => pair.Attribute?.Name is not null)
             .ToList();
         await Assert.That(tools.Count).IsEqualTo(7);
 
+        var surface = Surface();
         foreach (var (method, attribute) in tools) {
+            var tool = McpServerTool.Create(method, surface, new McpServerToolCreateOptions());
+            var spec = ArgumentSpecCatalog.Map(attribute!.Name!, tool.ProtocolTool.InputSchema);
             var parameters = method.GetParameters()
-                .Select(p => p.Name!)
+                .Select(parameter => parameter.Name!)
                 .OrderBy(name => name, StringComparer.Ordinal)
                 .ToList();
-            var allowed = UnknownArgumentFilter.AllowedArguments[attribute!.Name!]
+            var derived = spec.Select(argument => argument.Name)
                 .OrderBy(name => name, StringComparer.Ordinal)
                 .ToList();
-            await Assert.That(string.Join(",", allowed)).IsEqualTo(string.Join(",", parameters))
-                .Because($"{attribute.Name} and the argument filter must not drift");
+            await Assert.That(string.Join(",", derived)).IsEqualTo(string.Join(",", parameters))
+                .Because($"{attribute.Name} and its published inputSchema must not drift");
+
+            foreach (var argument in spec) {
+                await Assert.That(argument.JsonTypes.Count).IsGreaterThan(0)
+                    .Because($"{attribute.Name}.{argument.Name} must map to at least one JSON type");
+            }
+
+            if (spec.SingleOrDefault(argument => argument.Name == "workspace") is { } workspace) {
+                var parameter = method.GetParameters().Single(parameter => parameter.Name == "workspace");
+                await Assert.That(workspace.Required).IsEqualTo(!parameter.HasDefaultValue)
+                    .Because($"{attribute.Name}.workspace required-ness follows its signature");
+            }
         }
     }
 

@@ -242,18 +242,18 @@ public sealed partial class DomainToCSharpExporter {
             }
         }
 
-        // A create-in lands the child in its first stage. When a subscription watches
+        // A create-in lands the child in its initial stage. When a subscription watches
         // that stage, no transition occurs, so no previousStage notify runs. One call
         // here covers both wired and unwired cases.
         if (metadata.GetStructure(targetEntity)?.HasStages == true) {
-            var firstStage = targetEntity.InitialStage()!.Name;
+            var initialStage = targetEntity.InitialStage()!.Name;
             if (subscriberSubs is { Count: > 0 }
                 && subscriberSubs.Any(i =>
                     string.Equals(i.Relationship.Name, rel.Name, StringComparison.Ordinal)
-                    && string.Equals(i.StageName, firstStage, StringComparison.Ordinal))) {
-                var needsPrevious = StageGroupNeedsPrevious(targetEntity, firstStage, domain);
+                    && string.Equals(i.StageName, initialStage, StringComparison.Ordinal))) {
+                var needsPrevious = StageGroupNeedsPrevious(targetEntity, initialStage, domain);
                 bodyNodes.Add(new Invoke(
-                    new Member(local, $"Notify{firstStage}Subscribers"),
+                    new Member(local, $"Notify{initialStage}Subscribers"),
                     needsPrevious ? [new Constant(null)] : []));
             }
         }
@@ -436,18 +436,18 @@ public sealed partial class DomainToCSharpExporter {
         bodyNodes.AddRange(ctorAssignments);
 
         if (esm.HasStages) {
-            var firstStage = entity.InitialStage()!;
+            var initialStage = entity.InitialStage()!;
             bodyNodes.Add(new Assignment(
                 new Member(new ThisReference(), "CurrentStage"),
                 new Member(
                     new NamedTypeReference(stageEnumTypeName!),
-                    firstStage.Name)));
+                    initialStage.Name)));
 
             // Apply the initial stage's entry effects in the constructor.
             // This ensures properties set by entry effects (e.g. "entry { assign
             // CheckedOutAt to now }" on Loan.Active) are initialized during
             // construction, not just during explicit stage transitions.
-            if (firstStage.OnEntryEffects.Count > 0) {
+            if (initialStage.OnEntryEffects.Count > 0) {
                 var entryCtx = new LoweringContext(
                     new ThisReference(),
                     Analysis: metadata,
@@ -458,9 +458,9 @@ public sealed partial class DomainToCSharpExporter {
                     LifecycleEnumTypeName: esm.LifecycleEnumTypeName,
                     PostTransitionNotifyStages: postTransitionNotifyStages,
                     PreviousStageNotifyStages: previousStageNotifyStages,
-                    SourceStageName: firstStage.Name);
+                    SourceStageName: initialStage.Name);
                 var entryPass = new EffectLoweringPass(entity, entryCtx);
-                entryPass.AppendInlinedStageEffects(firstStage.OnEntryEffects, bodyNodes);
+                entryPass.AppendInlinedStageEffects(initialStage.OnEntryEffects, bodyNodes);
             }
         }
 

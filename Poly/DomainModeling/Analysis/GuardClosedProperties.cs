@@ -19,7 +19,7 @@ namespace Poly.DomainModeling.Analysis;
 ///     <c>invoke</c> is just another action of its own entity, so it is one of these): proven only for a literal
 ///     that satisfies every constraint. A parameter, property copy or arithmetic value is NOT proven — action
 ///     parameter constraints are not enforced when an action runs, and the assign guard is the thing C-1 elides.</item>
-///   <item><b>Entry-assigned</b> (first stage's top-level entry assign): not a Create argument; the entry assign
+///   <item><b>Entry-assigned</b> (initial stage's top-level entry assign): not a Create argument; the entry assign
 ///     overwrites the CLR default and is proven as an assign.</item>
 /// </list>
 /// Entity-wide blockers (every property false): an action bound to an imported contract (library-contributed body is

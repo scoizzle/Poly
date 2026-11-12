@@ -1820,6 +1820,25 @@ public class McpSmokeTests {
         await Assert.That(create.Message).Contains("Draft");
     }
 
+    /// <summary>#675: the runtime reports the designated stage, not the first declared one.</summary>
+    [Test]
+    public async Task CreateInstance_DesignatedInitialStage_SetsDesignatedStage() {
+        var (sessionId, _) = McpTestTools.Store.Create("Test");
+        var applied = McpTestTools.Dsl.ApplyDsl(sessionId, """
+            domain Test
+            Process: entity initial(Active) {
+              Name: Text
+              Draft: stage { }
+              Active: stage { }
+            }
+            """);
+        await Assert.That(applied.Success).IsTrue();
+
+        var create = McpTestTools.Runtime.CreateInstance(sessionId, "Process", """{"Name":"p"}""");
+        await Assert.That(create.Success).IsTrue();
+        await Assert.That(create.Message).Contains("Active");
+    }
+
     /// <summary>
     /// Extracts the instanceId from a JSON response containing an "instance" object.
     /// </summary>

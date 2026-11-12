@@ -145,7 +145,7 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
     }
 
     /// <summary>
-    /// Names of entity properties assigned by the FIRST stage's entry effects. The
+    /// Names of entity properties assigned by the initial stage's entry effects. The
     /// exported constructor runs those effects after setting CurrentStage, so these
     /// props are body-initialized — never ctor params (a param would be dead + written
     /// twice, e.g. StartedAt). Published on <see cref="EntityStructureMetadata.EntryAssignedPropertyNames"/>
@@ -286,7 +286,7 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
         var required = new List<ConstructorParameterOrder>();
         var optional = new List<ConstructorParameterOrder>();
 
-        // Props assigned by the FIRST stage's entry effects are body-initialized in
+        // Props assigned by the initial stage's entry effects are body-initialized in
         // the exported ctor (which runs those effects after setting CurrentStage) —
         // they are NOT ctor params. Shared rule published as
         // EntityStructureMetadata.EntryAssignedPropertyNames (single source of truth).

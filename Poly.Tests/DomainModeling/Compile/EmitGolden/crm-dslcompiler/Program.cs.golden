@@ -307,9 +307,9 @@ app.MapPost("/api/leads/{email}/convert", async (string email, CrmDbContext db) 
     try
     {
         var result = entity.Convert();
-        await db.SaveChangesAsync();
         if (result.IsSuccess)
         {
+            await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
         else
@@ -332,9 +332,9 @@ app.MapPost("/api/leads/{email}/disqualify", async (string email, CrmDbContext d
     try
     {
         var result = entity.Disqualify();
-        await db.SaveChangesAsync();
         if (result.IsSuccess)
         {
+            await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
         else
@@ -360,9 +360,9 @@ app.MapPost("/api/accounts/{id}/placehq", async (int id, PlaceHqDto dto, CrmDbCo
     try
     {
         var result = entity.PlaceHq(dto.City, dto.Region);
-        await db.SaveChangesAsync();
         if (result.IsSuccess)
         {
+            await db.SaveChangesAsync();
             return Results.Ok(result.Value);
         }
         else
@@ -388,9 +388,9 @@ app.MapPost("/api/accounts/{id}/addcontact", async (int id, AddContactDto dto, C
     try
     {
         var result = entity.AddContact(dto.Name, dto.Email, db);
-        await db.SaveChangesAsync();
         if (result.IsSuccess)
         {
+            await db.SaveChangesAsync();
             return Results.Ok(result.Value);
         }
         else
@@ -421,9 +421,9 @@ app.MapPost("/api/accounts/{id}/convertlead", async (int id, ConvertLeadDto dto,
             return Results.NotFound("Lead not found");
         }
         var result = entity.ConvertLead(lead, db);
-        await db.SaveChangesAsync();
         if (result.IsSuccess)
         {
+            await db.SaveChangesAsync();
             return Results.Ok(result.Value);
         }
         else
@@ -449,9 +449,9 @@ app.MapPost("/api/accounts/{id}/opendeal", async (int id, OpenDealDto dto, CrmDb
     try
     {
         var result = entity.OpenDeal(dto.Title, dto.Amount);
-        await db.SaveChangesAsync();
         if (result.IsSuccess)
         {
+            await db.SaveChangesAsync();
             return Results.Ok(result.Value);
         }
         else
@@ -477,9 +477,9 @@ app.MapPost("/api/accounts/{id}/archive", async (int id, CrmDbContext db) => {
     try
     {
         var result = entity.Archive();
-        await db.SaveChangesAsync();
         if (result.IsSuccess)
         {
+            await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
         else
@@ -505,9 +505,9 @@ app.MapPost("/api/accounts/{id}/openticket", async (int id, OpenTicketDto dto, C
     try
     {
         var result = entity.OpenTicket(dto.Subject);
-        await db.SaveChangesAsync();
         if (result.IsSuccess)
         {
+            await db.SaveChangesAsync();
             return Results.Ok(result.Value);
         }
         else
@@ -533,9 +533,9 @@ app.MapPost("/api/accounts/{id}/restore", async (int id, CrmDbContext db) => {
     try
     {
         var result = entity.Restore();
-        await db.SaveChangesAsync();
         if (result.IsSuccess)
         {
+            await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
         else
@@ -568,9 +568,9 @@ app.MapPost("/api/accounts/{id}/contacts/{email}/retire", async (int id, string 
     try
     {
         var result = entity.Retire();
-        await db.SaveChangesAsync();
         if (result.IsSuccess)
         {
+            await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
         else
@@ -603,9 +603,9 @@ app.MapPost("/api/accounts/{id}/contacts/{email}/reactivate", async (int id, str
     try
     {
         var result = entity.Reactivate();
-        await db.SaveChangesAsync();
         if (result.IsSuccess)
         {
+            await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
         else
@@ -641,9 +641,9 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/completeopenwork",
     try
     {
         var result = entity.CompleteOpenWork();
-        await db.SaveChangesAsync();
         if (result.IsSuccess)
         {
+            await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
         else
@@ -679,9 +679,9 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/propose", async (i
     try
     {
         var result = entity.Propose();
-        await db.SaveChangesAsync();
         if (result.IsSuccess)
         {
+            await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
         else
@@ -717,9 +717,9 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/lose", async (int 
     try
     {
         var result = entity.Lose();
-        await db.SaveChangesAsync();
         if (result.IsSuccess)
         {
+            await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
         else
@@ -755,9 +755,9 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/log", async (int i
     try
     {
         var result = entity.Log(dto.Subject);
-        await db.SaveChangesAsync();
         if (result.IsSuccess)
         {
+            await db.SaveChangesAsync();
             return Results.Ok(result.Value);
         }
         else
@@ -798,9 +798,9 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/addline", async (i
             return Results.NotFound("Product not found");
         }
         var result = entity.AddLine(product, dto.Qty);
-        await db.SaveChangesAsync();
         if (result.IsSuccess)
         {
+            await db.SaveChangesAsync();
             return Results.Ok(result.Value);
         }
         else
@@ -836,9 +836,9 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/quotedeal", async 
     try
     {
         var result = entity.QuoteDeal();
-        await db.SaveChangesAsync();
         if (result.IsSuccess)
         {
+            await db.SaveChangesAsync();
             return Results.Ok(result.Value);
         }
         else
@@ -874,9 +874,9 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/commit", async (in
     try
     {
         var result = entity.Commit();
-        await db.SaveChangesAsync();
         if (result.IsSuccess)
         {
+            await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
         else
@@ -912,9 +912,9 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/win", async (int i
     try
     {
         var result = entity.Win();
-        await db.SaveChangesAsync();
         if (result.IsSuccess)
         {
+            await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
         else
@@ -950,9 +950,9 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/capture", async (i
     try
     {
         var result = entity.Capture(dto.Request);
-        await db.SaveChangesAsync();
         if (result.IsSuccess)
         {
+            await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
         else
@@ -985,9 +985,9 @@ app.MapPost("/api/opportunities/{id}/activities/{activityId}/snooze", async (int
     try
     {
         var result = entity.Snooze();
-        await db.SaveChangesAsync();
         if (result.IsSuccess)
         {
+            await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
         else
@@ -1020,9 +1020,9 @@ app.MapPost("/api/opportunities/{id}/activities/{activityId}/complete", async (i
     try
     {
         var result = entity.Complete();
-        await db.SaveChangesAsync();
         if (result.IsSuccess)
         {
+            await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
         else
@@ -1061,9 +1061,9 @@ app.MapPost("/api/opportunities/{id}/quotes/{quoteId}/addline", async (int id, i
             return Results.NotFound("Product not found");
         }
         var result = entity.AddLine(product, dto.Qty);
-        await db.SaveChangesAsync();
         if (result.IsSuccess)
         {
+            await db.SaveChangesAsync();
             return Results.Ok(result.Value);
         }
         else
@@ -1097,9 +1097,9 @@ app.MapPost("/api/opportunities/{id}/quotes/{quoteId}/present", async (int id, i
     try
     {
         var result = entity.Present();
-        await db.SaveChangesAsync();
         if (result.IsSuccess)
         {
+            await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
         else
@@ -1133,9 +1133,9 @@ app.MapPost("/api/opportunities/{id}/quotes/{quoteId}/accept", async (int id, in
     try
     {
         var result = entity.Accept();
-        await db.SaveChangesAsync();
         if (result.IsSuccess)
         {
+            await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
         else
@@ -1169,9 +1169,9 @@ app.MapPost("/api/opportunities/{id}/quotes/{quoteId}/reject", async (int id, in
     try
     {
         var result = entity.Reject();
-        await db.SaveChangesAsync();
         if (result.IsSuccess)
         {
+            await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
         else
@@ -1200,9 +1200,9 @@ app.MapPost("/api/campaigns/{id}/enroll", async (int id, EnrollDto dto, CrmDbCon
             return Results.NotFound("Contact not found");
         }
         var result = entity.Enroll(contact);
-        await db.SaveChangesAsync();
         if (result.IsSuccess)
         {
+            await db.SaveChangesAsync();
             return Results.Ok(result.Value);
         }
         else
@@ -1226,9 +1226,9 @@ app.MapPost("/api/campaigns/{id}/end", async (int id, CrmDbContext db) => {
     try
     {
         var result = entity.End();
-        await db.SaveChangesAsync();
         if (result.IsSuccess)
         {
+            await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
         else
@@ -1261,9 +1261,9 @@ app.MapPost("/api/accounts/{id}/tickets/{ticketId}/work", async (int id, int tic
     try
     {
         var result = entity.Work();
-        await db.SaveChangesAsync();
         if (result.IsSuccess)
         {
+            await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
         else
@@ -1296,9 +1296,9 @@ app.MapPost("/api/accounts/{id}/tickets/{ticketId}/close", async (int id, int ti
     try
     {
         var result = entity.Close();
-        await db.SaveChangesAsync();
         if (result.IsSuccess)
         {
+            await db.SaveChangesAsync();
             return Results.Ok("ok");
         }
         else

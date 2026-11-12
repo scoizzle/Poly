@@ -420,19 +420,19 @@ public class FailureTypingTests {
         string dsl, string entity, string? action, int times = 1) {
         var asm = ExportedCSharp.CompileAndLoad(Print(dsl));
         var type = asm.GetType(entity)!;
-        var create = type.GetMethod("Create")!;
+        var create = type.GetMethod("Create", PrintedMembers.Any)!;
         var args = create.GetParameters().Select(p => p.ParameterType == typeof(string) ? (object?)"x"
             : p.ParameterType == typeof(bool) ? action == "Skip"
             : p.ParameterType == typeof(IStoragePort) ? new InMemoryStoragePort()
             : p.ParameterType.IsValueType ? Activator.CreateInstance(p.ParameterType) : null).ToArray();
         var created = create.Invoke(null, args)!;
-        var instance = created.GetType().GetProperty("Value")!.GetValue(created)!;
+        var instance = created.GetType().GetProperty("Value", PrintedMembers.Any)!.GetValue(created)!;
         object? result = null;
         if (action is null)
-            result = type.GetMethod("EnsureUnique")!.Invoke(instance, ["Sku", "other"]);
+            result = type.GetMethod("EnsureUnique", PrintedMembers.Any)!.Invoke(instance, ["Sku", "other"]);
         for (var i = 0; action is not null && i < times; i++)
-            result = type.GetMethod(action)!.Invoke(instance, [])!;
-        return (DomainFailure)result!.GetType().GetProperty("Error")!.GetValue(result)!;
+            result = type.GetMethod(action, PrintedMembers.Any)!.Invoke(instance, [])!;
+        return (DomainFailure)result!.GetType().GetProperty("Error", PrintedMembers.Any)!.GetValue(result)!;
     }
 
     private const string NestedCreateDsl = """
@@ -459,7 +459,7 @@ public class FailureTypingTests {
         """;
 
     private static object? Instantiate(Type type, IStoragePort? port = null, params object?[] named) {
-        var create = type.GetMethod("Create")!;
+        var create = type.GetMethod("Create", PrintedMembers.Any)!;
         var args = create.GetParameters().Select((p, i) =>
             i < named.Length ? named[i]
             : p.ParameterType == typeof(string) ? "x"
@@ -467,11 +467,11 @@ public class FailureTypingTests {
             : p.ParameterType == typeof(IStoragePort) ? port ?? new InMemoryStoragePort()
             : p.ParameterType.IsValueType ? Activator.CreateInstance(p.ParameterType) : null).ToArray();
         var created = create.Invoke(null, args)!;
-        return created.GetType().GetProperty("Value")!.GetValue(created);
+        return created.GetType().GetProperty("Value", PrintedMembers.Any)!.GetValue(created);
     }
 
     private static DomainFailure Failed(object result) =>
-        (DomainFailure)result.GetType().GetProperty("Error")!.GetValue(result)!;
+        (DomainFailure)result.GetType().GetProperty("Error", PrintedMembers.Any)!.GetValue(result)!;
 
     [Test]
     public async Task NestedCreate_PropagateCarriesTheCallerPath_AndTheLeafKeepsItsOwn() {
@@ -493,13 +493,13 @@ public class FailureTypingTests {
     public async Task Hold_WhenQtyZero_PrintedResultCarriesRangeKindAndFullPath() {
         var asm = ExportedCSharp.CompileAndLoad(Print(NestedCreateDsl));
         var product = asm.GetType("Product")!;
-        var result = product.GetMethod("Hold")!.Invoke(Instantiate(product), [0L])!;
+        var result = product.GetMethod("Hold", PrintedMembers.Any)!.Invoke(Instantiate(product), [0L])!;
 
         var failure = Failed(result);
         await Assert.That(failure.Kind).IsEqualTo(DomainFailureKind.Range);
         await Assert.That(failure.ElementPath).IsEqualTo("Product.Hold.Reservation.Qty");
         await Assert.That(failure.Message).IsEqualTo("'Qty' must be >= 1.");
-        await Assert.That(result.GetType().GetProperty("ErrorMessage")!.GetValue(result)).IsEqualTo("'Qty' must be >= 1.");
+        await Assert.That(result.GetType().GetProperty("ErrorMessage", PrintedMembers.Any)!.GetValue(result)).IsEqualTo("'Qty' must be >= 1.");
     }
 
     [Test]
@@ -507,8 +507,8 @@ public class FailureTypingTests {
         var asm = ExportedCSharp.CompileAndLoad(Print(InvokeCascadeDsl));
         var parent = asm.GetType("Parent")!;
         var instance = Instantiate(parent)!;
-        parent.GetMethod("AddKid")!.Invoke(instance, []);
-        var result = parent.GetMethod("Go")!.Invoke(instance, [])!;
+        parent.GetMethod("AddKid", PrintedMembers.Any)!.Invoke(instance, []);
+        var result = parent.GetMethod("Go", PrintedMembers.Any)!.Invoke(instance, [])!;
 
         var failure = Failed(result);
         await Assert.That(failure.Kind).IsEqualTo(DomainFailureKind.Policy);
@@ -698,8 +698,8 @@ public class FailureTypingTests {
         var type = asm.GetType(entity)!;
         var instance = Instantiate(type)!;
         if (entity == "Parent")
-            type.GetMethod("AddKid")!.Invoke(instance, []);
-        var method = type.GetMethod(action)!;
+            type.GetMethod("AddKid", PrintedMembers.Any)!.Invoke(instance, []);
+        var method = type.GetMethod(action, PrintedMembers.Any)!;
         var result = method.Invoke(instance, method.GetParameters().Length == 0 ? [] : [0L])!;
         var failure = Failed(result);
         await Assert.That(failure.Kind).IsEqualTo(kind);

@@ -1,4 +1,5 @@
 using System.Reflection;
+using Poly.Tests.TestHelpers;
 
 using Poly.Interpretation;
 
@@ -83,10 +84,10 @@ public sealed class DomainResultValueTests {
     }
 
     static bool IsSuccess(object result) =>
-        (bool)result.GetType().GetProperty("IsSuccess")!.GetValue(result)!;
+        (bool)result.GetType().GetProperty("IsSuccess", PrintedMembers.Any)!.GetValue(result)!;
 
     static object? Value(object result) =>
-        result.GetType().GetProperty("Value")!.GetValue(result);
+        result.GetType().GetProperty("Value", PrintedMembers.Any)!.GetValue(result);
 
     static string Join(IReadOnlyList<(string FileName, string Source)> files) {
         var sources = files.Select(f => f.Source.Replace("\r\n", "\n").Split('\n')).ToList();

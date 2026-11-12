@@ -8,7 +8,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Poly.Generated;
 
-public class LibraryDbContext : DbContext, Poly.DomainModeling.Runtime.IStoragePort
+public class LibraryDbContext : DbContext, Poly.Runtime.IStoragePort
 {
     private readonly HashSet<string> _pendingKeys = new HashSet<string>();
     public LibraryDbContext(DbContextOptions<LibraryDbContext> options) : base(options) { }
@@ -97,7 +97,7 @@ public class LibraryDbContext : DbContext, Poly.DomainModeling.Runtime.IStorageP
     }
     public bool Exists(string entity, string property, string value)
     {
-        if (this._pendingKeys.Contains(entity + "\u001f" + property + "\u001f" + value))
+        if (this._pendingKeys.Contains(Poly.Runtime.KeyCodec.Canonical(entity, property, value)))
         {
             return true;
         }
@@ -127,12 +127,13 @@ public class LibraryDbContext : DbContext, Poly.DomainModeling.Runtime.IStorageP
         }
         return false;
     }
+    public bool TryReserve(string entity, string property, string value) => this._pendingKeys.Add(Poly.Runtime.KeyCodec.Canonical(entity, property, value));
     public void Record(string entity, string property, string value)
     {
-        this._pendingKeys.Add(entity + "\u001f" + property + "\u001f" + value);
+        this._pendingKeys.Add(Poly.Runtime.KeyCodec.Canonical(entity, property, value));
     }
     public void Release(string entity, string property, string value)
     {
-        this._pendingKeys.Remove(entity + "\u001f" + property + "\u001f" + value);
+        this._pendingKeys.Remove(Poly.Runtime.KeyCodec.Canonical(entity, property, value));
     }
 }

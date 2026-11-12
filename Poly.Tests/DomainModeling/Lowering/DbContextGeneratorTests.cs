@@ -1,7 +1,10 @@
 using Poly.DomainModeling;
+using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Ontology;
 using Poly.DslCompiler;
+using Poly.Packs.Product;
+using Poly.Runtime;
 using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.DomainModeling.Lowering;
@@ -263,5 +266,49 @@ public class DbContextGeneratorTests {
         await Assert.That(typeArg).IsTypeOf<PrimitiveTypeReference>();
         await Assert.That(((PrimitiveTypeReference)typeArg).PrimitiveId)
             .IsEqualTo(Poly.Introspection.PrimitiveType.Int32);
+    }
+
+    [Test]
+    public async Task DbContext_StoragePort_EmitsTryReserveAndKeyCodecKeys() {
+        var domain = ParseDomain("""
+            domain Test
+            Patron: entity { Email: Text unique }
+            """);
+        var storage = DomainModelAnalyzer.Analyze(domain)
+            .GetMetadata<StorageMappingMetadata>(domain)!.Storage;
+        var unit = new DbContextGenerator(domain, storage, implementsStoragePort: true)
+            .GenerateCompilationUnit();
+        var context = unit.FindType("TestDbContext")!;
+
+        var tryReserve = context.FindMethod("TryReserve");
+        await Assert.That(tryReserve).IsNotNull();
+        await Assert.That(tryReserve!.ReturnType).IsTypeOf<PrimitiveTypeReference>();
+        await Assert.That(((PrimitiveTypeReference)tryReserve.ReturnType).PrimitiveId)
+            .IsEqualTo(Poly.Introspection.PrimitiveType.Boolean);
+        await Assert.That(tryReserve.Parameters!.Count).IsEqualTo(3);
+        await Assert.That(tryReserve.Parameters!.All(p =>
+            p.TypeReference is PrimitiveTypeReference { PrimitiveId: Poly.Introspection.PrimitiveType.String })).IsTrue();
+
+        foreach (var name in new[] { "Exists", "Record", "Release" }) {
+            var body = context.FindMethod(name)!.Body!;
+            var canonical = Descendants(body).OfType<Invoke>().Where(i =>
+                i.Delegate is Member { MemberName: "Canonical", Value: ClrTypeReference reference }
+                && reference.RuntimeType == typeof(KeyCodec)).ToList();
+            await Assert.That(canonical.Count).IsEqualTo(1).Because(name);
+
+            var separators = Descendants(body).OfType<Constant>()
+                .Where(c => c.Value is string text && text.Contains('\u001f', StringComparison.Ordinal)).ToList();
+            await Assert.That(separators).IsEmpty().Because(name);
+        }
+    }
+
+    private static IEnumerable<Node> Descendants(Node node) {
+        yield return node;
+        foreach (var child in node.Children) {
+            if (child is null)
+                continue;
+            foreach (var descendant in Descendants(child))
+                yield return descendant;
+        }
     }
 }

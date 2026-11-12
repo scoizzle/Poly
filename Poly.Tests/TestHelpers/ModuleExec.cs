@@ -66,21 +66,22 @@ static class ModuleReads {
 }
 
 /// <summary>
-/// In-memory <see cref="IStoragePort"/> for the printed side of a parity row.
-/// The printed <c>Create</c> calls <c>Record</c>; later creates see those keys.
+/// The printed side's <see cref="IStoragePort"/>: the reference <see cref="InMemoryStoragePort"/>
+/// under the name the parity harness uses, so the printed <c>Create</c> and the simulator
+/// cannot drift on the key encoding.
 /// </summary>
 sealed class RecordingStoragePort : IStoragePort {
-    readonly HashSet<string> _keys = new(StringComparer.Ordinal);
+    readonly InMemoryStoragePort _inner = new();
 
     public bool Exists(string entity, string property, string value) =>
-        _keys.Contains(Key(entity, property, value));
+        _inner.Exists(entity, property, value);
 
-    public void Record(string entity, string property, string value) =>
-        _keys.Add(Key(entity, property, value));
+    public bool TryReserve(string entity, string property, string value) =>
+        _inner.TryReserve(entity, property, value);
 
     public void Release(string entity, string property, string value) =>
-        _keys.Remove(Key(entity, property, value));
+        _inner.Release(entity, property, value);
 
-    static string Key(string entity, string property, string value) =>
-        entity + "\u001f" + property + "\u001f" + value;
+    public void Record(string entity, string property, string value) =>
+        _inner.Record(entity, property, value);
 }

@@ -3,7 +3,7 @@ using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Ontology.Constraints;
-using Poly.DomainModeling.Runtime;
+using Poly.Runtime;
 
 namespace Poly.DomainModeling.Libraries.Storage;
 

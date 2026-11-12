@@ -1,5 +1,5 @@
 using Poly.Ast.Nodes;
-using Poly.DomainModeling.Runtime;
+using Poly.Runtime;
 
 namespace Poly.DomainModeling.Compile;
 

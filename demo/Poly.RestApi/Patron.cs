@@ -165,7 +165,7 @@ public class Patron
     {
         this.OutstandingFines = this.OutstandingFines - 5L;
     }
-    public static DomainResult<Patron> Create(string email, string name, Poly.DomainModeling.Runtime.IStoragePort db, long maxItems = 0L, IEnumerable<Loan>? loans = null, IEnumerable<Fine>? fines = null, long currentBorrowCount = 0L, DateOnly? memberSince = null, long outstandingFines = 0L, PatronStatus status = PatronStatus.Active)
+    public static DomainResult<Patron> Create(string email, string name, Poly.Runtime.IStoragePort db, long maxItems = 0L, IEnumerable<Loan>? loans = null, IEnumerable<Fine>? fines = null, long currentBorrowCount = 0L, DateOnly? memberSince = null, long outstandingFines = 0L, PatronStatus status = PatronStatus.Active)
     {
         if (string.IsNullOrEmpty(email))
         {
@@ -226,5 +226,5 @@ public class Patron
         }
         return DomainResult.Failure("A unique assign needs the storage port.");
     }
-    public static System.Boolean ExistsWithEmail(Poly.DomainModeling.Runtime.IStoragePort db, System.String email) => db.Exists("Patron", "Email", email);
+    public static System.Boolean ExistsWithEmail(Poly.Runtime.IStoragePort db, System.String email) => db.Exists("Patron", "Email", email);
 }

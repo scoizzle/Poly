@@ -73,6 +73,20 @@ public sealed class DslCompilerSelectionTests {
         await Assert.That(Sorted(viaFacade.Files!)).IsEquivalentTo(Sorted(oracle.Files));
     }
 
+    /// <summary>
+    /// C-04 F6: the one row whose order moved. Generic Db with a host-loaded http library and no
+    /// <c>uses</c> loads <c>[storage, persistence, http]</c> (master: <c>[storage, http,
+    /// persistence]</c>), so the emitted file order is pinned here.
+    /// </summary>
+    [Test]
+    public async Task DbMode_GenericWithHostHttp_NoUses_FileOrderIsPinned() {
+        var result = new Compiler().Load(new Poly.DomainModeling.Libraries.Http.HttpLibrary())
+            .Compile("domain D\n" + Entity, CompileMode.Db, DbmsPack.Generic);
+
+        await Assert.That(result.Success).IsTrue().Because(string.Join("; ", result.Errors ?? []));
+        await Assert.That(string.Join("|", result.Files!.Select(f => f.FileName))).IsEqualTo("A.cs|Poly.Types.cs|DDbContext.cs|Program.cs|demo.http");
+    }
+
     /// <summary>A4: the ids stamped on the domain are the ids the session loaded.</summary>
     [Test]
     [Arguments(DbmsPack.Sqlite, new string[0], new[] { "storage", "sqlite" })]

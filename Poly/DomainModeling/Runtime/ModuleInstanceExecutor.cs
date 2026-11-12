@@ -1,5 +1,3 @@
-using System.Collections;
-
 using Poly.Analysis;
 using Poly.Ast.Nodes;
 using Poly.DomainModeling.Analysis;
@@ -122,136 +120,6 @@ public sealed partial class ModuleInstanceExecutor {
     }
 
     /// <summary>
-    /// Runs the entity's cached static <c>Create</c> on a dictionary <c>This</c>.
-    /// <paramref name="values"/> are property values by name (case-insensitive) from the
-    /// tool layer: JSON-ish scalars, instance ids for entity-typed values.
-    /// </summary>
-    public ModuleOutcome Create(string entityName, IReadOnlyDictionary<string, object?> values) {
-        ArgumentException.ThrowIfNullOrEmpty(entityName);
-        ArgumentNullException.ThrowIfNull(values);
-        lock (_gate) {
-            return Transact(() => {
-                SyncSubscriptionBodies();
-                _born.Clear();
-                var entity = RequireEntity(entityName);
-                var create = FindMethod(entityName, "Create", isStatic: true)
-                    ?? throw new HostException($"Entity '{entityName}' has no Create factory.");
-                var parameters = create.Parameters ?? [];
-                var known = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                var args = new object?[parameters.Count];
-                for (var i = 0; i < parameters.Count; i++) {
-                    var parameter = parameters[i];
-                    if (IsStoragePort(parameter)) {
-                        args[i] = _port;
-                        continue;
-                    }
-                    known.Add(parameter.Name);
-                    var property = entity.Properties.FirstOrDefault(p =>
-                        string.Equals(p.Name, parameter.Name, StringComparison.OrdinalIgnoreCase));
-                    var supplied = TryValue(values, parameter.Name, out var raw);
-                    var label = $"Property '{property?.Name ?? parameter.Name}'";
-                    args[i] = supplied
-                        ? CoerceValue(parameter, property?.Type.TypeName, raw, label, namedTypeFailure: true)
-                        : CoerceValue(parameter, null, DefaultOf(parameter), label);
-                }
-                foreach (var key in values.Keys) {
-                    if (!known.Contains(key))
-                        throw new HostException($"Unknown property '{key}' for entity '{entityName}'.");
-                }
-
-                if (Run(entityName, create, self: null, args) is not DomainResult result)
-                    throw new InvalidOperationException($"Create on '{entityName}' did not return a DomainResult.");
-                if (!result.IsSuccess)
-                    return ModuleOutcome.Fail(result.ErrorMessage ?? "Create failed.");
-                if (result.Value is not IDictionary<string, object?> bag)
-                    throw new InvalidOperationException($"Create on '{entityName}' did not return a dictionary instance.");
-
-                var instance = Register(entityName, bag);
-                return ModuleOutcome.Ok(instance, AdoptCreatedChildren());
-            }, constraintThrows: true);
-        }
-    }
-
-    /// <summary>
-    /// Invokes an action on <paramref name="target"/>. <paramref name="args"/> are action
-    /// parameter values by name; entity-typed parameters take instance ids. Guards,
-    /// stage checks and effects are the module body's own. A failure rolls everything back.
-    /// </summary>
-    public ModuleOutcome Invoke(
-        ModuleInstance target, string actionName, IReadOnlyDictionary<string, object?>? args = null) {
-        ArgumentNullException.ThrowIfNull(target);
-        ArgumentException.ThrowIfNullOrEmpty(actionName);
-        lock (_gate) {
-            return Transact(() => {
-                SyncSubscriptionBodies();
-                _born.Clear();
-                RequireRegistered(target);
-                var action = FindAction(target.EntityName, actionName);
-                var method = action is null ? null : FindMethod(target.EntityName, actionName, isStatic: false);
-                if (action is not null && method is null)
-                    throw new InvalidOperationException(
-                        $"Module method '{actionName}' is missing on entity '{target.EntityName}'.");
-                if (action is null || method is null)
-                    return ModuleOutcome.Fail($"Action '{actionName}' not found on entity '{target.EntityName}'.");
-
-                var parameters = method.Parameters ?? [];
-                var supplied = args ?? new Dictionary<string, object?>();
-                var known = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                var callArgs = new object?[parameters.Count];
-                for (var i = 0; i < parameters.Count; i++) {
-                    var parameter = parameters[i];
-                    if (IsStoragePort(parameter)) {
-                        known.Add(parameter.Name);
-                        callArgs[i] = TryValue(supplied, parameter.Name, out var given) && given is IStoragePort port
-                            ? port
-                            : _port;
-                        continue;
-                    }
-                    known.Add(parameter.Name);
-                    if (!TryValue(supplied, parameter.Name, out var raw))
-                        throw new HostException($"Missing argument '{parameter.Name}' for action '{actionName}'.");
-                    var declared = action.Parameters.FirstOrDefault(p =>
-                        string.Equals(p.Name, parameter.Name, StringComparison.OrdinalIgnoreCase));
-                    callArgs[i] = CoerceValue(parameter, declared?.Type.TypeName, raw, $"Argument '{parameter.Name}'");
-                }
-                foreach (var key in supplied.Keys) {
-                    if (!known.Contains(key))
-                        throw new HostException($"Unknown argument '{key}' for action '{actionName}'.");
-                }
-
-                object? ran;
-                try {
-                    ran = Run(target.EntityName, method, target.Bag, callArgs);
-                }
-                catch (InvalidOperationException ex) when (
-                    ex.Message.Contains("value stack overflow", StringComparison.Ordinal)) {
-                    throw new HostException(
-                        $"Action invoke depth exceeded while calling '{actionName}'. "
-                        + "Possible recursive invoke cycle (e.g. action → invoke self, or OnEntry → invoke → transition loops).");
-                }
-                if (ran is not DomainResult result)
-                    throw new InvalidOperationException(
-                        $"Action '{actionName}' on '{target.EntityName}' did not return a DomainResult.");
-                if (!result.IsSuccess)
-                    return MapFailure(action, result.ErrorMessage);
-
-                var created = AdoptCreatedChildren();
-                ModuleInstance? returned = null;
-                if (result.Value is not null && !_byBag.TryGetValue(result.Value, out returned)
-                    && result.Value is IDictionary<string, object?> returnedBag
-                    && action.Result.Members.Count > 0) {
-                    // A bare create is returned but linked nowhere: the declared return type
-                    // names the entity, and the executor starts tracking the instance.
-                    returned = Register(action.Result.Members[0].Type.TypeName, returnedBag);
-                    created.Add(returned);
-                    created.AddRange(AdoptCreatedChildren());
-                }
-                return ModuleOutcome.Ok(returned, created);
-            }, constraintThrows: true, keepConstraintMutations: true);
-        }
-    }
-
-    /// <summary>
     /// Evaluates a named policy: the policy body the lowering cached, run on the
     /// instance's dictionary. Links are read from the bag's relationship fields.
     /// Fail closed when the policy has no cached body.
@@ -349,54 +217,6 @@ public sealed partial class ModuleInstanceExecutor {
         }
     }
 
-    private sealed record BagState(
-        IDictionary<string, object?> Bag,
-        KeyValuePair<string, object?>[] Entries,
-        (IList List, object?[] Items)[] Lists);
-
-    private sealed record ExecutorState(BagState[] Bags, int Registered, int PortMark);
-
-    private ExecutorState Capture() {
-        var bags = new BagState[_order.Count];
-        for (var i = 0; i < bags.Length; i++) {
-            var bag = _order[i].Bag;
-            var entries = bag.ToArray();
-            var lists = new List<(IList, object?[])>();
-            foreach (var (_, value) in entries) {
-                if (value is IList { IsFixedSize: false, IsReadOnly: false } list)
-                    lists.Add((list, ToArray(list)));
-            }
-            bags[i] = new BagState(bag, entries, [.. lists]);
-        }
-        return new ExecutorState(bags, _order.Count, _port.Mark());
-    }
-
-    private void Restore(ExecutorState state) {
-        _port.RollbackTo(state.PortMark);
-        for (var i = _order.Count - 1; i >= state.Registered; i--) {
-            var dropped = _order[i];
-            _byId.Remove(dropped.Id);
-            _byBag.Remove(dropped.Bag);
-            _order.RemoveAt(i);
-        }
-        foreach (var saved in state.Bags) {
-            saved.Bag.Clear();
-            foreach (var (key, value) in saved.Entries)
-                saved.Bag[key] = value;
-            foreach (var (list, items) in saved.Lists) {
-                list.Clear();
-                foreach (var item in items)
-                    list.Add(item);
-            }
-        }
-    }
-
-    private static object?[] ToArray(IList list) {
-        var items = new object?[list.Count];
-        list.CopyTo(items, 0);
-        return items;
-    }
-
     // ── registration and created-child detection ─────────────────────────────
 
     private ModuleInstance Register(string entityName, IDictionary<string, object?> bag) {
@@ -481,26 +301,6 @@ public sealed partial class ModuleInstanceExecutor {
                     break;
             }
         }
-    }
-
-    private ModuleOutcome MapFailure(Action action, string? message) {
-        message ??= $"invoke '{action.Name}' failed.";
-        const string blockedPrefix = "blocked by policy '";
-        var blockedIdx = message.IndexOf(blockedPrefix, StringComparison.Ordinal);
-        if (blockedIdx >= 0 && message.StartsWith($"'{action.Name}'", StringComparison.Ordinal)) {
-            var start = blockedIdx + blockedPrefix.Length;
-            var end = message.IndexOf('\'', start);
-            if (end > start) {
-                var leaf = message[start..end];
-                var guard = action.Policies.Select(p => p.Name).FirstOrDefault(n =>
-                    string.Equals(n, leaf, StringComparison.Ordinal)
-                    || string.Equals(n, "not_" + leaf, StringComparison.Ordinal)) ?? leaf;
-                return ModuleOutcome.Fail(message, [guard]);
-            }
-        }
-        if (message.Contains("requires a linked", StringComparison.Ordinal))
-            return ModuleOutcome.Fail(message, [.. action.Policies.Select(p => p.Name)]);
-        return ModuleOutcome.Fail(message);
     }
 
     /// <summary>

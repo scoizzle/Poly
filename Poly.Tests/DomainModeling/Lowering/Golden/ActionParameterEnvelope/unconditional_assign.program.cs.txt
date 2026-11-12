@@ -131,7 +131,7 @@ static async System.Threading.Tasks.Task SeedAsync(TDbCtx db)
     {
         return;
     }
-    var bookResult = Book.Create("XXXXXXXX", 1, "Sample");
+    var bookResult = Book.Create("XXXXXXXX", 500, "Sample");
     if (bookResult.IsSuccess)
     {
         db.Add(bookResult.Value);

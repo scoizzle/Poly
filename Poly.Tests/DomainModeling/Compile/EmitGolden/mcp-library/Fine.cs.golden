@@ -32,15 +32,15 @@ public class Fine
     {
         if (amount < 0L)
         {
-            return DomainResult<Fine>.Failure("'Amount' must be >= 0.");
+            return DomainResult<Fine>.Failure(Poly.Runtime.DomainFailure.Range("'Amount' must be >= 0.", "Fine.Amount"));
         }
         if (amount > 500L)
         {
-            return DomainResult<Fine>.Failure("'Amount' must be <= 500.");
+            return DomainResult<Fine>.Failure(Poly.Runtime.DomainFailure.Range("'Amount' must be <= 500.", "Fine.Amount"));
         }
         if (string.IsNullOrEmpty(reason))
         {
-            return DomainResult<Fine>.Failure("'Reason' is required.");
+            return DomainResult<Fine>.Failure(Poly.Runtime.DomainFailure.Required("'Reason' is required.", "Fine.Reason"));
         }
         var created = new Fine(reason, amount);
         return DomainResult<Fine>.Success(created);

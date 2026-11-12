@@ -54,11 +54,11 @@ public class Quote
         var assignValue0 = this.Amount + qty * sku.ListPrice;
         if (assignValue0 < 0m)
         {
-            return DomainResult<QuoteLine>.Failure("'Amount' must be >= 0.");
+            return DomainResult<QuoteLine>.Failure(Poly.Runtime.DomainFailure.Range("'Amount' must be >= 0.", "Quote.Amount"));
         }
         if (assignValue0 > 100000000m)
         {
-            return DomainResult<QuoteLine>.Failure("'Amount' must be <= 100000000.");
+            return DomainResult<QuoteLine>.Failure(Poly.Runtime.DomainFailure.Range("'Amount' must be <= 100000000.", "Quote.Amount"));
         }
         this.Amount = assignValue0;
         var create1 = this.CreateLines(qty, sku.ListPrice, sku);
@@ -100,15 +100,15 @@ public class Quote
     {
         if (string.IsNullOrEmpty(title))
         {
-            return DomainResult<Quote>.Failure("'Title' is required.");
+            return DomainResult<Quote>.Failure(Poly.Runtime.DomainFailure.Required("'Title' is required.", "Quote.Title"));
         }
         if (amount < 0m)
         {
-            return DomainResult<Quote>.Failure("'Amount' must be >= 0.");
+            return DomainResult<Quote>.Failure(Poly.Runtime.DomainFailure.Range("'Amount' must be >= 0.", "Quote.Amount"));
         }
         if (amount > 100000000m)
         {
-            return DomainResult<Quote>.Failure("'Amount' must be <= 100000000.");
+            return DomainResult<Quote>.Failure(Poly.Runtime.DomainFailure.Range("'Amount' must be <= 100000000.", "Quote.Amount"));
         }
         var created = new Quote(title, amount, opportunity, lines);
         if (opportunity != null)

@@ -61,23 +61,23 @@ public class Customer
     {
         if (string.IsNullOrEmpty(email))
         {
-            return DomainResult<Customer>.Failure("'Email' is required.");
+            return DomainResult<Customer>.Failure(Poly.Runtime.DomainFailure.Required("'Email' is required.", "Customer.Email"));
         }
         if (string.IsNullOrEmpty(name))
         {
-            return DomainResult<Customer>.Failure("'Name' is required.");
+            return DomainResult<Customer>.Failure(Poly.Runtime.DomainFailure.Required("'Name' is required.", "Customer.Name"));
         }
         if (name.Length < 2L)
         {
-            return DomainResult<Customer>.Failure("'Name' must be at least 2 characters.");
+            return DomainResult<Customer>.Failure(Poly.Runtime.DomainFailure.Length("'Name' must be at least 2 characters.", "Customer.Name"));
         }
         if (name.Length > 100L)
         {
-            return DomainResult<Customer>.Failure("'Name' must be at most 100 characters.");
+            return DomainResult<Customer>.Failure(Poly.Runtime.DomainFailure.Length("'Name' must be at most 100 characters.", "Customer.Name"));
         }
         if (Customer.ExistsWithEmail(db, email))
         {
-            return DomainResult<Customer>.Failure("Unique constraint violated: 'Email' value is already used on another 'Customer'.");
+            return DomainResult<Customer>.Failure(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'Email' value is already used on another 'Customer'.", "Customer.Email"));
         }
         var created = new Customer(email, name, orders, tier);
         db.Record("Customer", "Email", email);

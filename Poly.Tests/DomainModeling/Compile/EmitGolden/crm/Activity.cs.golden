@@ -45,7 +45,7 @@ public class Activity
     {
         if (string.IsNullOrEmpty(subject))
         {
-            return DomainResult<Activity>.Failure("'Subject' is required.");
+            return DomainResult<Activity>.Failure(Poly.Runtime.DomainFailure.Required("'Subject' is required.", "Activity.Subject"));
         }
         var created = new Activity(subject, opportunity, dueOn);
         if (opportunity != null)

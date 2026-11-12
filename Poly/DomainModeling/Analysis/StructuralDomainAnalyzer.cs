@@ -750,6 +750,15 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
 
     private static void AnalyzeAction(AnalysisContext context, Action action) {
         ReportDuplicateNames(context, action.Parameters, "action", action.Name);
+        foreach (var parameter in action.Parameters) {
+            if (!ReservedNames.TryReservedAsActionParameter(parameter.Name, out var row))
+                continue;
+            context.ReportError(
+                parameter,
+                $"Parameter '{parameter.Name}' of action '{action.Name}' would shadow the generated " +
+                $"C# type '{row.Name}' that Emit calls from a generated member body; rename it.",
+                DomainModelDiagnosticCodes.ReservedMemberName);
+        }
         ReportDuplicateNames(context, action.Result.Members, "action result", action.Name);
         ReportDuplicateNames(context, action.Policies, "action", action.Name);
     }

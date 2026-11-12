@@ -210,10 +210,16 @@ public sealed partial class EffectLoweringPass : EffectDispatch<Node?> {
     };
 
     /// <summary>
-    /// Failure for assign guards: <c>return DomainResult.Failure</c> when the
+    /// Failure for assign guards: <c>return DomainResult.Failure(DomainFailure.&lt;Kind&gt;(…))</c> when the
     /// caller has a result type; <c>throw ConstraintFailureException</c> in void
     /// export contexts (ctor / stage entry) — same split as create-in fail-closed.
     /// </summary>
+    private Node AssignConstraintFailure(FailureLowering.Spec spec) =>
+        _context.ActionResultType is null
+            ? FailureLowering.Throw(spec)
+            : FailureLowering.Return(CallerResultType, spec);
+
+    /// <summary>The string-only form; the link-violation site moves to a typed spec in R-04b.</summary>
     private Node AssignConstraintFailure(Node message) {
         if (_context.ActionResultType is null) {
             return new ThrowStatement(new New(

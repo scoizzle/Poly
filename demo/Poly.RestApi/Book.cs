@@ -21,43 +21,43 @@ public class Book
     {
         if (string.IsNullOrEmpty(title))
         {
-            return DomainResult<Book>.Failure("'Title' is required.");
+            return DomainResult<Book>.Failure(Poly.Runtime.DomainFailure.Required("'Title' is required.", "Book.Title"));
         }
         if (string.IsNullOrEmpty(author))
         {
-            return DomainResult<Book>.Failure("'Author' is required.");
+            return DomainResult<Book>.Failure(Poly.Runtime.DomainFailure.Required("'Author' is required.", "Book.Author"));
         }
         if (string.IsNullOrEmpty(isbn))
         {
-            return DomainResult<Book>.Failure("'ISBN' is required.");
+            return DomainResult<Book>.Failure(Poly.Runtime.DomainFailure.Required("'ISBN' is required.", "Book.ISBN"));
         }
         if (isbn.Length < 10L)
         {
-            return DomainResult<Book>.Failure("'ISBN' must be at least 10 characters.");
+            return DomainResult<Book>.Failure(Poly.Runtime.DomainFailure.Length("'ISBN' must be at least 10 characters.", "Book.ISBN"));
         }
         if (isbn.Length > 17L)
         {
-            return DomainResult<Book>.Failure("'ISBN' must be at most 17 characters.");
+            return DomainResult<Book>.Failure(Poly.Runtime.DomainFailure.Length("'ISBN' must be at most 17 characters.", "Book.ISBN"));
         }
         if (pages < 1L)
         {
-            return DomainResult<Book>.Failure("'Pages' must be >= 1.");
+            return DomainResult<Book>.Failure(Poly.Runtime.DomainFailure.Range("'Pages' must be >= 1.", "Book.Pages"));
         }
         if (pages > 10000L)
         {
-            return DomainResult<Book>.Failure("'Pages' must be <= 10000.");
+            return DomainResult<Book>.Failure(Poly.Runtime.DomainFailure.Range("'Pages' must be <= 10000.", "Book.Pages"));
         }
         if ((object)genre == null)
         {
-            return DomainResult<Book>.Failure("'Genre' is required.");
+            return DomainResult<Book>.Failure(Poly.Runtime.DomainFailure.Required("'Genre' is required.", "Book.Genre"));
         }
         if (genre != Genre.Fiction && genre != Genre.NonFiction && genre != Genre.Reference)
         {
-            return DomainResult<Book>.Failure(string.Concat("'", genre, "' is not a valid member of Genre for property 'Genre'."));
+            return DomainResult<Book>.Failure(Poly.Runtime.DomainFailure.Enum(string.Concat("'", genre, "' is not a valid member of Genre for property 'Genre'."), "Book.Genre"));
         }
         if (Book.ExistsWithISBN(db, isbn))
         {
-            return DomainResult<Book>.Failure("Unique constraint violated: 'ISBN' value is already used on another 'Book'.");
+            return DomainResult<Book>.Failure(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'ISBN' value is already used on another 'Book'.", "Book.ISBN"));
         }
         var created = new Book(title, author, isbn, pages, genre);
         db.Record("Book", "ISBN", isbn);

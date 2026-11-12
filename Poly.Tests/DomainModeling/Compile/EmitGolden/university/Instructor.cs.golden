@@ -41,19 +41,19 @@ public class Instructor
     {
         if (string.IsNullOrEmpty(name))
         {
-            return DomainResult<Instructor>.Failure("'Name' is required.");
+            return DomainResult<Instructor>.Failure(Poly.Runtime.DomainFailure.Required("'Name' is required.", "Instructor.Name"));
         }
         if (string.IsNullOrEmpty(email))
         {
-            return DomainResult<Instructor>.Failure("'Email' is required.");
+            return DomainResult<Instructor>.Failure(Poly.Runtime.DomainFailure.Required("'Email' is required.", "Instructor.Email"));
         }
         if (!System.Text.RegularExpressions.Regex.IsMatch(email, "^[^@]+@[^@]+\\z"))
         {
-            return DomainResult<Instructor>.Failure("'Email' does not match the required pattern.");
+            return DomainResult<Instructor>.Failure(Poly.Runtime.DomainFailure.Pattern("'Email' does not match the required pattern.", "Instructor.Email"));
         }
         if (Instructor.ExistsWithEmail(db, email))
         {
-            return DomainResult<Instructor>.Failure("Unique constraint violated: 'Email' value is already used on another 'Instructor'.");
+            return DomainResult<Instructor>.Failure(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'Email' value is already used on another 'Instructor'.", "Instructor.Email"));
         }
         var created = new Instructor(name, email);
         db.Record("Instructor", "Email", email);

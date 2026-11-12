@@ -121,31 +121,31 @@ public class Hall
     {
         if (string.IsNullOrEmpty(name))
         {
-            return DomainResult<Hall>.Failure("'Name' is required.");
+            return DomainResult<Hall>.Failure(Poly.Runtime.DomainFailure.Required("'Name' is required.", "Hall.Name"));
         }
         if (name.Length < 1L)
         {
-            return DomainResult<Hall>.Failure("'Name' must be at least 1 characters.");
+            return DomainResult<Hall>.Failure(Poly.Runtime.DomainFailure.Length("'Name' must be at least 1 characters.", "Hall.Name"));
         }
         if (name.Length > 80L)
         {
-            return DomainResult<Hall>.Failure("'Name' must be at most 80 characters.");
+            return DomainResult<Hall>.Failure(Poly.Runtime.DomainFailure.Length("'Name' must be at most 80 characters.", "Hall.Name"));
         }
         if (capacity < 1L)
         {
-            return DomainResult<Hall>.Failure("'Capacity' must be >= 1.");
+            return DomainResult<Hall>.Failure(Poly.Runtime.DomainFailure.Range("'Capacity' must be >= 1.", "Hall.Capacity"));
         }
         if (capacity > 5000L)
         {
-            return DomainResult<Hall>.Failure("'Capacity' must be <= 5000.");
+            return DomainResult<Hall>.Failure(Poly.Runtime.DomainFailure.Range("'Capacity' must be <= 5000.", "Hall.Capacity"));
         }
         if (dayRate < 0m)
         {
-            return DomainResult<Hall>.Failure("'DayRate' must be >= 0.");
+            return DomainResult<Hall>.Failure(Poly.Runtime.DomainFailure.Range("'DayRate' must be >= 0.", "Hall.DayRate"));
         }
         if (dayRate > 100000m)
         {
-            return DomainResult<Hall>.Failure("'DayRate' must be <= 100000.");
+            return DomainResult<Hall>.Failure(Poly.Runtime.DomainFailure.Range("'DayRate' must be <= 100000.", "Hall.DayRate"));
         }
         var created = new Hall(name, capacity, dayRate, property, sections, occupied, offline, busySections);
         if (property != null)

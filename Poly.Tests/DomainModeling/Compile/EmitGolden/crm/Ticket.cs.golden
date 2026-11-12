@@ -80,7 +80,7 @@ public class Ticket
     {
         if (string.IsNullOrEmpty(subject))
         {
-            return DomainResult<Ticket>.Failure("'Subject' is required.");
+            return DomainResult<Ticket>.Failure(Poly.Runtime.DomainFailure.Required("'Subject' is required.", "Ticket.Subject"));
         }
         var created = new Ticket(subject, account);
         if (account != null)

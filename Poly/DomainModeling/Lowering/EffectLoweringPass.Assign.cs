@@ -311,7 +311,8 @@ public sealed partial class EffectLoweringPass {
     private void AppendAssignConstraintChecks(
         List<Node> nodes, Property prop, Node valueRef) {
 
-        Node Fail(Node msg) => AssignConstraintFailure(msg);
+        Node Fail(ConstraintCheckWriter.Check check) =>
+            AssignConstraintFailure(ConstraintCheckWriter.FailureSpec(check, _entity.Name, prop.Name));
 
         // Optional length checks share one outer !IsNullOrEmpty guard; the writer owns
         // the predicate (check.Presence), the call site owns the grouping Block.
@@ -323,7 +324,7 @@ public sealed partial class EffectLoweringPass {
                 return;
             var inner = new List<Node>();
             foreach (var c in lengthChecks)
-                inner.Add(new IfStatement(c.Condition, new Block([Fail(c.Message)])));
+                inner.Add(new IfStatement(c.Condition, new Block([Fail(c)])));
             if (lengthGroup is not null)
                 nodes.Add(new IfStatement(lengthGroup, new Block(inner)));
             else
@@ -343,7 +344,7 @@ public sealed partial class EffectLoweringPass {
                 continue;
             }
             FlushLength();
-            nodes.Add(new IfStatement(check.GuardedCondition, new Block([Fail(check.Message)])));
+            nodes.Add(new IfStatement(check.GuardedCondition, new Block([Fail(check)])));
         }
         FlushLength();
     }

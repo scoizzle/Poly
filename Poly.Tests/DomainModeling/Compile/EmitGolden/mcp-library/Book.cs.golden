@@ -17,23 +17,23 @@ public class Book
     {
         if (string.IsNullOrEmpty(title))
         {
-            return DomainResult<Book>.Failure("'Title' is required.");
+            return DomainResult<Book>.Failure(Poly.Runtime.DomainFailure.Required("'Title' is required.", "Book.Title"));
         }
         if (string.IsNullOrEmpty(isbn))
         {
-            return DomainResult<Book>.Failure("'Isbn' is required.");
+            return DomainResult<Book>.Failure(Poly.Runtime.DomainFailure.Required("'Isbn' is required.", "Book.Isbn"));
         }
         if (copies < 0L)
         {
-            return DomainResult<Book>.Failure("'Copies' must be >= 0.");
+            return DomainResult<Book>.Failure(Poly.Runtime.DomainFailure.Range("'Copies' must be >= 0.", "Book.Copies"));
         }
         if (copies > 1000L)
         {
-            return DomainResult<Book>.Failure("'Copies' must be <= 1000.");
+            return DomainResult<Book>.Failure(Poly.Runtime.DomainFailure.Range("'Copies' must be <= 1000.", "Book.Copies"));
         }
         if (Book.ExistsWithIsbn(db, isbn))
         {
-            return DomainResult<Book>.Failure("Unique constraint violated: 'Isbn' value is already used on another 'Book'.");
+            return DomainResult<Book>.Failure(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'Isbn' value is already used on another 'Book'.", "Book.Isbn"));
         }
         var created = new Book(title, isbn, copies);
         db.Record("Book", "Isbn", isbn);

@@ -21,7 +21,8 @@ namespace Poly.DomainModeling.Queries;
 /// Identity and behavior stay out: stages, actions, policies, and subscriptions are not
 /// data shape. Navigations are included as references so the graph survives the export.
 /// Property requiredness follows the DSL rule — required unless <c>optional</c>, and a
-/// <c>default</c> makes the property omittable.
+/// <c>default</c> makes the property omittable. Definitions and their members appear in
+/// declaration order (Q12).
 /// </para>
 /// </summary>
 public static class JsonSchemaExporter {
@@ -40,21 +41,21 @@ public static class JsonSchemaExporter {
         var byName = domain.Types.ToDictionary(t => t.Name, StringComparer.Ordinal);
         var defs = new JsonObject();
 
-        foreach (var type in domain.Types
-            .OfType<DomainType>()
-            .Where(t => t is Entity or ValueType or EnumType)
-            .OrderBy(t => t.Name, StringComparer.Ordinal)) {
+        foreach (var type in DomainExportOrder.Types(domain)) {
             defs[type.Name] = type switch {
                 EnumType enumType => EnumDefinition(enumType),
                 Entity entity => ObjectDefinition(
                     entity.Name,
                     entity.Facets,
-                    entity.Properties,
-                    entity.Navigations,
+                    EntityDeclarationOrder.Members(entity),
                     byName,
                     EntityStructureAnalyzer.ComputeEntryAssignedPropertyNames(entity)),
                 ValueType valueType => ObjectDefinition(
-                    valueType.Name, valueType.Facets, valueType.Properties, [], byName, entryAssigned: null),
+                    valueType.Name,
+                    valueType.Facets,
+                    [.. valueType.Properties.Select(p => new OrderedMember(EntityMemberKind.Property, p))],
+                    byName,
+                    entryAssigned: null),
                 _ => throw new InvalidOperationException($"Unsupported domain type '{type.Name}'."),
             };
         }
@@ -87,12 +88,12 @@ public static class JsonSchemaExporter {
     }
 
     /// <summary>
-    /// The term keys for a member, in a stable order. Only members that declared a term
+    /// The term keys for a member, in declaration order. Only members that declared a term
     /// appear; JSON Schema's <c>enum</c> stays the bare member list.
     /// </summary>
     private static JsonObject? MemberTerms(EnumType type) {
         var terms = new JsonObject();
-        foreach (var member in type.MemberNames.OrderBy(m => m, StringComparer.Ordinal)) {
+        foreach (var member in type.MemberNames) {
             if (!type.MemberFacets.TryGetValue(member, out var facets))
                 continue;
             var term = TermFacets.Read(facets);
@@ -113,26 +114,33 @@ public static class JsonSchemaExporter {
     private static JsonObject ObjectDefinition(
         string name,
         IReadOnlyList<Facet> facets,
-        IReadOnlyList<Property> properties,
-        IReadOnlyList<Relationship> navigations,
+        IReadOnlyList<OrderedMember> members,
         IReadOnlyDictionary<string, DomainType> byName,
         IReadOnlySet<string>? entryAssigned) {
         var shape = new JsonObject();
         var required = new JsonArray();
 
-        foreach (var property in properties.OrderBy(p => p.Name, StringComparer.Ordinal)) {
-            shape[property.Name] = PropertySchema(property, byName);
-            if (DomainPresentation.IsRequired(property, entryAssigned))
-                required.Add(property.Name);
-        }
+        // A schema object cannot carry both shapes under one key. Analysis is expected to
+        // reject such a domain; if it did not, fail closed rather than silently drop one.
+        var propertyNames = members
+            .Where(m => m.Kind == EntityMemberKind.Property)
+            .Select(m => ((Property)m.Node).Name)
+            .ToHashSet(StringComparer.Ordinal);
 
-        foreach (var navigation in navigations.OrderBy(n => n.Name, StringComparer.Ordinal)) {
-            // A schema object cannot carry both shapes under one key. Analysis is expected to
-            // reject such a domain; if it did not, fail closed rather than silently drop one.
-            if (shape.ContainsKey(navigation.Name))
-                throw new InvalidOperationException(
-                    $"Entity '{name}' declares both a property and a navigation named '{navigation.Name}'.");
-            shape[navigation.Name] = NavigationSchema(navigation, byName);
+        foreach (var member in members) {
+            switch (member.Node) {
+                case Property property:
+                    shape[property.Name] = PropertySchema(property, byName);
+                    if (DomainPresentation.IsRequired(property, entryAssigned))
+                        required.Add(property.Name);
+                    break;
+                case Relationship navigation:
+                    if (propertyNames.Contains(navigation.Name))
+                        throw new InvalidOperationException(
+                            $"Entity '{name}' declares both a property and a navigation named '{navigation.Name}'.");
+                    shape[navigation.Name] = NavigationSchema(navigation, byName);
+                    break;
+            }
         }
 
         var definition = new JsonObject {

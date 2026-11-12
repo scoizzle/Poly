@@ -10,8 +10,19 @@ namespace Poly.Tests.Mcp;
 /// that moves to <c>PolySurfaceHarness</c> must also lower its entry. It is deleted with the v1 tools (M-13).
 /// <para>
 /// A key is (file, v1 field or class): the seven <c>McpTestTools.X</c> fields and the class names.
-/// A nested DTO such as <c>OracleTool.HtmlExportData</c> keys as <c>OracleTool</c>. Comment lines are
-/// skipped the way <c>InertStatementTests</c> skips them.
+/// A nested DTO such as <c>OracleTool.HtmlExportData</c> keys as <c>OracleTool</c>.
+/// </para>
+/// <para>
+/// The count is per reference, not per line: <c>new DslTool(..., NullLogger&lt;DslTool&gt;...)</c> counts twice.
+/// The scan is deliberately conservative. A line starting with <c>//</c>, <c>*</c> or <c>/*</c> is skipped, but a v1
+/// name in a string literal, in <c>nameof</c>, after a trailing <c>//</c>, or on an unstarred line inside a block
+/// comment IS counted. <c>McpTestTools.Store</c> and <c>SessionStore</c> are not v1 names and never match.
+/// </para>
+/// <para>
+/// <c>Owner</c> is a label and is not compared. One entry per (file, key), placed under its FIRST owner. When calls
+/// split between owners the label is <c>A+B</c> (a Q-05 slice that migrates some, then a later row that removes the
+/// rest); the Q-05 PR lowers the count and rewrites the label to the residual owner. Entries labelled <c>Q-05x+M-nn</c>
+/// live in the Q-05 block, so grep the label, not the block, to find an owner's entries.
 /// </para>
 /// </summary>
 public partial class V1ToolIndependenceTests {
@@ -24,7 +35,7 @@ public partial class V1ToolIndependenceTests {
         new("Mcp/McpSqliteHttpHarnessTests.cs", "McpTestTools.Query", 1, "M-04"),
         // M-06
         new("Mcp/OracleToolTests.cs", "McpTestTools.Oracle", 8, "M-06"),
-        // M-07 (no entries: Q-05 moved the runtime tests onto the harness)
+        // M-07: no entries; Q-05 moved the runtime tests onto the harness
         // M-09
         new("DomainModeling/Runtime/ModuleInstanceExecutorTests.cs", "RuntimeTool", 1, "M-09"),
         // M-10
@@ -40,7 +51,7 @@ public partial class V1ToolIndependenceTests {
         new("Mcp/McpSqliteHttpHarnessTests.cs", "McpTestTools.Oracle", 1, "M-10"),
         new("Mcp/ShaclToolTests.cs", "McpTestTools.Oracle", 2, "M-10"),
         new("Mcp/ShaclToolTests.cs", "OracleTool", 2, "M-10"),
-        // M-11
+        // M-11: no entries of its own; the "Q-05b+M-11" entries live in the Q-05 block
         // M-13
         new("Docs/GuideExamplesTests.cs", "McpTestTools.Dsl", 1, "M-13"),
         new("DomainModeling/Analysis/DomainSemanticLookupFailClosedTests.cs", "McpTestTools.Evolve", 33, "M-13"),
@@ -71,23 +82,25 @@ public partial class V1ToolIndependenceTests {
         new("Mcp/UnifiedRemoveTests.cs", "McpTestTools.Query", 4, "M-13"),
         new("Mcp/UniqueSurvivesRejectedEvolveTests.cs", "McpTestTools.Evolve", 4, "M-13"),
         new("Mcp/ValidateDslTests.cs", "McpTestTools.Query", 3, "M-13"),
-        // Q-05
+        // Q-05 (a "Q-05x+M-nn" label: one entry per (file, key); the Q-05x PR lowers the count and rewrites the label to M-nn)
+        // Q-05b
         new("Mcp/DomainReportToolTests.cs", "McpTestTools.Dsl", 1, "Q-05b"),
+        new("Mcp/DomainReportToolTests.cs", "McpTestTools.Query", 3, "Q-05b+M-10"),
         new("Mcp/ExportRoundTripOrderTests.cs", "McpTestTools.Dsl", 4, "Q-05b"),
         new("Mcp/ExportRoundTripOrderTests.cs", "McpTestTools.Oracle", 1, "Q-05b"),
         new("Mcp/HtmlToolTests.cs", "McpTestTools.Dsl", 1, "Q-05b"),
         new("Mcp/HtmlToolTests.cs", "McpTestTools.Query", 1, "Q-05b"),
         new("Mcp/JsonLdToolTests.cs", "McpTestTools.Dsl", 1, "Q-05b"),
         new("Mcp/JsonLdToolTests.cs", "McpTestTools.Query", 1, "Q-05b"),
+        new("Mcp/ManyToManyExportTests.cs", "McpTestTools.Dsl", 2, "Q-05b+M-13"),
         new("Mcp/McpNameRuleTests.cs", "McpTestTools.Dsl", 4, "Q-05b"),
         new("Mcp/McpNameRuleTests.cs", "McpTestTools.Session", 4, "Q-05b"),
         new("Mcp/McpPackSharedInputsTests.cs", "McpTestTools.Dsl", 2, "Q-05b"),
+        new("Mcp/PolyDefineEditTests.cs", "McpTestTools.Dsl", 4, "Q-05b+M-11"),
         new("Mcp/ShaclToolTests.cs", "McpTestTools.Dsl", 1, "Q-05b"),
         new("Mcp/ShaclToolTests.cs", "McpTestTools.Query", 1, "Q-05b"),
-        new("Mcp/DomainReportToolTests.cs", "McpTestTools.Query", 3, "Q-05b+M-10"),
-        new("Mcp/PolyDefineEditTests.cs", "McpTestTools.Dsl", 4, "Q-05b+M-11"),
         new("Mcp/ValidateDslTests.cs", "McpTestTools.Dsl", 4, "Q-05b+M-11"),
-        new("Mcp/ManyToManyExportTests.cs", "McpTestTools.Dsl", 2, "Q-05b+M-13"),
+        // Q-05c
         new("DomainModeling/Compile/CompileRefusesErrorsTests.cs", "McpTestTools.Runtime", 1, "Q-05c"),
         new("DomainModeling/Compile/LibrarySelectionTests.cs", "McpTestTools.Dsl", 2, "Q-05c"),
         new("DomainModeling/Compile/LibrarySelectionTests.cs", "McpTestTools.Oracle", 1, "Q-05c"),
@@ -97,6 +110,7 @@ public partial class V1ToolIndependenceTests {
         new("Interpretation/SkippedIfCreateInVmTests.cs", "McpTestTools.Dsl", 1, "Q-05c"),
         new("Interpretation/SkippedIfCreateInVmTests.cs", "McpTestTools.Runtime", 5, "Q-05c"),
         new("Mcp/DomainFactsTests.cs", "McpTestTools.Dsl", 3, "Q-05c"),
+        // Q-05d1
         new("Mcp/CreateInstanceCoercionTests.cs", "DomainToolResponse", 2, "Q-05d1"),
         new("Mcp/CreateInstanceCoercionTests.cs", "McpTestTools.Dsl", 4, "Q-05d1"),
         new("Mcp/CreateInstanceCoercionTests.cs", "McpTestTools.Policy", 3, "Q-05d1"),
@@ -113,6 +127,7 @@ public partial class V1ToolIndependenceTests {
         new("Mcp/SimulateCreateDogfoodTests.cs", "McpTestTools.Runtime", 9, "Q-05d1"),
         new("Mcp/SubscriptionSingleFireTests.cs", "McpTestTools.Dsl", 2, "Q-05d1"),
         new("Mcp/SubscriptionSingleFireTests.cs", "McpTestTools.Runtime", 2, "Q-05d1"),
+        // Q-05d2
         new("Mcp/CacheSessionOwnershipTests.cs", "McpTestTools.Dsl", 4, "Q-05d2"),
         new("Mcp/CacheSessionOwnershipTests.cs", "McpTestTools.Oracle", 1, "Q-05d2"),
         new("Mcp/CacheSessionOwnershipTests.cs", "McpTestTools.Runtime", 1, "Q-05d2"),
@@ -126,16 +141,19 @@ public partial class V1ToolIndependenceTests {
         new("Mcp/UniqueSurvivesExportTests.cs", "McpTestTools.Runtime", 9, "Q-05d2"),
         new("Mcp/UniqueSurvivesRejectedEvolveTests.cs", "McpTestTools.Dsl", 4, "Q-05d2"),
         new("Mcp/UniqueSurvivesRejectedEvolveTests.cs", "McpTestTools.Runtime", 8, "Q-05d2"),
+        // Q-05e
         new("Mcp/SurfaceExtensionDogfoodTests.cs", "DomainToolResponse", 2, "Q-05e"),
         new("Mcp/SurfaceExtensionDogfoodTests.cs", "McpTestTools.Dsl", 27, "Q-05e"),
+        new("Mcp/SurfaceExtensionDogfoodTests.cs", "McpTestTools.Oracle", 5, "Q-05e+M-10"),
         new("Mcp/SurfaceExtensionDogfoodTests.cs", "McpTestTools.Policy", 19, "Q-05e"),
         new("Mcp/SurfaceExtensionDogfoodTests.cs", "McpTestTools.Runtime", 37, "Q-05e"),
-        new("Mcp/SurfaceExtensionDogfoodTests.cs", "McpTestTools.Oracle", 5, "Q-05e+M-10"),
+        // Q-05f1
         new("Mcp/McpSmokeTests.cs", "DomainToolResponse", 1, "Q-05f1"),
         new("Mcp/McpSmokeTests.cs", "McpTestTools.Dsl", 107, "Q-05f1+M-13"),
         new("Mcp/McpSmokeTests.cs", "McpTestTools.Session", 2, "Q-05f1+M-13"),
-        new("Mcp/McpSmokeTests.cs", "McpTestTools.Runtime", 143, "Q-05f2"),
+        // Q-05f2
         new("Mcp/McpSmokeTests.cs", "McpTestTools.Policy", 31, "Q-05f2+M-13"),
+        new("Mcp/McpSmokeTests.cs", "McpTestTools.Runtime", 143, "Q-05f2"),
     ];
 
     [GeneratedRegex(@"\bMcpTestTools\.(?:Dsl|Query|Oracle|Runtime|Policy|Session|Evolve)\b|\b(?:DslTool|QueryTool|OracleTool|RuntimeTool|PolicyTool|SessionTool|EvolveTool|DomainTools|DomainToolResponse)\b")]
@@ -215,6 +233,10 @@ public partial class V1ToolIndependenceTests {
             "    /* DslTool */",
             "var t = typeof(PolySessionTool); var u = new DomainToolResponse(true, \"m\");",
             "reflect(typeof(RuntimeTool));",
+            "var store = new McpSessionStore(); var q = SessionStore.Foo; var r = McpTestTools.SessionStore;",
+            "var x = new DslTool(a, NullLogger<DslTool>.Instance);",
+            "var n = \"EvolveTool in a string\"; var m = nameof(PolicyTool); var t = 1; // trailing QueryTool",
+            "    unstarred block comment line mentioning SessionTool",
         ];
 
         var counts = CountReferences(lines);
@@ -224,8 +246,13 @@ public partial class V1ToolIndependenceTests {
         await Assert.That(counts["OracleTool"]).IsEqualTo(1);
         await Assert.That(counts["DomainToolResponse"]).IsEqualTo(1);
         await Assert.That(counts["RuntimeTool"]).IsEqualTo(1);
+        await Assert.That(counts["DslTool"]).IsEqualTo(2).Because("the count is per reference, not per line");
+        await Assert.That(counts["EvolveTool"]).IsEqualTo(1).Because("a string literal is counted");
+        await Assert.That(counts["PolicyTool"]).IsEqualTo(1).Because("nameof is counted");
+        await Assert.That(counts["QueryTool"]).IsEqualTo(1).Because("a trailing comment is counted");
+        await Assert.That(counts["SessionTool"]).IsEqualTo(1).Because("an unstarred block-comment line is counted");
         await Assert.That(counts.Keys.OrderBy(k => k, StringComparer.Ordinal))
-            .IsEquivalentTo(["DomainToolResponse", "McpTestTools.Dsl", "McpTestTools.Oracle", "OracleTool", "RuntimeTool"]);
+            .IsEquivalentTo(["DomainToolResponse", "DslTool", "EvolveTool", "McpTestTools.Dsl", "McpTestTools.Oracle", "OracleTool", "PolicyTool", "QueryTool", "RuntimeTool", "SessionTool"]);
     }
 
     private static Dictionary<(string File, string Key), int> Scan(params (string File, string Key, int Count)[] rows) =>

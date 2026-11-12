@@ -17,6 +17,7 @@ internal sealed record HarnessFinding(string Severity, string? Code, string Path
 /// (no synthesis); the per-diagnostic codes are in <see cref="Findings"/>. <see cref="Data"/> keeps
 /// the transport's own casing, so a test never reads it across transports.
 /// </summary>
+/// <param name="Success">The envelope's <c>ok</c>. For a simulation it only means the scenario ran: assert a step through <c>Step(i).Ok</c>.</param>
 internal sealed record HarnessResult(
     bool Success,
     string? Code,
@@ -68,17 +69,27 @@ internal sealed record HarnessResult(
     /// <summary>A simulation's per-step <c>trace</c>.</summary>
     public JsonArray? Trace => Data?["trace"] as JsonArray;
 
-    /// <summary>A simulation's trace as typed steps; empty when the response carried no trace.</summary>
-    public IReadOnlyList<HarnessStep> Steps =>
-        (Trace ?? [])
-            .Select(t => t!.AsObject())
-            .Select(t => new HarnessStep(
-                t["index"]?.GetValue<int>() ?? 0,
-                t["op"]?.GetValue<string>() ?? "",
-                t["ok"]?.GetValue<bool>() ?? false,
-                t["summary"]?.GetValue<string>() ?? "",
-                t["data"]))
-            .ToList();
+    /// <summary>
+    /// A simulation's trace as typed steps. Throws when the response carried no trace, or a trace entry
+    /// lacks <c>index</c>, <c>op</c>, <c>ok</c> or <c>summary</c>; it never returns an empty list for a missing trace.
+    /// </summary>
+    public IReadOnlyList<HarnessStep> Steps {
+        get {
+            if (Trace is null)
+                throw new InvalidOperationException(
+                    $"The response has no trace (ok={Success}, code={Code ?? "none"}): {Summary}");
+            return Trace
+                .Select(t => t!.AsObject())
+                .Select(t => new HarnessStep(
+                    Required<int>(t, "index"), Required<string>(t, "op"), Required<bool>(t, "ok"), Required<string>(t, "summary"), t["data"]))
+                .ToList();
+        }
+    }
+
+    private static T Required<T>(JsonObject entry, string name) =>
+        entry[name] is { } node
+            ? node.GetValue<T>()
+            : throw new InvalidOperationException($"A trace entry has no '{name}': {entry.ToJsonString()}");
 
     /// <summary>
     /// One trace entry. A response with no trace (WORKSPACE_REQUIRED, bad steps JSON) throws a
@@ -96,7 +107,9 @@ internal sealed record HarnessResult(
 }
 
 /// <summary>The outcome of an <c>invoke</c> step, from <c>invokeActionResult</c> or the thrown-action failure shape.</summary>
-internal sealed record InvokeOutcome(bool Succeeded, string? ErrorMessage, string? NewStage, IReadOnlyList<string> FailedGuards);
+internal sealed record InvokeOutcome(
+    bool Succeeded, string? ErrorMessage, string? NewStage, IReadOnlyList<string> FailedGuards,
+    string? ReturnTypeName = null, string? ReturnInstanceId = null);
 
 /// <summary>One entry of a simulation's <c>trace</c>: a step's <c>ok</c>, <c>summary</c> and <c>data</c>.</summary>
 internal sealed record HarnessStep(int Index, string Op, bool Ok, string Summary, JsonNode? Data) {
@@ -105,26 +118,43 @@ internal sealed record HarnessStep(int Index, string Op, bool Ok, string Summary
         Data?["instance"]?["instanceId"]?.GetValue<string>()
             ?? throw new InvalidOperationException($"Step {Index} ({Op}) has no instance id (ok={Ok}): {Summary}");
 
-    /// <summary>A rendered property value from <c>Data.instance.properties[]</c>, or null when absent.</summary>
-    public string? Property(string name) =>
-        (Data?["instance"]?["properties"] as JsonArray)?
+    /// <summary>
+    /// A rendered property value from <c>Data.instance.properties[]</c>. Throws, naming the property and the
+    /// step, when the step has no instance snapshot or the name is absent. Use <see cref="TryProperty"/> to ask.
+    /// </summary>
+    public string Property(string name) =>
+        TryProperty(name, out var value)
+            ? value!
+            : throw new InvalidOperationException(
+                $"Step {Index} ({Op}) has no property '{name}' (ok={Ok}): {Summary}");
+
+    /// <summary>The deliberate absence check: false when the step has no snapshot or no such property.</summary>
+    public bool TryProperty(string name, out string? value) {
+        value = (Data?["instance"]?["properties"] as JsonArray)?
             .FirstOrDefault(p => p?["name"]?.GetValue<string>() == name)?["value"]?.GetValue<string>();
+        return value is not null;
+    }
 
     /// <summary>
-    /// An invoke step's outcome: <c>Data.invokeActionResult</c>, or the <c>{actionName, error}</c> shape
-    /// of an action that threw, or the step's own summary when it carries no data.
+    /// An invoke step's outcome: <c>Data.invokeActionResult</c>, or the <c>{actionName, error}</c> shape of an
+    /// action that threw. Throws (step index, op, summary) for any other step, including an invoke that never
+    /// reached the module: assert those through <see cref="Ok"/> and <see cref="Summary"/>.
     /// </summary>
     public InvokeOutcome Result {
         get {
-            if (Data?["invokeActionResult"] is JsonObject result)
+            if (Op == "invoke" && Data?["invokeActionResult"] is JsonObject result)
                 return new InvokeOutcome(
-                    result["succeeded"]?.GetValue<bool>() ?? false,
+                    result["succeeded"]?.GetValue<bool>()
+                        ?? throw new InvalidOperationException($"Step {Index} (invoke): invokeActionResult has no 'succeeded'."),
                     result["errorMessage"]?.GetValue<string>(),
                     result["newStage"]?.GetValue<string>(),
-                    (result["failedGuards"] as JsonArray)?.Select(g => g!.GetValue<string>()).ToList() ?? []);
-            if (Data?["error"] is { } error)
+                    (result["failedGuards"] as JsonArray)?.Select(g => g!.GetValue<string>()).ToList() ?? [],
+                    result["returnTypeName"]?.GetValue<string>(),
+                    result["returnInstanceId"]?.GetValue<string>());
+            if (Op == "invoke" && Data?["error"] is { } error && Data["actionName"] is not null)
                 return new InvokeOutcome(false, error.GetValue<string>(), null, []);
-            return new InvokeOutcome(Ok, Ok ? null : Summary, null, []);
+            throw new InvalidOperationException(
+                $"Step {Index} ({Op}) has no invoke outcome (ok={Ok}): {Summary}");
         }
     }
 }
@@ -217,12 +247,15 @@ internal sealed class PolySurfaceHarness {
     public HarnessResult Export(string workspace, string format, bool inline = true) =>
         Decode(_surface.Export(workspace, format, inline));
 
+    /// <remarks>Assert a step through <c>Step(i).Ok</c>; <c>Success</c> only means the scenario ran, not that every step did.</remarks>
     public HarnessResult Simulate(string workspace, string steps, bool reset = false, bool stopOnError = true) =>
         Decode(_surface.Simulate(workspace, steps, reset, stopOnError));
 
+    /// <remarks>Assert a step through <c>Step(i).Ok</c>; <c>Success</c> only means the scenario ran, not that every step did.</remarks>
     public HarnessResult Simulate(string workspace, params SimStep[] steps) =>
         Simulate(workspace, steps, reset: false, stopOnError: true);
 
+    /// <remarks>Assert a step through <c>Step(i).Ok</c>; <c>Success</c> only means the scenario ran, not that every step did.</remarks>
     public HarnessResult Simulate(string workspace, SimStep[] steps, bool reset = false, bool stopOnError = true) =>
         Simulate(workspace, new JsonArray(steps.Select(step => (JsonNode?)step.Json.DeepClone()).ToArray()).ToJsonString(), reset, stopOnError);
 

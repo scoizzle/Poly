@@ -484,7 +484,13 @@ public class PolySurfaceHarnessTests {
         await Assert.That(created.Op).IsEqualTo("create");
         await Assert.That(created.Property("Qty")).IsEqualTo("3");
         await Assert.That(created.Property("Name")).IsEqualTo("Widget");
-        await Assert.That(created.Property("Missing")).IsNull();
+        var missing = Thrown(() => created.Property("Missing"));
+        await Assert.That(missing).IsNotNull();
+        await Assert.That(missing!.Message).Contains("Missing").And.Contains("create");
+        await Assert.That(created.TryProperty("Missing", out var absent)).IsFalse();
+        await Assert.That(absent).IsNull();
+        await Assert.That(created.TryProperty("Qty", out var qty)).IsTrue();
+        await Assert.That(qty).IsEqualTo("3");
     }
 
     [Test]
@@ -595,7 +601,7 @@ public class PolySurfaceHarnessTests {
     }
 
     [Test]
-    public async Task InvokeOutcome_ReadsTheThrownActionShapeAndAStepWithNoData() {
+    public async Task InvokeOutcome_ReadsBothShapes_AndAStepWithNoDataThrows() {
         var thrown = new HarnessStep(0, "invoke", false, "Action execution failed: boom",
             JsonNode.Parse("""{"actionName":"A","error":"boom"}"""));
         var noData = new HarnessStep(1, "invoke", false, "Step 1 failed: nope", null);
@@ -605,10 +611,125 @@ public class PolySurfaceHarnessTests {
         await Assert.That(thrown.Result.Succeeded).IsFalse();
         await Assert.That(thrown.Result.ErrorMessage).IsEqualTo("boom");
         await Assert.That(thrown.Result.FailedGuards).IsEmpty();
-        await Assert.That(noData.Result.Succeeded).IsFalse();
-        await Assert.That(noData.Result.ErrorMessage).IsEqualTo("Step 1 failed: nope");
+        var noDataThrown = Thrown(() => noData.Result);
+        await Assert.That(noDataThrown).IsNotNull();
+        await Assert.That(noDataThrown!.Message).Contains("Step 1").And.Contains("invoke").And.Contains("Step 1 failed: nope");
         await Assert.That(succeeded.Result.Succeeded).IsTrue();
         await Assert.That(succeeded.Result.NewStage).IsEqualTo("Active");
         await Assert.That(succeeded.Result.ErrorMessage).IsNull();
+    }
+
+    [Test]
+    public async Task Result_OfAnInvokeOnAnUnknownInstance_ThrowsInsteadOfInventingAnOutcome() {
+        var h = PolySurfaceHarness.New();
+        var ws = OpenWith(h, "NoInstance", Orders);
+
+        var step = h.Invoke(ws, "no-such-id", "Cancel");
+        var thrown = Thrown(() => step.Result);
+
+        await Assert.That(step.Ok).IsFalse();
+        await Assert.That(step.Summary).IsNotEmpty();
+        await Assert.That(thrown).IsNotNull();
+        await Assert.That(thrown!.Message).Contains("invoke").And.Contains(step.Summary);
+    }
+
+    [Test]
+    public async Task Result_OfANonInvokeStep_Throws() {
+        var h = PolySurfaceHarness.New();
+        var ws = OpenWith(h, "NonInvoke", Orders);
+        var created = h.Create(ws, "Order", """{"Memo":"m"}""");
+
+        var thrown = Thrown(() => h.Get(ws, created.InstanceId).Result);
+
+        await Assert.That(thrown).IsNotNull();
+        await Assert.That(thrown!.Message).Contains("get");
+    }
+
+    [Test]
+    public async Task Property_ComparedAcrossTwoCreates_ThrowsWhenNeitherHasIt() {
+        var h = PolySurfaceHarness.New();
+        var ws = OpenWith(h, "TwoCreates", Orders);
+        var a = h.Create(ws, "Order", """{"Memo":"m"}""");
+        var b = h.Create(ws, "Order", """{"Memo":"m"}""");
+
+        var thrown = Thrown(() => a.Property("Nope") == b.Property("Nope"));
+
+        await Assert.That(thrown).IsNotNull();
+        await Assert.That(thrown!.Message).Contains("Nope");
+    }
+
+    [Test]
+    public async Task Property_OfAFailedStepOrAStepWithNoInstance_Throws() {
+        var h = PolySurfaceHarness.New();
+        var ws = OpenWith(h, "NoProps", Orders);
+        var failed = h.Get(ws, "no-such-id");
+        var listed = h.List(ws);
+
+        await Assert.That(failed.Ok).IsFalse();
+        await Assert.That(Thrown(() => failed.Property("Memo"))).IsNotNull();
+        await Assert.That(Thrown(() => listed.Property("Memo"))).IsNotNull();
+        await Assert.That(failed.TryProperty("Memo", out _)).IsFalse();
+    }
+
+    [Test]
+    public async Task Result_OfAnActionThatReturnsAnEntity_CarriesTheReturnShape() {
+        var h = PolySurfaceHarness.New();
+        var ws = OpenWith(h, "Tickets", """
+            domain Tickets
+            Ticket: entity {
+              Memo: Text
+              Draft: stage {
+                Cancel: action -> Receipt { create Receipt { Note: "done" } }
+                Activate: action { transition to Active }
+              }
+              Active: stage { Cancel: action { transition to Closed } }
+              Closed: stage { }
+            }
+            Receipt: entity { Note: Text }
+            """);
+        var returning = h.Create(ws, "Ticket", """{"Memo":"m"}""");
+        var plain = h.Create(ws, "Ticket", """{"Memo":"m"}""");
+        await Assert.That(h.Invoke(ws, plain.InstanceId, "Activate").Ok).IsTrue();
+
+        var fromDraft = h.Invoke(ws, returning.InstanceId, "Cancel").Result;
+        var fromActive = h.Invoke(ws, plain.InstanceId, "Cancel").Result;
+
+        await Assert.That(fromDraft.Succeeded).IsTrue();
+        await Assert.That(fromDraft.ReturnTypeName).IsEqualTo("Receipt");
+        await Assert.That(fromDraft.ReturnInstanceId).IsNotNull();
+        await Assert.That(fromActive.ReturnTypeName).IsNull();
+        await Assert.That(fromActive.ReturnInstanceId).IsNull();
+        await Assert.That(fromActive.NewStage).IsEqualTo("Closed");
+    }
+
+    [Test]
+    public async Task Steps_WhenTheResponseHasNoTrace_Throws() {
+        var h = PolySurfaceHarness.New();
+
+        var thrown = Thrown(() => h.Simulate("", SimStep.List()).Steps);
+
+        await Assert.That(thrown).IsNotNull();
+        await Assert.That(thrown!.Message).Contains("WORKSPACE_REQUIRED");
+    }
+
+    [Test]
+    public async Task Steps_OfAMalformedTraceEntry_Throws() {
+        var malformed = HarnessResult.FromEnvelope(JsonNode.Parse(
+            """{"ok":true,"summary":"s","data":{"trace":[{"index":0,"op":"get","summary":"x","data":null}]}}""")!);
+
+        var thrown = Thrown(() => malformed.Steps);
+
+        await Assert.That(thrown).IsNotNull();
+        await Assert.That(thrown!.Message).Contains("ok");
+    }
+
+    private static Exception? Thrown(Func<object?> action) {
+        try {
+            _ = action();
+            return null;
+        }
+        catch (Exception ex) {
+            return ex;
+        }
     }
 }

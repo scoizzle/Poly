@@ -356,16 +356,18 @@ key-clause = "key" "(" member ("," member)* ")"
 
 An exported signature must be closed. A `public` action's parameter and result types, and a `public` value type's field types, must themselves be `public`; primitives and enum payloads are always available, and a used contract's value types are already on that contract's surface. Analysis reports **`DMCON002`** and names the internal type. The fix is to mark the type `public`, not to add an exception.
 
-**Visibility in generated C#.** Only a `public` entity, value type or action prints `public`; every unmarked one prints `internal`, so a domain with no `public` mark has no public surface and a consumer in another assembly needs the mark. Enums carry no mark and stay public, and a stage enum follows its entity. A public entity's properties, `Create` and policies stay public, and a member that would name an internal type is `internal`. An internal entity's `Create` and `Create{Nav}` are `internal` too. A stage-dispatched action is one method that is `public` if any stage variant is public; a public stage group is rejected (`DMCON002`, on the offending copy) when any of its copies returns an internal entity. The generated DbContext is `internal` when any entity is internal, and a generated DTO is `internal` when its entity or any domain type it names is. For now a public entity may not navigate to an internal entity (an interim rule: a later slice, L-22b, allows it by generating the persistence mapping for a non-public navigation): analysis reports **`DMCON019`** on the navigation, and on an entity-typed property, and the fix is to mark the target `public`.
+**Visibility in generated C#.** Only a `public` entity, value type or action prints `public`; every unmarked one prints `internal`, so a domain with no `public` mark has no public surface and a consumer in another assembly needs the mark. Enums carry no mark and stay public, and a stage enum follows its entity. A public entity's properties, `Create` and policies stay public, and a member that would name an internal type is `internal`. An internal entity's `Create` and `Create{Nav}` are `internal` too. A stage-dispatched action is one method that is `public` if any stage variant is public; a public stage group is rejected (`DMCON002`, on the offending copy) when any of its copies returns an internal entity. The generated DbContext is `internal` when any entity is internal, and a generated DTO is `internal` when its entity or any domain type it names is. A public entity may navigate to an internal entity: the navigation prints `internal` (the public surface stays closed) and the pack maps it explicitly, so the entity's JSON omits it and its nested route reads it. The `Create` and `Create{Nav}` of such an entity are `internal` too, so it is built by its host, EF and actions, not by a caller in another assembly. **`DMCON019`** is the one remaining arm: a public entity with an entity-typed property of an internal entity (reachable only through the model API) is rejected, because persistence ignores such a property.
 
-<!-- poly-verify: invalid:DMCON019 wrapper:top-default -->
+<!-- poly-verify: valid -->
 ```poly
+domain Shop
+
 Line: entity {
   Qty: Number default(1)
 }
 
 public entity Order {
-  lines: many Line   // error: Order is public, Line is internal (interim, L-22b)
+  lines: many Line   // legal: prints internal, mapped by the pack
 }
 ```
 

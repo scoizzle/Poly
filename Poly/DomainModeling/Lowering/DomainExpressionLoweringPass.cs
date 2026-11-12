@@ -227,12 +227,29 @@ public sealed partial class DomainExpressionLoweringPass : DomainExpressionDispa
 
     /// <summary>
     /// True when a bare name must stay an instance read instead of becoming an enum
-    /// member: it is a property the property-type resolver knows, a property in the
-    /// enum map, or an action parameter (parameters win in
-    /// <see cref="PropertyAccess"/>).
+    /// member: an action parameter of the action being lowered (parameters win in
+    /// <see cref="PropertyAccess"/>), a property in the subject's enum map, or a
+    /// property of the source entity. Deliberately not
+    /// <see cref="LoweringContext.PropertyTypeResolver"/>: that resolver merges in the
+    /// parameters of every action on the entity, so a member named like ANOTHER
+    /// action's parameter would stop qualifying (B1).
     /// </summary>
     private bool Shadows(string name) =>
         _actionParameterNames?.Contains(name) == true
         || _context.EnumPropertyNames?.ContainsKey(name) == true
-        || _propertyTypeResolver?.Invoke(name) is not null;
+        || SourceEntityHasProperty(name);
+
+    /// <summary>
+    /// A property of the entity whose members the subject exposes
+    /// (<see cref="LoweringContext.SourceEntityName"/>), resolved the way
+    /// <see cref="ResolveRelationshipTarget"/> resolves its source. No domain-wide scan.
+    /// </summary>
+    private bool SourceEntityHasProperty(string name) {
+        if (_context.SourceEntityName is null)
+            return false;
+        var source = _domain.Types.OfType<Entity>().FirstOrDefault(e =>
+            string.Equals(e.Name, _context.SourceEntityName, StringComparison.Ordinal));
+        return source?.Properties.Any(p =>
+            string.Equals(p.Name, name, StringComparison.Ordinal)) == true;
+    }
 }

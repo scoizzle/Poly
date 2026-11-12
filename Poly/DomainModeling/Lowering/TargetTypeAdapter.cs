@@ -50,6 +50,9 @@ internal static class TargetTypeAdapter {
     /// enum's first member, a Decimal zero, a scalar's CLR zero, a mapped default
     /// member, or a typed null for an entity reference. The adapter invents no value
     /// for a slot without <c>default(...)</c> — only this supplies one.
+    ///
+    /// <para>Transitional: L-08 owns the final required/NotCreatable rule for an
+    /// omitted slot; this never decides requiredness.</para>
     /// </summary>
     internal static Node TypeDefault(DomainTypeReference target, LoweringContext ctx) {
         if (DomainToCSharpExporter.TryResolveEnumType(ctx.Domain, ctx.Analysis, target.TypeName, out var enumType)

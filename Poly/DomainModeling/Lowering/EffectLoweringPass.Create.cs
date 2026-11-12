@@ -230,10 +230,6 @@ public sealed partial class EffectLoweringPass {
     }
 
     /// <summary>
-    /// An initializer value lowers straight into the property's type through the one
-    /// target-type adapter. With no matching property the value lowers normally.
-    /// </summary>
-    /// <summary>
     /// The typed null an omitted scalar slot passes — the same shape the navigation
     /// hole uses, mapped through the property's CLR type so a kept hole resolves
     /// against the factory parameter (#495, D4).
@@ -257,6 +253,10 @@ public sealed partial class EffectLoweringPass {
         && enumType is not null
         && enumType.MemberNames.Contains(member.Name, StringComparer.Ordinal);
 
+    /// <summary>
+    /// An initializer value lowers straight into the property's type through the one
+    /// target-type adapter. With no matching property the value lowers normally.
+    /// </summary>
     private LoweredExpression LowerInitializerValue(
         Entity target, string name, DomainExpression expr) {
         var prop = target.Properties.FirstOrDefault(p =>

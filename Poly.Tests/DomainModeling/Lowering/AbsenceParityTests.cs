@@ -233,6 +233,30 @@ public class AbsenceParityTests {
     }
 
     [Test]
+    public async Task Assign_WhenOtherActionParameterNamedLikeEnumMember_StillQualifiesMember() {
+        // B1: the shadow guard must be scoped to the action being lowered. A bare enum
+        // member named like a parameter of ANOTHER action still qualifies.
+        var outcomes = await ParityScenario.FromDsl("""
+            domain Shop
+            PatronStatus: enum { Active, Suspended }
+            Patron: entity {
+              Status: PatronStatus default(Active)
+              Note: Text optional
+              Hold: action (Suspended: Text) { assign Note to Suspended }
+              Suspend: action { assign Status to Suspended }
+            }
+            """, "ParityOtherActionParameterShadows")
+            .AssertAgree(side => {
+                side.Create("Patron");
+                side.Invoke("Suspend");
+            });
+
+        await Assert.That(outcomes[1].Success).IsTrue()
+            .Because($"step failed: {outcomes[1].ExceptionType} {outcomes[1].Message}");
+        await Assert.That(outcomes[1].State["Status"]).IsEqualTo("Suspended");
+    }
+
+    [Test]
     public async Task CreateIn_WhenBareNameIsAlsoAProperty_StaysInstanceRead() {
         // Guard: a bare initializer value that is a property of the creating entity
         // reads that property, it is not a member of the target enum.
@@ -322,12 +346,108 @@ public class AbsenceParityTests {
         await Assert.That(outcomes[2].State["CurrentLoad"]).IsEqualTo("0");
     }
 
+    [Test]
+    public async Task CreateIn_WhenOptionalScalarHolesBeforeWrittenSlot_Agree() {
+        // #495 for value types: two optional scalars sort before the written slot, so
+        // both holes are kept and must carry their own type.
+        var outcomes = await ParityScenario.FromDsl("""
+            domain Ledger
+            Tally: entity {
+              N: Number optional
+              D: Decimal optional
+              V: Text
+            }
+            Acct: entity {
+              Name: Text
+              tallies: many Tally
+              Add: action { create in tallies { V: "x" } }
+            }
+            """, "ParityOptionalScalarHoles")
+            .AssertAgree(side => {
+                side.Create("Acct", ("Name", "Ada"));
+                side.Invoke("Add");
+                if (side.Outcomes[^1].Success)
+                    side.UseLinked("tallies");
+            });
+
+        await Assert.That(outcomes[1].Success).IsTrue()
+            .Because($"step failed: {outcomes[1].ExceptionType} {outcomes[1].Message}");
+        await Assert.That(outcomes[2].State["V"]).IsEqualTo("x");
+        await Assert.That(outcomes[2].State["N"]).IsNull();
+        await Assert.That(outcomes[2].State["D"]).IsNull();
+    }
+
+    [Test]
+    public async Task CreateIn_WhenDecimalInitializerZero_Agrees() {
+        // E8 green control: dropping the initializer Decimal arm leaves a written 0 as
+        // 0L, which the VM and the printed Decimal both store as zero.
+        var outcomes = await ParityScenario.FromDsl("""
+            domain Payroll
+            Employee: entity {
+              Name: Text
+              Salary: Decimal range(0, 1000000)
+            }
+            Dept: entity {
+              Name: Text
+              staff: many Employee
+              Hire: action { create in staff { Name: "Ada" Salary: 0 } }
+            }
+            """, "ParityDecimalInitializerZero")
+            .AssertAgree(side => {
+                side.Create("Dept", ("Name", "R&D"));
+                side.Invoke("Hire");
+                if (side.Outcomes[^1].Success)
+                    side.UseLinked("staff");
+            });
+
+        await Assert.That(outcomes[1].Success).IsTrue()
+            .Because($"step failed: {outcomes[1].ExceptionType} {outcomes[1].Message}");
+        await Assert.That(outcomes[2].State["Salary"]).IsEqualTo("0");
+    }
+
+    [Test]
+    public async Task Adapt_WhenStringNamesEnumMember_QualifiesMember() {
+        // The #683 Node-form contract: an already-lowered string constant naming a member.
+        var (domain, analysis) = EvolvedDomain.FromDsl("""
+            domain Shop
+            Tier: enum { Gold, Std }
+            Order: entity { Tier: Tier default(Std) }
+            """);
+        var context = new LoweringContext(new SN.ThisReference(), analysis, domain);
+        var target = domain.Types.OfType<Entity>().Single(e => e.Name == "Order")
+            .Properties.Single(p => p.Name == "Tier").Type;
+
+        var adapted = TargetTypeAdapter.Adapt(new SN.Constant("Gold"), target, context);
+
+        await Assert.That(adapted).IsTypeOf<SN.Member>();
+        await Assert.That(((SN.Member)adapted).MemberName).IsEqualTo("Gold");
+        await Assert.That(((SN.NamedTypeReference)((SN.Member)adapted).Value).TypeName)
+            .IsEqualTo("Tier");
+    }
+
+    [Test]
+    public async Task Adapt_WhenIntegralConstantForDecimalTarget_MakesDecimal() {
+        var (domain, analysis) = EvolvedDomain.FromDsl("""
+            domain Pay
+            Employee: entity { Salary: Decimal range(0, 1000000) }
+            """);
+        var context = new LoweringContext(new SN.ThisReference(), analysis, domain);
+        var target = domain.Types.OfType<Entity>().Single(e => e.Name == "Employee")
+            .Properties.Single(p => p.Name == "Salary").Type;
+
+        var adapted = TargetTypeAdapter.Adapt(new SN.Constant(0L), target, context);
+
+        await Assert.That(adapted).IsTypeOf<SN.Constant>();
+        await Assert.That(((SN.Constant)adapted).Value).IsEqualTo(0m);
+    }
+
     /// <summary>
     /// Pin: a function body names only its parameters (DMFUN005), so the nested pass
     /// keeps an empty enum-property map. An empty map means "no enum properties are
     /// known here" — a lookup miss, not a second mode — and the comparison stays text
-    /// (<c>Calls.cs</c>). L-23 owns the C#-typed function body; this row keeps the
-    /// current shape from drifting when the adapter takes over comparisons.
+    /// (<c>Calls.cs</c>). L-23 owns the C#-typed function body and flips this row when
+    /// it lands; until then it keeps the current shape from drifting as the adapter
+    /// takes over comparisons.
     /// </summary>
     [Test]
     public async Task FunctionBody_WhenEnumComparison_StillLowersAsText() {

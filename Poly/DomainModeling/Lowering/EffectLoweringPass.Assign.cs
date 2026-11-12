@@ -38,9 +38,6 @@ public sealed partial class EffectLoweringPass {
         // Item 6: assign-time required/range/length/pattern/enum (+ unique) in the
         // same Lower tree as simulate + C# print. Evaluate RHS once, fail-before-
         // mutate, then assign (EnsureUnique when unique).
-        // Assign-time required/range/length/pattern/enum (+ unique) in the
-        // same Lower tree as simulate + C# print. Evaluate RHS once, fail-before-
-        // mutate, then assign (EnsureUnique when unique).
         var uniqueName = assignProp is not null && IsUniqueProperty(assignProp.Name)
             ? assignProp.Name
             : null;

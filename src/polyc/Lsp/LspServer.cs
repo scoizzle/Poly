@@ -22,9 +22,9 @@ public sealed class LspServer {
 
     private sealed record Document(string Text, int Version);
 
-    public LspServer(Stream input, Stream output, string seed = "authoring", TextWriter? stderr = null) {
+    public LspServer(Stream input, Stream output, string? seed = null, TextWriter? stderr = null) {
         _transport = new LspTransport(input, output);
-        _compiler = new PolyCompiler(ProductCatalog.Catalog, seed);
+        _compiler = Options.CreateCompiler(seed);
         _stderr = stderr ?? Console.Error;
     }
 

@@ -365,7 +365,7 @@ internal static class GuideBlocks {
 
     /// <summary>Compiles text through the <c>poly_define</c> path. One instance per call: a compile evolves.</summary>
     public static CompileResult Analyze(string text) =>
-        new PolyCompiler(ProductCatalog.Model, ExtensionCatalog.ProductAuthoring,
+        new PolyCompiler(ProductCatalog.Model, ProductCatalog.ImplicitIds,
                 new CompileHooks { DefaultDomainName = "Imported" })
             .Analyze(text, "<workspace>");
 

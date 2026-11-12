@@ -45,8 +45,7 @@ public sealed class PolyCompiler {
     private const string VmReportType = "vm-analysis-report";
     private const string CatalogReportType = "catalog-reference-report";
 
-    private readonly ExtensionCatalog _catalog;
-    private readonly IReadOnlyList<string> _seed;
+    private readonly SessionOptions _options;
     private readonly CompileHooks? _hooks;
     private readonly object _gate = new();
     private string? _sessionKey;
@@ -56,8 +55,9 @@ public sealed class PolyCompiler {
         : this(catalog, ExtensionCatalog.Seed(seed), hooks) { }
 
     public PolyCompiler(ExtensionCatalog catalog, IReadOnlyList<string> seedIds, CompileHooks? hooks = null) {
-        _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
-        _seed = seedIds ?? throw new ArgumentNullException(nameof(seedIds));
+        ArgumentNullException.ThrowIfNull(seedIds);
+        _options = new SessionOptions(
+            catalog ?? throw new ArgumentNullException(nameof(catalog)), seedIds) { Authoring = true };
         _hooks = hooks;
     }
 
@@ -133,7 +133,7 @@ public sealed class PolyCompiler {
         if (tree.Name.Length > 0)
             domainName = tree.Name;
 
-        var requested = tree.Uses.Count > 0 ? tree.Uses : _seed;
+        var requested = tree.Uses.Count > 0 ? tree.Uses : _options.ImplicitIds;
         var sessionIds = _hooks?.SessionExtensions?.Invoke(requested) ?? requested;
         if (!CheckExtensions(build, tree, sessionIds, diags))
             return Fail();
@@ -143,7 +143,8 @@ public sealed class PolyCompiler {
         try {
             session = SessionFor(tree, sessionIds, target);
             cancel.ThrowIfCancellationRequested();
-            changes = DomainCompilation.WithSeed(DomainCompilation.Resolve(tree, session), _seed, session).ToList();
+            changes = DomainCompilation.WithSeed(
+                DomainCompilation.Resolve(tree, session), _options.ImplicitIds, session).ToList();
             if (_hooks?.DomainExtensions is { } rewrite)
                 changes = RewriteExtensions(changes, rewrite);
         }
@@ -269,8 +270,8 @@ public sealed class PolyCompiler {
             && string.Equals(tree.Uses[index], id, StringComparison.Ordinal)
                 ? tree.UsesVersions[index]
                 : null).ToList();
-        var session = DomainSession.ForAuthoringDocument(
-            tree with { Uses = ids, UsesVersions = versions }, _seed, _catalog).WithTarget(target);
+        var session = LibrarySelection.Load(tree with { Uses = ids, UsesVersions = versions }, _options)
+            .WithTarget(target);
         _session = session;
         _sessionKey = key;
         return session;
@@ -287,7 +288,7 @@ public sealed class PolyCompiler {
                 ok = false;
                 continue;
             }
-            if (!_catalog.Contains(id)) {
+            if (!_options.Catalog.Contains(id)) {
                 diags.Add(ExtensionDiagnostic(build, tree, id, occurrence: 1, Severities.Error,
                     DiagnosticCodes.UnknownExtension,
                     $"Unknown domain extension '{id}'. Record only ids this catalog can resolve."));

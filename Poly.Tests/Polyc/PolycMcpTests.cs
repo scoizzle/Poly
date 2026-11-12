@@ -27,7 +27,7 @@ public class PolycMcpTests {
     [Test]
     public async Task PolyDefine_FindingsUseTheCodesPolycCheckReports() {
         var text = PolycTestSupport.ManyErrors(3);
-        var check = new PolyCompiler(ProductCatalog.Catalog, "authoring").Compile(text, "<input>");
+        var check = new PolyCompiler(ProductCatalog.Catalog, ProductCatalog.ImplicitIds).Compile(text, "<input>");
         var expected = check.Diagnostics.Where(d => d.IsError).Select(d => d.Code).Distinct().Order(StringComparer.Ordinal).ToArray();
         await Assert.That(expected.Length).IsGreaterThan(0);
 
@@ -57,7 +57,7 @@ public class PolycMcpTests {
     }
 
     private static async Task AssertMatchesCheck(McpClient host, string workspace, string text) {
-        var check = new PolyCompiler(ProductCatalog.Model, "authoring").Compile(text, "<workspace>");
+        var check = new PolyCompiler(ProductCatalog.Model, ProductCatalog.ImplicitIds).Compile(text, "<workspace>");
         var expected = check.Diagnostics.Single(d => d.IsError);
         var define = await host.ToolAsync("poly_define", new JsonObject { ["workspace"] = workspace, ["poly"] = text, ["apply"] = false });
         var finding = define["findings"]!.AsArray().Single(f =>

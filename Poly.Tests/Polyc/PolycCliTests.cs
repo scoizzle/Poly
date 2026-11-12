@@ -186,6 +186,45 @@ public class PolycCliTests {
         await Assert.That(Run(["check", "--target", " "]).Err).Contains("--target needs a value");
     }
 
+    /// <summary>
+    /// C-03 R1: a document that lists no <c>uses</c> loads the implicit set
+    /// <c>[storage, persistence]</c>, so <c>unique</c> is the storage-port guard in the
+    /// module's own body and the wired catalog writes the DbContext.
+    /// </summary>
+    [Test]
+    public async Task Build_NoUsesUniqueProperty_EmitsTheStoragePortGuard() {
+        var dir = PolycTestSupport.TempDir();
+        var path = Write(dir, "orders.poly", PolycTestSupport.Orders);
+        var outDir = Path.Combine(dir, "out");
+        var (exit, _, _) = Run(["build", path, "--out", outDir]);
+        await Assert.That(exit).IsEqualTo(0);
+
+        var order = File.ReadAllText(Path.Combine(outDir, "Orders", "Order.cs"));
+        await Assert.That(order).Contains("ExistsWithNumber");
+        await Assert.That(order).Contains("Unique constraint violated");
+        await Assert.That(File.Exists(Path.Combine(outDir, "Orders", "OrdersDbContext.cs"))).IsTrue();
+    }
+
+    /// <summary>
+    /// FX1 pin: <c>--seed authoring</c> seeds <c>[storage]</c> only; omitting <c>--seed</c>
+    /// gives the implicit set, which carries <c>persistence</c> and so writes the DbContext.
+    /// </summary>
+    [Test]
+    public async Task Build_ExplicitSeedAuthoring_SeedsStorageOnly() {
+        var dir = PolycTestSupport.TempDir();
+        var path = Write(dir, "orders.poly", PolycTestSupport.Orders);
+
+        var explicitOut = Path.Combine(dir, "explicit");
+        var (explicitExit, _, _) = Run(["build", path, "--out", explicitOut, "--seed", "authoring"]);
+        await Assert.That(explicitExit).IsEqualTo(0);
+        await Assert.That(File.Exists(Path.Combine(explicitOut, "Orders", "OrdersDbContext.cs"))).IsFalse();
+
+        var implicitOut = Path.Combine(dir, "implicit");
+        var (implicitExit, _, _) = Run(["build", path, "--out", implicitOut]);
+        await Assert.That(implicitExit).IsEqualTo(0);
+        await Assert.That(File.Exists(Path.Combine(implicitOut, "Orders", "OrdersDbContext.cs"))).IsTrue();
+    }
+
     [Test]
     public async Task Check_UnknownUses_ReportsDsl0002() {
         var dir = PolycTestSupport.TempDir();

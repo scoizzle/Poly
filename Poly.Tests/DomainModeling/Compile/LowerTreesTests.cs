@@ -187,7 +187,8 @@ public sealed class LowerTreesTests {
 
     [Test]
     public async Task Analyze_EntityNamedLikeAnotherEntitysStageEnum_IsRefused() {
-        // N4: Analyze rejects `{E}Stage` when E has stages before Lower can run.
+        // N4: Analyze rejects `{E}Stage` when E generates the stage enum before Lower can run.
+        // Two stages, because a single bare stage is implicit and emits no enum (HasStages).
         var ex = Assert.Throws<InvalidOperationException>(() =>
             SliceCProducerLoopCatalogTests.Evolve("""
                 domain Clash
@@ -195,6 +196,7 @@ public sealed class LowerTreesTests {
                 Permit: entity {
                   Plate: Text
                   Open: stage { }
+                  Closed: stage { }
                 }
 
                 PermitStage: entity {

@@ -10,6 +10,7 @@ namespace Poly.DomainModeling.Analysis;
 internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
     public const string Id = "DomainStructuralDomainAnalyzer";
     public string PassName => Id;
+
     public void Analyze(AnalysisContext context, Node node) {
         switch (node) {
             case Domain domain:
@@ -72,6 +73,12 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
         // Emit/RegisterTrees puts each entity with its `{Entity}Stage` enum in one tree
         // and DomainResult in the scaffolding tree; a user type of that name compiles as CS0101.
         ReportReservedGeneratedNames(context, domain);
+
+        // S-01: one generated C# namespace per entity — cross-list names, one identifier,
+        // reservations. Runs at the domain node because the stage rows depend on the
+        // domain-wide implicit-stage test.
+        foreach (var entity in domain.Types.OfType<Entity>())
+            ReportMemberScopes(context, entity, domain);
 
         ReportStoredValueTypeProperties(context, domain);
 
@@ -250,9 +257,10 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
 
     /// <summary>
     /// N4 + S-01: names lowering emits at module scope must not be user types. The rows come
-    /// from <see cref="ReservedNames"/> — <c>DomainResult</c>, <c>ConstraintFailureException</c>
-    /// (scaffolding types) and <c>System</c> (the imported namespace) — plus
-    /// <c>{Entity}Stage</c> for every entity that has stages. Emit splits by entity tree, so the
+    /// from <see cref="ReservedNames"/> — <c>DomainResult</c>, <c>DomainResult&lt;T&gt;</c>,
+    /// <c>ConstraintFailureException</c> (scaffolding types) and <c>System</c> (the imported
+    /// namespace) — plus <c>{Entity}Stage</c> for every entity whose stage enum the emitter
+    /// actually generates (not an implicit single stage). Emit splits by entity tree, so the
     /// collision is a duplicate top-level C# type name (CS0101).
     /// </summary>
     private static void ReportReservedGeneratedNames(AnalysisContext context, Domain domain) {
@@ -270,7 +278,7 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
         }
 
         foreach (var entity in domain.Types.OfType<Entity>()) {
-            if (entity.Stages.Count == 0)
+            if (!ReservedNames.HasStages(entity, domain))
                 continue;
             var stageEnumName = $"{entity.Name}Stage";
             foreach (var type in domain.Types) {
@@ -301,7 +309,7 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
     /// and an identity the exporter already generates (<see cref="DomainModelDiagnosticCodes.ReservedMemberName"/>).
     /// One node reports once per pass, in that priority order.
     /// </summary>
-    private static void ReportMemberScopes(AnalysisContext context, Entity entity) {
+    private static void ReportMemberScopes(AnalysisContext context, Entity entity, Domain domain) {
         var scope = NameScopes.ForEntity(entity);
         if (scope.Count == 0)
             return;
@@ -313,11 +321,19 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
         foreach (var group in scope.GroupBy(static entry => entry.Name, StringComparer.Ordinal)) {
             if (group.Select(static entry => entry.Kind).Distinct().Count() < 2)
                 continue;
-            if (group.Any(static entry => entry.Kind == MemberKind.Policy)
-                && group.Any(static entry => entry.Kind == MemberKind.Action))
-                continue;
+            var hasAction = group.Any(static entry => entry.Kind == MemberKind.Action);
+            var firstPolicy = group.FirstOrDefault(static entry => entry.Kind == MemberKind.Policy);
             var first = group.First();
             foreach (var entry in group.Skip(1)) {
+                // Same-list duplicates are DMSTR001 from ReportDuplicateNames: one error per node.
+                if (entry.Kind == first.Kind)
+                    continue;
+                // Action↔policy and policy↔policy are legacy-owned by ReportPolicyNameClashes,
+                // which reports the policy node. Scope the carve-out to that entry so a
+                // property↔action pair in the same group is still attributed.
+                if (entry.Kind == MemberKind.Policy
+                    && (hasAction || !ReferenceEquals(entry, firstPolicy)))
+                    continue;
                 if (AlreadyReported(entry.Node))
                     continue;
                 reported.Add(entry.Node);
@@ -341,7 +357,7 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
         foreach (var entry in scope) {
             if (AlreadyReported(entry.Node))
                 continue;
-            if (!ReservedNames.TryReserved(entry.MemberIdentity, entity, out var row))
+            if (!ReservedNames.TryReserved(entry.MemberIdentity, entity, domain, out var row))
                 continue;
             reported.Add(entry.Node);
             context.ReportError(
@@ -394,9 +410,6 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
         // Same-name actions across stages are supported (resolved by current stage) —
         // do not reject. Policy names are one flat method namespace on the entity.
         ReportPolicyNameClashes(context, entity);
-
-        // S-01: one generated C# namespace per entity — cross-list names, one identifier, reservations.
-        ReportMemberScopes(context, entity);
     }
 
     /// <summary>

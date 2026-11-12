@@ -246,13 +246,14 @@ public sealed class NameScopeTests {
     }
 
     [Test]
-    public async Task ReservedModuleRows_AreExactlyTheScaffoldingTypes() {
+    public async Task ReservedModuleRows_IncludeTheScaffoldingTypes() {
+        // Presence, not an exact list: other slices append module rows by PR.
         var moduleRows = ReservedNames.All
             .Where(r => r.Kind is ReservedKind.GeneratedType or ReservedKind.Namespace)
             .Select(r => r.Name)
-            .ToList();
-        await Assert.That(string.Join(",", moduleRows))
-            .IsEqualTo("DomainResult,ConstraintFailureException,System");
+            .ToHashSet(StringComparer.Ordinal);
+        foreach (var expected in new[] { "DomainResult", "ConstraintFailureException", "System" })
+            await Assert.That(moduleRows.Contains(expected)).IsTrue();
 
         // {Entity}Stage is generated per entity, so it is not a fixed row.
         var evolved = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(
@@ -265,7 +266,7 @@ public sealed class NameScopeTests {
                 """).Parse());
         await Assert.That(evolved.Succeeded).IsTrue();
         var order = evolved.Root!.Types.OfType<Entity>().First(e => e.Name == "Order");
-        var stageRow = ReservedNames.ForEntity(order)
+        var stageRow = ReservedNames.ForEntity(order, evolved.Root)
             .FirstOrDefault(r => r.Name == "OrderStage" && r.Kind == ReservedKind.GeneratedType);
         await Assert.That(stageRow).IsNotNull();
     }
@@ -329,7 +330,7 @@ public sealed class NameScopeTests {
             "EnterNotifyCascade",
             "ExitNotifyCascade",
         };
-        var reserved = ReservedNames.ForEntity(group).Select(r => r.Name).ToHashSet(StringComparer.Ordinal);
+        var reserved = ReservedNames.ForEntity(group, domain).Select(r => r.Name).ToHashSet(StringComparer.Ordinal);
 
         var emitted = new List<string>();
         emitted.AddRange(typeDef.Properties?.Select(p => p.Name) ?? Enumerable.Empty<string>());
@@ -365,5 +366,220 @@ public sealed class NameScopeTests {
         await Assert.That(string.Join(",", reserved.Select(NodeName).OrderBy(n => n, StringComparer.Ordinal)))
             .IsEqualTo("Create,customer");
         await Assert.That(AllErrors(analysis).Count).IsEqualTo(2);
+    }
+
+    // ── Fix round 1: probe-proven false positives and negatives ──────────────
+
+    private static Domain ParseDomain(string dsl) {
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(
+            new PolyDslParser(dsl).Parse());
+        return result.Root!;
+    }
+
+    [Test]
+    public async Task PropertyNamedCurrentStage_OnImplicitSingleStageEntity_IsNotRejected() {
+        // Probe (a): one stage with no effects/policies/transitions emits no stage enum and no
+        // CurrentStage (EntityStructureAnalyzer.IsImplicitStage), so the property is free.
+        var analysis = Analyze("""
+            domain Scope
+            A: entity {
+              CurrentStage: Text
+              Only: stage { }
+            }
+            """);
+
+        await Assert.That(AllErrors(analysis).Count).IsEqualTo(0);
+
+        var domain = ParseDomain("""
+            domain Scope
+            A: entity {
+              CurrentStage: Text
+              Only: stage { }
+            }
+            """);
+        var entity = domain.Types.OfType<Entity>().First(e => e.Name == "A");
+        var rows = ReservedNames.ForEntity(entity, domain).Select(r => r.Name).ToList();
+        await Assert.That(rows.Contains("CurrentStage")).IsFalse();
+        await Assert.That(rows.Contains("AStage")).IsFalse();
+    }
+
+    [Test]
+    public async Task PropertyNamedCurrentStage_OnMultiStageEntity_IsRejected() {
+        // Probe (g), the control: a generated stage enum makes the property CS0102.
+        var analysis = Analyze("""
+            domain Scope
+            A: entity {
+              CurrentStage: Text
+              One: stage { }
+              Two: stage { }
+            }
+            """);
+
+        var errors = Errors(analysis, DomainModelDiagnosticCodes.ReservedMemberName);
+        await Assert.That(errors.Count).IsEqualTo(1);
+        await Assert.That(NodeName(errors[0])).IsEqualTo("CurrentStage");
+    }
+
+    [Test]
+    public async Task PropertyNamedSystem_IsNotRejected() {
+        // Probe (b): a member named System compiles; the namespace row is module scope only.
+        var analysis = Analyze("""
+            domain Scope
+            A: entity {
+              System: Text
+            }
+            """);
+
+        await Assert.That(AllErrors(analysis).Count).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task PropertyNamedConstraintFailureException_IsNotRejected() {
+        // Probe (c2): `new ConstraintFailureException(...)` in a void action body still binds
+        // to the scaffolding type when a property carries the name.
+        var analysis = Analyze("""
+            domain Scope
+            A: entity {
+              ConstraintFailureException: Text
+              N: Text
+              Bs: many B
+              Add: action (n: Text) {
+                create in Bs { N: n }
+              }
+            }
+            B: entity { N: Text }
+            """);
+
+        await Assert.That(Errors(analysis, DomainModelDiagnosticCodes.ReservedMemberName).Count).IsEqualTo(0);
+        await Assert.That(AllErrors(analysis).Count).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task PropertyNamedDomainResult_IsNotRejected() {
+        // Probe (d): the generated scaffolding type is referenced as `DomainResult.X` at type
+        // scope, which a property of that name does not shadow.
+        var analysis = Analyze("""
+            domain Scope
+            A: entity {
+              DomainResult: Text
+              Make: action -> B {
+                create B { N: "x" }
+              }
+            }
+            B: entity { N: Text }
+            """);
+
+        await Assert.That(Errors(analysis, DomainModelDiagnosticCodes.ReservedMemberName).Count).IsEqualTo(0);
+        await Assert.That(AllErrors(analysis).Count).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task PropertyNamedLikeCollectionNavField_IsRejected() {
+        // Probe (e): the property `_items` and the collection nav `items` both emit `_items`
+        // (Relationships.cs:149) — CS0102, and no rule reported it before this fix.
+        var analysis = Analyze("""
+            domain Scope
+            A: entity {
+              _items: Text
+              items: many B
+            }
+            B: entity { N: Text }
+            """);
+
+        var errors = Errors(analysis, DomainModelDiagnosticCodes.ReservedMemberName);
+        await Assert.That(errors.Count).IsEqualTo(1);
+        await Assert.That(NodeName(errors[0])).IsEqualTo("_items");
+        await Assert.That(errors[0].Message).Contains("_items");
+    }
+
+    [Test]
+    public async Task PropertyCreateAndActionCreate_OneReportPerNode() {
+        // One node reports once per pass, priority DMSTR001 → DMSTR008 → DMSTR009: the action
+        // is reported by the cross-list pass and must not also take the reserved row.
+        // (The plan's duplicate-property fixture is unreachable: the parser rejects a nav named
+        // like a property, and a duplicate property key throws in ExpressionTypeAnalyzer, so
+        // the same-kind skip is defensive.)
+        var analysis = Analyze("""
+            domain Scope
+            A: entity {
+              Create: Text
+              Create: action { }
+            }
+            """);
+
+        var duplicate = Errors(analysis, DomainModelDiagnosticCodes.StructuralDuplicate);
+        var reserved = Errors(analysis, DomainModelDiagnosticCodes.ReservedMemberName);
+        await Assert.That(duplicate.Count).IsEqualTo(1);
+        await Assert.That(reserved.Count).IsEqualTo(1);
+        await Assert.That(duplicate[0].Node is Poly.DomainModeling.Ontology.Action).IsTrue();
+        await Assert.That(reserved[0].Node is Property).IsTrue();
+        await Assert.That(AllErrors(analysis).Count).IsEqualTo(2);
+    }
+
+    [Test]
+    public async Task PropertyActionAndPolicySameName_PropertyActionPairStillReported() {
+        // The action↔policy carve-out is per-entry: the property↔action pair stays attributed.
+        var analysis = Analyze("""
+            domain Scope
+            A: entity {
+              X: Text
+              X: action { }
+              X: policy { X is "a" }
+            }
+            """);
+
+        var errors = Errors(analysis, DomainModelDiagnosticCodes.StructuralDuplicate);
+        await Assert.That(errors.Count).IsEqualTo(2);
+        await Assert.That(errors.Count(d => d.Node is Poly.DomainModeling.Ontology.Action)).IsEqualTo(1);
+        await Assert.That(errors.Count(d => d.Node is Policy)).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task EmitterParity_EveryMemberReservedRow_IsEmitted() {
+        // The converse of EmitterParity_EntityMembers_AreReservedOrGap: a member-scope row
+        // that applies to this fixture must name a member the emitter actually writes, so a
+        // stale or over-broad row fails here.
+        var evolved = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(
+            new PolyDslParser("""
+                domain Parity
+                Item: entity {
+                  Code: Text
+                }
+                Group: entity {
+                  Code: Text unique
+                  Label: Text
+                  items: many Item
+                  owner: Owner
+                  Add: action (code: Text) {
+                    create in items { Code: code }
+                  }
+                  Draft: stage { }
+                  Live: stage { entry { transition to Closed } }
+                  Closed: stage { }
+                }
+                Owner: entity {
+                  Label: Text
+                  groups: many Group
+                }
+                """).Parse());
+        await Assert.That(evolved.Succeeded).IsTrue();
+        var domain = evolved.Root!;
+        var analysis = DomainModelAnalyzer.Analyze(domain);
+        await Assert.That(AllErrors(analysis).Count).IsEqualTo(0);
+
+        var group = domain.Types.OfType<Entity>().First(e => e.Name == "Group");
+        var typeDef = DomainProgramProjection.ToSyntax(domain, analysis).First(t => t.Name == "Group");
+        var emitted = new HashSet<string>(StringComparer.Ordinal);
+        emitted.UnionWith(typeDef.Properties?.Select(p => p.Name) ?? []);
+        emitted.UnionWith(typeDef.Methods?.Select(m => m.Name) ?? []);
+        emitted.UnionWith(typeDef.Fields?.Select(f => f.Name) ?? []);
+
+        var memberRows = ReservedNames.ForEntity(group, domain)
+            .Where(static row => row.Kind == ReservedKind.GeneratedMember)
+            .Select(static row => row.Name)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        var missing = memberRows.Where(name => !emitted.Contains(name)).ToList();
+        await Assert.That(string.Join(",", missing)).IsEqualTo("");
     }
 }

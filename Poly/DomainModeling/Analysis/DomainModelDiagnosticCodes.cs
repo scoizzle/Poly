@@ -5,8 +5,11 @@ internal static class DomainModelDiagnosticCodes {
     public const string StructuralCycle = "DMSTR002";
     public const string StructuralOwnership = "DMSTR003";
     /// <summary>
-    /// A user-declared type reuses a name lowering emits at module scope
-    /// (<c>{Entity}Stage</c> for an entity that has stages, or <c>DomainResult</c>).
+    /// A user-declared type reuses a name lowering emits at module scope:
+    /// <c>{Entity}Stage</c> for an entity whose stage enum is generated (not an implicit
+    /// single stage), <c>DomainResult</c> / <c>DomainResult&lt;T&gt;</c>,
+    /// <c>ConstraintFailureException</c>, or the <c>System</c> namespace the generated C#
+    /// imports.
     /// </summary>
     public const string ReservedGeneratedName = "DMSTR004";
     /// <summary>

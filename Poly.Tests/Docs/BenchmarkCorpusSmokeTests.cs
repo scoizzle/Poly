@@ -154,6 +154,29 @@ public sealed class BenchmarkCorpusSmokeTests {
             .Because("the parse benchmark's document list must be exactly GoldenDomains.Compilable");
     }
 
+    /// <summary>
+    /// A non-finite number is not a measurement. The reader refuses <c>NaN</c> and <c>Infinity</c>
+    /// rather than letting a schema check compare against them.
+    /// </summary>
+    [Test]
+    public async Task BenchmarkBaseline_NonFiniteMean_ThrowsWithThePath() {
+        var directory = Path.Combine(Path.GetTempPath(), "poly-benchmark-csv-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try {
+            foreach (var value in new[] { "NaN", "Infinity" }) {
+                var path = Path.Combine(directory, $"{value}.csv");
+                await File.WriteAllTextAsync(path,
+                    $"Method,entry,Mean [ns],Allocated [B]\nParse_DslCorpus,dsl/hotel,{value},2\n");
+                var error = Assert.Throws<InvalidOperationException>(() => BenchmarkBaseline.Read(path));
+                await Assert.That(error.Message).Contains(path)
+                    .Because($"a non-finite Mean ({value}) must fail closed naming the file");
+            }
+        }
+        finally {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
     /// <summary>The 62 <c>*.cs.golden</c> transcripts the C# aggregate row parses.</summary>
     internal static string CSharpGoldenDirectory =>
         Path.Combine(GoldenDomains.RepoRoot, "Poly.Tests", "DomainModeling", "Compile", "EmitGolden");
@@ -300,15 +323,17 @@ internal static class BenchmarkBaseline {
             $"{csvPath} has no '{name}' column; its header is: {string.Join(", ", header)}.");
     }
 
-    private static double Number(string cell, string column, string csvPath, int line) =>
-        double.TryParse(
-            cell.Trim(),
-            NumberStyles.AllowThousands | NumberStyles.AllowDecimalPoint,
-            CultureInfo.InvariantCulture,
-            out var value)
-            ? value
-            : throw new InvalidOperationException(
-                $"{csvPath} data line {line} (file line {line + 1}): column '{column}' is not a number: '{cell}'.");
+    private static double Number(string cell, string column, string csvPath, int line) {
+        if (double.TryParse(
+                cell.Trim(),
+                NumberStyles.AllowThousands | NumberStyles.AllowDecimalPoint,
+                CultureInfo.InvariantCulture,
+                out var value)
+            && double.IsFinite(value))
+            return value;
+        throw new InvalidOperationException(
+            $"{csvPath} data line {line} (file line {line + 1}): column '{column}' is not a finite number: '{cell}'.");
+    }
 
     private static string[] SplitCsv(string line) {
         var cells = new List<string>();

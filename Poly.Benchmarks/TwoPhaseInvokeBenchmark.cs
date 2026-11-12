@@ -38,10 +38,20 @@ public enum InvokeShape {
 /// a method with parameters goes <c>FindMethod</c> → <c>BindOne</c>, which builds a fresh method
 /// body, so <c>Compile</c>'s <c>ReferenceEquals(cached.Body, body)</c> check can never hit and
 /// <c>Interpreter.Analyze</c> plus <c>Interpreter.Compile</c> re-run on every invoke. That is the
-/// 10.7 MB / ~8 ms in those rows. Only the parameterless <c>dispatch()</c> row hits the cache, so
-/// only it isolates the host's <c>Transact</c> <c>Capture</c>/<c>Restore</c> pair — 6 KB / ~2 µs.
+/// 10.7 MB / ~8 ms in those rows.
+/// </para>
+/// <para>
+/// <c>dispatch()</c> is the only row free of that per-invoke recompilation, and it measures a
+/// cached <em>successful</em> invoke: <c>Transact</c>'s <c>Capture</c> over every registered bag,
+/// <c>SyncSubscriptionBodies</c>, the <c>FindAction</c>/<c>FindMethod</c> lookup, the transition and
+/// its entry assign — 6 KB / ~2 µs. <c>Restore</c> runs only when the outcome fails or an exception
+/// escapes, so the only row that reaches it is the refused <c>load(40001)</c>, which is
+/// recompilation-dominated. <b>No committed row isolates <c>Restore</c> today.</b>
+/// </para>
+/// <para>
 /// A Q1 after-number on the parameterised rows is therefore <em>not attributable</em> until that
-/// cache miss is fixed; Q1's own delta shows up in <c>dispatch()</c>.
+/// cache miss is fixed, and a Q1 delta on <c>dispatch()</c> shows only the success-path share —
+/// <c>Capture</c>, not the rollback.
 /// </para>
 /// <para>
 /// <b>Session.</b> The cases are built on <see cref="BenchmarkSupport.AuthoringSession"/>:
@@ -52,10 +62,13 @@ public enum InvokeShape {
 /// <c>uses</c> id, so no vendor library contributes an analyzer or an artifact to these cases.
 /// </para>
 /// <para>
-/// <b>What is pre-Q1.</b> Today's invoke is the host-side <c>Transact</c> pair: <c>Capture</c> the
-/// instance state before the body and <c>Restore</c> it when the outcome fails, plus
-/// <c>keepConstraintMutations: true</c> on the call. Q1's after-number removes that host rollback and
-/// puts the two phases in the module. The refused row is <em>not</em> a thrown path: a refused
+/// <b>What is pre-Q1.</b> Today's invoke is the host-side <c>Transact</c> pair: <c>Capture</c> every
+/// registered bag before the body — on <em>every</em> invoke — and <c>Restore</c> it only when the
+/// outcome fails or an exception escapes, plus <c>keepConstraintMutations: true</c> on the call. Q1
+/// moves that work into the module's two phases. So the pair splits by row: the successful
+/// <c>dispatch()</c> row pays <c>Capture</c> only, and the refused <c>load(40001)</c> is the only row
+/// that reaches <c>Restore</c> — but it is recompilation-dominated, so no committed row measures the
+/// rollback cleanly. The refused row is <em>not</em> a thrown path either: a refused
 /// <c>Load</c> returns <c>ModuleOutcome.Fail</c>, because the action has a <c>DomainResult</c> return
 /// type and the assign guard therefore returns <c>Failure</c>; the throw path belongs to void
 /// contexts (a ctor or a stage entry). The <see cref="ConstraintFailureException"/> catch below is

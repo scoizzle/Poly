@@ -170,12 +170,12 @@ public sealed class BenchmarkDecisionSmokeTests {
 
                 var status = entry.Instance.Bag["Status"];
                 await Assert.That(status).IsNotEqualTo(idle)
-                    .Because($"{entry.Key} run {run} must move Status off Idle, so the reset before the next run is real");
+                    .Because($"{entry.Key} run {run} must move Status off Idle, so it is an Idle→EnRoute transition and the reset before the next run is real");
                 if (enRoute is null)
                     enRoute = status;
                 else
                     await Assert.That(status).IsEqualTo(enRoute)
-                        .Because($"{entry.Key} run {run} reset Status to Idle first, so the EnRoute entry effect must land it again");
+                        .Because($"{entry.Key} run {run} starts from Idle after the reset, so it is an Idle→EnRoute transition — not an EnRoute→EnRoute self-transition — and the entry effect must land Status on EnRoute again");
             }
         }
     }

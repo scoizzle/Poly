@@ -260,13 +260,19 @@ public sealed class SessionBuilder {
     }
 
     /// <summary>Freezes the loaded libraries into a session.</summary>
-    public DomainSession Build(Domain? domain = null) {
+    public DomainSession Build(Domain? domain = null) =>
+        Build(SessionOptions.Bare(ExtensionCatalog.Core), domain);
+
+    /// <summary>Freezes the loaded libraries into a session that remembers <paramref name="options"/>.</summary>
+    internal DomainSession Build(SessionOptions options, Domain? domain = null) {
+        ArgumentNullException.ThrowIfNull(options);
         var annotations = new AnnotationRegistry(Annotations);
         var expressionForms = new ExpressionFormRegistry(ExpressionForms);
         var language = DslGrammar.LanguageFor(annotations, expressionForms);
         return new DomainSession(
             domain,
             _loadedIds.ToArray(),
+            options,
             language,
             annotations,
             expressionForms,

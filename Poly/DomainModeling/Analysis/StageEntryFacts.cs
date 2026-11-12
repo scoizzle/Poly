@@ -22,16 +22,18 @@ namespace Poly.DomainModeling.Analysis;
 /// <para>
 /// May-assign; invoked-action transitions are not followed; not for definite-initialization
 /// decisions. Conditional and loop bodies count even when they cannot execute, so a create-supplied
-/// value for such a property is an error the author must escape with <c>default(x)</c>. Names are
+/// value for such a property is an error the author must escape with <c>default(x)</c>. Exits
+/// that never fire (dead per-stage switch arms) count the same way. Names are
 /// returned verbatim, never filtered against <see cref="Entity.Properties"/>, so an assignment to a
 /// mistyped name is not silently swallowed; a non-<see cref="PropertyAccess"/> target
 /// (a <see cref="RelationshipNavigation"/>) is skipped because it names another entity's property.
 /// </para>
 /// <para>
-/// This is the analysis-side provider. S-14 (or L-09, whichever first consumes it) repoints
-/// <see cref="EntityStructureAnalyzer.ComputeEntryAssignedPropertyNames"/> at it; S-14's lock must
-/// acknowledge the invoked-action gap. No lowering code calls <see cref="StageEntryFacts"/>
-/// (<c>docs/CORE.md</c>; <c>RequireStructure</c>).
+/// This is the analysis-side provider. S-14 consumes it ONLY for may-assign, fail-closed decisions
+/// (rejecting a create-supplied value); the flat
+/// <see cref="EntityStructureAnalyzer.ComputeEntryAssignedPropertyNames"/> stays the definite helper
+/// for every relief use. S-14's lock must acknowledge the invoked-action gap. No lowering code calls
+/// <see cref="StageEntryFacts"/> (<c>docs/CORE.md</c>; <c>RequireStructure</c>).
 /// </para>
 /// </summary>
 internal static class StageEntryFacts {
@@ -54,6 +56,8 @@ internal static class StageEntryFacts {
     /// (<see cref="EntityStructureAnalyzer"/> throws), so the fact never guesses.
     /// </summary>
     internal static string? LifecyclePropertyName(Entity entity, Domain domain) {
+        if (entity.Stages.Count == 0 || EntityStructureAnalyzer.IsImplicitStage(entity, domain))
+            return null;
         var stageNames = entity.Stages.Select(stage => stage.Name).ToHashSet(StringComparer.Ordinal);
         string? found = null;
         foreach (var property in entity.Properties) {
@@ -128,7 +132,7 @@ internal static class StageEntryFacts {
 
         // The body is its own pass starting from the dynamic cursor; the outer cursor only goes
         // dynamic when the body can change stage. Guard stacks are shared (Lower builds fresh
-        // ones), which can only drop names where the lowering itself would recurse forever.
+        // ones), which at most drops names where the lowering itself would recurse forever.
         private void ForEach(ForEachEffect loop) {
             var outer = _cursor;
             _cursor = null;
@@ -163,8 +167,10 @@ internal static class StageEntryFacts {
         }
 
         private void Hop(StageTransitionEffect transition) {
+            // Lower's fail-closed boundary: a hop to a stage the entity lacks throws.
             if (FindStage(transition.TargetStage.StageName) is not { } target)
-                return;
+                throw new InvalidOperationException(
+                    $"Stage '{transition.TargetStage.StageName}' does not exist on entity '{entity.Name}'.");
 
             if (_cursor is not null) {
                 if (FindStage(_cursor) is { } source)

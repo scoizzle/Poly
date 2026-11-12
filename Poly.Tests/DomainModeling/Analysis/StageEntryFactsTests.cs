@@ -437,6 +437,40 @@ public class StageEntryFactsTests {
         await Assert.That(() => EvolvedDomain.FromDsl(dsl)).Throws<InvalidOperationException>();
     }
 
+    // A hop to a stage the entity does not have is Lower's fail-closed boundary (it throws), so the
+    // fact throws too instead of silently skipping. Apply-built: analysis would reject the model.
+    [Test]
+    public async Task EntryAssignedProperties_HopToUnresolvableStage_Throws() {
+        var domain = WithEntryEffects(Apply("""
+            domain Dangling
+            Z: entity {
+              N: Number
+              A: stage { entry { assign N to 1 } }
+            }
+            """), "Z", "A", new StageTransitionEffect(new StageReference("Nowhere")));
+
+        await Assert.That(() => EntryAssigned(domain, "Z")).Throws<InvalidOperationException>();
+    }
+
+    // The resolver is gated like the analyzer (hasStages): one effect-free stage is implicit, so
+    // a matching enum property is not a lifecycle property for either.
+    [Test]
+    public async Task LifecyclePropertyName_ImplicitSingleStage_IsNullForFactAndAnalyzer() {
+        var (domain, analysis) = EvolvedDomain.FromDsl("""
+            domain ImplicitLifecycle
+            OneState: enum { Only }
+            Z: entity {
+              N: Number
+              State: OneState default(Only)
+              Only: stage { }
+            }
+            """);
+        var entity = EntityNamed(domain, "Z");
+
+        await Assert.That(analysis.GetStructure(entity)!.LifecyclePropertyName).IsNull();
+        await Assert.That(StageEntryFacts.LifecyclePropertyName(entity, domain)).IsNull();
+    }
+
     // B3: the fact's resolver must equal the analyzer's published lifecycle property on every
     // entity of every corpus file that analyzes. The counts keep the pass from being vacuous.
     [Test]

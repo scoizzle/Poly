@@ -5,7 +5,8 @@ namespace Poly.Tests.DomainModeling.Analysis;
 
 /// <summary>
 /// #367: range validation compares bounds type-correctly (ConstraintMerge.TryCompare's rule):
-/// same type by its own ordering, two numeric types as double, anything else is not coerced.
+/// same type by its own ordering, two numeric types exactly through ExactNumber, anything else is
+/// not coerced. A value that is not exactly representable (a fractional double) is unorderable.
 /// </summary>
 public class ConstraintRangeValidationTests {
     private static ConstraintVerdict Eval(object? min, object? max, object? value) =>
@@ -49,8 +50,12 @@ public class ConstraintRangeValidationTests {
     }
 
     [Test]
-    public async Task CrossNumeric_ComparesAsDouble() {
-        await Assert.That(Eval(1, 10, 5.5)).IsEqualTo(ConstraintVerdict.Satisfied);
+    public async Task CrossNumeric_ComparesExactly() {
+        // V-05a: two numeric types compare through ExactNumber, so a fractional decimal is exact.
+        await Assert.That(Eval(1, 10, 5.5m)).IsEqualTo(ConstraintVerdict.Satisfied);
+        // A fractional double is not exactly representable, so it is unorderable: fail closed.
+        // (Before V-05a this compared as double and was Satisfied.)
+        await Assert.That(Eval(1, 10, 5.5)).IsEqualTo(ConstraintVerdict.Violated);
         await Assert.That(Eval(1.5, 10, 1)).IsEqualTo(ConstraintVerdict.Violated);
         await Assert.That(Eval(0L, 10L, 5)).IsEqualTo(ConstraintVerdict.Satisfied);
     }

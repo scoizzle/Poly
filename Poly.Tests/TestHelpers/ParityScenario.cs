@@ -10,6 +10,7 @@ using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Runtime;
 using Poly.Interpretation.CSharp;
+using Poly.Runtime;
 
 using StepResult = (bool Success, string? Message, object? Value);
 
@@ -17,16 +18,18 @@ namespace Poly.Tests.TestHelpers;
 
 /// <summary>
 /// What one step did: success or failure, its message, the exception type if it threw, the
-/// entity's state afterwards, and the typed failure a later slice fills in.
-/// <see cref="FailureKind"/> is compared and stays null until the typed-failure slice lands.
+/// entity's state afterwards, and the typed failure of a failed step.
+/// <see cref="FailureKind"/>, <see cref="FailurePath"/> and <see cref="FailureGuard"/> are the
+/// <c>Poly.Runtime.DomainFailure</c> of a step that failed through a result, on both sides.
+/// A step that threw, or that failed without a typed failure, leaves them null.
 /// </summary>
 public sealed record ParityOutcome(
     string Step, bool Success, string? Message, string? ExceptionType, IReadOnlyDictionary<string, string?> State,
-    string? FailureKind = null);
+    string? FailureKind = null, string? FailurePath = null, string? FailureGuard = null);
 
 /// <summary>
 /// One field that differs between the sides. <see cref="Field"/> is the ledger vocabulary:
-/// <c>success</c>, <c>message</c>, <c>failureKind</c>, <c>exceptionType</c>, <c>state:&lt;member&gt;</c>
+/// <c>success</c>, <c>message</c>, <c>failureKind</c>, <c>failurePath</c>, <c>failureGuard</c>, <c>exceptionType</c>, <c>state:&lt;member&gt;</c>
 /// or <c>stepCount</c>. <see cref="ToString"/> keeps the wording the existing rows assert on.
 /// </summary>
 public sealed record ParityDifference(int Index, string Step, string Field, string? Simulate, string? Printed) {
@@ -35,6 +38,8 @@ public sealed record ParityDifference(int Index, string Step, string Field, stri
         "success" => $"{Step}: success differs (simulate '{Simulate}', printed '{Printed}')",
         "message" => $"{Step}: failure message differs (simulate '{Simulate}', printed '{Printed}')",
         "failureKind" => $"{Step}: failure kind differs (simulate '{Simulate}', printed '{Printed}')",
+        "failurePath" => $"{Step}: failure path differs (simulate '{Simulate}', printed '{Printed}')",
+        "failureGuard" => $"{Step}: failure guard differs (simulate '{Simulate}', printed '{Printed}')",
         "exceptionType" => $"{Step}: exception type differs (simulate '{Simulate}', printed '{Printed}')",
         _ => $"{Step}: '{Field.Replace("state:", "", StringComparison.Ordinal)}' differs (simulate '{Simulate}', printed '{Printed}')",
     };
@@ -179,6 +184,8 @@ public sealed class ParityScenario {
             Compare("success", s.Success.ToString(), p.Success.ToString());
             Compare("message", s.Message, p.Message);
             Compare("failureKind", s.FailureKind, p.FailureKind);
+            Compare("failurePath", s.FailurePath, p.FailurePath);
+            Compare("failureGuard", s.FailureGuard, p.FailureGuard);
             Compare("exceptionType", s.ExceptionType, p.ExceptionType);
             foreach (var member in s.State.Keys.Union(p.State.Keys))
                 Compare($"state:{member}", s.State.TryGetValue(member, out var a) ? a : "(absent)", p.State.TryGetValue(member, out var b) ? b : "(absent)");
@@ -255,14 +262,19 @@ public abstract class ParitySide(
     protected abstract Dictionary<string, string?> StateOf(object entity, Entity model);
     protected abstract string TypeName(object entity);
 
+    /// <summary>The typed failure of the step a core just ran, or null; <see cref="Record"/> reads and clears it.</summary>
+    protected DomainFailure? LastFailure { get; set; }
+
     object? Record(string step, Func<StepResult> act, Entity? created = null, string? answerName = null) {
+        LastFailure = null;
         try {
             var (success, message, value) = act();
+            var failure = success ? null : LastFailure;
             // A failed create has no entity, so its state is empty; other steps report the current entity.
             var subject = created is null ? Current : value;
             var state = subject is null ? [] : StateOf(subject, created ?? _model!);
             if (answerName is not null) state[answerName] = value?.ToString();
-            Outcomes.Add(new(step, success, message, null, state));
+            Outcomes.Add(new(step, success, message, null, state, failure?.Kind.ToString(), failure?.ElementPath, failure?.Guard));
             return success ? value : null;
         }
         catch (Exception ex) when (IsRecordedOutcome(Unwrap(ex))) {

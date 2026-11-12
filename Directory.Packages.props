@@ -9,7 +9,7 @@
   <ItemGroup Label="Test and tooling">
     <PackageVersion Include="TUnit" Version="1.53.0" />
     <PackageVersion Include="Microsoft.Testing.Extensions.CodeCoverage" Version="18.12.0" />
-    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="4.12.0" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="4.14.0" />
     <PackageVersion Include="BenchmarkDotNet" Version="0.15.8" />
     <PackageVersion Include="System.CommandLine" Version="2.0.9" />
   </ItemGroup>

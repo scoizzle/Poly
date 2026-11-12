@@ -559,6 +559,7 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
         }
 
         if (resolvedType is Entity targetEntity) {
+            var entryAssigned = EntryAssignedOrEmpty(targetEntity, domain);
             foreach (var initializer in cei.Initializers) {
                 var targetProp = targetEntity.Properties
                     .FirstOrDefault(p => string.Equals(p.Name, initializer.PropertyName, StringComparison.Ordinal));
@@ -577,6 +578,8 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
                 }
 
                 if (targetProp is null) continue; // nav binding — no property constraints to check
+
+                if (ValidateNotEntryAssigned(context, targetEntity, entryAssigned, initializer)) continue;
 
                 // Every initializer write gets exactly one verdict, recorded once (A3): a literal
                 // through the constraint evaluator, every other value through the flow channel.
@@ -733,6 +736,28 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
             "Run DomainCatalogPass before EffectAnalyzer.",
             DomainModelDiagnosticCodes.SemanticReferenceResolution);
 
+    // DMEFF019 reads the may-assign fact (Q15 b); every relief consumer keeps the definite flat fact.
+    // An unresolvable hop is reported on its own, so the check sees no names rather than throwing.
+    private static IReadOnlySet<string> EntryAssignedOrEmpty(Entity targetEntity, Domain domain) {
+        StageEntryFacts.TryEntryAssignedProperties(targetEntity, domain, out var names);
+        return names;
+    }
+
+    /// <summary>
+    /// True (after reporting DMEFF019 on the initializer) when it supplies a property the target's
+    /// entry chain may assign. The caller skips the value verdict: the value can never reach the object.
+    /// </summary>
+    private static bool ValidateNotEntryAssigned(
+        AnalysisContext context, Entity targetEntity, IReadOnlySet<string> entryAssigned, PropertyBinding initializer) {
+        if (!entryAssigned.Contains(initializer.PropertyName))
+            return false;
+        context.ReportError(
+            initializer,
+            StageEntryFacts.CannotSupplyMessage(targetEntity, initializer.PropertyName),
+            DomainModelDiagnosticCodes.CreateSuppliesEntryAssignedProperty);
+        return true;
+    }
+
     private static void ValidateCreateEntityInRelationship(
         AnalysisContext context, CreateEntityInRelationshipEffect createIn, Entity entity, Domain domain, DomainTypeLookupMetadata lookup, Action? action) {
         // amu-w1-1 / F1: catalog+RLM name resolve (no domain.Relationships scan);
@@ -772,6 +797,7 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
         // ResolvedRelationshipTargetMetadata is published by EffectFactsPass (fact emitter).
 
         // Validate initializer property names against target entity
+        var entryAssigned = EntryAssignedOrEmpty(targetEntity, domain);
         foreach (var initializer in createIn.Initializers) {
             var targetProp = targetEntity.Properties
                 .FirstOrDefault(p => string.Equals(p.Name, initializer.PropertyName, StringComparison.Ordinal));
@@ -787,6 +813,8 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
             }
 
             if (targetProp is null) continue; // nav binding — no property constraints to check
+
+            if (ValidateNotEntryAssigned(context, targetEntity, entryAssigned, initializer)) continue;
 
             // Same channel, same creator scope: `create in` runs inside the source entity's action.
             ValidateInitializerValue(context, domain, initializer, entity, action, targetEntity, targetProp);

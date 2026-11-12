@@ -340,6 +340,15 @@ internal static class DomainModelDiagnosticCodes {
     public const string ExitBlockEffectNotSupported = "DMEFF018";
 
     /// <summary>
+    /// A <c>create</c> or <c>create in</c> initializer supplies a property the new instance's entry
+    /// chain may assign (conditionally, in a loop, through a hop or an invoked action). The entry
+    /// chain overwrites the supplied value, so it can never reach the object. Omit the property
+    /// (give it <c>default(...)</c> or mark it <c>optional</c> if it must be omittable). An error
+    /// that no <see cref="DiagnosticAllowance"/> acknowledges.
+    /// </summary>
+    public const string CreateSuppliesEntryAssignedProperty = "DMEFF019";
+
+    /// <summary>
     /// A <c>match</c> arm condition (#409) is not Boolean. An error.
     /// </summary>
     public const string MatchConditionNotBoolean = "DMMAT001";

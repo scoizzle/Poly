@@ -1,4 +1,5 @@
 using Poly.Interpretation;
+using Poly.Interpretation.CSharp;
 using Poly.Introspection;
 
 namespace Poly.Tests.Interpretation.Vm.Abi;
@@ -20,7 +21,7 @@ public class ConditionalArmsTests {
         var thrown = Assert.Throws<InvalidOperationException>(() => {
             using var exec = Run(body, args);
         });
-        await Assert.That(thrown.Message).Contains("VM compile rejected: conditional arms differ in representation");
+        await Assert.That(thrown.Message).Contains("VM compile rejected:").And.Contains("arms differ in representation");
     }
 
     [Test]
@@ -92,5 +93,59 @@ public class ConditionalArmsTests {
     public async Task Switch_SameRepresentation_Runs() {
         using var exec = Run(Switched(new Constant(2L), new Constant(3L)), 0L);
         await Assert.That(exec.GetValue<long>()).IsEqualTo(3L);
+    }
+
+    /// <summary>A null first arm is not judgeable, but the arms after it are still compared with each other.</summary>
+    [Test]
+    public async Task Switch_NullArmFirst_StillRejectsTheMixedArmsAfterIt() =>
+        await AssertRejected(
+            new Block([new SwitchStatement(
+                new Parameter("key", TypeReference.To<long>()),
+                [new SwitchCase(new Constant(1L), new Constant(null)), new SwitchCase(new Constant(2L), new Constant(1.5m))],
+                new Constant(2L))]),
+            0L);
+
+    // Legal code that ran correctly before the guard must keep running (a nullable operand is judged by its
+    // underlying type; a statement switch's discarded bodies are not a merged value).
+
+    [Test]
+    [Arguments(null, 5L, 5L)]
+    [Arguments(3L, 5L, 3L)]
+    [Arguments(null, null, 0L)]
+    public async Task NestedCoalesce_NullableLong_Runs(long? first, long? second, long expected) {
+        var t = TypeReference.To<long?>();
+        var body = new Block([new Coalesce(new Coalesce(new Parameter("p1", t), new Parameter("p2", t)), new Constant(0L))]);
+        using var exec = Run(body, first, second);
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(expected);
+    }
+
+    [Test]
+    [Arguments(true, 3L, 3L)]
+    [Arguments(false, 3L, 5L)]
+    public async Task Conditional_NullableLongArmFirst_Runs(bool flag, long value, long expected) {
+        var body = new Block([new Conditional(
+            new Parameter("flag", TypeReference.To<bool>()), new Parameter("p", TypeReference.To<long?>()), new Constant(5L))]);
+        using var exec = Run(body, flag, value);
+        await Assert.That(exec.GetValue<long?>()).IsEqualTo(expected);
+    }
+
+    [Test]
+    [Arguments(true, 3L, 5L)]
+    [Arguments(false, 3L, 3L)]
+    public async Task Conditional_NullableLongArmSecond_Runs(bool flag, long value, long expected) {
+        var body = new Block([new Conditional(
+            new Parameter("flag", TypeReference.To<bool>()), new Constant(5L), new Parameter("p", TypeReference.To<long?>()))]);
+        using var exec = Run(body, flag, value);
+        await Assert.That(exec.GetValue<long?>()).IsEqualTo(expected);
+    }
+
+    [Test]
+    [Arguments(1, "d", "1.5")]
+    [Arguments(2, "n", "2")]
+    public async Task StatementSwitch_BodiesAssignDifferentRepresentations_Runs(int key, string read, string expected) {
+        var result = CSharpScript.Run(
+            $"long k = {key}; decimal d = 0; long n = 0; switch (k) {{ case 1: d = 1.5m; break; default: n = 2; break; }} {read};");
+        await Assert.That(result.Success).IsTrue();
+        await Assert.That(result.Value).IsEqualTo(expected);
     }
 }

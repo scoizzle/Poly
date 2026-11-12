@@ -897,7 +897,7 @@ public static partial class AbiEmitter {
         var test = CompileConditionAsBool(c.Condition, ctx);
         var ifTrue = CompileConditionalBranch(c, c.IfTrue, ctx);
         var ifFalse = CompileConditionalBranch(c, c.IfFalse, ctx);
-        RejectMixedRepresentationArms(c.IfTrue, c.IfFalse, ctx);
+        RejectMixedRepresentationArms("conditional", c.IfTrue, c.IfFalse, ctx);
         if (ifTrue.Type != typeof(void) && ifFalse.Type != typeof(void)) {
             // An IEEE arm keeps the value, so the arms must agree on one width before
             // Expression.Condition can take them.
@@ -929,23 +929,27 @@ public static partial class AbiEmitter {
 
     /// <summary>An inline scalar arm against a heap-handle arm (a whole number against a Decimal) merges two
     /// words of different meaning, and the result is read as one or the other. Fail closed at compile time
-    /// (#605). An arm whose representation is unknown, a null literal, or a void arm is not judged here.
-    /// A coalesce answers its left side unwrapped, so a nullable left is judged by its underlying type.</summary>
-    private static void RejectMixedRepresentationArms(Node first, Node second, Context ctx, bool unwrapFirst = false) {
-        if (first is Constant { Value: null } || second is Constant { Value: null })
+    /// (#605). This is a backstop: analysis owns conversion, so a tree that analysed clean never reaches it.
+    /// A nullable operand is judged by its underlying type; an arm that is a null literal, void, or of unknown
+    /// representation is not judged.</summary>
+    private static void RejectMixedRepresentationArms(string construct, Node first, Node second, Context ctx) {
+        if (JudgedRepresentation(first, ctx) is not { } left || JudgedRepresentation(second, ctx) is not { } right)
             return;
-        var (firstKind, firstClr) = ctx.RepresentationOf(first);
-        var (secondKind, secondClr) = ctx.RepresentationOf(second);
-        if (unwrapFirst && firstClr is not null && Nullable.GetUnderlyingType(firstClr) is { } underlying) {
-            firstClr = underlying;
-            firstKind = ValueRepresentationClassifier.KindFor(underlying);
-        }
-        var mixed = (firstKind, secondKind) is (ValueRepresentationKind.StackScalar, ValueRepresentationKind.HeapRef)
+        var mixed = (left.Kind, right.Kind) is (ValueRepresentationKind.StackScalar, ValueRepresentationKind.HeapRef)
             or (ValueRepresentationKind.HeapRef, ValueRepresentationKind.StackScalar);
         if (mixed)
             throw new InvalidOperationException(
-                $"VM compile rejected: conditional arms differ in representation: '{first}' ({firstClr?.Name ?? "?"}) vs "
-                + $"'{second}' ({secondClr?.Name ?? "?"}); convert one arm to the other's type.");
+                $"VM compile rejected: {construct} arms differ in representation: '{first}' ({left.Clr?.Name ?? "?"}) vs "
+                + $"'{second}' ({right.Clr?.Name ?? "?"}); convert one arm to the other's type.");
+    }
+
+    private static (ValueRepresentationKind Kind, Type? Clr)? JudgedRepresentation(Node arm, Context ctx) {
+        if (arm is Constant { Value: null })
+            return null;
+        var (kind, clr) = ctx.RepresentationOf(arm);
+        if (clr is not null && Nullable.GetUnderlyingType(clr) is { } underlying)
+            (kind, clr) = (ValueRepresentationClassifier.KindFor(underlying), underlying);
+        return kind is ValueRepresentationKind.Void or ValueRepresentationKind.Unknown ? null : (kind, clr);
     }
 
     private static Expression DecodeIeeeWordArm(Expression arm, Node branch, Context ctx) =>
@@ -1104,7 +1108,7 @@ public static partial class AbiEmitter {
     }
 
     private static Expression EmitCoalesceValue(Coalesce n, Context ctx) {
-        RejectMixedRepresentationArms(n.LeftHandValue, n.RightHandValue, ctx, unwrapFirst: true);
+        RejectMixedRepresentationArms("coalesce", n.LeftHandValue, n.RightHandValue, ctx);
         if (ContainsSuspend(n))
             return EmitCoalesceAcrossSuspend(n, ctx);
         var leftVal = ValueOf(n.LeftHandValue, ctx);

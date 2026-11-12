@@ -165,7 +165,8 @@ public sealed partial class DomainToCSharpExporter {
                     pascalName, readOnlyType,
                     Getter: new PropertyGetterDefinitionNode(
                         Body: new Member(new ThisReference(), fieldName)),
-                    IsReadOnly: true
+                    IsReadOnly: true,
+                    AccessModifier: DomainAccess.Demote(AccessModifier.Public, domain, targetType)
                 ));
 
                 // Create{Nav} is the typed create-in. A relationship with no create-in
@@ -185,7 +186,8 @@ public sealed partial class DomainToCSharpExporter {
                     pascalName, new OptionalTypeReference(targetType),
                     Getter: new PropertyGetterDefinitionNode(),
                     Setter: new PropertySetterDefinitionNode(
-                        AccessModifier: AccessModifier.Private)
+                        AccessModifier: AccessModifier.Private),
+                    AccessModifier: DomainAccess.Demote(AccessModifier.Public, domain, targetType)
                 ));
             }
         }

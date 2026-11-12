@@ -2,6 +2,7 @@ using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Runtime;
 
+using AccessModifier = Poly.Introspection.AccessModifier;
 using PrimType = Poly.Introspection.PrimitiveType;
 using Syntactic = Poly.Ast.Nodes;
 using ValueType = Poly.DomainModeling.Ontology.ValueType;
@@ -11,7 +12,7 @@ namespace Poly.DomainModeling.Lowering;
 // Properties: property/field emission, value-type shapes, and property default lowering.
 public sealed partial class DomainToCSharpExporter {
     internal static TypeDefinitionNode BuildValueTypeTypeDef(
-        ValueType valueType, Domain domain, INodeMetadataProvider metadata) {
+        ValueType valueType, Domain domain, INodeMetadataProvider metadata, AccessModifier access) {
         var props = new List<PropertyDefinitionNode>();
         foreach (var prop in valueType.Properties) {
             var propRef = MapDomainTypeRef(prop.Type, domain, metadata);
@@ -28,7 +29,8 @@ public sealed partial class DomainToCSharpExporter {
         return new TypeDefinitionNode(
             valueType.Name,
             Properties: props,
-            Semantics: Syntactic.TypeDefinitionSemantics.ImmutableValue
+            Semantics: Syntactic.TypeDefinitionSemantics.ImmutableValue,
+            AccessModifier: access
         );
     }
 

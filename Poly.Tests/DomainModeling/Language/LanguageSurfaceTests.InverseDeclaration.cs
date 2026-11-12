@@ -268,7 +268,7 @@ public sealed partial class LanguageSurfaceTests {
         await Assert.That(Nav(order, "line").SourceOwnsTarget).IsTrue();
         await Assert.That(Nav(order, "line").Inverse).IsEqualTo("owner");
         await Assert.That(printed).Contains("lines: many owned Line via order");
-        await Assert.That(printed).Contains("line: owned Line via owner");
+        await Assert.That(printed).Contains("line: one owned Line via owner");
         await Assert.That(new DomainDslPrinter().Print(Apply(printed))).IsEqualTo(printed);
     }
 
@@ -324,7 +324,7 @@ public sealed partial class LanguageSurfaceTests {
         var printed = new DomainDslPrinter().Print(root);
 
         await Assert.That(Nav(EntityNamed(root, "Employee"), "manager").Inverse).IsEqualTo("reports");
-        await Assert.That(printed).Contains("manager: Department via reports");
+        await Assert.That(printed).Contains("manager: one Department via reports");
         await Assert.That(new DomainDslPrinter().Print(Apply(printed))).IsEqualTo(printed);
     }
 
@@ -346,7 +346,7 @@ public sealed partial class LanguageSurfaceTests {
         // `one` is the default cardinality, so the printer's canonical form drops it;
         // the explicit input still round-trips through that short form.
         await Assert.That(Nav(EntityNamed(root, "Department"), "x").Inverse).IsEqualTo("owner");
-        await Assert.That(printed).Contains("x: Employee via owner");
+        await Assert.That(printed).Contains("x: one Employee via owner");
         await Assert.That(new DomainDslPrinter().Print(Apply(printed))).IsEqualTo(printed);
     }
 }

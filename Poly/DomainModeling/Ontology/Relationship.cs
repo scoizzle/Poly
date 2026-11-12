@@ -24,6 +24,12 @@ public sealed record Relationship(
     IReadOnlyList<Property> Properties
 ) : DomainMember(Name) {
     public bool SourceOwnsTarget { get; init; }
+
+    /// <summary>
+    /// The inverse navigation name declared with <c>via</c>, or null when the navigation
+    /// declares none. Syntax and IR only: pairing validity is analysis (S-11).
+    /// </summary>
+    public string? Inverse { get; init; }
     public IReadOnlyList<Stage> Stages { get; init; } = [];
     public IReadOnlyList<Policy> Policies { get; init; } = [];
     public sealed override IEnumerable<Node?> Children => [Source, Target, .. Properties, .. Stages, .. Policies];

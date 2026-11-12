@@ -44,6 +44,16 @@ public class PackOracleTests {
     }
 
     [Test]
+    public async Task GeneratedPublicEntityWithInternalNav_BootsAndServesOrderList() {
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.PublicOrderInternalLine604);
+
+        using var list = await oracle.Client.GetAsync("/api/orders");
+        await Assert.That(list.StatusCode).IsEqualTo(HttpStatusCode.OK);
+        using var json = JsonDocument.Parse(await list.Content.ReadAsStringAsync());
+        await Assert.That(json.RootElement.ValueKind).IsEqualTo(JsonValueKind.Array);
+    }
+
+    [Test]
     public async Task GeneratedInventoryApp_SeedRow_Present_Pins595() {
         await using var oracle = await PackOracle.BootAsync(PackOracleDomains.Inventory588);
 

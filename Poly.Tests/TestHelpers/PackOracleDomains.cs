@@ -160,6 +160,28 @@ public static class PackOracleDomains {
         """,
         "/api/orders");
 
+    /// <summary>L-22 (#604), A11 owner gate. A public entity navigates to an internal entity: the nav is demoted to
+    /// internal in the printed C#, so the host must still boot and serve the list route.</summary>
+    public static PackOracleDomain PublicOrderInternalLine604 { get; } = new(
+        "PublicOrderInternalLine604",
+        """
+        domain Shop
+        uses sqlite
+        uses http
+
+        OrderLine: entity {
+          Qty: Number range(1, 100)
+        }
+
+        public entity Order {
+          Code: Text unique length(3, 8)
+          Total: Number default(0)
+          lines: many OrderLine
+          public action Reset { assign Total to 0 }
+        }
+        """,
+        "/api/orders");
+
     public static IReadOnlyList<PackOracleDomain> All { get; } =
         [Inventory588, Logistics559, Warehouse620, Inventory626, Desk658, Tally653, Fulfillment675];
 

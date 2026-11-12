@@ -1,9 +1,11 @@
+using Poly.Ast.Nodes;
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
+using Poly.Interpretation;
 using Poly.Interpretation.CSharp;
 
 using Poly.Tests.TestHelpers;
@@ -751,12 +753,17 @@ public sealed class NameScopeTests {
     // ── S-02 (#520 #530): an enum's member list is one C# scope ──────────────
 
     /// <summary>
-    /// A compile probe (S-02 H1): emit the module for a DSL string and compile it, so the
-    /// analyzer's verdict on an enum member can be matched against the compiler's own.
-    /// Emit refuses an analysis with errors, and a probe exists precisely to compile a shape
-    /// the analyzer rejects, so it prints the same lowered module with the same writer
-    /// (<c>DomainSession.Compile</c> and <c>CSharpWriter.Write(module)</c>, the two calls
-    /// <c>Emit</c> makes) and only skips the error gate in front of them.
+    /// A compile probe (S-02 H1): compile the C# enum declaration the exporter builds for the
+    /// probe's <see cref="EnumType"/>, so the analyzer's verdict on a member name can be matched
+    /// against the compiler's own. The declaration is
+    /// <c>DomainToCSharpExporter.BuildEnumTypeDef</c> — the exact call
+    /// <c>DomainProgramProjection.ToSyntax</c> makes for every enum
+    /// (<c>DomainProgramProjection.cs:95</c>) — printed by the same
+    /// <see cref="CSharpWriter"/>. Both <c>Emit</c> and <c>ToSyntax</c> refuse an analysis with
+    /// errors, which is the shape under probe, and no <see cref="DiagnosticAllowance"/> can
+    /// express this: allowances are read only by the observed-flow and contract arms, never by
+    /// <c>StructuralDomainAnalyzer</c>. The full-module <c>Emit</c> path produced the recorded
+    /// outcomes before the rule shipped; every expected verdict here is the one it recorded.
     /// </summary>
     private static IReadOnlyList<Microsoft.CodeAnalysis.Diagnostic> EmitAndCompile(
         string dsl, out AnalysisResult analysis) {
@@ -766,8 +773,11 @@ public sealed class NameScopeTests {
         if (!mutation.Succeeded)
             throw new InvalidOperationException($"Probe DSL did not apply: {mutation.FailureSummary}");
         analysis = session.Analyze(mutation.Root);
-        var compiled = session.Compile(mutation.Root, analysis);
-        var source = new CSharpWriter(compiled.VmAnalysis).Write(compiled.Module);
+        var enumType = mutation.Root.Types.OfType<EnumType>().Single();
+        IReadOnlyList<TypeDefinitionNode> module =
+            [DomainToCSharpExporter.BuildEnumTypeDef(enumType.Name, enumType.MemberNames)];
+        var vm = Interpreter.Analyzer.Analyze(new CompilationUnitNode([], null, module, null));
+        var source = new CSharpWriter(vm).Write(module);
         return ExportedCSharp.CompileWithWarningsAsErrors("S02Probe", [("Probe.cs", source)]);
     }
 

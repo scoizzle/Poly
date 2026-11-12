@@ -142,14 +142,12 @@ public sealed partial class DomainSession {
     private static InvalidOperationException RefusedNamespace(string name, string reason) =>
         new($"Domain '{name}' cannot name a C# namespace: {reason}. Keyword and non-ASCII names are rejected until E-10 escapes them.");
 
-    /// <summary>A host file (global scope, <c>using &lt;ns&gt;;</c>) sees the global <c>Program</c> and the
-    /// domain's own root namespace ahead of a using-imported type, so a domain type of either name is
-    /// spelled <c>&lt;ns&gt;.&lt;name&gt;</c>. Every other name stays bare.</summary>
-    internal static string QualifyForHost(Domain domain, string typeName) {
-        var ns = CSharpNamespace(domain);
-        var shadowed = typeName == "Program" || typeName == ns.Split('.')[0];
-        return shadowed && domain.Types.Any(t => t.Name == typeName) ? ns + "." + typeName : typeName;
-    }
+    /// <summary>A host file (global scope, <c>using &lt;ns&gt;;</c>) sees the global <c>Program</c>, the domain's
+    /// own root namespace and every type its other usings import (an entity named <c>Task</c> is ambiguous with
+    /// <c>System.Threading.Tasks.Task</c>) ahead of or beside a using-imported domain type, so a domain type is
+    /// spelled <c>&lt;ns&gt;.&lt;name&gt;</c> there. Any other name (a CLR primitive, a generated name) stays bare.</summary>
+    internal static string QualifyForHost(Domain domain, string typeName) =>
+        domain.Types.Any(t => t.Name == typeName) ? CSharpNamespace(domain) + "." + typeName : typeName;
 
     private static CompilationUnitNode Unit(string ns, IReadOnlyList<TypeDefinitionNode> types) =>
         new([], ns, types, null);

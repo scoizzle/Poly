@@ -27,10 +27,10 @@ using (var scope = app.Services.CreateScope())
 
 app.MapGet("/api/gauges", async (TDbCtx db) => await db.Gauges.ToListAsync());
 
-app.MapGet("/api/gauges/{id}", async (int id, TDbCtx db) => (await db.Gauges.FindAsync(id) is Gauge gauge ? Results.Ok(gauge) : Results.NotFound()));
+app.MapGet("/api/gauges/{id}", async (int id, TDbCtx db) => (await db.Gauges.FindAsync(id) is T.Gauge gauge ? Results.Ok(gauge) : Results.NotFound()));
 
 app.MapPost("/api/gauges", async (GaugeDto dto, TDbCtx db) => {
-    var gaugeResult = Gauge.Create(dto.Level, dto.Peak);
+    var gaugeResult = T.Gauge.Create(dto.Level, dto.Peak);
     if (!gaugeResult.IsSuccess)
     {
         return FailureStatus(gaugeResult.ErrorMessage);
@@ -131,7 +131,7 @@ static async System.Threading.Tasks.Task SeedAsync(TDbCtx db)
     {
         return;
     }
-    var gaugeResult = Gauge.Create(50, 50);
+    var gaugeResult = T.Gauge.Create(50, 50);
     if (gaugeResult.IsSuccess)
     {
         db.Add(gaugeResult.Value);

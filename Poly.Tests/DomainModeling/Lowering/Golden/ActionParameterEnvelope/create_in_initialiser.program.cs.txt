@@ -27,10 +27,10 @@ using (var scope = app.Services.CreateScope())
 
 app.MapGet("/api/orders", async (TDbCtx db) => await db.Orders.ToListAsync());
 
-app.MapGet("/api/orders/{id}", async (int id, TDbCtx db) => (await db.Orders.FindAsync(id) is Order order ? Results.Ok(order) : Results.NotFound()));
+app.MapGet("/api/orders/{id}", async (int id, TDbCtx db) => (await db.Orders.FindAsync(id) is T.Order order ? Results.Ok(order) : Results.NotFound()));
 
 app.MapPost("/api/orders", async (OrderDto dto, TDbCtx db) => {
-    var orderResult = Order.Create(Enumerable.Empty<OrderLine>());
+    var orderResult = T.Order.Create(Enumerable.Empty<T.OrderLine>());
     if (!orderResult.IsSuccess)
     {
         return FailureStatus(orderResult.ErrorMessage);
@@ -107,7 +107,7 @@ static async System.Threading.Tasks.Task SeedAsync(TDbCtx db)
     {
         return;
     }
-    var orderResult = Order.Create(Enumerable.Empty<OrderLine>());
+    var orderResult = T.Order.Create(Enumerable.Empty<T.OrderLine>());
     if (orderResult.IsSuccess)
     {
         db.Add(orderResult.Value);

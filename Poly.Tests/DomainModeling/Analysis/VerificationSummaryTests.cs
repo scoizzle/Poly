@@ -121,7 +121,7 @@ public class VerificationSummaryTests {
     /// <summary>
     /// A5's fixture (from <c>ConstraintFailClosedAuditTests</c>): the callee's assignment runs under
     /// the caller's context against a target bound that cannot be ordered, so the call chain reports
-    /// an error and no violation fact exists for it. The callee's own parameter arm also records an
+    /// an error and (since V-05b S3b) records a violation fact for it. The callee's own parameter arm also records an
     /// unverified fact, so this doubles as A1's masking test: a diagnostic-to-fact match must not
     /// hide the error behind that fact.
     /// </summary>
@@ -141,11 +141,11 @@ public class VerificationSummaryTests {
         var (model, analysis) = CallChainAgainstUnorderableTargetBound();
         var facts = analysis.GetMetadata<WriteVerificationFacts>(model)!;
 
-        // The probe: the error comes from the call-chain arm and carries no violation fact.
+        // The probe: the error comes from the call-chain arm and (V-05b S3b) now carries a violation fact.
         await Assert.That(analysis.Diagnostics.Any(d =>
             d.Severity == DiagnosticSeverity.Error
             && d.Message.StartsWith("Call-chain postcondition (A → B)", StringComparison.Ordinal))).IsTrue();
-        await Assert.That(facts.Violations).IsEmpty();
+        await Assert.That(facts.Violations).IsNotEmpty();
         // ... while the callee's parameter arm did record an unverified fact.
         await Assert.That(facts.Unverified).IsNotEmpty();
 

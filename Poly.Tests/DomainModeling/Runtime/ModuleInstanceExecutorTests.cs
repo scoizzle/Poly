@@ -226,6 +226,31 @@ public sealed class ModuleInstanceExecutorTests {
     }
 
     [Test]
+    public async Task Invoke_DiscardedBareCreate_IsStillAdoptedThroughBorn() {
+        // Follow-up 3 (R-03a): a bare `create` that is neither linked nor returned reaches the
+        // executor only through the heap's born instances, so it must still be registered.
+        var executor = ExecutorFor("""
+            domain Desk
+            Ticket: entity { Subject: Text }
+            Desk: entity {
+              tickets: many Ticket
+              Note: action {
+                create Ticket { Subject: "loose" }
+              }
+            }
+            """);
+        var desk = executor.Create("Desk", Values()).Instance!;
+
+        var outcome = executor.Invoke(desk, "Note");
+
+        await Assert.That(outcome.Succeeded).IsTrue();
+        await Assert.That(executor.Instances.Count).IsEqualTo(2);
+        var ticket = executor.Instances.Single(i => i.EntityName == "Ticket");
+        await Assert.That(ticket.Bag["Subject"]).IsEqualTo("loose");
+        await Assert.That(executor.LinkedTargets("tickets", desk).Count).IsEqualTo(0);
+    }
+
+    [Test]
     public async Task Invoke_ActionReturningEntity_ReturnsTheRegisteredChild() {
         var executor = ExecutorFor("""
             domain Desk

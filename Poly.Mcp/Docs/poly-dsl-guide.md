@@ -482,6 +482,10 @@ same facts as a self-contained page for a person; an untagged element gets a sta
 `urn:poly:` IRI. The IRI is `x-poly-iri`, not a subschema `$id`: in JSON Schema 2020-12 a
 `$defs` `$id` starts an embedded resource and would rebase every local `#/$defs/…`
 reference onto the element IRI.
+### Export order and `uses`
+
+`export_dsl` prints declarations in the order they were authored. Top-level declarations are grouped by kind (enums, value types, entities, functions, contracts, bindings), each kind in model order. Entity members (properties, navigations, stages, actions, policies) print in authored order, with subscriptions last. Members added through incremental MCP tools print after the authored ones. A `uses` line is printed only when the domain's extension list differs from the implicit set (`storage`, `persistence`, in that order) or a `uses <id> <version>` pin is present, so a document that listed no `uses` exports without one. Export drops `uses temporal`; reading re-supplies it.
+
 ## 4. Navigation Properties (N1 Relationships Only)
 
 Relationships are declared as **inline navigation properties** on the source entity.

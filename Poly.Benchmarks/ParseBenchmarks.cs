@@ -92,7 +92,7 @@ public class ParseBenchmarks {
         entry.Session ?? throw new InvalidOperationException($"{entry} has no session; only DSL entries carry one.");
 
     private static ParseCorpusEntry LoadDsl(string relativePath) {
-        var fullPath = Path.Combine(BenchmarkSupport.RepoRoot(), relativePath);
+        var fullPath = Path.Combine(BenchmarkSupport.RepoRoot, relativePath);
         var text = BenchmarkSupport.ReadText(relativePath, fullPath);
         if (string.IsNullOrWhiteSpace(text))
             throw new InvalidOperationException($"Parse corpus document '{relativePath}' is empty ({fullPath}).");
@@ -111,7 +111,7 @@ public class ParseBenchmarks {
     }
 
     private static ParseCorpusEntry LoadCSharp() {
-        var root = Path.Combine(BenchmarkSupport.RepoRoot(), "Poly.Tests", "DomainModeling", "Compile", "EmitGolden");
+        var root = Path.Combine(BenchmarkSupport.RepoRoot, "Poly.Tests", "DomainModeling", "Compile", "EmitGolden");
         if (!Directory.Exists(root))
             throw new InvalidOperationException($"C# golden corpus directory is missing ({root}).");
         var paths = Directory
@@ -123,7 +123,7 @@ public class ParseBenchmarks {
 
         var documents = new string[paths.Length];
         for (var i = 0; i < paths.Length; i++) {
-            var relativePath = Path.GetRelativePath(BenchmarkSupport.RepoRoot(), paths[i]);
+            var relativePath = Path.GetRelativePath(BenchmarkSupport.RepoRoot, paths[i]);
             documents[i] = BenchmarkSupport.ReadText(relativePath, paths[i]);
             if (string.IsNullOrWhiteSpace(documents[i]))
                 throw new InvalidOperationException($"C# golden '{relativePath}' is empty ({paths[i]}).");

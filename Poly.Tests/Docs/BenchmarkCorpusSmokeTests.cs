@@ -114,22 +114,26 @@ public sealed class BenchmarkCorpusSmokeTests {
     /// </summary>
     [Test]
     public async Task BenchmarkSupport_ReadText_UnreadableDocument_ThrowsWithThePath() {
-        if (OperatingSystem.IsWindows() || Environment.IsPrivilegedProcess)
-            return;
+        Skip.When(
+            OperatingSystem.IsWindows() || Environment.IsPrivilegedProcess,
+            "chmod 000 is not enforced on Windows, and a privileged process ignores it");
 
         var directory = Path.Combine(Path.GetTempPath(), "poly-benchmark-readtext-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
         var fullPath = Path.Combine(directory, "unreadable.poly");
         await File.WriteAllTextAsync(fullPath, "domain Unreadable\n");
         try {
-            File.SetUnixFileMode(fullPath, UnixFileMode.None);
+            // The guard is for the platform analyzer; Skip.When above decides whether the test runs.
+            if (!OperatingSystem.IsWindows())
+                File.SetUnixFileMode(fullPath, UnixFileMode.None);
             var error = Assert.Throws<InvalidOperationException>(
                 () => BenchmarkSupport.ReadText("corpus/unreadable.poly", fullPath));
             await Assert.That(error.Message).Contains(fullPath)
                 .Because("an unreadable corpus document must name its full path, not surface an OS exception");
         }
         finally {
-            File.SetUnixFileMode(fullPath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+            if (!OperatingSystem.IsWindows())
+                File.SetUnixFileMode(fullPath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
             Directory.Delete(directory, recursive: true);
         }
     }
@@ -185,6 +189,32 @@ public sealed class BenchmarkCorpusSmokeTests {
             Directory.Delete(directory, recursive: true);
         }
     }
+
+    /// <summary>
+    /// The reader fails closed on a baseline it cannot open, and on one that carries a header but no
+    /// data row — a refresh that wrote only blank lines is not an empty baseline, it is a broken one.
+    /// </summary>
+    [Test]
+    public async Task BenchmarkBaseline_MissingFileAndEmptyBody_ThrowWithThePath() {
+        var directory = Path.Combine(Path.GetTempPath(), "poly-benchmark-csv-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try {
+            var missing = Path.Combine(directory, "missing.csv");
+            var missingError = Assert.Throws<InvalidOperationException>(() => BenchmarkBaseline.Read(missing));
+            await Assert.That(missingError.Message).Contains(missing)
+                .Because("a missing baseline must name the path it could not read");
+
+            var blank = Path.Combine(directory, "blank.csv");
+            await File.WriteAllTextAsync(blank,
+                "Method,entry,Mean [ns],Allocated [B]\n\n\n");
+            var blankError = Assert.Throws<InvalidOperationException>(() => BenchmarkBaseline.Read(blank));
+            await Assert.That(blankError.Message).Contains(blank)
+                .Because("a header with no data rows must name the file");
+        }
+        finally {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
 }
 
 /// <summary>One data row of a committed benchmark baseline.</summary>
@@ -225,7 +255,14 @@ internal static class BenchmarkBaseline {
 
     /// <summary>Every data row of <paramref name="csvPath"/>, in file order.</summary>
     internal static IReadOnlyList<BenchmarkBaselineRow> Read(string csvPath) {
-        var lines = File.ReadAllLines(csvPath);
+        string[] lines;
+        try {
+            lines = File.ReadAllLines(csvPath);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) {
+            throw new InvalidOperationException(
+                $"Baseline '{csvPath}' cannot be read: {exception.Message}", exception);
+        }
         if (lines.Length < 2)
             throw new InvalidOperationException($"{csvPath} has no data rows.");
 
@@ -249,6 +286,8 @@ internal static class BenchmarkBaseline {
                 Number(cells[mean], "Mean", csvPath, i),
                 Number(cells[allocated], "Allocated", csvPath, i)));
         }
+        if (rows.Count == 0)
+            throw new InvalidOperationException($"{csvPath} has a header but no data rows.");
         return rows;
     }
 

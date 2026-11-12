@@ -62,6 +62,13 @@ public sealed class BenchmarkDecisionSmokeTests {
                 .Because($"{entry} must analyze clean; a row over an error tree measures nothing");
         }
 
+        var simulator = new SimulatorInvokeBenchmark();
+        var simulatorCases = SimulatorInvokeBenchmark.Cases().ToList();
+        await Assert.That(simulatorCases.Count).IsEqualTo(1)
+            .Because("the simulator argument source is the single unique-port case");
+        await Assert.That(simulator.UniqueAssignAction(simulatorCases[0])).IsTrue()
+            .Because("the simulator's unique-assign case must succeed once");
+
         var invokeCases = TwoPhaseInvokeBenchmark.Cases().ToList();
         await Assert.That(invokeCases.Count).IsGreaterThan(0)
             .Because("the invoke argument source must enumerate every action case");
@@ -70,6 +77,51 @@ public sealed class BenchmarkDecisionSmokeTests {
             var shape = invoke.TwoPhase_ActionInvoke(entry);
             await Assert.That(shape).IsEqualTo(entry.Expected)
                 .Because($"{entry.Key} must take its declared outcome shape");
+        }
+    }
+
+    /// <summary>
+    /// C5: a case whose action or entity the module does not declare throws at factory time, naming
+    /// both, instead of measuring a <see cref="InvokeShape.ReturnedFailure"/>.
+    /// </summary>
+    [Test]
+    public async Task InvokeCases_ResolveEveryEntityAndActionAtFactoryTime() {
+        var entry = TwoPhaseInvokeBenchmark.Cases()
+            .First(candidate => candidate.Action == TwoPhaseInvokeBenchmark.TransitionAction);
+
+        var missingAction = Assert.Throws<InvalidOperationException>(() => TwoPhaseInvokeBenchmark.Case(
+            entry.Domain, entry.Executor, entry.Instance,
+            "warehouse/truck/nosuch()", "NoSuchAction",
+            new Dictionary<string, object?>(), InvokeShape.ReturnedFailure));
+        await Assert.That(missingAction.Message).Contains("NoSuchAction")
+            .Because("the error must name the action the case asked for");
+        await Assert.That(missingAction.Message).Contains(entry.Instance.EntityName)
+            .Because("the error must name the entity the case asked for");
+
+        var missingEntity = Assert.Throws<InvalidOperationException>(
+            () => TwoPhaseInvokeBenchmark.RequireDeclared(entry.Domain, "NoSuchEntity", "Load"));
+        await Assert.That(missingEntity.Message).Contains("NoSuchEntity")
+            .Because("the error must name the entity the case asked for");
+    }
+
+    /// <summary>
+    /// C2: every decision baseline's numeric columns stay in range, so a refresh that wrote a zero or
+    /// a negative cannot pass as a measurement. A schema check, never a threshold.
+    /// </summary>
+    [Test]
+    public async Task DecisionBaselines_PinNumericRange() {
+        foreach (var path in new[] {
+                     BenchmarkBaseline.InvokeCsvPath,
+                     BenchmarkBaseline.AnalysisCsvPath,
+                     BenchmarkBaseline.SimulatorCsvPath,
+                 }) {
+            var rows = BenchmarkBaseline.Read(path);
+            var outOfRange = rows
+                .Where(row => row.Mean <= 0 || row.Allocated < 0)
+                .Select(row => $"{row.Entry}: Mean={row.Mean}, Allocated={row.Allocated}")
+                .ToList();
+            await Assert.That(outOfRange).IsEmpty()
+                .Because($"{path}: Mean must be positive and Allocated non-negative — a schema check, not a threshold");
         }
     }
 
@@ -101,13 +153,29 @@ public sealed class BenchmarkDecisionSmokeTests {
 
         var benchmark = new TwoPhaseInvokeBenchmark();
         foreach (var entry in cases) {
+            var transition = entry.Action == TwoPhaseInvokeBenchmark.TransitionAction;
+            var idle = transition ? entry.Instance.Bag["Status"] : null;
+            object? enRoute = null;
             for (var run = 1; run <= 3; run++) {
+                if (transition && run > 1)
+                    entry.Instance.Bag["Status"] = idle;
                 var before = entry.Load();
                 var shape = benchmark.TwoPhase_ActionInvoke(entry);
                 await Assert.That(shape).IsEqualTo(entry.Expected)
                     .Because($"{entry.Key} run {run} must take its declared outcome shape, not only the first run");
                 await Assert.That(entry.Load()).IsEqualTo(before)
                     .Because($"{entry.Key} run {run} must keep CurrentLoad unchanged; a kept mutation is the Q1 baseline, not a measurement");
+                if (!transition)
+                    continue;
+
+                var status = entry.Instance.Bag["Status"];
+                await Assert.That(status).IsNotEqualTo(idle)
+                    .Because($"{entry.Key} run {run} must move Status off Idle, so the reset before the next run is real");
+                if (enRoute is null)
+                    enRoute = status;
+                else
+                    await Assert.That(status).IsEqualTo(enRoute)
+                        .Because($"{entry.Key} run {run} reset Status to Idle first, so the EnRoute entry effect must land it again");
             }
         }
     }

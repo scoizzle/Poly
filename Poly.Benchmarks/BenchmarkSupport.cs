@@ -11,7 +11,9 @@ namespace Poly.Benchmarks;
 /// </summary>
 public static class BenchmarkSupport {
     /// <summary>This checkout's root: the parent of the directory holding this file at build time.</summary>
-    public static string RepoRoot([CallerFilePath] string sourceFile = "") =>
+    public static string RepoRoot { get; } = RootOfFile();
+
+    private static string RootOfFile([CallerFilePath] string sourceFile = "") =>
         Path.GetFullPath(Path.Combine(Path.GetDirectoryName(sourceFile)!, ".."));
 
     /// <summary>
@@ -33,7 +35,7 @@ public static class BenchmarkSupport {
 
     /// <summary>Reads a corpus document by repo-relative path and rejects a blank one.</summary>
     public static string ReadDocument(string relativePath) {
-        var fullPath = Path.Combine(RepoRoot(), relativePath);
+        var fullPath = Path.Combine(RepoRoot, relativePath);
         var text = ReadText(relativePath, fullPath);
         if (string.IsNullOrWhiteSpace(text))
             throw new InvalidOperationException($"Corpus document '{relativePath}' is empty ({fullPath}).");
@@ -52,7 +54,7 @@ public static class BenchmarkSupport {
         }
         catch (Exception exception) {
             throw new InvalidOperationException(
-                $"Corpus document '{relativePath}' does not load ({Path.Combine(RepoRoot(), relativePath)}): {exception.Message}",
+                $"Corpus document '{relativePath}' does not load ({Path.Combine(RepoRoot, relativePath)}): {exception.Message}",
                 exception);
         }
     }

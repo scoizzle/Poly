@@ -26,6 +26,14 @@ namespace Poly.Benchmarks;
 /// per-invocation counter, so the key names the unique-port shape rather than a value.
 /// </para>
 /// <para>
+/// <b>Read the row as a rebinding cost, not an invoke cost.</b> <c>Relabel</c> takes a parameter, so
+/// every invoke goes <c>FindMethod</c> → <c>BindOne</c>, which builds a fresh method body; the
+/// compiled cache's <c>ReferenceEquals</c> check can never hit, and <c>Interpreter.Analyze</c> plus
+/// <c>Interpreter.Compile</c> re-run per call. That is the 1.77 MB in this row. The storage-port
+/// unique check is still exercised, but its cost is not separable from the recompilation until that
+/// cache miss is fixed, so a Q1 after-number on this row is not attributable either.
+/// </para>
+/// <para>
 /// <b>Usage rule.</b> Compare <c>Allocated</c> against the committed file — it is stable for a
 /// given runtime — and re-run <c>Mean</c> side by side on one machine. The noise caveat covers every
 /// row: <c>--job short</c> <c>Mean</c> is noisy, so this row is not a threshold.

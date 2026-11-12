@@ -26,13 +26,23 @@ public enum InvokeShape {
 
 /// <summary>
 /// The two-phase action-invoke baseline: one row per golden-domain action call, measuring
-/// <c>ModuleInstanceExecutor.Invoke</c> — argument binding, the action body, its assign guards, and
-/// the host's <c>Transact</c> capture/restore. The committed copy is
+/// <c>ModuleInstanceExecutor.Invoke</c>. The committed copy is
 /// <c>Poly.Benchmarks/baselines/invoke.csv</c>, produced by:
 /// <code>
 /// dotnet run -c Release --project Poly.Benchmarks -- --job short --filter '*TwoPhaseInvokeBenchmark*'
 /// </code>
 /// with BenchmarkDotNet 0.15.8, then copied verbatim from the exporter's report.
+/// <para>
+/// <b>Read the rows differently.</b> The two parameterised rows (<c>load(0)</c>, <c>load(40001)</c>)
+/// are dominated by per-invoke <em>rebinding and recompilation</em>, not by the invoke: every call to
+/// a method with parameters goes <c>FindMethod</c> → <c>BindOne</c>, which builds a fresh method
+/// body, so <c>Compile</c>'s <c>ReferenceEquals(cached.Body, body)</c> check can never hit and
+/// <c>Interpreter.Analyze</c> plus <c>Interpreter.Compile</c> re-run on every invoke. That is the
+/// 10.7 MB / ~8 ms in those rows. Only the parameterless <c>dispatch()</c> row hits the cache, so
+/// only it isolates the host's <c>Transact</c> <c>Capture</c>/<c>Restore</c> pair — 6 KB / ~2 µs.
+/// A Q1 after-number on the parameterised rows is therefore <em>not attributable</em> until that
+/// cache miss is fixed; Q1's own delta shows up in <c>dispatch()</c>.
+/// </para>
 /// <para>
 /// <b>Session.</b> The cases are built on <see cref="BenchmarkSupport.AuthoringSession"/>:
 /// <c>DomainSession.ForAuthoringSource(text, ExtensionCatalog.ProductAuthoring)</c>, the same
@@ -73,6 +83,9 @@ public class TwoPhaseInvokeBenchmark {
     /// <summary>The benchmark method name, pinned by the smoke test's row check.</summary>
     public const string Method = "TwoPhase_ActionInvoke";
 
+    /// <summary>The transition action whose entry effect the smoke test proves re-runs.</summary>
+    public const string TransitionAction = "Dispatch";
+
     /// <summary>
     /// One case per action shape: a validated assign, a refused assign, and a transition whose
     /// entry effect assigns. The executor, the domain and every instance are built in the factory,
@@ -95,6 +108,36 @@ public class TwoPhaseInvokeBenchmark {
         catch (ConstraintFailureException) {
             return InvokeShape.Threw;
         }
+    }
+
+    /// <summary>
+    /// One case, resolved against the domain at factory time: an action the module does not declare
+    /// throws here, naming the action and the entity, instead of measuring a failure outcome.
+    /// </summary>
+    public static InvokeCase Case(
+        Domain domain,
+        ModuleInstanceExecutor executor,
+        ModuleInstance instance,
+        string key,
+        string action,
+        IReadOnlyDictionary<string, object?> arguments,
+        InvokeShape expected) {
+        RequireDeclared(domain, instance.EntityName, action);
+        return new InvokeCase(key, action, arguments, expected, domain, executor, instance);
+    }
+
+    /// <summary>Throws naming the entity or the action when the domain declares neither.</summary>
+    public static void RequireDeclared(Domain domain, string entityName, string actionName) {
+        var entity = domain.Types.OfType<Entity>()
+            .FirstOrDefault(candidate => string.Equals(candidate.Name, entityName, StringComparison.Ordinal))
+            ?? throw new InvalidOperationException(
+                $"Invoke case names entity '{entityName}', which domain '{domain.Name}' does not declare.");
+        var declared = entity.Actions
+            .Concat(entity.Stages.SelectMany(stage => stage.Actions))
+            .Any(action => string.Equals(action.Name, actionName, StringComparison.Ordinal));
+        if (!declared)
+            throw new InvalidOperationException(
+                $"Invoke case names action '{actionName}' on entity '{entityName}', which the module does not declare.");
     }
 
     /// <summary>Builds the three cases, or throws naming the document, entity or action that failed.</summary>
@@ -129,15 +172,15 @@ public class TwoPhaseInvokeBenchmark {
         });
 
         return [
-            new InvokeCase("warehouse/truck/load(0)", "Load",
-                new Dictionary<string, object?> { ["weight"] = 0 },
-                InvokeShape.Succeeded, executor, Truck(executor, depot, "1HGCM82633A004352")),
-            new InvokeCase("warehouse/truck/load(40001)", "Load",
-                new Dictionary<string, object?> { ["weight"] = 40001 },
-                InvokeShape.ReturnedFailure, executor, Truck(executor, depot, "1HGCM82633A004353")),
-            new InvokeCase("warehouse/truck/dispatch()", "Dispatch",
-                new Dictionary<string, object?>(),
-                InvokeShape.Succeeded, executor, Truck(executor, depot, "1HGCM82633A004354")),
+            Case(domain, executor, Truck(executor, depot, "1HGCM82633A004352"),
+                "warehouse/truck/load(0)", "Load",
+                new Dictionary<string, object?> { ["weight"] = 0 }, InvokeShape.Succeeded),
+            Case(domain, executor, Truck(executor, depot, "1HGCM82633A004353"),
+                "warehouse/truck/load(40001)", "Load",
+                new Dictionary<string, object?> { ["weight"] = 40001 }, InvokeShape.ReturnedFailure),
+            Case(domain, executor, Truck(executor, depot, "1HGCM82633A004354"),
+                "warehouse/truck/dispatch()", TransitionAction,
+                new Dictionary<string, object?>(), InvokeShape.Succeeded),
         ];
     }
 
@@ -169,6 +212,7 @@ public sealed record InvokeCase(
     string Action,
     IReadOnlyDictionary<string, object?> Arguments,
     InvokeShape Expected,
+    Domain Domain,
     ModuleInstanceExecutor Executor,
     ModuleInstance Instance) {
     public override string ToString() => Key;
@@ -177,5 +221,9 @@ public sealed record InvokeCase(
     /// The instance's <c>CurrentLoad</c> read straight from the bag, so a refused invoke can prove
     /// it kept no mutation on any repeat.
     /// </summary>
-    public double Load() => Convert.ToDouble(Instance.Bag["CurrentLoad"], CultureInfo.InvariantCulture);
+    public double Load() =>
+        Instance.Bag.TryGetValue("CurrentLoad", out var value)
+            ? Convert.ToDouble(value, CultureInfo.InvariantCulture)
+            : throw new InvalidOperationException(
+                $"Case '{Key}' has no 'CurrentLoad' on '{Instance.EntityName}' ({Instance.Id}); only a load case carries one.");
 }

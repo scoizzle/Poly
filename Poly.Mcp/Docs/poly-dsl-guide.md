@@ -1213,17 +1213,21 @@ diverging:
   judging the downstream violation — e.g. `assign Qty to Qty + 10` under
   `require Qty <= 80` on `Qty: Number range(0, 90)` is provably within range and produces
   no diagnostic.
-- **Silence means verified (Q4).** A write analysis cannot decide — a bare
-  property or parameter with no bound, an operator the interval flow does not model
+- **Silence means verified (Q4)** — except observed flows and non-Range kinds. A write
+  analysis cannot decide — a bare property or parameter with no bound, an operator the
+  interval flow does not model
   (`/`, a call, `match`), or a constraint kind with no flow decision — is a **`DMCS003`
   warning** naming the write, the property and the constraint. So with
   `A: Number range(0, 10)` and `B: Number range(5, 20)`, `assign A to B` warns
   (`DMEFF008`, "can fall outside"), and `assign A to U + 1` with an unbounded `U` warns
   (`DMCS003`, no usable bound). One **fact** is recorded per write; the worst verdict
-  across every stage context the action can run in decides the reported code, and the
-  literal and parameter arms report one diagnostic per violated constraint. Observed
-  flows are the exception — a flow whose source carries no same-kind constraint is not
-  yet verified (deferred; V-04). An initializer is judged against the declared ranges
+  across every stage context the action can run in decides the reported code; the literal
+  arm reports one diagnostic per violated constraint and the parameter arm one per write
+  (its downstream duplicate is suppressed). Observed flows go through the same recorder: a
+  flow whose source carries no same-kind constraint is a `DMCS003` warning naming the flow
+  plus an unverified fact on the target, a source whose value range sits inside the target
+  is verified, and a wider source keeps its `DMEFF008` with a "can fall outside" fact
+  beside it (an allowance still downgrades that finding). An initializer is judged against the declared ranges
   only: unlike an assign, it gets no `require` narrowing and no stage invariants, because
   a `create` has no stage context. Only `range(...)` is decided against a computed value
   in this slice; `length(...)`, `pattern(...)` and `equals(...)` writes are not

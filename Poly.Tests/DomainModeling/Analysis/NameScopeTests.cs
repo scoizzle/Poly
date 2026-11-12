@@ -130,8 +130,13 @@ public sealed class NameScopeTests {
         var domain = evolved.Root!;
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
-        foreach (var typeDef in DomainProgramProjection.ToSyntax(domain, analysis)
-            .Where(t => t.Kind != Poly.Introspection.TypeKind.Enum)) {
+        var entityTypes = DomainProgramProjection.ToSyntax(domain, analysis)
+            .Where(t => t.Kind != Poly.Introspection.TypeKind.Enum)
+            .ToList();
+        await Assert.That(string.Join(",", entityTypes.Select(t => t.Name).Order(StringComparer.Ordinal)))
+            .IsEqualTo("Group,Item");
+
+        foreach (var typeDef in entityTypes) {
             var emitted = new List<string>();
             emitted.AddRange(typeDef.Properties?.Select(p => p.Name) ?? []);
             emitted.AddRange(typeDef.Methods?.Select(m => m.Name) ?? []);

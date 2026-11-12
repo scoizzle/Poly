@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+
 using Poly.DomainModeling.Libraries.Storage;
 using Poly.DomainModeling.Libraries.Temporal;
 using Poly.DomainModeling.Libraries.Tests;
@@ -44,6 +46,7 @@ public sealed class ExtensionCatalog {
     public DomainSession Authoring => DomainSession.ForExtensions(ProductAuthoring, this);
 
     private readonly Dictionary<string, IDomainLibrary> _libraries;
+    private readonly ConcurrentDictionary<string, Lazy<LibraryProbe>> _probes = new(StringComparer.Ordinal);
 
     public static ExtensionCatalog Core { get; } = new ExtensionCatalog()
         .With(new TemporalLibrary())
@@ -83,18 +86,75 @@ public sealed class ExtensionCatalog {
     public bool Contains(string id) =>
         id is not null && _libraries.ContainsKey(id);
 
-    public IReadOnlyList<string> KnownIds => [];
+    /// <summary>
+    /// Every extension id this catalog resolves, ordinal-sorted. Reads the
+    /// dictionary keys and never probes a library.
+    /// </summary>
+    public IReadOnlyList<string> KnownIds =>
+        _libraries.Keys.OrderBy(id => id, StringComparer.Ordinal).ToArray();
 
-    public IReadOnlyList<string> KnownTargets => [];
+    /// <summary>
+    /// Every host target the catalog's libraries declare, ordinal-sorted and
+    /// distinct. Probes each library once, as <see cref="Info"/> does.
+    /// </summary>
+    public IReadOnlyList<string> KnownTargets => SortedDistinct(
+        _libraries.Keys.SelectMany(id => Probe(id).Info.HostTargets));
 
+    /// <summary>
+    /// The library's read-only facts, from one cached
+    /// <see cref="IDomainLibrary.Register"/> on a throwaway builder. An unknown id
+    /// fails through <see cref="Resolve"/>.
+    /// </summary>
+    /// <remarks>
+    /// The probe loads only this library (no core) and then freezes the builder, so
+    /// <see cref="IDomainLibrary.Register"/> must be repeatable on a fresh builder.
+    /// A probe exception propagates.
+    /// </remarks>
     public LibraryInfo Info(string id) {
-        ArgumentException.ThrowIfNullOrWhiteSpace(id);
         _ = Resolve(id);
-        return new LibraryInfo(id, [], [], []);
+        return Probe(id).Info;
     }
 
+    /// <summary>
+    /// The catalog ids whose library installs a compiler whose
+    /// <see cref="IConstraintCompiler.Applies"/> is true for
+    /// <paramref name="constraint"/>, ordinal-sorted. Reports the catalog key, never
+    /// the compiler's own <see cref="IConstraintCompiler.LibraryId"/>. A throwing
+    /// <c>Applies</c> propagates, and each call returns a fresh list.
+    /// </summary>
     public IReadOnlyList<string> ProvidersOf(Constraint constraint) {
         ArgumentNullException.ThrowIfNull(constraint);
-        return [];
+        var providers = new List<string>();
+        foreach (var id in KnownIds) {
+            if (Probe(id).Compilers.Any(compiler => compiler.Applies(constraint)))
+                providers.Add(id);
+        }
+        return providers.ToArray();
     }
+
+    private LibraryProbe Probe(string id) =>
+        _probes.GetOrAdd(
+            id,
+            libraryId => new Lazy<LibraryProbe>(
+                () => CreateProbe(libraryId),
+                LazyThreadSafetyMode.ExecutionAndPublication)).Value;
+
+    private LibraryProbe CreateProbe(string id) {
+        var library = Resolve(id);
+        var builder = SessionBuilder.CreateEmpty();
+        builder.Load(library);
+        var session = builder.Build(SessionOptions.Bare(this));
+        return new LibraryProbe(
+            new LibraryInfo(
+                id,
+                library.PrimitiveSeeds,
+                SortedDistinct(session.ContractContributions.SelectMany(contribution => contribution.Targets)),
+                SortedDistinct(session.ContractContributions.Select(contribution => contribution.Surface.Name))),
+            session.ConstraintCompilers);
+    }
+
+    private static IReadOnlyList<string> SortedDistinct(IEnumerable<string> values) => values
+        .Distinct(StringComparer.Ordinal)
+        .OrderBy(value => value, StringComparer.Ordinal)
+        .ToArray();
 }

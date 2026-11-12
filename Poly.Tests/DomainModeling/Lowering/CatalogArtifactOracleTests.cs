@@ -47,8 +47,7 @@ public class CatalogArtifactOracleTests {
         var domain = GoldenDomains.Skipped.Single(d => d.Name == "nested-invoke-type-mismatch");
         var (succeeded, errors) = Analyze(File.ReadAllText(domain.FullPath));
         await Assert.That(succeeded).IsFalse().Because(domain.SkipReason!);
-        await Assert.That(errors.Any(e => e.Message.Contains("type", StringComparison.OrdinalIgnoreCase)))
-            .IsTrue().Because(domain.SkipReason!);
+        await Assert.That(errors.Any(e => e.Code == "DMSEM003")).IsTrue().Because(domain.SkipReason!);
     }
 
     [Test]

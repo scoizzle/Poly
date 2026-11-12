@@ -18,7 +18,7 @@ Use Poly when the task has a domain you would otherwise hard-code assumptions ab
 5. `poly_export` — `dsl`, `json-schema`, `csharp`, `markdown`, `html`, `json-ld`, or `shacl`. Small artifacts return inline; over 4 KB returns `{path, bytes, sha256}`.
    Or `poly_simulate` — an ordered `create`/`link`/`unlink`/`invoke`/`evaluate`/`get`/`list` scenario with one trace entry per step.
 
-`poly_inspect` reads back the overview or one element by path: `Entity`, `Entity.Member` (property, navigation, stage, action, policy), `Entity.Stage.Action`, or an enum, value type or function name. It is brief by default; `detail: "full"` returns the element.
+`poly_inspect` reads back the overview or one element by path: `Entity`, `Entity.Member` (property, navigation, stage, action, policy), `Entity.Stage.Action`, `Enum.Member`, or an enum, value type or function name. It is brief by default; `detail: "full"` returns the element.
 
 ## Authoring rules
 

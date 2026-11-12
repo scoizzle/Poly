@@ -59,7 +59,7 @@ Neurosymbolic platform: author structured domain → lower to symbolic AST → a
 | VM executes Syntax programs | `Interpreter.Compile` fail-closed; no domain opcodes; C# emit is a projection |
 | Domain lowers to generic ops | StageTransition / invoke / create / unique / clocks → existing Syntax + Store jobs on the one module |
 | Product doors are opt-in | `uses`; CLI seeds ids only |
-| MCP is harness | Author / inspect / simulate with caller context — not customer API; `poly_inspect` is a client of `ElementPath` / `ElementPathResolver` (`Poly/DomainModeling/Queries/`), the one typed element-path grammar |
+| MCP is harness | Author / inspect / simulate with caller context — not customer API; `poly_inspect` is a client of `ElementPath` / `ElementPathResolver` (`Poly/DomainModeling/Queries/`), the typed grammar `poly_inspect` uses (`poly_check`'s `NormalizeSelect` and `VerificationSummary.SelectScope` stay until M-04/M-05) |
 | Lowered module is **domain meaning** | Artifact set on session; Syntax module privileged; fix Lower when sim ≠ print |
 | Extend in the pipeline | Lower / analyze / replace — not emitter/ABI patches |
 | Analysis required for semantics | Fail closed without `AnalysisResult`; `LoweringContext` takes analysis and domain as required members |
@@ -180,7 +180,7 @@ Host-neutral types/members (`Poly/Introspection/`); CLR is first provider. Consu
 
 Simulate = Interpreter on lowered module bodies with caller-supplied context — not Domain/Effect IR. Extensions: one `.poly` language; session loads `uses` ids (unknown/duplicate fail closed). Persistence/HTTP emit doors only when listed. Core seed does not emit `Program.cs`.
 
-Tool arguments are validated before the SDK binder from each tool's published `inputSchema`; caller errors are `UNKNOWN_ARGUMENT`, `INVALID_ARGUMENT` or `WORKSPACE_REQUIRED`, and `INTERNAL_ERROR` means a defect. A JSON error inside a tool body (`steps`, `bindings`, `args`) still returns `ok:false` with no `errorCode` until M-07.
+Tool arguments are validated before the SDK binder from each tool's published `inputSchema`; caller errors are `UNKNOWN_ARGUMENT`, `INVALID_ARGUMENT`, `WORKSPACE_REQUIRED` or (`poly_inspect` only) `ELEMENT_NOT_FOUND`, and `INTERNAL_ERROR` means a defect. A JSON error inside a tool body (`steps`, `bindings`, `args`) still returns `ok:false` with no `errorCode` until M-07.
 
 ### 3.7 Debugging
 

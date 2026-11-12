@@ -61,7 +61,7 @@ The filter sits where `UnknownArgumentFilter` sat (inside `ToolExceptionBoundary
 
 Within one category the first defect in parameter order is reported.
 
-### 3. Four codes, one boundary
+### 3. Five codes, one boundary
 
 | Code | Meaning | Producer |
 |------|---------|----------|
@@ -140,3 +140,5 @@ type is `INVALID_ARGUMENT` and the same host still serves the next call.
 
 ### M-03 note: one path grammar, one resolver
 `poly_inspect` parses `ElementPath` and resolves it once through `ElementPathResolver` (`Poly/DomainModeling/Queries/`). The resolver is pure over the domain and returns a ref, a not-found (`unknown` / `notAddressable`, with candidates) or an ambiguity. `poly_check`'s select helpers and `VerificationSummary.SelectScope` are superseded copies that M-04/M-05 repoint.
+
+**Contract change (M-03).** `poly_inspect` `data.kind` is now `navigation`, `entityAction` or `stageAction` (`relationship` and `action` are gone), alongside `entity`, `property`, `enum`, `enumMember`, `valueType`, `policy`, `stage`, `function`. Bare stage, action, policy and relationship names with no entity no longer resolve; write `Entity.Name`. Elements carry `data.path`; an `ELEMENT_NOT_FOUND` carries `data.reason`, `data.candidates`, and when present `data.partial` (deepest resolved path) and `data.matches` (`{kind, path}` per ambiguous match). `InspectService` still takes `QueryTool` for the overview and entity data until M-13 deletes the v1 adapters.

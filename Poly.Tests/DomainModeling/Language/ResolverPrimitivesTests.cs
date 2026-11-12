@@ -139,8 +139,10 @@ public sealed class ResolverPrimitivesTests {
     }
 
     /// <summary>
-    /// J2: the resolver seeds the six before <c>AddDomainExtensionChange("temporal")</c> would,
-    /// and only that change's name-skip keeps the document to one <c>Date</c>.
+    /// J2: the <c>uses</c> loop emits <c>AddDomainExtensionChange("temporal")</c> before the
+    /// resolver seeds the primitives, so the seed's name filter skips temporal's own
+    /// <c>Date</c> and the document carries exactly one. This document never takes the
+    /// seed-append path; <see cref="SeedOnlyTemporalDocument_CarriesExactlyOneDate"/> covers it.
     /// </summary>
     [Test]
     public async Task FunctionOnlyDocumentWithTemporalUse_CarriesExactlyOneDate() {
@@ -154,6 +156,54 @@ public sealed class ResolverPrimitivesTests {
         await Assert.That(result.Succeeded).IsTrue();
         await Assert.That(result.Root.Types.OfType<PrimitiveType>().Count(p => p.Name == "Date"))
             .IsEqualTo(1);
+    }
+
+    /// <summary>
+    /// S-08 follow-up: a host that seeds <c>temporal</c> while the document names no
+    /// <c>uses</c> reaches the seed-append path, and still carries exactly one <c>Date</c>.
+    /// </summary>
+    [Test]
+    public async Task SeedOnlyTemporalDocument_CarriesExactlyOneDate() {
+        var result = new PolyCompiler(ProductCatalog.Catalog, ["temporal"])
+            .Analyze("""
+                domain P
+                function F(x: Date): Date = x
+                """);
+
+        await Assert.That(result.Succeeded).IsTrue();
+        await Assert.That(result.Domain!.Types.OfType<PrimitiveType>().Count(p => p.Name == "Date"))
+            .IsEqualTo(1);
+    }
+
+    /// <summary>
+    /// S-08 follow-up, double-seed pin: an entity, a value, a function and a contract in one
+    /// document share one seed, so every primitive appears exactly once.
+    /// </summary>
+    [Test]
+    public async Task MixedDocument_CarriesEachPrimitiveOnce() {
+        var (succeeded, root, _) = ApplyAndAnalyze("""
+            domain P
+            uses temporal
+            Money: value {
+              Amount: Number
+            }
+            Billing: contract internal billing v1 {
+              ChargeRequest: value {
+                Amount: Number
+              }
+              Charge: outbound operation ChargeRequest
+            }
+            E: entity {
+              Q: Number
+            }
+            function F(x: Number): Number = x
+            """);
+
+        await Assert.That(succeeded).IsTrue();
+        var names = Primitives(root);
+        await Assert.That(names.Where(n => names.Count(o => o == n) > 1).ToList()).IsEmpty();
+        foreach (var builtIn in new[] { "Boolean", "Number", "Decimal", "Text", "Uuid", "Binary", "Date" })
+            await Assert.That(names).Contains(builtIn);
     }
 
     /// <summary>#478 repro 1 through the production door: no unknown type, no duplicate name.</summary>

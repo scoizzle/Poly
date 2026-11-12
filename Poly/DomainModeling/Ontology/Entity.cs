@@ -50,6 +50,24 @@ public sealed record Entity(
     /// </summary>
     internal IReadOnlyList<string> KeyProperties { get; init; } = [];
 
+    /// <summary>
+    /// The order in which this entity's members were authored (S-15, Q12): properties,
+    /// navigations, stages, entity-level actions and entity-level policies, interleaved
+    /// exactly as written. Each entry is a <c>(Kind, Name)</c> pair, because names are not
+    /// unique across kinds — a stage and a property may share one.
+    /// <para>
+    /// Authoritative only when it covers every member. A programmatically built or mutated
+    /// entity (builder evolution such as <c>EvolveTool</c>) can leave it empty or partial, so
+    /// a consumer must not treat an absent entry as "not a member".
+    /// </para>
+    /// <para>
+    /// Written only by <c>SetEntityMemberOrderChange</c>; no member change appends to it and
+    /// nothing sorts it. Deliberately not in <see cref="Children"/>: it names members that
+    /// are already children, and walking it again would double-walk every member in every pass.
+    /// </para>
+    /// </summary>
+    internal IReadOnlyList<EntityMemberRef> MemberOrder { get; init; } = [];
+
     public sealed override IEnumerable<Node?> Children =>
         [.. Properties, .. Constraints, .. Facets, .. Actions, .. Policies, .. Stages, .. Subscriptions, .. Navigations];
 }

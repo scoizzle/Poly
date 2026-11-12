@@ -327,11 +327,6 @@ public sealed partial class DomainResolver {
         changes.Add(new AddImportedContractChange(name, sourceKind, sourceId, version));
         Expect(TokenKind.LBrace);
 
-        // Contract bodies declare value types that reference primitives (e.g. `Amount: Number`),
-        // so the built-in primitive types must be ensured even when the domain has no entity
-        // (a pure ACL / used-sub-domain domain). Mirrors ParseEntity's EnsurePrimitivesOnce.
-        EnsurePrimitivesOnce(changes);
-
         while (Current.Kind != TokenKind.RBrace && Current.Kind != TokenKind.EndOfFile) {
             if (Current.Kind == TokenKind.Identifier
                 && PeekIs(TokenKind.Colon)

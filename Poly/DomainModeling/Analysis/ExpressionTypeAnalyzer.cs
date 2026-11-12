@@ -46,6 +46,21 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
             ? claimed
             : expr;
 
+    /// <summary>Marker: this call was already checked in this analysis run (#483).</summary>
+    private sealed class CheckedCallMetadata : IAnalysisMetadata { }
+
+    /// <summary>
+    /// True the first time a call node is checked in this run: a <c>require</c> copy shares its
+    /// policy's expression object, so the tree walk reaches one call node twice. The fact sits on
+    /// the node in the run's own metadata store (<see cref="ContractCallResolver"/>'s idiom) — per
+    /// analysis, never a static table or a field on the reused pass instance.
+    /// </summary>
+    private static bool FirstVisitOfCall(AnalysisContext context, FunctionCall call) {
+        if (context.GetMetadata<CheckedCallMetadata>(call) is not null) return false;
+        context.SetMetadata(call, new CheckedCallMetadata());
+        return true;
+    }
+
     public void Analyze(AnalysisContext context, Node node) {
 
         if (node is Domain domain) {
@@ -53,7 +68,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
             FunctionAnalysis.CheckDeclarations(context, domain);
             AnalyzeFunctionBodies(context, domain);
         }
-        if (node is FunctionCall call)
+        if (node is FunctionCall call && FirstVisitOfCall(context, call))
             FunctionAnalysis.CheckCall(context, call);
         if (node is Property property)
             FunctionAnalysis.CheckProperty(context, property);
@@ -153,19 +168,23 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
         }
 
         // policies (entity, stage, action)
+        // #483: a `require P` copy holds P's expression object, so one tree is walked twice and
+        // would report twice. The set is per entity walk (the session re-runs this pass) and keyed
+        // on the parameter scope, because an action's parameters change what a name infers to.
+        var walked = new WalkedExpressions();
         foreach (var policy in entity.Policies)
-            WalkExpression(context, policy.Expression, props, null, enumTypes);
+            WalkExpression(context, policy.Expression, props, null, enumTypes, walked);
         foreach (var stage in entity.Stages) {
             foreach (var policy in stage.Policies)
-                WalkExpression(context, policy.Expression, props, null, enumTypes);
+                WalkExpression(context, policy.Expression, props, null, enumTypes, walked);
         }
         foreach (var action in entity.Actions)
             foreach (var policy in action.Policies)
-                WalkExpression(context, policy.Expression, props, ParamsOf(action), enumTypes);
+                WalkExpression(context, policy.Expression, props, ParamsOf(action), enumTypes, walked);
         foreach (var stage in entity.Stages)
             foreach (var action in stage.Actions)
                 foreach (var policy in action.Policies)
-                    WalkExpression(context, policy.Expression, props, ParamsOf(action), enumTypes);
+                    WalkExpression(context, policy.Expression, props, ParamsOf(action), enumTypes, walked);
 
         // effects (actions, entry/exit, subscriptions)
         foreach (var action in entity.Actions)
@@ -186,6 +205,53 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
         action.Parameters.Count > 0
             ? action.Parameters.ToDictionary(p => p.Name, p => p.Type.TypeName, StringComparer.Ordinal)
             : null;
+
+    /// <summary>
+    /// Policy expressions already walked for this entity, per parameter scope (#483). A
+    /// <c>require</c> copy shares its policy's expression object, so one tree is reachable by two
+    /// paths; the scope is part of the key because an action's parameters can change how a name
+    /// infers, and a finding is deduped only when the context is the same.
+    /// </summary>
+    private sealed class WalkedExpressions {
+        private readonly Dictionary<string, HashSet<Node>> _byScope = new(StringComparer.Ordinal);
+
+        public bool TryEnter(
+            DomainExpression expr, Dictionary<string, string>? parameters, Dictionary<string, string> props) {
+            var scope = ScopeOf(expr, parameters, props);
+            if (!_byScope.TryGetValue(scope, out var seen))
+                _byScope[scope] = seen = new HashSet<Node>(ReferenceEqualityComparer.Instance);
+            return seen.Add(expr);
+        }
+
+        /// <summary>
+        /// The parameters this expression reads, minus the entity's own properties. A parameter the
+        /// policy never names cannot change what it infers, so it must not open a second scope; a
+        /// name the entity declares stays a property whatever the action calls its parameter.
+        /// </summary>
+        private static string ScopeOf(
+            DomainExpression expr, Dictionary<string, string>? parameters, Dictionary<string, string> props) {
+            if (parameters is null || parameters.Count == 0) return "";
+            return string.Join('\u001f', NamesRead(expr)
+                .Where(name => parameters.ContainsKey(name) && !props.ContainsKey(name))
+                .Distinct(StringComparer.Ordinal)
+                .Order(StringComparer.Ordinal)
+                .Select(name => $"{name}:{parameters[name]}"));
+        }
+
+        /// <summary>Every name read through a property or parameter access, call arguments included.</summary>
+        private static IEnumerable<string> NamesRead(DomainExpression expr) {
+            if (expr is PropertyAccess or ParameterAccess) yield return NameOf(expr);
+            foreach (var child in expr.Children.OfType<DomainExpression>())
+                foreach (var name in NamesRead(child))
+                    yield return name;
+        }
+
+        private static string NameOf(DomainExpression expr) => expr switch {
+            PropertyAccess property => property.Name,
+            ParameterAccess parameter => parameter.Name,
+            _ => "",
+        };
+    }
 
     private static Dictionary<string, EnumType> ResolveEnums(AnalysisContext context) {
         var lookup = context.GetTypeLookup();
@@ -463,7 +529,9 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
         DomainExpression expr,
         Dictionary<string, string> props,
         Dictionary<string, string>? parameters,
-        Dictionary<string, EnumType> enumTypes) {
+        Dictionary<string, EnumType> enumTypes,
+        WalkedExpressions? walked = null) {
+        if (walked is not null && !walked.TryEnter(expr, parameters, props)) return;
         switch (expr) {
             case Comparison cmp:
                 CheckComparison(context, cmp, props, parameters, enumTypes);
@@ -478,8 +546,8 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                     // Same-family date minus date is a difference, not arithmetic; mixed families stay errors.
                     if (leftType.Category is TypeCategory.Date && rightType.Category is TypeCategory.Date
                         && !MixedDateGranularity(context, leftType, rightType)) {
-                        WalkExpression(context, sub.Left, props, parameters, enumTypes);
-                        WalkExpression(context, sub.Right, props, parameters, enumTypes);
+                        WalkExpression(context, sub.Left, props, parameters, enumTypes, walked);
+                        WalkExpression(context, sub.Right, props, parameters, enumTypes, walked);
                         return;
                     }
                 }
@@ -495,13 +563,13 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                 var operand = InferType(context, not.Operand, props, parameters, enumTypes);
                 if (operand.Category is not (TypeCategory.Boolean or TypeCategory.Unknown))
                     Report(context, expr, $"'not' requires a Boolean operand (got '{Describe(operand)}')");
-                WalkExpression(context, not.Operand, props, parameters, enumTypes);
+                WalkExpression(context, not.Operand, props, parameters, enumTypes, walked);
                 return;
             case And and:
-                CheckBooleanOperands(context, and.Left, and.Right, props, parameters, enumTypes);
+                CheckBooleanOperands(context, and.Left, and.Right, props, parameters, enumTypes, walked);
                 return;
             case Or or:
-                CheckBooleanOperands(context, or.Left, or.Right, props, parameters, enumTypes);
+                CheckBooleanOperands(context, or.Left, or.Right, props, parameters, enumTypes, walked);
                 return;
             case MatchExpr match:
                 CheckMatch(context, match, props, parameters, enumTypes);
@@ -517,7 +585,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                 return;
             default:
                 foreach (var child in expr.Children.OfType<DomainExpression>())
-                    WalkExpression(context, child, props, parameters, enumTypes);
+                    WalkExpression(context, child, props, parameters, enumTypes, walked);
                 _meaning.Checks.TryCheck(context, expr,
                     new ExpressionTypeCheckScope(props, parameters, enumTypes));
                 return;
@@ -527,15 +595,15 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
     private void CheckBooleanOperands(
         AnalysisContext context, DomainExpression left, DomainExpression right,
         Dictionary<string, string> props, Dictionary<string, string>? parameters,
-        Dictionary<string, EnumType> enumTypes) {
+        Dictionary<string, EnumType> enumTypes, WalkedExpressions? walked = null) {
         var leftType = InferType(context, left, props, parameters, enumTypes);
         var rightType = InferType(context, right, props, parameters, enumTypes);
         if (leftType.Category is not (TypeCategory.Boolean or TypeCategory.Unknown)
             || rightType.Category is not (TypeCategory.Boolean or TypeCategory.Unknown))
             Report(context, left,
                 $"'and'/'or' requires Boolean operands (got '{Describe(leftType)}' and '{Describe(rightType)}')");
-        WalkExpression(context, left, props, parameters, enumTypes);
-        WalkExpression(context, right, props, parameters, enumTypes);
+        WalkExpression(context, left, props, parameters, enumTypes, walked);
+        WalkExpression(context, right, props, parameters, enumTypes, walked);
     }
 
     private void CheckCompatible(

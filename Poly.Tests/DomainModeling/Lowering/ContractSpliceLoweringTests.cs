@@ -128,6 +128,10 @@ public sealed class ContractSpliceLoweringTests {
         });
         await Assert.That(sim.Succeeded).IsFalse();
         await Assert.That(sim.Error).IsEqualTo("declined");
+        await Assert.That(sim.Failure!.Kind).IsEqualTo(Poly.Runtime.DomainFailureKind.Constraint);
+        await Assert.That(sim.Failure.ElementPath).IsEqualTo("Order.Pay");
+        await Assert.That(sim.Failure.Message).IsEqualTo("declined");
+        await Assert.That(sim.Failure.Guard).IsNull();
 
         var cs = new CSharpGenerator().Generate(module);
         var asm = ExportedCSharp.CompileAndLoad(cs);
@@ -143,6 +147,11 @@ public sealed class ContractSpliceLoweringTests {
         await Assert.That((bool)printedResult.GetType().GetProperty("IsSuccess")!.GetValue(printedResult)!).IsFalse();
         await Assert.That((string?)printedResult.GetType().GetProperty("ErrorMessage")!.GetValue(printedResult))
             .IsEqualTo("declined");
+        var printedFailure = (Poly.Runtime.DomainFailure)printedResult.GetType().GetProperty("Error")!.GetValue(printedResult)!;
+        await Assert.That(printedFailure.Kind).IsEqualTo(Poly.Runtime.DomainFailureKind.Constraint);
+        await Assert.That(printedFailure.ElementPath).IsEqualTo("Order.Pay");
+        await Assert.That(printedFailure.Message).IsEqualTo("declined");
+        await Assert.That(printedFailure.Guard).IsNull();
     }
 
 }

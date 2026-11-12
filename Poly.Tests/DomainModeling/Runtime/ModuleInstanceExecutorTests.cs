@@ -1,3 +1,6 @@
+using System.Reflection;
+
+using Poly.Ast.Nodes;
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Compile;
@@ -6,6 +9,7 @@ using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Libraries.Storage;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Runtime;
+using Poly.Mcp.Tools;
 using Poly.Runtime;
 
 namespace Poly.Tests.DomainModeling.Runtime;
@@ -644,6 +648,167 @@ public sealed class ModuleInstanceExecutorTests {
             await Assert.That(text).DoesNotContain("blocked by policy '");
             await Assert.That(text).DoesNotContain("requires a linked");
         }
+    }
+
+    private const string InvokeUnlinkedGuardedDsl = """
+        domain Lab
+        Child: entity { Poke: action { } }
+        Parent: entity {
+          Armed: Boolean default(true)
+          Ready: policy { Armed is true }
+          kid: Child
+          Go: action require Ready { invoke kid.Poke }
+        }
+        """;
+
+    [Test]
+    public async Task Invoke_InvokeUnlinked_FailedGuardsListsTheActionPolicies() {
+        var executor = ExecutorFor(InvokeUnlinkedGuardedDsl);
+        var parent = executor.Create("Parent", Values()).Instance!;
+
+        var blocked = executor.Invoke(parent, "Go");
+
+        await Assert.That(blocked.Failure!.Kind).IsEqualTo(DomainFailureKind.Required);
+        await Assert.That(blocked.Failure.ElementPath).IsEqualTo("Parent.kid");
+        await Assert.That(blocked.Failure.Guard).IsNull();
+        await Assert.That(string.Join(",", blocked.FailedGuards)).IsEqualTo("Ready");
+    }
+
+    private const string RewrappedRequiredDsl = """
+        domain Lab
+        Owner: entity { Flag: Boolean default(true) }
+        Child: entity {
+          owner: Owner
+          OwnerFlagged: policy { owner Flag is true }
+          Poke: action require OwnerFlagged { }
+        }
+        Parent: entity {
+          Armed: Boolean default(true)
+          Ready: policy { Armed is true }
+          kid: Child
+          AddKid: action { create in kid { } }
+          Go: action require Ready { invoke kid.Poke }
+        }
+        """;
+
+    /// <summary>
+    /// X-01b ruling (a): a callee's path-prefix <c>Required</c>, rewrapped through <c>At</c> into a path
+    /// of more than two segments, projects <c>[]</c>. The caller's policies did not fail; the old text
+    /// parser listed them only because the callee's message contained the linked-target phrase.
+    /// The MCP mapper keeps listing the caller's policies until M-09 (see the cross-parser pin).
+    /// </summary>
+    [Test]
+    public async Task Invoke_RewrappedCalleeRequired_ProjectsNoGuards() {
+        var executor = ExecutorFor(RewrappedRequiredDsl);
+        var parent = executor.Create("Parent", Values()).Instance!;
+        await Assert.That(executor.Invoke(parent, "AddKid").Succeeded).IsTrue();
+
+        var blocked = executor.Invoke(parent, "Go");
+
+        await Assert.That(blocked.Succeeded).IsFalse();
+        await Assert.That(blocked.Failure!.Kind).IsEqualTo(DomainFailureKind.Required);
+        await Assert.That(blocked.Failure.ElementPath).IsEqualTo("Parent.Go.Child.owner");
+        await Assert.That(blocked.Failure.Guard).IsNull();
+        await Assert.That(blocked.FailedGuards.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task Invoke_PolicyFailureWithoutGuard_ProjectsNoGuards() {
+        var domain = Lower(PolicyBlockDsl);
+        var executor = new ModuleInstanceExecutor(domain);
+        var person = executor.Create("Person", Values(("Age", 30L))).Instance!;
+        ReplaceBody(domain, "Person", "Activate",
+            new Constant(new FixedResult(DomainFailure.Policy("blocked", "Person.Activate"))));
+
+        var blocked = executor.Invoke(person, "Activate");
+
+        await Assert.That(blocked.Failure!.Kind).IsEqualTo(DomainFailureKind.Policy);
+        await Assert.That(blocked.Failure.Guard).IsNull();
+        await Assert.That(blocked.FailedGuards.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task Invoke_RequiredOutsideANavigationPath_ProjectsNoGuards() {
+        var domain = Lower(PolicyBlockDsl);
+        var executor = new ModuleInstanceExecutor(domain);
+        var person = executor.Create("Person", Values(("Age", 30L))).Instance!;
+        ReplaceBody(domain, "Person", "Activate",
+            new Constant(new FixedResult(DomainFailure.Required("'Age' is required.", "Person.Age"))));
+
+        var blocked = executor.Invoke(person, "Activate");
+
+        await Assert.That(blocked.Failure!.Kind).IsEqualTo(DomainFailureKind.Required);
+        await Assert.That(blocked.Failure.ElementPath).IsEqualTo("Person.Age");
+        await Assert.That(blocked.FailedGuards.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task Invoke_FailedResultWithoutError_ThrowsRatherThanFabricatingAFailure() {
+        var domain = Lower(PolicyBlockDsl);
+        var executor = new ModuleInstanceExecutor(domain);
+        var person = executor.Create("Person", Values(("Age", 30L))).Instance!;
+        ReplaceBody(domain, "Person", "Activate", new Constant(new FixedResult(null)));
+
+        var thrown = Assert.Throws<InvalidOperationException>(() => executor.Invoke(person, "Activate"));
+
+        await Assert.That(thrown.Message).Contains("failed without a DomainFailure");
+    }
+
+    [Test]
+    public async Task Create_FailedResultWithoutError_ThrowsRatherThanFabricatingAFailure() {
+        var domain = Lower(PolicyBlockDsl);
+        var executor = new ModuleInstanceExecutor(domain);
+        ReplaceBody(domain, "Person", "Create", new Constant(new FixedResult(null)));
+
+        var thrown = Assert.Throws<InvalidOperationException>(() => executor.Create("Person", Values()));
+
+        await Assert.That(thrown.Message).Contains("failed without a DomainFailure");
+    }
+
+    /// <summary>A hand-written result, so a test can return a state the lowered module never produces.</summary>
+    private sealed record FixedResult(DomainFailure? Error) : IDomainResult {
+        public bool IsSuccess => false;
+        public string? ErrorMessage => Error?.Render();
+    }
+
+    /// <summary>Swaps one module method's body in the domain's cached module, the seam a hand-written result needs.</summary>
+    private static void ReplaceBody(Domain domain, string entity, string method, Node body) {
+        RuntimeAnalysisCache.TryGetModule(domain, out var module);
+        RuntimeAnalysisCache.ReplaceModule(domain, [.. module.Select(t => t.Name != entity ? t : t with {
+            Methods = [.. t.Methods!.Select(m => m.Name == method ? m with { Body = body } : m)],
+        })]);
+    }
+
+    /// <summary>
+    /// Until M-09 the executor's typed <c>GuardsFor</c> and the MCP text mapper implement one rule twice.
+    /// This pins where they agree (an own policy block, a path-prefix require) and the one named split:
+    /// a <c>require not X</c> block is <c>[X]</c> in the executor and <c>[not_X]</c> in MCP.
+    /// </summary>
+    [Test]
+    [Arguments(PolicyBlockDsl, "Person", "Activate", 10L, "IsAdult", "IsAdult")]
+    [Arguments(SectionDsl, "Enrollment", "Confirm", null, "not_SectionFull", "not_SectionFull")]
+    [Arguments(SectionDsl, "Enrollment", "Confirm", 1L, "SectionFull", "not_SectionFull")]
+    public async Task FailedGuards_ExecutorAndMcpMapper_AgreeExceptOnRequireNotPolicyBlocks(
+        string dsl, string entityName, string actionName, long? seats, string executorGuard, string mcpGuard) {
+        var domain = Lower(dsl);
+        var executor = new ModuleInstanceExecutor(domain);
+        var subject = executor.Create(entityName, entityName == "Person" ? Values(("Age", 10L)) : Values()).Instance!;
+        if (entityName == "Enrollment" && seats is { } taken) {
+            var section = executor.Create("Section", Values()).Instance!;
+            executor.Link("section", subject, section);
+            section.Bag["SeatsTaken"] = taken;
+        }
+
+        var blocked = executor.Invoke(subject, actionName);
+
+        var entity = domain.Types.OfType<Entity>().Single(e => e.Name == entityName);
+        var action = entity.Actions.Concat(entity.Stages.SelectMany(stage => stage.Actions)).Single(a => a.Name == actionName);
+        var mapped = ((IReadOnlyList<string> Guards, string? Message)?)typeof(RuntimeTool)
+            .GetMethod("MapGuardFailure", BindingFlags.Static | BindingFlags.NonPublic)!
+            .Invoke(null, [actionName, action, blocked.Error]);
+
+        await Assert.That(string.Join(",", blocked.FailedGuards)).IsEqualTo(executorGuard);
+        await Assert.That(mapped is { } m ? string.Join(",", m.Guards) : null).IsEqualTo(mcpGuard);
     }
 
     private const string OwnedKidDsl = """

@@ -696,6 +696,34 @@ public sealed class ContractBoundaryConstraintTests {
         await Assert.That(WithCode(analysis, "DMCON014").Count).IsEqualTo(1);
     }
 
+    /// <summary>L-20b: a trailing unescaped '$' means absolute end, so a final newline is a violation.</summary>
+    [Test]
+    public async Task BodyWritingAnchoredPatternWithFinalNewline_IsViolated() {
+        var surface = SurfaceWith(new Property("Code", new DomainTypeReference("Text"), [new PatternConstraint("^[A-Z]{3}$")]));
+        var bodies = new Dictionary<string, Func<Block>>(StringComparer.Ordinal) {
+            ["Charge"] = () => new Block([Write("Code", "ABC\n"), Done()]),
+        };
+        var (_, _, analysis) = Analyze(CodeCallerDsl("pattern(\"^[A-Z]{3}$\")"), surface, bodies);
+
+        await Assert.That(WithCode(analysis, "DMCON014").Count).IsEqualTo(1);
+    }
+
+    /// <summary>L-20b fallback: an unparsable pattern decides nothing, so it is unknown, never violated.</summary>
+    [Test]
+    public async Task BodyWritingAgainstInvalidPattern_IsUnknown() {
+        // Both sides declare the same pattern: the merge is identical, so the obligation
+        // exists and the boundary check's own pattern arm is what decides the literal.
+        var surface = SurfaceWith(new Property("Code", new DomainTypeReference("Text"), [new PatternConstraint("([")]));
+        var bodies = new Dictionary<string, Func<Block>>(StringComparer.Ordinal) {
+            ["Charge"] = () => new Block([Write("Code", "abc"), Done()]),
+        };
+        var (domain, _, analysis) = Analyze(CodeCallerDsl("pattern(\"([\")"), surface, bodies);
+
+        await Assert.That(WithCode(analysis, "DMCON014")).IsEmpty();
+        await Assert.That(Boundary(domain, analysis).Postcondition)
+            .IsEqualTo(ContractBoundaryVerdict.Unknown);
+    }
+
     /// <summary>F4b: a numeric equals violation is DMCON014.</summary>
     [Test]
     public async Task BodyWritingOutsideEquals_IsViolated() {

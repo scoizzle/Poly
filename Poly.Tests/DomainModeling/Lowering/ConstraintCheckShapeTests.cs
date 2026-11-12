@@ -145,17 +145,34 @@ public class ConstraintCheckShapeTests {
     }
 
     [Test]
-    public async Task AnchorEnd_RewritesOnlyAnUnescapedTrailingDollar() {
-        // An unescaped trailing '$' is .NET's end-of-input-or-before-final-newline
-        // anchor; it becomes the absolute-end anchor '\z'.
-        await Assert.That(ConstraintCheckWriter.AnchorEnd("^[A-Z]+$")).IsEqualTo("^[A-Z]+\\z");
-        // No end anchor is the author's search intent; it stays as written.
-        await Assert.That(ConstraintCheckWriter.AnchorEnd("^[A-Z]+")).IsEqualTo("^[A-Z]+");
-        // An escaped '$' is a literal dollar, not an anchor; it stays as written.
-        await Assert.That(ConstraintCheckWriter.AnchorEnd("^[A-Z]+\\$")).IsEqualTo("^[A-Z]+\\$");
-        // The escape parity counts backslashes: an even run leaves the '$' an anchor.
-        await Assert.That(ConstraintCheckWriter.AnchorEnd("^[A-Z]+\\\\$")).IsEqualTo("^[A-Z]+\\\\\\z");
-        await Assert.That(ConstraintCheckWriter.AnchorEnd("")).IsEqualTo("");
+    public async Task Assign_ConstantAnchoredPatternWithFinalNewline_KeepsGuard() {
+        // L-20b: the guard-omission fold must judge a constant RHS by the same
+        // absolute-end meaning the emitted guard uses. "ABC\n" is outside
+        // "^[A-Z]{3}$" once '$' means \z, so the fold may not drop the check.
+        var (domain, _) = EvolvedDomain.FromDsl("""
+            domain Lab
+            Tag: entity {
+              Code: Text pattern("^[A-Z]{3}$")
+              Relabel: action (code: Text) { assign Code to code }
+            }
+            """);
+        var cs = PrintAssignLiteral(domain, "Tag", "Code", "ABC\n");
+
+        await Assert.That(cs).Contains("System.Text.RegularExpressions.Regex.IsMatch");
+        await Assert.That(cs).Contains("^[A-Z]{3}\\\\z");
+    }
+
+    [Test]
+    public async Task PrintedPatternGuard_CarriesAbsoluteEndAnchor() {
+        // Pass-level oracle, not a behaviour test: L-20 already prints '\z'. This pins
+        // that one end-anchor semantic (L-20b's seam) is what the guard keeps.
+        var (domain, analysis) = EvolvedDomain.FromDsl("""
+            domain Lab
+            E: entity { S: Text pattern("^[A-Z]+$") }
+            """);
+        var create = PrintCreate(domain, analysis, "E");
+
+        await Assert.That(create).Contains("^[A-Z]+\\\\z");
     }
 
     [Test]
@@ -195,6 +212,15 @@ public class ConstraintCheckShapeTests {
         var lowered = pass.TryLowerVmNode(new AssignEffect(
             DomainExpression.Property(propertyName),
             DomainExpression.Property(valueName)));
+        return new CSharpGenerator().Generate(lowered!);
+    }
+
+    private static string PrintAssignLiteral(Domain domain, string entityName, string propertyName, object? value) {
+        var entity = domain.Types.OfType<Entity>().First(e => e.Name == entityName);
+        var pass = new EffectLoweringPass(entity, LoweringFixtures.Context(new ThisReference(), entity) with { ActionResultType = new NamedTypeReference("DomainResult") });
+        var lowered = pass.TryLowerVmNode(new AssignEffect(
+            DomainExpression.Property(propertyName),
+            DomainExpression.Literal(value)));
         return new CSharpGenerator().Generate(lowered!);
     }
 }

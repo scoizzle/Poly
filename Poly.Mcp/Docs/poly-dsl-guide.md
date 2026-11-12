@@ -1120,8 +1120,9 @@ diverging:
   policy is still rejected at analysis ("property does not exist").
 - **`pattern(regex)` validates stored values at write time** (create/assign) — it is a
   constraint, not a query/read filter. A body .NET cannot parse is rejected at define as
-  `DMSEM004`, one positioned error per distinct body. Grep-style read-time matching against stored text
-  is not expressible.
+  `DMSEM004`, one positioned error per distinct body. A trailing unescaped `$` means
+  absolute end of input (the guard is anchored as `\z`), so a final newline is rejected.
+  Grep-style read-time matching against stored text is not expressible.
 - **Quantifiers lower to foreach on both paths.** The C# export and the simulator both
   lower `any`/`all`/`none`/`count … where` to a foreach over the collection navigation
   (the host supplies the collection). Path-prefix reads and `Rel exists` / `not Rel exists`

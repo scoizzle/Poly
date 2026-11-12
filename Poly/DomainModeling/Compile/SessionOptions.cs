@@ -3,8 +3,9 @@ namespace Poly.DomainModeling.Compile;
 /// <summary>
 /// The inputs a session's library selection came from: the catalog the ids
 /// resolve against, the implicit id set a document without <c>uses</c> falls
-/// back to, and the host target. A reload reuses them, so it never falls back
-/// to <see cref="ExtensionCatalog.Core"/>.
+/// back to, the host target, and the host's storage vendor and host-loaded
+/// libraries. A reload reuses them, so it never falls back to
+/// <see cref="ExtensionCatalog.Core"/>.
 /// </summary>
 public sealed record SessionOptions(
     ExtensionCatalog Catalog,
@@ -28,15 +29,30 @@ public sealed record SessionOptions(
 
     /// <summary>
     /// The facet pack (<c>column</c>/<c>table</c>) as a session fact rather than a
-    /// factory. Internal and temporary: C-04 deletes it once storage is implicit.
+    /// factory: the compile pipeline's pack, set by <c>PolyCompiler</c>. It never becomes an
+    /// extension id, so a reload keeps it.
     /// </summary>
     internal bool Authoring { get; init; }
 
-    /// <summary>S1 stub.</summary>
+    /// <summary>
+    /// The storage library the host chose (a vendor id, or the generic persistence id), or null
+    /// when the host chose none. <see cref="LibrarySelection.Resolve"/> replaces a listed
+    /// <c>persistence</c> with it in place and appends it only when no storage compiler is
+    /// listed. Only a host that picks a database (a facade, not a document) sets it.
+    /// </summary>
     public string? StorageVendor { get; init; }
 
-    /// <summary>S1 stub.</summary>
-    public IReadOnlyList<string> HostIds { get; init; } = [];
+    /// <summary>
+    /// Libraries the host loaded outside the document's <c>uses</c>. They join the selection
+    /// once, after it. Blank or repeated entries are rejected here; a value set through
+    /// <c>with</c> is re-checked by <see cref="LibrarySelection.Resolve"/>.
+    /// </summary>
+    public IReadOnlyList<string> HostIds {
+        get => _hostIds;
+        init => _hostIds = ValidateImplicitIds(value);
+    }
+
+    private readonly IReadOnlyList<string> _hostIds = [];
 
     /// <summary>Options with no implicit ids beyond the catalog's.</summary>
     public static SessionOptions Bare(ExtensionCatalog catalog) => new(catalog, []);

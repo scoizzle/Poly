@@ -1,4 +1,5 @@
 using Poly.DomainModeling.Libraries.Storage;
+using Poly.DomainModeling.Ontology;
 
 namespace Poly.DomainModeling.Compile;
 
@@ -11,7 +12,8 @@ namespace Poly.DomainModeling.Compile;
 public static class LibrarySelection {
     /// <summary>
     /// The ids a document loads: its non-empty <c>uses</c> list, else the options'
-    /// implicit set. A blank id is an <see cref="ArgumentException"/>; a repeated
+    /// implicit set, then the host-loaded ids not already listed, then the host's storage vendor
+    /// (<see cref="SessionOptions.StorageVendor"/>) in place of <c>persistence</c>. A blank id is an <see cref="ArgumentException"/>; a repeated
     /// <c>uses</c> id and an id the catalog cannot resolve throw
     /// <see cref="InvalidOperationException"/>.
     /// </summary>
@@ -24,15 +26,52 @@ public static class LibrarySelection {
         ArgumentNullException.ThrowIfNull(catalog);
         // `with` bypasses SessionOptions' property validation, so re-check here.
         SessionOptions.ValidateImplicitIds(options.ImplicitIds);
-        if (documentUses.Count > 0) {
+        SessionOptions.ValidateImplicitIds(options.HostIds);
+        var fromDocument = documentUses.Count > 0;
+        if (fromDocument)
             ValidateDocumentUses(documentUses);
-            foreach (var id in documentUses)
-                catalog.Resolve(id);
-            return documentUses;
-        }
-        foreach (var id in options.ImplicitIds)
+        var chosen = fromDocument ? documentUses : options.ImplicitIds;
+        foreach (var id in chosen)
             catalog.Resolve(id);
-        return options.ImplicitIds;
+        foreach (var id in options.HostIds)
+            catalog.Resolve(id);
+        if (options.HostIds.Count == 0 && options.StorageVendor is null)
+            return chosen;
+
+        var ids = new List<string>(chosen);
+        foreach (var id in options.HostIds) {
+            if (!ids.Contains(id, StringComparer.Ordinal))
+                ids.Add(id);
+        }
+        if (options.StorageVendor is { } vendor)
+            ApplyStorageVendor(ids, vendor, fromDocument, catalog);
+        return ids;
+    }
+
+    /// <summary>
+    /// A storage compiler other than generic <c>persistence</c> in the list wins: it is the
+    /// vendor, so no second one is added, and a <c>persistence</c> beside it goes (an author's own
+    /// only when the host's vendor is a different library). With none, a listed
+    /// <c>persistence</c> becomes the vendor where it stands, and with no storage compiler at all
+    /// the vendor is appended.
+    /// </summary>
+    private static void ApplyStorageVendor(
+        List<string> ids, string vendor, bool fromDocument, ExtensionCatalog catalog) {
+        catalog.Resolve(vendor);
+        var providers = catalog.ProvidersOf(new UniqueConstraint());
+        var persistence = ids.IndexOf(PersistenceEmitLibrary.LibraryId);
+        var other = ids.Exists(id =>
+            !string.Equals(id, PersistenceEmitLibrary.LibraryId, StringComparison.Ordinal)
+            && providers.Contains(id, StringComparer.Ordinal));
+        if (other) {
+            var vendorIsPersistence = string.Equals(vendor, PersistenceEmitLibrary.LibraryId, StringComparison.Ordinal);
+            if (persistence >= 0 && (!fromDocument || !vendorIsPersistence))
+                ids.RemoveAt(persistence);
+        }
+        else if (persistence >= 0)
+            ids[persistence] = vendor;
+        else
+            ids.Add(vendor);
     }
 
     /// <summary>

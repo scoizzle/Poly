@@ -160,8 +160,8 @@ public static class PackOracleDomains {
         """,
         "/api/orders");
 
-    /// <summary>L-22 (#604), A11 owner gate. A public entity navigates to an internal entity: EF maps only public
-    /// navigations, so analysis rejects it (DMCON019, ruling on #683) and there is nothing to boot.</summary>
+    /// <summary>L-22b (#604), A11 owner ruling. A public entity navigates to an internal entity: the navigation
+    /// prints internal and the pack maps it explicitly, so the app boots and the nested route reads the lines.</summary>
     public static PackOracleDomain PublicOrderInternalLine604 { get; } = new(
         "PublicOrderInternalLine604",
         """
@@ -177,12 +177,32 @@ public static class PackOracleDomains {
           Code: Text unique length(3, 8)
           Total: Number default(0)
           lines: many OrderLine
-          public action Reset { assign Total to 0 }
+          public action AddLine (qty: Number) { create in lines { Qty: qty } }
         }
         """,
-        "/api/orders",
-        Boots: false,
-        NotBootingReason: "DMCON019: a public entity may not navigate to an internal entity (L-22, #604)");
+        "/api/orders");
+
+    /// <summary>L-22b: an owned many navigation to an internal entity whose own side declares the inverse (<c>via</c> on the
+    /// target). The line is an aggregate child, so the nested route reads it back.</summary>
+    public static PackOracleDomain PublicOrderOwnedInternalLine604 { get; } = new(
+        "PublicOrderOwnedInternalLine604",
+        """
+        domain Shop
+        uses sqlite
+        uses http
+
+        OrderLine: entity {
+          Qty: Number range(1, 100)
+          order: Order via lines
+        }
+
+        public entity Order {
+          Code: Text unique length(3, 8)
+          lines: many owned OrderLine
+          public action AddLine (qty: Number) { create in lines { Qty: qty } }
+        }
+        """,
+        "/api/orders");
 
     /// <summary>L-22 (#604): the same domain with the target marked public. It boots and serves the list route.</summary>
     public static PackOracleDomain PublicOrderPublicLine604 { get; } = new(

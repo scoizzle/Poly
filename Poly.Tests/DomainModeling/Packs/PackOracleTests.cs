@@ -44,14 +44,50 @@ public class PackOracleTests {
     }
 
     [Test]
-    public async Task PublicEntityWithInternalNav_IsRejectedByAnalysis_NotBooted() {
-        var result = new Poly.DslCompiler.DslCompiler()
-            .Load(new Poly.DomainModeling.Libraries.Http.HttpLibrary())
-            .Compile(PackOracleDomains.PublicOrderInternalLine604.Poly, Poly.DslCompiler.CompileMode.All, Poly.DslCompiler.DbmsPack.Sqlite);
+    [Category("OracleFull")]
+    public async Task PublicEntityWithInternalManyNav_BootsAndPersistsLines() {
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.PublicOrderInternalLine604);
 
-        await Assert.That(result.Success).IsFalse();
-        await Assert.That(string.Join("\n", result.Errors ?? [])).Contains("navigation 'lines' targets internal entity 'OrderLine'");
-        await Assert.That(PackOracleDomains.PublicOrderInternalLine604.Boots).IsFalse();
+        using var created = await oracle.Client.PostAsync(
+            "/api/orders", new StringContent("""{"Code":"ORD1"}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)created.StatusCode).IsEqualTo(201);
+
+        using var added = await oracle.Client.PostAsync(
+            "/api/orders/ORD1/addline", new StringContent("""{"Qty":5}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)added.StatusCode).IsEqualTo(200);
+
+        // OrderLine is a root here (no inverse), so it is listed at the top level rather than under the order.
+        // The generated seed row (#595) is also listed, so assert the created line is present, not the count.
+        using var lines = await oracle.Client.GetAsync("/api/orderlines");
+        await Assert.That(lines.StatusCode).IsEqualTo(HttpStatusCode.OK);
+        using var linesJson = JsonDocument.Parse(await lines.Content.ReadAsStringAsync());
+        await Assert.That(linesJson.RootElement.EnumerateArray().Any(l => l.GetProperty("qty").GetInt32() == 5)).IsTrue();
+
+        // F3 pin: the entity's JSON omits the non-public navigation; the nested route above reads it.
+        using var order = await oracle.Client.GetAsync("/api/orders/ORD1");
+        await Assert.That(order.StatusCode).IsEqualTo(HttpStatusCode.OK);
+        using var orderJson = JsonDocument.Parse(await order.Content.ReadAsStringAsync());
+        await Assert.That(orderJson.RootElement.TryGetProperty("lines", out _)).IsFalse();
+    }
+
+    [Test]
+    [Category("OracleFull")]
+    public async Task PublicEntityWithInternalOwnedManyNav_ReadsLinesBackThroughNestedRoute() {
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.PublicOrderOwnedInternalLine604);
+
+        using var created = await oracle.Client.PostAsync(
+            "/api/orders", new StringContent("""{"Code":"ORD1"}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)created.StatusCode).IsEqualTo(201);
+
+        using var added = await oracle.Client.PostAsync(
+            "/api/orders/ORD1/addline", new StringContent("""{"Qty":5}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)added.StatusCode).IsEqualTo(200);
+
+        using var lines = await oracle.Client.GetAsync("/api/orders/ORD1/lines");
+        await Assert.That(lines.StatusCode).IsEqualTo(HttpStatusCode.OK);
+        using var linesJson = JsonDocument.Parse(await lines.Content.ReadAsStringAsync());
+        await Assert.That(linesJson.RootElement.GetArrayLength()).IsEqualTo(1);
+        await Assert.That(linesJson.RootElement[0].GetProperty("qty").GetInt32()).IsEqualTo(5);
     }
 
     [Test]

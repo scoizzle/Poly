@@ -121,20 +121,6 @@ internal sealed class ContractIntegrationAnalyzer : INodeAnalyzer {
     /// navigations, so a navigation to an entity internal to this domain is an error (not acknowledgeable).
     /// </summary>
     private static void ValidatePublicNavigations(AnalysisContext context, Domain domain, Entity entity) {
-        foreach (var navigation in entity.Navigations) {
-            if (context.GetMetadata<ResolvedTypeReferenceMetadata>(navigation.Target)
-                is not ResolvedTypeReferenceMetadata { Type: Entity target }
-                || !IsDeclaredInDomain(domain, target)
-                || target.Visibility == Visibility.Public)
-                continue;
-
-            context.ReportError(
-                navigation,
-                $"Public entity '{entity.Name}' navigation '{navigation.Name}' targets internal entity " +
-                $"'{target.Name}'. Mark '{target.Name}' public, or remove the public mark from '{entity.Name}'.",
-                DomainModelDiagnosticCodes.PublicEntityNavigatesToInternalEntity);
-        }
-
         // An entity-typed property (the DSL reads one as a navigation; the model API can build one) would print as
         // a public property of an internal type (CS0053), so it is the same finding, positioned on the property.
         foreach (var property in entity.Properties) {

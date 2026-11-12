@@ -17,6 +17,7 @@ internal sealed record HarnessFinding(string Severity, string? Code, string Path
 /// (no synthesis); the per-diagnostic codes are in <see cref="Findings"/>. <see cref="Data"/> keeps
 /// the transport's own casing, so a test never reads it across transports.
 /// </summary>
+/// <param name="Revision">Null when the call found no workspace, so a before/after comparison in a test must assert it is not null.</param>
 /// <param name="Success">The envelope's <c>ok</c>. For a simulation it only means the scenario ran: assert a step through <c>Step(i).Ok</c>.</param>
 internal sealed record HarnessResult(
     bool Success,
@@ -63,8 +64,17 @@ internal sealed record HarnessResult(
             Instances: state?["instances"]?.GetValue<int>());
     }
 
-    /// <summary>An export's inline <c>content</c>.</summary>
-    public string? Content => Data?["content"]?.GetValue<string>();
+    /// <summary>
+    /// An inline export's text. Throws, with the envelope's code and summary, unless the call succeeded and
+    /// <c>Data.content</c> is a non-empty string, so two failed exports never compare equal. A test that expects a
+    /// failed export, or reads the <c>path</c> of an <c>inline:false</c> export, uses <see cref="Data"/>,
+    /// <see cref="Summary"/> and <see cref="Findings"/>.
+    /// </summary>
+    public string Content =>
+        Success && Data?["content"]?.GetValue<string>() is { Length: > 0 } content
+            ? content
+            : throw new InvalidOperationException(
+                $"The response has no export content (ok={Success}, code={Code ?? "none"}): {Summary}");
 
     /// <summary>A simulation's per-step <c>trace</c>.</summary>
     public JsonArray? Trace => Data?["trace"] as JsonArray;
@@ -120,21 +130,15 @@ internal sealed record HarnessStep(int Index, string Op, bool Ok, string Summary
 
     /// <summary>
     /// A rendered property value from <c>Data.instance.properties[]</c>. Throws, naming the property and the
-    /// step, when the step has no instance snapshot or the name is absent. Use <see cref="TryProperty"/> to ask.
+    /// step, when the step has no instance snapshot or the name is absent.
     /// </summary>
     public string Property(string name) =>
-        TryProperty(name, out var value)
-            ? value!
-            : throw new InvalidOperationException(
+        (Data?["instance"]?["properties"] as JsonArray)?
+            .FirstOrDefault(p => p?["name"]?.GetValue<string>() == name)?["value"]?.GetValue<string>()
+            ?? throw new InvalidOperationException(
                 $"Step {Index} ({Op}) has no property '{name}' (ok={Ok}): {Summary}");
 
     /// <summary>The deliberate absence check: false when the step has no snapshot or no such property.</summary>
-    public bool TryProperty(string name, out string? value) {
-        value = (Data?["instance"]?["properties"] as JsonArray)?
-            .FirstOrDefault(p => p?["name"]?.GetValue<string>() == name)?["value"]?.GetValue<string>();
-        return value is not null;
-    }
-
     /// <summary>
     /// An invoke step's outcome: <c>Data.invokeActionResult</c>, or the <c>{actionName, error}</c> shape of an
     /// action that threw. Throws (step index, op, summary) for any other step, including an invoke that never

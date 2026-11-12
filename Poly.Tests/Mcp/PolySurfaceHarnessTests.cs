@@ -487,10 +487,6 @@ public class PolySurfaceHarnessTests {
         var missing = Thrown(() => created.Property("Missing"));
         await Assert.That(missing).IsNotNull();
         await Assert.That(missing!.Message).Contains("Missing").And.Contains("create");
-        await Assert.That(created.TryProperty("Missing", out var absent)).IsFalse();
-        await Assert.That(absent).IsNull();
-        await Assert.That(created.TryProperty("Qty", out var qty)).IsTrue();
-        await Assert.That(qty).IsEqualTo("3");
     }
 
     [Test]
@@ -668,7 +664,6 @@ public class PolySurfaceHarnessTests {
         await Assert.That(failed.Ok).IsFalse();
         await Assert.That(Thrown(() => failed.Property("Memo"))).IsNotNull();
         await Assert.That(Thrown(() => listed.Property("Memo"))).IsNotNull();
-        await Assert.That(failed.TryProperty("Memo", out _)).IsFalse();
     }
 
     [Test]
@@ -731,5 +726,34 @@ public class PolySurfaceHarnessTests {
         catch (Exception ex) {
             return ex;
         }
+    }
+
+    [Test]
+    public async Task Content_OfAFailedExport_ThrowsWithTheCodeAndSummary() {
+        var h = PolySurfaceHarness.New();
+        var ws = OpenWith(h, "Failed", Orders);
+
+        var unknownFormat = h.Export(ws, "no-such-format");
+        var unknownWorkspace = h.Export("no-such-workspace", "dsl");
+        var formatThrown = Thrown(() => unknownFormat.Content);
+        var workspaceThrown = Thrown(() => unknownWorkspace.Content);
+
+        await Assert.That(unknownFormat.Success).IsFalse();
+        await Assert.That(unknownFormat.Data).IsNull();
+        await Assert.That(formatThrown).IsNotNull();
+        await Assert.That(formatThrown!.Message).Contains(unknownFormat.Summary);
+        await Assert.That(workspaceThrown).IsNotNull();
+        await Assert.That(workspaceThrown!.Message).Contains("WORKSPACE_REQUIRED");
+    }
+
+    [Test]
+    public async Task Content_TwoFailedExportsCompared_ThrowInsteadOfComparingEqual() {
+        var h = PolySurfaceHarness.New();
+        var ws = OpenWith(h, "FixedPoint", Orders);
+
+        var thrown = Thrown(() => h.Export(ws, "no-such-format").Content == h.Export(ws, "no-such-format").Content);
+
+        await Assert.That(thrown).IsNotNull();
+        await Assert.That(thrown!.GetType()).IsEqualTo(typeof(InvalidOperationException));
     }
 }

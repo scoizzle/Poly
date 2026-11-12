@@ -316,7 +316,9 @@ internal static class ContractBoundaryCheck {
     }
 
     private static bool? NumberEquals(object value, object? expected) =>
-        IsNumber(value) && IsNumber(expected) ? ExactNumber.Compare(value, expected) is 0 : null;
+        IsNumber(value) && IsNumber(expected) && ExactNumber.Compare(value, expected) is { } order
+            ? order == 0
+            : null;
 
     private static bool HasNumericBounds(RangeConstraint range) =>
         (range.Minimum is null || IsNumber(range.Minimum))

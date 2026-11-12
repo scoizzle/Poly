@@ -1,5 +1,6 @@
 // EffectAnalyzer partial: unconditional automatic stage-transition cycle detection.
 using Poly.DomainModeling.Ontology;
+using Poly.DomainModeling.Ontology.Constraints;
 
 namespace Poly.DomainModeling.Analysis;
 
@@ -70,6 +71,16 @@ internal sealed partial class EffectAnalyzer {
     }
 
     /// <summary>
+    /// Literal equality for the Equal/NotEqual arms. Numbers compare by value, so a mixed
+    /// <c>long</c>/<c>decimal</c> pair above 2^53 is decided by order, not by CLR type. When the two
+    /// cannot be ordered the pre-V-05a value equality stands, so this is never worse than master.
+    /// </summary>
+    private static bool? LiteralsEqual(object? left, object? right) {
+        if (left is null || right is null) return Equals(left, right);
+        return ConstraintMerge.TryCompare(left, right) is { } order ? order == 0 : Equals(left, right);
+    }
+
+    /// <summary>
     /// Only literals and comparisons of literals — anything that reads state is not proven.
     /// </summary>
     internal static bool IsProvablyAlwaysTrue(DomainExpression expression) => expression switch {
@@ -78,9 +89,9 @@ internal sealed partial class EffectAnalyzer {
         global::Poly.DomainModeling.Ontology.And a => IsProvablyAlwaysTrue(a.Left) && IsProvablyAlwaysTrue(a.Right),
         global::Poly.DomainModeling.Ontology.Or o => IsProvablyAlwaysTrue(o.Left) || IsProvablyAlwaysTrue(o.Right),
         Comparison { Kind: ComparisonKind.Equal, Left: Literal l, Right: Literal r } =>
-            Equals(l.Value, r.Value),
+            LiteralsEqual(l.Value, r.Value) is true,
         Comparison { Kind: ComparisonKind.NotEqual, Left: Literal l, Right: Literal r } =>
-            !Equals(l.Value, r.Value),
+            LiteralsEqual(l.Value, r.Value) is false,
         Comparison { Kind: ComparisonKind.GreaterThanOrEqual, Left: Literal l, Right: Literal r }
             when ExactNumber.Compare(l.Value, r.Value) is { } order => order >= 0,
         Comparison { Kind: ComparisonKind.GreaterThan, Left: Literal l, Right: Literal r }
@@ -98,9 +109,9 @@ internal sealed partial class EffectAnalyzer {
         global::Poly.DomainModeling.Ontology.And a => IsProvablyAlwaysFalse(a.Left) || IsProvablyAlwaysFalse(a.Right),
         global::Poly.DomainModeling.Ontology.Or o => IsProvablyAlwaysFalse(o.Left) && IsProvablyAlwaysFalse(o.Right),
         Comparison { Kind: ComparisonKind.Equal, Left: Literal l, Right: Literal r } =>
-            !Equals(l.Value, r.Value),
+            LiteralsEqual(l.Value, r.Value) is false,
         Comparison { Kind: ComparisonKind.NotEqual, Left: Literal l, Right: Literal r } =>
-            Equals(l.Value, r.Value),
+            LiteralsEqual(l.Value, r.Value) is true,
         Comparison { Kind: ComparisonKind.GreaterThanOrEqual, Left: Literal l, Right: Literal r }
             when ExactNumber.Compare(l.Value, r.Value) is { } order => order < 0,
         Comparison { Kind: ComparisonKind.GreaterThan, Left: Literal l, Right: Literal r }

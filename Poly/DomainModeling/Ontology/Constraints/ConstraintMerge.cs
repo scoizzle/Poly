@@ -237,15 +237,25 @@ public static class ConstraintMerge {
     /// <summary>
     /// Orders two range bounds, or <c>null</c> when they cannot be ordered. Same-type bounds use
     /// that type's own ordering (decimal, long, DateTime...). Two different numeric types compare
-    /// exactly through <see cref="ExactNumber"/>, so a bound above 2^53 is never rounded; a bound
-    /// that is not exactly representable (a fractional <c>double</c>) is not comparable.
+    /// exactly through <see cref="ExactNumber"/>, so a bound above 2^53 is never rounded; when an
+    /// exact ordering does not exist but one side is a <c>double</c>/<c>float</c>, the pre-V-05a
+    /// double comparison is the fallback so this is never worse than master.
     /// </summary>
+    /// <remarks>
+    /// The fallback exists only because the producers (<c>Refine</c>, <c>Eval</c>,
+    /// <c>ComposeArithmetic</c>) still carry a <c>double</c> bound. V-05b makes those endpoints
+    /// <c>decimal</c> and deletes this branch; the S5 grep is what proves it is gone.
+    /// </remarks>
     internal static int? TryCompare(object x, object y) {
         if (x.GetType() == y.GetType())
             return x is IComparable c ? c.CompareTo(y) : null;
-        if (IsNumeric(x) && IsNumeric(y))
-            return ExactNumber.Compare(x, y);
-        return null;
+        if (!IsNumeric(x) || !IsNumeric(y))
+            return null;
+        if (ExactNumber.Compare(x, y) is { } exact)
+            return exact;
+        return x is double or float || y is double or float
+            ? Convert.ToDouble(x).CompareTo(Convert.ToDouble(y))
+            : null;
     }
 
     private static bool IsNumeric(object v) => v is sbyte or byte or short or ushort or int

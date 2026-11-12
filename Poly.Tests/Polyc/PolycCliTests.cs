@@ -212,7 +212,8 @@ public class PolycCliTests {
     [Test]
     public async Task Build_ExplicitSeedAuthoring_SeedsStorageOnly() {
         var dir = PolycTestSupport.TempDir();
-        var path = Write(dir, "orders.poly", PolycTestSupport.Orders);
+        // Uniqueless: `--seed authoring` loads no persistence, which a `unique` property needs (C-05).
+        var path = Write(dir, "orders.poly", PolycTestSupport.UniquelessOrders);
 
         var explicitOut = Path.Combine(dir, "explicit");
         var (explicitExit, _, _) = Run(["build", path, "--out", explicitOut, "--seed", "authoring"]);

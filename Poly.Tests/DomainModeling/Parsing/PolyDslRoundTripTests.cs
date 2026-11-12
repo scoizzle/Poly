@@ -11,6 +11,7 @@ public class PolyDslRoundTripTests {
     public async Task ParseThenPrint_RoundTrips_StructurallyIdentical() {
         var poly = """
             domain TestDomain
+            uses persistence
 
             Product: entity {
               SKU: Text unique
@@ -572,6 +573,7 @@ public class PolyDslRoundTripTests {
     public async Task C9_AllConstraints_RoundTrip() {
         var poly = """
             domain Test
+            uses persistence
 
             Item: entity {
               Code: Text unique

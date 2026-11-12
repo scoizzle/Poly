@@ -40,6 +40,7 @@ public class ContractBindingExportTests {
     /// only exists after the producer fills the contract from the loaded billing domain.</summary>
     private static Domain BaseParent() => ParseDomain("""
         domain Shop
+        uses persistence
         Order: entity {
           Number: Text unique
         }

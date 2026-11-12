@@ -135,6 +135,7 @@ public class JsonSchemaExporterTests {
         var schema = Export("""
             domain Extras
             uses temporal
+            uses persistence
 
             Code: value {
               Value: Text

@@ -231,13 +231,15 @@ public class OracleToolTests {
         await Assert.That(response.Success).IsTrue();
         var dataJson = System.Text.Json.JsonSerializer.Serialize(response.Data);
         await Assert.That(dataJson.ToLowerInvariant()).Contains("stage");
-        // B4: the policy hint must teach the unified surface, not the deleted add_policy.
-        await Assert.That(dataJson).Contains("add(kind: policy)");
+        // Core hints are tool-neutral: they name the DSL declaration form, not a tool.
+        // JsonSerializer escapes ' as ', so the anchors below avoid quotes.
+        await Assert.That(dataJson).Contains("Draft: stage {");
+        await Assert.That(dataJson).Contains("Submit: action {");
+        await Assert.That(dataJson).Contains("Eligible: policy {");
+        await Assert.That(dataJson).DoesNotContain("add(kind");
+        await Assert.That(dataJson).DoesNotContain("apply_dsl");
         await Assert.That(dataJson).DoesNotContain("add_policy");
-        // The stage and stage-action hints must name the tool that exists.
-        await Assert.That(dataJson).Contains("add(kind: stage)");
         await Assert.That(dataJson).DoesNotContain("add_stage");
-        await Assert.That(dataJson).Contains("add(kind: stage_action)");
         await Assert.That(dataJson).DoesNotContain("add_action_to_stage");
     }
 

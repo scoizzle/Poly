@@ -1,6 +1,7 @@
 domain Gym
 uses temporal
 uses http
+uses persistence
 
 Tier: enum { Basic, Plus, Elite }
 

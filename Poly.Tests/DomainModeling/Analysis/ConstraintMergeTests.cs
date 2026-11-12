@@ -218,6 +218,7 @@ public class ConstraintMergeTests {
     public async Task Dsl_DuplicateUnique_AnalyzesCleanAndKeepsOne() {
         var result = Parse("""
             domain Test
+            uses persistence
             Person: entity {
               Code: Text unique unique
             }
@@ -234,6 +235,7 @@ public class ConstraintMergeTests {
     public async Task Dsl_DuplicateUniqueOnEntityWithAction_NoUnsatisfiablePreconditions() {
         var result = Parse("""
             domain Test
+            uses persistence
             Person: entity {
               Code: Text unique unique
               Rename: action { assign Code to Code }
@@ -248,6 +250,7 @@ public class ConstraintMergeTests {
     public async Task Dsl_DuplicateUnique_WithStorage_Lowers() {
         var result = ParseAndLower("""
             domain Test
+            uses persistence
             Person: entity {
               Code: Text unique unique
             }

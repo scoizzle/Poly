@@ -21,6 +21,7 @@ public static class DomainModelAnalyzer {
         new StructuralDomainAnalyzer(),
         new InitialStageAnalyzer(),
         new DomainCatalogPass(),
+        new ConstraintCoveragePass(),
         new ExpressionTypeAnalyzer(meaning, forms),
         new PolicyConstraintAnalyzer(),
         new ConstraintQualityAnalyzer(),

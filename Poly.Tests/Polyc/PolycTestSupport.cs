@@ -12,6 +12,13 @@ internal static class PolycTestSupport {
 
     public const string Orders = "domain Orders\n\nOrder: entity {\n  Number: Text unique\n}\n";
 
+    /// <summary>
+    /// The same document without <c>unique</c>, so a seed that omits <c>persistence</c> still
+    /// compiles (C-05). The seed-selection tests use this one; a <c>unique</c> document is
+    /// <c>DMLIB001</c> unless <c>persistence</c> or a vendor library is loaded.
+    /// </summary>
+    public const string UniquelessOrders = "domain Orders\n\nOrder: entity {\n  Number: Text\n}\n";
+
     /// <summary>Each pair yields one DMEFF011: a create-in that omits the child's required property.</summary>
     public static string ManyErrors(int count) =>
         "domain Broken\n\n" + string.Join("\n", Enumerable.Range(1, count).Select(i =>

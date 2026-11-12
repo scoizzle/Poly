@@ -2,6 +2,7 @@ using Poly.DomainModeling;
 using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Language;
+using Poly.Packs.Product;
 using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.DomainModeling.Parsing;
@@ -81,9 +82,15 @@ public sealed class DslRoundTripCorpusTests {
         await Assert.That(secondText).IsEqualTo(firstText).Because(label);
     }
 
-    /// <summary>Parses, analyses and prints one generation of the document.</summary>
+    /// <summary>
+    /// Parses, analyses and prints one generation of the document. The seed is the same
+    /// implicit set <c>polyc</c> gives a document that lists no <c>uses</c>
+    /// (<see cref="ProductCatalog.ImplicitIds"/>), taken from its one source of truth rather
+    /// than restated here: a bare <c>unique</c> is <c>DMLIB001</c> (C-05), and the fleet-eval
+    /// documents in the corpus carry one without a <c>uses</c> line.
+    /// </summary>
     private static (EvolutionResult Result, string Text) Generate(string poly) {
-        var session = DomainSession.ForDocument(DslSyntaxTree.Parse(poly), []);
+        var session = DomainSession.ForDocument(DslSyntaxTree.Parse(poly), ProductCatalog.ImplicitIds);
         var result = new DomainEvolution(DomainTestFactory.Create("_", [], []))
             .ApplyAndAnalyze(new PolyDslParser(poly, session).Parse(), session: session);
         return (result, new DomainDslPrinter(session).Print(result.Root));

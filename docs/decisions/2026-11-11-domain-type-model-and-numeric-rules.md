@@ -1,6 +1,7 @@
 # Domain type model and numeric rules (Q5, Q6, OQ-3, OQ-6, OQ-11)
 
 Status: **Transcription of owner rulings Q5, Q6, OQ-3, OQ-6, OQ-11; this file adds no new decision.**
+T-02 decided two items that were open (see *Open*, below).
 
 Recorded by slice T-01 of theme T ([#679](https://github.com/scoizzle/Poly/issues/679), epic
 [#677](https://github.com/scoizzle/Poly/issues/677)) so the slices that implement the model are held to the
@@ -76,12 +77,12 @@ owner-approved plan, not a ruling. **Open** — not settled by either; the named
 | R3 | optionality is a flag beside the definition, not a wrapped type; `null` only into an optional target. | **#679 plan direction** — goal: "first-class optionality"; the shape is the `ExprType(Definition, Optional, DomainName)` contract (T-03) and T-06's `OptionalTyping` row |
 | R4 | `Number / Number` is integer division; assigning it to `Decimal` warns. | **ruling clause** — Q6: "Number / Number is integer division (+ warning when assigned to Decimal)" |
 | R5 | `Decimal -> Number` is an error unless analysis proves it safe; when it rounds, both hosts round `MidpointRounding.AwayFromZero`. | **ruling clauses** — Q6: "Decimal -> Number rounding only when analysis proves it safe, else an error"; OQ-3: "`MidpointRounding.AwayFromZero`, emitted explicitly in BOTH the simulator and the generated C#". **Open: "proves it safe" — decided in T-12 via V-05** |
-| R6 | bounds are never `double`: a `Number` bound is `long`, a `Decimal` bound `decimal`; `ExactNumber` (planned, T-02) is decimal-backed and saturates to unbounded on overflow. | **#679 plan direction** (T-02 row: "Number bounds are long, Decimal bounds decimal, never double") + **ruling clause** — OQ-6: "decimal-backed and saturates to unbounded on overflow (never throws, never wraps)" |
+| R6 | bounds are never `double`: a `Number` bound is `long`, a `Decimal` bound `decimal`; `ExactNumber` (T-02, `Poly/DomainModeling/Analysis/ExactNumber.cs`) is decimal-backed and returns `null` (unbounded) on overflow or on an inexact decimal result. | **#679 plan direction** (T-02 row: "Number bounds are long, Decimal bounds decimal, never double") + **ruling clause** — OQ-6: "decimal-backed and saturates to unbounded on overflow (never throws, never wraps)". **Landed in T-02 at parse and in the assign guard; analysis-time bound arithmetic (`ValueRange`, mixed `ConstraintMerge` compares) still uses `double` — V-05** |
 
 `DMNUM001` and `DMNUM002` are identifiers owned by T-08, not ruling text. Every planned symbol is tagged
 `planned (T-NN)`; nothing planned is described as current.
 
-Open, named by the contract (each decided by the slice that owns it; no decision is taken here):
+Open or newly decided, named by the contract (an open item names the slice that decides it; T-02 decided two below):
 
 - **Mixed `Number op Decimal` result type** — `Open: decided in T-03/T-03b`; #679's
   `Binary_DecimalPlusNumber_IsDecimal` assumes `Decimal`, and T-03b owns operator result resolution.
@@ -110,7 +111,7 @@ mirrors the T-02…T-13 rows in #679.
 | R3 | `null` accepted for Text/Guid regardless of optionality, and rejected into a Number/Boolean/Date target even when optional (`CheckCompatible` has no optionality input) — `Poly/DomainModeling/Analysis/ExpressionTypeAnalyzer.cs:787-790`, `:541-600`; `IsRequired` is the only optionality definition — `Poly/DomainModeling/Analysis/EntityStructureAnalyzer.cs:135-136`. | T-06 |
 | R4 | no rule; every numeric result is a bare `Number` (call args, function bodies, Sum/Count — `Poly/DomainModeling/Analysis/ExpressionTypeAnalyzer.cs:133`, `:357`, `:716`; an assigned numeric arithmetic expression stays `Unknown`, see R5). | T-03b/T-04 result typing; T-08 warning |
 | R5 | an assigned numeric arithmetic expression is `Unknown` and unchecked (this is #491's path) — `Poly/DomainModeling/Analysis/ExpressionTypeAnalyzer.cs:585-586`, `:696`; Decimal -> Number on a *typed* source errors with a "Number to Number" message (#581) — `:768`; rounding modes diverge per OQ-3's recorded correction. | T-08 fail-closed baseline (error), T-12 rounding |
-| R6 | `double` at `Number` bound parse — `Poly/DomainModeling/Language/DomainResolver.Constraints.cs:100-113`; at mixed-type compare only, because same-type compare uses the type's own ordering — `Poly/DomainModeling/Ontology/Constraints/ConstraintMerge.cs:241-245`; and in `ValueRange(double?, double?)` — `Poly/DomainModeling/Analysis/EffectInvariantAnalyzer.cs:12`. Decimal bounds already parse as `decimal` — `Poly/DomainModeling/Language/DomainResolver.Constraints.cs:108-111`. | T-02 (`ExactNumber`), then V-05 |
+| R6 | `double` at `Number` bound parse — `Poly/DomainModeling/Language/DomainResolver.Constraints.cs:100-113`; at mixed-type compare only, because same-type compare uses the type's own ordering — `Poly/DomainModeling/Ontology/Constraints/ConstraintMerge.cs:241-245`; and in `ValueRange(double?, double?)` — `Poly/DomainModeling/Analysis/EffectInvariantAnalyzer.cs:12`. Decimal bounds already parse as `decimal` — `Poly/DomainModeling/Language/DomainResolver.Constraints.cs:108-111`. | **Landed in T-02**: parse (`long`/`decimal`, `ExactNumber.TryParseDecimalText`) and the assign guard (`ExactNumber.Compare`); V-05 then removes the remaining `double` in analysis-time arithmetic |
 
 ## P-05: which bound type goes with which column type
 

@@ -25,6 +25,29 @@ public class Activity : Poly.Runtime.IActionScoped
     public ActivityStage CurrentStage { get; private set; }
     public DomainResult Snooze()
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfSnooze();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfSnooze()
+    {
         if (this.CurrentStage != ActivityStage.Open)
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Snooze' requires stage 'Open' on entity 'Activity'.", "Activity.Snooze", "Open"));
@@ -33,6 +56,29 @@ public class Activity : Poly.Runtime.IActionScoped
         return DomainResult.Success();
     }
     public DomainResult Complete()
+    {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfComplete();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfComplete()
     {
         if (this.CurrentStage != ActivityStage.Open)
         {

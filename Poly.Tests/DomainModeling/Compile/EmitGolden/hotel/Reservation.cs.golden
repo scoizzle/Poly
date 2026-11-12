@@ -59,6 +59,29 @@ public class Reservation : Poly.Runtime.IActionScoped
     }
     public DomainResult Confirm()
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfConfirm();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfConfirm()
+    {
         if (this.CurrentStage != ReservationStage.Requested)
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Confirm' requires stage 'Requested' on entity 'Reservation'.", "Reservation.Confirm", "Requested"));
@@ -80,6 +103,29 @@ public class Reservation : Poly.Runtime.IActionScoped
     }
     public DomainResult Cancel()
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfCancel();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfCancel()
+    {
         if (this.CurrentStage == ReservationStage.Requested || this.CurrentStage == ReservationStage.Confirmed)
         {
             this.CurrentStage = ReservationStage.Cancelled;
@@ -89,6 +135,29 @@ public class Reservation : Poly.Runtime.IActionScoped
         return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Cancel' is not valid for the current stage on entity 'Reservation'.", "Reservation.Cancel"));
     }
     public DomainResult CheckIn()
+    {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfCheckIn();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfCheckIn()
     {
         if (this.CurrentStage != ReservationStage.Confirmed)
         {
@@ -121,6 +190,29 @@ public class Reservation : Poly.Runtime.IActionScoped
     }
     public DomainResult MarkNoShow()
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfMarkNoShow();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfMarkNoShow()
+    {
         if (this.CurrentStage != ReservationStage.Confirmed)
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'MarkNoShow' requires stage 'Confirmed' on entity 'Reservation'.", "Reservation.MarkNoShow", "Confirmed"));
@@ -130,6 +222,29 @@ public class Reservation : Poly.Runtime.IActionScoped
         return DomainResult.Success();
     }
     public DomainResult PostStayCharge()
+    {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfPostStayCharge();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfPostStayCharge()
     {
         if (this.CurrentStage != ReservationStage.InHouse)
         {
@@ -151,6 +266,29 @@ public class Reservation : Poly.Runtime.IActionScoped
         return DomainResult.Success();
     }
     public DomainResult CheckOut()
+    {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfCheckOut();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfCheckOut()
     {
         if (this.CurrentStage != ReservationStage.InHouse)
         {

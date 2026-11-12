@@ -37,6 +37,29 @@ public class Enrollment : Poly.Runtime.IActionScoped
     public EnrollmentStage CurrentStage { get; private set; }
     public DomainResult Confirm()
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfConfirm();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfConfirm()
+    {
         if (this.CurrentStage != EnrollmentStage.Pending)
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Confirm' requires stage 'Pending' on entity 'Enrollment'.", "Enrollment.Confirm", "Pending"));
@@ -56,6 +79,29 @@ public class Enrollment : Poly.Runtime.IActionScoped
     }
     public DomainResult Withdraw()
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfWithdraw();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfWithdraw()
+    {
         if (this.CurrentStage != EnrollmentStage.Pending)
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Withdraw' requires stage 'Pending' on entity 'Enrollment'.", "Enrollment.Withdraw", "Pending"));
@@ -65,6 +111,29 @@ public class Enrollment : Poly.Runtime.IActionScoped
         return DomainResult.Success();
     }
     public DomainResult RecordGrade(long score)
+    {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfRecordGrade(score);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfRecordGrade(long score)
     {
         if (this.CurrentStage != EnrollmentStage.Registered)
         {
@@ -91,6 +160,29 @@ public class Enrollment : Poly.Runtime.IActionScoped
     }
     public DomainResult Complete()
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfComplete();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfComplete()
+    {
         if (this.CurrentStage != EnrollmentStage.Registered)
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Complete' requires stage 'Registered' on entity 'Enrollment'.", "Enrollment.Complete", "Registered"));
@@ -100,6 +192,29 @@ public class Enrollment : Poly.Runtime.IActionScoped
         return DomainResult.Success();
     }
     public DomainResult Drop()
+    {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfDrop();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfDrop()
     {
         if (this.CurrentStage != EnrollmentStage.Registered)
         {

@@ -40,6 +40,29 @@ public class Truck : Poly.Runtime.IActionScoped
     }
     public DomainResult Load(long weight)
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfLoad(weight);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfLoad(long weight)
+    {
         var assignValue0 = this.CurrentLoad + weight;
         if (assignValue0 < 0L)
         {
@@ -53,6 +76,29 @@ public class Truck : Poly.Runtime.IActionScoped
         return DomainResult.Success();
     }
     public DomainResult Dispatch()
+    {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfDispatch();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfDispatch()
     {
         this.CurrentStage = TruckStage.EnRoute;
         this.Status = TruckStatus.EnRoute;

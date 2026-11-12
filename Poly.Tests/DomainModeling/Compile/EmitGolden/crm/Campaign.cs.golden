@@ -41,6 +41,29 @@ public class Campaign : Poly.Runtime.IActionScoped
     }
     public DomainResult<CampaignMember> Enroll(Contact who)
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfEnroll(who);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult<CampaignMember> __BodyOfEnroll(Contact who)
+    {
         if (this.CurrentStage != CampaignStage.Active)
         {
             return DomainResult<CampaignMember>.Failure(Poly.Runtime.DomainFailure.Stage("'Enroll' requires stage 'Active' on entity 'Campaign'.", "Campaign.Enroll", "Active"));
@@ -54,6 +77,29 @@ public class Campaign : Poly.Runtime.IActionScoped
         return DomainResult<CampaignMember>.Success(created1);
     }
     public DomainResult End()
+    {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfEnd();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfEnd()
     {
         if (this.CurrentStage != CampaignStage.Active)
         {

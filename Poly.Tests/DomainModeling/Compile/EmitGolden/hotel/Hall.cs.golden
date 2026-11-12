@@ -43,6 +43,29 @@ public class Hall : Poly.Runtime.IActionScoped
     }
     public DomainResult Occupy()
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfOccupy();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfOccupy()
+    {
         if (this.CurrentStage != HallStage.InService)
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Occupy' requires stage 'InService' on entity 'Hall'.", "Hall.Occupy", "InService"));
@@ -55,6 +78,29 @@ public class Hall : Poly.Runtime.IActionScoped
         return DomainResult.Success();
     }
     public DomainResult Vacate()
+    {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfVacate();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfVacate()
     {
         if (this.CurrentStage != HallStage.InService)
         {
@@ -69,6 +115,29 @@ public class Hall : Poly.Runtime.IActionScoped
     }
     public DomainResult MarkChildBusy()
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfMarkChildBusy();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfMarkChildBusy()
+    {
         if (this.CurrentStage != HallStage.InService)
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'MarkChildBusy' requires stage 'InService' on entity 'Hall'.", "Hall.MarkChildBusy", "InService"));
@@ -78,6 +147,29 @@ public class Hall : Poly.Runtime.IActionScoped
     }
     public DomainResult ClearChildBusy()
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfClearChildBusy();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfClearChildBusy()
+    {
         if (this.CurrentStage != HallStage.InService)
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'ClearChildBusy' requires stage 'InService' on entity 'Hall'.", "Hall.ClearChildBusy", "InService"));
@@ -86,6 +178,29 @@ public class Hall : Poly.Runtime.IActionScoped
         return DomainResult.Success();
     }
     public DomainResult TakeOffline()
+    {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfTakeOffline();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfTakeOffline()
     {
         if (this.CurrentStage != HallStage.InService)
         {
@@ -104,6 +219,29 @@ public class Hall : Poly.Runtime.IActionScoped
         return DomainResult.Success();
     }
     public DomainResult ReturnToService()
+    {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfReturnToService();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfReturnToService()
     {
         if (this.CurrentStage != HallStage.OutOfService)
         {

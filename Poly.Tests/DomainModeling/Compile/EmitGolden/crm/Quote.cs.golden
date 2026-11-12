@@ -47,6 +47,29 @@ public class Quote : Poly.Runtime.IActionScoped
     }
     public DomainResult<QuoteLine> AddLine(Product sku, long qty)
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfAddLine(sku, qty);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult<QuoteLine> __BodyOfAddLine(Product sku, long qty)
+    {
         if (this.CurrentStage != QuoteStage.Draft)
         {
             return DomainResult<QuoteLine>.Failure(Poly.Runtime.DomainFailure.Stage("'AddLine' requires stage 'Draft' on entity 'Quote'.", "Quote.AddLine", "Draft"));
@@ -71,6 +94,29 @@ public class Quote : Poly.Runtime.IActionScoped
     }
     public DomainResult Present()
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfPresent();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfPresent()
+    {
         if (this.CurrentStage != QuoteStage.Draft)
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Present' requires stage 'Draft' on entity 'Quote'.", "Quote.Present", "Draft"));
@@ -80,6 +126,29 @@ public class Quote : Poly.Runtime.IActionScoped
     }
     public DomainResult Accept()
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfAccept();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfAccept()
+    {
         if (this.CurrentStage != QuoteStage.Presented)
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Accept' requires stage 'Presented' on entity 'Quote'.", "Quote.Accept", "Presented"));
@@ -88,6 +157,29 @@ public class Quote : Poly.Runtime.IActionScoped
         return DomainResult.Success();
     }
     public DomainResult Reject()
+    {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfReject();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfReject()
     {
         if (this.CurrentStage != QuoteStage.Presented)
         {

@@ -23,6 +23,29 @@ public class Patient : Poly.Runtime.IActionScoped
     }
     public DomainResult CheckInAll()
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfCheckInAll();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfCheckInAll()
+    {
         foreach (var target0 in this.Visits)
         {
             if (target0.CurrentStage != VisitStage.Scheduled)

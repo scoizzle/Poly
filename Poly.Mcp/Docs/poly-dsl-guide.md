@@ -257,7 +257,7 @@ A policy compares an enum property to a member name: `Outcome == Pending` and
 Named records without identity or lifecycle. A value type is a **contract payload or
 action parameter** — it has no storage representation and cannot be a stored entity
 property. Analysis fails closed on a property typed as one. `public` is optional and
-omitted by default (`public value Money { … }`). It is stored as `Visibility.Public` and printed; export filtering is a later slice:
+omitted by default (`public value Money { … }`). Generated C# honours it (see **Visibility in generated C#** under entities): an unmarked value type prints `internal`.
 
 <!-- poly-verify: invalid:DMSTR006 wrapper:top-default -->
 ```poly
@@ -352,9 +352,22 @@ key-clause = "key" "(" member ("," member)* ")"
 
 **Key (identity).** `key(a, b)` designates existing members as the entity's identity. It is a header clause that sits **immediately before the opening `{`**, after any annotations: `Order: entity table("ORDERS") key(Code, Region) {` or `public entity Order key(Code) {`. It is not a body member and adds nothing to the entity; each name is one of the entity's own properties or singular navigations, and names are scoped to the entity. Analysis rejects an unknown member, a blank one, an `optional` or action-assigned key property, a collection navigation, or a navigation to an unkeyed entity (`DMSTR007`), a repeated member (`DMSTR001`), and a key cycle (`DMSTR002`). An empty `key()`, a doubled or trailing comma, an unclosed list, or a second `key(...)` clause is a positioned parse error. The printer writes the clause in the same position. Scoped **value** uniqueness (`unique_by` / `unique(scope, value)`) is **not implemented**, and nothing enforces a key at runtime yet.
 
-`public` is an optional leading modifier before the kind keyword (`public entity Order { … }`). Omitting it is `Visibility.Internal` and keeps `Order: entity`. It is stored as `Visibility` and printed; export filtering is a later slice. `public` is a keyword, so it is not a property name. The mark may appear anywhere among the header annotations; the printer writes it first.
+`public` is an optional leading modifier before the kind keyword (`public entity Order { … }`). Omitting it is `Visibility.Internal` and keeps `Order: entity`. `public` is a keyword, so it is not a property name. The mark may appear anywhere among the header annotations; the printer writes it first.
 
 An exported signature must be closed. A `public` action's parameter and result types, and a `public` value type's field types, must themselves be `public`; primitives and enum payloads are always available, and a used contract's value types are already on that contract's surface. Analysis reports **`DMCON002`** and names the internal type. The fix is to mark the type `public`, not to add an exception.
+
+**Visibility in generated C#.** Only a `public` entity, value type or action prints `public`; every unmarked one prints `internal`, so a domain with no `public` mark has no public surface and a consumer in another assembly needs the mark. Enums carry no mark and stay public, and a stage enum follows its entity. A public entity's properties, `Create` and policies stay public, and a member that would name an internal type is `internal`. A public entity may not navigate to an internal entity: the navigation is part of the exported shape and the persistence mapping reaches only public navigations, so analysis reports **`DMCON019`** on the navigation and the fix is to mark the target `public`.
+
+<!-- poly-verify: invalid:DMCON019 wrapper:top-default -->
+```poly
+Line: entity {
+  Qty: Number default(1)
+}
+
+public entity Order {
+  lines: many Line   // error: Order is public, Line is internal
+}
+```
 
 | Constraint | Syntax | Example |
 |-----------|--------|---------|
@@ -747,7 +760,7 @@ name that matches no stage is `DMINI001`.
 action-name ":" "action" ["(" param-name ":" Type ("," ...)? ")"] ["->" ret-type] ["require" ...] "{" effect* "}"
 ```
 
-`public` is an optional leading modifier (`public action Pay (bill: Money) { … }`). Omitting it is internal. Export filtering is a later slice. `public` is a keyword, so it is not a parameter name.
+`public` is an optional leading modifier (`public action Pay (bill: Money) { … }`). Omitting it is internal, and the generated method prints `internal` to match. `public` is a keyword, so it is not a parameter name.
 
 Parameters (optional) appear **after** `: action`, keeping the uniform `Name: kind` member form (matches `export_dsl`). Parameter names cannot be DSL keywords (`when`, `require`, `action`, `stage`, `policy`, `entity`, `public`).
 

@@ -24,6 +24,32 @@ public class CalleeFrameIsolationTests {
         }
         """;
 
+    /// <summary>#605 verbatim, plus the whole-number variants the issue names: the else value is stored, and
+    /// the simulator agrees with the printed C#.</summary>
+    [Test]
+    [Arguments("2.0", "2")]
+    [Arguments("2", "2")]
+    [Arguments("15", "15")]
+    public async Task DecimalMatch_ElseArm_StoresTheElseValue_OnBothHosts(string elseArm, string expected) {
+        var dsl = $$"""
+            domain P
+
+            Inv: entity {
+              Qty: Number default(0)
+              Dec: Decimal default(0)
+              A: stage {
+                Price: action { assign Dec to match { Qty > 1 -> 1.5, else -> {{elseArm}} } }
+              }
+            }
+            """;
+        var outcomes = await ParityScenario.FromDsl(dsl, "DecimalMatchElse" + elseArm.Replace(".", "_"))
+            .AssertAgree(side => {
+                side.Create("Inv");
+                side.Invoke("Price");
+            });
+        await Assert.That(outcomes[1].State["Dec"]).IsEqualTo(expected);
+    }
+
     [Test]
     public async Task CalleeDecimalMatch_NeverYieldsACallerHeapValue() {
         var (domain, _) = EvolvedDomain.FromDsl(Dsl);

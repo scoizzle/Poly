@@ -124,7 +124,7 @@ internal static class ConstraintKinds {
             Row<RangeConstraint>(
                 merge: ConstraintMerge.MergeRangeResult,
                 join: ConstraintMerge.JoinRange,
-                identical: (x, y) => Equals(x.Minimum, y.Minimum) && Equals(x.Maximum, y.Maximum) && Equals(x.Intervals, y.Intervals),
+                identical: (x, y) => ConstraintMerge.BoundsEqual(x.Minimum, y.Minimum) && ConstraintMerge.BoundsEqual(x.Maximum, y.Maximum) && Equals(x.Intervals, y.Intervals),
                 evaluate: (r, v) => ConstraintValidation.RangeVerdict(r, v),
                 describe: ConstraintValidation.FormatRange,
                 // A union has no DSL word; it prints as its hull, a sound widening.

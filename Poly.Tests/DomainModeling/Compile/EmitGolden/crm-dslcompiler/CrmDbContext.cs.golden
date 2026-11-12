@@ -116,7 +116,6 @@ public class CrmDbContext : DbContext, Poly.Runtime.IStoragePort
 });
         modelBuilder.Entity<Opportunity>(b => {
     b.ToTable("Opportunities", t => {
-    t.HasCheckConstraint("CK_amount", "amount >= 0 AND amount <= 100000000");
     t.HasCheckConstraint("CK_probability", "probability >= 0 AND probability <= 100");
 });
     b.Property<int>("Id");
@@ -137,9 +136,7 @@ public class CrmDbContext : DbContext, Poly.Runtime.IStoragePort
     b.Property(x => x.DueOn).HasColumnName("dueOn").HasColumnType("TEXT");
 });
         modelBuilder.Entity<Quote>(b => {
-    b.ToTable("Quotes", t => {
-    t.HasCheckConstraint("CK_amount", "amount >= 0 AND amount <= 100000000");
-});
+    b.ToTable("Quotes");
     b.Property<int>("Id");
     b.HasKey("Id");
     b.Property(x => x.Title).HasColumnName("title").HasColumnType("TEXT").IsRequired();

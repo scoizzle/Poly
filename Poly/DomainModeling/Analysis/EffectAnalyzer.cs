@@ -54,7 +54,7 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
                 ValidateActionParameterUsage(context, action);
                 ValidateActionReturnProducer(context, action, entity, domain, lookup);
                 ValidateActionReturnFinalStatement(context, action, entity, domain, lookup);
-                ValidateCallChainPostconditions(context, action, entity);
+                ValidateCallChainPostconditions(context, domain, action, entity);
             }
             // C4e (a): when Tracks B { transition to Nope } — subscription effects skipped this pass.
             foreach (var sub in entity.Subscriptions)
@@ -1249,55 +1249,91 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
     /// caller is reported on the callee effect with the caller chain named.
     /// </summary>
     private static void ValidateCallChainPostconditions(
-        AnalysisContext context, Action action, Entity entity) {
+        AnalysisContext context, Domain domain, Action action, Entity entity) {
         var meta = context.GetMetadata<ActionInvariantMetadata>(action);
         if (meta is null) return;
 
+        // The same callee write is reachable from several stage contexts of the caller, and each context
+        // folds its own policies into the written range, so the contexts can disagree. One finding per
+        // (callee effect, call) carries the WORST verdict over every context (Violated beats Undecided),
+        // and one fact per callee effect carries the worst of its calls: V-04 counts writes, not contexts
+        // (V-05b B1, V-03 A2). The call is the occurrence index of the effect in a context's postconditions;
+        // two invokes of one callee each report.
+        var findings = new Dictionary<(Node Effect, int Call), (EffectPostcondition Post, RangeConstraint Range, ValueRange Value, bool Violated)>();
+        var order = new List<(Node Effect, int Call)>();
+
         foreach (var stageCtx in meta.StageContexts()) {
+            var calls = new Dictionary<Node, int>(ReferenceEqualityComparer.Instance);
             foreach (var post in stageCtx.Postconditions) {
                 if (post.DeclaringAction == action) continue; // direct effects — validated per-effect
-                if (post.ValueRange is not { } vr) continue;
+                calls[post.Effect] = calls.GetValueOrDefault(post.Effect) + 1;
+                var call = calls[post.Effect];
                 // The postcondition's Constraints are the target's net constraint (declared +
                 // param/binder merges), valid for cross-entity callees whose target property
                 // lives on a different entity than the caller.
                 var range = post.Constraints.OfType<RangeConstraint>().FirstOrDefault();
                 if (range is null) continue;
 
-                var tmin = NumericBound.ToDoubleOrNull(range.Minimum);
-                var tmax = NumericBound.ToDoubleOrNull(range.Maximum);
-                // An absent side is unbounded, never 0 (#475): the called effect's range may be open.
-                double lo = vr.Min ?? double.NegativeInfinity, hi = vr.Max ?? double.PositiveInfinity;
-                bool fullyBelow = tmin is not null && hi < tmin.Value;
-                bool fullyAbove = tmax is not null && lo > tmax.Value;
-                if (fullyBelow || fullyAbove || WriteVerification.HasUnorderableBound(range)) {
-                    context.ReportError(
-                        post.Effect,
-                        $"Call-chain postcondition ({action.Name} → {post.DeclaringAction.Name}): assigned value range " +
-                        $"[{FormatBound(vr.Min, lower: true)}, {FormatBound(vr.Max, lower: false)}] is entirely outside constraint " +
-                        $"{ConstraintValidation.Describe(range)} on property '{post.TargetProperty}'.",
-                        DomainModelDiagnosticCodes.EffectConstraintViolation);
-                    continue;
+                // A postcondition with no value range is skipped: the callee's own assign already records
+                // DMCS003 for that write, so the chain adds no second finding (V-05b fix round 1).
+                if (post.ValueRange is not { } vr) continue;
+
+                // The written value is the callee's own range under the caller's narrowed context, as
+                // an exact interval (V-05b S3b): a both-open range carries no information (A3), and the
+                // decision is the one write procedure every assign uses.
+                var value = vr.ToRangeConstraint() is { } written
+                    ? AbstractValue.From([written])
+                    : AbstractValue.Unknown;
+                var verdict = WriteVerification.DecideRange(range, value);
+                if (verdict == ConstraintVerdict.Satisfied) continue;
+
+                var key = (post.Effect, call);
+                var violated = verdict == ConstraintVerdict.Violated;
+                if (!findings.TryGetValue(key, out var existing)) {
+                    findings[key] = (post, range, vr, violated);
+                    order.Add(key);
                 }
-                bool canViolate = (tmin is not null && lo < tmin.Value)
-                                  || (tmax is not null && hi > tmax.Value);
-                if (canViolate) {
-                    context.ReportWarning(
-                        post.Effect,
-                        $"Call-chain postcondition ({action.Name} → {post.DeclaringAction.Name}): assigned value range " +
-                        $"[{FormatBound(vr.Min, lower: true)}, {FormatBound(vr.Max, lower: false)}] can fall outside constraint " +
-                        $"{ConstraintValidation.Describe(range)} on property '{post.TargetProperty}'.",
-                        DomainModelDiagnosticCodes.EffectConstraintViolation);
-                }
+                else if (violated && !existing.Violated)
+                    findings[key] = (post, range, vr, true);
             }
+        }
+
+        var recorded = new HashSet<Node>(ReferenceEqualityComparer.Instance);
+        foreach (var effect in order.Select(k => k.Effect).Distinct(ReferenceEqualityComparer.Instance).Cast<Node>()) {
+            var calls = order.Where(k => ReferenceEquals(k.Effect, effect)).Select(k => findings[k]).ToList();
+            var worst = calls.FirstOrDefault(f => f.Violated);
+            if (worst.Post is null) worst = calls[0];
+            if (!recorded.Add(effect)) continue;
+            WriteRecorder.Record(
+                context, domain, effect, worst.Post.TargetProperty,
+                ConstraintValidation.Describe(worst.Range),
+                worst.Violated
+                    ? WriteVerdict.Violated
+                    : WriteVerdict.Unverified(
+                        UnverifiedReason.PossibleViolation,
+                        DomainModelDiagnosticCodes.EffectConstraintViolation));
+        }
+
+        foreach (var key in order) {
+            var (post, range, vr, violated) = findings[key];
+            var message =
+                $"Call-chain postcondition ({action.Name} → {post.DeclaringAction.Name}): assigned value range " +
+                $"[{FormatBound(vr.Min, lower: true)}, {FormatBound(vr.Max, lower: false)}] " +
+                (violated ? "is entirely outside" : "can fall outside") +
+                $" constraint {ConstraintValidation.Describe(range)} on property '{post.TargetProperty}'.";
+            if (violated)
+                context.ReportError(post.Effect, message, DomainModelDiagnosticCodes.EffectConstraintViolation);
+            else
+                context.ReportWarning(post.Effect, message, DomainModelDiagnosticCodes.EffectConstraintViolation);
         }
     }
 
-    private static string FormatRangeValue(double d) =>
-        d == Math.Floor(d) ? d.ToString("F0", System.Globalization.CultureInfo.InvariantCulture) : d.ToString("G", System.Globalization.CultureInfo.InvariantCulture);
+    private static string FormatRangeValue(decimal d) =>
+        d.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
     /// <summary>A written edge of a value range. An absent side is unbounded and prints as the
     /// <see cref="ConstraintValidation"/> glyph, never as the number 0 (#475).</summary>
-    private static string FormatBound(double? bound, bool lower) =>
+    private static string FormatBound(decimal? bound, bool lower) =>
         bound is { } value ? FormatRangeValue(value) : lower ? "−∞" : "+∞";
 
     /// <summary>

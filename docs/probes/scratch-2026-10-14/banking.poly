@@ -1,6 +1,7 @@
 domain Banking
 uses temporal
 uses http
+uses persistence
 
 AccountKind: enum { Checking, Savings, Credit }
 TxnKind: enum { Deposit, Withdrawal, Transfer }

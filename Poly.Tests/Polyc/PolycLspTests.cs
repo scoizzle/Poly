@@ -75,7 +75,7 @@ public class PolycLspTests {
     private static JsonObject Doc(string uri) => new() { ["uri"] = uri };
 
     private static List<CompileDiagnostic> CheckJson(string text) {
-        var result = new PolyCompiler(ProductCatalog.Catalog, ProductCatalog.ImplicitIds).Compile(text, File);
+        var result = new PolyCompiler(ProductCatalog.Catalog, new SessionOptions(ProductCatalog.Catalog, ProductCatalog.ImplicitIds)).Compile(text, File);
         var json = JsonNode.Parse(DiagnosticFormat.Report([result], []))!;
         return [.. json.AsArray().Select(n => DiagnosticFormat.FromJson(n!))];
     }

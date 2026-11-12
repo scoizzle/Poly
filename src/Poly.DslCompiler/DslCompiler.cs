@@ -6,7 +6,7 @@ using Poly.Packs.Product;
 namespace Poly.DslCompiler;
 
 /// <summary>
-/// Controls which seed extension ids the DslCompiler loads when source lists no <c>uses</c>.
+/// Controls which extension ids the DslCompiler loads when source lists no <c>uses</c>.
 /// CompileMode never invents a process door; HTTP host files require <c>uses http</c>
 /// (or an honest seed of that catalog id) and the HTTP analysis bag.
 /// </summary>
@@ -112,23 +112,22 @@ public sealed class DslCompiler {
             return Fail("DSL text is empty.");
 
         // The compile is Poly.Compile over the product catalog. The DbmsPack always wins for the
-        // Minimal API provider, so it is the host vendor the catalog is built with.
-        var catalog = ProductCatalog.Create(dbms switch {
-            DbmsPack.Sqlite => "sqlite",
-            DbmsPack.SqlServer => "sqlserver",
-            _ => "generic",
-        });
+        // Minimal API provider, so its vendor is the host vendor the catalog is built with, and
+        // it is the storage vendor library selection puts in place of generic persistence.
+        var vendor = VendorOf(dbms);
+        var catalog = ProductCatalog.Create(vendor);
         foreach (var library in extraLibraries) {
             if (!catalog.Contains(library.Id))
                 catalog = catalog.With(library);
         }
 
-        var vendor = LinkedVendor(mode, dbms);
-        var hooks = new CompileHooks {
-            SessionExtensions = ids => SessionIds(ids, mode, vendor, extraLibraries),
-            DomainExtensions = ids => vendor is null ? ids : SwapPersistence(ids, vendor),
+        var entities = mode is CompileMode.Entities;
+        var options = new SessionOptions(
+            catalog, entities ? ExtensionCatalog.ProductAuthoring : ProductCatalog.ImplicitIds) {
+            StorageVendor = entities ? null : vendor,
+            HostIds = extraLibraries.Select(library => library.Id).Distinct(StringComparer.Ordinal).ToList(),
         };
-        var compiled = new PolyCompiler(catalog, SeedFor(dbms, mode), hooks).Compile(polyText);
+        var compiled = new PolyCompiler(catalog, options).Compile(polyText);
         if (!compiled.Succeeded)
             return Fail(compiled);
 
@@ -162,78 +161,17 @@ public sealed class DslCompiler {
         }
     }
 
-    /// <summary>
-    /// The vendor that Db and All link in place of generic <c>persistence</c>, so the host
-    /// Program.cs provider matches <paramref name="dbms"/>. Null when nothing is swapped.
-    /// </summary>
-    private static string? LinkedVendor(CompileMode mode, DbmsPack dbms) {
-        if (mode is not (CompileMode.Db or CompileMode.All))
-            return null;
-        return dbms switch {
-            DbmsPack.Sqlite => "sqlite",
-            DbmsPack.SqlServer => "sqlserver",
-            _ => null
-        };
-    }
+    private static readonly DbmsPack[] VendorPacks = [DbmsPack.Sqlite, DbmsPack.SqlServer];
 
     /// <summary>
-    /// Drops every <c>persistence</c> id from an ordered extension list and puts
-    /// <paramref name="vendor"/> where the first one was, unless the vendor is already listed.
+    /// The library id a <see cref="DbmsPack"/> names: the vendor library, or the catalog's generic
+    /// storage id. The one pack-to-vendor mapping; selection does the rest.
     /// </summary>
-    private static List<string> SwapPersistence(IReadOnlyList<string> ids, string vendor) {
-        var hasVendor = ids.Contains(vendor);
-        var swapped = new List<string>(ids.Count);
-        foreach (var id in ids) {
-            if (id != "persistence") {
-                swapped.Add(id);
-                continue;
-            }
-            if (!hasVendor) {
-                swapped.Add(vendor);
-                hasVendor = true;
-            }
-        }
-        return swapped;
-    }
-
-    private static IReadOnlyList<string> SeedFor(DbmsPack dbms, CompileMode mode) {
-        if (mode is CompileMode.Entities)
-            return ExtensionCatalog.ProductAuthoring;
-        var seed = new List<string>(ExtensionCatalog.ProductAuthoring);
-        if (dbms is DbmsPack.Sqlite)
-            seed.Add("sqlite");
-        else if (dbms is DbmsPack.SqlServer)
-            seed.Add("sqlserver");
-        return seed;
-    }
-
-    /// <summary>
-    /// The ids one session loads: the document's <c>uses</c> (or the seed), the extra
-    /// libraries, then the vendor in place of generic persistence. CompileMode never seeds
-    /// <c>http</c> — that id arrives via source <c>uses</c> or an extra library.
-    /// </summary>
-    private static List<string> SessionIds(
-        IReadOnlyList<string> requested,
-        CompileMode mode,
-        string? vendor,
-        IReadOnlyList<IDomainLibrary> extraLibraries) {
-        var ids = new List<string>(requested);
-        var seen = new HashSet<string>(ids, StringComparer.Ordinal);
-        foreach (var library in extraLibraries) {
-            if (seen.Add(library.Id))
-                ids.Add(library.Id);
-        }
-        if (vendor is not null) {
-            ids = SwapPersistence(ids, vendor);
-            if (!ids.Contains(vendor))
-                ids.Add(vendor);
-        }
-        else if (mode is CompileMode.Db or CompileMode.All
-                 && !ids.Exists(id => id is "sqlite" or "sqlserver" or "mysql" or "persistence")) {
-            ids.Add("persistence");
-        }
-        return ids;
-    }
+    private static string VendorOf(DbmsPack dbms) => dbms switch {
+        DbmsPack.Sqlite => "sqlite",
+        DbmsPack.SqlServer => "sqlserver",
+        _ => ProductCatalog.GenericStorageId,
+    };
 
     /// <summary>
     /// Derives the Minimal API provider selection from loaded library ids
@@ -242,13 +180,9 @@ public sealed class DslCompiler {
     private static DbmsPack ResolveDbms(IReadOnlyCollection<IDomainLibrary> libraries) {
         var dbms = DbmsPack.Generic;
         foreach (var library in libraries) {
-            switch (library.Id) {
-                case "sqlite":
-                    dbms = DbmsPack.Sqlite;
-                    break;
-                case "sqlserver":
-                    dbms = DbmsPack.SqlServer;
-                    break;
+            foreach (var pack in VendorPacks) {
+                if (string.Equals(library.Id, VendorOf(pack), StringComparison.Ordinal))
+                    dbms = pack;
             }
         }
         return dbms;

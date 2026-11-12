@@ -5,7 +5,8 @@ using Poly.Packs.Product;
 namespace Poly.Tests.Polyc;
 
 public class PolycCompileTests {
-    private static PolyCompiler Compiler(string seed = "authoring") => new(ProductCatalog.Catalog, seed);
+    private static PolyCompiler Compiler(string seed = "authoring") =>
+        new(ProductCatalog.Catalog, new SessionOptions(ProductCatalog.Catalog, ExtensionCatalog.Seed(seed)));
 
     [Test]
     public async Task Compile_WarningsOnly_SucceedsAndReportsWarning() {
@@ -102,7 +103,7 @@ public class PolycCompileTests {
 
     [Test]
     public async Task Compile_UnknownSeed_FailsClosed() {
-        Assert.Throws<ArgumentException>(() => new PolyCompiler(ProductCatalog.Catalog, "nope"));
+        Assert.Throws<ArgumentException>(() => ExtensionCatalog.Seed("nope"));
         await Assert.That(ExtensionCatalog.Seed("Authoring")).IsEqualTo(ExtensionCatalog.ProductAuthoring);
     }
 

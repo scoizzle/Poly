@@ -8,23 +8,6 @@ using Poly.Grammar;
 
 namespace Poly.Compile;
 
-/// <summary>
-/// Optional host rewrites of the extension id lists a compile uses. The compiler never
-/// switches on an id itself; a host that needs to (for example a legacy facade) says so here.
-/// Both hooks run on the parse-stack thread (<see cref="DslLimits.RunOnParseStack"/>), not on
-/// the caller's, because the whole compile after the seam runs there.
-/// </summary>
-public sealed class CompileHooks {
-    /// <summary>Rewrites the ids the session loads (document <c>uses</c> or the seed).</summary>
-    public Func<IReadOnlyList<string>, IReadOnlyList<string>>? SessionExtensions { get; init; }
-
-    /// <summary>Rewrites the ids stamped on the <see cref="Domain"/>.</summary>
-    public Func<IReadOnlyList<string>, IReadOnlyList<string>>? DomainExtensions { get; init; }
-
-    /// <summary>The domain name when the document sets none. Defaults to <c>PolyDomain</c>.</summary>
-    public string? DefaultDomainName { get; init; }
-}
-
 /// <summary>The outcome of one compile: every diagnostic, and the emitted files on success.</summary>
 public sealed record CompileResult(
     string File,
@@ -41,30 +24,34 @@ public sealed record CompileResult(
 /// <summary>
 /// Drives <see cref="DomainSession"/> for one document: Header → Load → Parse → Evolve →
 /// Analyze → Lower → Produce. It calls the session; it holds no analyzer or lowering of its
-/// own. Extension ids come from the caller's <see cref="ExtensionCatalog"/> and a named seed.
+/// own. The libraries a document loads are the ones <see cref="LibrarySelection.Resolve"/> picks
+/// from the caller's <see cref="SessionOptions"/>; the compiler never switches on an id.
 /// </summary>
 public sealed class PolyCompiler {
     private const string VmReportType = "vm-analysis-report";
     private const string CatalogReportType = "catalog-reference-report";
 
     private readonly SessionOptions _options;
-    private readonly CompileHooks? _hooks;
     private readonly object _gate = new();
     private string? _sessionKey;
     private DomainSession? _session;
 
-    public PolyCompiler(ExtensionCatalog catalog, SessionOptions options)
-        : this(catalog, options.ImplicitIds, null) { }
-
-    public PolyCompiler(ExtensionCatalog catalog, string seed = "authoring", CompileHooks? hooks = null)
-        : this(catalog, ExtensionCatalog.Seed(seed), hooks) { }
-
-    public PolyCompiler(ExtensionCatalog catalog, IReadOnlyList<string> seedIds, CompileHooks? hooks = null) {
-        ArgumentNullException.ThrowIfNull(seedIds);
-        _options = new SessionOptions(
-            catalog ?? throw new ArgumentNullException(nameof(catalog)), seedIds) { Authoring = true };
-        _hooks = hooks;
+    /// <summary>
+    /// A compiler over <paramref name="catalog"/>, selecting libraries as
+    /// <paramref name="options"/> say. The catalog is the options' catalog; naming two is a
+    /// caller error.
+    /// </summary>
+    public PolyCompiler(ExtensionCatalog catalog, SessionOptions options) {
+        ArgumentNullException.ThrowIfNull(catalog);
+        ArgumentNullException.ThrowIfNull(options);
+        if (!ReferenceEquals(catalog, options.Catalog))
+            throw new ArgumentException(
+                "The catalog must be the one the session options resolve against.", nameof(catalog));
+        _options = options with { Authoring = true };
     }
+
+    /// <summary>The domain name when the document sets none. Defaults to <c>PolyDomain</c>.</summary>
+    public string? DefaultDomainName { get; init; }
 
     /// <summary>
     /// Compiles <paramref name="text"/>. Writes nothing; <see cref="CompileResult.Files"/> is in memory.
@@ -138,20 +125,20 @@ public sealed class PolyCompiler {
         if (tree.Name.Length > 0)
             domainName = tree.Name;
 
-        var requested = tree.Uses.Count > 0 ? tree.Uses : _options.ImplicitIds;
-        var sessionIds = _hooks?.SessionExtensions?.Invoke(requested) ?? requested;
-        if (!CheckExtensions(build, tree, sessionIds, diags))
+        var listed = tree.Uses.Count > 0 ? tree.Uses : _options.ImplicitIds;
+        if (!CheckExtensions(build, tree, listed, diags))
             return Fail();
 
         DomainSession session;
         List<DomainChange> changes;
         try {
-            session = SessionFor(tree, sessionIds, target);
+            var requested = LibrarySelection.Resolve(tree.Uses, _options);
+            session = SessionFor(tree, requested, target);
             cancel.ThrowIfCancellationRequested();
-            changes = DomainCompilation.WithSeed(
-                DomainCompilation.Resolve(tree, session), _options.ImplicitIds, session).ToList();
-            if (_hooks?.DomainExtensions is { } rewrite)
-                changes = RewriteExtensions(changes, rewrite);
+            var resolved = DomainCompilation.Resolve(tree, session);
+            changes = tree.Uses.Count > 0
+                ? StampExtensions(resolved, requested)
+                : DomainCompilation.WithSeed(resolved, requested, session).ToList();
         }
         catch (OperationCanceledException) {
             throw;
@@ -174,7 +161,7 @@ public sealed class PolyCompiler {
             return Fail();
         }
 
-        domainName = changes.OfType<SetDomainNameChange>().FirstOrDefault()?.Name ?? _hooks?.DefaultDomainName ?? "PolyDomain";
+        domainName = changes.OfType<SetDomainNameChange>().FirstOrDefault()?.Name ?? DefaultDomainName ?? "PolyDomain";
         var seedDomain = new Domain(domainName, []);
         EvolutionResult outcome;
         try {
@@ -267,8 +254,8 @@ public sealed class PolyCompiler {
         var key = string.Join('\n', ids) + "\ntarget:" + (target ?? "");
         if (_session is not null && _sessionKey == key)
             return _session;
-        // A session-extension hook may rewrite the ids. Keep an authored pin only where the
-        // id at that position is unchanged; a rewritten id has no authored surface pin.
+        // Selection may replace or add ids. Keep an authored pin only where the id at that
+        // position is unchanged; a selected id has no authored surface pin.
         var versions = ids.Select((id, index) =>
             index < tree.Uses.Count
             && index < tree.UsesVersions.Count
@@ -381,15 +368,15 @@ public sealed class PolyCompiler {
     };
 
     /// <summary>
-    /// Replaces the document's extension facts with the rewritten list, placed where the first
-    /// original fact was. Other changes keep their order.
+    /// Stamps the ids the session loaded in place of the document's own extension facts, placed
+    /// where the first one was, so the domain and the session never disagree. Other changes keep
+    /// their order.
     /// </summary>
-    private static List<DomainChange> RewriteExtensions(
-        List<DomainChange> changes, Func<IReadOnlyList<string>, IReadOnlyList<string>> rewrite) {
+    private static List<DomainChange> StampExtensions(
+        List<DomainChange> changes, IReadOnlyList<string> resolved) {
         var original = changes.OfType<AddDomainExtensionChange>().Select(c => c.ExtensionId).ToList();
-        if (original.Count == 0)
+        if (original.Count == 0 || original.SequenceEqual(resolved, StringComparer.Ordinal))
             return changes;
-        var rewritten = rewrite(original);
         var result = new List<DomainChange>(changes.Count);
         var placed = false;
         foreach (var change in changes) {
@@ -400,7 +387,7 @@ public sealed class PolyCompiler {
             if (placed)
                 continue;
             placed = true;
-            result.AddRange(rewritten.Select(id => new AddDomainExtensionChange(id)));
+            result.AddRange(resolved.Select(id => new AddDomainExtensionChange(id)));
         }
         return result;
     }

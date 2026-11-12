@@ -58,7 +58,8 @@ public class DomainExtensionSeedingTests {
 
     [Test]
     public async Task Compile_UsesLibraryOutsideCore_SeedsItsPrimitive() {
-        var compiler = new PolyCompiler(ExtensionCatalog.Core.With(new WidgetsLibrary()), new List<string>());
+        var catalog = ExtensionCatalog.Core.With(new WidgetsLibrary());
+        var compiler = new PolyCompiler(catalog, SessionOptions.Bare(catalog));
 
         var result = compiler.Analyze("domain D\nuses widgets\n", "w.poly");
 

@@ -20,7 +20,9 @@ namespace Poly.Tests.DomainModeling.Analysis;
 /// cannot pass by agreeing on an empty set.
 /// </para>
 /// <para>
-/// The fixtures cover every cursor shape of the merged Lower cursor (#765): each hop exits its
+/// The fixtures cover these cursor shapes of the merged Lower cursor (#765), not every possible
+/// combination (cross-entity and fan-out reach-back, and an exit-block target override, are accepted
+/// residuals): each hop exits its
 /// own source, the cursor moves before the target's entry, the else branch restarts from the
 /// conditional's entry stage, and the cursor is dynamic (the per-stage exit switch) after a
 /// hop-holding branch or <c>for</c>, after every self-invoke, and inside a <c>for</c> body.
@@ -324,6 +326,30 @@ public class StageEntryFactsParityTests {
           }
         }
         """, "Z", "N", "M", "X", "Y");
+
+    [Test]
+    public Task Parity_NonTransitioningBranchAndFor_KeepCursor() => AssertParity("""
+        domain P18
+        Item: entity { }
+        Z: entity {
+          Flag: Boolean
+          Items: many Item
+          N: Number
+          X: Number default(0)
+          Y: Number default(0)
+          W: Number default(0)
+          A: stage {
+            entry {
+              if (Flag is true) { assign N to 1 }
+              for i in Items { assign N to 2 }
+              transition to B
+            }
+            exit { assign X to 1 }
+          }
+          B: stage { exit { assign Y to 1 } }
+          C: stage { exit { assign W to 1 } }
+        }
+        """, "Z", "N", "X");
 
     // ── G7 lifecycle ─────────────────────────────────────────────────────────────────────
 

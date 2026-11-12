@@ -49,7 +49,7 @@ public sealed class ContractCallTests {
 
     private static (Domain Domain, AnalysisResult Analysis) Analyze(string poly, params IDomainLibrary[] libraries) {
         var tree = DslSyntaxTree.Parse(poly);
-        var session = DomainSession.ForDocument(tree, [], Catalog(libraries));
+        var session = DomainSession.Create(tree.Uses, SessionOptions.Bare(Catalog(libraries)));
         var changes = new DomainResolver(tree, session).Resolve();
         // Apply without the analysis gate: a test that expects an error still needs the
         // proposed root (and its facts), not the rolled-back seed.

@@ -300,7 +300,7 @@ public sealed class EntryAssignedPropertyTests {
               }
             }
             """;
-        var result = new PolyCompiler(ProductCatalog.Catalog, "authoring").Compile(dsl, "entry-assigned.poly");
+        var result = new PolyCompiler(ProductCatalog.Catalog, new SessionOptions(ProductCatalog.Catalog, ExtensionCatalog.ProductAuthoring)).Compile(dsl, "entry-assigned.poly");
 
         var errors = result.Diagnostics.Where(d => d.Code == Code).ToList();
         await Assert.That(errors.Count).IsEqualTo(1);

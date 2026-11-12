@@ -140,7 +140,7 @@ public sealed class DomainDslPrinterTests {
         """;
 
     private static (EvolutionResult Result, string Text) Generate(string poly) {
-        var session = DomainSession.ForDocument(DslSyntaxTree.Parse(poly), []);
+        var session = DomainSession.Create(DslSyntaxTree.Parse(poly).Uses, SessionOptions.Bare(ExtensionCatalog.Core));
         var result = new DomainEvolution(DomainTestFactory.Create("_", [], []))
             .ApplyAndAnalyze(new PolyDslParser(poly, session).Parse(), session: session);
         if (!result.Succeeded)
@@ -325,7 +325,7 @@ public sealed class DomainDslPrinterTests {
     }
 
     private static string PrintWithImplicitSet(string poly) {
-        var session = DomainSession.ForDocument(DslSyntaxTree.Parse(poly), ProductCatalog.ImplicitIds, ProductCatalog.Model);
+        var session = DomainSession.Create(DslSyntaxTree.Parse(poly).Uses, new SessionOptions(ProductCatalog.Model, ProductCatalog.ImplicitIds));
         var result = new DomainEvolution(DomainTestFactory.Create("_", [], []))
             .ApplyAndAnalyze(
                 DomainCompilation.WithSeed(new PolyDslParser(poly, session).Parse(), ProductCatalog.ImplicitIds, session),
@@ -394,8 +394,8 @@ public sealed class DomainDslPrinterTests {
         await Assert.That(UsesLines(text).Count).IsEqualTo(0);
 
         var tree = DslSyntaxTree.Parse(poly);
-        var before = DomainSession.ForDocument(tree, ProductCatalog.ImplicitIds, ProductCatalog.Model);
-        var after = DomainSession.ForDocument(DslSyntaxTree.Parse(text), ProductCatalog.ImplicitIds, ProductCatalog.Model);
+        var before = DomainSession.Create(tree.Uses, new SessionOptions(ProductCatalog.Model, ProductCatalog.ImplicitIds));
+        var after = DomainSession.Create(DslSyntaxTree.Parse(text).Uses, new SessionOptions(ProductCatalog.Model, ProductCatalog.ImplicitIds));
         await Assert.That(string.Join(",", after.Extensions)).IsEqualTo(string.Join(",", before.Extensions));
     }
 }

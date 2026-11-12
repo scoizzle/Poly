@@ -60,7 +60,7 @@ public sealed class ResolverPrimitivesTests {
         root.Types.OfType<PrimitiveType>().Select(p => p.Name).ToList();
 
     private static IReadOnlyList<CompileDiagnostic> ProductionDiagnostics(string dsl) =>
-        new PolyCompiler(ProductCatalog.Catalog, "authoring")
+        new PolyCompiler(ProductCatalog.Catalog, new SessionOptions(ProductCatalog.Catalog, ExtensionCatalog.ProductAuthoring))
             .Analyze(dsl, "builtin-primitives.poly")
             .Diagnostics;
 
@@ -164,7 +164,7 @@ public sealed class ResolverPrimitivesTests {
     /// </summary>
     [Test]
     public async Task SeedOnlyTemporalDocument_CarriesExactlyOneDate() {
-        var result = new PolyCompiler(ProductCatalog.Catalog, ["temporal"])
+        var result = new PolyCompiler(ProductCatalog.Catalog, new SessionOptions(ProductCatalog.Catalog, ["temporal"]))
             .Analyze("""
                 domain P
                 function F(x: Date): Date = x

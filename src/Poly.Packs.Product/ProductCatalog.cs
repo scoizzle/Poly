@@ -26,6 +26,9 @@ public static class ProductCatalog {
     /// </summary>
     public static IReadOnlyList<string> ImplicitIds { get; } = ["storage", "persistence"];
 
+    /// <summary>The generic storage library's id, the one a vendor library replaces.</summary>
+    public const string GenericStorageId = PersistenceEmitLibrary.LibraryId;
+
     /// <summary>
     /// The same libraries with no host-file contributors: the model and its C# types only. The
     /// MCP harness simulates and exports from this, so a workspace never emits a DbContext or a

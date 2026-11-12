@@ -16,7 +16,10 @@ public sealed class PersistenceEmitLibrary : IDomainLibrary {
         _contributor = contributor;
     }
 
-    public string Id => "persistence";
+    /// <summary>The catalog id of the generic storage library, the one a vendor library replaces.</summary>
+    public const string LibraryId = "persistence";
+
+    public string Id => LibraryId;
 
     public void Register(SessionBuilder builder) {
         ArgumentNullException.ThrowIfNull(builder);

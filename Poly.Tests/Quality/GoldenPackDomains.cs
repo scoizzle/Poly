@@ -15,8 +15,10 @@ public sealed record NoBootDomain(string Domain, int Issue, string Owner, string
 public static class GoldenPackDomains {
     public const string Provider = "sqlite";
 
-    /// <summary>Domains that cannot boot as an app. Empty until Step 0 observes one.</summary>
-    public static IReadOnlyList<NoBootDomain> NoBoot { get; } = [];
+    /// <summary>Domains that cannot boot as an app; each names its open issue and owner slice.</summary>
+    public static IReadOnlyList<NoBootDomain> NoBoot { get; } = [
+        new NoBootDomain("hotel", 791, "P-13", "#791: owned one-to-one with a back-reference; EF cannot determine the dependent side, the app exits at boot"),
+    ];
 
     /// <summary>The PR-tier boot set: exactly two golden domains, both with a unique-key root entity and an action.</summary>
     public static IReadOnlyList<GoldenDomain> Subset { get; } =

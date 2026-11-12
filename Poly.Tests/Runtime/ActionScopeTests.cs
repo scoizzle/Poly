@@ -245,6 +245,170 @@ public class ActionScopeTests {
         await Assert.That(ActionScope.HasOpenScope).IsFalse();
     }
 
+    [Test]
+    public async Task Begin_Nested_JoinsTheInnermostScope() {
+        var root = ActionScope.Begin();
+        var nested = ActionScope.Begin();
+
+        await Assert.That(root.IsRoot).IsTrue();
+        await Assert.That(nested.IsRoot).IsFalse();
+
+        // The frame really had two open ids: completing one leaves the other, and the root
+        // commit only succeeds once every nested id is gone.
+        ActionScope.Commit(nested);
+        await Assert.That(ActionScope.HasOpenScope).IsTrue();
+        ActionScope.Commit(root);
+        await Assert.That(ActionScope.HasOpenScope).IsFalse();
+    }
+
+    [Test]
+    public async Task Rollback_Nested_RollsBackTheWholeFrame_AndOuterCommitThrows() {
+        var port = new ModuleStoragePort();
+        var scoped = new Scoped("A");
+
+        var root = ActionScope.Begin(port);
+        ActionScope.Touch(scoped);
+        scoped.Value = "b";
+        await Assert.That(port.TryReserve("Patron", "Email", "x@b.c")).IsTrue();
+
+        var nested = ActionScope.Begin();
+        ActionScope.Rollback(nested);
+
+        // Q1: a handler failure aborts the whole action, not just the nested branch.
+        await Assert.That(scoped.Value).IsEqualTo("a");
+        await Assert.That(port.Exists("Patron", "Email", "x@b.c")).IsFalse();
+        await Assert.That(() => ActionScope.Commit(root)).Throws<InvalidOperationException>();
+    }
+
+    [Test]
+    public async Task Touch_AfterRollback_Throws() {
+        var scoped = new Scoped("A");
+        var root = ActionScope.Begin();
+
+        await InFreshFlow<Exception?>(() => {
+            ActionScope.Rollback(root);
+            return null;
+        });
+
+        Exception? touch = null;
+        try {
+            ActionScope.Touch(scoped);
+        }
+        catch (Exception exception) {
+            touch = exception;
+        }
+
+        Exception? create = null;
+        try {
+            ActionScope.Create(scoped, "Patron");
+        }
+        catch (Exception exception) {
+            create = exception;
+        }
+
+        // The parent flow still holds the closed frame: writing through it is a leaked frame,
+        // not a no-op.
+        await Assert.That(touch).IsTypeOf<InvalidOperationException>();
+        await Assert.That(create).IsTypeOf<InvalidOperationException>();
+        await Assert.That(ActionScope.HasOpenScope).IsFalse();
+    }
+
+    [Test]
+    public async Task Begin_SecondRootOnSameJournal_Throws() {
+        var port = new ModuleStoragePort();
+        var root = ActionScope.Begin(port);
+
+        var caught = await InFreshFlow<Exception?>(() => {
+            try {
+                ActionScope.Begin(port);
+                return null;
+            }
+            catch (Exception exception) {
+                return exception;
+            }
+        });
+
+        await Assert.That(caught).IsTypeOf<InvalidOperationException>();
+
+        ActionScope.Rollback(root);
+
+        // Closing the first root frees the journal: a flat journal supports one root mark.
+        var again = ActionScope.Begin(port);
+        await Assert.That(again.IsRoot).IsTrue();
+        ActionScope.Rollback(again);
+    }
+
+    [Test]
+    public async Task Begin_WithAFrameFromAnotherJournal_Throws() {
+        var first = new SpyJournal([]);
+        var second = new SpyJournal([]);
+        var root = ActionScope.Begin(first);
+
+        await Assert.That(() => ActionScope.Begin(second)).Throws<InvalidOperationException>();
+
+        ActionScope.Rollback(root);
+    }
+
+    [Test]
+    public async Task Rollback_AfterRootCommit_Throws() {
+        var root = ActionScope.Begin();
+        ActionScope.Commit(root);
+
+        await Assert.That(() => ActionScope.Rollback(root)).Throws<InvalidOperationException>();
+    }
+
+    [Test]
+    public async Task Rollback_WithCompletedNestedToken_OnLiveFrame_RollsBackWholeFrame() {
+        var scoped = new Scoped("A");
+        var root = ActionScope.Begin();
+        var nested = ActionScope.Begin();
+        ActionScope.Commit(nested);
+
+        ActionScope.Touch(scoped);
+        scoped.Value = "b";
+
+        // A completed nested token is still a token of the live frame, and any token rolls the
+        // whole frame back.
+        ActionScope.Rollback(nested);
+
+        await Assert.That(scoped.Value).IsEqualTo("a");
+        await Assert.That(ActionScope.HasOpenScope).IsFalse();
+    }
+
+    [Test]
+    public async Task Begin_NullJournal_JoinsFrameWithJournal() {
+        var port = new ModuleStoragePort();
+        var root = ActionScope.Begin(port);
+        await Assert.That(port.TryReserve("Patron", "Email", "x@b.c")).IsTrue();
+
+        var nested = ActionScope.Begin();
+        await Assert.That(nested.IsRoot).IsFalse();
+
+        ActionScope.Rollback(nested);
+        await Assert.That(port.Exists("Patron", "Email", "x@b.c")).IsFalse();
+    }
+
+    [Test]
+    public async Task Touch_AfterRootCommit_InCommittingFlow_IsNoOp() {
+        var scoped = new Scoped("A");
+        var root = ActionScope.Begin();
+        ActionScope.Touch(scoped);
+        ActionScope.Commit(root);
+
+        ActionScope.Touch(scoped);
+
+        await Assert.That(scoped.SnapshotCount).IsEqualTo(1);
+        await Assert.That(ActionScope.HasOpenScope).IsFalse();
+    }
+
+    private static async Task<T> InFreshFlow<T>(Func<T> body) {
+        Task<T> task;
+        using (ExecutionContext.SuppressFlow())
+            task = Task.Run(body);
+
+        return await task;
+    }
+
     /// <summary>An entity double whose snapshot is its <see cref="Value"/>.</summary>
     private sealed class Scoped(string name) : IActionScoped {
         public string Name { get; } = name;

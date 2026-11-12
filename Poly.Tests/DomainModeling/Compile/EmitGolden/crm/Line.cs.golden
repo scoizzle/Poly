@@ -1,4 +1,6 @@
 #nullable enable
+using Poly.Runtime;
+
 public class Line
 {
     private Line(long qty, decimal unitPrice, Product? product = null, Opportunity? opportunity = null)

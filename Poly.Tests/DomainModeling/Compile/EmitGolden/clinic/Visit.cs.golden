@@ -1,4 +1,6 @@
 #nullable enable
+using Poly.Runtime;
+
 public enum VisitStage
 {
     Scheduled = 0,

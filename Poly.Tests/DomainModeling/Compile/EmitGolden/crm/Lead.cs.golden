@@ -1,4 +1,6 @@
 #nullable enable
+using Poly.Runtime;
+
 public enum LeadStage
 {
     New = 0,

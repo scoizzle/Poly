@@ -2,6 +2,8 @@
 using System;
 using System.Collections.Generic;
 
+using Poly.Runtime;
+
 public enum FineStage
 {
     Unpaid = 0,

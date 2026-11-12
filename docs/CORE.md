@@ -171,6 +171,8 @@ Host-neutral types/members (`Poly/Introspection/`); CLR is first provider. Consu
 
 Simulate = Interpreter on lowered module bodies with caller-supplied context — not Domain/Effect IR. Extensions: one `.poly` language; session loads `uses` ids (unknown/duplicate fail closed). Persistence/HTTP emit doors only when listed. Core seed does not emit `Program.cs`.
 
+Tool arguments are validated before the SDK binder from each tool's published `inputSchema`; caller errors are `UNKNOWN_ARGUMENT`, `INVALID_ARGUMENT` or `WORKSPACE_REQUIRED`, and `INTERNAL_ERROR` means a defect.
+
 ### 3.7 Debugging
 
 `VmState.DebugInterrupt` · [`docs/decisions/2026-06-08-breakpoint-architecture.md`](decisions/2026-06-08-breakpoint-architecture.md) · `docs/interpretation/debugging-and-tracing.md`.

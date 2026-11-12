@@ -127,6 +127,101 @@ public class EvidenceBacklogProbes {
         var dirtyDsl = h.Export(dirty, "dsl").Content;
         await Assert.That($"first={first.Success} second={second.Success}\n{dirtyDsl}").IsEqualTo($"first={first.Success} second={second.Success}\n{freshDsl}");
     }
+
+    // ---- Item 13: [Range] bound beyond int --------------------------------------------------
+    [Test]
+    public async Task Item13_RangeBoundBeyondInt_OnLong_IsExact() {
+        var lines = new List<string>();
+        foreach (var bound in new[] { 4_294_967_296L, 9_007_199_254_740_992L, 9_007_199_254_740_993L, long.MaxValue - 1 }) {
+            var args = Poly.Packs.Product.RangeAttributeArguments.Build("long", 0L, bound);
+            var emitted = ((Poly.Ast.Nodes.Constant)args[1]).Value;
+            var back = emitted is double d ? (d >= 9.2233720368547758E18 ? "overflow" : ((long)d).ToString()) : Convert.ToString(emitted)!;
+            lines.Add($"{bound}->{emitted?.GetType().Name}:{back}{(back == bound.ToString() ? "" : " LOSSY")}");
+        }
+        await Assert.That(string.Join("; ", lines)).DoesNotContain("LOSSY");
+    }
+
+    // ---- Item 14: FoldNumber past 28 significant digits -------------------------------------
+    private static string DefaultLiteral(string text) {
+        try {
+            var (domain, _) = EvolvedDomain.FromDsl($"domain F\nX: entity {{\n  Amount: Decimal default({text})\n}}\n");
+            var prop = domain.Types.OfType<Entity>().Single().Properties.Single();
+            var lit = prop.Constraints.OfType<DefaultValueConstraint>().Single().Expression as Literal;
+            var v = lit!.Value;
+            return $"{v?.GetType().Name}:{Convert.ToString(v, System.Globalization.CultureInfo.InvariantCulture)}";
+        } catch (Exception e) when (e is FormatException or InvalidOperationException) {
+            return "ERROR:" + e.Message;
+        }
+    }
+
+    [Test]
+    public async Task Item14_FoldNumber_BeyondDecimalPrecision_IsExactOrError() {
+        var cases = new[] {
+            "0.1234567890123456789012345678",            // 28 sig digits: control
+            "0.12345678901234567890123456789",           // 29
+            "1.00000000000000000000000000001",           // 30 (rounds to integral 1)
+            "12345678901234567890123456789.5",           // 31
+            "99999999999999999999999999999999",           // 32-digit integer > decimal.MaxValue
+        };
+        var report = new List<string>();
+        foreach (var c in cases) {
+            var r = DefaultLiteral(c);
+            var exact = r.StartsWith("ERROR") || r.EndsWith(":" + c);
+            report.Add($"{c} => {r}{(exact ? "" : " LOSSY")}");
+        }
+        await Assert.That(string.Join("\n", report)).DoesNotContain("LOSSY");
+    }
+
+    // ---- Item 07: require-pinned entity-level action ----------------------------------------
+    [Test]
+    public async Task Item07_RequirePinnedEntityLevelAction_IsNotRejectedByDmeff017() {
+        const string dsl = """
+            domain R
+            Z: entity {
+              Mode: Text optional
+              InB: policy { Mode is "b" }
+              Go: action require InB { transition to B }
+              A: stage require not InB { exit { transition to C } }
+              B: stage { }
+              C: stage { }
+            }
+            """;
+        var all = Diagnose(dsl);
+        await Assert.That(Dump(all.Where(d => d.Severity == DiagnosticSeverity.Error)) + "|ALL:" + Dump(all)).DoesNotContain("DMEFF017");
+    }
+
+    // ---- Item 12: parity harness temporal gap -----------------------------------------------
+    [Test]
+    public async Task Item12_ParityScenario_OverDateProperty_BuildsAndAgrees() {
+        const string dsl = """
+            domain T
+            uses temporal
+            Z: entity {
+              Name: Text
+              Due: Date optional
+              Renew: action { assign Due to Today }
+            }
+            """;
+        var scenario = ParityScenario.FromDsl(dsl, "TemporalParity");
+        var outcomes = await scenario.AssertAgree(side => {
+            side.Create("Z", ("name", "a"));
+            side.Invoke("Renew");
+        });
+        await Assert.That(outcomes.Count).IsGreaterThan(0);
+    }
+
+    // ---- Item 18: GrammarChangeProtocolTests has no pattern/printer-fill rung ----------------
+    [Test]
+    public async Task Item18_GrammarChangeProtocol_ChecksPatternRowsAgainstPrinterFills() {
+        var methods = typeof(Poly.Tests.Grammar.GrammarChangeProtocolTests)
+            .GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.DeclaredOnly)
+            .Select(m => m.Name).ToList();
+        // A row added to the Core grammar is invisible to every check below (they enumerate token kinds only).
+        var core = DslGrammar.Core;
+        var rows = core.KnownRules.Sum(r => core.GetPatterns(r).Count);
+        await Assert.That(methods.Any(n => n.Contains("Pattern") || n.Contains("Fill") || n.Contains("Printer")))
+            .IsTrue().Because($"protocol tests = [{string.Join(", ", methods)}]; Core grammar has {rows} pattern rows none of them checked");
+    }
 }
 
 internal static class Record {

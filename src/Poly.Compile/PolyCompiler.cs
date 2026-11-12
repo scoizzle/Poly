@@ -11,6 +11,8 @@ namespace Poly.Compile;
 /// <summary>
 /// Optional host rewrites of the extension id lists a compile uses. The compiler never
 /// switches on an id itself; a host that needs to (for example a legacy facade) says so here.
+/// Both hooks run on the parse-stack thread (<see cref="DslLimits.RunOnParseStack"/>), not on
+/// the caller's, because the whole compile after the seam runs there.
 /// </summary>
 public sealed class CompileHooks {
     /// <summary>Rewrites the ids the session loads (document <c>uses</c> or the seed).</summary>

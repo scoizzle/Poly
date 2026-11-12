@@ -69,8 +69,6 @@ public sealed class DslExpressionParser {
             $"Unknown duration unit '{_c.Current.Text}'. Legal units: {DurationUnits.LegalUnits}.");
     }
 
-    public DomainExpression ParseNestedExpression() => ParseExpression();
-
     private DomainExpression FoldAddOp(DomainExpression left, DslTokenKind op, DomainExpression right) {
         var isPlus = op == DslTokenKind.Plus;
         return _forms.TryFoldBinary(left, right, isPlus) ?? (isPlus
@@ -130,7 +128,7 @@ public sealed class DslExpressionParser {
     /// </summary>
     private void GuardChain(int level, int operands, MatchResult<DslToken, DslTokenKind> match) {
         // A one-operand chain adds no level: every rule family wraps a single expression in one.
-        if (operands <= 1 || level + operands <= DslLimits.MaxExpressionDepth)
+        if (operands <= 1 || level + operands - 1 <= DslLimits.MaxExpressionDepth)
             return;
         var at = match.Operators.Count > 0 ? match.Operators[^1] : match.Tokens[^1];
         throw new GrammarException(DslLimits.DepthDetail, at.Line, at.Col, at.Offset, at.Length);
@@ -210,6 +208,7 @@ public sealed class DslExpressionParser {
     }
 
     private DomainExpression FoldMatch(MatchResult<DslToken, DslTokenKind> match, int level) {
+        GuardLevel(level, match.Tokens[0]);
         var keyword = match.Tokens[0];
         var closing = match.Tokens[^1];
         var inner = match.Tokens.Skip(2).Take(match.Tokens.Count - 3).ToList();
@@ -300,6 +299,7 @@ public sealed class DslExpressionParser {
     /// trailing comma) are a positioned error.
     /// </summary>
     private DomainExpression FoldCall(MatchResult<DslToken, DslTokenKind> match, int level) {
+        GuardLevel(level, match.Tokens[0]);
         var nameToken = match.Tokens[0];
         var name = nameToken.Text;
         var inner = match.Tokens.Skip(2).Take(match.Tokens.Count - 3).ToList();

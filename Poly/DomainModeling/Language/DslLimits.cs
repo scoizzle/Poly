@@ -11,8 +11,10 @@ namespace Poly.DomainModeling.Language;
 /// </summary>
 public static class DslLimits {
     /// <summary>
-    /// Expression nesting levels: a leaf is level 1, and a paren group, <c>not</c>, a
-    /// comparison operand, a <c>where</c> body and each chain operand add a level.
+    /// Expression nesting levels. The top-level expression is level 0; a paren group, <c>not</c>,
+    /// a comparison operand, a <c>where</c> body, and a call or <c>match</c> argument each add 1;
+    /// a left-associative chain of N operands adds N - 1. Anything whose level exceeds this is a
+    /// positioned parse error.
     /// </summary>
     public const int MaxExpressionDepth = 256;
 

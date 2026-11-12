@@ -1040,8 +1040,9 @@ The DSL accepts boolean and scalar expressions through the following precedence 
 | `and` | Binary, left-assoc | `Age >= 18 and Status is "active"` |
 | `or` | Binary, left-assoc | `Total > 0 or Rush is true` |
 
-An expression may nest at most 256 levels (a leaf is 1, and a paren group, `not` or a chain
-operand adds 1); deeper input is a positioned parse error, not a crash.
+An expression may nest at most 256 levels: the top level is 0, and each paren group, `not`,
+comparison operand, `where` body or call/match argument adds 1, while a chain of N operands
+adds N - 1. Deeper input is a positioned parse error, not a crash.
 
 Valid expressions:
 <!-- poly-verify: skip:illustration owner:M-02 -->

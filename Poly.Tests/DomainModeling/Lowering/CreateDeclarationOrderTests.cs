@@ -171,7 +171,10 @@ public sealed class CreateDeclarationOrderTests {
         // The simulator takes the same declared values by name; both sides hold the
         // same state, so the printed order is the only variable here.
         var outcome = ModuleExec.For(domain).Create("Product", new Dictionary<string, object?> {
-            ["Sku"] = "A", ["Price"] = 95L, ["OnHand"] = 5L, ["Reserved"] = 3L
+            ["Sku"] = "A",
+            ["Price"] = 95L,
+            ["OnHand"] = 5L,
+            ["Reserved"] = 3L
         });
         await Assert.That(outcome.Succeeded).IsTrue();
         await Assert.That(outcome.Instance!.Bag["Sku"]).IsEqualTo("A");

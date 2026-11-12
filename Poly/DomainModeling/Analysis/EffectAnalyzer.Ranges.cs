@@ -38,20 +38,62 @@ internal sealed partial class EffectAnalyzer {
         Action? action,
         Property targetProp) {
         var values = AssignedValues(context, assign, entity, action);
+        ValidateWrittenValue(
+            context, domain, assign, assign.Value,
+            $"assign {targetProp.Name} to {WritePrinter.PrintExpressionText(assign.Value)}",
+            targetProp, values);
+    }
+
+    /// <summary>
+    /// The create-initializer arm of the same channel (S4): one verdict, one finding and one fact for
+    /// the initializer. The expression is inferred in the CREATOR's scope (the entity whose action
+    /// creates) with the creating action's parameters in scope, exactly as master's
+    /// <c>InferNumericRange</c> call did — never in the created entity's scope, where a same-named
+    /// property would answer with the wrong constraints (A1).
+    /// </summary>
+    private static void ValidateInitializerValue(
+        AnalysisContext context,
+        Domain domain,
+        PropertyBinding initializer,
+        Entity creatorEntity,
+        Action? action,
+        Entity targetEntity,
+        Property targetProp) {
+        if (initializer.Expression is Literal literal) {
+            ValidateLiteralAgainstConstraints(context, initializer, literal.Value, targetProp, domain);
+            return;
+        }
+
+        var value = EffectInvariantAnalyzer.InferValue(initializer.Expression, creatorEntity, action);
+        ValidateWrittenValue(
+            context, domain, initializer, initializer.Expression,
+            $"create {targetEntity.Name} {{ {targetProp.Name}: {WritePrinter.PrintExpressionText(initializer.Expression)} }}",
+            targetProp, [value]);
+    }
+
+    /// <summary>The shared decision: every write-relevant constraint against every value, worst wins.</summary>
+    private static void ValidateWrittenValue(
+        AnalysisContext context,
+        Domain domain,
+        Node errorNode,
+        DomainExpression valueExpression,
+        string writeText,
+        Property targetProp,
+        IReadOnlyList<AbstractValue?> values) {
         WriteFinding? worst = null;
         foreach (var constraint in targetProp.Constraints) {
             if (!ConstraintValidation.IsWriteRelevant(constraint)) continue;
             foreach (var value in values) {
-                var finding = new WriteFinding(DecideWrite(constraint, value, assign.Value), constraint, value);
+                var finding = new WriteFinding(DecideWrite(constraint, value, valueExpression), constraint, value);
                 if (worst is null || finding.Verdict.Worst(worst.Value.Verdict) != worst.Value.Verdict)
                     worst = finding;
             }
         }
         if (worst is not { } decided) return;
 
-        ReportWrite(context, assign, targetProp, decided);
+        ReportWrite(context, errorNode, writeText, targetProp, decided);
         WriteRecorder.Record(
-            context, domain, assign, targetProp.Name, ConstraintValidation.Describe(decided.Constraint), decided.Verdict);
+            context, domain, errorNode, targetProp.Name, ConstraintValidation.Describe(decided.Constraint), decided.Verdict);
     }
 
     /// <summary>
@@ -98,14 +140,15 @@ internal sealed partial class EffectAnalyzer {
         _ => UnverifiedReason.UnsupportedOperator,
     };
 
-    private static void ReportWrite(AnalysisContext context, AssignEffect assign, Property targetProp, WriteFinding finding) {
+    private static void ReportWrite(
+        AnalysisContext context, Node errorNode, string writeText, Property targetProp, WriteFinding finding) {
         var constraint = finding.Constraint;
         var described = ConstraintValidation.Describe(constraint);
         var numeric = finding.Value?.NumericRange;
         switch (finding.Verdict.Outcome) {
             case WriteOutcome.Violated:
                 context.ReportError(
-                    assign,
+                    errorNode,
                     numeric is { } nr && constraint is RangeConstraint
                         ? $"Assigned expression value range [{FormatBound(nr.Min, lower: true)}, {FormatBound(nr.Max, lower: false)}] is entirely outside " +
                           $"constraint {described} on property '{targetProp.Name}'."
@@ -114,15 +157,15 @@ internal sealed partial class EffectAnalyzer {
                 break;
             case WriteOutcome.Unverified when finding.Verdict.Reason == UnverifiedReason.PossibleViolation && numeric is { } range:
                 context.ReportWarning(
-                    assign,
+                    errorNode,
                     $"Assigned expression value range [{FormatBound(range.Min, lower: true)}, {FormatBound(range.Max, lower: false)}] can fall outside " +
                     $"constraint {described} on property '{targetProp.Name}'.",
                     DomainModelDiagnosticCodes.EffectConstraintViolation);
                 break;
             case WriteOutcome.Unverified:
                 context.ReportWarning(
-                    assign,
-                    $"Cannot verify 'assign {targetProp.Name} to {WritePrinter.PrintExpressionText(assign.Value)}' against constraint " +
+                    errorNode,
+                    $"Cannot verify '{writeText}' against constraint " +
                     $"{described} on property '{targetProp.Name}': {UnverifiedReasonText(finding.Verdict.Reason)}.",
                     DomainModelDiagnosticCodes.ConstraintUndecided);
                 break;
@@ -135,62 +178,6 @@ internal sealed partial class EffectAnalyzer {
         UnverifiedReason.RecursionCut => "the value comes from a recursive invoke whose effect was cut",
         _ => "the assigned value has no bound analysis can use",
     };
-
-    /// <summary>
-    /// The create-initializer path (no action, no postconditions): infer the value range against
-    /// declared ranges and check it against the target's RangeConstraint. A range entirely outside is a
-    /// definite violation (error); one that can extend outside is a possible violation (warning). A value
-    /// with no range is still skipped here: S4 moves initializers onto the channel above.
-    /// </summary>
-    private static void ValidateDerivedValueRange(
-        AnalysisContext context,
-        Node errorNode,
-        DomainExpression value,
-        Entity entity,
-        Action? action,
-        Property targetProp) {
-        var range = targetProp.Constraints.OfType<RangeConstraint>().FirstOrDefault();
-        if (range is null) return;
-
-        var (lo, hi) = EffectInvariantAnalyzer.InferNumericRange(value, entity, action, null);
-        CheckDerivedRange(context, errorNode, AbstractValue.From([new RangeConstraint(lo, hi)]), range, targetProp);
-    }
-
-    private static void CheckDerivedRange(
-        AnalysisContext context,
-        Node errorNode,
-        AbstractValue value,
-        RangeConstraint range,
-        Property targetProp) {
-        // No numeric range at all is "Unknown", not the open interval (-∞, +∞): the
-        // create-initializer callers reach here through InferNumericRange for every unranged
-        // arithmetic initializer. Treating it as open would warn each one against its target.
-        // (Assign effects no longer reach here: ValidateAssignedValue records the write as Unverified.
-        // S4 does the same for initializers.)
-        if (value.NumericRange is not { } numeric) return;
-
-        // The null-endpoint semantics live in WriteVerification.DecideRange: a null target side
-        // is satisfied, a null value side against a closed target is Undecided, never Violated.
-        switch (WriteVerification.DecideRange(range, value)) {
-            case ConstraintVerdict.Violated:
-                context.ReportError(
-                    errorNode,
-                    $"Assigned expression value range [{FormatBound(numeric.Min, lower: true)}, {FormatBound(numeric.Max, lower: false)}] is entirely outside " +
-                    $"constraint {ConstraintValidation.Describe(range)} on property '{targetProp.Name}'.",
-                    DomainModelDiagnosticCodes.EffectConstraintViolation);
-                break;
-            case ConstraintVerdict.Undecided:
-                context.ReportWarning(
-                    errorNode,
-                    $"Assigned expression value range [{FormatBound(numeric.Min, lower: true)}, {FormatBound(numeric.Max, lower: false)}] can fall outside " +
-                    $"constraint {ConstraintValidation.Describe(range)} on property '{targetProp.Name}'.",
-                    DomainModelDiagnosticCodes.EffectConstraintViolation);
-                break;
-            case ConstraintVerdict.Satisfied:
-            default:
-                break;
-        }
-    }
 
     private static bool IsRangeSubsumed(RangeConstraint inner, RangeConstraint outer) {
         var innerMin = inner.Minimum is not null ? NumericBound.ToDoubleOrNull(inner.Minimum) : double.NegativeInfinity;

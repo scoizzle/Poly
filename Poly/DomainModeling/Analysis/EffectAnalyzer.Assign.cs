@@ -95,8 +95,7 @@ internal sealed partial class EffectAnalyzer {
     }
 
     private static void ValidateLiteralAgainstConstraints(
-        AnalysisContext context, Node errorNode, object? literalValue, Property targetProp, Domain? domain = null) {
-        // domain is null for create initializers, which S4 moves onto the recorder.
+        AnalysisContext context, Node errorNode, object? literalValue, Property targetProp, Domain domain) {
         var tally = new WriteTally();
         foreach (var constraint in targetProp.Constraints) {
             var verdict = ConstraintValidation.Evaluate(constraint, literalValue);
@@ -116,7 +115,7 @@ internal sealed partial class EffectAnalyzer {
                     DomainModelDiagnosticCodes.EffectConstraintViolation);
             }
         }
-        if (domain is not null) tally.Record(context, domain, errorNode, targetProp.Name);
+        tally.Record(context, domain, errorNode, targetProp.Name);
     }
 
     private static void ValidateParameterConstraintCompatibility(

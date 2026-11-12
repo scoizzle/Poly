@@ -429,12 +429,12 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
         }
 
         protected override object? CreateEntityInstance(CreateEntityInstance e) {
-            ValidateCreateEntityInstance(context, e, entity, lookup, domain);
+            ValidateCreateEntityInstance(context, e, entity, lookup, domain, action);
             return null;
         }
 
         protected override object? CreateEntityInRelationship(CreateEntityInRelationshipEffect e) {
-            ValidateCreateEntityInRelationship(context, e, entity, domain, lookup);
+            ValidateCreateEntityInRelationship(context, e, entity, domain, lookup, action);
             return null;
         }
 
@@ -512,7 +512,7 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
     }
 
     private static void ValidateCreateEntityInstance(
-        AnalysisContext context, CreateEntityInstance cei, Entity actionEntity, DomainTypeLookupMetadata lookup, Domain domain) {
+        AnalysisContext context, CreateEntityInstance cei, Entity actionEntity, DomainTypeLookupMetadata lookup, Domain domain, Action? action) {
         if (!TryResolveDomainType(context, cei.Type, lookup, cei, out var resolvedType)) {
             return;
         }
@@ -537,15 +537,10 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
 
                 if (targetProp is null) continue; // nav binding — no property constraints to check
 
-                // Validate literal initializer values against property constraints
-                if (initializer.Expression is Literal lit && targetProp.Constraints.Count > 0) {
-                    ValidateLiteralAgainstConstraints(context, initializer, lit.Value, targetProp);
-                }
-
-                // Propagate the target's range onto derived (arithmetic) initializer values
-                if (initializer.Expression is Add or Subtract or Multiply && targetProp.Constraints.Count > 0) {
-                    ValidateDerivedValueRange(context, initializer, initializer.Expression, actionEntity, action: null, targetProp);
-                }
+                // Every initializer write gets exactly one verdict, recorded once (A3): a literal
+                // through the constraint evaluator, every other value through the flow channel.
+                // The value is inferred in the CREATOR's scope, with the creating action in scope (A1).
+                ValidateInitializerValue(context, domain, initializer, actionEntity, action, targetEntity, targetProp);
             }
 
             // P2′.2: Reject bare create of exclusively-owned entity types
@@ -698,7 +693,7 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
             DomainModelDiagnosticCodes.SemanticReferenceResolution);
 
     private static void ValidateCreateEntityInRelationship(
-        AnalysisContext context, CreateEntityInRelationshipEffect createIn, Entity entity, Domain domain, DomainTypeLookupMetadata lookup) {
+        AnalysisContext context, CreateEntityInRelationshipEffect createIn, Entity entity, Domain domain, DomainTypeLookupMetadata lookup, Action? action) {
         // amu-w1-1 / F1: catalog+RLM name resolve (no domain.Relationships scan);
         // bag-missing reports a structural failure (fail-closed) before returning.
         if (!TryResolveRelationship(context, domain, entity.Name, createIn.RelationshipName, createIn, out var relationship)) {
@@ -752,15 +747,8 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
 
             if (targetProp is null) continue; // nav binding — no property constraints to check
 
-            // Validate literal initializer values against property constraints
-            if (initializer.Expression is Literal lit && targetProp.Constraints.Count > 0) {
-                ValidateLiteralAgainstConstraints(context, initializer, lit.Value, targetProp);
-            }
-
-            // Propagate the target's range onto derived (arithmetic) initializer values
-            if (initializer.Expression is Add or Subtract or Multiply && targetProp.Constraints.Count > 0) {
-                ValidateDerivedValueRange(context, initializer, initializer.Expression, entity, action: null, targetProp);
-            }
+            // Same channel, same creator scope: `create in` runs inside the source entity's action.
+            ValidateInitializerValue(context, domain, initializer, entity, action, targetEntity, targetProp);
         }
 
         // D: every required property must be provided — the back-reference nav

@@ -749,7 +749,12 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
 
     // ── Numeric fallback for diagnostics (no-metadata contexts) ──
 
-    internal static (double? Min, double? Max) InferNumericRange(
+    /// <summary>
+    /// The abstract value of <paramref name="expr"/> evaluated in <paramref name="entity"/>'s scope.
+    /// Create initializers call this with the CREATOR entity, not the created one: an initializer's
+    /// expression is written in the creating action's scope, exactly as an assign's RHS is.
+    /// </summary>
+    internal static AbstractValue InferValue(
         DomainExpression expr, Entity entity, Action? action,
         IReadOnlyDictionary<string, ValueRange?>? narrowed = null) {
         var env = new Dictionary<string, AbstractValue>(StringComparer.Ordinal);
@@ -757,9 +762,13 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
             foreach (var (k, v) in narrowed)
                 env[k] = v is { } r ? AbstractValue.From([new RangeConstraint(r.Min, r.Max)]) : AbstractValue.Unknown;
         }
-        var value = Eval(expr, entity, action, env);
-        return value.NumericRange is { } nr ? (nr.Min, nr.Max) : (null, null);
+        return Eval(expr, entity, action, env);
     }
+
+    internal static (double? Min, double? Max) InferNumericRange(
+        DomainExpression expr, Entity entity, Action? action,
+        IReadOnlyDictionary<string, ValueRange?>? narrowed = null) =>
+        InferValue(expr, entity, action, narrowed).NumericRange is { } nr ? (nr.Min, nr.Max) : (null, null);
 }
 
 /// <summary>Queryable surface for the additive invariant model.</summary>

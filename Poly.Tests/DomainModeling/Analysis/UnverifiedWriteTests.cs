@@ -364,6 +364,126 @@ public class UnverifiedWriteTests {
         await Assert.That(facts.Unverified.Single().Reason).IsEqualTo(UnverifiedReason.NonFlowCheckedKind);
     }
 
+    // ── S4: create initializers on the same channel ──────────────────────
+
+    [Test]
+    public async Task CreateInitializer_BareRefIntoRangedProperty_Warns() {
+        // A bare property reference in a create initializer was skipped on master (the gate only
+        // accepted literals and arithmetic). The creator's Amount has no range, so the value is
+        // Unknown and the write is DMCS003, never silence.
+        var result = Parse("""
+            domain Test
+            Source: entity {
+              Amount: Number
+              Make: action { create Item { Amount: Amount } }
+            }
+            Item: entity {
+              Amount: Number range(0, 10)
+            }
+            """);
+
+        var findings = Findings(result.Analysis, "Amount");
+
+        await Assert.That(findings.Count).IsEqualTo(1);
+        await Assert.That(findings[0].Code).IsEqualTo(DomainModelDiagnosticCodes.ConstraintUndecided);
+        await Assert.That(findings[0].Severity).IsEqualTo(DiagnosticSeverity.Warning);
+        await Assert.That(Facts(result).Unverified.Single().Reason).IsEqualTo(UnverifiedReason.UnknownBound);
+    }
+
+    [Test]
+    public async Task CreateInitializer_IsEvaluatedInTheCreatorsScope_NotTheTargets() {
+        // The target has a property of the same name with a different range. Creator [0, 10] against
+        // target [100, 200] is entirely below: a definite violation. Read in the target's scope the
+        // value would be [100, 200] and the write would be silently verified (A1).
+        var result = Parse("""
+            domain Test
+            Creator: entity {
+              Amount: Number range(0, 10)
+              Make: action { create Item { Amount: Amount } }
+            }
+            Item: entity {
+              Amount: Number range(100, 200)
+            }
+            """);
+
+        var findings = Findings(result.Analysis, "Amount");
+
+        await Assert.That(findings.Count).IsEqualTo(1);
+        await Assert.That(findings[0].Code).IsEqualTo(DomainModelDiagnosticCodes.EffectConstraintViolation);
+        await Assert.That(findings[0].Severity).IsEqualTo(DiagnosticSeverity.Error);
+        // The error rolls the DSL evolution back, taking the recorded facts with it; the violation is
+        // read from the diagnostic. (Programmatic domains keep their facts: BarePropertyRef_DisjointRange_IsOneError.)
+        await Assert.That(result.Succeeded).IsFalse();
+    }
+
+    [Test]
+    public async Task CreateInitializer_RangedParameter_IsVerified() {
+        // A ranged parameter cannot be authored in the DSL, so this builds the domain directly: the
+        // parameter [0, 50] is inside the target [0, 100], so the initializer is verified and silent.
+        var item = new Entity("Item",
+            [new Property("Qty", new DomainTypeReference("Number"), [new RangeConstraint(0d, 100d)])],
+            [],
+            [],
+            []);
+        var creator = new Entity("Creator",
+            [],
+            [new DmAction("Make", InvocationResult.Void,
+                [new Property("qty", new DomainTypeReference("Number"), [new RangeConstraint(0d, 50d)])],
+                [
+                    new CreateEntityInstance(
+                        new DomainTypeReference("Item"),
+                        [new PropertyBinding("Qty", DomainExpression.Parameter("qty"))]),
+                ],
+                [])],
+            [],
+            []);
+        var domain = DomainTestFactory.Create("Test", [Number, creator, item], []);
+
+        var analysis = DomainModelAnalyzer.Analyze(domain);
+
+        await Assert.That(Findings(analysis, "Qty")).IsEmpty();
+        var facts = analysis.GetMetadata<WriteVerificationFacts>(domain);
+        await Assert.That(facts).IsNotNull();
+        await Assert.That(facts!.Verified).IsEqualTo(1);
+        await Assert.That(facts.Unverified).IsEmpty();
+        await Assert.That(facts.Violations).IsEmpty();
+    }
+
+    [Test]
+    public async Task CreateInitializer_Write_IsExactlyOneFinding() {
+        // A ranged parameter wider than the target: one DMCS003-style warning ("can fall outside") and
+        // exactly one recorded write, never one per constraint or per stage context.
+        var item = new Entity("Item",
+            [new Property("Qty", new DomainTypeReference("Number"), [new RangeConstraint(0d, 100d)])],
+            [],
+            [],
+            []);
+        var creator = new Entity("Creator",
+            [],
+            [new DmAction("Make", InvocationResult.Void,
+                [new Property("qty", new DomainTypeReference("Number"), [new RangeConstraint(0d, 500d)])],
+                [
+                    new CreateEntityInstance(
+                        new DomainTypeReference("Item"),
+                        [new PropertyBinding("Qty", DomainExpression.Parameter("qty"))]),
+                ],
+                [])],
+            [],
+            []);
+        var domain = DomainTestFactory.Create("Test", [Number, creator, item], []);
+
+        var analysis = DomainModelAnalyzer.Analyze(domain);
+
+        var findings = Findings(analysis, "Qty");
+        await Assert.That(findings.Count).IsEqualTo(1);
+        await Assert.That(findings[0].Code).IsEqualTo(DomainModelDiagnosticCodes.EffectConstraintViolation);
+        await Assert.That(findings[0].Severity).IsEqualTo(DiagnosticSeverity.Warning);
+        var facts = analysis.GetMetadata<WriteVerificationFacts>(domain);
+        await Assert.That(facts).IsNotNull();
+        await Assert.That(facts!.Unverified.Count).IsEqualTo(1);
+        await Assert.That(facts.Unverified[0].Reason).IsEqualTo(UnverifiedReason.PossibleViolation);
+    }
+
     // ── effects outside an action body ───────────────────────────────────
 
     [Test]

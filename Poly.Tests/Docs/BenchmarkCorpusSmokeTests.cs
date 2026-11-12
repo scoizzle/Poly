@@ -15,8 +15,10 @@ namespace Poly.Tests.Docs;
 /// <para>
 /// The baseline pins schema and coverage, never a number: <c>Mean</c> is machine-dependent, so
 /// <c>Mean &gt; 0</c> is a schema check only, and a regression is judged by re-running the
-/// benchmark side by side. <c>Allocated</c> is runtime-stable and is the column to compare
-/// against this file.
+/// benchmark side by side. <c>Allocated</c> is stable for a given runtime and is the column to
+/// compare against this file. The noise caveat covers every row: <c>--job short</c> <c>Mean</c> is
+/// noisy on all of them (the plan-review note records ~49% on the university row and ~90% on the C#
+/// aggregate), so no row is a threshold.
 /// </para>
 /// </summary>
 public sealed class BenchmarkCorpusSmokeTests {
@@ -31,12 +33,10 @@ public sealed class BenchmarkCorpusSmokeTests {
 
     [Test]
     public async Task Baseline_FileExists_AndEveryRowNamesALiveDocument() {
-        await Assert.That(File.Exists(ParseBaseline.CsvPath)).IsTrue()
-            .Because($"{ParseBaseline.CsvPath} is the committed parse baseline; the command that produces it is in Poly.Benchmarks/ParseBenchmarks.cs");
+        await Assert.That(File.Exists(BenchmarkBaseline.ParseCsvPath)).IsTrue()
+            .Because($"{BenchmarkBaseline.ParseCsvPath} is the committed parse baseline; the command that produces it is in Poly.Benchmarks/ParseBenchmarks.cs");
 
-        var rows = ParseBaseline.Read();
-        await Assert.That(rows.Count).IsGreaterThan(0)
-            .Because("the baseline must record at least one row");
+        var rows = BenchmarkBaseline.Read(BenchmarkBaseline.ParseCsvPath);
 
         var duplicates = rows
             .GroupBy(row => (row.Method, row.Entry))
@@ -44,7 +44,7 @@ public sealed class BenchmarkCorpusSmokeTests {
             .Select(group => $"{group.Key.Method} {group.Key.Entry}")
             .ToList();
         await Assert.That(duplicates).IsEmpty()
-            .Because($"{ParseBaseline.CsvPath} repeats these rows");
+            .Because($"{BenchmarkBaseline.ParseCsvPath} repeats these rows");
 
         var goldenFiles = Directory.Exists(CSharpGoldenDirectory)
             ? Directory.GetFiles(CSharpGoldenDirectory, "*.cs.golden", SearchOption.AllDirectories)
@@ -86,10 +86,10 @@ public sealed class BenchmarkCorpusSmokeTests {
 
     [Test]
     public async Task BenchmarkBaseline_DslRowsAreExactlyTheCompilableSet_AndTheCSharpAggregateRowExists() {
-        await Assert.That(File.Exists(ParseBaseline.CsvPath)).IsTrue()
-            .Because($"{ParseBaseline.CsvPath} is the committed parse baseline; the command that produces it is in Poly.Benchmarks/ParseBenchmarks.cs");
+        await Assert.That(File.Exists(BenchmarkBaseline.ParseCsvPath)).IsTrue()
+            .Because($"{BenchmarkBaseline.ParseCsvPath} is the committed parse baseline; the command that produces it is in Poly.Benchmarks/ParseBenchmarks.cs");
 
-        var rows = ParseBaseline.Read();
+        var rows = BenchmarkBaseline.Read(BenchmarkBaseline.ParseCsvPath);
         var recorded = rows
             .Where(row => row.Method == DslMethod)
             .Select(row => row.Entry)
@@ -106,65 +106,154 @@ public sealed class BenchmarkCorpusSmokeTests {
             .Because($"the C# aggregate row '{CSharpKey}' must be present");
     }
 
+    /// <summary>
+    /// A3: the shared loader's contract is an <see cref="InvalidOperationException"/> naming the
+    /// document's full path, so an unreadable corpus member names itself instead of surfacing the
+    /// OS exception type. <c>chmod 000</c> is not enforced on Windows, and a privileged process
+    /// ignores it, so both skip the test.
+    /// </summary>
+    [Test]
+    public async Task BenchmarkSupport_ReadText_UnreadableDocument_ThrowsWithThePath() {
+        if (OperatingSystem.IsWindows() || Environment.IsPrivilegedProcess)
+            return;
+
+        var directory = Path.Combine(Path.GetTempPath(), "poly-benchmark-readtext-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var fullPath = Path.Combine(directory, "unreadable.poly");
+        await File.WriteAllTextAsync(fullPath, "domain Unreadable\n");
+        try {
+            File.SetUnixFileMode(fullPath, UnixFileMode.None);
+            var error = Assert.Throws<InvalidOperationException>(
+                () => BenchmarkSupport.ReadText("corpus/unreadable.poly", fullPath));
+            await Assert.That(error.Message).Contains(fullPath)
+                .Because("an unreadable corpus document must name its full path, not surface an OS exception");
+        }
+        finally {
+            File.SetUnixFileMode(fullPath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
     /// <summary>The 62 <c>*.cs.golden</c> transcripts the C# aggregate row parses.</summary>
     internal static string CSharpGoldenDirectory =>
         Path.Combine(GoldenDomains.RepoRoot, "Poly.Tests", "DomainModeling", "Compile", "EmitGolden");
+
+    /// <summary>
+    /// The reader fails closed on a header that loses a pinned unit and on a row that does not
+    /// match the header's width, naming the file it read and — for a row — the line it came from.
+    /// </summary>
+    [Test]
+    public async Task BenchmarkBaseline_HostileCsv_ThrowsWithTheFileAndTheRow() {
+        var directory = Path.Combine(Path.GetTempPath(), "poly-benchmark-csv-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try {
+            var unitless = Path.Combine(directory, "unitless-mean.csv");
+            await File.WriteAllTextAsync(unitless,
+                "Method,entry,Mean,Allocated [B]\nParse_DslCorpus,dsl/hotel,1,2\n");
+            var unitError = Assert.Throws<InvalidOperationException>(() => BenchmarkBaseline.Read(unitless));
+            await Assert.That(unitError.Message).Contains(unitless)
+                .Because("a baseline that loses a pinned unit must fail closed naming the file");
+            await Assert.That(unitError.Message).Contains("Mean [ns]")
+                .Because("the error must name the header the reader requires");
+
+            var ragged = Path.Combine(directory, "ragged.csv");
+            await File.WriteAllTextAsync(ragged,
+                "Method,entry,Mean [ns],Allocated [B]\nParse_DslCorpus,dsl/hotel,1\n");
+            var rowError = Assert.Throws<InvalidOperationException>(() => BenchmarkBaseline.Read(ragged));
+            await Assert.That(rowError.Message).Contains(ragged)
+                .Because("a ragged row must name the file it came from");
+            await Assert.That(rowError.Message).Contains("data line 1")
+                .Because("a ragged row must name the 1-based data line");
+        }
+        finally {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
 }
-internal sealed record ParseBaselineRow(string Method, string Entry, double Mean, double Allocated);
+
+/// <summary>One data row of a committed benchmark baseline.</summary>
+internal sealed record BenchmarkBaselineRow(string Method, string Entry, double Mean, double Allocated);
 
 /// <summary>
-/// Reads <c>Poly.Benchmarks/baselines/parse.csv</c> by header name. The CSV is BenchmarkDotNet's
-/// export with comma separators and invariant culture, so a quoted cell may contain a comma; the
-/// parameter column's header is the benchmark parameter's name (<c>entry</c>), not <c>Params</c>.
+/// Reads a committed baseline under <c>Poly.Benchmarks/baselines/</c> by exact header name. The CSV
+/// is BenchmarkDotNet's export with comma separators and invariant culture, so a quoted cell may
+/// contain a comma; the parameter column's header is the benchmark parameter's name
+/// (<c>entry</c>), not <c>Params</c>.
+/// <para>
+/// Every failure names the file it read, and a data-row failure also names the row, so a refresh
+/// that loses a pinned unit or drops a cell fails closed with the offending line.
+/// </para>
 /// </summary>
-internal static class ParseBaseline {
-    /// <summary>The committed baseline file.</summary>
-    internal static string CsvPath =>
-        Path.Combine(GoldenDomains.RepoRoot, "Poly.Benchmarks", "baselines", "parse.csv");
+internal static class BenchmarkBaseline {
+    /// <summary>The committed parse baseline.</summary>
+    internal static string ParseCsvPath => CsvPath("parse.csv");
 
-    /// <summary>Every data row, in file order.</summary>
-    internal static IReadOnlyList<ParseBaselineRow> Read() {
-        var lines = File.ReadAllLines(CsvPath);
+    /// <summary>The committed two-phase invoke baseline.</summary>
+    internal static string InvokeCsvPath => CsvPath("invoke.csv");
+
+    /// <summary>The committed domain-analysis baseline.</summary>
+    internal static string AnalysisCsvPath => CsvPath("analysis.csv");
+
+    /// <summary>The committed simulator invoke baseline.</summary>
+    internal static string SimulatorCsvPath => CsvPath("simulator.csv");
+
+    /// <summary>
+    /// The columns every baseline must carry, by exact header. A refresh that renames a unit
+    /// (<c>Mean</c> without <c>[ns]</c>, <c>Allocated</c> without <c>[B]</c>) would otherwise be
+    /// compared in the wrong unit, so the reader refuses it.
+    /// </summary>
+    internal static readonly string[] RequiredHeaders = ["Method", "entry", "Mean [ns]", "Allocated [B]"];
+
+    private static string CsvPath(string name) =>
+        Path.Combine(GoldenDomains.RepoRoot, "Poly.Benchmarks", "baselines", name);
+
+    /// <summary>Every data row of <paramref name="csvPath"/>, in file order.</summary>
+    internal static IReadOnlyList<BenchmarkBaselineRow> Read(string csvPath) {
+        var lines = File.ReadAllLines(csvPath);
         if (lines.Length < 2)
-            throw new InvalidOperationException($"{CsvPath} has no data rows.");
+            throw new InvalidOperationException($"{csvPath} has no data rows.");
 
         var header = SplitCsv(lines[0]);
-        var method = HeaderIndex(header, "Method");
-        var entry = HeaderIndex(header, "entry");
-        var mean = HeaderIndex(header, "Mean");
-        var allocated = HeaderIndex(header, "Allocated");
+        var method = HeaderIndex(header, "Method", csvPath);
+        var entry = HeaderIndex(header, "entry", csvPath);
+        var mean = HeaderIndex(header, "Mean [ns]", csvPath);
+        var allocated = HeaderIndex(header, "Allocated [B]", csvPath);
 
-        var rows = new List<ParseBaselineRow>();
-        foreach (var line in lines.Skip(1)) {
-            if (string.IsNullOrWhiteSpace(line))
+        var rows = new List<BenchmarkBaselineRow>();
+        for (var i = 1; i < lines.Length; i++) {
+            if (string.IsNullOrWhiteSpace(lines[i]))
                 continue;
-            var cells = SplitCsv(line);
-            rows.Add(new ParseBaselineRow(
+            var cells = SplitCsv(lines[i]);
+            if (cells.Length != header.Length)
+                throw new InvalidOperationException(
+                    $"{csvPath} data line {i} (file line {i + 1}) has {cells.Length} cells; the header has {header.Length}.");
+            rows.Add(new BenchmarkBaselineRow(
                 cells[method],
                 cells[entry],
-                Number(cells[mean], "Mean"),
-                Number(cells[allocated], "Allocated")));
+                Number(cells[mean], "Mean", csvPath, i),
+                Number(cells[allocated], "Allocated", csvPath, i)));
         }
         return rows;
     }
 
-    private static int HeaderIndex(IReadOnlyList<string> header, string prefix) {
+    private static int HeaderIndex(IReadOnlyList<string> header, string name, string csvPath) {
         for (var i = 0; i < header.Count; i++) {
-            if (header[i].StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(header[i], name, StringComparison.OrdinalIgnoreCase))
                 return i;
         }
         throw new InvalidOperationException(
-            $"{CsvPath} has no '{prefix}' column; its header is: {string.Join(", ", header)}.");
+            $"{csvPath} has no '{name}' column; its header is: {string.Join(", ", header)}.");
     }
 
-    private static double Number(string cell, string column) =>
+    private static double Number(string cell, string column, string csvPath, int line) =>
         double.TryParse(
             cell.Trim(),
             NumberStyles.AllowThousands | NumberStyles.AllowDecimalPoint,
             CultureInfo.InvariantCulture,
             out var value)
             ? value
-            : throw new InvalidOperationException($"{CsvPath}: column '{column}' is not a number: '{cell}'.");
+            : throw new InvalidOperationException(
+                $"{csvPath} data line {line} (file line {line + 1}): column '{column}' is not a number: '{cell}'.");
 
     private static string[] SplitCsv(string line) {
         var cells = new List<string>();

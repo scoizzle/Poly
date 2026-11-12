@@ -25,7 +25,7 @@ public static class BenchmarkSupport {
         try {
             return File.ReadAllText(fullPath);
         }
-        catch (IOException exception) {
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) {
             throw new InvalidOperationException(
                 $"Corpus document '{relativePath}' cannot be read ({fullPath}): {exception.Message}", exception);
         }

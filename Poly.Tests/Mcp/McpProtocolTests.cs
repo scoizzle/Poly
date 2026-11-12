@@ -30,7 +30,7 @@ public class McpProtocolTests {
 
     [Test]
     public async Task CallerErrors_ReturnTypedErrors_AtTheWire() {
-        using var host = await PolycProcess.McpAsync(McpTarget.Polyc, TimeSpan.FromSeconds(20));
+        using var host = await PolycProcess.McpAsync(TimeSpan.FromSeconds(20));
         await host.InitializeAsync();
         var workspace = await OpenWorkspaceAsync(host);
 

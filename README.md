@@ -32,7 +32,7 @@ Poly/                      Core library (zero external dependencies)
   Extensions/              Shared helpers
 
 Poly.Tests/                Test suite (TUnit)
-Poly.Mcp/                  MCP interactive harness for agents
+Poly.Mcp/                  MCP tool surface (class library; the host is `polyc mcp`)
 Poly.Benchmarks/           BenchmarkDotNet benchmarks
 Poly.Runtime/              BCL-only contract the emitted C# names (storage port, constraint failure)
 
@@ -141,7 +141,7 @@ For the full DSL syntax reference, see [`Poly.Mcp/Docs/poly-dsl-guide.md`](Poly.
 
 ## MCP Tools
 
-The MCP server (`polyc mcp`; `dotnet run --project Poly.Mcp` still launches the same host for one release) provides **seven outcome tools** for agents to describe the domain they are working in, prove it, and produce what the task needs:
+The MCP server (`polyc mcp`, stdio) provides **seven outcome tools** for agents to describe the domain they are working in, prove it, and produce what the task needs:
 
 - **Describe:** `poly_guide`, `poly_workspace`, `poly_define`.
 - **Prove:** `poly_check` (`proven` / `violated` / `unknown`).

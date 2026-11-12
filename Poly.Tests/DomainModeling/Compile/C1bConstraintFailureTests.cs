@@ -124,12 +124,14 @@ public class C1bConstraintFailureTests {
 
     [Test]
     public async Task ActionAssign_RangeOutOfBounds_StillReturnsFailure() {
+        var widget = new Entity("Widget",
+            Properties: [new Property("Score", new DomainTypeReference("Number"),
+                [new RangeConstraint(1.0, 10.0)])],
+            Actions: [], Policies: [], Stages: []);
         var pass = new EffectLoweringPass(
-            new Entity("Widget",
-                Properties: [new Property("Score", new DomainTypeReference("Number"),
-                    [new RangeConstraint(1.0, 10.0)])],
-                Actions: [], Policies: [], Stages: []),
-            LoweringFixtures.MinimalContext(new ThisReference()) with { ActionResultType = new NamedTypeReference("DomainResult") });
+            widget,
+            LoweringFixtures.Context(new ThisReference(), widget)
+                with { ActionResultType = new NamedTypeReference("DomainResult") });
         var lowered = pass.TryLowerVmNode(new AssignEffect(
             DomainExpression.Property("Score"),
             DomainExpression.Property("n")));

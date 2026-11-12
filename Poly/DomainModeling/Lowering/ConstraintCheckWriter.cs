@@ -97,14 +97,16 @@ internal static class ConstraintCheckWriter {
     /// <summary>
     /// Requiredness is the one published fact: a property is required at create
     /// unless it carries <c>optional</c>, then the text/nullable type gate decides
-    /// whether a value check applies. Reads <see cref="EntityStructureMetadata.RequiredPropertyNames"/>
-    /// with the <see cref="EntityStructureAnalyzer.ComputeRequiredPropertyNames"/>
-    /// fallback; does not read <c>DefaultValueConstraint</c> or <c>RequiredPropertiesMetadata</c>.
+    /// whether a value check applies. Reads <see cref="EntityStructureMetadata.RequiredPropertyNames"/>;
+    /// a missing structure bag throws — it does not recompute. Does not read
+    /// <c>DefaultValueConstraint</c> or <c>RequiredPropertiesMetadata</c>.
     /// </summary>
     internal static bool RequiredApplies(
         Entity entity, Property prop, Domain domain, INodeMetadataProvider analysis) {
-        var required = analysis.GetStructure(entity)?.RequiredPropertyNames
-            ?? EntityStructureAnalyzer.ComputeRequiredPropertyNames(entity);
+        var structure = analysis.GetStructure(entity)
+            ?? throw new InvalidOperationException(
+                $"EntityStructureMetadata is required to decide requiredness of '{entity.Name}.{prop.Name}'; analysis published none.");
+        var required = structure.RequiredPropertyNames;
         if (!required.Contains(prop.Name))
             return false;
         if (IsText(prop))

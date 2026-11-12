@@ -221,8 +221,7 @@ public sealed partial class EffectLoweringPass {
             }
             // Optional with no default: an omitted slot passes null and may be dropped
             // from the trailing run. Requiredness is the published fact.
-            var required = _analysis.GetStructure(target)?.RequiredPropertyNames
-                ?? EntityStructureAnalyzer.ComputeRequiredPropertyNames(target);
+            var required = DomainToCSharpExporter.RequireStructure(target, _analysis).RequiredPropertyNames;
             if (!required.Contains(prop.Name))
                 return (new Constant(null), true);
         }

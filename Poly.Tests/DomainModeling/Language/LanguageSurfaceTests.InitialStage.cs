@@ -123,6 +123,94 @@ public sealed partial class LanguageSurfaceTests {
     private static Entity InitialStageEntity(Domain domain, string name) =>
         domain.Types.OfType<Entity>().Single(e => e.Name == name);
 
+    /// <summary>
+    /// Mutation only, then analysis: a domain whose designation is wrong is rejected by the evolution
+    /// gate, so the proposal must be analyzed before it is discarded.
+    /// </summary>
+    private static (Domain Domain, AnalysisResult Analysis) InitialStageAnalyze(string poly) {
+        var changes = new PolyDslParser(poly).Parse();
+        var mutation = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
+        if (!mutation.Succeeded)
+            throw new InvalidOperationException(string.Join("; ", mutation.MutationErrors));
+        return (mutation.Root, DomainModelAnalyzer.Analyze(mutation.Root));
+    }
+
+    [Test]
+    public async Task InitialStage_UnknownStage_IsAnalysisError() {
+        const string poly = """
+            domain Orders
+            Order: entity initial(Shipped) {
+              Number: Text
+              Draft: stage { }
+              Active: stage { }
+            }
+            """;
+        var (domain, analysis) = InitialStageAnalyze(poly);
+
+        var finding = analysis.Diagnostics.Single(d => d.Code == "DMINI001");
+        await Assert.That(finding.Severity).IsEqualTo(DiagnosticSeverity.Error);
+        await Assert.That(finding.Message).Contains("Order");
+        await Assert.That(finding.Message).Contains("Shipped");
+        // Placed at the entity declaration, the DMSTR007 precedent, so the error points at the clause's owner.
+        await Assert.That(finding.Node).IsNotNull();
+        await Assert.That(((Entity)finding.Node!).Name).IsEqualTo("Order");
+
+        var order = InitialStageEntity(domain, "Order");
+        await Assert.That(order.InitialStage()!.Name).IsEqualTo("Draft").Because("the accessor falls back to the first declared stage");
+        await Assert.That(ReferenceEquals(order.InitialStage(), order.Stages[0])).IsTrue();
+    }
+
+    [Test]
+    public async Task InitialStage_DesignationNamingProperty_IsAnalysisError() {
+        const string poly = """
+            domain Orders
+            Order: entity initial(Label) {
+              Label: Text
+              Active: stage { }
+            }
+            """;
+        var (_, analysis) = InitialStageAnalyze(poly);
+
+        var finding = analysis.Diagnostics.Single(d => d.Code == "DMINI001");
+        await Assert.That(finding.Message).Contains("property");
+    }
+
+    [Test]
+    public async Task InitialStage_OnStagelessEntity_IsAnalysisError() {
+        const string poly = """
+            domain Orders
+            Order: entity initial(Active) {
+              Number: Text
+            }
+            """;
+        var (_, analysis) = InitialStageAnalyze(poly);
+
+        await Assert.That(analysis.Diagnostics.Single(d => d.Code == "DMINI001").Severity).IsEqualTo(DiagnosticSeverity.Error);
+    }
+
+    /// <summary>
+    /// An evolution change can remove the designated stage, leaving a dangling name. Analysis is what
+    /// makes it visible; the accessor keeps the create path working meanwhile.
+    /// </summary>
+    [Test]
+    public async Task InitialStage_RemovedStage_IsAnalysisError() {
+        var (domain, _) = InitialStageEvolve(DesignatedDocument);
+        var removed = new DomainEvolution(domain).Apply([new RemoveStageChange("Order", "Active")]);
+        await Assert.That(removed.Succeeded).IsTrue();
+
+        var analysis = DomainModelAnalyzer.Analyze(removed.Root);
+        var finding = analysis.Diagnostics.Single(d => d.Code == "DMINI001");
+        await Assert.That(finding.Message).Contains("Active");
+        await Assert.That(InitialStageEntity(removed.Root, "Order").InitialStage()!.Name).IsEqualTo("Draft");
+    }
+
+    [Test]
+    public async Task InitialStage_WellFormed_ProducesNoDiagnostic() {
+        var (_, analysis) = InitialStageEvolve(DesignatedDocument);
+        await Assert.That(analysis.Diagnostics.Any(d => d.Code == "DMINI001")).IsFalse();
+        await Assert.That(analysis.Diagnostics.Any(d => d.Code == "DMSTR010")).IsFalse();
+    }
+
     [Test]
     public async Task InitialStage_Designated_SimCreateStartsInDesignatedStage() {
         var (domain, _) = InitialStageEvolve(DesignatedDocument);

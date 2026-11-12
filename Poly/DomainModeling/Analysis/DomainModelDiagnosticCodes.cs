@@ -38,6 +38,13 @@ internal static class DomainModelDiagnosticCodes {
     public const string InvalidKeyDesignation = "DMSTR007";
 
     /// <summary>
+    /// An entity's <c>initial(Stage)</c> designation (#675) names no stage of that entity, or the
+    /// entity declares none. <see cref="Ontology.EntityStages.InitialStage"/> falls back to the first
+    /// declared stage so create still works; this is the error that says the designation is wrong.
+    /// </summary>
+    public const string InvalidInitialStageDesignation = "DMINI001";
+
+    /// <summary>
     /// Two members of one entity share a generated identifier: the C# member name (a
     /// property keeps its name, a navigation is PascalCased, an action and a policy keep
     /// theirs) or the constructor-parameter name (<c>ToCamelCase</c>). The two names differ

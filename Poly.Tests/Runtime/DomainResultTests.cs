@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 
 using RuntimeDomainFailure = Poly.Runtime.DomainFailure;
@@ -216,5 +217,142 @@ public class DomainResultTests {
             .ToArray();
 
         await Assert.That(mutable).IsEmpty();
+    }
+
+    // ---- R-02 fix round 1: the sign-off contract gaps ------------------------------------
+
+    /// <summary>One data-source row per kind, so a factory test cannot silently skip a kind.</summary>
+    public static IEnumerable<string> FactoryNames() => ContractKinds;
+
+    /// <summary>
+    /// The numeric values are the wire contract, not an artefact of declaration order: a
+    /// reorder that renumbers a kind breaks every serialised payload already written.
+    /// </summary>
+    [Test]
+    public async Task Kinds_HaveTheContractNumericValues() {
+        (RuntimeDomainFailureKind Kind, int Value)[] expected = [
+            (RuntimeDomainFailureKind.Required, 0),
+            (RuntimeDomainFailureKind.Range, 1),
+            (RuntimeDomainFailureKind.Length, 2),
+            (RuntimeDomainFailureKind.Pattern, 3),
+            (RuntimeDomainFailureKind.Enum, 4),
+            (RuntimeDomainFailureKind.Unique, 5),
+            (RuntimeDomainFailureKind.Stage, 6),
+            (RuntimeDomainFailureKind.Policy, 7),
+            (RuntimeDomainFailureKind.Link, 8),
+            (RuntimeDomainFailureKind.Arithmetic, 9),
+            (RuntimeDomainFailureKind.Argument, 10),
+            (RuntimeDomainFailureKind.Cascade, 11),
+            (RuntimeDomainFailureKind.Conflict, 12),
+            (RuntimeDomainFailureKind.Constraint, 13),
+        ];
+
+        foreach (var (kind, value) in expected)
+            await Assert.That((int)kind).IsEqualTo(value).Because($"{kind} keeps the contract value {value}: Cascade is 11");
+    }
+
+    /// <summary>A message is the one mandatory fact of a failure; null must not become an error-free record.</summary>
+    [Test]
+    [MethodDataSource(nameof(FactoryNames))]
+    public async Task Factory_NullMessage_Throws(string kindName) {
+        var factory = (Func<string, string?, string?, RuntimeDomainFailure>)Delegate.CreateDelegate(
+            typeof(Func<string, string?, string?, RuntimeDomainFailure>),
+            typeof(RuntimeDomainFailure).GetMethod(kindName, BindingFlags.Public | BindingFlags.Static)!);
+
+        await Assert.That(() => factory(null!, null, null)).Throws<ArgumentNullException>();
+    }
+
+    /// <summary>An empty path segment is no path, so it must normalise to null and stay equal to the default.</summary>
+    [Test]
+    public async Task Factory_EmptyElementPath_EqualsNullElementPath() {
+        var fromDefault = RuntimeDomainFailure.Required("m");
+        var fromEmpty = RuntimeDomainFailure.Required("m", "");
+
+        await Assert.That(fromEmpty.ElementPath).IsNull();
+        await Assert.That(fromEmpty).IsEqualTo(fromDefault);
+        await Assert.That(fromEmpty.GetHashCode()).IsEqualTo(fromDefault.GetHashCode());
+    }
+
+    /// <summary>
+    /// The success branch answers the value, and the annotation lets a caller's flow analysis
+    /// treat the out value as non-null exactly when it returns true.
+    /// </summary>
+    [Test]
+    public async Task TryGetValue_OnSuccess_ReturnsTrueAndValue() {
+        var result = Poly.Runtime.DomainResult<string>.Success("ok");
+
+        await Assert.That(result.TryGetValue(out var value)).IsTrue();
+        await Assert.That(value).IsEqualTo("ok");
+
+        var parameter = typeof(Poly.Runtime.DomainResult<string>)
+            .GetMethod("TryGetValue", BindingFlags.Public | BindingFlags.Instance)!
+            .GetParameters()[0];
+        var annotation = parameter.GetCustomAttribute<MaybeNullWhenAttribute>();
+        await Assert.That(annotation).IsNotNull().Because("TryGetValue(out T value) is annotated [MaybeNullWhen(false)]");
+        await Assert.That(annotation!.ReturnValue).IsFalse();
+    }
+
+    [Test]
+    public async Task Records_AreSealed() {
+        Type[] types = [
+            typeof(RuntimeDomainFailure),
+            typeof(RuntimeDomainResult),
+            typeof(Poly.Runtime.DomainResult<string>),
+        ];
+
+        foreach (var type in types)
+            await Assert.That(type.IsSealed).IsTrue().Because($"{type.Name} is a sealed record");
+    }
+
+    /// <summary>Factories are the only way in; a public constructor would let a caller skip the message guard.</summary>
+    [Test]
+    public async Task Records_HaveNoPublicConstructors() {
+        Type[] types = [
+            typeof(RuntimeDomainFailure),
+            typeof(RuntimeDomainResult),
+            typeof(Poly.Runtime.DomainResult<string>),
+        ];
+
+        foreach (var type in types) {
+            var publicConstructors = type.GetConstructors(BindingFlags.Public | BindingFlags.Instance);
+            await Assert.That(publicConstructors).IsEmpty().Because($"{type.Name} exposes no public constructor");
+        }
+    }
+
+    /// <summary><c>Inner</c> is cut per the lock; a nested wrapper would re-introduce the g.3 shape.</summary>
+    [Test]
+    public async Task DomainFailure_HasNoInnerMember() {
+        await Assert.That(typeof(RuntimeDomainFailure).GetMember("Inner", EveryMember)).IsEmpty();
+    }
+
+    /// <summary>
+    /// A default that is not null would make <c>Required("m")</c> and <c>Required("m", "")</c>
+    /// differ, or seed a guard the caller never asked for.
+    /// </summary>
+    [Test]
+    [MethodDataSource(nameof(FactoryNames))]
+    public async Task Factories_DefaultParametersAreNull(string kindName) {
+        var factory = typeof(RuntimeDomainFailure)
+            .GetMethod(kindName, BindingFlags.Public | BindingFlags.Static)!;
+        var parameters = factory.GetParameters();
+
+        await Assert.That(parameters[1].HasDefaultValue).IsTrue();
+        await Assert.That(parameters[1].DefaultValue).IsNull();
+        await Assert.That(parameters[2].HasDefaultValue).IsTrue();
+        await Assert.That(parameters[2].DefaultValue).IsNull();
+    }
+
+    /// <summary>Kind is part of the failure identity: a required miss is not a range miss.</summary>
+    [Test]
+    public async Task Failures_OfDifferentKind_AreNotEqual() {
+        await Assert.That(RuntimeDomainFailure.Required("m"))
+            .IsNotEqualTo(RuntimeDomainFailure.Range("m"));
+    }
+
+    [Test]
+    public async Task Success_ToString_ContainsValue() {
+        var text = Poly.Runtime.DomainResult<string>.Success("ok").ToString();
+
+        await Assert.That(text).Contains("Value = ok");
     }
 }

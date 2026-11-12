@@ -7,9 +7,12 @@ namespace Poly.Runtime;
 /// records rather than an explicit interface implementation.
 /// </summary>
 public interface IDomainResult {
+    /// <summary>True when the action succeeded; false when it carries a <see cref="Error"/>.</summary>
     bool IsSuccess { get; }
 
+    /// <summary>The failure of a failed result; null on success.</summary>
     DomainFailure? Error { get; }
 
+    /// <summary>g.3 shim; removed at R-07.</summary>
     string? ErrorMessage { get; }
 }

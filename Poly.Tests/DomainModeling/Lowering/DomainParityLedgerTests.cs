@@ -192,28 +192,39 @@ public class DomainParityLedgerTests {
         await Assert.That(defaulted.SequenceEqual(ExtensionCatalog.ProductAuthoring.Append("persistence"))).IsTrue();
     }
 
-    /// <summary>The column ships compared and empty: R-03/R-04 populate it, so no entry carries a kind today.</summary>
+    /// <summary>
+    /// The typed-failure columns are populated on both sides and compared: kind, path and guard.
+    /// A successful step carries none of them, and the seeded corpus carries at least one failed
+    /// step with a kind, and one whose kind is not the catch-all <c>Constraint</c>.
+    /// </summary>
     [Test]
-    public async Task FailureKind_IsComparedButNullUntilR03() {
-        var simulate = new ParityOutcome("invoke Close", false, null, null, new Dictionary<string, string?>(), FailureKind: "Invariant");
-        var printed = simulate with { FailureKind = null };
-        var differences = ParityScenario.DifferenceSet([simulate], [printed]);
-        await Assert.That(differences.Count).IsEqualTo(1);
-        await Assert.That(differences[0].Field).IsEqualTo("failureKind");
+    public async Task FailureKind_IsPopulatedOnBothSides() {
+        var simulate = new ParityOutcome("invoke Close", false, null, null, new Dictionary<string, string?>(),
+            FailureKind: "Policy", FailurePath: "Order.Close", FailureGuard: "IsOpen");
+        var differences = ParityScenario.DifferenceSet([simulate], [simulate with { FailureKind = null, FailurePath = null, FailureGuard = null }]);
+        await Assert.That(differences.Select(d => d.Field).ToList()).IsEquivalentTo(["failureKind", "failurePath", "failureGuard"]);
         await Assert.That(differences[0].ToString()).Contains("failure kind differs");
+        await Assert.That(differences[1].ToString()).Contains("failure path differs");
+        await Assert.That(differences[2].ToString()).Contains("failure guard differs");
 
-        var problems = DomainParityScenarios.All
-            .Select(seed => (seed, run: DomainParityScenarios.Run(seed.Name)))
+        var runs = DomainParityScenarios.All.Select(seed => (seed, run: DomainParityScenarios.Run(seed.Name))).ToList();
+        var problems = runs
             .Where(pair => pair.run.Fault is not null)
             .Select(pair => $"#{pair.seed.Issue}: the seed threw: {pair.run.Fault}")
             .ToList();
-        foreach (var (seed, run) in DomainParityScenarios.All.Select(seed => (seed, run: DomainParityScenarios.Run(seed.Name))))
-            if (run.Fault is null)
-                problems.AddRange(run.Simulate.Concat(run.Printed)
-                    .Where(outcome => outcome.FailureKind is not null)
-                    .Select(outcome => $"#{seed.Issue} '{seed.Name}': {outcome.Step} carries a failure kind."));
-
+        var outcomes = new List<ParityOutcome>();
+        foreach (var (seed, run) in runs.Where(pair => pair.run.Fault is null)) {
+            foreach (var outcome in run.Simulate.Concat(run.Printed)) {
+                outcomes.Add(outcome);
+                if (outcome.Success && (outcome.FailureKind, outcome.FailurePath, outcome.FailureGuard) != (null, null, null))
+                    problems.Add($"#{seed.Issue} '{seed.Name}': {outcome.Step} succeeded but carries a failure.");
+            }
+        }
         await Assert.That(string.Join("\n", problems)).IsEmpty();
+
+        var typed = outcomes.Where(o => !o.Success && o.ExceptionType is null && o.FailureKind is not null).ToList();
+        await Assert.That(typed).IsNotEmpty();
+        await Assert.That(typed.Any(o => o.FailureKind != nameof(Poly.Runtime.DomainFailureKind.Constraint))).IsTrue();
     }
 
     // A6: the matcher is the ratchet's only guard against a silent drift, so each drift kind gets a

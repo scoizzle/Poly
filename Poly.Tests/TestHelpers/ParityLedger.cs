@@ -45,7 +45,7 @@ public sealed record ParityRun(
 
 /// <summary>Every known divergence, sorted by issue. Empty entries are deleted by the fixing slice.</summary>
 public static class KnownDomainDivergences {
-    static readonly string[] Fields = ["success", "message", "failureKind", "exceptionType", "stepCount"];
+    static readonly string[] Fields = ["success", "message", "failureKind", "failurePath", "failureGuard", "exceptionType", "stepCount"];
 
     /// <summary>The ledger vocabulary: a field outside it is a typo, and a typo cannot pass.</summary>
     public static bool IsKnownField(string field) =>
@@ -64,6 +64,9 @@ public static class KnownDomainDivergences {
             new(1, "create Thing", "message", "Object reference not set to an instance of an object.",
                 "Unique constraint violated: 'K' value is already used on another 'Thing'."),
             new(1, "create Thing", "exceptionType", "NullReferenceException", null),
+            // The printed side returns the typed failure; the simulator's lowered create throws first.
+            new(1, "create Thing", "failureKind", null, "Unique"),
+            new(1, "create Thing", "failurePath", null, "Thing.K"),
         ]),
         new(565, "L-03", "multi-assign", ["simulate", "printed"], [
             new(1, "invoke Settle", "state:Status", "Active", "Suspended"),

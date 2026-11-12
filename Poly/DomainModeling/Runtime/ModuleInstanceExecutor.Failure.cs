@@ -10,7 +10,8 @@ public sealed partial class ModuleInstanceExecutor {
     private ModuleOutcome MapFailure(string entityName, Action action, DomainFailure failure) =>
         ModuleOutcome.Fail(failure, GuardsFor(entityName, action, failure));
 
-    // The simulate surface's guard list. Only structure is read: the failure kind and its element path.
+    // The simulate surface's guard list. Only structure is read: the failure kind, its element path and, for the
+    // action's own policy block, its guard.
     private IReadOnlyList<string> GuardsFor(string entityName, Action action, DomainFailure failure) {
         if (failure.Kind == DomainFailureKind.Policy
             && string.Equals(failure.ElementPath, $"{entityName}.{action.Name}", StringComparison.Ordinal))

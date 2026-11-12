@@ -1,4 +1,6 @@
+using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Ontology.Constraints;
 
@@ -63,5 +65,119 @@ public class ExactCompareTests {
         await Assert.That(adjusted).IsNotNull();
         await Assert.That(adjusted!.Minimum).IsTypeOf<decimal>();
         await Assert.That(adjusted.Minimum).IsEqualTo(9007199254740992m);
+    }
+
+    // ── F1: the exact compare must never be worse than master ───────────
+    //
+    // ValueRange is still double in V-05a, so Refine/Eval/ComposeArithmetic hand TryCompare a
+    // fractional double. A null order there drops the whole range axis or downgrades an error,
+    // so TryCompare falls back to master's double comparison for a double/float operand.
+
+    [Test]
+    public async Task Narrow_FractionalDoubleBoundPastDecimalRange_IsUnsatisfiable_F1() {
+        var declared = AbstractValue.From([new RangeConstraint(0m, 100m)]);
+
+        var narrowed = declared.Narrow(new RangeConstraint(150.5d, null));
+
+        await Assert.That(narrowed.Unsatisfiable).IsTrue();
+    }
+
+    [Test]
+    public async Task Narrow_FractionalDoubleBoundInsideDecimalRange_KeepsTheRange_F1() {
+        var narrowed = AbstractValue.From([new RangeConstraint(0m, 100m)])
+            .Narrow(new RangeConstraint(0.5d, null));
+
+        await Assert.That(narrowed.Range).IsNotNull();
+    }
+
+    [Test]
+    public async Task DecideRange_FractionalDoubleValueBelowDecimalTarget_IsViolated_F1() {
+        var value = AbstractValue.From([new RangeConstraint(0.01d, 0.1d)]);
+
+        var verdict = WriteVerification.DecideRange(new RangeConstraint(1m, 10m), value);
+
+        await Assert.That(verdict).IsEqualTo(ConstraintVerdict.Violated);
+    }
+
+    [Test]
+    public async Task Guard_FractionalBoundAboveDecimalRange_IsUnsatisfiablePrecondition_F1() {
+        // DSL reachable: a Decimal property with a fractional guard literal. Master reported the
+        // unsatisfiable precondition; a null order silently dropped the range axis instead.
+        var result = Analyze("""
+            domain Test
+            Item: entity {
+              Price: Decimal range(0, 100)
+              Big: policy { Price > 150.5 }
+              Run: action
+                require Big
+              {
+                assign Price to 1
+              }
+            }
+            """);
+
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.Analysis.Diagnostics.Any(d =>
+            d.Severity == DiagnosticSeverity.Error && d.Message.Contains("unsatisfiable preconditions"))).IsTrue();
+    }
+
+    // ── F2: an ordering analysis cannot make is not a violated claim ─────
+
+    [Test]
+    public async Task ConstantVerdict_EqualNumbersThatCannotBeOrdered_IsNotViolated_F2() {
+        var verdict = ContractBoundaryCheck.ConstantVerdict(
+            new EqualityConstraint(ulong.MaxValue), ulong.MaxValue);
+
+        await Assert.That(verdict).IsNotEqualTo(ContractBoundaryVerdict.Violated);
+    }
+
+    [Test]
+    public async Task Evaluate_FractionalDoubleInsideRange_IsNotViolated_F2() {
+        var verdict = ConstraintValidation.Evaluate(new RangeConstraint(1L, 10L), 5.5d);
+
+        await Assert.That(verdict).IsNotEqualTo(ConstraintVerdict.Violated);
+    }
+
+    // ── S3: Equal/NotEqual literal guards are numeric too ────────────────
+
+    [Test]
+    public async Task IsProvablyAlwaysFalse_EqualMixedNumericTypes_IsNotProven_S3() {
+        var comparison = new Comparison(
+            DomainExpression.Literal(1L), DomainExpression.Literal(1m), ComparisonKind.Equal);
+
+        await Assert.That(EffectAnalyzer.IsProvablyAlwaysFalse(comparison)).IsFalse();
+    }
+
+    [Test]
+    public async Task CycleGuard_EqualMixedAbove2Pow53_IsProvablyTrue() {
+        var comparison = new Comparison(
+            DomainExpression.Literal(Above2Pow53),
+            DomainExpression.Literal(9007199254740993m),
+            ComparisonKind.Equal);
+
+        await Assert.That(EffectAnalyzer.IsProvablyAlwaysTrue(comparison)).IsTrue();
+        await Assert.That(EffectAnalyzer.IsProvablyAlwaysFalse(comparison)).IsFalse();
+    }
+
+    [Test]
+    public async Task EntryGuard_TrueComparisonAbove2Pow53_IsAnUnconditionalCycle() {
+        // The guard is provably true, so both entry edges are unconditional and DMEFF013 applies.
+        var result = Analyze("""
+            domain E5
+            Z: entity {
+              Tag: Text
+              A: stage { entry { if (9007199254740993 > 9007199254740992) { transition to B } } }
+              B: stage { entry { transition to A } }
+            }
+            """);
+
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.Analysis.Diagnostics.Any(d =>
+            d.Code == DomainModelDiagnosticCodes.UnconditionalAutomaticTransitionCycle)).IsTrue();
+    }
+
+    private static EvolutionResult Analyze(string dsl) {
+        var changes = new PolyDslParser(dsl).Parse();
+        return new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes);
     }
 }

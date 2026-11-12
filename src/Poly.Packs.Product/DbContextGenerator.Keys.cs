@@ -1,18 +1,23 @@
 using Poly.Ast;
 using Poly.Ast.Nodes;
 using Poly.Introspection;
+using Poly.Runtime;
 
 using ClrPrimitive = Poly.Introspection.PrimitiveType;
 
 namespace Poly.Packs.Product;
 
-// DbContextGenerator (Keys) — the IStoragePort host half: pending-key set and Exists/Record/Release.
+// DbContextGenerator (Keys) — the IStoragePort host half: pending-key set and
+// Exists/TryReserve/Record/Release. Every key is KeyCodec.Canonical, so the host and the
+// simulator cannot drift on the encoding.
 public sealed partial class DbContextGenerator {
     /// <summary>
     /// The context is the host half of <see cref="IStoragePort"/>: <c>Exists</c>
-    /// queries the mapped <c>DbSet</c>; <c>Record</c> keeps the pending key a
-    /// nested create must see before the host saves; <c>Release</c> drops a
-    /// pending key this invocation replaced. A saved row is left for the host.
+    /// queries the mapped <c>DbSet</c>; <c>TryReserve</c> atomically adds the pending
+    /// key a nested create must see before the host saves; <c>Record</c> is the shim
+    /// that does the same add; <c>Release</c> drops a pending key this invocation
+    /// replaced. The persisted unique index is the authority, so a saved row is left
+    /// for the host to reject at commit.
     /// </summary>
     private static FieldDefinitionNode PendingKeysField() =>
         new("_pendingKeys",
@@ -69,6 +74,21 @@ public sealed partial class DbContextGenerator {
             Body: new Block(nodes));
     }
 
+    private static MethodDefinitionNode TryReserveMethod() {
+        var entityParam = new Parameter("entity", new PrimitiveTypeReference(ClrPrimitive.String));
+        var propertyParam = new Parameter("property", new PrimitiveTypeReference(ClrPrimitive.String));
+        var valueParam = new Parameter("value", new PrimitiveTypeReference(ClrPrimitive.String));
+        return new MethodDefinitionNode(
+            "TryReserve",
+            new PrimitiveTypeReference(ClrPrimitive.Boolean),
+            Parameters: [entityParam, propertyParam, valueParam],
+            Body: new Block([
+                new Return(new Invoke(
+                    new Member(new Member(new ThisReference(), "_pendingKeys"), "Add"),
+                    PendingKey(entityParam, propertyParam, valueParam)))
+            ]));
+    }
+
     private static MethodDefinitionNode RecordMethod() {
         var entityParam = new Parameter("entity", new PrimitiveTypeReference(ClrPrimitive.String));
         var propertyParam = new Parameter("property", new PrimitiveTypeReference(ClrPrimitive.String));
@@ -99,10 +119,9 @@ public sealed partial class DbContextGenerator {
             ]));
     }
 
-    private static Node PendingKey(Node entity, Node property, Node value) {
-        Node key = new Poly.Ast.Nodes.Add(entity, new Constant("\u001f"));
-        key = new Poly.Ast.Nodes.Add(key, property);
-        key = new Poly.Ast.Nodes.Add(key, new Constant("\u001f"));
-        return new Poly.Ast.Nodes.Add(key, value);
-    }
+    // One encoding for the host and the simulator: the length-prefixed KeyCodec key.
+    private static Node PendingKey(Node entity, Node property, Node value) =>
+        new Invoke(
+            new Member(new ClrTypeReference(typeof(KeyCodec)), "Canonical"),
+            entity, property, value);
 }

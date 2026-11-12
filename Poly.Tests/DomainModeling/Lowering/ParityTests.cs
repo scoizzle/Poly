@@ -12,6 +12,11 @@ using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.DomainModeling.Lowering;
 
+/// <summary>
+/// The differential: one scenario, run on the interpreter and on the printed C#, compared field by
+/// field. An <c>AssertAgree</c> row is a contract. A divergence the sides still have is recorded in
+/// <see cref="KnownDomainDivergences"/> (the Q-06 ledger), never in a row here.
+/// </summary>
 public class ParityTests {
     const string CreateFailDsl = """
         domain Lab

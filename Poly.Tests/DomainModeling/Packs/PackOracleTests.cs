@@ -91,6 +91,52 @@ public class PackOracleTests {
     }
 
     [Test]
+    [Category("OracleFull")]
+    public async Task PublicEntityWithInternalOneNav_BootsAndPersistsTheReceipt() {
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.PublicOrderInternalReceipt604);
+
+        using var created = await oracle.Client.PostAsync(
+            "/api/orders", new StringContent("""{"Code":"ORD1"}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)created.StatusCode).IsEqualTo(201);
+
+        using var issued = await oracle.Client.PostAsync(
+            "/api/orders/ORD1/issue", new StringContent("""{"Note":"paid"}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)issued.StatusCode).IsEqualTo(200);
+
+        // A unidirectional to-one target is a root, so it is listed at the top level (with the seed row, #595).
+        using var receipts = await oracle.Client.GetAsync("/api/receipts");
+        await Assert.That(receipts.StatusCode).IsEqualTo(HttpStatusCode.OK);
+        using var receiptsJson = JsonDocument.Parse(await receipts.Content.ReadAsStringAsync());
+        await Assert.That(receiptsJson.RootElement.EnumerateArray().Any(r => r.GetProperty("note").GetString() == "paid")).IsTrue();
+
+        using var order = await oracle.Client.GetAsync("/api/orders/ORD1");
+        using var orderJson = JsonDocument.Parse(await order.Content.ReadAsStringAsync());
+        await Assert.That(orderJson.RootElement.TryGetProperty("receipt", out _)).IsFalse();
+    }
+
+    [Test]
+    [Category("OracleFull")]
+    public async Task PublicChildWithInternalParentNav_BootsAndReadsLinesThroughNestedRoute() {
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.PublicLineInternalOrder604);
+
+        using var created = await oracle.Client.PostAsync(
+            "/api/orders", new StringContent("""{"Code":"ORD1"}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)created.StatusCode).IsEqualTo(201);
+
+        using var added = await oracle.Client.PostAsync(
+            "/api/orders/ORD1/addline", new StringContent("""{"Qty":5}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)added.StatusCode).IsEqualTo(200);
+
+        // No 500 from a serialisation cycle: the line's internal Order navigation is omitted from its JSON.
+        using var lines = await oracle.Client.GetAsync("/api/orders/ORD1/lines");
+        await Assert.That(lines.StatusCode).IsEqualTo(HttpStatusCode.OK);
+        using var linesJson = JsonDocument.Parse(await lines.Content.ReadAsStringAsync());
+        await Assert.That(linesJson.RootElement.GetArrayLength()).IsEqualTo(1);
+        await Assert.That(linesJson.RootElement[0].GetProperty("qty").GetInt32()).IsEqualTo(5);
+        await Assert.That(linesJson.RootElement[0].TryGetProperty("order", out _)).IsFalse();
+    }
+
+    [Test]
     public async Task GeneratedPublicEntityWithPublicNav_BootsAndServesOrderList() {
         await using var oracle = await PackOracle.BootAsync(PackOracleDomains.PublicOrderPublicLine604);
 

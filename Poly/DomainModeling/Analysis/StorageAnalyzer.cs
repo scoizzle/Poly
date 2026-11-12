@@ -341,12 +341,43 @@ public sealed class StorageAnalyzer {
         foreach (var rel in _relationships) {
             if (!string.Equals(rel.Source.TypeName, entity.Name, StringComparison.Ordinal)) continue;
             var isCollection = rel.Cardinality is RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany;
-            var nav = new StorageNavigation(rel, DomainTypeMapping.ToPascalCase(rel.Name), isCollection);
+            var inverse = ResolveInverse(rel);
+            var nav = new StorageNavigation(
+                rel,
+                DomainTypeMapping.ToPascalCase(rel.Name),
+                isCollection,
+                inverse is null ? null : DomainTypeMapping.ToPascalCase(inverse.Name));
             if (isCollection) collections.Add(nav);
             else references.Add(nav);
         }
 
         return (columns, collections, references);
+    }
+
+    /// <summary>
+    /// The navigation on the target that pairs with <paramref name="rel"/>, resolved once here for every consumer:
+    /// the one it declares (<c>via</c>), else the peer that declares it, else the target's only unclaimed navigation
+    /// back (an undeclared pair that is ambiguous is already an error in <c>StructuralDomainAnalyzer</c>).
+    /// </summary>
+    private Relationship? ResolveInverse(Relationship rel) {
+        var peers = _relationships
+            .Where(r => !ReferenceEquals(r, rel)
+                && string.Equals(r.Source.TypeName, rel.Target.TypeName, StringComparison.Ordinal)
+                && string.Equals(r.Target.TypeName, rel.Source.TypeName, StringComparison.Ordinal))
+            .ToList();
+
+        if (rel.Inverse is { Length: > 0 } declared)
+            return peers.FirstOrDefault(p => string.Equals(p.Name, declared, StringComparison.Ordinal));
+
+        var declaring = peers.Where(p => string.Equals(p.Inverse, rel.Name, StringComparison.Ordinal)).ToList();
+        if (declaring.Count > 0)
+            return declaring[0];
+
+        var unclaimed = peers.Where(p => p.Inverse is not { Length: > 0 }
+            && !_relationships.Any(other => !ReferenceEquals(other, rel)
+                && string.Equals(other.Source.TypeName, rel.Source.TypeName, StringComparison.Ordinal)
+                && string.Equals(other.Inverse, p.Name, StringComparison.Ordinal))).ToList();
+        return unclaimed.Count == 1 ? unclaimed[0] : null;
     }
 
     private Dictionary<string, (ValueRange? Range, bool Verified)> ComputeVerifiedRanges(Entity entity) =>

@@ -204,6 +204,48 @@ public static class PackOracleDomains {
         """,
         "/api/orders");
 
+    /// <summary>L-22b: a one-to-one navigation from a public entity to an internal one.</summary>
+    public static PackOracleDomain PublicOrderInternalReceipt604 { get; } = new(
+        "PublicOrderInternalReceipt604",
+        """
+        domain Shop
+        uses sqlite
+        uses http
+
+        Receipt: entity {
+          Note: Text
+        }
+
+        public entity Order {
+          Code: Text unique length(3, 8)
+          receipt: one Receipt
+          public action Issue (note: Text) { create in receipt { Note: note } }
+        }
+        """,
+        "/api/orders");
+
+    /// <summary>L-22b, reverse shape: the public entity is the child; its singular navigation to the internal parent
+    /// is the one that prints internal, and it pairs with the parent's public collection.</summary>
+    public static PackOracleDomain PublicLineInternalOrder604 { get; } = new(
+        "PublicLineInternalOrder604",
+        """
+        domain Shop
+        uses sqlite
+        uses http
+
+        Order: entity {
+          Code: Text unique length(3, 8)
+          lines: many owned Line
+          AddLine: action (qty: Number) { create in lines { Qty: qty } }
+        }
+
+        public entity Line {
+          Qty: Number range(1, 100)
+          order: Order via lines
+        }
+        """,
+        "/api/orders");
+
     /// <summary>L-22 (#604): the same domain with the target marked public. It boots and serves the list route.</summary>
     public static PackOracleDomain PublicOrderPublicLine604 { get; } = new(
         "PublicOrderPublicLine604",

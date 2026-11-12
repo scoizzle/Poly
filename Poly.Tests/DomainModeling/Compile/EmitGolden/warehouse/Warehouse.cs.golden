@@ -65,7 +65,7 @@ public class Warehouse
     }
     public DomainResult<Truck> RegisterTruck(string vin, long maxLoad, Poly.DomainModeling.Runtime.IStoragePort db)
     {
-        var create0 = this.CreateTrucks(maxLoad, vin, db);
+        var create0 = this.CreateTrucks(maxLoad, vin, db, 0L, TruckStatus.Idle);
         if (!create0.IsSuccess)
         {
             return DomainResult<Truck>.Failure(create0.ErrorMessage ?? "");

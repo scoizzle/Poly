@@ -7,7 +7,7 @@ public enum FolioStage
 
 public class Folio
 {
-    private Folio(Reservation? reservation = null, decimal balance = 0L)
+    private Folio(Reservation? reservation = null, decimal balance = 0m)
     {
         this.Balance = balance;
         this.Reservation = reservation;
@@ -81,7 +81,7 @@ public class Folio
     }
     public bool HasBalance() => this.Balance > 0L;
     public bool IsSettled() => this.Balance == 0L;
-    public static DomainResult<Folio> Create(Reservation? reservation = null, decimal balance = 0L)
+    public static DomainResult<Folio> Create(Reservation? reservation = null, decimal balance = 0m)
     {
         if (balance < 0m)
         {

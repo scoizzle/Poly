@@ -56,8 +56,20 @@ public sealed partial class DomainToCSharpExporter {
         Property prop,
         Domain domain,
         INodeMetadataProvider metadata) {
-        if (defaultValue.Expression is Literal lit)
+        if (defaultValue.Expression is Literal lit) {
+            // A Decimal property's literal default becomes a Decimal constant, so the
+            // VM's range guard compares Decimal to Decimal (#511). The arm is local
+            // because this function's inputs are (domain, metadata) only.
+            if (TargetTypeAdapter.IsDecimal(domain, prop.Type.TypeName)) {
+                switch (lit.Value) {
+                    case long integral:
+                        return new Constant((decimal)integral);
+                    case int narrow:
+                        return new Constant((decimal)narrow);
+                }
+            }
             return new Constant(lit.Value);
+        }
         if (defaultValue.Expression is PropertyAccess pa) {
             if (TryResolveEnumType(domain, metadata, prop.Type.TypeName, out var enumType)
                 && enumType is not null

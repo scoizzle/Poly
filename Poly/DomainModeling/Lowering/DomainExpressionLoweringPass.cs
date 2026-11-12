@@ -25,7 +25,6 @@ public sealed partial class DomainExpressionLoweringPass : DomainExpressionDispa
     private readonly LoweringContext _context;
     private readonly IReadOnlyDictionary<string, Node> _parameters;
     private readonly HashSet<string>? _actionParameterNames;
-    private readonly IReadOnlyDictionary<string, string>? _enumPropertyNames;
     private readonly Func<string, string>? _navigationNameResolver;
     private readonly Func<string, bool>? _isCollectionNavigation;
     private readonly Func<string, string?>? _propertyTypeResolver;
@@ -60,7 +59,6 @@ public sealed partial class DomainExpressionLoweringPass : DomainExpressionDispa
         _names = _context.Names!;
         _parameters = context.Parameters ?? new Dictionary<string, Node>();
         _actionParameterNames = context.ActionParameterNames;
-        _enumPropertyNames = context.EnumPropertyNames;
         _navigationNameResolver = context.NavigationNameResolver;
         _isCollectionNavigation = context.IsCollectionNavigation;
         _propertyTypeResolver = context.PropertyTypeResolver;
@@ -153,7 +151,7 @@ public sealed partial class DomainExpressionLoweringPass : DomainExpressionDispa
     /// </summary>
     private LoweredExpression LowerAgainstEntity(
         string? entityName, DomainExpression expression, Node subject) {
-        IReadOnlyDictionary<string, string>? enums = _enumPropertyNames;
+        IReadOnlyDictionary<string, string>? enums = _context.EnumPropertyNames;
         if (entityName is not null) {
             var targetEntity = _domain.Types.OfType<Entity>().FirstOrDefault(e =>
                 string.Equals(e.Name, entityName, StringComparison.Ordinal));
@@ -166,5 +164,92 @@ public sealed partial class DomainExpressionLoweringPass : DomainExpressionDispa
             SourceEntityName = entityName ?? _context.SourceEntityName
         });
         return nested.LowerExpression(expression, subject);
+    }
+
+    /// <summary>
+    /// Lowers <paramref name="value"/> into <paramref name="target"/>'s type — the one
+    /// place a value-to-target-type decision is made for an expression. Callers use it
+    /// *instead of* <see cref="LowerExpression"/>, never after it. Order: a
+    /// <see cref="MatchExpr"/> builds its chain against the target; a clock/session fold
+    /// adapts to the target; an enum member (string literal or bare identifier) becomes
+    /// qualified member access unless it shadows a property or a parameter; anything
+    /// else lowers normally. An unresolvable target leaves the value untouched.
+    /// </summary>
+    internal LoweredExpression AdaptTo(DomainExpression value, DomainTypeReference target, Node subject) {
+        var saved = _currentSubject;
+        _currentSubject = subject;
+        try { return Adapt(value, target); }
+        finally { _currentSubject = saved; }
+    }
+
+    private LoweredExpression Adapt(DomainExpression value, DomainTypeReference target) {
+        if (value is MatchExpr match)
+            return LowerMatch(match, target);
+
+        if (EffectLoweringPass.LowerDefaultExpression(
+                value, new NamedTypeReference(target.TypeName), EffectiveMeaning, EffectiveForms) is { } runtime)
+            return LoweredExpression.Of(TargetTypeAdapter.Adapt(runtime, target, _context));
+
+        if (DomainToCSharpExporter.TryResolveEnumType(_domain, _analysis, target.TypeName, out var enumType)
+            && enumType is not null) {
+            // String-literal member: Kind: "Keyword".
+            if (value is Literal { Value: string member } && member.Length > 0
+                && enumType.MemberNames.Contains(member, StringComparer.Ordinal))
+                return LoweredExpression.Of(new Member(new NamedTypeReference(enumType.Name), member));
+            // Bare identifier member: Kind: Keyword. A name that shadows a property or
+            // a parameter stays an instance read (rows 7 and 8 of #495's guard set).
+            if (value is PropertyAccess access && !Shadows(access.Name)
+                && enumType.MemberNames.Contains(access.Name, StringComparer.Ordinal))
+                return LoweredExpression.Of(new Member(new NamedTypeReference(enumType.Name), access.Name));
+        }
+
+        // No node-level rewrite for the general case: an integral literal written for a
+        // Decimal slot is left as-is (the corpus prints 0L there and the VM accepts it),
+        // so the only Decimal constant lowering rewrites is the default-constant arm in
+        // LowerDefaultConstantNode (#511, E5). TargetTypeAdapter.Adapt stays the #683
+        // contract for consumers that adapt an already-lowered value.
+        return Route(value);
+    }
+
+    /// <summary>
+    /// The enum type of the other side of a comparison, when that side reads an
+    /// enum-typed property. A null or empty <see cref="LoweringContext.EnumPropertyNames"/>
+    /// map means "no enum properties are known here" (a function body, a nested binder):
+    /// a lookup miss, not a second lowering mode.
+    /// </summary>
+    private DomainTypeReference? EnumTargetOf(DomainExpression expr) {
+        if (expr is not PropertyAccess property
+            || _context.EnumPropertyNames is null
+            || !_context.EnumPropertyNames.TryGetValue(property.Name, out var enumTypeName))
+            return null;
+        return new DomainTypeReference(enumTypeName);
+    }
+
+    /// <summary>
+    /// True when a bare name must stay an instance read instead of becoming an enum
+    /// member: an action parameter of the action being lowered (parameters win in
+    /// <see cref="PropertyAccess"/>), a property in the subject's enum map, or a
+    /// property of the source entity. Deliberately not
+    /// <see cref="LoweringContext.PropertyTypeResolver"/>: that resolver merges in the
+    /// parameters of every action on the entity, so a member named like ANOTHER
+    /// action's parameter would stop qualifying (B1).
+    /// </summary>
+    private bool Shadows(string name) =>
+        _actionParameterNames?.Contains(name) == true
+        || _context.EnumPropertyNames?.ContainsKey(name) == true
+        || SourceEntityHasProperty(name);
+
+    /// <summary>
+    /// A property of the entity whose members the subject exposes
+    /// (<see cref="LoweringContext.SourceEntityName"/>), resolved the way
+    /// <see cref="ResolveRelationshipTarget"/> resolves its source. No domain-wide scan.
+    /// </summary>
+    private bool SourceEntityHasProperty(string name) {
+        if (_context.SourceEntityName is null)
+            return false;
+        var source = _domain.Types.OfType<Entity>().FirstOrDefault(e =>
+            string.Equals(e.Name, _context.SourceEntityName, StringComparison.Ordinal));
+        return source?.Properties.Any(p =>
+            string.Equals(p.Name, name, StringComparison.Ordinal)) == true;
     }
 }

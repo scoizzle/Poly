@@ -126,6 +126,24 @@ public class DomainResultTests {
         await Assert.That(text).DoesNotContain("Value");
     }
 
+    /// <summary>
+    /// R5: a failed result's text carries the kind, the element path and the guard, so a log
+    /// line says which guard failed and where. <see cref="RuntimeDomainFailure.Render"/> is the
+    /// message alone, so the failure arm cannot go through it.
+    /// </summary>
+    [Test]
+    public async Task GenericFailure_ToString_NamesTheKind() {
+        var failure = Poly.Runtime.DomainResult<string>.Failure(
+            RuntimeDomainFailure.Range("qty out of range", "Reservation.Qty", "QtyInRange"));
+
+        var text = failure.ToString();
+
+        await Assert.That(text).Contains("Range");
+        await Assert.That(text).Contains("Reservation.Qty");
+        await Assert.That(text).Contains("QtyInRange");
+        await Assert.That(text).DoesNotContain("Value");
+    }
+
     [Test]
     public async Task Generic_Failure_Equality_And_HashCode_DoNotThrow() {
         var left = Poly.Runtime.DomainResult<string>.Failure(RuntimeDomainFailure.Required("missing name"));
@@ -146,6 +164,22 @@ public class DomainResultTests {
 
         var thrown = await Assert.That(() => failure.Value).Throws<InvalidOperationException>();
         await Assert.That(thrown!.Message).IsEqualTo("A failed DomainResult has no Value.");
+    }
+
+    /// <summary>
+    /// R8: the pin for the <c>TryGetValue</c> doc nit. A failed result leaves the out value at
+    /// <c>default</c> — 0 for <c>int</c>, false for <c>bool</c> — because a value-type
+    /// <typeparamref name="T"/> cannot hold null.
+    /// </summary>
+    [Test]
+    public async Task TryGetValue_OnFailure_LeavesDefault() {
+        var number = Poly.Runtime.DomainResult<int>.Failure("out of range");
+        await Assert.That(number.TryGetValue(out var value)).IsFalse();
+        await Assert.That(value).IsEqualTo(0);
+
+        var booleanResult = Poly.Runtime.DomainResult<bool>.Failure("not allowed");
+        await Assert.That(booleanResult.TryGetValue(out var enabled)).IsFalse();
+        await Assert.That(enabled).IsFalse();
     }
 
     [Test]
@@ -224,8 +258,8 @@ public class DomainResultTests {
     public static IEnumerable<string> FactoryNames() => ContractKinds;
 
     /// <summary>
-    /// The numeric values are the wire contract, not an artefact of declaration order: a
-    /// reorder that renumbers a kind breaks every serialised payload already written.
+    /// The kinds are serialised by name, so the numbers are not the wire contract; this pin
+    /// exists so that a reorder shows up as a change rather than as a silent renumbering.
     /// </summary>
     [Test]
     public async Task Kinds_HaveTheContractNumericValues() {

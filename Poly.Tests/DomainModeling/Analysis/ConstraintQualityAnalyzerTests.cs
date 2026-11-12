@@ -49,6 +49,16 @@ public class ConstraintQualityAnalyzerTests {
             (0.5d, 1L, false),
             (1L, 0.5d, true),
             (ulong.MaxValue, 2.5d, true),
+            (9223372036854775808UL, long.MaxValue, true),
+            (9223372036854775808UL, 9223372036854775807m, true),
+            (long.MaxValue, 9223372036854775808UL, false),
+            (9223372036854775808UL, 9223372036854775808m, false),
+            // Double bounds are compared within double precision (no exact form for a fractional double):
+            // 0.1d and 0.1m are the same double, so neither is reported. NaN orders below every number
+            // as minimum, and above every number as maximum, so a NaN maximum is reported.
+            (0.1d, 0.1m, false),
+            (double.NaN, 1L, false),
+            (1L, double.NaN, true),
         ];
 
         var mismatches = new List<string>();

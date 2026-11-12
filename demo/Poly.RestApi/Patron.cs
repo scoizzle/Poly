@@ -12,7 +12,7 @@ public enum PatronStage
     Closed = 2
 }
 
-public class Patron
+public class Patron : Poly.Runtime.IActionScoped
 {
     private List<Loan> _loans = new List<Loan>();
     private List<Fine> _fines = new List<Fine>();
@@ -228,6 +228,43 @@ public class Patron
             return DomainResult.Success();
         }
         return DomainResult.Failure(Poly.Runtime.DomainFailure.Constraint("A unique assign needs the storage port.", "Patron"));
+    }
+    public object __Snapshot()
+    {
+        var __state = new object?[10];
+        __state[0] = this.Name;
+        __state[1] = this.Email;
+        __state[2] = this.MemberSince;
+        __state[3] = this.Status;
+        __state[4] = this.MaxItems;
+        __state[5] = this.CurrentBorrowCount;
+        __state[6] = this.OutstandingFines;
+        __state[7] = this.CurrentStage;
+        __state[8] = new List<Loan>(this._loans);
+        __state[9] = new List<Fine>(this._fines);
+        return __state;
+    }
+    public void __Restore(object state)
+    {
+        var __saved = (object?[])state;
+        this.Name = (string)__saved[0]!;
+        this.Email = (string)__saved[1]!;
+        this.MemberSince = (DateOnly)__saved[2]!;
+        this.Status = (PatronStatus)__saved[3]!;
+        this.MaxItems = (long)__saved[4]!;
+        this.CurrentBorrowCount = (long)__saved[5]!;
+        this.OutstandingFines = (long)__saved[6]!;
+        this.CurrentStage = (PatronStage)__saved[7]!;
+        ((System.Collections.IList)this._loans).Clear();
+        foreach (var __item8 in(List<Loan>)__saved[8]!)
+        {
+            this._loans.Add(__item8);
+        }
+        ((System.Collections.IList)this._fines).Clear();
+        foreach (var __item9 in(List<Fine>)__saved[9]!)
+        {
+            this._fines.Add(__item9);
+        }
     }
     public static System.Boolean ExistsWithEmail(Poly.Runtime.IStoragePort db, System.String email) => db.Exists("Patron", "Email", email);
 }

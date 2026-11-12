@@ -1,7 +1,7 @@
 #nullable enable
 using Poly.Runtime;
 
-public class Schedule
+public class Schedule : Poly.Runtime.IActionScoped
 {
     private Schedule() { }
     private Schedule(string day, string state = "")
@@ -28,5 +28,18 @@ public class Schedule
         }
         var created = new Schedule(day, state);
         return DomainResult<Schedule>.Success(created);
+    }
+    public object __Snapshot()
+    {
+        var __state = new object?[2];
+        __state[0] = this.Day;
+        __state[1] = this.State;
+        return __state;
+    }
+    public void __Restore(object state)
+    {
+        var __saved = (object?[])state;
+        this.Day = (string)__saved[0]!;
+        this.State = (string)__saved[1]!;
     }
 }

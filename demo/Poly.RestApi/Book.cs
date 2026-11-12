@@ -1,7 +1,7 @@
 #nullable enable
 using Poly.Runtime;
 
-public class Book
+public class Book : Poly.Runtime.IActionScoped
 {
     private Book() { }
     private Book(string title, string author, string isbn, long pages, Genre genre)
@@ -74,6 +74,25 @@ public class Book
             return DomainResult.Success();
         }
         return DomainResult.Failure(Poly.Runtime.DomainFailure.Constraint("A unique assign needs the storage port.", "Book"));
+    }
+    public object __Snapshot()
+    {
+        var __state = new object?[5];
+        __state[0] = this.Title;
+        __state[1] = this.Author;
+        __state[2] = this.ISBN;
+        __state[3] = this.Pages;
+        __state[4] = this.Genre;
+        return __state;
+    }
+    public void __Restore(object state)
+    {
+        var __saved = (object?[])state;
+        this.Title = (string)__saved[0]!;
+        this.Author = (string)__saved[1]!;
+        this.ISBN = (string)__saved[2]!;
+        this.Pages = (long)__saved[3]!;
+        this.Genre = (Genre)__saved[4]!;
     }
     public static System.Boolean ExistsWithISBN(Poly.Runtime.IStoragePort db, System.String isbn) => db.Exists("Book", "ISBN", isbn);
 }

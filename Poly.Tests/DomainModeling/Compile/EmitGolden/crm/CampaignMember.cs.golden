@@ -1,7 +1,7 @@
 #nullable enable
 using Poly.Runtime;
 
-public class CampaignMember
+public class CampaignMember : Poly.Runtime.IActionScoped
 {
     private CampaignMember() { }
     private CampaignMember(Contact? contact = null, Campaign? campaign = null)
@@ -19,5 +19,18 @@ public class CampaignMember
             campaign.AttachMembers(created);
         }
         return DomainResult<CampaignMember>.Success(created);
+    }
+    public object __Snapshot()
+    {
+        var __state = new object?[2];
+        __state[0] = this.Contact;
+        __state[1] = this.Campaign;
+        return __state;
+    }
+    public void __Restore(object state)
+    {
+        var __saved = (object?[])state;
+        this.Contact = (Contact?)__saved[0]!;
+        this.Campaign = (Campaign?)__saved[1]!;
     }
 }

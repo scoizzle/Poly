@@ -12,7 +12,7 @@ public enum EnrollmentStage
     Dropped = 3
 }
 
-public class Enrollment
+public class Enrollment : Poly.Runtime.IActionScoped
 {
     private List<Student>? _studentEnrollmentsDroppedSubscribers;
     private List<Student>? _studentEnrollmentsCompletedSubscribers;
@@ -265,5 +265,96 @@ public class Enrollment
     private void ExitNotifyCascade()
     {
         this._notifyDepth = this._notifyDepth - 1;
+    }
+    public object __Snapshot()
+    {
+        var __state = new object?[11];
+        __state[0] = this.EnrolledOn;
+        __state[1] = this.DueDate;
+        __state[2] = this.Grade;
+        __state[3] = this.Section;
+        __state[4] = this.Student;
+        __state[5] = this.CurrentStage;
+        __state[6] = (this._studentEnrollmentsDroppedSubscribers == null ? null : new List<Student>(this._studentEnrollmentsDroppedSubscribers));
+        __state[7] = (this._studentEnrollmentsCompletedSubscribers == null ? null : new List<Student>(this._studentEnrollmentsCompletedSubscribers));
+        __state[8] = (this._sectionEnrollmentsRegisteredSubscribers == null ? null : new List<Section>(this._sectionEnrollmentsRegisteredSubscribers));
+        __state[9] = (this._sectionEnrollmentsDroppedSubscribers == null ? null : new List<Section>(this._sectionEnrollmentsDroppedSubscribers));
+        __state[10] = this._notifyDepth;
+        return __state;
+    }
+    public void __Restore(object state)
+    {
+        var __saved = (object?[])state;
+        this.EnrolledOn = (DateOnly)__saved[0]!;
+        this.DueDate = (DateOnly)__saved[1]!;
+        this.Grade = (long)__saved[2]!;
+        this.Section = (Section?)__saved[3]!;
+        this.Student = (Student?)__saved[4]!;
+        this.CurrentStage = (EnrollmentStage)__saved[5]!;
+        if (__saved[6] == null)
+        {
+            this._studentEnrollmentsDroppedSubscribers = null;
+        }
+        else
+        {
+            if (this._studentEnrollmentsDroppedSubscribers == null)
+            {
+                this._studentEnrollmentsDroppedSubscribers = new List<Student>();
+            }
+            ((System.Collections.IList)this._studentEnrollmentsDroppedSubscribers).Clear();
+            foreach (var __item6 in(List<Student>)__saved[6]!)
+            {
+                this._studentEnrollmentsDroppedSubscribers.Add(__item6);
+            }
+        }
+        if (__saved[7] == null)
+        {
+            this._studentEnrollmentsCompletedSubscribers = null;
+        }
+        else
+        {
+            if (this._studentEnrollmentsCompletedSubscribers == null)
+            {
+                this._studentEnrollmentsCompletedSubscribers = new List<Student>();
+            }
+            ((System.Collections.IList)this._studentEnrollmentsCompletedSubscribers).Clear();
+            foreach (var __item7 in(List<Student>)__saved[7]!)
+            {
+                this._studentEnrollmentsCompletedSubscribers.Add(__item7);
+            }
+        }
+        if (__saved[8] == null)
+        {
+            this._sectionEnrollmentsRegisteredSubscribers = null;
+        }
+        else
+        {
+            if (this._sectionEnrollmentsRegisteredSubscribers == null)
+            {
+                this._sectionEnrollmentsRegisteredSubscribers = new List<Section>();
+            }
+            ((System.Collections.IList)this._sectionEnrollmentsRegisteredSubscribers).Clear();
+            foreach (var __item8 in(List<Section>)__saved[8]!)
+            {
+                this._sectionEnrollmentsRegisteredSubscribers.Add(__item8);
+            }
+        }
+        if (__saved[9] == null)
+        {
+            this._sectionEnrollmentsDroppedSubscribers = null;
+        }
+        else
+        {
+            if (this._sectionEnrollmentsDroppedSubscribers == null)
+            {
+                this._sectionEnrollmentsDroppedSubscribers = new List<Section>();
+            }
+            ((System.Collections.IList)this._sectionEnrollmentsDroppedSubscribers).Clear();
+            foreach (var __item9 in(List<Section>)__saved[9]!)
+            {
+                this._sectionEnrollmentsDroppedSubscribers.Add(__item9);
+            }
+        }
+        this._notifyDepth = (int)__saved[10]!;
     }
 }

@@ -1,7 +1,7 @@
 #nullable enable
 using Poly.Runtime;
 
-public class Line
+public class Line : Poly.Runtime.IActionScoped
 {
     private Line() { }
     private Line(long qty, decimal unitPrice, Product? product = null, Opportunity? opportunity = null)
@@ -39,5 +39,22 @@ public class Line
             opportunity.AttachLines(created);
         }
         return DomainResult<Line>.Success(created);
+    }
+    public object __Snapshot()
+    {
+        var __state = new object?[4];
+        __state[0] = this.Qty;
+        __state[1] = this.UnitPrice;
+        __state[2] = this.Product;
+        __state[3] = this.Opportunity;
+        return __state;
+    }
+    public void __Restore(object state)
+    {
+        var __saved = (object?[])state;
+        this.Qty = (long)__saved[0]!;
+        this.UnitPrice = (decimal)__saved[1]!;
+        this.Product = (Product?)__saved[2]!;
+        this.Opportunity = (Opportunity?)__saved[3]!;
     }
 }

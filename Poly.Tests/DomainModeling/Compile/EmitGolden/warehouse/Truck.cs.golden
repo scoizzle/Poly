@@ -10,7 +10,7 @@ public enum TruckStage
     OutOfService = 2
 }
 
-public class Truck
+public class Truck : Poly.Runtime.IActionScoped
 {
     private List<Delivery> _deliveries = new List<Delivery>();
     private Truck() { }
@@ -120,6 +120,33 @@ public class Truck
             return DomainResult.Success();
         }
         return DomainResult.Failure(Poly.Runtime.DomainFailure.Constraint("A unique assign needs the storage port.", "Truck"));
+    }
+    public object __Snapshot()
+    {
+        var __state = new object?[7];
+        __state[0] = this.Vin;
+        __state[1] = this.MaxLoad;
+        __state[2] = this.CurrentLoad;
+        __state[3] = this.Status;
+        __state[4] = this.Warehouse;
+        __state[5] = this.CurrentStage;
+        __state[6] = new List<Delivery>(this._deliveries);
+        return __state;
+    }
+    public void __Restore(object state)
+    {
+        var __saved = (object?[])state;
+        this.Vin = (string)__saved[0]!;
+        this.MaxLoad = (long)__saved[1]!;
+        this.CurrentLoad = (long)__saved[2]!;
+        this.Status = (TruckStatus)__saved[3]!;
+        this.Warehouse = (Warehouse?)__saved[4]!;
+        this.CurrentStage = (TruckStage)__saved[5]!;
+        ((System.Collections.IList)this._deliveries).Clear();
+        foreach (var __item6 in(List<Delivery>)__saved[6]!)
+        {
+            this._deliveries.Add(__item6);
+        }
     }
     public static System.Boolean ExistsWithVin(Poly.Runtime.IStoragePort db, System.String vin) => db.Exists("Truck", "Vin", vin);
 }

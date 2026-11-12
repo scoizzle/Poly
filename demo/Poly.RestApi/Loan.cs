@@ -11,7 +11,7 @@ public enum LoanStage
     Returned = 2
 }
 
-public class Loan
+public class Loan : Poly.Runtime.IActionScoped
 {
     private List<Patron>? _patronLoansOverdueSubscribers;
     private List<Patron>? _patronLoansReturnedSubscribers;
@@ -143,5 +143,66 @@ public class Loan
     private void ExitNotifyCascade()
     {
         this._notifyDepth = this._notifyDepth - 1;
+    }
+    public object __Snapshot()
+    {
+        var __state = new object?[11];
+        __state[0] = this.Status;
+        __state[1] = this.CheckedOutAt;
+        __state[2] = this.DueDate;
+        __state[3] = this.ReturnedAt;
+        __state[4] = this.TimesRenewed;
+        __state[5] = this.Book;
+        __state[6] = this.Borrower;
+        __state[7] = this.CurrentStage;
+        __state[8] = (this._patronLoansOverdueSubscribers == null ? null : new List<Patron>(this._patronLoansOverdueSubscribers));
+        __state[9] = (this._patronLoansReturnedSubscribers == null ? null : new List<Patron>(this._patronLoansReturnedSubscribers));
+        __state[10] = this._notifyDepth;
+        return __state;
+    }
+    public void __Restore(object state)
+    {
+        var __saved = (object?[])state;
+        this.Status = (string?)__saved[0]!;
+        this.CheckedOutAt = (DateTime)__saved[1]!;
+        this.DueDate = (DateTime)__saved[2]!;
+        this.ReturnedAt = (DateTime?)__saved[3]!;
+        this.TimesRenewed = (long?)__saved[4]!;
+        this.Book = (Book?)__saved[5]!;
+        this.Borrower = (Patron?)__saved[6]!;
+        this.CurrentStage = (LoanStage)__saved[7]!;
+        if (__saved[8] == null)
+        {
+            this._patronLoansOverdueSubscribers = null;
+        }
+        else
+        {
+            if (this._patronLoansOverdueSubscribers == null)
+            {
+                this._patronLoansOverdueSubscribers = new List<Patron>();
+            }
+            ((System.Collections.IList)this._patronLoansOverdueSubscribers).Clear();
+            foreach (var __item8 in(List<Patron>)__saved[8]!)
+            {
+                this._patronLoansOverdueSubscribers.Add(__item8);
+            }
+        }
+        if (__saved[9] == null)
+        {
+            this._patronLoansReturnedSubscribers = null;
+        }
+        else
+        {
+            if (this._patronLoansReturnedSubscribers == null)
+            {
+                this._patronLoansReturnedSubscribers = new List<Patron>();
+            }
+            ((System.Collections.IList)this._patronLoansReturnedSubscribers).Clear();
+            foreach (var __item9 in(List<Patron>)__saved[9]!)
+            {
+                this._patronLoansReturnedSubscribers.Add(__item9);
+            }
+        }
+        this._notifyDepth = (int)__saved[10]!;
     }
 }

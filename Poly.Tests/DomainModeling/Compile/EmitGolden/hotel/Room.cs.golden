@@ -9,7 +9,7 @@ public enum RoomStage
     OutOfService = 1
 }
 
-public class Room
+public class Room : Poly.Runtime.IActionScoped
 {
     private List<Reservation> _stays = new List<Reservation>();
     private Room() { }
@@ -186,6 +186,41 @@ public class Room
             return DomainResult.Success();
         }
         return DomainResult.Failure(Poly.Runtime.DomainFailure.Constraint("A unique assign needs the storage port.", "Room"));
+    }
+    public object __Snapshot()
+    {
+        var __state = new object?[11];
+        __state[0] = this.Number;
+        __state[1] = this.Floor;
+        __state[2] = this.NightlyRate;
+        __state[3] = this.MaxOccupancy;
+        __state[4] = this.Occupied;
+        __state[5] = this.Dirty;
+        __state[6] = this.Offline;
+        __state[7] = this.Property;
+        __state[8] = this.RoomType;
+        __state[9] = this.CurrentStage;
+        __state[10] = new List<Reservation>(this._stays);
+        return __state;
+    }
+    public void __Restore(object state)
+    {
+        var __saved = (object?[])state;
+        this.Number = (string)__saved[0]!;
+        this.Floor = (long)__saved[1]!;
+        this.NightlyRate = (decimal)__saved[2]!;
+        this.MaxOccupancy = (long)__saved[3]!;
+        this.Occupied = (bool)__saved[4]!;
+        this.Dirty = (bool)__saved[5]!;
+        this.Offline = (bool)__saved[6]!;
+        this.Property = (Property?)__saved[7]!;
+        this.RoomType = (RoomType?)__saved[8]!;
+        this.CurrentStage = (RoomStage)__saved[9]!;
+        ((System.Collections.IList)this._stays).Clear();
+        foreach (var __item10 in(List<Reservation>)__saved[10]!)
+        {
+            this._stays.Add(__item10);
+        }
     }
     public static System.Boolean ExistsWithNumber(Poly.Runtime.IStoragePort db, System.String number) => db.Exists("Room", "Number", number);
 }

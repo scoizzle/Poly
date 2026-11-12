@@ -10,7 +10,7 @@ public enum WaitOfferStage
     Cancelled = 2
 }
 
-public class WaitOffer
+public class WaitOffer : Poly.Runtime.IActionScoped
 {
     private List<Section>? _sectionWaitlistOfferedSubscribers;
     private List<Section>? _sectionWaitlistCancelledSubscribers;
@@ -132,5 +132,56 @@ public class WaitOffer
     private void ExitNotifyCascade()
     {
         this._notifyDepth = this._notifyDepth - 1;
+    }
+    public object __Snapshot()
+    {
+        var __state = new object?[6];
+        __state[0] = this.Student;
+        __state[1] = this.Section;
+        __state[2] = this.CurrentStage;
+        __state[3] = (this._sectionWaitlistOfferedSubscribers == null ? null : new List<Section>(this._sectionWaitlistOfferedSubscribers));
+        __state[4] = (this._sectionWaitlistCancelledSubscribers == null ? null : new List<Section>(this._sectionWaitlistCancelledSubscribers));
+        __state[5] = this._notifyDepth;
+        return __state;
+    }
+    public void __Restore(object state)
+    {
+        var __saved = (object?[])state;
+        this.Student = (Student?)__saved[0]!;
+        this.Section = (Section?)__saved[1]!;
+        this.CurrentStage = (WaitOfferStage)__saved[2]!;
+        if (__saved[3] == null)
+        {
+            this._sectionWaitlistOfferedSubscribers = null;
+        }
+        else
+        {
+            if (this._sectionWaitlistOfferedSubscribers == null)
+            {
+                this._sectionWaitlistOfferedSubscribers = new List<Section>();
+            }
+            ((System.Collections.IList)this._sectionWaitlistOfferedSubscribers).Clear();
+            foreach (var __item3 in(List<Section>)__saved[3]!)
+            {
+                this._sectionWaitlistOfferedSubscribers.Add(__item3);
+            }
+        }
+        if (__saved[4] == null)
+        {
+            this._sectionWaitlistCancelledSubscribers = null;
+        }
+        else
+        {
+            if (this._sectionWaitlistCancelledSubscribers == null)
+            {
+                this._sectionWaitlistCancelledSubscribers = new List<Section>();
+            }
+            ((System.Collections.IList)this._sectionWaitlistCancelledSubscribers).Clear();
+            foreach (var __item4 in(List<Section>)__saved[4]!)
+            {
+                this._sectionWaitlistCancelledSubscribers.Add(__item4);
+            }
+        }
+        this._notifyDepth = (int)__saved[5]!;
     }
 }

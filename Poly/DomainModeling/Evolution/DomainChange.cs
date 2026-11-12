@@ -475,11 +475,13 @@ public sealed record AddRelationshipChange(
     DomainTypeReference Target,
     RelationshipCardinality Cardinality,
     IReadOnlyList<Property> Properties,
-    bool SourceOwnsTarget = false
+    bool SourceOwnsTarget = false,
+    string? Inverse = null
 ) : DomainChange {
     internal override void ApplyTo(DomainMutationContext context) {
         var newRel = new Relationship(Name, Source, Target, Cardinality, Properties) {
-            SourceOwnsTarget = SourceOwnsTarget
+            SourceOwnsTarget = SourceOwnsTarget,
+            Inverse = Inverse
         };
         var added = context.ReplaceInEntity(Source.TypeName,
             _ => true,

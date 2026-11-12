@@ -9,6 +9,10 @@ namespace Poly.DomainModeling.Language;
 // DomainResolver (Relationships) — navigation-property (N1) declarations and deferred relationship resolution.
 
 public sealed partial class DomainResolver {
+    // Inverse names declared with `via`, keyed by the pending nav they belong to. `via`
+    // is syntax and IR only: pairing validity is analysis (S-11), never this resolver.
+    private readonly Dictionary<PendingNav, string> _inverseByNav = new();
+
     private Exception N2RelationshipNotSupported() =>
         Error(
             "The 'relationship Name from Source to Target one|many' form is not supported. " +
@@ -78,9 +82,38 @@ public sealed partial class DomainResolver {
         var targetToken = Current;
         var targetType = ExpectIdentifier(TokenKind.Identifier, "target entity name");
 
+        // `via <name>` names the inverse navigation. It is a contextual word, not a
+        // grammar row: it starts a clause only when `via` is followed by a name, so a
+        // member named `via` (`via: Text`, `via(x: Text): action`) still parses.
+        string? inverseName = null;
+        if (AtViaClause()) {
+            var viaToken = Current;
+            Advance();
+            if (Current.Kind != TokenKind.Identifier || PeekIs(TokenKind.Colon))
+                throw GrammarError.Error("'via' requires the inverse navigation name", viaToken.Line, viaToken.Col);
+            inverseName = Current.Text;
+            Advance();
+            if (AtViaClause())
+                throw Error($"'via' is declared more than once on navigation property '{name}'");
+        }
+
         RejectRetiredRequiredWord();
-        _pendingNavs.Add(new PendingNav(_currentEntityName, name, targetType, cardinality, owned, targetToken));
+        var pending = new PendingNav(_currentEntityName, name, targetType, cardinality, owned, targetToken);
+        _pendingNavs.Add(pending);
+        if (inverseName is not null)
+            _inverseByNav[pending] = inverseName;
     }
+
+    /// <summary>
+    /// True when the cursor sits on a `via` clause: the contextual word `via` followed by
+    /// the inverse navigation name. A following ':' or '(' means a member named `via`,
+    /// not a clause.
+    /// </summary>
+    private bool AtViaClause() =>
+        Current.Kind == TokenKind.Identifier
+        && string.Equals(Current.Text, "via", StringComparison.Ordinal)
+        && Peek(1).Kind != TokenKind.Colon
+        && Peek(1).Kind != TokenKind.LParen;
 
     /// <summary>
     /// Resolves all pending navigation properties against known entity names.
@@ -126,12 +159,14 @@ public sealed partial class DomainResolver {
                 throw GrammarError.Error($"Relationship '{nav.PropertyName}' is defined more than once on entity '{nav.SourceEntityName}'. Relationship names must be unique within their source entity.", nav.At.Line, nav.At.Col);
             }
 
+            _inverseByNav.TryGetValue(nav, out var inverse);
             changes.Add(new AddRelationshipChange(
                 nav.PropertyName,
                 new DomainTypeReference(nav.SourceEntityName),
                 new DomainTypeReference(nav.TargetTypeName),
-                nav.Cardinality, [], nav.SourceOwnsTarget));
+                nav.Cardinality, [], nav.SourceOwnsTarget, inverse));
         }
         _pendingNavs.Clear();
+        _inverseByNav.Clear();
     }
 }

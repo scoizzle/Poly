@@ -26,6 +26,14 @@ internal sealed record ScopeEntry(
     DomainMember Node);
 
 /// <summary>
+/// One member of an enum's generated C# type (S-02): the authored name and its 1-based
+/// position in the declaration. An enum member has no node — the ontology carries members as
+/// strings (<c>EnumType.MemberNames</c>) — so the position is what a diagnostic on the enum
+/// node can name.
+/// </summary>
+internal sealed record EnumMemberScope(string Name, int Index);
+
+/// <summary>
 /// The entity member scope table (S-01): the members that share one generated C# type, with
 /// the identity the emitter gives each. Identity per kind, matching the emitter:
 /// a <b>property</b> keeps its name (<c>Properties.cs:110</c>) and its constructor parameter is
@@ -33,8 +41,8 @@ internal sealed record ScopeEntry(
 /// no parameter (<c>Properties.cs:127</c>); a <b>navigation</b>'s member is
 /// <c>ToPascalCase</c> (<c>Relationships.cs:143</c>) and its parameter <c>ToCamelCase</c> of that
 /// (<c>Relationships.cs:144</c>); an <b>action</b> (<c>Actions.cs:69</c>) and a <b>policy</b>
-/// (<c>Invariants.cs:68-77</c>) keep their names. Only <see cref="ForEntity"/> ships; a domain
-/// scope and an enum scope arrive with their first consumer (S-02/L-21).
+/// (<c>Invariants.cs:68-77</c>) keep their names. The enum member scope (<see cref="EnumScope"/>)
+/// sits beside it; a domain scope arrives with its first consumer (L-21).
 /// </summary>
 internal static class NameScopes {
     /// <summary>
@@ -75,6 +83,14 @@ internal static class NameScopes {
 
         return entries;
     }
+
+    /// <summary>
+    /// Every member of <paramref name="enumType"/>, in declaration order, each with its 1-based
+    /// position (S-02). The emitter prints one C# enum member per entry
+    /// (<c>CSharpWriter.cs:780-799</c>), in this order, so the list is the scope.
+    /// </summary>
+    public static IReadOnlyList<EnumMemberScope> EnumScope(EnumType enumType) =>
+        [.. enumType.MemberNames.Select(static (name, index) => new EnumMemberScope(name, index + 1))];
 
     private static IEnumerable<Action> AllActions(Entity entity) =>
         entity.Actions.Concat(entity.Stages.SelectMany(static stage => stage.Actions));

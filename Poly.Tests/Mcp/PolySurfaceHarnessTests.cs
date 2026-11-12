@@ -67,6 +67,12 @@ public class PolySurfaceHarnessTests {
         await Assert.That(define.Code).IsNull();
         await Assert.That(define.Revision).IsEqualTo(1L);
 
+        await Assert.That(h.Store.TryGet(ws, out var state)).IsTrue();
+        await Assert.That(state.Domain.Extensions).Contains("sqlite");
+        await Assert.That(state.Domain.Extensions).Contains("http");
+        await Assert.That(state.Modeling.Extensions).Contains("sqlite");
+        await Assert.That(state.Modeling.Extensions).Contains("http");
+
         var check = h.Check(ws);
         await Assert.That(check.Success).IsTrue().Because(check.Summary);
         await Assert.That(check.Data!["errorCount"]!.GetValue<int>()).IsEqualTo(0);
@@ -169,7 +175,7 @@ public class PolySurfaceHarnessTests {
         var tools = typeof(PolySurfaceTools).GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
             .Where(m => m.GetCustomAttribute<McpServerToolAttribute>() is not null)
             .ToList();
-        await Assert.That(tools).IsNotEmpty();
+        await Assert.That(tools.Count).IsEqualTo(7);
 
         var harnessMethods = typeof(PolySurfaceHarness).GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly);
         var gaps = new List<string>();
@@ -200,7 +206,7 @@ public class PolySurfaceHarnessTests {
         await Assert.That(edited.Success).IsTrue().Because(edited.Summary);
         await Assert.That(edited.Revision).IsEqualTo(2L);
         var dsl = h.Export(ws, "dsl");
-        await Assert.That(dsl.Content).Contains("Amount");
+        await Assert.That(dsl.Content).Contains("Amount: Number");
     }
 
     [Test]
@@ -215,7 +221,7 @@ public class PolySurfaceHarnessTests {
         await Assert.That(overview.Success).IsTrue().Because(overview.Summary);
         await Assert.That(overview.Data!["entityNames"]!.AsArray().Select(n => n!.GetValue<string>())).Contains("Item");
         await Assert.That(entity.Success).IsTrue().Because(entity.Summary);
-        await Assert.That(entity.Summary).Contains("Item");
+        await Assert.That(entity.Summary).Contains("Entity 'Item'");
     }
 
     [Test]
@@ -255,10 +261,84 @@ public class PolySurfaceHarnessTests {
             await Assert.That(viaHarness.Summary).IsEqualTo(viaSurface.Summary);
             await Assert.That(viaHarness.Findings.Select(f => (f.Severity, f.Code, f.Path, f.Message, f.Line, f.Column)))
                 .IsEquivalentTo(viaSurface.Findings.Select(f => (f.Severity, f.Code, f.Path, f.Message, f.Line, f.Column)));
+            await Assert.That(viaHarness.Findings.Select(f => (f.Hint, f.Fix)))
+                .IsEquivalentTo(viaSurface.Findings.Select(f => (f.Hint, f.Fix)));
             await Assert.That(viaHarness.Revision).IsEqualTo(viaSurface.State?.Revision);
+            await Assert.That(viaHarness.Workspace).IsEqualTo(hws);
+            await Assert.That(viaHarness.Model).IsEqualTo(viaSurface.State?.Model);
+            await Assert.That(viaHarness.Entities).IsEqualTo(viaSurface.State?.Entities);
+            await Assert.That(viaHarness.Instances).IsEqualTo(viaSurface.State?.Instances);
             await Assert.That(viaHarness.Next.Select(n => n.Replace(hws, "<ws>")))
                 .IsEquivalentTo(viaSurface.Next.Select(n => n.Replace(dws, "<ws>")));
             await Assert.That(viaHarness.Data?.ToJsonString()).IsEqualTo(JsonSerializer.SerializeToNode(viaSurface.Data)?.ToJsonString());
         }
+    }
+
+    [Test]
+    public async Task Harness_StateFields_AreDecoded() {
+        var h = PolySurfaceHarness.New();
+
+        var opened = h.Workspace(name: "Orders");
+        await Assert.That(opened.Model).IsEqualTo("Orders");
+        await Assert.That(opened.Entities).IsEqualTo(0);
+
+        var defined = h.Define(opened.Workspace!, Valid);
+        await Assert.That(defined.Success).IsTrue().Because(defined.Summary);
+        await Assert.That(defined.Entities).IsEqualTo(1);
+        await Assert.That(defined.Instances).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task Define_DryRun_OfAValidDocument_DoesNotApply() {
+        var h = PolySurfaceHarness.New();
+        var ws = h.Open("V2");
+
+        var dry = h.Define(ws, Valid, apply: false);
+
+        await Assert.That(dry.Success).IsTrue().Because(dry.Summary);
+        await Assert.That(dry.Summary).StartsWith("Dry run");
+        await Assert.That(dry.Revision).IsEqualTo(0L);
+        await Assert.That(h.Inspect(ws).Data!["entityCount"]!.GetValue<int>()).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task Define_DryRun_OfAnInvalidDocument_ReportsFindingsAndKeepsRevision() {
+        var h = PolySurfaceHarness.New();
+        var ws = h.Open("V2");
+        await Assert.That(h.Define(ws, Valid).Revision).IsEqualTo(1L);
+
+        var dry = h.Define(ws, Invalid, apply: false);
+
+        await Assert.That(dry.Success).IsFalse();
+        await Assert.That(dry.Findings.Any(f => f.Code == "DMEFF008")).IsTrue()
+            .Because(string.Join("; ", dry.Findings.Select(f => f.Code)));
+        await Assert.That(dry.Revision).IsEqualTo(1L);
+    }
+
+    [Test]
+    public async Task Define_DryRun_OfAParseError_ReportsAPositionedFinding() {
+        var h = PolySurfaceHarness.New();
+        var ws = h.Open("V2");
+
+        var dry = h.Define(ws, "domain Broken\nItem: entity {\n  Name Text\n}", apply: false);
+
+        await Assert.That(dry.Success).IsFalse().Because(dry.Summary);
+        await Assert.That(dry.Findings).IsNotEmpty().Because(dry.Summary);
+        await Assert.That(dry.Findings.Any(f => f.Line is not null)).IsTrue()
+            .Because(string.Join("; ", dry.Findings.Select(f => $"{f.Code}@{f.Line}:{f.Column} {f.Message}")));
+        await Assert.That(dry.Revision).IsEqualTo(0L);
+    }
+
+    [Test]
+    public async Task Check_Expression_EvaluatesAgainstBindings() {
+        var h = PolySurfaceHarness.New();
+        var ws = h.Open("V2");
+        await Assert.That(h.Define(ws, Valid).Success).IsTrue();
+
+        var check = h.Check(ws, expression: "Total > 100", bindings: """{"Total":150}""");
+
+        await Assert.That(check.Success).IsTrue().Because(check.Summary);
+        await Assert.That(check.Data!["verdict"]!.GetValue<string>()).IsEqualTo("proven");
+        await Assert.That(check.Data["result"]!.GetValue<bool>()).IsTrue();
     }
 }

@@ -10,7 +10,7 @@ using Poly.Mcp.Surface;
 namespace Poly.Tests.TestHelpers;
 
 /// <summary>One diagnostic from the v2 envelope's <c>findings</c>.</summary>
-internal sealed record HarnessFinding(string Severity, string? Code, string Path, string Message, int? Line, int? Column);
+internal sealed record HarnessFinding(string Severity, string? Code, string Path, string Message, int? Line, int? Column, string? Hint, string? Fix);
 
 /// <summary>
 /// The v2 envelope as a typed value. <see cref="Code"/> is the envelope <c>errorCode</c> verbatim
@@ -25,7 +25,10 @@ internal sealed record HarnessResult(
     JsonNode? Data,
     string? Workspace,
     long? Revision,
-    IReadOnlyList<string> Next) {
+    IReadOnlyList<string> Next,
+    string? Model,
+    int? Entities,
+    int? Instances) {
     /// <summary>The one decoder: an absent member and an explicit null are the same thing.</summary>
     public static HarnessResult FromEnvelope(JsonNode envelope) {
         var root = envelope.AsObject();
@@ -38,7 +41,9 @@ internal sealed record HarnessResult(
                 f["path"]?.GetValue<string>() ?? "",
                 f["message"]?.GetValue<string>() ?? "",
                 f["line"]?.GetValue<int>(),
-                f["column"]?.GetValue<int>()))
+                f["column"]?.GetValue<int>(),
+                null,
+                null))
             .ToList();
         var next = (root["next"] as JsonArray ?? [])
             .Select(n => n!.GetValue<string>())
@@ -51,7 +56,10 @@ internal sealed record HarnessResult(
             Data: root["data"],
             Workspace: state?["workspace"]?.GetValue<string>(),
             Revision: state?["revision"]?.GetValue<long>(),
-            Next: next);
+            Next: next,
+            Model: null,
+            Entities: null,
+            Instances: null);
     }
 
     /// <summary>An export's inline <c>content</c>.</summary>

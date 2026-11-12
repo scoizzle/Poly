@@ -258,6 +258,9 @@ internal sealed record PatternShape(
                     _i++;
                     break;
                 case '{' when TryReadBraceQuantifier(out var lower, out var upper):
+                    // #714 sign-off: an inverted range bails the whole shape, never a literal;
+                    // unreachable today because new Regex rejects it first.
+                    if (upper is { } ceiling && lower > ceiling) return null;
                     quantifierMin = lower;
                     quantifierMax = upper;
                     break;
@@ -295,8 +298,6 @@ internal sealed record PatternShape(
             else {
                 return false;
             }
-
-            if (max is { } ceiling && lower > ceiling) return false;
 
             _i = j + 1;
             min = lower;

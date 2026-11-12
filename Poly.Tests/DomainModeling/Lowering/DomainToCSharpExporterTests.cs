@@ -2808,12 +2808,12 @@ public class DomainToCSharpExporterTests {
               Plate: Text unique
             }
             Lot: entity {
-              Create: Boolean default(true)
+              Enabled: Boolean default(true)
               Occupied: Number default(0)
               permits: many Permit
               Issue: action (plate: Text) {
-                assign Create to false
-                if (Create) {
+                assign Enabled to false
+                if (Enabled) {
                   assign Occupied to Occupied + 1
                   create in permits { Plate: plate }
                 }
@@ -2825,12 +2825,12 @@ public class DomainToCSharpExporterTests {
         var cs = new CSharpGenerator().Generate(unit);
 
         var issueIdx = cs.IndexOf("public DomainResult Issue(", StringComparison.Ordinal);
-        var assignIdx = cs.IndexOf("this.Create = false", issueIdx);
+        var assignIdx = cs.IndexOf("this.Enabled = false", issueIdx);
         var createIdx = cs.IndexOf("this.CreatePermits(", issueIdx);
         await Assert.That(issueIdx).IsGreaterThan(-1);
         await Assert.That(assignIdx).IsGreaterThan(issueIdx);
         await Assert.That(createIdx).IsGreaterThan(assignIdx);
-        await Assert.That(cs[assignIdx..createIdx].Contains("if (this.Create)", StringComparison.Ordinal)).IsTrue();
+        await Assert.That(cs[assignIdx..createIdx].Contains("if (this.Enabled)", StringComparison.Ordinal)).IsTrue();
         await Assert.That(cs).DoesNotContain("ProbeCreate");
         await Assert.That(cs).DoesNotContain("if (false)");
     }

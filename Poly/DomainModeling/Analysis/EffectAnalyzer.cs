@@ -54,7 +54,7 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
                 ValidateActionParameterUsage(context, action);
                 ValidateActionReturnProducer(context, action, entity, domain, lookup);
                 ValidateActionReturnFinalStatement(context, action, entity, domain, lookup);
-                ValidateCallChainPostconditions(context, action, entity);
+                ValidateCallChainPostconditions(context, domain, action, entity);
             }
             // C4e (a): when Tracks B { transition to Nope } — subscription effects skipped this pass.
             foreach (var sub in entity.Subscriptions)
@@ -1249,46 +1249,58 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
     /// caller is reported on the callee effect with the caller chain named.
     /// </summary>
     private static void ValidateCallChainPostconditions(
-        AnalysisContext context, Action action, Entity entity) {
+        AnalysisContext context, Domain domain, Action action, Entity entity) {
         var meta = context.GetMetadata<ActionInvariantMetadata>(action);
         if (meta is null) return;
+
+        // One fact per callee effect, deduped by effect node: the same callee write is reachable from
+        // several stage contexts of the caller, and V-04 counts writes, not contexts (V-05b B1).
+        var recorded = new HashSet<Node>(ReferenceEqualityComparer.Instance);
 
         foreach (var stageCtx in meta.StageContexts()) {
             foreach (var post in stageCtx.Postconditions) {
                 if (post.DeclaringAction == action) continue; // direct effects — validated per-effect
-                if (post.ValueRange is not { } vr) continue;
                 // The postcondition's Constraints are the target's net constraint (declared +
                 // param/binder merges), valid for cross-entity callees whose target property
                 // lives on a different entity than the caller.
                 var range = post.Constraints.OfType<RangeConstraint>().FirstOrDefault();
                 if (range is null) continue;
 
-                var tmin = NumericBound.ToDoubleOrNull(range.Minimum);
-                var tmax = NumericBound.ToDoubleOrNull(range.Maximum);
-                // An absent side is unbounded, never 0 (#475): the called effect's range may be open.
-                var lo = NumericBound.ToDoubleOrNull(vr.Min);
-                var hi = NumericBound.ToDoubleOrNull(vr.Max);
-                bool fullyBelow = tmin is not null && hi is not null && hi < tmin.Value;
-                bool fullyAbove = tmax is not null && lo is not null && lo > tmax.Value;
-                if (fullyBelow || fullyAbove || WriteVerification.HasUnorderableBound(range)) {
+                // The written value is the callee's own range under the caller's narrowed context, as
+                // an exact interval (V-05b S3b): a null or both-open range carries no information (A3),
+                // and the decision is the one write procedure every assign uses.
+                var value = post.ValueRange?.ToRangeConstraint() is { } written
+                    ? AbstractValue.From([written])
+                    : AbstractValue.Unknown;
+                var verdict = WriteVerification.DecideRange(range, value);
+                if (verdict == ConstraintVerdict.Satisfied) continue;
+
+                if (recorded.Add(post.Effect))
+                    WriteRecorder.Record(
+                        context, domain, post.Effect, post.TargetProperty,
+                        ConstraintValidation.Describe(range),
+                        verdict == ConstraintVerdict.Violated
+                            ? WriteVerdict.Violated
+                            : WriteVerdict.Unverified(
+                                UnverifiedReason.PossibleViolation,
+                                DomainModelDiagnosticCodes.EffectConstraintViolation));
+
+                var vr = post.ValueRange;
+                if (verdict == ConstraintVerdict.Violated) {
                     context.ReportError(
                         post.Effect,
                         $"Call-chain postcondition ({action.Name} → {post.DeclaringAction.Name}): assigned value range " +
-                        $"[{FormatBound(vr.Min, lower: true)}, {FormatBound(vr.Max, lower: false)}] is entirely outside constraint " +
+                        $"[{FormatBound(vr?.Min, lower: true)}, {FormatBound(vr?.Max, lower: false)}] is entirely outside constraint " +
                         $"{ConstraintValidation.Describe(range)} on property '{post.TargetProperty}'.",
                         DomainModelDiagnosticCodes.EffectConstraintViolation);
                     continue;
                 }
-                bool canViolate = (tmin is not null && (lo is null || lo < tmin.Value))
-                                  || (tmax is not null && (hi is null || hi > tmax.Value));
-                if (canViolate) {
-                    context.ReportWarning(
-                        post.Effect,
-                        $"Call-chain postcondition ({action.Name} → {post.DeclaringAction.Name}): assigned value range " +
-                        $"[{FormatBound(vr.Min, lower: true)}, {FormatBound(vr.Max, lower: false)}] can fall outside constraint " +
-                        $"{ConstraintValidation.Describe(range)} on property '{post.TargetProperty}'.",
-                        DomainModelDiagnosticCodes.EffectConstraintViolation);
-                }
+                context.ReportWarning(
+                    post.Effect,
+                    $"Call-chain postcondition ({action.Name} → {post.DeclaringAction.Name}): assigned value range " +
+                    $"[{FormatBound(vr?.Min, lower: true)}, {FormatBound(vr?.Max, lower: false)}] can fall outside constraint " +
+                    $"{ConstraintValidation.Describe(range)} on property '{post.TargetProperty}'.",
+                    DomainModelDiagnosticCodes.EffectConstraintViolation);
             }
         }
     }

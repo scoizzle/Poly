@@ -265,7 +265,7 @@ public class DslCompilerSqliteOracleTests {
 
         var prog = result.Files!.Single(f => f.FileName == "Program.cs").Source;
         await Assert.That(prog).Contains("Box.Create(");
-        await Assert.That(prog).Contains("Enumerable.Empty<Token>()");
+        await Assert.That(prog).Contains("Enumerable.Empty<Demo.Token>()");
     }
 
     [Test]
@@ -287,7 +287,7 @@ public class DslCompilerSqliteOracleTests {
         var prog = result.Files!.Single(f => f.FileName == "Program.cs").Source;
         // Enum type maps to its own CLR name (Genre) with the allowed-value union declared
         // via [EnumDataType] — not excluded by entity-ness.
-        await Assert.That(prog).Contains("public Genre Genre { get; init; }");
+        await Assert.That(prog).Contains("public Demo.Genre Genre { get; init; }");
         await Assert.That(prog).Contains("public string Title { get; init; } = default!;");
         // L-07 (#558): the DTO and the POST endpoint read one fact, in DECLARATION
         // order — Title was declared before Genre. The expected order changed here
@@ -397,7 +397,7 @@ public class DslCompilerSqliteOracleTests {
         await Assert.That(result.Success).IsTrue();
 
         var prog = result.Files!.Single(f => f.FileName == "Program.cs").Source;
-        await Assert.That(prog).Contains("internal record CategorizeDto\n{\n    [EnumDataType(typeof(Genre))]\n    public Genre Genre { get; init; }");
+        await Assert.That(prog).Contains("internal record CategorizeDto\n{\n    [EnumDataType(typeof(Genre))]\n    public Demo.Genre Genre { get; init; }");
     }
 
     [Test]

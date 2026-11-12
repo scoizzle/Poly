@@ -1,7 +1,7 @@
 #nullable enable
 using Poly.Runtime;
 
-public class Product : Poly.Runtime.IActionScoped
+internal class Product : Poly.Runtime.IActionScoped
 {
     private Product() { }
     private Product(string sku, string name, decimal listPrice)
@@ -13,7 +13,7 @@ public class Product : Poly.Runtime.IActionScoped
     public string Sku { get; private set; } = default!;
     public string Name { get; private set; } = default!;
     public decimal ListPrice { get; private set; }
-    public static DomainResult<Product> Create(string sku, string name, decimal listPrice, Poly.Runtime.IStoragePort db)
+    internal static DomainResult<Product> Create(string sku, string name, decimal listPrice, Poly.Runtime.IStoragePort db)
     {
         if (string.IsNullOrEmpty(sku))
         {

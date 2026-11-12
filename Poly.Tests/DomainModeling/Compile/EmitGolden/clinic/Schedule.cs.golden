@@ -1,7 +1,7 @@
 #nullable enable
 using Poly.Runtime;
 
-public class Schedule : Poly.Runtime.IActionScoped
+internal class Schedule : Poly.Runtime.IActionScoped
 {
     private Schedule() { }
     private Schedule(string day, string state = "")
@@ -11,12 +11,12 @@ public class Schedule : Poly.Runtime.IActionScoped
     }
     public string Day { get; private set; } = default!;
     public string State { get; private set; } = default!;
-    public DomainResult Open()
+    internal DomainResult Open()
     {
         this.State = "open";
         return DomainResult.Success();
     }
-    public static DomainResult<Schedule> Create(string day, string state = "")
+    internal static DomainResult<Schedule> Create(string day, string state = "")
     {
         if (string.IsNullOrEmpty(day))
         {

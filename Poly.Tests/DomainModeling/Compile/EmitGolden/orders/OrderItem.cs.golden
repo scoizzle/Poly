@@ -1,7 +1,7 @@
 #nullable enable
 using Poly.Runtime;
 
-public class OrderItem : Poly.Runtime.IActionScoped
+internal class OrderItem : Poly.Runtime.IActionScoped
 {
     private OrderItem() { }
     private OrderItem(string sku, long qty, Order? order = null)
@@ -13,7 +13,7 @@ public class OrderItem : Poly.Runtime.IActionScoped
     public string Sku { get; private set; } = default!;
     public long Qty { get; private set; }
     public Order? Order { get; private set; }
-    public static DomainResult<OrderItem> Create(string sku, long qty, Order? order = null)
+    internal static DomainResult<OrderItem> Create(string sku, long qty, Order? order = null)
     {
         if (string.IsNullOrEmpty(sku))
         {

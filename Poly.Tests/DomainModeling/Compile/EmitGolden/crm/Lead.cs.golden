@@ -1,14 +1,14 @@
 #nullable enable
 using Poly.Runtime;
 
-public enum LeadStage
+internal enum LeadStage
 {
     New = 0,
     Converted = 1,
     Dead = 2
 }
 
-public class Lead : Poly.Runtime.IActionScoped
+internal class Lead : Poly.Runtime.IActionScoped
 {
     private Lead() { }
     private Lead(string name, string email, string company, Account? account = null)
@@ -24,7 +24,7 @@ public class Lead : Poly.Runtime.IActionScoped
     public string Company { get; private set; } = default!;
     public Account? Account { get; private set; }
     public LeadStage CurrentStage { get; private set; }
-    public DomainResult Convert()
+    internal DomainResult Convert()
     {
         if (this.CurrentStage != LeadStage.New)
         {
@@ -37,7 +37,7 @@ public class Lead : Poly.Runtime.IActionScoped
         this.CurrentStage = LeadStage.Converted;
         return DomainResult.Success();
     }
-    public DomainResult Disqualify()
+    internal DomainResult Disqualify()
     {
         if (this.CurrentStage != LeadStage.New)
         {
@@ -47,7 +47,7 @@ public class Lead : Poly.Runtime.IActionScoped
         return DomainResult.Success();
     }
     public bool HasAccount() => this.Account != null;
-    public static DomainResult<Lead> Create(string name, string email, string company, Poly.Runtime.IStoragePort db, Account? account = null)
+    internal static DomainResult<Lead> Create(string name, string email, string company, Poly.Runtime.IStoragePort db, Account? account = null)
     {
         if (string.IsNullOrEmpty(name))
         {

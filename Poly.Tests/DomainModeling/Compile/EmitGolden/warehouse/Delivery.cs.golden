@@ -1,7 +1,7 @@
 #nullable enable
 using Poly.Runtime;
 
-public class Delivery : Poly.Runtime.IActionScoped
+internal class Delivery : Poly.Runtime.IActionScoped
 {
     private Delivery() { }
     private Delivery(string reference, long weight, string notes = "", Truck? truck = null)
@@ -15,7 +15,7 @@ public class Delivery : Poly.Runtime.IActionScoped
     public long Weight { get; private set; }
     public string Notes { get; private set; } = default!;
     public Truck? Truck { get; private set; }
-    public DomainResult Confirm(string notes)
+    internal DomainResult Confirm(string notes)
     {
         var assignValue0 = notes;
         if (System.String.IsNullOrEmpty(assignValue0))
@@ -25,7 +25,7 @@ public class Delivery : Poly.Runtime.IActionScoped
         this.Notes = assignValue0;
         return DomainResult.Success();
     }
-    public static DomainResult<Delivery> Create(string reference, long weight, string notes = "", Truck? truck = null)
+    internal static DomainResult<Delivery> Create(string reference, long weight, string notes = "", Truck? truck = null)
     {
         if (string.IsNullOrEmpty(reference))
         {

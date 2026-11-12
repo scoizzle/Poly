@@ -118,7 +118,7 @@ static async System.Threading.Tasks.Task SeedAsync(TDbCtx db)
 app.Run();
 
 
-public record BookDto
+internal record BookDto
 {
     [Range(5, 50)]
     public long Pages { get; init; }
@@ -126,12 +126,12 @@ public record BookDto
     public long Stock { get; init; }
 }
 
-public record RestockDto
+internal record RestockDto
 {
     public long Amount { get; init; }
 }
 
-public record EitherDto
+internal record EitherDto
 {
     public long Amount { get; init; }
 }

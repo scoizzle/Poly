@@ -3,13 +3,13 @@ using System;
 
 using Poly.Runtime;
 
-public enum ActivityStage
+internal enum ActivityStage
 {
     Open = 0,
     Done = 1
 }
 
-public class Activity : Poly.Runtime.IActionScoped
+internal class Activity : Poly.Runtime.IActionScoped
 {
     private Activity() { }
     private Activity(string subject, Opportunity? opportunity = null, DateOnly? dueOn = null)
@@ -23,7 +23,7 @@ public class Activity : Poly.Runtime.IActionScoped
     public DateOnly DueOn { get; private set; }
     public Opportunity? Opportunity { get; private set; }
     public ActivityStage CurrentStage { get; private set; }
-    public DomainResult Snooze()
+    internal DomainResult Snooze()
     {
         if (this.CurrentStage != ActivityStage.Open)
         {
@@ -32,7 +32,7 @@ public class Activity : Poly.Runtime.IActionScoped
         this.DueOn = this.DueOn.AddDays((int)7L);
         return DomainResult.Success();
     }
-    public DomainResult Complete()
+    internal DomainResult Complete()
     {
         if (this.CurrentStage != ActivityStage.Open)
         {
@@ -41,7 +41,7 @@ public class Activity : Poly.Runtime.IActionScoped
         this.CurrentStage = ActivityStage.Done;
         return DomainResult.Success();
     }
-    public static DomainResult<Activity> Create(string subject, Opportunity? opportunity = null, DateOnly? dueOn = null)
+    internal static DomainResult<Activity> Create(string subject, Opportunity? opportunity = null, DateOnly? dueOn = null)
     {
         if (string.IsNullOrEmpty(subject))
         {

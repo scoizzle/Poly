@@ -1,7 +1,7 @@
 #nullable enable
 using Poly.Runtime;
 
-public class RoomType : Poly.Runtime.IActionScoped
+internal class RoomType : Poly.Runtime.IActionScoped
 {
     private RoomType() { }
     private RoomType(string name, decimal nightlyRate, long maxOccupancy)
@@ -13,7 +13,7 @@ public class RoomType : Poly.Runtime.IActionScoped
     public string Name { get; private set; } = default!;
     public decimal NightlyRate { get; private set; }
     public long MaxOccupancy { get; private set; }
-    public static DomainResult<RoomType> Create(string name, decimal nightlyRate, long maxOccupancy)
+    internal static DomainResult<RoomType> Create(string name, decimal nightlyRate, long maxOccupancy)
     {
         if (string.IsNullOrEmpty(name))
         {

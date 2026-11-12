@@ -118,19 +118,19 @@ static async System.Threading.Tasks.Task SeedAsync(TDbCtx db)
 app.Run();
 
 
-public record MeterDto
+internal record MeterDto
 {
     [Range(0, 100)]
     public long Qty { get; init; }
 }
 
-public record BumpDto
+internal record BumpDto
 {
     [Range(0, 100)]
     public long Amount { get; init; }
 }
 
-public record ShipDto
+internal record ShipDto
 {
     public long Amt { get; init; }
 }

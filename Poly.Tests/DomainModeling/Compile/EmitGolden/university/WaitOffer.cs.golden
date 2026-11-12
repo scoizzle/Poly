@@ -3,14 +3,14 @@ using System.Collections.Generic;
 
 using Poly.Runtime;
 
-public enum WaitOfferStage
+internal enum WaitOfferStage
 {
     Queued = 0,
     Offered = 1,
     Cancelled = 2
 }
 
-public class WaitOffer : Poly.Runtime.IActionScoped
+internal class WaitOffer : Poly.Runtime.IActionScoped
 {
     private List<Section>? _sectionWaitlistOfferedSubscribers;
     private List<Section>? _sectionWaitlistCancelledSubscribers;
@@ -25,7 +25,7 @@ public class WaitOffer : Poly.Runtime.IActionScoped
     public Student? Student { get; private set; }
     public Section? Section { get; private set; }
     public WaitOfferStage CurrentStage { get; private set; }
-    public DomainResult Seat()
+    internal DomainResult Seat()
     {
         if (this.CurrentStage != WaitOfferStage.Queued)
         {
@@ -35,7 +35,7 @@ public class WaitOffer : Poly.Runtime.IActionScoped
         this.NotifyOfferedSubscribers();
         return DomainResult.Success();
     }
-    public DomainResult Cancel()
+    internal DomainResult Cancel()
     {
         if (this.CurrentStage == WaitOfferStage.Queued || this.CurrentStage == WaitOfferStage.Offered)
         {
@@ -112,7 +112,7 @@ public class WaitOffer : Poly.Runtime.IActionScoped
             this.ExitNotifyCascade();
         }
     }
-    public static DomainResult<WaitOffer> Create(Student? student = null, Section? section = null)
+    internal static DomainResult<WaitOffer> Create(Student? student = null, Section? section = null)
     {
         var created = new WaitOffer(student, section);
         if (section != null)

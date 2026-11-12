@@ -108,3 +108,25 @@ Five properties the package holds, so a later slice does not re-derive them:
 **Versioning.** An additive member on this package (another status arm for a future kind, another
 `{ get; }` on `IVersioned`) needs no new ADR - the R-09 A1 precedent. A new *type*, a changed
 return type or a second table does.
+
+## Addendum: the failure-construction seam (#677 R-04, #557)
+
+Every lowered failure is built by `FailureLowering` and carries its kind, element path and guard. Per site:
+
+| Site | Kind | `ElementPath` | `Guard` |
+|------|------|---------------|---------|
+| create/assign constraint leaf | `Required`, `Range`, `Length`, `Pattern`, `Enum`; an `equals` check is `Constraint` (the enum is closed; 400 matches today's status) | `Entity.Property` | none |
+| storage unique (create guard, assign rewrite) | `Unique` | `Entity.Property` | none |
+| `EnsureUnique` without the storage port | `Constraint`, not `Unique`: a missing port is not a duplicate key | `Entity` (the property is a run-time parameter) | none |
+| stage gate | `Stage` | `Entity.Action` | the stage name |
+| stage fallthrough | `Stage` | `Entity.Action` | none |
+| `require P` / `require not P` / stage `require` | `Policy` | `Entity.Action` | the real policy name (`require not P` carries `P`, never `not_P`) |
+| unlinked path-prefix hop, unlinked invoke target | `Required` | `Entity.Rel` | none |
+| occupied to-one link | `Link` | `Entity.Rel` | none |
+| rewrap of a callee (create-in, invoke, `for`, contract adapter) | the callee's | `Caller.Action` prepended with `At` | the callee's |
+
+**Path rule.** The leaf names the entity that owns the member. Only a rewrap of a callee prepends `Caller.Action`, so a nested range failure is `Product.Hold.Reservation.Qty`. The `Create{Nav}` helper and the entity's own `EnsureUnique` are not callees and add no prefix. A unique assign therefore differs by storage in kind and path (`Constraint` at `Widget` when `EnsureUnique` itself runs, `Unique` at `Widget.Sku` after the storage rewrite) but never by an action prefix; `UniqueAssign_ElementPath_HasNoCallerPrefix_BeforeAndAfterTheStorageRewrite` pins it through `At`.
+
+**`Guard` per kind** is pinned by `FailureTypingTests`: `Policy` and `Stage` carry one; every other kind carries none, so X-01's `FailedGuards` derived from `Failure?.Guard` is correct for them. For the path-prefix require case `Guard` is null and X-01 must keep the "all action policies" behaviour it has today.
+
+**Void bodies** (constructor, `entry`, handler) keep `throw new ConstraintFailureException(message)` through `FailureLowering.Throw` / `ThrowFrom`; the kind is dropped there and L-04 deletes both. **`Poly` shadowing:** the factory receiver prints as `Poly.Runtime.DomainFailure` from expression position, so a member or type named `Poly` breaks any domain that prints a constraint failure. `Poly` is reserved (`ReservedNames`), as is `System`; `DomainResult` is reserved as an action parameter only for void actions. Not in scope: `Stages.cs:77` and the cascade overflow stay `InvalidOperationException`; `ParityOutcome.FailureKind` is populated by X-01, not here; #622's text belongs to M-09.

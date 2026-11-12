@@ -69,14 +69,14 @@ public sealed partial class DomainToCSharpExporter {
     /// as a synthetic <c>not_PolicyName</c> policy on the action), we strip the prefix and
     /// invert the condition so the generated code calls the real entity-level method.
     ///
-    /// All guards return <c>DomainResult.Failure("message")</c> (void) or
-    /// <c>DomainResult&lt;T&gt;.Failure("message")</c> (typed) instead of throwing
+    /// All guards return <c>DomainResult.Failure(DomainFailure.&lt;Kind&gt;(...))</c> (void) or
+    /// <c>DomainResult&lt;T&gt;.Failure(DomainFailure.&lt;Kind&gt;(...))</c> (typed) instead of throwing
     /// or returning default — enabling clean pattern matching at call sites.
     ///
     /// Generated patterns:
-    ///   Stage-scoped:          <c>return DomainResult.Failure("'CheckOut' is not valid for stage 'Active'...");</c>
-    ///   <c>require AtLimit</c>     → <c>return DomainResult.Failure("Policy 'AtLimit' not satisfied.");</c>
-    ///   <c>require not AtLimit</c> → <c>return DomainResult.Failure("Policy 'AtLimit' not satisfied.");</c>
+    ///   Stage-scoped:          <c>return DomainResult.Failure(DomainFailure.Stage("'CheckOut' requires stage 'Active' on entity 'Patron'.", "Patron.CheckOut", "Active"));</c>
+    ///   <c>require AtLimit</c>     → <c>return DomainResult.Failure(DomainFailure.Policy("'Act' blocked by policy 'AtLimit'.", "Entity.Act", "AtLimit"));</c>
+    ///   <c>require not AtLimit</c> → the same call: Guard is the real policy name, never <c>not_AtLimit</c>.
     ///
     /// Returns a <see cref="Block"/> with at least an empty body — never null —
     /// so the C# generator emits <c>{ }</c> rather than an invalid semicolon.
@@ -118,7 +118,7 @@ public sealed partial class DomainToCSharpExporter {
             nodes.Add(new Invoke(new Member(new ThisReference(), "ClearAutomaticStageChain")));
 
         // Emit stage guard for stage-scoped actions.
-        // Returns DomainResult[<T>].Failure("'CheckOut' requires stage 'Active' on entity 'Patron'.")
+        // Returns DomainResult[<T>].Failure(DomainFailure.Stage("'CheckOut' requires stage 'Active' on entity 'Patron'.", "Patron.CheckOut", "Active"))
         if (sourceStageName is not null && stageEnumTypeName is not null) {
             nodes.Add(new IfStatement(
                 new NotEqual(
@@ -268,7 +268,7 @@ public sealed partial class DomainToCSharpExporter {
 
     /// <summary>
     /// For each to-one path-prefix hop in a require policy expression, emit
-    /// <c>if (this.Rel == null) return DomainResult.Failure("'Action' requires a linked 'rel'…")</c>
+    /// <c>if (this.Rel == null) return DomainResult.Failure(DomainFailure.Required("'Action' requires a linked 'rel'…", "Entity.rel"))</c>
     /// before the policy bool is called. Multi-hop guards each hop in order;
     /// the entity clause names the subject entity of that hop.
     /// </summary>

@@ -91,8 +91,14 @@ Open or newly decided, named by the contract (an open item names the slice that 
 
 - **Mixed `Number op Decimal` result type** — decided by T-03b: `Decimal`. `Decimal + Int64` resolves to the
   declared `decimal.op_Addition(decimal, decimal)` because `Int64` converts implicitly to `Decimal`.
-- **`Float64 op Decimal`** — decided by T-03b: none. Neither type converts implicitly to the other, which is C#
-  and the VM; the domain analyzer accepts it today (the ledger names T-07 as the owner).
+- **`Float64 op Decimal`** — decided by T-03b: none. Neither type converts implicitly to the other, which is C#.
+  Nothing else agrees today (the ledger): the lowered-tree analysis types it `Decimal` (T-17, T-18) and the ABI
+  executes it as `Decimal` (T-21); the domain DSL cannot state a Float operand, so its analyzer column is n/a.
+- **Known limit: the built-in set is closed** (owned by T-24). The contract answers none for cells C# defines
+  outside {Int32, Int64, Float64} conversions and {Int32, Int64, Float64, Boolean, String} operators: small-integer
+  and unsigned arithmetic and mixes, Float32 arithmetic and conversions, Char, string concatenation with a
+  non-string operand; there are no `OperatorKind`s for shift, unary minus, modulo or bitwise. CLR-declared
+  members (`decimal`'s conversions, Float32's comparisons) stay open through reflection.
 - **`Text` operators** — decided by T-03b: `Text + Text` is `Text`, equality is defined, and ordering and
   subtraction are none (#631 is T-07's).
 - **Implicit `Number -> Decimal` widening** — decided by T-03: `Assign(Number -> Decimal)` is `Widening`,

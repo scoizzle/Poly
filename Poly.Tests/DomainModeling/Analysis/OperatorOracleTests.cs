@@ -318,15 +318,45 @@ internal static class OperatorOracle {
 
 /// <summary>
 /// An owner row for a divergence, matched by kind, operand names, operator and a fragment of the reason.
-/// <c>*</c> matches anything. Every divergence needs a rule and every rule needs a divergence: a stale rule fails.
+/// <c>*</c> matches anything. <see cref="ExpectedCount"/> is the number of divergences the row owns: a fixing slice
+/// edits the number or deletes the row, and growth fails as surely as shrinkage.
 /// </summary>
-internal sealed record LedgerRule(OracleKind Kind, string Lefts, string Ops, string Rights, string ReasonContains, string Owner) {
+internal sealed record LedgerRule(OracleKind Kind, string Lefts, string Ops, string Rights, string ReasonContains, string Owner, int ExpectedCount) {
     public bool Matches(OracleCell cell, OracleDivergence divergence) =>
         divergence.Kind == Kind
         && In(Lefts, cell.Left) && In(Ops, cell.Op.ToString()) && In(Rights, cell.Right ?? "-")
         && divergence.Reason.Contains(ReasonContains, StringComparison.Ordinal);
 
+    public string Describe() => $"{Kind} [{Lefts}] [{Ops}] [{Rights}] \"{ReasonContains}\" -> {Owner}";
+
     private static bool In(string set, string value) => set == "*" || set.Split(',').Contains(value);
+}
+
+internal static class LedgerCheck {
+    /// <summary>
+    /// The ratchet: every divergence has exactly one owning rule, and every rule owns exactly its expected count.
+    /// Returns the problems; empty means the ledger is exact.
+    /// </summary>
+    public static IReadOnlyList<string> Compare(IEnumerable<(OracleCell Cell, OracleDivergence Divergence)> divergences, IReadOnlyList<LedgerRule> rules) {
+        var problems = new List<string>();
+        var counts = rules.ToDictionary(static rule => rule, static _ => 0);
+        foreach (var (cell, divergence) in divergences) {
+            var owners = rules.Where(rule => rule.Matches(cell, divergence)).ToArray();
+            if (owners.Length == 0)
+                problems.Add($"unowned: {cell.Key}: {divergence.Reason}");
+            else if (owners.Length > 1)
+                problems.Add($"claimed by {owners.Length} rules: {cell.Key}: {divergence.Reason}");
+            foreach (var owner in owners)
+                counts[owner]++;
+        }
+        foreach (var rule in rules) {
+            if (rule.ExpectedCount <= 0)
+                problems.Add($"rule expects no cells (delete it): {rule.Describe()}");
+            else if (counts[rule] != rule.ExpectedCount)
+                problems.Add($"rule {rule.Describe()}: expected {rule.ExpectedCount}, matched {counts[rule]}");
+        }
+        return problems;
+    }
 }
 
 /// <summary>
@@ -340,69 +370,65 @@ public class OperatorOracleTests {
     private const string Ordering = "LessThan,LessThanOrEqual,GreaterThan,GreaterThanOrEqual";
     private const string Arithmetic = "Add,Subtract,Multiply,Divide";
 
+    private const string AllButOrder = "Number,Int32,Decimal,Float,Text,Boolean,Date,Time,DateTime,Duration,Uuid,Status,Money";
+
     private static readonly LedgerRule[] AnalyzerRules = [
         // The domain analyzer types an entity operand as Unknown and so accepts everything beside it.
-        new(OracleKind.AnalyzerDisagrees, "Order", "*", "*", "analyzer accepts", "T-06 (Unknown operands: R1)"),
-        new(OracleKind.AnalyzerDisagrees, "*", "*", "Order", "analyzer accepts", "T-06 (Unknown operands: R1)"),
+        new(OracleKind.AnalyzerDisagrees, "Order", "*", "*", "analyzer accepts", "T-06 (Unknown operands: R1)", 107),
+        new(OracleKind.AnalyzerDisagrees, AllButOrder, "*", "Order", "analyzer accepts", "T-06 (Unknown operands: R1)", 96),
         // Enum member literals compared as Text, and enum ordering.
-        new(OracleKind.AnalyzerDisagrees, "Status,Text", Comparisons, "Status,Text", "analyzer accepts", "T-06 (enum member literals)"),
-        new(OracleKind.AnalyzerDisagrees, "Status", Ordering, "Status", "analyzer accepts", "T-07 (ordering legality)"),
+        new(OracleKind.AnalyzerDisagrees, "Status", Comparisons, "Text", "analyzer accepts", "T-06 (enum member literals)", 6),
+        new(OracleKind.AnalyzerDisagrees, "Text", Comparisons, "Status", "analyzer accepts", "T-06 (enum member literals)", 6),
+        new(OracleKind.AnalyzerDisagrees, "Status", Ordering, "Status", "analyzer accepts", "T-07 (ordering legality)", 4),
         // Same-category pairs the analyzer accepts and no platform defines.
-        new(OracleKind.AnalyzerDisagrees, "Text,Boolean", Ordering, "Text,Boolean", "analyzer accepts", "T-07 (#631 ordering legality)"),
+        new(OracleKind.AnalyzerDisagrees, "Text,Boolean", Ordering, "Text,Boolean", "analyzer accepts", "T-07 (#631 ordering legality)", 8),
         // Temporal cells: the analyzer's offset permission and its rejection of CLR-defined duration arithmetic.
-        new(OracleKind.AnalyzerDisagrees, "Date,DateTime", "Add,Subtract", "Date,DateTime,Decimal,Number,Duration", "analyzer accepts", "T-10 (temporal offset permission)"),
-        new(OracleKind.AnalyzerDisagrees, "Duration,Time,Number", "*", "Duration,Time,Number", "analyzer rejects", "T-10 (temporal operands the CLR defines)")
+        new(OracleKind.AnalyzerDisagrees, "Date,DateTime", "Add,Subtract", "Date,DateTime,Decimal,Number,Duration", "analyzer accepts", "T-10 (temporal offset permission)", 11),
+        new(OracleKind.AnalyzerDisagrees, "Duration,Time,Number", "*", "Duration,Time,Number", "analyzer rejects", "T-10 (temporal operands the CLR defines)", 7)
     ];
 
+    // Float64 x Decimal and every Decimal-with-X cell the lowered analysis types: the domain DSL has no Float, so
+    // the analyzer column is n/a for those; the owners are the lowered analysis (T-17, T-18) and the ABI (T-21).
     private static readonly LedgerRule[] LoweredRules = [
-        new(OracleKind.LoweredAnalysisDisagrees, "*", "*", "*", "analysis error on a defined cell", "T-18 (SyntaxTypeCompatibilityAnalyzer arithmetic rules; temporal operands with T-10)"),
-        new(OracleKind.LoweredAnalysisDisagrees, "*", "*", "*", "typed Decimal", "T-17 (PromoteNumeric / ResolveAddType)"),
-        new(OracleKind.LoweredAnalysisDisagrees, "*", "Add", "*", "typed String", "T-17 (ResolveAddType: any string operand makes Add a string)"),
-        new(OracleKind.LoweredAnalysisDisagrees, "*", "Add,Subtract", "*", "typed DateOnly", "T-10 (RewriteDateOffset)"),
-        new(OracleKind.LoweredAnalysisDisagrees, "*", "Add,Subtract", "*", "typed DateTime", "T-10 (RewriteDateOffset)"),
-        new(OracleKind.LoweredAnalysisDisagrees, "*", Comparisons, "*", "typed Boolean", "T-18 (Compatible accepts same-category and Float-with-Decimal pairs)")
+        new(OracleKind.LoweredAnalysisDisagrees, "*", "*", "*", "analysis error on a defined cell", "T-18 (SyntaxTypeCompatibilityAnalyzer arithmetic rules; temporal operands with T-10)", 16),
+        new(OracleKind.LoweredAnalysisDisagrees, "*", "*", "*", "typed Decimal", "T-17 (PromoteNumeric / ResolveAddType)", 62),
+        new(OracleKind.LoweredAnalysisDisagrees, "*", "Add", "*", "typed String", "T-17 (ResolveAddType: any string operand makes Add a string)", 20),
+        new(OracleKind.LoweredAnalysisDisagrees, "*", "Add,Subtract", "*", "typed DateOnly", "T-10 (RewriteDateOffset)", 6),
+        new(OracleKind.LoweredAnalysisDisagrees, "*", "Add,Subtract", "*", "typed DateTime", "T-10 (RewriteDateOffset)", 6),
+        new(OracleKind.LoweredAnalysisDisagrees, "*", Comparisons, "*", "typed Boolean", "T-18 (Compatible accepts same-category and Float-with-Decimal pairs)", 20)
     ];
 
     private static readonly LedgerRule[] AbiRules = [
-        new(OracleKind.AbiDivergesFromTree, "*", "*", "*", "executes an undefined cell", "T-21 (the ABI must reject what the tree does not define)"),
-        new(OracleKind.AbiDivergesFromTree, "*", "*", "*", "unstated conversion", "T-21 (T-04 and Lower state the conversion node; the emitter stops converting)")
+        new(OracleKind.AbiDivergesFromTree, "*", "*", "*", "executes an undefined cell", "T-21 (the ABI must reject what the tree does not define)", 110),
+        new(OracleKind.AbiDivergesFromTree, "*", "*", "*", "unstated conversion", "T-21 (T-04 and Lower state the conversion node; the emitter stops converting)", 100)
     ];
 
     private static readonly LedgerRule[] RejectedDefinedRules = [];
 
-    private static async Task AssertOwned(OracleKind kind, LedgerRule[] rules) {
+    private static async Task AssertOwned(OracleKind kind, LedgerRule[] rules, int expectedTotal) {
         var (cells, _) = OperatorOracle.Run.Value;
-        var unowned = new List<string>();
-        var used = new HashSet<LedgerRule>();
-        foreach (var cell in cells) {
-            foreach (var divergence in cell.Divergences.Where(d => d.Kind == kind)) {
-                var matching = rules.Where(rule => rule.Matches(cell, divergence)).ToArray();
-                if (matching.Length == 0)
-                    unowned.Add($"{cell.Key}: {divergence.Reason}");
-                foreach (var rule in matching)
-                    used.Add(rule);
-            }
-        }
-        var stale = rules.Where(rule => !used.Contains(rule)).Select(static rule => $"{rule.Lefts} {rule.Ops} {rule.Rights} [{rule.ReasonContains}] -> {rule.Owner}").ToArray();
-        await Assert.That(unowned).IsEmpty();
-        await Assert.That(stale).IsEmpty();
+        var divergences = cells.SelectMany(cell => cell.Divergences.Where(d => d.Kind == kind).Select(d => (cell, d))).ToArray();
+        await Assert.That(LedgerCheck.Compare(divergences, rules)).IsEmpty();
+        // The kind total is the sum of its rules, and both are pinned.
+        await Assert.That(divergences.Length).IsEqualTo(rules.Sum(static rule => rule.ExpectedCount));
+        await Assert.That(divergences.Length).IsEqualTo(expectedTotal);
     }
 
     [Test]
     public async Task AnalyzerDisagrees_EveryDivergenceIsOwned_AndNoEntryIsStale() =>
-        await AssertOwned(OracleKind.AnalyzerDisagrees, AnalyzerRules);
+        await AssertOwned(OracleKind.AnalyzerDisagrees, AnalyzerRules, 245);
 
     [Test]
     public async Task LoweredAnalysisDisagrees_EveryDivergenceIsOwned_AndNoEntryIsStale() =>
-        await AssertOwned(OracleKind.LoweredAnalysisDisagrees, LoweredRules);
+        await AssertOwned(OracleKind.LoweredAnalysisDisagrees, LoweredRules, 130);
 
     [Test]
     public async Task AbiDivergesFromTree_EveryDivergenceIsOwned_AndNoEntryIsStale() =>
-        await AssertOwned(OracleKind.AbiDivergesFromTree, AbiRules);
+        await AssertOwned(OracleKind.AbiDivergesFromTree, AbiRules, 210);
 
     [Test]
     public async Task AbiRejectsDefined_EveryDivergenceIsOwned_AndNoEntryIsStale() =>
-        await AssertOwned(OracleKind.AbiRejectsDefined, RejectedDefinedRules);
+        await AssertOwned(OracleKind.AbiRejectsDefined, RejectedDefinedRules, 0);
 
     [Test]
     public async Task Ledger_CoversTheWholeGrid_WithinBudget_AndChecksEveryDefinedValue() {
@@ -450,5 +476,62 @@ public class OperatorOracleTests {
         await Assert.That(cell.Tree).IsEqualTo("none");
         await Assert.That(cell.Lowered).IsEqualTo("Decimal");
         await Assert.That(cell.Abi).StartsWith("Decimal;");
+    }
+
+    [Test]
+    public async Task AnalyzerColumn_NeverSwallowsAnException() {
+        // An exception in the analyzer column is a finding, not a blank cell.
+        var errors = OperatorOracle.Run.Value.Cells.Where(static c => c.Analyzer.StartsWith("error:", StringComparison.Ordinal))
+            .Select(static c => $"{c.Key}: {c.Analyzer}").ToArray();
+        await Assert.That(errors).IsEmpty();
+    }
+
+    // ---- the ratchet itself, on synthetic input ----
+
+    private static OracleCell SyntheticCell(string left, OperatorKind op, string right) =>
+        new(left, op, right, "none", "n/a", "n/a", "n/a", []);
+
+    private static (OracleCell, OracleDivergence) Item(string left, OperatorKind op, string right, string reason) =>
+        (SyntheticCell(left, op, right), new OracleDivergence(OracleKind.AbiDivergesFromTree, reason));
+
+    private static LedgerRule Rule(string lefts, string reason, int count) =>
+        new(OracleKind.AbiDivergesFromTree, lefts, "*", "*", reason, "T-99", count);
+
+    [Test]
+    public async Task Ratchet_ExactCounts_HaveNoProblem() {
+        var items = new[] { Item("A", OperatorKind.Add, "B", "x"), Item("A", OperatorKind.Add, "C", "x"), Item("D", OperatorKind.Add, "C", "y") };
+        await Assert.That(LedgerCheck.Compare(items, [Rule("A", "x", 2), Rule("D", "y", 1)])).IsEmpty();
+    }
+
+    [Test]
+    public async Task Ratchet_OneMoreMatchingCell_FailsNamingTheRuleAndBothCounts() {
+        var items = new[] { Item("A", OperatorKind.Add, "B", "x"), Item("A", OperatorKind.Add, "C", "x"), Item("A", OperatorKind.Add, "D", "x") };
+        var problems = LedgerCheck.Compare(items, [Rule("A", "x", 2)]);
+        await Assert.That(problems.Count).IsEqualTo(1);
+        await Assert.That(problems[0]).Contains("-> T-99").And.Contains("expected 2").And.Contains("matched 3");
+    }
+
+    [Test]
+    public async Task Ratchet_OneFewerMatchingCell_Fails() {
+        var items = new[] { Item("A", OperatorKind.Add, "B", "x") };
+        var problems = LedgerCheck.Compare(items, [Rule("A", "x", 2)]);
+        await Assert.That(problems.Count).IsEqualTo(1);
+        await Assert.That(problems[0]).Contains("expected 2").And.Contains("matched 1");
+    }
+
+    [Test]
+    public async Task Ratchet_CellMatchingTwoRules_Fails() {
+        var items = new[] { Item("A", OperatorKind.Add, "B", "x") };
+        var problems = LedgerCheck.Compare(items, [Rule("A", "x", 1), Rule("*", "x", 1)]);
+        await Assert.That(problems.Any(static p => p.StartsWith("claimed by 2 rules", StringComparison.Ordinal))).IsTrue();
+    }
+
+    [Test]
+    public async Task Ratchet_UnownedDivergence_AndStaleRule_Fail() {
+        var items = new[] { Item("A", OperatorKind.Add, "B", "x") };
+        var problems = LedgerCheck.Compare(items, [Rule("Z", "x", 1)]);
+        await Assert.That(problems.Any(static p => p.StartsWith("unowned:", StringComparison.Ordinal))).IsTrue();
+        await Assert.That(problems.Any(static p => p.Contains("expected 1, matched 0", StringComparison.Ordinal))).IsTrue();
+        await Assert.That(LedgerCheck.Compare([], [Rule("Z", "x", 0)]).Count).IsEqualTo(1);
     }
 }

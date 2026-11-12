@@ -33,6 +33,23 @@ public static class TypeDefinitionExtensions {
                         i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IEnumerable<>))));
     }
 
+    /// <summary>
+    /// The one type-identity notion: reference identity, or two synthetic collections of one kind and element.
+    /// Each resolve of a synthetic collection builds a fresh instance, so reference equality alone never matches
+    /// an omitted collection argument. <see cref="IsAssignableFrom"/>, <c>GetOperator</c> and <c>GetCommonType</c> share it.
+    /// </summary>
+    internal static bool IsSameType(ITypeDefinition a, ITypeDefinition b) =>
+        ReferenceEquals(a, b) || SyntheticCollectionsMatch(a, b);
+
+    private static bool SyntheticCollectionsMatch(ITypeDefinition to, ITypeDefinition from) {
+        if (to is not AstCollectionTypeDefinition left
+            || from is not AstCollectionTypeDefinition right)
+            return false;
+        return left.Kind == right.Kind
+            && string.Equals(left.ElementType.Name, right.ElementType.Name, StringComparison.Ordinal)
+            && string.Equals(left.ElementType.Namespace, right.ElementType.Namespace, StringComparison.Ordinal);
+    }
+
     extension(ITypeDefinition typeDefinition) {
         /// <summary>
         /// Gets the best-matching method overloads for the given name and argument types.
@@ -174,7 +191,7 @@ public static class TypeDefinitionExtensions {
                 }
             }
 
-            if (SyntheticCollectionsMatch(typeDefinition, other))
+            if (IsSameType(typeDefinition, other))
                 return true;
 
             var current = other.BaseType;
@@ -186,18 +203,6 @@ public static class TypeDefinitionExtensions {
             if (other.Interfaces.Any(i => typeDefinition == i)) return true;
 
             return typeDefinition.GetConversionFrom(other)?.Kind is ConversionOperatorKind.Implicit;
-
-            // List<Fine> and IEnumerable<Fine> both close as one synthetic
-            // collection. Each resolve builds a fresh instance, so reference
-            // equality never matches an omitted collection argument.
-            static bool SyntheticCollectionsMatch(ITypeDefinition to, ITypeDefinition from) {
-                if (to is not AstCollectionTypeDefinition left
-                    || from is not AstCollectionTypeDefinition right)
-                    return false;
-                return left.Kind == right.Kind
-                    && string.Equals(left.ElementType.Name, right.ElementType.Name, StringComparison.Ordinal)
-                    && string.Equals(left.ElementType.Namespace, right.ElementType.Namespace, StringComparison.Ordinal);
-            }
         }
 
         /// <summary>

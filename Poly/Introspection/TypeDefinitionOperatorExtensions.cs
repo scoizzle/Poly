@@ -39,7 +39,7 @@ internal static class TypeDefinitionOperatorExtensions {
                 var applies = true;
                 for (var i = 0; i < arity && applies; i++) {
                     var parameterType = parameters[i].ParameterTypeDefinition;
-                    if (ReferenceEquals(parameterType, operands[i]))
+                    if (TypeDefinitionExtensions.IsSameType(parameterType, operands[i]))
                         continue;
                     allIdentical = false;
                     applies = parameterType.ResolveConversionFrom(operands[i]) is { Kind: ConversionOperatorKind.Implicit };
@@ -67,14 +67,14 @@ internal static class TypeDefinitionOperatorExtensions {
             foreach (var type in types) {
                 if (type is null)
                     throw new ArgumentNullException(nameof(types), "A type in the set is null.");
-                if (!distinct.Exists(d => ReferenceEquals(d, type)))
+                if (!distinct.Exists(d => TypeDefinitionExtensions.IsSameType(d, type)))
                     distinct.Add(type);
             }
 
             ITypeDefinition? common = null;
             foreach (var candidate in distinct) {
                 var everyoneConverts = distinct.TrueForAll(other =>
-                    ReferenceEquals(other, candidate)
+                    TypeDefinitionExtensions.IsSameType(other, candidate)
                     || candidate.ResolveConversionFrom(other) is { Kind: ConversionOperatorKind.Implicit });
                 if (!everyoneConverts)
                     continue;
@@ -89,7 +89,7 @@ internal static class TypeDefinitionOperatorExtensions {
     private static IEnumerable<DeclaredOperator> Declared(ITypeDefinition left, ITypeDefinition? right, OperatorKind kind) {
         foreach (var declared in left.GetOperators(kind))
             yield return declared;
-        if (right is null || ReferenceEquals(left, right))
+        if (right is null || TypeDefinitionExtensions.IsSameType(left, right))
             yield break;
         foreach (var declared in right.GetOperators(kind))
             yield return declared;
@@ -98,12 +98,12 @@ internal static class TypeDefinitionOperatorExtensions {
     /// <summary>Same declaring type, name, parameter types and result: one operator reached twice.</summary>
     private static bool SameOperator(DeclaredOperator a, DeclaredOperator b) {
         var (x, y) = (a.Signature, b.Signature);
-        if (!ReferenceEquals(x.DeclaringTypeDefinition, y.DeclaringTypeDefinition)
+        if (!TypeDefinitionExtensions.IsSameType(x.DeclaringTypeDefinition, y.DeclaringTypeDefinition)
             || !string.Equals(x.Name, y.Name, StringComparison.Ordinal)
-            || !ReferenceEquals(x.MemberTypeDefinition, y.MemberTypeDefinition))
+            || !TypeDefinitionExtensions.IsSameType(x.MemberTypeDefinition, y.MemberTypeDefinition))
             return false;
         var (px, py) = (x.Parameters.ToArray(), y.Parameters.ToArray());
         return px.Length == py.Length
-            && px.Zip(py).All(static pair => ReferenceEquals(pair.First.ParameterTypeDefinition, pair.Second.ParameterTypeDefinition));
+            && px.Zip(py).All(static pair => TypeDefinitionExtensions.IsSameType(pair.First.ParameterTypeDefinition, pair.Second.ParameterTypeDefinition));
     }
 }

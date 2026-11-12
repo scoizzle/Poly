@@ -1,5 +1,7 @@
 using System.Reflection;
 
+using Poly.Ast.Nodes;
+using Poly.Interpretation.Analysis.Semantics;
 using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Tests.DomainModeling.Analysis;
@@ -276,5 +278,51 @@ public class TypeRulesTests {
                     || ns.StartsWith("System.Linq.Expressions", StringComparison.Ordinal)
                     || ns.StartsWith("Poly.Interpretation.Vm", StringComparison.Ordinal)
                     || ns.StartsWith("Poly.Introspection.CommonLanguageRuntime", StringComparison.Ordinal));
+    }
+
+    // ---- type identity: the notion IsAssignableFrom uses (fresh synthetic collection per resolve) ----
+
+    [Test]
+    public async Task GetCommonType_TwoEqualSyntheticCollections_ReturnsThatType() {
+        var element = Clr(typeof(int));
+        ITypeDefinition first = new AstCollectionTypeDefinition(element, CollectionKind.List);
+        ITypeDefinition second = new AstCollectionTypeDefinition(element, CollectionKind.List);
+        await Assert.That(ReferenceEquals(first, second)).IsFalse();
+        var common = new[] { first, second }.GetCommonType();
+        await Assert.That(common).IsNotNull();
+        await Assert.That(ReferenceEquals(common, first) || ReferenceEquals(common, second)).IsTrue();
+        // The sibling: collections of different elements, or kinds, have no common type.
+        ITypeDefinition other = new AstCollectionTypeDefinition(Clr(typeof(long)), CollectionKind.List);
+        await Assert.That(new[] { first, other }.GetCommonType()).IsNull();
+    }
+
+    [Test]
+    public async Task GetOperator_IdentityStep_TreatsEqualSyntheticCollectionsAsIdentical() {
+        var set = new ModeledTypeSet();
+        var bag = set.Add("Bag", new MethodDefinitionNode("op_Addition", new NamedTypeReference("Bag"),
+            [new Parameter("a", new NamedTypeReference("Bag")), new Parameter("b", new CollectionTypeReference(new NamedTypeReference("Bag"), CollectionKind.List))],
+            IsStatic: true));
+        ITypeDefinition bagType = bag;
+        ITypeDefinition freshList = new AstCollectionTypeDefinition(bag, CollectionKind.List);
+        var resolution = bagType.GetOperator(OperatorKind.Add, freshList);
+        await Assert.That(resolution).IsNotNull();
+        await Assert.That(resolution!.Value.Result).IsSameReferenceAs(bag);
+    }
+
+    // ---- PlatformApplied is a fact about the built-in set, not the result (T-24 widens the set) ----
+
+    [Test]
+    public async Task Comparisons_Float32AreDeclared_Float64AndInt32ArePlatformApplied_WithIdenticalResults() {
+        var boolean = Clr(typeof(bool));
+        foreach (var (type, platform) in new[] { (typeof(float), false), (typeof(double), true), (typeof(int), true) }) {
+            var definition = Clr(type);
+            var operators = definition.GetOperators(OperatorKind.LessThan).ToArray();
+            await Assert.That(operators.Length).IsEqualTo(1);
+            await Assert.That(operators[0].PlatformApplied).IsEqualTo(platform);
+            await Assert.That(operators[0].Signature.MemberTypeDefinition).IsSameReferenceAs(boolean);
+            var resolution = definition.GetOperator(OperatorKind.LessThan, definition);
+            await Assert.That(resolution!.Value.PlatformApplied).IsEqualTo(platform);
+            await Assert.That(resolution.Value.Result).IsSameReferenceAs(boolean);
+        }
     }
 }

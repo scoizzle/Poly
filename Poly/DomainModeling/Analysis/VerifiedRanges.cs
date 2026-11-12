@@ -55,5 +55,18 @@ internal static class VerifiedRanges {
         WriteVerification.DecideRange(outer, AbstractValue.From([inner])) == ConstraintVerdict.Satisfied;
 
     private static ValueRange ToValueRange(RangeConstraint r) =>
-        new(ExactNumber.TryFrom(r.Minimum)?.ToDecimal(), ExactNumber.TryFrom(r.Maximum)?.ToDecimal());
+        new(Bound(r.Minimum), Bound(r.Maximum));
+
+    /// <summary>A declared bound is never dropped: an exact number keeps every digit, and a finite
+    /// API-built <c>double</c>/<c>float</c> that <see cref="ExactNumber"/> cannot take (a fractional
+    /// value) is read as master did, by its invariant round-trip text (V-05b fix round 1).</summary>
+    private static decimal? Bound(object? bound) {
+        if (ExactNumber.TryFrom(bound) is { } exact) return exact.ToDecimal();
+        var value = bound switch { double d => d, float f => f, _ => double.NaN };
+        return double.IsFinite(value)
+            && decimal.TryParse(value.ToString("R", System.Globalization.CultureInfo.InvariantCulture),
+                System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var parsed)
+            ? parsed
+            : null;
+    }
 }

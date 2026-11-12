@@ -342,6 +342,21 @@ public class DbContextGeneratorTests {
         await Assert.That(checks[0]).Contains("price <= 100.00");
     }
 
+    /// <summary>V-05b fix round 1: an API-built fractional double bound is not an exact number, but it is
+    /// still declared, so the CHECK keeps both sides (a dropped side is a fail-open constraint).</summary>
+    [Test]
+    public async Task CheckSql_ApiBuiltFractionalDoubleBounds_KeepBothSides() {
+        var price = new Property("Price", new DomainTypeReference("Decimal"), [new RangeConstraint(0.5d, 1.5d)]);
+        var domain = DomainTestFactory.Create("Test", [new Entity("Item", [price], [], [], [])], [])
+            with { Extensions = ["persistence"] };
+
+        var checks = CheckConstraints(domain);
+
+        await Assert.That(checks.Count).IsEqualTo(1);
+        await Assert.That(checks[0]).Contains("price >= 0.5");
+        await Assert.That(checks[0]).Contains("price <= 1.5");
+    }
+
     private static IEnumerable<Node> Descendants(Node node) {
         yield return node;
         foreach (var child in node.Children) {

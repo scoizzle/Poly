@@ -455,4 +455,95 @@ public class ExactIntervalTests {
         var add = DomainExpression.Add(DomainExpression.Literal(1m), DomainExpression.Literal(2m));
         await Assert.That(IntervalTransfers.Transfer(add, [Range(1m, 1m), Range(2m, 2m)])!.Min).IsEqualTo(3m);
     }
+
+    // ── V-05b fix round 1 ─────────────────────────────────────────────────
+
+    /// <summary>T1: a call-chain postcondition with no value range is skipped silently; the callee's own
+    /// assign already records DMCS003 for the write, so the chain adds neither a row nor a warning.</summary>
+    [Test]
+    public async Task CallChain_PostconditionWithNoValueRange_IsSkippedSilently() {
+        var result = Parse("""
+            domain Test
+            A: entity {
+              U: Number
+              D: Number range(0, 100)
+              Set: action { assign D to U + 1 }
+              Go: action { invoke Set }
+            }
+            """);
+        var chain = result.Analysis.Diagnostics
+            .Where(d => d.Message.Contains("Call-chain postcondition (Go → Set)", StringComparison.Ordinal))
+            .ToList();
+
+        await Assert.That(chain).IsEmpty();
+        await Assert.That(result.Analysis.GetVerification(result.Root).UnverifiedWrites.Count).IsEqualTo(1);
+    }
+
+    /// <summary>T3: a callee write reachable from two stage contexts of the caller is one finding, not two
+    /// (V-03 A2, one finding per effect), matching the one fact per effect.</summary>
+    [Test]
+    public async Task CallChain_CalleeWriteInTwoStageContexts_IsOneDiagnostic() {
+        var qty = new Property("Qty", new DomainTypeReference("Number"), [new RangeConstraint(0L, 100L)]);
+        var d = new Property("D", new DomainTypeReference("Number"), [new RangeConstraint(0L, 100L)]);
+        var set = new Poly.DomainModeling.Ontology.Action("Set", InvocationResult.Void, [], [
+            new AssignEffect(DomainExpression.Property("D"),
+                DomainExpression.Add(DomainExpression.Property("Qty"), DomainExpression.Literal(10L)))
+        ], []);
+        var go = new Poly.DomainModeling.Ontology.Action("Go", InvocationResult.Void, [],
+            [new InvokeActionEffect("Set", [])], []);
+        var a = new Stage("A", Actions: [], Policies: [
+            new Policy("A95", DomainExpression.LessThanOrEqual(DomainExpression.Property("Qty"), DomainExpression.Literal(95L)))
+        ], OnEntryEffects: [], OnExitEffects: []);
+        var b = new Stage("B", Actions: [], Policies: [
+            new Policy("B98", DomainExpression.LessThanOrEqual(DomainExpression.Property("Qty"), DomainExpression.Literal(98L)))
+        ], OnEntryEffects: [], OnExitEffects: []);
+        var entity = new Entity("Item", [qty, d], [set, go], [], [a, b]);
+        var domain = DomainTestFactory.Create("Test", [entity], []);
+
+        var analysis = DomainModelAnalyzer.Analyze(domain);
+
+        await Assert.That(analysis.GetActionInvariants(go)!.StageContexts().Count).IsEqualTo(2);
+        var chain = analysis.Diagnostics
+            .Where(x => x.Message.Contains("Call-chain postcondition (Go → Set)", StringComparison.Ordinal))
+            .ToList();
+        await Assert.That(chain.Count).IsEqualTo(1);
+    }
+
+    /// <summary>T5: <c>line Qty − line Qty</c> cancels through the for-each binding evaluator too (A10).</summary>
+    [Test]
+    public async Task ForEachBinding_SameBinderPropertyDifference_IsZero() {
+        var result = Parse("""
+            domain Test
+            Line: entity {
+              Qty: Number
+              T: Number range(5, 20)
+              Mark: action (amount: Number) { assign T to amount }
+            }
+            Order: entity {
+              lines: many Line
+              Go: action { for lines as line invoke line.Mark(amount: line Qty - line Qty) }
+            }
+            """);
+
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(EffectErrors(result).Count).IsGreaterThanOrEqualTo(1);
+    }
+
+    /// <summary>T5: the Mul mirror of <c>[0,0] · open</c>: <c>open · [0,0]</c> is [0,0].</summary>
+    [Test]
+    public async Task Mul_OpenByZeroOperand_IsZero() {
+        var product = Range(null, 5m).Mul(Range(0m, 0m));
+
+        await Assert.That(product).IsNotNull();
+        await Assert.That(product!.Min).IsEqualTo(0m);
+        await Assert.That(product.Max).IsEqualTo(0m);
+    }
+
+    /// <summary>T5: a non-zero operand times an open operand stays open (not 0, not unknown-as-bounded).</summary>
+    [Test]
+    public async Task Mul_NonZeroOperandByOpen_StaysOpen() {
+        var product = Range(1m, 2m).Mul(Range(null, null));
+
+        await Assert.That(product is null || (product.Min is null && product.Max is null)).IsTrue();
+    }
 }

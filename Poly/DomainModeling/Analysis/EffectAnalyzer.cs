@@ -1266,31 +1266,36 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
                 var range = post.Constraints.OfType<RangeConstraint>().FirstOrDefault();
                 if (range is null) continue;
 
+                // A postcondition with no value range is skipped: the callee's own assign already records
+                // DMCS003 for that write, so the chain adds no second finding (V-05b fix round 1).
+                if (post.ValueRange is not { } vr) continue;
+
                 // The written value is the callee's own range under the caller's narrowed context, as
-                // an exact interval (V-05b S3b): a null or both-open range carries no information (A3),
-                // and the decision is the one write procedure every assign uses.
-                var value = post.ValueRange?.ToRangeConstraint() is { } written
+                // an exact interval (V-05b S3b): a both-open range carries no information (A3), and the
+                // decision is the one write procedure every assign uses.
+                var value = vr.ToRangeConstraint() is { } written
                     ? AbstractValue.From([written])
                     : AbstractValue.Unknown;
                 var verdict = WriteVerification.DecideRange(range, value);
                 if (verdict == ConstraintVerdict.Satisfied) continue;
 
-                if (recorded.Add(post.Effect))
-                    WriteRecorder.Record(
-                        context, domain, post.Effect, post.TargetProperty,
-                        ConstraintValidation.Describe(range),
-                        verdict == ConstraintVerdict.Violated
-                            ? WriteVerdict.Violated
-                            : WriteVerdict.Unverified(
-                                UnverifiedReason.PossibleViolation,
-                                DomainModelDiagnosticCodes.EffectConstraintViolation));
+                // One finding per callee effect: the fact and the diagnostic share the dedupe (V-03 A2).
+                if (!recorded.Add(post.Effect)) continue;
 
-                var vr = post.ValueRange;
+                WriteRecorder.Record(
+                    context, domain, post.Effect, post.TargetProperty,
+                    ConstraintValidation.Describe(range),
+                    verdict == ConstraintVerdict.Violated
+                        ? WriteVerdict.Violated
+                        : WriteVerdict.Unverified(
+                            UnverifiedReason.PossibleViolation,
+                            DomainModelDiagnosticCodes.EffectConstraintViolation));
+
                 if (verdict == ConstraintVerdict.Violated) {
                     context.ReportError(
                         post.Effect,
                         $"Call-chain postcondition ({action.Name} → {post.DeclaringAction.Name}): assigned value range " +
-                        $"[{FormatBound(vr?.Min, lower: true)}, {FormatBound(vr?.Max, lower: false)}] is entirely outside constraint " +
+                        $"[{FormatBound(vr.Min, lower: true)}, {FormatBound(vr.Max, lower: false)}] is entirely outside constraint " +
                         $"{ConstraintValidation.Describe(range)} on property '{post.TargetProperty}'.",
                         DomainModelDiagnosticCodes.EffectConstraintViolation);
                     continue;
@@ -1298,7 +1303,7 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
                 context.ReportWarning(
                     post.Effect,
                     $"Call-chain postcondition ({action.Name} → {post.DeclaringAction.Name}): assigned value range " +
-                    $"[{FormatBound(vr?.Min, lower: true)}, {FormatBound(vr?.Max, lower: false)}] can fall outside constraint " +
+                    $"[{FormatBound(vr.Min, lower: true)}, {FormatBound(vr.Max, lower: false)}] can fall outside constraint " +
                     $"{ConstraintValidation.Describe(range)} on property '{post.TargetProperty}'.",
                     DomainModelDiagnosticCodes.EffectConstraintViolation);
             }

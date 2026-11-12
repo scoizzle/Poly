@@ -92,6 +92,13 @@ public sealed class BenchmarkDecisionSmokeTests {
         await Assert.That(string.Join(", ", recorded)).IsEqualTo(string.Join(", ", expected))
             .Because("every invoke row must name a case, and every case must have a row");
 
+        var foreign = rows
+            .Where(row => row.Method != TwoPhaseInvokeBenchmark.Method)
+            .Select(row => $"{row.Method} {row.Entry}")
+            .ToList();
+        await Assert.That(foreign).IsEmpty()
+            .Because($"{BenchmarkBaseline.InvokeCsvPath} must hold only {TwoPhaseInvokeBenchmark.Method} rows");
+
         var benchmark = new TwoPhaseInvokeBenchmark();
         foreach (var entry in cases) {
             for (var run = 1; run <= 3; run++) {

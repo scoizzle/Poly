@@ -387,6 +387,84 @@ public class StageEntryFactsParityTests {
         }
         """, "Z", "N");
 
+    // ── Characterization (S-14 A2): subscription / notify / cross-entity shapes ──────────
+    // Each fixture states the OBSERVED oracle and fact (2026-11-12, on the S-14 head). All four
+    // agree, but agreement is NOT a parity claim for handlers: the oracle only follows `this.X()`
+    // calls, so a subscription-handler assign reached through a notify or an entry `create in`
+    // (the child's own `Create…` method notifies its subscribers) is invisible to the oracle and the
+    // fact alike. That is the recorded residual for L-09, failing open for DMEFF019 only.
+    //   C1 entity/stage `when`, entry assigns N:        oracle {N}  fact {N}  (H1, H2 absent)
+    //   C2 entry hop to another entity's notify target: oracle {Q}  fact {Q}
+    //   C3 entry `create Other { V: 2 }`:               oracle {N}  fact {N}  (V is Other's)
+    //   C4 entry `create in Kids` + own `when Kids A`:  oracle {N}  fact {N}  (Flag absent: RESIDUAL,
+    //      the lowered create notifies subscribers, so a handler could assign Flag at runtime)
+
+    private static async Task Characterize(string dsl, string entityName, string[] oracleNames, string[] factNames) {
+        var (oracle, fact) = Compute(dsl, entityName);
+
+        await Assert.That(oracle).IsEquivalentTo(oracleNames, StringComparer.Ordinal);
+        await Assert.That(fact).IsEquivalentTo(factNames, StringComparer.Ordinal);
+    }
+
+    [Test]
+    public Task Characterization_EntityAndStageWhenSubscriptions_AreNotInTheSet() => Characterize("""
+        domain C1
+        Item: entity {
+          S1: stage { Next: action { transition to S2 } }
+          S2: stage { }
+        }
+        Z: entity {
+          Items: many Item
+          N: Number default(0)
+          H1: Number default(0)
+          H2: Number default(0)
+          when Items S2 { assign H1 to 1 }
+          A: stage {
+            entry { assign N to 1 }
+            when Items S1 { assign H2 to 1 }
+          }
+        }
+        """, "Z", ["N"], ["N"]);
+
+    [Test]
+    public Task Characterization_EntryHopToAnotherEntitysNotifyTarget_SetUnchanged() => Characterize("""
+        domain C2
+        Z: entity {
+          Q: Number default(0)
+          A: stage { entry { transition to B } }
+          B: stage { entry { assign Q to 1 } }
+        }
+        W: entity {
+          Zs: many Z
+          H: Number default(0)
+          Idle: stage { when Zs B { assign H to 1 } }
+        }
+        """, "Z", ["Q"], ["Q"]);
+
+    [Test]
+    public Task Characterization_EntryCreateOfAnotherEntity_SetUnchanged() => Characterize("""
+        domain C3
+        Other: entity { V: Number default(0) }
+        Z: entity {
+          N: Number default(0)
+          A: stage { entry { assign N to 1  create Other { V: 2 } } }
+        }
+        """, "Z", ["N"], ["N"]);
+
+    [Test]
+    public Task Characterization_EntryCreateInSelfRelationshipWithOwnWhen_HandlerAssignNotInSet() => Characterize("""
+        domain C4
+        Z: entity {
+          Kids: many Z
+          N: Number default(0)
+          Flag: Number default(0)
+          A: stage {
+            entry { assign N to 1  create in Kids { } }
+            when Kids A { assign Flag to 1 }
+          }
+        }
+        """, "Z", ["N"], ["N"]);
+
     // F-1 (closed by S-14): a transition inside an invoked action is followed. An entity-level
     // action runs with the dynamic cursor, so the hop exits every stage (A's X and C's R) before
     // B's entry assigns Q.

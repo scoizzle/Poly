@@ -81,24 +81,18 @@ public sealed partial class DomainDslPrinter {
         }
         _sb.AppendLine();
 
-        // Entities (sorted by name for stability)
-        var entities = domain.Types.OfType<Entity>()
-            .OrderBy(e => e.Name, StringComparer.Ordinal)
-            .ToList();
-
-        // Print enum types first
-        var enumTypes = domain.Types.OfType<EnumType>().ToList();
-        foreach (var enumType in enumTypes) {
+        // Kind-grouped (enums, value types, entities, functions, contracts, bindings), each kind in model order.
+        foreach (var enumType in domain.Types.OfType<EnumType>()) {
             PrintEnumType(enumType);
             _sb.AppendLine();
         }
 
-        foreach (var valueType in domain.Types.OfType<ValueType>().OrderBy(v => v.Name, StringComparer.Ordinal)) {
+        foreach (var valueType in domain.Types.OfType<ValueType>()) {
             PrintValueType(valueType);
             _sb.AppendLine();
         }
 
-        foreach (var entity in entities) {
+        foreach (var entity in domain.Types.OfType<Entity>()) {
             PrintEntity(entity);
             _sb.AppendLine();
         }
@@ -111,13 +105,12 @@ public sealed partial class DomainDslPrinter {
         // A contract seeded by `uses <id>` is the export-package reference, already printed
         // on the uses line; only body-authored blocks print here.
         foreach (var contract in domain.ImportedContracts
-                     .Where(c => c.UsesId is null || !domain.Extensions.Contains(c.UsesId, StringComparer.Ordinal))
-                     .OrderBy(c => c.Name, StringComparer.Ordinal)) {
+                     .Where(c => c.UsesId is null || !domain.Extensions.Contains(c.UsesId, StringComparer.Ordinal))) {
             PrintContract(contract);
             _sb.AppendLine();
         }
 
-        foreach (var binding in domain.ContractBindings.OrderBy(b => b.Name, StringComparer.Ordinal)) {
+        foreach (var binding in domain.ContractBindings) {
             PrintBinding(binding);
             _sb.AppendLine();
         }

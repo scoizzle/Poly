@@ -1,5 +1,7 @@
 using Poly.DomainModeling.Ontology;
 
+using Action = Poly.DomainModeling.Ontology.Action;
+
 namespace Poly.DomainModeling.Language;
 
 // DomainDslPrinter partial: entity declaration printing (G-00b mechanical split).
@@ -33,74 +35,78 @@ public sealed partial class DomainDslPrinter {
 
         _sb.AppendLine(" {");
 
-        // Properties
-        foreach (var prop in entity.Properties) {
-            _sb.Append("  ");
-            _sb.Append(prop.Name);
-            _sb.Append(": ");
-            _sb.Append(prop.Type.TypeName);
-
-            AppendPrintedConstraints(prop.Constraints);
-
-            foreach (var facet in prop.Facets) {
-                _sb.Append(' ');
-                _sb.Append(PrintFacet(facet, prop.Name));
+        foreach (var member in EntityDeclarationOrder.Members(entity)) {
+            switch (member.Kind) {
+                case EntityMemberKind.Property:
+                    PrintProperty((Property)member.Node);
+                    break;
+                case EntityMemberKind.Navigation:
+                    PrintNavigation((Relationship)member.Node);
+                    break;
+                case EntityMemberKind.Policy:
+                    _sb.Append("  ");
+                    PrintPolicy((Policy)member.Node, "  ");
+                    break;
+                case EntityMemberKind.Stage:
+                    PrintStage((Stage)member.Node, "  ", entity);
+                    break;
+                case EntityMemberKind.Action:
+                    PrintAction((Action)member.Node, "  ", stageName: null);
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(member), member.Kind, null);
             }
-
-            _sb.AppendLine();
         }
 
-        // Navigation properties (N1 source-side only)
-        foreach (var rel in entity.Navigations
-            .OrderBy(r => r.Name, StringComparer.Ordinal)) {
-            _sb.Append("  ");
-            _sb.Append(rel.Name);
-            _sb.Append(": ");
-            // Q11: print a cardinality keyword only where the text reads back as the same
-            // cardinality. `one T` and `one owned T` read back as one-to-one, so a
-            // one-to-one navigation keeps its keyword; a bare `x: T` is parsed as one-to-one
-            // as well, but printing one-to-one bare would re-read as a typed property line,
-            // and a target whose name is a Phase 1a unsupported keyword then fails closed.
-            // ManyToOne has no N1 spelling at all and keeps the bare form it always had.
-            var isMany = rel.Cardinality is RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany;
-            if (isMany) {
-                _sb.Append("many ");
-            }
-            else if (rel.Cardinality == RelationshipCardinality.OneToOne) {
-                _sb.Append("one ");
-            }
-            if (rel.SourceOwnsTarget) {
-                _sb.Append("owned ");
-            }
-            _sb.Append(rel.Target.TypeName);
-            if (rel.Inverse is { Length: > 0 } inverse) {
-                _sb.Append(" via ");
-                _sb.Append(inverse);
-            }
-            _sb.AppendLine();
-        }
-
-        // Entity-level policies
-        foreach (var policy in entity.Policies) {
-            _sb.Append("  ");
-            PrintPolicy(policy, "  ");
-        }
-
-        // Entity-level subscriptions
+        // Entity-level subscriptions: no order slot, printed after the members
         foreach (var sub in entity.Subscriptions) {
             PrintSubscription(sub, "  ");
         }
 
-        // Stages (in declared order)
-        foreach (var stage in entity.Stages) {
-            PrintStage(stage, "  ", entity);
-        }
-
-        // Entity-level actions
-        foreach (var action in entity.Actions) {
-            PrintAction(action, "  ", stageName: null);
-        }
-
         _sb.AppendLine("}");
+    }
+
+    private void PrintProperty(Property prop) {
+        _sb.Append("  ");
+        _sb.Append(prop.Name);
+        _sb.Append(": ");
+        _sb.Append(prop.Type.TypeName);
+
+        AppendPrintedConstraints(prop.Constraints);
+
+        foreach (var facet in prop.Facets) {
+            _sb.Append(' ');
+            _sb.Append(PrintFacet(facet, prop.Name));
+        }
+
+        _sb.AppendLine();
+    }
+
+    private void PrintNavigation(Relationship rel) {
+        _sb.Append("  ");
+        _sb.Append(rel.Name);
+        _sb.Append(": ");
+        // Q11: print a cardinality keyword only where the text reads back as the same
+        // cardinality. `one T` and `one owned T` read back as one-to-one, so a
+        // one-to-one navigation keeps its keyword; a bare `x: T` is parsed as one-to-one
+        // as well, but printing one-to-one bare would re-read as a typed property line,
+        // and a target whose name is a Phase 1a unsupported keyword then fails closed.
+        // ManyToOne has no N1 spelling at all and keeps the bare form it always had.
+        var isMany = rel.Cardinality is RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany;
+        if (isMany) {
+            _sb.Append("many ");
+        }
+        else if (rel.Cardinality == RelationshipCardinality.OneToOne) {
+            _sb.Append("one ");
+        }
+        if (rel.SourceOwnsTarget) {
+            _sb.Append("owned ");
+        }
+        _sb.Append(rel.Target.TypeName);
+        if (rel.Inverse is { Length: > 0 } inverse) {
+            _sb.Append(" via ");
+            _sb.Append(inverse);
+        }
+        _sb.AppendLine();
     }
 }

@@ -1,3 +1,8 @@
+using Poly.DomainModeling;
+using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Compile;
+using Poly.DomainModeling.Evolution;
+using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Ontology;
 
 namespace Poly.Tests.DomainModeling.Parsing;
@@ -116,5 +121,166 @@ public sealed class DomainDslPrinterTests {
             """;
         var changes = new PolyDslParser(poly).Parse();
         await Assert.That(changes.Count > 0).IsTrue();
+    }
+
+    private const string InterleavedDsl = """
+        domain Orders
+        Customer: entity {
+          Name: Text
+        }
+        Order: entity {
+          Id: Text
+          Status: stage { }
+          Total: Number
+          Submit: action { }
+          Valid: policy { Total > 0 }
+          customer: Customer
+        }
+        """;
+
+    private static (EvolutionResult Result, string Text) Generate(string poly) {
+        var session = DomainSession.ForDocument(DslSyntaxTree.Parse(poly), []);
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], []))
+            .ApplyAndAnalyze(new PolyDslParser(poly, session).Parse(), session: session);
+        if (!result.Succeeded)
+            throw new InvalidOperationException(result.FailureSummary);
+        return (result, new DomainDslPrinter(session).Print(result.Root));
+    }
+
+    /// <summary>The names of the member lines at one indent level inside <paramref name="entityName"/>'s body.</summary>
+    private static IReadOnlyList<string> MemberNames(string text, string entityName) {
+        var lines = text.Split('\n');
+        var start = Array.FindIndex(lines, l =>
+            l.StartsWith(entityName + ":", StringComparison.Ordinal)
+            || l.StartsWith("public entity " + entityName + " ", StringComparison.Ordinal));
+        var names = new List<string>();
+        for (var i = start + 1; i < lines.Length && lines[i] != "}"; i++) {
+            var line = lines[i];
+            if (line.Length < 3 || line[0] != ' ' || line[1] != ' ' || line[2] == ' ')
+                continue;
+            var end = line.IndexOf(':', 2);
+            if (end > 0)
+                names.Add(line[2..end]);
+        }
+        return names;
+    }
+
+    private static IReadOnlyList<string> EntityOrder(string text) =>
+        [.. text.Split('\n').Where(l => l.Length > 0 && l[0] != ' ' && l[0] != '}' && l.Contains("entity", StringComparison.Ordinal))
+            .Select(l => l.StartsWith("public entity ", StringComparison.Ordinal)
+                ? l["public entity ".Length..].Split(' ')[0]
+                : l[..l.IndexOf(':')])];
+
+    [Test]
+    public async Task Print_KeepsEntityAndMemberDeclarationOrder() {
+        const string zedAlpha = """
+            domain D
+            Zed: entity {
+              Name: Text
+            }
+            Alpha: entity {
+              Zed1: Text
+              mgr: Zed
+              buddy: Alpha
+              Age: Number
+            }
+            """;
+        var (result, text) = Generate(zedAlpha);
+
+        await Assert.That(string.Join(",", EntityOrder(text))).IsEqualTo("Zed,Alpha");
+        await Assert.That(string.Join(",", MemberNames(text, "Alpha"))).IsEqualTo("Zed1,mgr,buddy,Age");
+
+        var alpha = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Alpha");
+        var before = result.Analysis.GetStructure(alpha)!.ConstructorParameters.Select(p => p.Name).ToList();
+        var (reparsed, _) = Generate(text);
+        var alpha2 = reparsed.Root.Types.OfType<Entity>().Single(e => e.Name == "Alpha");
+        var after = reparsed.Analysis.GetStructure(alpha2)!.ConstructorParameters.Select(p => p.Name).ToList();
+
+        await Assert.That(string.Join(",", after)).IsEqualTo(string.Join(",", before));
+    }
+
+    [Test]
+    public async Task Print_EntityMembers_FollowDeclarationOrder() {
+        const string second = """
+            domain Orders
+            Customer: entity {
+              Name: Text
+            }
+            Order: entity {
+              Id: Text
+              Status: stage { }
+              Total: Number
+              Submit: action { }
+              Valid: policy { Total > 0 }
+              customer: Customer
+            }
+            Thing: entity {
+              Guard: policy { Size > 0 }
+              Size: Number
+              Open: stage { }
+              Close: action { }
+            }
+            """;
+        var (_, text) = Generate(second);
+
+        await Assert.That(string.Join(",", MemberNames(text, "Order"))).IsEqualTo("Id,Status,Total,Submit,Valid,customer");
+        await Assert.That(string.Join(",", MemberNames(text, "Thing"))).IsEqualTo("Guard,Size,Open,Close");
+    }
+
+    [Test]
+    public async Task Print_ContractsAndBindings_KeepModelOrder() {
+        const string poly = """
+            domain D
+            Zeta: enum { A, B }
+            Alpha: enum { C, D }
+            Zv: value {
+              X: Number
+            }
+            Av: value {
+              Y: Number
+            }
+            Zent: entity {
+              N: Number
+            }
+            Aent: entity {
+              M: Number
+            }
+            """;
+        var (result, text) = Generate(poly);
+
+        var enumOrder = text.IndexOf("Zeta", StringComparison.Ordinal) < text.IndexOf("Alpha", StringComparison.Ordinal);
+        var valueOrder = text.IndexOf("Zv", StringComparison.Ordinal) < text.IndexOf("Av", StringComparison.Ordinal);
+        var entityOrder = text.IndexOf("Zent", StringComparison.Ordinal) < text.IndexOf("Aent", StringComparison.Ordinal);
+
+        await Assert.That(enumOrder).IsTrue();
+        await Assert.That(valueOrder).IsTrue();
+        await Assert.That(entityOrder).IsTrue();
+        await Assert.That(result.Root.ContractBindings.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task Print_EntityWithEmptyMemberOrder_FallsBackToListOrder() {
+        var (parsed, _) = Generate("""
+            domain T
+            E: entity {
+              Size: Number
+              Open: stage { }
+              Close: action
+                require Big
+              { }
+              Big: policy { Size > 0 }
+            }
+            """);
+        var source = parsed.Root.Types.OfType<Entity>().Single();
+        var bare = source with { MemberOrder = [] };
+        var text = new DomainDslPrinter().Print(new Domain("T", [bare]));
+
+        var reparsed = new DomainEvolution(DomainTestFactory.Create("_", [], []))
+            .Apply(new PolyDslParser(text).Parse());
+
+        await Assert.That(reparsed.Succeeded).IsTrue().Because(reparsed.FailureSummary ?? "");
+        var e2 = reparsed.Root.Types.OfType<Entity>().Single();
+        await Assert.That(string.Join(",", EntityDeclarationOrder.Members(e2).Select(m => m.Kind.ToString())))
+            .IsEqualTo(string.Join(",", EntityDeclarationOrder.Members(bare).Select(m => m.Kind.ToString())));
     }
 }

@@ -296,11 +296,10 @@ public class StageEntryFactsParityTests {
             entry { transition to B }
             exit {
               assign X to 1
-              transition to C
+              transition to B
             }
           }
-          B: stage { }
-          C: stage { entry { assign Q to 1 } }
+          B: stage { entry { assign Q to 1 } }
         }
         """, "Z", "X", "Q");
 

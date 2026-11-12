@@ -45,6 +45,12 @@ public class GuideExamplesTests {
 
     private const string MarkerShape = "<!-- poly-verify: <kind> -->";
 
+    /// <summary>
+    /// The short guide is section 0 + section 10 + the golden workflow + the index, and section 0 holds
+    /// eight marked fences. Measured after the markers landed; the cap is 240, so the margin is one line.
+    /// </summary>
+    private const int ShortGuideLines = 239;
+
     [Test]
     public async Task EveryPolyFence_CarriesAWellFormedMarker() {
         var document = GuideBlocks.Load();
@@ -446,6 +452,8 @@ public class GuideExamplesTests {
         var lines = guide!.Split('\n').Length;
         var shortMarkers = Regex.Matches(guide, Regex.Escape(GuideBlocks.MarkerOpener)).Count;
 
+        await Assert.That(lines).IsEqualTo(ShortGuideLines)
+            .Because("the short guide is pinned at the measured line count; McpSmokeTests caps it at 240");
         await Assert.That(lines).IsLessThan(240)
             .Because("McpSmokeTests pins the short guide under 240 lines and the short guide includes "
                      + $"section 0; measured {lines} lines, {shortMarkers} markers in it");

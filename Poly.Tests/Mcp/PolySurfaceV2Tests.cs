@@ -540,7 +540,7 @@ public class PolySurfaceV2Tests {
 
     [Test]
     public async Task StdioSurface_RejectsUnknownArgumentsWithValidNames() {
-        using var mcp = await PolycProcess.McpAsync(McpTarget.PolyMcp, TimeSpan.FromSeconds(15));
+        using var mcp = await PolycProcess.McpAsync(TimeSpan.FromSeconds(15));
         await mcp.InitializeAsync("2024-11-05");
 
         var response = await mcp.CallAsync("tools/call", new JsonObject {
@@ -623,11 +623,7 @@ public class PolySurfaceV2Tests {
     /// <summary>Boots the built server over stdio and hands the script a tools/call function. Through the one
     /// runner: the child holds a gate slot, and its lifetime is bounded by the client's absolute limit.</summary>
     private static async Task WithStdioServerAsync(Func<Func<string, Dictionary<string, object?>, Task<JsonNode>>, Task> script) {
-        var (dll, runtimeConfig) = PolycProcess.HostFiles("Poly.Mcp");
-        await Assert.That(File.Exists(dll)).IsTrue();
-        await Assert.That(File.Exists(runtimeConfig)).IsTrue();
-
-        using var mcp = await PolycProcess.McpAsync(McpTarget.PolyMcp, TimeSpan.FromSeconds(30));
+        using var mcp = await PolycProcess.McpAsync(TimeSpan.FromSeconds(30));
         await mcp.InitializeAsync("2024-11-05");
         await script(async (name, arguments) => await mcp.CallAsync("tools/call", new JsonObject {
             ["name"] = name,
@@ -636,11 +632,7 @@ public class PolySurfaceV2Tests {
     }
 
     private static async Task<(string? Instructions, List<JsonObject> Tools)> ReadSurfaceAsync() {
-        var (dll, runtimeConfig) = PolycProcess.HostFiles("Poly.Mcp");
-        await Assert.That(File.Exists(dll)).IsTrue();
-        await Assert.That(File.Exists(runtimeConfig)).IsTrue();
-
-        using var mcp = await PolycProcess.McpAsync(McpTarget.PolyMcp, TimeSpan.FromSeconds(15));
+        using var mcp = await PolycProcess.McpAsync(TimeSpan.FromSeconds(15));
         var initialized = await mcp.InitializeAsync("2024-11-05");
         var tools = (await mcp.ToolsListAsync()).ToList();
         return (initialized["instructions"]?.GetValue<string>(), tools);

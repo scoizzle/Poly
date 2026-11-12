@@ -55,10 +55,10 @@ public class DiagnosticAllowanceTests {
         analysis.Diagnostics.Where(d => d.Code == code);
 
     [Test]
-    public async Task ObservedFlow_UnboundedSource_IsNotYetVerified() {
-        // PIN (review H1): a source with no same-kind constraint is not verified today. V-04 routes
-        // observed flows through WriteRecorder and flips this; until then the flow is neither a
-        // finding nor a fact. The counts are read null-safely so this pin does not depend on H3.
+    public async Task ObservedFlow_UnboundedSource_IsUnverified_NotSkipped() {
+        // PIN, flipped by V-04 (hand-off 6818407744): a flow whose source carries no same-kind
+        // constraint is routed through the recorder — a DMCS003 warning naming the flow and one
+        // unverified fact on the target — so an observed copy is never silently skipped.
         var domain = """
             domain Orders
             Customer: entity {
@@ -75,16 +75,38 @@ public class DiagnosticAllowanceTests {
 
         var (_, model, analysis) = Run(domain, [new ObservedFlow("Customer.Amount", "Order.Amount")]);
 
-        // Zero diagnostics from the flow. (The domain carries one unrelated DMAS001 authoring
-        // suggestion on Order, so the total is not asserted; the write codes and the flow are.)
+        // One write-unverified warning, on the target, naming the flow.
+        var undecided = Of(analysis, "DMCS003").Single();
+        await Assert.That(undecided.Severity).IsEqualTo(DiagnosticSeverity.Warning);
+        await Assert.That(undecided.Message).Contains("Observed flow 'Customer.Amount' -> 'Order.Amount'");
+        await Assert.That(DomainElementPath.Resolve(model, undecided.Node)).IsEqualTo("Orders/Order/Amount");
+        // No violation, and no allowance to consume.
         await Assert.That(Of(analysis, "DMEFF008").Count()).IsEqualTo(0);
-        await Assert.That(Of(analysis, "DMCS003").Count()).IsEqualTo(0);
-        await Assert.That(analysis.Diagnostics.Any(d =>
-            d.Message.Contains("Observed flow", StringComparison.Ordinal))).IsFalse();
+        await Assert.That(Of(analysis, "DMALW001").Count()).IsEqualTo(0);
         var facts = analysis.GetMetadata<WriteVerificationFacts>(model);
-        await Assert.That(facts?.Unverified.Count ?? 0).IsEqualTo(0);
-        await Assert.That(facts?.Violations.Count ?? 0).IsEqualTo(0);
-        await Assert.That(facts?.Verified ?? 0).IsEqualTo(0);
+        await Assert.That(facts?.Unverified.Count ?? 0).IsEqualTo(1);
+        await Assert.That(facts!.Unverified[0].Reason).IsEqualTo(UnverifiedReason.UnknownBound);
+        await Assert.That(facts.Violations.Count).IsEqualTo(0);
+        await Assert.That(facts.Verified).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task Promotion_RePromotesAnAllowanceDowngradedFinding() {
+        // A9/F1 (recorded on #684 for C-11): the allowance picks a finding's severity at report
+        // time, and strict mode is a code-level policy applied after the report — so an
+        // acknowledged finding of a promoted code is promoted back to an error, and the analysis
+        // itself keeps the warning it reported.
+        var (_, _, analysis) = Run(NotesDomain, [NotesFlow()], [Allow("DMEFF008", NotesPath)]);
+        var finding = Of(analysis, "DMEFF008").Single();
+        await Assert.That(finding.Severity).IsEqualTo(DiagnosticSeverity.Warning);
+
+        var promoted = WarningPromotion.Apply(
+            analysis.Diagnostics, new HashSet<string>(StringComparer.Ordinal) { "DMEFF008" });
+
+        var after = promoted.Single(d => ReferenceEquals(d.Node, finding.Node) && d.Code == "DMEFF008");
+        await Assert.That(after.Severity).IsEqualTo(DiagnosticSeverity.Error);
+        await Assert.That(after.Message).IsEqualTo(finding.Message);
+        await Assert.That(Of(analysis, "DMEFF008").Single().Severity).IsEqualTo(DiagnosticSeverity.Warning);
     }
 
     [Test]

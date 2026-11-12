@@ -32,6 +32,18 @@ public sealed partial class LanguageSurfaceTests {
     private const string DepartmentAndEmployee = """
         domain Inverse
         Employee: entity {
+          manager: Department via reports
+        }
+        Department: entity {
+          reports: many Employee via manager
+        }
+        """;
+
+    // Parse layer only: `manager` names no navigation, which is S-11's DMREL003, not
+    // this resolver's. The name stays deliberately unknown.
+    private const string UnknownInverse = """
+        domain Inverse
+        Employee: entity {
           name: Text
         }
         Department: entity {
@@ -58,7 +70,7 @@ public sealed partial class LanguageSurfaceTests {
     public async Task Via_UnknownInverseName_IsRecorded_NotRejected() {
         // Parse layer only: naming a navigation that does not exist is S-11's
         // DMREL003, so the parser records the string and reports nothing.
-        var changes = new PolyDslParser(DepartmentAndEmployee).Parse();
+        var changes = new PolyDslParser(UnknownInverse).Parse();
         var added = changes.OfType<AddRelationshipChange>().Single(c => c.Name == "reports");
 
         await Assert.That(added.Inverse).IsEqualTo("manager");
@@ -180,6 +192,7 @@ public sealed partial class LanguageSurfaceTests {
             domain ContextualVia
             Employee: entity {
               name: Text
+              manager: Department via reports
             }
             Department: entity {
               reports: many Employee via manager
@@ -216,7 +229,7 @@ public sealed partial class LanguageSurfaceTests {
         var dsl = """
             domain ContextualVia
             Employee: entity {
-              name: Text
+              via: Department via reports
             }
             Department: entity {
               reports: many Employee via via
@@ -237,6 +250,8 @@ public sealed partial class LanguageSurfaceTests {
             domain OwnedInverse
             Line: entity {
               sku: Text
+              order: Order via lines
+              owner: Order via line
             }
             Order: entity {
               lines: many owned Line via order
@@ -254,6 +269,84 @@ public sealed partial class LanguageSurfaceTests {
         await Assert.That(Nav(order, "line").Inverse).IsEqualTo("owner");
         await Assert.That(printed).Contains("lines: many owned Line via order");
         await Assert.That(printed).Contains("line: owned Line via owner");
+        await Assert.That(new DomainDslPrinter().Print(Apply(printed))).IsEqualTo(printed);
+    }
+
+    /// <summary>
+    /// Q10: the two sides are independent. One side may name its inverse while the other
+    /// declares none, and nothing pairs them implicitly.
+    /// </summary>
+    [Test]
+    public async Task Via_DoesNotPairAnUndeclaredSide() {
+        var root = Apply("""
+            domain OneSidedVia
+            Department: entity {
+              reports: many Employee via manager
+            }
+            Employee: entity {
+              manager: Department
+            }
+            """);
+
+        await Assert.That(Nav(EntityNamed(root, "Department"), "reports").Inverse).IsEqualTo("manager");
+        await Assert.That(Nav(EntityNamed(root, "Employee"), "manager").Inverse).IsNull();
+    }
+
+    [Test]
+    public async Task MutualPair_WithoutVia_StaysIndependent() {
+        var root = Apply("""
+            domain NoInverse
+            Doctor: entity {
+              shift: Shift
+            }
+            Shift: entity {
+              doctor: Doctor
+            }
+            """);
+
+        await Assert.That(Nav(EntityNamed(root, "Doctor"), "shift").Inverse).IsNull();
+        await Assert.That(Nav(EntityNamed(root, "Shift"), "doctor").Inverse).IsNull();
+    }
+
+    [Test]
+    public async Task Via_OnBareTypedLineNavigation_RoundTrips() {
+        var dsl = """
+            domain TypedLineVia
+            Employee: entity {
+              manager: Department via reports
+            }
+            Department: entity {
+              reports: many Employee via manager
+            }
+            """;
+
+        var root = Apply(dsl);
+        var printed = new DomainDslPrinter().Print(root);
+
+        await Assert.That(Nav(EntityNamed(root, "Employee"), "manager").Inverse).IsEqualTo("reports");
+        await Assert.That(printed).Contains("manager: Department via reports");
+        await Assert.That(new DomainDslPrinter().Print(Apply(printed))).IsEqualTo(printed);
+    }
+
+    [Test]
+    public async Task Via_OnExplicitOneNavigation_RoundTrips() {
+        var dsl = """
+            domain OneVia
+            Department: entity {
+              x: one Employee via owner
+            }
+            Employee: entity {
+              owner: Department via x
+            }
+            """;
+
+        var root = Apply(dsl);
+        var printed = new DomainDslPrinter().Print(root);
+
+        // `one` is the default cardinality, so the printer's canonical form drops it;
+        // the explicit input still round-trips through that short form.
+        await Assert.That(Nav(EntityNamed(root, "Department"), "x").Inverse).IsEqualTo("owner");
+        await Assert.That(printed).Contains("x: Employee via owner");
         await Assert.That(new DomainDslPrinter().Print(Apply(printed))).IsEqualTo(printed);
     }
 }

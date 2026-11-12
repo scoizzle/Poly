@@ -521,7 +521,7 @@ Note: entity {
 ```
 
 **Inverse navigation.** `via <name>` names the navigation property on the target entity
-that points back, so both sides of a pair are declared rather than derived:
+that points back, so a pair can name both directions explicitly:
 
 ```poly
 Department: entity {
@@ -529,17 +529,19 @@ Department: entity {
 }
 
 Employee: entity {
-  manager: Department
+  manager: Department via reports
 }
 ```
 
-`via` is recorded on the relationship as `Inverse` and is **not yet consumed**:
-ambiguity and contradiction between the two sides are analysis findings, and dispatch
-does not read it. `via <name>` is legal on an owned navigation too — that is how the
-back-reference names its owner. A member may still be named `via` (`via: Text`,
-`via(x: Text): action { }`): the clause starts only when `via` is followed by a name.
-A `via` with no name, or a second `via` on the same navigation, is a positioned parse
-error.
+`via` is recorded on the relationship as `Inverse` and is **not yet consumed**: the
+derived back-reference wiring (C# export and runtime link maintenance) is unchanged and
+does not read `via` yet, and ambiguity or contradiction between the two sides will be
+reported by a later analysis slice — that validation is not implemented yet. `via
+<name>` is legal on an owned navigation too — that is how the back-reference names its
+owner. A member may still be named `via` (`via: Text`, `via(x: Text): action { }`): the
+clause starts whenever `via` is followed by anything other than `:` or `(`, so `via 123`
+enters the clause and then fails as a missing name. A `via` with no name, or a second
+`via` on the same navigation, is a positioned parse error.
 
 ## 5. Lifecycle Stages
 

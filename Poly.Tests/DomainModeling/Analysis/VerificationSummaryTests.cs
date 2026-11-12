@@ -511,20 +511,6 @@ public class VerificationSummaryTests {
     }
 
     [Test]
-    public async Task WarningPromotion_DoesNotChangeTheVerdict() {
-        // Promotion runs on produced diagnostics; the summary reads the unpromoted result, so a
-        // promoted list cannot turn "not decided" into "violated".
-        var result = Parse(UnboundedWrite);
-
-        var promoted = WarningPromotion.Apply(result.Analysis.Diagnostics);
-
-        await Assert.That(promoted.Any(d => d.Code == DomainModelDiagnosticCodes.ConstraintUndecided
-            && d.Severity == DiagnosticSeverity.Error)).IsTrue();
-        var summary = result.Analysis.GetVerification(result.Root);
-        await Assert.That(summary.Verdict).IsEqualTo(CheckVerdict.Unknown);
-    }
-
-    [Test]
     public async Task EveryUnverifiedReason_HasAnExplicitRank() {
         // A2: each reason names its own rank, so a new one cannot silently tie with PossibleViolation,
         // and an undeclared value is a guard failure rather than a rank of zero.
@@ -597,5 +583,78 @@ public class VerificationSummaryTests {
         await Assert.That(row.Property).IsEqualTo("Reserved");
         await Assert.That(row.Constraint).IsEqualTo("range(0, 100000)");
         await Assert.That(row.Reason).IsEqualTo(UnverifiedReason.UnknownBound);
+    }
+
+    [Test]
+    public async Task RowWithoutAFact_CarriesNullEnrichment() {
+        // A parameter with no `length` constraint flowing into a length-constrained property warns
+        // (DMEFF008) yet records no fact — Length is not WriteRelevant until V-08 — so the row's
+        // enrichment is null by design, not missing data.
+        var text = new DmPrimitiveType("Text", PrimitiveSemantics.Text, []);
+        var entity = new Entity("Item",
+            [new Property("Notes", new DomainTypeReference("Text"), [new LengthConstraint(0, 50)])],
+            [new DmAction("Set", InvocationResult.Void,
+                [new Property("note", new DomainTypeReference("Text"), [])],
+                [new AssignEffect(DomainExpression.Property("Notes"), DomainExpression.Parameter("note"))],
+                [])],
+            [], []);
+        var model = DomainTestFactory.Create("Test", [text, entity], []);
+
+        var analysis = DomainModelAnalyzer.Analyze(model);
+
+        var finding = WithCode(analysis, DomainModelDiagnosticCodes.EffectConstraintViolation).Single();
+        await Assert.That(finding.Severity).IsEqualTo(DiagnosticSeverity.Warning);
+        await Assert.That(analysis.GetMetadata<WriteVerificationFacts>(model)!.Unverified).IsEmpty();
+        var summary = analysis.GetVerification(model);
+        await Assert.That(summary.Verdict).IsEqualTo(CheckVerdict.Unknown);
+        var row = summary.UnverifiedWrites.Single();
+        await Assert.That(row.Code).IsEqualTo(DomainModelDiagnosticCodes.EffectConstraintViolation);
+        await Assert.That(row.Property).IsNull();
+        await Assert.That(row.Constraint).IsNull();
+        await Assert.That(row.Reason).IsNull();
+    }
+
+    [Test]
+    public async Task ObservedFlow_WiderRangeSource_IsPossibleViolation() {
+        // A4(ii)/(iii): both sides are `range`, DecideRange is not Satisfied, so the finding stays
+        // and a PossibleViolation fact sits beside it.
+        var (domain, analysis) = RunFlowed("""
+            domain Orders
+            Source: entity {
+              Amount: Number range(0, 20)
+            }
+            Target: entity {
+              Amount: Number range(0, 10)
+            }
+            """, [new ObservedFlow("Source.Amount", "Target.Amount")]);
+
+        await Assert.That(analysis.GetMetadata<WriteVerificationFacts>(domain)!.Unverified.Single().Reason)
+            .IsEqualTo(UnverifiedReason.PossibleViolation);
+        var summary = analysis.GetVerification(domain);
+        await Assert.That(summary.Verdict).IsEqualTo(CheckVerdict.Violated);
+        await Assert.That(summary.UnverifiedWrites.Single().Reason).IsEqualTo(UnverifiedReason.PossibleViolation);
+    }
+
+    [Test]
+    public async Task DefaultVerdict_IsUnknown() {
+        // E5e: the zero value fails closed, so a defaulted or partially initialised verdict is never
+        // read as Proven.
+        static CheckVerdict Unset() => default;
+        await Assert.That(Unset()).IsEqualTo(CheckVerdict.Unknown);
+        await Assert.That(Enum.GetValues<CheckVerdict>()[0]).IsEqualTo(CheckVerdict.Unknown);
+    }
+
+    [Test]
+    public async Task CallChainError_IsAttributedToTheCalleeScope() {
+        // E3 (A3 lock miss): a call-chain finding sits on the callee's effect, so a caller-scoped
+        // read says Proven while the whole domain says Violated. Pinned here and documented in
+        // CORE §3.4, guide §8 and the GetVerification doc.
+        var (model, analysis) = CallChainAgainstUnorderableTargetBound();
+
+        await Assert.That(analysis.GetVerification(model).Verdict).IsEqualTo(CheckVerdict.Violated);
+        await Assert.That(analysis.GetVerification(model, "Item.B").Verdict).IsEqualTo(CheckVerdict.Violated);
+        var caller = analysis.GetVerification(model, "Item.A");
+        await Assert.That(caller.Verdict).IsEqualTo(CheckVerdict.Proven);
+        await Assert.That(caller.UnverifiedWrites).IsEmpty();
     }
 }

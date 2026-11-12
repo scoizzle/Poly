@@ -92,7 +92,7 @@ public class PackOracleTests {
 
     [Test]
     [Category("OracleFull")]
-    public async Task PublicEntityWithInternalOneNav_BootsAndPersistsTheReceipt() {
+    public async Task PublicEntityWithInternalUnidirectionalToOneNav_PersistsTheReceipt_DatabaseDoesNotEnforceOneToOne() {
         await using var oracle = await PackOracle.BootAsync(PackOracleDomains.PublicOrderInternalReceipt604);
 
         using var created = await oracle.Client.PostAsync(
@@ -134,6 +134,46 @@ public class PackOracleTests {
         await Assert.That(linesJson.RootElement.GetArrayLength()).IsEqualTo(1);
         await Assert.That(linesJson.RootElement[0].GetProperty("qty").GetInt32()).IsEqualTo(5);
         await Assert.That(linesJson.RootElement[0].TryGetProperty("order", out _)).IsFalse();
+    }
+
+    // F3: two orders keep their own lines apart after reload (a fresh request per read). The no-inverse one-to-many and the
+    // unidirectional to-one have no route that loads the navigation (a root target has no nested route), so this pin runs
+    // on the aggregate-child shape, where the nested route observes Lines through the generated Collection(...).LoadAsync().
+    [Test]
+    [Category("OracleFull")]
+    public async Task PublicEntityWithInternalOwnedManyNav_KeepsTwoOrdersLinesSeparate() {
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.PublicOrderOwnedInternalLine604);
+
+        foreach (var code in new[] { "ORD1", "ORD2" }) {
+            using var created = await oracle.Client.PostAsync(
+                "/api/orders", new StringContent($$"""{"Code":"{{code}}"}""", Encoding.UTF8, "application/json"));
+            await Assert.That((int)created.StatusCode).IsEqualTo(201);
+        }
+        foreach (var (code, qty) in new[] { ("ORD1", 5), ("ORD1", 6), ("ORD2", 7) }) {
+            using var added = await oracle.Client.PostAsync(
+                $"/api/orders/{code}/addline", new StringContent($$"""{"Qty":{{qty}}}""", Encoding.UTF8, "application/json"));
+            await Assert.That((int)added.StatusCode).IsEqualTo(200);
+        }
+
+        async Task<int[]> QtysAsync(string code) {
+            using var lines = await oracle.Client.GetAsync($"/api/orders/{code}/lines");
+            using var json = JsonDocument.Parse(await lines.Content.ReadAsStringAsync());
+            return json.RootElement.EnumerateArray().Select(l => l.GetProperty("qty").GetInt32()).Order().ToArray();
+        }
+
+        await Assert.That(await QtysAsync("ORD1")).IsEquivalentTo(new[] { 5, 6 });
+        await Assert.That(await QtysAsync("ORD2")).IsEquivalentTo(new[] { 7 });
+    }
+
+    [Test]
+    public async Task PublicEntityWithBidirectionalInternalOneToOne_IsPinnedAsNotBooting_Issue791() {
+        var fixture = PackOracleDomains.PublicOrderInternalReceiptBidirectional604;
+
+        await Assert.That(fixture.Boots).IsFalse();
+        await Assert.That(fixture.NotBootingReason).Contains("#791");
+        await Assert.ThrowsAsync<Exception>(async () => {
+            await using var oracle = await PackOracle.BootAsync(fixture);
+        });
     }
 
     [Test]

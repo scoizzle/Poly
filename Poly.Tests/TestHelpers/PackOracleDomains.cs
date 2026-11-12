@@ -246,6 +246,30 @@ public static class PackOracleDomains {
         """,
         "/api/orders");
 
+    /// <summary>L-22b F4: a BIDIRECTIONAL owned one-to-one from a public entity to an internal one. It was an analysis
+    /// error before L-22b and is now the same boot failure as every all-public bidirectional one-to-one (#791).</summary>
+    public static PackOracleDomain PublicOrderInternalReceiptBidirectional604 { get; } = new(
+        "PublicOrderInternalReceiptBidirectional604",
+        """
+        domain Shop
+        uses sqlite
+        uses http
+
+        Receipt: entity {
+          Note: Text
+          order: Order via receipt
+        }
+
+        public entity Order {
+          Code: Text unique length(3, 8)
+          receipt: one owned Receipt
+          public action Issue (note: Text) { create in receipt { Note: note } }
+        }
+        """,
+        "/api/orders",
+        Boots: false,
+        NotBootingReason: "#791: EF cannot determine the dependent side of a bidirectional one-to-one");
+
     /// <summary>L-22 (#604): the same domain with the target marked public. It boots and serves the list route.</summary>
     public static PackOracleDomain PublicOrderPublicLine604 { get; } = new(
         "PublicOrderPublicLine604",

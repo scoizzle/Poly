@@ -254,6 +254,7 @@ public sealed class CSharpExportCompileTests {
 
         await Assert.That(e.Type("Order").GetMembers("Receipt").Single().DeclaredAccessibility).IsEqualTo(Accessibility.Internal);
         await Assert.That(e.Methods("Order", "Create").Single().DeclaredAccessibility).IsEqualTo(Accessibility.Internal);
+        await Assert.That(e.Methods("Order", "CreateReceipt").Single().DeclaredAccessibility).IsEqualTo(Accessibility.Internal);
         await Assert.That(DbContextText(e)).Contains("b.HasOne(e => e.Receipt).WithMany()");
         await Assert.That(e.Diagnostics).IsEmpty();
     }
@@ -280,6 +281,8 @@ public sealed class CSharpExportCompileTests {
 
         await Assert.That(e.Type("Order").GetMembers("Lines").Single().DeclaredAccessibility).IsEqualTo(Accessibility.Internal);
         await Assert.That(e.Type("Line").GetMembers("Order").Single().DeclaredAccessibility).IsEqualTo(Accessibility.Public);
+        await Assert.That(e.Methods("Order", "Create").Single().DeclaredAccessibility).IsEqualTo(Accessibility.Internal);
+        await Assert.That(e.Methods("Order", "CreateLines").Single().DeclaredAccessibility).IsEqualTo(Accessibility.Internal);
         await Assert.That(DbContextText(e)).Contains("b.HasMany(e => e.Lines).WithOne(i => i.Order)");
         await Assert.That(e.Diagnostics).IsEmpty();
     }
@@ -305,6 +308,7 @@ public sealed class CSharpExportCompileTests {
 
         await Assert.That(e.Type("Line").GetMembers("Order").Single().DeclaredAccessibility).IsEqualTo(Accessibility.Internal);
         await Assert.That(e.Type("Order").GetMembers("Lines").Single().DeclaredAccessibility).IsEqualTo(Accessibility.Public);
+        await Assert.That(e.Methods("Line", "Create").Single().DeclaredAccessibility).IsEqualTo(Accessibility.Internal);
         var db = DbContextText(e);
         await Assert.That(db).Contains("b.HasOne(e => e.Order).WithMany(i => i.Lines)");
         await Assert.That(e.Diagnostics).IsEmpty();
@@ -334,6 +338,35 @@ public sealed class CSharpExportCompileTests {
             """);
 
         await Assert.That(e.Type("Order").GetMembers("Lines").Single().DeclaredAccessibility).IsEqualTo(Accessibility.Public);
+        var db = DbContextText(e);
+        await Assert.That(db).DoesNotContain("HasMany(");
+        await Assert.That(db).DoesNotContain("HasOne(");
+        await Assert.That(e.Diagnostics).IsEmpty();
+    }
+
+    [Test]
+    [Arguments("public entity", "public entity")]
+    [Arguments("", "")]
+    [Arguments("", "public entity")]
+    public async Task Export_WhenSingularNavigationIsNotPublicOwnerToInternalTarget_EmitsNoExplicitMapping(string ownerHeader, string targetHeader) {
+        var owner = ownerHeader.Length == 0 ? "Order: entity" : ownerHeader + " Order";
+        var target = targetHeader.Length == 0 ? "Receipt: entity" : targetHeader + " Receipt";
+        var e = ExportHost($$"""
+            domain Shop
+            uses sqlite
+            uses http
+
+            {{target}} {
+              Note: Text
+            }
+
+            {{owner}} {
+              Code: Text unique length(3, 8)
+              receipt: one Receipt
+            }
+            """);
+
+        await Assert.That(e.Type("Order").GetMembers("Receipt").Single().DeclaredAccessibility).IsEqualTo(Accessibility.Public);
         var db = DbContextText(e);
         await Assert.That(db).DoesNotContain("HasMany(");
         await Assert.That(db).DoesNotContain("HasOne(");

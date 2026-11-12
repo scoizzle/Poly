@@ -5,8 +5,11 @@ internal static class DomainModelDiagnosticCodes {
     public const string StructuralCycle = "DMSTR002";
     public const string StructuralOwnership = "DMSTR003";
     /// <summary>
-    /// A user-declared type reuses a name lowering emits at module scope
-    /// (<c>{Entity}Stage</c> for an entity that has stages, or <c>DomainResult</c>).
+    /// A user-declared type reuses a name lowering emits at module scope:
+    /// <c>{Entity}Stage</c> for an entity whose stage enum is generated (not an implicit
+    /// single stage), <c>DomainResult</c> / <c>DomainResult&lt;T&gt;</c>,
+    /// <c>ConstraintFailureException</c>, or the <c>System</c> namespace the generated C#
+    /// imports.
     /// </summary>
     public const string ReservedGeneratedName = "DMSTR004";
     /// <summary>
@@ -33,6 +36,22 @@ internal static class DomainModelDiagnosticCodes {
     /// <see cref="StructuralDuplicate"/> and a navigation-key cycle is <see cref="StructuralCycle"/>.
     /// </summary>
     public const string InvalidKeyDesignation = "DMSTR007";
+
+    /// <summary>
+    /// Two members of one entity share a generated identifier: the C# member name (a
+    /// property keeps its name, a navigation is PascalCased, an action and a policy keep
+    /// theirs) or the constructor-parameter name (<c>ToCamelCase</c>). The two names differ
+    /// but the emitter derives one identifier for both (CS0102/CS0100).
+    /// </summary>
+    public const string GeneratedIdentifierCollision = "DMSTR008";
+
+    /// <summary>
+    /// A member's generated identity is a name the exporter reserves on the entity (the
+    /// <c>Create</c> factory, <c>CurrentStage</c>, <c>EnsureUnique</c>, a navigation's
+    /// <c>Create{Name}</c>/<c>Attach{Name}</c>/member/field, the automatic-transition guard,
+    /// the <c>{Entity}Stage</c> enum) or the entity's own name (CS0542).
+    /// </summary>
+    public const string ReservedMemberName = "DMSTR009";
 
     public const string SemanticTypeCompatibility = "DMSEM003";
     public const string SemanticConstraintMismatch = "DMSEM004";

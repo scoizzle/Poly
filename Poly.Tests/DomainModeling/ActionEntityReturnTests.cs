@@ -652,12 +652,12 @@ public class ActionEntityReturnTests {
               Plate: Text unique
             }
             Lot: entity {
-              Create: Boolean default(false)
+              Enabled: Boolean default(false)
               Occupied: Number default(0)
               permits: many Permit
               Issue: action (plate: Text) {
-                assign Create to true
-                if (Create) {
+                assign Enabled to true
+                if (Enabled) {
                   assign Occupied to Occupied + 1
                   create in permits { Plate: plate }
                 }
@@ -673,7 +673,7 @@ public class ActionEntityReturnTests {
         await Assert.That(result.Succeeded).IsFalse();
         await Assert.That(result.Error).Contains("Unique");
         await Assert.That(lot.Bag["Occupied"]).IsEqualTo(0L);
-        await Assert.That((bool)lot.Bag["Create"]!).IsFalse();
+        await Assert.That((bool)lot.Bag["Enabled"]!).IsFalse();
         await Assert.That(result.CreatedChildren).IsEmpty();
 
         await Assert.That(RuntimeAnalysisCache.TryGetModuleMethod(
@@ -683,7 +683,7 @@ public class ActionEntityReturnTests {
         var createIdx = flat.FindIndex(n =>
             n is Invoke inv && inv.Delegate is Member { MemberName: "CreatePermits" });
         var createAssignIdx = flat.FindIndex(n =>
-            n is Assignment a && a.Destination is Member { MemberName: "Create" });
+            n is Assignment a && a.Destination is Member { MemberName: "Enabled" });
         await Assert.That(flat.Any(n =>
             n is Invoke { Delegate: Member { MemberName: "ProbeCreate" } })).IsFalse();
         await Assert.That(createAssignIdx).IsGreaterThanOrEqualTo(0);
@@ -698,12 +698,12 @@ public class ActionEntityReturnTests {
               Plate: Text unique
             }
             Lot: entity {
-              Create: Boolean default(true)
+              Enabled: Boolean default(true)
               Occupied: Number default(0)
               permits: many Permit
               Issue: action (plate: Text) {
-                assign Create to false
-                if (Create) {
+                assign Enabled to false
+                if (Enabled) {
                   assign Occupied to Occupied + 1
                   create in permits { Plate: plate }
                 }
@@ -717,7 +717,7 @@ public class ActionEntityReturnTests {
         var lot = exec.Create((lotE).Name, new Dictionary<string, object?>()).Instance!;
         var result = exec.Invoke(lot, "Issue", new Dictionary<string, object?> { ["plate"] = "ABC123" });
         await Assert.That(result.Succeeded).IsTrue();
-        await Assert.That((bool)lot.Bag["Create"]!).IsFalse();
+        await Assert.That((bool)lot.Bag["Enabled"]!).IsFalse();
         await Assert.That(lot.Bag["Occupied"]).IsEqualTo(0L);
         await Assert.That(result.CreatedChildren).IsEmpty();
     }

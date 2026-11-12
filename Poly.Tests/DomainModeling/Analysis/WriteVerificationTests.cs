@@ -73,4 +73,20 @@ public class WriteVerificationTests {
         await Assert.That(WriteVerificationFactsStore.For(context, first)).IsSameReferenceAs(facts);
         await Assert.That(WriteVerificationFactsStore.For(context, second)).IsNotSameReferenceAs(facts);
     }
+
+    [Test]
+    public async Task Facts_ExistEmpty_WhenTheDomainHasNoConstrainedWrite() {
+        // Fail-closed for V-04 (review H3): the channel creates the bucket at the start of the
+        // analyzer's domain pass, so a missing bucket means the pass did not run — never "there was
+        // nothing to report".
+        var domain = DomainTestFactory.Create("Test", [], []);
+
+        var analysis = DomainModelAnalyzer.Analyze(domain);
+
+        var facts = analysis.GetMetadata<WriteVerificationFacts>(domain);
+        await Assert.That(facts).IsNotNull();
+        await Assert.That(facts!.Verified).IsEqualTo(0);
+        await Assert.That(facts.Unverified).IsEmpty();
+        await Assert.That(facts.Violations).IsEmpty();
+    }
 }

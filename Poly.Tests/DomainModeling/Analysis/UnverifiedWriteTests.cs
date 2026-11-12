@@ -503,4 +503,87 @@ public class UnverifiedWriteTests {
         await Assert.That(Findings(analysis, "A").Count).IsEqualTo(1);
         await Assert.That(analysis.GetMetadata<WriteVerificationFacts>(domain)!.Unverified.Count).IsEqualTo(1);
     }
+
+    // ── fix round 1: tie-break determinism, nested operators, the parameter arm ──
+
+    /// <summary>The reported code for one write that is PossibleViolation in one stage and UnknownBound in the other.</summary>
+    private static string TwoStageVerdictCode(bool narrowedStageFirst) {
+        // Qty has no declared range. Stage "Narrowed" narrows it to (-∞, 100] with a policy, so the
+        // write has a known range that overlaps Total's [0, 10]: PossibleViolation. Stage "Open" has
+        // no policy, so Qty stays unbounded: UnknownBound. Both are Unverified — the tie-break must
+        // not be stage order.
+        var qty = new Property("Qty", new DomainTypeReference("Number"), []);
+        var total = new Property("Total", new DomainTypeReference("Number"), [new RangeConstraint(0d, 10d)]);
+        var copy = new DmAction("Copy", InvocationResult.Void, [],
+            [new AssignEffect(DomainExpression.Property("Total"), DomainExpression.Property("Qty"))], []);
+        Stage Narrowed() => new("Narrowed", Actions: [], Policies: [
+            new Policy("Under100", DomainExpression.LessThanOrEqual(
+                DomainExpression.Property("Qty"), DomainExpression.Literal(100)))
+        ], OnEntryEffects: [], OnExitEffects: []);
+        Stage Open() => new("Open", Actions: [], Policies: [], OnEntryEffects: [], OnExitEffects: []);
+        var stages = narrowedStageFirst ? new[] { Narrowed(), Open() } : new[] { Open(), Narrowed() };
+        var entity = new Entity("Item", [qty, total], [copy], [], stages);
+        var domain = DomainTestFactory.Create("Test", [Number, entity], []);
+
+        var analysis = DomainModelAnalyzer.Analyze(domain);
+
+        return Findings(analysis, "Total").Single().Code!;
+    }
+
+    [Test]
+    public async Task TwoStages_PossibleViolationAndUnknownBound_ReportTheSameCodeInEitherOrder() {
+        // The worst reason wins deterministically (UnknownBound, DMCS003), so swapping the stages
+        // cannot flip the reported code from DMCS003 to DMEFF008 and back.
+        await Assert.That(TwoStageVerdictCode(narrowedStageFirst: true))
+            .IsEqualTo(TwoStageVerdictCode(narrowedStageFirst: false));
+        await Assert.That(TwoStageVerdictCode(narrowedStageFirst: true))
+            .IsEqualTo(DomainModelDiagnosticCodes.ConstraintUndecided);
+    }
+
+    [Test]
+    public async Task NestedUnmodelledOperator_ReasonIsUnsupportedOperator() {
+        // Division is nested inside an Add: the reason is the operator analysis does not model, not
+        // "UnknownBound" from the top-level Add.
+        var result = Parse("""
+            domain Test
+            Box: entity {
+              Q: Number range(0, 100)
+              T: Number range(0, 10)
+              Run: action { assign T to Q / 2 + 1 }
+            }
+            """);
+
+        var findings = Findings(result.Analysis, "T");
+
+        await Assert.That(findings.Count).IsEqualTo(1);
+        await Assert.That(findings[0].Code).IsEqualTo(DomainModelDiagnosticCodes.ConstraintUndecided);
+        await Assert.That(Facts(result).Unverified.Single().Reason).IsEqualTo(UnverifiedReason.UnsupportedOperator);
+    }
+
+    [Test]
+    public async Task ParameterArm_NoRangeParameter_ReportsOnceThroughTheDeclaredArm() {
+        // A parameter cannot be given a range in the DSL, so this is a programmatic domain.
+        // ConstraintPropagationAnalyzer ALSO publishes the target's own range for the parameter
+        // (CollectFromAssign), so the downstream arm runs too: a count of one proves only the
+        // declared arm reported, and the message names the parameter's own constraint (review H7).
+        var entity = new Entity("Stock",
+            [new Property("Reserved", new DomainTypeReference("Number"), [new RangeConstraint(0d, 100d)])],
+            [new DmAction("Set", InvocationResult.Void,
+                [new Property("qty", new DomainTypeReference("Number"), [])],
+                [new AssignEffect(DomainExpression.Property("Reserved"), DomainExpression.Parameter("qty"))],
+                [])],
+            [],
+            []);
+        var domain = DomainTestFactory.Create("Test", [Number, entity], []);
+
+        var analysis = DomainModelAnalyzer.Analyze(domain);
+
+        var findings = Findings(analysis, "Reserved");
+        await Assert.That(findings.Count).IsEqualTo(1);
+        await Assert.That(findings[0].Code).IsEqualTo(DomainModelDiagnosticCodes.EffectConstraintViolation);
+        await Assert.That(findings[0].Severity).IsEqualTo(DiagnosticSeverity.Warning);
+        await Assert.That(findings[0].Message).Contains("has no range(0, 100) constraint");
+        await Assert.That(findings[0].Message).DoesNotContain("Effect-chain constraint");
+        await Assert.That(analysis.GetMetadata<WriteVerificationFacts>(domain)!.Unverified.Count).IsEqualTo(1);
+    }
 }

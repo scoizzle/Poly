@@ -28,6 +28,11 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
     }
 
     private static void ValidateDomainEffects(AnalysisContext context, Domain domain) {
+        // Fail-closed for V-04 (review H3): the facts bucket exists from the moment the domain pass
+        // starts, so a missing bucket means this analyzer never ran — never "there was nothing to
+        // report".
+        WriteVerificationFactsStore.For(context, domain);
+
         var lookup = ResolveTypeLookup(context, domain);
         if (lookup is null) {
             // Fail closed (review F1): domain-bound validation without any type

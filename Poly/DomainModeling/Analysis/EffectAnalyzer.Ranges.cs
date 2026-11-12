@@ -85,6 +85,10 @@ internal sealed partial class EffectAnalyzer {
             if (!ConstraintValidation.IsWriteRelevant(constraint)) continue;
             foreach (var value in values) {
                 var finding = new WriteFinding(DecideWrite(constraint, value, valueExpression), constraint, value);
+                // A strictly worse verdict replaces the current one; on an equal rank the FIRST
+                // decided value wins, consistent with WriteVerdict.Worst returning `this` on a tie.
+                // (Ranks order the Unverified reasons too, so the outcome does not depend on the
+                // stage order — review H4.)
                 if (worst is null || finding.Verdict.Worst(worst.Value.Verdict) != worst.Value.Verdict)
                     worst = finding;
             }
@@ -131,13 +135,20 @@ internal sealed partial class EffectAnalyzer {
     }
 
     /// <summary>
-    /// Why an expression with no usable range could not be bounded: the operators the interval flow
-    /// models (+, -, *, a property, a parameter, a related property) lose the bound when an operand has
-    /// none; anything else (division, a call, a match, ...) is not modelled at all.
+    /// Why an expression with no usable range could not be bounded: an operator the interval flow does
+    /// not model anywhere in the tree (division, a call, a match, ...) is named first; otherwise the
+    /// modelled node simply lost its bound because an operand has none.
     /// </summary>
-    private static UnverifiedReason OpaqueReason(DomainExpression assigned) => assigned switch {
-        Add or Subtract or Multiply or PropertyAccess or ParameterAccess or RelationshipNavigation => UnverifiedReason.UnknownBound,
-        _ => UnverifiedReason.UnsupportedOperator,
+    private static UnverifiedReason OpaqueReason(DomainExpression assigned) =>
+        HasUnmodelledOperator(assigned) ? UnverifiedReason.UnsupportedOperator : UnverifiedReason.UnknownBound;
+
+    /// <summary>True when any node of the expression is an operator the interval flow does not model (pre-order).</summary>
+    private static bool HasUnmodelledOperator(DomainExpression expression) => expression switch {
+        Add add => HasUnmodelledOperator(add.Left) || HasUnmodelledOperator(add.Right),
+        Subtract sub => HasUnmodelledOperator(sub.Left) || HasUnmodelledOperator(sub.Right),
+        Multiply mul => HasUnmodelledOperator(mul.Left) || HasUnmodelledOperator(mul.Right),
+        PropertyAccess or ParameterAccess or RelationshipNavigation or Literal => false,
+        _ => true,
     };
 
     private static void ReportWrite(

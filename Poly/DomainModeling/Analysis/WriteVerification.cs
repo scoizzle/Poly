@@ -80,9 +80,22 @@ internal readonly record struct WriteVerdict(WriteOutcome Outcome, UnverifiedRea
     public static WriteVerdict Unverified(UnverifiedReason reason) => new(WriteOutcome.Unverified, reason);
 
     private int Rank => Outcome switch {
-        WriteOutcome.Violated => 2,
-        WriteOutcome.Unverified => 1,
+        WriteOutcome.Violated => 100,
+        WriteOutcome.Unverified => 10 + ReasonRank,
         _ => 0,
+    };
+
+    /// <summary>
+    /// Orders the Unverified reasons so the worst one wins deterministically rather than by the order
+    /// stage contexts were analyzed in (review H4). A known range that can fall outside is the least
+    /// unknown; a cut recursion is the most.
+    /// </summary>
+    private int ReasonRank => Reason switch {
+        UnverifiedReason.RecursionCut => 4,
+        UnverifiedReason.NonFlowCheckedKind => 3,
+        UnverifiedReason.UnsupportedOperator => 2,
+        UnverifiedReason.UnknownBound => 1,
+        _ => 0, // PossibleViolation, and the Violated/Satisfied cases that carry no reason.
     };
 
     /// <summary>The worse of two verdicts (Violated, then Unverified, then Satisfied); the first wins a tie.</summary>

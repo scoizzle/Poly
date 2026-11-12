@@ -30,9 +30,6 @@ public sealed record ParityOutcome(
 /// or <c>stepCount</c>. <see cref="ToString"/> keeps the wording the existing rows assert on.
 /// </summary>
 public sealed record ParityDifference(int Index, string Step, string Field, string? Simulate, string? Printed) {
-    /// <summary>The identity a ledger entry matches on: the step position, its name, and the field.</summary>
-    public string Key => $"{Index}\u001f{Step}\u001f{Field}";
-
     public override string ToString() => Field switch {
         "stepCount" => $"step count differs (simulate {Simulate}, printed {Printed})",
         "success" => $"{Step}: success differs (simulate '{Simulate}', printed '{Printed}')",
@@ -87,12 +84,6 @@ public sealed class ParityScenario {
 
     /// <summary>The names of the sides the last <see cref="Run"/> executed, in order.</summary>
     public IReadOnlyList<string> Sides { get; private set; } = [];
-
-    /// <summary>The libraries the simulate side is compiled against. Equal to <see cref="PrintedSessionIds"/> by construction.</summary>
-    public IReadOnlyList<string> SimulateSessionIds => SimulateSession.Extensions;
-
-    /// <summary>The libraries the printed side is lowered under.</summary>
-    public IReadOnlyList<string> PrintedSessionIds => PrintedSession.Extensions;
 
     /// <summary>The session the simulator runs on: a factory instance of its own, not the lowering one.</summary>
     public DomainSession SimulateSession => RuntimeAnalysisCache.Session(_domain);

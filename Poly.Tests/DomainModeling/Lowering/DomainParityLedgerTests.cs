@@ -1,3 +1,4 @@
+using Poly.DomainModeling.Compile;
 using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.DomainModeling.Lowering;
@@ -9,6 +10,8 @@ namespace Poly.Tests.DomainModeling.Lowering;
 /// </summary>
 public class DomainParityLedgerTests {
     const string ThemeFormat = @"\A[A-Z]{1,2}-[0-9]{2}\z";
+
+    static bool IsSliceId(string value) => System.Text.RegularExpressions.Regex.IsMatch(value, ThemeFormat);
 
     /// <summary>One measurement line per seed, so a failure is also the table the row records.</summary>
     static string Table() =>
@@ -30,13 +33,18 @@ public class DomainParityLedgerTests {
                 if (!entry.Sides.SequenceEqual(sides, StringComparer.Ordinal))
                     problems.Add($"#{entry.Issue} '{entry.Scenario}': sides [{string.Join(",", entry.Sides)}] but the case runs [{string.Join(",", sides)}].");
             }
-            if (!System.Text.RegularExpressions.Regex.IsMatch(entry.Theme, ThemeFormat))
+            if (!IsSliceId(entry.Theme))
                 problems.Add($"#{entry.Issue}: theme '{entry.Theme}' is not a slice id ({ThemeFormat}).");
             if (entry.ExpectedDifference.Length == 0)
                 problems.Add($"#{entry.Issue}: an entry with no expected difference cannot ratchet.");
             foreach (var difference in entry.ExpectedDifference)
                 if (!KnownDomainDivergences.IsKnownField(difference.Field))
                     problems.Add($"#{entry.Issue}: '{difference.Field}' is outside the field vocabulary.");
+            // One entry may name a step field once; a duplicate would let the comparer match either.
+            var repeatedKeys = entry.ExpectedDifference.GroupBy(difference => (difference.Index, difference.Field))
+                .Where(group => group.Count() > 1)
+                .Select(group => $"#{entry.Issue}: [{group.Key.Index}] {group.Key.Field} is listed {group.Count()} times.");
+            problems.AddRange(repeatedKeys);
         }
 
         var duplicates = KnownDomainDivergences.All.GroupBy(entry => (entry.Issue, entry.Scenario))
@@ -47,6 +55,10 @@ public class DomainParityLedgerTests {
         var issues = KnownDomainDivergences.All.Select(entry => entry.Issue).ToList();
         if (!issues.SequenceEqual(issues.Order()))
             problems.Add($"entries are not sorted by issue: {string.Join(",", issues)}.");
+
+        var assemblies = DomainParityScenarios.All.Select(scenario => scenario.AssemblyName).ToList();
+        if (assemblies.Count != assemblies.Distinct(StringComparer.Ordinal).Count())
+            problems.Add($"assembly names are not unique: {string.Join(",", assemblies)}.");
 
         await Assert.That(string.Join("\n", problems)).IsEmpty();
     }
@@ -59,6 +71,8 @@ public class DomainParityLedgerTests {
         foreach (var exclusion in DomainParityExclusions.All) {
             if (exclusion.Reason.Length < 20)
                 problems.Add($"#{exclusion.Issue}: reason '{exclusion.Reason}' is under 20 characters.");
+            if (!IsSliceId(exclusion.Owner))
+                problems.Add($"#{exclusion.Issue}: owner '{exclusion.Owner}' is not a slice id ({ThemeFormat}).");
             if (!seeds.Values.Contains(exclusion.Issue))
                 problems.Add($"#{exclusion.Issue}: excluded, but no seeded case carries that issue.");
             if (KnownDomainDivergences.All.Any(entry => entry.Issue == exclusion.Issue))
@@ -83,11 +97,18 @@ public class DomainParityLedgerTests {
 
         foreach (var seed in DomainParityScenarios.All) {
             var run = DomainParityScenarios.Run(seed.Name);
-            var entry = KnownDomainDivergences.All.FirstOrDefault(e => e.Scenario == seed.Name);
-            var excluded = DomainParityExclusions.All.Any(e => e.Issue == seed.Issue);
+            var entries = KnownDomainDivergences.All.Where(entry => entry.Scenario == seed.Name).ToList();
+            var excluded = DomainParityExclusions.All.Any(entry => entry.Issue == seed.Issue);
+
+            if (run.Fault is not null) {
+                problems.Add($"#{seed.Issue} '{seed.Name}': the seed threw: {run.Fault}");
+                continue;
+            }
+            if (entries.Count > 1)
+                problems.Add($"#{seed.Issue} '{seed.Name}': {entries.Count} ledger entries name one scenario.");
 
             if (run.Differences.Count == 0) {
-                if (entry is not null)
+                if (entries.Count > 0)
                     problems.Add($"#{seed.Issue} '{seed.Name}': listed in the ledger, but the sides agree.");
                 if (!excluded)
                     problems.Add($"#{seed.Issue} '{seed.Name}': no live divergence and no exclusion.");
@@ -96,24 +117,31 @@ public class DomainParityLedgerTests {
 
             if (excluded)
                 problems.Add($"#{seed.Issue} '{seed.Name}': excluded, but it still diverges: {run.Describe()}.");
-            if (entry is null) {
+            if (entries.Count == 0) {
                 problems.Add($"#{seed.Issue} '{seed.Name}': unlisted divergence: {run.Describe()}.");
                 continue;
             }
-            foreach (var drift in ParityDifferenceSet.Compare(entry.ExpectedDifference, run.Differences))
+            foreach (var drift in ParityDifferenceSet.Compare(entries[0].ExpectedDifference, run.Differences))
                 problems.Add($"#{seed.Issue} '{seed.Name}': {drift.Kind}: {drift.Detail}");
         }
 
         await Assert.That(string.Join("\n", problems)).IsEmpty().Because("\n" + Table());
     }
 
+    /// <summary>
+    /// An empty ledger is the goal state, so this row has no non-empty precondition: the comparer
+    /// cases below are what guard the mechanism, and <see cref="NoUnlistedDivergence_InTheSeededCorpus"/>
+    /// is what fails when a divergence is unlisted.
+    /// </summary>
     [Test]
     public async Task EveryLedgerEntry_StillDiverges() {
-        await Assert.That(KnownDomainDivergences.All.Count).IsGreaterThan(0);
-
         var problems = new List<string>();
         foreach (var entry in KnownDomainDivergences.All) {
             var run = DomainParityScenarios.Run(entry.Scenario);
+            if (run.Fault is not null) {
+                problems.Add($"#{entry.Issue} ({entry.Theme}) '{entry.Scenario}': the seed threw: {run.Fault}");
+                continue;
+            }
             foreach (var drift in ParityDifferenceSet.Compare(entry.ExpectedDifference, run.Differences))
                 problems.Add($"#{entry.Issue} ({entry.Theme}) '{entry.Scenario}': {drift.Kind}: {drift.Detail}");
         }
@@ -130,6 +158,10 @@ public class DomainParityLedgerTests {
         var problems = new List<string>();
         foreach (var seed in DomainParityScenarios.All) {
             var run = DomainParityScenarios.Run(seed.Name);
+            if (run.Fault is not null) {
+                problems.Add($"#{seed.Issue}: the seed threw: {run.Fault}");
+                continue;
+            }
             if (!run.Sides.SequenceEqual(["simulate", "printed"], StringComparer.Ordinal))
                 problems.Add($"#{seed.Issue}: sides are [{string.Join(",", run.Sides)}].");
             var simulate = run.Scenario.SimulateSession;
@@ -143,6 +175,23 @@ public class DomainParityLedgerTests {
         await Assert.That(string.Join("\n", problems)).IsEmpty();
     }
 
+    /// <summary>
+    /// The factory honours the id list it is given, and always adds the storage library, so a
+    /// `uses` domain and the printed side are compiled against the same set.
+    /// </summary>
+    [Test]
+    public async Task ParitySessions_WhenGivenIds_LoadsThoseLibrariesAndStorage() {
+        // "temporal" is not in the authoring seed, so the two calls must differ on it.
+        var custom = ParitySessions.Create([ExtensionCatalog.TemporalId]).Extensions;
+        var defaulted = ParitySessions.Create().Extensions;
+
+        await Assert.That(custom).Contains(ExtensionCatalog.TemporalId);
+        await Assert.That(custom).Contains("persistence");
+        await Assert.That(defaulted).Contains(ExtensionCatalog.StorageFacetsId);
+        await Assert.That(custom.SequenceEqual(defaulted)).IsFalse();
+        await Assert.That(defaulted.SequenceEqual(ExtensionCatalog.ProductAuthoring.Append("persistence"))).IsTrue();
+    }
+
     /// <summary>The column ships compared and empty: R-03/R-04 populate it, so no entry carries a kind today.</summary>
     [Test]
     public async Task FailureKind_IsComparedButNullUntilR03() {
@@ -153,12 +202,22 @@ public class DomainParityLedgerTests {
         await Assert.That(differences[0].Field).IsEqualTo("failureKind");
         await Assert.That(differences[0].ToString()).Contains("failure kind differs");
 
-        var run = DomainParityScenarios.Run(DomainParityScenarios.All[0].Name);
-        await Assert.That(run.Simulate.Concat(run.Printed).All(outcome => outcome.FailureKind is null)).IsTrue();
+        var problems = DomainParityScenarios.All
+            .Select(seed => (seed, run: DomainParityScenarios.Run(seed.Name)))
+            .Where(pair => pair.run.Fault is not null)
+            .Select(pair => $"#{pair.seed.Issue}: the seed threw: {pair.run.Fault}")
+            .ToList();
+        foreach (var (seed, run) in DomainParityScenarios.All.Select(seed => (seed, run: DomainParityScenarios.Run(seed.Name))))
+            if (run.Fault is null)
+                problems.AddRange(run.Simulate.Concat(run.Printed)
+                    .Where(outcome => outcome.FailureKind is not null)
+                    .Select(outcome => $"#{seed.Issue} '{seed.Name}': {outcome.Step} carries a failure kind."));
+
+        await Assert.That(string.Join("\n", problems)).IsEmpty();
     }
 
     // A6: the matcher is the ratchet's only guard against a silent drift, so each drift kind gets a
-    // synthetic case. A comparer that always returns empty fails all five.
+    // synthetic case. A comparer that always returns empty fails all six.
     static ParityOutcome Step(string step = "invoke Close", bool success = true, string? message = null,
         string? exceptionType = null, string? stage = "Open") =>
         new(step, success, message, exceptionType, new Dictionary<string, string?> { ["Stage"] = stage });
@@ -196,4 +255,21 @@ public class DomainParityLedgerTests {
     public Task DifferenceSet_WhenTheStepIsRenamed_ReportsRenamed() =>
         AssertOnlyDrift(ParityDriftKind.Renamed, CloseStage("Closed"),
             ParityScenario.DifferenceSet([Step("invoke Open")], [Step("invoke Open", stage: "Closed")]));
+
+    /// <summary>
+    /// A rename that also moves the value must not mask either half: the key match is on
+    /// <c>(index, field)</c>, so the step name is what reports the rename, and the values are then
+    /// never compared on a row whose identity already changed.
+    /// </summary>
+    [Test]
+    public async Task DifferenceSet_WhenTheStepIsRenamedAndTheValueMoves_StillReports() {
+        var drifts = ParityDifferenceSet.Compare(CloseStage("Closed"), CloseStage("Other")
+            .Select(difference => difference with { Step = "invoke Open" })
+            .ToList());
+
+        await Assert.That(drifts.Count).IsEqualTo(1);
+        await Assert.That(drifts[0].Kind).IsEqualTo(ParityDriftKind.Renamed);
+        await Assert.That(drifts[0].Detail).Contains("invoke Close");
+        await Assert.That(drifts[0].Detail).Contains("invoke Open");
+    }
 }

@@ -3,10 +3,16 @@ namespace Poly.Tests.TestHelpers;
 /// <summary>
 /// One runnable parity seed: the two DSL texts (the same text unless the row breaks one side on
 /// purpose), the steps, and the exception types it records as an outcome instead of a harness fault.
+/// Ledger seeds read post-throw state by default, because a kept cascade is only visible afterwards;
+/// the legacy <c>FromDsl</c>/<c>FromDsls</c> rows keep it off so no existing row flips.
 /// </summary>
 public sealed record ParityCase(
     string Name, int Issue, string SimulateDsl, string PrintedDsl, Action<ParitySide> Steps,
-    string[] RecordedExceptions, bool PostThrowState = false);
+    string[] RecordedExceptions, bool PostThrowState = true) {
+    /// <summary>Unique per case, not per issue: two seeds may carry one issue.</summary>
+    public string AssemblyName =>
+        "ParityLedger" + Issue + string.Concat(Name.Split('-').Select(part => char.ToUpperInvariant(part[0]) + part[1..]));
+}
 
 /// <summary>
 /// One known simulate/printed divergence: the scenario that reproduces it, the sides that ran, and
@@ -18,15 +24,20 @@ public sealed record KnownDomainDivergence(
     int Issue, string Theme, string Scenario, string[] Sides, ParityDifference[] ExpectedDifference);
 
 /// <summary>
-/// A seed that does not diverge at the module level, and the slice that owns the fix where it does.
-/// An exclusion is a recorded decision, never a skipped test.
+/// A seed that does not diverge at the module level, the slice that owns the fix where it does
+/// (<see cref="Owner"/>, a slice id), and why. An exclusion is a recorded decision, never a skipped
+/// test.
 /// </summary>
-public sealed record DomainParityExclusion(int Issue, string Reason);
+public sealed record DomainParityExclusion(int Issue, string Owner, string Reason);
 
-/// <summary>What one seeded case measured: the sides that ran, their exact difference set, and the outcomes.</summary>
+/// <summary>
+/// What one seeded case measured: the sides that ran, their exact difference set, the outcomes, and
+/// the fault when the seed itself threw. A fault belongs to its own seed and fails only that seed.
+/// </summary>
 public sealed record ParityRun(
     IReadOnlyList<string> Sides, IReadOnlyList<ParityDifference> Differences,
-    IReadOnlyList<ParityOutcome> Simulate, IReadOnlyList<ParityOutcome> Printed, ParityScenario Scenario) {
+    IReadOnlyList<ParityOutcome> Simulate, IReadOnlyList<ParityOutcome> Printed, ParityScenario Scenario,
+    string? Fault = null) {
     public string Describe() => Differences.Count == 0
         ? "no difference"
         : string.Join("; ", Differences.Select(d => $"[{d.Index}] {d.Step} {d.Field} ('{d.Simulate}' vs '{d.Printed}')"));
@@ -47,6 +58,8 @@ public static class KnownDomainDivergences {
             new(0, "create Thing", "message", "Object reference not set to an instance of an object.", null),
             new(0, "create Thing", "exceptionType", "NullReferenceException", null),
             new(0, "create Thing", "state:K", "(absent)", "9"),
+            // A StateOf artifact, not a second bug: a failed create has no state of its own, and
+            // StateOf reports a Stage key for a model with no stages. Known L-11 fixes the create.
             new(0, "create Thing", "state:Stage", "(absent)", null),
             new(1, "create Thing", "message", "Object reference not set to an instance of an object.",
                 "Unique constraint violated: 'K' value is already used on another 'Thing'."),
@@ -60,6 +73,11 @@ public static class KnownDomainDivergences {
             new(6, "invoke Poke", "state:Stage", "X", "Y"),
             new(7, "use Left", "state:Hops", "0", "16"),
         ]),
+        // Same family as cascade-overflow: a guard throws after the cascade has run, the module
+        // rolls back to the stage it started in, and the printed side keeps the stage it reached.
+        new(599, "L-05", "guarded-cycle-loop-guard", ["simulate", "printed"], [
+            new(1, "invoke Go", "state:Stage", "A", "C"),
+        ]),
         new(605, "T-09", "match-decimal-else", ["simulate", "printed"], [
             new(1, "invoke Price", "state:Dec", null, "2"),
         ]),
@@ -72,15 +90,14 @@ public static class KnownDomainDivergences {
 /// <summary>Seeds that do not diverge through the module, with the owner that has to fix them.</summary>
 public static class DomainParityExclusions {
     public static IReadOnlyList<DomainParityExclusion> All { get; } = [
-        new(611, "Both sides throw NullReferenceException on the unset optional unique Text, so the module "
-            + "has no divergence to ratchet; L-11 owns the fix."),
-        new(617, "Both sides now leave the transition and its handler atomic, so the simulator no longer "
-            + "strands the instance in the new stage; L-05 owns any remainder."),
-        new(621, "The printed Create fills an omitted required parameter with its default, so a module-level "
-            + "omission cannot be represented in this harness until L-08 owns it; Date/DateTime/Duration "
-            + "need `uses temporal`, which this harness cannot parse on the simulate side."),
-        new(622, "Both sides now report the module failure text `blocked by policy`, so the guard wording no "
-            + "longer differs; R-04 owns any remainder."),
+        new(611, "L-11", "Both sides throw NullReferenceException on the unset optional unique Text, so the "
+            + "module has no divergence to ratchet."),
+        new(617, "L-05", "The sides agree; absolute atomicity is L-05's done-when."),
+        new(621, "L-08", "The printed Create fills an omitted required parameter with its default, so a "
+            + "module-level omission cannot be represented in this harness; Date/DateTime/Duration need "
+            + "`uses temporal`, which this harness cannot parse on the simulate side."),
+        new(622, "R-04", "Both sides report the module failure text `blocked by policy`, so the guard wording "
+            + "no longer differs."),
     ];
 }
 
@@ -172,7 +189,29 @@ public static class DomainParityScenarios {
                 side.Link("lefts", left);
                 side.Invoke("Poke");
                 side.Use(left);
-            }, [], PostThrowState: true),
+            }, []),
+
+        new("guarded-cycle-loop-guard", 599, """
+            domain E6
+            Z: entity {
+              Ready: Boolean
+              A: stage { Go: action { transition to B } }
+              B: stage { entry { if (Ready is true) { transition to C } } }
+              C: stage { entry { if (Ready is true) { transition to B } } }
+            }
+            """, """
+            domain E6
+            Z: entity {
+              Ready: Boolean
+              A: stage { Go: action { transition to B } }
+              B: stage { entry { if (Ready is true) { transition to C } } }
+              C: stage { entry { if (Ready is true) { transition to B } } }
+            }
+            """,
+            side => {
+                side.Create("Z", ("Ready", true));
+                side.Invoke("Go");
+            }, []),
 
         new("handler-range-after-transition", 617, """
             domain M
@@ -365,7 +404,7 @@ public static class DomainParityScenarios {
                 side.Use(inv);
                 side.Link("lines", line);
                 side.Invoke("Grow");
-            }, [], PostThrowState: true),
+            }, []),
     ];
 
     static readonly Lazy<IReadOnlyDictionary<string, ParityRun>> Runs = new(Build, LazyThreadSafetyMode.ExecutionAndPublication);
@@ -375,16 +414,26 @@ public static class DomainParityScenarios {
             ? run
             : throw new ArgumentException($"No seeded parity case named '{name}'.");
 
+    /// <summary>
+    /// Builds every seed once and keeps a fault against the seed that raised it, so a broken seed
+    /// fails its own assertions instead of every test that reads a measurement.
+    /// </summary>
     static IReadOnlyDictionary<string, ParityRun> Build() {
         var runs = new Dictionary<string, ParityRun>(StringComparer.Ordinal);
-        foreach (var seed in All)
-            runs[seed.Name] = Execute(seed);
+        foreach (var seed in All) {
+            try {
+                runs[seed.Name] = Execute(seed);
+            }
+            catch (Exception ex) when (ex is not OutOfMemoryException) {
+                runs[seed.Name] = new([], [], [], [], null!, $"{ex.GetType().Name}: {ex.Message}");
+            }
+        }
         return runs;
     }
 
     static ParityRun Execute(ParityCase seed) {
         var scenario = ParityScenario.FromDsls(
-            seed.SimulateDsl, seed.PrintedDsl, $"ParityLedger{seed.Issue}", seed.RecordedExceptions, seed.PostThrowState);
+            seed.SimulateDsl, seed.PrintedDsl, seed.AssemblyName, seed.RecordedExceptions, seed.PostThrowState);
         var (simulate, printed) = scenario.Run(seed.Steps);
         return new(scenario.Sides, ParityScenario.DifferenceSet(simulate, printed), simulate, printed, scenario);
     }

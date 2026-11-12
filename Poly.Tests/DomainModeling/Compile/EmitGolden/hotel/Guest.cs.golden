@@ -12,25 +12,25 @@ public class Guest
 {
     private List<EventHold> _events = new List<EventHold>();
     private List<Reservation> _reservations = new List<Reservation>();
-    private Guest(string email, string name, string phone, IEnumerable<EventHold>? events = null, IEnumerable<Reservation>? reservations = null, long eventCount = 0L, long nightCount = 0L, long stayCount = 0L)
+    private Guest(string name, string email, string phone, IEnumerable<EventHold>? events = null, IEnumerable<Reservation>? reservations = null, long stayCount = 0L, long nightCount = 0L, long eventCount = 0L)
     {
-        this.Email = email;
         this.Name = name;
+        this.Email = email;
         this.Phone = phone;
-        this.EventCount = eventCount;
-        this.NightCount = nightCount;
         this.StayCount = stayCount;
+        this.NightCount = nightCount;
+        this.EventCount = eventCount;
         this._events = new List<EventHold>(events ?? new List<EventHold>());
         this._reservations = new List<Reservation>(reservations ?? new List<Reservation>());
         this.CurrentStage = GuestStage.Active;
         this.InitializeSubscriptions();
     }
-    public string Email { get; private set; } = default!;
-    public long EventCount { get; private set; }
     public string Name { get; private set; } = default!;
-    public long NightCount { get; private set; }
+    public string Email { get; private set; } = default!;
     public string Phone { get; private set; } = default!;
     public long StayCount { get; private set; }
+    public long NightCount { get; private set; }
+    public long EventCount { get; private set; }
     public IReadOnlyList<EventHold> Events
     {
         get => this._events;
@@ -40,9 +40,9 @@ public class Guest
         get => this._reservations;
     }
     public GuestStage CurrentStage { get; private set; }
-    public DomainResult<EventHold> CreateEvents(long capacity, decimal dayRate, DateOnly endDate, long headcount, DateOnly startDate, Hall? hall = null, Section? section = null)
+    public DomainResult<EventHold> CreateEvents(long headcount, long capacity, decimal dayRate, DateOnly startDate, DateOnly endDate, Hall? hall = null, Section? section = null)
     {
-        var eventHoldResult = EventHold.Create(capacity, dayRate, endDate, headcount, startDate, this, hall, section);
+        var eventHoldResult = EventHold.Create(headcount, capacity, dayRate, startDate, endDate, this, hall, section);
         if (!eventHoldResult.IsSuccess)
         {
             return DomainResult<EventHold>.Failure(eventHoldResult.ErrorMessage ?? "");
@@ -55,9 +55,9 @@ public class Guest
         this._events.Add(child);
         child.RegisterGuestEventsReleasedSubscriber(this);
     }
-    public DomainResult<Reservation> CreateReservations(DateOnly checkInDate, DateOnly checkOutDate, long maxOccupancy, decimal nightlyRate, long nights, long partySize, Folio? folio = null, Room? room = null)
+    public DomainResult<Reservation> CreateReservations(long partySize, long nights, decimal nightlyRate, long maxOccupancy, DateOnly checkInDate, DateOnly checkOutDate, Folio? folio = null, Room? room = null)
     {
-        var reservationResult = Reservation.Create(checkInDate, checkOutDate, maxOccupancy, nightlyRate, nights, partySize, folio, this, room);
+        var reservationResult = Reservation.Create(partySize, nights, nightlyRate, maxOccupancy, checkInDate, checkOutDate, folio, this, room);
         if (!reservationResult.IsSuccess)
         {
             return DomainResult<Reservation>.Failure(reservationResult.ErrorMessage ?? "");
@@ -76,7 +76,7 @@ public class Guest
         {
             return DomainResult<Reservation>.Failure("'BookStay' requires stage 'Active' on entity 'Guest'.");
         }
-        var create0 = this.CreateReservations(arrive, depart, room.MaxOccupancy, room.NightlyRate, nights, party, (Folio?)null, room);
+        var create0 = this.CreateReservations(party, nights, room.NightlyRate, room.MaxOccupancy, arrive, depart, (Folio?)null, room);
         if (!create0.IsSuccess)
         {
             return DomainResult<Reservation>.Failure(create0.ErrorMessage ?? "");
@@ -90,7 +90,7 @@ public class Guest
         {
             return DomainResult<EventHold>.Failure("'BookHall' requires stage 'Active' on entity 'Guest'.");
         }
-        var create0 = this.CreateEvents(hall.Capacity, hall.DayRate, depart, party, arrive, hall);
+        var create0 = this.CreateEvents(party, hall.Capacity, hall.DayRate, arrive, depart, hall);
         if (!create0.IsSuccess)
         {
             return DomainResult<EventHold>.Failure(create0.ErrorMessage ?? "");
@@ -104,7 +104,7 @@ public class Guest
         {
             return DomainResult<EventHold>.Failure("'BookSection' requires stage 'Active' on entity 'Guest'.");
         }
-        var create0 = this.CreateEvents(section.Capacity, section.DayRate, depart, party, arrive, hall, section);
+        var create0 = this.CreateEvents(party, section.Capacity, section.DayRate, arrive, depart, hall, section);
         if (!create0.IsSuccess)
         {
             return DomainResult<EventHold>.Failure(create0.ErrorMessage ?? "");
@@ -141,8 +141,12 @@ public class Guest
     {
         this.EventCount = this.EventCount + 1L;
     }
-    public static DomainResult<Guest> Create(string email, string name, string phone, IEnumerable<EventHold>? events = null, IEnumerable<Reservation>? reservations = null, long eventCount = 0L, long nightCount = 0L, long stayCount = 0L)
+    public static DomainResult<Guest> Create(string name, string email, string phone, IEnumerable<EventHold>? events = null, IEnumerable<Reservation>? reservations = null, long stayCount = 0L, long nightCount = 0L, long eventCount = 0L)
     {
+        if (string.IsNullOrEmpty(name))
+        {
+            return DomainResult<Guest>.Failure("'Name' is required.");
+        }
         if (string.IsNullOrEmpty(email))
         {
             return DomainResult<Guest>.Failure("'Email' is required.");
@@ -150,10 +154,6 @@ public class Guest
         if (!System.Text.RegularExpressions.Regex.IsMatch(email, "^[^@]+@[^@]+\\z"))
         {
             return DomainResult<Guest>.Failure("'Email' does not match the required pattern.");
-        }
-        if (string.IsNullOrEmpty(name))
-        {
-            return DomainResult<Guest>.Failure("'Name' is required.");
         }
         if (string.IsNullOrEmpty(phone))
         {
@@ -167,7 +167,7 @@ public class Guest
         {
             return DomainResult<Guest>.Failure("'Phone' must be at most 20 characters.");
         }
-        var created = new Guest(email, name, phone, events, reservations, eventCount, nightCount, stayCount);
+        var created = new Guest(name, email, phone, events, reservations, stayCount, nightCount, eventCount);
         return DomainResult<Guest>.Success(created);
     }
     private void InitializeSubscriptions()

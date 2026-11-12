@@ -15,21 +15,21 @@ public class Loan
     private List<Patron>? _patronLoansReturnedSubscribers;
     private int _notifyDepth;
     private Loan() { }
-    private Loan(Book? book = null, Patron? borrower = null, DateTime? dueDate = null, DateTime? returnedAt = null, string? status = null, long? timesRenewed = null)
+    private Loan(Book? book = null, Patron? borrower = null, string? status = null, DateTime? dueDate = null, DateTime? returnedAt = null, long? timesRenewed = null)
     {
+        this.Status = status;
         this.DueDate = dueDate ?? DateTime.UtcNow;
         this.ReturnedAt = returnedAt;
-        this.Status = status;
         this.TimesRenewed = timesRenewed;
         this.Book = book;
         this.Borrower = borrower;
         this.CurrentStage = LoanStage.Active;
         this.CheckedOutAt = DateTime.UtcNow;
     }
+    public string? Status { get; private set; }
     public DateTime CheckedOutAt { get; private set; }
     public DateTime DueDate { get; private set; }
     public DateTime? ReturnedAt { get; private set; }
-    public string? Status { get; private set; }
     public long? TimesRenewed { get; private set; }
     public Book? Book { get; private set; }
     public Patron? Borrower { get; private set; }
@@ -121,9 +121,9 @@ public class Loan
             this.ExitNotifyCascade();
         }
     }
-    public static DomainResult<Loan> Create(Book? book = null, Patron? borrower = null, DateTime? dueDate = null, DateTime? returnedAt = null, string? status = null, long? timesRenewed = null)
+    public static DomainResult<Loan> Create(Book? book = null, Patron? borrower = null, string? status = null, DateTime? dueDate = null, DateTime? returnedAt = null, long? timesRenewed = null)
     {
-        var created = new Loan(book, borrower, dueDate, returnedAt, status, timesRenewed);
+        var created = new Loan(book, borrower, status, dueDate, returnedAt, timesRenewed);
         if (borrower != null)
         {
             borrower.AttachLoans(created);

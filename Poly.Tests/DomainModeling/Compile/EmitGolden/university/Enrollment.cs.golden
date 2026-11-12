@@ -17,17 +17,17 @@ public class Enrollment
     private List<Section>? _sectionEnrollmentsRegisteredSubscribers;
     private List<Section>? _sectionEnrollmentsDroppedSubscribers;
     private int _notifyDepth;
-    private Enrollment(Section? section = null, Student? student = null, DateOnly? dueDate = null, DateOnly? enrolledOn = null, long grade = 0L)
+    private Enrollment(Section? section = null, Student? student = null, DateOnly? enrolledOn = null, DateOnly? dueDate = null, long grade = 0L)
     {
-        this.DueDate = dueDate ?? DateOnly.FromDateTime(DateTime.UtcNow);
         this.EnrolledOn = enrolledOn ?? DateOnly.FromDateTime(DateTime.UtcNow);
+        this.DueDate = dueDate ?? DateOnly.FromDateTime(DateTime.UtcNow);
         this.Grade = grade;
         this.Section = section;
         this.Student = student;
         this.CurrentStage = EnrollmentStage.Pending;
     }
-    public DateOnly DueDate { get; private set; }
     public DateOnly EnrolledOn { get; private set; }
+    public DateOnly DueDate { get; private set; }
     public long Grade { get; private set; }
     public Section? Section { get; private set; }
     public Student? Student { get; private set; }
@@ -230,7 +230,7 @@ public class Enrollment
             this.ExitNotifyCascade();
         }
     }
-    public static DomainResult<Enrollment> Create(Section? section = null, Student? student = null, DateOnly? dueDate = null, DateOnly? enrolledOn = null, long grade = 0L)
+    public static DomainResult<Enrollment> Create(Section? section = null, Student? student = null, DateOnly? enrolledOn = null, DateOnly? dueDate = null, long grade = 0L)
     {
         if (grade < 0L)
         {
@@ -240,7 +240,7 @@ public class Enrollment
         {
             return DomainResult<Enrollment>.Failure("'Grade' must be <= 100.");
         }
-        var created = new Enrollment(section, student, dueDate, enrolledOn, grade);
+        var created = new Enrollment(section, student, enrolledOn, dueDate, grade);
         if (section != null)
         {
             section.AttachEnrollments(created);

@@ -20,11 +20,11 @@ POST http://localhost:5201/api/books
 Content-Type: application/json
 
 {
+    "Title": "sample",
     "Author": "sample",
-    "Genre": "Fiction",
     "ISBN": "example-isbn",
     "Pages": 0,
-    "Title": "sample"
+    "Genre": "Fiction"
 }
 
 ### ──────────── Patrons ────────────
@@ -40,8 +40,8 @@ POST http://localhost:5201/api/patrons
 Content-Type: application/json
 
 {
-    "Email": "example-email",
     "Name": "sample",
+    "Email": "example-email",
     "MaxItems": 0
 }
 
@@ -103,9 +103,9 @@ POST http://localhost:5201/api/premiumPatrons
 Content-Type: application/json
 
 {
-    "Email": "example-email",
     "Name": "sample",
-    "PriorityAccess": false,
-    "RewardPoints": 0
+    "Email": "example-email",
+    "RewardPoints": 0,
+    "PriorityAccess": false
 }
 

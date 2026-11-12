@@ -38,7 +38,9 @@ public sealed record SessionOptions(
     /// <summary>
     /// Rejects a null set, a blank id and a repeated id. Shared with
     /// <see cref="LibrarySelection.Resolve"/> because <c>with</c> bypasses the
-    /// property initializers above.
+    /// property initializers above. One rule per input kind, whatever the entry
+    /// point: a blank id is an <see cref="ArgumentException"/>, a repeated one an
+    /// <see cref="InvalidOperationException"/>.
     /// </summary>
     internal static IReadOnlyList<string> ValidateImplicitIds(IReadOnlyList<string>? implicitIds) {
         ArgumentNullException.ThrowIfNull(implicitIds);
@@ -47,8 +49,8 @@ public sealed record SessionOptions(
             if (string.IsNullOrWhiteSpace(id))
                 throw new ArgumentException("Domain extension id must be non-empty.", nameof(implicitIds));
             if (!seen.Add(id))
-                throw new ArgumentException(
-                    $"Implicit ids list extension '{id}' more than once.", nameof(implicitIds));
+                throw new InvalidOperationException(
+                    $"Implicit ids list extension '{id}' more than once.");
         }
         return implicitIds;
     }

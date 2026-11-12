@@ -86,12 +86,29 @@ public class McpSmokeTests {
         var data = (AnalysisData)response.Data!;
         await Assert.That(data.EntityCount).IsGreaterThanOrEqualTo(2);
         await Assert.That(data.RelationshipCount).IsGreaterThanOrEqualTo(1);
-        await Assert.That(data.HasStorageMapping).IsFalse();
+        // C-03: the implicit set carries persistence, so a session with no `uses` has a mapping.
+        await Assert.That(data.HasStorageMapping).IsTrue();
         await Assert.That(data.RootEntityNames).IsNotNull();
         await Assert.That(data.RootEntityNames!.Count).IsGreaterThanOrEqualTo(1);
         // amu-w4: aggregate ownership summary present when bags exist.
         await Assert.That(data.AggregateRootCount).IsGreaterThanOrEqualTo(1);
         await Assert.That(data.Aggregates).IsNotNull();
+    }
+
+    /// <summary>
+    /// FX5 counter-test: a session whose <c>uses</c> omits persistence has no storage mapping.
+    /// </summary>
+    [Test]
+    public async Task GetDomainAnalysis_UsesWithoutPersistence_ReportsNoStorageMapping() {
+        var (sessionId, _) = McpTestTools.Store.Create("NoMapping");
+        var applied = McpTestTools.Dsl.ApplyDsl(
+            sessionId, "domain NoMapping\nuses temporal\n\nOrder: entity { Total: Number }\n");
+        await Assert.That(applied.Success).IsTrue();
+
+        var response = McpTestTools.Query.GetDomainAnalysis(sessionId);
+        await Assert.That(response.Success).IsTrue();
+        var data = (AnalysisData)response.Data!;
+        await Assert.That(data.HasStorageMapping).IsFalse();
     }
 
     [Test]

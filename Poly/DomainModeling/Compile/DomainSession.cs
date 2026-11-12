@@ -46,16 +46,15 @@ public sealed partial class DomainSession {
     /// </summary>
     public IReadOnlyList<ContractContribution> ContractContributions { get; }
 
+    /// <summary>The inputs this session's libraries were selected from; a reload reuses them.</summary>
+    public SessionOptions Options { get; }
+
     /// <summary>
     /// The host target this compilation is for (<c>posix</c>, <c>windows</c>), or <c>null</c>
     /// when the host named none. A host fact (spike #413 decision 3): not a <c>uses</c> id,
     /// not a <see cref="Domain"/> fact, and never implied by the ids the source lists.
     /// Analysis compares it with each target-declaring contract contribution.
     /// </summary>
-    /// <summary>The inputs this session's libraries were selected from; a reload reuses them.</summary>
-    public SessionOptions Options { get; }
-
-    /// <summary>The host target (<see cref="SessionOptions.Target"/>), or null.</summary>
     public string? Target => Options.Target;
 
     public IReadOnlyList<IArtifactContributor> Artifacts { get; }
@@ -224,7 +223,11 @@ public sealed partial class DomainSession {
         return LibrarySelection.Load(LibrarySelection.Resolve(documentUses, options), options);
     }
 
-    /// <summary>Loads the document's <c>uses</c> ids (or <paramref name="seed"/> when it lists none). Unknown id throws.</summary>
+    /// <summary>
+    /// Loads the document's <c>uses</c> ids (or <paramref name="seed"/> when it lists none).
+    /// Unknown id throws. The seed is validated eagerly, even when the document lists its own
+    /// <c>uses</c> and the seed is therefore never loaded.
+    /// </summary>
     public static DomainSession ForDocument(
         DslSyntaxTree tree,
         IReadOnlyList<string> seed,
@@ -237,7 +240,8 @@ public sealed partial class DomainSession {
     /// <summary>
     /// <see cref="ForDocument"/> plus the Sql annotation pack (<c>column</c>/<c>table</c>).
     /// The pack is not added to <see cref="Extensions"/> when the source <c>uses</c>
-    /// list omitted it, so <see cref="WithDomain"/> keeps the handlers.
+    /// list omitted it, so <see cref="WithDomain"/> keeps the handlers. The seed is
+    /// validated eagerly, as <see cref="ForDocument"/> does.
     /// </summary>
     public static DomainSession ForAuthoringDocument(
         DslSyntaxTree tree,

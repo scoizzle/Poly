@@ -35,7 +35,11 @@ public sealed record EntityStructureMetadata(
     /// </summary>
     IReadOnlyDictionary<string, Stage>? StageByName,
 
-    /// <summary>Constructor parameter order for entity creation lowering.</summary>
+    /// <summary>
+    /// Constructor parameter order for entity creation lowering: declaration order
+    /// within the required block, then within the trailing defaulted/optional block.
+    /// The block split itself is L-08's (it makes every Create parameter optional).
+    /// </summary>
     IReadOnlyList<ConstructorParameterOrder> ConstructorParameters,
 
     /// <summary>

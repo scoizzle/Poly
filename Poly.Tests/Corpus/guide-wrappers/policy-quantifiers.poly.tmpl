@@ -1,0 +1,22 @@
+domain GuidePolicyQuantifiers
+
+Order: entity {
+  Priority: Number
+  Total: Number
+  Status: Text
+}
+
+Note: entity {
+  NeedsFollowUp: Boolean
+}
+
+Line: entity {
+  Price: Number
+}
+
+Cart: entity {
+  orders: many Order
+  notes: many Note
+  lines: many Line
+// <<guide-block:entity>>
+}

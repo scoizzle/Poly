@@ -33,7 +33,7 @@ app.MapGet("/api/products", async (CrmDbContext db) => await db.Products.ToListA
 app.MapGet("/api/products/{sku}", async (string sku, CrmDbContext db) => (await db.Products.FirstOrDefaultAsync(e => e.Sku == sku) is Product product ? Results.Ok(product) : Results.NotFound()));
 
 app.MapPost("/api/products", async (ProductDto dto, CrmDbContext db) => {
-    var productResult = Product.Create(dto.ListPrice, dto.Name, dto.Sku, db);
+    var productResult = Product.Create(dto.Sku, dto.Name, dto.ListPrice, db);
     if (!productResult.IsSuccess)
     {
         return FailureStatus(productResult.ErrorMessage);
@@ -48,7 +48,7 @@ app.MapGet("/api/leads", async (CrmDbContext db) => await db.Leads.ToListAsync()
 app.MapGet("/api/leads/{email}", async (string email, CrmDbContext db) => (await db.Leads.FirstOrDefaultAsync(e => e.Email == email) is Lead lead ? Results.Ok(lead) : Results.NotFound()));
 
 app.MapPost("/api/leads", async (LeadDto dto, CrmDbContext db) => {
-    var leadResult = Lead.Create(dto.Company, dto.Email, dto.Name, db, null);
+    var leadResult = Lead.Create(dto.Name, dto.Email, dto.Company, db, null);
     if (!leadResult.IsSuccess)
     {
         return FailureStatus(leadResult.ErrorMessage);
@@ -63,7 +63,7 @@ app.MapGet("/api/accounts", async (CrmDbContext db) => await db.Accounts.ToListA
 app.MapGet("/api/accounts/{id}", async (int id, CrmDbContext db) => (await db.Accounts.FindAsync(id) is Account account ? Results.Ok(account) : Results.NotFound()));
 
 app.MapPost("/api/accounts", async (AccountDto dto, CrmDbContext db) => {
-    var accountResult = Account.Create(dto.Industry, dto.Name, null, null, Enumerable.Empty<Contact>(), Enumerable.Empty<Opportunity>(), Enumerable.Empty<Ticket>());
+    var accountResult = Account.Create(dto.Name, dto.Industry, null, null, Enumerable.Empty<Contact>(), Enumerable.Empty<Opportunity>(), Enumerable.Empty<Ticket>());
     if (!accountResult.IsSuccess)
     {
         return FailureStatus(accountResult.ErrorMessage);
@@ -1328,7 +1328,7 @@ static async System.Threading.Tasks.Task SeedAsync(CrmDbContext db)
     {
         return;
     }
-    var productResult = Product.Create(1, "Sample", "XXXXXXXX", db);
+    var productResult = Product.Create("XXXXXXXX", "Sample", 1, db);
     if (productResult.IsSuccess)
     {
         db.Add(productResult.Value);
@@ -1338,7 +1338,7 @@ static async System.Threading.Tasks.Task SeedAsync(CrmDbContext db)
     {
         db.Add(leadResult.Value);
     }
-    var accountResult = Account.Create(Industry.Technology, "Sample", null, null, Enumerable.Empty<Contact>(), Enumerable.Empty<Opportunity>(), Enumerable.Empty<Ticket>());
+    var accountResult = Account.Create("Sample", Industry.Technology, null, null, Enumerable.Empty<Contact>(), Enumerable.Empty<Opportunity>(), Enumerable.Empty<Ticket>());
     if (accountResult.IsSuccess)
     {
         db.Add(accountResult.Value);
@@ -1357,33 +1357,33 @@ app.Run();
 
 public record ProductDto
 {
-    [Range(typeof(decimal), "0", "100000000")]
-    public decimal ListPrice { get; init; }
-    [Required]
-    public string Name { get; init; } = default!;
     [Required]
     [MinLength(3)]
     [MaxLength(32)]
     public string Sku { get; init; } = default!;
+    [Required]
+    public string Name { get; init; } = default!;
+    [Range(typeof(decimal), "0", "100000000")]
+    public decimal ListPrice { get; init; }
 }
 
 public record LeadDto
 {
     [Required]
-    public string Company { get; init; } = default!;
+    public string Name { get; init; } = default!;
     [Required]
     [RegularExpression("^[^@]+@[^@]+$")]
     public string Email { get; init; } = default!;
     [Required]
-    public string Name { get; init; } = default!;
+    public string Company { get; init; } = default!;
 }
 
 public record AccountDto
 {
-    [EnumDataType(typeof(Industry))]
-    public Industry Industry { get; init; }
     [Required]
     public string Name { get; init; } = default!;
+    [EnumDataType(typeof(Industry))]
+    public Industry Industry { get; init; }
 }
 
 public record CampaignDto

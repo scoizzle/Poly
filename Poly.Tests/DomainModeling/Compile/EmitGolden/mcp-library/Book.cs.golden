@@ -2,17 +2,25 @@
 public class Book
 {
     private Book() { }
-    private Book(string isbn, string title, long copies = 1L)
+    private Book(string title, string isbn, long copies = 1L)
     {
-        this.Isbn = isbn;
         this.Title = title;
+        this.Isbn = isbn;
         this.Copies = copies;
     }
-    public long Copies { get; private set; }
-    public string Isbn { get; private set; } = default!;
     public string Title { get; private set; } = default!;
-    public static DomainResult<Book> Create(string isbn, string title, Poly.Runtime.IStoragePort db, long copies = 1L)
+    public string Isbn { get; private set; } = default!;
+    public long Copies { get; private set; }
+    public static DomainResult<Book> Create(string title, string isbn, Poly.Runtime.IStoragePort db, long copies = 1L)
     {
+        if (string.IsNullOrEmpty(title))
+        {
+            return DomainResult<Book>.Failure("'Title' is required.");
+        }
+        if (string.IsNullOrEmpty(isbn))
+        {
+            return DomainResult<Book>.Failure("'Isbn' is required.");
+        }
         if (copies < 0L)
         {
             return DomainResult<Book>.Failure("'Copies' must be >= 0.");
@@ -21,19 +29,11 @@ public class Book
         {
             return DomainResult<Book>.Failure("'Copies' must be <= 1000.");
         }
-        if (string.IsNullOrEmpty(isbn))
-        {
-            return DomainResult<Book>.Failure("'Isbn' is required.");
-        }
-        if (string.IsNullOrEmpty(title))
-        {
-            return DomainResult<Book>.Failure("'Title' is required.");
-        }
         if (Book.ExistsWithIsbn(db, isbn))
         {
             return DomainResult<Book>.Failure("Unique constraint violated: 'Isbn' value is already used on another 'Book'.");
         }
-        var created = new Book(isbn, title, copies);
+        var created = new Book(title, isbn, copies);
         db.Record("Book", "Isbn", isbn);
         return DomainResult<Book>.Success(created);
     }

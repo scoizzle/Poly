@@ -16,8 +16,8 @@ public class Activity
         this.Opportunity = opportunity;
         this.CurrentStage = ActivityStage.Open;
     }
-    public DateOnly DueOn { get; private set; }
     public string Subject { get; private set; } = default!;
+    public DateOnly DueOn { get; private set; }
     public Opportunity? Opportunity { get; private set; }
     public ActivityStage CurrentStage { get; private set; }
     public DomainResult Snooze()

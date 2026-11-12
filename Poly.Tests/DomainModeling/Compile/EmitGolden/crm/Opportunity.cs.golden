@@ -20,10 +20,10 @@ public class Opportunity
     private List<Account>? _accountOpportunitiesProposeSubscribers;
     private List<Account>? _accountOpportunitiesLostSubscribers;
     private int _notifyDepth;
-    private Opportunity(decimal amount, string title, Account? account = null, Contact? contact = null, IEnumerable<Activity>? activities = null, IEnumerable<Line>? lines = null, IEnumerable<Quote>? quotes = null, DateOnly? closeBy = null)
+    private Opportunity(string title, decimal amount, Account? account = null, Contact? contact = null, IEnumerable<Activity>? activities = null, IEnumerable<Line>? lines = null, IEnumerable<Quote>? quotes = null, DateOnly? closeBy = null)
     {
-        this.Amount = amount;
         this.Title = title;
+        this.Amount = amount;
         this.CloseBy = closeBy ?? DateOnly.FromDateTime(DateTime.UtcNow);
         this.Account = account;
         this.Contact = contact;
@@ -33,10 +33,10 @@ public class Opportunity
         this.CurrentStage = OpportunityStage.Qualify;
         this.Probability = 10L;
     }
+    public string Title { get; private set; } = default!;
     public decimal Amount { get; private set; }
     public DateOnly CloseBy { get; private set; }
     public long Probability { get; private set; }
-    public string Title { get; private set; } = default!;
     public Account? Account { get; private set; }
     public Contact? Contact { get; private set; }
     public IReadOnlyList<Activity> Activities
@@ -80,9 +80,9 @@ public class Opportunity
     {
         this._lines.Add(child);
     }
-    public DomainResult<Quote> CreateQuotes(decimal amount, string title)
+    public DomainResult<Quote> CreateQuotes(string title, decimal amount)
     {
-        var quoteResult = Quote.Create(amount, title, this, new List<QuoteLine>());
+        var quoteResult = Quote.Create(title, amount, this, new List<QuoteLine>());
         if (!quoteResult.IsSuccess)
         {
             return DomainResult<Quote>.Failure(quoteResult.ErrorMessage ?? "");
@@ -180,7 +180,7 @@ public class Opportunity
         {
             return DomainResult<Quote>.Failure("'QuoteDeal' requires stage 'Qualify' on entity 'Opportunity'.");
         }
-        var create0 = this.CreateQuotes(0L, this.Title);
+        var create0 = this.CreateQuotes(this.Title, 0L);
         if (!create0.IsSuccess)
         {
             return DomainResult<Quote>.Failure(create0.ErrorMessage ?? "");
@@ -333,8 +333,12 @@ public class Opportunity
             this.ExitNotifyCascade();
         }
     }
-    public static DomainResult<Opportunity> Create(decimal amount, string title, Account? account = null, Contact? contact = null, IEnumerable<Activity>? activities = null, IEnumerable<Line>? lines = null, IEnumerable<Quote>? quotes = null, DateOnly? closeBy = null)
+    public static DomainResult<Opportunity> Create(string title, decimal amount, Account? account = null, Contact? contact = null, IEnumerable<Activity>? activities = null, IEnumerable<Line>? lines = null, IEnumerable<Quote>? quotes = null, DateOnly? closeBy = null)
     {
+        if (string.IsNullOrEmpty(title))
+        {
+            return DomainResult<Opportunity>.Failure("'Title' is required.");
+        }
         if (amount < 0m)
         {
             return DomainResult<Opportunity>.Failure("'Amount' must be >= 0.");
@@ -343,11 +347,7 @@ public class Opportunity
         {
             return DomainResult<Opportunity>.Failure("'Amount' must be <= 100000000.");
         }
-        if (string.IsNullOrEmpty(title))
-        {
-            return DomainResult<Opportunity>.Failure("'Title' is required.");
-        }
-        var created = new Opportunity(amount, title, account, contact, activities, lines, quotes, closeBy);
+        var created = new Opportunity(title, amount, account, contact, activities, lines, quotes, closeBy);
         if (account != null)
         {
             account.AttachOpportunities(created);

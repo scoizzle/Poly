@@ -23,9 +23,9 @@ public class Fine
         this.CurrentStage = FineStage.Unpaid;
     }
     public long Amount { get; private set; }
+    public string Reason { get; private set; } = default!;
     public DateTime DateIssued { get; private set; }
     public bool? Paid { get; private set; }
-    public string Reason { get; private set; } = default!;
     public Patron? Patron { get; private set; }
     public FineStage CurrentStage { get; private set; }
     public DomainResult Pay()

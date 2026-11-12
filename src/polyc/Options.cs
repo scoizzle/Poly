@@ -1,5 +1,6 @@
 using Poly.Compile;
 using Poly.DomainModeling.Compile;
+using Poly.Packs.Product;
 
 namespace Polyc;
 
@@ -8,7 +9,7 @@ internal sealed class Options {
     public required string Command { get; init; }
     public List<string> Paths { get; } = [];
     public string Out { get; set; } = "./polyc-out";
-    public string Seed { get; set; } = "authoring";
+    public string? Seed { get; set; }
     public List<string> Artifacts { get; } = [];
     public string Format { get; set; } = "text";
     public bool WarnAsError { get; set; }
@@ -32,13 +33,25 @@ internal sealed class Options {
 
         A directory means every *.poly directly inside it (not recursive); each file is its own
         compilation unit. With no path and piped stdin, stdin is one document.
-        Seeds: authoring (default), language. A document's own `uses` wins over the seed.
+        Seeds: omitting --seed loads the implicit set [storage, persistence]; --seed authoring
+        loads [storage] only, and --seed language loads no ids. A document's non-empty `uses`
+        list replaces the seed, so a `unique` property needs persistence or a vendor library
+        in that list.
         --target is the host target (for example posix or windows). It is a host fact the
         driver forwards; `uses` never chooses it, and a platform package without it is an error.
         Exit codes: 0 no errors, 1 errors or usage, 2 unexpected failure.
         --format json prints a JSON array of diagnostic records. A build also prints each
         written path on stderr as `wrote <path>`.
         """;
+
+    /// <summary>
+    /// The one compiler factory: a named seed, or the product implicit set when the
+    /// driver names none. The LSP server and <c>polyc</c> both build through it.
+    /// </summary>
+    internal static PolyCompiler CreateCompiler(string? seed) =>
+        new PolyCompiler(
+            ProductCatalog.Catalog,
+            seed is null ? ProductCatalog.ImplicitIds : ExtensionCatalog.Seed(seed));
 
     /// <summary>Returns null with <paramref name="error"/> set on a usage problem.</summary>
     public static Options? Parse(string[] args, out string? error) {
@@ -101,7 +114,8 @@ internal sealed class Options {
             return null;
         }
         try {
-            ExtensionCatalog.Seed(options.Seed);
+            if (options.Seed is { } seedName)
+                ExtensionCatalog.Seed(seedName);
         }
         catch (ArgumentException ex) {
             error = ex.Message;

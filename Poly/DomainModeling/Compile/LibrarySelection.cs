@@ -4,9 +4,9 @@ namespace Poly.DomainModeling.Compile;
 
 /// <summary>
 /// The one place a document's <c>uses</c> ids are chosen against a session's
-/// implicit id set. Today's rule is replace: a non-empty <c>uses</c> list wins
-/// outright. Additive or vendor-aware selection (vendor storage replacing
-/// <c>persistence</c>) is C-03/C-04 behind this same signature.
+/// implicit id set: a non-empty <c>uses</c> list replaces the set, an empty one
+/// loads it, so a <c>unique</c> property needs <c>persistence</c> or a vendor
+/// library (a <c>sqlite</c>/<c>sqlserver</c> package) in that list.
 /// </summary>
 public static class LibrarySelection {
     /// <summary>
@@ -37,8 +37,9 @@ public static class LibrarySelection {
 
     /// <summary>
     /// Loads exactly <paramref name="ids"/> against the options' catalog, with no
-    /// <see cref="Resolve"/> substitution. A blank or repeated id and an unknown id
-    /// throw <see cref="InvalidOperationException"/>. The session keeps
+    /// <see cref="Resolve"/> substitution. A blank id is an
+    /// <see cref="ArgumentException"/>; a repeated or unknown id throws
+    /// <see cref="InvalidOperationException"/>. The session keeps
     /// <paramref name="options"/> so a reload resolves against the same catalog.
     /// </summary>
     public static DomainSession Load(IReadOnlyList<string> ids, SessionOptions options) {
@@ -53,7 +54,7 @@ public static class LibrarySelection {
         var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var id in ids) {
             if (string.IsNullOrWhiteSpace(id))
-                throw new InvalidOperationException("Domain extension id must be non-empty.");
+                throw new ArgumentException("Domain extension id must be non-empty.", nameof(ids));
             if (!seen.Add(id))
                 throw new InvalidOperationException($"Domain lists extension '{id}' more than once.");
             builder.Load(catalog.Resolve(id));

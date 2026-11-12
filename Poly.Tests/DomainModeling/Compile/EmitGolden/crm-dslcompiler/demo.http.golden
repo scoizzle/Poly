@@ -28,9 +28,9 @@ POST http://localhost:5201/api/products
 Content-Type: application/json
 
 {
-    "ListPrice": 0.0,
+    "Sku": "example-sku",
     "Name": "sample",
-    "Sku": "example-sku"
+    "ListPrice": 0.0
 }
 
 ### ──────────── Leads ────────────
@@ -46,9 +46,9 @@ POST http://localhost:5201/api/leads
 Content-Type: application/json
 
 {
-    "Company": "sample",
+    "Name": "sample",
     "Email": "example-email",
-    "Name": "sample"
+    "Company": "sample"
 }
 
 ### Action: Convert
@@ -70,8 +70,8 @@ POST http://localhost:5201/api/accounts
 Content-Type: application/json
 
 {
-    "Industry": "Technology",
-    "Name": "sample"
+    "Name": "sample",
+    "Industry": "Technology"
 }
 
 ### Action: PlaceHq

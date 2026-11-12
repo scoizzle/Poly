@@ -5,29 +5,29 @@ public class Warehouse
 {
     private List<Truck> _trucks = new List<Truck>();
     private Warehouse() { }
-    private Warehouse(long capacity, string code, string name, string zip, IEnumerable<Truck>? trucks = null, long safetyStock = 100L, TruckStatus status = TruckStatus.Idle)
+    private Warehouse(string code, string name, string zip, long capacity, IEnumerable<Truck>? trucks = null, long safetyStock = 100L, TruckStatus status = TruckStatus.Idle)
     {
-        this.Capacity = capacity;
         this.Code = code;
         this.Name = name;
         this.Zip = zip;
+        this.Capacity = capacity;
         this.SafetyStock = safetyStock;
         this.Status = status;
         this._trucks = new List<Truck>(trucks ?? new List<Truck>());
     }
-    public long Capacity { get; private set; }
     public string Code { get; private set; } = default!;
     public string Name { get; private set; } = default!;
+    public string Zip { get; private set; } = default!;
+    public long Capacity { get; private set; }
     public long SafetyStock { get; private set; }
     public TruckStatus Status { get; private set; }
-    public string Zip { get; private set; } = default!;
     public IReadOnlyList<Truck> Trucks
     {
         get => this._trucks;
     }
-    public DomainResult<Truck> CreateTrucks(long maxLoad, string vin, Poly.Runtime.IStoragePort db, long currentLoad = 0L, TruckStatus status = TruckStatus.Idle)
+    public DomainResult<Truck> CreateTrucks(string vin, long maxLoad, Poly.Runtime.IStoragePort db, long currentLoad = 0L, TruckStatus status = TruckStatus.Idle)
     {
-        var truckResult = Truck.Create(maxLoad, vin, db, this, new List<Delivery>(), currentLoad, status);
+        var truckResult = Truck.Create(vin, maxLoad, db, this, new List<Delivery>(), currentLoad, status);
         if (!truckResult.IsSuccess)
         {
             return DomainResult<Truck>.Failure(truckResult.ErrorMessage ?? "");
@@ -65,7 +65,7 @@ public class Warehouse
     }
     public DomainResult<Truck> RegisterTruck(string vin, long maxLoad, Poly.Runtime.IStoragePort db)
     {
-        var create0 = this.CreateTrucks(maxLoad, vin, db, 0L, TruckStatus.Idle);
+        var create0 = this.CreateTrucks(vin, maxLoad, db, 0L, TruckStatus.Idle);
         if (!create0.IsSuccess)
         {
             return DomainResult<Truck>.Failure(create0.ErrorMessage ?? "");
@@ -75,16 +75,8 @@ public class Warehouse
     }
     public bool IsOperational() => this.Capacity > 0L;
     public bool HasCapacity() => this.Capacity > 0L;
-    public static DomainResult<Warehouse> Create(long capacity, string code, string name, string zip, Poly.Runtime.IStoragePort db, IEnumerable<Truck>? trucks = null, long safetyStock = 100L, TruckStatus status = TruckStatus.Idle)
+    public static DomainResult<Warehouse> Create(string code, string name, string zip, long capacity, Poly.Runtime.IStoragePort db, IEnumerable<Truck>? trucks = null, long safetyStock = 100L, TruckStatus status = TruckStatus.Idle)
     {
-        if (capacity < 1L)
-        {
-            return DomainResult<Warehouse>.Failure("'Capacity' must be >= 1.");
-        }
-        if (capacity > 10000L)
-        {
-            return DomainResult<Warehouse>.Failure("'Capacity' must be <= 10000.");
-        }
         if (string.IsNullOrEmpty(code))
         {
             return DomainResult<Warehouse>.Failure("'Code' is required.");
@@ -113,6 +105,22 @@ public class Warehouse
         {
             return DomainResult<Warehouse>.Failure("'Name' must be at most 50 characters.");
         }
+        if (string.IsNullOrEmpty(zip))
+        {
+            return DomainResult<Warehouse>.Failure("'Zip' is required.");
+        }
+        if (!System.Text.RegularExpressions.Regex.IsMatch(zip, "^\\d{5}\\z"))
+        {
+            return DomainResult<Warehouse>.Failure("'Zip' does not match the required pattern.");
+        }
+        if (capacity < 1L)
+        {
+            return DomainResult<Warehouse>.Failure("'Capacity' must be >= 1.");
+        }
+        if (capacity > 10000L)
+        {
+            return DomainResult<Warehouse>.Failure("'Capacity' must be <= 10000.");
+        }
         if (safetyStock < 0L)
         {
             return DomainResult<Warehouse>.Failure("'SafetyStock' must be >= 0.");
@@ -125,19 +133,11 @@ public class Warehouse
         {
             return DomainResult<Warehouse>.Failure(string.Concat("'", status, "' is not a valid member of TruckStatus for property 'Status'."));
         }
-        if (string.IsNullOrEmpty(zip))
-        {
-            return DomainResult<Warehouse>.Failure("'Zip' is required.");
-        }
-        if (!System.Text.RegularExpressions.Regex.IsMatch(zip, "^\\d{5}\\z"))
-        {
-            return DomainResult<Warehouse>.Failure("'Zip' does not match the required pattern.");
-        }
         if (Warehouse.ExistsWithCode(db, code))
         {
             return DomainResult<Warehouse>.Failure("Unique constraint violated: 'Code' value is already used on another 'Warehouse'.");
         }
-        var created = new Warehouse(capacity, code, name, zip, trucks, safetyStock, status);
+        var created = new Warehouse(code, name, zip, capacity, trucks, safetyStock, status);
         db.Record("Warehouse", "Code", code);
         return DomainResult<Warehouse>.Success(created);
     }

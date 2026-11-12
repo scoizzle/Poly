@@ -10,14 +10,14 @@ public enum RoomStage
 public class Room
 {
     private List<Reservation> _stays = new List<Reservation>();
-    private Room(long floor, long maxOccupancy, decimal nightlyRate, string number, Property? property = null, RoomType? roomType = null, IEnumerable<Reservation>? stays = null, bool dirty = false, bool occupied = false, bool offline = false)
+    private Room(string number, long floor, decimal nightlyRate, long maxOccupancy, Property? property = null, RoomType? roomType = null, IEnumerable<Reservation>? stays = null, bool occupied = false, bool dirty = false, bool offline = false)
     {
-        this.Floor = floor;
-        this.MaxOccupancy = maxOccupancy;
-        this.NightlyRate = nightlyRate;
         this.Number = number;
-        this.Dirty = dirty;
+        this.Floor = floor;
+        this.NightlyRate = nightlyRate;
+        this.MaxOccupancy = maxOccupancy;
         this.Occupied = occupied;
+        this.Dirty = dirty;
         this.Offline = offline;
         this.Property = property;
         this.RoomType = roomType;
@@ -25,12 +25,12 @@ public class Room
         this.CurrentStage = RoomStage.InService;
         this.InitializeSubscriptions();
     }
-    public bool Dirty { get; private set; }
-    public long Floor { get; private set; }
-    public long MaxOccupancy { get; private set; }
-    public decimal NightlyRate { get; private set; }
     public string Number { get; private set; } = default!;
+    public long Floor { get; private set; }
+    public decimal NightlyRate { get; private set; }
+    public long MaxOccupancy { get; private set; }
     public bool Occupied { get; private set; }
+    public bool Dirty { get; private set; }
     public bool Offline { get; private set; }
     public Property? Property { get; private set; }
     public RoomType? RoomType { get; private set; }
@@ -103,32 +103,8 @@ public class Room
     {
         this.Dirty = true;
     }
-    public static DomainResult<Room> Create(long floor, long maxOccupancy, decimal nightlyRate, string number, Property? property = null, RoomType? roomType = null, IEnumerable<Reservation>? stays = null, bool dirty = false, bool occupied = false, bool offline = false)
+    public static DomainResult<Room> Create(string number, long floor, decimal nightlyRate, long maxOccupancy, Property? property = null, RoomType? roomType = null, IEnumerable<Reservation>? stays = null, bool occupied = false, bool dirty = false, bool offline = false)
     {
-        if (floor < 0L)
-        {
-            return DomainResult<Room>.Failure("'Floor' must be >= 0.");
-        }
-        if (floor > 50L)
-        {
-            return DomainResult<Room>.Failure("'Floor' must be <= 50.");
-        }
-        if (maxOccupancy < 1L)
-        {
-            return DomainResult<Room>.Failure("'MaxOccupancy' must be >= 1.");
-        }
-        if (maxOccupancy > 8L)
-        {
-            return DomainResult<Room>.Failure("'MaxOccupancy' must be <= 8.");
-        }
-        if (nightlyRate < 0m)
-        {
-            return DomainResult<Room>.Failure("'NightlyRate' must be >= 0.");
-        }
-        if (nightlyRate > 10000m)
-        {
-            return DomainResult<Room>.Failure("'NightlyRate' must be <= 10000.");
-        }
         if (string.IsNullOrEmpty(number))
         {
             return DomainResult<Room>.Failure("'Number' is required.");
@@ -141,7 +117,31 @@ public class Room
         {
             return DomainResult<Room>.Failure("'Number' must be at most 8 characters.");
         }
-        var created = new Room(floor, maxOccupancy, nightlyRate, number, property, roomType, stays, dirty, occupied, offline);
+        if (floor < 0L)
+        {
+            return DomainResult<Room>.Failure("'Floor' must be >= 0.");
+        }
+        if (floor > 50L)
+        {
+            return DomainResult<Room>.Failure("'Floor' must be <= 50.");
+        }
+        if (nightlyRate < 0m)
+        {
+            return DomainResult<Room>.Failure("'NightlyRate' must be >= 0.");
+        }
+        if (nightlyRate > 10000m)
+        {
+            return DomainResult<Room>.Failure("'NightlyRate' must be <= 10000.");
+        }
+        if (maxOccupancy < 1L)
+        {
+            return DomainResult<Room>.Failure("'MaxOccupancy' must be >= 1.");
+        }
+        if (maxOccupancy > 8L)
+        {
+            return DomainResult<Room>.Failure("'MaxOccupancy' must be <= 8.");
+        }
+        var created = new Room(number, floor, nightlyRate, maxOccupancy, property, roomType, stays, occupied, dirty, offline);
         if (property != null)
         {
             property.AttachRooms(created);

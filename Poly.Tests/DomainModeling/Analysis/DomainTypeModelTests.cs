@@ -28,6 +28,7 @@ public class DomainTypeModelTests {
         new OntologyValueType("Money", [new Property("Amount", new DomainTypeReference("Decimal"), [])], []),
         new OntologyPrimitive("Cents", PrimitiveSemantics.Decimal, []),
         new OntologyPrimitive("Blob", PrimitiveSemantics.Binary, []),
+        new OntologyPrimitive("Binary", PrimitiveSemantics.Binary, []),
         new OntologyPrimitive("Moment", PrimitiveSemantics.DateTime, [])
     ], []);
 

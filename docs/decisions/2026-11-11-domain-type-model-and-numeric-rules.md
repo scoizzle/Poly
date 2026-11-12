@@ -1,6 +1,6 @@
 # Domain type model and numeric rules (Q5, Q6, OQ-3, OQ-6, OQ-11)
 
-Status: **Transcription of owner rulings Q5, Q6, OQ-3, OQ-6, OQ-11, plus the two contract clauses T-02 decided (see *Open or newly decided*, below).**
+Status: **Transcription of owner rulings Q5, Q6, OQ-3, OQ-6, OQ-11, plus the two contract clauses T-02 decided and the one T-03 decided (see *Open or newly decided*, below). `ExprType` and `DomainTypeModel` have landed (T-03, internal, no production caller until T-04).**
 
 Recorded by slice T-01 of theme T ([#679](https://github.com/scoizzle/Poly/issues/679), epic
 [#677](https://github.com/scoizzle/Poly/issues/677)) so the slices that implement the model are held to the
@@ -60,8 +60,9 @@ OQ-6; that bullet is F-07's to correct.
 
 — OQ-11 row, [#659 comment 6805267269](https://github.com/scoizzle/Poly/issues/659#issuecomment-6805267269).
 
-Planned (OQ-11): an Introspection `GetOperator` lookup owns operand typing and result resolution;
-`Meaning/OperatorTable.cs` (planned, T-03) will map syntax → operator kind only.
+Landed (T-03): `Meaning/OperatorTable.cs` maps syntax → `OperatorKind` only (the enum lives in
+`Poly/Introspection/OperatorKind.cs`). Planned (OQ-11, T-03b): an Introspection `GetOperator` lookup owns
+operand typing and result resolution.
 
 ## Rules
 
@@ -71,7 +72,7 @@ owner-approved plan, not a ruling. **Open** — not settled by either; the named
 | # | Rule | Provenance |
 |---|---|---|
 | R0 | define/check acceptance is the one gate: what it accepts, simulate, printed C# and polyc accept. | **ruling clause (Q5: gate) + #679 plan direction (host parity)** — Q5: "domain analysis is the one gate"; #679 goal: "anything define/check accepts compiles on the VM, in generated C# and in polyc". The harness is T-05 `GateParity`, closed by T-13 |
-| R1 | `Unknown` (planned: `ExprType.Unresolved`, T-03) is never compatible — not a wildcard. | **#679 plan direction** (goal: "`Unknown` never compatible"; contract: `ExprType.Unresolved` is never assignable/comparable). Q5 says replace the model; it does not say this |
+| R1 | `Unknown` is never compatible; the model's `ExprType.Unresolved` (landed, T-03; no production caller until T-04) is never assignable — not a wildcard. | **#679 plan direction** (goal: "`Unknown` never compatible"; contract: `ExprType.Unresolved` is never assignable/comparable). Q5 says replace the model; it does not say this |
 | R2 | `Decimal` ≠ `Number`; `Number` ≡ `Int64`. | **#679 plan direction** — "Decimal distinct from Number" in the goal, and "Number ≡ Int64" in T-03's red test; the existing mapping (below) already spells `Number` as `long`/`bigint` |
 | R3 | optionality is a flag beside the definition, not a wrapped type; `null` only into an optional target. | **#679 plan direction** — goal: "first-class optionality"; the shape is the `ExprType(Definition, Optional, DomainName)` contract (T-03) and T-06's `OptionalTyping` row |
 | R4 | `Number / Number` is integer division; assigning it to `Decimal` warns. | **ruling clause** — Q6: "Number / Number is integer division (+ warning when assigned to Decimal)" |
@@ -81,12 +82,13 @@ owner-approved plan, not a ruling. **Open** — not settled by either; the named
 `DMNUM001` and `DMNUM002` are identifiers owned by T-08, not ruling text. Every planned symbol is tagged
 `planned (T-NN)`; nothing planned is described as current.
 
-Open or newly decided, named by the contract (an open item names the slice that decides it; T-02 decided two below):
+Open or newly decided, named by the contract (an open item names the slice that decides it; T-02 decided two below and T-03 one):
 
-- **Mixed `Number op Decimal` result type** — `Open: decided in T-03/T-03b`; #679's
+- **Mixed `Number op Decimal` result type** — `Open: decided in T-03b`; #679's
   `Binary_DecimalPlusNumber_IsDecimal` assumes `Decimal`, and T-03b owns operator result resolution.
-- **Implicit `Number -> Decimal` widening** — `Open: decided in T-03`; implied by Q6's "+ warning when
-  assigned to Decimal" and by T-03's `Assign_NumberToDecimal_IsWidening`.
+- **Implicit `Number -> Decimal` widening** — decided by T-03: `Assign(Number -> Decimal)` is `Widening`,
+  found through `decimal.op_Implicit(long)` via `GetConversionFrom`; `Decimal -> Number` is
+  `RoundingNarrowing` through the explicit operator. Implied by Q6's "+ warning when assigned to Decimal".
 - **What "assigned" covers for R4's Decimal warning** — `Open: decided in T-08`; #679's red test covers
   `assign` only, not call arguments, function returns or defaults.
 - **A declared `Number` bound outside `long` range** is an **error**, decided by T-02: #515's silent

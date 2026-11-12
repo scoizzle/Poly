@@ -469,6 +469,52 @@ internal sealed class ElementPathTests {
         await Assert.That(((ElementNotFound)resolved).Reason).IsEqualTo(NotFoundReason.Unknown);
     }
 
+    [Test]
+    [Arguments("Clinic.Aptt")]
+    [Arguments("Clinic/appt")]
+    public async Task Resolve_DomainPrefixedUnknownEntity_IsUnknownWithCandidates(string select) {
+        var (domain, _) = Clinic();
+
+        var resolved = Resolve(domain, select);
+
+        await Assert.That(resolved).IsTypeOf<ElementNotFound>().Because(Describe(resolved));
+        var notFound = (ElementNotFound)resolved;
+        await Assert.That(notFound.Reason).IsEqualTo(NotFoundReason.Unknown);
+        await Assert.That(notFound.Candidates).Contains("Appt");
+    }
+
+    [Test]
+    public async Task Resolve_UnknownNameNearAPrimitive_DoesNotSuggestThePrimitive() {
+        var (domain, _) = Clinic();
+
+        var resolved = (ElementNotFound)Resolve(domain, "Nmber");
+
+        await Assert.That(resolved.Candidates).DoesNotContain("Number");
+    }
+
+    [Test]
+    public async Task Resolve_APrimitiveName_IsNotAddressable() {
+        var (domain, _) = Clinic();
+
+        var resolved = Resolve(domain, "Number");
+
+        await Assert.That(resolved).IsTypeOf<ElementNotFound>().Because(Describe(resolved));
+        await Assert.That(((ElementNotFound)resolved).Reason).IsEqualTo(NotFoundReason.NotAddressable);
+    }
+
+    [Test]
+    public async Task Resolve_ActionScopedPolicy_AnalysisPathResolvesBackToTheSameNode() {
+        var onlyHere = Pol("OnlyHere");
+        var gadget = new Entity("Gadget", [], [Act("Book", onlyHere)], [], []);
+        var domain = DomainTestFactory.Create("Shop", [gadget], []);
+
+        var bare = (ElementRef)Resolve(domain, "Gadget.OnlyHere");
+        var back = Resolve(domain, bare.AnalysisPath);
+
+        await Assert.That(back).IsTypeOf<ElementRef>().Because(bare.AnalysisPath + ": " + Describe(back));
+        await Assert.That(ReferenceEquals(((ElementRef)back).Node, onlyHere)).IsTrue();
+    }
+
     // ── Twin grammar parity (A7) ───────────────────────────────
 
     [Test]

@@ -88,7 +88,7 @@ internal static class InspectService {
             return FromResponse(query.GetDomainOverview(workspace));
 
         if (!ElementPath.TryParse(select, out var path, out var parseError)) {
-            return new InspectOutcome(false, parseError!,
+            return new InspectOutcome(false, $"The select path is malformed: {parseError}",
                 new ElementNotFoundData("unknown", []), ElementNotFoundCode);
         }
 
@@ -112,11 +112,17 @@ internal static class InspectService {
 
     private static InspectOutcome Ambiguous(string select, ElementAmbiguous ambiguous) {
         var matches = ambiguous.Matches.Select(m => new ElementMatchData(KindName(m.Kind), m.Canonical)).ToList();
+        var sameName = matches.Select(static m => m.Path).Distinct(StringComparer.Ordinal).Count() < matches.Count;
         var summary = $"'{select}' is ambiguous: it matches "
             + string.Join("; ", matches.Select(m => $"{m.Kind} {m.Path}"))
-            + ". Pass the full path to pick one.";
+            + (sameName
+                ? ". Two of them share one path, so no path form selects one; rename one of the elements."
+                : ". Pass the full path to pick one.");
+        IReadOnlyList<string> candidates = sameName
+            ? [.. matches.Select(static m => $"{m.Kind} {m.Path}")]
+            : [.. matches.Select(static m => m.Path)];
         return new InspectOutcome(false, summary,
-            new ElementNotFoundData("ambiguous", [.. ambiguous.Matches.Select(static m => m.Canonical)]) { Matches = matches },
+            new ElementNotFoundData("ambiguous", candidates) { Matches = matches },
             ElementNotFoundCode);
     }
 

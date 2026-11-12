@@ -178,6 +178,58 @@ internal sealed class InspectPathTests {
     }
 
     [Test]
+    public async Task Inspect_DomainPrefixedUnknownEntity_IsUnknownWithCandidates() {
+        var (h, ws) = Open(Clinic);
+
+        var r = h.Inspect(ws, "Clinic/Aptt");
+
+        await Assert.That(r.Code).IsEqualTo("ELEMENT_NOT_FOUND");
+        await Assert.That(Str(r, "reason")).IsEqualTo("unknown");
+        await Assert.That(Strings(r.Data!["candidates"])).Contains("Appt");
+    }
+
+    [Test]
+    public async Task Inspect_AmbiguousAcrossKindsWithOneCanonical_ListsDistinguishableMatches() {
+        var (h, ws) = Open(Clinic);
+        h.Store.TryGet(ws, out var state);
+        var gadget = new Poly.DomainModeling.Ontology.Entity("Gadget",
+            [new Poly.DomainModeling.Ontology.Property("Flag", new Poly.DomainModeling.Ontology.DomainTypeReference("Text"), [])], [], [],
+            [new Poly.DomainModeling.Ontology.Stage("Flag", [], [], [], [])]);
+        var domain = state!.Domain with { Types = [.. state.Domain.Types, gadget] };
+
+        var outcome = InspectService.Inspect(ws, state with { Domain = domain }, "Gadget.Flag", McpTestTools.Query);
+
+        await Assert.That(outcome.ErrorCode).IsEqualTo("ELEMENT_NOT_FOUND");
+        var data = (ElementNotFoundData)outcome.Data!;
+        await Assert.That(data.Reason).IsEqualTo("ambiguous");
+        await Assert.That(data.Candidates.Distinct().Count()).IsEqualTo(2);
+        await Assert.That(data.Candidates).Contains("property Gadget.Flag").And.Contains("stage Gadget.Flag");
+        await Assert.That(outcome.Summary).DoesNotContain("full path");
+    }
+
+    [Test]
+    public async Task Define_StageSharingAPropertyName_IsAccepted_SoInspectCanBeAmbiguous() {
+        var h = PolySurfaceHarness.New();
+        var ws = h.Open("M03");
+
+        var define = h.Define(ws, "domain Shop\n\nGadget: entity {\n  Flag: Text\n  Flag: stage { }\n}\n");
+
+        await Assert.That(define.Success).IsTrue().Because(define.Summary);
+        var r = h.Inspect(ws, "Gadget.Flag");
+        await Assert.That(Str(r, "reason")).IsEqualTo("ambiguous");
+        await Assert.That(Strings(r.Data!["candidates"]).Distinct().Count()).IsEqualTo(2);
+    }
+
+    [Test]
+    public async Task Inspect_MalformedPath_SaysThePathIsMalformed() {
+        var (h, ws) = Open(Clinic);
+
+        var r = h.Inspect(ws, "Appt..SlotNo");
+
+        await Assert.That(r.Summary).Contains("malformed");
+    }
+
+    [Test]
     public async Task Inspect_EntityStageAction_AcceptsTheSamePathAsEdit() {
         var (h, ws) = Open(Orders);
 

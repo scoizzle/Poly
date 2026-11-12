@@ -102,7 +102,7 @@ internal static class ElementPathResolver {
     };
 
     private static int Depth(ElementResolution resolution) =>
-        resolution is ElementNotFound { Partial: { } partial } ? partial.Canonical.Count(static c => c == '.') + 1 : 0;
+        resolution is ElementNotFound { Partial: { Kind: not ElementKind.Domain } partial } ? partial.Canonical.Count(static c => c == '.') + 1 : 0;
 
     private static ElementResolution Descend(Domain domain, IReadOnlyList<string> segments) {
         var current = TopLevel(domain, segments[0]);
@@ -146,7 +146,7 @@ internal static class ElementPathResolver {
         if (matches.Count > 1)
             return new ElementAmbiguous(matches);
 
-        var pool = domain.Types.Select(static t => t.Name)
+        var pool = domain.Types.Where(static t => t is Entity or EnumType or ValueType).Select(static t => t.Name)
             .Concat(domain.Functions.Select(static f => f.Name))
             .Select(static n => (Label: n, Path: n))
             .ToList();
@@ -161,6 +161,7 @@ internal static class ElementPathResolver {
         ElementKind.Entity => ChildOfEntity(domain, (Entity)parent.Node!, parent, name),
         ElementKind.Stage => ChildOfStage(domain, DeclaringEntity(domain, parent), (Stage)parent.Node!, parent, name),
         ElementKind.Enum => ChildOfEnum(domain, (EnumType)parent.Node!, parent, name),
+        ElementKind.EntityAction or ElementKind.StageAction => ChildOfAction(domain, DeclaringEntity(domain, parent), (Ontology.Action)parent.Node!, parent, name),
         _ => NotAddressable(parent, name),
     };
 
@@ -229,6 +230,19 @@ internal static class ElementPathResolver {
         var candidates = Candidates(name, owned, []);
         return new ElementNotFound(NotFoundReason.Unknown, candidates, parent,
             $"'{name}' not found on stage '{entity.Name}.{stage.Name}' (tried action, policy).{DidYouMean(candidates)}");
+    }
+
+    private static ElementResolution ChildOfAction(Domain domain, Entity entity, Ontology.Action action, ElementRef parent, string name) {
+        var definitions = NameScopes.PolicyDefinitions(entity).ToList();
+        var matches = action.Policies
+            .Where(p => Is(p.Name, name) && definitions.Any(d => ReferenceEquals(d, p)))
+            .Select(p => PolicyRef(domain, entity, p))
+            .ToList();
+        return matches.Count switch {
+            0 => NotAddressable(parent, name),
+            1 => matches[0],
+            _ => new ElementAmbiguous(matches),
+        };
     }
 
     private static ElementResolution ChildOfEnum(Domain domain, EnumType enumType, ElementRef parent, string name) {

@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 
+using Poly.Mcp.Surface;
 using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Mcp;
@@ -54,6 +55,12 @@ internal sealed class InspectPathTests {
           Placed: stage { }
         }
         """;
+
+    /// <summary>Describes <paramref name="select"/> against a session-store workspace, for tests that build state through the store.</summary>
+    internal static InspectOutcome Describe(string sessionId, string select) {
+        McpTestTools.Store.TryGet(sessionId, out var state);
+        return InspectService.Inspect(sessionId, state, select, McpTestTools.Query);
+    }
 
     private static (PolySurfaceHarness H, string Ws) Open(string poly) {
         var h = PolySurfaceHarness.New();

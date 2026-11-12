@@ -1348,7 +1348,7 @@ public class DomainToCSharpExporterTests {
     private static async Task AssertExportCompiles(Domain domain, AnalysisResult analysis) {
         var typeDefs = DomainProgramProjection.ToSyntax(domain, analysis);
         var csharp = new CSharpGenerator().Generate(typeDefs);
-        var tree = CSharpSyntaxTree.ParseText("#nullable enable\n" + csharp);
+        var tree = CSharpSyntaxTree.ParseText("#nullable enable\n" + ExportedCSharp.MissingPolyRuntimeUsings(csharp) + csharp);
 
         var references = ((string?)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES"))
             ?.Split(Path.PathSeparator)
@@ -3161,7 +3161,7 @@ public class DomainToCSharpExporterTests {
         var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var cs = new CSharpGenerator().Generate(new CompilationUnitNode([], null, types, null));
 
-        var tree = CSharpSyntaxTree.ParseText("#nullable enable\nusing System.Collections.Generic;\n" + cs);
+        var tree = CSharpSyntaxTree.ParseText("#nullable enable\nusing System.Collections.Generic;\n" + ExportedCSharp.MissingPolyRuntimeUsings(cs) + cs);
         var references = ((string?)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES"))
             ?.Split(Path.PathSeparator)
             .Select(p => (MetadataReference)MetadataReference.CreateFromFile(p))
@@ -4077,7 +4077,6 @@ public class DomainToCSharpExporterTests {
         var (domain, analysis) = ParseAndAnalyze(dsl);
         var cs = new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis));
 
-        await Assert.That(cs).Contains("this._value = value;");
         await Assert.That(cs).DoesNotContain("@value");
         await Assert.That(cs).DoesNotContain("using System;");
         await Assert.That(cs).DoesNotContain("using System.Collections.Generic;");
@@ -4212,7 +4211,7 @@ public class DomainToCSharpExporterTests {
     }
 
     private static string[] CompileExported(string cs) {
-        var tree = CSharpSyntaxTree.ParseText("#nullable enable\nusing System.Collections.Generic;\n" + cs);
+        var tree = CSharpSyntaxTree.ParseText("#nullable enable\nusing System.Collections.Generic;\n" + ExportedCSharp.MissingPolyRuntimeUsings(cs) + cs);
         var references = ((string?)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES"))
             ?.Split(Path.PathSeparator)
             .Select(p => (MetadataReference)MetadataReference.CreateFromFile(p))

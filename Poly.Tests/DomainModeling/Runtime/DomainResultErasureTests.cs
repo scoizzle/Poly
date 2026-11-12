@@ -139,12 +139,13 @@ public sealed class DomainResultErasureTests {
 
     [Test]
     public async Task ModuleAnalysis_TwinsPresent_IsCleanAndAstWins() {
-        // R8a / I3: while the twins exist, the module's own types win and the report is clean.
+        // R8a / I3: the S2b characterization with the twins present; since S3 the lowered
+        // module carries none, so only the clean report remains of it (R8b pins the absence).
         var (errors, warnings, module) = ModuleReport(McpLibraryPoly());
 
         await Assert.That(errors).IsEqualTo(0);
         await Assert.That(warnings).IsEqualTo(0);
-        await Assert.That(module.Any(t => t.Name == "DomainResult")).IsTrue();
+        await Assert.That(module).IsNotEmpty();
     }
 
     [Test]
@@ -167,7 +168,7 @@ public sealed class DomainResultErasureTests {
         var withoutTwins = module
             .Where(t => t.Name is not ("DomainResult" or "ConstraintFailureException"))
             .ToList();
-        await Assert.That(withoutTwins.Count).IsLessThan(module.Count);
+        await Assert.That(withoutTwins.Count).IsEqualTo(module.Count);
 
         var vm = DomainSession.AnalyzeModule(withoutTwins);
 

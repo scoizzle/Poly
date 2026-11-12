@@ -171,7 +171,7 @@ public sealed class CSharpWriter {
             }
 
             var text = body.ToString().TrimEnd();
-            return Header(text) + text;
+            return text.Length == 0 ? "#nullable enable" : Header(text) + text;
         });
     }
 

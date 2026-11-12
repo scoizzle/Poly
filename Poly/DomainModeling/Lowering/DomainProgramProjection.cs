@@ -101,11 +101,6 @@ public static class DomainProgramProjection {
                 result.Add(DomainToCSharpExporter.BuildValueTypeTypeDef(valueType, domain, metadata));
         }
 
-        // ── Build DomainResult infrastructure types ─────────────
-        result.Add(DomainToCSharpExporter.BuildDomainResultTypeDef());
-        result.Add(DomainToCSharpExporter.BuildDomainResultGenericTypeDef());
-        result.Add(DomainToCSharpExporter.BuildConstraintFailureExceptionTypeDef());
-
         // ── Build entity type definitions ─────────────────────────
         var handlerNames = DomainToCSharpExporter.BuildHandlerNames(subscriptionsBySubscriber);
         foreach (var entity in entities) {

@@ -150,6 +150,9 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
     /// props are body-initialized — never ctor params (a param would be dead + written
     /// twice, e.g. StartedAt). Published on <see cref="EntityStructureMetadata.EntryAssignedPropertyNames"/>
     /// so the exporter's ctor emission and this signature stay in lockstep.
+    /// Definitely assigned: top-level <c>OnEntry</c> assigns only. The may-assign create-time set
+    /// (conditional, loop, exit, hop, invoked action) is <c>StageEntryFacts.EntryAssignedProperties</c>,
+    /// which only fail-closed checks may read (<c>DMEFF019</c>).
     /// </summary>
     internal static IReadOnlySet<string> ComputeEntryAssignedPropertyNames(Entity entity) {
         var names = new HashSet<string>(StringComparer.Ordinal);

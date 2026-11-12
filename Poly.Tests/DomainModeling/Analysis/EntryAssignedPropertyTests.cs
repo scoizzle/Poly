@@ -384,6 +384,32 @@ public sealed class EntryAssignedPropertyTests {
         await Assert.That(errors.Count).IsEqualTo(0);
     }
 
+    // ── Characterization pin (Step 4): the two facts stay apart ──────────────────────────
+
+    /// <summary>
+    /// Characterization, green on master: it is the drift alarm for DMEFF019, not a red test. A
+    /// conditionally entry-assigned property keeps its constructor parameter and its requiredness
+    /// (the definite fact excludes it), while the may fact holds it.
+    /// </summary>
+    [Test]
+    public async Task ConditionallyEntryAssignedProperty_KeepsCtorParameterAndRequiredness() {
+        var (domain, analysis) = Analyze("""
+            domain D15
+            Z: entity {
+              P: Number
+              Flag: Boolean default(false)
+              Q: stage { entry { if (Flag is true) { assign P to 1 } } }
+            }
+            """);
+        var z = domain.Types.OfType<Entity>().Single(e => e.Name == "Z");
+        var structure = analysis.GetStructure(z)!;
+
+        await Assert.That(structure.ConstructorParameters.Any(p => p.Name == "P")).IsTrue();
+        await Assert.That(structure.RequiredPropertyNames.Contains("P")).IsTrue();
+        await Assert.That(structure.EntryAssignedPropertyNames.Contains("P")).IsFalse();
+        await Assert.That(StageEntryFacts.EntryAssignedProperties(z, domain).Contains("P")).IsTrue();
+    }
+
     // ── Corpus pin (A7) ──────────────────────────────────────────────────────────────────
 
     [Test]

@@ -649,6 +649,29 @@ Parcel: entity {
 }
 ```
 
+**Supplied entry-assigned property (DMEFF019):** a `create` / `create in` initializer may not
+supply a property the new instance's entry chain may assign — directly in the initial stage's
+`entry`, under an `if` or `for`, through a `transition`, or through an `invoke`d action. The entry
+chain overwrites the supplied value, so it could never reach the object. Omit the initializer. A
+property assigned only inside an entry `if` is caught between the two rules: required, it is
+`DMEFF011` when omitted and `DMEFF019` when supplied, so give it `default(...)` or mark it
+`optional` to make it omittable.
+
+<!-- poly-verify: invalid:DMEFF019 -->
+```poly
+domain Tokens
+
+Token: entity {
+  Kind: Text optional
+  Lexed: stage { entry { assign Kind to "Keyword" } }
+}
+Parser: entity {
+  Lex: action {
+    create Token { Kind: "Keyword" }   // error: Lexed's entry assigns Kind
+  }
+}
+```
+
 ### Explicit Initial Stage
 
 `initial(Stage)` belongs to the entity header, not to a stage: it names the stage a new instance
@@ -1419,7 +1442,7 @@ assign Tier to match { Qty > 100 -> "big", Qty > 10 -> "mid", else -> "small" }
 | `for Rel as name [where policy \| where in stage] invoke name.Action` | action (OneToMany source-only fan-out; fail-fast; zero records is a no-op) |
 | `if (expr) { … } else if … else { … }` | action, entry, exit |
 
-A `transition` in an exit block must target the stage every hop leaving that stage targets (`DMEFF017`; see Entry/Exit Effects). The action-only effects above are rejected in an exit block (`DMEFF018`).
+A `transition` in an exit block must target the stage every hop leaving that stage targets (`DMEFF017`; see Entry/Exit Effects). The action-only effects above are rejected in an exit block (`DMEFF018`). A `create` or `create in` initializer may not supply a property the new instance's entry chain may assign (`DMEFF019`; see Required coverage).
 
 **Linking existing instances:** graph wiring happens through `create in Rel { … }`, which the module's own body links on the instance. To connect already-existing instances, the MCP `link_instances` and `unlink_instances` tools write the relationship field on the instance (the session executor's `Link` / `Unlink`) with relationship + entity-type validation at the tool boundary. `unlink_instances` refuses to drop the last owner of an `owned` target (see §4). There is no Link/Unlink **Effect IR** — linking existing instances is a host/tool operation only.
 

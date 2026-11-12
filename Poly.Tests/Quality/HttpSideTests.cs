@@ -115,3 +115,85 @@ public class HttpSideTests {
         await Assert.That(handler.Requests.Single().Uri).IsEqualTo("http://localhost:5000/api/tallies/a/bump");
     }
 }
+
+/// <summary>The probe runner over a fake handler: no host is booted.</summary>
+public class RequestMatrixProbeTests {
+    private sealed class Fake(Func<HttpRequestMessage, string, HttpResponseMessage> respond) : HttpMessageHandler {
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) {
+            var body = request.Content is null ? "" : await request.Content.ReadAsStringAsync(cancellationToken);
+            return respond(request, body);
+        }
+    }
+
+    private static readonly DomainMatrix Matrix = new("d", [new EntityMatrix(
+        "Thing", "/api/things", "Code",
+        JsonNode.Parse("""{"Code":"a","Name":"x"}""")!.AsObject(),
+        JsonNode.Parse("{}")!.AsObject(),
+        new ActionProbe("Do", JsonNode.Parse("{}")!.AsObject(), JsonNode.Parse("""{"n":1}""")!.AsObject()))]);
+
+    private static HttpResponseMessage Json(HttpStatusCode status, string body) =>
+        new(status) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
+
+    /// <summary>A healthy host unless a knob says otherwise.</summary>
+    private static async Task<Dictionary<string, ProbeObservation>> Run(
+        bool listThrows = false, string readBody = """{"code":"a","name":"x"}""", HttpStatusCode rejectedStatus = HttpStatusCode.BadRequest) {
+        var handler = new Fake((request, body) => {
+            var path = request.RequestUri!.AbsolutePath;
+            if (request.Method == HttpMethod.Get && path == "/api/things")
+                return listThrows ? throw new HttpRequestException("refused") : Json(HttpStatusCode.OK, "[]");
+            if (request.Method == HttpMethod.Post && path == "/api/things") {
+                if (body == "{}")
+                    return Json(HttpStatusCode.BadRequest, "{}");
+                var created = Json(HttpStatusCode.Created, "{}");
+                created.Headers.Location = new Uri("/api/things/a", UriKind.Relative);
+                return created;
+            }
+            if (request.Method == HttpMethod.Get && path == "/api/things/a")
+                return Json(HttpStatusCode.OK, readBody);
+            if (request.Method == HttpMethod.Post && path == "/api/things/a/do")
+                return body == "{}" ? new HttpResponseMessage(HttpStatusCode.OK) : Json(rejectedStatus, "{}");
+            return new HttpResponseMessage(HttpStatusCode.NotFound);
+        });
+        var side = new HttpSide(new HttpClient(handler) { BaseAddress = new Uri("http://localhost:5000") });
+        return (await RequestMatrix.RunAsync(side, Matrix)).ToDictionary(o => o.Probe);
+    }
+
+    [Test]
+    public async Task RunAsync_HealthyHost_EveryProbePasses() {
+        var all = await Run();
+
+        await Assert.That(all.Values.Where(o => !o.Passed).Select(o => $"{o.Probe}: {o.Observed}")).IsEmpty();
+    }
+
+    [Test]
+    public async Task RunAsync_TransportFailure_ObservesStatusErrNotStatusZero() {
+        var all = await Run(listThrows: true);
+
+        await Assert.That(all["Thing.List"].Passed).IsFalse();
+        await Assert.That(all["Thing.List"].Observed).IsEqualTo("status=err;location=none");
+    }
+
+    [Test]
+    public async Task RunAsync_ReadBodyThatDoesNotEchoTheCreatedRow_FailsReadCreated() {
+        var all = await Run(readBody: """{"code":"a","name":"someone else"}""");
+
+        await Assert.That(all["Thing.ReadCreated"].Passed).IsFalse();
+        await Assert.That(all["Thing.ReadCreated"].Observed).IsEqualTo("status=200;location=none");
+    }
+
+    [Test]
+    public async Task RunAsync_ActionRejectedWith404_FailsActionRejected() {
+        var all = await Run(rejectedStatus: HttpStatusCode.NotFound);
+
+        await Assert.That(all["Thing.ActionRejected"].Passed).IsFalse();
+        await Assert.That(all["Thing.ActionRejected"].Observed).IsEqualTo("status=404;location=none");
+    }
+
+    [Test]
+    public async Task RunAsync_ActionRejectedWith409Or422_PassesActionRejected() {
+        foreach (var status in new[] { HttpStatusCode.Conflict, HttpStatusCode.UnprocessableEntity }) {
+            var all = await Run(rejectedStatus: status);
+            await Assert.That(all["Thing.ActionRejected"].Passed).IsTrue();
+        }
+    }
+}

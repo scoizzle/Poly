@@ -109,6 +109,21 @@ internal sealed class ContractIntegrationAnalyzer : INodeAnalyzer {
                 $"'{target.Name}'. Mark '{target.Name}' public, or remove the public mark from '{entity.Name}'.",
                 DomainModelDiagnosticCodes.PublicEntityNavigatesToInternalEntity);
         }
+
+        // An entity-typed property (the DSL reads one as a navigation; the model API can build one) would print as
+        // a public property of an internal type (CS0053), so it is the same finding, positioned on the property.
+        foreach (var property in entity.Properties) {
+            var target = context.GetMetadata<ResolvedTypeReferenceMetadata>(property.Type)?.Type as Entity
+                ?? domain.Types.OfType<Entity>().FirstOrDefault(e => e.Name == property.Type.TypeName);
+            if (target is null || !IsDeclaredInDomain(domain, target) || target.Visibility == Visibility.Public)
+                continue;
+
+            context.ReportError(
+                property,
+                $"Public entity '{entity.Name}' property '{property.Name}' targets internal entity " +
+                $"'{target.Name}'. Mark '{target.Name}' public, or remove the public mark from '{entity.Name}'.",
+                DomainModelDiagnosticCodes.PublicEntityNavigatesToInternalEntity);
+        }
     }
 
     private static void ValidatePublicAction(

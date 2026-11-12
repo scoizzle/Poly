@@ -129,4 +129,48 @@ public sealed class PublicNavigationClosureTests {
 
         await Assert.That(diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error && d.Code == "DMSTR006")).IsTrue();
     }
+
+    // F2 (fix round 1): an entity-typed PROPERTY built through the model API (the DSL reads one as a
+    // navigation) reached the printer as CS0053. DMCON019 covers it, positioned on the property.
+    [Test]
+    public async Task Analyze_WhenPublicEntityHasEntityTypedProperty_ReportsDMCON019OnTheProperty() {
+        var owner = new Entity("Owner", [], [], [], []);
+        var pet = new Entity("Pet", [new Property("Owner", new DomainTypeReference("Owner"), [])], [], [], [])
+            with { Visibility = Visibility.Public };
+        var errors = DomainModelAnalyzer.Analyze(new Domain("T", [owner, pet])).Diagnostics
+            .Where(d => d.Severity == DiagnosticSeverity.Error && d.Code == "DMCON019")
+            .ToList();
+
+        await Assert.That(errors.Count).IsEqualTo(1);
+        await Assert.That(errors[0].Node is Property { Name: "Owner" }).IsTrue();
+        await Assert.That(errors[0].Message).Contains("property 'Owner'");
+    }
+
+    // F3 (fix round 1): a public stage group cannot carry an internal-entity result in any variant. A typed
+    // result is produced by create-in, which needs a navigation, so DMCON019 rejects the public owner.
+    [Test]
+    public async Task Analyze_WhenPublicStageGroupVariantReturnsInternalEntity_ReportsDMCON019() {
+        var errors = Errors("""
+            domain Test
+
+            Receipt: entity {
+              Code: Text
+            }
+
+            public entity Order {
+              receipts: many Receipt
+              A: stage {
+                public action Close { transition to B }
+              }
+              B: stage {
+                Close: action -> Receipt {
+                  create in receipts { Code: "x" }
+                }
+              }
+            }
+            """);
+
+        await Assert.That(errors.Count).IsEqualTo(1);
+        await Assert.That(errors[0].Message).Contains("receipts");
+    }
 }

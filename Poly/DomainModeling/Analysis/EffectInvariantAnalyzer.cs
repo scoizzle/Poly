@@ -13,17 +13,21 @@ public sealed record ValueRange(double? Min, double? Max);
 
 /// <summary>
 /// A postcondition an effect must respect: assigning to <see cref="TargetProperty"/>
-/// must satisfy <see cref="Constraints"/>; <see cref="ValueRange"/> is the value range
-/// the effect's expression can produce in this stage context (when statically known).
-/// <see cref="DeclaringAction"/> is the action whose body contains the effect — it differs
-/// from the context action for call-chain postconditions.
+/// must satisfy <see cref="Constraints"/>; <see cref="Value"/> is the abstract value
+/// the effect's expression can produce in this stage context. <see cref="ValueRange"/>
+/// is that value's numeric envelope, when statically known. <see cref="DeclaringAction"/>
+/// is the action whose body contains the effect — it differs from the context action for
+/// call-chain postconditions.
 /// </summary>
 public sealed record EffectPostcondition(
     Node Effect,
     string TargetProperty,
     IReadOnlyList<Constraint> Constraints,
-    ValueRange? ValueRange,
-    Action DeclaringAction);
+    AbstractValue Value,
+    Action DeclaringAction) {
+    /// <summary>The value's numeric range, when the value carries one.</summary>
+    public ValueRange? ValueRange => Value.NumericRange;
+}
 
 /// <summary>The additive invariant picture for an action in ONE stage context.</summary>
 public sealed record ActionStageInvariant(
@@ -404,7 +408,7 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
                         result.Add(new EffectPostcondition(
                             assign, prop.Name,
                             BuildPostconditionConstraints(prop, assign.Value, action, paramEnv),
-                            value.NumericRange,
+                            value,
                             action));
                         break;
                     }

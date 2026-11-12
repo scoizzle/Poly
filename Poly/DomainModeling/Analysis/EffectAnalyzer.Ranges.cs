@@ -27,7 +27,7 @@ internal sealed partial class EffectAnalyzer {
         if (meta is null) {
             // No action context (create-initializer): infer against declared ranges only.
             var (lo, hi) = EffectInvariantAnalyzer.InferNumericRange(value, entity, null, null);
-            CheckDerivedRange(context, errorNode, lo, hi, range, targetProp);
+            CheckDerivedRange(context, errorNode, AbstractValue.From([new RangeConstraint(lo, hi)]), range, targetProp);
             return;
         }
 
@@ -35,50 +35,43 @@ internal sealed partial class EffectAnalyzer {
         // postcondition in each — a violation in ANY state the action can run is reported.
         foreach (var ctx in meta.StageContexts) {
             var post = ctx.Postconditions.FirstOrDefault(p => ReferenceEquals(p.Effect, errorNode));
-            if (post?.ValueRange is { } vr)
-                CheckDerivedRange(context, errorNode, vr.Min, vr.Max, range, targetProp);
+            if (post is not null)
+                CheckDerivedRange(context, errorNode, post.Value, range, targetProp);
         }
     }
 
     private static void CheckDerivedRange(
         AnalysisContext context,
         Node errorNode,
-        double? loNullable,
-        double? hiNullable,
+        AbstractValue value,
         RangeConstraint range,
         Property targetProp) {
-        // Both sides absent is "no numeric range at all" (Unknown), not the open interval (-∞, +∞):
-        // the create-initializer callers reach here through InferNumericRange for every unranged
-        // arithmetic initializer, and treating that as open would warn each one against its target.
-        if (loNullable is null && hiNullable is null) return;
+        // No numeric range at all is "Unknown", not the open interval (-∞, +∞): the
+        // create-initializer callers reach here through InferNumericRange for every unranged
+        // arithmetic initializer. Treating it as open would warn each one against its target.
+        // (S3 removes this skip and records the write as Undecided.)
+        if (value.NumericRange is not { } numeric) return;
 
-        var tmin = NumericBound.ToDoubleOrNull(range.Minimum);
-        var tmax = NumericBound.ToDoubleOrNull(range.Maximum);
-
-        // An absent side is unbounded, never 0 (#475): ±∞ orders correctly against a bounded target.
-        double lo = loNullable ?? double.NegativeInfinity;
-        double hi = hiNullable ?? double.PositiveInfinity;
-
-        bool fullyBelow = tmin is not null && hi < tmin.Value;
-        bool fullyAbove = tmax is not null && lo > tmax.Value;
-        // #367: a target bound that cannot be ordered against a number is not skipped; nothing numeric is in it.
-        if (fullyBelow || fullyAbove || HasUnorderableBound(range)) {
-            context.ReportError(
-                errorNode,
-                $"Assigned expression value range [{FormatBound(loNullable, lower: true)}, {FormatBound(hiNullable, lower: false)}] is entirely outside " +
-                $"constraint {ConstraintValidation.Describe(range)} on property '{targetProp.Name}'.",
-                DomainModelDiagnosticCodes.EffectConstraintViolation);
-            return;
-        }
-
-        bool canViolate = (tmin is not null && lo < tmin.Value)
-                          || (tmax is not null && hi > tmax.Value);
-        if (canViolate) {
-            context.ReportWarning(
-                errorNode,
-                $"Assigned expression value range [{FormatBound(loNullable, lower: true)}, {FormatBound(hiNullable, lower: false)}] can fall outside " +
-                $"constraint {ConstraintValidation.Describe(range)} on property '{targetProp.Name}'.",
-                DomainModelDiagnosticCodes.EffectConstraintViolation);
+        // The null-endpoint semantics live in WriteVerification.DecideRange: a null target side
+        // is satisfied, a null value side against a closed target is Undecided, never Violated.
+        switch (WriteVerification.DecideRange(range, value)) {
+            case ConstraintVerdict.Violated:
+                context.ReportError(
+                    errorNode,
+                    $"Assigned expression value range [{FormatBound(numeric.Min, lower: true)}, {FormatBound(numeric.Max, lower: false)}] is entirely outside " +
+                    $"constraint {ConstraintValidation.Describe(range)} on property '{targetProp.Name}'.",
+                    DomainModelDiagnosticCodes.EffectConstraintViolation);
+                break;
+            case ConstraintVerdict.Undecided:
+                context.ReportWarning(
+                    errorNode,
+                    $"Assigned expression value range [{FormatBound(numeric.Min, lower: true)}, {FormatBound(numeric.Max, lower: false)}] can fall outside " +
+                    $"constraint {ConstraintValidation.Describe(range)} on property '{targetProp.Name}'.",
+                    DomainModelDiagnosticCodes.EffectConstraintViolation);
+                break;
+            case ConstraintVerdict.Satisfied:
+            default:
+                break;
         }
     }
 

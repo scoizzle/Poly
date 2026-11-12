@@ -346,29 +346,41 @@ public class AbsenceParityTests {
         await Assert.That(outcomes[2].State["CurrentLoad"]).IsEqualTo("0");
     }
 
+    private const string OptionalScalarHolesDsl = """
+        domain Ledger
+        Tally: entity {
+          N: Number optional
+          D: Decimal optional
+          V: Text optional
+        }
+        Acct: entity {
+          Name: Text
+          tallies: many Tally
+          Add: action { create in tallies { V: "x" } }
+        }
+        """;
+
     [Test]
     public async Task CreateIn_WhenOptionalScalarHolesBeforeWrittenSlot_Agree() {
-        // #495 for value types: two optional scalars sort before the written slot, so
-        // both holes are kept and must carry their own type.
-        var outcomes = await ParityScenario.FromDsl("""
-            domain Ledger
-            Tally: entity {
-              N: Number optional
-              D: Decimal optional
-              V: Text
-            }
-            Acct: entity {
-              Name: Text
-              tallies: many Tally
-              Add: action { create in tallies { V: "x" } }
-            }
-            """, "ParityOptionalScalarHoles")
+        // #495 for value types. V is optional too, so the slots are
+        // [D hole, N hole, V written] and both typed nulls are KEPT in the call —
+        // with a required V, V would be ctor slot 0 and D/N would be a trailing run
+        // that is dropped, which exercises nothing.
+        var outcomes = await ParityScenario.FromDsl(OptionalScalarHolesDsl, "ParityOptionalScalarHoles")
             .AssertAgree(side => {
                 side.Create("Acct", ("Name", "Ada"));
                 side.Invoke("Add");
                 if (side.Outcomes[^1].Success)
                     side.UseLinked("tallies");
             });
+
+        // The printed call is the proof the holes survived: two typed nulls, then the
+        // written value. A dropped trailing run would carry only the value.
+        var (domain, analysis) = EvolvedDomain.FromDsl(OptionalScalarHolesDsl);
+        var printed = new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis));
+        var add = ExportedCSharp.ExtractMethod(printed, "public DomainResult Add(");
+        await Assert.That(add).Contains("(decimal?)null");
+        await Assert.That(add).Contains("(long?)null");
 
         await Assert.That(outcomes[1].Success).IsTrue()
             .Because($"step failed: {outcomes[1].ExceptionType} {outcomes[1].Message}");

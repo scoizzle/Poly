@@ -65,7 +65,9 @@ public sealed partial class ModuleInstanceExecutor {
                     throw new InvalidOperationException(
                         $"Action '{actionName}' on '{target.EntityName}' did not return a DomainResult.");
                 if (!result.IsSuccess)
-                    return MapFailure(action, result.ErrorMessage);
+                    return MapFailure(target.EntityName, action, result.Error
+                        ?? throw new InvalidOperationException(
+                            $"Action '{actionName}' on '{target.EntityName}' failed without a DomainFailure."));
 
                 var created = AdoptCreatedChildren();
                 ModuleInstance? returned = null;

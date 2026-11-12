@@ -225,7 +225,7 @@ public class HotelDogfoodTests {
         await Assert.That(exec.Invoke(holdA, "Confirm").Succeeded).IsTrue();
         var startAsWhole = exec.Invoke(holdA, "StartHall");
         await Assert.That(startAsWhole.Succeeded).IsFalse();
-        await Assert.That(startAsWhole.FailedGuards).Contains("not_HasSection");
+        await Assert.That(startAsWhole.FailedGuards).Contains("HasSection");
         await Assert.That(exec.Invoke(holdA, "StartSection").Succeeded).IsTrue();
         await Assert.That((bool)salonA.Bag["Occupied"]!).IsTrue();
         await Assert.That(hall.Bag["BusySections"]).IsEqualTo(1L);

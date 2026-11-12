@@ -172,6 +172,62 @@ public class RangeBoundExactnessTests {
         await Assert.That(violation.Message).Contains("range(0, 9223372036854775806)");
     }
 
+    // ── A3: ExactNumber ops ──────────────────────────────────────────────
+
+    [Test]
+    public async Task ExactNumber_Multiply_SaturatesLongMaxSquared() {
+        var max = ExactNumber.TryFrom(long.MaxValue);
+
+        await Assert.That(max).IsNotNull();
+        await Assert.That(max!.Value.TryMultiply(max.Value)).IsNull();
+    }
+
+    [Test]
+    public async Task ExactNumber_Multiply_LongMaxByTwo_IsExact() {
+        var product = ExactNumber.TryFrom(long.MaxValue)!.Value
+            .TryMultiply(ExactNumber.TryFrom(2L)!.Value);
+
+        await Assert.That(product).IsNotNull();
+        await Assert.That(product!.Value.ToDecimal()).IsEqualTo(18446744073709551614m);
+    }
+
+    [Test]
+    public async Task ExactNumber_Compare_SeparatesValuesEqualUnderDouble() {
+        var large = ExactNumber.Compare(9223372036854775807L, 9223372036854775808m);
+        var nearTwoPow53 = ExactNumber.Compare(9007199254740993L, 9007199254740992m);
+
+        await Assert.That(large!.Value).IsEqualTo(-1);
+        await Assert.That(nearTwoPow53!.Value).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task ExactNumber_Compare_UnrepresentableDouble_IsNull() {
+        await Assert.That(ExactNumber.Compare(9007199254740994d, 9007199254740992d)).IsNull();
+        await Assert.That(ExactNumber.Compare(1.5d, 1m)).IsNull();
+    }
+
+    [Test]
+    public async Task ExactNumber_TryFrom_Double_OnlyExactIntegersWithinTwoToThe53() {
+        await Assert.That(ExactNumber.TryFrom(9007199254740992d)).IsNotNull();
+        await Assert.That(ExactNumber.TryFrom(9007199254740994d)).IsNull();
+        await Assert.That(ExactNumber.TryFrom(1.5d)).IsNull();
+        await Assert.That(ExactNumber.TryFrom(double.PositiveInfinity)).IsNull();
+    }
+
+    [Test]
+    public async Task ExactNumber_Multiply_InexactScale_IsNullAgainstExactProduct() {
+        var tiny = ExactNumber.TryFrom(0.0000000000000000000000000001m)!;
+        var tenth = ExactNumber.TryFrom(0.1m)!;
+        // The exact product is 1e-29 (mantissa 1, scale 29); decimal cannot carry scale 29.
+        var inexact = tiny.Value.TryMultiply(tenth.Value);
+        // Scaling by 10 is exact and representable.
+        var shifted = tiny.Value.TryMultiply(ExactNumber.TryFrom(10m)!.Value);
+
+        await Assert.That(inexact).IsNull();
+        await Assert.That(shifted).IsNotNull();
+        await Assert.That(shifted!.Value.ToDecimal()).IsEqualTo(0.000000000000000000000000001m);
+    }
+
     // ── helpers ──────────────────────────────────────────────────────────
 
     private static string Entity(string declaration) =>

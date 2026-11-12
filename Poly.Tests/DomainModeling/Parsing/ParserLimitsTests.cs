@@ -220,11 +220,10 @@ public class ParserLimitsTests {
         await Assert.That(text.Substring(error.Offset, error.Length)).IsEqualTo("and");
     }
 
-    /// <summary>Measured: a <c>match</c> costs more than one level (a call costs 1 and reaches 256),
-    /// so this pins only the safe side; the exact match boundary is a G-10 item.</summary>
+    /// <summary>A <c>match</c> argument costs exactly one level, like a call argument.</summary>
     [Test]
-    public async Task Matches_128Levels_ReturnsExpression() {
-        var (parsed, failure) = ParseOnLarge(Matches(Limit / 2));
+    public async Task Matches_256Levels_ReturnsExpression() {
+        var (parsed, failure) = ParseOnLarge(Matches(Limit));
 
         await Assert.That(failure).IsNull();
         await Assert.That(parsed).IsNotNull();
@@ -233,6 +232,15 @@ public class ParserLimitsTests {
     [Test]
     public async Task Matches_257Levels_IsPositionedDepthError() {
         var (parsed, failure) = ParseOnLarge(Matches(Limit + 1));
+
+        await Assert.That(parsed).IsNull();
+        await Assert.That(failure).IsTypeOf<GrammarException>();
+        await Assert.That(((GrammarException)failure!).Detail).IsEqualTo(DslLimits.DepthDetail);
+    }
+
+    [Test]
+    public async Task Calls_257Levels_IsPositionedDepthError() {
+        var (parsed, failure) = ParseOnLarge(Calls(Limit + 1));
 
         await Assert.That(parsed).IsNull();
         await Assert.That(failure).IsTypeOf<GrammarException>();
@@ -262,8 +270,8 @@ public class ParserLimitsTests {
         await Assert.That(error.Line).IsGreaterThan(0);
     }
 
-    /// <summary>A deep <c>where</c> chain is rejected as a nested <c>where</c>, with a position,
-    /// rather than folding further.</summary>
+    /// <summary>A deep <c>where</c> chain is a positioned depth error: each <c>where</c> body costs
+    /// one level, so the guard stops it before the nested-<c>where</c> rule would.</summary>
     [Test]
     public async Task Parse_DeepWhereChain_IsPositionedError() {
         var text = string.Concat(Enumerable.Repeat("Kids where (", 2000)) + "Flag" + new string(')', 2000);
@@ -272,7 +280,7 @@ public class ParserLimitsTests {
         await Assert.That(parsed).IsNull();
         await Assert.That(failure).IsTypeOf<GrammarException>();
         var error = (GrammarException)failure!;
-        await Assert.That(error.Detail).IsNotEmpty();
+        await Assert.That(error.Detail).IsEqualTo(DslLimits.DepthDetail);
         await Assert.That(error.Line).IsGreaterThan(0);
         await Assert.That(error.Column).IsGreaterThan(0);
     }
@@ -280,10 +288,11 @@ public class ParserLimitsTests {
     // ── F2 / A4: depth is a parameter, so nothing survives a failed parse ─────────────
 
     /// <summary>
-    /// A4 wanted the depth reset to be un-forgettable. Depth here is a parameter threaded through
-    /// the fold, never a field, so the guard is that the thread is left clean: after a depth error
-    /// the next parse on the same thread parses a shallow expression. Green before the guard
-    /// existed, and kept so a later field-based refactor has to face it.
+    /// A4 wanted the depth reset to be un-forgettable. Both calls below hop to their own parse
+    /// thread, so this proves only that the thread is left clean: after a depth error the next
+    /// parse on that thread parses a shallow expression. The durable guard is
+    /// <see cref="A4_ParserCarriesNoMutableIntInstanceField"/>: depth is a parameter, and a field
+    /// would be the stale state A4 warned about.
     /// </summary>
     [Test]
     public async Task ParseAfterDepthError_SameThreadParsesShallowExpression() {
@@ -304,5 +313,19 @@ public class ParserLimitsTests {
         await Assert.That(depth).IsTypeOf<GrammarException>();
         await Assert.That(((GrammarException)depth!).Detail).IsEqualTo(DslLimits.DepthDetail);
         await Assert.That(shallow).IsNotNull();
+    }
+
+    /// <summary>A4's real pin: the parser stores no mutable int, so no depth can go stale between
+    /// parses on one instance (DomainResolver reuses one parser for every expression).</summary>
+    [Test]
+    public async Task A4_ParserCarriesNoMutableIntInstanceField() {
+        var fields = typeof(DslExpressionParser)
+            .GetFields(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic
+                | System.Reflection.BindingFlags.Public)
+            .Where(f => !f.IsInitOnly && !f.IsLiteral)
+            .Select(f => $"{f.FieldType.Name} {f.Name}")
+            .ToArray();
+
+        await Assert.That(fields).IsEmpty();
     }
 }

@@ -208,7 +208,7 @@ public sealed class DslExpressionParser {
     }
 
     private DomainExpression FoldMatch(MatchResult<DslToken, DslTokenKind> match, int level) {
-        GuardLevel(level, match.Tokens[0]);
+        GuardLevel(level + 1, match.Tokens[0]);
         var keyword = match.Tokens[0];
         var closing = match.Tokens[^1];
         var inner = match.Tokens.Skip(2).Take(match.Tokens.Count - 3).ToList();
@@ -266,14 +266,14 @@ public sealed class DslExpressionParser {
                     throw _c.Error($"'match' has more than one 'else' arm{At(first)}");
                 if (i != segments.Count - 1)
                     throw _c.Error($"'else' must be the last arm of a 'match'{At(first)}");
-                elseValue = ParseArm(value, "match value", level + 1);
+                elseValue = ParseArm(value, "match value", level);
             }
             else {
                 if (condition.Any(t => t.Kind == DslTokenKind.Else))
                     throw _c.Error($"'else' cannot appear inside a 'match' condition{At(first)}");
                 arms.Add(new MatchArm(
-                    ParseArm(condition, "match condition", level + 1),
-                    ParseArm(value, "match value", level + 1)));
+                    ParseArm(condition, "match condition", level),
+                    ParseArm(value, "match value", level)));
             }
         }
 
@@ -299,7 +299,8 @@ public sealed class DslExpressionParser {
     /// trailing comma) are a positioned error.
     /// </summary>
     private DomainExpression FoldCall(MatchResult<DslToken, DslTokenKind> match, int level) {
-        GuardLevel(level, match.Tokens[0]);
+        // A zero-argument call has no arm to charge, so it pays its own level here.
+        GuardLevel(level + 1, match.Tokens[0]);
         var nameToken = match.Tokens[0];
         var name = nameToken.Text;
         var inner = match.Tokens.Skip(2).Take(match.Tokens.Count - 3).ToList();

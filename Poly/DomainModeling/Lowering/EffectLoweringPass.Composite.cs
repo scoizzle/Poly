@@ -31,6 +31,8 @@ public sealed partial class EffectLoweringPass {
     }
     protected override Node? Conditional(ConditionalEffect c) {
         var condition = _expressionPass.LowerExpression(c.Condition, Subject);
+        var canTransition = ContainsHop(c.ThenEffects)
+            || (c.ElseEffects is { Count: > 0 } && ContainsHop(c.ElseEffects));
         var thenNodes = new List<Node>();
         var thenVars = new List<Node>();
         foreach (var sub in c.ThenEffects) {
@@ -41,8 +43,10 @@ public sealed partial class EffectLoweringPass {
             CollectNode(thenNodes, thenVars, lowered);
         }
 
-        if (c.ElseEffects is not { Count: > 0 })
+        if (c.ElseEffects is not { Count: > 0 }) {
+            ClearCursorIf(canTransition);
             return condition.Before(new IfStatement(condition.Value, new Block(thenNodes, thenVars)));
+        }
 
         var elseNodes = new List<Node>();
         var elseVars = new List<Node>();
@@ -54,7 +58,22 @@ public sealed partial class EffectLoweringPass {
             CollectNode(elseNodes, elseVars, lowered);
         }
 
+        ClearCursorIf(canTransition);
         return condition.Before(new IfStatement(
             condition.Value, new Block(thenNodes, thenVars), new Block(elseNodes, elseVars)));
     }
+
+    /// <summary>
+    /// A hop inside a branch may not run, so the stage after the branch is not statically
+    /// known: null the cursor (the per-stage exit switch) instead of leaving the guarded
+    /// hop's target behind. The same dynamic cursor a <c>for</c> body uses.
+    /// </summary>
+    private void ClearCursorIf(bool canTransition) {
+        if (canTransition)
+            _sourceStageName = null;
+    }
+
+    /// <summary>True when the list holds a transition, however deeply nested.</summary>
+    private static bool ContainsHop(IEnumerable<Effect> effects) =>
+        EffectHelpers.FlattenEffects(effects).Any(e => e is StageTransitionEffect);
 }

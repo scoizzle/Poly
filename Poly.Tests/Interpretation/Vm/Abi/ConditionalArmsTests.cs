@@ -82,29 +82,10 @@ public class ConditionalArmsTests {
             defaultBody)]);
 
     [Test]
-    public async Task Switch_DecimalCaseIntegralDefault_Rejects() =>
-        await AssertRejected(Switched(new Constant(1.5m), new Constant(2L)), "switch", 0L);
-
-    [Test]
-    public async Task Switch_IntegralCaseDecimalDefault_Rejects() =>
-        await AssertRejected(Switched(new Constant(2L), new Constant(1.5m)), "switch", 0L);
-
-    [Test]
     public async Task Switch_SameRepresentation_Runs() {
         using var exec = Run(Switched(new Constant(2L), new Constant(3L)), 0L);
         await Assert.That(exec.GetValue<long>()).IsEqualTo(3L);
     }
-
-    /// <summary>A null first arm is not judgeable, but the arms after it are still compared with each other.</summary>
-    [Test]
-    public async Task Switch_NullArmFirst_StillRejectsTheMixedArmsAfterIt() =>
-        await AssertRejected(
-            new Block([new SwitchStatement(
-                new Parameter("key", TypeReference.To<long>()),
-                [new SwitchCase(new Constant(1L), new Constant(null)), new SwitchCase(new Constant(2L), new Constant(1.5m))],
-                new Constant(2L))]),
-            "switch",
-            0L);
 
     // Legal code that ran correctly before the guard must keep running (a nullable operand is judged by its
     // underlying type; a statement switch's discarded bodies are not a merged value).
@@ -140,14 +121,43 @@ public class ConditionalArmsTests {
         await Assert.That(exec.GetValue<long?>()).IsEqualTo(expected);
     }
 
+    /// <summary>A statement switch is legal whatever its bodies do: assignments, blocks or call statements of
+    /// different representations. It has no value, so nothing is merged; a switch whose value is read is T-21's.</summary>
     [Test]
-    [Arguments(1, "d", "1.5")]
-    [Arguments(2, "n", "2")]
-    public async Task StatementSwitch_BodiesAssignDifferentRepresentations_Runs(int key, string read, string expected) {
-        var result = CSharpScript.Run(
-            $"long k = {key}; decimal d = 0; long n = 0; switch (k) {{ case 1: d = 1.5m; break; default: n = 2; break; }} {read};");
+    [Arguments("long k = 1; decimal d = 0; long n = 0; switch (k) { case 1: d = 1.5m; break; default: n = 2; break; } d;", "1.5")]
+    [Arguments("long k = 2; decimal d = 0; long n = 0; switch (k) { case 1: d = 1.5m; break; default: n = 2; break; } n;", "2")]
+    [Arguments("long k = 1; decimal d = 0; long n = 0; switch (k) { case 1: { d = 1.5m; } break; default: { n = 2; } break; } d;", "1.5")]
+    [Arguments("long k = 2; decimal d = 0; long n = 0; switch (k) { case 1: { d = 1.5m; } break; default: { n = 2; } break; } n;", "2")]
+    [Arguments("class C { public C() { } decimal A() { return 1.5m; } long B() { return 2; } long M(long k) { switch (k) { case 1: this.A(); break; default: this.B(); break; } return k; } } new C().M(1);", "1")]
+    [Arguments("class C { public C() { } decimal A() { return 1.5m; } long B() { return 2; } long M(long k) { switch (k) { case 1: this.A(); break; default: this.B(); break; } return k; } } new C().M(2);", "2")]
+    public async Task StatementSwitch_BodiesOfDifferentRepresentations_Runs(string code, string expected) {
+        var result = CSharpScript.Run(code);
         await Assert.That(result.Success).IsTrue();
         await Assert.That(result.Value).IsEqualTo(expected);
+    }
+
+    [Test]
+    [Arguments(null, 5, 5)]
+    [Arguments(3, 5, 3)]
+    [Arguments(null, null, 0)]
+    public async Task NestedCoalesce_NullableDecimal_Runs(int? first, int? second, int expected) {
+        var t = TypeReference.To<decimal?>();
+        var body = new Block([new Coalesce(new Coalesce(new Parameter("p1", t), new Parameter("p2", t)), new Constant(0m))]);
+        using var exec = Run(body, first is null ? null : (decimal)first, second is null ? null : (decimal)second);
+        await Assert.That(exec.GetValue<decimal>()).IsEqualTo((decimal)expected);
+    }
+
+    /// <summary>Characterization of a known residual (#803, T-06): a nullable arm that is null when taken has no
+    /// value to merge and the VM throws today. Pinned so the row that fixes it flips this test.</summary>
+    [Test]
+    public async Task Conditional_NullableArmTakenWhileNull_ThrowsToday() {
+        var body = new Block([new Conditional(
+            new Parameter("flag", TypeReference.To<bool>()), new Parameter("p", TypeReference.To<long?>()), new Constant(5L))]);
+        var thrown = Assert.Throws<InvalidOperationException>(() => {
+            using var exec = Run(body, true, (object?)null);
+            _ = exec.GetValue<long?>();
+        });
+        await Assert.That(thrown.Message).Contains("Nullable object must have a value");
     }
 
     // The predicate's edges: only a scalar against a heap handle is rejected.
@@ -170,30 +180,35 @@ public class ConditionalArmsTests {
         await Assert.That(exec.GetValue<DateTime>()).IsEqualTo(new DateTime(2021, 2, 2));
     }
 
+    /// <summary>Two different heap types are not a scalar-vs-handle pair: the guard does not judge them and each
+    /// arm reads back as itself (the conversion between them is T-09's).</summary>
     [Test]
-    public async Task Conditional_DecimalAgainstText_IsNotJudgedByTheGuard() {
-        // Two different heap types: not a StackScalar-vs-HeapRef pair, so the guard does not cover it.
-        string outcome;
-        try {
-            using var exec = Run(Pick(new Constant(1.5m), new Constant("a")));
-            outcome = "ran";
-        }
-        catch (Exception ex) {
-            outcome = ex.Message;
-        }
-        await Assert.That(outcome).DoesNotContain("arms differ in representation");
+    [Arguments(true, true)]
+    [Arguments(false, true)]
+    [Arguments(true, false)]
+    [Arguments(false, false)]
+    public async Task Conditional_DecimalAgainstText_EachArmReadsBackAsItself(bool flag, bool decimalFirst) {
+        var body = decimalFirst
+            ? Pick(new Constant(1.5m), new Constant("a"))
+            : Pick(new Constant("a"), new Constant(1.5m));
+        using var exec = Run(body, flag);
+        var takesDecimal = flag == decimalFirst;
+        if (takesDecimal)
+            await Assert.That(exec.GetValue<decimal>()).IsEqualTo(1.5m);
+        else
+            await Assert.That(exec.GetValue<string>()).IsEqualTo("a");
     }
 
     [Test]
-    public async Task Conditional_EnumAgainstItsUnderlyingValue_IsNotJudgedByTheGuard() {
-        string outcome;
-        try {
-            using var exec = Run(Pick(new Constant(DayOfWeek.Monday), new Constant(2L)));
-            outcome = "ran";
-        }
-        catch (Exception ex) {
-            outcome = ex.Message;
-        }
-        await Assert.That(outcome).DoesNotContain("arms differ in representation");
+    [Arguments(true, true, 1L)]
+    [Arguments(false, true, 2L)]
+    [Arguments(true, false, 2L)]
+    [Arguments(false, false, 1L)]
+    public async Task Conditional_EnumAgainstItsUnderlyingValue_ReadsBackTheTakenArm(bool flag, bool enumFirst, long expected) {
+        var body = enumFirst
+            ? Pick(new Constant(DayOfWeek.Monday), new Constant(2L))
+            : Pick(new Constant(2L), new Constant(DayOfWeek.Monday));
+        using var exec = Run(body, flag);
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(expected);
     }
 }

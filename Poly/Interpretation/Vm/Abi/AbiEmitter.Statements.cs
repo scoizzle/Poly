@@ -445,15 +445,6 @@ public static partial class AbiEmitter {
         SpillToRing(EmitCoalesceValue(n, ctx), ctx);
 
     private static Expression EmitSwitch(SwitchStatement sw, Context ctx) {
-        // Every case body and the default land in one word: their representations must agree. A statement
-        // body (an assignment) is not a value, so a statement switch is not judged; the first judgeable arm
-        // anchors the comparison, so a leading null or void arm does not hide a mismatch after it.
-        var arms = sw.Cases.Select(c => c.Body).Concat(sw.DefaultCase is null ? [] : [sw.DefaultCase])
-            .Where(arm => arm is not Assignment).ToList();
-        var anchor = arms.FirstOrDefault(arm => JudgedRepresentation(arm, ctx) is not null);
-        if (anchor is not null)
-            foreach (var arm in arms)
-                RejectMixedRepresentationArms("switch", anchor, arm, ctx);
         var ring = ctx.OpenRing();
         var val = ring.AddValue(CompileNode(sw.Value, ctx));
         int savedDepth = val.RingSlot + 1;

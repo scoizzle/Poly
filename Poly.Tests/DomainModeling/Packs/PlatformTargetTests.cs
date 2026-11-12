@@ -49,7 +49,7 @@ public sealed class PlatformTargetTests {
     private static (Domain Domain, AnalysisResult Analysis, DomainSession Session) Evolve(
         string poly, ExtensionCatalog catalog, string? target) {
         var tree = DslSyntaxTree.Parse(poly);
-        var session = DomainSession.ForDocument(tree, [], catalog).WithTarget(target);
+        var session = DomainSession.Create(tree.Uses, SessionOptions.Bare(catalog)).WithTarget(target);
         var applied = new DomainEvolution(new Domain("_", []))
             .ApplyAndAnalyze(new DomainResolver(tree, session).Resolve(), session: session);
         return (applied.Root ?? new Domain("_", []), applied.Analysis, session);

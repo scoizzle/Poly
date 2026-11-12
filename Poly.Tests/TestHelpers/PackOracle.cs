@@ -762,7 +762,7 @@ public sealed class PackOracle : IAsyncDisposable {
 
     private static (string DomainName, IReadOnlyList<(string FileName, string Source)> Sources) PolyCompile(
         PackOracleDomain fixture, CancellationToken cancel) {
-        var result = new PolyCompiler(ProductCatalog.Catalog, "authoring")
+        var result = new PolyCompiler(ProductCatalog.Catalog, new SessionOptions(ProductCatalog.Catalog, ExtensionCatalog.ProductAuthoring))
             .Compile(fixture.Poly, fixture.Name + ".poly", cancel);
         if (!result.Succeeded) {
             throw new InvalidOperationException(

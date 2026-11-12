@@ -56,7 +56,7 @@ public sealed class ContractBoundaryConstraintTests {
         ImportedContract surface,
         IReadOnlyDictionary<string, Func<Poly.Ast.Nodes.Block>>? bodies = null) {
         var tree = DslSyntaxTree.Parse(poly);
-        var session = DomainSession.ForDocument(tree, [], Catalog(new ContractLibrary("billing", surface, bodies)));
+        var session = DomainSession.Create(tree.Uses, SessionOptions.Bare(Catalog(new ContractLibrary("billing", surface, bodies))));
         var changes = new DomainResolver(tree, session).Resolve();
         // Apply without the analysis gate: a test that expects an error still needs the
         // proposed root (and its facts), not the rolled-back seed.
@@ -1004,7 +1004,7 @@ public sealed class ContractBoundaryConstraintTests {
             Order: entity { Pay: action { } }
             ChargeOrder: bind Billing Charge to Pay request
             """);
-        var session = DomainSession.ForDocument(tree, [], Catalog(new ContractLibrary("billing", surface)));
+        var session = DomainSession.Create(tree.Uses, SessionOptions.Bare(Catalog(new ContractLibrary("billing", surface))));
         var changes = new List<DomainChange>(new DomainResolver(tree, session).Resolve());
         changes.Add(new AddParameterToActionChange(
             "Order", "Pay", new Property("request", new DomainTypeReference("Number"), callerConstraints)));

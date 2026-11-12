@@ -1740,7 +1740,7 @@ internal sealed class DslTool(ISessionStore store, ILogger<DslTool> logger) {
     private static DslCompileResult CompileDsl(McpSessionState state, string polyText) {
         var seed = state.Domain.Extensions.Count > 0
             ? state.Domain.Extensions
-            : ExtensionCatalog.ProductAuthoring;
+            : ProductCatalog.ImplicitIds;
         // The harness catalog loads the libraries without host-file contributors; the check
         // and produce rules are the ones polyc check and polyc build run.
         var compiler = new PolyCompiler(

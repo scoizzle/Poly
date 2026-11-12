@@ -19,9 +19,12 @@ public static class ProductCatalog {
     public static ExtensionCatalog Catalog { get; } = Build(wired: true, hostVendor: null);
 
     /// <summary>
-    /// The one implicit library set a document that lists no <c>uses</c> loads.
+    /// The one implicit library set a document that lists no <c>uses</c> loads:
+    /// <c>storage</c> (the <c>column</c>/<c>table</c> facet pack) and <c>persistence</c>
+    /// (the <c>unique</c> storage-port compiler and the DbContext contributor). Bare
+    /// sessions load none, and a document's non-empty <c>uses</c> list replaces the set.
     /// </summary>
-    public static IReadOnlyList<string> ImplicitIds => ExtensionCatalog.ProductAuthoring;
+    public static IReadOnlyList<string> ImplicitIds { get; } = ["storage", "persistence"];
 
     /// <summary>
     /// The same libraries with no host-file contributors: the model and its C# types only. The

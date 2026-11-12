@@ -9,7 +9,7 @@ internal sealed class Options {
     public required string Command { get; init; }
     public List<string> Paths { get; } = [];
     public string Out { get; set; } = "./polyc-out";
-    public string Seed { get; set; } = "authoring";
+    public string? Seed { get; set; }
     public List<string> Artifacts { get; } = [];
     public string Format { get; set; } = "text";
     public bool WarnAsError { get; set; }
@@ -46,7 +46,9 @@ internal sealed class Options {
     /// driver names none. The LSP server and <c>polyc</c> both build through it.
     /// </summary>
     internal static PolyCompiler CreateCompiler(string? seed) =>
-        new(ProductCatalog.Catalog, ExtensionCatalog.Seed(seed ?? "authoring"));
+        new PolyCompiler(
+            ProductCatalog.Catalog,
+            seed is null ? ProductCatalog.ImplicitIds : ExtensionCatalog.Seed(seed));
 
     /// <summary>Returns null with <paramref name="error"/> set on a usage problem.</summary>
     public static Options? Parse(string[] args, out string? error) {
@@ -109,7 +111,8 @@ internal sealed class Options {
             return null;
         }
         try {
-            ExtensionCatalog.Seed(options.Seed);
+            if (options.Seed is { } seedName)
+                ExtensionCatalog.Seed(seedName);
         }
         catch (ArgumentException ex) {
             error = ex.Message;

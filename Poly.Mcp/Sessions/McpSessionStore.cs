@@ -165,7 +165,7 @@ internal sealed class McpSessionStore(
             : preferredSessionId;
 
         var domain = DomainFactory.Create(domainName) with {
-            Extensions = [.. ExtensionCatalog.ProductAuthoring]
+            Extensions = [.. ProductCatalog.ImplicitIds]
         };
         var modeling = DomainSession.Open(domain, ProductCatalog.Model);
         var analysis = modeling.Analyze(domain);

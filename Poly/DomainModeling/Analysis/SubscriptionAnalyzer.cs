@@ -502,8 +502,10 @@ internal sealed class SubscriptionAnalyzer : INodeAnalyzer {
         AnalysisContext context, Domain domain, DomainTypeLookupMetadata lookup, Entity entity,
         IReadOnlyList<StageSubscription> subscriptions, string scope) {
         if (subscriptions.Count < 2) return;
-        // A subscription that does not resolve is already an error (DMSS003); nothing runs, so
-        // "both run" would be noise on a domain that fails analysis.
+        // A subscription that fails any DMSS003 check is skipped: nothing runs, so "both run"
+        // would be noise on a domain that fails analysis. The one exception is an unavailable
+        // relationship lookup (ResolveRelationshipLookup returns null): skipped silently,
+        // unreachable in practice and fail-closed here.
         var resolvable = subscriptions.Where(sub => Resolves(context, domain, lookup, entity, sub)).ToList();
         foreach (var group in resolvable.GroupBy(CanonicalKey, StringComparer.Ordinal)) {
             var members = group.ToList();
@@ -527,7 +529,10 @@ internal sealed class SubscriptionAnalyzer : INodeAnalyzer {
         return relLookup is not null
             && relLookup.TryGetRelationship(entity.Name, sub.RelationshipName, out var relationship)
             && lookup.Types.TryGetValue(relationship.Target.TypeName, out var target)
-            && target is Entity;
+            && target is Entity targetEntity
+            && sub.StageNames.All(name => targetEntity.Stages.Any(s => string.Equals(s.Name, name, StringComparison.Ordinal)))
+            && (sub.Quantifier == StageSubscriptionQuantifier.Each
+                || relationship.Cardinality is not (RelationshipCardinality.OneToOne or RelationshipCardinality.ManyToOne));
     }
 
     private static string CanonicalKey(StageSubscription sub) =>

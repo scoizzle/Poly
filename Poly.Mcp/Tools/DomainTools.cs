@@ -1570,7 +1570,8 @@ internal sealed class DslTool(ISessionStore store, ILogger<DslTool> logger) {
                 Revision: state.Revision,
                 Affordances: ["get_relationships", "get_domain_overview"]);
 
-        var printer = new DomainDslPrinter(state.Modeling);
+        // Not Options.ImplicitIds: apply_dsl replaces Modeling with a session seeded from the previous extensions.
+        var printer = new DomainDslPrinter(state.Modeling, ProductCatalog.ImplicitIds);
         var polyText = printer.Print(state.Domain);
 
         return new DomainToolResponse(
@@ -1743,8 +1744,9 @@ internal sealed class DslTool(ISessionStore store, ILogger<DslTool> logger) {
             : ProductCatalog.ImplicitIds;
         // The harness catalog loads the libraries without host-file contributors; the check
         // and produce rules are the ones polyc check and polyc build run.
-        var compiler = new PolyCompiler(
-            ProductCatalog.Model, seed, new CompileHooks { DefaultDomainName = "Imported" });
+        var compiler = new PolyCompiler(ProductCatalog.Model, new SessionOptions(ProductCatalog.Model, seed)) {
+            DefaultDomainName = "Imported",
+        };
         var core = compiler.Analyze(polyText, "<workspace>");
         if (core.Analysis is null)
             return new DslCompileResult(core, core.DomainName ?? "", RejectedBeforeAnalysis(core));

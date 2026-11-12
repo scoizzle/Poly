@@ -54,7 +54,7 @@ public sealed class ContractBindingFactsTests {
         string poly,
         IDomainLibrary library) {
         var tree = DslSyntaxTree.Parse(poly);
-        var session = DomainSession.ForDocument(tree, [], Catalog(library));
+        var session = DomainSession.Create(tree.Uses, SessionOptions.Bare(Catalog(library)));
         var changes = new DomainResolver(tree, session).Resolve();
         // Apply without the analysis gate: a test that expects an error still needs the
         // proposed root (and its facts), not the rolled-back seed.

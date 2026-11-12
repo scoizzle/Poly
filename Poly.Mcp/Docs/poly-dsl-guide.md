@@ -482,6 +482,13 @@ same facts as a self-contained page for a person; an untagged element gets a sta
 `urn:poly:` IRI. The IRI is `x-poly-iri`, not a subschema `$id`: in JSON Schema 2020-12 a
 `$defs` `$id` starts an embedded resource and would rebase every local `#/$defs/…`
 reference onto the element IRI.
+
+### Export order and `uses`
+
+`export_dsl` prints declarations in the order they were authored. Top-level declarations are grouped by kind (enums, value types, entities, functions, contracts, bindings), each kind in model order. Entity members (properties, navigations, stages, actions, policies) print in authored order, with subscriptions last. Members added through incremental MCP tools print after the authored ones. A `uses` line is printed only when the domain's extension list differs from the implicit set (`storage`, `persistence`, in that order) or a `uses <id> <version>` pin is present, so a document that listed no `uses` exports without one. Export drops `uses temporal`; reading re-supplies it.
+
+Two consequences of the `uses` rule. First, a document that spells exactly the implicit set (`uses storage` then `uses persistence`) exports without those lines: the model is equal, the text is not. Second, an export without `uses` is not self-describing: applying it into a session that already holds other libraries keeps them (for example `uses http`), and `polyc --seed language` loads no libraries (`--seed authoring` is an alias for the implicit set). Write the `uses` lines you need into the document. This is an interim rule until the implicit set stops being recorded in the extension list.
+
 ## 4. Navigation Properties (N1 Relationships Only)
 
 Relationships are declared as **inline navigation properties** on the source entity.
@@ -505,7 +512,7 @@ Customer: entity {
 ```
 
 Cardinality: `one` (default, can be omitted), `many`.
-Ownership: `owned` marks `SourceOwnsTarget = true`. Export writes `one ` explicitly for a one-to-one navigation (`invoice: Invoice` prints as `invoice: one Invoice`), because the bare form re-reads as a typed property line.
+Ownership: `owned` marks `SourceOwnsTarget = true`. Export writes `one ` explicitly for a one-to-one navigation (`invoice: Invoice` prints as `invoice: one Invoice`), because a bare `x: T` also reads back as one-to-one but fails closed when `T` is a Phase 1a keyword (`actor`, `schedule`, `parallel`, `for`, `function`; matched case-insensitively); `one T` is unambiguous.
 
 **Which entity is the root.** A collection nav (`children: many Child`) means the
 declaring entity owns the target. `owned` marks composition explicitly. A plain singular
@@ -524,6 +531,36 @@ endpoints.
 inbound link of an `owned` target (minimum one owner): "Cannot unlink '<rel>': the
 owned target must keep its owner." Non-owned links stay minimum zero, and removing
 the owner instance entirely is not an unlink, so it is exempt from the minimum.
+
+**An owned entity has exactly one owner navigation** (`DMSTR010`). Two `owned`
+navigations to one entity type are an analysis error, whether they sit on different
+entities or on one, and the message names every owner:
+
+<!-- poly-verify: invalid:DMSTR010 wrapper:top-default -->
+```poly
+Customer: entity {
+  Name: Text
+  profile: owned Profile
+}
+
+Supplier: entity {
+  Name: Text
+  profile: owned Profile   // error: Profile already has an owner, Customer.profile
+}
+
+Profile: entity {
+  Bio: Text
+}
+```
+
+Keep one navigation `owned` and make the other a plain reference. The rule is by
+navigation, so `Order.billing: owned Address` plus `Order.shipping: owned Address`
+is rejected too: make one a plain reference, or model the address as two entity types.
+A self-owning navigation (`Node.children: many owned Node`) is one owner edge and is
+legal, but a container that owns a recursive type (`Folder.items: many owned Item` plus
+`Item.children: many owned Item`) gives `Item` two owner navigations and is rejected;
+make `Item.children` a plain reference, or declare the tree node as its own type.
+This is a type-level check only: a second owner *instance* is not refused yet.
 
 **Relationship names are scoped to their source entity.** The same navigation name may
 be declared on different source entities — e.g. two children each back-reference their
@@ -560,8 +597,8 @@ Employee: entity {
 `via` is recorded on the relationship as `Inverse` and is validated by analysis:
 `DMREL003` when the name is not a navigation on the target entity, `DMREL004` when the
 two sides contradict (the named navigation points elsewhere, declares a different
-inverse, is the navigation itself, both ends are owned, or two navigations on one entity
-claim the same undeclared inverse), and `DMREL005` when two or more navigations of one
+inverse, is the navigation itself, both ends are owned, an owned navigation is paired with a
+collection inverse, or two navigations on one entity claim the same undeclared inverse), and `DMREL005` when two or more navigations of one
 cardinality class pair with a side that declares none. Lowering does not dispatch from
 the declared inverse yet — that is a later slice. `via <name>` is legal on an owned
 navigation too — that is how the back-reference names its owner, and only one side of a
@@ -1003,7 +1040,7 @@ same effect-binding fail-closed checks.
 Two `when`s in the same scope (entity level, or one stage) with the same relationship,
 quantifier, peer binder and stage set warn **`DMSS006`**. Nothing is removed: both run, in
 declaration order. A `when` that names a stage nothing transitions into, and that is not the
-target's initial stage, warns **`DMSS007`**: a stage in it can never trigger it. The check is syntactic (no
+target's initial stage, warns **`DMSS007`**: a stage it names can never trigger it. The check is syntactic (no
 transition into the stage at all), not reachability.
 
 ### Two shapes
@@ -1787,8 +1824,6 @@ comment describing the old member.
 <!-- poly-verify: valid -->
 ```poly
 domain Orders
-uses storage
-uses persistence
 
 Customer: entity {
   Name: Text

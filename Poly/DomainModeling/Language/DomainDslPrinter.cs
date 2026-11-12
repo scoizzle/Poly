@@ -25,6 +25,7 @@ public sealed partial class DomainDslPrinter {
     private readonly AnnotationRegistry? _annotations;
     private readonly ExpressionPrintRegistry _expressionBinders = new();
     private readonly Printer<DslToken, DslTokenKind> _printTable;
+    private readonly IReadOnlyList<string> _implicitIds = [];
 
     /// <summary>Creates a printer with the default (empty) session.</summary>
     public DomainDslPrinter() : this(DomainSession.ForExtensions([])) {
@@ -38,6 +39,15 @@ public sealed partial class DomainDslPrinter {
         new ExpressionFormRegistry().ContributePrintMappings(_expressionBinders);
         CoreExpressionPrintBinders.Register(_expressionBinders);
         _printTable = language.Printer;
+    }
+
+    /// <summary>
+    /// Creates a printer that omits the <c>uses</c> block when the domain's extension list equals
+    /// <paramref name="implicitIds"/> (the set a document that lists no <c>uses</c> is seeded with).
+    /// </summary>
+    public DomainDslPrinter(DomainSession session, IReadOnlyList<string> implicitIds) : this(session) {
+        ArgumentNullException.ThrowIfNull(implicitIds);
+        _implicitIds = implicitIds;
     }
 
     public DomainDslPrinter(DomainSession session) {
@@ -59,9 +69,7 @@ public sealed partial class DomainDslPrinter {
             "document",
             "header",
             fills: new Dictionary<string, string>(StringComparer.Ordinal) { ["name"] = domain.Name }));
-        foreach (var extensionId in domain.Extensions) {
-            if (string.Equals(extensionId, ExtensionCatalog.TemporalId, StringComparison.Ordinal))
-                continue;
+        foreach (var extensionId in UsesToPrint(domain)) {
             var seeded = domain.ImportedContracts.FirstOrDefault(contract =>
                 string.Equals(contract.UsesId, extensionId, StringComparison.Ordinal));
             if (seeded?.Pin is { Length: > 0 } pin) {
@@ -81,24 +89,18 @@ public sealed partial class DomainDslPrinter {
         }
         _sb.AppendLine();
 
-        // Entities (sorted by name for stability)
-        var entities = domain.Types.OfType<Entity>()
-            .OrderBy(e => e.Name, StringComparer.Ordinal)
-            .ToList();
-
-        // Print enum types first
-        var enumTypes = domain.Types.OfType<EnumType>().ToList();
-        foreach (var enumType in enumTypes) {
+        // Kind-grouped (enums, value types, entities, functions, contracts, bindings), each kind in model order.
+        foreach (var enumType in domain.Types.OfType<EnumType>()) {
             PrintEnumType(enumType);
             _sb.AppendLine();
         }
 
-        foreach (var valueType in domain.Types.OfType<ValueType>().OrderBy(v => v.Name, StringComparer.Ordinal)) {
+        foreach (var valueType in domain.Types.OfType<ValueType>()) {
             PrintValueType(valueType);
             _sb.AppendLine();
         }
 
-        foreach (var entity in entities) {
+        foreach (var entity in domain.Types.OfType<Entity>()) {
             PrintEntity(entity);
             _sb.AppendLine();
         }
@@ -111,18 +113,32 @@ public sealed partial class DomainDslPrinter {
         // A contract seeded by `uses <id>` is the export-package reference, already printed
         // on the uses line; only body-authored blocks print here.
         foreach (var contract in domain.ImportedContracts
-                     .Where(c => c.UsesId is null || !domain.Extensions.Contains(c.UsesId, StringComparer.Ordinal))
-                     .OrderBy(c => c.Name, StringComparer.Ordinal)) {
+                     .Where(c => c.UsesId is null || !domain.Extensions.Contains(c.UsesId, StringComparer.Ordinal))) {
             PrintContract(contract);
             _sb.AppendLine();
         }
 
-        foreach (var binding in domain.ContractBindings.OrderBy(b => b.Name, StringComparer.Ordinal)) {
+        foreach (var binding in domain.ContractBindings) {
             PrintBinding(binding);
             _sb.AppendLine();
         }
 
         return _sb.ToString().TrimEnd() + "\n";
+    }
+
+    // Interim (until C stops recording implicit ids in Domain.Extensions): a document that lists no
+    // `uses` is seeded with the implicit set, so an extension list equal to it (ordinal, `temporal`
+    // aside) reads back identically without the lines and is not printed. A pinned `uses <id> <v>`
+    // is authored, never seeded, so it always prints.
+    private IEnumerable<string> UsesToPrint(Domain domain) {
+        var extensions = domain.Extensions
+            .Where(id => !string.Equals(id, ExtensionCatalog.TemporalId, StringComparison.Ordinal))
+            .ToList();
+        var implicitIds = _implicitIds
+            .Where(id => !string.Equals(id, ExtensionCatalog.TemporalId, StringComparison.Ordinal));
+        var anyPinned = domain.ImportedContracts.Any(c =>
+            c.Pin is { Length: > 0 } && c.UsesId is not null && extensions.Contains(c.UsesId, StringComparer.Ordinal));
+        return !anyPinned && extensions.SequenceEqual(implicitIds, StringComparer.Ordinal) ? [] : extensions;
     }
 
     // The parser reads a bare identifier or a string literal here; anything the scanner would

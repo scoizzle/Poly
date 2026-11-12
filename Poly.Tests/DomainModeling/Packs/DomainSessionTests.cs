@@ -26,10 +26,10 @@ public sealed class DomainSessionTests {
     }
 
     [Test]
-    public async Task ForDocument_LoadsUses() {
+    public async Task Create_LoadsDocumentUses() {
         var tree = DslSyntaxTree.Parse("domain D\nuses temporal\n");
 
-        var session = DomainSession.ForDocument(tree, []);
+        var session = DomainSession.Create(tree.Uses, SessionOptions.Bare(ExtensionCatalog.Core));
 
         await Assert.That(session.Extensions).Contains("temporal");
     }

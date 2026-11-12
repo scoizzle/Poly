@@ -8,16 +8,19 @@ namespace Poly.DomainModeling.Ontology;
 internal readonly record struct OrderedMember(EntityMemberKind Kind, Node Node);
 
 /// <summary>
-/// The one declaration-order reader (Q12). Every projection, printer and compiler reads
-/// entity-member order here; do not re-sort. Order is never a determinism sort: determinism
-/// comes from the model's own order.
+/// The one declaration-order reader (Q12). Every property and navigation projection, the
+/// printer and the compiler read entity-member order here; do not re-sort. Order is never a
+/// determinism sort: determinism comes from the model's own order. The Stages and Actions tables in
+/// <c>DomainReportExporter</c> and <c>DomainHtmlExporter</c> read <c>entity.Stages</c> and
+/// <c>entity.Actions</c> directly: each is a single-kind list, so list order is its declaration order.
 /// <para>
 /// <see cref="Members"/> merges <see cref="Entity.MemberOrder"/> with the member lists. It walks
-/// <c>MemberOrder</c>, takes the first match per <c>(Kind, Name)</c> and drops an entry that
+/// <c>MemberOrder</c>, takes the first unclaimed match per <c>(Kind, Name)</c> and drops an entry that
 /// resolves to no member of that kind, then appends every member still unplaced in list order
 /// (properties, navigations, stages, actions, policies). The merge is monotone: adding a member
 /// never reorders existing ones, removing one drops only that member, and an empty
-/// <c>MemberOrder</c> degrades to per-list order. The fallback is by design, not fail-closed —
+/// <c>MemberOrder</c> degrades to per-list order. A property that is removed and added again returns to
+/// its old <c>MemberOrder</c> position. The fallback is by design, not fail-closed —
 /// builder evolution and programmatic models are legitimate inputs.
 /// </para>
 /// </summary>

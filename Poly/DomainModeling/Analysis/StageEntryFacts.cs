@@ -22,7 +22,7 @@ namespace Poly.DomainModeling.Analysis;
 /// </para>
 /// <para>
 /// May-assign; not for definite-initialization decisions. Conditional and loop bodies count even when they cannot execute, so a create-supplied
-/// value for such a property is an error the author must escape with <c>default(x)</c>. Exits
+/// value for such a property is an error the author resolves by omitting it (<c>default(...)</c> or <c>optional</c> keeps a required property omittable). Exits
 /// that never fire (dead per-stage switch arms) count the same way. Names are
 /// returned verbatim, never filtered against <see cref="Entity.Properties"/>, so an assignment to a
 /// mistyped name is not silently swallowed; a non-<see cref="PropertyAccess"/> target
@@ -72,7 +72,7 @@ internal static class StageEntryFacts {
     /// overwritten by <paramref name="entity"/>'s entry chain.
     /// </summary>
     public static string CannotSupplyMessage(Entity entity, string propertyName) =>
-        $"'{propertyName}' is set by the entry chain of initial stage '{entity.InitialStage()?.Name}' of entity " +
+        $"'{propertyName}' may be set by the entry or exit chain reached from initial stage '{entity.InitialStage()?.Name}' of entity " +
         $"'{entity.Name}' and cannot be supplied on create; omit it (a required property needs default(...) or " +
         "optional to be omittable).";
 

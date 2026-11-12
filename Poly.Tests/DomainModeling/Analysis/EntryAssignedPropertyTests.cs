@@ -86,6 +86,7 @@ public sealed class EntryAssignedPropertyTests {
             Box: entity { Make: action { create Token { P: 5 } } }
             """);
         await Assert.That(errors.Single().Message).Contains("'Q'");
+        await Assert.That(errors.Single().Message).Contains("may be set by");
     }
 
     [Test]
@@ -384,6 +385,49 @@ public sealed class EntryAssignedPropertyTests {
         await Assert.That(errors.Count).IsEqualTo(0);
     }
 
+    // ── Residuals and deliberate over-approximations (sign-off follow-ups) ───────────────
+
+    /// <summary>
+    /// Deliberate fail-closed over-approximation under ruling B: the entry <c>for</c> over the
+    /// entity's own (empty at create) <c>many</c> never runs its body, so a supplied P would survive,
+    /// but the may fact walks the body unconditionally and DMEFF019 fires.
+    /// </summary>
+    [Test]
+    public async Task CreateSuppliesPropertyAssignedInsideZeroTripForLoop_IsDMEFF019_Deliberately() => await AssertOneOnInitializer("""
+        domain D16
+        Kid: entity { }
+        Token: entity {
+          Kids: many Kid
+          P: Number optional
+          Q: stage { entry { for k in Kids { assign P to 1 } } }
+        }
+        Box: entity { Make: action { create Token { P: 5 } } }
+        """);
+
+    /// <summary>
+    /// RESIDUAL (named, fail open for DMEFF019 only): a fan-out <c>for Rel as x invoke x.Action</c> in
+    /// the entry reaches the CHILD's action; the walk has no <c>ForEachInvokeEffect</c> case, so a
+    /// property that action assigns is not in the may set and no DMEFF019 is reported.
+    /// </summary>
+    [Test]
+    public async Task CreateSuppliesPropertyAssignedOnlyByEntryFanOutInvoke_IsClean() {
+        var errors = Errors("""
+            domain D17
+            Kid: entity {
+              owner: Token
+              Touch: action { invoke owner.Fix }
+            }
+            Token: entity {
+              Kids: many Kid
+              P: Number optional
+              Fix: action { assign P to 1 }
+              Q: stage { entry { for Kids as k invoke k.Touch } }
+            }
+            Box: entity { Make: action { create Token { P: 5 } } }
+            """);
+        await Assert.That(errors.Count).IsEqualTo(0);
+    }
+
     // ── Characterization pin (Step 4): the two facts stay apart ──────────────────────────
 
     /// <summary>
@@ -410,31 +454,72 @@ public sealed class EntryAssignedPropertyTests {
         await Assert.That(StageEntryFacts.EntryAssignedProperties(z, domain).Contains("P")).IsTrue();
     }
 
+    /// <summary>
+    /// Probe (review-deep 7): an entry cannot <c>assign</c> a singular navigation (analysis rejects it,
+    /// DMEFF001: not a property), so the fact never holds a nav name and the nav-binding
+    /// <c>continue</c> before <c>ValidateNotEntryAssigned</c> cannot hide a DMEFF019.
+    /// </summary>
+    [Test]
+    public async Task EntryAssignToSingularNavigation_IsRejected_SoNavBindingNeverNeedsDMEFF019() {
+        var errors = Errors("""
+            domain NavAssign
+            Person: entity { Name: Text optional }
+            Token: entity {
+              Owner: Person
+              Q: stage { entry { assign Owner to Owner } }
+            }
+            """);
+        await Assert.That(errors.Count).IsEqualTo(1);
+        await Assert.That(errors[0].Code).IsEqualTo(DomainModelDiagnosticCodes.EffectBinding);
+        await Assert.That(errors[0].Message).Contains("does not exist on entity 'Token'");
+    }
+
     // ── Corpus pin (A7) ──────────────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// The corpus is applied without a session, so files that need a pack (<c>uses</c>) or fail to
+    /// apply are skipped. The analyzed count and the skipped set are pinned exactly, so a loading
+    /// regression cannot hide a DMEFF019.
+    /// </summary>
     [Test]
     public async Task Corpus_NoPolyFileReportsDMEFF019() {
         var root = FindRepoRoot();
         var offenders = new List<string>();
+        var skipped = new List<string>();
         var analyzed = 0;
         foreach (var path in Directory.EnumerateFiles(root, "*.poly", SearchOption.AllDirectories)
                      .Where(p => !IsBuildOutput(root, p))
                      .Order(StringComparer.Ordinal)) {
+            var relative = Path.GetRelativePath(root, path).Replace('\\', '/');
             try {
                 var applied = new DomainEvolution(DomainTestFactory.Create("_", [], []))
                     .Apply(new PolyDslParser(File.ReadAllText(path)).Parse());
-                if (!applied.Succeeded)
+                if (!applied.Succeeded) {
+                    skipped.Add($"{relative}: apply failed");
                     continue;
+                }
                 analyzed++;
                 if (DomainModelAnalyzer.Analyze(applied.Root).Diagnostics.Any(d => d.Code == Code))
-                    offenders.Add(Path.GetRelativePath(root, path).Replace('\\', '/'));
+                    offenders.Add(relative);
             }
-            catch (Exception) {
-                continue;
+            catch (Exception e) {
+                skipped.Add($"{relative}: {e.GetType().Name}");
             }
         }
-        await Assert.That(analyzed).IsGreaterThanOrEqualTo(30);
         await Assert.That(offenders).IsEquivalentTo(Array.Empty<string>(), StringComparer.Ordinal);
+        // The skipped files need a pack session (they throw InvalidOperationException without one).
+        await Assert.That(skipped).IsEquivalentTo(new[] {
+            "demo/Poly.RestApi/library.poly: InvalidOperationException",
+            "docs/missions/evolve-2026-10-13/library.poly: InvalidOperationException",
+            "docs/missions/evolve-2026-10-13/university-http.poly: InvalidOperationException",
+            "docs/probes/grep-2026-10-17/grep.poly: InvalidOperationException",
+            "docs/probes/scratch-2026-10-14/banking.poly: InvalidOperationException",
+            "docs/probes/scratch-2026-10-14/fleet.poly: InvalidOperationException",
+            "docs/probes/scratch-2026-10-14/gym.poly: InvalidOperationException",
+            "docs/probes/scratch-2026-10-14/logistics.poly: InvalidOperationException",
+            "docs/probes/scratch-2026-10-14/roastery.poly: InvalidOperationException"
+        }, StringComparer.Ordinal);
+        await Assert.That(analyzed).IsEqualTo(42);
     }
 
     private static bool IsBuildOutput(string root, string path) =>

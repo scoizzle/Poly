@@ -403,6 +403,22 @@ public class StageEntryFactsParityTests {
             }
             """, "Z", "M");
 
+    // A10: an entity-level and a stage-level action share a name; the walk unions both bodies, as
+    // the lowered oracle does (every same-named method).
+    [Test]
+    public Task Parity_DuplicateNamedEntityAndStageActions_AreUnioned() => AssertParity("""
+        domain DupAction
+        Z: entity {
+          X: Number default(0)
+          Y: Number default(0)
+          Bump: action { assign X to 1 }
+          A: stage {
+            Bump: action { assign Y to 1 }
+            entry { invoke Bump }
+          }
+        }
+        """, "Z", "X", "Y");
+
     // ── Characterization (S-14 A2): subscription / notify / cross-entity shapes ──────────
     // Each fixture states the OBSERVED oracle and fact (2026-11-12, on the S-14 head). All four
     // agree, but agreement is NOT a parity claim for handlers: the oracle only follows `this.X()`

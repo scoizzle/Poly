@@ -738,8 +738,10 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
 
     // DMEFF019 reads the may-assign fact (Q15 b); every relief consumer keeps the definite flat fact.
     // An unresolvable hop is reported on its own, so the check sees no names rather than throwing.
-    private static IReadOnlySet<string> EntryAssignedOrEmpty(Entity targetEntity, Domain domain) =>
-        StageEntryFacts.TryEntryAssignedProperties(targetEntity, domain, out var names) ? names : names;
+    private static IReadOnlySet<string> EntryAssignedOrEmpty(Entity targetEntity, Domain domain) {
+        StageEntryFacts.TryEntryAssignedProperties(targetEntity, domain, out var names);
+        return names;
+    }
 
     /// <summary>
     /// True (after reporting DMEFF019 on the initializer) when it supplies a property the target's

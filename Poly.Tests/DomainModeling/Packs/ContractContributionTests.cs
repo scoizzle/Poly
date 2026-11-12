@@ -240,7 +240,7 @@ public sealed class ContractContributionTests {
         await Assert.That(printed.Contains("uses ", StringComparison.Ordinal)).IsFalse();
 
         var tree = DslSyntaxTree.Parse(printed);
-        var session = DomainSession.ForDocument(tree, ["billing"], catalog);
+        var session = DomainSession.Create(tree.Uses, new SessionOptions(catalog, ["billing"]));
         var changes = DomainCompilation.WithSeed(new DomainResolver(tree, session).Resolve(), ["billing"], session);
         var result = new DomainEvolution(new Domain("_", [])).ApplyAndAnalyze(changes, session: session);
         await Assert.That(result.Succeeded).IsTrue();

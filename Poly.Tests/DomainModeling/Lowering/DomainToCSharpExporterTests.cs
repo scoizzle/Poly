@@ -214,13 +214,12 @@ public class DomainToCSharpExporterTests {
     }
 
     [Test]
-    public async Task Export_Produces_CoreInfrastructureTypes() {
+    public async Task Export_DoesNotProduce_ResultFamilyTypes() {
         var (domain, analysis) = ParseAndAnalyze(LibraryCheckoutDsl);
         var types = DomainProgramProjection.ToSyntax(domain, analysis);
 
         // R-03b: the result family is Poly.Runtime's; the tree no longer declares it.
         await Assert.That(types.Any(t => t.Name == "DomainResult")).IsFalse();
-        await Assert.That(types.Any(t => t.Name is "DomainResult" && t.GenericParameters?.Count > 0)).IsFalse();
     }
 
     [Test]
@@ -4072,13 +4071,15 @@ public class DomainToCSharpExporterTests {
     public async Task Export_NoVerbatimValue_AndOnlyNeededUsings() {
         const string dsl = """
             domain Shop
+            uses persistence
             Item: entity {
-              Name: Text
+              Name: Text unique
             }
             """;
         var (domain, analysis) = ParseAndAnalyze(dsl);
         var cs = new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis));
 
+        await Assert.That(cs).Contains("object value");
         await Assert.That(cs).DoesNotContain("@value");
         await Assert.That(cs).DoesNotContain("using System;");
         await Assert.That(cs).DoesNotContain("using System.Collections.Generic;");

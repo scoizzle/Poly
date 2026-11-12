@@ -361,7 +361,7 @@ public sealed partial class DomainSession {
 
     /// <summary>
     /// Splits the module into one tree per entity (the entity type and its stage enum) and one
-    /// scaffolding tree holding everything else (domain enums, DomainResult, and so on).
+    /// scaffolding tree holding everything else (domain enums and value types).
     /// Each tree's payload is a read-only copy of its type definitions. Each entity tree points
     /// at the matching <c>source-entity</c> artifact and the scaffolding tree at <c>source-domain</c>.
     /// A type that two trees would hold, or that the module defines twice (for example an entity

@@ -25,7 +25,7 @@ public static class DomainProgramProjection {
 
     /// <summary>
     /// Projects the domain into Syntax type definitions (entity types, stage
-    /// enums, DomainResult scaffolding, lowered operations). Called from
+    /// enums, value types, lowered operations; the result family is Poly.Runtime's). Called from
     /// <see cref="DomainSession.Lower"/>.
     /// </summary>
     public static IReadOnlyList<TypeDefinitionNode> ToSyntax(

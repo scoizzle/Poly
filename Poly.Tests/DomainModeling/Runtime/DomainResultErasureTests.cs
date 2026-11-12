@@ -138,14 +138,30 @@ public sealed class DomainResultErasureTests {
     }
 
     [Test]
-    public async Task ModuleAnalysis_TwinsPresent_IsCleanAndAstWins() {
-        // R8a / I3: the S2b characterization with the twins present; since S3 the lowered
-        // module carries none, so only the clean report remains of it (R8b pins the absence).
-        var (errors, warnings, module) = ModuleReport(McpLibraryPoly());
+    public async Task AnalyzeModule_ModuleDeclaringItsOwnResultTypes_OwnDeclarationsWin() {
+        // AST-wins: a module that declares DomainResult and DomainResult<T> itself binds those
+        // declarations, not the Poly.Runtime provider's, and analyzes clean.
+        var plain = new TypeDefinitionNode("DomainResult");
+        var generic = new TypeDefinitionNode("DomainResult", GenericParameters: [new Parameter("T")]);
+        var holder = new TypeDefinitionNode(
+            "Holder",
+            Properties: [
+                new PropertyDefinitionNode("Plain", new NamedTypeReference("DomainResult")),
+                new PropertyDefinitionNode(
+                    "Typed",
+                    new NamedTypeReference("DomainResult", TypeArguments: [
+                        new PrimitiveTypeReference(Poly.Introspection.PrimitiveType.String),
+                    ])),
+            ]);
 
-        await Assert.That(errors).IsEqualTo(0);
-        await Assert.That(warnings).IsEqualTo(0);
-        await Assert.That(module).IsNotEmpty();
+        var vm = DomainSession.AnalyzeModule([plain, generic, holder]);
+
+        await Assert.That(vm.Diagnostics.Count(d => d.Severity == DiagnosticSeverity.Error)).IsEqualTo(0);
+        var properties = vm.GetMetadata<TypeDefinitionMetadata>(holder)!.TypeDefinition.Properties;
+        await Assert.That(properties.Single(p => p.Name == "Plain").MemberTypeDefinition)
+            .IsTypeOf<AstTypeDefinition>();
+        await Assert.That(properties.Single(p => p.Name == "Typed").MemberTypeDefinition)
+            .IsTypeOf<AstTypeDefinition>();
     }
 
     [Test]
@@ -160,9 +176,8 @@ public sealed class DomainResultErasureTests {
 
     [Test]
     public async Task AnalyzeModule_ModuleWithoutResultTwins_ResolvesPolyRuntime() {
-        // S2b seam pin: the seam wraps the default registry with DomainResultTypeProvider, so a
-        // module that declares none of the result family still analyzes clean. Run while the
-        // real module still carries the twins, so this proves the wiring before S3 drops them.
+        // Seam pin: the seam wraps the default registry with DomainResultTypeProvider, so the
+        // lowered module, which declares none of the result family, analyzes clean.
         var (domain, analysis, session) = LowerWithSession(McpLibraryPoly());
         var module = RuntimeAnalysisCache.GetOrLower(domain, session, analysis);
         var withoutTwins = module

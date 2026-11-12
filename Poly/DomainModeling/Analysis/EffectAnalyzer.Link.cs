@@ -55,7 +55,7 @@ internal sealed partial class EffectAnalyzer {
         }
         context.ReportError(
             effect,
-            $"'{form}' parses and prints but is not lowerable yet (L-13); Analyze rejects it so nothing unlowerable ships.",
+            $"'{form}' parses and prints but is not executable yet (L-13), so Analyze rejects it. Link the instances through the host's link operations (MCP link_instances / unlink_instances) until then.",
             DomainModelDiagnosticCodes.EffectLinkNotLowerable);
     }
 }

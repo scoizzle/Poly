@@ -30,31 +30,52 @@ public class LinkEffectDoorTests {
     private static PolySurfaceTools Surface() =>
         new(McpTestTools.Store, NullLogger<PolySurfaceTools>.Instance);
 
-    [Test]
-    public async Task PolyDefine_Refuses_WithDMEFF020() {
+    private const string Prior = """
+        domain Board
+        Task: entity { Name: Text }
+        Board: entity {
+          Note: Text optional
+          Backlog: many Task
+          Active: many Task
+          Move: action { for t in Backlog { assign Note to "x" } }
+        }
+        """;
+
+    private static (PolySurfaceTools Surface, string Workspace, long Revision) WithPriorModel() {
         var surface = Surface();
         var workspace = surface.Workspace(name: "Board").State!.Workspace;
+        var defined = surface.Define(workspace, Prior);
+        return (surface, workspace, defined.State!.Revision);
+    }
+
+    [Test]
+    public async Task PolyDefine_Refuses_WithDMEFF020_AndKeepsThePriorModel() {
+        var (surface, workspace, revision) = WithPriorModel();
+        await Assert.That(revision).IsEqualTo(1);
 
         var response = surface.Define(workspace, Dsl);
 
         await Assert.That(response.Ok).IsFalse();
         await Assert.That(response.Findings.Count(f => f.Code == "DMEFF020")).IsEqualTo(1);
-        await Assert.That(response.State!.Revision).IsEqualTo(0);
+        await Assert.That(response.State!.Revision).IsEqualTo(revision);
+        var check = surface.Check(workspace);
+        await Assert.That(check.State!.Revision).IsEqualTo(revision);
+        await Assert.That(check.State.Entities).IsEqualTo(2);
+        await Assert.That(JsonSerializer.Serialize(surface.Export(workspace, "dsl").Data))
+            .Contains("assign Note").And.DoesNotContain("link Active");
+        await Assert.That(JsonSerializer.Serialize(surface.Inspect(workspace, "Board.Move").Data))
+            .DoesNotContain("link Active");
     }
 
     [Test]
-    public async Task RefusedDocument_LeavesNothingForCheckSimulateOrExport() {
-        var surface = Surface();
-        var workspace = surface.Workspace(name: "Board").State!.Workspace;
-        await Assert.That(surface.Define(workspace, Dsl).Ok).IsFalse();
+    public async Task PolyDefine_DryRun_RefusesWithDMEFF020_AndChangesNothing() {
+        var (surface, workspace, revision) = WithPriorModel();
 
-        var check = surface.Check(workspace);
-        var simulate = surface.Simulate(workspace, """[{"op":"create","entity":"Board","properties":{}}]""");
-        var csharp = surface.Export(workspace, "csharp");
+        var response = surface.Define(workspace, Dsl, apply: false);
 
-        await Assert.That(check.State!.Entities).IsEqualTo(0);
-        await Assert.That(JsonSerializer.SerializeToNode(simulate.Data)!["failedAt"]).IsNotNull();
-        await Assert.That(JsonSerializer.Serialize(csharp.Data)).DoesNotContain("Backlog");
+        await Assert.That(response.Ok).IsFalse();
+        await Assert.That(response.Findings.Count(f => f.Code == "DMEFF020")).IsEqualTo(1);
+        await Assert.That(surface.Inspect(workspace).State!.Revision).IsEqualTo(revision);
     }
 
     [Test]

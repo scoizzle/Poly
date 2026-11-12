@@ -362,4 +362,105 @@ public sealed partial class LanguageSurfaceTests {
     public async Task LinkBase_AnalyzesCleanWithoutLinkEffects() {
         await Assert.That(LinkDiagnostics(ApplyUnanalyzed(LinkBase)).Count).IsEqualTo(0);
     }
+
+    private static string PositionDsl(string entry, string exit, string when) => $$"""
+        domain Board
+        Task: entity {
+          Name: Text
+          Draft: stage { Finish: action { transition to Done } }
+          Done: stage { }
+        }
+        Board: entity {
+          Note: Text optional
+          Backlog: many Task
+          Active: many Task
+          Tracks: Task
+          Open: stage {
+            entry { {{entry}} }
+            exit { {{exit}} }
+            when Tracks Done as peer { {{when}} }
+          }
+        }
+        """;
+
+    private static IReadOnlyList<(string Position, string Bare, string InFor)> LinkPositions() => [
+        ("entry", "link Active to t", "for t in Backlog { link Active to t }"),
+        ("exit", "unlink Active from t", "for t in Backlog { unlink Active from t }"),
+        ("when", "link Active to peer", "for t in Backlog { link Active to t }"),
+    ];
+
+    private static string PositionDslFor(string position, string effect) => position switch {
+        "entry" => PositionDsl(effect, "assign Note to \"x\"", "assign Note to \"y\""),
+        "exit" => PositionDsl("assign Note to \"x\"", effect, "assign Note to \"y\""),
+        _ => PositionDsl("assign Note to \"x\"", "assign Note to \"y\"", effect),
+    };
+
+    private static IReadOnlyList<Diagnostic> PositionErrors(string dsl) =>
+        LinkDiagnostics(ApplyUnanalyzed(dsl));
+
+    [Test]
+    public async Task LinkBare_InEntryExitAndWhenBodies_IsBinderError() {
+        foreach (var (position, bare, _) in LinkPositions()) {
+            var errors = PositionErrors(PositionDslFor(position, bare));
+
+            await Assert.That(errors.Count(d => d.Code == DomainModelDiagnosticCodes.EffectBinding && d.Node is LinkEffect or UnlinkEffect))
+                .IsEqualTo(1).Because(position);
+            await Assert.That(errors.Count(d => d.Code == DomainModelDiagnosticCodes.EffectLinkNotLowerable))
+                .IsEqualTo(0).Because(position);
+        }
+    }
+
+    [Test]
+    public async Task LinkInFor_InEntryExitAndWhenBodies_IsRefusedOnce() {
+        foreach (var (position, _, inFor) in LinkPositions()) {
+            var errors = PositionErrors(PositionDslFor(position, inFor));
+
+            await Assert.That(errors.Count(d => d.Code == DomainModelDiagnosticCodes.EffectLinkNotLowerable))
+                .IsEqualTo(1).Because(position);
+            await Assert.That(errors.Count(d => d.Code == DomainModelDiagnosticCodes.EffectBinding && d.Node is LinkEffect or UnlinkEffect))
+                .IsEqualTo(0).Because(position);
+        }
+    }
+
+    [Test]
+    public async Task LinkAndUnlink_InEntryExitAndWhenBodies_RoundTrip() {
+        foreach (var (position, bare, inFor) in LinkPositions()) {
+            foreach (var effect in new[] { bare, inFor }) {
+                var printed = new DomainDslPrinter().Print(ApplyUnanalyzed(PositionDslFor(position, effect)));
+
+                await Assert.That(printed).Contains(effect.Split(' ')[0] == "for" ? "for t in Backlog" : effect).Because(position);
+                await Assert.That(new DomainDslPrinter().Print(ApplyUnanalyzed(printed))).IsEqualTo(printed).Because(position);
+            }
+        }
+    }
+
+    /// <summary>
+    /// F-16 reserves lowercase <c>link</c> and <c>unlink</c> as hard keywords, so they cannot name
+    /// anything. G-21 (contextual keywords) flips these to parse cleanly; delete or invert this pin then.
+    /// </summary>
+    [Test]
+    [Arguments("Task: entity { link: Text }", "link", 1, 16)]
+    [Arguments("Task: entity { unlink: Text }", "unlink", 1, 16)]
+    [Arguments("Task: entity { Name: Text }\nBoard: entity { link: many Task }", "link", 2, 17)]
+    [Arguments("Task: entity { Name: Text }\nBoard: entity { Open: stage { }\n  unlink: stage { } }", "unlink", 3, 3)]
+    [Arguments("Task: entity { link: action { } }", "link", 1, 16)]
+    [Arguments("Task: entity { Go: action (link: Text) { } }", "link", 1, 28)]
+    public async Task LinkAndUnlink_AsNames_FailToParseWithAPositionedError(string body, string token, int line, int column) {
+        var ex = ParseFails("domain D\n" + body);
+
+        await Assert.That(ex.Message).Contains(token);
+        await Assert.That(ex.Line).IsEqualTo(line + 1);
+        await Assert.That(ex.Column).IsEqualTo(column);
+    }
+
+    [Test]
+    [Arguments("domain link\nTask: entity { Name: Text }")]
+    [Arguments("domain D\nlink: entity { Name: Text }")]
+    [Arguments("domain D\nKind: enum { link, other }")]
+    public async Task LinkAsEntityDomainOrEnumValueName_FailsToParse(string dsl) {
+        var ex = ParseFails(dsl);
+
+        await Assert.That(ex.Message).Contains("link");
+        await Assert.That(ex.Line).IsGreaterThan(0);
+    }
 }

@@ -30,7 +30,7 @@ public sealed class LinkEffectFailClosedTests {
         var (domain, analysis) = EvolvedDomain.FromDsl(Dsl);
         var board = domain.Types.OfType<Entity>().Single(e => e.Name == "Board");
         return (new EffectLoweringPass(board, new LoweringContext(
-            new Parameter("entity", new TypeReference(board.Name)), analysis, domain)), board);
+            new Parameter("entity", new TypeReference(board.Name)), analysis, domain) { ActionName = "Move" }), board);
     }
 
     private static readonly LinkEffect LinkActive = new("Active", DomainExpression.Property("t"));
@@ -42,7 +42,7 @@ public sealed class LinkEffectFailClosedTests {
 
         var ex = Assert.Throws<InvalidOperationException>(() => pass.TryLowerVmNode(LinkActive))!;
 
-        await Assert.That(ex.Message).Contains("link Active to t");
+        await Assert.That(ex.Message).Contains("Board.Move: link Active to t");
     }
 
     [Test]
@@ -51,7 +51,7 @@ public sealed class LinkEffectFailClosedTests {
 
         var ex = Assert.Throws<InvalidOperationException>(() => pass.TryLowerVmNode(UnlinkActive))!;
 
-        await Assert.That(ex.Message).Contains("unlink Active from t");
+        await Assert.That(ex.Message).Contains("Board.Move: unlink Active from t");
     }
 
     [Test]
@@ -61,7 +61,7 @@ public sealed class LinkEffectFailClosedTests {
 
         var ex = Assert.Throws<InvalidOperationException>(() => pass.LowerActionBody([body]))!;
 
-        await Assert.That(ex.Message).Contains("link Active to t");
+        await Assert.That(ex.Message).Contains("Board.Move: link Active to t");
     }
 
     [Test]
@@ -71,6 +71,6 @@ public sealed class LinkEffectFailClosedTests {
 
         var ex = Assert.Throws<InvalidOperationException>(() => pass.LowerActionBody([body]))!;
 
-        await Assert.That(ex.Message).Contains("unlink Active from t");
+        await Assert.That(ex.Message).Contains("Board.Move: unlink Active from t");
     }
 }

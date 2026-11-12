@@ -397,7 +397,7 @@ static async System.Threading.Tasks.Task SeedAsync(LibraryDbContext db)
     {
         db.Add(bookResult.Value);
     }
-    var patronResult = Patron.Create("Sample", "user@test.com", db, 1, Enumerable.Empty<Loan>(), Enumerable.Empty<Fine>());
+    var patronResult = Patron.Create("Sample", "user@test.com", db, 10, Enumerable.Empty<Loan>(), Enumerable.Empty<Fine>());
     if (patronResult.IsSuccess)
     {
         db.Add(patronResult.Value);

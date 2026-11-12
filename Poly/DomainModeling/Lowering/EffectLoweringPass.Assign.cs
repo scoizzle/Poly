@@ -70,9 +70,13 @@ public sealed partial class EffectLoweringPass {
         foreach (var constraint in prop.Constraints) {
             switch (constraint) {
                 case RangeConstraint range when TryNumeric(value, out var number):
-                    if (range.Minimum is not null && number < Convert.ToDouble(range.Minimum))
+                    // Exact comparison: a bound and a value above 2^53 compare equal through double,
+                    // which would elide a guard that must fire (#643).
+                    if (range.Minimum is not null
+                        && (ExactNumber.Compare(number, range.Minimum) is not { } minCompare || minCompare < 0))
                         return false;
-                    if (range.Maximum is not null && number > Convert.ToDouble(range.Maximum))
+                    if (range.Maximum is not null
+                        && (ExactNumber.Compare(number, range.Maximum) is not { } maxCompare || maxCompare > 0))
                         return false;
                     break;
                 case RangeConstraint:
@@ -243,19 +247,10 @@ public sealed partial class EffectLoweringPass {
         }
     }
 
-    private static bool TryNumeric(Node value, out double number) {
+    private static bool TryNumeric(Node value, out object number) {
         switch (value) {
-            case Constant { Value: long l }:
-                number = l;
-                return true;
-            case Constant { Value: int i }:
-                number = i;
-                return true;
-            case Constant { Value: double d }:
-                number = d;
-                return true;
-            case Constant { Value: decimal m }:
-                number = (double)m;
+            case Constant { Value: long or int or double or decimal } constant:
+                number = constant.Value!;
                 return true;
             default:
                 number = 0;

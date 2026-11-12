@@ -59,11 +59,11 @@ public class Student
     {
         if (this.CurrentStage != StudentStage.Active)
         {
-            return DomainResult<Enrollment>.Failure("'Enroll' requires stage 'Active' on entity 'Student'.");
+            return DomainResult<Enrollment>.Failure(Poly.Runtime.DomainFailure.Stage("'Enroll' requires stage 'Active' on entity 'Student'.", "Student.Enroll", "Active"));
         }
         if (this.AtLimit())
         {
-            return DomainResult<Enrollment>.Failure("'Enroll' blocked by policy 'AtLimit'.");
+            return DomainResult<Enrollment>.Failure(Poly.Runtime.DomainFailure.Policy("'Enroll' blocked by policy 'AtLimit'.", "Student.Enroll", "AtLimit"));
         }
         this.OpenCredits = this.OpenCredits + 3L;
         var create0 = this.CreateEnrollments(offering);
@@ -78,7 +78,7 @@ public class Student
     {
         if (this.CurrentStage != StudentStage.Active)
         {
-            return DomainResult.Failure("'DropRegistered' requires stage 'Active' on entity 'Student'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'DropRegistered' requires stage 'Active' on entity 'Student'.", "Student.DropRegistered", "Active"));
         }
         foreach (var target0 in this.Enrollments)
         {
@@ -98,7 +98,7 @@ public class Student
     {
         if (this.CurrentStage != StudentStage.Active)
         {
-            return DomainResult.Failure("'DropAllRegistered' requires stage 'Active' on entity 'Student'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'DropAllRegistered' requires stage 'Active' on entity 'Student'.", "Student.DropAllRegistered", "Active"));
         }
         var invoke0 = this.DropRegistered();
         if (!invoke0.IsSuccess)
@@ -111,7 +111,7 @@ public class Student
     {
         if (this.CurrentStage != StudentStage.Active)
         {
-            return DomainResult.Failure("'CompleteRegistered' requires stage 'Active' on entity 'Student'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'CompleteRegistered' requires stage 'Active' on entity 'Student'.", "Student.CompleteRegistered", "Active"));
         }
         foreach (var target0 in this.Enrollments)
         {
@@ -131,7 +131,7 @@ public class Student
     {
         if (this.CurrentStage != StudentStage.Active)
         {
-            return DomainResult.Failure("'CompletePassing' requires stage 'Active' on entity 'Student'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'CompletePassing' requires stage 'Active' on entity 'Student'.", "Student.CompletePassing", "Active"));
         }
         foreach (var target0 in this.Enrollments)
         {
@@ -151,7 +151,7 @@ public class Student
     {
         if (this.CurrentStage != StudentStage.Active)
         {
-            return DomainResult.Failure("'Suspend' requires stage 'Active' on entity 'Student'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Suspend' requires stage 'Active' on entity 'Student'.", "Student.Suspend", "Active"));
         }
         this.CurrentStage = StudentStage.Suspended;
         this.Holds = this.Holds + 1L;
@@ -161,7 +161,7 @@ public class Student
     {
         if (this.CurrentStage != StudentStage.Suspended)
         {
-            return DomainResult.Failure("'Reinstate' requires stage 'Suspended' on entity 'Student'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Reinstate' requires stage 'Suspended' on entity 'Student'.", "Student.Reinstate", "Suspended"));
         }
         this.CurrentStage = StudentStage.Active;
         return DomainResult.Success();
@@ -232,7 +232,7 @@ public class Student
         {
             return DomainResult.Success();
         }
-        return DomainResult.Failure("A unique assign needs the storage port.");
+        return DomainResult.Failure(Poly.Runtime.DomainFailure.Constraint("A unique assign needs the storage port.", "Student"));
     }
     public static System.Boolean ExistsWithEmail(Poly.Runtime.IStoragePort db, System.String email) => db.Exists("Student", "Email", email);
 }

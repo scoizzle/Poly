@@ -23,7 +23,7 @@ public class Instructor
     {
         if (this.CurrentStage != InstructorStage.Ready)
         {
-            return DomainResult.Failure("'GoOnLeave' requires stage 'Ready' on entity 'Instructor'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'GoOnLeave' requires stage 'Ready' on entity 'Instructor'.", "Instructor.GoOnLeave", "Ready"));
         }
         this.CurrentStage = InstructorStage.Leave;
         return DomainResult.Success();
@@ -32,7 +32,7 @@ public class Instructor
     {
         if (this.CurrentStage != InstructorStage.Leave)
         {
-            return DomainResult.Failure("'Return' requires stage 'Leave' on entity 'Instructor'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Return' requires stage 'Leave' on entity 'Instructor'.", "Instructor.Return", "Leave"));
         }
         this.CurrentStage = InstructorStage.Ready;
         return DomainResult.Success();
@@ -69,7 +69,7 @@ public class Instructor
         {
             return DomainResult.Success();
         }
-        return DomainResult.Failure("A unique assign needs the storage port.");
+        return DomainResult.Failure(Poly.Runtime.DomainFailure.Constraint("A unique assign needs the storage port.", "Instructor"));
     }
     public static System.Boolean ExistsWithEmail(Poly.Runtime.IStoragePort db, System.String email) => db.Exists("Instructor", "Email", email);
 }

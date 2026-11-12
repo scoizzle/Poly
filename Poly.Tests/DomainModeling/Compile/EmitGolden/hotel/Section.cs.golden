@@ -21,20 +21,20 @@ public class Section
     {
         if (!this.CanBook())
         {
-            return DomainResult.Failure("'Occupy' blocked by policy 'CanBook'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Policy("'Occupy' blocked by policy 'CanBook'.", "Section.Occupy", "CanBook"));
         }
         if (this.Hall == null)
         {
-            return DomainResult.Failure("'Occupy' requires a linked 'hall' on entity 'Section'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Required("'Occupy' requires a linked 'hall' on entity 'Section'.", "Section.hall"));
         }
         if (!this.ParentFree())
         {
-            return DomainResult.Failure("'Occupy' blocked by policy 'ParentFree'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Policy("'Occupy' blocked by policy 'ParentFree'.", "Section.Occupy", "ParentFree"));
         }
         this.Occupied = true;
         if (this.Hall == null)
         {
-            return DomainResult.Failure("'Occupy' requires a linked 'hall' on entity 'Section'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Required("'Occupy' requires a linked 'hall' on entity 'Section'.", "Section.hall"));
         }
         var invoke0 = this.Hall.MarkChildBusy();
         if (!invoke0.IsSuccess)
@@ -47,12 +47,12 @@ public class Section
     {
         if (!this.IsOccupied())
         {
-            return DomainResult.Failure("'Vacate' blocked by policy 'IsOccupied'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Policy("'Vacate' blocked by policy 'IsOccupied'.", "Section.Vacate", "IsOccupied"));
         }
         this.Occupied = false;
         if (this.Hall == null)
         {
-            return DomainResult.Failure("'Vacate' requires a linked 'hall' on entity 'Section'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Required("'Vacate' requires a linked 'hall' on entity 'Section'.", "Section.hall"));
         }
         var invoke0 = this.Hall.ClearChildBusy();
         if (!invoke0.IsSuccess)

@@ -23,7 +23,7 @@ public class Fine
     {
         if (this.CurrentStage != FineStage.Resolved)
         {
-            return DomainResult.Failure("'Resolve' requires stage 'Resolved' on entity 'Fine'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Resolve' requires stage 'Resolved' on entity 'Fine'.", "Fine.Resolve", "Resolved"));
         }
         this.CurrentStage = FineStage.Paid;
         return DomainResult.Success();

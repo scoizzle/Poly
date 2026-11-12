@@ -23,7 +23,7 @@ public class Folio
     {
         if (this.CurrentStage != FolioStage.Open)
         {
-            return DomainResult.Failure("'PostRoomNight' requires stage 'Open' on entity 'Folio'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'PostRoomNight' requires stage 'Open' on entity 'Folio'.", "Folio.PostRoomNight", "Open"));
         }
         var assignValue0 = this.Balance + amount;
         if (assignValue0 < 0m)
@@ -41,7 +41,7 @@ public class Folio
     {
         if (this.CurrentStage != FolioStage.Open)
         {
-            return DomainResult.Failure("'PostCharge' requires stage 'Open' on entity 'Folio'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'PostCharge' requires stage 'Open' on entity 'Folio'.", "Folio.PostCharge", "Open"));
         }
         var assignValue0 = this.Balance + amount;
         if (assignValue0 < 0m)
@@ -59,11 +59,11 @@ public class Folio
     {
         if (this.CurrentStage != FolioStage.Open)
         {
-            return DomainResult.Failure("'Settle' requires stage 'Open' on entity 'Folio'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Settle' requires stage 'Open' on entity 'Folio'.", "Folio.Settle", "Open"));
         }
         if (!this.HasBalance())
         {
-            return DomainResult.Failure("'Settle' blocked by policy 'HasBalance'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Policy("'Settle' blocked by policy 'HasBalance'.", "Folio.Settle", "HasBalance"));
         }
         this.Balance = 0L;
         this.CurrentStage = FolioStage.Settled;
@@ -73,11 +73,11 @@ public class Folio
     {
         if (this.CurrentStage != FolioStage.Open)
         {
-            return DomainResult.Failure("'CloseEmpty' requires stage 'Open' on entity 'Folio'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'CloseEmpty' requires stage 'Open' on entity 'Folio'.", "Folio.CloseEmpty", "Open"));
         }
         if (!this.IsSettled())
         {
-            return DomainResult.Failure("'CloseEmpty' blocked by policy 'IsSettled'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Policy("'CloseEmpty' blocked by policy 'IsSettled'.", "Folio.CloseEmpty", "IsSettled"));
         }
         this.CurrentStage = FolioStage.Settled;
         return DomainResult.Success();

@@ -4,6 +4,7 @@ using Poly.DomainModeling.Dispatch;
 using Poly.DomainModeling.Meaning;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Runtime;
+using Poly.Runtime;
 
 using Syntactic = Poly.Ast.Nodes;
 
@@ -45,8 +46,10 @@ public sealed partial class EffectLoweringPass {
             var navMember = new Member(Subject, DomainToCSharpExporter.ToPascalCase(i.TargetRelationship));
             var guard = new IfStatement(
                 new Equal(navMember, new Constant(null!)),
-                new Block([ReturnCallerFailure(new Constant(
-                    $"'{_context.ActionName ?? i.ActionName}' requires a linked '{i.TargetRelationship}' on entity '{_entity.Name}'."))]));
+                new Block([FailureLowering.Return(CallerResultType, new FailureLowering.Spec(
+                    DomainFailureKind.Required,
+                    new Constant($"'{_context.ActionName ?? i.ActionName}' requires a linked '{i.TargetRelationship}' on entity '{_entity.Name}'."),
+                    $"{_entity.Name}.{i.TargetRelationship}"))]));
             var resultVar = _names.Next("invoke");
             var invokeCall = new Invoke(new Member(navMember, i.ActionName), [.. args]);
             return LoweredExpression.Before(loweredArgs, new Block([

@@ -1,5 +1,6 @@
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Ontology;
+using Poly.Runtime;
 
 using AccessModifier = Poly.Introspection.AccessModifier;
 using PrimType = Poly.Introspection.PrimitiveType;
@@ -36,9 +37,8 @@ public sealed partial class DomainToCSharpExporter {
                         value)),
                 new Block([DomainResultSuccess()])));
         }
-        nodes.Add(new Return(new Invoke(
-            new Member(new NamedTypeReference("DomainResult"), "Failure"),
-            new Constant("A unique assign needs the storage port."))));
+        nodes.Add(FailureLowering.Return(new NamedTypeReference("DomainResult"), new FailureLowering.Spec(
+            DomainFailureKind.Constraint, new Constant("A unique assign needs the storage port."), entity.Name)));
         return new MethodDefinitionNode(
             "EnsureUnique",
             new NamedTypeReference("DomainResult"),

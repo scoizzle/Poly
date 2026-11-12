@@ -28,7 +28,7 @@ public class Ticket
     {
         if (this.CurrentStage != TicketStage.New)
         {
-            return DomainResult.Failure("'Work' requires stage 'New' on entity 'Ticket'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Work' requires stage 'New' on entity 'Ticket'.", "Ticket.Work", "New"));
         }
         this.CurrentStage = TicketStage.Working;
         return DomainResult.Success();
@@ -41,7 +41,7 @@ public class Ticket
             this.NotifyClosedSubscribers();
             return DomainResult.Success();
         }
-        return DomainResult.Failure("'Close' is not valid for the current stage on entity 'Ticket'.");
+        return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Close' is not valid for the current stage on entity 'Ticket'.", "Ticket.Close"));
     }
     internal void RegisterAccountTicketsClosedSubscriber(Account subscriber)
     {

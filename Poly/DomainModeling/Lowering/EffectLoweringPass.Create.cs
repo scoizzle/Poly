@@ -4,6 +4,7 @@ using Poly.DomainModeling.Dispatch;
 using Poly.DomainModeling.Meaning;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Runtime;
+using Poly.Runtime;
 
 using Syntactic = Poly.Ast.Nodes;
 
@@ -44,7 +45,10 @@ public sealed partial class EffectLoweringPass {
         var nav = new Member(Subject, DomainToCSharpExporter.ToPascalCase(runtimeRel.Name));
         var guard = new IfStatement(
             new NotEqual(nav, new Constant(null)),
-            new Block([AssignConstraintFailure(new Constant(Relationship.LinkViolationMessage(runtimeRel.Name)))]));
+            new Block([AssignConstraintFailure(new FailureLowering.Spec(
+                DomainFailureKind.Link,
+                new Constant(Relationship.LinkViolationMessage(runtimeRel.Name)),
+                $"{_entity.Name}.{runtimeRel.Name}"))]));
         if (create is Block block)
             return new Block([guard, .. block.Nodes], block.Variables);
         return new Block([guard, create]);

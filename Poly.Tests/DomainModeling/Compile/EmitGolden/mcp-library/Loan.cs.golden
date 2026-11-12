@@ -28,7 +28,7 @@ public class Loan
     {
         if (this.CurrentStage != LoanStage.Active)
         {
-            return DomainResult.Failure("'MarkOverdue' requires stage 'Active' on entity 'Loan'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'MarkOverdue' requires stage 'Active' on entity 'Loan'.", "Loan.MarkOverdue", "Active"));
         }
         this.CurrentStage = LoanStage.Overdue;
         this.NotifyOverdueSubscribers();
@@ -38,7 +38,7 @@ public class Loan
     {
         if (this.CurrentStage != LoanStage.Overdue)
         {
-            return DomainResult.Failure("'Return' requires stage 'Overdue' on entity 'Loan'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Return' requires stage 'Overdue' on entity 'Loan'.", "Loan.Return", "Overdue"));
         }
         this.Amount = 0L;
         this.CurrentStage = LoanStage.Returned;

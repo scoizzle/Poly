@@ -35,7 +35,7 @@ public class Visit
     {
         if (this.CurrentStage != VisitStage.Scheduled)
         {
-            return DomainResult.Failure("'CheckIn' requires stage 'Scheduled' on entity 'Visit'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'CheckIn' requires stage 'Scheduled' on entity 'Visit'.", "Visit.CheckIn", "Scheduled"));
         }
         this.CurrentStage = VisitStage.CheckedIn;
         this.State = VisitState.CheckedIn;

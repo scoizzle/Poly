@@ -403,11 +403,12 @@ public class FailureTypingTests {
     }
 
     private static DomainFailure PrintedFailure(
-        string dsl, string entity, string? action, int times = 1, string? nested = null) {
+        string dsl, string entity, string? action, int times = 1) {
         var asm = ExportedCSharp.CompileAndLoad(Print(dsl));
         var type = asm.GetType(entity)!;
         var create = type.GetMethod("Create")!;
         var args = create.GetParameters().Select(p => p.ParameterType == typeof(string) ? (object?)"x"
+            : p.ParameterType == typeof(bool) ? action == "Skip"
             : p.ParameterType == typeof(IStoragePort) ? new InMemoryStoragePort()
             : p.ParameterType.IsValueType ? Activator.CreateInstance(p.ParameterType) : null).ToArray();
         var created = create.Invoke(null, args)!;
@@ -504,5 +505,50 @@ public class FailureTypingTests {
         await Assert.That(evolved.Analysis.Diagnostics.Any(d =>
             d.Code == DomainModelDiagnosticCodes.ReservedMemberName
             && d.Message.Contains("Parameter 'DomainResult' of action 'Mark' would shadow the generated C# type 'DomainResult'"))).IsTrue();
+    }
+
+    [Test]
+    public async Task ActionParameterNamedDomainResult_InATypedAction_StillPrintsCompilableCSharp() {
+        var cs = Print("""
+            domain Lab
+            Book: entity { Title: Text }
+            Patron: entity {
+              Ok: Boolean
+              IsOk: policy { Ok is true }
+              loans: many Loan
+              CheckOut: action (DomainResult: Book) -> Loan require IsOk {
+                create in loans { book: DomainResult }
+              }
+            }
+            Loan: entity {
+              book: Book
+              borrower: Patron
+            }
+            """);
+
+        var asm = ExportedCSharp.CompileAndLoad(cs);
+
+        await Assert.That(asm.GetType("Patron")).IsNotNull();
+    }
+
+    [Test]
+    [Arguments("for lines as DomainResult invoke DomainResult.Mark(amount: 5)")]
+    public async Task ForLoopBinderNamedDomainResult_InAVoidAction_PrintsCompilableCSharp(string body) {
+        var cs = Print($$"""
+            domain Lab
+            Order: entity {
+              Score: Number range(1, 10) default(5)
+              lines: many OrderLine
+              Mark: action { {{body}} }
+            }
+            OrderLine: entity {
+              Qty: Number range(1, 10) default(5)
+              Mark: action (amount: Number) { assign Qty to amount }
+            }
+            """);
+
+        var asm = ExportedCSharp.CompileAndLoad(cs);
+
+        await Assert.That(asm.GetType("Order")).IsNotNull();
     }
 }

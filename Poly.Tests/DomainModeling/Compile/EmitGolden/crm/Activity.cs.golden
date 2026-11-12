@@ -27,7 +27,7 @@ public class Activity
     {
         if (this.CurrentStage != ActivityStage.Open)
         {
-            return DomainResult.Failure("'Snooze' requires stage 'Open' on entity 'Activity'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Snooze' requires stage 'Open' on entity 'Activity'.", "Activity.Snooze", "Open"));
         }
         this.DueOn = this.DueOn.AddDays((int)7L);
         return DomainResult.Success();
@@ -36,7 +36,7 @@ public class Activity
     {
         if (this.CurrentStage != ActivityStage.Open)
         {
-            return DomainResult.Failure("'Complete' requires stage 'Open' on entity 'Activity'.");
+            return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Complete' requires stage 'Open' on entity 'Activity'.", "Activity.Complete", "Open"));
         }
         this.CurrentStage = ActivityStage.Done;
         return DomainResult.Success();

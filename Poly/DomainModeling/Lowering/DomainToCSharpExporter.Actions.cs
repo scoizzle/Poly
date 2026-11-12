@@ -3,6 +3,7 @@ using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Ontology.Contract;
 using Poly.DomainModeling.Runtime;
+using Poly.Runtime;
 
 using AccessModifier = Poly.Introspection.AccessModifier;
 using Action = Poly.DomainModeling.Ontology.Action;
@@ -213,10 +214,10 @@ public sealed partial class DomainToCSharpExporter {
             locals.AddRange(tail.Variables);
         }
         else {
-            nodes.Add(new Return(
-                new Invoke(
-                    new Member(actionResultType, "Failure"),
-                    new Constant($"'{representative.Name}' is not valid for the current stage on entity '{entity.Name}'."))));
+            nodes.Add(FailureLowering.Return(actionResultType, new FailureLowering.Spec(
+                DomainFailureKind.Stage,
+                new Constant($"'{representative.Name}' is not valid for the current stage on entity '{entity.Name}'."),
+                $"{entity.Name}.{representative.Name}")));
         }
 
         Node returnType = isVoid

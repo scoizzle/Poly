@@ -17,7 +17,7 @@ builder.Services.ConfigureHttpJsonOptions(options => {
 
 builder.Services.AddDbContext<LibraryDbContext>(options => options.UseSqlite("Data Source=library.db"));
 
-builder.Services.AddScoped<Poly.DomainModeling.Runtime.IStoragePort, LibraryDbContext>();
+builder.Services.AddScoped<Poly.Runtime.IStoragePort, LibraryDbContext>();
 
 var app = builder.Build();
 

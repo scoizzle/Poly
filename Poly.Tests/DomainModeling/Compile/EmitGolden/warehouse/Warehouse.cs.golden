@@ -25,7 +25,7 @@ public class Warehouse
     {
         get => this._trucks;
     }
-    public DomainResult<Truck> CreateTrucks(long maxLoad, string vin, Poly.DomainModeling.Runtime.IStoragePort db, long currentLoad = 0L, TruckStatus status = TruckStatus.Idle)
+    public DomainResult<Truck> CreateTrucks(long maxLoad, string vin, Poly.Runtime.IStoragePort db, long currentLoad = 0L, TruckStatus status = TruckStatus.Idle)
     {
         var truckResult = Truck.Create(maxLoad, vin, db, this, new List<Delivery>(), currentLoad, status);
         if (!truckResult.IsSuccess)
@@ -63,7 +63,7 @@ public class Warehouse
         this.Status = assignValue0;
         return DomainResult.Success();
     }
-    public DomainResult<Truck> RegisterTruck(string vin, long maxLoad, Poly.DomainModeling.Runtime.IStoragePort db)
+    public DomainResult<Truck> RegisterTruck(string vin, long maxLoad, Poly.Runtime.IStoragePort db)
     {
         var create0 = this.CreateTrucks(maxLoad, vin, db, 0L, TruckStatus.Idle);
         if (!create0.IsSuccess)
@@ -75,7 +75,7 @@ public class Warehouse
     }
     public bool IsOperational() => this.Capacity > 0L;
     public bool HasCapacity() => this.Capacity > 0L;
-    public static DomainResult<Warehouse> Create(long capacity, string code, string name, string zip, Poly.DomainModeling.Runtime.IStoragePort db, IEnumerable<Truck>? trucks = null, long safetyStock = 100L, TruckStatus status = TruckStatus.Idle)
+    public static DomainResult<Warehouse> Create(long capacity, string code, string name, string zip, Poly.Runtime.IStoragePort db, IEnumerable<Truck>? trucks = null, long safetyStock = 100L, TruckStatus status = TruckStatus.Idle)
     {
         if (capacity < 1L)
         {
@@ -153,5 +153,5 @@ public class Warehouse
         }
         return DomainResult.Failure("A unique assign needs the storage port.");
     }
-    public static System.Boolean ExistsWithCode(Poly.DomainModeling.Runtime.IStoragePort db, System.String code) => db.Exists("Warehouse", "Code", code);
+    public static System.Boolean ExistsWithCode(Poly.Runtime.IStoragePort db, System.String code) => db.Exists("Warehouse", "Code", code);
 }

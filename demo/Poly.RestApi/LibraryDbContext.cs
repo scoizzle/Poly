@@ -8,7 +8,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Poly.Generated;
 
-public class LibraryDbContext : DbContext, Poly.DomainModeling.Runtime.IStoragePort
+public class LibraryDbContext : DbContext, Poly.Runtime.IStoragePort
 {
     private readonly HashSet<string> _pendingKeys = new HashSet<string>();
     public LibraryDbContext(DbContextOptions<LibraryDbContext> options) : base(options) { }

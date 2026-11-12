@@ -17,7 +17,7 @@ builder.Services.ConfigureHttpJsonOptions(options => {
 
 builder.Services.AddDbContext<CrmDbContext>(options => options.UseSqlite("Data Source=crm.db"));
 
-builder.Services.AddScoped<Poly.DomainModeling.Runtime.IStoragePort, CrmDbContext>();
+builder.Services.AddScoped<Poly.Runtime.IStoragePort, CrmDbContext>();
 
 var app = builder.Build();
 

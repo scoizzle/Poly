@@ -55,7 +55,7 @@ public class Customer
         }
         return DomainResult.Success();
     }
-    public static DomainResult<Customer> Create(string email, string name, Poly.DomainModeling.Runtime.IStoragePort db, IEnumerable<Order>? orders = null, string tier = "standard")
+    public static DomainResult<Customer> Create(string email, string name, Poly.Runtime.IStoragePort db, IEnumerable<Order>? orders = null, string tier = "standard")
     {
         if (string.IsNullOrEmpty(email))
         {
@@ -93,5 +93,5 @@ public class Customer
         }
         return DomainResult.Failure("A unique assign needs the storage port.");
     }
-    public static System.Boolean ExistsWithEmail(Poly.DomainModeling.Runtime.IStoragePort db, System.String email) => db.Exists("Customer", "Email", email);
+    public static System.Boolean ExistsWithEmail(Poly.Runtime.IStoragePort db, System.String email) => db.Exists("Customer", "Email", email);
 }

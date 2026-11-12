@@ -11,7 +11,7 @@ public class Book
     public long Copies { get; private set; }
     public string Isbn { get; private set; } = default!;
     public string Title { get; private set; } = default!;
-    public static DomainResult<Book> Create(string isbn, string title, Poly.DomainModeling.Runtime.IStoragePort db, long copies = 1L)
+    public static DomainResult<Book> Create(string isbn, string title, Poly.Runtime.IStoragePort db, long copies = 1L)
     {
         if (copies < 0L)
         {
@@ -49,5 +49,5 @@ public class Book
         }
         return DomainResult.Failure("A unique assign needs the storage port.");
     }
-    public static System.Boolean ExistsWithIsbn(Poly.DomainModeling.Runtime.IStoragePort db, System.String isbn) => db.Exists("Book", "Isbn", isbn);
+    public static System.Boolean ExistsWithIsbn(Poly.Runtime.IStoragePort db, System.String isbn) => db.Exists("Book", "Isbn", isbn);
 }

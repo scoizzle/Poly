@@ -629,8 +629,9 @@ transition counts as leaving whatever stage the instance may then be in, so it m
 exit-block target too. The rule is conservative: guards are not analysed (every existing transition
 counts, including one under an `if`), and an `invoke` before a hop makes it dynamic even when the
 callee is pure. Making the exit-block transition target the same stage as the hop passes the rule,
-but the hop still re-runs that target's entry effects (open on #683), so keep that entry idempotent
-until then.
+and that transition is redundant: the hop owns the landing, so the target's entry effects and
+subscriber notify run once, and the effects after the transition in the exit block still run before
+the landing.
 
 `invoke`, `create`, `create in` and `for … invoke` are action-only (§9): each one in an exit block is
 rejected with `DMEFF018`, positioned on the effect. Move it into an action.

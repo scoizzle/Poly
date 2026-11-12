@@ -16,7 +16,8 @@ internal sealed partial class EffectAnalyzer {
             $"Assign targets state reached through relationship '{relationshipName}', which belongs to another entity. " +
             $"Only '{owner.Name}' and its own actions, entry, exit and when blocks may assign its state; " +
             $"cross-entity access is read-only. Invoke an action on the other entity instead " +
-            $"(e.g. 'invoke {relationshipName}.SomeAction').",
+            $"(e.g. 'invoke {relationshipName}.SomeAction'); in an exit block, move that work into an action — " +
+            $"an exit block rejects 'invoke', 'create' and 'for … invoke' (DMEFF018).",
             DomainModelDiagnosticCodes.EffectCrossEntityMutation);
     }
 

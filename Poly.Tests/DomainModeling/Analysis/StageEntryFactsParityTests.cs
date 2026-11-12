@@ -387,6 +387,22 @@ public class StageEntryFactsParityTests {
         }
         """, "Z", "N");
 
+    // F9: a same-target exit hop inside the initial entry chain lowers to nothing (the leaving
+    // hop owns the landing); the fact still models it as a landing, and the name set is equal.
+    [Test]
+    public async Task Parity_SameTargetExitHopInEntryChain() =>
+        await AssertParity("""
+            domain ExitHop
+            Z: entity {
+              M: Number default(0)
+              A: stage {
+                entry { transition to B }
+                exit { transition to B }
+              }
+              B: stage { entry { assign M to 1 } }
+            }
+            """, "Z", "M");
+
     // F-1, a recorded gap: a transition inside an invoked action is not followed, so the fact
     // is a strict subset of Lower here. May-assign; not for definite-initialization decisions.
     // S-14's lock must acknowledge this before it consumes the fact.

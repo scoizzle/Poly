@@ -128,4 +128,47 @@ public class ExitBlockEffectTests {
             """);
         await Assert.That(errors).IsEmpty();
     }
+
+    [Test]
+    public async Task Analyze_InvokeInElseBranchOfExitBlock_IsRejected() =>
+        await AssertRejected<InvokeActionEffect>("""
+            domain E8
+            Z: entity {
+              Tag: Text optional
+              A: stage {
+                exit { if (Tag is "a") { assign Tag to "b" } else { invoke Touch } }
+                Touch: action { assign Tag to "x" }
+              }
+            }
+            """, "invoke");
+
+    [Test]
+    public async Task Analyze_InvokeInForBodyOfExitBlock_IsRejected() =>
+        await AssertRejected<InvokeActionEffect>("""
+            domain E9
+            Z: entity {
+              Items: many Item
+              A: stage { exit { for i in Items { invoke i.Touch } } }
+            }
+            """ + "\n" + Items, "invoke");
+
+    // CompositeEffect is only built by lowering, so the domain is evolved through the API.
+    [Test]
+    public async Task Analyze_InvokeInCompositeOfExitBlock_IsRejected() {
+        var changes = new PolyDslParser("""
+            domain E10
+            Z: entity {
+              Tag: Text optional
+              A: stage { Touch: action { assign Tag to "x" } }
+            }
+            """).Parse();
+        var composite = new CompositeEffect([new InvokeActionEffect("Touch", [])]);
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], []))
+            .ApplyAndAnalyze([.. changes, new AddOnExitEffectToStageChange("Z", "A", composite)]);
+        var errors = result.Analysis.Diagnostics
+            .Where(d => d.Severity == DiagnosticSeverity.Error && d.Code == DomainModelDiagnosticCodes.ExitBlockEffectNotSupported)
+            .ToList();
+        await Assert.That(errors.Count).IsEqualTo(1);
+        await Assert.That(errors[0].Node is InvokeActionEffect).IsTrue();
+    }
 }

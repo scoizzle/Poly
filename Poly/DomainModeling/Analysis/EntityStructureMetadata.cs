@@ -55,7 +55,7 @@ public sealed record EntityStructureMetadata(
     IReadOnlyDictionary<string, string>? EnumPropertyNames = null,
 
     /// <summary>
-    /// Names of entity properties assigned by the FIRST stage's entry effects.
+    /// Names of entity properties assigned by the initial stage's entry effects.
     /// The exported constructor runs those effects after setting CurrentStage, so
     /// these props are body-initialized — never ctor params (a param would be dead
     /// and written twice, e.g. StartedAt). Published so the exporter's ctor emission

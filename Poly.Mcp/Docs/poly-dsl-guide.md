@@ -103,7 +103,7 @@ value bag / constructor parameter like a scalar initializer.
 
 **Required coverage (DMEFF011):** every property **without** `optional` on the
 created entity must be provided in the `create` / `create in` initializers,
-unless it has a `default` or the first stage's `entry` effects assign it. Only
+unless it has a `default` or the initial stage's `entry` effects assign it. Only
 scalar/enum-typed properties carry constraints — navigation properties cannot be
 marked `optional` (`nav: Type optional` is a parse error), and `required` is not
 a constraint word, so the back-reference exemption simply means the auto-wired nav needs no
@@ -330,10 +330,13 @@ the contract and endpoint; it is never erased.
 ## 3. Entities and Properties
 
 ```
-["public"] "entity" entity-name annotation* [key-clause] "{" property* stage* action* policy* "}"
-entity-name ":" "entity" annotation* [key-clause] "{" property* stage* action* policy* "}"
+["public"] "entity" entity-name annotation* [initial-clause] [key-clause] "{" property* stage* action* policy* "}"
+entity-name ":" "entity" annotation* [initial-clause] [key-clause] "{" property* stage* action* policy* "}"
+initial-clause = "initial" "(" stage-name ")"
 key-clause = "key" "(" member ("," member)* ")"
 ```
+
+**Initial stage.** `initial(Active)` designates which stage a new instance starts in. It is a header clause that sits **before** `key(...)` and the opening `{`, after any annotations: `Order: entity initial(Active) key(Code) {`. It is not a body member and adds nothing to the entity: the name must be one of the entity's own stages. With no designation the first declared stage is initial, which is the old rule. The designation is honoured on create by the simulator and by the generated C# `Create` and its constructor, so the designated stage's `entry` effects run on creation. The generated test suite treats that stage as the covered one: its create test asserts the designated stage, and it refuses actions that exist only on other stages. An empty clause, a non-identifier, a second `initial(...)` clause, or a clause placed after `key(...)` is a positioned parse error; a name that matches no stage (or an entity with no stages) is **`DMINI001`**, and the create path falls back to the first declared stage meanwhile. The printer writes the clause in the same position.
 
 **Key (identity).** `key(a, b)` designates existing members as the entity's identity. It is a header clause that sits **immediately before the opening `{`**, after any annotations: `Order: entity table("ORDERS") key(Code, Region) {` or `public entity Order key(Code) {`. It is not a body member and adds nothing to the entity; each name is one of the entity's own properties or singular navigations, and names are scoped to the entity. Analysis rejects an unknown member, a blank one, an `optional` or action-assigned key property, a collection navigation, or a navigation to an unkeyed entity (`DMSTR007`), a repeated member (`DMSTR001`), and a key cycle (`DMSTR002`). An empty `key()`, a doubled or trailing comma, an unclosed list, or a second `key(...)` clause is a positioned parse error. The printer writes the clause in the same position. Scoped **value** uniqueness (`unique_by` / `unique(scope, value)`) is **not implemented**, and nothing enforces a key at runtime yet.
 
@@ -587,6 +590,35 @@ Active: stage {
   DoStuff: action { transition to Done }
 }
 ```
+
+### Explicit Initial Stage
+
+`initial(Stage)` belongs to the entity header, not to a stage: it names the stage a new instance
+starts in. With no clause the first declared stage is initial. A stage named `initial` is an
+ordinary stage — the word is contextual only in header position, before `key(...)`.
+
+```poly
+domain Orders
+
+Order: entity initial(Active) {
+  Number: Text
+  Status: Text optional
+  Draft: stage {
+    Activate: action {
+      transition to Active
+    }
+  }
+  Active: stage {
+    entry {
+      assign Status to "entered_active"
+    }
+  }
+}
+```
+
+`Create` starts the instance in `Active` and runs `Active`'s `entry` effects even though `Draft` is
+declared first; the generated test suite asserts `Active` as the create stage and refuses `Draft`'s actions. A
+name that matches no stage is `DMINI001`.
 
 ## 6. Actions
 

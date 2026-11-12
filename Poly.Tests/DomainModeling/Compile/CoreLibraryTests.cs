@@ -14,6 +14,9 @@ public sealed class CoreLibraryTests {
         await Assert.That(session.Contributions.First())
             .IsEqualTo(new StageContribution(PipelineStage.Load, CoreLibrary.CoreId));
         await Assert.That(session.Analyzers[0].PassName).IsEqualTo(StructuralDomainAnalyzer.Id);
+        // R8: the designation check runs immediately after the structural pass, so it is the first
+        // error among the designation-dependent ones.
+        await Assert.That(session.Analyzers[1].PassName).IsEqualTo(InitialStageAnalyzer.Id);
         await Assert.That(session.Extensions).IsEmpty();
     }
 

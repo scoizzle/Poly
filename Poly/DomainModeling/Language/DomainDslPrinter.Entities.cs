@@ -19,6 +19,12 @@ public sealed partial class DomainDslPrinter {
             _sb.Append(PrintFacet(facet));
         }
 
+        if (entity.InitialStageName is { } initialStageName) {
+            _sb.Append(" initial(");
+            _sb.Append(initialStageName);
+            _sb.Append(')');
+        }
+
         if (entity.KeyProperties.Count > 0) {
             _sb.Append(" key(");
             _sb.Append(string.Join(", ", entity.KeyProperties));

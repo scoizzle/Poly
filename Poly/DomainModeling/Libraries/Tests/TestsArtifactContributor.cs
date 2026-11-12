@@ -94,12 +94,12 @@ public sealed class TestsArtifactContributor : IArtifactContributor {
 
     /// <summary>
     /// Actions declared on some later stage and not on the initial stage or the entity, in stage then
-    /// declaration order, once per name. The initial stage is the first declared stage.
+    /// declaration order, once per name. The initial stage is the designated one, else the first declared.
     /// </summary>
     private static List<Action> RefusedActions(Entity entity) {
-        // The initial stage is the first declared stage; every other stage is "later". The filter
-        // below compares *references*, so two stages that happen to hold equal values are still
-        // told apart — a record's value equality would drop a later stage that mirrors the initial.
+        // Every stage but the initial one is "later". The filter below compares *references*, so two
+        // stages that happen to hold equal values are still told apart — a record's value equality
+        // would drop a later stage that mirrors the initial.
         var initial = entity.InitialStage()!;
         var covered = initial.Actions.Select(a => a.Name)
             .Concat(entity.Actions.Select(a => a.Name))

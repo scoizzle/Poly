@@ -713,4 +713,58 @@ public class ProvableGuardTests {
         var analysis = session.Analyze(ParameterDomain([CopyFromParameter()], inStage: true));
         await Assert.That(Of(analysis, "DMEFF014").Count()).IsEqualTo(1);
     }
+
+    private const string DesignatedDocument = """
+        domain Notes
+        Doc: entity initial(Active) {
+          Note: Text optional
+          Memo: Text
+          HasNote: policy { Note is not null }
+          Draft: stage {
+            Start: action require HasNote { transition to Active }
+          }
+          Active: stage {
+            Copy: action { assign Memo to Note }
+          }
+        }
+        """;
+
+    private const string UndesignatedDocument = """
+        domain Notes
+        Doc: entity {
+          Note: Text optional
+          Memo: Text
+          HasNote: policy { Note is not null }
+          Draft: stage {
+            Start: action require HasNote { transition to Active }
+          }
+          Active: stage {
+            Copy: action { assign Memo to Note }
+          }
+        }
+        """;
+
+    /// <summary>
+    /// #675: the designated initial stage is entered on create, not by a transition, so it borrows no
+    /// transition seed. Active's <c>Copy</c> copies a possibly-null Note into required Memo with no
+    /// guard of its own — the seed proven on the way in from Draft does not apply to a created instance.
+    /// </summary>
+    [Test]
+    public async Task DesignatedInitialStage_BorrowsNoTransitionSeed() {
+        var (_, _, analysis) = Run(DesignatedDocument);
+
+        var finding = Of(analysis, "DMEFF014").Single();
+        await Assert.That(finding.Severity).IsEqualTo(DiagnosticSeverity.Error);
+    }
+
+    /// <summary>
+    /// The control: with no designation Draft is initial, so Active is entered by a transition that
+    /// proved Note present, and the same action stays clean. The feature adds a designation, it does
+    /// not remove the transition seed from every stage.
+    /// </summary>
+    [Test]
+    public async Task TransitionedStage_StillBorrowsItsTransitionSeed() {
+        var (_, _, analysis) = Run(UndesignatedDocument);
+        await Assert.That(Of(analysis, "DMEFF014").Count()).IsEqualTo(0);
+    }
 }

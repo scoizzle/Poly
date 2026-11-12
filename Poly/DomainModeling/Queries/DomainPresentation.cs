@@ -11,7 +11,7 @@ namespace Poly.DomainModeling.Queries;
 internal static class DomainPresentation {
     /// <summary>
     /// The DSL create rule: required unless <c>optional</c>, a <c>default</c> supplies
-    /// the value, or the first stage's entry effect initializes it.
+    /// the value, or the initial stage's entry effect initializes it.
     /// </summary>
     public static bool IsRequired(Property property, IReadOnlySet<string>? entryAssigned) =>
         !property.Constraints.OfType<OptionalConstraint>().Any()

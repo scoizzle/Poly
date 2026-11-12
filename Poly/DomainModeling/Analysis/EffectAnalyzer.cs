@@ -785,7 +785,7 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
     /// <summary>
     /// DMEFF011: a <c>create</c> / <c>create in</c> must provide a value for every
     /// required property of the created entity — a property without <c>optional</c> —
-    /// unless the property has a <c>default</c>, is initialized by the first stage's
+    /// unless the property has a <c>default</c>, is initialized by the initial stage's
     /// entry effects, or is the auto-wired back-reference navigation (the target's nav
     /// typed as the create-in source entity). Without this, the generated <c>Create</c>
     /// factory would fail at runtime on a missing required value — analysis catches the

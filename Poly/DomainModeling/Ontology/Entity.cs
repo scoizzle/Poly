@@ -51,6 +51,17 @@ public sealed record Entity(
     internal IReadOnlyList<string> KeyProperties { get; init; } = [];
 
     /// <summary>
+    /// The explicit initial-stage designation (#675): the name of the stage a new instance starts in.
+    /// Authored as the header clause <c>initial(Stage)</c> before <c>key(...)</c> and printed in that
+    /// position. With no designation the first declared stage is initial, which is the implicit rule.
+    /// A designation is metadata over an existing stage, not a member: nothing is lowered for it, and
+    /// <see cref="EntityStages.InitialStage"/> resolves it, falling back to the first declared stage
+    /// when no stage carries the name; analysis reports that as an error. Internal until a consuming
+    /// slice widens it (S-14, D-04, Q-12).
+    /// </summary>
+    internal string? InitialStageName { get; init; }
+
+    /// <summary>
     /// The order in which this entity's members were authored (S-15, Q12): properties,
     /// navigations, stages, entity-level actions and entity-level policies, interleaved
     /// exactly as written. Each entry is a <c>(Kind, Name)</c> pair, because names are not

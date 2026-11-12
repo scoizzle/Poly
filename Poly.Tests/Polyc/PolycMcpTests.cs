@@ -88,4 +88,24 @@ public class PolycMcpTests {
         await Assert.That(forwarderTools.SequenceEqual(SevenTools)).IsTrue();
         await Assert.That(forwarderTools.SequenceEqual(polycTools)).IsTrue();
     }
+
+    /// <summary>#533: a wrong JSON type is a typed caller error, and the host keeps serving.</summary>
+    [Test]
+    public async Task StdioWrongTypedArgument_IsATypedError_AndTheHostStaysAlive() {
+        using var host = await PolycProcess.McpAsync(McpTarget.Polyc);
+        await host.InitializeAsync();
+        var workspace = (await host.ToolAsync("poly_workspace", new JsonObject { ["name"] = "Alive" }))
+            ["state"]!["workspace"]!.GetValue<string>();
+
+        var rejected = await host.ToolAsync("poly_simulate", new JsonObject {
+            ["workspace"] = workspace,
+            ["steps"] = "[]",
+            ["reset"] = "yes",
+        });
+        await Assert.That(rejected["errorCode"]!.GetValue<string>()).IsEqualTo("INVALID_ARGUMENT");
+        await Assert.That(rejected["summary"]!.GetValue<string>()).Contains("reset");
+
+        var alive = await host.ToolAsync("poly_workspace", new JsonObject { ["op"] = "list" });
+        await Assert.That(alive["ok"]!.GetValue<bool>()).IsTrue();
+    }
 }

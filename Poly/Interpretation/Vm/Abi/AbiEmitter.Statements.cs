@@ -445,6 +445,10 @@ public static partial class AbiEmitter {
         SpillToRing(EmitCoalesceValue(n, ctx), ctx);
 
     private static Expression EmitSwitch(SwitchStatement sw, Context ctx) {
+        // Every case body and the default land in one word: their representations must agree.
+        var arms = sw.Cases.Select(c => c.Body).Concat(sw.DefaultCase is null ? [] : [sw.DefaultCase]).ToList();
+        for (int i = 1; i < arms.Count; i++)
+            RejectMixedRepresentationArms(arms[0], arms[i], ctx);
         var ring = ctx.OpenRing();
         var val = ring.AddValue(CompileNode(sw.Value, ctx));
         int savedDepth = val.RingSlot + 1;

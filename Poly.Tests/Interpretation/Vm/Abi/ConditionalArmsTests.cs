@@ -13,12 +13,12 @@ public class ConditionalArmsTests {
     private static Node Pick(Node ifTrue, Node ifFalse) =>
         new Block([new Conditional(new Parameter("pickFirst", TypeReference.To<bool>()), ifTrue, ifFalse)]);
 
-    private static ExecutionResult Run(Node body) =>
-        Interpreter.Execute(Interpreter.Compile(body), s => s.SetArgs(false));
+    private static ExecutionResult Run(Node body, params object?[] args) =>
+        Interpreter.Execute(Interpreter.Compile(body), s => s.SetArgs(args.Length == 0 ? [false] : args));
 
-    private static async Task AssertRejected(Node body) {
+    private static async Task AssertRejected(Node body, params object?[] args) {
         var thrown = Assert.Throws<InvalidOperationException>(() => {
-            using var exec = Run(body);
+            using var exec = Run(body, args);
         });
         await Assert.That(thrown.Message).Contains("VM compile rejected: conditional arms differ in representation");
     }
@@ -53,5 +53,44 @@ public class ConditionalArmsTests {
     public async Task Conditional_NullArmAgainstReference_Runs() {
         using var exec = Run(Pick(new Constant("a"), new Constant(null)));
         await Assert.That(exec.GetValue<string?>()).IsNull();
+    }
+
+    // Every other site that merges two arm values into one word (A11): a coalesce and a switch.
+
+    private static Node Coalesced(TypeReference leftType, Node right) =>
+        new Block([new Coalesce(new Parameter("left", leftType), right)]);
+
+    [Test]
+    public async Task Coalesce_HeapNullableDecimalThenIntegral_Rejects() =>
+        await AssertRejected(Coalesced(TypeReference.To<decimal?>(), new Constant(2L)), (object?)null);
+
+    [Test]
+    public async Task Coalesce_ScalarNullableThenDecimal_Rejects() =>
+        await AssertRejected(Coalesced(TypeReference.To<long?>(), new Constant(1.5m)), (object?)null);
+
+    [Test]
+    public async Task Coalesce_SameRepresentation_Runs() {
+        using var exec = Run(Coalesced(TypeReference.To<long?>(), new Constant(2L)), (object?)null);
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(2L);
+    }
+
+    private static Node Switched(Node caseBody, Node defaultBody) =>
+        new Block([new SwitchStatement(
+            new Parameter("key", TypeReference.To<long>()),
+            [new SwitchCase(new Constant(1L), caseBody)],
+            defaultBody)]);
+
+    [Test]
+    public async Task Switch_DecimalCaseIntegralDefault_Rejects() =>
+        await AssertRejected(Switched(new Constant(1.5m), new Constant(2L)), 0L);
+
+    [Test]
+    public async Task Switch_IntegralCaseDecimalDefault_Rejects() =>
+        await AssertRejected(Switched(new Constant(2L), new Constant(1.5m)), 0L);
+
+    [Test]
+    public async Task Switch_SameRepresentation_Runs() {
+        using var exec = Run(Switched(new Constant(2L), new Constant(3L)), 0L);
+        await Assert.That(exec.GetValue<long>()).IsEqualTo(3L);
     }
 }

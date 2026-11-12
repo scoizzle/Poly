@@ -108,14 +108,14 @@ Recorded here and in `docs/CORE.md`; each consumer's plan lock must confirm them
   is what distinguishes success from a returned `Failure`; without it a bare `finally` would
   commit failed actions. `<body>` yields its result into `__r` with no `Return` node inside the
   try block, for example as an inner method or local function.
-- **Explicit implementation (B4).** Generated entities implement `IActionScoped` **explicitly**
-  (`object IActionScoped.__Snapshot()`, `void IActionScoped.__Restore(object)`), so no member name
-  enters the type's declaration space and `ReservedNames` needs no row. That needs an
-  explicit-interface qualifier on `MethodDefinitionNode` printed with no access modifier, and
-  neither exists today (`MethodDefinitionNode.cs:12-21`, `AccessModifier.cs:6-24`). L-03 owns
-  adding it, with its reader/writer grammar-table row, its idempotence test and its fail-closed
-  case. The fallback is public implicit `__Snapshot`/`__Restore` members plus two `ReservedNames`
-  rows. `__Snapshot` and `__Restore` must not call the storage port.
+- **Implicit implementation (B4).** Generated entities implement `IActionScoped` with public
+  implicit members, `public object __Snapshot()` and `public void __Restore(object)`. The explicit
+  form would need an explicit-interface qualifier on `MethodDefinitionNode` printed with no access
+  modifier, and neither exists today (`MethodDefinitionNode.cs:12-21`, `AccessModifier.cs:6-24`);
+  adding it, with its reader/writer grammar-table row, is deferred. The two names therefore sit in
+  the declaration space, so the DSL reserves the `__` prefix for member and action-parameter names
+  (`ReservedNames.IsActionScopeName`) and `ReservedNames` carries fixed rows for `__Snapshot` and
+  `__Restore`. `__Snapshot` and `__Restore` must not call the storage port.
 - **Nested failures (B6).** Lowered code returns immediately on any failed nested `DomainResult`,
   before another `Touch` or `Create`; a throw after a whole-frame rollback is a host bug.
 - **Host obligation.** The executor opens the root per call and asserts `token.IsRoot`; a false

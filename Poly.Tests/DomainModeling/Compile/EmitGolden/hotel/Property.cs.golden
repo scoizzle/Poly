@@ -9,7 +9,7 @@ public enum PropertyStage
     Closed = 1
 }
 
-public class Property
+public class Property : Poly.Runtime.IActionScoped
 {
     private List<Hall> _halls = new List<Hall>();
     private List<Room> _rooms = new List<Room>();
@@ -112,5 +112,32 @@ public class Property
         }
         var created = new Property(name, city, halls, rooms);
         return DomainResult<Property>.Success(created);
+    }
+    public object __Snapshot()
+    {
+        var __state = new object?[5];
+        __state[0] = this.Name;
+        __state[1] = this.City;
+        __state[2] = this.CurrentStage;
+        __state[3] = new List<Hall>(this._halls);
+        __state[4] = new List<Room>(this._rooms);
+        return __state;
+    }
+    public void __Restore(object state)
+    {
+        var __saved = (object?[])state;
+        this.Name = (string)__saved[0]!;
+        this.City = (string)__saved[1]!;
+        this.CurrentStage = (PropertyStage)__saved[2]!;
+        ((System.Collections.IList)this._halls).Clear();
+        foreach (var __item3 in(List<Hall>)__saved[3]!)
+        {
+            this._halls.Add(__item3);
+        }
+        ((System.Collections.IList)this._rooms).Clear();
+        foreach (var __item4 in(List<Room>)__saved[4]!)
+        {
+            this._rooms.Add(__item4);
+        }
     }
 }

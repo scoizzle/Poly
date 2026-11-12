@@ -10,7 +10,7 @@ public enum FineStage
     Resolved = 1
 }
 
-public class Fine
+public class Fine : Poly.Runtime.IActionScoped
 {
     private List<Patron>? _patronFinesResolvedSubscribers;
     private int _notifyDepth;
@@ -119,5 +119,45 @@ public class Fine
     private void ExitNotifyCascade()
     {
         this._notifyDepth = this._notifyDepth - 1;
+    }
+    public object __Snapshot()
+    {
+        var __state = new object?[8];
+        __state[0] = this.Amount;
+        __state[1] = this.Reason;
+        __state[2] = this.DateIssued;
+        __state[3] = this.Paid;
+        __state[4] = this.Patron;
+        __state[5] = this.CurrentStage;
+        __state[6] = (this._patronFinesResolvedSubscribers == null ? null : new List<Patron>(this._patronFinesResolvedSubscribers));
+        __state[7] = this._notifyDepth;
+        return __state;
+    }
+    public void __Restore(object state)
+    {
+        var __saved = (object?[])state;
+        this.Amount = (long)__saved[0]!;
+        this.Reason = (string)__saved[1]!;
+        this.DateIssued = (DateTime)__saved[2]!;
+        this.Paid = (bool?)__saved[3]!;
+        this.Patron = (Patron?)__saved[4]!;
+        this.CurrentStage = (FineStage)__saved[5]!;
+        if (__saved[6] == null)
+        {
+            this._patronFinesResolvedSubscribers = null;
+        }
+        else
+        {
+            if (this._patronFinesResolvedSubscribers == null)
+            {
+                this._patronFinesResolvedSubscribers = new List<Patron>();
+            }
+            ((System.Collections.IList)this._patronFinesResolvedSubscribers).Clear();
+            foreach (var __item6 in(List<Patron>)__saved[6]!)
+            {
+                this._patronFinesResolvedSubscribers.Add(__item6);
+            }
+        }
+        this._notifyDepth = (int)__saved[7]!;
     }
 }

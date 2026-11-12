@@ -9,7 +9,7 @@ public enum SectionStage
     Closed = 1
 }
 
-public class Section
+public class Section : Poly.Runtime.IActionScoped
 {
     private List<Enrollment> _enrollments = new List<Enrollment>();
     private List<WaitOffer> _waitlist = new List<WaitOffer>();
@@ -209,6 +209,43 @@ public class Section
         foreach (var target in this.Waitlist)
         {
             target.RegisterSectionWaitlistCancelledSubscriber(this);
+        }
+    }
+    public object __Snapshot()
+    {
+        var __state = new object?[10];
+        __state[0] = this.Cap;
+        __state[1] = this.SeatsTaken;
+        __state[2] = this.OfferingTerm;
+        __state[3] = this.OfferedSeats;
+        __state[4] = this.WaitCleared;
+        __state[5] = this.Course;
+        __state[6] = this.Instructor;
+        __state[7] = this.CurrentStage;
+        __state[8] = new List<Enrollment>(this._enrollments);
+        __state[9] = new List<WaitOffer>(this._waitlist);
+        return __state;
+    }
+    public void __Restore(object state)
+    {
+        var __saved = (object?[])state;
+        this.Cap = (long)__saved[0]!;
+        this.SeatsTaken = (long)__saved[1]!;
+        this.OfferingTerm = (Term)__saved[2]!;
+        this.OfferedSeats = (long)__saved[3]!;
+        this.WaitCleared = (long)__saved[4]!;
+        this.Course = (Course?)__saved[5]!;
+        this.Instructor = (Instructor?)__saved[6]!;
+        this.CurrentStage = (SectionStage)__saved[7]!;
+        ((System.Collections.IList)this._enrollments).Clear();
+        foreach (var __item8 in(List<Enrollment>)__saved[8]!)
+        {
+            this._enrollments.Add(__item8);
+        }
+        ((System.Collections.IList)this._waitlist).Clear();
+        foreach (var __item9 in(List<WaitOffer>)__saved[9]!)
+        {
+            this._waitlist.Add(__item9);
         }
     }
 }

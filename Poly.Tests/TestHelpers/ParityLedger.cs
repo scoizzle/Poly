@@ -45,7 +45,7 @@ public sealed record ParityRun(
 
 /// <summary>Every known divergence, sorted by issue. Empty entries are deleted by the fixing slice.</summary>
 public static class KnownDomainDivergences {
-    static readonly string[] Fields = ["success", "message", "failureKind", "exceptionType", "stepCount"];
+    static readonly string[] Fields = ["success", "message", "failureKind", "failurePath", "failureGuard", "exceptionType", "stepCount"];
 
     /// <summary>The ledger vocabulary: a field outside it is a typo, and a typo cannot pass.</summary>
     public static bool IsKnownField(string field) =>
@@ -64,6 +64,9 @@ public static class KnownDomainDivergences {
             new(1, "create Thing", "message", "Object reference not set to an instance of an object.",
                 "Unique constraint violated: 'K' value is already used on another 'Thing'."),
             new(1, "create Thing", "exceptionType", "NullReferenceException", null),
+            // The printed side returns the typed failure; the simulator's lowered create throws first.
+            new(1, "create Thing", "failureKind", null, "Unique"),
+            new(1, "create Thing", "failurePath", null, "Thing.K"),
         ]),
         new(565, "L-03", "multi-assign", ["simulate", "printed"], [
             new(1, "invoke Settle", "state:Status", "Active", "Suspended"),
@@ -90,6 +93,8 @@ public static class KnownDomainDivergences {
 /// <summary>Seeds that do not diverge through the module, with the owner that has to fix them.</summary>
 public static class DomainParityExclusions {
     public static IReadOnlyList<DomainParityExclusion> All { get; } = [
+        new(585, "L-13", "Both sides accept a second owner, so the module has no divergence to ratchet; "
+            + "absolute single-owner state is S-12b's done-when."),
         new(611, "L-11", "Both sides throw NullReferenceException on the unset optional unique Text, so the "
             + "module has no divergence to ratchet."),
         new(617, "L-05", "The sides agree; absolute atomicity is L-05's done-when."),
@@ -135,6 +140,27 @@ public static class DomainParityScenarios {
             side => {
                 side.Create("Member");
                 side.Invoke("Settle", ("amount", 10L));
+            }, []),
+
+        new("owned-second-owner", 585, """
+            domain Shop
+            Order: entity { Total: Number default(0) }
+            Customer: entity {
+              Name: Text
+              orders: many owned Order
+            }
+            """, """
+            domain Shop
+            Order: entity { Total: Number default(0) }
+            Customer: entity {
+              Name: Text
+              orders: many owned Order
+            }
+            """,
+            side => {
+                var order = side.Create("Order");
+                side.Create("Customer", ("Name", "Ann"), ("orders", new[] { order }));
+                side.Create("Customer", ("Name", "Bob"), ("orders", new[] { order }));
             }, []),
 
         new("cascade-overflow", 599, """

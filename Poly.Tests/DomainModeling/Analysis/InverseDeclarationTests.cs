@@ -208,6 +208,10 @@ public sealed class InverseDeclarationTests {
             """);
 
         await Assert.That(Errors(analysis, DomainModelDiagnosticCodes.InverseAmbiguous)).IsEmpty();
+        // S-12: the two owned candidates are Peer.primary and Peer.secondary owning one Child.
+        var owners = Errors(analysis, DomainModelDiagnosticCodes.OwnedTargetMultipleOwners);
+        await Assert.That(owners.Count).IsEqualTo(1);
+        await Assert.That(AllErrors(analysis).Count).IsEqualTo(1);
     }
 
     [Test]
@@ -250,12 +254,58 @@ public sealed class InverseDeclarationTests {
 
         var errors = Errors(analysis, DomainModelDiagnosticCodes.InverseContradictory);
         await Assert.That(errors.Count).IsEqualTo(2);
-        await Assert.That(AllErrors(analysis).Count).IsEqualTo(2);
+        // S-12 flip: AllErrors was 2. Order and Line each now have two owner navigations,
+        // so each is also DMSTR010 — 2 DMREL004 + 2 DMSTR010.
+        await Assert.That(Errors(analysis, DomainModelDiagnosticCodes.OwnedTargetMultipleOwners).Count).IsEqualTo(2);
+        await Assert.That(AllErrors(analysis).Count).IsEqualTo(4);
         var names = errors
             .Select(d => ((Poly.DomainModeling.Ontology.Relationship)d.Node).Name)
             .OrderBy(static n => n, StringComparer.Ordinal)
             .ToArray();
         await Assert.That(names).IsEquivalentTo(["order", "owner"]);
+    }
+
+    [Test]
+    public async Task BothOwned_OneSidedVia_ReportsOnce() {
+        // Guard row (rule 6b): only one end names the pairing; the pair is still both-owned
+        // and reports once, from the side that declares `via`.
+        var analysis = Analyze("""
+            domain OneSidedBothOwned
+            Line: entity {
+              sku: Text
+              order: owned Order
+            }
+            Order: entity {
+              lines: many owned Line via order
+            }
+            """);
+
+        var errors = Errors(analysis, DomainModelDiagnosticCodes.InverseContradictory);
+        await Assert.That(errors.Count).IsEqualTo(1);
+        await Assert.That(AllErrors(analysis).Count).IsEqualTo(1);
+        await Assert.That(((Poly.DomainModeling.Ontology.Relationship)errors[0].Node).Name).IsEqualTo("lines");
+    }
+
+    [Test]
+    public async Task BothOwnedWithSecondClaimer_PinsTheMeasuredCount() {
+        // Characterization pin, not deduped (S-12 F4): one root cause — Order owns Line
+        // twice while Line.order also owns Order — is reported as it is found: 3 DMREL004
+        // (two both-owned pairings and the duplicate `via order` claim) and 1 DMSTR010.
+        var analysis = Analyze("""
+            domain BothOwnedSecondClaimer
+            Line: entity {
+              sku: Text
+              order: owned Order
+            }
+            Order: entity {
+              lines: many owned Line via order
+              line: owned Line via order
+            }
+            """);
+
+        await Assert.That(Errors(analysis, DomainModelDiagnosticCodes.InverseContradictory).Count).IsEqualTo(3);
+        await Assert.That(Errors(analysis, DomainModelDiagnosticCodes.OwnedTargetMultipleOwners).Count).IsEqualTo(1);
+        await Assert.That(AllErrors(analysis).Count).IsEqualTo(4);
     }
 
     [Test]
@@ -502,5 +552,83 @@ public sealed class InverseDeclarationTests {
             """);
 
         await Assert.That(AllErrors(analysis)).IsEmpty();
+    }
+
+    [Test]
+    public async Task OwnedWithCollectionInverse_IsDMREL004() {
+        // S-12: an owned target has one owner, so its paired inverse must be singular.
+        var analysis = Analyze("""
+            domain OwnedCollectionInverse
+            Order: entity {
+              Total: Number
+              lines: many owned Line via orders
+            }
+            Line: entity {
+              sku: Text
+              orders: many Order via lines
+            }
+            """);
+
+        var errors = Errors(analysis, DomainModelDiagnosticCodes.InverseContradictory);
+        await Assert.That(errors.Count).IsEqualTo(1);
+        await Assert.That(AllErrors(analysis).Count).IsEqualTo(1);
+        await Assert.That(((Poly.DomainModeling.Ontology.Relationship)errors[0].Node).Name).IsEqualTo("lines");
+    }
+
+    [Test]
+    public async Task OwnedWithCollectionInverse_OnlyThePlainSideDeclares_IsDMREL004() {
+        // Reverse-declared orientation: only Line.orders names the pairing.
+        var analysis = Analyze("""
+            domain OwnedCollectionInverseReverse
+            Order: entity {
+              Total: Number
+              lines: many owned Line
+            }
+            Line: entity {
+              sku: Text
+              orders: many Order via lines
+            }
+            """);
+
+        var errors = Errors(analysis, DomainModelDiagnosticCodes.InverseContradictory);
+        await Assert.That(errors.Count).IsEqualTo(1);
+        await Assert.That(AllErrors(analysis).Count).IsEqualTo(1);
+        await Assert.That(((Poly.DomainModeling.Ontology.Relationship)errors[0].Node).Name).IsEqualTo("orders");
+    }
+
+    /// <summary>Pin: green before the rule — an owned edge with a singular inverse is the legal pairing.</summary>
+    [Test]
+    public async Task OwnedWithSingularInverse_IsClean_Pin() {
+        var analysis = Analyze("""
+            domain OwnedSingularInverse
+            Order: entity {
+              Total: Number
+              lines: many owned Line via order
+            }
+            Line: entity {
+              sku: Text
+              order: Order via lines
+            }
+            """);
+
+        await Assert.That(AllErrors(analysis)).IsEmpty();
+    }
+
+    /// <summary>Pin: green before the rule — without `via` the two navigations are independent (Q10).</summary>
+    [Test]
+    public async Task OwnedWithCollectionInverse_Undeclared_IsClean_Pin() {
+        var analysis = Analyze("""
+            domain OwnedCollectionUndeclared
+            Order: entity {
+              Total: Number
+              lines: many owned Line
+            }
+            Line: entity {
+              sku: Text
+              orders: many Order
+            }
+            """);
+
+        await Assert.That(Errors(analysis, DomainModelDiagnosticCodes.InverseContradictory)).IsEmpty();
     }
 }

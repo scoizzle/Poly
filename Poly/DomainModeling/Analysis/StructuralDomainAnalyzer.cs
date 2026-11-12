@@ -87,6 +87,9 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
         // cannot honour is an analysis error.
         ReportInverseDeclarations(context, domain);
 
+        // S-12 (#585): an owned target has exactly one owner navigation.
+        ReportOwnedTargetOwners(context, domain);
+
         ReportStoredValueTypeProperties(context, domain);
 
         ReportKeyDesignations(context, domain);
@@ -437,7 +440,20 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
             return;
         }
 
-        if (!nav.SourceOwnsTarget || !peer.SourceOwnsTarget)
+        // S-12: an owned target has one owner, so the plain side of an owned/plain pairing
+        // cannot be a collection (it would be owned by many).
+        if (nav.SourceOwnsTarget != peer.SourceOwnsTarget) {
+            var plain = nav.SourceOwnsTarget ? peer : nav;
+            if (plain.Cardinality is RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany
+                && reportedPairs.Add(PairKey($"{source.Name}.{nav.Name}", $"{target.Name}.{peer.Name}")))
+                ReportContradictory(
+                    context, nav,
+                    $"Navigations '{source.Name}.{nav.Name}' and '{target.Name}.{inverseName}' are paired by 'via', " +
+                    "one is owned and the other is a collection; an owned entity has one owner, so its inverse must be singular.");
+            return;
+        }
+
+        if (!nav.SourceOwnsTarget)
             return;
 
         // Both ends own the target: exactly one side may. One report per navigation
@@ -451,6 +467,26 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
             context, nav,
             $"Navigations '{source.Name}.{nav.Name}' and '{target.Name}.{inverseName}' are paired " +
             "by 'via' and both are owned; exactly one side may own the target.");
+    }
+
+    /// <summary>
+    /// S-12 (#585): two or more <c>owned</c> navigations to one entity type leave the
+    /// single-owner rule unlowerable. One <see cref="DomainModelDiagnosticCodes.OwnedTargetMultipleOwners"/>
+    /// per target, on the second owner navigation in declaration order, naming all of them.
+    /// </summary>
+    private static void ReportOwnedTargetOwners(AnalysisContext context, Domain domain) {
+        foreach (var group in OwnershipAggregatePass.OwnedEdges(domain)
+                     .GroupBy(static e => e.Nav.Target.TypeName, StringComparer.Ordinal)) {
+            var owners = group.ToList();
+            if (owners.Count < 2)
+                continue;
+            var names = string.Join(", ", owners.Select(static o => $"'{o.Source.Name}.{o.Nav.Name}'"));
+            context.ReportError(
+                owners[1].Nav,
+                $"Entity '{group.Key}' is owned by more than one navigation ({names}); an owned entity has exactly one owner. " +
+                "Keep one navigation 'owned' and make the others plain references.",
+                DomainModelDiagnosticCodes.OwnedTargetMultipleOwners);
+        }
     }
 
     private static void ReportContradictory(AnalysisContext context, Relationship nav, string message) =>
@@ -641,7 +677,9 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
             reported.Add(entry.Node);
             context.ReportError(
                 entry.Node,
-                row.Kind switch {
+                ReservedNames.IsActionScopeName(entry.MemberIdentity)
+                    ? $"Member '{entry.MemberIdentity}' on entity '{entity.Name}': {row.Reason}; rename it."
+                    : row.Kind switch {
                     ReservedKind.Language =>
                         $"Member '{entry.MemberIdentity}' on entity '{entity.Name}' would take the enclosing " +
                         "type's name (CS0542); rename it.",
@@ -755,8 +793,10 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
                 continue;
             context.ReportError(
                 parameter,
-                $"Parameter '{parameter.Name}' of action '{action.Name}' would shadow the generated " +
-                $"C# type '{row.Name}' that Emit calls from a generated member body; rename it.",
+                ReservedNames.IsActionScopeName(parameter.Name)
+                    ? $"Parameter '{parameter.Name}' of action '{action.Name}': {row.Reason}; rename it."
+                    : $"Parameter '{parameter.Name}' of action '{action.Name}' would shadow the generated " +
+                    $"C# type '{row.Name}' that Emit calls from a generated member body; rename it.",
                 DomainModelDiagnosticCodes.ReservedMemberName);
         }
         ReportDuplicateNames(context, action.Result.Members, "action result", action.Name);

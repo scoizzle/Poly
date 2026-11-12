@@ -10,7 +10,7 @@ public enum AccountStage
     Archived = 1
 }
 
-public class Account
+public class Account : Poly.Runtime.IActionScoped
 {
     private List<Contact> _contacts = new List<Contact>();
     private List<Opportunity> _opportunities = new List<Opportunity>();
@@ -256,6 +256,49 @@ public class Account
         foreach (var target in this.Tickets)
         {
             target.RegisterAccountTicketsClosedSubscriber(this);
+        }
+    }
+    public object __Snapshot()
+    {
+        var __state = new object?[11];
+        __state[0] = this.Name;
+        __state[1] = this.Industry;
+        __state[2] = this.WonCount;
+        __state[3] = this.OpenPipeline;
+        __state[4] = this.ClosedTickets;
+        __state[5] = this.Parent;
+        __state[6] = this.Hq;
+        __state[7] = this.CurrentStage;
+        __state[8] = new List<Contact>(this._contacts);
+        __state[9] = new List<Opportunity>(this._opportunities);
+        __state[10] = new List<Ticket>(this._tickets);
+        return __state;
+    }
+    public void __Restore(object state)
+    {
+        var __saved = (object?[])state;
+        this.Name = (string)__saved[0]!;
+        this.Industry = (Industry)__saved[1]!;
+        this.WonCount = (long)__saved[2]!;
+        this.OpenPipeline = (decimal)__saved[3]!;
+        this.ClosedTickets = (long)__saved[4]!;
+        this.Parent = (Account?)__saved[5]!;
+        this.Hq = (Site?)__saved[6]!;
+        this.CurrentStage = (AccountStage)__saved[7]!;
+        ((System.Collections.IList)this._contacts).Clear();
+        foreach (var __item8 in(List<Contact>)__saved[8]!)
+        {
+            this._contacts.Add(__item8);
+        }
+        ((System.Collections.IList)this._opportunities).Clear();
+        foreach (var __item9 in(List<Opportunity>)__saved[9]!)
+        {
+            this._opportunities.Add(__item9);
+        }
+        ((System.Collections.IList)this._tickets).Clear();
+        foreach (var __item10 in(List<Ticket>)__saved[10]!)
+        {
+            this._tickets.Add(__item10);
         }
     }
 }

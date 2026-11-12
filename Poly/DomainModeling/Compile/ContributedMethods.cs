@@ -92,10 +92,10 @@ internal static class ContributedMethods {
         Dictionary<(int TypeIndex, string Method), List<Slot>> threaded,
         HashSet<string> threadedMethods,
         List<(Node From, Node To)> replaced) {
-        foreach (var contribution in contributions
-                     .OrderBy(c => c.LibraryId, StringComparer.Ordinal)
-                     .ThenBy(c => c.TargetTypeName, StringComparer.Ordinal)
-                     .ThenBy(c => c.MethodName, StringComparer.Ordinal)) {
+        // Library id is the one retained sort: libraries are not declared members. Each
+        // contribution writes only its own type's list, so the stable sort keeps
+        // declaration order within a library.
+        foreach (var contribution in contributions.OrderBy(c => c.LibraryId, StringComparer.Ordinal)) {
             var typeIndex = RequireType(module, contribution);
             var list = methods[typeIndex];
             var index = IndexOf(list, contribution.MethodName);

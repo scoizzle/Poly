@@ -72,6 +72,15 @@ internal sealed record ReservedName(
 /// on <see cref="StructuralDomainAnalyzer"/> stays a second, expression-only list (G-06/G-21).
 /// </summary>
 internal static class ReservedNames {
+    /// <summary>The prefix the generated action-scope surface (snapshot/restore members, wrapper locals) lives under.</summary>
+    internal const string ActionScopePrefix = "__";
+
+    internal const string ActionScopeReason = "names beginning `__` are the generated action-scope surface";
+
+    /// <summary>True when <paramref name="identity"/> sits in the generated action-scope surface (L-03, D4).</summary>
+    internal static bool IsActionScopeName(string identity) =>
+        identity.StartsWith(ActionScopePrefix, StringComparison.Ordinal);
+
     private static readonly ReservedName[] Fixed = [
         // Create.cs:558 — every entity publishes the static Create factory.
         new("Create", ReservedKind.GeneratedMember, "the create factory"),
@@ -90,6 +99,11 @@ internal static class ReservedNames {
         // Stages.cs:41 — the chain field the guard nulls.
         new("_automaticStageChain", ReservedKind.GeneratedMember, "the automatic-transition chain field",
             static (entity, _) => EffectHelpers.HasAutomaticTransitions(entity)),
+        // DomainToCSharpExporter.cs — every entity implements Poly.Runtime.IActionScoped with these two
+        // members. The `__` prefix rule (ActionScopePrefix) reserves the whole surface; the fixed rows keep
+        // the emitter-parity tests closed over the two names the emitter writes today.
+        new("__Snapshot", ReservedKind.GeneratedMember, ActionScopeReason),
+        new("__Restore", ReservedKind.GeneratedMember, ActionScopeReason),
         // The Poly.Runtime result types the generated C# imports. A member of one
         // of these names is fine on its own; the member-scope row below covers the shapes
         // whose generated bodies call the non-generic form unqualified (probes b and b2).
@@ -129,6 +143,9 @@ internal static class ReservedNames {
             "shadows the Poly.Runtime namespace the generated member bodies call"),
     ];
 
+    private static readonly ReservedName ActionScopeRow =
+        new(ActionScopePrefix, ReservedKind.GeneratedMember, ActionScopeReason);
+
     /// <summary>
     /// Every fixed entity and module row, unfiltered by entity. The enum rows are
     /// <see cref="EnumFixed"/>, reached through <see cref="ForEnum"/>; they must stay out of this
@@ -165,6 +182,10 @@ internal static class ReservedNames {
     /// binds as a type beside the parameter.
     /// </summary>
     public static bool TryReservedAsActionParameter(string identity, Ontology.Action action, out ReservedName row) {
+        if (IsActionScopeName(identity)) {
+            row = ActionScopeRow;
+            return true;
+        }
         foreach (var candidate in Fixed) {
             if (candidate.Kind != ReservedKind.GeneratedReference)
                 continue;
@@ -216,6 +237,10 @@ internal static class ReservedNames {
     /// itself, not a name it can collide with. Its backing collection field is listed.
     /// </summary>
     public static bool TryReserved(string identity, Entity owner, Domain? domain, out ReservedName row) {
+        if (IsActionScopeName(identity)) {
+            row = ActionScopeRow;
+            return true;
+        }
         foreach (var candidate in Rows(owner, domain, includeNavigationProperty: false)) {
             if (candidate.Kind is not (ReservedKind.Language or ReservedKind.GeneratedMember
                 or ReservedKind.GeneratedReference))

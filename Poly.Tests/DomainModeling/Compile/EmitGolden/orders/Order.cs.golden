@@ -12,7 +12,7 @@ public enum OrderStage
     Cancelled = 4
 }
 
-public class Order
+public class Order : Poly.Runtime.IActionScoped
 {
     private List<OrderItem> _items = new List<OrderItem>();
     private Order() { }
@@ -127,5 +127,32 @@ public class Order
             customer.AttachOrders(created);
         }
         return DomainResult<Order>.Success(created);
+    }
+    public object __Snapshot()
+    {
+        var __state = new object?[7];
+        __state[0] = this.Total;
+        __state[1] = this.Discount;
+        __state[2] = this.State;
+        __state[3] = this.CancelReason;
+        __state[4] = this.Customer;
+        __state[5] = this.CurrentStage;
+        __state[6] = new List<OrderItem>(this._items);
+        return __state;
+    }
+    public void __Restore(object state)
+    {
+        var __saved = (object?[])state;
+        this.Total = (decimal)__saved[0]!;
+        this.Discount = (decimal)__saved[1]!;
+        this.State = (OrderState)__saved[2]!;
+        this.CancelReason = (string)__saved[3]!;
+        this.Customer = (Customer?)__saved[4]!;
+        this.CurrentStage = (OrderStage)__saved[5]!;
+        ((System.Collections.IList)this._items).Clear();
+        foreach (var __item6 in(List<OrderItem>)__saved[6]!)
+        {
+            this._items.Add(__item6);
+        }
     }
 }

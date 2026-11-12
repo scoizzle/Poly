@@ -246,16 +246,21 @@ public sealed partial class LanguageSurfaceTests {
 
     [Test]
     public async Task Via_OnOwnedNavigation_IsAcceptedAndRecorded() {
+        // S-12: the second owned nav moved from Line to its own target Header — two owned
+        // navs to one type are DMSTR010.
         var dsl = """
             domain OwnedInverse
             Line: entity {
               sku: Text
               order: Order via lines
-              owner: Order via line
+            }
+            Header: entity {
+              title: Text
+              owner: Order via header
             }
             Order: entity {
               lines: many owned Line via order
-              line: owned Line via owner
+              header: owned Header via owner
             }
             """;
 
@@ -265,10 +270,10 @@ public sealed partial class LanguageSurfaceTests {
 
         await Assert.That(Nav(order, "lines").SourceOwnsTarget).IsTrue();
         await Assert.That(Nav(order, "lines").Inverse).IsEqualTo("order");
-        await Assert.That(Nav(order, "line").SourceOwnsTarget).IsTrue();
-        await Assert.That(Nav(order, "line").Inverse).IsEqualTo("owner");
+        await Assert.That(Nav(order, "header").SourceOwnsTarget).IsTrue();
+        await Assert.That(Nav(order, "header").Inverse).IsEqualTo("owner");
         await Assert.That(printed).Contains("lines: many owned Line via order");
-        await Assert.That(printed).Contains("line: one owned Line via owner");
+        await Assert.That(printed).Contains("header: one owned Header via owner");
         await Assert.That(new DomainDslPrinter().Print(Apply(printed))).IsEqualTo(printed);
     }
 

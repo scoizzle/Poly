@@ -19,7 +19,30 @@ internal sealed class OwnershipAggregatePass : INodeAnalyzer {
 
         var topology = context.GetMetadata<EffectTopologyMetadata>(domain)?.Topology;
         var aggregate = BuildAggregate(domain, context, topology);
-        context.SetMetadata(domain, new OwnershipAggregateMetadata(aggregate));
+        var edges = OwnedEdges(domain)
+            .Select(static e => new OwnedEdge(e.Source.Name, e.Nav.Name, e.Nav.Target.TypeName, e.Nav.Cardinality))
+            .ToList();
+        context.SetMetadata(domain, new OwnershipAggregateMetadata(aggregate, edges));
+    }
+
+    /// <summary>
+    /// The one owned-edge computation (S-12): every <c>owned</c> navigation in declaration
+    /// order. A source or target type declared more than once failed admission
+    /// (DMSTR001) and is skipped rather than cascaded on.
+    /// </summary>
+    internal static IReadOnlyList<(Entity Source, Relationship Nav)> OwnedEdges(Domain domain) {
+        var entities = domain.Types.OfType<Entity>().ToList();
+        var counts = entities.GroupBy(static e => e.Name, StringComparer.Ordinal)
+            .ToDictionary(static g => g.Key, static g => g.Count(), StringComparer.Ordinal);
+        var edges = new List<(Entity, Relationship)>();
+        foreach (var entity in entities) {
+            if (counts[entity.Name] != 1) continue;
+            foreach (var nav in entity.Navigations) {
+                if (nav.SourceOwnsTarget && counts.GetValueOrDefault(nav.Target.TypeName) == 1)
+                    edges.Add((entity, nav));
+            }
+        }
+        return edges;
     }
 
     /// <summary>

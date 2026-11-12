@@ -9,7 +9,7 @@ public enum HallStage
     OutOfService = 1
 }
 
-public class Hall
+public class Hall : Poly.Runtime.IActionScoped
 {
     private List<Section> _sections = new List<Section>();
     private Hall() { }
@@ -153,5 +153,36 @@ public class Hall
             property.AttachHalls(created);
         }
         return DomainResult<Hall>.Success(created);
+    }
+    public object __Snapshot()
+    {
+        var __state = new object?[9];
+        __state[0] = this.Name;
+        __state[1] = this.Capacity;
+        __state[2] = this.DayRate;
+        __state[3] = this.Occupied;
+        __state[4] = this.Offline;
+        __state[5] = this.BusySections;
+        __state[6] = this.Property;
+        __state[7] = this.CurrentStage;
+        __state[8] = new List<Section>(this._sections);
+        return __state;
+    }
+    public void __Restore(object state)
+    {
+        var __saved = (object?[])state;
+        this.Name = (string)__saved[0]!;
+        this.Capacity = (long)__saved[1]!;
+        this.DayRate = (decimal)__saved[2]!;
+        this.Occupied = (bool)__saved[3]!;
+        this.Offline = (bool)__saved[4]!;
+        this.BusySections = (long)__saved[5]!;
+        this.Property = (Property?)__saved[6]!;
+        this.CurrentStage = (HallStage)__saved[7]!;
+        ((System.Collections.IList)this._sections).Clear();
+        foreach (var __item8 in(List<Section>)__saved[8]!)
+        {
+            this._sections.Add(__item8);
+        }
     }
 }

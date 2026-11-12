@@ -53,7 +53,7 @@ public static class PolyEdit {
             switch (op.Kind) {
                 case "add":
                     path = op.Parent!.Length == 0
-                        ? DeclaredName(op.Dsl!) ?? "(top level)"
+                        ? TopLevelPath(op.Dsl!) ?? "(top level)"
                         : $"{op.Parent}.{DeclaredName(op.Dsl!)}";
                     splice = Add(text, nl, outline, op, out code, out error);
                     break;
@@ -151,8 +151,15 @@ public static class PolyEdit {
         error = null;
         var name = DeclaredName(op.Dsl!);
 
-        if (op.Parent!.Length == 0)
+        if (op.Parent!.Length == 0) {
+            if (BadSnippet(DslOutline.Inspect(op.Dsl!, topLevel: true)) is { } topLevelFault) {
+                code = "EDIT_BAD_SNIPPET";
+                error = topLevelFault;
+                return null;
+            }
+
             return AddTopLevel(text, nl, outline, op, name, out code, out error);
+        }
 
         var parent = outline.All().FirstOrDefault(n => string.Equals(n.Path, op.Parent, StringComparison.Ordinal));
         if (parent is null) {
@@ -167,9 +174,22 @@ public static class PolyEdit {
             return null;
         }
 
+        if (TopLevelKind(op.Dsl!) == "uses") {
+            code = "EDIT_NOT_ADDRESSABLE";
+            var (usesLine, usesCol) = FirstTokenPosition(op.Dsl!);
+            error = $"'uses' is a top-level declaration (dsl line {usesLine}, col {usesCol}); add it with parent \"\" instead.";
+            return null;
+        }
+
         if (name is not null && parent.Children.Any(c => c.Addressable && c.Name == name)) {
             code = "EDIT_NAME_COLLISION";
             error = $"'{op.Parent}' already has a member '{name}'.";
+            return null;
+        }
+
+        if (BadSnippet(DslOutline.Inspect(op.Dsl!, topLevel: false)) is { } memberFault) {
+            code = "EDIT_BAD_SNIPPET";
+            error = memberFault;
             return null;
         }
 
@@ -234,6 +254,14 @@ public static class PolyEdit {
         if (node is null)
             return null;
 
+        // Dropping the last uses line would leave the stored text disagreeing with the compiled
+        // model, which keeps the packs it already loads, so the edit is refused instead.
+        if (node.Kind == "uses" && outline.Roots.Count(n => n.Kind == "uses") == 1) {
+            code = "EDIT_NOT_ADDRESSABLE";
+            error = $"'{op.Path}' (line {node.StartLine}) is the document's only uses line; keep another uses line or redefine the model with poly.";
+            return null;
+        }
+
         var lineStart = node.StartOffset;
         while (lineStart > 0 && text[lineStart - 1] is not ('\n' or '\r'))
             lineStart--;
@@ -267,6 +295,29 @@ public static class PolyEdit {
         if (node is null)
             return null;
 
+        // A uses line and a member are disjoint kinds: neither snippet can retarget the other.
+        var usesSnippet = TopLevelKind(op.Dsl!) == "uses";
+        if (node.Kind == "uses" || usesSnippet) {
+            var (dslLine, dslCol) = FirstTokenPosition(op.Dsl!);
+            if (node.Kind == "uses" && !usesSnippet) {
+                code = "EDIT_NOT_ADDRESSABLE";
+                error = $"the dsl for '{op.Path}' must be a uses line (dsl line {dslLine}, col {dslCol}).";
+                return null;
+            }
+
+            if (node.Kind != "uses") {
+                code = "EDIT_NOT_ADDRESSABLE";
+                error = $"the dsl for '{op.Path}' must not be a uses line (dsl line {dslLine}, col {dslCol}); edit a uses line by its own path.";
+                return null;
+            }
+        }
+
+        if (BadSnippet(DslOutline.Inspect(op.Dsl!, topLevel: outline.Roots.Contains(node))) is { } fault) {
+            code = "EDIT_BAD_SNIPPET";
+            error = fault;
+            return null;
+        }
+
         var name = DeclaredName(op.Dsl!);
         if (name is not null && name != node.Name) {
             var siblings = SiblingsOf(outline, node);
@@ -284,6 +335,62 @@ public static class PolyEdit {
         if (outline.Roots.Contains(node))
             return outline.Roots;
         return outline.All().FirstOrDefault(n => n.Children.Contains(node))?.Children ?? [];
+    }
+
+    /// <summary>
+    /// The <c>EDIT_BAD_SNIPPET</c> failure for a fragment that is not exactly one balanced
+    /// declaration, or null when the fragment is usable. Positions are fragment-relative and
+    /// labelled <c>dsl line</c> so they are not mistaken for document lines.
+    /// </summary>
+    private static string? BadSnippet(SnippetShape shape) => shape.Fault switch {
+        { Kind: SnippetFaultKind.UnexpectedClose } f =>
+            $"the dsl has an unmatched '}}' at dsl line {f.Line}, col {f.Col}; the dsl must be one member with balanced braces.",
+        { Kind: SnippetFaultKind.Unclosed } f =>
+            $"the dsl has an unclosed '{{' at dsl line {f.Line}, col {f.Col}; the dsl must be one member with balanced braces.",
+        { Kind: SnippetFaultKind.Multiple } f =>
+            $"the dsl contains more than one declaration (the second starts at dsl line {f.Line}, col {f.Col}); each op changes exactly one member.",
+        { Kind: SnippetFaultKind.Empty } =>
+            "the dsl does not declare a member, e.g. \"Amount: Decimal\".",
+        { Kind: SnippetFaultKind.BadToken } f =>
+            $"the dsl could not be read: {f.Detail}",
+        _ => null,
+    };
+
+    /// <summary>The first token's fragment-relative position, for a kind-mismatch message.</summary>
+    private static (int Line, int Col) FirstTokenPosition(string dsl) {
+        try {
+            var first = new DslTokenReader(dsl).Peek(0);
+            return (first.Line, first.Col);
+        }
+        catch (FormatException) {
+            return (1, 1);
+        }
+    }
+
+    /// <summary>
+    /// The path a top-level <c>add</c> lands on: a member name, or <c>uses:&lt;pack&gt;</c> for a
+    /// uses line, which the outline addresses as its own root.
+    /// </summary>
+    private static string? TopLevelPath(string dsl) {
+        if (TopLevelKind(dsl) != "uses")
+            return DeclaredName(dsl);
+
+        try {
+            var tokens = new List<DslToken>();
+            var reader = new DslTokenReader(dsl);
+            while (true) {
+                var token = reader.Peek();
+                if (token.Kind == DslTokenKind.EndOfFile)
+                    break;
+                tokens.Add(token);
+                reader.Consume(1);
+            }
+
+            return DslSyntaxTree.TryReadUse(tokens, 0, out var id, out _, out _) ? "uses:" + id : null;
+        }
+        catch (FormatException) {
+            return null;
+        }
     }
 
     /// <summary>

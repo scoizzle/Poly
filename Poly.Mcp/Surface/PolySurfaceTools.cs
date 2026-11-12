@@ -133,7 +133,7 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
         [Description("Workspace handle from poly_workspace.")] string workspace,
         [Description("The complete .poly document. It replaces the current model; it does not merge. Pass exactly one of poly or edit.")] string? poly = null,
         [Description("Apply the document when valid (default true). false is a dry run.")] bool apply = true,
-        [Description("A JSON array of ops that edit the stored document and keep the rest of it, comments and order included: [{\"op\":\"add\",\"parent\":\"Product\",\"dsl\":\"Amount: Decimal\"},{\"op\":\"remove\",\"path\":\"Product.Total\"},{\"op\":\"replace\",\"path\":\"Product.Note\",\"dsl\":\"Note: Text optional\"}]. add takes parent (\"\" for top level) and dsl; remove takes path; replace takes path and dsl. Needs a document applied by poly_define first.")] string? edit = null) {
+        [Description("A JSON array of ops that edit the stored document and keep the rest of it, comments and order included: [{\"op\":\"add\",\"parent\":\"Product\",\"dsl\":\"Amount: Decimal\"},{\"op\":\"remove\",\"path\":\"Product.Total\"},{\"op\":\"replace\",\"path\":\"Product.Note\",\"dsl\":\"Note: Text optional\"}]. add takes parent (\"\" for top level) and dsl; remove takes path (including a uses line as \"uses:<pack>\"); replace takes path and dsl. dsl must be one member with balanced braces (EDIT_BAD_SNIPPET otherwise). Needs a document applied by poly_define first.")] string? edit = null) {
         if (!TryWorkspace(workspace, out var current))
             return WorkspaceRequired();
 

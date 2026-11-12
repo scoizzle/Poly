@@ -193,4 +193,39 @@ public class SourceTextTests {
         await Assert.That(sink).IsGreaterThan(0);
         await Assert.That(bytes).IsEqualTo(0L);
     }
+
+    private static bool TryCanonical(DslTokenKind kind, out string text) {
+        try { text = DslGrammar.CanonicalText(kind); return true; }
+        catch (ArgumentOutOfRangeException) { text = ""; return false; }
+    }
+
+    /// <summary>
+    /// The exchange rule: a fixed kind's text is the writer table (<see cref="DslGrammar.CanonicalText"/>), a
+    /// value-bearing kind's text is the <see cref="SourceText"/> slice. Which kinds are fixed versus value-bearing
+    /// is pinned by <c>GrammarChangeProtocolTests</c>. The oracle is the legacy path (<c>DslToken.Text</c>).
+    /// </summary>
+    [Test]
+    public async Task SyntheticToken_RoundTripsThroughWriterTextTable() {
+        const string text = "domain A\n\nTask: entity {\n  Title: Text optional unique\n}\n";
+        var source = new SourceText(text);
+        var reader = new DslTokenReader(text);
+        var viaSpans = new DslTokenWriter();
+        var legacy = new DslTokenWriter();
+
+        for (var i = 0; ; i++) {
+            var t = reader.Peek(i);
+            if (t.Kind == DslTokenKind.EndOfFile) break;
+            var span = new SpanToken<DslTokenKind>(t.Kind, t.Offset, t.Length);
+            if (TryCanonical(t.Kind, out _)) { viaSpans.Write(span.Kind); legacy.Write(t.Kind); }
+            else { viaSpans.Write(span.Kind, source.Span(span).ToString()); legacy.Write(t.Kind, t.Text); }
+        }
+
+        await Assert.That(viaSpans.ToText()).IsEqualTo(legacy.ToText());
+        await Assert.That(viaSpans.ToText()).Contains("Title");
+
+        // A synthetic fixed token has no source span and still prints.
+        var writer = new DslTokenWriter();
+        writer.Write(new SpanToken<DslTokenKind>(DslTokenKind.Colon, 0, 0).Kind);
+        await Assert.That(writer.ToText()).IsEqualTo(":");
+    }
 }

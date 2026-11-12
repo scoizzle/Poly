@@ -97,8 +97,9 @@ public sealed class TestsArtifactContributor : IArtifactContributor {
     /// declaration order, once per name. The initial stage is the first declared stage.
     /// </summary>
     private static List<Action> RefusedActions(Entity entity) {
-        // The initial stage is the first declared stage; every other stage is "later". Reference
-        // identity, not value equality: two stages may declare the same name-free shape.
+        // The initial stage is the first declared stage; every other stage is "later". The filter
+        // below compares *references*, so two stages that happen to hold equal values are still
+        // told apart — a record's value equality would drop a later stage that mirrors the initial.
         var initial = entity.InitialStage()!;
         var covered = initial.Actions.Select(a => a.Name)
             .Concat(entity.Actions.Select(a => a.Name))

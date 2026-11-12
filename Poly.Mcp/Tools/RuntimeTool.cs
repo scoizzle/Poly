@@ -80,7 +80,8 @@ internal sealed class RuntimeTool(ISessionStore store, ILogger<RuntimeTool> logg
 
     /// <summary>
     /// The stage the instance is in. The module leaves the key unset until the first
-    /// transition, so an unset key on a staged entity is its first stage.
+    /// transition, so an unset key on a staged entity is its first stage. That reading holds
+    /// only while <c>Create</c> always writes <c>CurrentStage</c>; see L-04 before changing it.
     /// </summary>
     private static string? StageOf(McpSessionState state, ModuleInstance instance) =>
         instance.Bag.TryGetValue(CurrentStageKey, out var stage) && stage is not null

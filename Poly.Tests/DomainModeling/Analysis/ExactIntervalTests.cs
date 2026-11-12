@@ -386,4 +386,73 @@ public class ExactIntervalTests {
     public async Task FractionalDoubleBound_IsUnorderable() {
         await Assert.That(AbstractValue.From([new RangeConstraint(0.5d, null)]).NumericRange).IsNull();
     }
+
+    // ── V-05b S4: provable truth and the transfer registry (A4) ───────────
+
+    private static Dictionary<string, AbstractValue> TruthEnv() => new(StringComparer.Ordinal) {
+        ["X"] = AbstractValue.From([new RangeConstraint(0m, 5m)]),
+        ["Y"] = AbstractValue.From([new RangeConstraint(10m, 20m)]),
+        ["Z"] = AbstractValue.From([new RangeConstraint(3m, 9m)]),
+    };
+
+    /// <summary>T11a: a comparison over intervals is true when every pair satisfies it, false when no
+    /// pair does, and unknown otherwise — literals and transfer-built intervals included.</summary>
+    [Test]
+    public async Task ProvableTruth_ComparisonOverIntervals_IsTrueFalseUnknown() {
+        var env = TruthEnv();
+
+        await Assert.That(ProvableTruth.Decide(
+            DomainExpression.LessThan(DomainExpression.Property("X"), DomainExpression.Property("Y")), env))
+            .IsEqualTo(Truth.True);
+        await Assert.That(ProvableTruth.Decide(
+            DomainExpression.GreaterThan(DomainExpression.Property("X"), DomainExpression.Property("Y")), env))
+            .IsEqualTo(Truth.False);
+        await Assert.That(ProvableTruth.Decide(
+            DomainExpression.LessThan(DomainExpression.Property("X"), DomainExpression.Property("Z")), env))
+            .IsEqualTo(Truth.Unknown);
+
+        // A literal on one side, and an interval the transfer table built (X + 1 is [1, 6]).
+        await Assert.That(ProvableTruth.Decide(
+            DomainExpression.GreaterThanOrEqual(DomainExpression.Property("Y"), DomainExpression.Literal(10m)), env))
+            .IsEqualTo(Truth.True);
+        await Assert.That(ProvableTruth.Decide(
+            DomainExpression.LessThan(DomainExpression.Add(DomainExpression.Property("X"), DomainExpression.Literal(1m)),
+                DomainExpression.Property("Y")), env))
+            .IsEqualTo(Truth.True);
+
+        // An unmodelled leaf is never a guess.
+        await Assert.That(ProvableTruth.Decide(DomainExpression.Call("f", []), env)).IsEqualTo(Truth.Unknown);
+    }
+
+    /// <summary>T11b: And/Or are Kleene three-valued and Not flips only a decided answer.</summary>
+    [Test]
+    public async Task ProvableTruth_AndOrNot_ThreeValued() {
+        var env = TruthEnv();
+        var yes = DomainExpression.LessThan(DomainExpression.Property("X"), DomainExpression.Property("Y"));
+        var no = DomainExpression.GreaterThan(DomainExpression.Property("X"), DomainExpression.Property("Y"));
+        var maybe = DomainExpression.LessThan(DomainExpression.Property("X"), DomainExpression.Property("Z"));
+
+        await Assert.That(ProvableTruth.Decide(DomainExpression.And(yes, no), env)).IsEqualTo(Truth.False);
+        await Assert.That(ProvableTruth.Decide(DomainExpression.And(no, maybe), env)).IsEqualTo(Truth.False);
+        await Assert.That(ProvableTruth.Decide(DomainExpression.And(yes, maybe), env)).IsEqualTo(Truth.Unknown);
+        await Assert.That(ProvableTruth.Decide(DomainExpression.And(yes, yes), env)).IsEqualTo(Truth.True);
+
+        await Assert.That(ProvableTruth.Decide(DomainExpression.Or(no, maybe), env)).IsEqualTo(Truth.Unknown);
+        await Assert.That(ProvableTruth.Decide(DomainExpression.Or(yes, maybe), env)).IsEqualTo(Truth.True);
+        await Assert.That(ProvableTruth.Decide(DomainExpression.Or(no, no), env)).IsEqualTo(Truth.False);
+
+        await Assert.That(ProvableTruth.Decide(DomainExpression.Not(yes), env)).IsEqualTo(Truth.False);
+        await Assert.That(ProvableTruth.Decide(DomainExpression.Not(no), env)).IsEqualTo(Truth.True);
+        await Assert.That(ProvableTruth.Decide(DomainExpression.Not(maybe), env)).IsEqualTo(Truth.Unknown);
+    }
+
+    /// <summary>T12: a node with no transfer row is unknown, and a registered row still transfers.</summary>
+    [Test]
+    public async Task IntervalTransfers_UnregisteredNode_IsUnknown() {
+        var divide = DomainExpression.Divide(DomainExpression.Literal(4m), DomainExpression.Literal(2m));
+        await Assert.That(IntervalTransfers.Transfer(divide, [Range(4m, 4m), Range(2m, 2m)])).IsNull();
+
+        var add = DomainExpression.Add(DomainExpression.Literal(1m), DomainExpression.Literal(2m));
+        await Assert.That(IntervalTransfers.Transfer(add, [Range(1m, 1m), Range(2m, 2m)])!.Min).IsEqualTo(3m);
+    }
 }

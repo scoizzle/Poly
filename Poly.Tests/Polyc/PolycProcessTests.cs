@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using System.Text;
 
 using Poly.Tests.Polyc;
 
@@ -14,6 +15,11 @@ public class PolycProcessTests {
     /// overflow: it stalls past 30 s (2000 deep). When the parser is hardened (G-10) this test flips; the mechanism's permanent
     /// proof is <see cref="RunTestInChild_OverflowingChild_ReportsAbortNotHostCrash"/>.</summary>
     private const int OverflowDepth = 20_000;
+
+    /// <summary>A document whose one positioned error names the file, so the BOM comparison is not vacuous:
+    /// <c>uses nope</c> is a single error, the same one <c>DslBomTests</c> checks in-process.</summary>
+    private const string BomDocument = "domain B\nuses nope\nA: entity { N: Text }\n";
+
 
     private static IReadOnlyDictionary<string, string?> Probe(string name, string? holdMs = null) =>
         new Dictionary<string, string?> { ["POLY_CHILD_PROBE"] = name, ["POLY_CHILD_HOLD_MS"] = holdMs };
@@ -50,6 +56,34 @@ public class PolycProcessTests {
             Directory.Delete(dir, recursive: true);
         }
     }
+
+    /// <summary>G-02 through the real binary, not the in-process reader: a file whose first three bytes are a
+    /// real UTF-8 BOM (EF BB BF) and the same document without them report the same thing, exit and all, with
+    /// only the file path differing.</summary>
+    [Test]
+    public async Task Check_LeadingBomFile_MatchesNoBomFile_ViaSubprocess() {
+        var dir = PolycTestSupport.TempDir();
+        try {
+            var plain = Path.Combine(dir, "plain.poly");
+            var bom = Path.Combine(dir, "bom.poly");
+            File.WriteAllBytes(plain, Encoding.UTF8.GetBytes(BomDocument));
+            File.WriteAllBytes(bom, [0xEF, 0xBB, 0xBF, .. Encoding.UTF8.GetBytes(BomDocument)]);
+
+            var noBom = await PolycProcess.CheckAsync(plain);
+            var withBom = await PolycProcess.CheckAsync(bom);
+
+            await Assert.That(noBom.Stdout).Contains(plain);
+            await Assert.That(noBom.ExitCode).IsNotEqualTo(0);
+            await Assert.That(withBom.ExitCode).IsEqualTo(noBom.ExitCode);
+            await Assert.That(RelativeTo(withBom.Stdout, bom)).IsEqualTo(RelativeTo(noBom.Stdout, plain));
+            await Assert.That(withBom.Stderr).IsEqualTo(noBom.Stderr);
+        }
+        finally {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    private static string RelativeTo(string report, string path) => report.Replace(path, "<file>", StringComparison.Ordinal);
 
     [Test]
     public async Task RunTestInChild_FilteredTest_ReturnsItsExitCode() {

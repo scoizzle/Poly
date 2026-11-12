@@ -58,8 +58,11 @@ public sealed record CompiledApp(string Directory, string AppDll, string DomainN
 /// Bounds, all of them because a spawn-heavy harness froze the machine once:
 /// at most two live children; one gated polyc compile (30 s) and one gated Roslyn emit (30 s); a 25 s slot
 /// wait, 30 s readiness, 10 s kill wait and 10 s per-request HTTP budget. A worst-case boot is
-/// 30 + 30 + 25 + 30 + 10 + 10 = 135 s, inside the assembly's 180 s test timeout with 45 s of margin; the
-/// tests that boot twice carry their own explicit <c>[Timeout]</c>.
+/// 30 + 30 + 25 + 30 + 10 + 10 = 135 s. That number bounds one boot, not one test: it excludes the compile
+/// gate wait (compiles serialise in-process), a cache-hit rebuild, child runtime startup and JIT, and the
+/// first-use sweep. The 25 s slot wait is the shared <see cref="ChildProcessGate"/> budget, so a booted
+/// oracle and a test-host child contend for the same two slots. 135 s sits inside the assembly's 180 s test
+/// timeout with 45 s of margin; the tests that boot twice carry their own explicit <c>[Timeout]</c>.
 /// </summary>
 public sealed class PackOracle : IAsyncDisposable {
     private const string HookFileName = "PackOracleHook.dll";
@@ -474,18 +477,29 @@ public sealed class PackOracle : IAsyncDisposable {
         return path;
     }
 
-    private static PidRecord? ReadPidFile(string path) {
+    /// <summary>A record read that could not happen is not evidence the record is corrupt: an I/O or permission
+    /// wall skips the record, because it may still name a live child. Only a corrupt or empty document is droppable.</summary>
+    private readonly record struct PidRead(PidRecord? Record, bool Unreadable) {
+        public static PidRead UnreadableFile => new(null, Unreadable: true);
+        public static PidRead Droppable => new(null, Unreadable: false);
+    }
+
+    private static PidRead ReadPidFile(string path) {
+        string text;
         try {
-            return JsonSerializer.Deserialize<PidRecord>(File.ReadAllText(path), _json);
+            text = File.ReadAllText(path);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) {
+            return PidRead.UnreadableFile;
+        }
+        if (string.IsNullOrWhiteSpace(text))
+            return PidRead.Droppable;
+        try {
+            var record = JsonSerializer.Deserialize<PidRecord>(text, _json);
+            return record is null ? PidRead.Droppable : new PidRead(record, Unreadable: false);
         }
         catch (JsonException) {
-            return null;
-        }
-        catch (IOException) {
-            return null;
-        }
-        catch (UnauthorizedAccessException) {
-            return null;
+            return PidRead.Droppable;
         }
     }
 
@@ -493,8 +507,10 @@ public sealed class PackOracle : IAsyncDisposable {
     /// For every pidfile whose host process is dead: kill its child, but only when that pid is still the
     /// process the record names (start time within seconds, name <c>dotnet</c>, command line under
     /// <c>poly-oracle</c>), otherwise only delete the record; then delete its run directory.
-    /// A corrupt or unreadable record cannot name a live child, so it is dropped at once. Returns how many
-    /// children were killed. A live host's record is never touched, and one bad record never aborts the sweep.
+    /// A corrupt or empty record cannot name a live child, so it is dropped at once. A record that cannot be
+    /// read at all (an I/O or permission wall) is skipped and kept: the wall is not evidence of corruption, and
+    /// the record may still name a live child. Returns how many children were killed. A live host's record is
+    /// never touched, and one bad record never aborts the sweep.
     /// </summary>
     public static int SweepOrphans() {
         if (!Directory.Exists(PidRoot))
@@ -509,11 +525,14 @@ public sealed class PackOracle : IAsyncDisposable {
         }
         foreach (var file in files) {
             try {
-                var record = ReadPidFile(file);
-                if (record is null) {
+                var read = ReadPidFile(file);
+                if (read.Unreadable)
+                    continue;
+                if (read.Record is null) {
                     TryDeleteFile(file);
                     continue;
                 }
+                var record = read.Record;
                 if (IsProcessAlive(record.HostPid))
                     continue;
                 if (ChildStillMatches(record)) {
@@ -607,9 +626,16 @@ public sealed class PackOracle : IAsyncDisposable {
             records = [];
         }
         foreach (var file in records) {
-            var record = ReadPidFile(file);
-            if (record is null)
+            PidRead read;
+            try {
+                read = ReadPidFile(file);
+            }
+            catch (Exception ex) when (IsPidStoreFailure(ex)) {
+                continue; // an unreadable record protects nothing it cannot name
+            }
+            if (read.Unreadable || read.Record is null)
                 continue;
+            var record = read.Record;
             protectedDirs.Add(record.RunDir);
             if (record.AppDir is not null)
                 protectedDirs.Add(record.AppDir);

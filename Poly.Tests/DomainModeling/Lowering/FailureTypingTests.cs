@@ -1,6 +1,9 @@
 using Poly.DomainModeling;
 using Poly.DomainModeling.Evolution;
+using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Language;
+using Poly.DomainModeling.Ontology;
+using Poly.DomainModeling.Runtime;
 using Poly.DomainModeling.Lowering;
 using Poly.Ast.Nodes;
 using Poly.Interpretation.CSharp;
@@ -76,8 +79,8 @@ public class FailureTypingTests {
             }
             """);
 
-        await Assert.That(cs).Contains("Poly.Runtime.DomainFailure.Enum(");
-        await Assert.That(cs).Contains(", \"Widget.Status\")");
+        await Assert.That(System.Text.RegularExpressions.Regex.IsMatch(
+            cs, "Poly\\.Runtime\\.DomainFailure\\.Enum\\([^;]*, \"Widget\\.Status\"\\)\\)")).IsTrue();
         await Assert.That(cs).Contains("Poly.Runtime.DomainFailure.Required(\"'Status' is required.\", \"Widget.Status\")");
     }
 
@@ -123,7 +126,7 @@ public class FailureTypingTests {
     [Test]
     public async Task FailureKindOf_IsTotalOverEveryCheckKind() {
         foreach (var kind in Enum.GetValues<ConstraintCheckWriter.Kind>())
-            await Assert.That(Enum.IsDefined(ConstraintCheckWriter.FailureKindOf(kind))).IsTrue();
+            await Assert.That(() => ConstraintCheckWriter.FailureKindOf(kind)).ThrowsNothing();
     }
 
     [Test]
@@ -190,5 +193,65 @@ public class FailureTypingTests {
         await Assert.That(printed[1].Success).IsFalse();
         await Assert.That(printed[1].Message).IsEqualTo(
             "Unique constraint violated: 'Sku' value is already used on another 'Widget'.");
+    }
+
+    [Test]
+    public async Task PropertyNamedPoly_WithAConstraint_IsAReservedNameError() {
+        var session = ParitySessions.Create();
+        var changes = new PolyDslParser("""
+            domain Lab
+            Widget: entity {
+              Poly: Text length(3, 8)
+            }
+            """, session).Parse();
+
+        var evolved = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes, session: session);
+
+        await Assert.That(evolved.Analysis.Diagnostics.Any(d =>
+            d.Code == DomainModelDiagnosticCodes.ReservedMemberName
+            && d.Message.Contains("would shadow the generated C# type 'Poly'"))).IsTrue();
+    }
+
+    [Test]
+    public async Task ConstraintKinds_AssignLength_OnBothSides_KeepTheLegacyMessageText() {
+        const string dsl = """
+            domain Lab
+            Widget: entity {
+              Name: Text length(3, 8) default("abcd")
+              Set: action (v: Text) { assign Name to v }
+            }
+            """;
+
+        var outcomes = await ParityScenario.FromDsl(dsl, "FailureTypingAssignLength")
+            .AssertAgree(side => {
+                side.Create("Widget");
+                side.Invoke("Set", ("v", "ab"));
+            });
+
+        await Assert.That(outcomes[1].Success).IsFalse();
+        await Assert.That(outcomes[1].Message).IsEqualTo("'Name' must be at least 3 characters.");
+    }
+
+    [Test]
+    public async Task AssignConstraintFailure_TypedResultSite_NeverRoutesThroughThrow() {
+        var entity = new Entity("Widget",
+            Properties: [new Property("Score", new DomainTypeReference("Number"), [new RangeConstraint(1.0, 10.0)])],
+            Actions: [], Policies: [], Stages: []);
+        var assign = new AssignEffect(DomainExpression.Property("Score"), DomainExpression.Property("n"));
+
+        var typed = new EffectLoweringPass(entity, LoweringFixtures.Context(new ThisReference(), entity)
+            with { ActionResultType = new NamedTypeReference("DomainResult") }).TryLowerVmNode(assign);
+        var voidBody = new EffectLoweringPass(entity, LoweringFixtures.Context(new ThisReference(), entity))
+            .TryLowerVmNode(assign);
+
+        await Assert.That(Walk(typed!).Any(n => n is ThrowStatement)).IsFalse();
+        await Assert.That(Walk(voidBody!).Any(n => n is ThrowStatement)).IsTrue();
+    }
+
+    private static IEnumerable<Node> Walk(Node root) {
+        yield return root;
+        foreach (var child in root.Children.OfType<Node>())
+            foreach (var node in Walk(child))
+                yield return node;
     }
 }

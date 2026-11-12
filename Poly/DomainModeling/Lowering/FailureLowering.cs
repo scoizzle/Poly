@@ -9,7 +9,9 @@ namespace Poly.DomainModeling.Lowering;
 /// <c>Poly.Runtime.DomainFailure.&lt;Kind&gt;(message[, path[, guard]])</c> call, so the kind,
 /// the element path and the guard travel with the message.
 /// The receiver is a <see cref="ClrTypeReference"/>, so it prints fully qualified and
-/// needs no using or reserved-name row. Trailing null arguments are omitted: the VM and
+/// needs no using, but the leading <c>Poly</c> is a simple name in expression position, so a
+/// member named <c>Poly</c> would shadow it: <c>ReservedNames</c> reserves <c>Poly</c> as a
+/// generated-reference member name. Trailing null arguments are omitted: the VM and
 /// printed C# both fill the optional parameters.
 /// </summary>
 internal static class FailureLowering {

@@ -119,6 +119,11 @@ internal static class ReservedNames {
         // some shapes collide, and enumerating them would twin the writer's decisions.
         new("System", ReservedKind.GeneratedReference,
             "shadows the System namespace the generated member bodies call"),
+        // FailureLowering.Call — constraint failures print `Poly.Runtime.DomainFailure.<Kind>(...)`
+        // from expression position inside the entity, where a member named Poly wins the name
+        // (CS0120). Unconditional like System: the language shrinks by one member name.
+        new("Poly", ReservedKind.GeneratedReference,
+            "shadows the Poly.Runtime namespace the generated member bodies call"),
     ];
 
     /// <summary>

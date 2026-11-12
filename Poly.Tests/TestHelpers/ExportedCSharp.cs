@@ -22,10 +22,23 @@ public static class ExportedCSharp {
             else if (cs[i] == '}') {
                 depth--;
                 if (depth == 0)
-                    return cs[start..(i + 1)];
+                    return WithBodyPartner(cs, cs[start..(i + 1)]);
             }
         }
         throw new InvalidOperationException($"Unbalanced braces for '{signature}'.");
+    }
+
+    /// <summary>A public action is a scope wrapper that calls its private <c>__BodyOf{Action}</c>
+    /// partner; the wrapper text is returned with the partner's text, so body-content assertions
+    /// keep seeing the lowered body.</summary>
+    private static string WithBodyPartner(string cs, string method) {
+        var call = System.Text.RegularExpressions.Regex.Match(method, @"this\.(__BodyOf\w+)\(");
+        if (!call.Success)
+            return method;
+        var declaration = System.Text.RegularExpressions.Regex.Match(cs, @"(?<![.\w])[\w<>?.]+ " + call.Groups[1].Value + @"\(");
+        if (!declaration.Success)
+            throw new InvalidOperationException($"Body method '{call.Groups[1].Value}' not found.");
+        return method + "\n" + ExtractMethod(cs, declaration.Value);
     }
 
     /// <summary>The usings a printed module needs for the shared <c>Poly.Runtime</c> result family.</summary>

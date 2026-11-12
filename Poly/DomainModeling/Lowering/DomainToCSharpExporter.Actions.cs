@@ -3,6 +3,7 @@ using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Ontology.Contract;
 using Poly.DomainModeling.Runtime;
+using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Runtime;
 
 using AccessModifier = Poly.Introspection.AccessModifier;
@@ -66,15 +67,68 @@ public sealed partial class DomainToCSharpExporter {
                 TypeArguments: [innerType]);
         }
 
-        methods.Add(new MethodDefinitionNode(
-            action.Name,
-            returnType,
-            Parameters: action.Parameters
+        AddScopedActionMethods(methods, action.Name, returnType,
+            action.Parameters
                 .Select(p => new Parameter(p.Name, MapDomainTypeRef(p.Type, domain, analysis)))
                 .ToList(),
+            body);
+    }
+
+    private const string ActionBodyPrefix = "__BodyOf";
+
+    private static Node ActionScopeCall(string member, params Node[] arguments) =>
+        new Invoke(new Member(new ClrTypeReference(typeof(ActionScope)), member), arguments);
+
+    /// <summary>
+    /// An action is atomic: the public method is a wrapper that opens an <see cref="ActionScope"/>,
+    /// calls the private body method that holds the lowered action, and commits on success.
+    /// A failed result, an exception, or a throwing commit leaves <c>__done</c> false, so the
+    /// <c>finally</c> rolls the still-open frame back. The wrapper's locals begin with <c>__</c>,
+    /// which the DSL reserves, and the body is a separate method, so no authored name can collide.
+    /// The token is cast to its own type: the VM analysis does not resolve the static call's return
+    /// type, and an unresolved first write makes the analysis of the same body reject itself on re-entry.
+    /// </summary>
+    private static void AddScopedActionMethods(List<MethodDefinitionNode> methods, string name,
+        Node returnType, List<Parameter> parameters, Block body) {
+        var bodyName = ActionBodyPrefix + name;
+        var scope = new Variable("__scope");
+        var done = new Variable("__done");
+        var result = new Variable("__result");
+        var call = new Invoke(new Member(new ThisReference(), bodyName), [.. parameters]);
+        var wrapper = new Block([
+            new Assignment(scope, new TypeCast(
+                ActionScopeCall("Begin", new Constant(null)),
+                new ClrTypeReference(typeof(ActionScopeToken)))),
+            new Assignment(done, new Constant(false)),
+            new TryCatchFinally(
+                new Block([
+                    new Assignment(result, call),
+                    new IfStatement(
+                        new Poly.Ast.Nodes.Not(new Member(result, "IsSuccess")),
+                        new Block([new Return(result)])),
+                    ActionScopeCall("Commit", scope),
+                    new Assignment(done, new Constant(true)),
+                    new Return(result)
+                ], [result]),
+                FinallyBlock: new Block([
+                    new IfStatement(new Poly.Ast.Nodes.Not(done), ActionScopeCall("Rollback", scope))
+                ]))
+        ], [scope, done]);
+        methods.Add(new MethodDefinitionNode(
+            name,
+            returnType,
+            Parameters: parameters,
+            Body: wrapper,
+            AccessModifier: AccessModifier.Public));
+
+        methods.Add(new MethodDefinitionNode(
+            bodyName,
+            returnType,
+            Parameters: parameters
+                .Select(p => new Parameter(p.Name, p.TypeReference))
+                .ToList(),
             Body: body,
-            AccessModifier: AccessModifier.Public
-        ));
+            AccessModifier: AccessModifier.Private));
     }
 
     private static Block BuildFullActionBody(Entity entity, Action action,
@@ -224,15 +278,11 @@ public sealed partial class DomainToCSharpExporter {
             ? new NamedTypeReference("DomainResult")
             : actionResultType;
 
-        methods.Add(new MethodDefinitionNode(
-            representative.Name,
-            returnType,
-            Parameters: representative.Parameters
+        AddScopedActionMethods(methods, representative.Name, returnType,
+            representative.Parameters
                 .Select(p => new Parameter(p.Name, MapDomainTypeRef(p.Type, domain, analysis)))
                 .ToList(),
-            Body: new Block(nodes, locals),
-            AccessModifier: AccessModifier.Public
-        ));
+            new Block(nodes, locals));
     }
 
     // ── Lowering helpers ────────────────────────────────────────

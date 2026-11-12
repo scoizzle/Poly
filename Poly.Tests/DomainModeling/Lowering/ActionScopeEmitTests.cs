@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Reflection;
+using System.Text.RegularExpressions;
 
 using Poly.DomainModeling;
 using Poly.DomainModeling.Compile;
@@ -86,6 +87,98 @@ public class ActionScopeEmitTests {
             throw new InvalidOperationException($"{method} failed: {result.GetType().GetProperty("ErrorMessage")!.GetValue(result)}");
     }
 
+    private const string StageDispatchDsl = """
+        domain Tickets
+        Ticket: entity {
+          Memo: Text
+          Draft: stage {
+            Cancel: action -> Receipt { create Receipt { Note: "done" } }
+            Activate: action { transition to Active }
+          }
+          Active: stage { Cancel: action { transition to Closed } }
+          Closed: stage { }
+        }
+        Receipt: entity { Note: Text }
+        """;
+
+    private const string BinderDsl = """
+        domain Binders
+        Item: entity {
+          Code: Text
+          Ping: action { assign Code to "p" }
+        }
+        Group: entity {
+          Label: Text
+          items: many Item
+          Sweep: action {
+            for __scope in items { invoke __scope.Ping }
+          }
+        }
+        """;
+
+    private static int Occurrences(string text, string needle) {
+        var count = 0;
+        for (var at = text.IndexOf(needle, StringComparison.Ordinal); at >= 0;
+             at = text.IndexOf(needle, at + needle.Length, StringComparison.Ordinal))
+            count++;
+        return count;
+    }
+
+    [Test]
+    public async Task Action_OpensAndClosesAScope_OnBothHosts() {
+        var (cs, _) = Print(Dsl, "ActionScopeWrapper");
+        var bump = ExportedCSharp.ExtractMethod(cs, "DomainResult Bump(");
+        await Assert.That(bump).Contains("ActionScope.Begin(");
+        await Assert.That(bump).Contains("ActionScope.Commit");
+        await Assert.That(bump).Contains("ActionScope.Rollback");
+        await Assert.That(cs).Contains("__BodyOfBump(");
+
+        var outcomes = await ParityScenario.FromDsl(Dsl, "ActionScopeWrapperParity")
+            .AssertAgree(side => {
+                side.Create("Group", ("Label", "g"));
+                side.Invoke("Bump", ("n", 9L));
+            });
+        await Assert.That(outcomes[1].Success).IsTrue();
+        await Assert.That(outcomes[1].State["Score"]).IsEqualTo("9");
+        await Assert.That(ActionScope.HasOpenScope).IsFalse();
+    }
+
+    [Test]
+    public async Task StageDispatchedAction_OpensOneScope() {
+        var (cs, _) = Print(StageDispatchDsl, "ActionScopeStageDispatch");
+        // Cancel (two stages, one merged method) and Activate: one wrapper each, one shared body each.
+        await Assert.That(Occurrences(cs, "ActionScope.Begin(")).IsEqualTo(2);
+        await Assert.That(Occurrences(cs, "DomainResult<Receipt> Cancel(")).IsEqualTo(1);
+        await Assert.That(Occurrences(cs, "__BodyOfCancel(")).IsEqualTo(2);
+    }
+
+    [Test]
+    public async Task WrapperAndBodyNames_CannotCollideWithAuthoredNames() {
+        // By construction: the wrapper's only names are its own `__`-prefixed locals plus the
+        // action parameters, and `__` is reserved for members and parameters; the body is a
+        // separate method, and an authored binder never becomes a printed local (it maps to a
+        // generated `target{N}` variable). The test pins the printed side of that argument.
+        var (cs, _) = Print(Dsl, "ActionScopeNames");
+        var allowed = new Regex(@"^__(Snapshot|Restore|state|saved|item\d+|scope|done|result|BodyOf\w+)$");
+        var stray = Regex.Matches(cs, @"\b__\w+").Select(m => m.Value).Where(n => !allowed.IsMatch(n)).Distinct().ToList();
+        await Assert.That(string.Join(",", stray)).IsEqualTo("");
+
+        // A binder named like a wrapper local prints, compiles with warnings as errors and runs.
+        var (binderCs, binderAssembly) = Print(BinderDsl, "ActionScopeBinder");
+        await Assert.That(string.Join("\n", ExportedCSharp
+            .CompileWithWarningsAsErrors("ActionScopeBinderStrict", [("Binders.cs", binderCs)])
+            .Select(d => d.ToString()))).IsEqualTo("");
+        var group = Create(binderAssembly, "Group", ("label", "g"));
+        Call(group, "Sweep");
+        await Assert.That(ActionScope.HasOpenScope).IsFalse();
+
+        // The reservation still covers action parameters.
+        var reserved = new Compiler().Compile(
+            BinderDsl.Replace("Sweep: action {", "Sweep: action (__x: Text) {"), CompileMode.All, DbmsPack.Sqlite);
+        await Assert.That(reserved.Success).IsFalse();
+        await Assert.That(string.Join("; ", reserved.Errors ?? [])).Contains("__x");
+    }
+
     [Test]
     public async Task Entity_ImplementsActionScoped_SnapshotRestoreRoundTrips() {
         var (cs, assembly) = Print(Dsl, "ActionScopeRoundTrip");
@@ -116,9 +209,12 @@ public class ActionScopeEmitTests {
         // The analyzer resolves every member the snapshot calls: the synthetic entity-list type
         // exposes only Item, Count, constructors and Add, so a ToArray/Clear/AddRange call on an
         // entity list is rejected here and nowhere in the print-and-Roslyn path.
-        var result = new Compiler().Compile(Dsl, CompileMode.All, DbmsPack.Sqlite);
-        await Assert.That(string.Join("; ", result.Errors ?? [])).IsEqualTo("");
-        await Assert.That(result.Success).IsTrue();
+        // The action wrapper (single, stage-dispatched, and with a loop binder) is part of that module.
+        foreach (var dsl in new[] { Dsl, StageDispatchDsl, BinderDsl }) {
+            var result = new Compiler().Compile(dsl, CompileMode.All, DbmsPack.Sqlite);
+            await Assert.That(string.Join("; ", result.Errors ?? [])).IsEqualTo("");
+            await Assert.That(result.Success).IsTrue();
+        }
     }
 
     [Test]

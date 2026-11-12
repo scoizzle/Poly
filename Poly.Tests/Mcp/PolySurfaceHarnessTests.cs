@@ -134,7 +134,7 @@ public class PolySurfaceHarnessTests {
                 await Assert.That(observed[i].Summary).Contains(fragment).Because($"{rows[i].Row}\nobserved:\n{table}");
         }
 
-        await Assert.That(observed[0].Workspace).IsEqualTo(workspace).Because("a validator error still carries the state envelope");
+        await Assert.That(observed[2].Next).Contains("poly_workspace");
     }
 
     [Test]

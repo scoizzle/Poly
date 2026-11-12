@@ -28,7 +28,30 @@ internal sealed record HarnessResult(
     IReadOnlyList<string> Next) {
     /// <summary>The one decoder: an absent member and an explicit null are the same thing.</summary>
     public static HarnessResult FromEnvelope(JsonNode envelope) {
-        throw new NotImplementedException();
+        var root = envelope.AsObject();
+        var state = root["state"] as JsonObject;
+        var findings = (root["findings"] as JsonArray ?? [])
+            .Select(f => f!.AsObject())
+            .Select(f => new HarnessFinding(
+                f["severity"]?.GetValue<string>() ?? "",
+                f["code"]?.GetValue<string>(),
+                f["path"]?.GetValue<string>() ?? "",
+                f["message"]?.GetValue<string>() ?? "",
+                f["line"]?.GetValue<int>(),
+                f["column"]?.GetValue<int>()))
+            .ToList();
+        var next = (root["next"] as JsonArray ?? [])
+            .Select(n => n!.GetValue<string>())
+            .ToList();
+        return new HarnessResult(
+            Success: root["ok"]?.GetValue<bool>() ?? false,
+            Code: root["errorCode"]?.GetValue<string>(),
+            Summary: root["summary"]?.GetValue<string>() ?? "",
+            Findings: findings,
+            Data: root["data"],
+            Workspace: state?["workspace"]?.GetValue<string>(),
+            Revision: state?["revision"]?.GetValue<long>(),
+            Next: next);
     }
 
     /// <summary>An export's inline <c>content</c>.</summary>
@@ -62,26 +85,36 @@ internal sealed class PolySurfaceHarness {
             NullLogger<McpSessionStore>.Instance));
 
     /// <summary>Creates a workspace and returns its handle.</summary>
-    public string Open(string? name = null) => throw new NotImplementedException();
+    public string Open(string? name = null) =>
+        Workspace(name: name).Workspace
+            ?? throw new InvalidOperationException("poly_workspace returned no handle.");
 
-    public HarnessResult Guide(string? topic = null) => throw new NotImplementedException();
+    public HarnessResult Guide(string? topic = null) => Decode(_surface.Guide(topic));
 
-    public HarnessResult Workspace(string? op = null, string? name = null, string? workspace = null) => throw new NotImplementedException();
+    public HarnessResult Workspace(string? op = null, string? name = null, string? workspace = null) =>
+        Decode(_surface.Workspace(op, name, workspace));
 
-    public HarnessResult Define(string workspace, string? poly = null, bool apply = true, string? edit = null) => throw new NotImplementedException();
+    public HarnessResult Define(string workspace, string? poly = null, bool apply = true, string? edit = null) =>
+        Decode(_surface.Define(workspace, poly, apply, edit));
 
     /// <summary>Sugar over <see cref="Define"/> with <c>edit</c>.</summary>
-    public HarnessResult Edit(string workspace, string ops, bool apply = true) => throw new NotImplementedException();
+    public HarnessResult Edit(string workspace, string ops, bool apply = true) =>
+        Define(workspace, edit: ops, apply: apply);
 
     public HarnessResult Check(
-        string workspace, string? select = null, string? args = null, string? expression = null, string? bindings = null) => throw new NotImplementedException();
+        string workspace, string? select = null, string? args = null, string? expression = null, string? bindings = null) =>
+        Decode(_surface.Check(workspace, select, args, expression, bindings));
 
-    public HarnessResult Inspect(string workspace, string? select = null, string? detail = null) => throw new NotImplementedException();
+    public HarnessResult Inspect(string workspace, string? select = null, string? detail = null) =>
+        Decode(_surface.Inspect(workspace, select, detail));
 
     /// <summary>Inline by default: the harness never reads a temp-file <c>path</c>.</summary>
-    public HarnessResult Export(string workspace, string format, bool inline = true) => throw new NotImplementedException();
+    public HarnessResult Export(string workspace, string format, bool inline = true) =>
+        Decode(_surface.Export(workspace, format, inline));
 
-    public HarnessResult Simulate(string workspace, string steps, bool reset = false, bool stopOnError = true) => throw new NotImplementedException();
+    public HarnessResult Simulate(string workspace, string steps, bool reset = false, bool stopOnError = true) =>
+        Decode(_surface.Simulate(workspace, steps, reset, stopOnError));
 
-    private static HarnessResult Decode(PolyResponse response) => throw new NotImplementedException();
+    private static HarnessResult Decode(PolyResponse response) =>
+        HarnessResult.FromEnvelope(JsonSerializer.SerializeToNode(response)!);
 }

@@ -554,6 +554,49 @@ public class ActionScopeTests {
         ActionScope.Commit(outer);
     }
 
+    [Test]
+    public async Task Rollback_WhenRestoreThrows_StillRollsBackJournal_ClosesFrame_AndThrowsAggregate() {
+        var port = new ModuleStoragePort();
+        var root = ActionScope.Begin(port);
+        await Assert.That(port.TryReserve("Patron", "Email", "x@b.c")).IsTrue();
+        ActionScope.Touch(new Scoped("A") { ThrowOnRestore = true });
+        ActionScope.Touch(new Scoped("B") { ThrowOnRestore = true });
+
+        AggregateException? caught = null;
+        try {
+            ActionScope.Rollback(root);
+        }
+        catch (AggregateException exception) {
+            caught = exception;
+        }
+
+        // Every restore is attempted, the journal is always reverted and the frame always
+        // closes: there is no poison state to reset.
+        await Assert.That(caught).IsNotNull();
+        await Assert.That(caught!.InnerExceptions.Count).IsEqualTo(2);
+        await Assert.That(port.Exists("Patron", "Email", "x@b.c")).IsFalse();
+        await Assert.That(ActionScope.HasOpenScope).IsFalse();
+    }
+
+    [Test]
+    public async Task Begin_AfterThatFailure_StartsFreshRoot() {
+        var port = new ModuleStoragePort();
+        var root = ActionScope.Begin(port);
+        ActionScope.Touch(new Scoped("A") { ThrowOnRestore = true });
+
+        try {
+            ActionScope.Rollback(root);
+        }
+        catch (AggregateException) {
+            // The frame is closed regardless; the next action starts clean.
+        }
+
+        var next = ActionScope.Begin(port);
+        await Assert.That(next.IsRoot).IsTrue();
+        ActionScope.Rollback(next);
+        await Assert.That(ActionScope.HasOpenScope).IsFalse();
+    }
+
     private static async Task<T> InFreshFlow<T>(Func<T> body) {
         Task<T> task;
         using (ExecutionContext.SuppressFlow())

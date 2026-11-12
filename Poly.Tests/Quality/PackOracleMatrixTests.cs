@@ -71,6 +71,18 @@ public class PackOracleMatrixTests {
     }
 
     [Test]
+    public async Task FromGolden_DomainWithoutMatrixRow_DoesNotThrow() {
+        // A NoBoot domain has no matrix row; deriving its fixture must still work so the boot (not the derivation) is what fails.
+        var withoutRow = RequestMatrix.All.Where(m => m.Domain != "hotel").ToList();
+
+        var fixture = GoldenPackDomains.FromGolden(Golden("hotel"), withoutRow);
+
+        await Assert.That(fixture.Name).IsEqualTo("golden-hotel");
+        await Assert.That(fixture.ListPath).IsEqualTo("/");
+        await Assert.That(Uses(fixture.Poly)).Contains("uses sqlite");
+    }
+
+    [Test]
     public async Task GoldenPackDomains_SubsetIsTwo_AndInFull() {
         await Assert.That(GoldenPackDomains.Subset.Select(d => d.Name)).IsEquivalentTo(new[] { "mcp-library", "warehouse" });
         await Assert.That(GoldenPackDomains.Subset.All(d => GoldenPackDomains.Full.Contains(d))).IsTrue();

@@ -26,7 +26,7 @@ public static class GoldenPackDomains {
     public static IReadOnlyList<GoldenDomain> Full { get; } =
         [.. GoldenDomains.Compilable.Where(d => NoBoot.All(n => n.Domain != d.Name))];
 
-    public static PackOracleDomain FromGolden(GoldenDomain golden) {
+    public static PackOracleDomain FromGolden(GoldenDomain golden, IReadOnlyList<DomainMatrix>? matrices = null) {
         ArgumentNullException.ThrowIfNull(golden);
         var lines = golden.Poly.ReplaceLineEndings("\n").Split('\n').ToList();
         lines.RemoveAll(l => l.Trim() is "uses persistence" or "uses sqlite" or "uses http");
@@ -34,6 +34,6 @@ public static class GoldenPackDomains {
         if (at < 0)
             at = lines.FindIndex(l => l.TrimStart().StartsWith("domain ", StringComparison.Ordinal));
         lines.InsertRange(at + 1, ["uses http", "uses sqlite"]);
-        return new PackOracleDomain("golden-" + golden.Name, string.Join('\n', lines), RequestMatrix.For(golden.Name).Entities[0].Route);
+        return new PackOracleDomain("golden-" + golden.Name, string.Join('\n', lines), (matrices ?? RequestMatrix.All).FirstOrDefault(m => m.Domain == golden.Name)?.Entities[0].Route ?? "/");
     }
 }

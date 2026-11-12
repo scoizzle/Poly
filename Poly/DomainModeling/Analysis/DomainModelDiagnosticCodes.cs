@@ -217,12 +217,13 @@ internal static class DomainModelDiagnosticCodes {
     public const string ContractBindActionAlreadyBound = "DMCON018";
 
     /// <summary>
-    /// #604 L-22: a public entity navigates to an entity that is internal to the declaring domain.
-    /// The printed navigation would have to be internal to keep the public surface closed, and EF
-    /// maps only public navigations, so the shape is rejected: mark the target <c>public</c>.
-    /// An error positioned on the navigation, not acknowledgeable.
+    /// #604 L-22: a public entity has a property typed as an entity that is internal to the declaring
+    /// domain (reachable only through the model API; the DSL reads such a member as a navigation). Persistence
+    /// ignores the property, so demoting it would lose data: mark the target <c>public</c>. A navigation to an
+    /// internal entity is legal since L-22b (it prints <c>internal</c> and the pack maps it explicitly).
+    /// An error positioned on the property, not acknowledgeable.
     /// </summary>
-    public const string PublicEntityNavigatesToInternalEntity = "DMCON019";
+    public const string PublicEntityPropertyTypedInternalEntity = "DMCON019";
 
     /// <summary>
     /// #684 C-05: a constraint no loaded library compiles. <c>unique</c> is the one

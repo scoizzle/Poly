@@ -10,21 +10,24 @@ using Poly.Packs.Product;
 namespace Poly.Tests.DomainModeling.Analysis;
 
 /// <summary>
-/// #604 L-22, ruling on #683: a public entity may not navigate to an entity that is internal to the domain
-/// (<c>DMCON019</c>). EF maps only public navigations, so demoting the printed navigation is not an option;
-/// the fix is to mark the target public. An internal entity may navigate anywhere.
+/// #604 L-22b, owner ruling on #683: a public entity may navigate to an entity that is internal to the domain
+/// (the navigation prints internal and the pack maps it explicitly). <c>DMCON019</c> now covers only an
+/// entity-typed property of a public entity. An internal entity may navigate anywhere.
 /// </summary>
 public sealed class PublicNavigationClosureTests {
-    private static IReadOnlyList<Diagnostic> Errors(string dsl) =>
+    private static IReadOnlyList<Diagnostic> AllErrors(string dsl) =>
         new DomainEvolution(DomainTestFactory.Create("_", [], []))
             .ApplyAndAnalyze(new PolyDslParser(dsl).Parse())
             .Analysis.Diagnostics
-            .Where(d => d.Severity == DiagnosticSeverity.Error && d.Code == "DMCON019")
+            .Where(d => d.Severity == DiagnosticSeverity.Error)
             .ToList();
 
+    private static IReadOnlyList<Diagnostic> Errors(string dsl) =>
+        AllErrors(dsl).Where(d => d.Code == "DMCON019").ToList();
+
     [Test]
-    public async Task Analyze_WhenPublicEntityHasManyNavToInternalEntity_ReportsDMCON019() {
-        var errors = Errors("""
+    public async Task Analyze_WhenPublicEntityHasManyNavToInternalEntity_ProducesNoDiagnostic() {
+        var errors = AllErrors("""
             domain Test
 
             Line: entity {
@@ -37,17 +40,13 @@ public sealed class PublicNavigationClosureTests {
             }
             """);
 
-        await Assert.That(errors.Count).IsEqualTo(1);
-        await Assert.That(errors[0].Message).Contains("Order");
-        await Assert.That(errors[0].Node is Relationship { Name: "lines" }).IsTrue();
-        await Assert.That(errors[0].Message).Contains("lines");
-        await Assert.That(errors[0].Message).Contains("Line");
-        await Assert.That(errors[0].Message).Contains("public");
+        await Assert.That(errors.Count(d => d.Code == "DMCON019")).IsEqualTo(0);
+        await Assert.That(errors.Count).IsEqualTo(0);
     }
 
     [Test]
-    public async Task Analyze_WhenPublicEntityHasSingularNavToInternalEntity_ReportsDMCON019() {
-        var errors = Errors("""
+    public async Task Analyze_WhenPublicEntityHasSingularNavToInternalEntity_ProducesNoDiagnostic() {
+        var errors = AllErrors("""
             domain Test
 
             Owner: entity {
@@ -60,9 +59,8 @@ public sealed class PublicNavigationClosureTests {
             }
             """);
 
-        await Assert.That(errors.Count).IsEqualTo(1);
-        await Assert.That(errors[0].Message).Contains("owner");
-        await Assert.That(errors[0].Node is Relationship { Name: "owner" }).IsTrue();
+        await Assert.That(errors.Count(d => d.Code == "DMCON019")).IsEqualTo(0);
+        await Assert.That(errors.Count).IsEqualTo(0);
     }
 
     [Test]
@@ -150,12 +148,12 @@ public sealed class PublicNavigationClosureTests {
         await Assert.That(errors[0].Message).Contains("property 'Owner'");
     }
 
-    // F3 (fix round 1): this shape reaches DMCON019 only because the stage copy produces its result with
-    // create-in, which needs a navigation. A copy that creates the entity directly has no navigation; that
-    // shape is DMCON002 (PublicSurfaceClosureTests.PublicStageGroup_WhenAnotherVariantReturnsInternalEntity...).
+    // F3 (fix round 1), reshaped by L-22b: with the navigation arm gone the stage group is reported only by the
+    // group check, DMCON002, once, on the copy that returns the internal entity. Group coverage also lives in
+    // PublicSurfaceClosureTests.PublicStageGroup_*.
     [Test]
-    public async Task Analyze_WhenPublicStageGroupVariantReturnsInternalEntity_ReportsDMCON019() {
-        var errors = Errors("""
+    public async Task Analyze_WhenPublicStageGroupVariantReturnsInternalEntity_ReportsDMCON002OnTheCopy() {
+        var errors = AllErrors("""
             domain Test
 
             Receipt: entity {
@@ -175,13 +173,34 @@ public sealed class PublicNavigationClosureTests {
             }
             """);
 
-        await Assert.That(errors.Count).IsEqualTo(1);
-        await Assert.That(errors[0].Message).Contains("receipts");
+        await Assert.That(errors.Count(d => d.Code == "DMCON019")).IsEqualTo(0);
+        var group = errors.Where(d => d.Code == "DMCON002").ToList();
+        await Assert.That(group.Count).IsEqualTo(1);
+        await Assert.That(group[0].Node is Poly.DomainModeling.Ontology.Action { Name: "Close" }).IsTrue();
+        await Assert.That(group[0].Message).Contains("Receipt");
     }
 
-    // F4 (fix round 1): polyc places DMCON019 on the navigation's line.
     [Test]
-    public async Task Polyc_ReportsDMCON019PlacedAtTheNavigation() {
+    public async Task Analyze_WhenPublicEntityHasInternalActionReturningInternalEntity_IsClean() {
+        await Assert.That(AllErrors("""
+            domain Test
+
+            Receipt: entity {
+              Code: Text
+            }
+
+            public entity Order {
+              receipts: many Receipt
+              Close: action -> Receipt {
+                create in receipts { Code: "x" }
+              }
+            }
+            """)).IsEmpty();
+    }
+
+    // F4 (fix round 1), reshaped by L-22b: the navigation that used to be DMCON019 now compiles clean.
+    [Test]
+    public async Task Polyc_WhenPublicEntityNavigatesToInternalEntity_CompilesClean() {
         const string Dsl = """
             domain Test
 
@@ -198,12 +217,8 @@ public sealed class PublicNavigationClosureTests {
         var result = new PolyCompiler(ProductCatalog.Catalog, new SessionOptions(ProductCatalog.Catalog, ExtensionCatalog.ProductAuthoring))
             .Compile(Dsl, "n.poly");
 
-        var errors = result.Diagnostics.Where(d => d.Code == "DMCON019").ToList();
-        await Assert.That(errors.Count).IsEqualTo(1);
-        await Assert.That(errors[0].Placed).IsTrue();
-        await Assert.That(errors[0].File).IsEqualTo("n.poly");
-        await Assert.That(errors[0].Line).IsEqualTo(9);
-        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.Diagnostics.Count(d => d.Code == "DMCON019")).IsEqualTo(0);
+        await Assert.That(result.Succeeded).IsTrue();
     }
 
     // P3: an enum has no visibility mark and is always public, so an enum-typed property on a public entity

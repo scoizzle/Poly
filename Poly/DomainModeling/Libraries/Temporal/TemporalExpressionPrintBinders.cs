@@ -25,7 +25,7 @@ public static class TemporalExpressionPrintBinders {
     }
 
     private static DomainExpression ClaimDuration(long amount, string unit) {
-        if (!DurationForm.TryGetUnit(unit, out var parsed))
+        if (!DurationUnits.TryGetUnit(unit, out var parsed))
             throw new FormatException($"Unknown duration unit '{unit}'.");
         return new Duration(amount, parsed);
     }
@@ -36,7 +36,7 @@ public static class TemporalExpressionPrintBinders {
             throw new InvalidOperationException("Duration match is missing amount/unit captures.");
         if (!long.TryParse(amounts[0].Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var amount))
             throw new InvalidOperationException($"Duration amount '{amounts[0].Text}' is not an integer.");
-        if (!DurationForm.TryGetUnit(units[0].Text, out var unit))
+        if (!DurationUnits.TryGetUnit(units[0].Text, out var unit))
             throw new FormatException($"Unknown duration unit '{units[0].Text}'.");
         return new Duration(amount, unit);
     }

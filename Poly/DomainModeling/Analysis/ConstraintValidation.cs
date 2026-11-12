@@ -100,11 +100,6 @@ internal static class ConstraintValidation {
 
     internal static bool IsValidPattern(object? value, string pattern) {
         if (value is not string s) return false;
-        try {
-            return Regex.IsMatch(s, pattern);
-        }
-        catch (RegexParseException) {
-            return false;
-        }
+        return PatternSemantics.TryMatch(s, pattern);
     }
 }

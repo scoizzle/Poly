@@ -84,7 +84,7 @@ public sealed partial class EffectLoweringPass {
                 case LengthConstraint:
                     return false;
                 case PatternConstraint pattern when value is Constant { Value: string text }:
-                    if (!System.Text.RegularExpressions.Regex.IsMatch(text, pattern.Pattern))
+                    if (!PatternSemantics.TryMatch(text, pattern.Pattern))
                         return false;
                     break;
                 case PatternConstraint:

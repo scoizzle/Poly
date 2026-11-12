@@ -35,8 +35,13 @@ public class ConstraintValidationFailClosedTests {
             .IsEqualTo(ConstraintVerdict.Satisfied);
     }
 
+    /// <summary>
+    /// The fixture's own record has no compiler, so C-05 reports it; what remains of #367 D-1 is
+    /// that the unmodelled kind is a warning, never a violation, and that DMLIB001 is the only
+    /// error the analysis emits.
+    /// </summary>
     [Test]
-    public async Task Assign_LiteralToPropertyWithUnmodelledConstraint_WarnsUndecidedAndDoesNotError() {
+    public async Task Assign_LiteralToUnmodelledConstraint_WarnsUndecided_AndOnlyDMLIB001Errors() {
         var entity = new Entity("Item",
             [new Property("Total", new DomainTypeReference("Number"), [new UnmodelledConstraint()])],
             [new DmAction("SetTotal", InvocationResult.Void, [],
@@ -53,15 +58,19 @@ public class ConstraintValidationFailClosedTests {
             d.Severity == DiagnosticSeverity.Warning)).IsTrue();
         await Assert.That(analysis.Diagnostics.Any(d =>
             d.Code == DomainModelDiagnosticCodes.EffectConstraintViolation)).IsFalse();
-        // The fixture's own record has no compiler and no coverage row, so C-05 reports it: the
-        // fixture used to rely on the pass being silent about a constraint nothing compiles.
-        await Assert.That(analysis.Diagnostics.Any(d =>
-            d.Code == DomainModelDiagnosticCodes.ConstraintNoCompiler
-            && d.Severity == DiagnosticSeverity.Error)).IsTrue();
+        var errors = analysis.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+        await Assert.That(errors.Any(d => d.Code == DomainModelDiagnosticCodes.ConstraintNoCompiler)).IsTrue()
+            .Because("the fixture's record has no compiler, so C-05 must report DMLIB001");
+        await Assert.That(errors.All(d => d.Code == DomainModelDiagnosticCodes.ConstraintNoCompiler)).IsTrue()
+            .Because("the unmodelled kind may add no other error; it is a warning, not a violation");
     }
 
+    /// <summary>
+    /// The same shape on the equality path: the undecided kind warns, and DMLIB001 is the only
+    /// error severity the analysis carries.
+    /// </summary>
     [Test]
-    public async Task Property_EqualityWithUnmodelledConstraint_WarnsUndecidedAndDoesNotError() {
+    public async Task Property_EqualityWithUnmodelledConstraint_WarnsUndecided_AndOnlyDMLIB001Errors() {
         var entity = new Entity("Item",
             [new Property("Total", new DomainTypeReference("Number"),
                 [new EqualityConstraint(5L), new UnmodelledConstraint()])],
@@ -75,10 +84,10 @@ public class ConstraintValidationFailClosedTests {
         await Assert.That(analysis.Diagnostics.Any(d =>
             d.Code == DomainModelDiagnosticCodes.ConstraintUndecided &&
             d.Severity == DiagnosticSeverity.Warning)).IsTrue();
-        // C-05: the fixture's record has no compiler, so this is a DMLIB001 error too. Its premise
-        // ("an unmodelled kind never errors") was written against the silent drop the pass removes.
-        await Assert.That(analysis.Diagnostics.Any(d =>
-            d.Code == DomainModelDiagnosticCodes.ConstraintNoCompiler
-            && d.Severity == DiagnosticSeverity.Error)).IsTrue();
+        var errors = analysis.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+        await Assert.That(errors.Any(d => d.Code == DomainModelDiagnosticCodes.ConstraintNoCompiler)).IsTrue()
+            .Because("the fixture's record has no compiler, so C-05 must report DMLIB001");
+        await Assert.That(errors.All(d => d.Code == DomainModelDiagnosticCodes.ConstraintNoCompiler)).IsTrue()
+            .Because("the unmodelled kind may add no other error; it is a warning, not a violation");
     }
 }

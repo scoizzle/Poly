@@ -226,6 +226,70 @@ public class ConstraintCoverageTests {
         await Assert.That(accepted.Success).IsTrue();
     }
 
+    /// <summary>(a) Every library in the catalog that could compile the record is named, in its order.</summary>
+    [Test]
+    public async Task UsesHttpAlone_NamesEveryVendorLibraryInTheHint() {
+        const string Text = "domain HttpOnly\nuses http\n\nAccount: entity {\n  Email: Text unique\n}\n";
+
+        var result = new PolyCompiler(ProductCatalog.Catalog, ProductCatalog.ImplicitIds).Compile(Text, "http-only.poly");
+
+        var error = result.Diagnostics.Single(d => d.IsError);
+        await Assert.That(error.Message).IsEqualTo(
+            "Constraint 'unique' on Account.Email has no compiler: "
+            + "add `uses persistence`, `uses sqlite` or `uses sqlserver`.");
+    }
+
+    /// <summary>(b) The marker rows need no compiler, so a bare session reports nothing for them.</summary>
+    [Test]
+    public async Task MarkerOnlyConstraints_ReportNoDMLIB001() {
+        var entity = new Entity("Holder", [
+            new Property("Note", new DomainTypeReference("Text"),
+                [new OptionalConstraint(), new DefaultValueConstraint(DomainExpression.Literal("x"))]),
+            new Property("Seats", new DomainTypeReference("Number"),
+                [new RelationalConstraint("Capacity", RelationalOrdering.Less)]),
+        ], [], [], []);
+        var domain = ValidDomain.Create("Holder", [entity]);
+
+        var analysis = BareSession().Analyze(domain);
+
+        await Assert.That(analysis.Diagnostics.Any(d => d.Code == "DMLIB001")).IsFalse();
+    }
+
+    /// <summary>(c) A vendor library is a compiler: sqlite alone covers a bare `unique`.</summary>
+    [Test]
+    public async Task UsesSqliteAlone_CoversUnique_WithNoDMLIB001() {
+        const string Text = "domain VendorOnly\nuses sqlite\n\nAccount: entity {\n  Email: Text unique\n}\n";
+
+        var result = new PolyCompiler(ProductCatalog.Catalog, ProductCatalog.ImplicitIds).Analyze(Text, "sqlite.poly");
+
+        await Assert.That(result.Diagnostics.Any(d => d.Code == "DMLIB001")).IsFalse();
+        await Assert.That(result.Diagnostics.Any(d => d.IsError)).IsFalse();
+    }
+
+    /// <summary>
+    /// (d) The evolve path is the same analysis gate as `poly_define`: adding `unique` to a
+    /// session that loaded only `storage` is refused with DMLIB001 and writes nothing.
+    /// </summary>
+    [Test]
+    public async Task McpEvolve_AddUnique_ToAStorageOnlySession_IsRejectedWithDMLIB001_AndKeepsTheRevision() {
+        var (sessionId, _) = McpTestTools.Store.Create("EvolveStorage");
+        var applied = McpTestTools.Dsl.ApplyDsl(
+            sessionId, "domain EvolveStorage\nuses storage\n\nAgent: entity {\n  Name: Text\n}\n");
+        await Assert.That(applied.Success).IsTrue();
+        await Assert.That(McpTestTools.Store.TryGet(sessionId, out var before)).IsTrue();
+
+        var added = McpTestTools.Evolve.Add(sessionId, "constraint",
+            """{"entityName":"Agent","propertyName":"Name","type":"Unique"}""");
+
+        await Assert.That(added.Success).IsFalse();
+        // The evolve tool flattens analysis errors to their messages (DomainTools.Evolve), so the
+        // code itself is not observable here; `poly_define` and PolyCompiler carry it (tests above).
+        await Assert.That(added.Message).Contains("has no compiler");
+        await Assert.That(added.Message).Contains("uses persistence");
+        await Assert.That(McpTestTools.Store.TryGet(sessionId, out var after)).IsTrue();
+        await Assert.That(after.Revision).IsEqualTo(before.Revision);
+    }
+
     private static List<string> ErrorCodes(CompileResult result) =>
         [.. result.Diagnostics.Where(d => d.IsError).Select(d => d.Code)];
 

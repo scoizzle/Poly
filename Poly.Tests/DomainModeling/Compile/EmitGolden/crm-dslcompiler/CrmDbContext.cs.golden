@@ -123,7 +123,7 @@ public class CrmDbContext : DbContext, Poly.Runtime.IStoragePort
     b.HasKey("Id");
     b.Property(x => x.Title).HasColumnName("title").HasColumnType("TEXT").IsRequired();
     b.Property(x => x.Amount).HasColumnName("amount").HasColumnType("TEXT");
-    b.Property(x => x.CloseBy).HasColumnName("closeBy").HasColumnType("date");
+    b.Property(x => x.CloseBy).HasColumnName("closeBy").HasColumnType("TEXT");
     b.Property(x => x.Probability).HasColumnName("probability").HasColumnType("INTEGER");
     b.Metadata.FindNavigation(nameof(Opportunity.Activities))!.SetPropertyAccessMode(PropertyAccessMode.Field);
     b.Metadata.FindNavigation(nameof(Opportunity.Lines))!.SetPropertyAccessMode(PropertyAccessMode.Field);
@@ -134,7 +134,7 @@ public class CrmDbContext : DbContext, Poly.Runtime.IStoragePort
     b.Property<int>("Id");
     b.HasKey("Id");
     b.Property(x => x.Subject).HasColumnName("subject").HasColumnType("TEXT").IsRequired();
-    b.Property(x => x.DueOn).HasColumnName("dueOn").HasColumnType("date");
+    b.Property(x => x.DueOn).HasColumnName("dueOn").HasColumnType("TEXT");
 });
         modelBuilder.Entity<Quote>(b => {
     b.ToTable("Quotes", t => {

@@ -21,6 +21,15 @@ public sealed record OutlineNode(
     public int SharedLine { get; init; }
 }
 
+/// <summary>Why a <c>dsl</c> fragment cannot stand in for exactly one member.</summary>
+internal enum SnippetFaultKind { Empty, UnexpectedClose, Unclosed, Multiple, BadToken }
+
+/// <summary>Where a fragment fails, positioned relative to the fragment (1-based).</summary>
+internal sealed record SnippetFault(SnippetFaultKind Kind, int Line, int Col, string? Detail = null);
+
+/// <summary>How many declarations a fragment holds, and the fault that makes it unusable.</summary>
+internal sealed record SnippetShape(int Declarations, SnippetFault? Fault);
+
 /// <summary>
 /// Token-driven outline of a .poly document: where each top-level declaration, entity member
 /// and stage action starts and ends. It reads the tokenizer's source spans, so comments and
@@ -45,6 +54,30 @@ public sealed class DslOutline {
 
         var builder = new Builder(text, tokens);
         return new DslOutline(builder.BuildDocument());
+    }
+
+    /// <summary>
+    /// Checks that an edit fragment is exactly one balanced declaration. A member fragment must
+    /// start at a member (or, with <paramref name="topLevel"/>, at a top-level declaration); the
+    /// returned positions are relative to the fragment, so they are never document lines.
+    /// </summary>
+    internal static SnippetShape Inspect(string fragment, bool topLevel) {
+        var tokens = new List<DslToken>();
+        try {
+            var reader = new DslTokenReader(fragment);
+            while (true) {
+                var token = reader.Peek();
+                if (token.Kind == DslTokenKind.EndOfFile)
+                    break;
+                tokens.Add(token);
+                reader.Consume(1);
+            }
+        }
+        catch (FormatException ex) {
+            return new SnippetShape(0, new SnippetFault(SnippetFaultKind.BadToken, 0, 0, ex.Message));
+        }
+
+        return new Builder(fragment, tokens).InspectFragment(topLevel);
     }
 
     /// <summary>Every node, depth first.</summary>
@@ -122,7 +155,9 @@ public sealed class DslOutline {
 
                 if (t.Kind == DslTokenKind.Uses
                     && DslSyntaxTree.TryReadUse(tokens, i, out var usesId, out _, out var usesEnd)) {
-                    nodes.Add(Make("uses", usesId, "uses:" + usesId, i, i + 1, false, -1, -1, []));
+                    // The span covers the version tokens too, so a whole-line edit of a versioned
+                    // uses line leaves no ` v1` remnant behind.
+                    nodes.Add(Make("uses", usesId, "uses:" + usesId, i, usesEnd - 1, true, -1, -1, []));
                     i = usesEnd;
                     continue;
                 }
@@ -143,6 +178,157 @@ public sealed class DslOutline {
 
             MarkSharedLines(nodes);
             return nodes;
+        }
+
+        /// <summary>
+        /// One balanced declaration, with positions relative to the fragment. The fault with the
+        /// earliest offset wins, so a stray <c>'}'</c> is reported before a later second
+        /// declaration, and a fragment that starts inside a block is empty rather than a member.
+        /// </summary>
+        public SnippetShape InspectFragment(bool topLevel) {
+            var unmatchedClose = -1;
+            var open = new Stack<int>();
+            for (var k = 0; k < tokens.Count; k++) {
+                if (tokens[k].Kind == DslTokenKind.LBrace)
+                    open.Push(k);
+                else if (tokens[k].Kind == DslTokenKind.RBrace) {
+                    if (open.Count == 0) {
+                        unmatchedClose = k;
+                        break;
+                    }
+                    open.Pop();
+                }
+            }
+
+            var starts = ScanDeclarations(topLevel);
+            var faults = new List<(int Offset, SnippetFault Fault)>();
+            if (unmatchedClose >= 0)
+                faults.Add((tokens[unmatchedClose].Offset, Fault(SnippetFaultKind.UnexpectedClose, unmatchedClose)));
+            if (open.Count > 0) {
+                var unclosed = open.Min();
+                faults.Add((tokens[unclosed].Offset, Fault(SnippetFaultKind.Unclosed, unclosed)));
+            }
+            if (starts.Count > 1)
+                faults.Add((tokens[starts[1]].Offset, Fault(SnippetFaultKind.Multiple, starts[1])));
+
+            if (faults.Count > 0)
+                return new SnippetShape(starts.Count, faults.MinBy(f => f.Offset).Fault);
+
+            if (starts.Count == 0 || starts[0] != 0)
+                return new SnippetShape(starts.Count, new SnippetFault(SnippetFaultKind.Empty, 0, 0));
+
+            return new SnippetShape(starts.Count, null);
+
+            SnippetFault Fault(SnippetFaultKind kind, int index) =>
+                new(kind, tokens[index].Line, tokens[index].Col);
+        }
+
+        /// <summary>
+        /// The token index of each declaration start. A header <c>require</c>/<c>when</c> extends
+        /// the declaration it follows (as in <see cref="Members"/>), and a matched brace block is
+        /// skipped wholesale so a body never counts as a second declaration.
+        /// </summary>
+        private List<int> ScanDeclarations(bool topLevel) {
+            var starts = new List<int>();
+            int? currentStart = null;
+            var currentKind = "";
+            var blockSeen = false;
+            var paren = 0;
+            var i = 0;
+            while (i < tokens.Count) {
+                var t = tokens[i];
+
+                // Inside a parameter list nothing can start a declaration: `(book: Book)` is
+                // not a member, and its colon would otherwise read as one.
+                if (t.Kind == DslTokenKind.LParen) {
+                    paren++;
+                    i++;
+                    continue;
+                }
+
+                if (t.Kind == DslTokenKind.RParen) {
+                    if (paren > 0) paren--;
+                    i++;
+                    continue;
+                }
+
+                if (paren > 0) {
+                    i++;
+                    continue;
+                }
+
+                if (t.Kind == DslTokenKind.LBrace && _match[i] >= 0) {
+                    blockSeen = true;
+                    i = _match[i] + 1;
+                    continue;
+                }
+
+                var inHeader = currentStart is not null
+                    && currentKind is "action" or "policy" or "stage" && !blockSeen;
+
+                string kind;
+                int skip;
+                var start = topLevel
+                    ? TryTopLevelStart(i, out kind, out skip)
+                    : TryMemberStart(i, currentKind, inHeader, out kind, out _, out skip);
+
+                if (start) {
+                    starts.Add(i);
+                    currentStart = i;
+                    currentKind = kind;
+                    blockSeen = false;
+                    paren = 0;
+                    i += skip;
+                    continue;
+                }
+
+                i++;
+            }
+
+            return starts;
+        }
+
+        private bool TryTopLevelStart(int i, out string kind, out int skip) {
+            kind = "";
+            skip = 0;
+            var t = tokens[i];
+            if (t.Kind == DslTokenKind.Domain && i + 1 < tokens.Count) {
+                kind = "domain";
+                skip = 2;
+                return true;
+            }
+
+            if (t.Kind == DslTokenKind.Uses
+                && DslSyntaxTree.TryReadUse(tokens, i, out _, out _, out var usesEnd)) {
+                kind = "uses";
+                skip = usesEnd - i;
+                return true;
+            }
+
+            if (t.Kind == DslTokenKind.Public && i + 2 < tokens.Count
+                && (tokens[i + 1].Kind == DslTokenKind.Entity || DslGrammar.IsValueWord(tokens[i + 1]))) {
+                kind = tokens[i + 1].Kind == DslTokenKind.Entity ? "entity" : "value";
+                skip = 3;
+                return true;
+            }
+
+            // A top-level `function` declaration starts with the word and is not the legacy
+            // `function: entity` name form (mirrors DomainResolver.IsFunctionDeclarationStart).
+            if (t.Kind == DslTokenKind.Identifier
+                && string.Equals(t.Text, "function", StringComparison.Ordinal)
+                && !(i + 1 < tokens.Count && tokens[i + 1].Kind == DslTokenKind.Colon)) {
+                kind = "function";
+                skip = 2;
+                return true;
+            }
+
+            if (IsNameColon(i)) {
+                kind = "member";
+                skip = 2;
+                return true;
+            }
+
+            return false;
         }
 
         private int TopLevel(int start, List<OutlineNode> nodes) {

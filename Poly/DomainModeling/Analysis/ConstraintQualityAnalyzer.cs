@@ -36,6 +36,7 @@ internal sealed class ConstraintQualityAnalyzer : INodeAnalyzer {
         ValidateRangeSatisfiability(context, property, constraints);
         ValidateLengthSatisfiability(context, property, constraints);
         ValidatePatternWithinLength(context, property, constraints);
+        ValidatePatternSyntax(context, property, constraints);
         ValidateEqualitySatisfiability(context, property, constraints);
         ValidateJointConstraintSatisfiability(context, property, constraints);
         ValidateConstraintTypeCompatibility(context, property, constraints);
@@ -119,6 +120,7 @@ internal sealed class ConstraintQualityAnalyzer : INodeAnalyzer {
         if (equality is not null) {
             foreach (var c in constraints) {
                 if (c is EqualityConstraint or RangeConstraint) continue; // range covered elsewhere
+                if (HasInvalidPattern(c)) continue; // #513: already its own diagnostic, never a contradiction
                 var verdict = ConstraintValidation.Evaluate(c, equality.ExpectedValue);
                 if (verdict == ConstraintVerdict.Undecided) {
                     ConstraintValidation.ReportUndecided(context, property, c, $"on property '{property.Name}'");
@@ -137,6 +139,7 @@ internal sealed class ConstraintQualityAnalyzer : INodeAnalyzer {
         if (constraints.OfType<DefaultValueConstraint>().FirstOrDefault()?.Expression is Literal lit) {
             foreach (var c in constraints) {
                 if (c is DefaultValueConstraint or RangeConstraint or LengthConstraint) continue; // covered elsewhere
+                if (HasInvalidPattern(c)) continue; // #513: already its own diagnostic, never a contradiction
                 var verdict = ConstraintValidation.Evaluate(c, lit.Value);
                 if (verdict == ConstraintVerdict.Undecided) {
                     ConstraintValidation.ReportUndecided(context, property, c, $"on property '{property.Name}'");
@@ -342,4 +345,27 @@ internal sealed class ConstraintQualityAnalyzer : INodeAnalyzer {
             }
         }
     }
+
+    /// <summary>
+    /// #513: a body .NET cannot parse matches nothing, so every write of the property fails at
+    /// runtime with the raw regex error. Validity is <see cref="PatternShape"/>'s decision (the one
+    /// <c>new Regex</c> site); each distinct body is one defect, however often it is declared.
+    /// </summary>
+    private static void ValidatePatternSyntax(
+        AnalysisContext context, Property property, IReadOnlyList<Constraint> constraints) {
+        var reported = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var pattern in constraints.OfType<PatternConstraint>()) {
+            if (!reported.Add(pattern.Pattern)) continue;
+            var shape = PatternShape.Of(pattern.Pattern);
+            if (shape.IsValid) continue;
+            context.ReportError(
+                property,
+                $"Property '{property.Name}' pattern '{pattern.Pattern}' is not a valid regular expression: {shape.Error}",
+                DomainModelDiagnosticCodes.SemanticConstraintMismatch);
+        }
+    }
+
+    /// <summary>An invalid pattern already has its own diagnostic; it is never reread as a violation.</summary>
+    private static bool HasInvalidPattern(Constraint constraint) =>
+        constraint is PatternConstraint pattern && !PatternShape.Of(pattern.Pattern).IsValid;
 }

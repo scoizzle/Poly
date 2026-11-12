@@ -1119,7 +1119,8 @@ diverging:
   executes as `DateTime.UtcNow` / `DateOnly.FromDateTime`. A bare lowercase `now`/`guid` in a
   policy is still rejected at analysis ("property does not exist").
 - **`pattern(regex)` validates stored values at write time** (create/assign) — it is a
-  constraint, not a query/read filter. Grep-style read-time matching against stored text
+  constraint, not a query/read filter. A body .NET cannot parse is rejected at define as
+  `DMSEM004`, one positioned error per distinct body. Grep-style read-time matching against stored text
   is not expressible.
 - **Quantifiers lower to foreach on both paths.** The C# export and the simulator both
   lower `any`/`all`/`none`/`count … where` to a foreach over the collection navigation
@@ -1538,6 +1539,14 @@ revision bump as a whole-document define. A rejected edit changes nothing.
 | `remove` | `path` | Deletes the member (`Product.Total`, `Product.Draft.Publish`) and its line. |
 | `replace` | `path`, `dsl` | Replaces the member with `dsl`, re-indented. A trailing `//` comment on the last line stays. |
 
+`uses` lines have their own root path, `uses:<pack>`: `{"op":"remove","path":"uses:storage"}`
+removes the line, and `replace` swaps it for another `uses` line. A `uses` path takes no entity
+prefix and only a `uses` snippet, and a member path never takes one; an unknown `uses:<pack>`
+reaches the declared packs only through a substring match or the near-miss fallback. Removing the
+document's last `uses` line is refused
+(`EDIT_NOT_ADDRESSABLE`): keep another `uses` line, or redefine the model with `poly` — the
+compiled model keeps the packs it already loads, so a document with none would disagree with it.
+
 ```json
 [{"op":"add","parent":"Product","dsl":"Amount: Decimal"},
  {"op":"remove","path":"Product.Note"}]
@@ -1552,7 +1561,12 @@ Edit needs a document that `poly_define(poly)` applied; any other change to the 
 incremental tools) drops the stored text and `edit` answers `EDIT_NO_SOURCE`. Errors, all
 leaving the model unchanged: `EDIT_NO_SOURCE`, `EDIT_STALE` (the model moved meanwhile),
 `EDIT_PATH_NOT_FOUND` (lists near misses), `EDIT_NOT_ADDRESSABLE` (stage `entry`/`exit`/`when`,
-or two members on one line), `EDIT_NAME_COLLISION`, `EDIT_UNKNOWN_OP`, `EDIT_BAD_JSON`,
+two members on one line, a `uses` line and a member swapped for each other, or the document's last
+`uses` line), `EDIT_BAD_SNIPPET` (the `dsl` of `add`/`replace` is not exactly one declaration — a
+member, a top-level declaration or a `uses` line — with balanced braces: an `}` that would close
+the parent, an unclosed `{`, or a second declaration is
+refused before anything is spliced, and the line and column it reports are relative to your `dsl`,
+not the document), `EDIT_NAME_COLLISION`, `EDIT_UNKNOWN_OP`, `EDIT_BAD_JSON`,
 `EDIT_ARGUMENT_CONFLICT`. Rename is not an op yet: renaming misses references, so redefine
 with `poly`. Comments are invisible to the tokenizer: `remove` deletes a member's own trailing
 comment but can orphan a comment on the line above it, and `replace` can leave a trailing

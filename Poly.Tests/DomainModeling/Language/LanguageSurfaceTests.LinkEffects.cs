@@ -142,7 +142,7 @@ public sealed partial class LanguageSurfaceTests {
         var link = AllActionEffects(domain).OfType<LinkEffect>().Single();
 
         await Assert.That(link.RelationshipName).IsEqualTo("Active");
-        await Assert.That(link.Target).IsEqualTo(DomainExpression.Property("t"));
+        await Assert.That(link.Target is PropertyAccess { Name: "t" }).IsTrue();
 
         var printed = new DomainDslPrinter().Print(domain);
         await Assert.That(printed).Contains("link Active to t");
@@ -155,7 +155,7 @@ public sealed partial class LanguageSurfaceTests {
         var unlink = AllActionEffects(domain).OfType<UnlinkEffect>().Single();
 
         await Assert.That(unlink.RelationshipName).IsEqualTo("Backlog");
-        await Assert.That(unlink.Target).IsEqualTo(DomainExpression.Property("t"));
+        await Assert.That(unlink.Target is PropertyAccess { Name: "t" }).IsTrue();
 
         var printed = new DomainDslPrinter().Print(domain);
         await Assert.That(printed).Contains("unlink Backlog from t");

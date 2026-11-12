@@ -42,8 +42,8 @@ internal sealed record HarnessResult(
                 f["message"]?.GetValue<string>() ?? "",
                 f["line"]?.GetValue<int>(),
                 f["column"]?.GetValue<int>(),
-                null,
-                null))
+                f["hint"]?.GetValue<string>(),
+                f["fix"]?.GetValue<string>()))
             .ToList();
         var next = (root["next"] as JsonArray ?? [])
             .Select(n => n!.GetValue<string>())
@@ -57,9 +57,9 @@ internal sealed record HarnessResult(
             Workspace: state?["workspace"]?.GetValue<string>(),
             Revision: state?["revision"]?.GetValue<long>(),
             Next: next,
-            Model: null,
-            Entities: null,
-            Instances: null);
+            Model: state?["model"]?.GetValue<string>(),
+            Entities: state?["entities"]?.GetValue<int>(),
+            Instances: state?["instances"]?.GetValue<int>());
     }
 
     /// <summary>An export's inline <c>content</c>.</summary>

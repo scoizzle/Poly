@@ -225,19 +225,20 @@ public sealed partial class EffectLoweringPass {
             if (!required.Contains(prop.Name))
                 return (new Constant(null), true);
         }
-        return (TypeDefaultNode(type), false);
+        return (TargetTypeAdapter.TypeDefault(type, _context), false);
     }
 
+    /// <summary>
+    /// An initializer value lowers straight into the property's type through the one
+    /// target-type adapter. With no matching property the value lowers normally.
+    /// </summary>
     private LoweredExpression LowerInitializerValue(
         Entity target, string name, DomainExpression expr) {
         var prop = target.Properties.FirstOrDefault(p =>
             string.Equals(p.Name, name, StringComparison.Ordinal));
-        if (prop is not null
-            && LowerDefault(expr, new NamedTypeReference(prop.Type.TypeName)) is { } adapted)
-            return LoweredExpression.Of(adapted);
-        if (prop is not null)
-            return LowerEnumAwareValue(expr, prop.Type, Subject);
-        return _expressionPass.LowerExpression(expr, Subject);
+        return prop is null
+            ? _expressionPass.LowerExpression(expr, Subject)
+            : _expressionPass.AdaptTo(expr, prop.Type, Subject);
     }
 
     private static Dictionary<string, PropertyBinding> BindingsByName(
@@ -246,22 +247,6 @@ public sealed partial class EffectLoweringPass {
         foreach (var init in initializers)
             inits[init.PropertyName] = init;
         return inits;
-    }
-
-    private Node TypeDefaultNode(DomainTypeReference type) {
-        if (DomainToCSharpExporter.TryResolveEnumType(_domain, _analysis, type.TypeName, out var enumType)
-            && enumType is { MemberNames.Count: > 0 })
-            return new Member(new NamedTypeReference(enumType.Name), enumType.MemberNames[0]);
-        var clr = RuntimeAnalysisCache.ClrTypeName(_domain, type.TypeName);
-        if (clr is "string") return new Constant("");
-        if (clr is "long") return new Constant(0L);
-        if (clr is "int") return new Constant(0);
-        if (clr is "bool") return new Constant(false);
-        if (DomainTypeMapping.TryDefaultMember(clr, out var defaultType, out var member))
-            return new Member(new NamedTypeReference(defaultType), member);
-        if (IsDomainEntityType(type))
-            return DomainToCSharpExporter.TypedNull(type.TypeName);
-        return new Constant(null);
     }
 
     /// <summary>
@@ -280,35 +265,6 @@ public sealed partial class EffectLoweringPass {
             + (linkRelationshipName is null ? "" : $" on '{linkRelationshipName}'")
             + $" with {initializers.Count} initializer(s): "
             + "the compiled entity has no dictionary create member.");
-    }
-
-    private bool IsDomainEntityType(DomainTypeReference? type) =>
-        type is not null && _domain.Types.OfType<Entity>().Any(e =>
-            string.Equals(e.Name, type.TypeName, StringComparison.Ordinal));
-
-    /// <summary>
-    /// Lowers an initializer/assignment VALUE whose target is
-    /// <paramref name="targetType"/>. A bare identifier that names a member of the
-    /// target enum type resolves to qualified member access
-    /// (<c>create in tokens { Kind: Numeric }</c> → <c>TokenKind.Numeric</c>),
-    /// mirroring how string literals already lower to qualified enum members on
-    /// assign (<c>"Suspended"</c> → <c>PatronStatus.Suspended</c>). Any other
-    /// expression (parameter, subject property, literal) lowers normally.
-    /// </summary>
-    private LoweredExpression LowerEnumAwareValue(DomainExpression expr, DomainTypeReference targetType, Node subject) {
-        if (DomainToCSharpExporter.TryResolveEnumType(_domain, _analysis, targetType.TypeName, out var enumType)
-            && enumType is not null) {
-            // Bare identifier member: Tier: Pro
-            if (expr is PropertyAccess pa && enumType.MemberNames.Contains(pa.Name, StringComparer.Ordinal)) {
-                return LoweredExpression.Of(new Member(new NamedTypeReference(enumType.Name), pa.Name));
-            }
-            // String-literal member: Kind: "Keyword" — same qualification as assign.
-            if (expr is Literal { Value: string s }
-                && enumType.MemberNames.Contains(s, StringComparer.Ordinal)) {
-                return LoweredExpression.Of(new Member(new NamedTypeReference(enumType.Name), s));
-            }
-        }
-        return _expressionPass.LowerExpression(expr, subject);
     }
 
     private Entity? ResolveEntity(string typeName) {

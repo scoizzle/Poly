@@ -436,4 +436,46 @@ public class CSharpWriterUnitTests {
         await Assert.That(once).Contains("// inner");
         await Assert.That(CSharpLanguage.Write(CSharpLanguage.Read(once))).IsEqualTo(once);
     }
+
+    // ── E-03 / A14 item 4: every regenerated unit golden survives Write(Read(x)) unchanged ──
+
+    public static IEnumerable<string> UnitGoldenFiles() {
+        var root = AppContext.BaseDirectory;
+        while (root is not null && !File.Exists(Path.Combine(root, "docs/CORE.md")))
+            root = Directory.GetParent(root)?.FullName;
+        var emit = Path.Combine(root!, "Poly.Tests", "DomainModeling", "Compile", "EmitGolden");
+        return Directory.GetFiles(emit, "*.cs.golden", SearchOption.AllDirectories)
+            .Select(path => Path.GetRelativePath(root!, path))
+            .Where(path => File.ReadAllText(Path.Combine(root!, path)).StartsWith(Banner, StringComparison.Ordinal))
+            .Order(StringComparer.Ordinal);
+    }
+
+    // Findings, not exemptions: each file below diverges today for the stated reason, and the test below pins
+    // that it still does, so fixing the reader or writer removes the row instead of leaving it stale.
+    private static readonly Dictionary<string, string> KnownRoundTripFindings = new(StringComparer.Ordinal) {
+        ["Poly.Tests/DomainModeling/Compile/EmitGolden/university/Enrollment.cs.golden"] =
+            "DateTime.UtcNow re-prints as System.DateTime.UtcNow",
+        ["Poly.Tests/DomainModeling/Compile/EmitGolden/crm/Activity.cs.golden"] =
+            "DateTime.UtcNow re-prints as System.DateTime.UtcNow",
+        ["Poly.Tests/DomainModeling/Compile/EmitGolden/crm/Opportunity.cs.golden"] =
+            "DateTime.UtcNow re-prints as System.DateTime.UtcNow",
+        ["Poly.Tests/DomainModeling/Compile/EmitGolden/crm-dslcompiler/Program.cs.golden"] =
+            "the [Range(typeof(decimal), ...)] attribute (first difference, line 1366) does not round-trip",
+    };
+
+    [Test]
+    [MethodDataSource(nameof(UnitGoldenFiles))]
+    public async Task Write_Read_UnitGolden_IsUnchanged(string relativePath) {
+        var root = AppContext.BaseDirectory;
+        while (root is not null && !File.Exists(Path.Combine(root, "docs/CORE.md")))
+            root = Directory.GetParent(root)?.FullName;
+        var golden = (await File.ReadAllTextAsync(Path.Combine(root!, relativePath))).Replace("\r\n", "\n");
+
+        var round = CSharpLanguage.Write(CSharpLanguage.Read(golden));
+
+        if (KnownRoundTripFindings.TryGetValue(relativePath.Replace('\\', '/'), out var finding))
+            await Assert.That(round).IsNotEqualTo(golden).Because($"known finding no longer reproduces: {finding}");
+        else
+            await Assert.That(round).IsEqualTo(golden);
+    }
 }

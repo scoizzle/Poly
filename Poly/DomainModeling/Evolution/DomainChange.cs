@@ -1371,3 +1371,23 @@ public sealed record AddEntitySubscriptionChange(
     internal override string GetDescription() =>
         $"Add entity subscription '{Subscription.RelationshipName} -> {string.Join("/", Subscription.StageNames)}' to Entity '{EntityName}'";
 }
+
+/// <summary>
+/// Sets an Entity's authored member order (S-15, Q12): every member the document declared, in
+/// document order, as <c>(Kind, Name)</c> pairs. Names are not checked here — analysis owns
+/// duplicate and reference rules — and the order is authoritative only when it covers every
+/// member, because builder evolution can leave it partial.
+/// </summary>
+internal sealed record SetEntityMemberOrderChange(
+    string EntityName,
+    IReadOnlyList<EntityMemberRef> MemberOrder
+) : DomainChange {
+    internal override void ApplyTo(DomainMutationContext context) {
+        context.RequireUpdate(
+            context.ReplaceInEntity(EntityName, _ => true, e => e with { MemberOrder = MemberOrder }),
+            $"Entity '{EntityName}' not found — cannot set member order");
+    }
+
+    internal override string GetDescription() =>
+        $"Set member order ({MemberOrder.Count} members) on Entity '{EntityName}'";
+}

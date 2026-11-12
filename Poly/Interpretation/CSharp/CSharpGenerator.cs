@@ -29,7 +29,8 @@ public sealed class CSharpGenerator {
     /// <returns>Formatted C# source code.</returns>
     public string Generate(Node node) => _writer.Write(node);
 
-    /// <summary>Generates C# source code for a complete compilation unit.</summary>
+    /// <summary>Generates C# source code for a complete compilation unit: an
+    /// auto-generated banner, one nullable directive, and System-first usings.</summary>
     /// <param name="unit">The compilation unit to generate.</param>
     /// <returns>Formatted C# source code.</returns>
     public string Generate(CompilationUnitNode unit) => _writer.Write(unit);

@@ -387,27 +387,42 @@ public class StageEntryFactsParityTests {
         }
         """, "Z", "N");
 
-    // F-1, a recorded gap: a transition inside an invoked action is not followed, so the fact
-    // is a strict subset of Lower here. May-assign; not for definite-initialization decisions.
-    // S-14's lock must acknowledge this before it consumes the fact.
+    // F-1 (closed by S-14): a transition inside an invoked action is followed. An entity-level
+    // action runs with the dynamic cursor, so the hop exits every stage (A's X and C's R) before
+    // B's entry assigns Q.
     [Test]
-    public async Task Characterization_InvokedActionTransition_NotInFact() {
-        var (oracle, fact) = Compute("""
-            domain Gap
-            Z: entity {
-              X: Number default(0)
-              Q: Number default(0)
-              Go: action { transition to B }
-              A: stage {
-                entry { invoke Go }
-                exit { assign X to 1 }
-              }
-              B: stage { entry { assign Q to 1 } }
-            }
-            """, "Z");
+    public Task Parity_InvokedActionTransition_IsExact() => AssertParity("""
+        domain Gap
+        Z: entity {
+          X: Number default(0)
+          Q: Number default(0)
+          R: Number default(0)
+          Go: action { transition to B }
+          A: stage {
+            entry { invoke Go }
+            exit { assign X to 1 }
+          }
+          B: stage { entry { assign Q to 1 } }
+          C: stage { exit { assign R to 3 } }
+        }
+        """, "Z", "X", "R", "Q");
 
-        await Assert.That(oracle).IsEquivalentTo(new[] { "X", "Q" }, StringComparer.Ordinal);
-        await Assert.That(fact.All(oracle.Contains)).IsTrue();
-        await Assert.That(fact.Count).IsLessThan(oracle.Count);
-    }
+    // A stage-declared action hops from its declaring stage (A), not the dynamic cursor: C's exit
+    // (R) must stay out of the set.
+    [Test]
+    public Task Parity_InvokedStageAction_UsesDeclaringStageCursor() => AssertParity("""
+        domain NestedAction
+        Z: entity {
+          X: Number default(0)
+          Q: Number default(0)
+          R: Number default(0)
+          A: stage {
+            Go: action { transition to B }
+            entry { invoke Go }
+            exit { assign X to 1 }
+          }
+          B: stage { entry { assign Q to 2 } }
+          C: stage { exit { assign R to 3 } }
+        }
+        """, "Z", "X", "Q");
 }

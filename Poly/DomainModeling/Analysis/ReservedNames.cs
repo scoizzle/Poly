@@ -5,7 +5,10 @@ namespace Poly.DomainModeling.Analysis;
 
 /// <summary>The generated surface a reserved name lands on.</summary>
 internal enum ReservedKind {
-    /// <summary>C# itself: a member cannot carry its enclosing type's name (CS0542).</summary>
+    /// <summary>
+    /// C# itself reserves the name: a member cannot carry its enclosing type's name (CS0542),
+    /// and no enum member can be <c>value__</c>, the backing field every enum carries (CS0076).
+    /// </summary>
     Language,
 
     /// <summary>A property, field, or method on the generated entity class.</summary>
@@ -110,6 +113,33 @@ internal static class ReservedNames {
 
     /// <summary>Every fixed row, unfiltered by entity.</summary>
     public static IReadOnlyList<ReservedName> All => Fixed;
+
+    /// <summary>
+    /// The names C# reserves on every enum's member list (S-02, #530). An enum member is a
+    /// value, not a nested member, so the enclosing type's name is free — <c>E: enum { E, A }</c>
+    /// compiles (the S-02 probe in <c>NameScopeTests</c>), unlike a class member (CS0542). The
+    /// one reserved name is <c>value__</c>: every enum type carries that backing field, so a
+    /// member of that name is CS0076. Probed.
+    /// </summary>
+    public static IReadOnlyList<ReservedName> ForEnum(EnumType enumType) => EnumFixed;
+
+    private static readonly ReservedName[] EnumFixed = [
+        // CSharpWriter.cs:780-799 prints each member as an enum value; the C# type carries a
+        // `value__` instance field of its own, so a member of that name is CS0076.
+        new("value__", ReservedKind.Language, "the backing field every enum carries, CS0076"),
+    ];
+
+    /// <summary>True when <paramref name="identity"/> is reserved on <paramref name="owner"/>.</summary>
+    public static bool TryReserved(string identity, EnumType owner, out ReservedName row) {
+        foreach (var candidate in ForEnum(owner)) {
+            if (!string.Equals(candidate.Name, identity, StringComparison.Ordinal))
+                continue;
+            row = candidate;
+            return true;
+        }
+        row = null!;
+        return false;
+    }
 
     /// <summary>
     /// The rows that apply to <paramref name="entity"/>: the fixed rows its shape triggers,

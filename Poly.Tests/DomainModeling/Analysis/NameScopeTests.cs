@@ -1,8 +1,12 @@
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
+using Poly.Interpretation.CSharp;
+
+using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.DomainModeling.Analysis;
 
@@ -742,5 +746,184 @@ public sealed class NameScopeTests {
         await Assert.That(errors.Count(d => d.Message.Contains("are both named 'X'"))).IsEqualTo(1);
         await Assert.That(errors.Any(d => d.Node is Property)).IsFalse();
         await Assert.That(errors.Count).IsGreaterThanOrEqualTo(2);
+    }
+
+    // ── S-02 (#520 #530): an enum's member list is one C# scope ──────────────
+
+    /// <summary>
+    /// A compile probe (S-02 H1): emit the module for a DSL string and compile it, so the
+    /// analyzer's verdict on an enum member can be matched against the compiler's own.
+    /// Emit refuses an analysis with errors, and a probe exists precisely to compile a shape
+    /// the analyzer rejects, so it prints the same lowered module with the same writer
+    /// (<c>DomainSession.Compile</c> and <c>CSharpWriter.Write(module)</c>, the two calls
+    /// <c>Emit</c> makes) and only skips the error gate in front of them.
+    /// </summary>
+    private static IReadOnlyList<Microsoft.CodeAnalysis.Diagnostic> EmitAndCompile(
+        string dsl, out AnalysisResult analysis) {
+        var session = DomainSession.ForSource(dsl, ExtensionCatalog.ProductAuthoring);
+        var mutation = new DomainEvolution(new Domain("_", []))
+            .Apply(new PolyDslParser(dsl, session).Parse(), session: session);
+        if (!mutation.Succeeded)
+            throw new InvalidOperationException($"Probe DSL did not apply: {mutation.FailureSummary}");
+        analysis = session.Analyze(mutation.Root);
+        var compiled = session.Compile(mutation.Root, analysis);
+        var source = new CSharpWriter(compiled.VmAnalysis).Write(compiled.Module);
+        return ExportedCSharp.CompileWithWarningsAsErrors("S02Probe", [("Probe.cs", source)]);
+    }
+
+    [Test]
+    public async Task EnumMemberNamedLikeEnum_MatchesTheEmitter() {
+        // H1 probe 1: `E: enum { E, A }` compiled clean, so an enum member may carry the
+        // enum's own name — an enum member is a value, not a nested member (CS0542 is a class
+        // and struct rule). Analysis must agree: no diagnostic, and no reserved row.
+        var diagnostics = EmitAndCompile("""
+            domain Probe
+            E: enum { E, A }
+            """, out var analysis);
+        await Assert.That(string.Join(",", diagnostics.Select(d => d.Id).Distinct().Order(StringComparer.Ordinal)))
+            .IsEqualTo("");
+        await Assert.That(AllErrors(analysis).Count).IsEqualTo(0);
+
+        var domain = ParseDomain("""
+            domain Probe
+            E: enum { E, A }
+            """);
+        var enumType = domain.Types.OfType<EnumType>().Single();
+        await Assert.That(ReservedNames.ForEnum(enumType).Any(r => r.Name == enumType.Name)).IsFalse();
+    }
+
+    [Test]
+    public async Task EnumMemberNamedValueUnderscore_MatchesTheEmitter() {
+        // H1 probe 2: `E: enum { value__ }` is CS0076 — every enum type carries that backing
+        // field. Analysis agrees with exactly one DMSTR009 on the enum node.
+        var diagnostics = EmitAndCompile("""
+            domain Probe
+            E: enum { value__ }
+            """, out var analysis);
+        await Assert.That(string.Join(",", diagnostics.Select(d => d.Id).Distinct().Order(StringComparer.Ordinal)))
+            .IsEqualTo("CS0076");
+
+        var errors = Errors(analysis, DomainModelDiagnosticCodes.ReservedMemberName);
+        await Assert.That(errors.Count).IsEqualTo(1);
+        await Assert.That(errors[0].Node is EnumType).IsTrue();
+        await Assert.That((errors[0].Node as EnumType)!.Name).IsEqualTo("E");
+        await Assert.That(errors[0].Message).Contains("'value__'");
+        await Assert.That(errors[0].Message).Contains("CS0076");
+    }
+
+    [Test]
+    public async Task EnumMembersDifferingOnlyByCase_Compile() {
+        // H1 probe 3, and the compile proof FORK-1 rests on: enum member identity is verbatim,
+        // so `Active` and `active` are two distinct C# enum values. DMSTR008's own doc is about
+        // two names that derive one identifier, which is an entity-scope shape.
+        var diagnostics = EmitAndCompile("""
+            domain Probe
+            E: enum { Active, active }
+            """, out var analysis);
+        await Assert.That(string.Join(",", diagnostics.Select(d => d.Id).Distinct().Order(StringComparer.Ordinal)))
+            .IsEqualTo("");
+        await Assert.That(AllErrors(analysis).Count).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task EnumMembersDifferingOnlyByCase_IsAccepted() {
+        var analysis = Analyze("""
+            domain Scope
+            E: enum { Active, active }
+            """);
+
+        await Assert.That(AllErrors(analysis).Count).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task DuplicateEnumMemberNamedLikeEnum_ReportsOnce() {
+        // H2: the duplicate group owns the name, so the reserved check does not also fire.
+        var analysis = Analyze("""
+            domain Scope
+            E: enum { E, E }
+            """);
+
+        var duplicate = Errors(analysis, DomainModelDiagnosticCodes.StructuralDuplicate);
+        await Assert.That(duplicate.Count).IsEqualTo(1);
+        await Assert.That(Errors(analysis, DomainModelDiagnosticCodes.ReservedMemberName).Count).IsEqualTo(0);
+        await Assert.That(AllErrors(analysis).Count).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task EnumScope_ReportsAuthoredNamesInDeclarationOrderWithOneBasedIndexes() {
+        var domain = ParseDomain("""
+            domain Scope
+            E: enum { A, B, C }
+            """);
+
+        var scope = NameScopes.EnumScope(domain.Types.OfType<EnumType>().Single());
+        await Assert.That(scope.Count).IsEqualTo(3);
+        await Assert.That(string.Join(",", scope.Select(entry => $"{entry.Name}:{entry.Index}")))
+            .IsEqualTo("A:1,B:2,C:3");
+    }
+
+    [Test]
+    public async Task DuplicateEnumMember_IsPositionedError() {
+        var analysis = Analyze("""
+            domain Scope
+            E: enum { A, B, A }
+            X: entity { V: E default(A) }
+            """);
+
+        var errors = Errors(analysis, DomainModelDiagnosticCodes.StructuralDuplicate);
+        await Assert.That(errors.Count).IsEqualTo(1);
+        await Assert.That(errors[0].Node is EnumType).IsTrue();
+        await Assert.That((errors[0].Node as EnumType)!.Name).IsEqualTo("E");
+        await Assert.That(errors[0].Message).Contains("'A'");
+        await Assert.That(errors[0].Message).Contains("enum 'E'");
+        await Assert.That(errors[0].Message).Contains("member 1");
+        await Assert.That(errors[0].Message).Contains("member 3");
+    }
+
+    [Test]
+    public async Task DuplicateEnumMember_ThroughEvolution_IsPositionedError() {
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], []))
+            .ApplyAndAnalyze([new AddEnumTypeChange("E", ["A", "B", "A"])]);
+
+        var errors = result.Analysis.Diagnostics
+            .Where(d => d.Severity == DiagnosticSeverity.Error
+                && d.Code == DomainModelDiagnosticCodes.StructuralDuplicate)
+            .ToList();
+        await Assert.That(errors.Count).IsEqualTo(1);
+        await Assert.That(errors[0].Node is EnumType).IsTrue();
+        await Assert.That(errors[0].Message).Contains("member 3");
+    }
+
+    [Test]
+    public async Task InterleavedDuplicateEnumMembers_ReportTwoDistinctMessages() {
+        var analysis = Analyze("""
+            domain Scope
+            E: enum { A, B, A, B }
+            """);
+
+        var errors = Errors(analysis, DomainModelDiagnosticCodes.StructuralDuplicate);
+        await Assert.That(errors.Count).IsEqualTo(2);
+        await Assert.That(errors.Select(d => d.Message).Distinct(StringComparer.Ordinal).Count()).IsEqualTo(2);
+    }
+
+    [Test]
+    public async Task TripleDuplicateEnumMember_ReportsEachRepeat() {
+        var analysis = Analyze("""
+            domain Scope
+            E: enum { A, A, A }
+            """);
+
+        var errors = Errors(analysis, DomainModelDiagnosticCodes.StructuralDuplicate);
+        await Assert.That(errors.Count).IsEqualTo(2);
+    }
+
+    [Test]
+    public async Task EmptyEnum_HasNoDiagnostic() {
+        var analysis = Analyze("""
+            domain Scope
+            E: enum { }
+            """);
+
+        await Assert.That(AllErrors(analysis).Count).IsEqualTo(0);
     }
 }

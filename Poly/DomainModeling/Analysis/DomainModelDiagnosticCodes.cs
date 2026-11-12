@@ -49,7 +49,10 @@ internal static class DomainModelDiagnosticCodes {
     /// A member's generated identity is a name the exporter reserves on the entity (the
     /// <c>Create</c> factory, <c>CurrentStage</c>, <c>EnsureUnique</c>, a navigation's
     /// <c>Create{Name}</c>/<c>Attach{Name}</c>/member/field, the automatic-transition guard,
-    /// the <c>{Entity}Stage</c> enum) or the entity's own name (CS0542).
+    /// the <c>{Entity}Stage</c> enum) or the entity's own name (CS0542). On an enum it is a
+    /// name C# reserves on every enum member list: <c>value__</c>, the backing field, which is
+    /// CS0076 (S-02, #530). The enum's own name is not reserved — an enum member is a value,
+    /// not a nested member, so <c>E: enum { E }</c> compiles.
     /// </summary>
     public const string ReservedMemberName = "DMSTR009";
 

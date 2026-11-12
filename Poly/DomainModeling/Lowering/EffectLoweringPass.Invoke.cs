@@ -58,6 +58,11 @@ public sealed partial class EffectLoweringPass {
             ], [resultVar]));
         }
 
+        // A callee may transition — directly, or through its own invokes — and the
+        // lowering has no transitive "callee can transition" fact, so the caller's
+        // cursor goes dynamic rather than keep a source the callee may have left.
+        _sourceStageName = null;
+
         return LoweredExpression.Before(loweredArgs,
             WrapInvokeResult(new Invoke(new Member(Subject, i.ActionName), [.. args])));
     }

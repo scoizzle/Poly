@@ -160,6 +160,18 @@ public class RangeAttributeArgumentsTests {
 
     // ── End to end: the emitted attribute ────────────────────────────
 
+    /// <summary>V-05b A1: the verified range now hands <c>Build</c> decimal endpoints. The attribute
+    /// shape and text are unchanged for ordinary bounds, and a bound above 2^53 stays exact.</summary>
+    [Test]
+    public async Task VerifiedRangeDto_AttributeUnchanged() {
+        var args = Poly.Packs.Product.RangeAttributeArguments.Build("decimal", 0m, 100m);
+        await Assert.That(((Constant)args[1]).Value).IsEqualTo("0");
+        await Assert.That(((Constant)args[2]).Value).IsEqualTo("100");
+
+        var exact = Poly.Packs.Product.RangeAttributeArguments.Build("decimal", 9007199254740993m, null);
+        await Assert.That(((Constant)exact[1]).Value).IsEqualTo("9007199254740993");
+    }
+
     [Test]
     public async Task NumberRange_EmitsIntegralRangeAttribute() {
         var prog = await ProgramFor("""

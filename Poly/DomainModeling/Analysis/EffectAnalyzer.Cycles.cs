@@ -71,11 +71,6 @@ internal sealed partial class EffectAnalyzer {
     }
 
     /// <summary>
-    /// Literal equality for the Equal/NotEqual arms. Numbers compare by value, so a mixed
-    /// <c>long</c>/<c>decimal</c> pair above 2^53 is decided by order, not by CLR type. When the two
-    /// cannot be ordered the pre-V-05a value equality stands, so this is never worse than master.
-    /// </summary>
-    /// <summary>
     /// Numeric order of two literal values through the shared compare: exact first, master's double
     /// comparison when the exact order is missing. Null when either side is not a number, so a
     /// non-numeric pair is never proven (as on master).
@@ -85,6 +80,11 @@ internal sealed partial class EffectAnalyzer {
             ? ConstraintMerge.TryCompare(left!, right!)
             : null;
 
+    /// <summary>
+    /// Literal equality for the Equal/NotEqual arms. Numbers compare by value, so a mixed
+    /// <c>long</c>/<c>decimal</c> pair above 2^53 is decided by order, not by CLR type. When the two
+    /// cannot be ordered the pre-V-05a value equality stands, so this is never worse than master.
+    /// </summary>
     private static bool? LiteralsEqual(object? left, object? right) {
         if (left is null || right is null) return Equals(left, right);
         // The order path is for numbers; anything else keeps master's value equality, which is

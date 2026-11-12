@@ -55,14 +55,14 @@ public class DomainFactsTests {
         await Assert.That(run.Preconditions).IsEquivalentTo(new[] { "Big", "Ordered" });
 
         var qty = run.Properties.Single(p => p.Name == "Qty");
-        await Assert.That(qty.Min).IsEqualTo(10d);
-        await Assert.That(qty.Max).IsEqualTo(100d);
+        await Assert.That(qty.Min).IsEqualTo(10m);
+        await Assert.That(qty.Max).IsEqualTo(100m);
         await Assert.That(run.Properties.Single(p => p.Name == "Floor").Constraints.Any(c => c.Contains("Qty"))).IsTrue();
 
         var post = run.Postconditions.Single(p => p.TargetProperty == "Qty");
         await Assert.That(post.DeclaringAction).IsEqualTo("Run");
-        await Assert.That(post.Min).IsEqualTo(50d);
-        await Assert.That(post.Max).IsEqualTo(50d);
+        await Assert.That(post.Min).IsEqualTo(50m);
+        await Assert.That(post.Max).IsEqualTo(50m);
     }
 
     [Test]

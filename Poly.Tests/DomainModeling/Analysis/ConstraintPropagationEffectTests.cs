@@ -385,7 +385,7 @@ public class ConstraintPropagationEffectTests {
         var post = invariants!.StageContexts().Single().Postconditions
             .SingleOrDefault(p => ReferenceEquals(p.DeclaringAction, mark));
         await Assert.That(post).IsNotNull();
-        await Assert.That(post!.ValueRange!.Max).IsEqualTo(50d);
+        await Assert.That(post!.ValueRange!.Max).IsEqualTo(50m);
     }
 
     [Test]
@@ -498,12 +498,12 @@ public class ConstraintPropagationEffectTests {
 
         // B's own postcondition (direct): wide [10, 100] without always-on LowQty.
         var bPost = bInvariants!.StageContexts().Single().Postconditions.Single();
-        await Assert.That(bPost.ValueRange!.Max).IsEqualTo(100d);
+        await Assert.That(bPost.ValueRange!.Max).IsEqualTo(100m);
 
         // A's call-chain postcondition for the same B assign: narrowed [10, 70].
         var aPost = aInvariants!.StageContexts().Single().Postconditions
             .Single(p => ReferenceEquals(p.Effect, bPost.Effect));
-        await Assert.That(aPost.ValueRange!.Max).IsEqualTo(70d);
+        await Assert.That(aPost.ValueRange!.Max).IsEqualTo(70m);
     }
 
     [Test]
@@ -529,7 +529,7 @@ public class ConstraintPropagationEffectTests {
         var bumpPost = bumpInv!.StageContexts().Single().Postconditions.Single();
         var kickPost = kickInv!.StageContexts().Single().Postconditions
             .Single(p => ReferenceEquals(p.Effect, bumpPost.Effect));
-        await Assert.That(kickPost.ValueRange!.Max).IsEqualTo(100d);
+        await Assert.That(kickPost.ValueRange!.Max).IsEqualTo(100m);
     }
 
     [Test]
@@ -559,7 +559,7 @@ public class ConstraintPropagationEffectTests {
         var aInvariants = analysis.GetActionInvariants(a);
         await Assert.That(aInvariants).IsNotNull();
         var aPost = aInvariants!.StageContexts().Single().Postconditions.Single();
-        await Assert.That(aPost.ValueRange!.Max).IsEqualTo(200d);
+        await Assert.That(aPost.ValueRange!.Max).IsEqualTo(200m);
         var net = aPost.Constraints.OfType<RangeConstraint>().Single();
         await Assert.That(Convert.ToDouble(net.Maximum)).IsEqualTo(100d);
     }
@@ -664,8 +664,8 @@ public class ConstraintPropagationEffectTests {
         var openCtx = abortInv.StageContexts().Single(c => c.StageName == "Open");
         var draftPost = draftCtx.Postconditions.Single(p => p.TargetProperty == "Flag");
         var openPost = openCtx.Postconditions.Single(p => p.TargetProperty == "Flag");
-        await Assert.That(draftPost.ValueRange!.Max).IsEqualTo(1d);
-        await Assert.That(openPost.ValueRange!.Max).IsEqualTo(2d);
+        await Assert.That(draftPost.ValueRange!.Max).IsEqualTo(1m);
+        await Assert.That(openPost.ValueRange!.Max).IsEqualTo(2m);
     }
 
 }

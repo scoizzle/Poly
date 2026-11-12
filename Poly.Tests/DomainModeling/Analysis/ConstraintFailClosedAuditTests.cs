@@ -1,7 +1,9 @@
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Ontology;
 using Poly.Introspection;
+using Poly.Tests.TestHelpers;
 
 using DmAction = Poly.DomainModeling.Ontology.Action;
 using DmPrimitiveType = Poly.DomainModeling.Ontology.PrimitiveType;
@@ -20,6 +22,10 @@ public class ConstraintFailClosedAuditTests {
     private static readonly DateTime D2 = new(2021, 1, 1);
 
     private static Domain Dom(params DomainType[] types) => DomainTestFactory.Create("T", [Num, .. types], []);
+    private static EvolutionResult Analyze(string dsl) {
+        var changes = new PolyDslParser(dsl).Parse();
+        return new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes);
+    }
     private static Property NumProp(string name, params Constraint[] constraints) =>
         new(name, new DomainTypeReference("Number"), constraints);
     private static DmAction Act(string name, IReadOnlyList<Property> parameters, params Effect[] effects) =>
@@ -74,7 +80,7 @@ public class ConstraintFailClosedAuditTests {
 
         var column = QtyColumn(Dom(entity));
         await Assert.That(column.IsRangeVerified).IsTrue();
-        await Assert.That(column.VerifiedRange!.Max).IsEqualTo(100d);
+        await Assert.That(column.VerifiedRange!.Max).IsEqualTo(100m);
     }
 
     // ── EffectAnalyzer.CheckDerivedRange / call-chain postcondition ───────
@@ -116,11 +122,41 @@ public class ConstraintFailClosedAuditTests {
             new InvokeActionEffect("B", [new PropertyBinding("x", DomainExpression.Parameter("amount"))]));
         var entity = new Entity("Item",
             [NumProp("Total", new RequiredConstraint(), new RangeConstraint(D1, D2))], [a, b], [], []);
+        var domain = Dom(entity);
 
-        var analysis = DomainModelAnalyzer.Analyze(Dom(entity));
+        var analysis = DomainModelAnalyzer.Analyze(domain);
 
         await Assert.That(analysis.Diagnostics.Any(d =>
             d.Severity == DiagnosticSeverity.Error && d.Message.Contains("Call-chain postcondition (A → B)"))).IsTrue();
+
+        // V-05b S3b: the chain decides through DecideRange and RECORDS the non-Satisfied outcome.
+        // An unorderable target bound is a Violation, not an Unverified, and exactly one fact is
+        // recorded for the callee effect (deduped by effect node).
+        var facts = analysis.GetMetadata<WriteVerificationFacts>(domain)
+            ?? throw new InvalidOperationException("no write-verification facts were recorded");
+        var violations = facts.Violations.Where(v => v.TargetProperty == "Total").ToList();
+        await Assert.That(violations.Count).IsEqualTo(1);
+        await Assert.That(violations[0].Reason).IsNull();
+    }
+
+    /// <summary>V-05b S3b twin: a fractional narrowed range stays an error through the call chain.
+    /// [0.5, 0.5] against <c>range(1, 10)</c> is entirely outside, so DecideRange answers Violated; it
+    /// is never downgraded to Undecided by the exact endpoint type.</summary>
+    [Test]
+    public async Task CallChain_PostconditionFractionalRangeOutsideTarget_IsAnError() {
+        var result = Analyze("""
+            domain Test
+            A: entity {
+              D: Decimal range(1, 10)
+              Set: action { assign D to 0.5 }
+              Go: action { invoke Set }
+            }
+            """);
+
+        var chain = result.Analysis.Diagnostics
+            .Where(d => d.Message.Contains("Call-chain postcondition (Go → Set)", StringComparison.Ordinal))
+            .ToList();
+        await Assert.That(chain.Any(d => d.Severity == DiagnosticSeverity.Error)).IsTrue();
     }
 
     [Test]

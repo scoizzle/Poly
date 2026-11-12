@@ -15,8 +15,12 @@ namespace Poly.DomainModeling.Runtime;
 /// replaying the journal never writes new journal entries.
 /// </remarks>
 internal sealed class ModuleStoragePort : IStoragePort {
-    private readonly InMemoryStoragePort _keys = new();
+    private readonly IStoragePort _keys;
     private readonly List<(bool Added, string Entity, string Property, string Value)> _journal = [];
+
+    public ModuleStoragePort() : this(new InMemoryStoragePort()) { }
+
+    internal ModuleStoragePort(IStoragePort keys) => _keys = keys;
 
     public bool Exists(string entity, string property, string value) {
         ThrowIfNull(entity, property, value);

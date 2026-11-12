@@ -5,8 +5,6 @@ using Poly.DomainModeling.Runtime;
 using Poly.Interpretation.CSharp;
 using Poly.Introspection;
 
-using ClrPrimitive = Poly.Introspection.PrimitiveType;
-
 namespace Poly.Packs.Product;
 
 /// <summary>

@@ -1,8 +1,5 @@
 using Poly.Ast;
 using Poly.Ast.Nodes;
-using Poly.DomainModeling.Analysis;
-using Poly.DomainModeling.Runtime;
-using Poly.Interpretation.CSharp;
 using Poly.Introspection;
 
 using ClrPrimitive = Poly.Introspection.PrimitiveType;

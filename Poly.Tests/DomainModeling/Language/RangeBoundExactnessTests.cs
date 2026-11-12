@@ -112,6 +112,16 @@ public class RangeBoundExactnessTests {
     }
 
     [Test]
+    public async Task DecimalBound_TrailingZeros_KeepDeclaredScale() {
+        var (domain, _, _) = Evolve(Entity("Decimal range(0.00, 100.00)"));
+        var range = Bind(domain);
+
+        await Assert.That(new DomainDslPrinter().Print(domain)).Contains("range(0.00, 100.00)");
+        await Assert.That((decimal)range.Maximum!).IsEqualTo(100.00m);
+        await Assert.That((decimal.GetBits((decimal)range.Maximum!)[3] >> 16) & 0xFF).IsEqualTo(2);
+    }
+
+    [Test]
     public async Task DecimalBound_BeyondDecimalPrecision_IsPositionedParseError() {
         // 1e-29 needs scale 29; decimal.TryParse silently rounds it to 0 (D2).
         var poly = Entity("Decimal range(0, 0.00000000000000000000000000005)");
@@ -327,6 +337,27 @@ public class RangeBoundExactnessTests {
         await Assert.That(fraction).IsEqualTo(0L);
         await Assert.That(tooLarge).IsFalse();
         await Assert.That(huge).IsEqualTo(0L);
+    }
+
+    [Test]
+    public async Task ExactNumber_TryParseDecimalText_PinsTheText() {
+        var twentyNineNines = ExactNumber.TryParseDecimalText("9.9999999999999999999999999999");
+        var twentyEightDigits = ExactNumber.TryParseDecimalText("0.9999999999999999999999999999");
+        var max = ExactNumber.TryParseDecimalText("79228162514264337593543950335");
+        var oneFifty = ExactNumber.TryParseDecimalText("1.50");
+        var zero = ExactNumber.TryParseDecimalText("0.0");
+        var leading = ExactNumber.TryParseDecimalText("007.5");
+
+        // 29 significant digits at scale 28 needs a 29-digit mantissa above 96 bits: positioned error.
+        await Assert.That(twentyNineNines).IsNull();
+        await Assert.That(twentyEightDigits).IsNotNull();
+        await Assert.That(twentyEightDigits!.Value.ToDecimal()).IsEqualTo(0.9999999999999999999999999999m);
+        await Assert.That(max!.Value.ToDecimal()).IsEqualTo(decimal.MaxValue);
+        await Assert.That(oneFifty!.Value.ToDecimal()).IsEqualTo(1.50m);
+        await Assert.That((decimal.GetBits(oneFifty.Value.ToDecimal())[3] >> 16) & 0xFF).IsEqualTo(2);
+        await Assert.That(zero!.Value.ToDecimal()).IsEqualTo(0.0m);
+        await Assert.That((decimal.GetBits(zero.Value.ToDecimal())[3] >> 16) & 0xFF).IsEqualTo(1);
+        await Assert.That(leading!.Value.ToDecimal()).IsEqualTo(7.5m);
     }
 
     [Test]

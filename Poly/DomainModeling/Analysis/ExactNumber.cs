@@ -65,14 +65,21 @@ internal readonly struct ExactNumber : IEquatable<ExactNumber> {
             return null;
         digits = digits.TrimStart('0');
         if (digits.Length == 0)
-            return new ExactNumber(0m);
-        var end = digits.Length;
-        while (end > 0 && scale > 0 && digits[end - 1] == '0') {
-            end--;
-            scale--;
+            return new ExactNumber(new decimal(0, 0, 0, false, (byte)(scale <= DecimalMaxScale ? scale : 0)));
+        var mantissa = BigInteger.Parse(digits, CultureInfo.InvariantCulture);
+        // Keep the declared scale whenever decimal can hold it; trim trailing zeros only to fit.
+        // (The arithmetic path still normalises in FromMantissaScale; a parsed bound keeps its text.)
+        if (scale > DecimalMaxScale || mantissa > DecimalMaxMantissa) {
+            var end = digits.Length;
+            while (end > 0 && scale > 0 && digits[end - 1] == '0') {
+                end--;
+                scale--;
+            }
+            mantissa = BigInteger.Parse(digits[..end], CultureInfo.InvariantCulture);
+            if (scale > DecimalMaxScale || mantissa > DecimalMaxMantissa)
+                return null;
         }
-        var mantissa = BigInteger.Parse(digits[..end], CultureInfo.InvariantCulture);
-        return FromMantissaScale(mantissa, scale);
+        return new ExactNumber(BuildDecimal(mantissa, scale));
     }
 
     /// <summary>Orders two CLR values exactly, or null when either side is not exactly representable.</summary>
@@ -147,11 +154,16 @@ internal readonly struct ExactNumber : IEquatable<ExactNumber> {
             return null;
         if (BigInteger.Abs(mantissa) > DecimalMaxMantissa)
             return null;
+        return new ExactNumber(BuildDecimal(mantissa, scale));
+    }
+
+    /// <summary>Builds a decimal from a 96-bit-bounded mantissa and a 0..28 scale, without normalising.</summary>
+    private static decimal BuildDecimal(BigInteger mantissa, int scale) {
         var negative = mantissa.Sign < 0;
         var magnitude = BigInteger.Abs(mantissa);
         var lo = (int)(uint)(magnitude & 0xFFFFFFFF);
         var mid = (int)(uint)((magnitude >> 32) & 0xFFFFFFFF);
         var hi = (int)(uint)((magnitude >> 64) & 0xFFFFFFFF);
-        return new ExactNumber(new decimal(lo, mid, hi, negative, (byte)scale));
+        return new decimal(lo, mid, hi, negative, (byte)scale);
     }
 }

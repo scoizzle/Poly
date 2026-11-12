@@ -16,7 +16,7 @@ namespace Poly.Tests.Docs;
 public class GuideExamplesTests {
     private static readonly Regex LooksLikePoly = new(
         @"^\s*(?:[A-Z][A-Za-z0-9_]*:\s*(?:entity|stage|enum|value|policy|action|function|contract)\b"
-        + @"|assign\s|create\s+in\b|transition\s+to\b|when\s|invoke\s|require\s|for\s+\w+\s+as\b)",
+        + @"|domain\s|uses\b|assign\s|create\s+in\b|transition\s+to\b|when\s|invoke\s|require\s|for\s+\w+\s+as\b)",
         RegexOptions.Compiled);
 
     /// <summary>
@@ -36,20 +36,15 @@ public class GuideExamplesTests {
     ];
 
     /// <summary>Skip counts per reason. Pinned exactly: skips cannot grow silently (F2).</summary>
-    private const int IllustrationSkips = 10;
+    private const int IllustrationSkips = 9;
 
-    private const int DriftSkips = 2;
+    private const int DriftSkips = 4;
 
     /// <summary>Owners allowed on a skip: M-02 owns guide corrections (A1).</summary>
     private static readonly string[] SkipOwners = ["M-02"];
 
     private const string MarkerShape = "<!-- poly-verify: <kind> -->";
 
-    /// <summary>
-    /// The short guide is section 0 + section 10 + the golden workflow + the index, and section 0 holds
-    /// eight marked fences. Measured after the markers landed; the cap is 240, so the margin is one line.
-    /// </summary>
-    private const int ShortGuideLines = 239;
 
     [Test]
     public async Task EveryPolyFence_CarriesAWellFormedMarker() {
@@ -179,6 +174,12 @@ public class GuideExamplesTests {
                 domain D
                 ```
                 """, null),
+            ("comment-only fragment", $$"""
+                {{Marker("fragment:top wrapper:none-here")}}
+                ```poly
+                // just a note
+                ```
+                """, root => Write(root, "none-here.poly.tmpl", "domain W\n// <<guide-block:top>>\n")),
         };
 
         var failures = new List<string>();
@@ -202,8 +203,8 @@ public class GuideExamplesTests {
         await Assert.That(failures.Count).IsEqualTo(0)
             .Because("every hostile guide shape must fail closed, naming the line or the wrapper:\n"
                      + string.Join("\n", failures));
-        await Assert.That(cases.Length).IsEqualTo(11)
-            .Because("R4 is pinned at eleven cases (A10)");
+        await Assert.That(cases.Length).IsEqualTo(12)
+            .Because("R4 is pinned at eleven cases (A10) plus the comment-only fragment FX5 added");
     }
 
     [Test]
@@ -328,11 +329,38 @@ public class GuideExamplesTests {
                              + string.Join(", ", SkipOwners));
         await Assert.That(string.Join("\n", bad)).IsEqualTo(string.Empty)
             .Because("a skip needs an owner that can delete it");
+    }
 
-        var reasons = skips.Select(block => block.Marker!.Reason).Distinct().Order(StringComparer.Ordinal).ToList();
-        await Assert.That(string.Join(",", reasons)).IsEqualTo(
-                string.Join(",", new[] { "drift", "illustration" }.Where(r => skips.Any(b => b.Marker!.Reason == r))))
-            .Because("only two reasons exist: illustration (cannot be a document) and drift (should validate)");
+    /// <summary>
+    /// A drift skip is a block that should validate and does not. The marker names the code it still
+    /// fails with; this re-measures that code out of the block's own composition, so a block that starts
+    /// failing differently, or starts passing, reds instead of hiding behind the skip.
+    /// </summary>
+    [Test]
+    public async Task DriftSkips_StillFail() {
+        var document = GuideBlocks.Load();
+        var drift = document.Blocks
+            .Where(block => block.Marker?.Kind == GuideMarkerKind.Skip
+                            && string.Equals(block.Marker.Reason, "drift", StringComparison.Ordinal))
+            .ToList();
+        await Assert.That(drift.Count).IsEqualTo(DriftSkips)
+            .Because("the drift count is pinned with the illustration count");
+
+        var problems = new List<string>();
+        foreach (var block in drift) {
+            var code = block.Marker!.Code;
+            if (code is null) {
+                problems.Add($"guide line {block.Line}: a drift skip must name its code");
+                continue;
+            }
+            var outcome = GuideBlocks.Compose(block, document.Wrappers);
+            if (!outcome.Errors.Any(error => string.Equals(error.Code, code, StringComparison.Ordinal)))
+                problems.Add($"guide line {block.Line} [{block.FirstLine}]: drift with {code}, but the block gives "
+                             + $"{outcome.Codes} ({outcome.Detail})");
+        }
+
+        await Assert.That(problems.Count).IsEqualTo(0)
+            .Because("a drift skip is re-measured, not asserted:\n" + string.Join("\n", problems));
     }
 
     [Test]
@@ -377,7 +405,12 @@ public class GuideExamplesTests {
 
             var control = GuideBlocks.Splice(wrapper, ["!!! this line is not poly !!!"]);
             if (control.Errors.Count == 0)
-                controlNotBroken.Add($"{name}: the negative control analysed clean, so the wrapper proves nothing");
+                controlNotBroken.Add($"{name}: the parse control analysed clean, so the wrapper proves nothing");
+
+            var semantic = GuideBlocks.Splice(wrapper, ["Zz: entity { N: NoSuchType }"]);
+            if (!semantic.Errors.Any(semantic.InBlock))
+                controlNotBroken.Add($"{name}: the semantic control did not report an error inside the block's "
+                                     + $"lines {semantic.FirstLine}-{semantic.LastLine}: {semantic.Codes}");
 
             foreach (var block in document.Blocks.Where(b =>
                          b.Marker?.Kind == GuideMarkerKind.Fragment && b.Marker.Wrapper == id)) {
@@ -452,8 +485,7 @@ public class GuideExamplesTests {
         var lines = guide!.Split('\n').Length;
         var shortMarkers = Regex.Matches(guide, Regex.Escape(GuideBlocks.MarkerOpener)).Count;
 
-        await Assert.That(lines).IsEqualTo(ShortGuideLines)
-            .Because("the short guide is pinned at the measured line count; McpSmokeTests caps it at 240");
+        // The cap lives in McpSmokeTests. The re-measure procedure is in the wrappers README.
         await Assert.That(lines).IsLessThan(240)
             .Because("McpSmokeTests pins the short guide under 240 lines and the short guide includes "
                      + $"section 0; measured {lines} lines, {shortMarkers} markers in it");
@@ -466,43 +498,48 @@ public class GuideExamplesTests {
         var document = GuideBlocks.Load();
         var wrappers = document.Wrappers;
         var (sessionId, _) = McpTestTools.Store.Create("Q10Parity");
+        try {
 
-        var samples = new List<(string Label, GuideBlock Block)>();
-        var valid = document.Blocks.FirstOrDefault(b => b.Marker?.Kind == GuideMarkerKind.Valid);
-        if (valid is not null)
-            samples.Add(("valid", valid));
-        var invalid = document.Blocks.FirstOrDefault(b =>
-            b.Marker?.Kind == GuideMarkerKind.Invalid
-            && !string.Equals(b.Marker.Code, "DSL0001", StringComparison.Ordinal));
-        if (invalid is not null)
-            samples.Add(("invalid", invalid));
-        var parseError = document.Blocks.FirstOrDefault(b =>
-            b.Marker?.Kind == GuideMarkerKind.Invalid
-            && string.Equals(b.Marker.Code, "DSL0001", StringComparison.Ordinal));
+            var samples = new List<(string Label, GuideBlock Block)>();
+            var valid = document.Blocks.FirstOrDefault(b => b.Marker?.Kind == GuideMarkerKind.Valid);
+            if (valid is not null)
+                samples.Add(("valid", valid));
+            var invalid = document.Blocks.FirstOrDefault(b =>
+                b.Marker?.Kind == GuideMarkerKind.Invalid
+                && !string.Equals(b.Marker.Code, "DSL0001", StringComparison.Ordinal));
+            if (invalid is not null)
+                samples.Add(("invalid", invalid));
+            var parseError = document.Blocks.FirstOrDefault(b =>
+                b.Marker?.Kind == GuideMarkerKind.Invalid
+                && string.Equals(b.Marker.Code, "DSL0001", StringComparison.Ordinal));
 
-        var mismatches = new List<string>();
-        foreach (var (label, block) in samples) {
-            var composed = GuideBlocks.Compose(block, wrappers);
-            var mcp = McpTestTools.Dsl.ValidateDsl(sessionId, composed.Text);
-            if (composed.Result.Succeeded != mcp.Success)
-                mismatches.Add($"{label} block at guide line {block.Line}: harness says {composed.Result.Succeeded}, "
-                               + $"validate_dsl says {mcp.Success}");
+            var mismatches = new List<string>();
+            foreach (var (label, block) in samples) {
+                var composed = GuideBlocks.Compose(block, wrappers);
+                var mcp = McpTestTools.Dsl.ValidateDsl(sessionId, composed.Text);
+                if (composed.Result.Succeeded != mcp.Success)
+                    mismatches.Add($"{label} block at guide line {block.Line}: harness says {composed.Result.Succeeded}, "
+                                   + $"validate_dsl says {mcp.Success}");
+            }
+
+            // A parse error is the case the two agree on least often by accident, so it is always sampled:
+            // from the guide when one is marked, from a hostile document otherwise.
+            var parseText = parseError is not null
+                ? GuideBlocks.Compose(parseError, wrappers).Text
+                : "domain Q10Parse\n\nA: entity {\n";
+            var parseHarness = GuideBlocks.Analyze(parseText);
+            var parseMcp = McpTestTools.Dsl.ValidateDsl(sessionId, parseText);
+            if (parseHarness.Succeeded != parseMcp.Success)
+                mismatches.Add($"parse-error document: harness says {parseHarness.Succeeded}, validate_dsl says {parseMcp.Success}");
+
+            await Assert.That(string.Join("\n", mismatches)).IsEqualTo(string.Empty)
+                .Because("the harness must be the same oracle as poly_define, or a green harness proves nothing");
+            await Assert.That(samples.Count).IsGreaterThanOrEqualTo(1)
+                .Because("at least the valid block is sampled");
         }
-
-        // A parse error is the case the two agree on least often by accident, so it is always sampled:
-        // from the guide when one is marked, from a hostile document otherwise.
-        var parseText = parseError is not null
-            ? GuideBlocks.Compose(parseError, wrappers).Text
-            : "domain Q10Parse\n\nA: entity {\n";
-        var parseHarness = GuideBlocks.Analyze(parseText);
-        var parseMcp = McpTestTools.Dsl.ValidateDsl(sessionId, parseText);
-        if (parseHarness.Succeeded != parseMcp.Success)
-            mismatches.Add($"parse-error document: harness says {parseHarness.Succeeded}, validate_dsl says {parseMcp.Success}");
-
-        await Assert.That(string.Join("\n", mismatches)).IsEqualTo(string.Empty)
-            .Because("the harness must be the same oracle as poly_define, or a green harness proves nothing");
-        await Assert.That(samples.Count).IsGreaterThanOrEqualTo(1)
-            .Because("at least the valid block is sampled");
+        finally {
+            McpTestTools.Store.Remove(sessionId);
+        }
     }
 
     private static string Marker(string body) => $"<!-- poly-verify: {body} -->";

@@ -51,9 +51,9 @@ internal sealed record GuideMarker(
         }
         if (head.StartsWith("fragment:", StringComparison.Ordinal)) {
             var context = head["fragment:".Length..];
-            if (context is not ("top" or "entity" or "expr"))
+            if (context is not ("top" or "entity"))
                 throw new InvalidOperationException(
-                    $"Guide line {line}: fragment context '{context}' must be top, entity or expr.");
+                    $"Guide line {line}: fragment context '{context}' must be top or entity.");
             if (tokens.Length != 2 || !tokens[1].StartsWith("wrapper:", StringComparison.Ordinal))
                 throw new InvalidOperationException(
                     $"Guide line {line}: a fragment needs exactly one wrapper:<id> token.");
@@ -83,15 +83,38 @@ internal sealed record GuideMarker(
         }
         if (head.StartsWith("skip:", StringComparison.Ordinal)) {
             var reason = head["skip:".Length..];
-            if (reason is not ("illustration" or "drift"))
+            string? driftCode = null;
+            if (reason.StartsWith("drift:", StringComparison.Ordinal)) {
+                driftCode = reason["drift:".Length..];
+                if (!CodePattern.IsMatch(driftCode))
+                    throw new InvalidOperationException(
+                        $"Guide line {line}: a drift skip names the diagnostic code it still fails with "
+                        + $"(skip:drift:DSL0001), got '{driftCode}'.");
+                reason = "drift";
+            }
+            if (driftCode is null && reason == "drift")
                 throw new InvalidOperationException(
-                    $"Guide line {line}: skip reason '{reason}' must be illustration or drift.");
-            if (tokens.Length != 2 || !tokens[1].StartsWith("owner:", StringComparison.Ordinal))
-                throw new InvalidOperationException($"Guide line {line}: a skip needs exactly one owner:<slice> token.");
-            var owner = tokens[1]["owner:".Length..];
+                    $"Guide line {line}: a drift skip names the code it still fails with (skip:drift:DSL0001).");
+            if (driftCode is null && reason != "illustration")
+                throw new InvalidOperationException(
+                    $"Guide line {line}: skip reason '{reason}' must be illustration or drift:<code>.");
+            string? skipWrapper = null;
+            var ownerIndex = 1;
+            if (tokens.Length == 3 && tokens[1].StartsWith("wrapper:", StringComparison.Ordinal)) {
+                skipWrapper = tokens[1]["wrapper:".Length..];
+                if (!WrapperId.IsMatch(skipWrapper))
+                    throw new InvalidOperationException(
+                        $"Guide line {line}: wrapper id '{skipWrapper}' is not lower-case kebab.");
+                ownerIndex = 2;
+            }
+            if (tokens.Length != ownerIndex + 1
+                || !tokens[ownerIndex].StartsWith("owner:", StringComparison.Ordinal))
+                throw new InvalidOperationException(
+                    $"Guide line {line}: a skip needs one owner:<slice> token, and a wrapper:<id> only on drift.");
+            var owner = tokens[ownerIndex]["owner:".Length..];
             if (!OwnerPattern.IsMatch(owner))
                 throw new InvalidOperationException($"Guide line {line}: owner '{owner}' is not a slice id (M-02).");
-            return new GuideMarker(GuideMarkerKind.Skip, null, null, null, reason, owner);
+            return new GuideMarker(GuideMarkerKind.Skip, null, skipWrapper, driftCode, reason, owner);
         }
         throw new InvalidOperationException($"Guide line {line}: unknown poly-verify kind '{head}'.");
     }
@@ -167,7 +190,7 @@ internal static class GuideBlocks {
         new(@"^(?<indent>[ \t]*)(?<fence>`{3,}|~{3,})(?<info>[^`~]*)$", RegexOptions.Compiled);
 
     private static readonly Regex PlaceholderPattern =
-        new(@"^\s*//\s*<<guide-block:(?<context>top|entity|expr)>>\s*$", RegexOptions.Compiled);
+        new(@"^\s*//\s*<<guide-block:(?<context>top|entity)>>\s*$", RegexOptions.Compiled);
 
     private static readonly Regex DomainHeaderPattern =
         new(@"^\s*domain\s+[A-Za-z_][A-Za-z0-9_]*\s*$", RegexOptions.Compiled);
@@ -278,11 +301,19 @@ internal static class GuideBlocks {
         // Wrappers are validated at load, not when a block happens to use them: a broken template is a
         // broken harness even while its blocks are still unmarked.
         var wrappers = Wrappers(wrappersRoot);
+        foreach (var fence in fences.Where(f => f.Marker?.Kind == GuideMarkerKind.Fragment)) {
+            if (!fence.Code.Any(line => line.Trim().Length > 0
+                                        && !line.TrimStart().StartsWith("//", StringComparison.Ordinal)))
+                throw new InvalidOperationException(
+                    $"Guide line {fence.Line}: a fragment needs at least one code line; "
+                    + "this fence is blank or comment-only, so splice it as a skip.");
+        }
+
         foreach (var fence in fences.Where(f => f.Marker?.Wrapper is not null)) {
             var marker = fence.Marker!;
             if (!wrappers.TryGetValue(marker.Wrapper!, out var wrapper))
                 throw new InvalidOperationException(
-                    $"Guide line {marker.Wrapper}: wrapper '{marker.Wrapper}' does not exist in {wrappersRoot}.");
+                    $"Guide line {fence.Line}: wrapper '{marker.Wrapper}' does not exist in {wrappersRoot}.");
             if (marker.Kind == GuideMarkerKind.Fragment
                 && !string.Equals(wrapper.Context, marker.Context, StringComparison.Ordinal))
                 throw new InvalidOperationException(
@@ -371,8 +402,8 @@ internal static class GuideBlocks {
         GuideBlock block, IReadOnlyDictionary<string, GuideWrapper> wrappers) {
         var marker = block.Marker
                      ?? throw new InvalidOperationException($"Guide line {block.Line}: no marker.");
-        if (marker.Kind is not (GuideMarkerKind.Fragment or GuideMarkerKind.Invalid) || marker.Wrapper is null)
-            return Document(block.Code);
+        if (marker.Wrapper is null)
+            return Probe(block);
         if (!wrappers.TryGetValue(marker.Wrapper, out var wrapper))
             throw new InvalidOperationException(
                 $"Guide line {block.Line}: wrapper '{marker.Wrapper}' does not exist in {WrappersPath()}.");

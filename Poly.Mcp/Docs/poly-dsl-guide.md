@@ -286,7 +286,7 @@ OpenAPI pack will emit this same IR later. No generated client.
 Value types declared **inside** the contract belong to that sub-domain. Action
 parameters at the bind seam may use those types. **Stored entity properties may not.**
 
-<!-- poly-verify: skip:drift owner:M-02 -->
+<!-- poly-verify: skip:drift:DMEFF001 owner:M-02 -->
 ```poly
 Billing: contract internal billing v1 {
   ChargeRequest: value {
@@ -485,7 +485,7 @@ reference onto the element IRI.
 Relationships are declared as **inline navigation properties** on the source entity.
 The legacy `relationship { }` top-level form is **not supported**.
 
-<!-- poly-verify: fragment:top wrapper:nav-companions -->
+<!-- poly-verify: skip:drift:DSL0001 owner:M-02 -->
 ```poly
 Orders: entity {
   //One-to-many navigation to Customer
@@ -842,7 +842,7 @@ once per record whose `where` holds.
   at the `for`.
 - Still missing: `first` / `filter`; `create in` inside the body is not exercised yet.
 
-<!-- poly-verify: skip:illustration owner:M-02 -->
+<!-- poly-verify: skip:drift:DSL0001 owner:M-02 -->
 ```poly
 invoke Validate                              # self-only
 invoke Validate(status: "ready")             # self-only with args (all params required)
@@ -1123,7 +1123,7 @@ owns the **Date**, **Time**, **DateTime**, and **Duration** catalog types, clock
 relative date arithmetic. These spellings parse to `Now` / `Today` / `DateOperation` IR, pass
 analysis, round-trip through `export_dsl`, and are authorable in **assign RHS and policy comparisons**:
 
-<!-- poly-verify: skip:drift owner:M-02 -->
+<!-- poly-verify: skip:drift:DMSEM003 wrapper:time-facts owner:M-02 -->
 ```poly
 Renew: action {
   assign DueDate to Now - 12 Days

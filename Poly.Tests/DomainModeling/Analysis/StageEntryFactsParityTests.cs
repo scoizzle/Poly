@@ -27,11 +27,14 @@ namespace Poly.Tests.DomainModeling.Analysis;
 /// </para>
 /// </summary>
 public class StageEntryFactsParityTests {
-    private static async Task AssertParity(string dsl, string entityName, params string[] expected) {
+    private static (HashSet<string> Oracle, IReadOnlySet<string> Fact) Compute(string dsl, string entityName) {
         var (domain, analysis) = EvolvedDomain.FromDsl(dsl);
         var entity = domain.Types.OfType<Entity>().Single(e => e.Name == entityName);
-        var oracle = LowerOracle(domain, analysis, entity);
-        var fact = StageEntryFacts.EntryAssignedProperties(entity, domain);
+        return (LowerOracle(domain, analysis, entity), StageEntryFacts.EntryAssignedProperties(entity, domain));
+    }
+
+    private static async Task AssertParity(string dsl, string entityName, params string[] expected) {
+        var (oracle, fact) = Compute(dsl, entityName);
 
         await Assert.That(oracle).IsEquivalentTo(expected, StringComparer.Ordinal);
         await Assert.That(fact).IsEquivalentTo(oracle, StringComparer.Ordinal);
@@ -358,4 +361,28 @@ public class StageEntryFactsParityTests {
           Only: stage { entry { assign N to 1 } }
         }
         """, "Z", "N");
+
+    // F-1, a recorded gap: a transition inside an invoked action is not followed, so the fact
+    // is a strict subset of Lower here. May-assign; not for definite-initialization decisions.
+    // S-14's lock must acknowledge this before it consumes the fact.
+    [Test]
+    public async Task Characterization_InvokedActionTransition_NotInFact() {
+        var (oracle, fact) = Compute("""
+            domain Gap
+            Z: entity {
+              X: Number default(0)
+              Q: Number default(0)
+              Go: action { transition to B }
+              A: stage {
+                entry { invoke Go }
+                exit { assign X to 1 }
+              }
+              B: stage { entry { assign Q to 1 } }
+            }
+            """, "Z");
+
+        await Assert.That(oracle).IsEquivalentTo(new[] { "X", "Q" }, StringComparer.Ordinal);
+        await Assert.That(fact.All(oracle.Contains)).IsTrue();
+        await Assert.That(fact.Count).IsLessThan(oracle.Count);
+    }
 }

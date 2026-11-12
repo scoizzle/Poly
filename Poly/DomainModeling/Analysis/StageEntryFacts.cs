@@ -6,29 +6,32 @@ using Poly.DomainModeling.Ontology.Effects;
 namespace Poly.DomainModeling.Analysis;
 
 /// <summary>
-/// The analysis-side answer to "which properties does a new instance's stage-entry chain assign".
+/// The analysis-side answer to "which properties does a new instance's constructor assign beyond
+/// its parameters" (the create-time set, Q12 option (b)).
 /// <para>
-/// The walk starts at <see cref="EntityStages.InitialStage"/> and follows the entry chain the
-/// exported constructor runs: an <see cref="AssignEffect"/> whose target is a
-/// <see cref="PropertyAccess"/> contributes its authored name, and a
-/// <see cref="StageTransitionEffect"/> queues its target stage, whose entry effects are walked the
-/// same way. Only entry transitions chain — an action's <c>transition</c> does not run at create —
-/// and <see cref="Stage.OnExitEffects"/> never contribute. A cycle terminates because each stage is
-/// visited once, which yields the same name union as the constructor's entry inlining.
+/// The walk mirrors the constructor's lowering of the initial stage's entry: an
+/// <see cref="AssignEffect"/> whose target is a <see cref="PropertyAccess"/> contributes its
+/// authored name; a <see cref="StageTransitionEffect"/> to a resolvable stage T exits its source
+/// stage, moves the source cursor to T, walks T's entry unless T is already being entered, and
+/// adds the lifecycle property (G7); a self <see cref="InvokeActionEffect"/> contributes the
+/// callee's assigns, transitively. The cursor is the lowering's: null (every stage's exit) after a
+/// hop-holding branch or <c>for</c>, after every self invoke, and at the start of a <c>for</c>
+/// body; an else branch restarts from the conditional's entry stage. The tests compare the fact
+/// against the lowered constructor for every one of those shapes.
 /// </para>
 /// <para>
-/// Conditional and loop bodies count even when they cannot execute: this is an over-approximation,
-/// deliberately, so a create-supplied value for such a property is an error the author must
-/// escape with <c>default(x)</c>. Names are returned verbatim, never filtered against
-/// <see cref="Entity.Properties"/>, so an assignment to a mistyped name is not silently swallowed;
-/// a non-<see cref="PropertyAccess"/> target (a <see cref="RelationshipNavigation"/>) is skipped
-/// because it names another entity's property.
+/// May-assign; invoked-action transitions are not followed; not for definite-initialization
+/// decisions. Conditional and loop bodies count even when they cannot execute, so a create-supplied
+/// value for such a property is an error the author must escape with <c>default(x)</c>. Names are
+/// returned verbatim, never filtered against <see cref="Entity.Properties"/>, so an assignment to a
+/// mistyped name is not silently swallowed; a non-<see cref="PropertyAccess"/> target
+/// (a <see cref="RelationshipNavigation"/>) is skipped because it names another entity's property.
 /// </para>
 /// <para>
-/// This is the analysis-side provider. L-09 (or S-14, whichever first consumes it) repoints
-/// <see cref="EntityStructureAnalyzer.ComputeEntryAssignedPropertyNames"/> at it and publishes
-/// through the existing <see cref="EntityStructureMetadata.EntryAssignedPropertyNames"/> field.
-/// No lowering code calls <see cref="StageEntryFacts"/> (<c>docs/CORE.md</c>; <c>RequireStructure</c>).
+/// This is the analysis-side provider. S-14 (or L-09, whichever first consumes it) repoints
+/// <see cref="EntityStructureAnalyzer.ComputeEntryAssignedPropertyNames"/> at it; S-14's lock must
+/// acknowledge the invoked-action gap. No lowering code calls <see cref="StageEntryFacts"/>
+/// (<c>docs/CORE.md</c>; <c>RequireStructure</c>).
 /// </para>
 /// </summary>
 internal static class StageEntryFacts {
@@ -50,7 +53,7 @@ internal static class StageEntryFacts {
     /// stage names. None for zero or more than one candidate; analysis rejects the latter
     /// (<see cref="EntityStructureAnalyzer"/> throws), so the fact never guesses.
     /// </summary>
-    private static string? LifecyclePropertyName(Entity entity, Domain domain) {
+    internal static string? LifecyclePropertyName(Entity entity, Domain domain) {
         var stageNames = entity.Stages.Select(stage => stage.Name).ToHashSet(StringComparer.Ordinal);
         string? found = null;
         foreach (var property in entity.Properties) {
@@ -75,6 +78,7 @@ internal static class StageEntryFacts {
     private sealed class CreateWalk(Entity entity, string? lifecycleProperty) {
         private readonly HashSet<string> _entering = new(StringComparer.Ordinal);
         private readonly HashSet<string> _exiting = new(StringComparer.Ordinal);
+        private readonly HashSet<string> _invoked = new(StringComparer.Ordinal);
         private string? _cursor = entity.InitialStage()!.Name;
 
         public HashSet<string> Names { get; } = new(StringComparer.Ordinal);
@@ -101,8 +105,8 @@ internal static class StageEntryFacts {
                 case StageTransitionEffect transition:
                     Hop(transition);
                     break;
-                case InvokeActionEffect { TargetRelationship: null }:
-                    _cursor = null;
+                case InvokeActionEffect { TargetRelationship: null } invoke:
+                    SelfInvoke(invoke);
                     break;
             }
         }
@@ -130,6 +134,32 @@ internal static class StageEntryFacts {
             _cursor = null;
             Effects(loop.Body);
             _cursor = CanChangeStage(loop.Body) ? null : outer;
+        }
+
+        // A callee may transition, so the cursor goes dynamic. The callee's own assigns (and its
+        // self-invokes, transitively) count; its transitions are not followed (recorded gap F-1).
+        private void SelfInvoke(InvokeActionEffect invoke) {
+            _cursor = null;
+            CollectActionAssigns(invoke.ActionName);
+        }
+
+        private void CollectActionAssigns(string actionName) {
+            if (!_invoked.Add(actionName))
+                return;
+            var actions = entity.Actions.Concat(entity.Stages.SelectMany(stage => stage.Actions))
+                .Where(action => string.Equals(action.Name, actionName, StringComparison.Ordinal));
+            foreach (var action in actions) {
+                foreach (var effect in EffectHelpers.FlattenEffects(action.Effects)) {
+                    switch (effect) {
+                        case AssignEffect { Target: PropertyAccess property }:
+                            Names.Add(property.Name);
+                            break;
+                        case InvokeActionEffect { TargetRelationship: null } callee:
+                            CollectActionAssigns(callee.ActionName);
+                            break;
+                    }
+                }
+            }
         }
 
         private void Hop(StageTransitionEffect transition) {

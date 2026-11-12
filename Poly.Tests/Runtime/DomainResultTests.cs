@@ -138,7 +138,9 @@ public class DomainResultTests {
 
         var text = failure.ToString();
 
-        await Assert.That(text).Contains("Range");
+        // Follow-up 1 (R-03a): the guard text alone satisfied the old form, so the
+        // record's own "Kind = " field is what this pins.
+        await Assert.That(text).Contains("Kind = Range");
         await Assert.That(text).Contains("Reservation.Qty");
         await Assert.That(text).Contains("QtyInRange");
         await Assert.That(text).DoesNotContain("Value");

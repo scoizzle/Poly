@@ -217,8 +217,9 @@ public class DomainToCSharpExporterTests {
         var (domain, analysis) = ParseAndAnalyze(LibraryCheckoutDsl);
         var types = DomainProgramProjection.ToSyntax(domain, analysis);
 
-        await Assert.That(types.Any(t => t.Name == "DomainResult")).IsTrue();
-        await Assert.That(types.Any(t => t.Name is "DomainResult" && t.GenericParameters?.Count > 0)).IsTrue();
+        // R-03b: the result family is Poly.Runtime's; the tree no longer declares it.
+        await Assert.That(types.Any(t => t.Name == "DomainResult")).IsFalse();
+        await Assert.That(types.Any(t => t.Name is "DomainResult" && t.GenericParameters?.Count > 0)).IsFalse();
     }
 
     [Test]

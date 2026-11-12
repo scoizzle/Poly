@@ -146,31 +146,48 @@ public sealed class EmitSessionContractTests {
         await Assert.That(files.Any(f => f.FileName.EndsWith("DbContext.cs", StringComparison.Ordinal))).IsFalse();
     }
 
+    /// <summary>A domain whose entity file names the result family: <c>Room.Book</c>
+    /// returns <c>Stay</c>, so <c>Room.cs</c> prints <c>DomainResult&lt;Stay&gt;</c>.</summary>
+    private const string HotelStayDsl = """
+        domain Hotel
+        uses temporal
+
+        Industry: enum { Hospitality, Manufacturing }
+
+        Stay: entity {
+          Guest: Text
+          Industry: Industry
+          Vacant: stage {
+            CheckIn: action { transition to Occupied }
+          }
+          Occupied: stage { }
+        }
+
+        Room: entity {
+          Number: Text
+          stays: many Stay
+          Book: action (guest: Text) -> Stay {
+            create in stays { Guest: guest Industry: Hospitality }
+          }
+        }
+        """;
+
+    [Test]
+    public async Task Emit_EntityFile_ImportsPolyRuntime() {
+        // R3: the entity file names DomainResult<Stay>, so the header must import the
+        // runtime the type lives in (R-03b).
+        var (session, domain, analysis) = AnalyzePoly(HotelStayDsl);
+
+        var files = session.Emit(domain, analysis);
+
+        var room = files.Single(f => f.FileName == "Room.cs").Source;
+        await Assert.That(room).Contains("using Poly.Runtime;");
+        await Assert.That(room).Contains("DomainResult<Stay>");
+    }
+
     [Test]
     public async Task Emit_ProjectedTypesIncludingGenerics_AnalyzeWithoutFallback() {
-        const string poly = """
-            domain Hotel
-            uses temporal
-
-            Industry: enum { Hospitality, Manufacturing }
-
-            Stay: entity {
-              Guest: Text
-              Industry: Industry
-              Vacant: stage {
-                CheckIn: action { transition to Occupied }
-              }
-              Occupied: stage { }
-            }
-
-            Room: entity {
-              Number: Text
-              stays: many Stay
-              Book: action (guest: Text) -> Stay {
-                create in stays { Guest: guest Industry: Hospitality }
-              }
-            }
-            """;
+        const string poly = HotelStayDsl;
 
         var (session, domain, analysis) = AnalyzePoly(poly);
         var types = DomainProgramProjection.ToSyntax(domain, analysis);

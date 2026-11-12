@@ -51,7 +51,8 @@ public class EvidenceBacklogProbes {
         try {
             var (domain, analysis) = EvolvedDomain.FromDsl(dsl);
             cs = new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis));
-        } catch (InvalidOperationException) {
+        }
+        catch (InvalidOperationException) {
             return; // analysis rejected it: expected
         }
         var thrown = Record.Exception(() => ExportedCSharp.CompileAndLoad(cs, "ValueUnderscore"));
@@ -62,7 +63,8 @@ public class EvidenceBacklogProbes {
     private static string ErrorsOf(string dsl) {
         try {
             return Dump(Diagnose(dsl).Where(d => d.Severity == DiagnosticSeverity.Error));
-        } catch (FormatException e) {
+        }
+        catch (FormatException e) {
             return "PARSE " + e.Message;
         }
     }
@@ -101,16 +103,11 @@ public class EvidenceBacklogProbes {
             var reread = new DomainEvolution(DomainTestFactory.Create("_", [], []))
                 .ApplyAndAnalyze(new PolyDslParser(printed).Parse());
             outcome = reread.Succeeded ? "ok" : "ANALYSIS " + reread.FailureSummary;
-        } catch (FormatException e) {
+        }
+        catch (FormatException e) {
             outcome = "PARSE " + e.Message;
         }
         await Assert.That(outcome + " <<" + printed.Replace('\n', '~') + ">>").StartsWith("ok");
-    }
-
-    [Test]
-    public async Task Item17_F9_UsesOrder_IsPreservedByLoad() {
-        var session = DomainSession.Create(["persistence", "temporal"], SessionOptions.Bare(ExtensionCatalog.Core));
-        await Assert.That(string.Join(",", session.Extensions)).StartsWith("persistence,temporal");
     }
 
     [Test]
@@ -149,7 +146,8 @@ public class EvidenceBacklogProbes {
             var lit = prop.Constraints.OfType<DefaultValueConstraint>().Single().Expression as Literal;
             var v = lit!.Value;
             return $"{v?.GetType().Name}:{Convert.ToString(v, System.Globalization.CultureInfo.InvariantCulture)}";
-        } catch (Exception e) when (e is FormatException or InvalidOperationException) {
+        }
+        catch (Exception e) when (e is FormatException or InvalidOperationException) {
             return "ERROR:" + e.Message;
         }
     }
@@ -221,6 +219,124 @@ public class EvidenceBacklogProbes {
         var rows = core.KnownRules.Sum(r => core.GetPatterns(r).Count);
         await Assert.That(methods.Any(n => n.Contains("Pattern") || n.Contains("Fill") || n.Contains("Printer")))
             .IsTrue().Because($"protocol tests = [{string.Join(", ", methods)}]; Core grammar has {rows} pattern rows none of them checked");
+    }
+
+    // ---- Item 23h: guide markers served to clients ------------------------------------------
+    [Test]
+    public async Task Item23h_GuideServedToClients_CarriesNoPolyVerifyMarkers() {
+        var h = PolySurfaceHarness.New();
+        var counts = new List<string>();
+        var total = 0;
+        foreach (var topic in new string?[] { null, "all", "1", "9", "13" }) {
+            var r = h.Guide(topic);
+            var text = r.Summary + (r.Data?.ToJsonString() ?? "");
+            var n = System.Text.RegularExpressions.Regex.Matches(text, "poly-verify").Count;
+            total += n;
+            counts.Add($"{topic ?? "(quickstart)"}:{n}(len {text.Length})");
+        }
+        await Assert.That($"markers={total} [{string.Join(", ", counts)}]").IsEqualTo("markers=0 [" + string.Join(", ", counts) + "]");
+    }
+
+    // ---- Item 23d: Length / Pattern / Equality constant writes ------------------------------
+    private static string WriteFindings(string constraint, string value) {
+        var all = Diagnose($"domain W\nX: entity {{\n  V: Text {constraint}\n  Set: action {{ assign V to \"{value}\" }}\n}}\n");
+        return Dump(all.Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
+    }
+
+    [Test]
+    public async Task Item23d_AssignTooLongConstantToLengthProperty_IsReported() =>
+        await Assert.That(WriteFindings("length(1, 3)", "toolong")).IsNotEmpty();
+
+    [Test]
+    public async Task Item23d_AssignPatternViolatingConstant_IsReported() =>
+        await Assert.That(WriteFindings("pattern(\"^[A-Z]+$\")", "abc")).IsNotEmpty();
+
+    [Test]
+    public async Task Item23d_AssignDifferentConstantToEqualityProperty_IsReported() =>
+        await Assert.That(WriteFindings("equals(\"Active\")", "Other")).IsNotEmpty();
+
+    // ---- Item 23c: create initializer judged against declared range only --------------------
+    private static string RangeFindings(string dsl) =>
+        Dump(Diagnose(dsl).Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning
+            && d.Code is DomainModelDiagnosticCodes.EffectConstraintViolation or DomainModelDiagnosticCodes.ConstraintUndecided));
+
+    [Test]
+    public async Task Item23c_CreateInitializerNarrowedByRequire_IsNotFlagged() {
+        var control = RangeFindings("""
+            domain C
+            Order: entity {
+              Qty: Number range(0, 100)
+              Local: Number range(0, 10) optional
+              Small: policy { Qty <= 10 }
+              Copy: action require Small { assign Local to Qty }
+            }
+            """);
+        var create = RangeFindings("""
+            domain C
+            Item: entity { Qty: Number range(0, 10) }
+            Order: entity {
+              Qty: Number range(0, 100)
+              Small: policy { Qty <= 10 }
+              Make: action require Small { create Item { Qty: Qty } }
+            }
+            """);
+        await Assert.That($"control=[{control}] create=[{create}]").IsEqualTo("control=[" + control + "] create=[]");
+    }
+
+    // ---- Item 23e: unknown action-parameter type --------------------------------------------
+    [Test]
+    public async Task Item23e_UnknownActionParameterType_NamesTheParameter() {
+        var errors = ErrorsOf("domain P\nX: entity {\n  N: Text optional\n  Go: action (x: Missing) { assign N to \"a\" }\n}\n");
+        await Assert.That(errors + " <<expect: no \"Property 'x'\">>").DoesNotContain("Property 'x'");
+    }
+
+    // ---- Item 23f: {Other}Stage shadowing ---------------------------------------------------
+    [Test]
+    public async Task Item23f_PropertyNamedLikeOtherEntitysStageEnum_IsRejectedOrCompiles() {
+        const string dsl = """
+            domain S
+            Order: entity {
+              Touched: Text optional
+              Touch: action { assign Touched to "t" }
+              A: stage { Go: action { transition to B } }
+              B: stage { }
+            }
+            Loan: entity {
+              OrderStage: Text optional
+              orders: many Order
+              Sweep: action { for orders as o where o in A invoke o.Touch }
+            }
+            """;
+        string cs;
+        try {
+            var (domain, analysis) = EvolvedDomain.FromDsl(dsl);
+            cs = new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis));
+        }
+        catch (InvalidOperationException) {
+            return; // analysis rejected: expected
+        }
+        var thrown = Record.Exception(() => ExportedCSharp.CompileAndLoad(cs, "ShadowStage"));
+        await Assert.That(thrown?.Message.Split('\n')[0]).IsNull();
+    }
+
+    // ---- Item 23b: fallback in ValidateRequiredInitializerCoverage ---------------------------
+    [Test]
+    public async Task Item23b_EveryEntityHasStructureBag_SoTheFlatFallbackIsUnreachable() {
+        var (domain, analysis) = EvolvedDomain.FromDsl("""
+            domain B
+            Item: entity { Qty: Number optional  A: stage { } B2: stage { } }
+            Order: entity { items: many Item  Make: action { create in items { } } }
+            """);
+        var missing = domain.Types.OfType<Entity>()
+            .Where(e => analysis.GetMetadata<EntityStructureMetadata>(e) is null).Select(e => e.Name).ToList();
+        await Assert.That(string.Join(",", missing)).IsEqualTo("");
+    }
+
+    // ---- F9: uses order through the Load / re-read path -------------------------------------
+    [Test]
+    public async Task Item17_F9_UsesOrder_SurvivesDslRead() {
+        var (domain, _) = EvolvedDomain.FromDsl("domain U\nuses persistence\nuses temporal\nE: entity { N: Text }\n");
+        await Assert.That(string.Join(",", domain.Extensions)).StartsWith("persistence,temporal");
     }
 }
 

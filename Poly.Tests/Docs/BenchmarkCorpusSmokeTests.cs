@@ -134,6 +134,22 @@ public sealed class BenchmarkCorpusSmokeTests {
         }
     }
 
+    /// <summary>
+    /// The parse tie: the benchmark's own document list is exactly <see cref="GoldenDomains.Compilable"/>.
+    /// The benchmark cannot read the golden catalog (it lives in the test project), so this is the
+    /// typed tie — a moved golden fails here, not only in the CSV row check.
+    /// </summary>
+    [Test]
+    public async Task ParseCorpus_TiesTheBenchmarkDocumentListToTheGoldenCatalog() {
+        var recorded = ParseBenchmarks.DslPaths.Order(StringComparer.Ordinal).ToList();
+        var expected = GoldenDomains.Compilable
+            .Select(domain => domain.Path)
+            .Order(StringComparer.Ordinal)
+            .ToList();
+        await Assert.That(string.Join(", ", recorded)).IsEqualTo(string.Join(", ", expected))
+            .Because("the parse benchmark's document list must be exactly GoldenDomains.Compilable");
+    }
+
     /// <summary>The 62 <c>*.cs.golden</c> transcripts the C# aggregate row parses.</summary>
     internal static string CSharpGoldenDirectory =>
         Path.Combine(GoldenDomains.RepoRoot, "Poly.Tests", "DomainModeling", "Compile", "EmitGolden");

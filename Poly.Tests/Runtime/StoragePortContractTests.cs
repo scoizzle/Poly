@@ -80,9 +80,11 @@ public class StoragePortContractTests {
 
         var threads = new Thread[threadCount];
         for (var t = 0; t < threadCount; t++) {
+            // Background, so a thread that failed to start cannot hold the test host open;
+            // the barrier timeout then surfaces the shortfall as a failure, not a hang.
             threads[t] = new Thread(() => {
                 try {
-                    barrier.SignalAndWait();
+                    barrier.SignalAndWait(TimeSpan.FromSeconds(30));
                     for (var k = 0; k < keyCount; k++) {
                         if (port.TryReserve("Patron", "Email", $"patron{k}@example.test"))
                             Interlocked.Increment(ref wins[k]);
@@ -91,7 +93,9 @@ public class StoragePortContractTests {
                 catch (Exception exception) {
                     failures.Enqueue(exception);
                 }
-            });
+            }) {
+                IsBackground = true,
+            };
         }
 
         foreach (var thread in threads)

@@ -52,7 +52,11 @@ public sealed partial class DomainSession {
     /// not a <see cref="Domain"/> fact, and never implied by the ids the source lists.
     /// Analysis compares it with each target-declaring contract contribution.
     /// </summary>
-    public string? Target { get; }
+    /// <summary>The inputs this session's libraries were selected from; a reload reuses them.</summary>
+    public SessionOptions Options { get; }
+
+    /// <summary>The host target (<see cref="SessionOptions.Target"/>), or null.</summary>
+    public string? Target => Options.Target;
 
     public IReadOnlyList<IArtifactContributor> Artifacts { get; }
 
@@ -135,6 +139,7 @@ public sealed partial class DomainSession {
     internal DomainSession(
         Domain? domain,
         IReadOnlyList<string> extensions,
+        SessionOptions options,
         Language<DslToken, DslTokenKind> language,
         AnnotationRegistry annotations,
         ExpressionFormRegistry expressionForms,
@@ -149,8 +154,7 @@ public sealed partial class DomainSession {
         IReadOnlyList<IConstraintCompiler>? constraintCompilers = null,
         IReadOnlyList<ObservedFlow>? observedFlows = null,
         IReadOnlyList<DiagnosticAllowance>? diagnosticAllowances = null,
-        IReadOnlyList<ContractContribution>? contractContributions = null,
-        string? target = null) {
+        IReadOnlyList<ContractContribution>? contractContributions = null) {
         Domain = domain;
         Extensions = extensions;
         Language = language;
@@ -168,7 +172,7 @@ public sealed partial class DomainSession {
         ObservedFlows = observedFlows ?? [];
         DiagnosticAllowances = diagnosticAllowances ?? [];
         ContractContributions = contractContributions ?? [];
-        Target = target;
+        Options = options;
     }
 
     /// <summary>
@@ -181,17 +185,17 @@ public sealed partial class DomainSession {
             ArgumentException.ThrowIfNullOrWhiteSpace(target);
         if (string.Equals(Target, target, StringComparison.Ordinal))
             return this;
-        return Clone(Domain, target);
+        return Clone(Domain, Options with { Target = target });
     }
 
     /// <summary>
     /// The one place a session copy is made. Every clone site (a changed domain, a new target)
     /// goes through here so a new session fact cannot be dropped by one of them.
     /// </summary>
-    private DomainSession Clone(Domain? domain, string? target) =>
-        new(domain, Extensions, Language, Annotations, ExpressionForms, TypeMaps, StorageConventions,
+    private DomainSession Clone(Domain? domain, SessionOptions options) =>
+        new(domain, Extensions, options, Language, Annotations, ExpressionForms, TypeMaps, StorageConventions,
             Folds, Meaning, Artifacts, Analyzers, Contributions, PrimitiveSeeds, ConstraintCompilers,
-            ObservedFlows, DiagnosticAllowances, ContractContributions, target);
+            ObservedFlows, DiagnosticAllowances, ContractContributions);
 
     /// <summary>The contract the library with <paramref name="libraryId"/> contributed, or null.</summary>
     public ContractContribution? FindContractContribution(string libraryId) =>
@@ -211,20 +215,13 @@ public sealed partial class DomainSession {
         IReadOnlyList<string> extensions,
         ExtensionCatalog? catalog = null) {
         ArgumentNullException.ThrowIfNull(extensions);
-        var resolved = catalog ?? ExtensionCatalog.Core;
-        var builder = SessionBuilder.CreateEmpty();
-        builder.LoadCore();
-        if (!extensions.Any(id => string.Equals(id, ExtensionCatalog.TemporalId, StringComparison.Ordinal)))
-            builder.LoadTemporal();
-        var seen = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var id in extensions) {
-            if (string.IsNullOrWhiteSpace(id))
-                throw new InvalidOperationException("Domain extension id must be non-empty.");
-            if (!seen.Add(id))
-                throw new InvalidOperationException($"Domain lists extension '{id}' more than once.");
-            builder.Load(resolved.Resolve(id));
-        }
-        return builder.Build();
+        return LibrarySelection.Load(extensions, SessionOptions.Bare(catalog ?? ExtensionCatalog.Core));
+    }
+
+    /// <summary>Loads the libraries <see cref="LibrarySelection.Resolve"/> selects for <paramref name="documentUses"/>.</summary>
+    public static DomainSession Create(IReadOnlyList<string> documentUses, SessionOptions options) {
+        ArgumentNullException.ThrowIfNull(options);
+        return LibrarySelection.Load(LibrarySelection.Resolve(documentUses, options), options);
     }
 
     /// <summary>Loads the document's <c>uses</c> ids (or <paramref name="seed"/> when it lists none). Unknown id throws.</summary>
@@ -234,7 +231,7 @@ public sealed partial class DomainSession {
         ExtensionCatalog? catalog = null) {
         ArgumentNullException.ThrowIfNull(tree);
         ArgumentNullException.ThrowIfNull(seed);
-        return ForExtensions(tree.Uses.Count > 0 ? tree.Uses : seed, catalog);
+        return LibrarySelection.Load(tree, new SessionOptions(catalog ?? ExtensionCatalog.Core, seed));
     }
 
     /// <summary>
@@ -248,22 +245,8 @@ public sealed partial class DomainSession {
         ExtensionCatalog? catalog = null) {
         ArgumentNullException.ThrowIfNull(tree);
         ArgumentNullException.ThrowIfNull(seed);
-        var ids = tree.Uses.Count > 0 ? tree.Uses : seed;
-        var resolved = catalog ?? ExtensionCatalog.Core;
-        var builder = SessionBuilder.CreateEmpty();
-        builder.LoadCore();
-        if (!ids.Any(id => string.Equals(id, ExtensionCatalog.TemporalId, StringComparison.Ordinal)))
-            builder.LoadTemporal();
-        var seen = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var id in ids) {
-            if (string.IsNullOrWhiteSpace(id))
-                throw new InvalidOperationException("Domain extension id must be non-empty.");
-            if (!seen.Add(id))
-                throw new InvalidOperationException($"Domain lists extension '{id}' more than once.");
-            builder.Load(resolved.Resolve(id));
-        }
-        StorageFacetLibrary.EnsureRegistered(builder);
-        return builder.Build();
+        return LibrarySelection.Load(
+            tree, new SessionOptions(catalog ?? ExtensionCatalog.Core, seed) { Authoring = true });
     }
 
     /// <summary>Parses <paramref name="poly"/> and loads its libraries. Unknown id throws.</summary>
@@ -290,9 +273,9 @@ public sealed partial class DomainSession {
     public DomainSession WithDomain(Domain domain) {
         ArgumentNullException.ThrowIfNull(domain);
         if (SameExtensions(Extensions, domain.Extensions))
-            return Clone(domain, Target);
-        var reloaded = ForExtensions(domain.Extensions, ExtensionCatalog.Core);
-        return new DomainSession(domain, reloaded.Extensions, reloaded.Language, reloaded.Annotations, reloaded.ExpressionForms, reloaded.TypeMaps, reloaded.StorageConventions, reloaded.Folds, reloaded.Meaning, reloaded.Artifacts, reloaded.Analyzers, reloaded.Contributions, reloaded.PrimitiveSeeds, reloaded.ConstraintCompilers, ObservedFlows, DiagnosticAllowances, reloaded.ContractContributions, Target);
+            return Clone(domain, Options);
+        var reloaded = LibrarySelection.Load(domain.Extensions, Options);
+        return new DomainSession(domain, reloaded.Extensions, Options, reloaded.Language, reloaded.Annotations, reloaded.ExpressionForms, reloaded.TypeMaps, reloaded.StorageConventions, reloaded.Folds, reloaded.Meaning, reloaded.Artifacts, reloaded.Analyzers, reloaded.Contributions, reloaded.PrimitiveSeeds, reloaded.ConstraintCompilers, ObservedFlows, DiagnosticAllowances, reloaded.ContractContributions);
     }
 
     /// <summary>

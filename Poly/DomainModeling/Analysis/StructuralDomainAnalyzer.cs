@@ -26,6 +26,9 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
             case Action action:
                 AnalyzeAction(context, action);
                 break;
+            case EnumType enumType:
+                AnalyzeEnum(context, enumType);
+                break;
             case Relationship relationship:
                 AnalyzeRelationship(context, relationship);
                 break;
@@ -473,6 +476,49 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
         ReportDuplicateNames(context, action.Parameters, "action", action.Name);
         ReportDuplicateNames(context, action.Result.Members, "action result", action.Name);
         ReportDuplicateNames(context, action.Policies, "action", action.Name);
+    }
+
+    /// <summary>
+    /// S-02 (#520 #530): an enum's member list is one generated C# scope. A repeated member is
+    /// <see cref="DomainModelDiagnosticCodes.StructuralDuplicate"/> on the enum node — members
+    /// are strings (<c>EnumType.MemberNames</c>), so there is no member node and the message
+    /// carries the name and both 1-based positions — and a name C# reserves on an enum is
+    /// <see cref="DomainModelDiagnosticCodes.ReservedMemberName"/>.
+    /// Duplicates first (H2): a repeated name belongs to its duplicate group, so the reserved
+    /// check skips it and reports every other name once, at its first occurrence.
+    /// </summary>
+    private static void AnalyzeEnum(AnalysisContext context, EnumType enumType) {
+        var scope = NameScopes.EnumScope(enumType);
+        if (scope.Count == 0)
+            return;
+
+        var repeated = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var group in scope.GroupBy(static entry => entry.Name, StringComparer.Ordinal)) {
+            var entries = group.ToList();
+            if (entries.Count < 2)
+                continue;
+            repeated.Add(entries[0].Name);
+            var first = entries[0];
+            foreach (var entry in entries.Skip(1)) {
+                context.ReportError(
+                    enumType,
+                    $"Duplicate member name '{entry.Name}' in enum '{enumType.Name}' " +
+                    $"(member {first.Index} and member {entry.Index}).",
+                    DomainModelDiagnosticCodes.StructuralDuplicate);
+            }
+        }
+
+        foreach (var entry in scope) {
+            if (repeated.Contains(entry.Name))
+                continue;
+            if (!ReservedNames.TryReserved(entry.Name, enumType, out var row))
+                continue;
+            context.ReportError(
+                enumType,
+                $"Member '{entry.Name}' in enum '{enumType.Name}' collides with a name C# " +
+                $"reserves on every enum ({row.Reason}); rename it.",
+                DomainModelDiagnosticCodes.ReservedMemberName);
+        }
     }
 
     private static void AnalyzeRelationship(AnalysisContext context, Relationship relationship) {

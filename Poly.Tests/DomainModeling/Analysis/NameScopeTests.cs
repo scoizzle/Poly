@@ -150,7 +150,7 @@ public sealed class NameScopeTests {
         }
     }
 
-    /// <summary>The private body method an action wrapper calls: <c>__BodyOf</c> plus an authored action name.</summary>
+    /// <summary>The private body method an action wrapper calls: <c>__BodyOf</c> plus an authored ACTION name (not any member).</summary>
     private static bool IsBodyOfAuthoredAction(string name, IReadOnlySet<string> authored) =>
         name.StartsWith("__BodyOf", StringComparison.Ordinal) && authored.Contains(name["__BodyOf".Length..]);
 
@@ -412,8 +412,10 @@ public sealed class NameScopeTests {
         var authored = new HashSet<string>(StringComparer.Ordinal) { "Group" };
         authored.UnionWith(group.Properties.Select(p => p.Name));
         authored.UnionWith(group.Navigations.Select(n => n.Name));
-        authored.UnionWith(group.Actions.Select(a => a.Name));
-        authored.UnionWith(group.Stages.SelectMany(s => s.Actions).Select(a => a.Name));
+        var actionNames = group.Actions.Select(a => a.Name)
+            .Concat(group.Stages.SelectMany(s => s.Actions).Select(a => a.Name))
+            .ToHashSet(StringComparer.Ordinal);
+        authored.UnionWith(actionNames);
         authored.UnionWith(group.Policies.Select(p => p.Name));
 
         // Named gap (S-05/L-14): subscription-derived names S-01 cannot compute.
@@ -434,7 +436,7 @@ public sealed class NameScopeTests {
 
         var unexplained = emitted
             .Where(name => !authored.Contains(name) && !reserved.Contains(name) && !subscriptionGap.Contains(name)
-                && !IsBodyOfAuthoredAction(name, authored))
+                && !IsBodyOfAuthoredAction(name, actionNames))
             .ToList();
         await Assert.That(string.Join(",", unexplained)).IsEqualTo("");
 

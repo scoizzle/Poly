@@ -40,7 +40,9 @@ public class SliceASharedModuleBodyTests {
         var issue = lotType.Methods?.FirstOrDefault(m => m.Name == "Issue");
         await Assert.That(issue).IsNotNull();
         await Assert.That(issue!.Body).IsNotNull();
-        var body = issue.Body!;
+        var bodyMethod = lotType.Methods.BodyMethod("Issue");
+        await Assert.That(bodyMethod!.Name).IsEqualTo("__BodyOfIssue");
+        var body = bodyMethod.Body!;
 
         // Export-shaped: ThisReference present — not a Parameter("entity")-rooted twin.
         await Assert.That(ContainsNode<ThisReference>(body)).IsTrue();
@@ -55,7 +57,8 @@ public class SliceASharedModuleBodyTests {
         // Same module method object after execute — no re-lower with opposite flag.
         await Assert.That(RuntimeAnalysisCache.TryGetModuleMethod(domain, "Lot", "Issue", out var cached)).IsTrue();
         await Assert.That(ReferenceEquals(issue, cached)).IsTrue();
-        await Assert.That(ReferenceEquals(body, cached!.Body)).IsTrue();
+        await Assert.That(ActionBodies.TryGetModuleBody(domain, "Lot", "Issue", out var cachedBody)).IsTrue();
+        await Assert.That(ReferenceEquals(body, cachedBody!.Body)).IsTrue();
 
         // 3) C# print of the SAME method body (no second EffectLoweringPass / UseThis flag).
         var printedFromModule = new CSharpGenerator().Generate(body);

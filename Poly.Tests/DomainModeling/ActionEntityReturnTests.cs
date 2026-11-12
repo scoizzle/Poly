@@ -686,7 +686,7 @@ public class ActionEntityReturnTests {
         await Assert.That((bool)lot.Bag["Enabled"]!).IsFalse();
         await Assert.That(result.CreatedChildren).IsEmpty();
 
-        await Assert.That(RuntimeAnalysisCache.TryGetModuleMethod(
+        await Assert.That(ActionBodies.TryGetModuleBody(
             domain, "Lot", "Issue", out var issue)).IsTrue();
         await Assert.That(issue?.Body).IsNotNull();
         var flat = FlattenSyntax(issue!.Body!).ToList();
@@ -1141,7 +1141,7 @@ public class ActionEntityReturnTests {
         await Assert.That(guest.Bag["OpenStays"]).IsEqualTo(0L);
         await Assert.That(result.CreatedChildren).IsEmpty();
 
-        await Assert.That(RuntimeAnalysisCache.TryGetModuleMethod(
+        await Assert.That(ActionBodies.TryGetModuleBody(
             domain, "Guest", "Book", out var book)).IsTrue();
         await Assert.That(book?.Body).IsNotNull();
         var flat = FlattenSyntax(book!.Body!).ToList();
@@ -1184,7 +1184,7 @@ public class ActionEntityReturnTests {
         await Assert.That(guest.Bag["OpenStays"]).IsEqualTo(0L);
         await Assert.That(result.CreatedChildren).IsEmpty();
 
-        await Assert.That(RuntimeAnalysisCache.TryGetModuleMethod(
+        await Assert.That(ActionBodies.TryGetModuleBody(
             domain, "Guest", "Book", out var book)).IsTrue();
         await Assert.That(book?.Body).IsNotNull();
         var flat = FlattenSyntax(book!.Body!).ToList();
@@ -1226,7 +1226,7 @@ public class ActionEntityReturnTests {
         await Assert.That(guest.Bag["OpenStays"]).IsEqualTo(0L);
         await Assert.That(result.CreatedChildren).IsEmpty();
 
-        await Assert.That(RuntimeAnalysisCache.TryGetModuleMethod(
+        await Assert.That(ActionBodies.TryGetModuleBody(
             domain, "Guest", "Book", out var book)).IsTrue();
         await Assert.That(book?.Body).IsNotNull();
         var flat = FlattenSyntax(book!.Body!).ToList();

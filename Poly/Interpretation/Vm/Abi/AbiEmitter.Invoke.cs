@@ -166,6 +166,14 @@ public static partial class AbiEmitter {
                             $"VM compile rejected: AST method '{astMethod.Name}' has no compilable body and "
                             + "its receiver is an instance the VM constructs, so there is no host method to "
                             + $"dispatch to. {Reason(rejection)}");
+                    // `this` in a module body is that same dictionary: an AST method that resolved on
+                    // it and did not compile is reported as its own compile failure, never as a
+                    // missing host method (an action wrapper calls its `__BodyOf` method through here).
+                    if (member.Value is ThisReference && rejection is not null)
+                        throw new InvalidOperationException(
+                            rejection.StartsWith("VM compile rejected:", StringComparison.Ordinal)
+                                ? rejection
+                                : $"VM compile rejected: {rejection}");
                     astBodyReject = rejection;
                 }
             }

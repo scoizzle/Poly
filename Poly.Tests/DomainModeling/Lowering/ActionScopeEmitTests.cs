@@ -134,6 +134,17 @@ public class ActionScopeEmitTests {
         await Assert.That(bump).Contains("ActionScope.Rollback");
         await Assert.That(cs).Contains("__BodyOfBump(");
 
+        // The lowered module (what the simulator executes) carries the same split: the wrapper opens the
+        // scope and calls the private body method, which does not open one.
+        var (domain, analysis) = EvolvedDomain.FromDsl(Dsl);
+        var group = DomainProgramProjection.ToSyntax(domain, analysis).Single(t => t.Name == "Group");
+        var wrapper = group.Methods!.Single(m => m.Name == "Bump");
+        var body = group.Methods!.Single(m => m.Name == "__BodyOfBump");
+        await Assert.That(new CSharpGenerator().Generate(wrapper.Body!)).Contains("ActionScope.Begin(");
+        await Assert.That(new CSharpGenerator().Generate(wrapper.Body!)).Contains("__BodyOfBump(");
+        await Assert.That(new CSharpGenerator().Generate(body.Body!)).DoesNotContain("ActionScope.Begin(");
+        await Assert.That(new CSharpGenerator().Generate(body.Body!)).Contains("Score");
+
         var outcomes = await ParityScenario.FromDsl(Dsl, "ActionScopeWrapperParity")
             .AssertAgree(side => {
                 side.Create("Group", ("Label", "g"));

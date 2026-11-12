@@ -127,7 +127,9 @@ public class ContributedMethodTests {
 
         var issue = Method(module, "Lot", "Issue");
         await Assert.That(Names(issue)).IsEqualTo("code,db");
-        await Assert.That(LastArgument(issue, "CreateWidgets")).IsEqualTo("db");
+        // The wrapper forwards the contributed parameter to the body, and the body threads it on.
+        await Assert.That(LastArgument(issue, "__BodyOfIssue")).IsEqualTo("db");
+        await Assert.That(LastArgument(module.First(t => t.Name == "Lot").Methods.BodyMethod("Issue")!, "CreateWidgets")).IsEqualTo("db");
 
         var touch = Method(module, "Lot", "Touch");
         await Assert.That(Names(touch)).IsEqualTo("label");

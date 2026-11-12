@@ -58,7 +58,7 @@ public class PolycMcpTests {
     /// now that the forwarder test is gone: the pin moves here with the host.</summary>
     [Test]
     public async Task PolycMcp_ListsSevenToolsAndTheHostInstructions() {
-        using var host = await PolycProcess.McpAsync(McpTarget.Polyc);
+        using var host = await PolycProcess.McpAsync();
         var initialized = await host.InitializeAsync();
         await Assert.That(initialized["instructions"]!.GetValue<string>()).IsEqualTo(PolyMcpInstructions.Text);
         await Assert.That((await ToolNamesAsync(host)).SequenceEqual(SevenTools)).IsTrue();
@@ -104,7 +104,7 @@ public class PolycMcpTests {
         var expected = check.Diagnostics.Where(d => d.IsError).Select(d => d.Code).Distinct().Order(StringComparer.Ordinal).ToArray();
         await Assert.That(expected.Length).IsGreaterThan(0);
 
-        using var host = await PolycProcess.McpAsync(McpTarget.Polyc);
+        using var host = await PolycProcess.McpAsync();
         await host.InitializeAsync();
         var workspace = (await host.ToolAsync("poly_workspace", new JsonObject { ["name"] = "Broken" }))["state"]!["workspace"]!.GetValue<string>();
         var define = await host.ToolAsync("poly_define", new JsonObject { ["workspace"] = workspace, ["poly"] = text, ["apply"] = false });
@@ -121,7 +121,7 @@ public class PolycMcpTests {
 
     [Test]
     public async Task PolyDefine_PreAnalysisFailuresKeepCheckCodes() {
-        using var host = await PolycProcess.McpAsync(McpTarget.Polyc);
+        using var host = await PolycProcess.McpAsync();
         await host.InitializeAsync();
         var workspace = (await host.ToolAsync("poly_workspace", new JsonObject { ["name"] = "Broken" }))["state"]!["workspace"]!.GetValue<string>();
 
@@ -144,7 +144,7 @@ public class PolycMcpTests {
     /// <summary>#533: a wrong JSON type is a typed caller error, and the host keeps serving.</summary>
     [Test]
     public async Task StdioWrongTypedArgument_IsATypedError_AndTheHostStaysAlive() {
-        using var host = await PolycProcess.McpAsync(McpTarget.Polyc);
+        using var host = await PolycProcess.McpAsync();
         await host.InitializeAsync();
         var workspace = (await host.ToolAsync("poly_workspace", new JsonObject { ["name"] = "Alive" }))
             ["state"]!["workspace"]!.GetValue<string>();

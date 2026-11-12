@@ -136,7 +136,8 @@ public class ActionScopeTests {
         ArgumentException? caught = null;
         try {
             ActionScope.Touch(new object());
-        } catch (ArgumentException exception) {
+        }
+        catch (ArgumentException exception) {
             caught = exception;
         }
 

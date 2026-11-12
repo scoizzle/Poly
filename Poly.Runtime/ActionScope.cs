@@ -193,14 +193,16 @@ public static class ActionScope {
             for (var i = frame.Touched.Count - 1; i >= 0; i--) {
                 try {
                     Restore(frame.Touched[i], frame.Snapshots[i]);
-                } catch (Exception exception) {
+                }
+                catch (Exception exception) {
                     errors.Add(exception);
                 }
             }
 
             try {
                 frame.Journal?.RollbackTo(frame.RootMark);
-            } catch (Exception exception) {
+            }
+            catch (Exception exception) {
                 errors.Add(exception);
             }
 

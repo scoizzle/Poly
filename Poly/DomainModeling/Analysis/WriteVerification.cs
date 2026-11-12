@@ -96,7 +96,9 @@ internal readonly record struct WriteVerdict(WriteOutcome Outcome, UnverifiedRea
         UnverifiedReason.NonFlowCheckedKind => 3,
         UnverifiedReason.UnsupportedOperator => 2,
         UnverifiedReason.UnknownBound => 1,
-        _ => 0, // PossibleViolation, and the Violated/Satisfied cases that carry no reason.
+        UnverifiedReason.PossibleViolation => 0,
+        null => 0, // the Satisfied and Violated verdicts carry no reason.
+        _ => throw new ArgumentOutOfRangeException(nameof(Reason), Reason, "a new UnverifiedReason must name its rank"),
     };
 
     /// <summary>The worse of two verdicts (Violated, then Unverified, then Satisfied); the first wins a tie.</summary>
@@ -108,7 +110,7 @@ internal readonly record struct WriteVerdict(WriteOutcome Outcome, UnverifiedRea
 /// violation stays a separate DMEFF008 error and is recorded in
 /// <see cref="WriteVerificationFacts.Violations"/>.
 /// </summary>
-internal enum UnverifiedReason {
+public enum UnverifiedReason {
     /// <summary>A known value range overlaps the constraint: it can fall outside (DMEFF008 warning).</summary>
     PossibleViolation,
 
@@ -212,7 +214,10 @@ internal struct WriteTally {
 
 /// <summary>The domain-keyed facts store: one bucket per <see cref="Domain"/> for one analysis run.</summary>
 internal static class WriteVerificationFactsStore {
-    /// <summary>The facts for <paramref name="domain"/>, created on the first recorded write.</summary>
+    /// <summary>
+    /// The facts for <paramref name="domain"/>, created on first use. The domain pass creates it
+    /// before anything else, so after a full analysis a missing bucket means the pass did not run.
+    /// </summary>
     internal static WriteVerificationFacts For(AnalysisContext context, Domain domain) {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(domain);

@@ -64,6 +64,9 @@ public sealed record EntityStructureMetadata(
     /// these props are body-initialized — never ctor params (a param would be dead
     /// and written twice, e.g. StartedAt). Published so the exporter's ctor emission
     /// and this signature stay in lockstep without re-deriving the rule.
+    /// Definitely assigned: top-level <c>OnEntry</c> assigns only. The may-assign create-time set
+    /// (conditional, loop, exit, hop, invoked action) is <c>StageEntryFacts.EntryAssignedProperties</c>,
+    /// which only fail-closed checks may read (<c>DMEFF019</c>).
     /// </summary>
     IReadOnlySet<string> EntryAssignedPropertyNames = null!,
 

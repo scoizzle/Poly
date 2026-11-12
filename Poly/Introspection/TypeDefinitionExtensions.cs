@@ -245,8 +245,8 @@ public static class TypeDefinitionExtensions {
                         continue;
                     var parameters = method.Parameters.ToArray();
                     if (parameters.Length == 1
-                        && method.MemberTypeDefinition == to
-                        && parameters[0].ParameterTypeDefinition == from)
+                        && IsSameType(method.MemberTypeDefinition, to)
+                        && IsSameType(parameters[0].ParameterTypeDefinition, from))
                         return method;
                 }
             }

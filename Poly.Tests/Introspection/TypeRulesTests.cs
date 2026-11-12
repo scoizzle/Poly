@@ -325,4 +325,15 @@ public class TypeRulesTests {
             await Assert.That(resolution.Value.Result).IsSameReferenceAs(boolean);
         }
     }
+
+    [Test]
+    public async Task ResolveConversionFrom_Modeled_FreshEqualSyntheticCollectionParameter_IsFound() {
+        var set = new ModeledTypeSet();
+        var bag = set.Add("Bag", new MethodDefinitionNode("op_Implicit", new NamedTypeReference("Bag"),
+            [new Parameter("a", new CollectionTypeReference(new NamedTypeReference("Bag"), CollectionKind.List))], IsStatic: true));
+        ITypeDefinition fresh = new AstCollectionTypeDefinition(bag, CollectionKind.List);
+        var conversion = ((ITypeDefinition)bag).ResolveConversionFrom(fresh);
+        await Assert.That(conversion).IsNotNull();
+        await Assert.That(conversion!.Value.Kind).IsEqualTo(ConversionOperatorKind.Implicit);
+    }
 }

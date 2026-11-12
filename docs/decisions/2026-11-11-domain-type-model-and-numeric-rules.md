@@ -139,6 +139,8 @@ Recorded by T-03b from [#679 comment 6837489066](https://github.com/scoizzle/Pol
   and conversion were handled separately wherever they were needed; nine copies disagreed (`Float64 × Decimal`
   was accepted by the domain analyzer, typed `Decimal` by the lowered-tree pass, resolved in decimal's favour by
   the lambda bridge, and rejected by the VM).
+  *Corrected by T-03b's ledger (2026-11-12):* the domain DSL cannot state a Float operand, so the domain analyzer's
+  column is n/a; the lowered-tree pass types it `Decimal`; the ABI runs it as `Decimal` (it does not reject it).
 - **Ruling 1.** The rules live with the type provider's definitions: the .NET definitions answer what converts
   to what and what an operator produces from reflection plus the built-in rules .NET leaves to the compiler;
   modeled types answer from declared members. Language policy stays in `DomainTypeModel`; the common result
@@ -157,8 +159,10 @@ Recorded by T-03b from [#679 comment 6837489066](https://github.com/scoizzle/Pol
   decides meaning. T-03b's cross-check ledger reports both, and a cell where the ABI did something the tree did
   not state is its own ledger kind. Row T-21 removes emitter-side promotion that decides meaning; L-03v's
   emit-time rejection is its first instance.
-- **Convergence.** One row per remaining copy after T-04: T-16 (`IsNumericWideningFrom`, plus the three
-  Introspection-root branches that name .NET classes), T-17 (`PromoteNumeric`/`GetNumericRank`/`ResolveAddType`),
+- **Convergence.** One row per remaining copy after T-04: T-16 (to answer a conversion four things still name .NET: `GetConversionFrom`'s CLR branch,
+  `IsAssignableFrom`'s `ClrTypeDefinition` branch, `IsNumericWideningFrom`'s `TypeCode` table and the second conversion
+  door, the internal `ResolveConversionFrom` beside the public `GetConversionFrom`; `IsCollectionShape` and
+  `GetElementType` also name CLR types but do not answer a conversion), T-17 (`PromoteNumeric`/`GetNumericRank`/`ResolveAddType`),
   T-18 (`SyntaxTypeCompatibilityAnalyzer`), T-19 (`LambdaBridge.PromoteNumeric`), T-20
   (`ConstantFoldingPass.Promote`), T-21 (the emitter's promotion).
 

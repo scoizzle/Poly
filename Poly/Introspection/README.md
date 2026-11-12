@@ -67,8 +67,7 @@ is the unique type the others identically or implicitly convert to. Optionality 
 - **.NET rules** live in `CommonLanguageRuntime/`: `ClrTypeDefinition` reflects `op_Implicit`/`op_Explicit` and
   static special-name `op_*` members, then `ClrBuiltInRules` supplies what C# leaves to the compiler (the closed
   {Int32, Int64, Float64} conversions, and the intrinsic operators of those, Boolean and String). A closed set
-  answers none, not unknown. `ClrBuiltInRules` is the only source of the built-in answers; three older branches
-  in this folder's root still name .NET classes and move in T-16.
+  answers none, not unknown. `ClrBuiltInRules` is the only source of the built-in answers. To answer a conversion, four things still name .NET: `GetConversionFrom`'s CLR branch (`FindConversionFrom`), `IsAssignableFrom`'s `ClrTypeDefinition` branch, `IsNumericWideningFrom`'s `TypeCode` table, and the second conversion door (the internal `ResolveConversionFrom` beside the public `GetConversionFrom`); T-16 removes all four. `IsCollectionShape` and `GetElementType` also name CLR types in the Introspection root but do not answer a conversion.
 - **Modeled definitions** answer from declared static `op_*` members: Poly's modeled convention, shared with
   `op_Implicit`, not a platform fact. `And` and `Or` have no declared form.
 - **Introspection-internal today.** The members are `internal` and neutral at signature level only

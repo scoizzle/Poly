@@ -290,10 +290,11 @@ public class PolicyFindingDedupeTests {
     /// The same shared policy, required by an action whose parameter supplies the name the policy
     /// reads: the entity walk infers nothing (the name is no property there) while the action walk
     /// types it Text, so the action's finding exists only in that scope. A gate keyed on the
-    /// expression alone would drop it; the gate keys on the parameter scope too.
+    /// expression alone would drop it; the gate keys on the scope the expression reads too.
+    /// Guard: 1 before and after.
     /// </summary>
     [Test]
-    public async Task ShadowingActionParameter_KeepsContextDifferingFinding() {
+    public async Task ActionOnlyParameterName_KeepsContextDifferingFinding() {
         var r = Parse("""
             domain Shop
 
@@ -308,6 +309,100 @@ public class PolicyFindingDedupeTests {
             .Where(d => d.Code == DomainModelDiagnosticCodes.SemanticTypeCompatibility)
             .ToList();
         await Assert.That(errors.Count).IsEqualTo(1);
+    }
+
+    /// <summary>
+    /// R11 through the fresh wrapper the resolver builds for <c>require not P</c>
+    /// (<c>DomainResolver.cs:445,466</c>): the copy's root is a new <c>Not</c>, so a gate that only
+    /// prunes at the walk root admits it and the operand walk reports the shared comparison again.
+    /// </summary>
+    [Test]
+    public async Task RequireNotPolicy_ReportsDMSEM003Once() {
+        var r = Parse("""
+            domain Shop
+
+            Order: entity {
+              Name: Text
+              P: policy { Name > 5 }
+              Fire: action require not P { }
+            }
+            """);
+
+        var errors = r.Analysis.Diagnostics
+            .Where(d => d.Code == DomainModelDiagnosticCodes.SemanticTypeCompatibility)
+            .ToList();
+        await Assert.That(errors.Count).IsEqualTo(1);
+    }
+
+    /// <summary>B1 on the stage path: the resolver's stage require builds its own <c>Not</c> wrapper.</summary>
+    [Test]
+    public async Task StageRequireNotPolicy_ReportsDMSEM003Once() {
+        var r = Parse("""
+            domain Shop
+
+            Order: entity {
+              Name: Text
+              P: policy { Name > 5 }
+              Open: stage require not P { }
+            }
+            """);
+
+        var errors = r.Analysis.Diagnostics
+            .Where(d => d.Code == DomainModelDiagnosticCodes.SemanticTypeCompatibility)
+            .ToList();
+        await Assert.That(errors.Count).IsEqualTo(1);
+    }
+
+    /// <summary>
+    /// B2: the action takes a parameter the policy never reads, so the walk context is the entity's
+    /// and the shared expression must still be reported once — the scope key is what the expression
+    /// reads, not the action's whole parameter list.
+    /// </summary>
+    [Test]
+    public async Task RequireReferencedPolicy_ParameterisedAction_ReportsDMSEM003Once() {
+        var r = Parse("""
+            domain Shop
+
+            Order: entity {
+              Name: Text
+              P: policy { Name > 5 }
+              Fire(Qty: Number): action require P { }
+            }
+            """);
+
+        var errors = r.Analysis.Diagnostics
+            .Where(d => d.Code == DomainModelDiagnosticCodes.SemanticTypeCompatibility)
+            .ToList();
+        await Assert.That(errors.Count).IsEqualTo(1);
+    }
+
+    /// <summary>R11 / S1: the type pass's call gate is per run, not per pass instance.</summary>
+    [Test]
+    public async Task SecondAnalysisOfOneDomain_ReportsDMFUN001Once() {
+        var builder = SessionBuilder.CreateEmpty();
+        builder.LoadCore();
+        foreach (var id in ExtensionCatalog.ProductAuthoring)
+            builder.Load(ExtensionCatalog.Core.Resolve(id));
+        var session = builder.Build();
+
+        var changes = new PolyDslParser("""
+            domain Shop
+
+            Order: entity {
+              Name: Text
+              P: policy { Name is Nope(1) }
+              Fire: action require P { }
+            }
+            """, session).Parse();
+        var evolution = new DomainEvolution(DomainTestFactory.Create("_", [], []));
+
+        var first = evolution.ApplyAndAnalyze(changes, session: session);
+        var second = evolution.ApplyAndAnalyze(changes, session: session);
+
+        await Assert.That(Findings(first.Analysis, DomainModelDiagnosticCodes.FunctionUnknown, "Nope").Count)
+            .IsEqualTo(1);
+        await Assert.That(Findings(second.Analysis, DomainModelDiagnosticCodes.FunctionUnknown, "Nope").Count)
+            .IsEqualTo(1);
     }
 
     // ── R12: DMFUN001 (FunctionAnalysis via ExpressionTypeAnalyzer) ──

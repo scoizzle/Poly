@@ -87,7 +87,7 @@ public sealed class ContractSpliceLoweringTests {
         var cs = new CSharpGenerator().Generate(module);
         await Assert.That(cs).Contains("System.Diagnostics.Debug.WriteLine");
         await Assert.That(cs).Contains(
-            "return DomainResult<Line>.Failure(adapterResult.ErrorMessage ?? \"\")");
+            "return DomainResult<Line>.Failure(adapterResult.Error!.At(\"Order.Pay\"))");
         await Assert.That(cs.Contains("StripeAdapters", StringComparison.Ordinal)).IsFalse();
 
         var asm = ExportedCSharp.CompileAndLoad(cs);

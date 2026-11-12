@@ -48,7 +48,7 @@ public class Guest
         var eventHoldResult = EventHold.Create(headcount, capacity, dayRate, startDate, endDate, this, hall, section);
         if (!eventHoldResult.IsSuccess)
         {
-            return DomainResult<EventHold>.Failure(eventHoldResult.ErrorMessage ?? "");
+            return DomainResult<EventHold>.Failure(eventHoldResult.Error!);
         }
         var eventHold = eventHoldResult.Value;
         return DomainResult<EventHold>.Success(eventHold);
@@ -63,7 +63,7 @@ public class Guest
         var reservationResult = Reservation.Create(partySize, nights, nightlyRate, maxOccupancy, checkInDate, checkOutDate, folio, this, room);
         if (!reservationResult.IsSuccess)
         {
-            return DomainResult<Reservation>.Failure(reservationResult.ErrorMessage ?? "");
+            return DomainResult<Reservation>.Failure(reservationResult.Error!);
         }
         var reservation = reservationResult.Value;
         return DomainResult<Reservation>.Success(reservation);
@@ -82,7 +82,7 @@ public class Guest
         var create0 = this.CreateReservations(party, nights, room.NightlyRate, room.MaxOccupancy, arrive, depart, (Folio?)null, room);
         if (!create0.IsSuccess)
         {
-            return DomainResult<Reservation>.Failure(create0.ErrorMessage ?? "");
+            return DomainResult<Reservation>.Failure(create0.Error!.At("Guest.BookStay"));
         }
         var created1 = create0.Value;
         return DomainResult<Reservation>.Success(created1);
@@ -96,7 +96,7 @@ public class Guest
         var create0 = this.CreateEvents(party, hall.Capacity, hall.DayRate, arrive, depart, hall);
         if (!create0.IsSuccess)
         {
-            return DomainResult<EventHold>.Failure(create0.ErrorMessage ?? "");
+            return DomainResult<EventHold>.Failure(create0.Error!.At("Guest.BookHall"));
         }
         var created1 = create0.Value;
         return DomainResult<EventHold>.Success(created1);
@@ -110,7 +110,7 @@ public class Guest
         var create0 = this.CreateEvents(party, section.Capacity, section.DayRate, arrive, depart, hall, section);
         if (!create0.IsSuccess)
         {
-            return DomainResult<EventHold>.Failure(create0.ErrorMessage ?? "");
+            return DomainResult<EventHold>.Failure(create0.Error!.At("Guest.BookSection"));
         }
         var created1 = create0.Value;
         return DomainResult<EventHold>.Success(created1);

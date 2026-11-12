@@ -36,7 +36,7 @@ public class Customer
             var result1 = target0.Ship();
             if (!result1.IsSuccess)
             {
-                return DomainResult.Failure(result1.ErrorMessage ?? "");
+                return DomainResult.Failure(result1.Error!.At("Customer.ShipAll"));
             }
         }
         return DomainResult.Success();
@@ -52,7 +52,7 @@ public class Customer
             var result1 = target0.Cancel("customer request");
             if (!result1.IsSuccess)
             {
-                return DomainResult.Failure(result1.ErrorMessage ?? "");
+                return DomainResult.Failure(result1.Error!.At("Customer.CancelPending"));
             }
         }
         return DomainResult.Success();

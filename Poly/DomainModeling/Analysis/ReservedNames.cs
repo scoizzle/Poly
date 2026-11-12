@@ -33,13 +33,15 @@ internal enum ReservedKind {
 /// <summary>
 /// One name the C# exporter generates, and the reason it is unavailable to the author.
 /// <paramref name="AppliesTo"/> restricts a fixed row to the entities the emitter actually
-/// generates it on; null means every entity.
+/// generates it on; null means every entity. <paramref name="AppliesToAction"/> does the same for a
+/// <see cref="ReservedKind.GeneratedReference"/> row against an action parameter; null means every action.
 /// </summary>
 internal sealed record ReservedName(
     string Name,
     ReservedKind Kind,
     string Reason,
-    Func<Entity, Domain?, bool>? AppliesTo = null);
+    Func<Entity, Domain?, bool>? AppliesTo = null,
+    Func<Ontology.Action, bool>? AppliesToAction = null);
 
 /// <summary>
 /// The tables of names the generated C# surface reserves (S-01, #528 #519; enum scope S-02,
@@ -102,7 +104,8 @@ internal static class ReservedNames {
         // prints DomainResult<T> only, which binds as a type even beside the member.
         new("DomainResult", ReservedKind.GeneratedReference,
             "shadows the DomainResult type the generated members call",
-            static (entity, _) => EmitsUnqualifiedDomainResult(entity)),
+            static (entity, _) => EmitsUnqualifiedDomainResult(entity),
+            static action => action.Result is not { Members.Count: > 0 }),
         // CSharpWriter.cs Header — `using Poly.Runtime;` for the result family, so a user type
         // named Poly would shadow the namespace the import names.
         new("Poly", ReservedKind.Namespace,
@@ -156,9 +159,10 @@ internal static class ReservedNames {
     /// True when <paramref name="identity"/> is a name <paramref name="action"/>'s method body calls from
     /// expression position (<c>Poly.Runtime…</c>, <c>System.…</c>, and <c>DomainResult.Success()</c> /
     /// <c>DomainResult.Failure(…)</c> in a void action): a parameter of that name shadows it inside the
-    /// body. The unconditional <see cref="ReservedKind.GeneratedReference"/> rows qualify for every
-    /// action; the <c>DomainResult</c> row only for an action with no result members, because a typed
-    /// action prints <c>DomainResult&lt;T&gt;</c>, which binds as a type beside the parameter.
+    /// body. A <see cref="ReservedKind.GeneratedReference"/> row qualifies for every action unless its
+    /// <see cref="ReservedName.AppliesToAction"/> says otherwise: the <c>DomainResult</c> row applies only to an
+    /// action with no result members, because a typed action prints <c>DomainResult&lt;T&gt;</c>, which
+    /// binds as a type beside the parameter.
     /// </summary>
     public static bool TryReservedAsActionParameter(string identity, Ontology.Action action, out ReservedName row) {
         foreach (var candidate in Fixed) {
@@ -166,8 +170,8 @@ internal static class ReservedNames {
                 continue;
             if (!string.Equals(candidate.Name, identity, StringComparison.Ordinal))
                 continue;
-            if (candidate.AppliesTo is not null
-                && !(candidate.Name == "DomainResult" && action.Result is not { Members.Count: > 0 }))
+            // A stage-dispatched method merged from a void and a typed copy is deliberately over-rejected.
+            if (candidate.AppliesToAction is not null && !candidate.AppliesToAction(action))
                 continue;
             row = candidate;
             return true;

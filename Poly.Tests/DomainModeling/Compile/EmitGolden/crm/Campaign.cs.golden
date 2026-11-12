@@ -30,7 +30,7 @@ public class Campaign
         var campaignMemberResult = CampaignMember.Create(contact, this);
         if (!campaignMemberResult.IsSuccess)
         {
-            return DomainResult<CampaignMember>.Failure(campaignMemberResult.ErrorMessage ?? "");
+            return DomainResult<CampaignMember>.Failure(campaignMemberResult.Error!);
         }
         var campaignMember = campaignMemberResult.Value;
         return DomainResult<CampaignMember>.Success(campaignMember);
@@ -48,7 +48,7 @@ public class Campaign
         var create0 = this.CreateMembers(who);
         if (!create0.IsSuccess)
         {
-            return DomainResult<CampaignMember>.Failure(create0.ErrorMessage ?? "");
+            return DomainResult<CampaignMember>.Failure(create0.Error!.At("Campaign.Enroll"));
         }
         var created1 = create0.Value;
         return DomainResult<CampaignMember>.Success(created1);

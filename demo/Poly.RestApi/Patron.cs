@@ -52,7 +52,7 @@ public class Patron
         var loanResult = Loan.Create(book, this, status, dueDate, returnedAt, timesRenewed);
         if (!loanResult.IsSuccess)
         {
-            return DomainResult<Loan>.Failure(loanResult.ErrorMessage ?? "");
+            return DomainResult<Loan>.Failure(loanResult.Error!);
         }
         var loan = loanResult.Value;
         return DomainResult<Loan>.Success(loan);
@@ -90,7 +90,7 @@ public class Patron
         var create0 = this.CreateLoans();
         if (!create0.IsSuccess)
         {
-            return DomainResult<Loan>.Failure(create0.ErrorMessage ?? "");
+            return DomainResult<Loan>.Failure(create0.Error!.At("Patron.CheckOut"));
         }
         var created1 = create0.Value;
         return DomainResult<Loan>.Success(created1);

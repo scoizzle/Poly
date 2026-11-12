@@ -1181,7 +1181,7 @@ public class DomainToCSharpExporterTests {
         await Assert.That(cs).Contains("if (!target0.IsPaid())");
         await Assert.That(cs).Contains("target0.Mark(target0.Qty)");
         await Assert.That(cs).Contains("target2.CurrentStage != LineStage.Active");
-        await Assert.That(cs).Contains("return DomainResult.Failure(result1.ErrorMessage ?? \"\");");
+        await Assert.That(cs).Contains("return DomainResult.Failure(result1.Error!.At(\"Order.Go\"));");
         await Assert.That(cs).DoesNotContain("matched zero targets");
         await Assert.That(cs).DoesNotContain("NotSupportedException");
     }

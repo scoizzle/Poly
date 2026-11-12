@@ -60,7 +60,7 @@ public class Opportunity
         var activityResult = Activity.Create(subject, this, dueOn);
         if (!activityResult.IsSuccess)
         {
-            return DomainResult<Activity>.Failure(activityResult.ErrorMessage ?? "");
+            return DomainResult<Activity>.Failure(activityResult.Error!);
         }
         var activity = activityResult.Value;
         return DomainResult<Activity>.Success(activity);
@@ -74,7 +74,7 @@ public class Opportunity
         var lineResult = Line.Create(qty, unitPrice, product, this);
         if (!lineResult.IsSuccess)
         {
-            return DomainResult<Line>.Failure(lineResult.ErrorMessage ?? "");
+            return DomainResult<Line>.Failure(lineResult.Error!);
         }
         var line = lineResult.Value;
         return DomainResult<Line>.Success(line);
@@ -88,7 +88,7 @@ public class Opportunity
         var quoteResult = Quote.Create(title, amount, this, new List<QuoteLine>());
         if (!quoteResult.IsSuccess)
         {
-            return DomainResult<Quote>.Failure(quoteResult.ErrorMessage ?? "");
+            return DomainResult<Quote>.Failure(quoteResult.Error!);
         }
         var quote = quoteResult.Value;
         return DomainResult<Quote>.Success(quote);
@@ -108,7 +108,7 @@ public class Opportunity
             var result1 = target0.Complete();
             if (!result1.IsSuccess)
             {
-                return DomainResult.Failure(result1.ErrorMessage ?? "");
+                return DomainResult.Failure(result1.Error!.At("Opportunity.CompleteOpenWork"));
             }
         }
         return DomainResult.Success();
@@ -146,7 +146,7 @@ public class Opportunity
             var create0 = this.CreateActivities(subject);
             if (!create0.IsSuccess)
             {
-                return DomainResult<Activity>.Failure(create0.ErrorMessage ?? "");
+                return DomainResult<Activity>.Failure(create0.Error!.At("Opportunity.Log"));
             }
             var created1 = create0.Value;
             return DomainResult<Activity>.Success(created1);
@@ -170,7 +170,7 @@ public class Opportunity
             var create1 = this.CreateLines(qty, sku.ListPrice, sku);
             if (!create1.IsSuccess)
             {
-                return DomainResult<Line>.Failure(create1.ErrorMessage ?? "");
+                return DomainResult<Line>.Failure(create1.Error!.At("Opportunity.AddLine"));
             }
             var created2 = create1.Value;
             return DomainResult<Line>.Success(created2);
@@ -186,7 +186,7 @@ public class Opportunity
         var create0 = this.CreateQuotes(this.Title, 0L);
         if (!create0.IsSuccess)
         {
-            return DomainResult<Quote>.Failure(create0.ErrorMessage ?? "");
+            return DomainResult<Quote>.Failure(create0.Error!.At("Opportunity.QuoteDeal"));
         }
         var created1 = create0.Value;
         return DomainResult<Quote>.Success(created1);

@@ -80,8 +80,7 @@ internal sealed class AuthoringSuggestionAnalyzer : INodeAnalyzer {
         context.ReportHint(
             entity,
             $"Entity '{entity.Name}' has {entity.Properties.Count} {noun} but no stages defined. " +
-            "Consider adding lifecycle stages (e.g. 'Active', 'Inactive') to model state transitions. " +
-            "Use `add(kind: stage)` to add stages.",
+            "Consider declaring lifecycle stages to model state transitions, e.g. 'Draft: stage { ... }'.",
             DomainModelDiagnosticCodes.AuthoringSuggestion);
     }
 
@@ -102,9 +101,9 @@ internal sealed class AuthoringSuggestionAnalyzer : INodeAnalyzer {
         var stageNoun = entity.Stages.Count == 1 ? "stage" : "stages";
         context.ReportHint(
             entity,
-            $"Entity '{entity.Name}' has {entity.Stages.Count} {stageNoun} but no actions defined on any stage. " +
-            "Actions define what operations can be performed in each state. " +
-            "Use `add(kind: stage_action)` to add actions to stages.",
+            $"Entity '{entity.Name}' has {entity.Stages.Count} {stageNoun} but no actions declared on any stage. " +
+            "Actions define what operations can be performed in each state; declare them inside the stage, " +
+            $"e.g. '{entity.Stages[0].Name}: stage {{ Submit: action {{ ... }} }}'.",
             DomainModelDiagnosticCodes.AuthoringSuggestion);
     }
 
@@ -126,8 +125,8 @@ internal sealed class AuthoringSuggestionAnalyzer : INodeAnalyzer {
         context.ReportHint(
             entity,
             $"Entity '{entity.Name}' has properties suitable for policy guards " +
-            "(boolean or range-constrained properties) but no policies defined. " +
-            "Policies enforce business rules. Use `add(kind: policy)` or `apply_dsl` to define guards.",
+            "(boolean or range-constrained properties) but no policies declared. " +
+            "Policies enforce business rules; declare them on the entity, e.g. 'Eligible: policy { ... }'.",
             DomainModelDiagnosticCodes.AuthoringSuggestion);
     }
 

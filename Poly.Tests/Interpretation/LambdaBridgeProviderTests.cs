@@ -1276,25 +1276,15 @@ public class LambdaBridgeProviderTests {
     private static BridgeCase Cell(string grid, string key) => BridgeGrid.Cases.Single(c => c.Grid == grid && c.Key == key);
 
     /// <summary>
-    /// Issue 832's wrong VM values (owner T-21): the main emitter answers -1 for unary minus on a Decimal and on a Duration,
-    /// and a wrong value and type for <c>UInt8 | UInt64</c>. Inside a bridged lambda the same expressions are right, on
-    /// master already; T-21 fixes the main emitter and inverts the ledger's pin
-    /// (<c>Probe_WrongVmValues_Issue832_PinnedAsTheyAreToday_T21InvertsThem</c>).
+    /// Issue 832's wrong VM value (owner T-21): the main emitter answers a wrong value and type for <c>UInt8 | UInt64</c>.
+    /// Inside a bridged lambda the same expression is right, on master already; T-21 fixes the main emitter and inverts
+    /// the ledger's pin (<c>Probe_WrongVmValues_Issue832_PinnedAsTheyAreToday_T21InvertsThem</c>).
     /// </summary>
     [Test]
-    public async Task Bridge_RightWhereMainIsWrong_Issue832Cells_PinnedForT21() {
-        var negate = Cell("operator", "Decimal UnaryMinus -");
-        await Assert.That(BridgeGrid.Outcome(negate).Observed).IsEqualTo("ran; Decimal; S1=-0.1; S2=-0.2");
-        await Assert.That(BridgeGrid.LedgerCell(negate).Abi).IsEqualTo("Decimal; S1=-1; S2=-1");
+    public async Task Bridge_RightWhereMainIsWrong_UInt8OrUInt64_PinnedForT21() {
         var or = Cell("operator", "UInt8 BitwiseOr UInt64");
         await Assert.That(BridgeGrid.Outcome(or).Observed).IsEqualTo("ran; UInt64; S1=255; S2=18446744073709551615");
         await Assert.That(BridgeGrid.LedgerCell(or).Abi).IsEqualTo("Byte; S1=255; S2=-1");
-        // Duration is not a governed operand (the bridge's fence is the primitives): its negation is TimeSpan's own operator.
-        var duration = new BridgeOperand(OperatorOracle.Operands.Single(static o => o.Name == "Duration"), false);
-        var minusDuration = new BridgeCase("named", "Duration UnaryMinus -", OperatorKind.UnaryMinus, duration, null, typeof(object),
-            static (x, _) => new UnaryMinus(x), [new("S1", duration.Operand.Stress, null), new("S2", duration.Operand.Plain, null)]);
-        await Assert.That(BridgeGrid.Evaluate(minusDuration).Observed).IsEqualTo("ran; TimeSpan; S1=-01:00:00; S2=-01:30:00");
-        await Assert.That(BridgeGrid.LedgerCell(minusDuration).Abi).IsEqualTo("TimeSpan; S1=-1; S2=-1");
     }
 
     private static string FamiliesOf(IEnumerable<BridgeCase> cells, Func<BridgeCase, string> family) =>
@@ -1568,8 +1558,8 @@ public class LambdaBridgeProviderTests {
             .Select(static c => $"{c.Key}: bridge {BridgeGrid.BridgeAnswer(BridgeGrid.Outcome(c).Observed)}, main {BridgeGrid.MainAnswer(c)}").ToArray();
         await Assert.That(outside).IsEmpty();
         await Assert.That(set2.All(c => set1.Contains(c))).IsTrue();
-        await Assert.That(ConstantFoldGrid.Pin([.. set1.Select(static c => c.Line)])).IsEqualTo("559 9d09db067ba7f23c");
-        await Assert.That(ConstantFoldGrid.Pin([.. set2.Select(static c => c.Line)])).IsEqualTo("291 66ac0ce004b85f4b");
+        await Assert.That(ConstantFoldGrid.Pin([.. set1.Select(static c => c.Line)])).IsEqualTo("557 2e1cf4891ce292e8");
+        await Assert.That(ConstantFoldGrid.Pin([.. set2.Select(static c => c.Line)])).IsEqualTo("290 ba91a97a067ddc0d");
     }
 
     private static readonly string[] PredictedDelta = [

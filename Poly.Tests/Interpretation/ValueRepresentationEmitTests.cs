@@ -271,6 +271,66 @@ public class ValueRepresentationEmitTests {
 
         await Assert.That(exec.GetValue<decimal>()).IsEqualTo(2.5m);
     }
+
+    private static string Answer(Node node, params object?[] args) {
+        try {
+            using var exec = Interpreter.Execute(Interpreter.Compile(node), args);
+            return exec.Result.Value is { } value ? $"{value.GetType().Name} {value}" : "null";
+        }
+        catch (InvalidOperationException ex) {
+            return ex.Message;
+        }
+    }
+
+    private static Parameter P<T>(string name) => new(name, TypeReference.To<T>());
+
+    private static Invoke NullableCall(string method, bool present) =>
+        new(new Member(new ClrTypeReference(typeof(NullableProbe)), method), new Constant(present));
+
+    /// <summary>
+    /// Unary minus and <c>~</c> on a value held behind a handle (issue 832): a struct wider than a word, and a nullable
+    /// that arrives as a word (a call result). The type's own operator runs; the handle is never the operand. A struct
+    /// with no such operator is refused at compile, naming the type, where the VM used to negate the handle.
+    /// </summary>
+    [Test]
+    public async Task UnaryOnAHandleHeldValue_IsTheTypesOperator_OrRefused() {
+        var answers = new[] {
+            Answer(new UnaryMinus(P<decimal>("d")), 0.1m),
+            Answer(new UnaryMinus(P<decimal?>("d")), 0.1m),
+            Answer(new UnaryMinus(P<decimal?>("d")), (object?)null),
+            Answer(new UnaryMinus(P<TimeSpan>("t")), TimeSpan.FromHours(1)),
+            Answer(new UnaryMinus(P<TimeSpan?>("t")), TimeSpan.FromHours(1)),
+            Answer(new UnaryMinus(P<Int128>("i")), (Int128)5),
+            Answer(new BitwiseNot(P<Int128>("i")), (Int128)5),
+            Answer(new BitwiseNot(P<UInt128>("i")), (UInt128)5),
+            Answer(new UnaryMinus(P<System.Numerics.BigInteger>("b")), new System.Numerics.BigInteger(5)),
+            Answer(new UnaryMinus(NullableCall(nameof(NullableProbe.FiveOrNull), true))),
+            Answer(new UnaryMinus(NullableCall(nameof(NullableProbe.FiveOrNull), false))),
+            Answer(new BitwiseNot(NullableCall(nameof(NullableProbe.FiveOrNull), true))),
+            Answer(new UnaryMinus(NullableCall(nameof(NullableProbe.FiveDecimalOrNull), true))),
+            Answer(new UnaryMinus(P<Guid>("g")), Guid.Empty),
+            Answer(new UnaryMinus(P<DateTimeOffset>("o")), DateTimeOffset.UnixEpoch),
+            Answer(new BitwiseNot(P<Guid>("g")), Guid.Empty),
+        };
+        await Assert.That(answers).IsEquivalentTo(new[] {
+            "Decimal -0.1",
+            "Decimal -0.1",
+            "null",
+            $"TimeSpan {-TimeSpan.FromHours(1)}",
+            $"TimeSpan {-TimeSpan.FromHours(1)}",
+            "Int128 -5",
+            "Int128 -6",
+            $"UInt128 {~(UInt128)5}",
+            "BigInteger -5",
+            "Int32 -5",
+            "null",
+            "Int32 -6",
+            "Decimal -5",
+            "VM compile rejected: no unary '-' operator for 'Guid'.",
+            "VM compile rejected: no unary '-' operator for 'DateTimeOffset'.",
+            "VM compile rejected: no unary '~' operator for 'Guid'.",
+        }, TUnit.Assertions.Enums.CollectionOrdering.Matching);
+    }
 }
 
 public static class RepresentationProbe {
@@ -289,4 +349,8 @@ public static class NullableProbe {
     }
 
     public static int Id(int? value) => value ?? -1;
+
+    public static int? FiveOrNull(bool present) => present ? 5 : null;
+
+    public static decimal? FiveDecimalOrNull(bool present) => present ? 5m : null;
 }

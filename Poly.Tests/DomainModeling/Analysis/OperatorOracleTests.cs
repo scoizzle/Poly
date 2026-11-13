@@ -502,12 +502,12 @@ public class OperatorOracleTests {
     ];
 
     private static readonly LedgerRule[] AbiRules = [
-        new(OracleKind.AbiDivergesFromTree, "*", "*", "*", "executes an undefined cell", "T-21 (the ABI must reject what the tree does not define); T-18b adds 231 native-integer cells: the accepted-undefined bitwise, shift and date cells above that the VM runs", 1290, "cf1253256569c5f2"),
+        new(OracleKind.AbiDivergesFromTree, "*", "*", "*", "executes an undefined cell", "T-21 (the ABI must reject what the tree does not define); T-18b adds 231 native-integer cells: the accepted-undefined bitwise, shift and date cells above that the VM runs; T-21a refuses -Uuid, ~Decimal, ~Duration and ~Uuid at compile (no such operator), 4", 1286, "64040fcb261f6bfc"),
         new(OracleKind.AbiDivergesFromTree, "*", "*", "*", "unstated conversion", "T-21 (T-04 and Lower state the conversion node; the emitter stops converting); T-18b adds 520 native-integer cells (T-18b lock amendment 7: 'its unstated conversion is then T-21's ledger line')", 2249, "0018c569d72f44e5"),
         new(OracleKind.AbiDivergesFromTree, "*", "*", "*", "^type: VM [^;]*$", "T-21 (the emitter's own promotion: the VM keeps the operand type); T-17 typed arithmetic through the provider: the 240 arithmetic cells (150 + 90 native) left this rule, 90 of the 132 native-integer cells left with it; the 42 that remain are bitwise and shift ones", 255, "414297d201bfefdc"),
-        // Wrong values (issue 832): the type and the value in one reason, then the value alone (-Decimal and -Duration give -1).
+        // Wrong values (issue 832): the type and the value in one reason, then the value alone (T-21a: -Decimal and -Duration left it).
         new(OracleKind.AbiDivergesFromTree, "*", "*", "*", "^type: VM .*; value S", "T-21 (issue 832: wrong type and value)", 8, "2e73ee06e20095c0"),
-        new(OracleKind.AbiDivergesFromTree, "*", "*", "*", "^value S", "T-21 (issue 832: wrong values)", 115, "ae35f7db5640776e")
+        new(OracleKind.AbiDivergesFromTree, "*", "*", "*", "^value S", "T-21 (issue 832: wrong values)", 113, "f0fb201908c77b79")
     ];
 
     private static readonly LedgerRule[] RejectedDefinedRules = [];
@@ -531,7 +531,7 @@ public class OperatorOracleTests {
 
     [Test]
     public async Task AbiDivergesFromTree_EveryDivergenceIsOwned_AndNoEntryIsStale() =>
-        await AssertOwned(OracleKind.AbiDivergesFromTree, AbiRules, 3917);
+        await AssertOwned(OracleKind.AbiDivergesFromTree, AbiRules, 3911);
 
     [Test]
     public async Task AbiRejectsDefined_EveryDivergenceIsOwned_AndNoEntryIsStale() =>
@@ -547,7 +547,7 @@ public class OperatorOracleTests {
     ];
 
     private static readonly (int Count, string Checksum)[] MasterAbi = [
-        (1059, "7fada48079f73965"), (1729, "6699a0d31e9728fb"), (213, "af39c0ce64fd29e0"), (8, "2e73ee06e20095c0"), (115, "ae35f7db5640776e")
+        (1055, "4c80c7da0f1584bc"), (1729, "6699a0d31e9728fb"), (213, "af39c0ce64fd29e0"), (8, "2e73ee06e20095c0"), (113, "f0fb201908c77b79")
     ];
 
     private static bool IsNative(string? operand) => operand is "NInt" or "NUInt";
@@ -629,8 +629,8 @@ public class OperatorOracleTests {
     /// </summary>
     [Test]
     public async Task Probe_WrongVmValues_Issue832_PinnedAsTheyAreToday_T21InvertsThem() {
-        await Assert.That(Cell("Decimal", OperatorKind.UnaryMinus, null).Abi).IsEqualTo("Decimal; S1=-1; S2=-1");
-        await Assert.That(Cell("Duration", OperatorKind.UnaryMinus, null).Abi).IsEqualTo("TimeSpan; S1=-1; S2=-1");
+        await Assert.That(Cell("Decimal", OperatorKind.UnaryMinus, null).Abi).IsEqualTo("Decimal; S1=-0.1; S2=-0.2");
+        await Assert.That(Cell("Duration", OperatorKind.UnaryMinus, null).Abi).IsEqualTo("TimeSpan; S1=-01:00:00; S2=-01:30:00");
         await Assert.That(Cell("UInt8", OperatorKind.BitwiseOr, "UInt64").Abi).IsEqualTo("Byte; S1=255; S2=-1");
     }
 

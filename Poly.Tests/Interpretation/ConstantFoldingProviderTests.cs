@@ -509,8 +509,6 @@ public class ConstantFoldingProviderTests {
             .Select(static f => $"{f.Row.Key}: fold {f.Fold}, VM {ConstantFoldGrid.UnfoldedVm(f.Row)}")
             .Order(StringComparer.Ordinal).ToArray();
         await Assert.That(lines).IsEquivalentTo([
-            "Decimal UnaryMinus - S1: fold Decimal:-0.1, VM Int64:-1",
-            "Decimal UnaryMinus - S2: fold Decimal:-0.2, VM Int64:-1",
             "Float32 Divide Float32 S1: fold Single:11184811, VM Double:11184811",
             "Float32 Divide Float32 S2: fold Single:8.940697E-08, VM Double:8.940696716308594E-08"
         ]);
@@ -881,7 +879,7 @@ public class ConstantFoldingProviderTests {
     private const string MasterUndefinedFolds = "828 0d020bf27c2afbb7";
     private const string KeptFolds = "1776 06fba54a76763aeb";
     private const string UnprintableDefinedFolds = "48 ace2db05f3c87b7b";
-    private const string AllowedDisagree = "4 97551d7e2ef40a1f";
+    private const string AllowedDisagree = "2 5e0895ede8f270db";
     private const string LogicalFolds = "6 d49ba859ff062537";
     private const string UndefinedCells = "7800 1786e1cb3f6eaa59";
     private const string RejectedMismatchedEqualities = "672 88f2cc26c94956cb";

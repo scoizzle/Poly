@@ -345,6 +345,8 @@ public static partial class AbiEmitter {
         var compiled = CompileNode(unaryMinus.Operand, ctx);
         if (NullableValue(compiled, ctx) is { } nullable)
             return SpillToRing(Negate(LocalType.AsWordType(nullable)), ctx);
+        if (HeapUnary(unaryMinus.Operand, compiled, Negate, "-", ctx) is { } heap)
+            return heap;
         var slot = ring.AddValue(compiled);
         Expression result;
         if (RingCodec.IsIeee(unaryMinus.Operand, ctx.Analysis)) {
@@ -370,8 +372,30 @@ public static partial class AbiEmitter {
         var compiled = CompileNode(n.Operand, ctx);
         if (NullableValue(compiled, ctx) is { } nullable)
             return SpillToRing(Not(LocalType.AsWordType(nullable)), ctx);
+        if (HeapUnary(n.Operand, compiled, OnesComplement, "~", ctx) is { } heap)
+            return heap;
         var slot = ring.AddValue(compiled);
         return ring.Then(Assign(slot.Read, Not(slot.Read)));
+    }
+
+    /// <summary>A unary operator on a value-type operand held behind a handle: a struct wider than a word
+    /// (<c>decimal</c>, <c>TimeSpan</c>, <c>Int128</c>, <c>BigInteger</c>) or a nullable that arrives as a word (a call
+    /// or member result). The word is read as the operand's own type and that type's operator runs, so the handle is
+    /// never the operand. A type with no such operator fails closed. Null when the operand is a word.</summary>
+    private static Expression? HeapUnary(
+        Node operand, Value compiled, Func<Expression, UnaryExpression> op, string symbol, Context ctx) {
+        var clr = ctx.ClrTypeOf(operand);
+        if (clr is not { IsValueType: true } || LocalType.Of(clr).Kind != ValueRepresentationKind.HeapRef)
+            return null;
+        var value = LocalType.AsWordType(LocalType.Decode(ctx.Word(compiled), clr, clr, ctx.HeapLocal));
+        Expression result;
+        try {
+            result = op(value);
+        }
+        catch (InvalidOperationException) {
+            throw new InvalidOperationException($"VM compile rejected: no unary '{symbol}' operator for '{clr.Name}'.");
+        }
+        return SpillToRing(Block(compiled.Code, result), ctx);
     }
 
     /// <summary>The operand's <c>Nullable&lt;T&gt;</c> value, or null when the slot is a word.</summary>

@@ -16,7 +16,7 @@ public static class KnownOperandGaps {
         new(812, "T-22", "Await", "NumberOperand", "analysis=unchanged;compile=backstop"),
         new(812, "T-22", "BitwiseAnd", "NumberDecimal", "analysis=unchanged;compile=backstop"),
         new(812, "T-22", "BitwiseAnd", "NumberText", "analysis=unchanged;compile=ok"),
-        new(812, "T-22", "BitwiseNot", "Decimal", "analysis=unchanged;compile=ok"),
+        new(812, "T-22", "BitwiseNot", "Decimal", "analysis=unchanged;compile=backstop"),
         new(812, "T-22", "BitwiseNot", "Text", "analysis=unchanged;compile=ok"),
         new(812, "T-22", "BitwiseOr", "NumberDecimal", "analysis=unchanged;compile=backstop"),
         new(812, "T-22", "BitwiseXor", "NumberText", "analysis=unchanged;compile=ok"),

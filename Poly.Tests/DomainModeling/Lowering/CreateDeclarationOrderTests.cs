@@ -13,10 +13,9 @@ using TUnit.Assertions.Enums;
 namespace Poly.Tests.DomainModeling.Lowering;
 
 /// <summary>
-/// L-07 (#558, #683): entity members, Create parameters within each block, and the
-/// create guard / invariant order follow DECLARATION order. The required/trailing
-/// block split itself stays until L-08 emits every Create parameter as an optional
-/// <c>T? x = default</c>; within each block this pins declaration order.
+/// L-07 (#558, #683): entity members, Create parameters and the create guard /
+/// invariant order follow DECLARATION order. Since L-08b every Create parameter is
+/// <c>T? x = default</c>, one declaration-ordered list (<c>CreateSlots</c>).
 /// </summary>
 public sealed class CreateDeclarationOrderTests {
     /// <summary>Members are declared Price, OnHand, Sku; ordinal order is OnHand, Price, Sku.</summary>
@@ -92,10 +91,8 @@ public sealed class CreateDeclarationOrderTests {
 
     [Test]
     public async Task CreateNav_ForwardsDefaultedOverridesBySlot() {
-        // A4: invoke CreateWidgets BY NAME. The trailing block has two independent
-        // producers (Properties.cs defaultedCtorParams and Create.cs
-        // TrailingOmittableProperties); they agree only because both walk
-        // entity.Properties. This is the only guard that they do.
+        // A4: invoke CreateWidgets BY NAME, so the override must land on its own slot.
+        // Create{Nav} and the target's Create both read the published CreateSlots.
         var (domain, analysis) = EvolvedDomain.FromDsl("""
             domain Shop
             Shelf: entity {

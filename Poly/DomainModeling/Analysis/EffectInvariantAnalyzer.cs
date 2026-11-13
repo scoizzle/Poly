@@ -29,13 +29,28 @@ public sealed record EffectPostcondition(
     public ValueRange? ValueRange => Value.NumericRange;
 }
 
+/// <summary>
+/// A create or create-in initializer's abstract value in one stage context: <see cref="Initializer"/>'s expression
+/// evaluated in the creating action's environment at the create (guards, branch conditions and earlier assigns
+/// applied), in the creator's scope. <see cref="DeclaringAction"/> is the action whose body holds the create.
+/// </summary>
+public sealed record InitializerValue(PropertyBinding Initializer, AbstractValue Value, Action DeclaringAction) {
+    /// <summary>The value's numeric range, when the value carries one.</summary>
+    public ValueRange? ValueRange => Value.NumericRange;
+}
+
 /// <summary>The additive invariant picture for an action in ONE stage context.</summary>
 public sealed record ActionStageInvariant(
     string? StageName,
     IReadOnlyList<Policy> Preconditions,
     IReadOnlyDictionary<string, ValueRange?> NarrowedRanges,
     IReadOnlyDictionary<string, IReadOnlyList<Constraint>> MergedConstraints,
-    IReadOnlyList<EffectPostcondition> Postconditions);
+    IReadOnlyList<EffectPostcondition> Postconditions) {
+    /// <summary>The values of the action's own create and create-in initializers in this context. An initializer
+    /// with no entry here (a create in a loop body, or after an effect the flow does not model) is judged against
+    /// declared ranges.</summary>
+    public IReadOnlyList<InitializerValue> InitializerValues { get; init; } = [];
+}
 
 /// <summary>Per-action invariant metadata: one <see cref="ActionStageInvariant"/> per stage
 /// the action is valid in.</summary>
@@ -84,7 +99,7 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
 
     /// <summary>What a guard needs to know about one entity's properties: which hold integers (a strict bound on one
     /// is exact) and which are optional (a guard that also holds for a null value cannot empty one).</summary>
-    private sealed record GuardAxes(IReadOnlySet<string> Integral, IReadOnlySet<string> Optional);
+    internal sealed record GuardAxes(IReadOnlySet<string> Integral, IReadOnlySet<string> Optional);
 
     /// <summary>The <see cref="GuardAxes"/> of each entity, computed once per entity from the domain type model:
     /// integral is <see cref="NumericKind.Integer64"/>. A guard narrows an environment with the axes of the entity
@@ -108,19 +123,49 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
         var contexts = new List<ActionStageInvariant>();
         foreach (var (stageName, stage) in ValidStages(action, entity)) {
             var preconditions = CollectPreconditions(action, entity, stage);
+            var guards = PolicyGuardFacts.Guards(action, stage);
             var conflicts = new List<RelationConflict>();
-            var env = BuildInitialEnv(entity, preconditions, axes.For(entity), conflicts);
-            var scalarEnv = conflicts.Count == 0 ? env : BuildInitialEnv(entity, preconditions, axes.For(entity), relations: false);
+            var env = BuildInitialEnv(entity, guards, axes.For(entity), conflicts);
+            var scalarEnv = conflicts.Count == 0 ? env : BuildInitialEnv(entity, guards, axes.For(entity), relations: false);
             ReportUnsatisfiablePreconditions(context, action, stageName, env, scalarEnv, conflicts);
             var narrowed = env.ToDictionary(kv => kv.Key, kv => kv.Value.NumericRange, StringComparer.Ordinal);
             var merged = env.ToDictionary(kv => kv.Key, kv => (IReadOnlyList<Constraint>)kv.Value.Constraints, StringComparer.Ordinal);
             var postconditions = new List<EffectPostcondition>();
             // Call-stack scoped: an action is in the set only while its walk is on the stack.
             var visited = new HashSet<Action>(ReferenceEqualityComparer.Instance) { action };
-            ApplyEffects(action.Effects, entity, action, env, paramEnv: null, visited, postconditions, domain, stageName, axes);
-            contexts.Add(new ActionStageInvariant(stageName, preconditions, narrowed, merged, postconditions));
+            var flow = new WalkTrust(action, preconditionGuardsOnly: false);
+            ApplyEffects(action.Effects, entity, action, env, paramEnv: null, visited, postconditions, flow, domain, stageName, axes);
+            if (flow.UntrustedWrites.Count > 0)
+                JudgeUntrustedWritesByPreconditions(action, entity, stage, stageName, domain, axes, postconditions, flow.UntrustedWrites);
+            contexts.Add(new ActionStageInvariant(stageName, preconditions, narrowed, merged, postconditions) {
+                InitializerValues = flow.Values,
+            });
         }
         context.SetMetadata(action, new ActionInvariantMetadata(contexts));
+    }
+
+    /// <summary>
+    /// An assign the walk records where it no longer models the instance (<see cref="WalkTrust.Trusted"/> false:
+    /// after a loop, a transition, a cross-entity invoke, ...) takes its value from a second walk over the guards
+    /// master narrowed by (<see cref="PolicyGuardFacts.PreconditionGuards"/>, callees included): there V-18's
+    /// <c>require not</c> and stage-gate narrowing could compose with the unsound loop and write-back environments
+    /// (#863, V-15) into a new clean. The walk's shape does not depend on the environment, so the two walks record the
+    /// same effects in the same order; a mismatch is a broken invariant and throws.
+    /// </summary>
+    private static void JudgeUntrustedWritesByPreconditions(
+        Action action, Entity entity, Stage? stage, string? stageName, Domain domain, DomainGuardAxes axes,
+        List<EffectPostcondition> postconditions, IReadOnlyList<int> untrusted) {
+        var shadow = new List<EffectPostcondition>();
+        ApplyEffects(action.Effects, entity, action,
+            BuildInitialEnv(entity, PolicyGuardFacts.PreconditionGuards(action, stage), axes.For(entity)), paramEnv: null,
+            new HashSet<Action>(ReferenceEqualityComparer.Instance) { action }, shadow,
+            new WalkTrust(action, preconditionGuardsOnly: true), domain, stageName, axes);
+        foreach (var i in untrusted) {
+            if (i >= shadow.Count || !ReferenceEquals(shadow[i].Effect, postconditions[i].Effect))
+                throw new InvalidOperationException(
+                    $"The {Id} pass walked action '{action.Name}' twice and the walks recorded different effects.");
+            postconditions[i] = postconditions[i] with { Value = shadow[i].Value };
+        }
     }
 
     /// <summary>The stages the action is valid in: its own stage if stage-scoped, else every
@@ -146,21 +191,21 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
     // ── Abstract environment ────────────────────────────────────
 
     /// <summary>The initial abstract environment: each property's declared constraints as an
-    /// <see cref="AbstractValue"/>, refined by every precondition's bounds.</summary>
+    /// <see cref="AbstractValue"/>, refined by every guard (<see cref="PolicyGuardFacts"/>).</summary>
     private static Dictionary<string, AbstractValue> BuildInitialEnv(
-        Entity entity, IReadOnlyList<Policy> preconditions, GuardAxes axes,
+        Entity entity, IReadOnlyList<GuardedPolicy> guards, GuardAxes axes,
         List<RelationConflict>? conflicts = null, bool relations = true) {
         var env = new Dictionary<string, AbstractValue>(StringComparer.Ordinal);
         foreach (var prop in entity.Properties)
             env[prop.Name] = AbstractValue.From(prop.Constraints);
-        foreach (var policy in preconditions)
-            Refine(env, policy.Expression, axes, conflicts, relations);
+        foreach (var guard in guards)
+            PolicyGuardFacts.Refine(env, guard, entity, args: null, instantiate: null, axes, conflicts, relations);
         return env;
     }
 
     /// <summary>A relation (<c>Start &lt; End</c>) whose refinement is what made two previously
     /// satisfiable properties unsatisfiable: one cause, reported once (#367 B-7).</summary>
-    private readonly record struct RelationConflict(string Left, string Right, RelationalOrdering Orderings);
+    internal readonly record struct RelationConflict(string Left, string Right, RelationalOrdering Orderings);
 
     /// <summary>
     /// Narrows the symbols an environment mentions by a boolean condition (a guard, an if-branch, or a where-filter).
@@ -172,7 +217,7 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
     /// that is also true for a null optional property still narrows its present values (F4, as the else-branch does),
     /// but never empties it.
     /// </summary>
-    private static void Refine(
+    internal static void Refine(
         Dictionary<string, AbstractValue> env, DomainExpression condition, GuardAxes axes,
         List<RelationConflict>? conflicts = null, bool relations = true) {
         switch (condition) {
@@ -197,7 +242,7 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
     /// <summary>Narrows an environment by the negation of <paramref name="condition"/> (an else-branch, or the operand
     /// of <c>not</c>): <c>not not x</c> is <c>x</c>, <c>not (a and b)</c> is <c>not a or not b</c>, <c>not (a or b)</c>
     /// is <c>not a and not b</c>, and a comparison takes its complement kind. Same contract as <see cref="Refine"/>.</summary>
-    private static void RefineNegated(
+    internal static void RefineNegated(
         Dictionary<string, AbstractValue> env, DomainExpression condition, GuardAxes axes,
         List<RelationConflict>? conflicts = null, bool relations = true) {
         switch (condition) {
@@ -521,7 +566,7 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
         IReadOnlyList<Effect> effects, Entity entity, Action action,
         Dictionary<string, AbstractValue> env,
         IReadOnlyDictionary<string, AbstractValue>? paramEnv,
-        HashSet<Action> visited, List<EffectPostcondition> result, Domain domain,
+        HashSet<Action> visited, List<EffectPostcondition> result, WalkTrust flow, Domain domain,
         string? currentStage, DomainGuardAxes axes) {
         foreach (var effect in effects) {
             switch (effect) {
@@ -537,6 +582,7 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
                         foreach (var key in env.Keys.ToList())
                             if (!string.Equals(key, target.Name, StringComparison.Ordinal))
                                 env[key] = env[key].WithoutRelationsTo(target.Name);
+                        if (!flow.Trusted) flow.UntrustedWrites.Add(result.Count);
                         result.Add(new EffectPostcondition(
                             assign, prop.Name,
                             BuildPostconditionConstraints(prop, assign.Value, action, paramEnv),
@@ -548,35 +594,100 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
                     var thenEnv = CloneEnv(env);
                     Refine(thenEnv, cond.Condition, axes.For(entity));
                     var thenDead = ArmIsDead(env, thenEnv);
-                    ApplyEffects(cond.ThenEffects, entity, action, thenEnv, paramEnv, visited, result, domain, currentStage, axes);
+                    var trustedBefore = flow.Trusted;
+                    ApplyEffects(cond.ThenEffects, entity, action, thenEnv, paramEnv, visited, result, flow, domain, currentStage, axes);
+                    var thenTrusted = flow.Trusted;
+                    flow.Trusted = trustedBefore;
                     Dictionary<string, AbstractValue>? elseEnv = null;
                     var elseDead = false;
                     if (cond.ElseEffects is not null) {
                         elseEnv = CloneEnv(env);
                         RefineNegated(elseEnv, cond.Condition, axes.For(entity));
                         elseDead = ArmIsDead(env, elseEnv);
-                        ApplyEffects(cond.ElseEffects, entity, action, elseEnv, paramEnv, visited, result, domain, currentStage, axes);
+                        ApplyEffects(cond.ElseEffects, entity, action, elseEnv, paramEnv, visited, result, flow, domain, currentStage, axes);
                     }
+                    // Each arm is its own path: an effect the walk does not model in one arm leaves the other arm
+                    // trusted, and the join is trusted only when both arms are.
+                    flow.Trusted = thenTrusted && flow.Trusted;
                     JoinBranches(env, thenEnv, thenDead, elseEnv, elseDead, entity);
                     break;
                 case CompositeEffect composite:
-                    ApplyEffects(composite.Effects, entity, action, env, paramEnv, visited, result, domain, currentStage, axes);
+                    ApplyEffects(composite.Effects, entity, action, env, paramEnv, visited, result, flow, domain, currentStage, axes);
                     break;
                 case InvokeActionEffect invoke:
-                    ApplyInvoke(invoke, entity, action, env, paramEnv, visited, result, domain, currentStage, axes);
+                    // A cross-entity callee can invoke back into this instance, and a callee the walk does not
+                    // enter still runs: either way the environment no longer describes this instance.
+                    if (!ApplyInvoke(invoke, entity, action, env, paramEnv, visited, result, flow, domain, currentStage, axes))
+                        flow.Untrust();
                     DropAllRelations(env);
                     break;
                 case ForEachEffect fe:
                     // Zero or more iterations: assigns join into the env (Merge), so the
-                    // pre-loop value still holds for zero iterations.
-                    ApplyEffects(fe.Body, entity, action, env, paramEnv, visited, result, domain, currentStage, axes);
+                    // pre-loop value still holds for zero iterations. The body is walked once on the pre-loop
+                    // environment, so neither the body nor what follows the loop is a sound place to read it from (#863).
+                    flow.Untrust();
+                    ApplyEffects(fe.Body, entity, action, env, paramEnv, visited, result, flow, domain, currentStage, axes);
                     break;
                 case ForEachInvokeEffect efe:
-                    ApplyForEachInvoke(efe, entity, action, env, paramEnv, visited, result, domain, axes);
+                    flow.Untrust();
+                    ApplyForEachInvoke(efe, entity, action, env, paramEnv, visited, result, flow, domain, axes);
                     DropAllRelations(env);
+                    break;
+                case CreateEntityInstance create:
+                    RecordInitializers(create.Initializers, entity, action, env, paramEnv, flow);
+                    flow.Untrust();
+                    break;
+                case CreateEntityInRelationshipEffect createIn:
+                    RecordInitializers(createIn.Initializers, entity, action, env, paramEnv, flow);
+                    flow.Untrust();
+                    break;
+                default:
+                    // A transition runs the target stage's entry block, and an effect without an arm here (a link
+                    // or an unlink, which analysis refuses today, or a later kind) is one the walk does not model.
+                    flow.Untrust();
                     break;
             }
         }
+    }
+
+    /// <summary>
+    /// The create initializers one stage context records for its action (#809): each one's value in the walk's
+    /// environment at the create, so an initializer reads the guard, branch and assign facts an assignment reads.
+    /// Only the context's own action's creates are recorded; a callee's creates are judged in the callee's context.
+    /// The environment is trusted for an initializer only while every effect walked so far is one the walk models
+    /// exactly (an assign, an <c>if</c>, a composite, a self-invoke it entered): after anything else, in the
+    /// branch it was in and every effect after it, nothing more is recorded, and those creates are judged against
+    /// declared ranges as before (lock amendments 1 and 3). Each arm of an <c>if</c> is its own path; after the
+    /// <c>if</c> the flag is the conjunction of the arms, and it never turns true again further along a path. An assign
+    /// recorded while it is false is listed in <see cref="UntrustedWrites"/> (see
+    /// <see cref="JudgeUntrustedWritesByPreconditions"/>), whose second walk sets <see cref="PreconditionGuardsOnly"/>.
+    /// </summary>
+    private sealed class WalkTrust(Action root, bool preconditionGuardsOnly) {
+        public Action Root { get; } = root;
+        public List<InitializerValue> Values { get; } = [];
+        public List<int> UntrustedWrites { get; } = [];
+        public bool PreconditionGuardsOnly { get; } = preconditionGuardsOnly;
+        public bool Trusted { get; set; } = true;
+        public void Untrust() => Trusted = false;
+
+        /// <summary>The guards a callee's entry environment is narrowed by in this walk.</summary>
+        public IReadOnlyList<GuardedPolicy> CalleeGuards(Action callee) => PreconditionGuardsOnly
+            ? PolicyGuardFacts.PreconditionGuards(callee, stage: null)
+            : PolicyGuardFacts.Guards(callee, stage: null);
+    }
+
+    /// <summary>Records each initializer's value, evaluated in the creator's scope as
+    /// <see cref="InferValue"/> evaluates it (no domain, so a navigation stays Unknown), under the walk's
+    /// environment. Nothing is recorded where a symbol is <see cref="AbstractValue.Unsatisfiable"/>: no execution
+    /// reaches that point (a dead <c>if</c> arm, unsatisfiable guards, or an assign that always fails), and an empty
+    /// value keeps its stale range, which would read as a definite violation; the create keeps the declared path.</summary>
+    private static void RecordInitializers(
+        IReadOnlyList<PropertyBinding> initializers, Entity entity, Action action,
+        Dictionary<string, AbstractValue> env, IReadOnlyDictionary<string, AbstractValue>? paramEnv,
+        WalkTrust flow) {
+        if (!flow.Trusted || !ReferenceEquals(action, flow.Root) || env.Values.Any(v => v.Unsatisfiable)) return;
+        foreach (var initializer in initializers)
+            flow.Values.Add(new InitializerValue(initializer, Eval(initializer.Expression, entity, action, env, paramEnv), action));
     }
 
     /// <summary>A callee runs on a copy of the environment and may reassign any property, so after
@@ -589,24 +700,25 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
     /// <summary>Call-chain propagation. Self-invoke threads the current environment into the
     /// callee (refined by its own preconditions) with argument bindings mapped to its params.
     /// Cross-entity invoke (Rel.Action) builds the related entity's environment and steps
-    /// the callee on it.</summary>
-    private static void ApplyInvoke(
+    /// the callee on it. True when the callee's effects were stepped on this instance's environment (a self-invoke
+    /// the walk entered), so the environment after it still describes this instance.</summary>
+    private static bool ApplyInvoke(
         InvokeActionEffect invoke, Entity entity, Action action,
         Dictionary<string, AbstractValue> env,
         IReadOnlyDictionary<string, AbstractValue>? paramEnv,
-        HashSet<Action> visited, List<EffectPostcondition> result, Domain domain,
+        HashSet<Action> visited, List<EffectPostcondition> result, WalkTrust flow, Domain domain,
         string? currentStage, DomainGuardAxes axes) {
         if (invoke.TargetRelationship is not null) {
-            ApplyCrossEntityInvoke(invoke, entity, action, env, paramEnv, visited, result, domain, axes);
-            return;
+            ApplyCrossEntityInvoke(invoke, entity, action, env, paramEnv, visited, result, flow, domain, axes);
+            return false;
         }
 
         var target = DomainAnalysis.FindAction(entity, invoke.ActionName, currentStage);
-        if (target is null || !visited.Add(target)) return;
+        if (target is null || !visited.Add(target)) return false;
 
         var targetEnv = CloneEnv(env);
-        foreach (var policy in CollectPreconditions(target, entity, null))
-            Refine(targetEnv, policy.Expression, axes.For(entity));
+        foreach (var guard in flow.CalleeGuards(target))
+            PolicyGuardFacts.Refine(targetEnv, guard, entity, args: null, instantiate: null, axes.For(entity));
 
         Dictionary<string, AbstractValue>? targetParams = null;
         if (invoke.ParameterBindings.Count > 0) {
@@ -620,13 +732,14 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
         var atEntry = CloneEnv(targetEnv);
 
         try {
-            ApplyEffects(target.Effects, entity, target, targetEnv, targetParams, visited, result, domain, currentStage, axes);
+            ApplyEffects(target.Effects, entity, target, targetEnv, targetParams, visited, result, flow, domain, currentStage, axes);
         }
         finally {
             visited.Remove(target);
         }
 
         MergeCalleePostState(env, targetEnv, atEntry, entity);
+        return true;
     }
 
     /// <summary>#367 B-3: a self-invoke runs on the SAME entity (the callee env is keyed by this
@@ -653,7 +766,7 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
         InvokeActionEffect invoke, Entity entity, Action action,
         Dictionary<string, AbstractValue> env,
         IReadOnlyDictionary<string, AbstractValue>? paramEnv,
-        HashSet<Action> visited, List<EffectPostcondition> result, Domain domain, DomainGuardAxes axes) {
+        HashSet<Action> visited, List<EffectPostcondition> result, WalkTrust flow, Domain domain, DomainGuardAxes axes) {
         var relationship = entity.Navigations.FirstOrDefault(r =>
             string.Equals(r.Name, invoke.TargetRelationship, StringComparison.Ordinal));
         if (relationship is null) return;
@@ -669,8 +782,8 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
         var targetEnv = new Dictionary<string, AbstractValue>(StringComparer.Ordinal);
         foreach (var prop in targetEntity.Properties)
             targetEnv[prop.Name] = AbstractValue.From(prop.Constraints);
-        foreach (var policy in CollectPreconditions(targetAction, targetEntity, null))
-            Refine(targetEnv, policy.Expression, axes.For(targetEntity));
+        foreach (var guard in flow.CalleeGuards(targetAction))
+            PolicyGuardFacts.Refine(targetEnv, guard, targetEntity, args: null, instantiate: null, axes.For(targetEntity));
 
         Dictionary<string, AbstractValue>? targetParams = null;
         if (invoke.ParameterBindings.Count > 0) {
@@ -680,7 +793,7 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
         }
 
         try {
-            ApplyEffects(targetAction.Effects, targetEntity, targetAction, targetEnv, targetParams, visited, result, domain, currentStage: null, axes);
+            ApplyEffects(targetAction.Effects, targetEntity, targetAction, targetEnv, targetParams, visited, result, flow, domain, currentStage: null, axes);
         }
         finally {
             visited.Remove(targetAction);
@@ -694,7 +807,7 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
         ForEachInvokeEffect efe, Entity entity, Action action,
         Dictionary<string, AbstractValue> env,
         IReadOnlyDictionary<string, AbstractValue>? paramEnv,
-        HashSet<Action> visited, List<EffectPostcondition> result, Domain domain, DomainGuardAxes axes) {
+        HashSet<Action> visited, List<EffectPostcondition> result, WalkTrust flow, Domain domain, DomainGuardAxes axes) {
         var relationship = entity.Navigations.FirstOrDefault(r =>
             string.Equals(r.Name, efe.RelationshipName, StringComparison.Ordinal));
         if (relationship is null) return;
@@ -710,13 +823,14 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
         var targetEnv = new Dictionary<string, AbstractValue>(StringComparer.Ordinal);
         foreach (var prop in targetEntity.Properties)
             targetEnv[prop.Name] = AbstractValue.From(prop.Constraints);
-        foreach (var policy in CollectPreconditions(targetAction, targetEntity, null))
-            Refine(targetEnv, policy.Expression, axes.For(targetEntity));
+        foreach (var guard in flow.CalleeGuards(targetAction))
+            PolicyGuardFacts.Refine(targetEnv, guard, targetEntity, args: null, instantiate: null, axes.For(targetEntity));
         if (efe.Predicate is ForEachNamedPolicy { PolicyName: var policyName }) {
             var predicatePolicy = targetEntity.Policies.FirstOrDefault(p =>
                 string.Equals(p.Name, policyName, StringComparison.Ordinal));
             if (predicatePolicy is not null)
-                Refine(targetEnv, predicatePolicy.Expression, axes.For(targetEntity));
+                PolicyGuardFacts.Refine(targetEnv, new GuardedPolicy(predicatePolicy, Negated: false), targetEntity,
+                    args: null, instantiate: null, axes.For(targetEntity));
         }
 
         Dictionary<string, AbstractValue>? targetParams = null;
@@ -728,7 +842,7 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
         }
 
         try {
-            ApplyEffects(targetAction.Effects, targetEntity, targetAction, targetEnv, targetParams, visited, result, domain, currentStage: null, axes);
+            ApplyEffects(targetAction.Effects, targetEntity, targetAction, targetEnv, targetParams, visited, result, flow, domain, currentStage: null, axes);
         }
         finally {
             visited.Remove(targetAction);

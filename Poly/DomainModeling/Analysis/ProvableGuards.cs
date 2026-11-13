@@ -181,10 +181,10 @@ internal static class ProvableGuards {
     /// Properties a stage <c>require</c> proves present for this action. An action
     /// <c>require not Policy</c> suppresses that policy, matching <c>EmitStagePolicyGuards</c>.
     /// </summary>
-    private static HashSet<string> StagePresence(Action action, Stage stage) {
+    internal static HashSet<string> StagePresence(Action action, Stage stage) {
         var names = new HashSet<string>(StringComparer.Ordinal);
         foreach (var policy in stage.Policies) {
-            if (action.Policies.Any(p => string.Equals(p.Name, "not_" + policy.Name, StringComparison.Ordinal)))
+            if (PolicyGuardFacts.SuppressesStageGate(action, policy))
                 continue;
             names.UnionWith(Presence([policy]));
         }

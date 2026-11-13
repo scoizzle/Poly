@@ -173,6 +173,28 @@ public static class TypeDefinitionExtensions {
         }
 
         /// <summary>
+        /// The kind of the conversion from <paramref name="other"/> when a native integer (<c>nint</c> or <c>nuint</c>)
+        /// meets another numeric primitive, or null when neither side is a native integer, a side is not numeric, or the
+        /// pair has no conversion. C# 11 applies these conversions itself, so a consumer converts through the platform and
+        /// never through a method the platform type declares beside them (IntPtr's <c>op_Explicit</c> to <c>int</c> is
+        /// checked; C#'s native conversion is not). The one predicate for casts and assignments of native integers;
+        /// <see cref="IsAssignableFrom"/> keeps its narrower meaning, and answers no native pair (IntPtr and UIntPtr
+        /// declare no implicit operator).
+        /// </summary>
+        public ConversionOperatorKind? NativeIntegerConversionFrom(ITypeDefinition other) {
+            ArgumentNullException.ThrowIfNull(other);
+            if (typeDefinition.PrimitiveType is not { } to || other.PrimitiveType is not { } from
+                || !(IsNativeInteger(to) || IsNativeInteger(from)) || !IsNumeric(to) || !IsNumeric(from))
+                return null;
+            return typeDefinition.ResolveConversionFrom(other)?.Kind;
+
+            static bool IsNativeInteger(PrimitiveType type) => type is PrimitiveType.NInt or PrimitiveType.NUInt;
+
+            static bool IsNumeric(PrimitiveType type) => type.IsInteger() || IsNativeInteger(type)
+                || type is PrimitiveType.Char or PrimitiveType.Float32 or PrimitiveType.Float64 or PrimitiveType.Decimal;
+        }
+
+        /// <summary>
         /// Determines if this type can be assigned to <paramref name="other"/>.
         /// </summary>
         public bool IsAssignableTo(ITypeDefinition other) {

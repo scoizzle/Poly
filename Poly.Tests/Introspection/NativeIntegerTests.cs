@@ -436,6 +436,13 @@ internal static class NativeIntegerGrid {
             return (float)widened;
         if (value is not long word || root is null)
             return value;
+        // A lifted root answers its present value as the boxed word, read as it is (as the pre-T-18a table was captured).
+        if (Nullable.GetUnderlyingType(root) is not null)
+            return value;
+        // A non-nullable heap root (decimal) answered as a bare word is the interpreter's fallback for a handle that
+        // names no heap object: never a value, so it can never pass as one.
+        if (!Poly.Interpretation.Vm.Abi.LocalType.IsInline(root))
+            return $"raw word {word} for a {root.Name}";
         return root switch {
             _ when root == typeof(bool) => word != 0,
             _ when root == typeof(double) => BitConverter.Int64BitsToDouble(word),
@@ -863,9 +870,9 @@ public class NativeIntegerTests {
         await Assert.That((stated.Length, Poly.Tests.DomainModeling.Analysis.LedgerCheck.Checksum(stated))).IsEqualTo(StatedTypeConstantCells);
     }
 
-    private const int DefinedConstantCells = 0;
+    private const int DefinedConstantCells = 336;
 
-    private static readonly (int, string) StatedTypeConstantCells = (0, "");
+    private static readonly (int, string) StatedTypeConstantCells = (104, "6bfb3e9eeb765c2b");
 
     // ---- F2, F3, F5 ----
 

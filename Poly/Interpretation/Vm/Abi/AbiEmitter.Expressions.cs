@@ -705,12 +705,15 @@ public static partial class AbiEmitter {
         }
         // An unchecked integer cast wraps, the way `(short)32768` is -32768.
         // Convert.ToInt16 throws, so this is not that call. A reference cast
-        // stays on the heap helper below.
-        if (IsIntegralCast(sourceType) && IsIntegralCast(targetType)) {
-            var asSource = LocalType.Decode(slot.Read, sourceType, sourceType, ctx.HeapLocal);
+        // stays on the heap helper below. A native integer converts at its word type
+        // (LocalType.WordTypeOf), beside any numeric type.
+        var (sourceWord, targetWord) = (LocalType.WordTypeOf(sourceType), LocalType.WordTypeOf(targetType));
+        if ((IsIntegralCast(sourceWord) && IsIntegralCast(targetWord))
+            || ((sourceWord != sourceType || targetWord != targetType) && IsNumericCast(sourceWord) && IsNumericCast(targetWord))) {
+            var asSource = LocalType.Decode(slot.Read, sourceType, sourceWord, ctx.HeapLocal);
             Expression converted = t.IsChecked
-                ? ConvertChecked(asSource, targetType)
-                : Convert(asSource, targetType);
+                ? ConvertChecked(asSource, targetWord)
+                : Convert(asSource, targetWord);
             return ring.Then(Assign(
                 slot.Read,
                 LocalType.Encode(converted, targetType, ctx.HeapLocal)));
@@ -728,6 +731,9 @@ public static partial class AbiEmitter {
         || type == typeof(ushort) || type == typeof(int) || type == typeof(uint)
         || type == typeof(long) || type == typeof(ulong) || type == typeof(char)
         || type.IsEnum;
+
+    private static bool IsNumericCast(Type type) =>
+        (IsIntegralCast(type) && !type.IsEnum) || type == typeof(float) || type == typeof(double) || type == typeof(decimal);
 
     /// <summary>Default of the resolved type (0 / false / ABI null / heap default struct).</summary>
     private static Expression EmitDefault(Default d, Context ctx) {

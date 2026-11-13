@@ -619,6 +619,17 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
 
         var destDef = context.TypeDefinitions.GetTypeDefinition(priorType);
         var srcDef = context.TypeDefinitions.GetTypeDefinition(rhsType);
+        // An implicit native-integer conversion has no method: the tree states it as a cast, which the emitter executes
+        // through the word type (a nuint widening to double or decimal is unsigned; a decimal store is a handle).
+        if (destDef is not null && srcDef is not null && !destDef.IsAssignableFrom(srcDef)
+            && destDef.NativeIntegerConversionFrom(srcDef) is ConversionOperatorKind.Implicit) {
+            var cast = new TypeCast(assignment.Value, new ClrTypeReference(priorType));
+            context.SetResolvedType(cast, destDef);
+            var stated = assignment with { Value = cast };
+            context.SetResolvedType(stated, destDef);
+            Replace(context, assignment, stated);
+            return;
+        }
         bool convertible = IsImplicitlyConvertible(rhsType, priorType)
             || (destDef is not null && srcDef is not null && destDef.IsAssignableFrom(srcDef));
         if (convertible) {
@@ -666,6 +677,10 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         var srcDef = context.GetResolvedType(typeCast.Operand)
             ?? (source is not null ? context.TypeDefinitions.GetTypeDefinition(source) : null);
         if (destDef is not null && srcDef is not null) {
+            // A native-integer cast is the platform's own conversion: the emitter converts through the word type, never
+            // through IntPtr's declared operator or a Convert.To* overload pick.
+            if (destDef.NativeIntegerConversionFrom(srcDef) is not null)
+                return;
             if (RewriteOperatorConversion(context, typeCast, typeCast.Operand, destDef, srcDef, implicitOnly: false))
                 return;
             if (destDef.IsAssignableFrom(srcDef))

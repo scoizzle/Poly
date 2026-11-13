@@ -711,8 +711,19 @@ public static partial class AbiEmitter {
         if (leftType is null || rightType is null)
             throw new InvalidOperationException(
                 "VM compile rejected: cannot resolve the width of a nullable arithmetic operand.");
+        // A non-negative int or long constant beside a nuint converts to it (C# 10.2.11; ConstantOperandRule, T-26).
+        if (!shift && IsNativeUnsigned(left, ctx) && IsNonNegativeIntegralConstant(right))
+            rightType = leftType;
+        if (!shift && IsNativeUnsigned(right, ctx) && IsNonNegativeIntegralConstant(left))
+            leftType = rightType;
         return CSharpBinaryNumericType(leftType, rightType, shift);
     }
+
+    private static bool IsNativeUnsigned(Node node, Context ctx) =>
+        ctx.ClrTypeOf(node) is { } clr && (Nullable.GetUnderlyingType(clr) ?? clr) == typeof(nuint);
+
+    private static bool IsNonNegativeIntegralConstant(Node node) =>
+        node is Constant { Value: int i } ? i >= 0 : node is Constant { Value: long l } && l >= 0;
 
     /// <summary>The type a binary operator on these underlying types takes.
     /// <c>decimal</c> with <c>float</c> or <c>double</c>, and <c>ulong</c> with a

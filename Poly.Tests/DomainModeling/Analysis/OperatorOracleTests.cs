@@ -553,16 +553,6 @@ public class OperatorOracleTests {
 
     private static bool IsNative(string? operand) => operand is "NInt" or "NUInt";
 
-    /// <summary>Set <c>POLY_LEDGER_OUT</c> to a path to write every cell's columns and divergences there.</summary>
-    [Test]
-    public async Task Ledger_WritesItsCells_WhenAsked() {
-        if (Environment.GetEnvironmentVariable("POLY_LEDGER_OUT") is not { Length: > 0 } output)
-            return;
-        var (cells, _) = OperatorOracle.Run.Value;
-        await File.WriteAllLinesAsync(output, cells.Select(static c =>
-            $"{c.Key} | {c.Tree} | {c.Lowered} | {c.Abi} | {string.Join(" || ", c.Divergences.Select(static d => $"{d.Kind}: {d.Reason}"))}"));
-    }
-
     [Test]
     public async Task Ledger_TheMasterGridCells_AreOwnedAsBeforeT18b() {
         var (cells, _) = OperatorOracle.Run.Value;

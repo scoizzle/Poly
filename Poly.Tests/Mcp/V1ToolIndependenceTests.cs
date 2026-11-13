@@ -40,6 +40,7 @@ public partial class V1ToolIndependenceTests {
         new("DomainModeling/Runtime/ModuleInstanceExecutorTests.cs", "RuntimeTool", 1, "M-09"),
         // M-10
         new("DomainModeling/Compile/ArtifactContributorCallerTests.cs", "McpTestTools.Oracle", 2, "M-10"),
+        new("Mcp/DomainReportToolTests.cs", "McpTestTools.Query", 2, "M-10"),
         new("Mcp/HtmlToolTests.cs", "McpTestTools.Oracle", 3, "M-10"),
         new("Mcp/HtmlToolTests.cs", "OracleTool", 2, "M-10"),
         new("Mcp/JsonLdToolTests.cs", "McpTestTools.Oracle", 2, "M-10"),
@@ -51,7 +52,9 @@ public partial class V1ToolIndependenceTests {
         new("Mcp/McpSqliteHttpHarnessTests.cs", "McpTestTools.Oracle", 1, "M-10"),
         new("Mcp/ShaclToolTests.cs", "McpTestTools.Oracle", 2, "M-10"),
         new("Mcp/ShaclToolTests.cs", "OracleTool", 2, "M-10"),
-        // M-11: no entries of its own; the "Q-05b+M-11" entries live in the Q-05 block
+        // M-11
+        new("Mcp/PolyDefineEditTests.cs", "McpTestTools.Dsl", 2, "M-11"),
+        new("Mcp/ValidateDslTests.cs", "McpTestTools.Dsl", 4, "M-11"),
         // M-13
         new("Docs/GuideExamplesTests.cs", "McpTestTools.Dsl", 1, "M-13"),
         new("DomainModeling/Analysis/DomainSemanticLookupFailClosedTests.cs", "McpTestTools.Evolve", 33, "M-13"),
@@ -83,23 +86,6 @@ public partial class V1ToolIndependenceTests {
         new("Mcp/UniqueSurvivesRejectedEvolveTests.cs", "McpTestTools.Evolve", 4, "M-13"),
         new("Mcp/ValidateDslTests.cs", "McpTestTools.Query", 3, "M-13"),
         // Q-05 (a "Q-05x+M-nn" label: one entry per (file, key); the Q-05x PR lowers the count and rewrites the label to M-nn)
-        // Q-05b
-        new("Mcp/DomainReportToolTests.cs", "McpTestTools.Dsl", 1, "Q-05b"),
-        new("Mcp/DomainReportToolTests.cs", "McpTestTools.Query", 3, "Q-05b+M-10"),
-        new("Mcp/ExportRoundTripOrderTests.cs", "McpTestTools.Dsl", 4, "Q-05b"),
-        new("Mcp/ExportRoundTripOrderTests.cs", "McpTestTools.Oracle", 1, "Q-05b"),
-        new("Mcp/HtmlToolTests.cs", "McpTestTools.Dsl", 1, "Q-05b"),
-        new("Mcp/HtmlToolTests.cs", "McpTestTools.Query", 1, "Q-05b"),
-        new("Mcp/JsonLdToolTests.cs", "McpTestTools.Dsl", 1, "Q-05b"),
-        new("Mcp/JsonLdToolTests.cs", "McpTestTools.Query", 1, "Q-05b"),
-        new("Mcp/ManyToManyExportTests.cs", "McpTestTools.Dsl", 2, "Q-05b+M-13"),
-        new("Mcp/McpNameRuleTests.cs", "McpTestTools.Dsl", 4, "Q-05b"),
-        new("Mcp/McpNameRuleTests.cs", "McpTestTools.Session", 4, "Q-05b"),
-        new("Mcp/McpPackSharedInputsTests.cs", "McpTestTools.Dsl", 2, "Q-05b"),
-        new("Mcp/PolyDefineEditTests.cs", "McpTestTools.Dsl", 4, "Q-05b+M-11"),
-        new("Mcp/ShaclToolTests.cs", "McpTestTools.Dsl", 1, "Q-05b"),
-        new("Mcp/ShaclToolTests.cs", "McpTestTools.Query", 1, "Q-05b"),
-        new("Mcp/ValidateDslTests.cs", "McpTestTools.Dsl", 4, "Q-05b+M-11"),
         // Q-05c
         new("DomainModeling/Compile/CompileRefusesErrorsTests.cs", "McpTestTools.Runtime", 1, "Q-05c"),
         new("DomainModeling/Compile/LibrarySelectionTests.cs", "McpTestTools.Dsl", 2, "Q-05c"),

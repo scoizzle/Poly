@@ -23,8 +23,9 @@ public class DomainReportToolTests {
 
     [Test]
     public async Task GetDomainReport_ReturnsMarkdownWithoutMutatingTheSession() {
-        var (sessionId, _) = McpTestTools.Store.Create("Catalog");
-        await Assert.That(McpTestTools.Dsl.ApplyDsl(sessionId, Dsl).Success).IsTrue();
+        var surface = PolySurfaceHarness.Over(McpTestTools.Store);
+        var sessionId = surface.Open("Catalog");
+        await Assert.That(surface.Define(sessionId, Dsl).Success).IsTrue();
         await Assert.That(McpTestTools.Store.TryGet(sessionId, out var afterApply)).IsTrue();
         var revision = afterApply.Revision;
 
@@ -40,7 +41,9 @@ public class DomainReportToolTests {
         await Assert.That(data.Markdown).Contains("`length(1, 20)`");
         await Assert.That(data.Markdown).Contains("Draft");
 
-        await Assert.That(McpTestTools.Query.GetDomainOverview(sessionId).Revision).IsEqualTo(revision);
+        var inspected = surface.Inspect(sessionId).Revision;
+        await Assert.That(inspected).IsNotNull();
+        await Assert.That(inspected).IsEqualTo(revision);
     }
 
     [Test]

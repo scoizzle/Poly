@@ -57,9 +57,6 @@ internal static class OperatorOracle {
         new("UInt32", null, typeof(uint), uint.MaxValue, 7u, ClrOnly: true),
         new("UInt64", null, typeof(ulong), ulong.MaxValue, 7UL, ClrOnly: true),
         new("Char", null, typeof(char), 'a', 'b', ClrOnly: true),
-        // T-18b: the native integers. A wrap at the top and a negative; a nuint at or above 2^63, which a signed word reads as negative.
-        new("NInt", null, typeof(nint), nint.MaxValue, (nint)(-7), ClrOnly: true),
-        new("NUInt", null, typeof(nuint), unchecked((nuint)0x8000_0000_0000_0005UL), (nuint)7, ClrOnly: true),
         new("Text", "Text", typeof(string), "ab", "cd"),
         new("Boolean", "Boolean", typeof(bool), true, false),
         new("Date", "Date", typeof(DateOnly), new DateOnly(2024, 2, 28), new DateOnly(2024, 3, 1)),
@@ -72,6 +69,19 @@ internal static class OperatorOracle {
         new("Money", "Money", null, null, null)
     ];
 
+    /// <summary>
+    /// T-18b: the native integers. A wrap at the top and a negative; a nuint at or above 2^63, which a signed word reads as
+    /// negative. Apart from <see cref="Operands"/>, which the constant-fold grid and the extra-operand grid also read, so
+    /// their grids stay the 22-operand ones.
+    /// </summary>
+    public static readonly OracleOperand[] NativeOperands = [
+        new("NInt", null, typeof(nint), nint.MaxValue, (nint)(-7), ClrOnly: true),
+        new("NUInt", null, typeof(nuint), unchecked((nuint)0x8000_0000_0000_0005UL), (nuint)7, ClrOnly: true)
+    ];
+
+    /// <summary>The ledger's operands: the 22, then the native integers.</summary>
+    public static readonly OracleOperand[] GridOperands = [.. Operands, .. NativeOperands];
+
     private static readonly Poly.DomainModeling.Meaning.DomainTypeModel Model = OperatorOperands.Model();
 
     /// <summary>The grid, under the invariant culture: the checksums hash reason strings, and concatenation formats values.</summary>
@@ -82,12 +92,12 @@ internal static class OperatorOracle {
             var watch = Stopwatch.StartNew();
             var cells = new List<OracleCell>();
             foreach (var kind in Enum.GetValues<OperatorKind>()) {
-                foreach (var left in Operands) {
+                foreach (var left in GridOperands) {
                     if (OperatorShape.ArityOf(kind) == 1) {
                         cells.Add(Evaluate(left, kind, null));
                         continue;
                     }
-                    foreach (var right in Operands)
+                    foreach (var right in GridOperands)
                         cells.Add(Evaluate(left, kind, right));
                 }
             }
@@ -575,7 +585,7 @@ public class OperatorOracleTests {
         var (cells, elapsed) = OperatorOracle.Run.Value;
         var binary = Enum.GetValues<OperatorKind>().Count(static k => OperatorShape.ArityOf(k) == 2);
         var unary = Enum.GetValues<OperatorKind>().Length - binary;
-        await Assert.That(cells.Count).IsEqualTo((binary * OperatorOracle.Operands.Length * OperatorOracle.Operands.Length) + (unary * OperatorOracle.Operands.Length));
+        await Assert.That(cells.Count).IsEqualTo((binary * OperatorOracle.GridOperands.Length * OperatorOracle.GridOperands.Length) + (unary * OperatorOracle.GridOperands.Length));
         await Assert.That(cells.Count).IsEqualTo(10464);
         await Assert.That(elapsed).IsLessThan(TimeSpan.FromMinutes(2));
         // A defined cell the VM ran must have had its value compared with what the tree states.

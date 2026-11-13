@@ -7,8 +7,8 @@ using Poly.Tests.DomainModeling.Analysis;
 namespace Poly.Tests.Interpretation;
 
 /// <summary>
-/// The lowered-tree compatibility analysis over operands the operator ledger's 22-operand grid omits: DateTimeOffset,
-/// CLR enums, IntPtr and UIntPtr, and the nullable of every value operand. Each cell is read twice: the analysis
+/// The lowered-tree compatibility analysis over operands the operator ledger's 22 base operands omit: DateTimeOffset,
+/// CLR enums, IntPtr and UIntPtr (the ledger adds those two apart since T-18b), and the nullable of every value operand. Each cell is read twice: the analysis
 /// verdict, and whether the type provider defines the operator for the unwrapped operands. Cells are pinned per
 /// family by count and by a checksum of their keys, so a verdict that moves inside a family is visible.
 /// </summary>
@@ -19,8 +19,7 @@ internal static class ExtraOperandGrid {
 
     internal enum Wide : ulong { None = 0, All = ulong.MaxValue }
 
-    /// <summary>The ledger's CLR operands before T-18b: the native integers it gained stay in this grid's IntPtr family.</summary>
-    private static readonly Type[] Base = [.. OperatorOracle.Operands.Where(static o => o.Clr is not null && o.Clr != typeof(IntPtr) && o.Clr != typeof(UIntPtr)).Select(static o => o.Clr!)];
+    private static readonly Type[] Base = [.. OperatorOracle.Operands.Where(static o => o.Clr is not null).Select(static o => o.Clr!)];
 
     private static readonly Type[] Extras = [typeof(DateTimeOffset), typeof(Shade), typeof(Other), typeof(Wide), typeof(IntPtr), typeof(UIntPtr)];
 

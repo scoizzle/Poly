@@ -617,4 +617,27 @@ public sealed class GrammarFailureTests {
             .Define("function").Pattern("p").Kind(TestKind.Action).Kind(TestKind.LBrace).Repeat("param").Value(TestKind.Identifier, "name").Commit()
             .Build()).Throws<InvalidOperationException>();
     }
+
+    [Test]
+    public async Task Refuse_TiedWithAPlainPostCutFailure_ReportsTheSamePositionAndMessage_InEitherDeclarationOrder() {
+        static Grammar<TestToken, TestKind> Rows(bool refusalFirst) {
+            var rule = new GrammarBuilder<TestToken, TestKind>().Define("entity-body");
+            RuleBuilder<TestToken, TestKind> Policy(RuleBuilder<TestToken, TestKind> r) => r.Pattern("policy")
+                .Value(TestKind.Identifier, "name").Kind(TestKind.Colon).Word(TestKind.Identifier, "policy", t => IsWord(t, "policy")).Cut()
+                .Any().Kind(TestKind.LBrace).Commit();
+            RuleBuilder<TestToken, TestKind> External(RuleBuilder<TestToken, TestKind> r) => r.Pattern("policy-external")
+                .Value(TestKind.Identifier, "name").Kind(TestKind.Colon).Word(TestKind.Identifier, "policy", t => IsWord(t, "policy"))
+                .Word(TestKind.Identifier, "external", t => IsWord(t, "external")).Refuse("'policy external' is not supported").Commit();
+            return (refusalFirst ? Policy(External(rule)) : External(Policy(rule))).Build();
+        }
+
+        // Both rows reach 4: the Cut row fails at the end of input after `external`; the refusal stands through `external`.
+        var policyFirst = Match(Rows(refusalFirst: false), "entity-body", "X : policy external").Failure;
+        var refusalFirst = Match(Rows(refusalFirst: true), "entity-body", "X : policy external").Failure;
+
+        await Assert.That(policyFirst).IsNotNull();
+        await Assert.That(refusalFirst).IsNotNull();
+        await Assert.That((policyFirst!.Refused, policyFirst.Offset, policyFirst.Template)).IsEqualTo((true, 3, "'policy external' is not supported"));
+        await Assert.That((refusalFirst!.Refused, refusalFirst.Offset, refusalFirst.Template)).IsEqualTo((policyFirst.Refused, policyFirst.Offset, policyFirst.Template));
+    }
 }

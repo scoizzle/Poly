@@ -968,6 +968,174 @@ public class LambdaBridgeProviderTests {
         await Assert.That(BridgeGrid.LedgerCell(minusDuration).Abi).IsEqualTo("TimeSpan; S1=-1; S2=-1");
     }
 
+    private static string FamiliesOf(IEnumerable<BridgeCase> cells, Func<BridgeCase, string> family) =>
+        string.Join("\n", cells.GroupBy(family)
+            .OrderBy(static g => g.Key, StringComparer.Ordinal)
+            .Select(static g => $"{g.Key} = {ConstantFoldGrid.Pin([.. g.Select(static c => c.Line)])}"));
+
+    /// <summary>
+    /// The rule (owner statement 2026-11-12; T-19's done-when): every cell the bridge decides is the provider's answer:
+    /// the operator <c>GetOperator</c> states over the operands with their nullable unwrapped (lifted back), the conditional's
+    /// <c>GetCommonType</c>, an implicit <c>ResolveConversionFrom</c> for a return or an argument, or a positioned refusal
+    /// where the provider has none. The failing families are listed.
+    /// </summary>
+    [Test]
+    public async Task Bridge_AgreesWithTheProvider_OnEveryCellItDecides() {
+        var disagreeing = BridgeGrid.Cases.Where(static c => BridgeGrid.BridgeDecides(c) && !BridgeGrid.Agrees(c));
+        await Assert.That(FamiliesOf(disagreeing, static c => BridgeGrid.Family(c, BridgeGrid.Outcome(c).Render, BridgeGrid.ProviderExpectation(c).Render)))
+            .IsEqualTo("");
+    }
+
+    /// <summary>
+    /// The nullable shapes, one by one (lock amendment 7, 3,549 cells): a nullable operand lifts the provider's operator, so
+    /// <c>int? + int</c> is <c>int?</c> and null gives null (master unwrapped and threw), and a comparison stays <c>bool</c>.
+    /// </summary>
+    [Test]
+    public async Task Bridge_NullableLift_EveryNullableShapeIsTheProvidersLiftedOperator() {
+        var nullable = InGrid("nullable").ToArray();
+        await Assert.That(nullable.Length).IsEqualTo(3549);
+        var disagreeing = nullable.Where(static c => BridgeGrid.BridgeDecides(c) && !BridgeGrid.Agrees(c));
+        await Assert.That(FamiliesOf(disagreeing, static c => BridgeGrid.Family(c, BridgeGrid.Outcome(c).Render, BridgeGrid.ProviderExpectation(c).Render)))
+            .IsEqualTo("");
+    }
+
+    /// <summary>
+    /// The owner's exception (#679 6842272727) through T-18's shared rule (<c>ConstantOperandRule</c>): a non-negative signed
+    /// constant beside <c>ulong</c>, <c>ulong?</c> or a <c>ulong</c> constant is judged as UInt64; a negative one stays an
+    /// analysis error, as in C#.
+    /// </summary>
+    [Test]
+    public async Task Bridge_UInt64WithNonNegativeConstant_StaysAccepted() {
+        var cells = InGrid("uint64-constant").ToArray();
+        var negative = cells.Where(static c => c.Key.Contains("(-1)", StringComparison.Ordinal)).ToArray();
+        await Assert.That(negative.Length).IsEqualTo(264);
+        await Assert.That(negative.All(static c => BridgeGrid.Outcome(c).Stage == "analysis-rejected")).IsTrue();
+        var decided = cells.Except(negative).Where(BridgeGrid.BridgeDecides).ToArray();
+        await Assert.That(decided.Length).IsEqualTo(236);
+        var wrong = decided.Where(static c => BridgeGrid.Outcome(c).Observed != BridgeGrid.Expectation(c).Render)
+            .Select(static c => $"{c.Key}: {BridgeGrid.Outcome(c).Observed}, C# {BridgeGrid.Expectation(c).Render}").ToArray();
+        await Assert.That(wrong).IsEmpty();
+    }
+
+    /// <summary>
+    /// Amendment 3: the stage each cell reaches, per grid, so a harness that sent every cell to one stage could not pass.
+    /// A replaced body (non-nullable Decimal arithmetic, rewritten to <c>Decimal.Add</c> by the analysis) counts as ran.
+    /// </summary>
+    [Test]
+    public async Task Grid_StagesPerGrid_AreThePredicted() {
+        var stages = BridgeGrid.Cases.GroupBy(static c => $"{c.Grid} {BridgeGrid.Outcome(c).Stage}")
+            .OrderBy(static g => g.Key, StringComparer.Ordinal).Select(static g => $"{g.Key} = {g.Count()}");
+        await Assert.That(string.Join("\n", stages)).IsEqualTo(string.Join("\n", PredictedStages));
+        await Assert.That(BridgeGrid.Cases.Count(static c => BridgeGrid.Outcome(c) is { Stage: "ran", Replaced: true })).IsGreaterThanOrEqualTo(95);
+    }
+
+    private static readonly string[] PredictedStages = [
+        "conditional bridge-rejected = 265",
+        "conditional main-rejected = 107",
+        "conditional ran = 304",
+        "constant-parameter analysis-rejected = 8",
+        "constant-parameter bridge-rejected = 25",
+        "constant-parameter ran = 3",
+        "nullable analysis-rejected = 808",
+        "nullable bridge-rejected = 265",
+        "nullable main-rejected = 335",
+        "nullable ran = 2141",
+        "operator analysis-rejected = 749",
+        "operator bridge-rejected = 224",
+        "operator main-rejected = 301",
+        "operator ran = 1807",
+        "return bridge-rejected = 484",
+        "return ran = 192",
+        "uint32-constant bridge-rejected = 4",
+        "uint32-constant ran = 60",
+        "uint64-constant analysis-rejected = 264",
+        "uint64-constant main-rejected = 28",
+        "uint64-constant ran = 236"
+    ];
+
+    /// <summary>
+    /// Fail closed with a positioned message: no cell throws a raw exception from <c>System.Linq.Expressions</c>, and every
+    /// cell the bridge decides and the provider leaves undefined is the bridge's own refusal (not an analysis error, which
+    /// would pass vacuously). The refusal families with a bridge-rejected cell are pinned; a family whose undefined cells all
+    /// stop before the bridge is an untested backstop.
+    /// </summary>
+    [Test]
+    public async Task Bridge_RefusesUndefinedCells_WithItsOwnPositionedMessage() {
+        var raw = BridgeGrid.Cases.Where(static c => BridgeGrid.Outcome(c).Stage == "emit-throws").Select(static c => c.Line).ToArray();
+        await Assert.That(raw).IsEmpty();
+        var undefined = BridgeGrid.Cases.Where(static c => !BridgeGrid.ProviderExpectation(c).Defined).ToArray();
+        var notOwn = undefined.Where(static c => BridgeGrid.BridgeDecides(c)
+                && !(BridgeGrid.Outcome(c) is { Stage: "bridge-rejected", Message: { } m } && m.StartsWith("VM compile rejected: lambda bridge", StringComparison.Ordinal)))
+            .Select(static c => $"{c.Line}: {BridgeGrid.Outcome(c).Render}").ToArray();
+        await Assert.That(notOwn).IsEmpty();
+        var families = undefined.Where(static c => BridgeGrid.Outcome(c).Stage == "bridge-rejected")
+            .GroupBy(BridgeGrid.Group).OrderBy(static g => g.Key, StringComparer.Ordinal).Select(static g => $"{g.Key} = {g.Count()}");
+        await Assert.That(string.Join("\n", families)).IsEqualTo(string.Join("\n", BridgeRefusalFamilies));
+        var backstops = undefined.GroupBy(BridgeGrid.Group).Where(static g => g.All(static c => !BridgeGrid.BridgeDecides(c)))
+            .Select(static g => g.Key).Order(StringComparer.Ordinal);
+        await Assert.That(string.Join("\n", backstops)).IsEqualTo(string.Join("\n", UntestedBackstops));
+    }
+
+    private static readonly string[] BridgeRefusalFamilies = [
+        "conditional = 265",
+        "constant-parameter = 25",
+        "nullable bitwise not = 1",
+        "nullable logical = 6",
+        "nullable shift = 258",
+        "operator bitwise = 84",
+        "operator bitwise not = 4",
+        "operator shift = 134",
+        "operator unary minus = 2",
+        "return = 484",
+        "uint32-constant = 4"
+    ];
+
+    /// <summary>
+    /// The refusal families whose undefined cells never reach the bridge: the lowered analysis (T-18) or the main emitter's
+    /// function-table compile (T-21) refuses each first, so the bridge's refusal there is not exercised by this grid.
+    /// </summary>
+    private static readonly string[] UntestedBackstops = [
+        "nullable arithmetic",
+        "nullable bitwise",
+        "nullable comparison",
+        "nullable unary minus",
+        "operator arithmetic",
+        "operator comparison",
+        "operator logical",
+        "uint64-constant"
+    ];
+
+    /// <summary>
+    /// Lock amendment 4: the provider models no constant-expression conversion (C# 10.2.11) outside the owner's
+    /// <c>ulong</c> exception, so a non-negative <c>int</c> constant beside a <c>uint</c> takes the provider's operator
+    /// (<c>uint + 1</c> is Int64, as the owner ruled for the analysis), and a constant into an unsigned or narrower return is
+    /// refused. These are the only cells the bridge decides differently from C#; T-26 models the conversion and removes them.
+    /// </summary>
+    [Test]
+    public async Task Bridge_DisagreesWithCSharp_OnlyOnTheConstantConversionCells_OwnedByT26() {
+        var disagreeing = BridgeGrid.Cases.Where(static c => BridgeGrid.BridgeDecides(c) && !BridgeGrid.Matches(BridgeGrid.Outcome(c).Observed, BridgeGrid.Expectation(c))).ToArray();
+        await Assert.That(disagreeing.All(static c => c.Grid is "uint32-constant" or "constant-parameter")).IsTrue();
+        await Assert.That(ConstantFoldGrid.Pin([.. disagreeing.Select(static c => c.Line)])).IsEqualTo("23 e0fc5956255e264f");
+    }
+
+    /// <summary>
+    /// Lock amendment 2. Set 1, the plain operator cells where the bridge's answer is not the main emitter's (the operator
+    /// ledger's ABI column for the same cell), is a subset of the ledger's VM-divergence cells: where the two disagree, the
+    /// main emitter is the one the ledger records as wrong (T-21). Set 2, the set-1 cells the bridge already answered like
+    /// the provider on master, is a subset of set 1. Both are pinned; T-21 inverts them.
+    /// </summary>
+    [Test]
+    public async Task Bridge_DiffersFromMain_OnlyOnLedgerDivergenceCells() {
+        var set1 = BridgeGrid.Set1();
+        var set2 = BridgeGrid.Set2();
+        var outside = set1.Where(static c => !BridgeGrid.LedgerDiverges(c))
+            .Select(static c => $"{c.Key}: bridge {BridgeGrid.BridgeAnswer(BridgeGrid.Outcome(c).Observed)}, main {BridgeGrid.MainAnswer(c)}").ToArray();
+        await Assert.That(outside).IsEmpty();
+        await Assert.That(set2.All(c => set1.Contains(c))).IsTrue();
+        await Assert.That(ConstantFoldGrid.Pin([.. set1.Select(static c => c.Line)])).IsEqualTo("709 4661008facbc71f6");
+        await Assert.That(ConstantFoldGrid.Pin([.. set2.Select(static c => c.Line)])).IsEqualTo("391 8983a5ccdda34ae8");
+    }
+
     private static readonly string[] PredictedDelta = [
         "conditional: refused becomes works = 84 d6ced5cc4370eb72",
         "conditional: runs becomes refused = 206 c6602fc15602ec42",

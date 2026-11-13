@@ -329,7 +329,7 @@ public class ActionScopeTouchShapeTests {
 
     [Test]
     public async Task Tripwire_WhenAMethodWritesAPeerOrThroughAnAlias_NamesIt() {
-        MethodDefinitionNode Method(string name, Node body) => new(name, new TypeReference("void"), Body: new Block([new Invoke(new Member(new ClrTypeReference(typeof(ActionScope)), "Touch"), new ThisReference()), body]));
+        static MethodDefinitionNode Method(string name, Node body) => new(name, new TypeReference("void"), Body: new Block([new Invoke(new Member(new ClrTypeReference(typeof(ActionScope)), "Touch"), new ThisReference()), body]));
         var peer = Method("PeerWrite", new Assignment(new Member(new Parameter("peer"), "X"), new Constant(1)));
         var alias = Method("AliasWrite", new Block([
             new Assignment(new Variable("self"), new ThisReference()),

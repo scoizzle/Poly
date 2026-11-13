@@ -264,12 +264,6 @@ public sealed class PrintBaselineTests {
         return new Entry(key, PipelineDocument + "; catalog=none", sessionText, string.Join(" | ", failures), "");
     }
 
-    internal static Entry PrintBuilt(string name, DomainSession session, string sessionText, Domain domain, IReadOnlyList<string>? implicitIds = null) {
-        var printer = implicitIds is null ? new DomainDslPrinter(session) : new DomainDslPrinter(session, implicitIds);
-        return new Entry("built/" + name, PipelineBuilt, sessionText + (implicitIds is null ? "" : "; implicitIds=[" + string.Join(",", implicitIds) + "]"),
-            "printed", Normalise(printer.Print(domain)));
-    }
-
     /// <summary>Every entry, in key order: poly/, pack/, guide/, built/.</summary>
     internal static List<Entry> CurrentEntries() {
         var entries = new List<Entry>();
@@ -333,7 +327,8 @@ public sealed class PrintBaselineTests {
     /// <summary>A document that does not print is recorded as such: exactly the known set, with the exact status, in both directions.</summary>
     [Test]
     public async Task UnprintableDocuments_AreRecorded_ExactlyAsKnown() {
-        var recorded = Frozen().Where(e => e.Status != "printed").ToDictionary(e => e.Key, e => e.Status, StringComparer.Ordinal);
+        var recorded = Frozen().Where(e => e.Status != "printed" && !e.Key.StartsWith("built/", StringComparison.Ordinal))
+            .ToDictionary(e => e.Key, e => e.Status, StringComparer.Ordinal);
         var known = KnownUnprintable.ToDictionary(k => k.Key, k => k.Status, StringComparer.Ordinal);
 
         foreach (var (key, status) in recorded)
@@ -342,6 +337,44 @@ public sealed class PrintBaselineTests {
         foreach (var key in known.Keys)
             await Assert.That(recorded.ContainsKey(key)).IsTrue()
                 .Because($"{key} is listed as unprintable but is recorded as printed: delete the entry (stale)");
+    }
+
+    /// <summary>A built case that does not print is either fail-closed by design or a known gap: exactly those, both ways.</summary>
+    [Test]
+    public async Task BuiltCasesThatDoNotPrint_AreFailClosedOrKnownGaps() {
+        var recorded = Frozen().Where(e => e.Status != "printed" && e.Key.StartsWith("built/", StringComparison.Ordinal))
+            .ToDictionary(e => e.Key, e => e.Status, StringComparer.Ordinal);
+        var expected = PrintBaselineBuiltCases.FailClosed.ToDictionary(f => "built/" + f.Case, f => "failed:" + f.ExceptionType, StringComparer.Ordinal);
+        foreach (var gap in PrintBaselineBuiltCases.KnownGaps.Where(g => g.Fragment.StartsWith("failed:", StringComparison.Ordinal)))
+            expected[gap.Key] = gap.Fragment;
+
+        foreach (var (key, status) in recorded)
+            await Assert.That(expected.TryGetValue(key, out var want) && want == status).IsTrue().Because($"{key} is recorded as '{status}'");
+        foreach (var key in expected.Keys)
+            await Assert.That(recorded.ContainsKey(key)).IsTrue().Because($"{key} now prints: delete its entry (stale)");
+    }
+
+    /// <summary>Every built key names the branch it covers, and every branch row has its key.</summary>
+    [Test]
+    public async Task BuiltCases_NameTheirBranch_AndEveryBranchHasACase() {
+        var built = Frozen().Where(e => e.Key.StartsWith("built/", StringComparison.Ordinal)).Select(e => e.Key["built/".Length..]).ToList();
+        var named = PrintBaselineBuiltCases.Branches.Select(b => b.Case).ToList();
+
+        await Assert.That(built).IsEquivalentTo(named);
+        await Assert.That(named.Distinct().Count()).IsEqualTo(named.Count);
+        await Assert.That(PrintBaselineBuiltCases.Unreachable.Length).IsGreaterThan(0);
+    }
+
+    /// <summary>A frozen oddity is still frozen: its key exists and still shows the fragment; a fix re-records the key and deletes the entry.</summary>
+    [Test]
+    public async Task KnownGaps_StillShowTheirOddity() {
+        var frozen = Frozen().ToDictionary(e => e.Key, StringComparer.Ordinal);
+        foreach (var (key, owner, _, fragment) in PrintBaselineBuiltCases.KnownGaps) {
+            await Assert.That(frozen.ContainsKey(key)).IsTrue().Because(key);
+            var entry = frozen[key];
+            var shown = (entry.Status + "\n" + entry.Text).Contains(fragment, StringComparison.Ordinal);
+            await Assert.That(shown).IsTrue().Because($"{key} (owner {owner}) no longer shows its recorded oddity: delete the entry (stale)");
+        }
     }
 
     [Test]

@@ -2992,3 +2992,244 @@ Order: entity {
   Done: stage {
   }
 }
+##### built/key-composite-and-initial	built: print(code-built Domain)	DomainSession.ForExtensions([])	printed	BB5D4DA4
+domain Matrix
+
+A: entity initial(Done) key(Name, Code) {
+  Name: Text
+  Code: Text
+  Draft: stage {
+  }
+  Done: stage {
+  }
+}
+##### built/key-single	built: print(code-built Domain)	DomainSession.ForExtensions([])	printed	289664C9
+domain Matrix
+
+A: entity key(Name) {
+  Name: Text
+}
+##### built/initial-only	built: print(code-built Domain)	DomainSession.ForExtensions([])	printed	49E3C7AB
+domain Matrix
+
+A: entity initial(Done) {
+  Draft: stage {
+  }
+  Done: stage {
+  }
+}
+##### built/public-action	built: print(code-built Domain)	DomainSession.ForExtensions([])	printed	27AB1959
+domain Matrix
+
+A: entity {
+  Name: Text
+  public action Go {
+  }
+  Stop: action {
+  }
+}
+##### built/public-action-in-stage	built: print(code-built Domain)	DomainSession.ForExtensions([])	printed	AE082552
+domain Matrix
+
+A: entity {
+  Draft: stage {
+    public action Go {
+      transition to Done
+    }
+  }
+  Done: stage {
+  }
+}
+##### built/composite-effect	built: print(code-built Domain)	DomainSession.ForExtensions([])	printed	505F2C43
+domain Matrix
+
+B: entity {
+  Name: Text
+}
+
+A: entity {
+  Name: Text
+  bs: many B
+  Go: action {
+    assign Name to "x"
+assign Name to "y"
+  }
+}
+##### built/create-in-via-instance	built: print(code-built Domain)	DomainSession.ForExtensions([])	printed	00932E86
+domain Matrix
+
+B: entity {
+  Name: Text
+}
+
+A: entity {
+  Name: Text
+  bs: many B
+  Go: action {
+    create in bs { Name: "x" }
+  }
+}
+##### built/link-and-unlink	built: print(code-built Domain)	DomainSession.ForExtensions([])	printed	19AEDF99
+domain Matrix
+
+B: entity {
+  Name: Text
+}
+
+A: entity {
+  Name: Text
+  bs: many B
+  Go: action {
+    link bs to Name
+    unlink bs from Name
+  }
+}
+##### built/for-each	built: print(code-built Domain)	DomainSession.ForExtensions([])	printed	93362F6E
+domain Matrix
+
+B: entity {
+  Name: Text
+}
+
+A: entity {
+  Name: Text
+  bs: many B
+  Go: action {
+    for b in bs {
+      assign Name to "y"
+  }
+    for c in bs where Name is "x" {
+      assign Name to "z"
+  }
+  }
+}
+##### built/stage-policy-not-a-require	built: print(code-built Domain)	DomainSession.ForExtensions([])	failed:InvalidOperationException	E3B0C442
+##### built/stage-not-policy-without-entity-policy	built: print(code-built Domain)	DomainSession.ForExtensions([])	failed:InvalidOperationException	E3B0C442
+##### built/stage-require-not	built: print(code-built Domain)	DomainSession.ForExtensions([])	printed	68E3AABE
+domain Matrix
+
+A: entity {
+  Total: Number
+  Draft: stage
+    require Ok
+    require not Ok {
+  }
+  Ok: policy { Total > 0 }
+}
+##### built/value-types	built: print(code-built Domain)	DomainSession.ForExtensions([])	printed	AE9300EB
+domain Matrix
+
+public value V {
+  X: Number
+}
+
+W: value {
+  Y: Text length(1, 5)
+}
+##### built/facet-unregistered-annotation	built: print(code-built Domain)	DomainSession.ForExtensions([])	failed:FormatException	E3B0C442
+##### built/facet-unregistered-type	built: print(code-built Domain)	DomainSession.ForExtensions([])	failed:FormatException	E3B0C442
+##### built/annotation-registry-printer	built: print(code-built Domain)	AnnotationRegistry of ExtensionCatalog.Core.Authoring	printed	E42D7326
+domain Matrix
+
+A: entity table("T") {
+  Name: Text column("N")
+}
+##### built/implicit-ids-elided	built: print(code-built Domain)	DomainSession.ForExtensions([]); implicitIds=ProductCatalog.ImplicitIds	printed	AF48F6FC
+domain Matrix
+
+A: entity {
+  Name: Text
+}
+##### built/implicit-ids-not-elided	built: print(code-built Domain)	DomainSession.ForExtensions([]); implicitIds=ProductCatalog.ImplicitIds	printed	AEA48FD1
+domain Matrix
+uses storage
+
+A: entity {
+  Name: Text
+}
+##### built/uses-pinned	built: print(code-built Domain)	DomainSession.ForExtensions([])	printed	33AB5E10
+domain Matrix
+uses storage 2024-11-20
+
+A: entity {
+  Name: Text
+}
+##### built/literals	built: print(code-built Domain)	DomainSession.ForExtensions([])	printed	A1E8A4D6
+domain Matrix
+
+A: entity {
+  Total: Decimal
+  Dec: policy { Total > 1.5 }
+  Dbl: policy { Total > 2.5 }
+  Int: policy { Total > 3 }
+  Nul: policy { Total is not null }
+  Flag: policy { Total is true }
+}
+##### built/equality-literals	built: print(code-built Domain)	DomainSession.ForExtensions([])	printed	2E27AE73
+domain Matrix
+
+A: entity {
+  P1: Text equals(null)
+  P2: Boolean equals(true)
+  P3: Boolean equals(false)
+  P4: Text equals("s\"q")
+  P5: Decimal equals(1.5)
+  P6: Number equals(3)
+  P7: Decimal equals(2.5)
+}
+##### built/required-constraint-omitted	built: print(code-built Domain)	DomainSession.ForExtensions([])	printed	AF48F6FC
+domain Matrix
+
+A: entity {
+  Name: Text
+}
+##### built/expression-duration-unbound	built: print(code-built Domain)	DomainSession.ForExtensions([])	failed:InvalidOperationException	E3B0C442
+##### built/expression-date-operation	built: print(code-built Domain)	DomainSession.ForExtensions([])	printed	406041EF
+domain Matrix
+
+A: entity {
+  Due: Date
+  Soon: policy { Due > Now + 14 Days }
+}
+##### built/expression-kinds	built: print(code-built Domain)	DomainSession.ForExtensions([])	printed	B2B384E0
+domain Matrix
+
+B: entity {
+  Name: Text
+}
+
+A: entity {
+  Total: Number
+  bs: many B
+  Owned: policy { Addr City }
+  NotCmp: policy { not (Total > 1) }
+  NotPlain: policy { not Flag }
+  Div: policy { (Total / 2) > 1 }
+  NoB: policy { not bs Name exists }
+  Match: policy { match { Total > 1 -> 1, else -> 0 } > 0 }
+}
+##### built/entry/PrintConstraintText	entry: PrintConstraintText(constraints)	DomainSession.ForExtensions([])	printed	7EE45A90
+length(1, 5)
+length(3)
+pattern("^a$")
+range(1, 10)
+unique
+optional
+equals("x")
+default(3)
+?RequiredConstraint
+?RelationalConstraint
+##### built/entry/PrintExpressionText	entry: PrintExpressionText(expression)	DomainSession.ForExtensions([])	printed	39EC8D69
+(Total > 1 and not Flag)
+##### built/entry/PrintTestExpression	entry: PrintTestExpression(expression)	DomainSession.ForExtensions([])	printed	FD9BA50D
+(A is "x" or B <= 2)
+##### built/entry/PrintActionFragmentKey	entry: PrintActionFragmentKey(action, stage)	DomainSession.ForExtensions([])	printed	C2D58E14
+params:p:Number,
+require:Ok,
+effects:
+assign Total to 1
+transition to Done
+stagePolicies:
+Ok,onExit:
+assign Total to 2
+

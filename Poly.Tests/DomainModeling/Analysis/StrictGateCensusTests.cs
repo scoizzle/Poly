@@ -341,6 +341,26 @@ public class StrictGateCensusTests {
         await Assert.That(Codes(With("if (5 == 5) { assign N to 1 }"))).IsEqualTo("ok");
     }
 
+    private static string WithDefault(string type, string value) =>
+        With("assign N to 1").Replace("  Go:", $"  D: {type} optional default({value})\n  Go:", StringComparison.Ordinal);
+
+    /// <summary>
+    /// C2 (closing round): <c>default(...)</c> is a consumer like any other. A default the analyzer cannot type is
+    /// DMSEM006 (or the more specific error), a typed default of another type is DMSEM003, and the default's own
+    /// expression is walked (a comparison inside it meets the comparison rule).
+    /// </summary>
+    [Test]
+    public async Task Default_IsTypeChecked_LikeEveryOtherConsumer() {
+        await Assert.That(Codes(WithDefault("Number", "parts Qty"))).IsEqualTo("DMSEM006");
+        await Assert.That(Codes(WithDefault("Number", "Nope(1)"))).IsEqualTo("DMFUN001");
+        await Assert.That(Codes(WithDefault("Boolean", "5 == \"x\""))).IsEqualTo("DMSEM003");
+        await Assert.That(Codes(WithDefault("Number", "5 == 5"))).IsEqualTo("DMSEM003");
+        await Assert.That(Codes(WithDefault("Text", "1 + 2"))).IsEqualTo("DMSEM003");
+        // Positive companions: a typed default of the property's type stays valid.
+        await Assert.That(Codes(WithDefault("Number", "1 + 2"))).IsEqualTo("ok");
+        await Assert.That(Codes(WithDefault("Boolean", "5 == 5"))).IsEqualTo("ok");
+    }
+
     [Test]
     public async Task UndeclaredFunction_IsDMFUN001Alone() =>
         await Assert.That(Codes(With("assign N to Nope(N)"))).IsEqualTo("DMFUN001");

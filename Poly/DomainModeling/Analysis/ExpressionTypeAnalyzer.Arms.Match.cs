@@ -25,7 +25,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
         var where = match.Line > 0 ? $" (line {match.Line}, col {match.Col})" : "";
         foreach (var arm in match.Arms) {
             var condition = InferType(context, arm.Condition, props, parameters, enumTypes);
-            if (condition.Category is not (TypeCategory.Boolean or TypeCategory.Unknown))
+            if (Family(condition) is not (TypeFamily.Boolean or TypeFamily.Unknown))
                 context.ReportError(match,
                     $"'match' arm condition must be Boolean (got '{Describe(condition)}'){where}.",
                     DomainModelDiagnosticCodes.MatchConditionNotBoolean);
@@ -37,10 +37,10 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
         WalkExpression(context, match.Else, props, parameters, enumTypes);
         CheckMatchNames(context, match, match.Else, props, parameters, enumTypes, where);
 
-        TypeInfo? reference = null;
+        ExprType? reference = null;
         foreach (var value in match.Arms.Select(a => a.Value).Append(match.Else)) {
             var type = InferType(context, value, props, parameters, enumTypes);
-            if (type.Category is TypeCategory.Unknown or TypeCategory.Null) continue;
+            if (Family(type) is TypeFamily.Unknown or TypeFamily.Null) continue;
             if (reference is null) { reference = type; continue; }
             if (!Unifies(reference.Value, type))
                 context.ReportError(match,
@@ -65,11 +65,11 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
     /// enum and the other Text, as in comparisons. Not <see cref="Compatible"/>: that treats two
     /// untyped values as equal by name.
     /// </summary>
-    private static bool Unifies(TypeInfo a, TypeInfo b) =>
-        a.Category == b.Category
-            ? a.Category is not TypeCategory.Enum || string.Equals(a.TypeName, b.TypeName, StringComparison.Ordinal)
-            : (a.Category is TypeCategory.Enum && b.Category is TypeCategory.Text)
-              || (b.Category is TypeCategory.Enum && a.Category is TypeCategory.Text);
+    private static bool Unifies(ExprType a, ExprType b) =>
+        Family(a) == Family(b)
+            ? Family(a) is not TypeFamily.Enum || string.Equals(a.DomainName, b.DomainName, StringComparison.Ordinal)
+            : (Family(a) is TypeFamily.Enum && Family(b) is TypeFamily.Text)
+              || (Family(b) is TypeFamily.Enum && Family(a) is TypeFamily.Text);
 
     /// <summary>
     /// A position- and identity-free structural key for an expression: type, scalar members (not
@@ -127,16 +127,15 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
     }
 
     /// <summary>The unified value type of a <c>match</c>: the first arm type that is known and not null.</summary>
-    private TypeInfo InferMatch(
+    private ExprType InferMatch(
         AnalysisContext context, MatchExpr match,
         Dictionary<string, string>? props, Dictionary<string, string>? parameters,
         Dictionary<string, EnumType> enumTypes) {
         var types = match.Arms.Select(a => a.Value).Append(match.Else)
             .Select(v => InferType(context, v, props, parameters, enumTypes)).ToList();
-        if (types.Any(t => t.Category is TypeCategory.Unknown))
-            return new(TypeCategory.Unknown);
-        return types.FirstOrDefault(t => t.Category is not TypeCategory.Null) is { Category: not TypeCategory.Unknown } known
-            ? known
-            : new(TypeCategory.Null);
+        if (types.Any(IsLenient))
+            return ExprType.Unresolved;
+        // A match whose every arm is `null` is typed Text, as it was before the move (an unreachable Null arm).
+        return types.Cast<ExprType?>().FirstOrDefault(t => Family(t!.Value) is not TypeFamily.Null) ?? TextFamily;
     }
 }

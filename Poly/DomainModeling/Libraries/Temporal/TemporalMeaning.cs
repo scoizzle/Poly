@@ -198,7 +198,7 @@ public static class TemporalMeaning {
 
     private static string? TypeNameOf(
         DomainExpression expr, ExpressionTypeCheckScope scope, AnalysisContext context) {
-        if (context.GetMetadata<CatalogTypedExpressionMetadata>(expr) is { TypeName: { } stamped })
+        if (context.GetMetadata<TypedExpressionMetadata>(expr) is { Binary: null, Type.DomainName: { } stamped })
             return stamped;
         return expr switch {
             Now => "DateTime",

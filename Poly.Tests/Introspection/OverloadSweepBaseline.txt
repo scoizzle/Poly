@@ -1,0 +1,1998 @@
+## poly file demo/Poly.RestApi/library.poly
+  errors: 0
+  System.String.IsNullOrEmpty(System.String)
+  Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)
+  System.String.get_Length()
+  Poly.Runtime.DomainFailure.Length(System.String,System.String,System.String)
+  Poly.Runtime.DomainFailure.Range(System.String,System.String,System.String)
+  System.String.Concat(System.Object,System.Object,System.Object)
+  Poly.Runtime.DomainFailure.Enum(System.String,System.String,System.String)
+  Poly.Runtime.DomainFailure.Unique(System.String,System.String,System.String)
+  Poly.Runtime.IStoragePort.Record(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
+  Poly.Runtime.DomainResult.Success()
+  System.Object.Equals(System.Object,System.Object)
+  Poly.Runtime.DomainFailure.Constraint(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult.Failure(Poly.Runtime.DomainFailure)
+  Poly.Runtime.IStoragePort.Exists(System.String,System.String,System.String)
+  System.DateTime.get_UtcNow()
+  System.DateOnly.FromDateTime(System.DateTime)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_IsSuccess()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_Error()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_Value()
+  Poly.Runtime.ActionScope.Commit(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.ActionScope.Rollback(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.DomainFailure.Stage(System.String,System.String,System.String)
+  Poly.Runtime.DomainFailure.Policy(System.String,System.String,System.String)
+  Poly.Runtime.DomainFailure.At(System.String)
+  Poly.Runtime.DomainResult.get_IsSuccess()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_ErrorMessage()
+  Poly.DomainModeling.Runtime.ConstraintFailureException.ctor(System.String)
+  System.Text.RegularExpressions.Regex.IsMatch(System.String,System.String)
+  Poly.Runtime.DomainFailure.Pattern(System.String,System.String,System.String)
+  System.Collections.IList.Clear()
+  System.DateTime.AddDays(System.Double)
+  Poly.Runtime.DomainResult.get_Error()
+  System.Object.ReferenceEquals(System.Object,System.Object)
+  System.String.Concat(System.String,System.String,System.String)
+  System.InvalidOperationException.ctor(System.String)
+## poly file demo/live/checkout.poly
+  errors: 0
+  Poly.Runtime.DomainResult.get_IsSuccess()
+  Poly.Runtime.ActionScope.Commit(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.ActionScope.Rollback(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.DomainResult.Success()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
+## poly file demo/live/domain.poly
+  errors: 0
+  System.String.IsNullOrEmpty(System.String)
+  Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)
+  System.String.get_Length()
+  Poly.Runtime.DomainFailure.Length(System.String,System.String,System.String)
+  Poly.Runtime.DomainFailure.Unique(System.String,System.String,System.String)
+  Poly.Runtime.IStoragePort.Record(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
+  Poly.Runtime.DomainResult.Success()
+  System.Object.Equals(System.Object,System.Object)
+  Poly.Runtime.DomainFailure.Constraint(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult.Failure(Poly.Runtime.DomainFailure)
+  Poly.Runtime.IStoragePort.Exists(System.String,System.String,System.String)
+## poly file docs/missions/evolve-2026-10-13/ambig-backref.poly
+  status: analysis-errors DMREL005
+## poly file docs/missions/evolve-2026-10-13/billing.poly
+  status: analysis-errors DMEFF011,DMLIB001
+## poly file docs/missions/evolve-2026-10-13/claims.poly
+  status: analysis-errors DMEFF011,DMLIB001
+## poly file docs/missions/evolve-2026-10-13/disputes.poly
+  status: analysis-errors DMSTR006
+## poly file docs/missions/evolve-2026-10-13/library.poly
+  status: analysis-errors DMEFF011,DMLIB001,DMLIB001
+## poly file docs/missions/evolve-2026-10-13/saas.poly
+  errors: 0
+  System.String.IsNullOrEmpty(System.String)
+  Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)
+  Poly.Runtime.DomainFailure.Range(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
+  System.DateTime.get_UtcNow()
+  System.DateOnly.FromDateTime(System.DateTime)
+  Poly.Runtime.DomainResult.get_IsSuccess()
+  Poly.Runtime.ActionScope.Commit(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.ActionScope.Rollback(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.DomainFailure.Stage(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult.Failure(Poly.Runtime.DomainFailure)
+  System.DateOnly.AddDays(System.Int32)
+  Poly.Runtime.DomainResult.Success()
+## poly file docs/missions/evolve-2026-10-13/smarthome.poly
+  errors: 0
+  Poly.Runtime.DomainResult.get_IsSuccess()
+  Poly.Runtime.ActionScope.Commit(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.ActionScope.Rollback(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.DomainResult.get_Error()
+  Poly.Runtime.DomainFailure.At(System.String)
+  Poly.Runtime.DomainResult.Failure(Poly.Runtime.DomainFailure)
+  Poly.Runtime.DomainResult.Success()
+  System.String.IsNullOrEmpty(System.String)
+  Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
+  System.Collections.IList.Clear()
+  Poly.Runtime.DomainFailure.Stage(System.String,System.String,System.String)
+  Poly.Runtime.DomainFailure.Range(System.String,System.String,System.String)
+  System.Object.ReferenceEquals(System.Object,System.Object)
+  System.String.Concat(System.String,System.String,System.String)
+  System.InvalidOperationException.ctor(System.String)
+## poly file docs/missions/evolve-2026-10-13/university-http.poly
+  status: analysis-errors DMEFF011,DMEFF011,DMLIB001,DMLIB001,DMLIB001
+## poly file docs/missions/evolve-2026-10-13/university.poly
+  status: analysis-errors DMEFF011,DMEFF011,DMLIB001,DMLIB001,DMLIB001
+## poly file docs/missions/evolve-2026-10-14/cart.poly
+  errors: 0
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_IsSuccess()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_Error()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_Value()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
+  Poly.Runtime.DomainResult.get_IsSuccess()
+  Poly.Runtime.ActionScope.Commit(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.ActionScope.Rollback(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.DomainFailure.At(System.String)
+  Poly.Runtime.DomainResult.Failure(Poly.Runtime.DomainFailure)
+  Poly.Runtime.DomainResult.Success()
+  Poly.Runtime.DomainFailure.Stage(System.String,System.String,System.String)
+  System.String.IsNullOrEmpty(System.String)
+  Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
+  System.Collections.IList.Clear()
+  Poly.Runtime.DomainFailure.Range(System.String,System.String,System.String)
+## poly file docs/missions/evolve-2026-10-14/durtype.poly
+  errors: 0
+  System.String.IsNullOrEmpty(System.String)
+  Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
+## poly file docs/missions/evolve-2026-10-14/jobqueue.poly
+  errors: 0
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_IsSuccess()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_Error()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_Value()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
+  Poly.Runtime.DomainResult.get_IsSuccess()
+  Poly.Runtime.ActionScope.Commit(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.ActionScope.Rollback(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.DomainFailure.At(System.String)
+  Poly.Runtime.DomainResult.Failure(Poly.Runtime.DomainFailure)
+  Poly.Runtime.DomainResult.Success()
+  System.String.IsNullOrEmpty(System.String)
+  Poly.DomainModeling.Runtime.ConstraintFailureException.ctor(System.String)
+  Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
+  System.Collections.IList.Clear()
+  Poly.Runtime.DomainFailure.Stage(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult.get_Error()
+  Poly.Runtime.DomainFailure.Policy(System.String,System.String,System.String)
+  System.Object.ReferenceEquals(System.Object,System.Object)
+  System.String.Concat(System.String,System.String,System.String)
+  System.InvalidOperationException.ctor(System.String)
+## poly file docs/missions/evolve-2026-10-14/notifications.poly
+  errors: 0
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_IsSuccess()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_Error()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_Value()
+  Poly.Runtime.DomainResult.get_IsSuccess()
+  Poly.Runtime.DomainResult.get_Error()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
+  Poly.Runtime.ActionScope.Commit(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.ActionScope.Rollback(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.DomainFailure.At(System.String)
+  Poly.Runtime.DomainResult.Failure(Poly.Runtime.DomainFailure)
+  Poly.Runtime.DomainResult.Success()
+  Poly.Runtime.DomainFailure.Stage(System.String,System.String,System.String)
+  System.String.IsNullOrEmpty(System.String)
+  Poly.DomainModeling.Runtime.ConstraintFailureException.ctor(System.String)
+  Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
+  System.Collections.IList.Clear()
+  System.Object.ReferenceEquals(System.Object,System.Object)
+  System.String.Concat(System.String,System.String,System.String)
+  System.InvalidOperationException.ctor(System.String)
+## poly file docs/missions/evolve-2026-10-14/ownedunlink.poly
+  errors: 0
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_IsSuccess()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_Error()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_Value()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
+  Poly.Runtime.DomainResult.get_IsSuccess()
+  Poly.Runtime.ActionScope.Commit(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.ActionScope.Rollback(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.DomainFailure.At(System.String)
+  Poly.Runtime.DomainResult.Failure(Poly.Runtime.DomainFailure)
+  Poly.Runtime.DomainResult.Success()
+  System.String.IsNullOrEmpty(System.String)
+  Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
+  System.Collections.IList.Clear()
+## poly file docs/missions/evolve-2026-10-14/ratelimit.poly
+  status: analysis-errors DMLIB001
+## poly file docs/missions/evolve-2026-10-14/sessions.poly
+  status: analysis-errors DMLIB001
+## poly file docs/probes/dogfood/crm.poly
+  errors: 0
+  System.String.IsNullOrEmpty(System.String)
+  Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
+  System.String.get_Length()
+  Poly.Runtime.DomainFailure.Length(System.String,System.String,System.String)
+  Poly.Runtime.DomainFailure.Range(System.String,System.String,System.String)
+  Poly.Runtime.DomainFailure.Unique(System.String,System.String,System.String)
+  Poly.Runtime.IStoragePort.Record(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult.Success()
+  System.Object.Equals(System.Object,System.Object)
+  Poly.Runtime.DomainFailure.Constraint(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult.Failure(Poly.Runtime.DomainFailure)
+  Poly.Runtime.IStoragePort.Exists(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult.get_IsSuccess()
+  Poly.Runtime.ActionScope.Commit(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.ActionScope.Rollback(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.DomainFailure.Stage(System.String,System.String,System.String)
+  Poly.Runtime.DomainFailure.Policy(System.String,System.String,System.String)
+  System.Text.RegularExpressions.Regex.IsMatch(System.String,System.String)
+  Poly.Runtime.DomainFailure.Pattern(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_IsSuccess()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_Error()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_Value()
+  Poly.Runtime.DomainFailure.Link(System.String,System.String,System.String)
+  Poly.Runtime.DomainFailure.At(System.String)
+  System.String.Concat(System.Object,System.Object,System.Object)
+  Poly.Runtime.DomainFailure.Enum(System.String,System.String,System.String)
+  System.Collections.IList.Clear()
+  System.DateTime.get_UtcNow()
+  System.DateOnly.FromDateTime(System.DateTime)
+  Poly.Runtime.DomainResult.get_Error()
+  System.Collections.ICollection.get_Count()
+  System.Object.ReferenceEquals(System.Object,System.Object)
+  System.String.Concat(System.String,System.String,System.String)
+  System.InvalidOperationException.ctor(System.String)
+  System.DateOnly.AddDays(System.Int32)
+## poly file docs/probes/dogfood/entry-transition-in-first-stage.poly
+  errors: 0
+  System.String.IsNullOrEmpty(System.String)
+  Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
+  System.Object.ToString()
+  System.Collections.Generic.HashSet`1[[System.String, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].ctor()
+  System.Collections.Generic.HashSet`1[[System.String, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Add(System.String)
+  System.String.Concat(System.String,System.String,System.String)
+  System.InvalidOperationException.ctor(System.String)
+  System.Collections.Generic.HashSet`1[[System.String, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].ctor(System.Collections.Generic.IEnumerable`1[[System.String, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]])
+## poly file docs/probes/dogfood/hotel.poly
+  errors: 0
+  System.String.IsNullOrEmpty(System.String)
+  Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)
+  System.String.get_Length()
+  Poly.Runtime.DomainFailure.Length(System.String,System.String,System.String)
+  Poly.Runtime.DomainFailure.Range(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_IsSuccess()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_Error()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_Value()
+  Poly.Runtime.ActionScope.Commit(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.ActionScope.Rollback(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.DomainFailure.Stage(System.String,System.String,System.String)
+  Poly.Runtime.DomainFailure.At(System.String)
+  Poly.Runtime.DomainResult.get_IsSuccess()
+  Poly.Runtime.DomainResult.Failure(Poly.Runtime.DomainFailure)
+  Poly.Runtime.DomainResult.Success()
+  System.Collections.ICollection.get_Count()
+  System.Collections.IList.Clear()
+  Poly.Runtime.DomainFailure.Policy(System.String,System.String,System.String)
+  Poly.Runtime.DomainFailure.Unique(System.String,System.String,System.String)
+  Poly.Runtime.IStoragePort.Record(System.String,System.String,System.String)
+  System.Object.Equals(System.Object,System.Object)
+  Poly.Runtime.DomainFailure.Constraint(System.String,System.String,System.String)
+  Poly.Runtime.IStoragePort.Exists(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult.get_Error()
+  System.Text.RegularExpressions.Regex.IsMatch(System.String,System.String)
+  Poly.Runtime.DomainFailure.Pattern(System.String,System.String,System.String)
+  Poly.Runtime.DomainFailure.Link(System.String,System.String,System.String)
+  System.Object.ReferenceEquals(System.Object,System.Object)
+  System.String.Concat(System.String,System.String,System.String)
+  System.InvalidOperationException.ctor(System.String)
+## poly file docs/probes/dogfood/nested-invoke-type-mismatch.poly
+  status: analysis-errors DMSEM003
+## poly file docs/probes/dogfood/peer-tracking-transition.poly
+  errors: 0
+  Poly.Runtime.DomainResult.get_IsSuccess()
+  Poly.Runtime.ActionScope.Commit(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.ActionScope.Rollback(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.DomainFailure.Stage(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult.Failure(Poly.Runtime.DomainFailure)
+  Poly.Runtime.DomainResult.get_Error()
+  Poly.Runtime.DomainFailure.At(System.String)
+  Poly.Runtime.DomainResult.Success()
+  System.Object.ReferenceEquals(System.Object,System.Object)
+  System.String.IsNullOrEmpty(System.String)
+  Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
+  System.String.Concat(System.String,System.String,System.String)
+  System.InvalidOperationException.ctor(System.String)
+  System.Collections.IList.Clear()
+## poly file docs/probes/dogfood/simulate-create-create-in.poly
+  errors: 0
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_IsSuccess()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_Error()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_Value()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
+  Poly.Runtime.ActionScope.Commit(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.ActionScope.Rollback(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.DomainFailure.At(System.String)
+  System.Collections.ICollection.get_Count()
+  System.String.IsNullOrEmpty(System.String)
+  Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
+  System.Collections.IList.Clear()
+  Poly.Runtime.DomainFailure.Range(System.String,System.String,System.String)
+## poly file docs/probes/dogfood/simulate-create-in.poly
+  errors: 0
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_IsSuccess()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_Error()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_Value()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
+  Poly.Runtime.ActionScope.Commit(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.ActionScope.Rollback(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.DomainFailure.At(System.String)
+  System.Collections.ICollection.get_Count()
+  System.String.IsNullOrEmpty(System.String)
+  Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
+  System.Collections.IList.Clear()
+  Poly.Runtime.DomainFailure.Range(System.String,System.String,System.String)
+## poly file docs/probes/dogfood/simulate-create-type.poly
+  errors: 0
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_IsSuccess()
+  Poly.Runtime.ActionScope.Commit(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.ActionScope.Rollback(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_Error()
+  Poly.Runtime.DomainFailure.At(System.String)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_Value()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
+  System.Collections.ICollection.get_Count()
+  System.String.IsNullOrEmpty(System.String)
+  Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
+  System.Collections.IList.Clear()
+  Poly.Runtime.DomainFailure.Range(System.String,System.String,System.String)
+## poly file docs/probes/dogfood/university.poly
+  errors: 0
+  Poly.Runtime.DomainResult.get_IsSuccess()
+  Poly.Runtime.ActionScope.Commit(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.ActionScope.Rollback(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.DomainFailure.Stage(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult.Failure(Poly.Runtime.DomainFailure)
+  Poly.Runtime.DomainResult.Success()
+  System.String.IsNullOrEmpty(System.String)
+  Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)
+  System.Text.RegularExpressions.Regex.IsMatch(System.String,System.String)
+  Poly.Runtime.DomainFailure.Pattern(System.String,System.String,System.String)
+  Poly.Runtime.DomainFailure.Unique(System.String,System.String,System.String)
+  Poly.Runtime.IStoragePort.Record(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
+  System.Object.Equals(System.Object,System.Object)
+  Poly.Runtime.DomainFailure.Constraint(System.String,System.String,System.String)
+  Poly.Runtime.IStoragePort.Exists(System.String,System.String,System.String)
+  System.String.get_Length()
+  Poly.Runtime.DomainFailure.Length(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_IsSuccess()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_Error()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_Value()
+  Poly.Runtime.DomainFailure.Policy(System.String,System.String,System.String)
+  Poly.Runtime.DomainFailure.At(System.String)
+  Poly.Runtime.DomainResult.get_Error()
+  System.Collections.ICollection.get_Count()
+  Poly.Runtime.DomainFailure.Range(System.String,System.String,System.String)
+  System.Collections.IList.Clear()
+  System.String.Concat(System.Object,System.Object,System.Object)
+  Poly.Runtime.DomainFailure.Enum(System.String,System.String,System.String)
+  System.Object.ReferenceEquals(System.Object,System.Object)
+  System.String.Concat(System.String,System.String,System.String)
+  System.InvalidOperationException.ctor(System.String)
+  System.DateTime.get_UtcNow()
+  System.DateOnly.FromDateTime(System.DateTime)
+  System.DateOnly.AddDays(System.Int32)
+## poly file docs/probes/fleet-eval/09-transport/clinic.poly
+  errors: 0
+  Poly.Runtime.DomainResult.get_IsSuccess()
+  Poly.Runtime.ActionScope.Commit(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.ActionScope.Rollback(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult.Failure(Poly.Runtime.DomainFailure)
+  Poly.Runtime.DomainResult.get_Error()
+  Poly.Runtime.DomainFailure.At(System.String)
+  Poly.Runtime.DomainResult.Success()
+  System.String.IsNullOrEmpty(System.String)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)
+  System.String.get_Length()
+  Poly.Runtime.DomainFailure.Length(System.String,System.String,System.String)
+  System.Text.RegularExpressions.Regex.IsMatch(System.String,System.String)
+  Poly.Runtime.DomainFailure.Pattern(System.String,System.String,System.String)
+  Poly.Runtime.DomainFailure.Unique(System.String,System.String,System.String)
+  Poly.Runtime.IStoragePort.Record(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
+  System.Object.Equals(System.Object,System.Object)
+  Poly.Runtime.DomainFailure.Constraint(System.String,System.String,System.String)
+  Poly.Runtime.IStoragePort.Exists(System.String,System.String,System.String)
+  System.Collections.IList.Clear()
+  Poly.Runtime.DomainFailure.Stage(System.String,System.String,System.String)
+  System.String.Concat(System.Object,System.Object,System.Object)
+  Poly.Runtime.DomainFailure.Enum(System.String,System.String,System.String)
+## poly file docs/probes/fleet-eval/09-transport/orders.poly
+  errors: 0
+  Poly.Runtime.DomainResult.get_IsSuccess()
+  Poly.Runtime.ActionScope.Commit(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.ActionScope.Rollback(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.DomainResult.get_Error()
+  Poly.Runtime.DomainFailure.At(System.String)
+  Poly.Runtime.DomainResult.Failure(Poly.Runtime.DomainFailure)
+  Poly.Runtime.DomainResult.Success()
+  System.String.IsNullOrEmpty(System.String)
+  Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)
+  System.String.get_Length()
+  Poly.Runtime.DomainFailure.Length(System.String,System.String,System.String)
+  Poly.Runtime.DomainFailure.Unique(System.String,System.String,System.String)
+  Poly.Runtime.IStoragePort.Record(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
+  System.Object.Equals(System.Object,System.Object)
+  Poly.Runtime.DomainFailure.Constraint(System.String,System.String,System.String)
+  System.Collections.IList.Clear()
+  Poly.Runtime.IStoragePort.Exists(System.String,System.String,System.String)
+  Poly.Runtime.DomainFailure.Range(System.String,System.String,System.String)
+  Poly.Runtime.DomainFailure.Stage(System.String,System.String,System.String)
+  System.String.Concat(System.Object,System.Object,System.Object)
+  Poly.Runtime.DomainFailure.Enum(System.String,System.String,System.String)
+  System.Text.RegularExpressions.Regex.IsMatch(System.String,System.String)
+  Poly.Runtime.DomainFailure.Pattern(System.String,System.String,System.String)
+## poly file docs/probes/fleet-eval/09-transport/warehouse.poly
+  errors: 0
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_IsSuccess()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_Error()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_Value()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
+  Poly.Runtime.DomainResult.get_IsSuccess()
+  Poly.Runtime.ActionScope.Commit(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.ActionScope.Rollback(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.DomainFailure.Range(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult.Failure(Poly.Runtime.DomainFailure)
+  Poly.Runtime.DomainResult.Success()
+  Poly.Runtime.DomainFailure.Enum(System.String,System.String,System.String)
+  Poly.Runtime.DomainFailure.At(System.String)
+  System.String.IsNullOrEmpty(System.String)
+  Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
+  System.String.get_Length()
+  Poly.Runtime.DomainFailure.Length(System.String,System.String,System.String)
+  System.Text.RegularExpressions.Regex.IsMatch(System.String,System.String)
+  Poly.Runtime.DomainFailure.Pattern(System.String,System.String,System.String)
+  System.String.Concat(System.Object,System.Object,System.Object)
+  Poly.Runtime.DomainFailure.Unique(System.String,System.String,System.String)
+  Poly.Runtime.IStoragePort.Record(System.String,System.String,System.String)
+  System.Object.Equals(System.Object,System.Object)
+  Poly.Runtime.DomainFailure.Constraint(System.String,System.String,System.String)
+  System.Collections.IList.Clear()
+  Poly.Runtime.IStoragePort.Exists(System.String,System.String,System.String)
+## poly file docs/probes/fleet-eval/12-mcp/mcp-library.poly
+  errors: 0
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_IsSuccess()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_Error()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_Value()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
+  Poly.Runtime.ActionScope.Commit(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.ActionScope.Rollback(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.DomainFailure.Policy(System.String,System.String,System.String)
+  Poly.Runtime.DomainFailure.At(System.String)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_ErrorMessage()
+  Poly.DomainModeling.Runtime.ConstraintFailureException.ctor(System.String)
+  Poly.Runtime.DomainResult.Success()
+  System.String.IsNullOrEmpty(System.String)
+  Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
+  System.Collections.IList.Clear()
+  Poly.Runtime.DomainFailure.Range(System.String,System.String,System.String)
+  Poly.Runtime.DomainFailure.Unique(System.String,System.String,System.String)
+  Poly.Runtime.IStoragePort.Record(System.String,System.String,System.String)
+  System.Object.Equals(System.Object,System.Object)
+  Poly.Runtime.DomainFailure.Constraint(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult.Failure(Poly.Runtime.DomainFailure)
+  Poly.Runtime.IStoragePort.Exists(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult.get_IsSuccess()
+  Poly.Runtime.DomainFailure.Stage(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult.get_Error()
+  System.Object.ReferenceEquals(System.Object,System.Object)
+  System.String.Concat(System.String,System.String,System.String)
+  System.InvalidOperationException.ctor(System.String)
+## poly file docs/probes/grep-2026-10-17/grep.poly
+  errors: 0
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_IsSuccess()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_Error()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_Value()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
+  Poly.Runtime.ActionScope.Commit(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.ActionScope.Rollback(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.DomainFailure.Stage(System.String,System.String,System.String)
+  Poly.Runtime.DomainFailure.At(System.String)
+  Poly.Runtime.DomainResult.get_IsSuccess()
+  Poly.Runtime.DomainResult.Failure(Poly.Runtime.DomainFailure)
+  Poly.Runtime.DomainResult.get_Error()
+  Poly.Runtime.DomainResult.Success()
+  System.String.IsNullOrEmpty(System.String)
+  Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
+  System.String.Concat(System.Object,System.Object,System.Object)
+  Poly.Runtime.DomainFailure.Enum(System.String,System.String,System.String)
+  System.Collections.IList.Clear()
+  System.Object.ReferenceEquals(System.Object,System.Object)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_ErrorMessage()
+  Poly.DomainModeling.Runtime.ConstraintFailureException.ctor(System.String)
+  System.String.Concat(System.String,System.String,System.String)
+  System.InvalidOperationException.ctor(System.String)
+## poly file docs/probes/scratch-2026-10-14/banking.poly
+  errors: 0
+  Poly.Runtime.DomainResult.get_IsSuccess()
+  Poly.Runtime.ActionScope.Commit(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.ActionScope.Rollback(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.DomainFailure.Stage(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult.Failure(Poly.Runtime.DomainFailure)
+  Poly.Runtime.DomainFailure.Range(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult.Success()
+  Poly.Runtime.DomainFailure.Policy(System.String,System.String,System.String)
+  System.String.IsNullOrEmpty(System.String)
+  Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)
+  System.String.get_Length()
+  Poly.Runtime.DomainFailure.Length(System.String,System.String,System.String)
+  System.String.Concat(System.Object,System.Object,System.Object)
+  Poly.Runtime.DomainFailure.Enum(System.String,System.String,System.String)
+  Poly.Runtime.DomainFailure.Constraint(System.String,System.String,System.String)
+  Poly.Runtime.DomainFailure.Unique(System.String,System.String,System.String)
+  Poly.Runtime.IStoragePort.Record(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
+  System.Object.Equals(System.Object,System.Object)
+  System.Collections.IList.Clear()
+  Poly.Runtime.IStoragePort.Exists(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult.get_Error()
+  Poly.Runtime.DomainFailure.At(System.String)
+  System.Object.ReferenceEquals(System.Object,System.Object)
+  System.String.Concat(System.String,System.String,System.String)
+  System.InvalidOperationException.ctor(System.String)
+## poly file docs/probes/scratch-2026-10-14/fleet.poly
+  errors: 0
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_IsSuccess()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_Error()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_Value()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
+  Poly.Runtime.ActionScope.Commit(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.ActionScope.Rollback(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.DomainFailure.At(System.String)
+  Poly.Runtime.DomainResult.get_IsSuccess()
+  Poly.Runtime.DomainFailure.Range(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult.Failure(Poly.Runtime.DomainFailure)
+  Poly.Runtime.DomainResult.Success()
+  System.String.IsNullOrEmpty(System.String)
+  Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
+  System.String.get_Length()
+  Poly.Runtime.DomainFailure.Length(System.String,System.String,System.String)
+  Poly.Runtime.DomainFailure.Unique(System.String,System.String,System.String)
+  Poly.Runtime.IStoragePort.Record(System.String,System.String,System.String)
+  System.Object.Equals(System.Object,System.Object)
+  Poly.Runtime.DomainFailure.Constraint(System.String,System.String,System.String)
+  System.Collections.IList.Clear()
+  Poly.Runtime.IStoragePort.Exists(System.String,System.String,System.String)
+  Poly.Runtime.DomainFailure.Stage(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult.get_Error()
+  System.Object.ReferenceEquals(System.Object,System.Object)
+  System.String.Concat(System.String,System.String,System.String)
+  System.InvalidOperationException.ctor(System.String)
+## poly file docs/probes/scratch-2026-10-14/gym.poly
+  errors: 0
+  System.String.IsNullOrEmpty(System.String)
+  Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)
+  System.String.get_Length()
+  Poly.Runtime.DomainFailure.Length(System.String,System.String,System.String)
+  Poly.Runtime.DomainFailure.Range(System.String,System.String,System.String)
+  System.String.Concat(System.Object,System.Object,System.Object)
+  Poly.Runtime.DomainFailure.Enum(System.String,System.String,System.String)
+  Poly.Runtime.DomainFailure.Unique(System.String,System.String,System.String)
+  Poly.Runtime.IStoragePort.Record(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
+  Poly.Runtime.DomainResult.Success()
+  System.Object.Equals(System.Object,System.Object)
+  Poly.Runtime.DomainFailure.Constraint(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult.Failure(Poly.Runtime.DomainFailure)
+  Poly.Runtime.IStoragePort.Exists(System.String,System.String,System.String)
+  System.Collections.IList.Clear()
+  System.DateTime.get_UtcNow()
+  System.DateOnly.FromDateTime(System.DateTime)
+  Poly.Runtime.DomainResult.get_IsSuccess()
+  Poly.Runtime.ActionScope.Commit(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.ActionScope.Rollback(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.DomainFailure.Stage(System.String,System.String,System.String)
+  System.DateOnly.AddDays(System.Int32)
+  Poly.Runtime.DomainResult.get_Error()
+  Poly.Runtime.DomainFailure.At(System.String)
+  System.Text.RegularExpressions.Regex.IsMatch(System.String,System.String)
+  Poly.Runtime.DomainFailure.Pattern(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_IsSuccess()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_Error()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_Value()
+  Poly.Runtime.DomainFailure.Policy(System.String,System.String,System.String)
+  System.Collections.ICollection.get_Count()
+  System.Object.ReferenceEquals(System.Object,System.Object)
+  System.String.Concat(System.String,System.String,System.String)
+  System.InvalidOperationException.ctor(System.String)
+## poly file docs/probes/scratch-2026-10-14/insurance.poly
+  errors: 0
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_IsSuccess()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_Error()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_Value()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
+  Poly.Runtime.ActionScope.Commit(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.ActionScope.Rollback(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.DomainFailure.At(System.String)
+  Poly.Runtime.DomainResult.Success()
+  System.String.IsNullOrEmpty(System.String)
+  Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
+  System.Text.RegularExpressions.Regex.IsMatch(System.String,System.String)
+  Poly.Runtime.DomainFailure.Pattern(System.String,System.String,System.String)
+  Poly.Runtime.DomainFailure.Unique(System.String,System.String,System.String)
+  Poly.Runtime.IStoragePort.Record(System.String,System.String,System.String)
+  System.Object.Equals(System.Object,System.Object)
+  Poly.Runtime.DomainFailure.Constraint(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult.Failure(Poly.Runtime.DomainFailure)
+  System.Collections.IList.Clear()
+  Poly.Runtime.IStoragePort.Exists(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult.get_IsSuccess()
+  Poly.Runtime.DomainResult.get_Error()
+  System.String.get_Length()
+  Poly.Runtime.DomainFailure.Length(System.String,System.String,System.String)
+  Poly.Runtime.DomainFailure.Range(System.String,System.String,System.String)
+  Poly.Runtime.DomainFailure.Stage(System.String,System.String,System.String)
+  Poly.Runtime.DomainFailure.Policy(System.String,System.String,System.String)
+  System.Collections.ICollection.get_Count()
+  System.Object.ReferenceEquals(System.Object,System.Object)
+  System.String.Concat(System.String,System.String,System.String)
+  System.InvalidOperationException.ctor(System.String)
+## poly file docs/probes/scratch-2026-10-14/logistics.poly
+  errors: 0
+  System.String.IsNullOrEmpty(System.String)
+  Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)
+  System.Text.RegularExpressions.Regex.IsMatch(System.String,System.String)
+  Poly.Runtime.DomainFailure.Pattern(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_IsSuccess()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_Error()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_Value()
+  Poly.Runtime.ActionScope.Commit(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.ActionScope.Rollback(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.DomainFailure.Stage(System.String,System.String,System.String)
+  Poly.Runtime.DomainFailure.At(System.String)
+  Poly.Runtime.DomainResult.get_IsSuccess()
+  Poly.Runtime.DomainResult.Failure(Poly.Runtime.DomainFailure)
+  Poly.Runtime.DomainResult.Success()
+  Poly.Runtime.DomainFailure.Range(System.String,System.String,System.String)
+  System.Collections.IList.Clear()
+  Poly.Runtime.DomainFailure.Link(System.String,System.String,System.String)
+  Poly.Runtime.DomainFailure.Unique(System.String,System.String,System.String)
+  Poly.Runtime.IStoragePort.Record(System.String,System.String,System.String)
+  System.Object.Equals(System.Object,System.Object)
+  Poly.Runtime.DomainFailure.Constraint(System.String,System.String,System.String)
+  Poly.Runtime.IStoragePort.Exists(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult.get_Error()
+  System.Object.ReferenceEquals(System.Object,System.Object)
+  System.String.Concat(System.String,System.String,System.String)
+  System.InvalidOperationException.ctor(System.String)
+## poly file docs/probes/scratch-2026-10-14/payroll.poly
+  errors: 0
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_IsSuccess()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_Error()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_Value()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
+  Poly.Runtime.ActionScope.Commit(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.ActionScope.Rollback(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.DomainFailure.Stage(System.String,System.String,System.String)
+  Poly.Runtime.DomainFailure.At(System.String)
+  Poly.Runtime.DomainResult.get_IsSuccess()
+  Poly.Runtime.DomainResult.Failure(Poly.Runtime.DomainFailure)
+  Poly.Runtime.DomainResult.Success()
+  System.String.IsNullOrEmpty(System.String)
+  Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
+  System.Text.RegularExpressions.Regex.IsMatch(System.String,System.String)
+  Poly.Runtime.DomainFailure.Pattern(System.String,System.String,System.String)
+  System.String.Concat(System.Object,System.Object,System.Object)
+  Poly.Runtime.DomainFailure.Enum(System.String,System.String,System.String)
+  Poly.Runtime.DomainFailure.Range(System.String,System.String,System.String)
+  Poly.Runtime.DomainFailure.Unique(System.String,System.String,System.String)
+  Poly.Runtime.IStoragePort.Record(System.String,System.String,System.String)
+  System.Object.Equals(System.Object,System.Object)
+  Poly.Runtime.DomainFailure.Constraint(System.String,System.String,System.String)
+  System.Collections.IList.Clear()
+  Poly.Runtime.IStoragePort.Exists(System.String,System.String,System.String)
+  System.DateTime.get_UtcNow()
+  System.DateOnly.FromDateTime(System.DateTime)
+  Poly.Runtime.DomainResult.get_Error()
+  System.Object.ReferenceEquals(System.Object,System.Object)
+  System.String.Concat(System.String,System.String,System.String)
+  System.InvalidOperationException.ctor(System.String)
+  System.DateOnly.AddDays(System.Int32)
+  Poly.DomainModeling.Runtime.ConstraintFailureException.ctor(System.String)
+## poly file docs/probes/scratch-2026-10-14/restaurant.poly
+  status: analysis-errors DMEFF011,DMEFF011,DMSTR006
+## poly file docs/probes/scratch-2026-10-14/roastery.poly
+  errors: 0
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_IsSuccess()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_Error()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_Value()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
+  Poly.Runtime.ActionScope.Commit(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.ActionScope.Rollback(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.DomainFailure.Stage(System.String,System.String,System.String)
+  Poly.Runtime.DomainFailure.At(System.String)
+  Poly.Runtime.DomainResult.get_IsSuccess()
+  Poly.Runtime.DomainResult.Failure(Poly.Runtime.DomainFailure)
+  Poly.Runtime.DomainResult.Success()
+  Poly.DomainModeling.Runtime.ConstraintFailureException.ctor(System.String)
+  System.String.IsNullOrEmpty(System.String)
+  Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
+  System.String.get_Length()
+  Poly.Runtime.DomainFailure.Length(System.String,System.String,System.String)
+  System.String.Concat(System.Object,System.Object,System.Object)
+  Poly.Runtime.DomainFailure.Enum(System.String,System.String,System.String)
+  Poly.Runtime.DomainFailure.Range(System.String,System.String,System.String)
+  Poly.Runtime.DomainFailure.Unique(System.String,System.String,System.String)
+  Poly.Runtime.IStoragePort.Record(System.String,System.String,System.String)
+  System.Object.Equals(System.Object,System.Object)
+  Poly.Runtime.DomainFailure.Constraint(System.String,System.String,System.String)
+  System.Collections.IList.Clear()
+  Poly.Runtime.IStoragePort.Exists(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult.get_Error()
+  System.Object.ReferenceEquals(System.Object,System.Object)
+  System.String.Concat(System.String,System.String,System.String)
+  System.InvalidOperationException.ctor(System.String)
+## poly file docs/probes/smoke/smoke.poly
+  errors: 0
+  System.String.IsNullOrEmpty(System.String)
+  Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
+## poly wrapper entity-bodies
+  errors: 0
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
+  Poly.Runtime.DomainResult.get_IsSuccess()
+  Poly.Runtime.ActionScope.Commit(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.ActionScope.Rollback(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.DomainResult.Success()
+  System.String.IsNullOrEmpty(System.String)
+  Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)
+  System.Collections.IList.Clear()
+## poly wrapper entity-stage-effects
+  errors: 0
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
+## poly wrapper entity-stage-list
+  errors: 0
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
+## poly wrapper entity-stage-require
+  errors: 0
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
+## poly wrapper enum-defaults
+  errors: 0
+## poly wrapper order-minimal
+  errors: 0
+  System.String.IsNullOrEmpty(System.String)
+  Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
+## poly wrapper patron-loans
+  errors: 0
+  System.String.IsNullOrEmpty(System.String)
+  Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
+## poly wrapper policy-facts
+  errors: 0
+  System.String.IsNullOrEmpty(System.String)
+  Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
+## poly wrapper policy-gate
+  errors: 0
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
+## poly wrapper policy-quantifiers
+  errors: 0
+  System.String.IsNullOrEmpty(System.String)
+  Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
+  System.Collections.IList.Clear()
+## poly wrapper stage-subscriptions
+  errors: 0
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
+  System.Collections.IList.Clear()
+## poly wrapper time-facts
+  errors: 0
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
+## poly wrapper top-default
+  errors: 0
+## poly guide // ✅ Correct — Loan references Book through a navigation pro #0
+  status: exception GrammarException
+## poly guide // ✅ Correct — Loan carries the lifecycle #0
+  status: exception GrammarException
+## poly guide Patron: entity { #0
+  errors: 0
+  System.String.IsNullOrEmpty(System.String)
+  Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_IsSuccess()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_Error()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_Value()
+  Poly.Runtime.DomainResult.get_IsSuccess()
+  Poly.Runtime.ActionScope.Commit(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.ActionScope.Rollback(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.DomainFailure.At(System.String)
+  Poly.Runtime.DomainResult.Failure(Poly.Runtime.DomainFailure)
+  Poly.Runtime.DomainResult.Success()
+  System.Collections.IList.Clear()
+## poly guide // ✅ Correct — both props provided (a property is required b #0
+  errors: 0
+  System.String.IsNullOrEmpty(System.String)
+  Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_IsSuccess()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_Error()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_Value()
+  Poly.Runtime.DomainResult.get_IsSuccess()
+  Poly.Runtime.ActionScope.Commit(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.ActionScope.Rollback(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.DomainFailure.At(System.String)
+  Poly.Runtime.DomainResult.Failure(Poly.Runtime.DomainFailure)
+  Poly.Runtime.DomainResult.Success()
+  System.Collections.IList.Clear()
+## poly guide // ✅ Correct — Patron subscribes to its own loans #0
+  status: exception GrammarException
+## poly guide // ✅ Correct — clear, testable guards #0
+  status: exception GrammarException
+## poly guide Suspended: stage { #0
+  status: exception GrammarException
+## poly guide domain MyDomain #0
+  errors: 0
+## poly guide Color: enum { #0
+  errors: 0
+## poly guide Money: value { #0
+  status: analysis-errors DMSTR006
+## poly guide Billing: contract internal billing v1 { #0
+  status: analysis-errors DMEFF001
+## poly guide domain Shop #0
+  errors: 0
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
+  System.Collections.IList.Clear()
+## poly guide Color: enum { Red, Green, Blue } #0
+  errors: 0
+  System.String.IsNullOrEmpty(System.String)
+  Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)
+  System.String.Concat(System.Object,System.Object,System.Object)
+  Poly.Runtime.DomainFailure.Enum(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
+## poly guide Token: entity { #0
+  errors: 0
+  System.String.IsNullOrEmpty(System.String)
+  Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
+## poly guide Item: entity table("INVENTORY") { #0
+  errors: 0
+  System.String.IsNullOrEmpty(System.String)
+  Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)
+  Poly.Runtime.DomainFailure.Range(System.String,System.String,System.String)
+  Poly.Runtime.DomainFailure.Unique(System.String,System.String,System.String)
+  Poly.Runtime.IStoragePort.Record(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
+  Poly.Runtime.DomainResult.Success()
+  System.Object.Equals(System.Object,System.Object)
+  Poly.Runtime.DomainFailure.Constraint(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult.Failure(Poly.Runtime.DomainFailure)
+  Poly.Runtime.IStoragePort.Exists(System.String,System.String,System.String)
+## poly guide Color: enum iri("https://example.com/Color") { #0
+  errors: 0
+  System.String.IsNullOrEmpty(System.String)
+  Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)
+  System.String.get_Length()
+  Poly.Runtime.DomainFailure.Length(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
+## poly guide Orders: entity { #0
+  status: exception GrammarException
+## poly guide Customer: entity { #0
+  status: analysis-errors DMSTR010
+## poly guide OrderLine: entity { #0
+  errors: 0
+  System.String.IsNullOrEmpty(System.String)
+  Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
+## poly guide Department: entity { #0
+  errors: 0
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
+  System.Collections.IList.Clear()
+## poly guide Draft: stage { #0
+  errors: 0
+  Poly.Runtime.DomainResult.get_IsSuccess()
+  Poly.Runtime.ActionScope.Commit(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.ActionScope.Rollback(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.DomainFailure.Stage(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult.Failure(Poly.Runtime.DomainFailure)
+  Poly.Runtime.DomainResult.Success()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
+## poly guide HasNote: policy { Note is not null } #0
+  errors: 0
+  Poly.Runtime.DomainResult.get_IsSuccess()
+  Poly.Runtime.ActionScope.Commit(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.ActionScope.Rollback(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.DomainFailure.Stage(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult.Failure(Poly.Runtime.DomainFailure)
+  Poly.Runtime.DomainFailure.Policy(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult.Success()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
+## poly guide Active: stage { #0
+  errors: 0
+  Poly.Runtime.DomainResult.get_IsSuccess()
+  Poly.Runtime.ActionScope.Commit(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.ActionScope.Rollback(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.DomainFailure.Stage(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult.Failure(Poly.Runtime.DomainFailure)
+  Poly.Runtime.DomainResult.Success()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
+## poly guide domain Shipping #0
+  status: analysis-errors DMEFF017
+## poly guide domain Tokens #0
+  status: analysis-errors DMEFF019
+## poly guide domain Orders #0
+  errors: 0
+  Poly.Runtime.DomainResult.get_IsSuccess()
+  Poly.Runtime.ActionScope.Commit(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.ActionScope.Rollback(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.DomainFailure.Stage(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult.Failure(Poly.Runtime.DomainFailure)
+  Poly.Runtime.DomainResult.Success()
+  System.String.IsNullOrEmpty(System.String)
+  Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
+## poly guide Tag: action (value: Text) { #0
+  errors: 0
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
+  Poly.Runtime.DomainResult.get_IsSuccess()
+  Poly.Runtime.ActionScope.Commit(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.ActionScope.Rollback(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.DomainResult.Success()
+  System.String.IsNullOrEmpty(System.String)
+  Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)
+  System.Collections.IList.Clear()
+## poly guide PlaceOrder: action -> Order { #0
+  errors: 0
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_IsSuccess()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_Error()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_Value()
+  Poly.Runtime.DomainResult.get_IsSuccess()
+  Poly.Runtime.ActionScope.Commit(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.ActionScope.Rollback(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.DomainResult.Success()
+  Poly.Runtime.DomainFailure.At(System.String)
+  System.String.IsNullOrEmpty(System.String)
+  Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
+  System.Collections.IList.Clear()
+## poly guide // ✅ Correct — create is the final statement #0
+  errors: 1
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_IsSuccess()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_Error()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_Value()
+  Poly.Runtime.DomainResult.get_IsSuccess()
+  Poly.Runtime.ActionScope.Commit(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.ActionScope.Rollback(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.DomainResult.Success()
+  Poly.Runtime.DomainFailure.At(System.String)
+  System.String.IsNullOrEmpty(System.String)
+  Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
+  System.Collections.IList.Clear()
+## poly guide // Not product: -> Number from assign alone (analysis error) #0
+  errors: 0
+## poly guide PlaceOrder: action { #0
+  errors: 0
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_IsSuccess()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_Error()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_Value()
+  Poly.Runtime.DomainResult.get_IsSuccess()
+  Poly.Runtime.ActionScope.Commit(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.ActionScope.Rollback(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.DomainResult.Success()
+  Poly.Runtime.DomainFailure.At(System.String)
+  Poly.Runtime.DomainResult.Failure(Poly.Runtime.DomainFailure)
+  Poly.Runtime.DomainResult.get_Error()
+  System.String.IsNullOrEmpty(System.String)
+  Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
+  System.Collections.IList.Clear()
+## poly guide invoke Validate                              # self-only #0
+  status: exception GrammarException
+## poly guide PositiveTotal: policy { Total > 0 } #0
+  errors: 0
+  Poly.Runtime.DomainResult.get_IsSuccess()
+  Poly.Runtime.ActionScope.Commit(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.ActionScope.Rollback(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.DomainFailure.Policy(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult.Failure(Poly.Runtime.DomainFailure)
+  Poly.Runtime.DomainResult.Success()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
+## poly guide Pending: stage { #0
+  errors: 0
+  System.Object.ReferenceEquals(System.Object,System.Object)
+  Poly.Runtime.DomainResult.get_IsSuccess()
+  Poly.Runtime.DomainResult.Success()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
+  System.String.Concat(System.String,System.String,System.String)
+  System.InvalidOperationException.ctor(System.String)
+  System.Collections.IList.Clear()
+## poly guide // Notification-only — peer values not needed #0
+  status: exception GrammarException
+## poly guide IsAdult: policy { Age >= 18 } #0
+  errors: 0
+  System.String.IsNullOrEmpty(System.String)
+  Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
+## poly guide Age >= 18 #0
+  status: exception GrammarException
+## poly guide assignee Active #0
+  status: exception GrammarException
+## poly guide HasPriorityOrder: policy { any orders where Priority > 5 } #0
+  errors: 0
+  System.String.IsNullOrEmpty(System.String)
+  Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
+  System.Collections.ICollection.get_Count()
+  System.Collections.IList.Clear()
+## poly guide Renew: action { #0
+  status: analysis-errors DMSEM003
+## poly guide domain Board #0
+  status: analysis-errors DMEFF020
+## poly guide function Add(a: Number, b: Number): Number = a + b #0
+  errors: 0
+## poly guide Cart: entity { #0
+  errors: 0
+  Poly.Runtime.DomainResult.get_IsSuccess()
+  Poly.Runtime.ActionScope.Commit(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.ActionScope.Rollback(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.DomainResult.Success()
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
+## poly guide SetName: action (newName: Text) { #0
+  errors: 0
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
+  Poly.Runtime.DomainResult.get_IsSuccess()
+  Poly.Runtime.ActionScope.Commit(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.ActionScope.Rollback(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.DomainResult.Success()
+  System.String.IsNullOrEmpty(System.String)
+  Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult.Failure(Poly.Runtime.DomainFailure)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)
+  System.Collections.IList.Clear()
+## poly guide domain Orders #1
+  errors: 0
+  System.String.IsNullOrEmpty(System.String)
+  Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)
+  Poly.Runtime.DomainFailure.Unique(System.String,System.String,System.String)
+  Poly.Runtime.IStoragePort.Record(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
+  Poly.Runtime.DomainResult.Success()
+  System.Object.Equals(System.Object,System.Object)
+  Poly.Runtime.DomainFailure.Constraint(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult.Failure(Poly.Runtime.DomainFailure)
+  System.Collections.IList.Clear()
+  Poly.Runtime.IStoragePort.Exists(System.String,System.String,System.String)
+  Poly.Runtime.DomainResult.get_IsSuccess()
+  Poly.Runtime.ActionScope.Commit(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.ActionScope.Rollback(Poly.Runtime.ActionScopeToken)
+  Poly.Runtime.DomainFailure.Stage(System.String,System.String,System.String)
+  Poly.Runtime.DomainFailure.Policy(System.String,System.String,System.String)
+  Poly.Runtime.DomainFailure.Range(System.String,System.String,System.String)
+## csharp added corpus case for BitwiseNot #0
+  errors: 1
+## csharp added corpus case for ShiftRight #0
+  errors: 1
+## csharp added corpus case for DoWhileLoop #0
+  errors: 0
+## csharp added corpus case for BreakStatement #0
+  errors: 0
+## csharp added corpus case for ContinueStatement #0
+  errors: 0
+## csharp added corpus case for GotoStatement #0
+  errors: 2
+## csharp added corpus case for YieldStatement #0
+  errors: 0
+## csharp added corpus case for SwitchStatement #0
+  errors: 2
+## csharp added corpus case for TypeAs #0
+  errors: 1
+## csharp added corpus case for MapTypeReference #0
+  errors: 0
+## csharp added corpus case for Divide #0
+  errors: 1
+## csharp added corpus case for Modulo #0
+  errors: 1
+## csharp added corpus case for UnaryMinus #0
+  errors: 1
+## csharp added corpus case for InterpolatedString #0
+  errors: 1
+## csharp added corpus case for BitwiseAnd #0
+  errors: 1
+## csharp added corpus case for BitwiseOr #0
+  errors: 1
+## csharp added corpus case for BitwiseXor #0
+  errors: 1
+## csharp added corpus case for ShiftLeft #0
+  errors: 1
+## csharp added corpus case for ThrowExpression #0
+  errors: 3
+  System.InvalidOperationException.ctor()
+## csharp added corpus case for ForEachLoop #0
+  errors: 2
+## csharp added corpus case for IndexAccess #0
+  errors: 3
+## csharp added corpus case for Comment #0
+  errors: 0
+## csharp added corpus case for And #0
+  errors: 0
+## csharp added corpus case for Or #0
+  errors: 0
+## csharp added corpus case for Not #0
+  errors: 0
+## csharp added corpus case for Equal #0
+  errors: 0
+## csharp added corpus case for NotEqual #0
+  errors: 0
+## csharp added corpus case for LessThanOrEqual #0
+  errors: 0
+## csharp added corpus case for GreaterThan #0
+  errors: 0
+## csharp added corpus case for GreaterThanOrEqual #0
+  errors: 0
+## csharp added corpus case for Conditional #0
+  errors: 0
+## csharp added corpus case for Lambda #0
+  errors: 0
+## csharp added corpus case for Parameter #0
+  errors: 0
+## csharp Poly.Tests/Interpretation/AstParity.cs #0
+  errors: 0
+## csharp Poly.Tests/Interpretation/AstParityTests.cs #0
+  errors: 0
+## csharp Poly.Tests/Interpretation/AstParityTests.cs #1
+  errors: 0
+## csharp Poly.Tests/Interpretation/AstParityTests.cs #2
+  errors: 0
+## csharp Poly.Tests/Interpretation/AstParityTests.cs #3
+  errors: 0
+## csharp Poly.Tests/Interpretation/AstParityTests.cs #4
+  errors: 0
+## csharp Poly.Tests/Interpretation/AstParityTests.cs #5
+  errors: 0
+## csharp Poly.Tests/Interpretation/AstParityTests.cs #6
+  errors: 0
+## csharp Poly.Tests/Interpretation/AstParityTests.cs #7
+  errors: 0
+## csharp Poly.Tests/Interpretation/AstParityTests.cs #8
+  errors: 0
+## csharp Poly.Tests/Interpretation/AstParityTests.cs #9
+  errors: 0
+## csharp Poly.Tests/Interpretation/AstParityTests.cs #10
+  errors: 0
+## csharp Poly.Tests/Interpretation/AstParityTests.cs #11
+  errors: 0
+## csharp Poly.Tests/Interpretation/AstParityTests.cs #12
+  errors: 0
+## csharp Poly.Tests/Interpretation/AstParityTests.cs #13
+  errors: 0
+## csharp Poly.Tests/Interpretation/AstParityTests.cs #14
+  errors: 0
+## csharp Poly.Tests/Interpretation/AstParityTests.cs #15
+  errors: 0
+## csharp Poly.Tests/Interpretation/AstParityTests.cs #16
+  errors: 0
+## csharp Poly.Tests/Interpretation/AstParityTests.cs #17
+  errors: 0
+## csharp Poly.Tests/Interpretation/AstParityTests.cs #18
+  errors: 0
+## csharp Poly.Tests/Interpretation/AstParityTests.cs #19
+  errors: 0
+## csharp Poly.Tests/Interpretation/AstParityTests.cs #20
+  errors: 0
+## csharp Poly.Tests/Interpretation/AstParityTests.cs #21
+  errors: 0
+## csharp Poly.Tests/Interpretation/AstParityTests.cs #22
+  errors: 0
+## csharp Poly.Tests/Interpretation/AstParityTests.cs #23
+  errors: 0
+## csharp Poly.Tests/Interpretation/AstParityTests.cs #24
+  errors: 0
+## csharp Poly.Tests/Interpretation/AstParityTests.cs #25
+  errors: 0
+## csharp Poly.Tests/Interpretation/AstParityTests.cs #26
+  errors: 0
+## csharp Poly.Tests/Interpretation/AstParityTests.cs #27
+  errors: 0
+## csharp Poly.Tests/Interpretation/AstParityTests.cs #28
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpCommentTests.cs #0
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #0
+  errors: 2
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #1
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #2
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #3
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #4
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #5
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #6
+  errors: 2
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #7
+  errors: 2
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #8
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #9
+  errors: 3
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #10
+  errors: 3
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #11
+  errors: 3
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #12
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #13
+  errors: 2
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #14
+  errors: 3
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #15
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #16
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #17
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #18
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #19
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #20
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #21
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #22
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #23
+  errors: 4
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #24
+  errors: 5
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #25
+  errors: 4
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #26
+  errors: 4
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #27
+  errors: 4
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #28
+  errors: 4
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #29
+  errors: 4
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #30
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #31
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #32
+  errors: 2
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #33
+  errors: 2
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #34
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #35
+  errors: 0
+  System.String.ctor(System.ReadOnlySpan`1[[System.Char, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]])
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #36
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #37
+  errors: 2
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #38
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #39
+  errors: 2
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #40
+  errors: 2
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #41
+  errors: 2
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #42
+  errors: 2
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #43
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #44
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #45
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #46
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #47
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #48
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #49
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #50
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #51
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #52
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #53
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #54
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #55
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #56
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #57
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #58
+  errors: 2
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #59
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #60
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #61
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #62
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #63
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #64
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #65
+  errors: 2
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #66
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #67
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #68
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #69
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #70
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #71
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #72
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #73
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #74
+  errors: 0
+  System.Exception.ctor()
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #75
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #76
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #77
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #78
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #79
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #80
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #81
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #82
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #83
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #84
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #85
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #86
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #87
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #88
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #89
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #90
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #91
+  errors: 3
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #92
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #93
+  errors: 2
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #94
+  errors: 2
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #95
+  errors: 2
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #96
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #97
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpLanguageTests.cs #0
+  errors: 4
+## csharp Poly.Tests/Interpretation/CSharpLanguageTests.cs #1
+  errors: 4
+## csharp Poly.Tests/Interpretation/CSharpLanguageTests.cs #2
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpLanguageTests.cs #3
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpLanguageTests.cs #4
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpLanguageTests.cs #5
+  errors: 5
+## csharp Poly.Tests/Interpretation/CSharpLanguageTests.cs #6
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpLanguageTests.cs #7
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpLanguageTests.cs #8
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpLanguageTests.cs #9
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpLanguageTests.cs #10
+  errors: 2
+## csharp Poly.Tests/Interpretation/CSharpQualifiedConstantTests.cs #0
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpQualifiedConstantTests.cs #1
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpQualifiedConstantTests.cs #2
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpQualifiedConstantTests.cs #3
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpQualifiedNameTests.cs #0
+  errors: 0
+  System.Numerics.BitOperations.PopCount(System.UInt64)
+## csharp Poly.Tests/Interpretation/CSharpQualifiedNameTests.cs #1
+  errors: 0
+  System.Math.Abs(System.Int32)
+## csharp Poly.Tests/Interpretation/CSharpQualifiedNameTests.cs #2
+  errors: 0
+  System.Numerics.BitOperations.PopCount(System.UInt64)
+## csharp Poly.Tests/Interpretation/CSharpQualifiedNameTests.cs #3
+  errors: 6
+## csharp Poly.Tests/Interpretation/CSharpQualifiedNameTests.cs #4
+  errors: 1
+  System.Numerics.BitOperations.PopCount(System.UInt32)
+## csharp Poly.Tests/Interpretation/CSharpQualifiedNameTests.cs #5
+  errors: 2
+## csharp Poly.Tests/Interpretation/CSharpQualifiedNameTests.cs #6
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpQualifiedNameTests.cs #7
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpQualifiedNameTests.cs #8
+  errors: 2
+  System.Numerics.BitOperations.PopCount(System.UInt64)
+## csharp Poly.Tests/Interpretation/CSharpQualifiedNameTests.cs #9
+  errors: 0
+  System.Numerics.BitOperations.PopCount(System.UInt64)
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #0
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #1
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #2
+  errors: 2
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #3
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #4
+  errors: 2
+  System.String.IsNullOrEmpty(System.String)
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #5
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #6
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #7
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #8
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #9
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #10
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #11
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #12
+  errors: 2
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #13
+  errors: 2
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #14
+  errors: 3
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #15
+  errors: 3
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #16
+  errors: 2
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #17
+  errors: 2
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #18
+  errors: 3
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #19
+  errors: 2
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #20
+  errors: 2
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #21
+  errors: 2
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #22
+  errors: 2
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #23
+  errors: 2
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #24
+  errors: 2
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #25
+  errors: 2
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #26
+  errors: 2
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #27
+  errors: 2
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #28
+  errors: 2
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #29
+  errors: 2
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #30
+  errors: 4
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #31
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #32
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #33
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #34
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #35
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #36
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #37
+  errors: 2
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #38
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #39
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #40
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpScriptTests.cs #0
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpScriptTests.cs #1
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpScriptTests.cs #2
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpScriptTests.cs #3
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpScriptTests.cs #4
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpScriptTests.cs #5
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpScriptTests.cs #6
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpScriptTests.cs #7
+  errors: 4
+## csharp Poly.Tests/Interpretation/CSharpScriptTests.cs #8
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpScriptTests.cs #9
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpScriptTests.cs #10
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpScriptTests.cs #11
+  errors: 2
+## csharp Poly.Tests/Interpretation/CSharpScriptTests.cs #12
+  errors: 3
+## csharp Poly.Tests/Interpretation/CSharpScriptTests.cs #13
+  errors: 3
+## csharp Poly.Tests/Interpretation/CSharpScriptTests.cs #14
+  errors: 4
+## csharp Poly.Tests/Interpretation/CSharpScriptTests.cs #15
+  errors: 2
+## csharp Poly.Tests/Interpretation/CSharpScriptTests.cs #16
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpScriptTests.cs #17
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpScriptTests.cs #18
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpScriptTests.cs #19
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpScriptTests.cs #20
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpScriptTests.cs #21
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpScriptTests.cs #22
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpScriptTests.cs #23
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpScriptTests.cs #24
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpScriptTests.cs #25
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpScriptTests.cs #26
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpScriptTests.cs #27
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpScriptTests.cs #28
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpScriptTests.cs #29
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpWriterDefectTests.cs #0
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpWriterDefectTests.cs #1
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpWriterDefectTests.cs #2
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpWriterDefectTests.cs #3
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpWriterDefectTests.cs #4
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpWriterDefectTests.cs #5
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpWriterDefectTests.cs #6
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpWriterDefectTests.cs #7
+  errors: 2
+## csharp Poly.Tests/Interpretation/CSharpWriterFailClosedTests.cs #0
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpWriterFailClosedTests.cs #1
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpWriterFailClosedTests.cs #2
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpWriterFailClosedTests.cs #3
+  errors: 1
+  System.Numerics.BitOperations.PopCount(System.UInt64)
+## csharp Poly.Tests/Interpretation/CSharpWriterUnitTests.cs #0
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpWriterUnitTests.cs #1
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpWriterUnitTests.cs #2
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpWriterUnitTests.cs #3
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpWriterUnitTests.cs #4
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpWriterUnitTests.cs #5
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpWriterUnitTests.cs #6
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpWriterUnitTests.cs #7
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpWriterUnitTests.cs #8
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpWriterUnitTests.cs #9
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpWriterUnitTests.cs #10
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpWriterUnitTests.cs #11
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpWriterUnitTests.cs #12
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpWriterUnitTests.cs #13
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpWriterUnitTests.cs #14
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpWriterUnitTests.cs #15
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpWriterUnitTests.cs #16
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpWriterUnitTests.cs #17
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpWriterUnitTests.cs #18
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpWriterUnitTests.cs #19
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpWriterUnitTests.cs #20
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpWriterUnitTests.cs #21
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpWriterUnitTests.cs #22
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpWriterUnitTests.cs #23
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpWriterUnitTests.cs #24
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpWriterUnitTests.cs #25
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpWriterUnitTests.cs #26
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpWriterUnitTests.cs #27
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpWriterUnitTests.cs #28
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpWriterUnitTests.cs #29
+  errors: 1
+## csharp Poly.Tests/Interpretation/CSharpWriterUnitTests.cs #30
+  errors: 0
+## csharp Poly.Tests/Interpretation/CSharpWriterUnitTests.cs #31
+  errors: 1
+## csharp Poly.Tests/Interpretation/CallFrameArgumentTests.cs #0
+  errors: 0
+## csharp Poly.Tests/Interpretation/CallFrameArgumentTests.cs #1
+  errors: 0
+## csharp Poly.Tests/Interpretation/CallFrameArgumentTests.cs #2
+  errors: 0
+## csharp Poly.Tests/Interpretation/CallFrameArgumentTests.cs #3
+  errors: 0
+## csharp Poly.Tests/Interpretation/ControlFlowAnalysisTests.cs #0
+  errors: 1
+## csharp Poly.Tests/Interpretation/InvokeMemberInstanceTests.cs #0
+  errors: 0
+## csharp Poly.Tests/Interpretation/IteratorDebuggerTests.cs #0
+  errors: 0
+## csharp Poly.Tests/Interpretation/IteratorDebuggerTests.cs #1
+  errors: 0
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #0
+  errors: 1
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #1
+  errors: 0
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #2
+  errors: 0
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #3
+  errors: 7
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #4
+  errors: 1
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #5
+  errors: 0
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #6
+  errors: 1
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #7
+  errors: 0
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #8
+  errors: 0
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #9
+  errors: 0
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #10
+  errors: 0
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #11
+  errors: 0
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #12
+  errors: 0
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #13
+  errors: 0
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #14
+  errors: 1
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #15
+  errors: 0
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #16
+  errors: 0
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #17
+  errors: 1
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #18
+  errors: 1
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #19
+  errors: 1
+  System.Collections.Generic.List`1[[System.Int64, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_Count()
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #20
+  errors: 1
+  System.Collections.Generic.List`1[[System.Int64, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Add(System.Int64)
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #21
+  errors: 0
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #22
+  errors: 0
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #23
+  errors: 0
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #24
+  errors: 0
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #25
+  errors: 0
+  System.InvalidOperationException.ctor()
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #26
+  status: exception InvalidOperationException
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #27
+  errors: 0
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #28
+  errors: 0
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #29
+  errors: 0
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #30
+  errors: 0
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #31
+  errors: 0
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #32
+  errors: 0
+  System.InvalidOperationException.ctor()
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #33
+  errors: 0
+  System.IO.MemoryStream.ctor()
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #34
+  errors: 0
+  System.IO.MemoryStream.ctor()
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #35
+  errors: 0
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #36
+  errors: 0
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #37
+  errors: 0
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #38
+  errors: 0
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #39
+  errors: 1
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #40
+  errors: 0
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #41
+  errors: 1
+  System.Collections.ArrayList.ctor()
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #42
+  errors: 1
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #43
+  errors: 0
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #44
+  errors: 0
+## csharp Poly.Tests/Interpretation/IteratorParityTests.cs #0
+  errors: 0
+## csharp Poly.Tests/Interpretation/IteratorParityTests.cs #1
+  errors: 0
+## csharp Poly.Tests/Interpretation/IteratorParityTests.cs #2
+  errors: 0
+## csharp Poly.Tests/Interpretation/IteratorParityTests.cs #3
+  errors: 0
+## csharp Poly.Tests/Interpretation/IteratorParityTests.cs #4
+  errors: 0
+## csharp Poly.Tests/Interpretation/IteratorParityTests.cs #5
+  errors: 0
+## csharp Poly.Tests/Interpretation/IteratorYieldTests.cs #0
+  errors: 0
+## csharp Poly.Tests/Interpretation/IteratorYieldTests.cs #1
+  errors: 1
+## csharp Poly.Tests/Interpretation/IteratorYieldTests.cs #2
+  errors: 1
+## csharp Poly.Tests/Interpretation/IteratorYieldTests.cs #3
+  errors: 0
+## csharp Poly.Tests/Interpretation/IteratorYieldTests.cs #4
+  errors: 1
+## csharp Poly.Tests/Interpretation/IteratorYieldTests.cs #5
+  errors: 1
+## csharp Poly.Tests/Interpretation/IteratorYieldTests.cs #6
+  errors: 1
+## csharp Poly.Tests/Interpretation/IteratorYieldTests.cs #7
+  errors: 0
+## csharp Poly.Tests/Interpretation/IteratorYieldTests.cs #8
+  errors: 1
+## csharp Poly.Tests/Interpretation/IteratorYieldTests.cs #9
+  errors: 1
+## csharp Poly.Tests/Interpretation/IteratorYieldTests.cs #10
+  errors: 1
+## csharp Poly.Tests/Interpretation/IteratorYieldTests.cs #11
+  errors: 1
+## csharp Poly.Tests/Interpretation/IteratorYieldTests.cs #12
+  errors: 1
+## csharp Poly.Tests/Interpretation/IteratorYieldTests.cs #13
+  errors: 0
+## csharp Poly.Tests/Interpretation/LanguageVmTests.cs #0
+  errors: 0
+## csharp Poly.Tests/Interpretation/NodeFactCorpus.cs #0
+  errors: 1
+## csharp Poly.Tests/Interpretation/NodeFactCorpus.cs #1
+  errors: 1
+## csharp Poly.Tests/Interpretation/NodeFactCorpus.cs #2
+  errors: 0
+## csharp Poly.Tests/Interpretation/NodeFactCorpus.cs #3
+  errors: 0
+## csharp Poly.Tests/Interpretation/NodeFactCorpus.cs #4
+  errors: 0
+## csharp Poly.Tests/Interpretation/NodeFactCorpus.cs #5
+  errors: 2
+## csharp Poly.Tests/Interpretation/NodeFactCorpus.cs #6
+  errors: 0
+## csharp Poly.Tests/Interpretation/NodeFactCorpus.cs #7
+  errors: 2
+## csharp Poly.Tests/Interpretation/NodeFactCorpus.cs #8
+  errors: 1
+## csharp Poly.Tests/Interpretation/NodeFactCorpus.cs #9
+  errors: 0
+## csharp Poly.Tests/Interpretation/NodeFactCorpus.cs #10
+  errors: 1
+## csharp Poly.Tests/Interpretation/NodeFactCorpus.cs #11
+  errors: 1
+## csharp Poly.Tests/Interpretation/NodeFactCorpus.cs #12
+  errors: 1
+## csharp Poly.Tests/Interpretation/NodeFactCorpus.cs #13
+  errors: 1
+## csharp Poly.Tests/Interpretation/NodeFactCorpus.cs #14
+  errors: 1
+## csharp Poly.Tests/Interpretation/NodeFactCorpus.cs #15
+  errors: 1
+## csharp Poly.Tests/Interpretation/NodeFactCorpus.cs #16
+  errors: 1
+## csharp Poly.Tests/Interpretation/NodeFactCorpus.cs #17
+  errors: 1
+## csharp Poly.Tests/Interpretation/NodeFactCorpus.cs #18
+  errors: 3
+  System.InvalidOperationException.ctor()
+## csharp Poly.Tests/Interpretation/NodeFactCorpus.cs #19
+  errors: 2
+## csharp Poly.Tests/Interpretation/NodeFactCorpus.cs #20
+  errors: 3
+## csharp Poly.Tests/Interpretation/NodeFactCorpus.cs #21
+  errors: 0
+## csharp Poly.Tests/Interpretation/NodeFactCorpus.cs #22
+  errors: 0
+## csharp Poly.Tests/Interpretation/NodeFactCorpus.cs #23
+  errors: 0
+## csharp Poly.Tests/Interpretation/NodeFactCorpus.cs #24
+  errors: 0
+## csharp Poly.Tests/Interpretation/NodeFactCorpus.cs #25
+  errors: 0
+## csharp Poly.Tests/Interpretation/NodeFactCorpus.cs #26
+  errors: 0
+## csharp Poly.Tests/Interpretation/NodeFactCorpus.cs #27
+  errors: 0
+## csharp Poly.Tests/Interpretation/NodeFactCorpus.cs #28
+  errors: 0
+## csharp Poly.Tests/Interpretation/NodeFactCorpus.cs #29
+  errors: 0
+## csharp Poly.Tests/Interpretation/NodeFactCorpus.cs #30
+  errors: 0
+## csharp Poly.Tests/Interpretation/NodeFactCorpus.cs #31
+  errors: 0
+## csharp Poly.Tests/Interpretation/NodeFactCorpus.cs #32
+  errors: 0
+## csharp Poly.Tests/Interpretation/NodeFactCorpus.cs #33
+  errors: 0
+## csharp Poly.Tests/Interpretation/ParameterBindingTests.cs #0
+  errors: 3
+## csharp Poly.Tests/Interpretation/RejectedBodyFailClosedTests.cs #0
+  errors: 0
+## csharp Poly.Tests/Interpretation/RejectedBodyFailClosedTests.cs #1
+  errors: 1
+## csharp Poly.Tests/Interpretation/RejectedBodyFailClosedTests.cs #2
+  errors: 0
+## csharp Poly.Tests/Interpretation/RejectedBodyFailClosedTests.cs #3
+  errors: 0
+  System.String.IndexOf(System.Char)
+## csharp Poly.Tests/Interpretation/RepeatedAstInvocationTests.cs #0
+  errors: 0
+## csharp Poly.Tests/Interpretation/RepeatedAstInvocationTests.cs #1
+  errors: 0
+## csharp Poly.Tests/Interpretation/RepeatedAstInvocationTests.cs #2
+  errors: 0
+## csharp Poly.Tests/Interpretation/ShadowedVariableVmTests.cs #0
+  errors: 4
+## csharp Poly.Tests/Interpretation/ShadowedVariableVmTests.cs #1
+  errors: 7
+## csharp Poly.Tests/Interpretation/ShadowedVariableVmTests.cs #2
+  errors: 7
+## csharp Poly.Tests/Interpretation/ShadowedVariableVmTests.cs #3
+  errors: 3
+## csharp Poly.Tests/Interpretation/ShadowedVariableVmTests.cs #4
+  errors: 3
+## csharp Poly.Tests/Interpretation/ShadowedVariableVmTests.cs #5
+  errors: 3
+## csharp Poly.Tests/Interpretation/ShadowedVariableVmTests.cs #6
+  errors: 5
+  System.InvalidOperationException.ctor(System.String)
+  System.Exception.get_Message()
+  System.String.get_Length()
+## csharp Poly.Tests/Interpretation/VariableMultiAssignTypeExperimentTests.cs #0
+  errors: 1
+## csharp Poly.Tests/Interpretation/VariableMultiAssignTypeExperimentTests.cs #1
+  errors: 1
+## csharp Poly.Tests/Interpretation/Vm/Abi/ConditionalArmsTests.cs #0
+  errors: 7
+## csharp Poly.Tests/Interpretation/Vm/Abi/ConditionalArmsTests.cs #1
+  errors: 7
+## csharp Poly.Tests/Interpretation/Vm/Abi/ConditionalArmsTests.cs #2
+  errors: 7
+## csharp Poly.Tests/Interpretation/Vm/Abi/ConditionalArmsTests.cs #3
+  errors: 7
+## csharp Poly.Tests/Interpretation/Vm/Abi/ConditionalArmsTests.cs #4
+  errors: 0
+## csharp Poly.Tests/Interpretation/Vm/Abi/ConditionalArmsTests.cs #5
+  errors: 0

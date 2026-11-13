@@ -32,8 +32,8 @@ Common members include:
 - `PrimitiveType`
 - `Members`
 - `GetMembers(string name)`
-- `IsAssignableFrom` / `GetConversionFrom` (conversion operators are not in `Methods`)
-- `ResolveConversionFrom` / `GetOperators` (internal, default-bodied: what the platform defines for conversions and operators; see below)
+- `IsAssignableFrom` (no conversion, or a declared implicit operator; a conversion the platform applies itself, such as numeric widening, is not assignment)
+- `ResolveConversionFrom` / `IsAssignableWithoutConversion` / `GetOperators` (internal, default-bodied: what the platform defines for conversions, assignability and operators; see below). Conversion operators are not in `Methods`; a declared one is a `TypeConversion` with a method, a built-in one has none.
 
 ### ITypeMember
 
@@ -73,7 +73,7 @@ is the unique type the others identically or implicitly convert to. Optionality 
   modulo, comparison, bitwise, shift, unary minus and plus, the Boolean operators, and string concatenation with
   any CLR operand). Decimal's conversions and operators are the CLR's declared members. Deliberately none: enum,
   lifted, reference-equality, delegate and object operators. `PlatformApplied` is true for every operator of the
-  simple types except decimal's, and for concatenation. `ClrBuiltInRules` is the only source of the built-in answers. To answer a conversion, four things still name .NET: `GetConversionFrom`'s CLR branch (`FindConversionFrom`), `IsAssignableFrom`'s `ClrTypeDefinition` branch, `IsNumericWideningFrom`'s `TypeCode` table, and the second conversion door (the internal `ResolveConversionFrom` beside the public `GetConversionFrom`); T-16 removes all four. `IsCollectionShape` and `GetElementType` also name CLR types in the Introspection root but do not answer a conversion.
+  simple types except decimal's, and for concatenation. `ClrBuiltInRules` is the only source of the built-in answers. Overload scoring reads the provider since T-16: tier 0 is the same type (`IsSameType`), tier 1 is `IsAssignableFrom`, tier 2 is an implicit `ResolveConversionFrom` (a conversion with no method, which the platform applies itself); the private numeric rank table and the public `GetConversionFrom` door are gone. `IsAssignableFrom` stays "no conversion, or a declared implicit operator" because assignment, casts, type tests and the emitter also read it; widening it would loosen all of them. `IsAssignableWithoutConversion` is its first half: the same type, a base type or an interface, and for .NET `Type.IsAssignableFrom`, the lift from `T` to `T?` and `object` accepting every definition (the VM boxes a modeled entity). The box into `object` is also `ClrBuiltInRules`' implicit conversion, so it is stated twice; the two agree on every CLR definition (`ObjectAcceptsEveryClrDefinition_IsAssignableFromAndResolveConversionFromAgree`) and differ for a modeled source by design. Still outside the contract, with no removing row yet: the tier sum itself (a private copy of overload resolution that keeps the first of equal candidates; it is not C# 12.6.4 better-conversion), the boxing rule stated twice, and `SyntaxTypeCompatibilityAnalyzer`'s `IsImplicitlyConvertible(Type, Type)` with its nullable lifting, `CoerceTo`, `IsIntegerType`, `ConvertMethodName` and `IsIeeeFloating`. T-23 publishes `IsAssignableWithoutConversion`. `IsCollectionShape` and `GetElementType` also name CLR types in the Introspection root but do not answer a conversion.
 - **Modeled definitions** answer from declared static `op_*` members: Poly's modeled convention, shared with
   `op_Implicit`, not a platform fact. `And` and `Or` have no declared form.
 - **Introspection-internal today.** The members are `internal` and neutral at signature level only

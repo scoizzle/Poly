@@ -113,7 +113,7 @@ Open or newly decided, named by the contract (an open item names the slice that 
 - **`Text` operators** — decided by T-03b: `Text + Text` is `Text`, equality is defined, and ordering and
   subtraction are none (#631 is T-07's).
 - **Implicit `Number -> Decimal` widening** — decided by T-03: `Assign(Number -> Decimal)` is `Widening`,
-  found through `decimal.op_Implicit(long)` via `GetConversionFrom`; `Decimal -> Number` is
+  found through `decimal.op_Implicit(long)` via `ResolveConversionFrom`; `Decimal -> Number` is
   `RoundingNarrowing` through the explicit operator. Implied by Q6's "+ warning when assigned to Decimal".
 - **What "assigned" covers for R4's Decimal warning** — `Open: decided in T-08`; #679's red test covers
   `assign` only, not call arguments, function returns or defaults.
@@ -170,10 +170,10 @@ Recorded by T-03b from [#679 comment 6837489066](https://github.com/scoizzle/Pol
   decides meaning. T-03b's cross-check ledger reports both, and a cell where the ABI did something the tree did
   not state is its own ledger kind. Row T-21 removes emitter-side promotion that decides meaning; L-03v's
   emit-time rejection is its first instance.
-- **Convergence.** One row per remaining copy after T-04: T-16 (to answer a conversion four things still name .NET: `GetConversionFrom`'s CLR branch,
-  `IsAssignableFrom`'s `ClrTypeDefinition` branch, `IsNumericWideningFrom`'s `TypeCode` table and the second conversion
-  door, the internal `ResolveConversionFrom` beside the public `GetConversionFrom`, whose conversion into `object`
-  duplicates `IsAssignableFrom`'s CLR branch since T-24; `IsCollectionShape` and
+- **Convergence.** One row per remaining copy after T-04: T-16 (done: overload scoring reads the provider's conversions, and
+  `IsNumericWideningFrom`, `NumericWidenRank` and the public `GetConversionFrom` door are gone; what remains outside the contract
+  is listed in `Poly/Introspection/README.md`: the tier-sum scoring, the boxing rule stated twice and the analyzer's
+  `IsImplicitlyConvertible(Type, Type)` residuals, none with a removing row yet; `IsCollectionShape` and
   `GetElementType` also name CLR types but do not answer a conversion), T-17 (`PromoteNumeric`/`GetNumericRank`/`ResolveAddType`),
   T-18 (`SyntaxTypeCompatibilityAnalyzer`), T-19 (`LambdaBridge.PromoteNumeric`), T-20
   (`ConstantFoldingPass.Promote`: converged, folding asks `GetOperator` and applies the chosen signature; it leaves

@@ -1,6 +1,7 @@
 using System.Globalization;
 
 using Poly.DomainModeling.Analysis;
+using Poly.Grammar;
 
 namespace Poly.DomainModeling.Language;
 
@@ -36,7 +37,7 @@ internal enum NumberLiteralKind {
 /// </remarks>
 internal static class DslNumberText {
     private const string LongMaxDigits = "9223372036854775807";
-    private const string DecimalMaxDigits = "79228162514264337593543950335";
+    private static readonly string DecimalMaxDigits = ExactNumber.MaxMantissa.ToString(CultureInfo.InvariantCulture);
 
     /// <summary>True when <see cref="Format"/> accepts the value's type.</summary>
     public static bool IsNumber(object? value) => value is
@@ -80,6 +81,108 @@ internal static class DslNumberText {
         }
 
         return ExactNumber.TryParseDecimalText(text) is null ? NumberLiteralKind.FractionalOverflow : NumberLiteralKind.Fractional;
+    }
+
+    // ── reading a number token's value: exact, or a positioned error (T-15) ─────────────
+
+    private const int MaxShownLength = 40;
+
+    /// <summary>The value of a Number token: a <see cref="long"/> when integral and in range, else an exact <see cref="decimal"/>; anything else is a positioned error.</summary>
+    public static object ParseLiteral(DslToken token) {
+        var text = token.Span;
+        if (long.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var whole))
+            return whole;
+        var value = ExactDecimalOrThrow(token);
+        // 1.0 is integral. A fraction is decimal. Never a double.
+        if (value == decimal.Truncate(value) && value >= long.MinValue && value <= long.MaxValue)
+            return (long)value;
+        return value;
+    }
+
+    /// <summary>A <c>length(...)</c> bound: a whole number from 0 to <see cref="int.MaxValue"/>, written without a decimal point.</summary>
+    public static int ParseLengthBound(DslToken token) =>
+        int.TryParse(token.Span, NumberStyles.None, CultureInfo.InvariantCulture, out var bound)
+            ? bound
+            : throw WholeNumberError(token, "Length bound", int.MaxValue.ToString(CultureInfo.InvariantCulture));
+
+    /// <summary>A duration's amount: a whole number from 0 to <see cref="long.MaxValue"/>, written without a decimal point.</summary>
+    public static long ParseDurationAmount(DslToken token) =>
+        long.TryParse(token.Span, NumberStyles.None, CultureInfo.InvariantCulture, out var amount)
+            ? amount
+            : throw WholeNumberError(token, "Duration amount", long.MaxValue.ToString(CultureInfo.InvariantCulture));
+
+    /// <summary>An annotation argument: the one literal rule (exact, or a positioned error), then the nearest <see cref="double"/>.</summary>
+    public static double ParseAnnotationNumber(DslToken token) {
+        ExactDecimalOrThrow(token);
+        return double.Parse(token.Span, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture);
+    }
+
+    /// <summary>The whole value of an integral range bound (<c>100.0</c> is whole), or false when it is fractional or outside <see cref="long"/>. A magnitude of 2^63 with a minus is <see cref="long.MinValue"/>.</summary>
+    public static bool TryParseWholeInt64(ReadOnlySpan<char> digitText, bool negative, out long value) {
+        if (TryExactDecimal(digitText, out var dec, out _)) {
+            var signed = negative ? -dec : dec;
+            if (dec == decimal.Truncate(dec) && signed >= long.MinValue && signed <= long.MaxValue) {
+                value = (long)signed;
+                return true;
+            }
+        }
+        value = 0;
+        return false;
+    }
+
+    private static decimal ExactDecimalOrThrow(DslToken token) {
+        var text = token.Span;
+        if (TryExactDecimal(text, out var value, out var fractionDigits))
+            return value;
+        throw GrammarError.Error(NotExactMessage(token, Classify(text), fractionDigits), token.Line, token.Col);
+    }
+
+    private static bool TryExactDecimal(ReadOnlySpan<char> text, out decimal value, out int fractionDigits) {
+        Shape(text, out var integerDigits, out fractionDigits);
+        // At most 28 significant digits is always exact: no allocation on the common path.
+        if (integerDigits + fractionDigits <= ExactNumber.MaxScale
+            && decimal.TryParse(text, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out value))
+            return true;
+        if (ExactNumber.TryParseDecimalText(text.ToString()) is { } exact) {
+            value = exact.ToDecimal();
+            return true;
+        }
+        value = 0;
+        return false;
+    }
+
+    // Significant digits either side of the point: leading zeros of the integer part and trailing zeros of the fraction are free.
+    private static void Shape(ReadOnlySpan<char> text, out int integerDigits, out int fractionDigits) {
+        var dot = text.IndexOf('.');
+        var integral = dot < 0 ? text : text[..dot];
+        var fraction = dot < 0 ? ReadOnlySpan<char>.Empty : text[(dot + 1)..];
+        integerDigits = integral.TrimStart('0').Length;
+        fractionDigits = fraction.TrimEnd('0').Length;
+    }
+
+    // The limit printed is the limit enforced: the mantissa cap is decimal.MaxValue's, scaled by the digits after the point.
+    private static string NotExactMessage(DslToken token, NumberLiteralKind kind, int fractionDigits) {
+        var shown = Shown(token);
+        var places = fractionDigits.ToString(CultureInfo.InvariantCulture);
+        if (kind == NumberLiteralKind.IntegerOverflow)
+            return $"Number '{shown}' is larger than the maximum {DecimalMaxDigits}.";
+        if (fractionDigits > ExactNumber.MaxScale)
+            return $"Number '{shown}' has {places} digits after the point; the maximum is {ExactNumber.MaxScale.ToString(CultureInfo.InvariantCulture)}.";
+        var scaledMax = fractionDigits == 0
+            ? DecimalMaxDigits
+            : DecimalMaxDigits[..^fractionDigits] + "." + DecimalMaxDigits[^fractionDigits..];
+        var noun = fractionDigits == 1 ? "digit" : "digits";
+        return $"Number '{shown}' is larger than the maximum {scaledMax} for {places} {noun} after the point.";
+    }
+
+    private static FormatException WholeNumberError(DslToken token, string what, string maximum) {
+        var written = token.Span.Contains('.') ? ", written without a decimal point" : "";
+        return GrammarError.Error($"{what} '{Shown(token)}' must be a whole number from 0 to {maximum}{written}.", token.Line, token.Col);
+    }
+
+    private static string Shown(DslToken token) {
+        var shown = DslTokenText.Shown(token);
+        return shown.Length <= MaxShownLength ? shown : string.Concat(shown.AsSpan(0, MaxShownLength - 3), "...");
     }
 
     private static string ExpandExponent(string shortest) {

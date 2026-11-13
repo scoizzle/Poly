@@ -347,6 +347,39 @@ public sealed class DslTokenStreamBaselineTests {
             .IsEqualTo(records.Count);
     }
 
+    private const string NonAsciiDigitError = "Numeric literal contains non-ASCII digit 'U+0663'; use 0-9.";
+
+    [Test]
+    public async Task NonAsciiDigit_IsAPositionedLexError_AtEveryEntryPoint() {
+        const string document = "domain A\nX: entity {\n  N: Number default(٣)\n}\n";
+
+        var parse = await Assert.That(() => DslSyntaxTree.Parse(document)).Throws<GrammarException>();
+        await Assert.That((parse!.Detail, parse.Line, parse.Column)).IsEqualTo((NonAsciiDigitError, 3, 21));
+
+        var edit = PolyEdit.Apply(document, "[{\"op\":\"remove\",\"path\":\"X.N\"}]");
+        await Assert.That(edit.ErrorCode).IsEqualTo("EDIT_NOT_ADDRESSABLE");
+        await Assert.That(edit.Error).Contains(NonAsciiDigitError);
+
+        var fragment = await Assert.That(() => DslExpressionFragment.ParseExpressionFragment("Age > ٣")).Throws<GrammarException>();
+        await Assert.That((fragment!.Detail, fragment.Line, fragment.Column)).IsEqualTo((NonAsciiDigitError, 1, 7));
+
+        var afterDigit = await Assert.That(() => DslExpressionFragment.ParseExpressionFragment("1٣")).Throws<GrammarException>();
+        await Assert.That((afterDigit!.Detail, afterDigit.Line, afterDigit.Column)).IsEqualTo((NonAsciiDigitError, 1, 2));
+
+        // The fragment parser stops at the stray '.' first; the lexer's own error for the digit after it is at column 3.
+        var reader = new DslTokenReader("1.٣");
+        reader.Consume(2);
+        var afterPoint = await Assert.That(() => reader.Peek()).Throws<GrammarException>();
+        await Assert.That((afterPoint!.Detail, afterPoint.Line, afterPoint.Column)).IsEqualTo((NonAsciiDigitError, 1, 3));
+    }
+
+    [Test]
+    [Arguments("domain A\n// ٣\nX: entity {\n  N: Text default(\"٣\")\n  Y٣: Number\n}\n")]
+    public async Task NonAsciiDigit_InACommentAStringOrAName_IsNotANumber(string document) {
+        // Controls: the digit class is a rule for a number literal, not for every character of the document.
+        await Assert.That(DslSyntaxTree.Parse(document).Tokens.Any(t => t.Kind == DslTokenKind.Number)).IsFalse();
+    }
+
     [Test]
     public async Task Tokenizer_MatchesFrozenBaseline() {
         var failures = new List<string>();

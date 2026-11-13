@@ -1,5 +1,3 @@
-using System.Globalization;
-
 using Poly.DomainModeling.Libraries.Temporal;
 using Poly.DomainModeling.Ontology;
 using Poly.Grammar;
@@ -294,9 +292,7 @@ public sealed class DslExpressionParser {
         private DomainExpression FoldUnresolvedDuration(MatchResult<DslToken, DslTokenKind> match) {
             // The duration row captures 'amount' with a Number value.
             var amountToken = CaptureToken(match, "amount");
-            if (!long.TryParse(amountToken.Span, NumberStyles.Integer, CultureInfo.InvariantCulture, out var amount))
-                throw _c.Error($"Duration amount '{DslTokenText.Shown(amountToken)}' is not an integer.");
-            return new UnresolvedDuration(amount, CaptureText(match, "unit"));
+            return new UnresolvedDuration(DslNumberText.ParseDurationAmount(amountToken), CaptureText(match, "unit"));
         }
 
         /// <summary>

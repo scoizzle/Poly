@@ -578,6 +578,28 @@ legal, but a container that owns a recursive type (`Folder.items: many owned Ite
 make `Item.children` a plain reference, or declare the tree node as its own type.
 This is a type-level check only: a second owner *instance* is not refused yet.
 
+**Ownership never closes a loop between different entities** (`DMDEP002`). Two or
+more different entity types that own each other through `owned` navigations are an
+analysis error, one per cycle, reported on the owned navigation that returns to the
+cycle's earliest-declared entity and naming the whole path (`Cabin -> Deck -> Cabin`).
+An entity owning only itself is a tree and stays legal; a plain reference back to the
+owner is not ownership:
+
+<!-- poly-verify: invalid:DMDEP002 wrapper:top-default -->
+```poly
+Cabin: entity {
+  Name: Text
+  deck: owned Deck
+}
+
+Deck: entity {
+  Name: Text
+  cabin: owned Cabin   // error: Cabin -> Deck -> Cabin, nothing is the root
+}
+```
+
+Make the back navigation a plain reference (`cabin: Cabin`), or drop it.
+
 **Relationship names are scoped to their source entity.** The same navigation name may
 be declared on different source entities — e.g. two children each back-reference their
 parent with a nav named `order` — but never twice on the same entity, and never

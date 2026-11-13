@@ -67,8 +67,8 @@ internal sealed record PatternRowViolation(PatternRowCheck Check, string Rule, s
 /// before end of input.</item>
 /// <item><b>A3, coverage.</b> (a) every row is observed or carries an unobserved entry; (b) every
 /// optional or repeated slot of an observed row is non-empty in some observation, or carries an
-/// <see cref="PatternRowEntryKind.AlwaysNull"/> entry keyed by its slot index; (c) every reader-head row
-/// has an example that the matcher selects, and every example names a reader-head row.</item>
+/// <see cref="PatternRowEntryKind.AlwaysNull"/> entry keyed by its slot index; (c) every reader-head and
+/// reader-only row has an example that the matcher selects, and every example names such a row.</item>
 /// </list>
 ///
 /// Every allow-list entry is checked both ways: an entry whose condition does not fire is a
@@ -492,7 +492,9 @@ internal static class PatternRowChecker {
 
         private void CheckExamples(List<PatternRowEntry> entries, IReadOnlyList<PatternRowExample> examples) {
             var heads = new HashSet<(string Rule, string Pattern)>();
-            foreach (var entry in entries.Where(e => e.Kind == PatternRowEntryKind.ReaderHead)) {
+            // Reader heads and reader-only rows are read but never printed through the table, so an
+            // example the matcher must select stands in for the observation (it is what finds a shadowed row).
+            foreach (var entry in entries.Where(e => e.Kind is PatternRowEntryKind.ReaderHead or PatternRowEntryKind.ReaderOnly)) {
                 if (entry.Pattern is { } pattern)
                     heads.Add((entry.Rule, pattern));
                 else
@@ -513,7 +515,7 @@ internal static class PatternRowChecker {
                     continue;
                 }
                 if (!heads.Contains((example.Rule, example.Pattern))) {
-                    Report("is for a row that is not a reader head: delete the example, or the row's entry is missing");
+                    Report("is for a row that is neither a reader head nor reader-only: delete the example, or the row's entry is missing");
                     continue;
                 }
                 exampled.Add((example.Rule, example.Pattern));
@@ -522,7 +524,7 @@ internal static class PatternRowChecker {
             }
 
             foreach (var (rule, pattern) in heads.Where(head => !exampled.Contains(head)).Order())
-                _violations.Add(new(PatternRowCheck.Example, rule, pattern, "is a reader head with no example"));
+                _violations.Add(new(PatternRowCheck.Example, rule, pattern, "is a reader-head or reader-only row with no example"));
         }
     }
 }

@@ -4,7 +4,7 @@ namespace Poly.Tests.Grammar;
 internal enum PatternRowEntryKind {
     /// <summary>Unobserved: a reader dispatch head the hand printer spells outside the table. Needs an example.</summary>
     ReaderHead,
-    /// <summary>Unobserved: read surface only. No print site names the row; the writer composes that text by hand.</summary>
+    /// <summary>Unobserved: read surface only. No print site names the row; the writer composes that text by hand. Needs an example.</summary>
     ReaderOnly,
     /// <summary>Unobserved: a recogniser no shipped reader or printer uses.</summary>
     NonLive,

@@ -690,6 +690,20 @@ public class ConstantFoldingProviderTests {
         await AssertFolds(new Invoke(new Lambda([y], new Add(y, new Constant(1))), new Constant(5)), 6);
     }
 
+    /// <summary>
+    /// Amendment 10: a lambda parameter with no type has no stamp, so its operand has no type and the operator declines
+    /// (master folded it to 6). The stamped twin folds.
+    /// </summary>
+    [Test]
+    public async Task ParameterWithoutAStamp_Declines_AndAStampedOneFolds() {
+        var x = new Parameter("x");
+        var unstamped = new Invoke(new Lambda([x], new Add(x, new Constant(1))), new Constant(5));
+        await Assert.That(Interpreter.Analyze(unstamped).GetResolvedType(x)).IsNull();
+        await AssertDoesNotFold(unstamped);
+        var y = new Parameter("y", TypeReference.To<int>());
+        await AssertFolds(new Invoke(new Lambda([y], new Add(y, new Constant(1))), new Constant(5)), 6);
+    }
+
     // The persisted counts and checksums.
     private const string MasterFolds = "2640 68cba717a778d527";
     private const string MasterUndefinedFolds = "828 0d020bf27c2afbb7";

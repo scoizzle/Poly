@@ -17,9 +17,14 @@ public sealed class ParseAllocationTests {
     /// <summary>
     /// Measured once with this test body on the consumers before the G-13a sweep (commit <c>1ae2d948</c>,
     /// every consumer still reading <c>DslToken.Text</c>), Debug build, as the suite runs: 2,346,080 bytes in
-    /// two runs. At G-13a's head (<c>9c3cf7a3</c> plus this test) the same body measures 2,345,208.
+    /// two runs. At G-13a's head (<c>9c3cf7a3</c> plus this test) the same body measures 2,345,208. G-28 lowered
+    /// the ceiling: the matcher indexes a row's elements instead of boxing an enumerator per row it tries, and the top
+    /// level no longer matches the visibility rule for every declaration. Measured 2,155,896 bytes on 2026-11-13 at
+    /// <c>54067e82</c>, and again at <c>716214f8</c> run alone and in the Parsing filter; the full suite measures 2,154,808
+    /// there (1,088 bytes less). The ceiling is the higher, filtered, measure plus 1,024 bytes of run-to-run noise headroom
+    /// (G-13a saw 56), not a budget.
     /// </summary>
-    private const long HotelParseBytesBeforeTheSweep = 2_346_080;
+    private const long HotelParseBytesCeiling = 2_156_920;
 
     internal static long MeasureHotelParse() {
         var text = File.ReadAllText(Path.Combine(GoldenDomains.RepoRoot, "docs/probes/dogfood/hotel.poly"));
@@ -45,6 +50,6 @@ public sealed class ParseAllocationTests {
         var bytes = MeasureHotelParse();
 
         await Assert.That(bytes).IsGreaterThan(100_000);
-        await Assert.That(bytes).IsLessThanOrEqualTo(HotelParseBytesBeforeTheSweep);
+        await Assert.That(bytes).IsLessThanOrEqualTo(HotelParseBytesCeiling);
     }
 }

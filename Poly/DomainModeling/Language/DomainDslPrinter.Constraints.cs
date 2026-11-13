@@ -1,3 +1,5 @@
+using System.Globalization;
+
 using Poly.DomainModeling.Ontology;
 
 namespace Poly.DomainModeling.Language;
@@ -21,6 +23,14 @@ public sealed partial class DomainDslPrinter {
         public string Expression(DomainExpression expression) => printer.PrintExpression(expression);
 
         public string Literal(object? value) => PrintLiteralValue(value);
+
+        public string Number(object value) => DslNumberText.Format(value);
+
+        public string Bound(object? bound) => bound switch {
+            null => "",
+            _ when DslNumberText.IsNumber(bound) => DslNumberText.Format(bound),
+            _ => Convert.ToString(bound, CultureInfo.InvariantCulture) ?? "",
+        };
 
         public string EscapeString(string value) => EscapeStringLiteral(value);
     }

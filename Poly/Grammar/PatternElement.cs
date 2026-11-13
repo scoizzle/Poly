@@ -9,27 +9,53 @@ public interface IPatternElement<TToken, TTokenKind>
     where TToken : struct, IToken<TTokenKind>
     where TTokenKind : struct;
 
+/// <summary>
+/// A token element a failure report can name (<see cref="MatchKind{TToken,TTokenKind}"/>,
+/// <see cref="Value{TToken,TTokenKind}"/>, <see cref="MatchPredicate{TToken,TTokenKind}"/>,
+/// <see cref="Word{TToken,TTokenKind}"/>, <see cref="Run{TToken,TTokenKind}"/>). <see cref="Expect"/> is what the
+/// report calls the element when it is expected and does not match (a predicate's <c>Label</c> is a capture
+/// name, so the failure label is a field of its own); <see cref="ExpectTemplate"/> is the row's own message for
+/// that failure, with the placeholders <c>{expected}</c>, <c>{got}</c> and a capture name of a required element
+/// before it. Set both with <see cref="PatternBuilder{TToken,TTokenKind}.Expect"/>.
+/// </summary>
+public interface IExpectedElement {
+    /// <summary>The label a failure report shows for this element; null for the element's default.</summary>
+    string? Expect { get; }
+
+    /// <summary>The row's message when this element is the first expected element of a failure; null for the host's default.</summary>
+    string? ExpectTemplate { get; }
+}
+
 /// <summary>Matches a single token of a specific kind (fixed syntax — auto-emitted by printer).</summary>
-public sealed record MatchKind<TToken, TTokenKind>(TTokenKind Kind) : IPatternElement<TToken, TTokenKind>
+public sealed record MatchKind<TToken, TTokenKind>(TTokenKind Kind) : IPatternElement<TToken, TTokenKind>, IExpectedElement
     where TToken : struct, IToken<TTokenKind>
-    where TTokenKind : struct;
+    where TTokenKind : struct {
+    public string? Expect { get; init; }
+    public string? ExpectTemplate { get; init; }
+}
 
 /// <summary>
 /// Matches a single value-bearing token of a specific kind (runtime content).
 /// <paramref name="Name"/> is the capture / print-fill key; null is unnamed (legacy callback).
 /// </summary>
 public sealed record Value<TToken, TTokenKind>(TTokenKind Kind, string? Name = null)
-    : IPatternElement<TToken, TTokenKind>
+    : IPatternElement<TToken, TTokenKind>, IExpectedElement
     where TToken : struct, IToken<TTokenKind>
-    where TTokenKind : struct;
+    where TTokenKind : struct {
+    public string? Expect { get; init; }
+    public string? ExpectTemplate { get; init; }
+}
 
 /// <summary>Matches a single token whose full content satisfies a predicate (semantic predicates live here).</summary>
 public sealed record MatchPredicate<TToken, TTokenKind>(
     Func<TToken, bool> Predicate,
     string Label
-) : IPatternElement<TToken, TTokenKind>
+) : IPatternElement<TToken, TTokenKind>, IExpectedElement
     where TToken : struct, IToken<TTokenKind>
-    where TTokenKind : struct;
+    where TTokenKind : struct {
+    public string? Expect { get; init; }
+    public string? ExpectTemplate { get; init; }
+}
 
 /// <summary>Matches zero or one occurrence of an inner element.</summary>
 public sealed record Optional<TToken, TTokenKind>(IPatternElement<TToken, TTokenKind> Inner)
@@ -103,12 +129,15 @@ public sealed record NotFollowedBy<TToken, TTokenKind>(TTokenKind Kind)
 /// Matches one token that <paramref name="Matches"/> accepts: a contextual word, such as an identifier
 /// spelled <c>via</c>. The host supplies the test (the engine knows only token kinds); it captures nothing,
 /// and the printer writes <paramref name="Text"/> as a token of <paramref name="Kind"/>, so the row owns
-/// the spelling.
+/// the spelling. A failure report calls it by its quoted text (<c>'via'</c>) unless <see cref="Expect"/> names it.
 /// </summary>
 public sealed record Word<TToken, TTokenKind>(TTokenKind Kind, string Text, Func<TToken, bool> Matches)
-    : IPatternElement<TToken, TTokenKind>
+    : IPatternElement<TToken, TTokenKind>, IExpectedElement
     where TToken : struct, IToken<TTokenKind>
-    where TTokenKind : struct;
+    where TTokenKind : struct {
+    public string? Expect { get; init; }
+    public string? ExpectTemplate { get; init; }
+}
 
 /// <summary>
 /// A zero-width print hole at the end of a row: the reader stops here (the host reads what follows, such
@@ -126,9 +155,58 @@ public sealed record Slot<TToken, TTokenKind>(string Name) : IPatternElement<TTo
 /// host decides what continues (the DSL: the same line, and adjacent from index 1), so the engine stays
 /// position-free. The first candidate's previous token is the last token this row has matched, so a Run
 /// is never the first element, never preceded only by optional elements, and never optional (the builder
-/// rejects each); a Run that matches no token fails.
+/// rejects each); a Run that matches no token fails. A failure report calls it by its name unless
+/// <see cref="Expect"/> names it.
 /// </summary>
 public sealed record Run<TToken, TTokenKind>(Func<TToken, TToken, int, bool> Continues, string Name)
-    : IPatternElement<TToken, TTokenKind>
+    : IPatternElement<TToken, TTokenKind>, IExpectedElement
+    where TToken : struct, IToken<TTokenKind>
+    where TTokenKind : struct {
+    public string? Expect { get; init; }
+    public string? ExpectTemplate { get; init; }
+}
+
+/// <summary>
+/// Zero-width commit: once the elements before it have matched, a failure of any element after it is a
+/// committed failure. A sibling row of the same rule rescues it only by matching more tokens than the
+/// committed row had matched when it failed; otherwise it escapes the rule and aborts the whole
+/// <see cref="Matcher{TToken,TTokenKind}.Match"/> call (outer siblings are not tried, and it is never
+/// memoised). A row holds at most one Cut, never first and never last, never inside an
+/// <see cref="Optional{TToken,TTokenKind}"/>; it prints nothing. A rule that holds one, directly or through a
+/// rule it references, is matched with <c>Match</c>: <c>TryMatch</c> throws for it.
+/// </summary>
+public sealed record Cut<TToken, TTokenKind> : IPatternElement<TToken, TTokenKind>
     where TToken : struct, IToken<TTokenKind>
     where TTokenKind : struct;
+
+/// <summary>
+/// Zero-width, terminal refusal: a row that reaches it matches its tokens and yields a committed failure with
+/// <paramref name="Message"/> (placeholders <c>{got}</c> and a capture name of a required element before it),
+/// positioned at the last token the row matched. It counts as matching every token up to there, so a
+/// shorter sibling does not rescue it. It is the row's last element, after at least one required element or
+/// alone (a catch-all that matches no token: it stands on the head token, and any sibling that matches a token
+/// rescues it), never inside an <see cref="Optional{TToken,TTokenKind}"/>; a refusal row is never printed (the printer throws).
+/// </summary>
+/// <remarks>
+/// <paramref name="At"/> names another position: the capture of a required element before it (a value, a labelled
+/// predicate, a Run) or the text of a required Word before it; the refusal then stands on that element's first token.
+/// </remarks>
+public sealed record Refuse<TToken, TTokenKind>(string Message, string? At = null) : IPatternElement<TToken, TTokenKind>
+    where TToken : struct, IToken<TTokenKind>
+    where TTokenKind : struct {
+    /// <summary>The index of the row element <paramref name="at"/> names (a top-level capture or Word text), or -1.</summary>
+    internal static int AnchorOf(IReadOnlyList<IPatternElement<TToken, TTokenKind>> elements, string at) {
+        for (var i = 0; i < elements.Count; i++) {
+            var named = elements[i] switch {
+                Value<TToken, TTokenKind> v => v.Name,
+                MatchPredicate<TToken, TTokenKind> p => p.Label,
+                Run<TToken, TTokenKind> r => r.Name,
+                Word<TToken, TTokenKind> w => w.Text,
+                _ => null,
+            };
+            if (string.Equals(named, at, StringComparison.Ordinal))
+                return i;
+        }
+        return -1;
+    }
+}

@@ -20,6 +20,8 @@ internal static class PatternRowExamples {
     public static IReadOnlyList<PatternRowExample> All { get; } = [
         new(Dsl, "top", "enum", "Status: enum"),
         new(Dsl, "top", "entity", "Order: entity"),
+        new(Dsl, "marked-top", "entity", "public entity Order"),
+        new(Dsl, "marked-top", "value", "public value Money"),
 
         new(Dsl, "entity-body", "entity-subscription", "when Created"),
         new(Dsl, "entity-body", "stage", "Draft: stage"),

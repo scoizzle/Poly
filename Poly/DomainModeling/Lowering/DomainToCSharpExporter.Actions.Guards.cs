@@ -18,7 +18,7 @@ public sealed partial class DomainToCSharpExporter {
         Action action, Entity entity, string? policyStageName, string? stageEnumTypeName,
         List<Node> nodes, Func<FailureLowering.Spec, Node> failureReturn) {
         void EmitOne(Policy policy) {
-            if (action.Policies.Any(p => string.Equals(p.Name, "not_" + policy.Name, StringComparison.Ordinal)))
+            if (PolicyGuardFacts.SuppressesStageGate(action, policy))
                 return;
             var negated = policy.Name.StartsWith("not_", StringComparison.Ordinal);
             var realName = negated ? policy.Name[4..] : policy.Name;

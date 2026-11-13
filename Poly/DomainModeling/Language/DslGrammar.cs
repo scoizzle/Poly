@@ -33,7 +33,7 @@ public static class DslGrammar {
 
     /// <summary>The value-type kind word. It stays an identifier so <c>value</c> can still be a name.</summary>
     public static bool IsValueWord(DslToken t) =>
-        t.Kind == DslTokenKind.Identifier && t.Text == "value";
+        t.Kind == DslTokenKind.Identifier && t.TextEquals("value");
     public static bool IsCompareToken(DslToken t) => IsCompareOpKind(t.Kind);
 
     /// <summary>
@@ -370,26 +370,26 @@ public static class DslGrammar {
 
     internal static bool IsMatchIdent(DslToken t) =>
         t.Kind == DslTokenKind.Identifier
-        && string.Equals(t.Text, "match", StringComparison.Ordinal);
+        && t.TextEquals("match", StringComparison.Ordinal);
 
     internal static bool IsExistsIdent(DslToken t) =>
         t.Kind == DslTokenKind.Identifier
-        && string.Equals(t.Text, "exists", StringComparison.OrdinalIgnoreCase);
+        && t.TextEquals("exists", StringComparison.OrdinalIgnoreCase);
 
     internal static bool IsWhereIdent(DslToken t) =>
         t.Kind == DslTokenKind.Identifier
-        && string.Equals(t.Text, "where", StringComparison.OrdinalIgnoreCase);
+        && t.TextEquals("where", StringComparison.OrdinalIgnoreCase);
 
     internal static bool IsQuantifierToken(DslToken t) =>
-        t.Kind == DslTokenKind.Identifier && IsQuantifierKeyword(t.Text);
+        t.Kind == DslTokenKind.Identifier && IsQuantifierKeyword(t.Span);
 
     internal static bool IsCountToken(DslToken t) =>
         t.Kind == DslTokenKind.Identifier
-        && string.Equals(t.Text, "count", StringComparison.OrdinalIgnoreCase);
+        && t.TextEquals("count", StringComparison.OrdinalIgnoreCase);
 
     internal static bool IsSumToken(DslToken t) =>
         t.Kind == DslTokenKind.Identifier
-        && string.Equals(t.Text, "sum", StringComparison.OrdinalIgnoreCase);
+        && t.TextEquals("sum", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// A path hop is a plain identifier. <c>function</c> is excluded so an expression that ends
@@ -406,7 +406,7 @@ public static class DslGrammar {
     /// <summary>True when <paramref name="t"/> is the <c>function</c> keyword that starts a declaration.</summary>
     internal static bool IsFunctionDeclarationWord(DslToken t) =>
         t.Kind == DslTokenKind.Identifier
-        && string.Equals(t.Text, "function", StringComparison.Ordinal);
+        && t.TextEquals("function", StringComparison.Ordinal);
 
     /// <summary>
     /// True when <paramref name="t"/> is an identifier spelling a duration unit
@@ -415,12 +415,12 @@ public static class DslGrammar {
     /// swallow the next declaration. The kind check keeps a quoted <c>"Days"</c> out.
     /// </summary>
     internal static bool IsDurationUnitToken(DslToken t) =>
-        t.Kind == DslTokenKind.Identifier && DurationUnits.IsUnit(t.Text);
+        t.Kind == DslTokenKind.Identifier && DurationUnits.IsUnit(t.Span);
 
-    internal static bool IsQuantifierKeyword(string text) =>
-        string.Equals(text, "any", StringComparison.OrdinalIgnoreCase)
-        || string.Equals(text, "all", StringComparison.OrdinalIgnoreCase)
-        || string.Equals(text, "none", StringComparison.OrdinalIgnoreCase)
-        || string.Equals(text, "count", StringComparison.OrdinalIgnoreCase)
-        || string.Equals(text, "sum", StringComparison.OrdinalIgnoreCase);
+    internal static bool IsQuantifierKeyword(ReadOnlySpan<char> text) =>
+        text.Equals("any", StringComparison.OrdinalIgnoreCase)
+        || text.Equals("all", StringComparison.OrdinalIgnoreCase)
+        || text.Equals("none", StringComparison.OrdinalIgnoreCase)
+        || text.Equals("count", StringComparison.OrdinalIgnoreCase)
+        || text.Equals("sum", StringComparison.OrdinalIgnoreCase);
 }

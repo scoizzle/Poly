@@ -303,7 +303,7 @@ public class GuardClosedAssignElisionTests {
     private static string CopyBody(string poly, string entityName, string actionName) {
         var (domain, analysis, session) = Build(poly);
         session.Lower(domain, analysis);
-        if (!RuntimeAnalysisCache.TryGetModuleMethod(domain, entityName, actionName, out var method)
+        if (!ActionBodies.TryGetModuleBody(domain, entityName, actionName, out var method)
             || method?.Body is null)
             throw new InvalidOperationException($"No module body for {entityName}.{actionName}.");
         return new CSharpGenerator().Generate(method.Body);

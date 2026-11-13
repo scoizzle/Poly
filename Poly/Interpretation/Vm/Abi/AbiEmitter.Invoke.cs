@@ -166,6 +166,17 @@ public static partial class AbiEmitter {
                             $"VM compile rejected: AST method '{astMethod.Name}' has no compilable body and "
                             + "its receiver is an instance the VM constructs, so there is no host method to "
                             + $"dispatch to. {Reason(rejection)}");
+                    // `this` in a module body is that same dictionary: an AST method that resolved on
+                    // it and did not compile is reported as its own compile failure, never as a
+                    // missing host method (an action wrapper calls its `__BodyOf` method through here).
+                    // Behaviour change (L-03b): a caller of an action whose body cannot compile now fails
+                    // to compile too, where it used to run until the call site was reached; strictly more
+                    // fail-closed. T-09 makes such bodies compile.
+                    if (member.Value is ThisReference && rejection is not null)
+                        throw new InvalidOperationException(
+                            rejection.StartsWith("VM compile rejected:", StringComparison.Ordinal)
+                                ? rejection
+                                : $"VM compile rejected: {rejection}");
                     astBodyReject = rejection;
                 }
             }
@@ -966,8 +977,9 @@ public static partial class AbiEmitter {
     /// <summary>
     /// True when the receiver is an instance the VM allocates itself: <c>new T()</c> for a
     /// <c>T</c> analysis resolves to an AST type definition, whose runtime object is the
-    /// VM's own dictionary. A host-supplied instance reaches the same call shape through
-    /// <c>this</c> or a parameter instead, and may genuinely implement the method.
+    /// VM's own dictionary. <c>this</c> in a module body is that same dictionary and is handled
+    /// at the call site; only a host-supplied instance reaching the call through a parameter may
+    /// genuinely implement the method.
     /// </summary>
     private static bool IsVmConstructedInstance(Node receiver, Context ctx) =>
         receiver is New

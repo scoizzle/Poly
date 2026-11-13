@@ -1,0 +1,2337 @@
+# G-12 frozen DSL token-stream baseline, written by the pre-span tokenizer. See DslTokenStreamBaselineTests.
+# H input / TAB kind start length line col text (or TAB ERR detail line col offset length); U header; C cursor;
+# D golden path, E expression text, X generator spec: token-line count and SHA-256 (16 hex) of the same dump.
+H	
+	EndOfFile	0	0	1	1	
+H	\uFEFF
+	EndOfFile	1	0	1	1	
+H	\uFEFFdomain A
+	Domain	1	6	1	1	domain
+	Identifier	8	1	1	8	A
+	EndOfFile	9	0	1	9	
+H	\uFEFF\nx
+	Identifier	2	1	2	1	x
+	EndOfFile	3	0	2	2	
+H	domain A\r\nX: entity {\r\n  N: Text\r\n}\r\n
+	Domain	0	6	1	1	domain
+	Identifier	7	1	1	8	A
+	Identifier	10	1	2	1	X
+	Colon	11	1	2	2	:
+	Entity	13	6	2	4	entity
+	LBrace	20	1	2	11	{
+	Identifier	25	1	3	3	N
+	Colon	26	1	3	4	:
+	Text	28	4	3	6	Text
+	RBrace	34	1	4	1	}
+	EndOfFile	37	0	5	1	
+H	a\rb
+	Identifier	0	1	1	1	a
+	Identifier	2	1	1	3	b
+	EndOfFile	3	0	1	4	
+H	a\r\rb\n
+	Identifier	0	1	1	1	a
+	Identifier	3	1	1	4	b
+	EndOfFile	5	0	2	1	
+H	\ta\t\tb
+	Identifier	1	1	1	2	a
+	Identifier	4	1	1	5	b
+	EndOfFile	5	0	1	6	
+H	x // comment at EOF
+	Identifier	0	1	1	1	x
+	EndOfFile	19	0	1	20	
+H	// only a comment
+	EndOfFile	17	0	1	18	
+H	a // c\r\nb
+	Identifier	0	1	1	1	a
+	Identifier	8	1	2	1	b
+	EndOfFile	9	0	2	2	
+H	a//b\n//\nc
+	Identifier	0	1	1	1	a
+	Identifier	8	1	3	1	c
+	EndOfFile	9	0	3	2	
+H	""
+	StringLiteral	0	2	1	1	
+	EndOfFile	2	0	1	3	
+H	"
+	StringLiteral	0	1	1	1	
+	EndOfFile	1	0	1	2	
+H	"abc
+	StringLiteral	0	4	1	1	abc
+	EndOfFile	4	0	1	5	
+H	"abc\\"
+	StringLiteral	0	6	1	1	abc"
+	EndOfFile	6	0	1	7	
+H	"abc\\
+	StringLiteral	0	5	1	1	abc\\
+	EndOfFile	5	0	1	6	
+H	"a\\"b"
+	StringLiteral	0	6	1	1	a"b
+	EndOfFile	6	0	1	7	
+H	"a\\\\"
+	StringLiteral	0	5	1	1	a\\
+	EndOfFile	5	0	1	6	
+H	"a\\n"
+	StringLiteral	0	5	1	1	a\\n
+	EndOfFile	5	0	1	6	
+H	"a\nb" c
+	StringLiteral	0	5	1	1	a\nb
+	Identifier	6	1	2	4	c
+	EndOfFile	7	0	2	5	
+H	"a\r\nb" c
+	StringLiteral	0	6	1	1	a\r\nb
+	Identifier	7	1	2	4	c
+	EndOfFile	8	0	2	5	
+H	"\\""
+	StringLiteral	0	4	1	1	"
+	EndOfFile	4	0	1	5	
+H	"\\\\\\"" x
+	StringLiteral	0	6	1	1	\\"
+	Identifier	7	1	1	8	x
+	EndOfFile	8	0	1	9	
+H	"\\x" y
+	StringLiteral	0	4	1	1	\\x
+	Identifier	5	1	1	6	y
+	EndOfFile	6	0	1	7	
+H	"\u200B" z
+	StringLiteral	0	3	1	1	\u200B
+	Identifier	4	1	1	5	z
+	EndOfFile	5	0	1	6	
+H	"caf\u00E9"
+	StringLiteral	0	6	1	1	caf\u00E9
+	EndOfFile	6	0	1	7	
+H	x"y"z
+	Identifier	0	1	1	1	x
+	StringLiteral	1	3	1	2	y
+	Identifier	4	1	1	5	z
+	EndOfFile	5	0	1	6	
+H	1.
+	Number	0	1	1	1	1
+	Dot	1	1	1	2	.
+	EndOfFile	2	0	1	3	
+H	1.5
+	Number	0	3	1	1	1.5
+	EndOfFile	3	0	1	4	
+H	1.5.3
+	Number	0	3	1	1	1.5
+	Dot	3	1	1	4	.
+	Number	4	1	1	5	3
+	EndOfFile	5	0	1	6	
+H	007
+	Number	0	3	1	1	007
+	EndOfFile	3	0	1	4	
+H	1..2
+	Number	0	1	1	1	1
+	Dot	1	1	1	2	.
+	Dot	2	1	1	3	.
+	Number	3	1	1	4	2
+	EndOfFile	4	0	1	5	
+H	.5
+	Dot	0	1	1	1	.
+	Number	1	1	1	2	5
+	EndOfFile	2	0	1	3	
+H	1.x
+	Number	0	1	1	1	1
+	Dot	1	1	1	2	.
+	Identifier	2	1	1	3	x
+	EndOfFile	3	0	1	4	
+H	\u0661\u0662\u0663
+	Number	0	3	1	1	\u0661\u0662\u0663
+	EndOfFile	3	0	1	4	
+H	\u0661.\u0662
+	Number	0	3	1	1	\u0661.\u0662
+	EndOfFile	3	0	1	4	
+H	3Days
+	Number	0	1	1	1	3
+	Identifier	1	4	1	2	Days
+	EndOfFile	5	0	1	6	
+H	caf\u00E9 \u03A9mega \u540D\u524D
+	Identifier	0	4	1	1	caf\u00E9
+	Identifier	5	5	1	6	\u03A9mega
+	Identifier	11	2	1	12	\u540D\u524D
+	EndOfFile	13	0	1	14	
+H	_x
+	Identifier	0	2	1	1	_x
+	EndOfFile	2	0	1	3	
+H	x1
+	Identifier	0	2	1	1	x1
+	EndOfFile	2	0	1	3	
+H	_
+	Identifier	0	1	1	1	_
+	EndOfFile	1	0	1	2	
+H	__a_1
+	Identifier	0	5	1	1	__a_1
+	EndOfFile	5	0	1	6	
+H	x\u0661
+	Identifier	0	2	1	1	x\u0661
+	EndOfFile	2	0	1	3	
+H	a_b.c_d
+	Identifier	0	3	1	1	a_b
+	Dot	3	1	1	4	.
+	Identifier	4	3	1	5	c_d
+	EndOfFile	7	0	1	8	
+H	->
+	Arrow	0	2	1	1	->
+	EndOfFile	2	0	1	3	
+H	>=
+	Gte	0	2	1	1	>=
+	EndOfFile	2	0	1	3	
+H	<=
+	Lte	0	2	1	1	<=
+	EndOfFile	2	0	1	3	
+H	==
+	Eq	0	2	1	1	==
+	EndOfFile	2	0	1	3	
+H	!=
+	Neq	0	2	1	1	!=
+	EndOfFile	2	0	1	3	
+H	=
+	SingleEq	0	1	1	1	=
+	EndOfFile	1	0	1	2	
+H	>
+	Gt	0	1	1	1	>
+	EndOfFile	1	0	1	2	
+H	<
+	Lt	0	1	1	1	<
+	EndOfFile	1	0	1	2	
+H	+
+	Plus	0	1	1	1	+
+	EndOfFile	1	0	1	2	
+H	-
+	Minus	0	1	1	1	-
+	EndOfFile	1	0	1	2	
+H	*
+	Star	0	1	1	1	*
+	EndOfFile	1	0	1	2	
+H	/
+	Slash	0	1	1	1	/
+	EndOfFile	1	0	1	2	
+H	- >
+	Minus	0	1	1	1	-
+	Gt	2	1	1	3	>
+	EndOfFile	3	0	1	4	
+H	-->
+	Minus	0	1	1	1	-
+	Arrow	1	2	1	2	->
+	EndOfFile	3	0	1	4	
+H	>==
+	Gte	0	2	1	1	>=
+	SingleEq	2	1	1	3	=
+	EndOfFile	3	0	1	4	
+H	=>
+	SingleEq	0	1	1	1	=
+	Gt	1	1	1	2	>
+	EndOfFile	2	0	1	3	
+H	<-
+	Lt	0	1	1	1	<
+	Minus	1	1	1	2	-
+	EndOfFile	2	0	1	3	
+H	: , . ( ) { } [ ]
+	Colon	0	1	1	1	:
+	Comma	2	1	1	3	,
+	Dot	4	1	1	5	.
+	LParen	6	1	1	7	(
+	RParen	8	1	1	9	)
+	LBrace	10	1	1	11	{
+	RBrace	12	1	1	13	}
+	LBracket	14	1	1	15	[
+	RBracket	16	1	1	17	]
+	EndOfFile	17	0	1	18	
+H	a->b
+	Identifier	0	1	1	1	a
+	Arrow	1	2	1	2	->
+	Identifier	3	1	1	4	b
+	EndOfFile	4	0	1	5	
+H	a>=-1
+	Identifier	0	1	1	1	a
+	Gte	1	2	1	2	>=
+	Minus	3	1	1	4	-
+	Number	4	1	1	5	1
+	EndOfFile	5	0	1	6	
+H	x.y.z
+	Identifier	0	1	1	1	x
+	Dot	1	1	1	2	.
+	Identifier	2	1	1	3	y
+	Dot	3	1	1	4	.
+	Identifier	4	1	1	5	z
+	EndOfFile	5	0	1	6	
+H	{}
+	LBrace	0	1	1	1	{
+	RBrace	1	1	1	2	}
+	EndOfFile	2	0	1	3	
+H	[x]
+	LBracket	0	1	1	1	[
+	Identifier	1	1	1	2	x
+	RBracket	2	1	1	3	]
+	EndOfFile	3	0	1	4	
+H	!
+	ERR	Unexpected character '!'	1	1	-1	0
+H	! =
+	ERR	Unexpected character '!'	1	1	-1	0
+H	@
+	ERR	Unexpected character '@'	1	1	-1	0
+H	#
+	ERR	Unexpected character '#'	1	1	-1	0
+H	$
+	ERR	Unexpected character '$'	1	1	-1	0
+H	\u200B
+	ERR	Unexpected character U+200B	1	1	-1	0
+H	\u00A0
+	ERR	Unexpected character U+00A0	1	1	-1	0
+H	a @ b
+	Identifier	0	1	1	1	a
+	ERR	Unexpected character '@'	1	3	-1	0
+H	a\uFEFFb
+	Identifier	0	1	1	1	a
+	ERR	Unexpected character U+FEFF	1	2	-1	0
+H	x\n  ;
+	Identifier	0	1	1	1	x
+	ERR	Unexpected character ';'	2	3	-1	0
+H	\u0001
+	ERR	Unexpected character U+0001	1	1	-1	0
+H	\uD83D\uDE00
+	ERR	Unexpected character U+D83D	1	1	-1	0
+H	domain A\n\nuses http "v1"\n\nX: entity {\n  N: Number range(0.01, 1.0)\n  T: Text optional\n}\n
+	Domain	0	6	1	1	domain
+	Identifier	7	1	1	8	A
+	Uses	10	4	3	1	uses
+	Identifier	15	4	3	6	http
+	StringLiteral	20	4	3	11	v1
+	Identifier	26	1	5	1	X
+	Colon	27	1	5	2	:
+	Entity	29	6	5	4	entity
+	LBrace	36	1	5	11	{
+	Identifier	40	1	6	3	N
+	Colon	41	1	6	4	:
+	NumberType	43	6	6	6	Number
+	Range	50	5	6	13	range
+	LParen	55	1	6	18	(
+	Number	56	4	6	19	0.01
+	Comma	60	1	6	23	,
+	Number	62	3	6	25	1.0
+	RParen	65	1	6	28	)
+	Identifier	69	1	7	3	T
+	Colon	70	1	7	4	:
+	Text	72	4	7	6	Text
+	Optional	77	8	7	11	optional
+	RBrace	86	1	8	1	}
+	EndOfFile	88	0	9	1	
+H	domain uses entity stage action policy when require transition to assign and or not is true false null Text Number Boolean optional unique range length pattern enum default equals relationship from link unlink one many owned create in invoke for if else entry exit as public
+	Domain	0	6	1	1	domain
+	Uses	7	4	1	8	uses
+	Entity	12	6	1	13	entity
+	Stage	19	5	1	20	stage
+	Action	25	6	1	26	action
+	Policy	32	6	1	33	policy
+	When	39	4	1	40	when
+	Require	44	7	1	45	require
+	Transition	52	10	1	53	transition
+	To	63	2	1	64	to
+	Assign	66	6	1	67	assign
+	And	73	3	1	74	and
+	Or	77	2	1	78	or
+	Not	80	3	1	81	not
+	Is	84	2	1	85	is
+	True	87	4	1	88	true
+	False	92	5	1	93	false
+	Null	98	4	1	99	null
+	Text	103	4	1	104	Text
+	NumberType	108	6	1	109	Number
+	BooleanType	115	7	1	116	Boolean
+	Optional	123	8	1	124	optional
+	Unique	132	6	1	133	unique
+	Range	139	5	1	140	range
+	Length	145	6	1	146	length
+	Pattern	152	7	1	153	pattern
+	Enum	160	4	1	161	enum
+	Equals	165	7	1	166	default
+	Equality	173	6	1	174	equals
+	Relationship	180	12	1	181	relationship
+	From	193	4	1	194	from
+	Link	198	4	1	199	link
+	Unlink	203	6	1	204	unlink
+	One	210	3	1	211	one
+	Many	214	4	1	215	many
+	Owned	219	5	1	220	owned
+	Create	225	6	1	226	create
+	In	232	2	1	233	in
+	Invoke	235	6	1	236	invoke
+	For	242	3	1	243	for
+	If	246	2	1	247	if
+	Else	249	4	1	250	else
+	Entry	254	5	1	255	entry
+	Exit	260	4	1	261	exit
+	As	265	2	1	266	as
+	Public	268	6	1	269	public
+	EndOfFile	274	0	1	275	
+H	Domain Uses Entity Stage Action Policy When Require Transition To Assign And Or Not Is True False Null text number boolean Optional Unique Range Length Pattern Enum Default Equals Relationship From Link Unlink One Many Owned Create In Invoke For If Else Entry Exit As Public
+	Identifier	0	6	1	1	Domain
+	Identifier	7	4	1	8	Uses
+	Identifier	12	6	1	13	Entity
+	Identifier	19	5	1	20	Stage
+	Identifier	25	6	1	26	Action
+	Identifier	32	6	1	33	Policy
+	Identifier	39	4	1	40	When
+	Identifier	44	7	1	45	Require
+	Identifier	52	10	1	53	Transition
+	Identifier	63	2	1	64	To
+	Identifier	66	6	1	67	Assign
+	Identifier	73	3	1	74	And
+	Identifier	77	2	1	78	Or
+	Identifier	80	3	1	81	Not
+	Identifier	84	2	1	85	Is
+	Identifier	87	4	1	88	True
+	Identifier	92	5	1	93	False
+	Identifier	98	4	1	99	Null
+	Identifier	103	4	1	104	text
+	Identifier	108	6	1	109	number
+	Identifier	115	7	1	116	boolean
+	Identifier	123	8	1	124	Optional
+	Identifier	132	6	1	133	Unique
+	Identifier	139	5	1	140	Range
+	Identifier	145	6	1	146	Length
+	Identifier	152	7	1	153	Pattern
+	Identifier	160	4	1	161	Enum
+	Identifier	165	7	1	166	Default
+	Identifier	173	6	1	174	Equals
+	Identifier	180	12	1	181	Relationship
+	Identifier	193	4	1	194	From
+	Identifier	198	4	1	199	Link
+	Identifier	203	6	1	204	Unlink
+	Identifier	210	3	1	211	One
+	Identifier	214	4	1	215	Many
+	Identifier	219	5	1	220	Owned
+	Identifier	225	6	1	226	Create
+	Identifier	232	2	1	233	In
+	Identifier	235	6	1	236	Invoke
+	Identifier	242	3	1	243	For
+	Identifier	246	2	1	247	If
+	Identifier	249	4	1	250	Else
+	Identifier	254	5	1	255	Entry
+	Identifier	260	4	1	261	Exit
+	Identifier	265	2	1	266	As
+	Identifier	268	6	1	269	Public
+	EndOfFile	274	0	1	275	
+H	DOMAIN USES ENTITY STAGE ACTION POLICY WHEN REQUIRE TRANSITION TO ASSIGN AND OR NOT IS TRUE FALSE NULL TEXT NUMBER BOOLEAN OPTIONAL UNIQUE RANGE LENGTH PATTERN ENUM DEFAULT EQUALS RELATIONSHIP FROM LINK UNLINK ONE MANY OWNED CREATE IN INVOKE FOR IF ELSE ENTRY EXIT AS PUBLIC
+	Identifier	0	6	1	1	DOMAIN
+	Identifier	7	4	1	8	USES
+	Identifier	12	6	1	13	ENTITY
+	Identifier	19	5	1	20	STAGE
+	Identifier	25	6	1	26	ACTION
+	Identifier	32	6	1	33	POLICY
+	Identifier	39	4	1	40	WHEN
+	Identifier	44	7	1	45	REQUIRE
+	Identifier	52	10	1	53	TRANSITION
+	Identifier	63	2	1	64	TO
+	Identifier	66	6	1	67	ASSIGN
+	Identifier	73	3	1	74	AND
+	Identifier	77	2	1	78	OR
+	Identifier	80	3	1	81	NOT
+	Identifier	84	2	1	85	IS
+	Identifier	87	4	1	88	TRUE
+	Identifier	92	5	1	93	FALSE
+	Identifier	98	4	1	99	NULL
+	Identifier	103	4	1	104	TEXT
+	Identifier	108	6	1	109	NUMBER
+	Identifier	115	7	1	116	BOOLEAN
+	Identifier	123	8	1	124	OPTIONAL
+	Identifier	132	6	1	133	UNIQUE
+	Identifier	139	5	1	140	RANGE
+	Identifier	145	6	1	146	LENGTH
+	Identifier	152	7	1	153	PATTERN
+	Identifier	160	4	1	161	ENUM
+	Identifier	165	7	1	166	DEFAULT
+	Identifier	173	6	1	174	EQUALS
+	Identifier	180	12	1	181	RELATIONSHIP
+	Identifier	193	4	1	194	FROM
+	Identifier	198	4	1	199	LINK
+	Identifier	203	6	1	204	UNLINK
+	Identifier	210	3	1	211	ONE
+	Identifier	214	4	1	215	MANY
+	Identifier	219	5	1	220	OWNED
+	Identifier	225	6	1	226	CREATE
+	Identifier	232	2	1	233	IN
+	Identifier	235	6	1	236	INVOKE
+	Identifier	242	3	1	243	FOR
+	Identifier	246	2	1	247	IF
+	Identifier	249	4	1	250	ELSE
+	Identifier	254	5	1	255	ENTRY
+	Identifier	260	4	1	261	EXIT
+	Identifier	265	2	1	266	AS
+	Identifier	268	6	1	269	PUBLIC
+	EndOfFile	274	0	1	275	
+H	Domain TEXT Number number text boolean BOOLEAN Default EQUALS
+	Identifier	0	6	1	1	Domain
+	Identifier	7	4	1	8	TEXT
+	NumberType	12	6	1	13	Number
+	Identifier	19	6	1	20	number
+	Identifier	26	4	1	27	text
+	Identifier	31	7	1	32	boolean
+	Identifier	39	7	1	40	BOOLEAN
+	Identifier	47	7	1	48	Default
+	Identifier	55	6	1	56	EQUALS
+	EndOfFile	61	0	1	62	
+U	domain A\nuses http "v1"\n	name=[A]	uses=[http]	versions=[v1]	headerEnd=5
+U	domain A\nuses http "v\\"1"\n	name=[A]	uses=[http]	versions=[v"1]	headerEnd=5
+U	domain A\nuses temporal 2024-11-20\n	name=[A]	uses=[temporal]	versions=[2024-11-20]	headerEnd=9
+U	domain A\nuses http 1.2.3\n	name=[A]	uses=[http]	versions=[1.2.3]	headerEnd=7
+U	domain A\nuses http 1.2 .3\n	name=[A]	uses=[http]	versions=[1.2]	headerEnd=5
+U	domain A\nuses http\nuses http\n	ERR FormatException: Domain lists extension 'http' more than once.
+U	domain A\nuses http v1\nuses temporal\n	name=[A]	uses=[http|temporal]	versions=[v1]|<none>	headerEnd=7
+U	domain A\nuses http\n1.2\n	name=[A]	uses=[http]	versions=<none>	headerEnd=4
+U	domain A\n	name=[A]	uses=[]	versions=	headerEnd=2
+U	entity A\n	name=[]	uses=[]	versions=	headerEnd=2
+C	Expect:Colon	:	OK Colon [:] next=EndOfFile
+C	Expect:Colon	x	ERR Expected Colon, got 'x' (Identifier) @1:1
+C	Expect:Colon	"a\\"b"	ERR Expected Colon, got 'a"b' (StringLiteral) @1:1
+C	Expect:Colon		ERR Expected Colon, got '' (EndOfFile) @1:1
+C	Expect:Colon	   \n  entity	ERR Expected Colon, got 'entity' (Entity) @2:3
+C	Expect:Colon	42	ERR Expected Colon, got '42' (Number) @1:1
+C	Expect:Colon	->	ERR Expected Colon, got '->' (Arrow) @1:1
+C	ExpectIdentifier:Identifier:an entity name	Task	OK [Task] next=EndOfFile
+C	ExpectIdentifier:Identifier:an entity name	:	ERR Expected an entity name, got ':' @1:1
+C	ExpectIdentifier:Identifier:an entity name	"a\\"b"	ERR Expected an entity name, got 'a"b' @1:1
+C	ExpectIdentifier:Identifier:an entity name		ERR Expected an entity name, got '' @1:1
+C	ExpectIdentifier:Identifier:an entity name	entity	ERR Expected an entity name, got 'entity' @1:1
+C	ExpectIdentifier:Identifier:an entity name	1.5	ERR Expected an entity name, got '1.5' @1:1
+D	docs/probes/fleet-eval/09-transport/warehouse.poly	314	05F81FE3600419B4
+D	docs/probes/fleet-eval/09-transport/orders.poly	232	0665D5195C35A0A7
+D	docs/probes/fleet-eval/09-transport/clinic.poly	182	4FD4138B093BAF22
+D	docs/probes/fleet-eval/12-mcp/mcp-library.poly	197	FBD871826112E7B8
+D	docs/probes/dogfood/university.poly	681	4333DDC61B97D645
+D	docs/probes/dogfood/crm.poly	1215	8A934F9A1D4792C4
+D	docs/probes/dogfood/hotel.poly	1452	D3A82908420C6A8E
+D	docs/probes/dogfood/simulate-create-type.poly	86	89E32BBD899A2E1D
+D	docs/probes/dogfood/simulate-create-in.poly	87	C729EA00E25A5882
+D	docs/probes/dogfood/simulate-create-create-in.poly	104	6AFA037DAE6146D9
+E	a or b and c	6	9B9BAD723E41D43B
+E	a and b or c and d	8	EE7340E26268AC49
+E	a - b - c	6	ACF88DBB05212972
+E	a / b / c	6	8D96C5D90982A317
+E	a + b * c - d / e	10	E131232F6F10393D
+E	a * b + c * d	8	8F53C90EDBFB9004
+E	a < b	4	EFBB4E29F2D05417
+E	a is b	4	621D42AD0255FF59
+E	a is not b	5	E8EE5A5DFF4C97C0
+E	a is not b + c	7	CEDCB2528EEA2186
+E	a + b is not c * d	9	B60270E9FD032964
+E	a is (not b)	7	08B43BC186104100
+E	not a	3	E221DA28692F2A46
+E	not a and b	5	523AAAC00F45E3B0
+E	a and not b	5	A6B208D5EEAC4167
+E	a or not b and c	7	15A2F19F5292BC7D
+E	not not a	4	E054B9DEB8BCA459
+E	not not not a	5	DB05EB4A04FCBBC8
+E	not a + b	5	00C15AB793BACDC8
+E	not a * b	5	2C80329E0FD3D34C
+E	not (a > b)	7	7736B4E2F4E4CCF1
+E	a + not b	5	29BCA09A1A007A3D
+E	a + not b + c	7	3D837D128E15E263
+E	a * not b	5	30D70B120608F62E
+E	a * not b * c	7	61696DA4FFD0C8BA
+E	a + not b > c	7	CA2B14AE2593BC3A
+E	a > not b	5	9FC7D175607EA82C
+E	a > not b + c	7	C1301DA9226ABBB8
+E	a is not not b	6	8C0E3CE6DCE244EF
+E	a is not b is not c	8	0599368BCAEEC146
+E	not a is b	5	76048E6029A3E473
+E	not a > b	5	0C1DBDF67333C912
+E	a and not b > c	7	E83AE19AD33A2C64
+E	(not a) > b	7	F9784E53B412E58E
+E	not (a) > b	7	7950A69DE66E6CEE
+E	a > b and c < d	8	28AA88D0CB81AE9E
+E	a > b or c < d and e is f	12	BF32FE750B8B8161
+E	a < b and c	6	B63B04114D74DFFA
+E	a and b < c	6	B329994A20AA2172
+E	a + 1 > b - 2 * 3	10	AF0A81AAC1AD8065
+E	x - 1 - 2 - 3	8	77C8F0BA443EF8E1
+E	a and (b or c) and d	10	6FAF8D32E32B2593
+E	(a or b) and (c or d)	12	FDEF840D01FC2605
+E	((a))	6	786CC3E27E816AE1
+E	(((a + b) * c) - d)	14	4523B12C572FA3EF
+E	42	2	D0098442D7A2BE16
+E	"text"	2	E51B759360D118B6
+E	true	2	A9174C840625CD8D
+E	false	2	21A73C51DB7CE639
+E	null	2	E273CA9293008289
+E	Flag	2	9F45624CA6624282
+E	3 Days	3	D3334C020B3DEFBF
+E	12 Hours	3	64221C24D45AE818
+E	3 Days + 4 Hours	6	A3D80202C1E29487
+E	Order Price	3	D3D061784235B84B
+E	Order Price Name	4	932BD8BA53C1C3FD
+E	Order Price > 3	5	42C16E385BAF16B0
+E	Order Price is not 3	6	DC2E11F18023246E
+E	Order Price > 3 + 4	7	92C479C6692971FA
+E	Order Price > (a + b)	9	FAFB0B27240C40D4
+E	Order Price > not a	6	A5903710AE91A40E
+E	Order Price > not a + b	8	832A07BB606FAD35
+E	Order Price > F(1)	8	C74A70FCD7911276
+E	Order Price > Kids where Flag	7	8C8B7BF201089C69
+E	Order Price > Kids where Flag and Ready	9	785B7C121500660A
+E	Order Price == Items Qty	6	FE1B32D70A034E99
+E	Order Price != 4 and Flag	7	1F307F0E3D82E58A
+E	Order Price is not Items Qty and Flag	9	91EDFC28B99365EA
+E	Kids exists	3	E6D4F17301363CC9
+E	Kids exists and Flag	5	6E58263FCD07EAC9
+E	not Kids exists	4	9DF431A379722341
+E	count Kids	3	6469AF31CB196662
+E	count Kids > 2	5	34B93B004C9B0A5B
+E	sum Kids Price	4	A94D212720E836B3
+E	sum Kids Price > 100	6	DD4B4E39BB3E7BFC
+E	sum Kids Price + 1	6	A76C26C5456B4EBD
+E	Kids where Flag	4	CDBF357A4411E248
+E	Kids where Flag and Ready	6	0EE0D7874C93ACE0
+E	Kids where Flag or Ready	6	9664CAF29CE1F039
+E	Kids where Price > 3	6	F2B2B10E117F821B
+E	Kids where Price > 3 and Qty < 2	10	9B59AD83417E8CC2
+E	Kids where not Flag	5	A8B7052ED88EBE99
+E	Kids where (Flag or Ready) and Qty	10	9C6BCD4A41DDEED7
+E	Kids where (Kids where Flag)	8	61A1E0A50C043EAC
+E	Kids where F(Kids where Flag)	9	0AB70DC0C454E31F
+E	Kids where match { Kids where Flag -> 1, else -> 2 } > 0	17	70BFCA0F372B6FCE
+E	any Kids where Flag	5	AD81CA2F5C0CAF6E
+E	all Kids where Flag and Ready	7	8D85212B9FDD970C
+E	none Kids where Price > 3	7	1C443777F6D54B75
+E	count Kids where Flag	5	471C64B5F3AE8A2F
+E	count Kids where Flag > 1	7	299A52AC6F2573A8
+E	any Kids where Flag or Ready	7	C8D781E09F16F9CD
+E	Flag and any Kids where Ready	7	43A6B86F2128484E
+E	Kids where Flag and Ready or Total > 4	10	6762F57881D80E8A
+E	any Kids where Order Price > 3	8	58669DEF6DAC52EB
+E	any Kids where Order Price is not 3	9	FDD7079CC731026F
+E	F()	4	AF3837595CF372C5
+E	F(1)	5	1D390AF77D0102E7
+E	F(1, 2)	7	5D28882E608D62EB
+E	F(a + b, c and d)	11	E1897363B08B5115
+E	F(F(1), G(2, 3))	15	1BDB0CFDF3840679
+E	F(a, (b, c))	11	474C1FAC8C26976D
+E	F(not a)	6	50E89B9C7AD3EB7D
+E	F(a > b)	7	3E912643A28F4317
+E	F(Kids where Flag)	7	E7750416AF17BD4B
+E	F(any Kids where Flag, 2)	10	83600B422E818879
+E	F(match { a -> 1, else -> 2 })	14	6E0E41CC9034C5B8
+E	F(match { a -> 1, b -> 2, else -> 3 }, 4)	20	7B3FD3288FB63C3E
+E	F(a) + G(b)	10	198447B744D2D5B0
+E	F(a) > G(b)	10	6D204F5FE94B11DF
+E	not F(a)	6	09E1DCAB94D72BAA
+E	F(a) and G(b)	10	92838089A5756366
+E	match { else -> 1 }	7	165D03F745B9E79F
+E	match { a -> 1, else -> 2 }	11	3D2345143982034A
+E	match { a -> 1, b -> 2, else -> 3 }	15	0C3F8E00EA133325
+E	match { a > 1 and b -> x + 1, else -> y * 2 }	19	55517C103772E65F
+E	match { F(a, b) -> G(c), else -> H(d) }	22	9A506C2C03AD821F
+E	match { a -> match { b -> 1, else -> 2 }, else -> 3 }	20	0E9A20C18E159C01
+E	match { (a) -> (1), else -> (2) }	17	8EE143AE71D97319
+E	match { a -> 1, else -> 2 } + 1	13	9E235854D2DC2C9B
+E	1 + match { a -> 1, else -> 2 }	13	BDA3AAAFE113CBD1
+E	match { a -> 1, else -> 2 } > 0	13	C93086505C246618
+E	match { not a -> 1, else -> 2 }	12	E98C8562DDD32D56
+E	match { a is not b -> 1, else -> 2 }	14	58441C75C8A82C06
+E	match { Kids where Flag -> 1, else -> 2 }	13	6B8F881C74D673F0
+E	match { a -> Kids where Flag, else -> 2 }	13	90BDBB81252192C7
+E	match	2	7889FDFCEBA9E6A2
+E	match + 1	4	6A4F0419B0CF4197
+E	match > 1	4	658BC1EA422CDB1F
+E	match and Flag	4	4AC94BA708B4E15E
+E	where	2	25D4388411E6377A
+E	exists	2	25715C6918D2CA7B
+E	count	2	5F627D8D01B89C93
+E	sum	2	7AB38ACC506A1986
+E	any	2	56E8EBDFDE80E3EB
+E	function	2	0B6F677B4ECB2D81
+E	value	2	611F470D0A3DD2A6
+E	Kids where	3	CCE4CDEB0F249DEE
+E	count Kids where	4	65162B6CEA8BEB48
+E	3 Days > 2 Days	6	3FC2FE4D99EAC823
+E	Now + 3 Days	5	23553C0EF1C1BB3D
+E	a + 3 Days	5	99E6EE43C96B4B73
+E	3 Days + a	5	E31FB6B5D1A8F912
+E	(3 Days)	5	91542BF394DCA5D0
+E	F(3 Days)	6	A549ED2CD1F609AC
+E	F(3 Days, 4 Hours)	9	38F0AE9B17EF11C9
+E	match { a -> 3 Days, else -> 4 Hours }	13	D6FB4CB867C877D8
+E	3	2	10C1E326CB5A3AA4
+E	3 + 4	4	F3FED96F11AFA7C5
+E	3 4	3	7930B13A969A60A3
+E	3 days	3	459C8DF087C55D51
+E	3 DAYS	3	B0B81B68FE762E3E
+E	"a" + "b"	4	0F11198D4FAB9201
+E	""	2	FFDE9A89224F9997
+E	null is null	4	7ABA2B8A45800EE2
+E	true and false	4	0E7705267402D3C7
+E	true is not false	5	3FFFC23EDCA69CB4
+E	(	2	106E23FCFF28CC29
+E	)	2	65266A20FB1357BB
+E	()	3	21BB3C9FF08BDC97
+E	(())	5	E42D0D3A5341123C
+E	(a	3	B5790FA3356BD8C1
+E	a)	3	20A6A116E9768891
+E	((a)	5	B4B0955B42E020E9
+E	(a))	5	105A421940395966
+E	(a b)	5	392C49BA67F3AE1C
+E	(a +)	5	CEBC09A7825ABE7F
+E	(+ a)	5	AF8917D05F583102
+E	(a > )	5	6985FA2BCEBAC1A8
+E	(a and)	5	A33C4C777A09E775
+E	(Price > 3 4)	7	F914F995EF3A66CD
+E	(Price > 3 function)	7	C352EACC47E8AA53
+E	(Flag function)	5	3AF001E61214A7A7
+E	(function)	4	C210915FD71B6E4F
+E	(3 function)	5	A1C6BF7295DF42C3
+E	(3 Foo)	5	3DEC61FF9FFDD066
+E	(3 Foo Bar)	6	2B22016B7360D496
+E	(a b c)	6	0597459B2DA2E955
+E	(Kids where)	5	20D9C3C022C634BA
+E	(not)	4	9A49300CFC4D516C
+E	(a,)	5	D1709C8801C1E323
+E	(a, b)	6	2917F66A5DD51101
+E	(a;)	3	736354F692AD3292
+E	F(	3	21BF0A3DC287AE30
+E	F(a	4	802B017ABA5BEC5D
+E	F(a,	5	6736E666DC2F6986
+E	F(a,)	6	490DEF07E7B5AEEF
+E	F(,a)	6	B3B3DABE0D82FDF8
+E	F(a,,b)	8	8200EF13D2D3E2E3
+E	F(,)	5	A2E926E6CAB9C2F7
+E	F(a b)	6	E242BA768585D876
+E	F(1 x)	6	D3C99B8A576AB0B7
+E	F(3 function)	6	116E6381E8762C62
+E	F(a))	6	6D99027AF2EB9C5B
+E	F(a ]	5	13358AEF79E17EE8
+E	F(a] )	6	EADC35D633743D24
+E	F(()	5	84CF82AEB89338DF
+E	F((a)	6	5D0F226E27A7C607
+E	F(a, (b)	8	D31D48D482419086
+E	F(not)	5	BC23B3ADFCA998B4
+E	F(a +)	6	6700A4A3926E41C1
+E	F(a >)	6	CADC23EDAAA9E9DA
+E	F(1 Days x)	7	E9FBC29B0208CB9F
+E	F(match { a -> 1, else -> 2 }	13	0903539CFC77CDE8
+E	F(match { a -> 1 )	9	0B2407DFC7D0000C
+E	F(Kids where)	6	CB5CB6F5BD3C5B13
+E	F(Kids where) 	6	93B863A6ED7ADBDF
+E	f ( a )	5	0B37DDF514BE9192
+E	match {	3	F4D113FCF254A860
+E	match { }	4	4AA5C2C8D0C4F02C
+E	match { a	4	00EB53912ADDEC74
+E	match { a -> 1	6	2AE8A49761967B18
+E	match { a -> 1, else -> 2	10	887DA497AFD76215
+E	match { else }	5	55C2141DA3EAEDA9
+E	match { else -> }	6	CB3CBCD3732CD9CB
+E	match { -> 1, else -> 2 }	10	B84C122A7D54CA80
+E	match { a -> , else -> 2 }	10	E9352B9FD9217CA9
+E	match { a 1, else -> 2 }	10	6C1BA523B0147A56
+E	match { a -> 1 }	7	06FE9DE23CE7E56D
+E	match { a -> 1, }	8	275C7302826A099C
+E	match { , a -> 1, else -> 2 }	12	6006FFA84D029823
+E	match { a -> 1,, else -> 2 }	12	0E6C901D4BC4C3C2
+E	match { else -> 1, else -> 2 }	11	BB0C244B686E56EB
+E	match { else -> 1, a -> 2 }	11	61AE90785BB218D2
+E	match { a else -> 1, else -> 2 }	12	AB94E2459B5CF0F6
+E	match { a -> 1 2, else -> 3 }	12	3CB9F499A86CB7D0
+E	match { a b -> 1, else -> 2 }	12	08ECB7FC7E7BC56D
+E	match { a -> 1, else -> 2 3 }	12	BDE27A258C17002D
+E	match { a -> 1, else -> 2, else -> 3 }	15	F9B5A18565757AE5
+E	match { a -> else, else -> 2 }	11	F7BA859F5086249F
+E	match { (else) -> 1, else -> 2 }	13	2B5D6A1C56719082
+E	match { a -> 1, else -> 2 } 3	12	DBDE9C44067FFAC6
+E	match { a -> 1, else -> 2 } }	12	8B26CF6AF63E4A1D
+E	match { a -> (1, else -> 2 }	12	DDB333941C65BB86
+E	match { a -> 1 Days x, else -> 2 }	13	A03787DC89F35BD5
+E	match { 3 Foo -> 1, else -> 2 }	12	325A7DC4B93398CD
+E	match { a -> 3 Foo, else -> 2 }	12	5B3425B26060293F
+E	match { a -> 3 function, else -> 2 }	12	F416A362A94F14BE
+E	match { a - -> 1, else -> 2 }	12	3A3C2B0EEFE49626
+E	match { a -> -, else -> 2 }	11	6CF851CC44E1A872
+E	match { a -> -1, else -> 2 }	12	5CCB8E481304FB6C
+E	match { -1 -> 1, else -> 2 }	12	57F8213D795EC868
+E	match { a == -1 -> 1, else -> 2 }	14	694D7EDCFADF4AB7
+E	any Kids where	4	16625E99AC0E99F4
+E	all Kids where	4	CFB285918F3DACFD
+E	none Kids where	4	63970A374D966D8D
+E	sum Kids where Flag	5	2EB9F556D467CD3D
+E	sum Kids where	4	4F5E6705C0D4A7F0
+E	Kids where Kids where Flag	6	A153B81CA7A988BB
+E	any Kids where all Kids where Flag	8	E06845601DB85159
+E	Kids where Flag and Kids where Ready	8	F3219247A03A537F
+E	Kids where any Kids where Flag	7	7279D353EF826048
+E	Kids where (any Kids where Flag)	9	E3EBBC803A3AA2B4
+E	Kids where (Kids where (Kids where Flag))	12	A1C9B62045C20E6B
+E	Kids where Flag Ready	5	48618FEC06CA6477
+E	any Kids	3	3CDB204F8942F61B
+E	all	2	221799EFE10917ED
+E	none	2	E7926A5D503B4DB1
+E	sum Kids	3	89C0E7D79D17FCEA
+E	count Kids Price	4	86AC2D52F2490072
+E	Kids where )	4	53AB502DF766ED71
+E	Kids where (	4	C2661D018E9FBC4B
+E	Kids where (Flag	5	4B27D1B6AB0397B2
+E	any Kids where (Flag	6	54151D086CA7C335
+E	Kids where Flag)	5	AD6019BB6DA750E5
+E	Kids where 3 Foo	5	CE778AEBAB9D57DE
+E	a and	3	C125E0FBC8555531
+E	a or	3	8FFFAECD0F626D4A
+E	a +	3	433B5C259C5B7605
+E	a -	3	BCE7705280B87F8B
+E	a *	3	AFDC6BB65BC76B5C
+E	a /	3	F89C194BBCE746F0
+E	+ a	3	017B219BF46B8C60
+E	* a	3	038F21DB60D8E8EF
+E	and a	3	1E06539E7E7660A8
+E	or a	3	45C7E71E1EB6BF38
+E	a and and b	5	2E1DF6C37D3FC84F
+E	a + + b	5	E67C12AF63C2113D
+E	a * * b	5	4745BA859FF484D5
+E	a >	3	5BFC1FAA362752F8
+E	> a	3	C5BFB2C4455E3887
+E	a > >	4	2EAD862995108DAF
+E	a > > b	5	F8D0BFF269B61F31
+E	a < b < c	6	975513989C7B3994
+E	a > b > c	6	94AC74A20A43C4E0
+E	a is b is c	6	4BA2BE84EBE5CA69
+E	a == b != c	6	B4845325F0A0A2A2
+E	a is not	4	801D5282CF9CA2DC
+E	a is	3	E149E289A7F83D38
+E	a is not not	5	8282269595605072
+E	not	2	C505E3E6F8AB89CC
+E	not not	3	E38CCCEB3AA8EB62
+E	not >	3	FA6E3E62927B2563
+E	not a >	4	41210BEFC7AE9FD8
+E	not a >= b >= c	7	4283A3A58BC381BE
+E	a not b	4	97B6333A152B9AC5
+E	a b	3	584ADC490A775780
+E	a b c	4	D4471E0BB9048650
+E	a b c d	5	10B244462C94B2D9
+E	a 3	3	2591EAF60664A274
+E	3 a	3	80532B2ABBAAF70E
+E	"s" a	3	36D7FD97740D4AF6
+E	a, b	4	2D0BD78BA34E87BA
+E	a ; b	2	1F3AF9C756E4F602
+E	a }	3	7224F583D70AA868
+E	a ]	3	43B2160D88B901C3
+E	{ a }	4	5D0B53C17773A0A2
+E	[a]	4	59931F839A4C55E7
+E	a.b	4	7908DB051FA60ABB
+E	a : b	4	7C13042A8AA8D0E6
+E	a -> b	4	CD6D97AB75B5923F
+E	a = b	4	B9AAC72E1E6CD658
+E	a => b	5	9E804A21E8329805
+E	Order Price >	4	C0461AFCADCF8ABE
+E	Order Price is not	5	10D33A432F164B98
+E	Order Price > )	5	7652336514A51ECC
+E	Order Price is not )	6	4319823EAF274DD0
+E	Order Price > > 3	6	4A95DD4CE8EE79D4
+E	Order Price > 3 > 4	7	F1BFCCAE58165E14
+E	Order Price is not 3 4	7	61521474BA9274AE
+E	Order Price > (	5	6BCA964EA6FB4649
+E	Order Price > (3	6	62DB9D2FADCCAB65
+E	Order Price > match { else -> 1	9	8FB3D5A2E4EEE074
+E	Order Price > F(	6	4B58032E5D0F4626
+E	Order Price > not	5	DB0D8C189014C2CB
+E	Order Price > Kids where	6	5CD813CA290DBEA6
+E	Order Price is not Kids where	7	2022450CE7EEC1B8
+E	Order Price > any Kids where	7	CF61086E16508702
+E	a b >	4	1305AF31BDC3FF79
+E	a b is not	5	8EAED24A56585C57
+E	a b > 3 4	6	D5486A03232174B1
+E	a b > 3 Foo	6	0E00D4D69B550780
+E	a b is not 3 Foo	7	A991017C9005AA55
+E	3 Foo	3	BBE8162699010411
+E	3 Foo Bar	4	72D6DDC50F0A06BF
+E	3 Days Foo	4	60858A23AEF5B5F8
+E	3 Hours 4	4	60D8E8F3B4DA5512
+E	3 function	3	E38066ECE60E87FD
+E	3 Days function	4	95687074DD6B2587
+E	3 x y	4	F4D4BAC3F90401FE
+E	3 Foo > 2	5	2D2F951420A249D0
+E	a > 3 Foo	5	9BBAFB2A922578E5
+E	a + 3 Foo	5	720A324F28C78BA1
+E	3 Foo + a	5	555A4EEBE5D58996
+E	(a + 3 Foo)	7	65A0C450190D1661
+E	F(3 Foo)	6	AA4198D9922BBC90
+E	F(a, 3 Foo)	8	464BB51D710D038A
+E	Flag and 3 Foo	5	3B38CB5E49C16019
+E	Flag or 3 Foo	5	AF144C3E34B22133
+E	not 3 Foo	4	01CC03D1632920C5
+E	Kids where Flag and 3 Foo	7	183FFA3AEE8506D5
+E	count Kids where Price > 3 Foo	8	2EEEC76ABB17DB98
+E	3 Days x	4	715685D80B75D6B8
+E	3 Days Days	4	891CC68518E605B9
+E	3 Days 4 Days	5	1ED13EEC363EE582
+E	99999999999999999999 Days	3	2CB4006A2722932D
+E	99999999999999999999	2	A86F633117C9705C
+E	Flag Flag	3	2763022369380FCB
+E	Flag 1	3	C41A2409F1BE6E21
+E	1 Flag	3	0623E7E43BE68A63
+E	1 Days 1	4	9F83446138E09F24
+E	Flag )	3	36EFC6F5271A9E1A
+E	Flag ,	3	1DE1600B6A8BFBAB
+E	Flag }	3	BC5DEEC38E811672
+E	not (not 3 Days) or Kids where not Name + null is not z or Qty	19	A53E4006F7503084
+E	Total < 3 Days	5	246F82A661404E83
+E	y + Age >= 12 Hours	7	A709A56691873888
+E	Name / Age + not count Kids > Age	10	7578FD688B5D9909
+E	Flag >= Qty / x - not z and x	11	E0BD62C4CC8A588A
+E	Order Price is Ready + 7	7	EE7262E9F8F42C2F
+E	not Age / null and not 3 Days / Total and not x - x	16	63F49E14902177DD
+E	not 7 - not Amount	6	F0B92CA0F832ADDA
+E	Items Product Name + Total	6	C7D89D1C1166EF99
+E	Order Price == sum Kids Price * false	9	311E1417C33AAAD3
+E	12 Hours * Total and "abc" and Kids exists - y / 0	14	BC8B6C92A41D9CAD
+E	Name	2	790D2663E1FB30AA
+E	12 Hours - y	5	3E0DE1C4884D3FC5
+E	sum Kids Price or count Kids or Order Price != false and 42 + any Kids where null	19	60DF07F120707242
+E	not Name and not null	6	5B111DDC1154D2A2
+E	Order Price or Order Price <= Kids exists and Items Product Name * null	15	306F4A7F367C3D9D
+E	z / Items Product Name >= Price + y	10	66C0DFF3BE7DAEB1
+E	Age	2	5C6467E95772DC71
+E	count Kids == false	5	9706FF203CF81263
+E	Price or not 3 Days	6	621AEE82D18302CB
+E	not true and any Kids where not Order Price * Qty or not not 42 and Age or Price	20	BCF72C26EAFCB0C6
+E	Order Price > "abc" + Qty != Items Product Name / null	13	03960E653967A990
+E	not Name and x	5	FFBC71769B5FA9E6
+E	y > 7 + 7 or count Kids <= sum Kids Price or Age - Order Price < Age and Qty != Order Price >= y	27	52730C1C380780E1
+E	x	2	D91A799977E3C4CC
+E	Ready	2	918F9CF3E93BCE35
+E	not null and Name	5	7F13B4EBCCEE9A8F
+E	0 and Kids exists is not null and not sum Kids Price	13	8E69C5C3A93897AC
+E	not y	3	98309778D33318E4
+E	not Age or Items Product Name - Items Product Name * null	13	B179D9EF83DD39ED
+E	not false / Age + 0 or Order Price != 0 or Total and y	16	5171BA93D4A80845
+E	42 < 3 Days / none Kids where z is Ready	12	9441FB98C3461B92
+E	Qty and count Kids	5	762188168E037F7C
+E	Kids exists - 0	5	71C91C34F42F15EF
+E	42 / z and Ready	6	C5538167F34CE643
+E	Total	2	BE83DFB91434CC81
+E	not 7 * Items Product Name and Ready	9	CDF47CCFE4574AAF
+E	Flag or Amount * Order Price > Ready	9	4C0187ECC27577AD
+E	Kids exists > Name and Order Price and count Kids * Kids exists == "abc" / Age	18	E2966211B874EC20
+E	Qty / not "abc" - not count Kids or sum Kids Price and sum Kids Price	17	6B4B28BEC614DE80
+E	not z	3	A539F7AE84264D82
+E	not Order Price - false and Items Product Name is not x	13	D454B9E1EC709250
+E	not count Kids / Order Price and not y	10	66CC5AD8B16E9BD4
+E	x and Order Price	5	AB915BE2DD6A8480
+E	Kids exists and sum Kids Price	7	79E06CDC0E67C95D
+E	Order Price != sum Kids Price	7	16C1D8F5B5F18C01
+E	7 and not Flag	5	25951AA03A9FA460
+E	(not Age - not Price) >= Amount or not Total / 7 + count Kids	18	D3F8412BBC0DFB8B
+E	z == (Order Price * count Kids) - 42 and Qty	14	1759903FC33AF912
+E	12 Hours / Qty	5	FB812571789D78C9
+E	Price + z	4	AED02C355048ACC2
+E	G(Ready <= count Kids)	8	97BB561E8E35CE92
+E	7	2	3E5471E17AA92F9B
+E	y and x / x	6	EA87632B38F91315
+E	Name / y	4	DE997133C4AB8388
+E	Order Price >= null	5	DBCC5DA066C1F15A
+E	Ready != 12 Hours - true / 12 Hours and not Qty / null + Kids exists or sum Kids Price <= 12 Hours	25	1319CCDC14539CEA
+E	Order Price > 3 Days > any Kids where 42 and Name and 42 or Items Product Name	19	7DACD250EF0AEA62
+E	false and Qty + Flag	6	08A672DF0BB60C81
+E	Order Price > 42 and Amount and not count Kids / Items Product Name or false - false is Qty or null	23	ABD86F9B6F5C12C6
+E	not count Kids or y	6	F24CF11319705ECE
+E	not count Kids	4	76C31808C2C1533C
+E	false and Qty * null + Order Price <= 12 Hours and G(z < not Order Price + 12 Hours * Kids exists)	27	908E53C867141975
+E	null / Qty - 12 Hours * Items Product Name or not Ready + Amount * not Qty * 0	21	B261304546F55006
+E	not 3 Days or false / 3 Days is not Order Price is Qty	15	B1691AA76B781F2E
+E	Kids where Name	4	1B21A323D562AF99
+E	Items Product Name or Name != Amount and not Total and 42 is not not "abc" * Price	19	1C86B14F7DDE2FCD
+E	Kids exists is not x * 7	8	8477B9DC8BA59F0A
+E	count Kids or not count Kids	7	6AFDA1D74956EFE6
+E	not Amount / Total - Order Price is Kids exists / Kids where Order Price / true and Flag	20	DFAD15E2CE4BFB46
+E	not "abc"	3	5BF77A1411B9907F
+E	not Name	3	8159690287D9BBD5
+E	Age and not Order Price or Age >= Qty - Items Product Name	14	CEA2C4A6357A7F00
+E	"abc" and 12 Hours == F(count Kids and x and Order Price or sum Kids Price, not null + Name * 0)	27	E855C20A076E3C16
+E	not Age	3	2A54C03D22E70350
+E	not Items Product Name * Age	7	18211E80A87736B6
+E	not not Ready + 7	6	409E270D07A62BC3
+E	12 Hours or not Kids where Flag > true / Kids exists / Price / Items Product Name and Kids exists	22	ADDD5C216151379D
+E	Total or Order Price != Qty	7	B1C63074DCFA25DF
+E	Price != (Price) and Order Price	9	6272999A4173A57C
+E	Age - Name is not Flag	7	7E44086AE4791300
+E	Ready and Ready is 7	6	6085A0A8217BFCE0
+E	Ready + 3 Days	5	9A01F0B24151765D
+E	Kids where not "abc"	5	0169BE0B89D9ACF2
+E	not true	3	7466F1774C0068E4
+E	7 and not Order Price != count Kids and not Kids where true * Age <= 3 Days	19	64B80A30E3E17B85
+E	x * Name or Total + Order Price <= z	11	E41405A8394353F3
+E	Total > false	4	8E091C6F3FB183D9
+E	Amount and 12 Hours and z / Items Product Name	11	195992A8F780E813
+E	Price + count Kids where not Flag	8	6020AA4DCE66353B
+E	12 Hours * Qty - z	7	A43AA98E386A6CAB
+E	"abc" or Qty * Flag	6	E8FFAA68158C078A
+E	Order Price is z * 42 + true / 42 is not z	14	37AD69CD56DD094D
+E	null <= Kids where not Total or Amount is false and Order Price == sum Kids Price * Order Price != x	23	5791786BC1180FA1
+E	null / (not G(Age is Price + Order Price) + 42)	17	03CC634A0F35059C
+E	not true * Total and Flag	7	7BA81DC571E85FEA
+E	Name / Price or 7 == Kids where Name >= false and null and Age or 3 Days * Age	21	C13CCB43AB8E6D26
+E	Order Price - Name / 12 Hours	8	9E25D98615547F2E
+E	Price - Flag * Price	6	46A86087D5117B38
+E	z != Price or count Kids	7	A35EDD13E203C171
+E	0	2	1970D2C3740D5CB3
+E	not y and "abc" - Kids where not 42 / sum Kids Price + G(not x + Ready) and not 0 < z	27	1F7C364A6D52B626
+E	any Kids where sum Kids Price	7	F2693832314CE60F
+E	Order Price + count Kids <= false and not Amount	11	D259AA1420DEE70B
+E	12 Hours + "abc" > Flag / Kids where 3 Days	12	6C7BF55C7705D685
+E	Age is y or not Age	7	52F499F9FC0350D3
+E	0 / false <= Kids where null	8	6E77089BDA4A5F4F
+E	Items Product Name is not Order Price and not (42 and Name) * sum Kids Price + Total	21	0584167CBE830C2D
+E	x * Qty is not sum Kids Price + true	11	DF85ABED8E3D58B1
+E	false == Amount and Price and 7 is not Order Price is Items Product Name	16	6853D98C13827DF9
+E	not null and Flag	5	9CFF0116F64A4EC6
+E	Items Product Name	4	A87780522A0185CF
+E	Ready + not Age != 0	7	9383A69E68337B0E
+E	Amount	2	C4D21211C0787A56
+E	not x / G(count Kids < Items Product Name and z is not null) or not Age and 42 and Age or null and not Flag	30	DDF635AD500A424C
+E	Order Price is Amount	5	6D678E79036C1286
+E	not Qty and (null and x and not not true) * Total and z	17	B9C943A0E3D03BBC
+E	not false or true	5	250F2615BF447CB4
+E	(Qty * false < 3 Days and Order Price != "abc" or true) - Total or 7	20	C4BC5FFC12C83D95
+E	Qty > true	4	18A3423E30A17E79
+E	y is 12 Hours	5	7A5C7DBC64718AF1
+E	not Total or "abc" + null or not Total	10	CEAC2E8B95F58CD2
+E	not 7	3	9BF76FDECD964955
+E	Kids exists and Price	5	841D2E2555B3C5E0
+E	Kids where Age / Name >= Qty and true * Total is not z or Total	17	9DB4F100328DF553
+E	not not Ready + Qty * 0	8	152A224D034DB455
+E	not Total	3	4E96ECD0FBD64087
+E	42 - G("abc") >= not Order Price is y or Amount * 3 Days > Amount * count Kids and x	25	5AA1F1C06EE006DA
+E	Ready != Age and not Price or not null	10	92B9DDA247DE5E90
+E	false and null * not Order Price or Price + Order Price <= Price and not 42 and y	20	7774A1F4F0B175D4
+E	not not Total / x and true - Total	10	A63E76738601CDD1
+E	not (y) / not Total * Total	10	0A8FD1B030C58DEF
+E	Order Price >= true and false	7	4246568FB9A7430D
+E	not Amount	3	815D5CE39F385118
+E	Age > 42 and G(F(Age is null and Amount / 42 - Amount or not Flag + z, Name and Order Price + Ready)) / x	34	530C29015F4CE1C7
+E	false + Order Price and not Age / Order Price is 42 + null	15	3E93F42CAB5B256E
+E	not G("abc") - 12 Hours * null and z is not null and not 12 Hours + (not 42 * y)	27	3DB1ACF013701DD7
+E	true or Kids where F(12 Hours + Items Product Name and Flag, 12 Hours and true)	21	9131740958A3592C
+E	not not null + 42 or count Kids	9	A614945C5BB75181
+E	true != Flag	4	AF5C15DE68768F31
+E	x and count Kids	5	476994C9606B404B
+E	none Kids where 0 and sum Kids Price is not 0	12	0550AAFC18D0A326
+E	not Price	3	D45B716DE3AECEFF
+E	Order Price <= Price is not Kids exists and Amount >= 12 Hours + Total	16	2C336D0E3A71EE92
+E	42 and 12 Hours == count Kids / Kids where 42 is not 7 and not 7 / Kids exists	21	E34B0E69779A1FDD
+E	Order Price < Amount	5	6EB4D03FE9B9D9C1
+E	Ready / true or Age	6	BEF567A64EBD3A30
+E	Price * null and not Price or not Kids where not sum Kids Price * sum Kids Price + Amount	21	E33E15AEC3487B17
+E	not 7 + z / Order Price >= "abc" or false and Total * Qty and Flag / (Order Price <= Age)	25	2A0C69946EC56CE6
+E	0 - Price	4	547D5649E973E903
+E	not Order Price + Age / 0	8	AEB32194D6B96D88
+E	0 is Price or count Kids - Total	9	5032B7480FF017A8
+E	3 Days - Items Product Name * Kids exists and not Order Price < "abc" / Age and sum Kids Price - 7	24	C65FC7AE2DC21997
+E	"abc"	2	62E44BD0CBFCF53C
+E	Ready / 7 is Price	6	E050F2E3DA94CCFD
+E	not Kids exists or not 7	7	6A5857911E675154
+E	Name != Name and Name and 42 or not true / y	13	698D8A9DC1C95A24
+E	Flag and G(Flag < Total and Items Product Name) < Kids exists	16	76E3752409190B97
+E	null > 12 Hours / Items Product Name - Order Price is z	14	F590CCF15F82ADE4
+E	Amount or Flag or Total == Kids where not Items Product Name and not 12 Hours * Flag	19	9A9181CCE9C4D9E9
+E	Order Price < z	5	13F15751170778D5
+E	Items Product Name or not 0 or Qty	9	E33BEE2A1963F40E
+E	Total or (7 and not Kids exists and (y - Age) * 12 Hours) - 0	21	701FF32E09E84618
+E	Order Price > 12 Hours * Name + not 42 * z is not Order Price is Age + 0	21	D311B6A52DF8E84B
+E	7 and G(z != true) is not "abc" or 3 Days	15	DEF282AA6DECBB5B
+E	not 12 Hours	4	B66A0548B6CD3124
+E	(null) / 12 Hours and y / Kids exists < "abc"	14	74A863391D6E511B
+E	false >= 42	4	5E32CD347A6224FB
+E	Price - (0) * Price < Name + true	12	0DF2922C8550B909
+E	3 Days / Age < "abc" + Kids exists / "abc"	12	C33837E26CE52E35
+E	sum Kids Price and null	6	2A32CBF31E62B8BF
+E	none Kids where not y / y * Qty or true	12	62704650128E22A7
+E	y + 7 * count Kids	7	C8232D75DE680F0B
+E	not Price and z - Kids exists and Qty == 3 Days * Total + 12 Hours * Qty	20	040ADED4ED4D642C
+E	not null	3	5A81910C251774B2
+E	not 42	3	607722E5D8051F24
+E	12 Hours * true <= Qty or not not 12 Hours / (Ready)	16	A8829577E3B807AD
+E	Kids exists == y	5	B0B1949843DFBE9A
+E	not Price * Ready	5	2F16726209FE88B3
+E	Age <= x + z or 3 Days * Age	11	C68A6F00744AB6C5
+E	"abc" * Kids exists is not 0	8	CD254FBB8EFDCFE5
+E	(not Order Price > Name) and false and null	12	86723C0FF0666829
+E	not Order Price != Total or not null and Total >= Price and not Amount	16	0D75545F77675311
+E	7 == 0 * count Kids or 3 Days is not Order Price >= true * y and "abc"	20	907F7F23EB6B03A1
+E	12 Hours / false and z / not 7 and z	12	D1A55D06FC2A4C36
+E	Amount or 3 Days >= Kids where Kids exists or 3 Days and (not not Qty - Flag) and 42	23	92DFD33989CC76F5
+E	Qty * Age	4	5DF12D5A60A5E3DC
+E	3 Days and Amount + 7 and 3 Days or x or null / 12 Hours	17	86EEF7B000E9AD50
+E	Items Product Name * Flag	6	317905DD1D8FE36F
+E	null * Order Price == 3 Days == Age and count Kids and x	15	9DD6246DF794C52A
+E	12 Hours and Price + 42	7	99D6EE397368B40F
+E	not none Kids where 7	6	7D32558414928793
+E	Amount / (Order Price < y < any Kids where Ready + count Kids or 42) - Name and 42	23	670F589252EABE52
+E	7 or not Ready	5	6DC1E8E1FD3568AD
+E	z * Order Price > true and count Kids and Order Price < Amount - null	17	490FEA697A76F0C3
+E	not Ready / Qty and null and false / Amount	11	5AAD37226C55925F
+E	3 Days - Kids exists	6	A30233AB77E3B793
+E	not Name and sum Kids Price	7	97818A144627A070
+E	3 Days and Items Product Name - (count Kids or x + x or Kids exists and 12 Hours * Order Price >= null)	27	F921B2EF9B29FFE3
+E	Price and Price	4	AC36DB2CF4027466
+E	7 is Order Price > count Kids / 7 and Qty < null and null	16	0CAF20952EA1EED6
+E	sum Kids Price is not sum Kids Price or z == Flag	13	D505F484B122E179
+E	"abc" / x is not y or (Order Price != 12 Hours and not 7 or Name - not y) and not Total	26	26FA1F1456CDA289
+E	Total / Order Price != Total is G(not x) and Qty != z	17	924D11C85FBC57B5
+E	not true and Kids where Amount + 12 Hours - null == Items Product Name	16	8BB056635C2FDD4C
+E	Age or not count Kids and null or true and not Name * Qty	15	BB723BE5AA266C39
+E	Age >= not 7 + 7 and not Amount / 0 or x is Amount	16	64F17D4C8264D7CF
+E	12 Hours < count Kids where Name or 12 Hours - Total / false	15	48A3F8CB4CF557FE
+E	Items Product Name - x * Kids exists	9	1520B4725109A1D6
+E	0 * "abc" and not G(null + Flag * Name < Age and y or count Kids and y and count Kids is not "abc")	29	D9FC9B5081FA017F
+E	"abc" / (Qty >= Items Product Name) is not x	13	3D3E95B56333BA47
+E	y - true is 12 Hours	7	B7A56FE6C38D0B8F
+E	not Flag and not true + Items Product Name	10	D97396C2EDDA7398
+E	Kids where not Items Product Name - 3 Days is not null and 42 and Qty + Age < Total / Items Product Name	25	48B204A8116BCB36
+E	Total < y and null	6	0C212496C37B1D09
+E	x >= Price or not z / G(Total >= false + x * Amount or 7 and not y and Amount)	25	DB2B387D2A40D283
+E	3 Days != Items Product Name	7	894A060F946A13EA
+E	Name and y / "abc" and Price - x * 42	12	D7E4E94FF8B5AD87
+E	not Name or (Total and Ready - 0 / Kids where y) / Order Price <= false	20	45A7BCAABAB457E2
+E	Price >= sum Kids Price	6	4FD23D47E9B72BD8
+E	not not null * (Amount * count Kids is not sum Kids Price) - Qty - sum Kids Price	22	8CBB8ABC3A02DDEF
+E	Age * Name is 42	6	D9DAF423832FCAEA
+E	Amount and null / Age or Ready or not Order Price - Name	14	B58256A33FCEF261
+E	not G(y) or Ready	8	718A5D594520B06D
+E	all Kids where not Order Price >= 7 / count Kids	12	882DEFBC8BC6E3D1
+E	3 Days + 7 or Name / Order Price and 7 != 7 - 7	16	652D42424044CBDF
+E	12 Hours * Amount - false / false or Flag + Order Price >= 42 * x or Kids exists	21	7E33620C78450572
+E	Qty is Total or false and z is Name + Name * 0 or 7 >= z and z	20	6C1F65131FCB76A5
+E	not Flag + Qty and Price	7	80AE3BB3CAB40B5C
+E	Name and not Order Price != Order Price or not Order Price and Amount + x > 0 * 0	21	5F52ADD52D35B872
+E	Price * false	4	32AEE0B61310F11F
+E	not z - Order Price != Price * 7 and (Name / Items Product Name) * Price + sum Kids Price	24	64153134AD27DF38
+E	Kids exists and count Kids	6	60EA5A1AEACC6286
+E	not Items Product Name and Qty * G(y) - Ready	14	87CF34A214ED03F8
+E	12 Hours and not Items Product Name	8	3C9A3774FC2BA94C
+E	42 + Name / any Kids where not Order Price > 7	13	10587EF05A258633
+E	not (Order Price) + sum Kids Price and not 0 / 42 + Total and Amount	19	97FFBC53B2DDF17B
+E	count Kids is Total / sum Kids Price - z or not 42	14	A04E73C7EEB2F456
+E	z is Total * Kids exists or G(true >= Items Product Name / Flag) or not null and y * x <= Total	27	4BA1392AA7DBC8C0
+E	Order Price == sum Kids Price is not Ready and Age / Order Price >= Items Product Name - Price	21	077F08977FDDA901
+E	42 - y * z and Flag	8	073D9948D09CFF4B
+E	Amount or none Kids where Age <= Order Price != 7 + count Kids - 12 Hours is not Kids exists and not y / 7	27	3B50D8605E91D074
+E	"abc" * Amount and 12 Hours > 0 / not Qty or Amount and not 12 Hours / Total and all Kids where not Ready is z	28	9701D56779F7ACCE
+E	any Kids where null < Total / 42 <= 42	11	1CDDDC56E78A83CE
+E	Age / not x - Amount and count Kids	10	CBE28AF237CB4CDE
+E	Age + Order Price and Age + Order Price == "abc"	12	346CD27F0E2221BA
+E	Qty	2	FB86FFE08A819C11
+E	count Kids and 12 Hours	6	2C0C55E762544CF4
+E	true - Amount	4	F6F992B1104ABBF8
+E	Order Price and count Kids - z	8	317A6A43E4937F1B
+E	not Order Price	4	C6810A06735BFC67
+E	z + not z / Qty == y and 12 Hours	12	0F80D314805FE79D
+E	Order Price < Price	5	D198D1BDEDBEBC13
+E	y	2	346FD96DE8CCC195
+E	Order Price == null	5	C62B78C3284D95A7
+E	not count Kids / 12 Hours - G(Order Price is Ready / Order Price == z) and Ready or Price and not Order Price	28	88ADFC567FD81588
+E	false - 3 Days	5	DB48AC6A6EB7E455
+E	count Kids or Amount	5	A941410EB3A5C0FA
+E	Order Price or sum Kids Price	7	50DBAC61C2940C7A
+E	Amount >= Total	4	F89FA20B2D5D239B
+E	not 3 Days - G(not Name or Age > null) and 0 != Flag * "abc" - count Kids where x is Kids exists	28	BB2DCB8128D4CB20
+E	3 Days >= F(not sum Kids Price, 3 Days != Price and Order Price > false) and not Order Price	25	8959E2116E1ECEC3
+E	Items Product Name - null > 3 Days and not 0	12	6DAD332355CBD9A3
+E	G(0 <= null) * 7 and 7 > Kids where Kids exists is Age + Ready * not "abc"	23	400F1A6C8128E034
+E	y or null == count Kids where null is count Kids	12	5A70B4A3096CDB9B
+E	Amount and 42 / Flag is false + Total / Amount and Price + Age	16	56F9C82B5C6BF70A
+E	Price * Amount	4	CF33C7C17857E7BD
+E	Amount - sum Kids Price * Amount and not Qty	11	A5A667B3B122A3AD
+E	7 / true - Flag or y and "abc" > not sum Kids Price * Total	17	689086562D36262B
+E	Flag == Order Price <= Flag or not z and Order Price != Price and x or Flag * y is not true	24	4479B5A6A58A2B44
+E	null > not Items Product Name * Amount	9	722EC972E5BC1460
+E	0 and Qty + 0	6	B0E642CA1CA769B9
+E	Order Price is count Kids	6	8956BBA497633106
+E	not not 0 / count Kids where count Kids and Flag and Kids exists + sum Kids Price is z and x == sum Kids Price	27	221C62B4D800B5C1
+E	G(Price) and all Kids where y / 12 Hours	13	80F630E44A589BA3
+E	12 Hours != Ready or Price and true or Age * count Kids + z and null + not Order Price < x / Age	26	7C5A9DBCA21DEEE4
+E	count Kids * z is not not Amount * Order Price != y and 0	16	DFA12AF1BD9114ED
+E	"abc" * Order Price	5	12159C444219793B
+E	Age or 7	4	D1A46FD89720A9F8
+E	Flag or G(Ready / Order Price) / not 42 or Ready - Age	17	CFC854CC057A404A
+E	Amount or not Amount or (not 3 Days / Amount + Amount / 7)	17	47E25DC07B625760
+E	Kids exists >= 12 Hours and not sum Kids Price and 12 Hours or Age / sum Kids Price and 7 <= z	24	D91B8537B7F5E43C
+E	count Kids or 7 and 7 * Flag - Total	11	D45FA4839672B1A7
+E	x is not "abc" + Qty and z or Kids where not z * count Kids >= Qty / null	21	D81AA8993269B547
+E	none Kids where 42 is Ready	7	5883D7739E1A2C58
+E	Qty and not x / Flag	7	05FFD520A97A227E
+E	false is not Age	5	959ADEC556CBE8A7
+E	not Items Product Name and not not none Kids where Qty - "abc" and Price <= count Kids - Amount and 7	23	A82D566457B2BAA9
+E	Amount is not "abc" * not any Kids where count Kids > Name + 12 Hours and not 3 Days / y - Flag	25	3DF615ECE222CFC5
+E	z is not true or x + 7 * 3 Days >= 7	14	79186A4C6F06346A
+E	Total / z	4	564F3D53B8F406CD
+E	Total + Order Price >= Age or z and 0	11	ACE1BF9943414DA0
+E	12 Hours - sum Kids Price	7	16F119015752F2CB
+E	3 Days < Amount or not x and Name + Flag / "abc"	14	E69286F63957F69E
+E	z + G(true * Amount and Price + Kids where z - true and not false and "abc" or not x) and 7 * 12 Hours	30	BBE366913CFD1266
+E	z + G(Amount * z < Order Price or Ready + 3 Days > Flag or Price) * 7 >= Qty	25	61DBDB9DB3DE432D
+E	not Qty	3	198469321BDD84FE
+E	not false or not true * Total + 0	10	D06D6BCC5B2357FC
+E	z	2	455E9FBBA50AF04C
+E	y / null + 12 Hours is not not 3 Days and null * true - true and 3 Days * false is Items Product Name	27	BA5E00AF2A73047A
+E	(not (not 3 Days / x) and not x and 3 Days) + not y * not Name < Qty / null or 7 < z	31	E62911FCA7025972
+E	not (F(false, 7) * Kids where sum Kids Price < sum Kids Price and Amount or all Kids where Age < true)	29	3A3788088CBCFECF
+E	not 3 Days and Price + count Kids / count Kids	12	4D0FE0D3A4D4D226
+E	not "abc" / Order Price >= Kids exists	9	88D24A6EE60D1712
+E	Age and Qty is not Order Price < Order Price	11	C7394F1598E2922B
+E	Order Price < 3 Days or z >= Flag	10	19B8968AB89F559D
+E	Order Price + "abc"	5	E11907BE845FEEDC
+E	not 0	3	A1FFA5CA3F81F7BB
+E	x and not 42 and Kids exists or not Flag or Kids exists and false / null >= count Kids and Ready - Total	25	BE5B08CF32909F60
+E	Order Price >= Amount > y or "abc" * Price	11	1D72C45D03799AFD
+E	Order Price or null and false or null * Order Price	12	846F80B52403C52A
+E	not Kids exists * z	6	FEE703E920D6EBCF
+E	not Name or Ready - z >= Flag	9	556559DA5FD21441
+E	not 7 and Ready * null - "abc" and not 0	12	9B28BE84A9DD8BB0
+E	sum Kids Price * G(y * Amount or 3 Days <= Price and null and Ready) + 3 Days	23	BEFC2042840BB266
+E	42 > Order Price != Qty	7	CD284C354440A3E3
+E	G(any Kids where Name / 0 == Items Product Name and "abc" == count Kids and not 42) + Order Price	25	C2140852AC64C451
+E	0 or false	4	ADA35FBFB9E71A4E
+E	not none Kids where 3 Days * 42 * not x	12	BEF08BCC388DF59E
+E	0 - false * G((7 - Ready) + Items Product Name and sum Kids Price / x == 3 Days) is Price and Price	30	11DF7C14842832FE
+E	0 * Kids exists - Age >= Items Product Name or null + Kids exists	16	F9281976740E61E2
+E	null + Kids exists >= Kids where not Name and Name / not sum Kids Price * 7 and not Name and 42 >= Order Price	27	16333DA9BD81644D
+E	not z * "abc"	5	2C08D8891E021BFA
+E	3 Days and x / y - Total / 3 Days or false	14	2D8589AA2769D717
+E	Ready or Kids exists / not true - sum Kids Price	12	FE17D576E677AB89
+E	0 / Flag and z == true	8	CEE6968F77C98EA1
+E	null is false + 3 Days or Qty * not Flag	12	9D77611D13F46C36
+E	Kids where Name and false > not Price + (z <= true) and null or not Total	20	DD5A02D26BF7FFAB
+E	Ready or count Kids	5	9F6ED4186EE26734
+E	Kids exists - Order Price >= null or 3 Days is not sum Kids Price * null	18	1274C64D84CEC9D3
+E	Name - 0 >= Qty / Flag	8	49790149719AC6F9
+E	not Order Price is z - true	8	D58F140EBBA71492
+E	3 Days >= count Kids and not Items Product Name and Age == Price	15	1808231D1C5AA9D9
+E	Order Price != Kids exists	6	FFDC6E242D27699B
+E	true + 0	4	21E7FEB8B8F39EEF
+E	not Qty - Kids exists * Age	8	C65A7BA269724733
+E	Order Price - y == Age + 3 Days	10	625F4BD54CB870A2
+E	not Order Price is 7 and not Order Price / Qty	12	4BC1CE2D9C8816F9
+E	(G(3 Days or null == Amount and Order Price != Flag and not true + 7 or Order Price)) == 0 + z	29	BAA99E7F5D4111E1
+E	true / z + z * Items Product Name > sum Kids Price + false	16	E3F3B41999DF5DF2
+E	null > Age and true	6	4E848098D356426E
+E	Qty / count Kids	5	EFE02952AA21A797
+E	z and not Order Price != 42	8	17CC8AFC0AEEFD6D
+E	42 or not null	5	06DED097FF14A957
+E	F(not Flag and 42 and 7, 42) + y	14	9C9B082E4E58B5C5
+E	count Kids where not not 0 * count Kids - true and 7 is F(null, Name or z / false - Amount)	27	2EAC37438778256B
+E	Qty is Order Price >= "abc" and Ready <= F(z or not sum Kids Price, not Ready) and not 3 Days + Qty	28	F1E2C6B48F9473A6
+E	null is not G(not G(y) * sum Kids Price and not any Kids where Total * true)	24	BDB83E31AA778CB7
+E	G(Flag or Ready == Order Price == null - Order Price)	15	13AE5D8FA093AF80
+E	"abc" and Order Price	5	540A388A72C27244
+E	not 42 * Qty	5	F38D09567632E738
+E	z * count Kids - 42 or not 3 Days or null and Items Product Name and z	19	8623F658ECCC9943
+E	(not 12 Hours) == Flag	8	BF5AB4D9151A5613
+E	true / Order Price or not Items Product Name - Flag	12	A2E16C0D959F3BAC
+E	true > Total / 3 Days and z + z is not Amount and not Qty	17	EBFED082BECB28D2
+E	Order Price < Qty / Total - Order Price is Order Price / false == z	17	49AFE2506C5DEFE2
+E	Items Product Name * null	6	14FDD12EEE697EE4
+E	12 Hours is not not Price	7	B98787FE14062D13
+E	true and Order Price < 0 != count Kids and 42 * "abc"	14	F17521DC4FE7BCDC
+E	z / true >= z	6	D637C015449C73B9
+E	not Items Product Name + Items Product Name or 0 / Items Product Name + 3 Days >= (Ready)	22	DCEB4F45E2D10A45
+E	true and null or not Name	7	6737463910DE37B7
+E	not Total * Items Product Name and z or Kids exists == Amount + Flag and Items Product Name and not Qty	23	E415DF8E81832B98
+E	null is not Items Product Name	7	CD1A6BFE164D2C67
+E	not Total and Kids where Items Product Name	9	DBE9FE8E8D41D83C
+E	false and null / 0	6	EA3758C949D3DC0B
+E	42 + z and Age / Flag and Kids where not Order Price < Price or Qty and not Kids exists	22	B2A73BF1A4209CBC
+E	Age > "abc"	4	9249616B33047209
+E	Items Product Name != 42 and null + Ready	10	8FDC80AAE43B5364
+E	Ready and Order Price > Order Price <= Kids exists	11	A1BDB4D6F4F0E5A9
+E	Age + y and not Price	7	1064E71EF2D30839
+E	G(sum Kids Price >= 42 * F(not x / true, 0 is not 7)) is all Kids where (0 <= 0) - Price	33	E9E047369A170F92
+E	not x	3	EE3F75BEBFDEE645
+E	true + F(null + none Kids where Total and Price * 3 Days is 7 - Kids exists > 0, Price and G(Amount))	31	C777A8D44F9FAA89
+E	Ready / Order Price <= true + z	9	CE5FEEECF33A2523
+E	12 Hours and 7	5	740A37CEC0CBB44F
+E	42 is not 0 or G(42) + Items Product Name	14	2595B364B9D80B42
+E	Flag * Total	4	6A7EE6BD7DD55F82
+E	"abc" - (42 and not x) and Order Price < false	14	DF8A2117C8F32F12
+E	12 Hours and Kids exists	6	EC72F2821C7821BE
+E	not true and x * x	7	671B76B4EB2E219F
+E	sum Kids Price * Flag	6	9A450A37D14CCBF9
+E	not Name + count Kids or not Kids where not Kids exists / x	15	11156B87CA6DD139
+E	Age < "abc" and not y + (42)	11	3CECFF2A9D90BEEF
+E	count Kids and false	5	85E6C87E636A3DB3
+E	not ("abc" and 0)	7	C01C667B75C13FE8
+E	y is 12 Hours and Ready - Kids exists or not 42 or Amount and "abc" is Name	19	3403933759F8CE0D
+E	Amount == y	4	FF0CC8C2AE8BD84C
+E	not sum Kids Price	5	9B7B6BCB7BC5EEFB
+E	y / Kids exists <= null and Total - x <= 0 and Order Price < Name is not 12 Hours	22	C212C28E91AD286D
+E	x != "abc" and 42	6	A7A2A27F189857F3
+E	3 Days and null	5	5EF187CE037DD1B3
+E	Kids where Ready + "abc" / 42 is not sum Kids Price	13	FE23F8F9340BF985
+E	3 Days and x or Amount != "abc" - not 0 or false	14	D75CB2AB2FBCBE36
+E	Qty + (Total * F(not Flag, Ready) and true < not Qty / y - true and Qty) or y >= "abc" and Order Price	32	0EB3A4A980A859C2
+E	Price	2	2436E1333BEF5EB0
+E	"abc" and F(not Price / Name, any Kids where Total * 3 Days) and G(not Age + count Kids) - Items Product Name	31	F20A09D0C54A03F6
+E	Price * null	4	CEC068F69B851495
+E	Order Price < sum Kids Price	7	0FF685BD5764D694
+E	not Ready + false and Flag	7	0A04A4A3865453A9
+E	y and 0 == true or not Ready and Order Price != Qty and (not Order Price == z and null)	24	1FA6E643625A6BA8
+E	Flag is not not true * any Kids where Age	11	0EEA75E0AC32774E
+E	Items Product Name or "abc" * (7 + null) and Ready * sum Kids Price - 7	20	2DE2C8C2FF2C5D94
+E	12 Hours > Items Product Name	7	BB00980E389857BA
+E	Ready * G(x) == all Kids where not count Kids / null	16	E78771C4780A6B80
+E	x is not 7 * Name	7	E74F854A98E3BF7A
+E	Order Price is 7 - sum Kids Price	9	2BE68B04B41CAF17
+E	not (Amount / G(Ready and count Kids + null is Name)) and 12 Hours * true	22	9E4579F10BA0203A
+E	not Order Price <= 12 Hours or count Kids != Flag / x	14	A6B447748479A452
+E	z * Ready and Amount and 12 Hours >= Amount or y >= 42 + Items Product Name or Qty + Name	23	44987E3E267C3A60
+E	sum Kids Price > Qty - Items Product Name	10	8819F2E5BE8FCA66
+E	count Kids where sum Kids Price or y and not count Kids / Order Price > Flag	18	03CE343B1985F5C4
+E	"abc" / Order Price > Total	7	BA81FB5C8B66483F
+E	y * "abc" != y	6	D9283ED56D68509F
+E	Age - (Flag / Items Product Name)	10	2908761B8BEE16B1
+E	not Items Product Name or Total	7	A2B287F7C0106C8E
+E	Total != z and not Total and not Items Product Name	12	8F4B37E850856869
+E	"abc" or not Name * Order Price == false	10	CC5BC5A25F1EC985
+E	not Age or Flag	5	E42133CA3F3FD513
+E	Total is not false * Order Price and not false and false - y	15	044A409A6CBE3F18
+E	not (Amount - Kids where Kids exists is not Name / 42 or not true and sum Kids Price * y >= Price)	26	E737FBF470B65117
+E	not not Ready * x - Kids exists and y - Name / Qty	15	34FDA013EC9A2349
+E	42 is not z	5	FD4B6C4A15FFF5DF
+E	Flag - "abc" and not 3 Days - Items Product Name	12	3B8091369605A524
+E	not not Flag / Total - Age + Age or Items Product Name and count Kids	17	8CCFBDF17A91CFF9
+E	Price or not x	5	B98C0A1F824ED5EF
+E	Order Price <= 0 or Kids where x is Order Price and not not Amount - Order Price + "abc"	21	31100E9592E9873E
+E	(F(x is not Ready, Price) - z or G(not Flag * y))	22	3A70EAD85518BBB3
+E	not Items Product Name and x	7	0DBF46D8629B1DA6
+E	Name == Order Price is Order Price	8	520BB8C71C1B07A0
+E	Amount <= not (not null - false)	10	A803F80552586754
+E	count Kids where not true == Kids where false / Flag * Age < Price	16	8454E46C577547F9
+E	count Kids / Price != Amount	7	2547A49286C44010
+E	Name * Qty	4	2BEC2AE07F27EE12
+E	false and Items Product Name == "abc" + 0	10	E3684890DF96C96F
+E	not true or Qty >= Items Product Name	9	1575BB3A91A2733E
+E	not Kids exists or not Items Product Name	9	522B6438F858DB0B
+E	Ready * 42 or not z + Price	9	E728FA34A4CC3EC1
+E	not Age * null + G(not Amount or Total or Amount == Order Price is 12 Hours)	21	8A480968537AE2E5
+E	x is not Order Price <= false or sum Kids Price or Total != not Ready	17	C0814C0F8C20A3E0
+E	Flag + 0	4	F930440875723264
+E	Age / 42	4	C714106DF7088874
+E	not Order Price * 42	6	7E293C5FE60EA0D5
+E	count Kids / Order Price is Ready	8	32138012BF69D291
+E	Price * Flag	4	E63D14DF99B328F5
+E	Name + sum Kids Price * Qty == Price and Amount < not any Kids where Price < "abc" * Ready	22	CF69503341BB10A3
+E	Kids where z + Amount and count Kids / 12 Hours - (Ready) > Ready or y < Name	22	EF786D4B30A5EBD8
+E	not Flag / Items Product Name + not Kids exists or false <= Kids exists * 3 Days + y	21	7658D147829957A7
+E	not not Price and not Ready + Amount	9	A02CD305A46EE5D5
+E	x and not 42	5	C239DBA73D10D268
+E	not z / sum Kids Price + 0	9	CA333E7A7F4066CD
+E	not Flag - Ready / y	7	AD29DEEBEA9EB773
+E	Order Price <= 42 < 0 and Order Price <= Amount / Total	14	5B8FCE5B8DA391D0
+E	z * 7 or sum Kids Price >= false	10	05F8251499CFAA2E
+E	false + Order Price is Age * true and 42 or Kids where y > Name or Flag / x != Flag and not Amount	26	3045E6F3F3E94648
+E	Items Product Name / none Kids where 0 - Qty and not x / y or 42 is not Name or Total and z	25	1E43FCE9825149A3
+E	Qty and Ready	4	C78F5BB37C5E8579
+E	Qty and Name >= all Kids where Ready != Qty or Name - count Kids is Flag and Age <= y * Flag and y + Ready	28	64C40097CF5BDDAC
+E	not 12 Hours / not Flag / 3 Days or not Age	13	0B049ACBC460395A
+E	not Total or not false	6	70875A0AE3994EC2
+E	not "abc" and 0 * "abc"	7	BFC47179A1F60884
+E	Order Price and y <= count Kids	8	1E96F1693496B0BA
+E	sum Kids Price / Ready	6	8149B9831A0B077A
+E	not sum Kids Price + null * Price and Kids exists != Order Price	15	033352D52BEDDD86
+E	Total and 7 is not not 0 - Total or 12 Hours	13	28FB381F12EF4F0B
+E	not 0 and not Flag or count Kids + Order Price < 3 Days	15	110D014C34AB3441
+E	3 Days >= 3 Days	6	F844855CD95EF9B4
+E	none Kids where Flag	5	5854DD1A8B2A9CC1
+E	sum Kids Price * 7	6	9C1E219E34D6CF97
+E	null >= Kids where true is count Kids and not Kids exists - z	15	14F4723A9BE749C2
+E	false >= 42 or not 42 or Name	9	FF7B85CCFE1B0081
+E	not 7 or "abc" * Order Price == 42 and z - Flag < Order Price * Name and Order Price + Total	24	730F23DB43BF94A3
+E	not x - G(null) + "abc" or not Flag	13	2F1786C7BE391362
+E	12 Hours or not Order Price	7	F7BB916F6382A101
+E	Age - false == Kids where not 3 Days * not Age - y and not Qty - x	20	2A8574DC74DA954F
+E	42 != null + (x or 12 Hours * Name + "abc" * z and y or x * count Kids)	24	18559D60A64D61B6
+E	0 - Order Price == sum Kids Price	9	CE35D5FD1CE054F1
+E	7 != x	4	009ECEB6ABE3CD96
+E	not true - null or Kids exists - 12 Hours and Ready	13	6E14C7568EE81F7E
+E	Amount > Flag	4	D95838F2DC798593
+E	0 == Order Price	5	FB389630D40C0BA8
+E	not Price or Qty is y	7	F20716FC17E33F47
+E	7 * false or not Ready	7	72B662509A389C62
+E	y or Ready	4	FF2CDAD4D888008C
+E	not Items Product Name	5	E171FF9D61635C6C
+E	z + "abc" is not count Kids	8	08B3D9CD40EBBE85
+E	not "abc" - false	5	B32233ACF6289C07
+E	42 == 7 and 42	6	347BA0C3147B6D88
+E	Order Price == null == Items Product Name or y == 0 and not null * Qty	18	C1AEFF8CB12D2C8F
+E	Kids where not Price / Age is not Age	10	2C1FF5985C36AFC7
+E	Age / z or Flag * Kids exists	9	D0211C3025699057
+E	3 Days - null / Ready and Amount != Name or count Kids / Amount and count Kids and Items Product Name	23	659C8587A9993B76
+E	not Ready - Order Price	6	F9879C05E1E2516E
+E	42 >= z * 7 or Price	8	EC124C4278592384
+E	none Kids where Age	5	9F79160CE9BAF643
+E	not (Price and Kids where Amount is not y >= Ready)	14	03240DB45BC931DC
+E	Flag == Amount and not Flag	7	7C1289679CA41FA5
+E	Age / Order Price >= sum Kids Price	9	6FC97B5C8FFC5353
+E	"abc" or Amount or count Kids	7	5904AF0C71725179
+E	not Kids exists - 42	6	2BA3AF3C1AB590C3
+E	not sum Kids Price - y	7	A514F9409AC9FA59
+E	x > Name and not 7 and 0 != Kids where not Amount	14	1A49AA53E02DAE54
+E	false + Age and 42 - 3 Days == 12 Hours - Price * Order Price is Items Product Name	21	D8FE00415A5962D7
+E	42 * z	4	A1028565CA1277FE
+E	Total * count Kids > Name and 0 + 7 and not Items Product Name	16	C312BCCE18778C79
+E	Total * Price and not 12 Hours * Qty or not sum Kids Price	15	18F98F2237A88D58
+E	null - Price	4	CD6A470EC4D1F958
+E	Qty == G(12 Hours and not false * y + "abc")	15	D9972C19063DD96A
+E	7 and G(not Kids exists) * 12 Hours	12	19AEA4D6526E7F32
+E	Total is not Order Price >= z and not Name or Age	13	4547D764F5A329D8
+E	Order Price * F(Ready + 7 < 7 + G(Qty * Flag - 42 <= 42), Price)	25	B0322413EFDCEE5B
+E	not 42 or not Age or not z and z is not "abc"	14	D6AC975695CFC672
+E	z + Kids exists / x and count Kids / y and Ready + z	16	6F4E206344482370
+E	not z and not Items Product Name or Age and Qty	12	847C37E06523BB7E
+E	true - count Kids / Name == 42 and not Items Product Name - "abc"	16	9938A961181E007D
+E	Name and Total	4	0A5ADB4CDA8630DF
+E	Amount + (Items Product Name < Name or x / "abc") and Qty	16	E6007D5EDA66370D
+E	not 12 Hours - (Name - Name / false) and true * "abc" or Order Price - x and sum Kids Price + 3 Days and Flag	30	B4E08FDF8C4786B9
+E	not Kids where not Price - count Kids	9	47551E2BB978E327
+E	Flag + Price and 42 * G(Items Product Name >= Flag - Qty and z and Price - not 3 Days)	25	C686F56AB443419F
+E	not Ready + Price and Kids exists and 42 + 3 Days	13	00721E2C8059EC8D
+E	42 - z and not null * 7 and Name	11	D9F7B8280C8FF2FA
+E	not 0 or G(42)	8	0F543D66177AEF2C
+E	not sum Kids Price and not Items Product Name	10	2767684A78B2A109
+E	((7 is Flag * Price)) / Items Product Name + Price	16	F744DC4C111BACE9
+E	12 Hours is not 0 - Order Price >= z	11	165BF33615E1B6C1
+E	Age - 0 / Name	6	891C7FA1EAFCBE08
+E	not false	3	19A9F154893AB6A0
+E	Flag is not not count Kids + false or x or not Items Product Name	16	BB92FC9D3436E366
+E	not not 42	4	74F045C78DF3D980
+E	Price / Order Price < Flag	7	C93E9FA725866126
+E	Name and Amount is not y	7	1FEB4C0D5A2B75F3
+E	Kids exists * Order Price	6	14BC3D486C09BA35
+E	Order Price is Qty - Age or null / Kids exists	12	FFDAE34D70AF475D
+E	Flag / Qty and 12 Hours and Amount	9	030FDE46F5F317E8
+E	z and sum Kids Price - Flag	8	EB79D4B4EAB9D7CA
+E	G(Order Price >= y and Age / Age != Kids where "abc" is Items Product Name) * Price	22	AF651BCE1E03522B
+E	42 or Kids exists	5	6B934EBC3ED91E2C
+E	not y * 7	5	C60896F5AD9FDA43
+E	Items Product Name - Age	6	805463293075FD80
+E	not 12 Hours and 3 Days	7	042D34F22E7AEAC6
+E	7 != Ready	4	48BD1CF219947118
+E	7 > Total / 42	6	DAE6C09C687B3DFB
+E	not not 0 * Order Price != true + 7	11	75BC32A117F2A869
+E	"abc" and count Kids	5	C6DFBEB9A9B99EEA
+E	(Kids where Flag and not null * Amount) * Flag	13	CD93EB6CBE2BBA96
+E	Order Price != Qty	5	4949B345B5D4BC12
+E	G(Flag + count Kids)	8	494BC3549C6E9694
+E	0 or Order Price == 42 is sum Kids Price and Items Product Name or Order Price is Price	20	FB40CE3A33AACB63
+E	Kids where Total	4	653F9EF72F71B630
+E	42 - z / 12 Hours	7	481726F318368F41
+E	count Kids and Items Product Name	7	F6EBA12695FF12C2
+E	not (Kids where not 12 Hours and 12 Hours <= x - Amount != Age)	18	CF59C56B07D1ABF1
+E	42 * Order Price > "abc" != not sum Kids Price / count Kids and not y	18	5EB49EBB461BB768
+E	count Kids / Kids exists	6	4C0EAB8B58DDF2E8
+E	Name >= Order Price == Amount - Name * x	11	3419A5FDE3F23764
+E	Total / Order Price or not 0 * z + count Kids where not 42 or Order Price > "abc" and Flag - 3 Days	26	B90F0B459C65220A
+E	Order Price is 3 Days	6	5950AE96D0FED4A7
+E	not Items Product Name - Kids exists	8	E64D5FDF9CAF44D6
+E	Order Price < Total != Order Price	8	2875D1A99C432F75
+E	sum Kids Price * Age < null / sum Kids Price and Qty	14	EED2FF928C56162D
+E	Age != 3 Days and Qty + (not Order Price / Total + false / false) and 42	21	A56133DB9282D891
+E	sum Kids Price / Items Product Name	8	66701441B2B3FEF2
+E	Price is y	4	D129B2ED25FED8D6
+E	not not G(sum Kids Price or 12 Hours != "abc") / Order Price == z	19	2A13025C02FC95D2
+E	Name and true / null >= y + Ready or z > Order Price >= Items Product Name	19	7FAD093FF099C195
+E	false / false is not Age + Name or not false	12	A02CF5C536364ACF
+E	false - any Kids where false >= x / z + false	13	C912AFD10F88B666
+E	Order Price > x < null or null	9	E70840165A51AFCF
+E	not Kids exists and not x + G(true != 0 and Name)	16	E789C13DAB42A92E
+E	z / Age < Order Price	7	F6EF3A46D2922728
+E	count Kids + null and Items Product Name	9	A42BFD5B2C868538
+E	count Kids * false	5	C9F758A436C442A7
+E	G(x > y + Qty or Kids where Qty / false is not Total * Qty + Order Price)	23	E59B8564185FDBC5
+E	count Kids == 0	5	09D62F2D227A2875
+E	null + not null >= Age or Amount * Order Price >= 0 is true + y	18	D97D4BC67076465F
+E	0 / x - sum Kids Price / Kids exists and not null or sum Kids Price	18	B2892207514EDDCE
+E	Items Product Name * 7 and Age is not true	11	A2CD049441642B7D
+E	G(Amount and Amount) > sum Kids Price	11	689C41E2D977CCE5
+E	not Age + z	5	8C11B46F5B13B3E3
+E	not 12 Hours and null != Order Price <= Total * Order Price == Qty - "abc" and Kids where 42 < Amount	24	DE00476E5D8D4C91
+E	not Kids where G(Kids exists and Kids exists is not true) / true is not count Kids + 3 Days	24	1B0254AA3C157844
+E	not Price * null	5	11F1B6C4BC228978
+E	Qty is not y * Flag	7	8E16474A224AE4B2
+E	(42 and not 0 - y or Kids where 42) + Kids where z + 12 Hours is not 42	23	3FBEA42E8B93A5B2
+E	z - count Kids >= Items Product Name - Kids where 0 == 12 Hours + Qty	18	6FCA2985CC2084D8
+E	0 == Kids where Flag is count Kids + G(12 Hours and 0) and Flag and false is not Order Price	25	4FBF0120710AFCAA
+E	Order Price <= false	5	AD63D3E9D8808F8D
+E	(Price <= x and sum Kids Price is false + Age) > (Age) and x <= "abc" + not Order Price / z - Amount and x	32	3B61F5A7C6A0D7E7
+E	Price and Age or z or x * Total	10	96356B282F070F23
+E	7 / Ready != Amount / Qty	8	F2F53B274F3E2781
+E	42 * false and Qty	6	563360C1BFB46628
+E	Total == Total	4	71F9952DC4738461
+E	sum Kids Price + G("abc" * Order Price <= Amount) * 3 Days >= "abc"	19	2407332C9ABB8808
+E	not Price + Total and Qty or Order Price == 7 is not Order Price + 3 Days / Order Price	22	FAF499BCFF1AC2B6
+E	Ready is not Qty + 12 Hours or sum Kids Price / 0	14	6960ACABB8ECE5B0
+E	not Kids exists or not any Kids where Total and true and Total is not 3 Days + Items Product Name or not Age	25	0C294B5E077C5DFD
+E	0 - not Order Price >= Items Product Name or 12 Hours * 7 - Ready and Qty - x	21	7A15960FD27D1000
+E	0 + none Kids where not Name - Price == "abc" * Price	14	1B4358560CAE668C
+E	not Order Price <= true and Order Price == x	11	EF2ADE588A66FD30
+E	Order Price - Kids exists and Qty + not 3 Days + Total	14	0404CEB76440CE77
+E	not not Kids where Qty is Items Product Name * count Kids + Price	15	F185BE145C0D1BF9
+E	Items Product Name * 7 - count Kids and not Kids exists	13	40026B41F1E6FE45
+E	Age - 42 != 7 + not Order Price != Amount and 7 and Flag * 12 Hours > count Kids or count Kids is not Age	28	5129F691ABF2044A
+E	sum Kids Price and 7 and 42 < Kids exists + true or not Order Price != Price / 42 and 42	23	9F9BD9DC2F1F7D90
+E	Items Product Name + true != not Price and Order Price <= 3 Days + Ready is Kids exists	20	3741BAFB6F1B8CA2
+E	  ") { X: Text }	2	8EA7F1CDACC91708
+E	 42	2	A3E9611D75DF1B11
+E	") { X: Text }	2	C5696C052BAD7C97
+E	"name"	2	1D2CE5E2641DA69E
+E	"x"	2	167C2C87D2FB41D8
+E	"{DomainDslPrinter.EscapeStringLiteral(value)}"	2	78FEA9B2477BECED
+E	(1 + 2)	6	8151B8C2B5A4A820
+E	(1 + 2) * 3	8	027CFCCDB15A9FE1
+E	(A == 1) and (B == 2)	12	6DA37834479E56A5
+E	(A and not B)	7	709231435050BA3B
+E	(Age + 1) >= 18	8	1147B970AD62DBFA
+E	(Price > 3)	6	A775B7E9DB550632
+E	(Total > 0) or Rush is true	10	965E107CA65269D3
+E	(a + b)	6	B950D03878A1B312
+E	0.0	2	63AF34CDADB45295
+E	0.00000000000000000000000000005	2	0B6E68A1C005FEC9
+E	0.9999999999999999999999999999	2	4F9CC513707B51CD
+E	007.5	2	4003A518CCFEB15A
+E	1	2	4D3B92C37CECB4A9
+E	1 	2	39F1151B5A487DFD
+E	1 + 2 * 3	6	FC58B28941ADBB74
+E	1 + 2 * 3 + 4	8	80E590D55052F471
+E	1 + 2 - 3	6	91DD812C29A97228
+E	1 Day	3	0075F10B3E84FE13
+E	1 Hour	3	4B33F5114391F149
+E	1 Millisecond	3	46E2F24A791A462E
+E	1 Minute	3	0C2E3EDFFFCAA27E
+E	1 Second	3	937D54716634EDDC
+E	1 Week	3	CB00E8569DAEF93D
+E	1 Year	3	A7CEE602BAC626CA
+E	1+2	4	A12A592FDECE695C
+E	1+2*3	6	744401416339A80A
+E	1+2+3	6	9C42478E293BC54E
+E	1.0	2	EB5E6563DBA02B89
+E	1.50	2	812B6B51805C5428
+E	10	2	0B6A7A6CDAA1D8AB
+E	100	2	70BD61DF4C2A8095
+E	1000	2	0E370EE01DE249B9
+E	12	2	172DE217A79F25D0
+E	12 Days	3	455F66D2C1CD8252
+E	12 Days is 12 Days	6	15E51CD7A052950A
+E	12Days	3	BC73C0352DD99840
+E	18	2	F8167C260960F45A
+E	2	2	C8CF12037C67060F
+E	2026	2	13DC6E7469B0C515
+E	3 Months	3	7EA01BC4BBDD5ED8
+E	3.14	2	E4F8D97B151C1E88
+E	30	2	C6A5F0E96BE9E56B
+E	4	2	2AA4665D3FD2B782
+E	5	2	0953DADDEFAB2E62
+E	5 Days	3	2326B76303279DA1
+E	5 Hours	3	3DC7FCD7041255F6
+E	5 Milliseconds	3	09A081DDF7E898F5
+E	5 Minutes	3	E95C977C4FE5244D
+E	5 Months	3	23B9BA6A52B8AB29
+E	5 Seconds	3	727EF8B657F2CDF8
+E	5 Weeks	3	2F8A5DF4DA3C8039
+E	5 Years	3	E489CE65D6C274A4
+E	5 ms	3	63908414BAC75362
+E	70	2	9853353AD00F8CED
+E	79228162514264337593543950335	2	1F1AF222D955FD44
+E	79228162514264337593543950336	2	4090CB0FE5DA34F0
+E	9	2	DBC2A94AA13A8ECC
+E	9.9999999999999999999999999999	2	45609ABB596D1280
+E	9223372036854775806	2	1B78DCAA559AC18E
+E	9223372036854775807	2	A9E32F658C3EF1F7
+E	9223372036854775808	2	979342A6DDFDD469
+E	9223372036854775809	2	5B651D727D3CA4F3
+E	A	2	9CCCA3B51BFC051C
+E	A sellable item	4	1A00D5DE99D5ECAC
+E	A-1	4	91F839FCF788C0BB
+E	A4_ParserCarriesNoMutableIntInstanceField	2	E4F6AA6AB49BD166
+E	Account	2	8E006C8FAE8F3BC3
+E	Activate	2	2E64B26C359BB1DC
+E	Active	2	1D851D97A57DBCB8
+E	Add	2	7C331BA1E74B5A3B
+E	Add(1, 2)	7	9D9948EE0781FE92
+E	Add(Add(a, b), c)	12	C46F0B3340C655CD
+E	Add(Lit(1),Lit(2))	13	F723C12E39065974
+E	Add(Lit(1),Mul(Lit(2),Lit(3)))	21	101791CE975E2116
+E	Add(Prop(a),Not(Prop(b)))	16	C464E2C906011DC1
+E	AddDays	2	07F6C6D56635D1E6
+E	AddFunctionChange	2	8A1B7E77D9195752
+E	AddHours	2	9E382D742A1828A3
+E	AddMilliseconds	2	844801ACCB0070EC
+E	AddMinutes	2	67C667DDAF711566
+E	AddYears	2	C643C380A5DAD440
+E	Aent	2	6BE41C7062335009
+E	Age != 18	4	3DCE4F18117341D7
+E	Age < 18	4	87C1708ABDC0555C
+E	Age <= 18	4	5B2FB533CC2E9D72
+E	Age == 18	4	DF579315EA2D47CA
+E	Age >= 18	4	6B63036D4C0E5E11
+E	Age is 18	4	1D4C3A7D89B42B1F
+E	Age is not 18	5	0C1067FB53195704
+E	Alpha	2	64C12B2C41464FF7
+E	Amount <= 0	4	A2BD561592F2A0A1
+E	Amount <= cover Coverage	5	7361A477B9352C4B
+E	Amount > 100000	4	9D1B027477792593
+E	And(Prop(a),Prop(b))	13	42A9D1E6ACA18CBE
+E	ArgumentOutOfRangeException	2	A41CB5B757E17063
+E	Audits	2	49558993F11906B5
+E	Av	2	7A7EFBEA69413CF2
+E	B	2	B19436F60938F3DB
+E	B is invoked	4	4D69B120CA2AA654
+E	Backlog	2	5B9DF4B0E681DB35
+E	Bad	2	8F7002B480674640
+E	Badge	2	46B65AD753256E8E
+E	Balance > 0	4	3EFA1A50283605B8
+E	Balance is 0	4	D6E70D4DBACE8D06
+E	BillSettled	2	33348FA0690078ED
+E	Billing	2	4F3827C0041785B5
+E	Binary	2	64B02484849471E3
+E	Blocked	2	303D4188039AA1B5
+E	Blue	2	E8B44F388F23C552
+E	Bnd	2	C4A86D0327B2BA21
+E	Board	2	F41D8019C88E31D5
+E	Bump	2	E446400D5C45AD18
+E	BusySections is 0	4	D5E2C6AD3874DF1B
+E	C	2	ACA753CF67470BA8
+E	CARD_NBR	2	F701CB378765F62F
+E	CODE	2	617990A71FBB103D
+E	CanBook	2	433FF0DCFBA073BB
+E	CanRetry	2	A9AB327CB8D9920B
+E	Cancelled	2	E7D6CC512CF64C29
+E	Cap	2	221303041EFA67AA
+E	Capacity	2	CEB2E01101D5BACA
+E	Capacity > 0	4	738EDF542F92590B
+E	Cart	2	59717518112B3258
+E	Chained	2	60B5348107ED3DD5
+E	Charge	2	C600831F3BA56B7B
+E	ChargeRequest	2	1422D56F9F70F4E4
+E	CheckOutDate > CheckInDate	4	FB73D0B72F4C4760
+E	CheckedIn	2	9220D3015C056943
+E	Checkout	2	8F9D17DF7E61F854
+E	ChildProcessSlots	2	123AA66C37D9BF25
+E	Children	2	D70D4A4F3A0FFA8E
+E	ChildrenFree	2	D128FDEFB8EECF0C
+E	Classify	2	678787A19C32AF57
+E	Close	2	A68D2E64BCAD71E4
+E	Closed	2	3F71F595D5E5DFBB
+E	Cmp(Add(Prop(Age),Lit(1)),GreaterThanOrEqual,Lit(18))	23	C7147BC6271BDDEF
+E	Cmp(Add(Prop(a),Not(Prop(b))),GreaterThan,Prop(c))	26	96D595F570340018
+E	Cmp(Prop(Age),Equal,Lit(18))	15	6C4F3889AAEE706F
+E	Cmp(Prop(Age),GreaterThanOrEqual,Lit(18))	15	A20E667BBCE9EF0D
+E	Cmp(Prop(Age),LessThan,Lit(18))	15	AE3C5337D50DD2BB
+E	Cmp(Prop(Age),LessThanOrEqual,Lit(18))	15	5334E83169477DC7
+E	Cmp(Prop(Age),NotEqual,Lit(18))	15	937642DE2F54B85F
+E	Code	2	8E3EE5731DA7A2E8
+E	Color	2	573C38A1A62E7D32
+E	Company	2	89AFBE5BEABA7572
+E	Completed	2	27484610F56B46F7
+E	Compute	2	A5921BEB68BF3004
+E	Content is needle	4	D50E73E5B29A0451
+E	Content is not needle	5	2C9965C95FC14282
+E	Create	2	1BA11F6758CA635C
+E	CreatedAt	2	DB322ADED931FE7F
+E	Currency	2	C2E9B43D65A40185
+E	CurrentBorrowCount >= MaxItems	4	AD70C08A21DC8114
+E	CurrentLoad > MaxLoad	4	F5FB8714ABCE5059
+E	CurrentStage	2	7A6C417B9DDFFCEB
+E	Customer	2	EBCF47BFE850AFF1
+E	D	2	B98137A8A4968A24
+E	DMFUN001	2	E4BA8EE01FB93291
+E	DMFUN002	2	DF4C49BDAF047C2F
+E	DMFUN003	2	0F679BF15BDF0491
+E	DMFUN004	2	C1DE8FE42A9DBDEB
+E	DMFUN005	2	091697E0F25858BC
+E	DMFUN006	2	AA3732AA44888ECB
+E	DMINI001	2	817BD19F1230FEC6
+E	DMMAT001	2	235C237157C89B9B
+E	DMMAT002	2	01837DDB3E7A2F76
+E	DMMAT003	2	599769F737DF6E38
+E	DMMAT004	2	3399EB57A5D6B04E
+E	DMSEM003	2	C2E20DE8817036FA
+E	DMSTR010	2	152ABDC2F7A207E1
+E	Date	2	6460D915C316C5AC
+E	DateOperation	2	E099BB814B972D71
+E	DateTime	2	D5323C561E45B94C
+E	DatesValid	2	00C3A6932D70198B
+E	Days	2	723BA684D758AA75
+E	Decimal	2	6C50BD850742DD11
+E	DecimalBoundGuard	2	D55BF9B05D862835
+E	Decisions that narrow the shipped claim so authoring fails loud instead of silently	14	996A4CA2AB9A46A1
+E	Delivered	2	27AB3D50012064A5
+E	Department	2	7D01AC0D7BE6E077
+E	Div(Mul(Prop(x),Prop(y)),Prop(z))	21	431FEE54286A6478
+E	Docs	2	CAC1EBC7CFC4DCF5
+E	Doctor	2	4642CECF75A5D10F
+E	DomainResolver	2	508120F60F110B7E
+E	Done	2	4912A1C03EB82837
+E	Draft	2	D37D3DFDF77E4983
+E	DslTokenReader	2	907035B4C448F113
+E	Due	2	8B3980059C96C6E6
+E	DueDate	2	2A891460DDA4DA0A
+E	DueDate + 14 Days > ExpiryDate	7	A05BFC707E671CF8
+E	Duration	2	C2DD5475A9978C28
+E	DurationForm	2	98B6F8940B8717F6
+E	E	2	49DF60570F5B420A
+E	EDIT_BAD_SNIPPET	2	FAE405278F76C508
+E	EDIT_NAME_COLLISION	2	A52625175D380CBC
+E	EDIT_NOT_ADDRESSABLE	2	F59C2762D653FF93
+E	EDIT_PATH_NOT_FOUND	2	5FED078258AB4C1A
+E	Employee	2	803801013F5B0259
+E	EnRoute	2	028883C0479AA405
+E	Enabled is true	4	962BEEE1E42D9A56
+E	EnabledPolicy	2	0D3879B8851E6A6F
+E	EndDate > StartDate	4	B6A092DD4E0FC659
+E	Entered	2	37625696E381E8C1
+E	ErrorMessage	2	5B726F86788D216F
+E	Exited	2	2C4C49FC4045BC17
+E	Expected an arm	4	27AB49E08A8D8A02
+E	Expected expression	3	E41B4324F542F857
+E	ExpiresAt < Now	4	FFECB2392DA3F14A
+E	Expiry < Today	4	CB004E2FBA4935AC
+E	ExpiryDate < Today	4	EECC70D746F8143B
+E	ExpressionPrintRegistry	2	CA4736882C7DC7E1
+E	False	2	1ABEE1C50C24A256
+E	FitsTable	2	EC44B68BB2B15CE1
+E	Fixed	2	9C13C989EB9EC4C2
+E	Flagged	2	49E681CFEE7B5802
+E	FnCallAssign	2	FBA2313001249284
+E	FnCallNested	2	6A75EA85D2B782FD
+E	FnCallPolicy	2	B4583A7C0BC4BB25
+E	FnCallPropertyArg	2	D8E620352288B996
+E	FnCallScaled	2	3E0796AAD2444A2C
+E	Foo	2	FA5F5B9657CC8E96
+E	Fortnights	2	30290F949E7A21CC
+E	Fractional	2	E83768FA2F6575F5
+E	General	2	FE72A816413F45B5
+E	Go	2	548114D45477F49A
+E	GoodStanding	2	3712FECB78492FD1
+E	Grade >= 70	4	3929650A0F2B25AF
+E	Green	2	02B36A8D69472AF4
+E	Green declared no term	5	21BE8EDBC08F7DE6
+E	HasAccount	2	8A96B69CA9EEF655
+E	HasBalance	2	974924C9ECFF6B79
+E	HasDocuments	2	438BA9C49A842D93
+E	HasFolio	2	BF81E60751AFA56B
+E	HasFunds	2	533BAD2A3DC46FAE
+E	HasHall	2	8809D06AC81526A9
+E	HasInstructor	2	E6BE6F440486A2D5
+E	HasLines	2	CCE3A8FB7D7AE312
+E	HasName	2	84A7E1074B1E8FC8
+E	HasNote	2	403BBC2741D22FCF
+E	HasNotes	2	F05FF45945ED095E
+E	HasRoom	2	4C9088EF9DF1CF01
+E	HasSeats	2	47A3540B5B5344CC
+E	HasSection	2	5B93E505C325E1AB
+E	HasSpace	2	FADB5458E8C16CF0
+E	Hazardous	2	4C73FCE77C6057D7
+E	Headcount <= Capacity	4	051E26FF45D01394
+E	Hidden	2	AC7520CC0E9BF634
+E	INVENTORY	2	6A13560462BD5CBF
+E	Idle	2	3EC3EA5C4A800C1F
+E	Imported	2	DDDFF820184A82D1
+E	InTreatment	2	25F9B8CDB4983481
+E	Int	2	22AAEC7122D4242B
+E	Int64	2	F8A1E4255F0264F8
+E	Invert is true	4	6208E2969A0566C4
+E	IsOccupied	2	9D2B6FF291508B43
+E	IsSettled	2	1C58396382697297
+E	IsSuccess	2	9F228F02874F1BD3
+E	IsThirty	2	20DDEAF568BAC7DA
+E	IsThree	2	AEAEE9D832D327D3
+E	IsVacant	2	C616F57F172A2F44
+E	Item	2	17B73677E881CD1A
+E	Items	2	1B001E639E97502D
+E	Keep	2	9FAAFE5D5642AE32
+E	L-13	4	9DCC17D6F22F5A81
+E	Level	2	9776D2C773DEF297
+E	Limit	2	192EA6DD4D0DD5CF
+E	LineItem	2	0CEDB008149C48F0
+E	Lines	2	2F8B90F3D643794E
+E	Link	2	CDF144E19D6DC604
+E	Literal	2	311ED172134E7573
+E	Lo	2	04243CE62F39AD47
+E	Loop	2	889BA1CD9C775995
+E	Lost	2	3DF3B1609AA61B4D
+E	MAGIC	2	40F4BA399CCB4545
+E	MAGIC == 42	4	32EF82FE7FE31B6A
+E	MAGIC is 42	4	7419638C3601E11C
+E	MagicLiteral	2	0F50D09923C3CA48
+E	Maintenance	2	0640ED99CC08869C
+E	MaxCredits	2	F3E0DD6BE476C72F
+E	MaxItems	2	6F17B426C9A126A9
+E	MaxOccupancy	2	6C9703BB31C07965
+E	Money	2	91C63A04627CA9A6
+E	Move	2	A694384C073A5CE8
+E	Mul(Add(Lit(1),Lit(2)),Lit(3))	21	072B5946C389BFB7
+E	NAME	2	30FA7A9E3DB5A4B4
+E	Name required	3	95EB407729F4480E
+E	Nav(loan,Nav(book,Cmp(Prop(Title),Equal,Lit(Classic))))	25	4921F80C97046D24
+E	Nav(patron,Nav(loan,Cmp(Prop(Code),Equal,Lit(L1))))	25	52A27FC44CD841F6
+E	Nested	2	E2B285D1BDBFB1AC
+E	NewItem	2	69EAAC3C9EE9D48C
+E	NoShow	2	32F8BC5B1A61C133
+E	NonExistent	2	685D8BC08899A80C
+E	Nope	2	D859642A814621A2
+E	Not(Add(Prop(a),Prop(b)))	16	EEF79A0F369F8171
+E	Not(And(Prop(a),Prop(b)))	16	DC6ECC24545A0525
+E	Not(Cmp(Prop(a),GreaterThan,Prop(b)))	18	C0DCBB549F373740
+E	Not(Not(Prop(x)))	11	E6767DBCC90C5D00
+E	Not(Prop(x))	8	AD5C57B90BF1837B
+E	Note	2	A06E4464B21AD388
+E	Note is not null	5	3BA47D929374363E
+E	Now	2	689692CAAF61F358
+E	Now + 2 Hours + 3 Minutes	8	D10B59B2F7ED9097
+E	Now + 2 Weeks	5	1CF3DDC16C413026
+E	Now - 12 Days	5	55FE9B74AB348957
+E	Now - 2 Hours	5	EE307FCA9E98B839
+E	Now - 50 ms	5	5E4038547AD19C1B
+E	ORDERS	2	E3785669B4D2BF04
+E	ORDER_RECORDS	2	A83F7CA38DB2C7B7
+E	Occupied is false	4	D6F97DE927037325
+E	Occupied is false and Dirty is false and Offline is false	12	FC93F10EDAA06B58
+E	Occupied is false and Offline is false and BusySections is 0	12	34CB604922DDA48C
+E	Occupied is true	4	0CCC1A4576FA2EB3
+E	Odometer - LastServiceAt > 5000	6	A25E0BAA6E1D938E
+E	Ok	2	603C66A2018BDA1F
+E	OpenCredits >= MaxCredits	4	5A19F5AF757D5B08
+E	OpenedOn	2	A3413F623339A516
+E	Or(And(Prop(a),Prop(b)),Prop(c))	21	EB9A0C9D1B8F95E5
+E	Or(Prop(a),Prop(b))	13	2A63D0851CCB1A8E
+E	Order	2	5861D16B52A4AD9D
+E	OutOfService	2	0257739362D60B58
+E	Outcome == "Won" or Outcome == "Lost"	8	6A53777832E5106E
+E	OutstandingFines > 0	4	ED07FB9614628A52
+E	Overdue	2	F09E898CAB0C921E
+E	Oversize	2	BE2496C55837C7FD
+E	P	2	1F75F0A4873EDBB6
+E	PATRON_MASTER	2	76A3A43DD34DAE43
+E	POLY_CHILD_PROBE	2	2FAFDDC937EA8048
+E	Paid	2	C8130DE57ED09321
+E	ParentFree	2	5FA0F115E21A0F60
+E	PartyFits	2	F388F99AA0D1AF8B
+E	PartySize <= MaxOccupancy	4	3A549668EA994A18
+E	PartySize <= table Seats	5	DFF3AD7685075E0B
+E	Patient	2	6C4DC1B0C34F6DD2
+E	Patron	2	2EEF22B7D1C2ECFC
+E	Pay	2	60DE4B532BF7C1D9
+E	Pending	2	CE2A31F581FCC623
+E	PerformanceReview	2	24CD5CAA9E3D16BC
+E	Person	2	60E803ADA35C1D83
+E	Pi	2	A4DAACFA2FBD147C
+E	Place	2	68687D36FC87C516
+E	PositiveTotal	2	22026C909EF81EBC
+E	PriorityAccess is true	4	FE54A1E8A124D8BB
+E	Product	2	743ABF5DF31D2A1A
+E	Promote	2	9304F52FEFE9443C
+E	Property	2	C668E0CB8A60CD99
+E	PropertyAccess	2	420493B684150295
+E	Q	2	F9468121A982719C
+E	Qty >= 10	4	B2894F85705D617A
+E	RangeExactParity	2	4CFD747E88D8FD70
+E	Rate	2	B05BBE606D61F945
+E	Red	2	96660B4E07DB546C
+E	Refrigerated	2	D9224C533D6EFF16
+E	Regex	2	6140D2142E4F5164
+E	Result	2	FA91BE4F65C012B0
+E	Retries < MaxRetries	4	53D1AE6D8D15A9B1
+E	RewardPoints >= 100	4	358FE305CA15163F
+E	Role	2	B6FD95DF227143E9
+E	RoomReady	2	C6486F4F5FDCFF10
+E	Rush is true	4	9A181DC4B622DAB4
+E	SCENES	2	1CA493A95FBB9E64
+E	SKU	2	139EA55BC221C3E9
+E	STATE_CD	2	DACE76780FEB3452
+E	Scaled	2	19886A4BC73BD795
+E	Scheduled	2	9247D6FD038FE506
+E	Score >= 70	4	2A4B889367E33ECD
+E	Score >= 90	4	3FC8FE9C169FFFF0
+E	SeatsTaken >= Cap	4	DDF2F5BC301976BC
+E	SeedOnlyTemporalDocument_CarriesExactlyOneDate	2	C7CCA0B796C59ED4
+E	Shift	2	09E0F5258C004FE8
+E	Shipped	2	0FFA075D22C8D2F4
+E	Shop	2	253EAA23E64C5B6C
+E	Shown	2	96E382D985AB191A
+E	Sku	2	F52E94AA781F7BAE
+E	So with	3	C15FAFD679746E2A
+E	SourceText	2	CA6E96D7B9297818
+E	Square(Add(1, 2))	10	4C59FCE9EA3FE483
+E	State	2	3ECDAA62FA63F8D0
+E	State is "Paid"	4	28D579DC36A40151
+E	Status	2	E188027D88E15B4F
+E	Status is "Active"	4	793F01659FC061DB
+E	Status is "Active" and CurrentBorrowCount < MaxItems	8	58307B43FFB1CB78
+E	Status is "Active" and OutstandingFines == 0	8	1410A9FDB5946EF7
+E	Status is "active"	4	1F75A9EDA1D40466
+E	Status is "new"	4	06DA92B95060546E
+E	Stock keeping unit	4	E1DFDDED9640A6D2
+E	Stra\u00DFe	2	6EAFE44C4DEAE5D6
+E	Stripe	2	4EEDADB6C8D7829E
+E	Sub(Add(Lit(1),Lit(2)),Lit(3))	21	B51D159C28CE6059
+E	Suspended	2	552DB19458384B89
+E	Sweep	2	46E3A1DED26BCB9C
+E	SyntaxCases	2	A6E1D1D6F75F0506
+E	T	2	C844D31E2AF95F21
+E	TITLE	2	E9688A0E884DD7E3
+E	Task	2	3770F06923962E14
+E	TermMetadata	2	B8DC1DDD3C506293
+E	Test	2	FEEEA41B77772D09
+E	The DSL accepts boolean and scalar expressions through the following precedence levels	13	4B553491A63B4CDF
+E	Thing	2	AFDF1CF787472CB2
+E	Tier	2	0A0D1979BAD9665F
+E	Tier is "Platinum" or PriorityAccess is true	8	C636E57E35452F61
+E	Tier is Elite	4	B0612A48A4DB68A6
+E	Title	2	E8FE679C5D342AD5
+E	Today	2	232B67EFB55480AC
+E	Today + 1 Year	5	0B016410ED36673C
+E	Token	2	42C885B362914AB2
+E	Total > 0	4	3E645B464B2AC1FE
+E	Total is Add(1, 2)	9	C9003F514E63004C
+E	Tracker	2	177ED7332136B6AE
+E	Tracks	2	9FD40DCDEC232457
+E	Tracks B	3	FFBBA684927D17FC
+E	Trailing	2	59A89EE1238F69C1
+E	Trailing comma	3	95792BB768603C62
+E	Trailing tokens after expression	5	56B7E47431A484AE
+E	Triggered	2	8415ECCEC16222D5
+E	True	2	8E9C4DE87B450A70
+E	U+FEFF	4	67F0AF8985CE8409
+E	Unbilled	2	F4E1AFF3D37582B6
+E	Unknown duration unit	4	2880BC36D34DFD88
+E	Unknown or unregistered annotation	5	D5F119D8C4BFFFB7
+E	Usage > 500	4	5D857EB84028E2A6
+E	Usage > 900	4	5CAAD64118269B67
+E	UtcNow	2	FB23119227005A64
+E	Uuid	2	242B8B7B536FA17E
+E	VARCHAR2(20)	5	33FB46350253F1BC
+E	VARCHAR2(50)	5	AE5561D041CF7D1C
+E	ValidDomain	2	D6EA5A0F0A87CDEB
+E	Validate	2	15E45FC8795DCE2D
+E	Validated	2	F513C55AB1A24270
+E	Value	2	FC43671369377E72
+E	Visit	2	2EF1D00BA337CC37
+E	Went	2	AC2678029557A9F2
+E	WithinCoverage	2	16A07CFA29DE1204
+E	Won	2	6AE31D30C63868FB
+E	Worker	2	97E29711C70535A7
+E	X	2	4F0193B9DEFBF1CD
+E	Z	2	4B97ADD9C1D80188
+E	Zent	2	2C887FF0CD31712D
+E	Zeta	2	B1F38B7549A63946
+E	Zv	2	718A2ABE9E9D2DBE
+E	_	2	EA8F260C948AD1A6
+E	a	2	A4AFE6F590F46EB0
+E	a * a	4	43E765DCE223299C
+E	a + b	4	1AFE2DB7AE95EA7E
+E	a and b	4	B1E22B17E9569945
+E	a and b or c	6	6106E841106152C2
+E	a linked	3	49DA9BDD608EA039
+E	a or b	4	3289378E2D948B09
+E	a-letter	4	91DB4E9B7C111BD4
+E	a123	2	B76A644F6BC66F1A
+E	ab	2	AE78B4A513615914
+E	abc	2	7206AC3A398F0FE7
+E	abc12	2	5AEFF98DB4C39059
+E	abcd	2	F95A50BB828F5DC4
+E	account exists	3	36BCDEEA7B7B53C6
+E	add	2	95801DA07CF78D5F
+E	all Line where Total > 0	7	D27353A822A935E6
+E	all loans where DueDate < Today	7	C6F4C29542732934
+E	all orders where Total > 100	7	1BA5B322D4AA4B02
+E	alpha beta gamma	4	14687778D46468E8
+E	amount	2	54392798EC48A1FB
+E	any Line where Total > 0	7	96673882FE48A969
+E	any loans where Status is "Overdue"	7	6FBB9C3D27E52183
+E	any orders where Priority > 5	7	DF8D42FEAD336D69
+E	applied	2	CEE0431AC51989D8
+E	argument	2	337B40F2A91664D5
+E	array	2	2820233ABC539B71
+E	assignee Active	3	562104F4B1215647
+E	assignee exists	3	665E141BE01FBF60
+E	atom	2	2C1685B3FCB60504
+E	b	2	5972A11562C2F49A
+E	big	2	2102AD8F16420947
+E	bigflag	2	2778E7B35EAC199D
+E	bill	2	614FE0F2BF97C4F6
+E	billing	2	308C9F0D21978FE4
+E	body	2	9C8D11CC4FCF3E80
+E	bookings Attended	3	899507469CBB8BFF
+E	bye	2	79EFA22CE9FADE5D
+E	ceo	2	2D99B025223C6270
+E	chain	2	B51BBB0F292C787C
+E	check	2	2EAEDD7D62827EC8
+E	claims Settled	3	C33224EA92251307
+E	clock	2	4C137345221AF108
+E	column	2	6B0FB168CF92ED65
+E	column("CARD_NBR", "VARCHAR2(20)")	7	8306D490F1793165
+E	column("CODE")	5	8DCD4FA175FFD14D
+E	column("NAME", "VARCHAR2(50)")	7	CA3A0054B0FA4A81
+E	condition	2	D7C9985C1B242874
+E	conflicts with an existing property	6	5B9FE2EF877ED8DD
+E	contract internal	3	0B1FAFCC6CA56A7F
+E	count Line where Total > 0	7	1875867B5B7C1678
+E	count bookings < Capacity	5	F9A7E3F3AE722650
+E	count disputes where Reason == "fraud" >= 1	9	337AF33DDCB4AE13
+E	count documents > 0	5	67C13369937D27D7
+E	count enrollments < Seats	5	26D45FA572A04279
+E	count enrollments > 0	5	7EE07F571F16FBBA
+E	count enrollments >= 5	5	14B7D5920FC7DD81
+E	count events > 0	5	E8A44BD4876EA00A
+E	count fines == 0	5	AAC94622C9A209EF
+E	count fines > 0	5	B08B2A4498969238
+E	count halls > 0	5	98B8F0DA46442776
+E	count lines	3	68F42F1FCA1065CE
+E	count lines > 0	5	C1D46D97E5B78F5A
+E	count loans >= 3	5	4E2D5D91D8F6F3E5
+E	count orders > 5	5	0C846F71C0D28497
+E	count orders where Status is "Open" > 0	9	79EEA2530F39DD5B
+E	count requests where SeenAt > Now - 60 Minutes >= Limit	12	48B8DB7340A7B44B
+E	count reservations > 0	5	566A45681731E603
+E	count waitlist > 0	5	584E55E17527EEF5
+E	cover Coverage	3	9C08EE9196A08648
+E	customer	2	C0F0896F2F7BBAC4
+E	customer Tier is "VIP"	5	EB9E2C65A42D5C5C
+E	customer where Status is "Active" and CreditLimit >= 1000	10	65A2DD49C2E451AC
+E	d	2	FE07D8A0B68F5CFD
+E	days	2	00BCA95E3001FFAF
+E	db	2	2856579CA005EF60
+E	decimal	2	890D7E6AA45693DF
+E	decl	2	95476453767C7661
+E	delete	2	48A020BE43D2A977
+E	departments	2	62175B5011EBC3FE
+E	digit	2	1A5CC71BBF82D3B4
+E	digit-any	4	92BA60090124D298
+E	director	2	53A525710F08BC43
+E	doctor	2	A06779C5A359A4AD
+E	documents Attached	3	601DBA5114ED32E9
+E	dup	2	2890A9DF55EFA205
+E	duration	2	A5B179811C11491F
+E	effect	2	6EC19EF7DE2E5800
+E	employees	2	8B1B43A72EC7C6CB
+E	empty	2	2CBC80676D40EB37
+E	empty-body	4	8D2F11441507032E
+E	enrollments Dropped	3	CE1D229CF971EA0E
+E	enrollments Registered	3	B413EAD9F539F4B5
+E	entered_active	2	6E5983E1E8D500C2
+E	entityName	2	7BDECFAAD1A5CF69
+E	events Released	3	71D2F2120E8AE969
+E	evolution failed	3	E2F70B3DC0592D29
+E	exactly	2	C2D5C8D24F9EF90C
+E	expected a parse error	5	038899A62B327E01
+E	expected a positioned parse error	6	984F3B1C837FAFAF
+E	expr	2	CE22A40E4488CC1B
+E	expr-add	4	27BC7D5B8DB4D702
+E	expr-mul	4	94D42C859D8101F4
+E	expr-primary	4	A9E8AF54FA7FADA3
+E	file	2	96D50F45DF93FCAD
+E	fines Resolved	3	36415AC9625F15A4
+E	fines exists	3	B70831D3D06F1790
+E	fixed	2	A4CFD408ED42633F
+E	folio Balance is 0	5	B02684D6002EADE7
+E	folio exists	3	7F1E3E5A5CCCF44F
+E	friends	2	23D8F745157239F1
+E	g09-depth	4	85AA7F0EA08B4BD0
+E	g09-resolve	4	8CDB127B8B7ED613
+E	go	2	3F3D7FB21D4CFD1C
+E	greedy	2	FBA0E5070A54ED5D
+E	group	2	B5A1F1F6680F4D3A
+E	guest exists	3	498DA5A9CB5C3F9C
+E	hall exists	3	0FF0E0DF322AFDC8
+E	hall exists or section exists	6	2930A9086DC8114A
+E	hall where Occupied is false and Offline is false	10	371BEFA450E8E585
+E	header	2	D71D943A91DF73D7
+E	hello	2	2C6FC8F373683CB0
+E	hello world	3	4183F6DD1710093E
+E	hello world bye	4	480E26CD7829F8C9
+E	high usage	3	A5D2A961A48D8061
+E	hq City is "Metropolis"	5	F2FF7BB88B4D0B25
+E	hq exists	3	D92FCCE9E9DC739C
+E	ident	2	6CE86E1C3C6A0C1C
+E	idents	2	B0E2711FD2C01A1D
+E	initial	2	FD3077665D9ADA1D
+E	initial(Ready)	5	FE00B14BD3ECEE5D
+E	inner	2	9EC97F057EC0D9B7
+E	instructor exists	3	FF84D7C925DB6E51
+E	iri	2	A2A40CA6B559F4B7
+E	iri("https://example.com/Product")	5	CF3C2797714985DB
+E	isActive is true and role is "admin"	8	31B2B7068896AFB3
+E	item	2	B0D84DFA6DD8F7F4
+E	items	2	381AC167E8A98D48
+E	jobs Done	3	5CE69343F3884E74
+E	jobs Failed	3	EEA235AAAFCE9804
+E	json	2	3E43BC2BD408094D
+E	l	2	E04B11274D9943F4
+E	label("SKU")	5	187DBE22E5C2F207
+E	letter	2	7BAB91D4531521F4
+E	letters	2	37335A07042C4D9A
+E	line	2	03FB162B2589111C
+E	lineItems	2	AF1A3D6800046F36
+E	lines	2	CCCEDD948E838B72
+E	lines Served	3	5982310093311E0D
+E	list	2	7C2D443514F416CA
+E	lists	2	DDE6DAF5E4B2AE7C
+E	lit	2	5C443514E9411523
+E	loan book Title is "Classic"	6	8E8752B33177F8A5
+E	loans Overdue	3	4DDA1C67E3A6B814
+E	loans Returned	3	A065C6160A626431
+E	loans exists	3	EAE89D1508BFE9A0
+E	long	2	9CD0271677297460
+E	lower	2	CCD57E8DB6E286A5
+E	m	2	73CE39883538BA3D
+E	magic	2	D9B2B54E0EB8B213
+E	manager	2	795E2086B39C5CD7
+E	match { Nope > 1 -> "a", else -> "b" }	13	1FECCF0F901601D4
+E	match { Qty -> "a", else -> "b" }	11	0EA5479F67FE5B8E
+E	match { Qty > 1 -> "a", Qty > 1 -> "b", else -> "c" }	19	4256937CD0C841CB
+E	match { Qty > 1 -> "a", else -> 2 }	13	CD9B1E2841434C57
+E	match { Qty > 1 -> 1, else -> 2 }	13	8499B2C398C34288
+E	match { Qty > 10 -> match { Flag -> "bigflag", else -> "big" }, else -> "small" }	22	2428416560C8D9D5
+E	matching limit	3	993FFDDD92C1F03C
+E	maybe	2	3EB29C0A703AF4B8
+E	maybe-term	4	ADF0864C0D65DDA6
+E	medium	2	D038A60C8D446F66
+E	mid	2	FD7B156467BFD9D2
+E	minimum exceeds maximum	4	9DB43E4023188600
+E	missing	2	B0760E8EA59B4362
+E	more than once	4	880033CD494F175A
+E	n	2	AB8E1B0A765C58A3
+E	name	2	8DA769477E9C911B
+E	navigation property	3	FDD44CEC753A8B81
+E	nested	2	AE71BD6564621CAD
+E	no longer supported	4	63C076193C1F6654
+E	no pack registered	4	C7D1E551926C2598
+E	none disputes where Outcome == "Lost"	7	A9EC01F23FD6CE46
+E	none notes where NeedsFollowUp is true	7	6DB9A4D5190C7AEE
+E	nope	2	A3938CD3CCAAEA76
+E	not ((Total > 0))	9	9E6E88B5BD86F51B
+E	not (Total > 0)	7	B1268B6CA19D82F9
+E	not (a and b)	7	35DE5E1EA18763D0
+E	not AtLimit	3	C3091B4F4310F889
+E	not HasFines	3	ED25B7CB9F0771B9
+E	not HasOverdueLoans	3	44C504A34E0FECC9
+E	not HasSection	3	128D4C97F03EAC7A
+E	not OverLimit	3	06E79963798CD18A
+E	not Overloaded	3	C51D0769FDD73265
+E	not SectionFull	3	C25BBAAF22360D6F
+E	not Suspended	3	C9CFBE69D74370F6
+E	not certificate exists	4	EDB19EF034F57F49
+E	not not x	4	B4A78D0513FC644C
+E	not notes exists	4	D1CEECBA811FE532
+E	not_Blocked	2	6CF625D083A3908E
+E	not_IsBlocked	2	4E7CAE75E173182A
+E	notes exists	3	A6602BD8E177EB0B
+E	notifications Read	3	4B9E2AA7D4371EDF
+E	notifications Unread	3	9E77B6B11D9A446D
+E	nots	2	AC678F151FC5A3F7
+E	now	2	BE96B264D78CF0C2
+E	num	2	BBC19442E2B58A37
+E	number	2	046A7C639D3C8C69
+E	object	2	CB6FEE3A2F75E176
+E	ok	2	02A4AEBFF1A9B59B
+E	opportunities Won	3	602C7CA551550FF2
+E	order	2	083BBE51AF5E5FD6
+E	orders	2	F4AD1F3DC1775151
+E	orders Active	3	03B725E8664960DD
+E	orders exists	3	415C1101FC7C9506
+E	owner	2	D04A1FBC5AC37512
+E	owner is fixed	4	5D11B46EDADE19CC
+E	p	2	C238180FEAC7C2ED
+E	pair	2	C29B5D1486F8A3B2
+E	passport	2	ECC10A4FBA7A6B50
+E	path	2	72CB764CFB42E647
+E	patient	2	981D1859D46948C8
+E	patron loan Code is "L1"	6	3EFA95938C57B488
+E	persistence	2	F8D6CE4BAEE69BC6
+E	plan exists	3	FFA37CB4B139792F
+E	prev	2	AA41CE08E9EADA62
+E	primary	2	26986D6B5B968155
+E	primitive type	3	B8FAAD7779DC4BEE
+E	print(parse(print(parse(x)))) is a fixed point	18	2A0E21F07261E40E
+E	profile	2	1B3C26B8C84B0FEC
+E	prop	2	D1B8B41A5D02CA37
+E	property	2	A59CEFE36D1EA83A
+E	qty	2	E53E815300E09340
+E	r	2	8B6E82221A5A7E19
+E	red	2	BE7479448C695615
+E	remove	2	F71722C2591E6E6A
+E	replace	2	27BDCB1D7DCD389B
+E	reports	2	1FB5D3C8B1B3533E
+E	request	2	C810845AE924B3C5
+E	required	2	1AD018388717ED05
+E	reservations Seated	3	8EEAC333D794F3AB
+E	reserved keyword	3	E888878A509935DD
+E	reviews	2	11FD27E3566E4CD8
+E	room exists	3	0A3DBEDDD2908091
+E	room where Occupied is false and Dirty is false and Offline is false	14	63F0F1148DBCFF66
+E	roomType exists	3	BFBC9643F347D3C9
+E	rule	2	62384D44270187F3
+E	schedule	2	88555758781BAE06
+E	score >= 70	4	3C8FCC86D4FA95E3
+E	section SeatsTaken >= 1	5	092CEE358D7A7AED
+E	section exists	3	C41B945E49F44681
+E	sentence	2	DEB5118AC40BD059
+E	shift	2	46A97D7FDD037669
+E	short	2	1B23F309F93E585C
+E	skip	2	753606E8FE79513D
+E	slips Added	3	22A652311CEC8DF3
+E	small	2	89228413E2BA02EB
+E	sources Scanned	3	1C8890708DFF336A
+E	span	2	2E87059AF2D211FA
+E	star	2	B056F7940CF4875E
+E	stays Departed	3	4767DB502E82482C
+E	stays InHouse	3	770C5E7ECE14B1C7
+E	stmt	2	51AD7F847FA943CA
+E	storage	2	29040FAF7A206F98
+E	string	2	6719F45FCB2BDEDF
+E	stripe	2	7D90D68590477EEA
+E	stripe-eu	4	969314848E402927
+E	student program Code is "CS"	6	BE66991CF8853E4D
+E	sum lines Price	4	D48164A0F91641EF
+E	sum lines Price == 150	6	D25F91C3A6013680
+E	t	2	44CF8EE9FA110AD8
+E	table	2	F0A49ED64632C67F
+E	table Seats	3	B24834D3C58E8795
+E	table("ORDER_RECORDS")	5	71D5812082AB86AC
+E	table("PATRON_MASTER")	5	AC8F348DE071D40F
+E	temporal	2	492945BC01D64917
+E	term	2	CA773EC17B7C8779
+E	that	2	463647895432CA6C
+E	the	2	191B0DC0F89DC70B
+E	the declared ranges	4	6CF4245024AA158D
+E	the invariant analysis proved no effect can exceed	9	0D346BCF37F7DD2C
+E	tickets Closed	3	72951366F507332B
+E	tiny test-only node	6	1F1D74D702C0B3FC
+E	today	2	9710335734B310D8
+E	token	2	71A2A4341820D238
+E	top	2	7CC94ED6B8726CB8
+E	top-level	4	C6D4F7052A94AE27
+E	tracks	2	C823814B1076E8B5
+E	two	2	D525DCBAD726AA88
+E	type	2	F40A058B7C92CEB1
+E	type-decl	4	73E814074C66DA81
+E	typed	2	56756C6A7680FB8B
+E	u	2	9750CEF8D4FF44F8
+E	unit	2	E19AB0261ACB9567
+E	upper	2	222D93A2E0A56DBD
+E	use	2	FB1B3ECD92E68ACB
+E	v	2	0629A1E2B7BBA407
+E	v1	2	A7DCFABF74BD8130
+E	validated	2	EC7886E85CA042D3
+E	value-type members	5	00CC1ADF30B3EB16
+E	via	2	BEBD2BFC5046E6B2
+E	visits	2	2A8C26C1497F5403
+E	wild	2	B05026054C5C1002
+E	with-body	4	F18434369BAD327E
+E	won is true	4	5643151C0449EBAF
+E	word	2	1EABE0B9AA2006B7
+E	word2	2	F7A437B1CA5B30EF
+E	wrapped	2	6F078C534B33020E
+E	x * y / z	6	ABB232E0FE94BD77
+E	z-letter	4	845AD638A414F5EF
+E	\u00E9	2	A88CB190632EFE62
+X	chain:and:255	510	A3727F536FD764BA
+X	chain:and:256	512	0AE8F7A126E3ED3B
+X	chain:and:257	514	376E50DCE66667E3
+X	chain:and:258	516	2863E9A6340A3047
+X	chain:and:259	518	CD56970D6E045B27
+X	right:and:126	506	3B90AB740E3B80DD
+X	right:and:127	510	C027CC05C37C3877
+X	right:and:128	514	501AE9D5B4C875B5
+X	right:and:129	518	D7F9C91E225888D1
+X	right:and:130	522	175C67D55B592443
+X	chain:or:255	510	E375574AD806CB34
+X	chain:or:256	512	63EE85478434038F
+X	chain:or:257	514	C2AC188454347335
+X	chain:or:258	516	DFDE63C800A48158
+X	chain:or:259	518	3B0F11DB64BDFDD5
+X	right:or:126	506	36E1A3719CE40469
+X	right:or:127	510	728B49F58F5EB09A
+X	right:or:128	514	AC445EEF451F073E
+X	right:or:129	518	CCF37AF3516C72FF
+X	right:or:130	522	1ED98E53518EFC33
+X	chain:+:255	510	02851311230DD41D
+X	chain:+:256	512	33D01121832346F6
+X	chain:+:257	514	6816708CB8BC576F
+X	chain:+:258	516	C88E1E107ECAB3E7
+X	chain:+:259	518	04C15B69ACC2ABF7
+X	right:+:126	506	14A86E42DE215260
+X	right:+:127	510	789D8660FB1EB641
+X	right:+:128	514	2EBE0817C7E9A226
+X	right:+:129	518	C94CA0387C559977
+X	right:+:130	522	9B533C50DACBD41E
+X	chain:*:255	510	BD08B136E9E54CFA
+X	chain:*:256	512	1CF968ED4975CA40
+X	chain:*:257	514	85FF12CD092EE694
+X	chain:*:258	516	D81CC9515D64307D
+X	chain:*:259	518	0862F03A82890658
+X	right:*:126	506	F1E4D4DD0CFE3F6C
+X	right:*:127	510	A48551867D19BAFB
+X	right:*:128	514	8A3195CB45BC9851
+X	right:*:129	518	25A27E14F1C3B7C0
+X	right:*:130	522	E3F2E42D9D7C2BAB
+X	chain:-:256	512	3426DB7F372376CE
+X	chain:-:257	514	73335633D8B1F893
+X	chain:-:258	516	83AC94387A5527A6
+X	right:-:127	510	B6D089B33A11234A
+X	right:-:128	514	70DFDBB15E56ECB6
+X	right:-:129	518	3C418E07EF67C293
+X	chain:/:256	512	8D0F5618227B0C50
+X	chain:/:257	514	06F6A0305CFB2F98
+X	chain:/:258	516	8BCBDCB54B4FAB9B
+X	right:/:127	510	BF44B56030364922
+X	right:/:128	514	E9BC0A13AA7D806B
+X	right:/:129	518	1D5BC03859B90A81
+X	cmp-left:255	512	24DD6D73D4C3F5F6
+X	cmp-right:255	512	E9515F5961339EDD
+X	cmp-left:256	514	D589E4848D467EDA
+X	cmp-right:256	514	D2D0410B15C729E2
+X	cmp-left:257	516	1EB239CA07407082
+X	cmp-right:257	516	65803FFD424A5D03
+X	cmp-left:258	518	D5D2497B8CB2447D
+X	cmp-right:258	518	25491021D942C7B9
+X	cmp-both:128	512	C940FFAD3D8BF89E
+X	cmp-both:129	516	38032F44F2241621
+X	cmp-both:130	520	2DAB36FCFF05E53A
+X	cmp-nest:126	506	AB2A866DE04CF7F5
+X	isnot-nest:126	632	01F428EA237F4019
+X	cmp-nest:127	510	2D95847DC62936C0
+X	isnot-nest:127	637	A2DCA80E85A5AF2E
+X	cmp-nest:128	514	3AEF508BA763ADBA
+X	isnot-nest:128	642	398334B003746CD9
+X	cmp-nest:129	518	9B903ABE06285E47
+X	isnot-nest:129	647	5B13A882660D127F
+X	cmp-nest:130	522	D0B86E21F5049315
+X	isnot-nest:130	652	FAE3EB53E3A818DD
+X	parens:255	512	8B41987AB538A1F8
+X	nots:255	257	0291F5A24A6C0116
+X	calls:255	767	5E438F8330B10492
+X	matches:255	2297	C1BF8A79C21EC910
+X	mixed:255	428	19A742B02454689D
+X	not-add:255	511	66A7A34D943C7969
+X	parens:256	514	809333BFE510E943
+X	nots:256	258	8C49A0DA0F85B21C
+X	calls:256	770	7077FB556C890A13
+X	matches:256	2306	18E281FD07C4CABE
+X	mixed:256	429	6F5ACEFE265DA800
+X	not-add:256	513	B01292BE49CF21AA
+X	parens:257	516	9F46AC38D42BA0E3
+X	nots:257	259	545627354A1B7CE2
+X	calls:257	773	7891A8151A793CA4
+X	matches:257	2315	56830D8820A87911
+X	mixed:257	431	E1FF7853E4BDDA42
+X	not-add:257	515	7401AA0E1400CE68
+X	parens:258	518	02032943B8CCFF9A
+X	nots:258	260	78C4416DB40A9D4C
+X	calls:258	776	F4964EFE9922ADA3
+X	matches:258	2324	76E1513956341449
+X	mixed:258	433	B17E5A652A12F128
+X	not-add:258	517	9326D60EFB51A406
+X	where-nest:84	506	5F086AC2C6C3F929
+X	where-nest:85	512	C4916AB80D034ADA
+X	where-nest:86	518	658EEAF735A43655
+X	where-nest:127	764	082D427371E73093
+X	where-nest:128	770	9985F6652F5F0833
+X	where-nest:129	776	2F9C9F0A7F50CF8E
+X	and-of-nots:256	768	2DB20F4D1A487439
+X	and-of-nots:257	771	5FCD25453CACB6B5
+X	and-of-nots:258	774	7EA417384FEB70E9
+E	match { a -> F(match { b -> 1, else -> 2 }, 3), else -> 4 }	25	B7A4706F33B38026

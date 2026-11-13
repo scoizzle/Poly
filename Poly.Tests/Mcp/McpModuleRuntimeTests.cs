@@ -1,6 +1,5 @@
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Runtime;
-using Poly.Mcp.Tools;
 
 namespace Poly.Tests.Mcp;
 
@@ -12,13 +11,13 @@ public class McpModuleRuntimeTests {
     [Test]
     public async Task McpCreate_ExecutesCachedModuleCreate() {
         var (sessionId, _) = McpTestTools.Store.Create("ModuleRuntime");
-        await Assert.That(McpTestTools.Dsl.ApplyDsl(sessionId, """
+        await Assert.That(McpTestTools.Surface.Define(sessionId, """
             domain Ledger
             Entry: entity { Memo: Text }
             """).Success).IsTrue();
 
-        var create = McpTestTools.Runtime.CreateInstance(sessionId, "Entry", """{"Memo":"first"}""");
-        await Assert.That(create.Success).IsTrue();
+        var create = McpTestTools.Surface.Create(sessionId, "Entry", """{"Memo":"first"}""");
+        await Assert.That(create.Ok).IsTrue();
 
         await Assert.That(McpTestTools.Store.TryGet(sessionId, out var state)).IsTrue();
         await Assert.That(RuntimeAnalysisCache.TryGetModuleMethod(

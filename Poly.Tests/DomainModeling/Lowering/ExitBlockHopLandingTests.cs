@@ -149,7 +149,7 @@ public class ExitBlockHopLandingTests {
         var (domain, analysis) = EvolvedDomain.FromDsl(dsl);
         var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var z = types.Single(t => t.Name == "Z");
-        var leave = (MethodDefinitionNode)z.Methods!.Single(m => m.Name == "Leave");
+        var leave = (MethodDefinitionNode)z.Methods!.Single(m => m.Name == ActionBodies.Prefix + "Leave");
         var nodes = Descendants(leave.Body!).ToList();
 
         var stageAssigns = nodes.OfType<Assignment>().Count(a =>

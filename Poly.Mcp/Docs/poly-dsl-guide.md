@@ -1388,7 +1388,18 @@ diverging:
   narrows a property's value range is combined with the property's own constraints before
   judging the downstream violation — e.g. `assign Qty to Qty + 10` under
   `require Qty <= 80` on `Qty: Number range(0, 90)` is provably within range and produces
-  no diagnostic.
+  no diagnostic. A guard narrows through comparisons of a property with a literal (on
+  either side) or another property, joined by `and`, `or` and `not`: `or` narrows to the
+  span of its arms (`X <= 4 or X <= 8` gives `[…, 8]`, while `X <= 2 or X >= 9` narrows
+  nothing), and `not` negates (`not (X >= 10)` is `X < 10`). On a `Number` a strict bound
+  is exact (`N < 100` gives N ≤ 99, `X > 0` gives X ≥ 1) and `X != 10` drops 10 when it
+  is the range's end; on a `Decimal` a strict bound keeps its endpoint (`D < 5.5` gives
+  D ≤ 5.5) and `!=` narrows nothing, except that a point range minus its value is empty
+  (`D == 5.5 and D != 5.5` is `DMCS001`). A guard no value can satisfy (`X > 10` on
+  `X: Number range(0, 10)`) makes the action's preconditions unsatisfiable (`DMCS001`).
+  An optional property's range describes its present values: a guard that also holds when
+  it is null (`not (W >= 10)`, `W != 5`) narrows those values but never rejects the guard.
+  `require not P` is not used for narrowing.
 - **Silence means verified (Q4)** — with two exceptions: non-`range` kinds on `assign`
   and initializer writes (V-08). A write analysis cannot
   decide — a bare property or parameter with no bound, an operator the
@@ -1440,8 +1451,8 @@ diverging:
 - **`if` conditions are implicit branch preconditions.** A conditional effect's
   then-branch is analyzed with the condition's bounds applied (e.g.
   `if (Qty >= 10) { assign Qty to Qty - 5 }` runs with Qty ∈ [10, …], so the assignment is
-  judged against that narrower range); the else-branch uses the negated condition where it
-  is a single comparison. This removes false-positive downstream warnings on guarded
+  judged against that narrower range); the else-branch uses the negated condition
+  (`not`, `and` and `or` included, as for a guard). This removes false-positive downstream warnings on guarded
   branches and is part of the same additive invariant model as guard policies.
 - **Call-chain propagation.** `invoke B` runs B's effects under the caller's context: the
   caller's guard/if-condition narrowing is intersected with B's own preconditions, and the

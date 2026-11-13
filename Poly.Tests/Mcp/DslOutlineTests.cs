@@ -150,7 +150,7 @@ public class DslOutlineTests {
             reader.Consume(1);
         }
 
-        await Assert.That(tokens.Select(t => text.Substring(t.Offset, t.Length)).ToArray())
+        await Assert.That(tokens.Select(t => text.Substring(t.Start, t.Length)).ToArray())
             .IsEquivalentTo(new[] { "A", ":", "\"x\\\"y\"", "B", "12", "\"open" });
         await Assert.That(tokens[2].Text).IsEqualTo("x\"y");
         await Assert.That(tokens.Select(t => (t.Line, t.Col)).ToArray())

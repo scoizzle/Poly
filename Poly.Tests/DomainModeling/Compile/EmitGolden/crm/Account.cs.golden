@@ -114,6 +114,29 @@ internal class Account : Poly.Runtime.IActionScoped
     }
     internal DomainResult<Site> PlaceHq(string city, string region)
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfPlaceHq(city, region);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult<Site> __BodyOfPlaceHq(string city, string region)
+    {
         if (this.CurrentStage != AccountStage.Open)
         {
             return DomainResult<Site>.Failure(Poly.Runtime.DomainFailure.Stage("'PlaceHq' requires stage 'Open' on entity 'Account'.", "Account.PlaceHq", "Open"));
@@ -132,6 +155,29 @@ internal class Account : Poly.Runtime.IActionScoped
     }
     internal DomainResult<Contact> AddContact(string name, string email, Poly.Runtime.IStoragePort db)
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfAddContact(name, email, db);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult<Contact> __BodyOfAddContact(string name, string email, Poly.Runtime.IStoragePort db)
+    {
         if (this.CurrentStage != AccountStage.Open)
         {
             return DomainResult<Contact>.Failure(Poly.Runtime.DomainFailure.Stage("'AddContact' requires stage 'Open' on entity 'Account'.", "Account.AddContact", "Open"));
@@ -145,6 +191,29 @@ internal class Account : Poly.Runtime.IActionScoped
         return DomainResult<Contact>.Success(created1);
     }
     internal DomainResult<Contact> ConvertLead(Lead lead, Poly.Runtime.IStoragePort db)
+    {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfConvertLead(lead, db);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult<Contact> __BodyOfConvertLead(Lead lead, Poly.Runtime.IStoragePort db)
     {
         if (this.CurrentStage != AccountStage.Open)
         {
@@ -160,6 +229,29 @@ internal class Account : Poly.Runtime.IActionScoped
     }
     internal DomainResult<Opportunity> OpenDeal(string title, long amount)
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfOpenDeal(title, amount);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult<Opportunity> __BodyOfOpenDeal(string title, long amount)
+    {
         if (this.CurrentStage != AccountStage.Open)
         {
             return DomainResult<Opportunity>.Failure(Poly.Runtime.DomainFailure.Stage("'OpenDeal' requires stage 'Open' on entity 'Account'.", "Account.OpenDeal", "Open"));
@@ -174,6 +266,29 @@ internal class Account : Poly.Runtime.IActionScoped
     }
     internal DomainResult Archive()
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfArchive();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfArchive()
+    {
         if (this.CurrentStage != AccountStage.Open)
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Archive' requires stage 'Open' on entity 'Account'.", "Account.Archive", "Open"));
@@ -182,6 +297,29 @@ internal class Account : Poly.Runtime.IActionScoped
         return DomainResult.Success();
     }
     internal DomainResult<Ticket> OpenTicket(string subject)
+    {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfOpenTicket(subject);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult<Ticket> __BodyOfOpenTicket(string subject)
     {
         if (this.CurrentStage != AccountStage.Open)
         {
@@ -196,6 +334,29 @@ internal class Account : Poly.Runtime.IActionScoped
         return DomainResult<Ticket>.Success(created1);
     }
     internal DomainResult Restore()
+    {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfRestore();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfRestore()
     {
         if (this.CurrentStage != AccountStage.Archived)
         {

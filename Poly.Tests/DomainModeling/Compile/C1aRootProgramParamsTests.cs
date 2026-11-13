@@ -32,7 +32,7 @@ public class C1aRootProgramParamsTests {
             """);
         var exec = ModuleExec.For(domain);
         var module = session.Lower(domain, analysis);
-        var issue = module.First(t => t.Name == "Lot").Methods!.First(m => m.Name == "Issue");
+        var issue = module.First(t => t.Name == "Lot").Methods.BodyMethod("Issue")!;
         await Assert.That(ContainsNode<Parameter>(issue.Body!, "plate")).IsTrue();
         await Assert.That(ContainsNode<Member>(issue.Body!, "plate")).IsFalse();
         var printed = new CSharpGenerator().Generate(issue.Body!);

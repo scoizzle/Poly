@@ -19,6 +19,14 @@ namespace Poly.DomainModeling.Queries;
 public static class DomainHtmlExporter {
     public static string Export(Domain domain) {
         ArgumentNullException.ThrowIfNull(domain);
+        return Export(new DomainExportContext(domain));
+    }
+
+    public static string Export(DomainExportContext context) {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(context.Domain);
+        var domain = context.Domain;
+        var printer = new Lazy<DomainDslPrinter>(context.CreatePrinter);
 
         var ordered = DomainExportOrder.Types(domain);
         var entities = ordered.OfType<Entity>().ToList();
@@ -59,7 +67,7 @@ public static class DomainHtmlExporter {
 
         sb.AppendLine("<main>");
         foreach (var entity in entities)
-            AppendEntity(sb, entity);
+            AppendEntity(sb, entity, printer);
         foreach (var enumType in enums)
             AppendEnum(sb, enumType);
         foreach (var valueType in valueTypes)
@@ -74,7 +82,7 @@ public static class DomainHtmlExporter {
         return sb.ToString();
     }
 
-    private static void AppendEntity(StringBuilder sb, Entity entity) {
+    private static void AppendEntity(StringBuilder sb, Entity entity, Lazy<DomainDslPrinter> printer) {
         sb.AppendLine($"<section id=\"entity-{E(entity.Name)}\">");
         sb.AppendLine($"<h2>{E(entity.Name)}</h2>");
         AppendTerm(sb, entity.Facets);
@@ -127,6 +135,17 @@ public static class DomainHtmlExporter {
                     : string.Join(", ", action.Policies.Select(p => p.Name));
                 sb.AppendLine($"<tr><td>{E(action.Name)}</td><td>{E(stage ?? "entity")}</td>" +
                     $"<td>{E(parameters)}</td><td>{E(guards)}</td></tr>");
+            }
+            sb.AppendLine("</tbody></table>");
+        }
+
+        var policies = PolicyProjection.For(entity, printer);
+        if (policies.Count > 0) {
+            sb.AppendLine("<h3>Policies</h3>");
+            sb.AppendLine("<table><thead><tr><th>Policy</th><th>Scope</th><th>Condition</th></tr></thead><tbody>");
+            foreach (var policy in policies) {
+                sb.AppendLine($"<tr><td>{E(policy.Name)}</td><td>{E(policy.Scope)}</td>" +
+                    $"<td><code>{E(policy.ConditionText)}</code></td></tr>");
             }
             sb.AppendLine("</tbody></table>");
         }

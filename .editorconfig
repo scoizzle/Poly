@@ -20,6 +20,9 @@ tab_width = 4
 # New line preferences
 insert_final_newline = false
 
+# G-12 transitional DslToken.Text shim (POLYTOK001); G-13 moves its readers onto spans and deletes the shim and these two lines.
+dotnet_diagnostic.POLYTOK001.severity = suggestion
+
 #### .NET Coding Conventions ####
 [*.{cs,vb}]
 

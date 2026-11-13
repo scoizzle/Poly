@@ -57,8 +57,8 @@ public sealed class PolyCompiler {
     /// Compiles <paramref name="text"/>. Writes nothing; <see cref="CompileResult.Files"/> is in memory.
     /// </summary>
     /// <param name="target">
-    /// The host target (<c>posix</c>, <c>windows</c>), or null when the host names none. It is a
-    /// host fact: never read from the document's <c>uses</c> line.
+    /// The host target, or null when the host names none. A target the catalog does not declare is
+    /// <c>DSL0005</c>. It is a host fact: never read from the document's <c>uses</c> line.
     /// </param>
     public CompileResult Compile(
         string text, string file = "<input>", CancellationToken cancel = default, string? target = null) {
@@ -99,6 +99,12 @@ public sealed class PolyCompiler {
         var diags = new List<CompileDiagnostic>();
         string? domainName = null;
         CompileResult Fail() => new(file, domainName, diags, [], null, null, null, null);
+
+        // A host misconfiguration is independent of the document: report it first and alone.
+        if (_options.Catalog.TargetError(target) is { } targetError) {
+            diags.Add(build.Unplaced(Severities.Error, DiagnosticCodes.UnknownTarget, targetError));
+            return Fail();
+        }
 
         // A leading UTF-8 BOM is an encoding artifact the scanner skips; strip it here too, so a
         // BOM-only document reports the same empty-document error as an empty one rather than a
@@ -315,7 +321,7 @@ public sealed class PolyCompiler {
                 continue;
             if (++count == occurrence) {
                 var token = tree.Tokens[i + 1];
-                return build.Span(token.Offset, token.Length, severity, code, message, "");
+                return build.Span(token.Start, token.Length, severity, code, message, "");
             }
         }
         return build.Unplaced(severity, code, message, "");
@@ -347,7 +353,7 @@ public sealed class PolyCompiler {
         for (var i = 2; DslSyntaxTree.TryReadUse(tokens, i, out var id, out _, out var next); i = next) {
             if (!seen.Add(id)) {
                 var token = tokens[i + 1];
-                return build.Span(token.Offset, token.Length, Severities.Error,
+                return build.Span(token.Start, token.Length, Severities.Error,
                     DiagnosticCodes.DuplicateExtension, ex.Message, "");
             }
         }

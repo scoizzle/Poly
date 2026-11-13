@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
+using System.Runtime.InteropServices;
 
 using Poly.Grammar;
 
@@ -8,19 +9,22 @@ namespace Poly.DomainModeling.Language;
 /// <summary>
 /// Product DSL scanner on the buffered reader base. The base owns buffering +
 /// committed position (Peek/Consume); this type owns the physical decoding seam:
-/// char navigation, line/column tracking, comments, strings, numbers, and the
-/// keyword map. Positions are tracked here, on the language side.
+/// char navigation, comments, strings, numbers, and the keyword map. A token is a
+/// range into <see cref="Source"/>; line and column come from its line table.
 /// </summary>
 public sealed class DslTokenReader : BufferedTokenReader<DslToken, DslTokenKind> {
     private readonly string _text;
     private int _pos;
-    private int _line = 1;
-    private int _col = 1;
     private int _startPos;
-    private int _startLine = 1;
-    private int _startCol = 1;
 
-    public DslTokenReader(string text) {
+    public DslTokenReader(string text) : this(new SourceText(text), text) {
+    }
+
+    public DslTokenReader(SourceText source) : this(source, TextOf(source)) {
+    }
+
+    private DslTokenReader(SourceText source, string text) {
+        Source = source;
         _text = text;
         // A leading UTF-8 BOM is an encoding artifact, not a character of the document: start
         // scanning after it while line and column still begin at 1:1. Offsets stay relative to
@@ -29,16 +33,26 @@ public sealed class DslTokenReader : BufferedTokenReader<DslToken, DslTokenKind>
         _pos = text.Length > 0 && text[0] == '\uFEFF' ? 1 : 0;
     }
 
+    /// <summary>The document every token of this reader points into.</summary>
+    public SourceText Source { get; }
+
+    // The string a SourceText was built over (the public constructor's own string), or a copy.
+    private static string TextOf(SourceText source) {
+        ArgumentNullException.ThrowIfNull(source);
+        return MemoryMarshal.TryGetString(source.Text, out var text, out var start, out var length)
+            && start == 0 && length == text.Length
+            ? text
+            : source.Text.ToString();
+    }
+
     public override bool EndOfStream(DslTokenKind kind) => kind == DslTokenKind.EndOfFile;
 
     protected override DslToken ScanNextToken() {
         SkipWhitespaceAndComments();
         _startPos = _pos;
-        _startLine = _line;
-        _startCol = _col;
 
         if (_pos >= _text.Length)
-            return Make(DslTokenKind.EndOfFile, "");
+            return Make(DslTokenKind.EndOfFile);
 
         var ch = PeekChar();
 
@@ -54,12 +68,12 @@ public sealed class DslTokenReader : BufferedTokenReader<DslToken, DslTokenKind>
             case ']': return Advance(DslTokenKind.RBracket);
         }
 
-        if (ch == '-' && PeekChar(1) == '>') return TwoChar("->", DslTokenKind.Arrow);
-        if (ch == '>' && PeekChar(1) == '=') return TwoChar(">=", DslTokenKind.Gte);
-        if (ch == '<' && PeekChar(1) == '=') return TwoChar("<=", DslTokenKind.Lte);
-        if (ch == '=' && PeekChar(1) == '=') return TwoChar("==", DslTokenKind.Eq);
+        if (ch == '-' && PeekChar(1) == '>') return TwoChar(DslTokenKind.Arrow);
+        if (ch == '>' && PeekChar(1) == '=') return TwoChar(DslTokenKind.Gte);
+        if (ch == '<' && PeekChar(1) == '=') return TwoChar(DslTokenKind.Lte);
+        if (ch == '=' && PeekChar(1) == '=') return TwoChar(DslTokenKind.Eq);
         if (ch == '=') return Advance(DslTokenKind.SingleEq);
-        if (ch == '!' && PeekChar(1) == '=') return TwoChar("!=", DslTokenKind.Neq);
+        if (ch == '!' && PeekChar(1) == '=') return TwoChar(DslTokenKind.Neq);
 
         if (ch == '>') return Advance(DslTokenKind.Gt);
         if (ch == '<') return Advance(DslTokenKind.Lt);
@@ -75,11 +89,13 @@ public sealed class DslTokenReader : BufferedTokenReader<DslToken, DslTokenKind>
             return ScanNumber();
 
         if (IsWordStart(ch)) {
-            var word = ScanWord();
-            return Make(WordToKind(word), word);
+            while (_pos < _text.Length && IsWordPart(_text[_pos]))
+                _pos++;
+            return Make(WordToKind(_text.AsSpan(_startPos, _pos - _startPos)));
         }
 
-        throw GrammarError.Error($"Unexpected character {Describe(ch)}", _line, _col);
+        var (line, col) = Source.GetLineColumn(_pos);
+        throw GrammarError.Error($"Unexpected character {Describe(ch)}", line, col);
     }
 
     /// <summary>
@@ -95,77 +111,56 @@ public sealed class DslTokenReader : BufferedTokenReader<DslToken, DslTokenKind>
         || char.GetUnicodeCategory(ch) is UnicodeCategory.Format or UnicodeCategory.OtherNotAssigned
             or UnicodeCategory.PrivateUse;
 
-    private DslToken Make(DslTokenKind kind, string text) => new(kind, text, _startLine, _startCol, _startPos, _pos - _startPos);
+    private DslToken Make(DslTokenKind kind) => new(kind, _startPos, _pos - _startPos, Source);
 
     private DslToken Advance(DslTokenKind kind) {
-        var text = PeekChar().ToString();
-        AdvanceChar();
-        return Make(kind, text);
+        _pos++;
+        return Make(kind);
     }
 
-    private DslToken TwoChar(string text, DslTokenKind kind) {
-        AdvanceChar();
-        AdvanceChar();
-        return Make(kind, text);
+    private DslToken TwoChar(DslTokenKind kind) {
+        _pos += 2;
+        return Make(kind);
     }
 
     private void SkipWhitespaceAndComments() {
         while (_pos < _text.Length) {
             var ch = PeekChar();
-            if (ch == '\n' || ch == '\r' || ch is ' ' or '\t') { AdvanceChar(); continue; }
+            if (ch == '\n' || ch == '\r' || ch is ' ' or '\t') { _pos++; continue; }
             if (ch == '/' && PeekChar(1) == '/') {
-                while (_pos < _text.Length && PeekChar() != '\n') AdvanceChar();
+                while (_pos < _text.Length && PeekChar() != '\n') _pos++;
                 continue;
             }
             break;
         }
     }
 
+    // Raw range only: the quotes and escapes stay in the slice; DslToken.Unescape decodes them.
     private DslToken ScanString() {
-        AdvanceChar(); // skip opening "
-        var sb = new StringBuilder();
+        _pos++; // skip opening "
         while (_pos < _text.Length) {
             var ch = PeekChar();
-            if (ch == '"') { AdvanceChar(); break; }
-            if (ch == '\\' && _pos + 1 < _text.Length) {
-                var next = PeekChar(1);
-                if (next is '"' or '\\') {
-                    sb.Append(next);
-                    AdvanceChar();
-                    AdvanceChar();
-                    continue;
-                }
+            if (ch == '"') { _pos++; break; }
+            if (ch == '\\' && _pos + 1 < _text.Length && PeekChar(1) is '"' or '\\') {
+                _pos += 2;
+                continue;
             }
-            sb.Append(ch);
-            AdvanceChar();
+            _pos++;
         }
-        return Make(DslTokenKind.StringLiteral, sb.ToString());
+        return Make(DslTokenKind.StringLiteral);
     }
 
     private DslToken ScanNumber() {
-        var sb = new StringBuilder();
-        while (_pos < _text.Length && char.IsDigit(PeekChar())) {
-            sb.Append(PeekChar());
-            AdvanceChar();
-        }
+        while (_pos < _text.Length && char.IsDigit(PeekChar()))
+            _pos++;
         // Fractional bounds (range(0.01, 1.0)): consume a `.` and trailing digits.
         if (_pos < _text.Length && PeekChar() == '.'
             && _pos + 1 < _text.Length && char.IsDigit(_text[_pos + 1])) {
-            sb.Append('.');
-            AdvanceChar();
-            while (_pos < _text.Length && char.IsDigit(PeekChar())) {
-                sb.Append(PeekChar());
-                AdvanceChar();
-            }
+            _pos++;
+            while (_pos < _text.Length && char.IsDigit(PeekChar()))
+                _pos++;
         }
-        return Make(DslTokenKind.Number, sb.ToString());
-    }
-
-    private string ScanWord() {
-        var start = _pos;
-        while (_pos < _text.Length && IsWordPart(PeekChar()))
-            AdvanceChar();
-        return _text[start.._pos];
+        return Make(DslTokenKind.Number);
     }
 
     private static bool IsWordStart(char ch) => char.IsLetter(ch) || ch == '_';
@@ -198,15 +193,9 @@ public sealed class DslTokenReader : BufferedTokenReader<DslToken, DslTokenKind>
 
     private char PeekChar(int ahead = 0) => _pos + ahead < _text.Length ? _text[_pos + ahead] : '\0';
 
-    private void AdvanceChar() {
-        if (_pos >= _text.Length) return;
-        var ch = _text[_pos];
-        _pos++;
-        if (ch == '\n') { _line++; _col = 1; }
-        else { _col++; }
-    }
+    private static DslTokenKind WordToKind(string word) => WordToKind(word.AsSpan());
 
-    private static DslTokenKind WordToKind(string word) => word switch {
+    private static DslTokenKind WordToKind(ReadOnlySpan<char> word) => word switch {
         "domain" => DslTokenKind.Domain,
         "uses" => DslTokenKind.Uses,
         "entity" => DslTokenKind.Entity,

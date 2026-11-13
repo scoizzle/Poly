@@ -46,6 +46,29 @@ internal class Order : Poly.Runtime.IActionScoped
     }
     internal DomainResult Cancel(string reason)
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfCancel(reason);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfCancel(string reason)
+    {
         var assignValue0 = reason;
         if (System.String.IsNullOrEmpty(assignValue0))
         {
@@ -62,6 +85,29 @@ internal class Order : Poly.Runtime.IActionScoped
     }
     internal DomainResult ApplyDiscount(long amount)
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfApplyDiscount(amount);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfApplyDiscount(long amount)
+    {
         var assignValue0 = amount;
         if (assignValue0 < 0m)
         {
@@ -76,6 +122,29 @@ internal class Order : Poly.Runtime.IActionScoped
     }
     internal DomainResult Pay()
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfPay();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfPay()
+    {
         if (this.CurrentStage != OrderStage.Pending)
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Pay' requires stage 'Pending' on entity 'Order'.", "Order.Pay", "Pending"));
@@ -85,6 +154,29 @@ internal class Order : Poly.Runtime.IActionScoped
         return DomainResult.Success();
     }
     internal DomainResult Ship()
+    {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfShip();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfShip()
     {
         if (this.CurrentStage != OrderStage.Paid)
         {

@@ -22,6 +22,29 @@ internal class Delivery : Poly.Runtime.IActionScoped
     public Truck? Truck { get; private set; }
     internal DomainResult Confirm(string notes)
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfConfirm(notes);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfConfirm(string notes)
+    {
         var assignValue0 = notes;
         if (System.String.IsNullOrEmpty(assignValue0))
         {

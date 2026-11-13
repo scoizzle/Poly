@@ -45,6 +45,29 @@ internal class EventHold : Poly.Runtime.IActionScoped
     public EventHoldStage CurrentStage { get; private set; }
     internal DomainResult Confirm()
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfConfirm();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfConfirm()
+    {
         if (this.CurrentStage != EventHoldStage.Requested)
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Confirm' requires stage 'Requested' on entity 'EventHold'.", "EventHold.Confirm", "Requested"));
@@ -66,6 +89,29 @@ internal class EventHold : Poly.Runtime.IActionScoped
     }
     internal DomainResult Cancel()
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfCancel();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfCancel()
+    {
         if (this.CurrentStage == EventHoldStage.Requested || this.CurrentStage == EventHoldStage.Confirmed)
         {
             this.CurrentStage = EventHoldStage.Cancelled;
@@ -74,6 +120,29 @@ internal class EventHold : Poly.Runtime.IActionScoped
         return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Cancel' is not valid for the current stage on entity 'EventHold'.", "EventHold.Cancel"));
     }
     internal DomainResult StartHall()
+    {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfStartHall();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfStartHall()
     {
         if (this.CurrentStage != EventHoldStage.Confirmed)
         {
@@ -101,6 +170,29 @@ internal class EventHold : Poly.Runtime.IActionScoped
     }
     internal DomainResult StartSection()
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfStartSection();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfStartSection()
+    {
         if (this.CurrentStage != EventHoldStage.Confirmed)
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'StartSection' requires stage 'Confirmed' on entity 'EventHold'.", "EventHold.StartSection", "Confirmed"));
@@ -122,6 +214,29 @@ internal class EventHold : Poly.Runtime.IActionScoped
         return DomainResult.Success();
     }
     internal DomainResult ReleaseHall()
+    {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfReleaseHall();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfReleaseHall()
     {
         if (this.CurrentStage != EventHoldStage.InUse)
         {
@@ -153,6 +268,29 @@ internal class EventHold : Poly.Runtime.IActionScoped
         return DomainResult.Success();
     }
     internal DomainResult ReleaseSection()
+    {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfReleaseSection();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfReleaseSection()
     {
         if (this.CurrentStage != EventHoldStage.InUse)
         {

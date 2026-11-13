@@ -1246,11 +1246,14 @@ are that entity's properties (and the action's parameters), and it must be Boole
 
 **Every expression has a type.** An expression the analyzer cannot type, where its type is needed (assigned,
 compared, passed, returned, a condition or an arithmetic operand), is `DMSEM006`
-(`cannot determine the type of '…': <why>`), unless a more specific error already names it (an unknown property
-is `DMSEM005`, an unknown function `DMFUN001`). Typical causes: a path through a `many` relationship
+(`cannot determine the type of '…': <why>`), unless a more specific error already names it: a name that is no
+property, parameter or enum member is `DMSEM005` wherever it appears, an unknown function `DMFUN001`. Typical causes: a path through a `many` relationship
 (`parts Qty`: use `any`/`count`/`sum`), a name that is no property, parameter or enum member, a relationship
 read in a function body (a function has only its parameters). Operands of different kinds do not compare:
-`5 == "x"` and `count lines == true` are `DMSEM003`.
+`5 == "x"` and `count lines == true` are `DMSEM003`. A `default(...)` value is checked the same way, against the
+property's type, and cannot read the entity's properties (it is evaluated before the instance exists).
+A pack that adds its own expression form must register the form's type (`SessionBuilder.Meaning.Inference.Register`)
+and analyze with the session that parsed it; a form with no registered type is `DMSEM006` wherever it is used.
 
 **Empty collection semantics:**
 

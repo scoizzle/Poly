@@ -293,7 +293,7 @@ public class DslCompilerSqliteOracleTests {
         // order — Title was declared before Genre. The expected order changed here
         // deliberately; ordinal order (Genre, Title) was the old, swap-prone shape.
         var titleAt = prog.IndexOf("public string Title { get; init; }", StringComparison.Ordinal);
-        var genreAt = prog.IndexOf("[EnumDataType(typeof(Genre))]", StringComparison.Ordinal);
+        var genreAt = prog.IndexOf("[EnumDataType(typeof(Demo.Genre))]", StringComparison.Ordinal);
         await Assert.That(titleAt).IsGreaterThanOrEqualTo(0);
         await Assert.That(genreAt).IsGreaterThanOrEqualTo(0);
         await Assert.That(titleAt).IsLessThan(genreAt)

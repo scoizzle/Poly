@@ -27,7 +27,7 @@ public class CacheSessionOwnershipTests {
     [Test]
     public async Task ExecutionPair_IsCreatedOnce_AndReused() {
         var (sessionId, _) = McpTestTools.Store.Create("Owned");
-        await Assert.That(McpTestTools.Dsl.ApplyDsl(sessionId, Dsl).Success).IsTrue();
+        await Assert.That(McpTestTools.Surface.Define(sessionId, Dsl).Success).IsTrue();
         await Assert.That(McpTestTools.Store.TryGet(sessionId, out var state)).IsTrue();
 
         var first = state.Execution;
@@ -44,9 +44,9 @@ public class CacheSessionOwnershipTests {
     [Test]
     public async Task ExecutorAndExport_UseTheSameSession() {
         var (sessionId, _) = McpTestTools.Store.Create("Owned");
-        await Assert.That(McpTestTools.Dsl.ApplyDsl(sessionId, Dsl).Success).IsTrue();
-        await Assert.That(McpTestTools.Runtime.CreateInstance(sessionId, "Agent", """{"Handle":"a"}""").Success).IsTrue();
-        await Assert.That(McpTestTools.Oracle.ExportDomainToCSharp(sessionId).Success).IsTrue();
+        await Assert.That(McpTestTools.Surface.Define(sessionId, Dsl).Success).IsTrue();
+        await Assert.That(McpTestTools.Surface.Create(sessionId, "Agent", """{"Handle":"a"}""").Ok).IsTrue();
+        await Assert.That(McpTestTools.Surface.Export(sessionId, "csharp").Success).IsTrue();
 
         await Assert.That(McpTestTools.Store.TryGet(sessionId, out var state)).IsTrue();
         await Assert.That(ReferenceEquals(state.ExecutionSession, state.Execution.Session)).IsTrue();
@@ -61,7 +61,7 @@ public class CacheSessionOwnershipTests {
     [Test]
     public async Task AcceptedChange_ProducesANewDomainReference() {
         var (sessionId, _) = McpTestTools.Store.Create("Owned");
-        await Assert.That(McpTestTools.Dsl.ApplyDsl(sessionId, Dsl).Success).IsTrue();
+        await Assert.That(McpTestTools.Surface.Define(sessionId, Dsl).Success).IsTrue();
         await Assert.That(McpTestTools.Store.TryGet(sessionId, out var before)).IsTrue();
         var oldDomain = before.Domain;
 
@@ -79,7 +79,7 @@ public class CacheSessionOwnershipTests {
     [Test]
     public async Task RejectedChange_KeepsTheStateAndItsPair() {
         var (sessionId, _) = McpTestTools.Store.Create("Owned");
-        await Assert.That(McpTestTools.Dsl.ApplyDsl(sessionId, Dsl).Success).IsTrue();
+        await Assert.That(McpTestTools.Surface.Define(sessionId, Dsl).Success).IsTrue();
         await Assert.That(McpTestTools.Store.TryGet(sessionId, out var before)).IsTrue();
         var pair = before.Execution;
 

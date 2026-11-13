@@ -1,5 +1,3 @@
-using Poly.Mcp.Tools;
-
 namespace Poly.Tests.Mcp;
 
 /// <summary>
@@ -31,39 +29,39 @@ public class UniqueSurvivesExportTests {
     [Test]
     public async Task Create_DuplicateUnique_AfterCSharpExport_StillFails() {
         var (sessionId, _) = McpTestTools.Store.Create("ExportUnique");
-        var applied = McpTestTools.Dsl.ApplyDsl(sessionId, Dsl);
+        var applied = McpTestTools.Surface.Define(sessionId, Dsl);
         await Assert.That(applied.Success).IsTrue();
 
         // A live executor exists before the export, which is the order that broke.
-        var first = McpTestTools.Runtime.CreateInstance(sessionId, "Agent", """{"Handle":"sam"}""");
-        await Assert.That(first.Success).IsTrue();
+        var first = McpTestTools.Surface.Create(sessionId, "Agent", """{"Handle":"sam"}""");
+        await Assert.That(first.Ok).IsTrue();
 
-        var exported = McpTestTools.Oracle.ExportDomainToCSharp(sessionId);
+        var exported = McpTestTools.Surface.Export(sessionId, "csharp");
         await Assert.That(exported.Success).IsTrue();
 
-        var duplicate = McpTestTools.Runtime.CreateInstance(sessionId, "Agent", """{"Handle":"sam"}""");
-        await Assert.That(duplicate.Success).IsFalse()
+        var duplicate = McpTestTools.Surface.Create(sessionId, "Agent", """{"Handle":"sam"}""");
+        await Assert.That(duplicate.Ok).IsFalse()
             .Because("exporting the C# must not disable a unique constraint the domain declared");
-        await Assert.That(duplicate.Message).Contains("Unique constraint");
-        await Assert.That(duplicate.Message).Contains("Handle");
+        await Assert.That(duplicate.Summary).Contains("Unique constraint");
+        await Assert.That(duplicate.Summary).Contains("Handle");
     }
 
     [Test]
     public async Task Create_DuplicateUnique_WhenExportRanFirst_StillFails() {
         var (sessionId, _) = McpTestTools.Store.Create("ExportUnique");
-        var applied = McpTestTools.Dsl.ApplyDsl(sessionId, Dsl);
+        var applied = McpTestTools.Surface.Define(sessionId, Dsl);
         await Assert.That(applied.Success).IsTrue();
 
-        var exported = McpTestTools.Oracle.ExportDomainToCSharp(sessionId);
+        var exported = McpTestTools.Surface.Export(sessionId, "csharp");
         await Assert.That(exported.Success).IsTrue();
 
-        var first = McpTestTools.Runtime.CreateInstance(sessionId, "Agent", """{"Handle":"sam"}""");
-        await Assert.That(first.Success).IsTrue();
+        var first = McpTestTools.Surface.Create(sessionId, "Agent", """{"Handle":"sam"}""");
+        await Assert.That(first.Ok).IsTrue();
 
-        var duplicate = McpTestTools.Runtime.CreateInstance(sessionId, "Agent", """{"Handle":"sam"}""");
-        await Assert.That(duplicate.Success).IsFalse()
+        var duplicate = McpTestTools.Surface.Create(sessionId, "Agent", """{"Handle":"sam"}""");
+        await Assert.That(duplicate.Ok).IsFalse()
             .Because("an export before the executor exists must not leave it lowering without the unique check");
-        await Assert.That(duplicate.Message).Contains("Unique constraint");
+        await Assert.That(duplicate.Summary).Contains("Unique constraint");
     }
 
     /// <summary>
@@ -73,22 +71,22 @@ public class UniqueSurvivesExportTests {
     [Test]
     public async Task Assign_DuplicateUnique_AfterCSharpExport_StillFails() {
         var (sessionId, _) = McpTestTools.Store.Create("ExportUnique");
-        var applied = McpTestTools.Dsl.ApplyDsl(sessionId, Dsl);
+        var applied = McpTestTools.Surface.Define(sessionId, Dsl);
         await Assert.That(applied.Success).IsTrue();
 
-        var sam = McpTestTools.Runtime.CreateInstance(sessionId, "Agent", """{"Handle":"sam"}""");
-        await Assert.That(sam.Success).IsTrue();
-        var kim = McpTestTools.Runtime.CreateInstance(sessionId, "Agent", """{"Handle":"kim"}""");
-        await Assert.That(kim.Success).IsTrue();
+        var sam = McpTestTools.Surface.Create(sessionId, "Agent", """{"Handle":"sam"}""");
+        await Assert.That(sam.Ok).IsTrue();
+        var kim = McpTestTools.Surface.Create(sessionId, "Agent", """{"Handle":"kim"}""");
+        await Assert.That(kim.Ok).IsTrue();
 
-        var exported = McpTestTools.Oracle.ExportDomainToCSharp(sessionId);
+        var exported = McpTestTools.Surface.Export(sessionId, "csharp");
         await Assert.That(exported.Success).IsTrue();
 
-        var kimId = InstanceIdOf(kim);
-        var relabel = McpTestTools.Runtime.InvokeAction(sessionId, kimId, "Relabel", """{"handle":"sam"}""");
-        await Assert.That(relabel.Success).IsFalse()
+        var kimId = kim.InstanceId;
+        var relabel = McpTestTools.Surface.Invoke(sessionId, kimId, "Relabel", """{"handle":"sam"}""");
+        await Assert.That(relabel.Ok).IsFalse()
             .Because("an assign to a unique property must stay checked after an export");
-        await Assert.That(relabel.Message).Contains("Unique constraint");
+        await Assert.That(relabel.Summary).Contains("Unique constraint");
     }
 
     /// <summary>
@@ -98,18 +96,18 @@ public class UniqueSurvivesExportTests {
     [Test]
     public async Task Create_DuplicateUnique_AfterTwoExportsAroundACreate_StillFails() {
         var (sessionId, _) = McpTestTools.Store.Create("ExportUnique");
-        var applied = McpTestTools.Dsl.ApplyDsl(sessionId, Dsl);
+        var applied = McpTestTools.Surface.Define(sessionId, Dsl);
         await Assert.That(applied.Success).IsTrue();
 
-        await Assert.That(McpTestTools.Oracle.ExportDomainToCSharp(sessionId).Success).IsTrue();
-        var first = McpTestTools.Runtime.CreateInstance(sessionId, "Agent", """{"Handle":"sam"}""");
-        await Assert.That(first.Success).IsTrue();
-        await Assert.That(McpTestTools.Oracle.ExportDomainToCSharp(sessionId).Success).IsTrue();
+        await Assert.That(McpTestTools.Surface.Export(sessionId, "csharp").Success).IsTrue();
+        var first = McpTestTools.Surface.Create(sessionId, "Agent", """{"Handle":"sam"}""");
+        await Assert.That(first.Ok).IsTrue();
+        await Assert.That(McpTestTools.Surface.Export(sessionId, "csharp").Success).IsTrue();
 
-        var duplicate = McpTestTools.Runtime.CreateInstance(sessionId, "Agent", """{"Handle":"sam"}""");
-        await Assert.That(duplicate.Success).IsFalse()
+        var duplicate = McpTestTools.Surface.Create(sessionId, "Agent", """{"Handle":"sam"}""");
+        await Assert.That(duplicate.Ok).IsFalse()
             .Because("two exports around a create must not leave the executor on a lower without the unique check");
-        await Assert.That(duplicate.Message).Contains("Unique constraint");
+        await Assert.That(duplicate.Summary).Contains("Unique constraint");
     }
 
     /// <summary>
@@ -128,30 +126,24 @@ public class UniqueSurvivesExportTests {
             """;
 
         var (implicitId, _) = McpTestTools.Store.Create("Alpha");
-        await Assert.That(McpTestTools.Dsl.ApplyDsl(implicitId, $"domain Alpha\n{Body}").Success).IsTrue();
+        await Assert.That(McpTestTools.Surface.Define(implicitId, $"domain Alpha\n{Body}").Success).IsTrue();
 
         var (explicitId, _) = McpTestTools.Store.Create("Beta");
-        await Assert.That(McpTestTools.Dsl.ApplyDsl(explicitId, $"domain Beta\nuses persistence\n{Body}").Success).IsTrue();
+        await Assert.That(McpTestTools.Surface.Define(explicitId, $"domain Beta\nuses persistence\n{Body}").Success).IsTrue();
 
-        var implicitExport = McpTestTools.Oracle.ExportDomainToCSharp(implicitId);
-        var explicitExport = McpTestTools.Oracle.ExportDomainToCSharp(explicitId);
+        var implicitExport = McpTestTools.Surface.Export(implicitId, "csharp");
+        var explicitExport = McpTestTools.Surface.Export(explicitId, "csharp");
         await Assert.That(implicitExport.Success).IsTrue();
         await Assert.That(explicitExport.Success).IsTrue();
 
-        var implicitSource = SourceOf(implicitExport);
-        var explicitSource = SourceOf(explicitExport);
+        var implicitSource = implicitExport.Content;
+        var explicitSource = explicitExport.Content;
 
         await Assert.That(implicitSource).Contains("ExistsWithHandle")
             .Because("the printed Create must carry the module's unique guard, not a stub");
         await Assert.That(explicitSource).Contains("ExistsWithHandle");
         await Assert.That(Normalise(implicitSource)).IsEqualTo(Normalise(explicitSource))
             .Because("the MCP overlay makes `uses persistence` implicit, so the export must not depend on it");
-    }
-
-    private static string SourceOf(DomainToolResponse response) {
-        var json = System.Text.Json.JsonSerializer.Serialize(response.Data);
-        using var document = System.Text.Json.JsonDocument.Parse(json);
-        return document.RootElement.GetProperty("csharp").GetString()!;
     }
 
     /// <summary>
@@ -162,29 +154,4 @@ public class UniqueSurvivesExportTests {
     private static string Normalise(string source) =>
         source.Replace("Alpha", "Domain", StringComparison.Ordinal)
               .Replace("Beta", "Domain", StringComparison.Ordinal);
-
-    /// <summary>The instance id the tool handed back, so the test does not depend on the payload shape.</summary>
-    private static string InstanceIdOf(DomainToolResponse response) {
-        var json = System.Text.Json.JsonSerializer.Serialize(response.Data);
-        using var document = System.Text.Json.JsonDocument.Parse(json);
-        return Find(document.RootElement)
-            ?? throw new InvalidOperationException($"no instanceId in '{json}'");
-
-        static string? Find(System.Text.Json.JsonElement element) {
-            if (element.ValueKind == System.Text.Json.JsonValueKind.Object) {
-                foreach (var property in element.EnumerateObject()) {
-                    if (string.Equals(property.Name, "instanceId", StringComparison.Ordinal))
-                        return property.Value.GetString();
-                    if (Find(property.Value) is { } nested)
-                        return nested;
-                }
-            }
-            else if (element.ValueKind == System.Text.Json.JsonValueKind.Array) {
-                foreach (var item in element.EnumerateArray())
-                    if (Find(item) is { } nested)
-                        return nested;
-            }
-            return null;
-        }
-    }
 }

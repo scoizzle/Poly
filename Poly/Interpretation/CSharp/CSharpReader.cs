@@ -282,17 +282,43 @@ public static class CSharpReader {
 
         private static IReadOnlyList<FieldDefinitionNode> FoldEnumFields(MatchResult<CSharpToken, CSharpTokenKind> match) {
             var fields = new List<FieldDefinitionNode>();
-            foreach (var member in match.Children) {
+            foreach (var member in MaybeChild(match, "enum-members")?.Children ?? []) {
                 var target = string.Equals(member.RuleName, "enum-member", StringComparison.Ordinal)
                     ? member
                     : member.Children[0];
                 fields.Add(new FieldDefinitionNode(
                     Capture(target, "name"),
                     new PrimitiveTypeReference(PrimitiveType.Int32),
+                    new Constant(FoldEnumValue(target)),
                     IsStatic: true,
                     IsConst: true));
             }
             return fields;
+        }
+
+        /// <summary>An enum member's value: the number literal, negated when a minus precedes it. A negated
+        /// value that fits <c>int</c> is an <c>int</c> (<c>-2147483648</c> folds as the long 2147483648).</summary>
+        private static object FoldEnumValue(MatchResult<CSharpToken, CSharpTokenKind> member) {
+            var token = CapturedToken(member, "value");
+            var negative = member.Tokens.Any(t => t.Kind == CSharpTokenKind.Minus);
+            // A plain decimal literal folds signed, so the range check sees the negated value
+            // (-9223372036854775808 is a long; its digits alone overflow).
+            var signed = negative && token.Text.All(c => char.IsAsciiDigit(c) || c == '_');
+            object value;
+            try {
+                value = FoldNumber(signed ? "-" + token.Text : token.Text);
+            }
+            catch (OverflowException) {
+                throw GrammarError.Error($"Enum value '{token.Text}' is outside the range of long", token.Line, token.Col);
+            }
+            if (value is float or double or decimal)
+                throw GrammarError.Error($"Enum value '{token.Text}' is not an integer", token.Line, token.Col);
+            if (value is ulong big && big > long.MaxValue)
+                throw GrammarError.Error($"Enum value '{token.Text}' is outside the range of long", token.Line, token.Col);
+            if (!negative || signed)
+                return value;
+            var negated = -Convert.ToInt64(value, CultureInfo.InvariantCulture);
+            return negated >= int.MinValue ? (object)(int)negated : negated;
         }
 
         // ── members ──────────────────────────────────────────────────────────

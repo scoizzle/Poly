@@ -261,7 +261,7 @@ public sealed class CSharpWriter {
 
     private bool Visible(string name) {
         foreach (var scope in _declScopes) {
-            if (scope.Names.ContainsKey(name))
+            if (scope.Names.ContainsKey(name) || scope.Names.ContainsValue(name))
                 return true;
         }
         return false;
@@ -349,7 +349,7 @@ public sealed class CSharpWriter {
                 return;
             case Assignment assign:
                 sb.Append(Pad(indent));
-                sb.AppendLine(Render("statement", "expr-stmt", Expr(assign)));
+                sb.AppendLine(AssignmentStatementText(assign));
                 return;
             case Block block:
                 sb.AppendLine(BlockText(block, indent));
@@ -406,8 +406,7 @@ public sealed class CSharpWriter {
             case LabelDeclaration label:
                 sb.Append(Pad(indent));
                 sb.AppendLine(RenderFills("statement", "label",
-                    Names(("label", label.Name), ("colon", ":")), new string?[] { null }));
-                WriteStatement(sb, label.Statement, indent);
+                    Names(("label", label.Name), ("colon", ":")), "\n" + StatementText(label.Statement, indent)));
                 return;
             case Return ret:
                 sb.Append(Pad(indent));
@@ -693,23 +692,13 @@ public sealed class CSharpWriter {
     }
 
     /// <summary>Prints a <c>for</c> header expression. The condition and increment slots hold
-    /// expressions, so the statement-level rule that fuses an undeclared name into a <c>var</c>
-    /// declaration is off there — a declaration does not parse inside the header — and a
-    /// statement-shaped node, which has no expression form, rejects. The body prints under the
-    /// enclosing rule, unchanged.</summary>
+    /// expressions, so a statement-shaped node, which has no expression form, rejects.</summary>
     private string? ForHeaderExpression(Node? node) {
         if (node is null)
             return null;
         if (node is Statement or Block)
             return Unprintable(node, "a for header slot holds one expression, and a statement or block has no expression form");
-        var fuseUndeclaredName = _fuseUndeclaredName;
-        _fuseUndeclaredName = false;
-        try {
-            return Expr(node);
-        }
-        finally {
-            _fuseUndeclaredName = fuseUndeclaredName;
-        }
+        return Expr(node);
     }
 
     private string ForEachText(ForEachLoop forEach, int indent) {
@@ -808,22 +797,25 @@ public sealed class CSharpWriter {
         sb.Append(attrs);
 
         if (kind is TypeKind.Enum) {
-            var members = new StringBuilder();
-            if (typeDef.Fields != null) {
-                for (var i = 0; i < typeDef.Fields.Count; i++) {
-                    members.Append('\n');
-                    members.Append(Pad(indent + 1));
-                    members.Append(RenderFills("enum-member", "member", Names(
-                        ("name", EscapeIdent(typeDef.Fields[i].Name)),
-                        ("value", i.ToString(CultureInfo.InvariantCulture)))));
-                    if (i < typeDef.Fields.Count - 1)
-                        members.Append(',');
+            string? members = null;
+            if (typeDef.Fields is { Count: > 0 } fields) {
+                var list = new StringBuilder();
+                for (var i = 0; i < fields.Count; i++) {
+                    list.Append('\n');
+                    list.Append(Pad(indent + 1));
+                    var value = EnumMemberValueText(fields[i], i);
+                    var negative = value.StartsWith('-');
+                    list.Append(RenderFills("enum-member", "member", Names(
+                        ("name", EscapeIdent(fields[i].Name)),
+                        ("value", negative ? value[1..] : value)), negative ? "-" : null));
+                    if (i < fields.Count - 1)
+                        list.Append(',');
                 }
-                members.Append('\n');
-                members.Append(Pad(indent));
+                list.Append('\n');
+                list.Append(Pad(indent));
+                members = list.ToString();
             }
-            var body = Pad(indent) + RenderFills("enum-body", "body", Braces(),
-                members.Length == 0 ? " " : members.ToString(), null);
+            var body = Pad(indent) + RenderFills("enum-body", "body", Braces(), members);
             sb.Append(Pad(indent));
             sb.AppendLine(RenderFills("type-decl", "enum", TypeNameFill(typeDef.Name), null, mods,
                 "\n" + body));
@@ -831,26 +823,14 @@ public sealed class CSharpWriter {
         }
 
         if (kind is TypeKind.Interface) {
-            var body = new StringBuilder();
-            if (typeDef.Properties != null) {
-                foreach (var property in typeDef.Properties) {
-                    body.Append('\n');
-                    body.Append(Pad(indent + 1));
-                    body.Append(InterfacePropertyText(property));
-                }
-            }
-            if (typeDef.Methods != null) {
-                foreach (var method in typeDef.Methods) {
-                    body.Append('\n');
-                    body.Append(Pad(indent + 1));
-                    body.Append(InterfaceMethodText(method));
-                }
-            }
-            body.Append('\n');
-            body.Append(Pad(indent));
+            var interfaceMembers = new List<(Node Member, string? CtorName)>();
+            foreach (var property in typeDef.Properties ?? [])
+                interfaceMembers.Add((property, null));
+            foreach (var method in typeDef.Methods ?? [])
+                interfaceMembers.Add((method, null));
             sb.Append(Pad(indent));
             sb.AppendLine(RenderFills("type-decl", "interface", TypeNameFill(typeDef.Name), null, mods,
-                GenericParamsText(typeDef.GenericParameters), LineageText(typeDef), body.ToString()));
+                GenericParamsText(typeDef.GenericParameters), LineageText(typeDef), TypeBodyText(interfaceMembers, indent)));
             return;
         }
 
@@ -863,26 +843,16 @@ public sealed class CSharpWriter {
             return;
         }
 
-        var membersBlock = new StringBuilder();
-        void AddMember(Node member, string? name = null) {
-            membersBlock.Append('\n');
-            membersBlock.Append(name is null ? MemberText(member, indent + 1) : MemberText(member, indent + 1, name));
-        }
-        if (typeDef.Fields != null) {
-            foreach (var field in typeDef.Fields)
-                AddMember(field);
-        }
-        if (typeDef.Constructors != null) {
-            foreach (var ctor in typeDef.Constructors)
-                AddMember(ctor, typeDef.Name);
-        }
+        var bodyMembers = new List<(Node Member, string? CtorName)>();
+        foreach (var field in typeDef.Fields ?? [])
+            bodyMembers.Add((field, null));
+        foreach (var ctor in typeDef.Constructors ?? [])
+            bodyMembers.Add((ctor, typeDef.Name));
         foreach (var prop in GetBodyProperties(typeDef))
-            AddMember(prop);
-        if (typeDef.Methods != null) {
-            foreach (var method in typeDef.Methods)
-                AddMember(method);
-        }
-        var bodyText = "\n" + Pad(indent) + RenderFills("type-body", "body", Braces(), membersBlock + "\n" + Pad(indent));
+            bodyMembers.Add((prop, null));
+        foreach (var method in typeDef.Methods ?? [])
+            bodyMembers.Add((method, null));
+        var bodyText = TypeBodyText(bodyMembers, indent);
 
         sb.Append(Pad(indent));
         sb.AppendLine(isRecord
@@ -896,14 +866,22 @@ public sealed class CSharpWriter {
 
     private static Dictionary<string, string> TypeNameFill(string name) => Names(("name", EscapeIdent(name)));
 
-    private string InterfaceMethodText(MethodDefinitionNode method) =>
-        TypeText(method.ReturnType) + " " + EscapeIdent(method.Name) + "(" + ParamListText(method.Parameters) + ");";
+    /// <summary>An enum member's value: its integral constant default, else its ordinal (the domain
+    /// exporter stores member-name strings as defaults, so those print as ordinals).</summary>
+    private static string EnumMemberValueText(FieldDefinitionNode field, int ordinal) =>
+        field.DefaultValue is Constant { Value: sbyte or byte or short or ushort or int or uint or long or ulong } constant
+            ? Convert.ToString(constant.Value, CultureInfo.InvariantCulture)!
+            : ordinal.ToString(CultureInfo.InvariantCulture);
 
-    private string InterfacePropertyText(PropertyDefinitionNode prop) {
-        var accessors = new StringBuilder();
-        if (prop.Getter != null) accessors.Append("get; ");
-        if (prop.Setter != null) accessors.Append("set; ");
-        return $"{TypeText(prop.MemberType)} {EscapeIdent(prop.Name)} {{ {accessors.ToString().TrimEnd()} }}";
+    /// <summary>A class, record or interface body: every member through its member row, in the braces of
+    /// <c>type-body/body</c>. The constructor name is the type's own name.</summary>
+    private string TypeBodyText(IReadOnlyList<(Node Member, string? CtorName)> members, int indent) {
+        var block = new StringBuilder();
+        foreach (var (member, ctorName) in members) {
+            block.Append('\n');
+            block.Append(MemberText(member, indent + 1, ctorName));
+        }
+        return "\n" + Pad(indent) + RenderFills("type-body", "body", Braces(), block + "\n" + Pad(indent));
     }
 
     private static bool TypeDefinitionHasBody(TypeDefinitionNode typeDef) =>
@@ -1249,13 +1227,18 @@ public sealed class CSharpWriter {
     private static string IdentText(string name) =>
         RenderFills("expr-primary", "ident", Names(("name", EscapeIdent(name))));
 
-    private string AssignmentText(Assignment assign) {
+    /// <summary>An assignment in statement position. At the top level an undeclared name's first
+    /// assignment is its declaration (<c>var x = v;</c>); anywhere else it is the assignment it is.</summary>
+    private string AssignmentStatementText(Assignment assign) {
         if (assign.Destination is Variable dest && _fuseUndeclaredName && !DeclaredHere(dest.Name)) {
             MarkDeclared(dest.Name);
-            return "var " + EscapeIdent(dest.Name) + " = " + Expr(assign.Value);
+            return RenderFills("statement", "var-decl", Names(("name", EscapeIdent(dest.Name))), Expr(assign.Value));
         }
-        return Render("expr-assignment", "assign", Expr(assign.Destination), " = " + Expr(assign.Value));
+        return Render("statement", "expr-stmt", Expr(assign));
     }
+
+    private string AssignmentText(Assignment assign) =>
+        Render("expr-assignment", "assign", Expr(assign.Destination), " = " + Expr(assign.Value));
 
     private string MemberAccessText(Member member) {
         if (member.Value is ParameterReference)
@@ -1272,12 +1255,14 @@ public sealed class CSharpWriter {
             foreach (var parameter in lambda.Parameters)
                 DeclareLocal(parameter.Name);
             var async = BodyContainsAwait(lambda.Body) ? Render("async-kw", "async") + " " : null;
+            var block = lambda.Body as Block;
+            var body = Expr(lambda.Body);
             if (lambda.Parameters.Count == 1 && lambda.Parameters[0].TypeReference is null)
-                return RenderFills("expr-primary", "lambda-ident",
+                return RenderFills("expr-primary", block is null ? "lambda-ident" : "lambda-block-ident",
                     Names(("param", EscapeIdent(LocalText(lambda.Parameters[0].Name)))),
-                    async, Expr(lambda.Body));
-            return Render("expr-primary", "lambda-parens",
-                async, string.Join(", ", lambda.Parameters.Select(ParamText)), Expr(lambda.Body));
+                    async, body);
+            return Render("expr-primary", block is null ? "lambda-parens" : "lambda-block-parens",
+                async, string.Join(", ", lambda.Parameters.Select(ParamText)), body);
         }
         finally {
             _declScopes.Pop();

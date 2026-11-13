@@ -690,6 +690,17 @@ public static partial class AbiEmitter {
         // underlying type is a present zero, so the cast writes the nullable's own absent value.
         if (t.Operand is Constant { Value: null } && Nullable.GetUnderlyingType(targetType) is not null)
             return Assign(ctx.HoldRing(targetType), Default(targetType));
+        // A lifted integer cast (`(int?)count` for a nullable count of Poly's shift-count policy): an absent operand stays
+        // absent, a present one converts at the word type, unchecked unless the cast is checked.
+        if (sourceType is not null && Nullable.GetUnderlyingType(sourceType) is { } sourceUnderlying
+            && Nullable.GetUnderlyingType(targetType) is { } targetUnderlying && sourceType != targetType
+            && !sourceUnderlying.IsEnum && !targetUnderlying.IsEnum
+            && IsIntegralCast(LocalType.WordTypeOf(sourceUnderlying)) && IsIntegralCast(LocalType.WordTypeOf(targetUnderlying))) {
+            var source = LocalType.AsWordType(ValueOf(t.Operand, ctx));
+            var wordTarget = typeof(Nullable<>).MakeGenericType(LocalType.WordTypeOf(targetUnderlying));
+            Expression lifted = t.IsChecked ? ConvertChecked(source, wordTarget) : Convert(source, wordTarget);
+            return Assign(ctx.HoldRing(targetType), wordTarget == targetType ? lifted : Convert(lifted, targetType));
+        }
         var ring = ctx.OpenRing();
         var slot = ring.AddValue(CompileNode(t.Operand, ctx));
         if (sourceType is null || sourceType == targetType || targetType.IsAssignableFrom(sourceType))

@@ -28,6 +28,7 @@ internal class Section : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfOccupy();
             if (!__result.IsSuccess)
             {
@@ -77,6 +78,7 @@ internal class Section : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfVacate();
             if (!__result.IsSuccess)
             {
@@ -147,6 +149,7 @@ internal class Section : Poly.Runtime.IActionScoped
             return DomainResult<Section>.Failure(Poly.Runtime.DomainFailure.Range("'DayRate' must be <= 100000.", "Section.DayRate"));
         }
         var created = new Section(name, capacity, dayRate, hall, occupied);
+        Poly.Runtime.ActionScope.Create(created, "Section");
         if (hall != null)
         {
             hall.AttachSections(created);

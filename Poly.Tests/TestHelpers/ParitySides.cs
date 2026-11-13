@@ -8,11 +8,16 @@ using StepResult = (bool Success, string? Message, object? Value);
 
 namespace Poly.Tests.TestHelpers;
 
-sealed class SimulateSide(Domain domain, IReadOnlySet<string>? recordedExceptions = null, bool recordPostThrowState = false)
-    : ParitySide(domain, recordedExceptions, recordPostThrowState) {
+sealed class SimulateSide(Domain domain, IReadOnlySet<string>? recordedExceptions = null, bool recordPostThrowState = false,
+    bool recordGraph = false)
+    : ParitySide(domain, recordedExceptions, recordPostThrowState, recordGraph) {
     readonly ModuleInstanceExecutor _exec = ModuleExec.For(domain);
 
     public override string Name => "simulate";
+
+    protected override GraphState.Reader GraphReader => GraphState.BagReader.Instance;
+
+    protected override object GraphRoot(object entity) => ((ModuleInstance)entity).Bag;
 
     protected override StepResult CreateCore(Entity model, (string Name, object? Value)[] values) {
         // A singular navigation is a Create parameter, as on the printed side (Tr.Create(tracks: paper)),
@@ -69,6 +74,13 @@ sealed class SimulateSide(Domain domain, IReadOnlySet<string>? recordedException
         return (result.Succeeded, result.Error, null);
     }
 
+    protected override StepResult InvokeScopeOnlyCore(string action, (string Name, object? Value)[] args) {
+        var result = ModuleScopeOnly.Invoke(_exec, (ModuleInstance)Current, action,
+            args.ToDictionary(a => a.Name, a => a.Value, StringComparer.Ordinal));
+        LastFailure = result.Error;
+        return (result.IsSuccess, result.Error?.Render(), null);
+    }
+
     protected override StepResult LinkCore(string relationship, object?[] targets) {
         foreach (var target in targets) {
             var outcome = _exec.Link(relationship, (ModuleInstance)Current, (ModuleInstance)target!);
@@ -113,8 +125,9 @@ sealed class SimulateSide(Domain domain, IReadOnlySet<string>? recordedException
     }
 }
 
-sealed class PrintedSide(Domain domain, Assembly assembly, IReadOnlySet<string>? recordedExceptions = null, bool recordPostThrowState = false)
-    : ParitySide(domain, recordedExceptions, recordPostThrowState) {
+sealed class PrintedSide(Domain domain, Assembly assembly, IReadOnlySet<string>? recordedExceptions = null, bool recordPostThrowState = false,
+    bool recordGraph = false)
+    : ParitySide(domain, recordedExceptions, recordPostThrowState, recordGraph) {
     // L-22: an unmarked entity prints internal, so the printed members are looked up non-public too.
     const BindingFlags AnyInstance = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
 
@@ -124,6 +137,8 @@ sealed class PrintedSide(Domain domain, Assembly assembly, IReadOnlySet<string>?
     Type? PrintedType(string name) => assembly.GetType(name) ?? assembly.GetType($"{Domain.Name}.{name}");
 
     public override string Name => "printed";
+
+    protected override GraphState.Reader GraphReader => GraphState.PrintedReader.Instance;
 
     protected override StepResult CreateCore(Entity model, (string Name, object? Value)[] values) {
         var arguments = values.Select(v => {

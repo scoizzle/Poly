@@ -41,6 +41,7 @@ internal class Campaign : Poly.Runtime.IActionScoped
     }
     internal void AttachMembers(CampaignMember child)
     {
+        Poly.Runtime.ActionScope.Touch(this);
         this._members.Add(child);
     }
     internal DomainResult<CampaignMember> Enroll(Contact who)
@@ -49,6 +50,7 @@ internal class Campaign : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfEnroll(who);
             if (!__result.IsSuccess)
             {
@@ -86,6 +88,7 @@ internal class Campaign : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfEnd();
             if (!__result.IsSuccess)
             {
@@ -119,6 +122,7 @@ internal class Campaign : Poly.Runtime.IActionScoped
             return DomainResult<Campaign>.Failure(Poly.Runtime.DomainFailure.Required("'Name' is required.", "Campaign.Name"));
         }
         var created = new Campaign(name, members);
+        Poly.Runtime.ActionScope.Create(created, "Campaign");
         return DomainResult<Campaign>.Success(created);
     }
     public object __Snapshot()

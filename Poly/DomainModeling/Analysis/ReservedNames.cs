@@ -181,7 +181,24 @@ internal static class ReservedNames {
     /// action with no result members, because a typed action prints <c>DomainResult&lt;T&gt;</c>, which
     /// binds as a type beside the parameter.
     /// </summary>
-    public static bool TryReservedAsActionParameter(string identity, Ontology.Action action, out ReservedName row) {
+    public static bool TryReservedAsActionParameter(string identity, Ontology.Action action, out ReservedName row) =>
+        // A stage-dispatched method merged from a void and a typed copy is deliberately over-rejected.
+        TryReservedInGeneratedBody(identity,
+            candidate => candidate.AppliesToAction is null || candidate.AppliesToAction(action), out row);
+
+    /// <summary>
+    /// True when <paramref name="identity"/>, as a subscription peer binder (<c>when Rel Stage as name</c>), would
+    /// shadow a name the generated handler calls from expression position. The binder prints as the handler's
+    /// parameter, and every handler body calls <c>Poly.Runtime.ActionScope.Touch(this)</c> (L-03c) and returns the
+    /// non-generic <c>DomainResult</c>, so the rows are the action-parameter rows of a void action: one rule, one list.
+    /// The fan-out <c>for Rel as name</c> and general <c>for name in Rel</c> binders need no row: they lower to a
+    /// generated <c>target{N}</c> local, never to the authored name.
+    /// </summary>
+    public static bool TryReservedAsPeerBinder(string identity, out ReservedName row) =>
+        TryReservedInGeneratedBody(identity, static _ => true, out row);
+
+    private static bool TryReservedInGeneratedBody(
+        string identity, Func<ReservedName, bool> applies, out ReservedName row) {
         if (IsActionScopeName(identity)) {
             row = ActionScopeRow;
             return true;
@@ -191,8 +208,7 @@ internal static class ReservedNames {
                 continue;
             if (!string.Equals(candidate.Name, identity, StringComparison.Ordinal))
                 continue;
-            // A stage-dispatched method merged from a void and a typed copy is deliberately over-rejected.
-            if (candidate.AppliesToAction is not null && !candidate.AppliesToAction(action))
+            if (!applies(candidate))
                 continue;
             row = candidate;
             return true;

@@ -49,10 +49,12 @@ internal class Property : Poly.Runtime.IActionScoped
     }
     internal void AttachHalls(Hall child)
     {
+        Poly.Runtime.ActionScope.Touch(this);
         this._halls.Add(child);
     }
     internal void AttachRooms(Room child)
     {
+        Poly.Runtime.ActionScope.Touch(this);
         this._rooms.Add(child);
     }
     internal DomainResult<Hall> AddHall(string name, long seats, long rate)
@@ -61,6 +63,7 @@ internal class Property : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfAddHall(name, seats, rate);
             if (!__result.IsSuccess)
             {
@@ -98,6 +101,7 @@ internal class Property : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfClose();
             if (!__result.IsSuccess)
             {
@@ -130,6 +134,7 @@ internal class Property : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfReopen();
             if (!__result.IsSuccess)
             {
@@ -184,6 +189,7 @@ internal class Property : Poly.Runtime.IActionScoped
             return DomainResult<Property>.Failure(Poly.Runtime.DomainFailure.Length("'City' must be at most 60 characters.", "Property.City"));
         }
         var created = new Property(name, city, halls, rooms);
+        Poly.Runtime.ActionScope.Create(created, "Property");
         return DomainResult<Property>.Success(created);
     }
     public object __Snapshot()

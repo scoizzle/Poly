@@ -35,6 +35,7 @@ internal class Lead : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfConvert();
             if (!__result.IsSuccess)
             {
@@ -71,6 +72,7 @@ internal class Lead : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfDisqualify();
             if (!__result.IsSuccess)
             {
@@ -121,6 +123,7 @@ internal class Lead : Poly.Runtime.IActionScoped
             return DomainResult<Lead>.Failure(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'Email' value is already used on another 'Lead'.", "Lead.Email"));
         }
         var created = new Lead(name, email, company, account);
+        Poly.Runtime.ActionScope.Create(created, "Lead");
         db.Record("Lead", "Email", email);
         return DomainResult<Lead>.Success(created);
     }

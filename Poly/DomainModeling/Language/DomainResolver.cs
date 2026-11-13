@@ -143,8 +143,8 @@ public sealed partial class DomainResolver : DslCursor {
         // Dispatch is matcher-driven over the "top" rule; unmodeled shapes get
         // the same targeted diagnostics ParseEntity would produce.
         while (Current.Kind == TokenKind.Identifier || Current.Kind == TokenKind.Public) {
-            if (TryTakeVisibility(out var visibility)) {
-                ParseMarkedTop(changes, visibility);
+            if (Current.Kind == TokenKind.Public) {
+                FoldMarkedTop(changes);
                 continue;
             }
             if (IsFunctionDeclarationStart()) {

@@ -26,7 +26,10 @@ internal sealed record ErrorFile(List<string> Header, List<ErrorRow> Rows, List<
 }
 
 /// <summary>What the resolver did with one input: the result line, the site it was thrown from, and the structured error.</summary>
-internal sealed record Observation(string Result, string? SiteId, string OriginClass, string? Detail, int Offset, int Length);
+internal sealed record Observation(string Result, string? SiteId, string OriginClass, string? Detail, int Offset, int Length) {
+    /// <summary>For a table-reported error, every row element it named (label reach).</summary>
+    public IReadOnlyList<string> Labels { get; init; } = [];
+}
 
 /// <summary>One S row or sweep mutation that threw: the source of the input and the site it reached.</summary>
 internal sealed record ExistingRun(string Key, Exception Exception, ErrorOrigin Origin);
@@ -47,15 +50,15 @@ internal static class ResolverErrorBaseline {
 
     /// <summary>
     /// A result that is known wrong, by the row that will fix it. <c>Key</c> is <c>S:site/case</c> or <c>X:doc#token/filler/door</c>
-    /// (G-13a rows, read from <c>ResolverBaseline.txt</c>) or <c>E:key</c>; <c>Fragment</c> is what the wrong result shows.
-    /// A tag whose row no longer shows its fragment is stale and fails until it is deleted.
+    /// (G-13a rows, read from <c>ResolverBaseline.txt</c>) or <c>E:key</c>; <c>Fragment</c> is the end of what the wrong result shows
+    /// (before its <c> @line:col</c>). A tag whose row's message no longer ends with its fragment is stale and fails until it is deleted.
     /// </summary>
     public static readonly (string Key, string Fixer, string Fragment)[] KnownWrong = [
         // T-15: number and duration text surfaces as a raw .NET exception message.
-        ("S:Constraints.length.min/overflow", "T-15", "OverflowException: Value was either too large"),
+        ("S:Constraints.length.min/overflow", "T-15", "OverflowException: Value was either too large or too small for an Int32."),
         ("S:Constraints.length.min/fraction", "T-15", "ERR FormatException: The input string '1.5' was not in a correct format."),
         ("S:Constraints.length.min/arabic-indic", "T-15", "ERR FormatException: The input string '٣' was not in a correct format."),
-        ("S:Constraints.length.max/overflow", "T-15", "OverflowException: Value was either too large"),
+        ("S:Constraints.length.max/overflow", "T-15", "OverflowException: Value was either too large or too small for an Int32."),
         ("S:Entities.annotation.number/arabic-indic", "T-15", "ERR FormatException: The input string '٣' was not in a correct format."),
         ("S:Temporal.amount.message/fraction", "T-15", "InvalidOperationException: Duration amount '1.5' is not an integer."),
         ("S:Temporal.amount.message/overflow", "T-15", "InvalidOperationException: Duration amount '99999999999999999999' is not an integer."),
@@ -70,27 +73,20 @@ internal static class ResolverErrorBaseline {
         ("S:Entities.fallback.unsupported/mis-keyword", "G-29", "ERR FormatException: 'for' is not supported in Phase 1a (used as type for 'Go')"),
         ("S:Relationships.navline.text/unsupported", "G-29", "ERR FormatException: 'actor' is not supported in Phase 1a (used as type for 'Owner')"),
         ("S:Relationships.navline.text/case", "G-29", "ERR FormatException: 'PARALLEL' is not supported in Phase 1a (used as type for 'Owner')"),
-        ("X:entities#3/ident/R", "G-29", "InvalidOperationException: Unknown domain extension 'zz'"),
-        ("X:expressions#3/ident/R", "G-29", "InvalidOperationException: Unknown domain extension 'zz'"),
+        ("X:entities#3/ident/R", "G-29", "InvalidOperationException: Unknown domain extension 'zz'. Record only ids this catalog can resolve."),
+        ("X:expressions#3/ident/R", "G-29", "InvalidOperationException: Unknown domain extension 'zz'. Record only ids this catalog can resolve."),
         // G-05 keeps `actor` (S-09 owns the rest of TopLevelRejection's unpositioned refusals: `Function`, `schedule`); G-29 owns the inheritance error.
         ("S:TopLevel.rejection.unsupported/ok", "G-05", "ERR FormatException: 'actor' is not supported in Phase 1a (use 'entity' instead)"),
         ("S:TopLevel.rejection.unsupported/case", "S-09", "ERR FormatException: 'Function' is not supported in Phase 1a (use 'entity' instead)"),
         ("S:TopLevel.rejection.unsupported-message/ok", "S-09", "ERR FormatException: 'schedule' is not supported in Phase 1a (use 'entity' instead)"),
-        ("S:TopLevel.rejection.inheritance/ok", "G-29", "ERR FormatException: Entity inheritance ('X: Base entity') is no longer supported."),
-        ("S:TopLevel.rejection.inheritance-define/unicode", "G-29", "ERR FormatException: Entity inheritance ('X: Größe entity') is no longer supported."),
+        ("S:TopLevel.rejection.inheritance/ok", "G-29", "ERR FormatException: Entity inheritance ('X: Base entity') is no longer supported. Define 'Base' properties directly on 'X'."),
+        ("S:TopLevel.rejection.inheritance-define/unicode", "G-29", "ERR FormatException: Entity inheritance ('X: Größe entity') is no longer supported. Define 'Größe' properties directly on 'X'."),
         // G-32 (#871): a `require` of a missing policy is reported at the end of the entity body, not at the `require` (frozen @33:1 for a require on line 23).
-        ("E:site:Entities:ResolvePendingRequires#1", "G-32", "@33:1 off=-1 len=0 :: Action 'Act' requires policy 'Q'"),
-        ("E:site:Entities:ResolvePendingRequires#2", "G-32", "@33:1 off=-1 len=0 :: Action 'Run' requires policy 'P'"),
-        ("E:ladder:Entities:ResolvePendingRequires#1/Entities:ResolvePendingRequires#2", "G-32", "@5:2 off=-1 len=0 :: Action 'Go' requires policy 'M1'"),
-        ("E:ladder:Entities:ResolvePendingRequires#2/Entities:ResolvePendingRequires#3", "G-32", "@5:2 off=-1 len=0 :: Action 'Go' requires policy 'M1'"),
-        ("E:defer:order:requires-before-navs", "G-32", "@7:2 off=-1 len=0 :: Action 'Go' requires policy 'M'"),
-        // G-28: the message does not show the token kind (a quoted string reads as `got 'value'`).
-        ("E:pub:1", "G-28", "after 'public', got 'value'"),
-        ("E:pub:2", "G-28", "after 'public', got 'str'"),
-        ("E:pub:3", "G-28", "after 'public', got '5'"),
-        ("E:pub:4", "G-28", "after 'public', got '{'"),
-        ("E:pub:5", "G-28", "after 'public', got 'action'"),
-        ("E:pub:8", "G-28", "after 'public', got ''"),
+        ("E:site:Entities:ResolvePendingRequires#1", "G-32", "@33:1 off=-1 len=0 :: Action 'Act' requires policy 'Q' which is not defined on entity 'X'."),
+        ("E:site:Entities:ResolvePendingRequires#2", "G-32", "@33:1 off=-1 len=0 :: Action 'Run' requires policy 'P' which is not defined on entity 'X'."),
+        ("E:ladder:Entities:ResolvePendingRequires#1/Entities:ResolvePendingRequires#2", "G-32", "@5:2 off=-1 len=0 :: Action 'Go' requires policy 'M1' which is not defined on entity 'X'."),
+        ("E:ladder:Entities:ResolvePendingRequires#2/Entities:ResolvePendingRequires#3", "G-32", "@5:2 off=-1 len=0 :: Action 'Go' requires policy 'M1' which is not defined on entity 'X'."),
+        ("E:defer:order:requires-before-navs", "G-32", "@7:2 off=-1 len=0 :: Action 'Go' requires policy 'M' which is not defined on entity 'Z'."),
     ];
 
     /// <summary>Where a tag's fixing row lives when that is not obvious from the fixer: a site in G-30 or G-33 code is fixed by whichever row converts it.</summary>
@@ -171,7 +167,8 @@ internal static class ResolverErrorBaseline {
         ("Stages:ParseStage#17", "LoopExit", "the stage-body loop exits only on `}`"),
         ("Stages:ParseSubscription#6", "LoopExit", "the effect loop exits only on `}`"),
         ("Stages:ParseEntitySubscription#6", "LoopExit", "the effect loop exits only on `}`"),
-        ("TopLevel:TryTakeVisibility#1", "DefaultArm", "the visibility rule has one pattern, `public`"),
+        ("TopLevel:VisibilityOf#1", "DefaultArm", "the visibility rule has one pattern, `public`"),
+        ("TopLevel:FoldMarkedTop#1", "DefaultArm", "the marked-top rule has two patterns, `entity` and `value`, and each has an arm"),
         ("TopLevel:ParseEnumType#1", "RowGuard", "top/enum matched `Identifier Colon Enum`"),
         ("TopLevel:ParseEnumType#2", "RowGuard", "top/enum matched `Identifier Colon Enum`"),
         ("TopLevel:ParseEnumType#3", "RowGuard", "top/enum matched `Identifier Colon Enum`"),
@@ -266,7 +263,7 @@ internal static class ResolverErrorBaseline {
             return new Observation("OK", null, "none", null, -1, 0);
         var origin = ResolverErrorSiteScanner.OriginOf(ex);
         var (offset, length) = ex is GrammarException g ? (g.Offset, g.Length) : (-1, 0);
-        return new Observation(ResultOf(ex), origin.SiteId, origin.Class, DetailOf(ex), offset, length);
+        return new Observation(ResultOf(ex), origin.SiteId, origin.Class, DetailOf(ex), offset, length) { Labels = origin.Labels };
     }
 
     // ── what G-13a already runs ──────────────────────────────────────────────────────
@@ -409,8 +406,8 @@ internal static class ResolverErrorBaseline {
                 problems.Add($"{key}: fixer '{fixer}' is not in the closed set");
             if (!results.TryGetValue(key, out var result))
                 problems.Add($"{key}: tag names no row");
-            else if (!result.Contains(fragment, StringComparison.Ordinal))
-                problems.Add($"{key}: stale tag for {fixer}: the row no longer shows '{fragment}' (now: {result})");
+            else if (!MessageHead(result).EndsWith(fragment, StringComparison.Ordinal))
+                problems.Add($"{key}: stale tag for {fixer}: the row's message no longer ends with '{fragment}' (now: {result})");
             tagged.Add(key);
         }
 
@@ -421,6 +418,12 @@ internal static class ResolverErrorBaseline {
 
         return problems;
     }
+
+    /// <summary>
+    /// A result without its trailing <c> @line:col</c> (G-13a rows end with one): a tag's fragment must END the message there, so a
+    /// fix that only appends to the message (a suffix such as <c>(StringLiteral)</c>) makes the tag stale.
+    /// </summary>
+    public static string MessageHead(string result) => Regex.Replace(result, @" @\d+:\d+$", "");
 
     private static bool IsUnpositioned(string key, string result) => key.StartsWith("E:", StringComparison.Ordinal) || key.StartsWith("P:", StringComparison.Ordinal)
         ? result != "OK" && (!result.StartsWith("GrammarException @", StringComparison.Ordinal) || result.StartsWith("GrammarException @0:0 ", StringComparison.Ordinal))
@@ -530,7 +533,7 @@ internal static class ResolverErrorBaseline {
         ("stage-body", "domain A\nX: entity {\n  S: stage {\n    ¤"),
         ("effect", "domain A\nX: entity {\n  Go: action {\n    ¤"),
         ("annotation", "domain A\nX: entity {\n  N: Text ¤"),
-        ("visibility", "domain A\n¤"),
+        ("marked-top", "domain A\n¤"),
     ];
 
     private static bool SameElement(IPatternElement<DslToken, DslTokenKind> a, IPatternElement<DslToken, DslTokenKind> b) => (a, b) switch {
@@ -605,9 +608,8 @@ internal static class ResolverErrorBaseline {
     /// <summary>The dispatch sites, each tried matching 1, 2 and 3 tokens deep and then failing; a depth with no row that long is listed with its reason.</summary>
     public static readonly (string Rule, int Depth, string? NotApplicable)[] DispatchDepths = [
         ("top", 1, null), ("top", 2, null), ("top", 3, null),
-        ("visibility", 1, null),
-        ("visibility", 2, "the only visibility row, `public`, is one element long"),
-        ("visibility", 3, "the only visibility row, `public`, is one element long"),
+        ("marked-top", 1, null), ("marked-top", 2, null),
+        ("marked-top", 3, "both marked-top rows are three tokens long: a failure after the third token is the entity or value body's"),
         ("entity-body", 1, null), ("entity-body", 2, null), ("entity-body", 3, null),
         ("annotation", 1, null), ("annotation", 2, null), ("annotation", 3, null),
         ("stage-body", 1, null), ("stage-body", 2, null), ("stage-body", 3, null),
@@ -616,10 +618,21 @@ internal static class ResolverErrorBaseline {
 
     public static readonly string[] PublicPins = ["pub:1", "pub:2", "pub:3", "pub:4", "pub:5", "pub:6", "pub:7", "pub:8"];
 
+    /// <summary>Every table row element (<see cref="ResolverErrorSiteScanner.TableLabels"/>) that an S row or a sweep mutation names in its failure.</summary>
+    public static HashSet<string> LabelsReachedByExisting() =>
+        ExistingRuns.SelectMany(r => r.Origin.Labels).ToHashSet(StringComparer.Ordinal);
+
+    /// <summary>The table row elements no run names: label reach replaces site reach for a form the table reports (G-28).</summary>
+    public static List<string> LabelReachProblems(IReadOnlySet<string> reached, IEnumerable<string> labels) =>
+        [.. labels.Where(l => !reached.Contains(l)).Select(l => $"{l}: no S row, sweep mutation or E row names this row element in its failure")];
+
     /// <summary>Every key the file must hold as an E row, a U row (an existing run supplies it) or an X row (with the reason it has no input).</summary>
     public static IEnumerable<string> RequiredKeys(IReadOnlyDictionary<string, int> reachedByExisting) {
         foreach (var site in ResolverErrorSiteScanner.Sites.Where(s => !IsUnreachable(s) && !reachedByExisting.ContainsKey(s.Id)))
             yield return $"site:{site.Id}";
+        var labelsReached = LabelsReachedByExisting();
+        foreach (var label in ResolverErrorSiteScanner.TableLabels.Where(l => !labelsReached.Contains(l)))
+            yield return $"label:{label}";
         foreach (var key in RequiredOffenderKeys())
             yield return key;
         foreach (var (key, _) in KindInputs())

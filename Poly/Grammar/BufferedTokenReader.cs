@@ -17,9 +17,16 @@ public abstract class BufferedTokenReader<TToken, TTokenKind> : ITokenReader<TTo
         return _buffer[offset];
     }
 
+    /// <summary>
+    /// Commits <paramref name="count"/> tokens, scanning any not yet buffered first, so a Consume before the first Peek
+    /// commits exactly as many. Past the end of input the scanner keeps yielding end-of-input tokens, so the head after
+    /// consuming past the end is end of input, as a Peek past the end is.
+    /// </summary>
     public void Consume(int count) {
         ArgumentOutOfRangeException.ThrowIfNegative(count);
-        _buffer.RemoveRange(0, Math.Min(count, _buffer.Count));
+        if (count > _buffer.Count)
+            Peek(count - 1);
+        _buffer.RemoveRange(0, count);
     }
 
     /// <summary>The single physical-decoding seam — languages produce tokens here.</summary>

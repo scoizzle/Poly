@@ -12,6 +12,14 @@ namespace Poly.Grammar;
 /// - trailing operator in LeftAssoc → the whole chain fails
 /// - zero-width sub-match in Ref / Repeat / LeftAssoc operand → failure (recursion guard)
 /// - Repeat below Min → failure; bounded by Max, never a hard magic cap
+///
+/// Failure report (G-28), on <see cref="Match"/> only: every failing token element records
+/// its offset, and the report is the furthest offset with the union of what was expected
+/// there. A <see cref="Cut{TToken,TTokenKind}"/> commits its row: a later failure in that
+/// row is rescued only by a sibling of the same rule that matches more tokens than the
+/// committed row had matched; otherwise it escapes the rule and aborts the call (outer
+/// siblings are not tried, and an abort is never memoised). <see cref="TryMatch"/> pays one
+/// null check per failing element and throws for a rule that can commit.
 /// </summary>
 public sealed class Matcher<TToken, TTokenKind>
     where TToken : struct, IToken<TTokenKind>
@@ -34,8 +42,9 @@ public sealed class Matcher<TToken, TTokenKind>
 
         MatchResult<TToken, TTokenKind>? best = null;
         var bestPriority = int.MinValue;
+        Commit? committed = null;
         foreach (var pattern in _grammar.GetPatterns(ruleName)) {
-            if (!TryMatchPattern(ruleName, pattern, offset, out var match))
+            if (!TryMatchPattern(ruleName, pattern, offset, out var match, ref committed))
                 continue;
             if (best is null
                 || match.Consumed > best.Consumed
@@ -43,6 +52,13 @@ public sealed class Matcher<TToken, TTokenKind>
                 best = match;
                 bestPriority = pattern.Priority;
             }
+        }
+        // A committed row is rescued only by a sibling that matched more tokens than it had; otherwise
+        // the commit escapes this rule and aborts the call (it is never memoised).
+        if (committed is not null && (best is null || best.Consumed <= committed.Reach - offset)) {
+            var failure = Report(committed.Entries, committed.Reach, committed: true);
+            failure.CommittedPattern = committed.Row.Name;
+            throw new CommitAbort(failure);
         }
         _memo?[key] = best;
         return best;
@@ -66,18 +82,77 @@ public sealed class Matcher<TToken, TTokenKind>
     /// is unchanged. The table is scoped to this call because offsets are relative
     /// to the reader's committed position.
     /// </summary>
+    /// <exception cref="InvalidOperationException">The rule holds a <see cref="Cut{TToken,TTokenKind}"/> or a
+    /// <see cref="Refuse{TToken,TTokenKind}"/>, directly or through a rule it references (whether or not this input
+    /// would reach it): a commit has no meaning without the report, so such a rule is matched with <see cref="Match"/>.</exception>
     public MatchResult<TToken, TTokenKind>? TryMatch(string ruleName) {
+        if (_grammar.CanCommit(ruleName))
+            throw new InvalidOperationException(
+                $"Rule '{ruleName}' holds a Cut or a Refuse (directly or through a rule it references); match it with Match, which reports the committed failure.");
         var previous = _memo;
+        var previousTracker = _tracker;
         _memo = new Dictionary<(string Rule, int Offset), MatchResult<TToken, TTokenKind>?>();
+        _tracker = null;
         try {
             return TryMatchRuleAt(ruleName, offset: 0);
         }
         finally {
             _memo = previous;
+            _tracker = previousTracker;
         }
     }
 
+    /// <summary>
+    /// <see cref="TryMatch"/> with the failure report: the match, or what the table says went wrong. The report is
+    /// the furthest failure and the union of the elements expected there, sorted by declaration order; when a row
+    /// committed (<see cref="Cut{TToken,TTokenKind}"/> or <see cref="Refuse{TToken,TTokenKind}"/>) and nothing rescued it,
+    /// the report comes from the committed failures only. A successful match reports nothing. Each returned failure
+    /// is also offered to <see cref="MatchTrace"/> (observation only).
+    /// <para>
+    /// <c>Match</c> never throws for an input (only for an unknown rule): a caller that must not throw, such as an
+    /// outline or an edit path, matches a rule that holds Cut or Refuse rows with it and reads a null
+    /// <see cref="MatchOutcome{TToken,TTokenKind}.Result"/> as "no head here"; <see cref="MatchFailure{TToken,TTokenKind}.CommittedPattern"/>
+    /// names a half-written head's row and <see cref="MatchFailure{TToken,TTokenKind}.Refused"/> a refused one.
+    /// </para>
+    /// </summary>
+    public MatchOutcome<TToken, TTokenKind> Match(string ruleName) {
+        EnsureKnownRule(ruleName);
+        var previous = _memo;
+        var previousTracker = _tracker;
+        // The accumulator is created on the first Match of this matcher and reused (a nested Match gets its own).
+        var tracker = previousTracker is null ? _spareTracker ??= new FailureTracker() : new FailureTracker();
+        tracker.Reset();
+        _memo = new Dictionary<(string Rule, int Offset), MatchResult<TToken, TTokenKind>?>();
+        _tracker = tracker;
+        var scopeDepth = (_scopes ??= []).Count;
+        MatchFailure<TToken, TTokenKind> failure;
+        try {
+            if (TryMatchRuleAt(ruleName, offset: 0) is { } result)
+                return new(result, null);
+            failure = Report(tracker.Entries, tracker.Far, committed: false);
+        }
+        catch (CommitAbort abort) {
+            failure = abort.Failure;
+        }
+        finally {
+            _memo = previous;
+            _tracker = previousTracker;
+            // An abort leaves the rows it escaped on the stack.
+            _scopes.RemoveRange(scopeDepth, _scopes.Count - scopeDepth);
+        }
+        MatchTrace.Record(new MatchObservation(ruleName, failure));
+        return new(null, failure);
+    }
+
     private Dictionary<(string Rule, int Offset), MatchResult<TToken, TTokenKind>?>? _memo;
+
+    // Failure tracking: non-null only inside Match. _frame names the row element being matched, for the record.
+    private FailureTracker? _tracker;
+    private FailureTracker? _spareTracker;
+    private Frame _frame;
+
+    // The captures of the rows being matched, outermost first (Match only): what a template's enclosing names read.
+    private List<Dictionary<string, IReadOnlyList<TToken>>>? _scopes;
 
     private void EnsureKnownRule(string ruleName) {
         if (!_grammar.HasRule(ruleName))
@@ -111,14 +186,45 @@ public sealed class Matcher<TToken, TTokenKind>
         string ruleName,
         Pattern<TToken, TTokenKind> pattern,
         int offset,
-        out MatchResult<TToken, TTokenKind> match) {
+        out MatchResult<TToken, TTokenKind> match,
+        ref Commit? committed) {
         var tokens = new List<TToken>();
         var children = new List<MatchResult<TToken, TTokenKind>>();
         var operators = new List<TToken>();
         var captures = new Dictionary<string, IReadOnlyList<TToken>>(StringComparer.Ordinal);
         var pos = offset;
-        foreach (var element in pattern.Elements) {
+        var cut = false;
+        var elements = pattern.Elements;
+        var tracking = _tracker is not null;
+        // A refusal that names its position stands on that element's first token (Match only: a Refuse is never under TryMatch).
+        var anchor = tracking && elements[^1] is Refuse<TToken, TTokenKind> { At: { } at } ? Refuse<TToken, TTokenKind>.AnchorOf(elements, at) : -1;
+        var anchorPos = -1;
+        if (tracking)
+            _scopes!.Add(captures);
+        for (var index = 0; index < elements.Count; index++) {
+            var element = elements[index];
+            if (index == anchor)
+                anchorPos = pos;
+            if (tracking)
+                _frame = new Frame(ruleName, pattern, index, captures);
+            switch (element) {
+                case Cut<TToken, TTokenKind>:
+                    cut = true;
+                    continue;
+                case Refuse<TToken, TTokenKind>:
+                    // The row matched every token up to here and refuses at the last one; a Refuse-only row (a catch-all)
+                    // matched none, so it stands on the head token and any sibling that matches a token rescues it.
+                    Commit.Add(ref committed, new Commit(pattern, pos,
+                        [new Entry(ruleName, pattern, index, element, anchorPos >= 0 ? anchorPos : pos > offset ? pos - 1 : pos, null, Scope())]));
+                    _scopes!.RemoveAt(_scopes.Count - 1);
+                    match = null!;
+                    return false;
+            }
             if (!TryMatchElement(element, pos, captures, tokens, out var piece)) {
+                if (cut)
+                    Commit.Add(ref committed, CommitAt(new Frame(ruleName, pattern, index, captures), element, pos, tokens));
+                if (tracking)
+                    _scopes!.RemoveAt(_scopes.Count - 1);
                 match = null!;
                 return false;
             }
@@ -127,6 +233,8 @@ public sealed class Matcher<TToken, TTokenKind>
             operators.AddRange(piece.Operators);
             pos += piece.Tokens.Count;
         }
+        if (tracking)
+            _scopes!.RemoveAt(_scopes.Count - 1);
         match = new MatchResult<TToken, TTokenKind>(
             pattern.Name, tokens, captures, ruleName, children, operators, pattern);
         return true;
@@ -151,6 +259,7 @@ public sealed class Matcher<TToken, TTokenKind>
         switch (element) {
             case MatchKind<TToken, TTokenKind> k:
                 if (!TryMatchKind(k.Kind, offset, out var kindTokens)) {
+                    Fail(k, offset, k.Kind);
                     piece = default;
                     return false;
                 }
@@ -159,6 +268,7 @@ public sealed class Matcher<TToken, TTokenKind>
 
             case Value<TToken, TTokenKind> v:
                 if (!TryMatchKind(v.Kind, offset, out var valueTokens)) {
+                    Fail(v, offset, v.Kind);
                     piece = default;
                     return false;
                 }
@@ -169,6 +279,7 @@ public sealed class Matcher<TToken, TTokenKind>
             case MatchPredicate<TToken, TTokenKind> p:
                 var pt = _reader.Peek(offset);
                 if (!p.Predicate(pt)) {
+                    Fail(p, offset, null);
                     piece = default;
                     return false;
                 }
@@ -209,6 +320,7 @@ public sealed class Matcher<TToken, TTokenKind>
             case Any<TToken, TTokenKind>:
                 var at = _reader.Peek(offset);
                 if (_reader.EndOfStream(at.Kind)) {
+                    Fail(element, offset, null);
                     piece = default;
                     return false;
                 }
@@ -218,6 +330,7 @@ public sealed class Matcher<TToken, TTokenKind>
             case NotFollowedBy<TToken, TTokenKind> n:
                 var next = _reader.Peek(offset);
                 if (EqualityComparer<TTokenKind>.Default.Equals(next.Kind, n.Kind)) {
+                    Fail(n, offset, null);
                     piece = default;
                     return false;
                 }
@@ -227,6 +340,7 @@ public sealed class Matcher<TToken, TTokenKind>
             case Word<TToken, TTokenKind> w:
                 var wt = _reader.Peek(offset);
                 if (_reader.EndOfStream(wt.Kind) || !w.Matches(wt)) {
+                    Fail(w, offset, null);
                     piece = default;
                     return false;
                 }
@@ -240,12 +354,18 @@ public sealed class Matcher<TToken, TTokenKind>
 
             case Run<TToken, TTokenKind> run:
                 if (!TryRun(run, offset, matched, out var runTokens)) {
+                    Fail(run, offset, null);
                     piece = default;
                     return false;
                 }
                 RecordCapture(captures, run.Name, runTokens);
                 piece = Piece.TokensOnly(runTokens);
                 return true;
+
+            case Cut<TToken, TTokenKind>:
+            case Refuse<TToken, TTokenKind>:
+                // The builder keeps both at a row's top level, where TryMatchPattern handles them.
+                throw new InvalidOperationException($"'{element.GetType().Name}' is matched only as a row element, never nested.");
 
             default:
                 throw new InvalidOperationException($"Unknown pattern element '{element.GetType().Name}'");
@@ -341,6 +461,7 @@ public sealed class Matcher<TToken, TTokenKind>
     private bool TryBalanced(Balanced<TToken, TTokenKind> b, int offset, out List<TToken> consumed) {
         var first = _reader.Peek(offset);
         if (!EqualityComparer<TTokenKind>.Default.Equals(first.Kind, b.Open)) {
+            Fail(b, offset, b.Open);
             consumed = [];
             return false;
         }
@@ -350,6 +471,7 @@ public sealed class Matcher<TToken, TTokenKind>
         while (true) {
             var t = _reader.Peek(pos);
             if (_reader.EndOfStream(t.Kind)) {
+                Fail(b, pos, b.Close);
                 consumed = [];
                 return false;
             }
@@ -365,6 +487,171 @@ public sealed class Matcher<TToken, TTokenKind>
         }
         consumed = tokens;
         return true;
+    }
+
+    // ── the failure report (Match only) ──────────────────────────────────────────────
+
+    /// <summary>Records a failing token element at <paramref name="offset"/> (no-op outside <see cref="Match"/>).</summary>
+    private void Fail(IPatternElement<TToken, TTokenKind> element, int offset, TTokenKind? kind) {
+        if (_tracker is { } tracker)
+            tracker.Record(new Entry(_frame.Rule, _frame.Pattern, _frame.Index, element, offset, kind,
+                element is IExpectedElement { ExpectTemplate: not null } ? Scope() : _frame.Captures));
+    }
+
+    /// <summary>
+    /// The captures a template reads, as they stand now: every row on the match stack merged outermost first, so the
+    /// innermost (the reporting row's own) wins a name. A snapshot, because the enclosing rows go on matching.
+    /// </summary>
+    private Dictionary<string, IReadOnlyList<TToken>> Scope() {
+        var merged = new Dictionary<string, IReadOnlyList<TToken>>(StringComparer.Ordinal);
+        foreach (var scope in _scopes!) {
+            foreach (var (name, tokens) in scope)
+                merged[name] = tokens;
+        }
+        return merged;
+    }
+
+    /// <summary>
+    /// The committed failure of <paramref name="element"/>, which just failed after its row's Cut: its own failures,
+    /// re-collected by matching it once more with a fresh accumulator (and, for an element that reaches other rules, a
+    /// fresh memo, since a memo hit records nothing). A token element is just itself at <paramref name="pos"/>.
+    /// </summary>
+    private Commit CommitAt(Frame frame, IPatternElement<TToken, TTokenKind> element, int pos, List<TToken> matched) {
+        var outer = _tracker;
+        var outerMemo = _memo;
+        var local = new FailureTracker();
+        _tracker = local;
+        _frame = frame;
+        if (element is Ref<TToken, TTokenKind> or Repeat<TToken, TTokenKind> or LeftAssoc<TToken, TTokenKind>)
+            _memo = new Dictionary<(string Rule, int Offset), MatchResult<TToken, TTokenKind>?>();
+        try {
+            _ = TryMatchElement(element, pos, frame.Captures, matched, out _);
+        }
+        finally {
+            _tracker = outer;
+            _memo = outerMemo;
+        }
+        return local.Far >= 0
+            ? new Commit(frame.Pattern, local.Far, [.. local.Entries])
+            : new Commit(frame.Pattern, pos, [new Entry(frame.Rule, frame.Pattern, frame.Index, element, pos, null, frame.Captures)]);
+    }
+
+    /// <summary>
+    /// The report for <paramref name="entries"/> (all at the same offset): sorted by (declaration order, element
+    /// index) and deduplicated; the first entry names the rule, row and element, and the first entry with a
+    /// template (or the refusal) carries the message. With no entry the failure is at <paramref name="far"/>
+    /// (the head when that is -1) and expects nothing.
+    /// </summary>
+    private MatchFailure<TToken, TTokenKind> Report(IReadOnlyList<Entry> entries, int far, bool committed) {
+        var sorted = new List<Entry>(entries.Count);
+        foreach (var entry in entries) {
+            if (!sorted.Exists(e => ReferenceEquals(e.Pattern, entry.Pattern) && e.Index == entry.Index && ReferenceEquals(e.Element, entry.Element)))
+                sorted.Add(entry);
+        }
+        sorted.Sort(static (a, b) => a.Pattern.Order != b.Pattern.Order ? a.Pattern.Order.CompareTo(b.Pattern.Order) : a.Index.CompareTo(b.Index));
+        if (sorted.Count == 0) {
+            var at = Math.Max(far, 0);
+            return new MatchFailure<TToken, TTokenKind>(_reader.Peek(at), at, committed, refused: false, "", "", -1, [],
+                template: null, new Dictionary<string, IReadOnlyList<TToken>>(StringComparer.Ordinal));
+        }
+
+        var first = sorted[0];
+        var expected = new List<Expectation<TTokenKind>>(sorted.Count);
+        Entry? messenger = null;
+        foreach (var entry in sorted) {
+            if (messenger is null && (entry.Element is Refuse<TToken, TTokenKind> || entry.Element is IExpectedElement { ExpectTemplate: not null }))
+                messenger = entry;
+            var label = LabelOf(entry.Element);
+            if (label is not null || entry.Kind is not null)
+                expected.Add(new Expectation<TTokenKind>(entry.Rule, entry.Pattern.Name, entry.Index, label, entry.Kind, IsContent(entry.Element)));
+        }
+        var refusal = messenger?.Element as Refuse<TToken, TTokenKind>;
+        var template = refusal?.Message ?? (messenger?.Element as IExpectedElement)?.ExpectTemplate;
+        var source = messenger ?? first;
+        return new MatchFailure<TToken, TTokenKind>(
+            _reader.Peek(source.Offset), source.Offset, committed, refusal is not null,
+            first.Rule, first.Pattern.Name, first.Index, expected, template,
+            source.Captures ?? new Dictionary<string, IReadOnlyList<TToken>>(StringComparer.Ordinal));
+    }
+
+    /// <summary>What a report calls an element: its Expect label, a Word's quoted text, a Run's name; else null (the host names it by kind).</summary>
+    private static string? LabelOf(IPatternElement<TToken, TTokenKind> element) => element switch {
+        IExpectedElement { Expect: { } label } => label,
+        Word<TToken, TTokenKind> w => $"'{w.Text}'",
+        Run<TToken, TTokenKind> r => r.Name,
+        _ => null,
+    };
+
+    /// <summary>A content element (runtime text: a value, predicate, Run or Any), as opposed to fixed syntax.</summary>
+    private static bool IsContent(IPatternElement<TToken, TTokenKind> element) =>
+        element is Value<TToken, TTokenKind> or MatchPredicate<TToken, TTokenKind> or Run<TToken, TTokenKind> or Any<TToken, TTokenKind>;
+
+    /// <summary>The row element being matched (set per element inside <see cref="Match"/>).</summary>
+    private readonly record struct Frame(
+        string Rule,
+        Pattern<TToken, TTokenKind> Pattern,
+        int Index,
+        Dictionary<string, IReadOnlyList<TToken>> Captures);
+
+    /// <summary>One failing element: where it is in the table, the offset it failed at, the kind it expected (if one).</summary>
+    private readonly record struct Entry(
+        string Rule,
+        Pattern<TToken, TTokenKind> Pattern,
+        int Index,
+        IPatternElement<TToken, TTokenKind> Element,
+        int Offset,
+        TTokenKind? Kind,
+        IReadOnlyDictionary<string, IReadOnlyList<TToken>>? Captures);
+
+    /// <summary>The furthest offset any element failed at, and the elements that failed there.</summary>
+    private sealed class FailureTracker {
+        public int Far { get; private set; } = -1;
+
+        public List<Entry> Entries { get; } = [];
+
+        public void Reset() {
+            Far = -1;
+            Entries.Clear();
+        }
+
+        public void Record(Entry entry) {
+            if (entry.Offset > Far) {
+                Far = entry.Offset;
+                Entries.Clear();
+            }
+            if (entry.Offset == Far)
+                Entries.Add(entry);
+        }
+    }
+
+    /// <summary>
+    /// A committed failure: <see cref="Reach"/> is how far the row got (the failing offset, or for a refusal the
+    /// position after its last token), so a sibling rescues it only by matching past it; the furthest commits union.
+    /// </summary>
+    private sealed class Commit(Pattern<TToken, TTokenKind> row, int reach, List<Entry> entries) {
+        /// <summary>The committed row (the first in declaration order among siblings that committed at the same reach).</summary>
+        public Pattern<TToken, TTokenKind> Row { get; private set; } = row;
+
+        public int Reach { get; } = reach;
+
+        public List<Entry> Entries { get; } = entries;
+
+        public static void Add(ref Commit? existing, Commit next) {
+            if (existing is null || next.Reach > existing.Reach) {
+                existing = next;
+                return;
+            }
+            if (next.Reach == existing.Reach) {
+                existing.Entries.AddRange(next.Entries);
+                if (next.Row.Order < existing.Row.Order)
+                    existing.Row = next.Row;
+            }
+        }
+    }
+
+    /// <summary>An unrescued commit leaving its rule: aborts the Match call (caught there only).</summary>
+    private sealed class CommitAbort(MatchFailure<TToken, TTokenKind> failure) : Exception {
+        public MatchFailure<TToken, TTokenKind> Failure { get; } = failure;
     }
 
     private readonly struct Piece(

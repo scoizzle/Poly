@@ -9,6 +9,7 @@ public sealed class GrammarBuilder<TToken, TTokenKind>
     where TToken : struct, IToken<TTokenKind>
     where TTokenKind : struct {
     private readonly Dictionary<string, List<Pattern<TToken, TTokenKind>>> _rules;
+    private int _nextOrder;
 
     public GrammarBuilder() {
         _rules = new Dictionary<string, List<Pattern<TToken, TTokenKind>>>(StringComparer.Ordinal);
@@ -21,9 +22,13 @@ public sealed class GrammarBuilder<TToken, TTokenKind>
     internal static GrammarBuilder<TToken, TTokenKind> From(Grammar<TToken, TTokenKind> grammar) {
         ArgumentNullException.ThrowIfNull(grammar);
         var rules = new Dictionary<string, List<Pattern<TToken, TTokenKind>>>(StringComparer.Ordinal);
-        foreach (var (rule, patterns) in grammar.Rules)
+        var nextOrder = 0;
+        foreach (var (rule, patterns) in grammar.Rules) {
             rules[rule] = [.. patterns];
-        return new GrammarBuilder<TToken, TTokenKind>(rules);
+            foreach (var pattern in patterns)
+                nextOrder = Math.Max(nextOrder, pattern.Order + 1);
+        }
+        return new GrammarBuilder<TToken, TTokenKind>(rules) { _nextOrder = nextOrder };
     }
 
     /// <summary>Begins defining patterns in a named rule group.</summary>
@@ -37,7 +42,101 @@ public sealed class GrammarBuilder<TToken, TTokenKind>
         var frozen = new Dictionary<string, List<Pattern<TToken, TTokenKind>>>(StringComparer.Ordinal);
         foreach (var (rule, patterns) in _rules)
             frozen[rule] = [.. patterns];
+        EnsureEnclosingCaptures(frozen);
         return new Grammar<TToken, TTokenKind>(frozen);
+    }
+
+    /// <summary>
+    /// A template placeholder that is not the row's own capture names an enclosing row's: every row that reaches the rule
+    /// (a top-level or optional Ref, Repeat or LeftAssoc operand) must capture it with a required element before that
+    /// reference, or be reached only by rows that do. A rule nothing reaches has no enclosing row, so the name fails; a rule
+    /// two rows reach fails too (<see cref="EnsureSingleReach"/>).
+    /// </summary>
+    private static void EnsureEnclosingCaptures(Dictionary<string, List<Pattern<TToken, TTokenKind>>> rules) {
+        foreach (var (rule, patterns) in rules) {
+            foreach (var pattern in patterns) {
+                var own = CaptureNames(pattern.Elements).ToHashSet(StringComparer.Ordinal);
+                foreach (var element in pattern.Elements) {
+                    var template = element switch {
+                        Refuse<TToken, TTokenKind> refuse => refuse.Message,
+                        IExpectedElement { ExpectTemplate: { } t } => t,
+                        Optional<TToken, TTokenKind> { Inner: IExpectedElement { ExpectTemplate: { } t } } => t,
+                        _ => null,
+                    };
+                    foreach (var name in template is null ? [] : MatchFailure<TToken, TTokenKind>.PlaceholdersOf(template)) {
+                        if (name is ("expected" or "got" or "token") || own.Contains(name))
+                            continue;
+                        if (!Enclosed(rules, rule, name, [rule]))
+                            throw new InvalidOperationException(
+                                $"The template of '{rule}/{pattern.Name}' names '{{{name}}}', which neither the row nor every row that reaches '{rule}' captures before it.");
+                        EnsureSingleReach(rules, rule, name, $"{rule}/{pattern.Name}", [rule]);
+                    }
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// A template that reads an enclosing capture needs a single parent: a memoised failure keeps the captures of the first
+    /// row that reached the rule, so two rows reaching it at the same offset would word the report by evaluation order. Each
+    /// rule from <paramref name="rule"/> up to the row that captures <paramref name="name"/> must be reached by exactly one row
+    /// (the reach relation of <see cref="Enclosed"/>); a row that reaches it more than once counts once (its references are
+    /// at different offsets, so they never share a memo entry).
+    /// </summary>
+    private static void EnsureSingleReach(
+        Dictionary<string, List<Pattern<TToken, TTokenKind>>> rules, string rule, string name, string templated, HashSet<string> visited) {
+        var reaching = new List<(string Rule, Pattern<TToken, TTokenKind> Pattern, bool Provides)>();
+        foreach (var (outer, patterns) in rules) {
+            foreach (var pattern in patterns) {
+                var before = new HashSet<string>(StringComparer.Ordinal);
+                var reaches = false;
+                var provides = true;
+                foreach (var element in pattern.Elements) {
+                    if (ReferencedRule(element) == rule) {
+                        reaches = true;
+                        provides &= before.Contains(name);
+                    }
+                    if (element is not (Optional<TToken, TTokenKind> or NotFollowedBy<TToken, TTokenKind>))
+                        before.UnionWith(CaptureNames([element]));
+                }
+                if (reaches)
+                    reaching.Add((outer, pattern, provides));
+            }
+        }
+        if (reaching.Count != 1)
+            throw new InvalidOperationException(
+                $"The template of '{templated}' reads the enclosing capture '{{{name}}}', so '{rule}' may be reached by one row only; it is reached by "
+                + $"{string.Join(", ", reaching.OrderBy(r => r.Pattern.Order).Select(r => $"'{r.Rule}/{r.Pattern.Name}'"))}. A memoised failure keeps the captures of the first row that reached it.");
+        var (parent, _, provided) = reaching[0];
+        if (!provided && visited.Add(parent))
+            EnsureSingleReach(rules, parent, name, templated, visited);
+    }
+
+    private static string? ReferencedRule(IPatternElement<TToken, TTokenKind> element) => element switch {
+        Ref<TToken, TTokenKind> r => r.RuleName,
+        Repeat<TToken, TTokenKind> r => r.RuleName,
+        LeftAssoc<TToken, TTokenKind> l => l.OperandRule,
+        Optional<TToken, TTokenKind> { Inner: Ref<TToken, TTokenKind> r } => r.RuleName,
+        _ => null,
+    };
+
+    private static bool Enclosed(Dictionary<string, List<Pattern<TToken, TTokenKind>>> rules, string rule, string name, HashSet<string> visited) {
+        var reached = false;
+        foreach (var (outer, patterns) in rules) {
+            foreach (var pattern in patterns) {
+                var before = new HashSet<string>(StringComparer.Ordinal);
+                foreach (var element in pattern.Elements) {
+                    if (ReferencedRule(element) == rule) {
+                        reached = true;
+                        if (!before.Contains(name) && (visited.Contains(outer) || !Enclosed(rules, outer, name, [.. visited, outer])))
+                            return false;
+                    }
+                    if (element is not (Optional<TToken, TTokenKind> or NotFollowedBy<TToken, TTokenKind>))
+                        before.UnionWith(CaptureNames([element]));
+                }
+            }
+        }
+        return reached;
     }
 
     /// <summary>
@@ -58,6 +157,9 @@ public sealed class GrammarBuilder<TToken, TTokenKind>
         throw new InvalidOperationException($"Unknown pattern '{patternName}' in rule '{ruleName}'.");
     }
 
+    /// <summary>The next declaration order (<see cref="Pattern{TToken,TTokenKind}.Order"/>).</summary>
+    internal int NextOrder() => _nextOrder++;
+
     internal void AddPattern(string ruleName, Pattern<TToken, TTokenKind> pattern) {
         if (!_rules.TryGetValue(ruleName, out var list))
             _rules[ruleName] = list = [];
@@ -72,12 +174,20 @@ public sealed class GrammarBuilder<TToken, TTokenKind>
 
     /// <summary>
     /// Fails closed on an element where it cannot work: a <see cref="Slot{TToken,TTokenKind}"/> that is not
-    /// the row's last element; a <see cref="Run{TToken,TTokenKind}"/> with no required element before it (it
-    /// continues the token before it); and a Slot or Run inside an <see cref="Optional{TToken,TTokenKind}"/>.
+    /// the row's last element or has no required element before it (a Slot-only row matches zero tokens
+    /// anywhere); a <see cref="Run{TToken,TTokenKind}"/> with no required element before it (it continues the
+    /// token before it); a Slot or Run inside an <see cref="Optional{TToken,TTokenKind}"/>; a
+    /// <see cref="Cut{TToken,TTokenKind}"/> with no required element before it, last, inside an Optional, or a
+    /// second one; a <see cref="Refuse{TToken,TTokenKind}"/> that is not last, follows only optional elements (a
+    /// Refuse-only row is a catch-all that matches no token), or is inside an Optional; and a template placeholder that is not <c>{expected}</c>, <c>{got}</c> or the capture
+    /// of a required element before it.
     /// </summary>
     private static void EnsurePlacement(string ruleName, Pattern<TToken, TTokenKind> pattern) {
         var elements = pattern.Elements;
         var required = false;
+        var cuts = 0;
+        var captured = new HashSet<string>(StringComparer.Ordinal);
+        string Where(int i) => $"element {i + 1} of '{ruleName}/{pattern.Name}'";
         for (var i = 0; i < elements.Count; i++) {
             switch (elements[i]) {
                 case Run<TToken, TTokenKind> run when !required:
@@ -89,12 +199,48 @@ public sealed class GrammarBuilder<TToken, TTokenKind>
                 case Slot<TToken, TTokenKind> slot when i != elements.Count - 1:
                     throw new InvalidOperationException(
                         $"Slot '{slot.Name}' on '{ruleName}/{pattern.Name}' is element {i + 1} of {elements.Count}; a Slot must be the last element.");
+                case Slot<TToken, TTokenKind> slot when !required:
+                    throw new InvalidOperationException(
+                        $"Slot '{slot.Name}' on '{ruleName}/{pattern.Name}' has no required element before it; a row of only a Slot matches zero tokens anywhere.");
                 case Optional<TToken, TTokenKind> { Inner: Slot<TToken, TTokenKind> inner }:
                     throw new InvalidOperationException(
                         $"Slot '{inner.Name}' on '{ruleName}/{pattern.Name}' is inside an Optional; a Slot is never optional.");
+                case Cut<TToken, TTokenKind> when !required:
+                    throw new InvalidOperationException($"The Cut is {Where(i)} with no required element before it; a Cut commits a row once its head has matched.");
+                case Cut<TToken, TTokenKind> when i == elements.Count - 1:
+                    throw new InvalidOperationException($"The Cut is the last element of '{ruleName}/{pattern.Name}'; a Cut with nothing after it commits nothing.");
+                case Cut<TToken, TTokenKind> when ++cuts > 1:
+                    throw new InvalidOperationException($"'{ruleName}/{pattern.Name}' holds more than one Cut; a row commits once.");
+                case Refuse<TToken, TTokenKind> when i != elements.Count - 1:
+                    throw new InvalidOperationException($"The Refuse is {Where(i)} of {elements.Count}; a Refuse must be the last element.");
+                case Refuse<TToken, TTokenKind> when !required && i != 0:
+                    throw new InvalidOperationException($"The Refuse is {Where(i)} after only optional elements; a refusal stands on a matched token, or is the whole row (a catch-all).");
+                case Refuse<TToken, TTokenKind> { At: { } at } when Refuse<TToken, TTokenKind>.AnchorOf(elements, at) is var anchor && (anchor < 0 || anchor >= i):
+                    throw new InvalidOperationException($"The Refuse of '{ruleName}/{pattern.Name}' stands at '{at}', which names no required capture or Word before it.");
+                case Optional<TToken, TTokenKind> { Inner: Cut<TToken, TTokenKind> or Refuse<TToken, TTokenKind> }:
+                    throw new InvalidOperationException($"{Where(i)} is an Optional Cut or Refuse; neither is ever optional.");
             }
-            if (elements[i] is not (Optional<TToken, TTokenKind> or NotFollowedBy<TToken, TTokenKind>))
+            var template = elements[i] switch {
+                Refuse<TToken, TTokenKind> refuse => refuse.Message,
+                IExpectedElement { ExpectTemplate: { } t } => t,
+                Optional<TToken, TTokenKind> { Inner: IExpectedElement { ExpectTemplate: { } t } } => t,
+                _ => null,
+            };
+            if (template is not null) {
+                // A name the row does not capture at all may be an enclosing row's: Build checks that (EnsureEnclosingCaptures).
+                var own = CaptureNames(elements).ToHashSet(StringComparer.Ordinal);
+                foreach (var name in MatchFailure<TToken, TTokenKind>.PlaceholdersOf(template)) {
+                    if (name is not ("expected" or "got" or "token") && !captured.Contains(name) && own.Contains(name))
+                        throw new InvalidOperationException(
+                            $"The template of {Where(i)} names '{{{name}}}', which the row captures only after it or optionally.");
+                }
+            }
+            if (elements[i] is not (Optional<TToken, TTokenKind> or NotFollowedBy<TToken, TTokenKind>
+                or Cut<TToken, TTokenKind> or Refuse<TToken, TTokenKind> or Slot<TToken, TTokenKind>)) {
                 required = true;
+                foreach (var name in CaptureNames([elements[i]]))
+                    captured.Add(name);
+            }
         }
     }
 
@@ -244,6 +390,57 @@ public sealed class PatternBuilder<TToken, TTokenKind>
         return this;
     }
 
+    /// <summary>
+    /// Names the element before it in a failure report: <paramref name="label"/> is what the report says was
+    /// expected, and <paramref name="template"/> (optional) is the row's own message when this element is the first
+    /// expected element (placeholders <c>{expected}</c>, <c>{got}</c> and a capture name of a required element
+    /// before it). Only a token element takes one: a Kind, Value, Predicate, Word or Run. A capture the row does not take
+    /// itself is an enclosing row's, read innermost first; a rule whose template reads one is reached by one row only
+    /// (<c>Build</c> throws otherwise), because a memoised failure keeps the captures of the first row that reached it.
+    /// </summary>
+    public PatternBuilder<TToken, TTokenKind> Expect(string label, string? template = null) {
+        ArgumentException.ThrowIfNullOrEmpty(label);
+        if (_elements.Count == 0)
+            throw new InvalidOperationException($"Expect names the element before it; pattern '{_name}' in rule '{_ruleName}' has none.");
+        _elements[^1] = _elements[^1] switch {
+            MatchKind<TToken, TTokenKind> e => e with { Expect = label, ExpectTemplate = template },
+            Value<TToken, TTokenKind> e => e with { Expect = label, ExpectTemplate = template },
+            MatchPredicate<TToken, TTokenKind> e => e with { Expect = label, ExpectTemplate = template },
+            Word<TToken, TTokenKind> e => e with { Expect = label, ExpectTemplate = template },
+            Run<TToken, TTokenKind> e => e with { Expect = label, ExpectTemplate = template },
+            var other => throw new InvalidOperationException(
+                $"Expect names a token element (Kind, Value, Predicate, Word or Run); element {_elements.Count} of pattern '{_name}' in rule '{_ruleName}' is a {other.GetType().Name[..other.GetType().Name.IndexOf('`')]}."),
+        };
+        return this;
+    }
+
+    /// <summary>
+    /// Commits the row once the elements before it have matched (<see cref="Cut{TToken,TTokenKind}"/>). The convention,
+    /// enforced at <c>Commit</c>: the Cut goes after the row's head tokens (at least one required element before it), never
+    /// first and never last, and a row holds one; a rule with a Cut is matched with <c>Match</c>.
+    /// </summary>
+    public PatternBuilder<TToken, TTokenKind> Cut() {
+        _elements.Add(new Cut<TToken, TTokenKind>());
+        return this;
+    }
+
+    /// <summary>Ends the row with a refusal: reaching it yields a committed failure with <paramref name="message"/> (<see cref="Refuse{TToken,TTokenKind}"/>).</summary>
+    /// <remarks>
+    /// A <c>Repeat</c> over a rule that has a Refuse-only catch-all cannot end at its terminator: at the terminator no other
+    /// row matches, the catch-all commits and the whole match ends, so such loops stay host-driven (the host matches one
+    /// item at a time and tests for the terminator itself). A Refuse-only catch-all also outranks a deeper plain failure of a
+    /// sibling (committed failures only are reported), so a sibling whose own error must win needs a <c>Cut</c> after its
+    /// discriminating token, not after a prefix it shares with other rows. The message is a template like an <c>Expect</c>
+    /// template: a capture the row does not take itself is an enclosing row's, read innermost first, and a rule whose
+    /// message reads one is reached by one row only (<c>Build</c> throws otherwise), because a memoised failure keeps the
+    /// captures of the first row that reached it.
+    /// </remarks>
+    public PatternBuilder<TToken, TTokenKind> Refuse(string message, string? at = null) {
+        ArgumentException.ThrowIfNullOrEmpty(message);
+        _elements.Add(new Refuse<TToken, TTokenKind>(message, at));
+        return this;
+    }
+
     /// <summary>Makes <paramref name="inner"/> optional — matches zero or one occurrence.</summary>
     public PatternBuilder<TToken, TTokenKind> Optional(IPatternElement<TToken, TTokenKind> inner) {
         _elements.Add(new Optional<TToken, TTokenKind>(inner));
@@ -299,7 +496,7 @@ public sealed class PatternBuilder<TToken, TTokenKind>
 
     /// <summary>Registers this pattern on the builder; ready for the next pattern in the same rule.</summary>
     public RuleBuilder<TToken, TTokenKind> Commit() {
-        _builder.AddPattern(_ruleName, new Pattern<TToken, TTokenKind>(_name, _elements, _priority, _payload));
+        _builder.AddPattern(_ruleName, new Pattern<TToken, TTokenKind>(_name, _elements, _priority, _payload) { Order = _builder.NextOrder() });
         return new RuleBuilder<TToken, TTokenKind>(_builder, _ruleName);
     }
 }

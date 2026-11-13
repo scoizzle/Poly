@@ -88,6 +88,8 @@ internal static class PatternRowAllowList {
         PatternRowEntry.Row(Dsl, PatternRowEntryKind.ReaderHead, "top", "enum", HandPrintedUntil("G-29"), "G-29"),
         PatternRowEntry.Row(Dsl, PatternRowEntryKind.ReaderHead, "top", "entity", HandPrintedUntil("G-30"), "G-30"),
         PatternRowEntry.Row(Dsl, PatternRowEntryKind.ReaderHead, "visibility", "public", HandPrintedUntil("G-29"), "G-29"),
+        PatternRowEntry.Row(Dsl, PatternRowEntryKind.ReaderHead, "marked-top", "entity", HandPrintedUntil("G-30"), "G-30"),
+        PatternRowEntry.Row(Dsl, PatternRowEntryKind.ReaderHead, "marked-top", "value", HandPrintedUntil("G-29"), "G-29"),
         .. Rows(Dsl, PatternRowEntryKind.ReaderHead, "entity-body",
             ["typed-line", "property", "nav-many", "nav-one", "nav-owned", "primitive-name"], HandPrintedUntil("G-30"), "G-30"),
         .. Rows(Dsl, PatternRowEntryKind.ReaderHead, "entity-body", ["entity-subscription", "stage"], HandPrintedUntil("G-31"), "G-31"),

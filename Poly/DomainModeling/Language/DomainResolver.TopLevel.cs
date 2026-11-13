@@ -12,39 +12,31 @@ namespace Poly.DomainModeling.Language;
 // DomainResolver (TopLevel) — top-level declarations: visibility, enum/value/function/contract/bind and the top-level rejection.
 
 public sealed partial class DomainResolver {
-    /// <summary>
-    /// The optional visibility slot. Absent means <see cref="Visibility.Internal"/>.
-    /// The grammar rule is the plug point for a later level.
-    /// </summary>
-    private bool TryTakeVisibility(out Visibility visibility) {
-        var match = MatchRule("visibility");
-        if (match is null) {
-            visibility = Visibility.Internal;
-            return false;
-        }
-        visibility = match.PatternName switch {
-            "public" => Visibility.Public,
-            _ => throw Error($"Unknown visibility '{match.PatternName}'."),
-        };
-        Consume(match);
-        return true;
-    }
+    /// <summary>The visibility a <c>visibility</c> row names.</summary>
+    private Visibility VisibilityOf(MatchResult<DslToken, TokenKind> visibility) => visibility.PatternName switch {
+        "public" => Visibility.Public,
+        _ => throw Error($"Unknown visibility '{visibility.PatternName}'."),
+    };
 
-    /// <summary><c>public entity Name</c> or <c>public value Name</c>. The trailing mark is not accepted.</summary>
-    private void ParseMarkedTop(List<DomainChange> changes, Visibility visibility) {
-        if (Current.Kind == TokenKind.Entity) {
-            Advance();
-            var name = ExpectIdentifier(TokenKind.Identifier, "entity name");
-            ParseEntityAfterKind(changes, name, visibility);
-            return;
+    /// <summary>
+    /// <c>public entity Name</c> or <c>public value Name</c>: the <c>marked-top</c> row matches the head and reports
+    /// what it expected when it does not; this folds the match. The trailing mark is not accepted.
+    /// </summary>
+    private void FoldMarkedTop(List<DomainChange> changes) {
+        var match = MatchOrThrow("marked-top");
+        Consume(match);
+        var visibility = VisibilityOf(match.Children[0]);
+        var name = match.Captures["name"][0].Name();
+        switch (match.PatternName) {
+            case "entity":
+                ParseEntityAfterKind(changes, name, visibility);
+                break;
+            case "value":
+                FinishValueType(changes, name, visibility);
+                break;
+            default:
+                throw Error($"Unknown marked top-level row '{match.PatternName}'.");
         }
-        if (DslGrammar.IsValueWord(Current)) {
-            Advance();
-            var name = ExpectIdentifier(TokenKind.Identifier, "value type name");
-            FinishValueType(changes, name, visibility);
-            return;
-        }
-        throw Error($"Expected 'entity' or 'value' after '{visibility.ToString().ToLowerInvariant()}', got '{Shown(Current)}'");
     }
 
     /// <summary>

@@ -287,4 +287,29 @@ public sealed class GrammarEdgeCaseTests {
         await Assert.That(r2).IsNotNull();
         await Assert.That(r2!.Consumed).IsEqualTo(4);
     }
+
+    // ── the buffered reader's committed position ─────────────────────────────────────
+
+    [Test]
+    public async Task BufferedReader_ConsumeBeforeAnyPeek_ConsumesThatManyTokens() {
+        var reader = new TestTokenizer("a b c d");
+
+        reader.Consume(2);
+
+        await Assert.That(reader.Peek(0)).IsEqualTo(new TestToken(TestKind.Identifier, "c"));
+    }
+
+    [Test]
+    public async Task BufferedReader_ConsumePastTheEnd_LeavesEndOfFile_AsPeekingPastItDoes() {
+        var peeked = new TestTokenizer("a");
+        var consumed = new TestTokenizer("a");
+
+        // Past the end the scanner keeps returning end of input: Peek(5) is EndOfFile, and so is the head after Consume(5).
+        var pastTheEnd = peeked.Peek(5);
+        consumed.Consume(5);
+
+        await Assert.That(pastTheEnd.Kind).IsEqualTo(TestKind.EndOfFile);
+        await Assert.That(consumed.Peek(0).Kind).IsEqualTo(TestKind.EndOfFile);
+        await Assert.That(consumed.Peek(1).Kind).IsEqualTo(TestKind.EndOfFile);
+    }
 }

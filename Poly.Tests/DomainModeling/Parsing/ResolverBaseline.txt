@@ -259,10 +259,10 @@ S	Stages.quantifier.all	ok	R	domain A\nX: entity {\n  Kids: many Kid\n  Done: st
 S	Stages.quantifier.all	case	R	domain A\nX: entity {\n  Kids: many Kid\n  Done: stage {\n    when All Kids Done { }\n  }\n}\nKid: entity {\n  Qty: Number\n  IsPaid: policy { Qty > 0 }\n  Pay: action { }\n}\n	OK SetDomainNameChange(Name="A") ; AddEntityChange(InitialProperties=[],Name="X",Visibility=Visibility.Internal) ; AddStageChange(EntityName="X",Name="Done") ; AddStageSubscriptionChange(EntityName="X",StageName="Done",Subscription=StageSubscription(Children=[],Effects=[],PeerBinding=null,Quantifier=StageSubscriptionQuantifier.All,RelationshipName="Kids",StageNames=["Done"])) ; SetEntityMemberOrderChange(EntityName="X",MemberOrder=[EntityMemberRef(Kind=EntityMemberKind.Navigation,Name="Kids"),EntityMemberRef(Kind=EntityMemberKind.Stage,Name="Done")]) ; AddEntityChange(InitialProperties=[],Name="Kid",Visibility=Visibility.Internal) ; AddPropertyToEntityChange(EntityName="Kid",Property=Property(Children=[],Constraints=[],Facets=[],Name="Qty",Type=DomainTypeReference(Children=[],TypeName="Number"))) ; AddPolicyToEntityChange(EntityName="Kid",Policy=Policy(Children=[Comparison(Children=[PropertyAccess(Children=[],Name="Qty"),Literal(Children=[],Col=Int32:26,Line=Int32:10,TypeHint=null,Value=Int64:0)],Kind=ComparisonKind.GreaterThan,Left=PropertyAccess(Children=[],Name="Qty"),Right=Literal(Children=[],Col=Int32:26,Line=Int32:10,TypeHint=null,Value=Int64:0))],Expression=Comparison(Children=[PropertyAccess(Children=[],Name="Qty"),Literal(Children=[],Col=Int32:26,Line=Int32:10,TypeHint=null,Value=Int64:0)],Kind=ComparisonKind.GreaterThan,Left=PropertyAccess(Children=[],Name="Qty"),Right=Literal(Children=[],Col=Int32:26,Line=Int32:10,TypeHint=null,Value=Int64:0)),Name="IsPaid")) ; AddActionChange(EntityName="Kid",Name="Pay",Visibility=Visibility.Internal) ; SetEntityMemberOrderChange(EntityName="Kid",MemberOrder=[EntityMemberRef(Kind=EntityMemberKind.Property,Name="Qty"),EntityMemberRef(Kind=EntityMemberKind.Policy,Name="IsPaid"),EntityMemberRef(Kind=EntityMemberKind.Action,Name="Pay")]) ; AddRelationshipChange(Cardinality=RelationshipCardinality.OneToMany,Inverse=null,Name="Kids",Properties=[],Source=DomainTypeReference(Children=[],TypeName="X"),SourceOwnsTarget=false,Target=DomainTypeReference(Children=[],TypeName="Kid"))
 S	Stages.quantifier.all	rel-named-all	R	domain A\nX: entity {\n  Kids: many Kid\n  Done: stage {\n    when all Done { }\n  }\n}\nKid: entity {\n  Qty: Number\n  IsPaid: policy { Qty > 0 }\n  Pay: action { }\n}\n	ERR Expected target stage name, got '{' @5:19
 S	Stages.quantifier.all	str	R	domain A\nX: entity {\n  Kids: many Kid\n  Done: stage {\n    when "all" Kids Done { }\n  }\n}\nKid: entity {\n  Qty: Number\n  IsPaid: policy { Qty > 0 }\n  Pay: action { }\n}\n	ERR Expected action name, got 'when' @5:5
-S	TopLevel.marked.error	mis-number	R	domain A\npublic 5\n	ERR Expected 'entity' or 'value' after 'public', got '5' @2:8
-S	TopLevel.marked.error	str	R	domain A\npublic "value" V { }\n	ERR Expected 'entity' or 'value' after 'public', got 'value' @2:8
-S	TopLevel.marked.error	mis-keyword	R	domain A\npublic enum S { }\n	ERR Expected 'entity' or 'value' after 'public', got 'enum' @2:8
-S	TopLevel.marked.error	mis-eof	R	domain A\npublic	ERR Expected 'entity' or 'value' after 'public', got '' @2:7
+S	TopLevel.marked.error	mis-number	R	domain A\npublic 5\n	ERR Expected 'entity' or 'value' after 'public', got '5' (Number) @2:8
+S	TopLevel.marked.error	str	R	domain A\npublic "value" V { }\n	ERR Expected 'entity' or 'value' after 'public', got 'value' (StringLiteral) @2:8
+S	TopLevel.marked.error	mis-keyword	R	domain A\npublic enum S { }\n	ERR Expected 'entity' or 'value' after 'public', got 'enum' (Enum) @2:8
+S	TopLevel.marked.error	mis-eof	R	domain A\npublic	ERR Expected 'entity' or 'value' after 'public', got '' (EndOfFile) @2:7
 S	TopLevel.marked.error	ok-entity	R	domain A\npublic entity E { N: Text }\n	OK SetDomainNameChange(Name="A") ; AddEntityChange(InitialProperties=[],Name="E",Visibility=Visibility.Public) ; AddPropertyToEntityChange(EntityName="E",Property=Property(Children=[],Constraints=[],Facets=[],Name="N",Type=DomainTypeReference(Children=[],TypeName="Text"))) ; SetEntityMemberOrderChange(EntityName="E",MemberOrder=[EntityMemberRef(Kind=EntityMemberKind.Property,Name="N")])
 S	TopLevel.marked.error	ok-value	R	domain A\npublic value V { N: Text }\n	OK SetDomainNameChange(Name="A") ; AddValueTypeChange(Name="V",Properties=[Property(Children=[],Constraints=[],Facets=[],Name="N",Type=DomainTypeReference(Children=[],TypeName="Text"))],Visibility=Visibility.Public)
 S	TopLevel.rejection.name	mis-number	R	domain A\nX: 5\n	ERR Expected 'entity', 'enum', 'value', 'contract', 'function', or 'bind' definition, got 'X' @2:1
@@ -2612,7 +2612,7 @@ N	toplevel	23	Colon	30C37794E6F143BE
 N	toplevel	24	NumberType	83132A4D6CC20AEC
 N	toplevel	25	RBrace	B8E5992676A4AAFD
 N	toplevel	26	Public	F740EB703A6A56E7
-N	toplevel	27	Identifier	32DCB95FB71677AE
+N	toplevel	27	Identifier	5976775C3C1BD2A9
 N	toplevel	28	Identifier	4A717705BC20E074
 N	toplevel	29	LBrace	EC733A8CB2C866DD
 N	toplevel	30	Identifier	4F723E5D29493BAD
@@ -2646,7 +2646,7 @@ N	toplevel	57	Identifier	97150A19AC4A954A
 N	toplevel	58	Text	E6FDAC5709CDF7CB
 N	toplevel	59	RBrace	18104CB858A5CA4F
 N	toplevel	60	Public	3A914D8884D0E711
-N	toplevel	61	Entity	5CE346E20CA9CEAD
+N	toplevel	61	Entity	C299C334634F8CEA
 N	toplevel	62	Identifier	F156ACC1B5751A9B
 N	toplevel	63	LBrace	FEEA550A63420F4C
 N	toplevel	64	Identifier	6DDE9BC5D7943628

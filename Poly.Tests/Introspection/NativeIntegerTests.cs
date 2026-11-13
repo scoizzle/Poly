@@ -726,7 +726,7 @@ public class NativeIntegerTests {
     /// bitwise operands keep the left type). Pinned by count and key checksum.
     /// </summary>
     [Test]
-    public async Task Grid_StatedTypeDiffers_IsT17s_PinnedByCountAndChecksum() {
+    public async Task Grid_StatedTypeDiffers_IsT22s_PinnedByCountAndChecksum() {
         var cells = NativeIntegerGrid.Cells.Value.Where(static c => c.Class == "defined: right word, stated type differs").ToArray();
         await Assert.That((cells.Length, Poly.Tests.DomainModeling.Analysis.LedgerCheck.Checksum(cells.Select(static c => c.Key)))).IsEqualTo((24, "361d663ed250c4c0"));
     }
@@ -869,11 +869,21 @@ public class NativeIntegerTests {
         // T-17 typed 78 of the 104 right-word cells as C#'s type. The 26 that remain are a `long` constant beside a native form: nuint beside it is judged by ConstantOperandRule as nuint where C# says ulong (T-26), and `x * 1L`, `x / 1L`, `x % 1L` fold to x typed as x (identity fold keeps the operand's type; found, not fixed).
         var stated = cells.Where(static c => c.Class == "right word, stated type differs").Select(static c => c.Key).ToArray();
         await Assert.That((stated.Length, Poly.Tests.DomainModeling.Analysis.LedgerCheck.Checksum(stated))).IsEqualTo(StatedTypeConstantCells);
+        // T-26's, two groups: nuint beside a long constant under Add or Subtract (ConstantOperandRule judges it as nuint, C# says ulong), and the
+        // identity folds x * 1L, x / 1L, x % 1L (the fold keeps x's own type, C# says long); both are removed with the constant conversion (T-26).
+        var rule = stated.Where(static key => key.Contains(" Add ", StringComparison.Ordinal) || key.Contains(" Subtract ", StringComparison.Ordinal)).ToArray();
+        var folds = stated.Except(rule).ToArray();
+        await Assert.That((rule.Length, Poly.Tests.DomainModeling.Analysis.LedgerCheck.Checksum(rule))).IsEqualTo(StatedTypeConstantRuleCells);
+        await Assert.That((folds.Length, Poly.Tests.DomainModeling.Analysis.LedgerCheck.Checksum(folds))).IsEqualTo(StatedTypeConstantFoldCells);
     }
 
     private const int DefinedConstantCells = 414;
 
     private static readonly (int, string) StatedTypeConstantCells = (26, "ec6c6896f8c181cd");
+
+    private static readonly (int, string) StatedTypeConstantRuleCells = (8, "d0fdea1e57dc3890");
+
+    private static readonly (int, string) StatedTypeConstantFoldCells = (18, "a130fa72c63b56b3");
 
     // ---- F2, F3, F5 ----
 

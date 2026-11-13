@@ -85,12 +85,12 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
             Parameter parameter => FoldParameter(parameter, parameterValues),
 
             // Operators: the type provider states which apply and what they mean (GetOperator).
-            Add add => FoldOperator(context, node, OperatorKind.Add, add.LeftHandValue, add.RightHandValue, parameterValues),
-            Subtract sub => FoldOperator(context, node, OperatorKind.Subtract, sub.LeftHandValue, sub.RightHandValue, parameterValues),
-            Multiply mul => FoldOperator(context, node, OperatorKind.Multiply, mul.LeftHandValue, mul.RightHandValue, parameterValues),
-            Divide div => FoldOperator(context, node, OperatorKind.Divide, div.LeftHandValue, div.RightHandValue, parameterValues),
-            Modulo mod => FoldOperator(context, node, OperatorKind.Modulo, mod.LeftHandValue, mod.RightHandValue, parameterValues),
-            UnaryMinus neg => FoldOperator(context, node, OperatorKind.UnaryMinus, neg.Operand, null, parameterValues),
+            Add add => FoldOperator(context, OperatorKind.Add, add.LeftHandValue, add.RightHandValue, parameterValues),
+            Subtract sub => FoldOperator(context, OperatorKind.Subtract, sub.LeftHandValue, sub.RightHandValue, parameterValues),
+            Multiply mul => FoldOperator(context, OperatorKind.Multiply, mul.LeftHandValue, mul.RightHandValue, parameterValues),
+            Divide div => FoldOperator(context, OperatorKind.Divide, div.LeftHandValue, div.RightHandValue, parameterValues),
+            Modulo mod => FoldOperator(context, OperatorKind.Modulo, mod.LeftHandValue, mod.RightHandValue, parameterValues),
+            UnaryMinus neg => FoldOperator(context, OperatorKind.UnaryMinus, neg.Operand, null, parameterValues),
 
             // Boolean operations
             And and => FoldAnd(context, and, parameterValues),
@@ -98,12 +98,12 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
             Not not => FoldUnaryBoolean(context, not.Value, a => !a, parameterValues),
 
             // Comparison and equality operations
-            GreaterThan gt => FoldOperator(context, node, OperatorKind.GreaterThan, gt.LeftHandValue, gt.RightHandValue, parameterValues),
-            GreaterThanOrEqual gte => FoldOperator(context, node, OperatorKind.GreaterThanOrEqual, gte.LeftHandValue, gte.RightHandValue, parameterValues),
-            LessThan lt => FoldOperator(context, node, OperatorKind.LessThan, lt.LeftHandValue, lt.RightHandValue, parameterValues),
-            LessThanOrEqual lte => FoldOperator(context, node, OperatorKind.LessThanOrEqual, lte.LeftHandValue, lte.RightHandValue, parameterValues),
-            Equal eq => FoldOperator(context, node, OperatorKind.Equal, eq.LeftHandValue, eq.RightHandValue, parameterValues),
-            NotEqual neq => FoldOperator(context, node, OperatorKind.NotEqual, neq.LeftHandValue, neq.RightHandValue, parameterValues),
+            GreaterThan gt => FoldOperator(context, OperatorKind.GreaterThan, gt.LeftHandValue, gt.RightHandValue, parameterValues),
+            GreaterThanOrEqual gte => FoldOperator(context, OperatorKind.GreaterThanOrEqual, gte.LeftHandValue, gte.RightHandValue, parameterValues),
+            LessThan lt => FoldOperator(context, OperatorKind.LessThan, lt.LeftHandValue, lt.RightHandValue, parameterValues),
+            LessThanOrEqual lte => FoldOperator(context, OperatorKind.LessThanOrEqual, lte.LeftHandValue, lte.RightHandValue, parameterValues),
+            Equal eq => FoldOperator(context, OperatorKind.Equal, eq.LeftHandValue, eq.RightHandValue, parameterValues),
+            NotEqual neq => FoldOperator(context, OperatorKind.NotEqual, neq.LeftHandValue, neq.RightHandValue, parameterValues),
 
             // Conditional with constant condition
             Conditional cond => FoldConditional(context, cond, parameterValues),
@@ -113,12 +113,12 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
             Coalesce coalesce => FoldCoalesce(context, coalesce, parameterValues),
 
             // Bitwise operations
-            BitwiseAnd ba => FoldOperator(context, node, OperatorKind.BitwiseAnd, ba.LeftHandValue, ba.RightHandValue, parameterValues),
-            BitwiseOr bor => FoldOperator(context, node, OperatorKind.BitwiseOr, bor.LeftHandValue, bor.RightHandValue, parameterValues),
-            BitwiseXor bx => FoldOperator(context, node, OperatorKind.BitwiseXor, bx.LeftHandValue, bx.RightHandValue, parameterValues),
-            ShiftLeft sl => FoldOperator(context, node, OperatorKind.ShiftLeft, sl.LeftHandValue, sl.RightHandValue, parameterValues),
-            ShiftRight sr => FoldOperator(context, node, OperatorKind.ShiftRight, sr.LeftHandValue, sr.RightHandValue, parameterValues),
-            BitwiseNot bn => FoldOperator(context, node, OperatorKind.BitwiseNot, bn.Operand, null, parameterValues),
+            BitwiseAnd ba => FoldOperator(context, OperatorKind.BitwiseAnd, ba.LeftHandValue, ba.RightHandValue, parameterValues),
+            BitwiseOr bor => FoldOperator(context, OperatorKind.BitwiseOr, bor.LeftHandValue, bor.RightHandValue, parameterValues),
+            BitwiseXor bx => FoldOperator(context, OperatorKind.BitwiseXor, bx.LeftHandValue, bx.RightHandValue, parameterValues),
+            ShiftLeft sl => FoldOperator(context, OperatorKind.ShiftLeft, sl.LeftHandValue, sl.RightHandValue, parameterValues),
+            ShiftRight sr => FoldOperator(context, OperatorKind.ShiftRight, sr.LeftHandValue, sr.RightHandValue, parameterValues),
+            BitwiseNot bn => FoldOperator(context, OperatorKind.BitwiseNot, bn.Operand, null, parameterValues),
 
             // Lambda invocation with constant arguments
             Invoke invoke => FoldInvocation(context, invoke, parameterValues),
@@ -537,7 +537,7 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
     /// operator is applied. A cell the provider states nothing for declines (fail closed), except equality of two values
     /// of one enum type, which keeps <see cref="object.Equals(object?, object?)"/>.
     /// </summary>
-    private FoldResult FoldOperator(AnalysisContext context, Node node, OperatorKind kind, Node left, Node? right, IReadOnlyDictionary<NodeId, object?>? parameterValues) {
+    private FoldResult FoldOperator(AnalysisContext context, OperatorKind kind, Node left, Node? right, IReadOnlyDictionary<NodeId, object?>? parameterValues) {
         if (!TryGetOperand(context, left, parameterValues, out var leftValue))
             return FoldResult.NotFoldable;
         object? rightValue = null;

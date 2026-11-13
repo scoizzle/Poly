@@ -78,6 +78,13 @@ public sealed partial class MatchFailure<TToken, TTokenKind>
     /// <summary>True when the report is a <see cref="Refuse{TToken,TTokenKind}"/> row's: <see cref="Template"/> is its message.</summary>
     public bool Refused { get; }
 
+    /// <summary>
+    /// The row that committed (its Cut passed, or it reached its Refuse); the first in declaration order when siblings
+    /// committed at the same offset. Null for a plain failure. A caller that must not throw (an outline) can read
+    /// the kind of a half-written head from it.
+    /// </summary>
+    public string? CommittedPattern { get; internal set; }
+
     /// <summary>The rule of the reported element (the first in declaration order); empty when nothing was recorded.</summary>
     public string Rule { get; }
 

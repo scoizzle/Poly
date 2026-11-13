@@ -314,7 +314,11 @@ public sealed class PatternBuilder<TToken, TTokenKind>
         return this;
     }
 
-    /// <summary>Commits the row once the elements before it have matched (<see cref="Cut{TToken,TTokenKind}"/>).</summary>
+    /// <summary>
+    /// Commits the row once the elements before it have matched (<see cref="Cut{TToken,TTokenKind}"/>). The convention,
+    /// enforced at <c>Commit</c>: the Cut goes after the row's head tokens (at least one required element before it), never
+    /// first and never last, and a row holds one; a rule with a Cut is matched with <c>Match</c>.
+    /// </summary>
     public PatternBuilder<TToken, TTokenKind> Cut() {
         _elements.Add(new Cut<TToken, TTokenKind>());
         return this;

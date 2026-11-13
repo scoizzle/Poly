@@ -507,4 +507,43 @@ public sealed class GrammarFailureTests {
         await Assert.That(() => TryMatch(grammar, "refusing", "x")).Throws<InvalidOperationException>();
         await Assert.That(TryMatch(grammar, "free", "x")?.PatternName).IsEqualTo("p");
     }
+
+    // ── follow-ups for the family rows (#856 row G-28 'also' lines, 2026-11-13) ──────────
+
+    [Test]
+    public async Task Refuse_InsideARepeatItem_EndsTheWholeMatch() {
+        var grammar = Table()
+            .Define("item")
+                .Pattern("ok").Value(TestKind.Identifier, "name").Kind(TestKind.Colon).Kind(TestKind.Number).Commit()
+                .Pattern("actor").Value(TestKind.Identifier, "name").Kind(TestKind.Colon)
+                    .Word(TestKind.Identifier, "actor", t => IsWord(t, "actor")).Refuse("'actor' is not supported").Commit()
+            .Define("list").Pattern("p").Kind(TestKind.LBrace).Repeat("item").Kind(TestKind.RBrace).Commit()
+            .Build();
+
+        var outcome = Match(grammar, "list", "{ a : 1 b : actor }");
+
+        await Assert.That(outcome.Result).IsNull();
+        await Assert.That(outcome.Failure).IsNotNull();
+        await Assert.That((outcome.Failure!.Refused, outcome.Failure.Offset, outcome.Failure.Template)).IsEqualTo((true, 6, "'actor' is not supported"));
+    }
+
+    [Test]
+    public async Task Failure_NamesTheCommittedPattern_TheCutRowOrTheRefusingRow_AndNullWhenPlain() {
+        var grammar = Table()
+            .Define("inner").Pattern("typed").Kind(TestKind.Entity).Cut().Ref("type").Commit()
+            .Define("type").Pattern("p").Kind(TestKind.Identifier).Kind(TestKind.Colon).Expect("':'").Commit()
+            .Define("plain").Pattern("p").Kind(TestKind.Entity).Kind(TestKind.Stage).Commit()
+            .Define("refusing").Pattern("no").Kind(TestKind.Entity).Refuse("no").Commit()
+            .Build();
+
+        var committed = Match(grammar, "inner", "entity a 5").Failure;
+        var plain = Match(grammar, "plain", "entity 5").Failure;
+        var refused = Match(grammar, "refusing", "entity").Failure;
+
+        await Assert.That(committed).IsNotNull();
+        // The failure is inside `type`; the row whose Cut passed is inner/typed.
+        await Assert.That((committed!.Pattern, committed.CommittedPattern)).IsEqualTo(("p", "typed"));
+        await Assert.That(plain!.CommittedPattern).IsNull();
+        await Assert.That(refused!.CommittedPattern).IsEqualTo("no");
+    }
 }

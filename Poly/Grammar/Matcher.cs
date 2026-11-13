@@ -55,8 +55,11 @@ public sealed class Matcher<TToken, TTokenKind>
         }
         // A committed row is rescued only by a sibling that matched more tokens than it had; otherwise
         // the commit escapes this rule and aborts the call (it is never memoised).
-        if (committed is not null && (best is null || best.Consumed <= committed.Reach - offset))
-            throw new CommitAbort(Report(committed.Entries, committed.Reach, committed: true));
+        if (committed is not null && (best is null || best.Consumed <= committed.Reach - offset)) {
+            var failure = Report(committed.Entries, committed.Reach, committed: true);
+            failure.CommittedPattern = committed.Row.Name;
+            throw new CommitAbort(failure);
+        }
         _memo?[key] = best;
         return best;
     }
@@ -105,6 +108,12 @@ public sealed class Matcher<TToken, TTokenKind>
     /// committed (<see cref="Cut{TToken,TTokenKind}"/> or <see cref="Refuse{TToken,TTokenKind}"/>) and nothing rescued it,
     /// the report comes from the committed failures only. A successful match reports nothing. Each returned failure
     /// is also offered to <see cref="MatchTrace"/> (observation only).
+    /// <para>
+    /// <c>Match</c> never throws for an input (only for an unknown rule): a caller that must not throw, such as an
+    /// outline or an edit path, matches a rule that holds Cut or Refuse rows with it and reads a null
+    /// <see cref="MatchOutcome{TToken,TTokenKind}.Result"/> as "no head here"; <see cref="MatchFailure{TToken,TTokenKind}.CommittedPattern"/>
+    /// names a half-written head's row and <see cref="MatchFailure{TToken,TTokenKind}.Refused"/> a refused one.
+    /// </para>
     /// </summary>
     public MatchOutcome<TToken, TTokenKind> Match(string ruleName) {
         EnsureKnownRule(ruleName);
@@ -190,7 +199,7 @@ public sealed class Matcher<TToken, TTokenKind>
                     continue;
                 case Refuse<TToken, TTokenKind>:
                     // The row matched every token up to here and refuses at the last one.
-                    Commit.Add(ref committed, new Commit(pos, [new Entry(ruleName, pattern, index, element, pos - 1, null, captures)]));
+                    Commit.Add(ref committed, new Commit(pattern, pos, [new Entry(ruleName, pattern, index, element, pos - 1, null, captures)]));
                     match = null!;
                     return false;
             }
@@ -488,8 +497,8 @@ public sealed class Matcher<TToken, TTokenKind>
             _memo = outerMemo;
         }
         return local.Far >= 0
-            ? new Commit(local.Far, [.. local.Entries])
-            : new Commit(pos, [new Entry(frame.Rule, frame.Pattern, frame.Index, element, pos, null, frame.Captures)]);
+            ? new Commit(frame.Pattern, local.Far, [.. local.Entries])
+            : new Commit(frame.Pattern, pos, [new Entry(frame.Rule, frame.Pattern, frame.Index, element, pos, null, frame.Captures)]);
     }
 
     /// <summary>
@@ -584,7 +593,10 @@ public sealed class Matcher<TToken, TTokenKind>
     /// A committed failure: <see cref="Reach"/> is how far the row got (the failing offset, or for a refusal the
     /// position after its last token), so a sibling rescues it only by matching past it; the furthest commits union.
     /// </summary>
-    private sealed class Commit(int reach, List<Entry> entries) {
+    private sealed class Commit(Pattern<TToken, TTokenKind> row, int reach, List<Entry> entries) {
+        /// <summary>The committed row (the first in declaration order among siblings that committed at the same reach).</summary>
+        public Pattern<TToken, TTokenKind> Row { get; private set; } = row;
+
         public int Reach { get; } = reach;
 
         public List<Entry> Entries { get; } = entries;
@@ -594,8 +606,11 @@ public sealed class Matcher<TToken, TTokenKind>
                 existing = next;
                 return;
             }
-            if (next.Reach == existing.Reach)
+            if (next.Reach == existing.Reach) {
                 existing.Entries.AddRange(next.Entries);
+                if (next.Row.Order < existing.Row.Order)
+                    existing.Row = next.Row;
+            }
         }
     }
 

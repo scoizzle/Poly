@@ -392,7 +392,7 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
             return true; // unknown receiver — allow emit late-bind
         var argTypes = new ITypeDefinition[invoke.Arguments.Length];
         for (var i = 0; i < invoke.Arguments.Length; i++) {
-            var argType = context.GetResolvedType(invoke.Arguments[i]);
+            var argType = UndefinedArithmeticMatch.ForNode(context, invoke.Arguments[i]);
             if (argType is null)
                 return true; // incomplete — allow late-bind
             argTypes[i] = argType;
@@ -1127,7 +1127,7 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
 
     private static Type? ClrTypeOf(AnalysisContext context, Node node) {
         var effective = context.GetNodeReplacement(node) ?? node;
-        return context.GetResolvedType(effective)?.GetRuntimeType()
+        return (context.GetResolvedType(effective) ?? UndefinedArithmeticMatch.ForNode(context, effective))?.GetRuntimeType()
             ?? (effective is Constant { Value: not null } constant
                 ? constant.Value.GetType()
                 : null);

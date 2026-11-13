@@ -11,7 +11,7 @@ namespace Poly.Tests.Interpretation.Analysis;
 /// unresolved, the nullable shift and bitwise cells) has no stamp, but every consumer position judges it exactly as master
 /// did, when the private rule stamped the left operand's type (a string when an operand was exactly string). Each cell is
 /// pinned with master's verdict, message and value (<see cref="Expected"/> was generated on origin/master). The cell records the verdict, the message and the value, not the
-/// root type name: a bare undefined sum has no stamp (master stamped the left operand's type), which only the VM root type shows.
+/// root type name. One cell is not master's: `obj - 1` at the root, which master read as null (the sum was typed Object and the typed read of the difference gave nothing) and the head reads as 0, the arithmetic result; every other cell is master's exactly. A bare undefined sum has no stamp (master stamped the left operand's type), which only the VM root type shows.
 /// </summary>
 public class UndefinedArithmeticArgumentTests {
     public struct Pair {
@@ -184,7 +184,7 @@ public class UndefinedArithmeticArgumentTests {
         "obj * 2 @ conditional arm\tERROR: no matching member 'TakesInt' on 'Calls' for invoke with 1 argument(s)",
         "obj * 2 @ coalesce\tERROR: no matching member 'TakesInt' on 'Calls' for invoke with 1 argument(s)",
         "obj * 2 @ return\tOK 2",
-        "obj - 1 @ root\tOK ",
+        "obj - 1 @ root\tOK 0",
         "obj - 1 @ TakesInt\tERROR: no matching member 'TakesInt' on 'Calls' for invoke with 1 argument(s)",
         "obj - 1 @ TakesObject\tOK ",
         "obj - 1 @ TakesItem\tERROR: no matching member 'TakesItem' on 'Calls' for invoke with 1 argument(s)",

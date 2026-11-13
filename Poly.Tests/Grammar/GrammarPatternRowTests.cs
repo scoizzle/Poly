@@ -103,6 +103,30 @@ public sealed class GrammarPatternRowTests {
         await Assert.That(error.Message).Contains("AlienElement");
     }
 
+    // ── G-27 elements: Word is fixed text ─────────────────────────────────────
+
+    [Test]
+    public async Task Classify_Word_IsFixed() {
+        var word = new Word<DslToken, DslTokenKind>(DslTokenKind.Identifier, "via", _ => true);
+
+        await Assert.That(PatternRowChecker.Classify(word)).IsEqualTo(PatternRowChecker.ElementRole.Fixed);
+    }
+
+    [Test]
+    public async Task Check_RowWithAWord_ReadsBackAndNeedsNoFillForTheWord() {
+        var grammar = Dsl.ToBuilder()
+            .Define("synthetic-nav")
+                .Pattern("via")
+                    .Value(DslTokenKind.Identifier, "name").Word("via").Value(DslTokenKind.Identifier, "target").Commit()
+            .Build();
+
+        var good = CheckDsl(grammar, [Observed(grammar, "synthetic-nav", "via", "Owner via Account", fills: ["name", "target"])]);
+        var bad = CheckDsl(grammar, [Observed(grammar, "synthetic-nav", "via", "Owner vial Account", fills: ["name", "target"])]);
+
+        await Assert.That(good.Where(v => v.Rule == "synthetic-nav")).IsEmpty();
+        await Assert.That(On(bad, PatternRowCheck.ReadBack, "synthetic-nav", "via")).Count().IsEqualTo(1);
+    }
+
     // ── coverage (A3a) ────────────────────────────────────────────────────────
 
     [Test]

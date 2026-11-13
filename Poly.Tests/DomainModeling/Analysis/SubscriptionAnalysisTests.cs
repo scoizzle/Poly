@@ -183,11 +183,15 @@ public class SubscriptionAnalysisTests {
         var rel = new Relationship("Notifies",
             new DomainTypeReference("Order"), new DomainTypeReference("Customer"),
             RelationshipCardinality.OneToOne, []);
+        // S-13a: the subscription's relationship states its explicit inverse (via) on the other end.
+        var notified = new Relationship("NotifiedBy",
+            new DomainTypeReference("Customer"), new DomainTypeReference("Order"),
+            RelationshipCardinality.OneToOne, []) { Inverse = "Notifies" };
         var targetStage = new Stage("Active", [], [], [], []);
         var target = MakeEntity("Customer", targetStage);
         var stage = MakeStage("Pending");
         var entity = MakeEntity("Order", stage);
-        var domain = ValidDomain.Create("Test", [entity, target], [rel]);
+        var domain = ValidDomain.Create("Test", [entity, target], [rel, notified]);
 
         // Add a subscription via evolution
         var sub = new StageSubscription("Notifies", ["Active"], StageSubscriptionQuantifier.Each, []);
@@ -355,6 +359,7 @@ public class SubscriptionAnalysisTests {
             }
 
             Loan: entity {
+              patron: Patron via loans
               Draft: stage { }
               Overdue: stage { }
             }
@@ -380,6 +385,7 @@ public class SubscriptionAnalysisTests {
             }
 
             Loan: entity {
+              patron: Patron via loans
               Draft: stage { }
               Overdue: stage { }
             }
@@ -423,8 +429,12 @@ public class SubscriptionAnalysisTests {
         var rel = new Relationship("Tracks",
             new DomainTypeReference("Tracker"), new DomainTypeReference("Order"),
             RelationshipCardinality.OneToOne, []);
+        // S-13a: the subscription's relationship states its explicit inverse (via) on the other end.
+        var tracked = new Relationship("TrackedBy",
+            new DomainTypeReference("Order"), new DomainTypeReference("Tracker"),
+            RelationshipCardinality.OneToOne, []) { Inverse = "Tracks" };
 
-        var domain = ValidDomain.Create("Test", [tracker, order], [rel]);
+        var domain = ValidDomain.Create("Test", [tracker, order], [rel, tracked]);
         var exec = ModuleExec.For(domain);
 
         // Verify analysis is clean
@@ -474,8 +484,12 @@ public class SubscriptionAnalysisTests {
         var rel = new Relationship("Tracks",
             new DomainTypeReference("Tracker"), new DomainTypeReference("Order"),
             RelationshipCardinality.OneToOne, []);
+        // S-13a: the subscription's relationship states its explicit inverse (via) on the other end.
+        var tracked = new Relationship("TrackedBy",
+            new DomainTypeReference("Order"), new DomainTypeReference("Tracker"),
+            RelationshipCardinality.OneToOne, []) { Inverse = "Tracks" };
 
-        var domain = ValidDomain.Create("Test", [tracker, order], [rel]);
+        var domain = ValidDomain.Create("Test", [tracker, order], [rel, tracked]);
         var exec = ModuleExec.For(domain);
 
         var orderInstance = exec.Create((order).Name, new Dictionary<string, object?>()).Instance!;
@@ -518,6 +532,7 @@ public class SubscriptionAnalysisTests {
         domain Test
 
         Parcel: entity {
+          hub2: Hub2 via parcels
           Pending: stage { Move: action { transition to Moved } }
           Moved: stage { }
           Shipped: stage { }
@@ -537,6 +552,7 @@ public class SubscriptionAnalysisTests {
         domain Test
 
         Order: entity {
+          customer: Customer via orders
           Open: stage { Fulfil: action { transition to Fulfilled } }
           Fulfilled: stage { }
         }
@@ -593,6 +609,7 @@ public class SubscriptionAnalysisTests {
             domain Test
 
             Parcel: entity {
+              hub2: Hub2 via parcels
               Pending: stage { Move: action { transition to Moved } }
               Moved: stage { }
             }
@@ -620,6 +637,7 @@ public class SubscriptionAnalysisTests {
             domain Test
 
             Parcel: entity {
+              hub2: Hub2 via parcels
               Pending: stage { Move: action { transition to Moved } Ship: action { transition to Shipped } }
               Moved: stage { }
               Shipped: stage { }
@@ -648,6 +666,7 @@ public class SubscriptionAnalysisTests {
             domain Test
 
             Parcel: entity {
+              hub2: Hub2 via parcels
               Pending: stage { Move: action { transition to Moved } }
               Moved: stage { }
             }
@@ -672,6 +691,7 @@ public class SubscriptionAnalysisTests {
             domain Test
 
             Parcel: entity {
+              hub2: Hub2 via parcels
               Pending: stage { Move: action { transition to Moved } }
               Moved: stage { }
             }
@@ -695,6 +715,7 @@ public class SubscriptionAnalysisTests {
     private const string TraceParcel = """
         Parcel: entity {
           Code: Text
+          hub2: Hub2 via parcels
           Pending: stage { Move: action { transition to Moved } }
           Moved: stage { }
         }
@@ -753,6 +774,7 @@ public class SubscriptionAnalysisTests {
         domain Test
 
         Shipment: entity{{shipmentHeader}} {
+          order: Order via shipments
         {{shipmentBody}}
         }
 
@@ -838,12 +860,14 @@ public class SubscriptionAnalysisTests {
             domain Test
 
             Part: entity {
+              shipment: Shipment via parts
               Open: stage { Close: action { transition to Closed } }
               Closed: stage { }
             }
 
             Shipment: entity {
               parts: many Part
+              order: Order via shipments
               Packed: stage {
                 when parts Closed { transition to Delivered }
               }
@@ -871,6 +895,7 @@ public class SubscriptionAnalysisTests {
 
             Shipment: entity {
               parts: many Part
+              order: Order via shipments
               Packed: stage { Run: action { for p in parts { transition to Delivered } } }
               Delivered: stage { }
             }
@@ -890,6 +915,7 @@ public class SubscriptionAnalysisTests {
 
         Parcel: entity {
           Label: Text optional
+          hub2: Hub2 via parcels
           Pending: stage { Move: action { transition to Moved } }
           Moved: stage { }
         }
@@ -1078,12 +1104,14 @@ public class SubscriptionAnalysisTests {
             domain Test
 
             Part: entity {
+              shipment: Shipment via parts
               Open: stage { Close: action { transition to Closed } }
               Closed: stage { }
             }
 
             Shipment: entity {
               parts: many Part
+              order: Order via shipments
               Packed: stage { }
               Delivered: stage { }
               when parts Closed { transition to Delivered }

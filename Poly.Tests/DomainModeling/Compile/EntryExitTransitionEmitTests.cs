@@ -42,7 +42,8 @@ public class EntryExitTransitionEmitTests {
         await Assert.That(simulate.Outcomes[1].State["Stage"]).IsEqualTo("C");
     }
 
-    const string WatchedDsl = EntryDsl + """
+    // S-13a: Door states the explicit inverse of Watcher.Tracks; EntryDsl itself stays as the other tests use it.
+    static readonly string WatchedDsl = EntryDsl.Replace("  Tag: Text\n", "  Tag: Text\n  watchers: many Watcher via Tracks\n") + """
 
         Watcher: entity {
           Seen: Text

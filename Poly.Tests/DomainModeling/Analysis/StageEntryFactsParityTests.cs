@@ -442,6 +442,7 @@ public class StageEntryFactsParityTests {
     public Task Characterization_EntityAndStageWhenSubscriptions_AreNotInTheSet() => Characterize("""
         domain C1
         Item: entity {
+          z: Z via Items
           S1: stage { Next: action { transition to S2 } }
           S2: stage { }
         }
@@ -463,6 +464,7 @@ public class StageEntryFactsParityTests {
         domain C2
         Z: entity {
           Q: Number default(0)
+          w: W via Zs
           A: stage { entry { transition to B } }
           B: stage { entry { assign Q to 1 } }
         }
@@ -488,6 +490,7 @@ public class StageEntryFactsParityTests {
         domain C4
         Z: entity {
           Kids: many Z
+          parent: Z via Kids
           N: Number default(0)
           Flag: Number default(0)
           A: stage {

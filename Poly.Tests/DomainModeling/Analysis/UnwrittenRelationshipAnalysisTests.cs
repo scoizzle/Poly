@@ -74,7 +74,7 @@ public class UnwrittenRelationshipAnalysisTests {
             Member: entity {
               Name: Text
               Visits: Number default(0)
-              bookings: many Booking
+              bookings: many Booking via member
               when bookings Attended {
                 assign Visits to Visits + 1
               }
@@ -107,7 +107,7 @@ public class UnwrittenRelationshipAnalysisTests {
             Member: entity {
               Name: Text
               Visits: Number default(0)
-              bookings: many Booking
+              bookings: many Booking via member
               Reserve: action -> Booking {
                 create in bookings { }
               }
@@ -134,7 +134,7 @@ public class UnwrittenRelationshipAnalysisTests {
             domain Test
             Order: entity {
               Reference: Text
-              lines: many Line
+              lines: many Line via order
               when lines Picked {
                 assign Reference to Reference
               }
@@ -158,6 +158,7 @@ public class UnwrittenRelationshipAnalysisTests {
             domain Test
             Plan: entity {
               Code: Text
+              members: many Member via plan
               Active: stage { }
             }
             Member: entity {

@@ -33,6 +33,7 @@ User: entity {
 Notification: entity {
   Body: Text
   Status: Text default("unread")
+  user: User via notifications
   Unread: stage {
     entry { assign Status to "unread" }
     MarkRead: action {

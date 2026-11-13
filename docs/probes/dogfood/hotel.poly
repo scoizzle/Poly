@@ -35,7 +35,7 @@ Room: entity {
   Offline: Boolean default(false)
   property: Property
   roomType: RoomType
-  stays: many Reservation
+  stays: many Reservation via room
   IsVacant: policy { Occupied is false }
   IsReady: policy { Occupied is false and Dirty is false and Offline is false }
   HasType: policy { roomType exists }
@@ -147,8 +147,8 @@ Guest: entity {
   StayCount: Number default(0)
   NightCount: Number default(0)
   EventCount: Number default(0)
-  events: many EventHold
-  reservations: many Reservation
+  events: many EventHold via guest
+  reservations: many Reservation via guest
   HasStays: policy { count reservations > 0 }
   HasEvents: policy { count events > 0 }
   when reservations Departed as stay {

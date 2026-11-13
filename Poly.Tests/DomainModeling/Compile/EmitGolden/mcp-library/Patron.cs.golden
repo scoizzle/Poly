@@ -33,14 +33,12 @@ internal class Patron : Poly.Runtime.IActionScoped
     }
     internal DomainResult<Loan> CreateLoans(Book? book = null, long amount = 0L)
     {
-        var loanResult = Loan.Create(book, amount);
+        var loanResult = Loan.Create(book, this, amount);
         if (!loanResult.IsSuccess)
         {
             return DomainResult<Loan>.Failure(loanResult.Error!);
         }
         var loan = loanResult.Value;
-        this._loans.Add(loan);
-        loan.RegisterPatronLoansOverdueSubscriber(this);
         return DomainResult<Loan>.Success(loan);
     }
     internal void AttachLoans(Loan child)

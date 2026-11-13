@@ -814,11 +814,11 @@
   Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
 ## poly wrapper top-default
   errors: 0
-## poly guide-line 36
+## poly guide // ✅ Correct — Loan references Book through a navigation pro #0
   status: exception GrammarException
-## poly guide-line 64
+## poly guide // ✅ Correct — Loan carries the lifecycle #0
   status: exception GrammarException
-## poly guide-line 87
+## poly guide Patron: entity { #0
   errors: 0
   System.String.IsNullOrEmpty(System.String)
   Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
@@ -834,7 +834,7 @@
   Poly.Runtime.DomainResult.Failure(Poly.Runtime.DomainFailure)
   Poly.Runtime.DomainResult.Success()
   System.Collections.IList.Clear()
-## poly guide-line 119
+## poly guide // ✅ Correct — both props provided (a property is required b #0
   errors: 0
   System.String.IsNullOrEmpty(System.String)
   Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
@@ -850,25 +850,25 @@
   Poly.Runtime.DomainResult.Failure(Poly.Runtime.DomainFailure)
   Poly.Runtime.DomainResult.Success()
   System.Collections.IList.Clear()
-## poly guide-line 154
+## poly guide // ✅ Correct — Patron subscribes to its own loans #0
   status: exception GrammarException
-## poly guide-line 178
+## poly guide // ✅ Correct — clear, testable guards #0
   status: exception GrammarException
-## poly guide-line 201
+## poly guide Suspended: stage { #0
   status: exception GrammarException
-## poly guide-line 225
+## poly guide domain MyDomain #0
   errors: 0
-## poly guide-line 236
+## poly guide Color: enum { #0
   errors: 0
-## poly guide-line 264
+## poly guide Money: value { #0
   status: analysis-errors DMSTR006
-## poly guide-line 291
+## poly guide Billing: contract internal billing v1 { #0
   status: analysis-errors DMEFF001
-## poly guide-line 363
+## poly guide domain Shop #0
   errors: 0
   Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
   System.Collections.IList.Clear()
-## poly guide-line 393
+## poly guide Color: enum { Red, Green, Blue } #0
   errors: 0
   System.String.IsNullOrEmpty(System.String)
   Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
@@ -876,13 +876,13 @@
   System.String.Concat(System.Object,System.Object,System.Object)
   Poly.Runtime.DomainFailure.Enum(System.String,System.String,System.String)
   Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
-## poly guide-line 414
+## poly guide Token: entity { #0
   errors: 0
   System.String.IsNullOrEmpty(System.String)
   Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
   Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)
   Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
-## poly guide-line 450
+## poly guide Item: entity table("INVENTORY") { #0
   errors: 0
   System.String.IsNullOrEmpty(System.String)
   Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
@@ -896,7 +896,7 @@
   Poly.Runtime.DomainFailure.Constraint(System.String,System.String,System.String)
   Poly.Runtime.DomainResult.Failure(Poly.Runtime.DomainFailure)
   Poly.Runtime.IStoragePort.Exists(System.String,System.String,System.String)
-## poly guide-line 480
+## poly guide Color: enum iri("https://example.com/Color") { #0
   errors: 0
   System.String.IsNullOrEmpty(System.String)
   Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
@@ -904,21 +904,21 @@
   System.String.get_Length()
   Poly.Runtime.DomainFailure.Length(System.String,System.String,System.String)
   Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
-## poly guide-line 514
+## poly guide Orders: entity { #0
   status: exception GrammarException
-## poly guide-line 556
+## poly guide Customer: entity { #0
   status: analysis-errors DMSTR010
-## poly guide-line 589
+## poly guide OrderLine: entity { #0
   errors: 0
   System.String.IsNullOrEmpty(System.String)
   Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
   Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)
   Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
-## poly guide-line 603
+## poly guide Department: entity { #0
   errors: 0
   Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
   System.Collections.IList.Clear()
-## poly guide-line 635
+## poly guide Draft: stage { #0
   errors: 0
   Poly.Runtime.DomainResult.get_IsSuccess()
   Poly.Runtime.ActionScope.Commit(Poly.Runtime.ActionScopeToken)
@@ -927,7 +927,7 @@
   Poly.Runtime.DomainResult.Failure(Poly.Runtime.DomainFailure)
   Poly.Runtime.DomainResult.Success()
   Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
-## poly guide-line 652
+## poly guide HasNote: policy { Note is not null } #0
   errors: 0
   Poly.Runtime.DomainResult.get_IsSuccess()
   Poly.Runtime.ActionScope.Commit(Poly.Runtime.ActionScopeToken)
@@ -937,7 +937,7 @@
   Poly.Runtime.DomainFailure.Policy(System.String,System.String,System.String)
   Poly.Runtime.DomainResult.Success()
   Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
-## poly guide-line 662
+## poly guide Active: stage { #0
   errors: 0
   Poly.Runtime.DomainResult.get_IsSuccess()
   Poly.Runtime.ActionScope.Commit(Poly.Runtime.ActionScopeToken)
@@ -946,11 +946,11 @@
   Poly.Runtime.DomainResult.Failure(Poly.Runtime.DomainFailure)
   Poly.Runtime.DomainResult.Success()
   Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
-## poly guide-line 693
+## poly guide domain Shipping #0
   status: analysis-errors DMEFF017
-## poly guide-line 715
+## poly guide domain Tokens #0
   status: analysis-errors DMEFF019
-## poly guide-line 736
+## poly guide domain Orders #0
   errors: 0
   Poly.Runtime.DomainResult.get_IsSuccess()
   Poly.Runtime.ActionScope.Commit(Poly.Runtime.ActionScopeToken)
@@ -962,7 +962,7 @@
   Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
   Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)
   Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
-## poly guide-line 775
+## poly guide Tag: action (value: Text) { #0
   errors: 0
   Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
   Poly.Runtime.DomainResult.get_IsSuccess()
@@ -973,7 +973,7 @@
   Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
   Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)
   System.Collections.IList.Clear()
-## poly guide-line 789
+## poly guide PlaceOrder: action -> Order { #0
   errors: 0
   Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
   Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_IsSuccess()
@@ -988,7 +988,7 @@
   System.String.IsNullOrEmpty(System.String)
   Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
   System.Collections.IList.Clear()
-## poly guide-line 803
+## poly guide // ✅ Correct — create is the final statement #0
   errors: 1
   Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
   Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_IsSuccess()
@@ -1003,9 +1003,9 @@
   System.String.IsNullOrEmpty(System.String)
   Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
   System.Collections.IList.Clear()
-## poly guide-line 829
+## poly guide // Not product: -> Number from assign alone (analysis error) #0
   errors: 0
-## poly guide-line 849
+## poly guide PlaceOrder: action { #0
   errors: 0
   Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
   Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_IsSuccess()
@@ -1022,9 +1022,9 @@
   System.String.IsNullOrEmpty(System.String)
   Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
   System.Collections.IList.Clear()
-## poly guide-line 956
+## poly guide invoke Validate                              # self-only #0
   status: exception GrammarException
-## poly guide-line 976
+## poly guide PositiveTotal: policy { Total > 0 } #0
   errors: 0
   Poly.Runtime.DomainResult.get_IsSuccess()
   Poly.Runtime.ActionScope.Commit(Poly.Runtime.ActionScopeToken)
@@ -1033,7 +1033,7 @@
   Poly.Runtime.DomainResult.Failure(Poly.Runtime.DomainFailure)
   Poly.Runtime.DomainResult.Success()
   Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
-## poly guide-line 1022
+## poly guide Pending: stage { #0
   errors: 0
   System.Object.ReferenceEquals(System.Object,System.Object)
   Poly.Runtime.DomainResult.get_IsSuccess()
@@ -1042,19 +1042,19 @@
   System.String.Concat(System.String,System.String,System.String)
   System.InvalidOperationException.ctor(System.String)
   System.Collections.IList.Clear()
-## poly guide-line 1096
+## poly guide // Notification-only — peer values not needed #0
   status: exception GrammarException
-## poly guide-line 1147
+## poly guide IsAdult: policy { Age >= 18 } #0
   errors: 0
   System.String.IsNullOrEmpty(System.String)
   Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
   Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)
   Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
-## poly guide-line 1176
+## poly guide Age >= 18 #0
   status: exception GrammarException
-## poly guide-line 1198
+## poly guide assignee Active #0
   status: exception GrammarException
-## poly guide-line 1240
+## poly guide HasPriorityOrder: policy { any orders where Priority > 5 } #0
   errors: 0
   System.String.IsNullOrEmpty(System.String)
   Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
@@ -1062,20 +1062,20 @@
   Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
   System.Collections.ICollection.get_Count()
   System.Collections.IList.Clear()
-## poly guide-line 1260
+## poly guide Renew: action { #0
   status: analysis-errors DMSEM003
-## poly guide-line 1536
+## poly guide domain Board #0
   status: analysis-errors DMEFF020
-## poly guide-line 1625
+## poly guide function Add(a: Number, b: Number): Number = a + b #0
   errors: 0
-## poly guide-line 1653
+## poly guide Cart: entity { #0
   errors: 0
   Poly.Runtime.DomainResult.get_IsSuccess()
   Poly.Runtime.ActionScope.Commit(Poly.Runtime.ActionScopeToken)
   Poly.Runtime.ActionScope.Rollback(Poly.Runtime.ActionScopeToken)
   Poly.Runtime.DomainResult.Success()
   Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
-## poly guide-line 1693
+## poly guide SetName: action (newName: Text) { #0
   errors: 0
   Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Success(System.Object)
   Poly.Runtime.DomainResult.get_IsSuccess()
@@ -1087,7 +1087,7 @@
   Poly.Runtime.DomainResult.Failure(Poly.Runtime.DomainFailure)
   Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)
   System.Collections.IList.Clear()
-## poly guide-line 1881
+## poly guide domain Orders #1
   errors: 0
   System.String.IsNullOrEmpty(System.String)
   Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)
@@ -1107,892 +1107,892 @@
   Poly.Runtime.DomainFailure.Stage(System.String,System.String,System.String)
   Poly.Runtime.DomainFailure.Policy(System.String,System.String,System.String)
   Poly.Runtime.DomainFailure.Range(System.String,System.String,System.String)
-## csharp 0 added corpus case for BitwiseNot: var y = ~1L;
+## csharp added corpus case for BitwiseNot #0
   errors: 1
-## csharp 1 added corpus case for ShiftRight: var x = 8L >> 2;
+## csharp added corpus case for ShiftRight #0
   errors: 1
-## csharp 2 added corpus case for DoWhileLoop: do { var y = 1L; } while 
+## csharp added corpus case for DoWhileLoop #0
   errors: 0
-## csharp 3 added corpus case for BreakStatement: while (true) { break; 
+## csharp added corpus case for BreakStatement #0
   errors: 0
-## csharp 4 added corpus case for ContinueStatement: while (true) { cont
+## csharp added corpus case for ContinueStatement #0
   errors: 0
-## csharp 5 added corpus case for GotoStatement: var x = 0L; goto done; 
+## csharp added corpus case for GotoStatement #0
   errors: 2
-## csharp 6 added corpus case for YieldStatement: class C { IEnumerable<
+## csharp added corpus case for YieldStatement #0
   errors: 0
-## csharp 7 added corpus case for SwitchStatement: switch (1L) { case 1L
+## csharp added corpus case for SwitchStatement #0
   errors: 2
-## csharp 8 added corpus case for TypeAs: var o = "a" as object;
+## csharp added corpus case for TypeAs #0
   errors: 1
-## csharp 9 added corpus case for MapTypeReference: class M { public Dic
+## csharp added corpus case for MapTypeReference #0
   errors: 0
-## csharp 10 added corpus case for Divide: var y = 8L / 2;
+## csharp added corpus case for Divide #0
   errors: 1
-## csharp 11 added corpus case for Modulo: var y = 8L % 3;
+## csharp added corpus case for Modulo #0
   errors: 1
-## csharp 12 added corpus case for UnaryMinus: var y = -1L;
+## csharp added corpus case for UnaryMinus #0
   errors: 1
-## csharp 13 added corpus case for InterpolatedString: var y = $"a{1 + 2}
+## csharp added corpus case for InterpolatedString #0
   errors: 1
-## csharp 14 added corpus case for BitwiseAnd: var y = 6L & 3L;
+## csharp added corpus case for BitwiseAnd #0
   errors: 1
-## csharp 15 added corpus case for BitwiseOr: var y = 6L | 3L;
+## csharp added corpus case for BitwiseOr #0
   errors: 1
-## csharp 16 added corpus case for BitwiseXor: var y = 6L ^ 3L;
+## csharp added corpus case for BitwiseXor #0
   errors: 1
-## csharp 17 added corpus case for ShiftLeft: var y = 1L << 3;
+## csharp added corpus case for ShiftLeft #0
   errors: 1
-## csharp 18 added corpus case for ThrowExpression: var e = new System.In
+## csharp added corpus case for ThrowExpression #0
   errors: 3
   System.InvalidOperationException.ctor()
-## csharp 19 added corpus case for ForEachLoop: var a = new long[2]; fore
+## csharp added corpus case for ForEachLoop #0
   errors: 2
-## csharp 20 added corpus case for IndexAccess: var a = new long[2]; var 
+## csharp added corpus case for IndexAccess #0
   errors: 3
-## csharp 21 added corpus case for Comment: class C { void M() { // a lin
+## csharp added corpus case for Comment #0
   errors: 0
-## csharp 22 added corpus case for And: true && false;
+## csharp added corpus case for And #0
   errors: 0
-## csharp 23 added corpus case for Or: true || false;
+## csharp added corpus case for Or #0
   errors: 0
-## csharp 24 added corpus case for Not: !true;
+## csharp added corpus case for Not #0
   errors: 0
-## csharp 25 added corpus case for Equal: 1L == 2L;
+## csharp added corpus case for Equal #0
   errors: 0
-## csharp 26 added corpus case for NotEqual: 1L != 2L;
+## csharp added corpus case for NotEqual #0
   errors: 0
-## csharp 27 added corpus case for LessThanOrEqual: 1L <= 2L;
+## csharp added corpus case for LessThanOrEqual #0
   errors: 0
-## csharp 28 added corpus case for GreaterThan: 1L > 2L;
+## csharp added corpus case for GreaterThan #0
   errors: 0
-## csharp 29 added corpus case for GreaterThanOrEqual: 1L >= 2L;
+## csharp added corpus case for GreaterThanOrEqual #0
   errors: 0
-## csharp 30 added corpus case for Conditional: true ? 1L : 2L;
+## csharp added corpus case for Conditional #0
   errors: 0
-## csharp 31 added corpus case for Lambda: { var f = (long v) => v; }
+## csharp added corpus case for Lambda #0
   errors: 0
-## csharp 32 added corpus case for Parameter: { var f = (long v) => v; }
+## csharp added corpus case for Parameter #0
   errors: 0
-## csharp 33 Poly.Tests/Interpretation/AstParity.cs: using System.Collect
+## csharp Poly.Tests/Interpretation/AstParity.cs #0
   errors: 0
-## csharp 34 Poly.Tests/Interpretation/AstParityTests.cs: 2 + 3;
+## csharp Poly.Tests/Interpretation/AstParityTests.cs #0
   errors: 0
-## csharp 35 Poly.Tests/Interpretation/AstParityTests.cs: 10 - 4;
+## csharp Poly.Tests/Interpretation/AstParityTests.cs #1
   errors: 0
-## csharp 36 Poly.Tests/Interpretation/AstParityTests.cs: 3 * 4;
+## csharp Poly.Tests/Interpretation/AstParityTests.cs #2
   errors: 0
-## csharp 37 Poly.Tests/Interpretation/AstParityTests.cs: 20 / 5;
+## csharp Poly.Tests/Interpretation/AstParityTests.cs #3
   errors: 0
-## csharp 38 Poly.Tests/Interpretation/AstParityTests.cs: 10 % 3;
+## csharp Poly.Tests/Interpretation/AstParityTests.cs #4
   errors: 0
-## csharp 39 Poly.Tests/Interpretation/AstParityTests.cs: 2 + 3 * 4;
+## csharp Poly.Tests/Interpretation/AstParityTests.cs #5
   errors: 0
-## csharp 40 Poly.Tests/Interpretation/AstParityTests.cs: 20 - 10 / 2;
+## csharp Poly.Tests/Interpretation/AstParityTests.cs #6
   errors: 0
-## csharp 41 Poly.Tests/Interpretation/AstParityTests.cs: (2 + 3) * 4;
+## csharp Poly.Tests/Interpretation/AstParityTests.cs #7
   errors: 0
-## csharp 42 Poly.Tests/Interpretation/AstParityTests.cs: ((2 + 3) * (4 +
+## csharp Poly.Tests/Interpretation/AstParityTests.cs #8
   errors: 0
-## csharp 43 Poly.Tests/Interpretation/AstParityTests.cs: 10 + 5 * 2 - 8 
+## csharp Poly.Tests/Interpretation/AstParityTests.cs #9
   errors: 0
-## csharp 44 Poly.Tests/Interpretation/AstParityTests.cs: -5;
+## csharp Poly.Tests/Interpretation/AstParityTests.cs #10
   errors: 0
-## csharp 45 Poly.Tests/Interpretation/AstParityTests.cs: 10 + -5;
+## csharp Poly.Tests/Interpretation/AstParityTests.cs #11
   errors: 0
-## csharp 46 Poly.Tests/Interpretation/AstParityTests.cs: -(10 + 5);
+## csharp Poly.Tests/Interpretation/AstParityTests.cs #12
   errors: 0
-## csharp 47 Poly.Tests/Interpretation/AstParityTests.cs: 2.5 + 3.7;
+## csharp Poly.Tests/Interpretation/AstParityTests.cs #13
   errors: 0
-## csharp 48 Poly.Tests/Interpretation/AstParityTests.cs: 10 + 2.5;
+## csharp Poly.Tests/Interpretation/AstParityTests.cs #14
   errors: 0
-## csharp 49 Poly.Tests/Interpretation/AstParityTests.cs: 10 * 2.5 - 5 / 
+## csharp Poly.Tests/Interpretation/AstParityTests.cs #15
   errors: 0
-## csharp 50 Poly.Tests/Interpretation/AstParityTests.cs: 1 + 2 * 3 - 4 /
+## csharp Poly.Tests/Interpretation/AstParityTests.cs #16
   errors: 0
-## csharp 51 Poly.Tests/Interpretation/AstParityTests.cs: 2+3*4;
+## csharp Poly.Tests/Interpretation/AstParityTests.cs #17
   errors: 0
-## csharp 52 Poly.Tests/Interpretation/AstParityTests.cs: 2 + 3 * 4;
+## csharp Poly.Tests/Interpretation/AstParityTests.cs #18
   errors: 0
-## csharp 53 Poly.Tests/Interpretation/AstParityTests.cs: 2  +  3  *  4  
+## csharp Poly.Tests/Interpretation/AstParityTests.cs #19
   errors: 0
-## csharp 54 Poly.Tests/Interpretation/AstParityTests.cs: 2 / 0;
+## csharp Poly.Tests/Interpretation/AstParityTests.cs #20
   errors: 0
-## csharp 55 Poly.Tests/Interpretation/AstParityTests.cs: 0 + 5;
+## csharp Poly.Tests/Interpretation/AstParityTests.cs #21
   errors: 0
-## csharp 56 Poly.Tests/Interpretation/AstParityTests.cs: 5 - 0;
+## csharp Poly.Tests/Interpretation/AstParityTests.cs #22
   errors: 0
-## csharp 57 Poly.Tests/Interpretation/AstParityTests.cs: 0 * 5;
+## csharp Poly.Tests/Interpretation/AstParityTests.cs #23
   errors: 0
-## csharp 58 Poly.Tests/Interpretation/AstParityTests.cs: 0 / 5;
+## csharp Poly.Tests/Interpretation/AstParityTests.cs #24
   errors: 0
-## csharp 59 Poly.Tests/Interpretation/AstParityTests.cs: 1000000 + 20000
+## csharp Poly.Tests/Interpretation/AstParityTests.cs #25
   errors: 0
-## csharp 60 Poly.Tests/Interpretation/AstParityTests.cs: 10 - 5 - 2;
+## csharp Poly.Tests/Interpretation/AstParityTests.cs #26
   errors: 0
-## csharp 61 Poly.Tests/Interpretation/AstParityTests.cs: 2 * 3 * 4;
+## csharp Poly.Tests/Interpretation/AstParityTests.cs #27
   errors: 0
-## csharp 62 Poly.Tests/Interpretation/AstParityTests.cs: class PolyParit
+## csharp Poly.Tests/Interpretation/AstParityTests.cs #28
   errors: 0
-## csharp 63 Poly.Tests/Interpretation/CSharpCommentTests.cs: class C {  
+## csharp Poly.Tests/Interpretation/CSharpCommentTests.cs #0
   errors: 0
-## csharp 64 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: _ = @case
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #0
   errors: 2
-## csharp 65 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: _ = 42;
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #1
   errors: 1
-## csharp 66 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: _ = "hell
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #2
   errors: 1
-## csharp 67 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: _ = null;
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #3
   errors: 1
-## csharp 68 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: _ = true;
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #4
   errors: 1
-## csharp 69 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: _ = false
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #5
   errors: 1
-## csharp 70 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: _ = x;
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #6
   errors: 2
-## csharp 71 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: _ = y;
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #7
   errors: 2
-## csharp 72 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: _ = this;
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #8
   errors: 1
-## csharp 73 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: _ = unche
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #9
   errors: 3
-## csharp 74 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: _ = unche
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #10
   errors: 3
-## csharp 75 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: _ = unche
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #11
   errors: 3
-## csharp 76 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: _ = 10 / 
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #12
   errors: 1
-## csharp 77 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: _ = 100L 
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #13
   errors: 2
-## csharp 78 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: _ = unche
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #14
   errors: 3
-## csharp 79 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: _ = 1 == 
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #15
   errors: 1
-## csharp 80 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: _ = 1 != 
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #16
   errors: 1
-## csharp 81 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: _ = 1 < 2
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #17
   errors: 1
-## csharp 82 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: _ = 1 <= 
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #18
   errors: 1
-## csharp 83 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: _ = 1 > 2
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #19
   errors: 1
-## csharp 84 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: _ = 1 >= 
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #20
   errors: 1
-## csharp 85 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: _ = true 
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #21
   errors: 1
-## csharp 86 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: _ = true 
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #22
   errors: 1
-## csharp 87 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: _ = (a &&
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #23
   errors: 4
-## csharp 88 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: _ = a & b
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #24
   errors: 5
-## csharp 89 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: _ = (a ||
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #25
   errors: 4
-## csharp 90 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: _ = a | b
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #26
   errors: 4
-## csharp 91 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: _ = a << 
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #27
   errors: 4
-## csharp 92 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: _ = a >> 
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #28
   errors: 4
-## csharp 93 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: _ = a << 
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #29
   errors: 4
-## csharp 94 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: _ = !true
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #30
   errors: 1
-## csharp 95 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: _ = -5;
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #31
   errors: 1
-## csharp 96 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: _ = perso
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #32
   errors: 2
-## csharp 97 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: _ = arr[0
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #33
   errors: 2
-## csharp 98 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: obj.DoSom
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #34
   errors: 1
-## csharp 99 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: new Syste
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #35
   errors: 0
   System.String.ctor(System.ReadOnlySpan`1[[System.Char, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]])
-## csharp 100 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: _ = (true
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #36
   errors: 1
-## csharp 101 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: _ = a ?? 
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #37
   errors: 2
-## csharp 102 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: x = 10;
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #38
   errors: 1
-## csharp 103 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: _ = (Syst
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #39
   errors: 2
-## csharp 104 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: _ = x is 
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #40
   errors: 2
-## csharp 105 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: _ = x as 
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #41
   errors: 2
-## csharp 106 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: _ = ((Adm
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #42
   errors: 2
-## csharp 107 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: _ = (Func
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #43
   errors: 1
-## csharp 108 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: _ = (Func
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #44
   errors: 1
-## csharp 109 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: _ = 1;
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #45
   errors: 1
-## csharp 110 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: _ = 2;
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #46
   errors: 1
-## csharp 111 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: var x = 5
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #47
   errors: 1
-## csharp 112 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: var x = d
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #48
   errors: 1
-## csharp 113 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: _ = 1;
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #49
   errors: 1
-## csharp 114 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: var x = d
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #50
   errors: 1
-## csharp 115 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: x = 1L;
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #51
   errors: 1
-## csharp 116 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: var x = 1
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #52
   errors: 1
-## csharp 117 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: var x = d
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #53
   errors: 1
-## csharp 118 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: x = 1L;
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #54
   errors: 1
-## csharp 119 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: _ = 1;
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #55
   errors: 1
-## csharp 120 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: _ = 2;
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #56
   errors: 1
-## csharp 121 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: _ = 1;
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #57
   errors: 1
-## csharp 122 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: i = i + 1
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #58
   errors: 2
-## csharp 123 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: var x = d
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #59
   errors: 1
-## csharp 124 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: x = 1L;
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #60
   errors: 1
-## csharp 125 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: x = 2L;
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #61
   errors: 1
-## csharp 126 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: var x = 1
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #62
   errors: 1
-## csharp 127 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: var x = 2
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #63
   errors: 1
-## csharp 128 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: var i = d
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #64
   errors: 1
-## csharp 129 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: x = x + 1
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #65
   errors: 2
-## csharp 130 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: _ = 42;
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #66
   errors: 1
-## csharp 131 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: _ = 42;
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #67
   errors: 1
-## csharp 132 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: _ = 1;
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #68
   errors: 1
-## csharp 133 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: break;
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #69
   errors: 1
-## csharp 134 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: continue;
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #70
   errors: 1
-## csharp 135 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: return 42
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #71
   errors: 0
-## csharp 136 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: return;
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #72
   errors: 0
-## csharp 137 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: { return;
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #73
   errors: 0
-## csharp 138 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: throw new
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #74
   errors: 0
   System.Exception.ctor()
-## csharp 139 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: _ = 1;
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #75
   errors: 1
-## csharp 140 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: _ = 2;
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #76
   errors: 1
-## csharp 141 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: _ = 3;
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #77
   errors: 1
-## csharp 142 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: _ = 1;
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #78
   errors: 1
-## csharp 143 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: _ = 2;
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #79
   errors: 1
-## csharp 144 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: _ = 1;
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #80
   errors: 1
-## csharp 145 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: return 2;
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #81
   errors: 0
-## csharp 146 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: _ = 1;
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #82
   errors: 1
-## csharp 147 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: return 10
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #83
   errors: 0
-## csharp 148 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: return 20
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #84
   errors: 0
-## csharp 149 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: return 0;
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #85
   errors: 0
-## csharp 150 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: goto exit
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #86
   errors: 1
-## csharp 151 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: return 0;
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #87
   errors: 0
-## csharp 152 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: _ = 10 % 
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #88
   errors: 1
-## csharp 153 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: public re
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #89
   errors: 0
-## csharp 154 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: obj.GetSe
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #90
   errors: 1
-## csharp 155 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: _ = unche
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #91
   errors: 3
-## csharp 156 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: _ = 1;
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #92
   errors: 1
-## csharp 157 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: var build
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #93
   errors: 2
-## csharp 158 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: FindNavig
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #94
   errors: 2
-## csharp 159 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: ToTable("
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #95
   errors: 2
-## csharp 160 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: { }
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #96
   errors: 0
-## csharp 161 Poly.Tests/Interpretation/CSharpGeneratorTests.cs: { }
+## csharp Poly.Tests/Interpretation/CSharpGeneratorTests.cs #97
   errors: 0
-## csharp 162 Poly.Tests/Interpretation/CSharpLanguageTests.cs: _ = a + b 
+## csharp Poly.Tests/Interpretation/CSharpLanguageTests.cs #0
   errors: 4
-## csharp 163 Poly.Tests/Interpretation/CSharpLanguageTests.cs: _ = (a + b
+## csharp Poly.Tests/Interpretation/CSharpLanguageTests.cs #1
   errors: 4
-## csharp 164 Poly.Tests/Interpretation/CSharpLanguageTests.cs: class C { 
+## csharp Poly.Tests/Interpretation/CSharpLanguageTests.cs #2
   errors: 1
-## csharp 165 Poly.Tests/Interpretation/CSharpLanguageTests.cs: break;
+## csharp Poly.Tests/Interpretation/CSharpLanguageTests.cs #3
   errors: 1
-## csharp 166 Poly.Tests/Interpretation/CSharpLanguageTests.cs: break;
+## csharp Poly.Tests/Interpretation/CSharpLanguageTests.cs #4
   errors: 1
-## csharp 167 Poly.Tests/Interpretation/CSharpLanguageTests.cs: switch (x)
+## csharp Poly.Tests/Interpretation/CSharpLanguageTests.cs #5
   errors: 5
-## csharp 168 Poly.Tests/Interpretation/CSharpLanguageTests.cs: break;
+## csharp Poly.Tests/Interpretation/CSharpLanguageTests.cs #6
   errors: 1
-## csharp 169 Poly.Tests/Interpretation/CSharpLanguageTests.cs: for (var i
+## csharp Poly.Tests/Interpretation/CSharpLanguageTests.cs #7
   errors: 0
-## csharp 170 Poly.Tests/Interpretation/CSharpLanguageTests.cs: for (var i
+## csharp Poly.Tests/Interpretation/CSharpLanguageTests.cs #8
   errors: 1
-## csharp 171 Poly.Tests/Interpretation/CSharpLanguageTests.cs: for (var i
+## csharp Poly.Tests/Interpretation/CSharpLanguageTests.cs #9
   errors: 1
-## csharp 172 Poly.Tests/Interpretation/CSharpLanguageTests.cs: var total 
+## csharp Poly.Tests/Interpretation/CSharpLanguageTests.cs #10
   errors: 2
-## csharp 173 Poly.Tests/Interpretation/CSharpQualifiedConstantTests.cs: _
+## csharp Poly.Tests/Interpretation/CSharpQualifiedConstantTests.cs #0
   errors: 1
-## csharp 174 Poly.Tests/Interpretation/CSharpQualifiedConstantTests.cs: _
+## csharp Poly.Tests/Interpretation/CSharpQualifiedConstantTests.cs #1
   errors: 1
-## csharp 175 Poly.Tests/Interpretation/CSharpQualifiedConstantTests.cs: _
+## csharp Poly.Tests/Interpretation/CSharpQualifiedConstantTests.cs #2
   errors: 1
-## csharp 176 Poly.Tests/Interpretation/CSharpQualifiedConstantTests.cs: u
+## csharp Poly.Tests/Interpretation/CSharpQualifiedConstantTests.cs #3
   errors: 0
-## csharp 177 Poly.Tests/Interpretation/CSharpQualifiedNameTests.cs: class
+## csharp Poly.Tests/Interpretation/CSharpQualifiedNameTests.cs #0
   errors: 0
   System.Numerics.BitOperations.PopCount(System.UInt64)
-## csharp 178 Poly.Tests/Interpretation/CSharpQualifiedNameTests.cs: using
+## csharp Poly.Tests/Interpretation/CSharpQualifiedNameTests.cs #1
   errors: 0
   System.Math.Abs(System.Int32)
-## csharp 179 Poly.Tests/Interpretation/CSharpQualifiedNameTests.cs: using
+## csharp Poly.Tests/Interpretation/CSharpQualifiedNameTests.cs #2
   errors: 0
   System.Numerics.BitOperations.PopCount(System.UInt64)
-## csharp 180 Poly.Tests/Interpretation/CSharpQualifiedNameTests.cs: { lon
+## csharp Poly.Tests/Interpretation/CSharpQualifiedNameTests.cs #3
   errors: 6
-## csharp 181 Poly.Tests/Interpretation/CSharpQualifiedNameTests.cs: long 
+## csharp Poly.Tests/Interpretation/CSharpQualifiedNameTests.cs #4
   errors: 1
   System.Numerics.BitOperations.PopCount(System.UInt32)
-## csharp 182 Poly.Tests/Interpretation/CSharpQualifiedNameTests.cs: using
+## csharp Poly.Tests/Interpretation/CSharpQualifiedNameTests.cs #5
   errors: 2
-## csharp 183 Poly.Tests/Interpretation/CSharpQualifiedNameTests.cs: _ = S
+## csharp Poly.Tests/Interpretation/CSharpQualifiedNameTests.cs #6
   errors: 1
-## csharp 184 Poly.Tests/Interpretation/CSharpQualifiedNameTests.cs: _ = i
+## csharp Poly.Tests/Interpretation/CSharpQualifiedNameTests.cs #7
   errors: 1
-## csharp 185 Poly.Tests/Interpretation/CSharpQualifiedNameTests.cs: _ = S
+## csharp Poly.Tests/Interpretation/CSharpQualifiedNameTests.cs #8
   errors: 2
   System.Numerics.BitOperations.PopCount(System.UInt64)
-## csharp 186 Poly.Tests/Interpretation/CSharpQualifiedNameTests.cs: retur
+## csharp Poly.Tests/Interpretation/CSharpQualifiedNameTests.cs #9
   errors: 0
   System.Numerics.BitOperations.PopCount(System.UInt64)
-## csharp 187 Poly.Tests/Interpretation/CSharpReaderTests.cs: public class
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #0
   errors: 0
-## csharp 188 Poly.Tests/Interpretation/CSharpReaderTests.cs: using System
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #1
   errors: 0
-## csharp 189 Poly.Tests/Interpretation/CSharpReaderTests.cs: class C { vo
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #2
   errors: 2
-## csharp 190 Poly.Tests/Interpretation/CSharpReaderTests.cs: class C { vo
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #3
   errors: 1
-## csharp 191 Poly.Tests/Interpretation/CSharpReaderTests.cs: class C { Do
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #4
   errors: 2
   System.String.IsNullOrEmpty(System.String)
-## csharp 192 Poly.Tests/Interpretation/CSharpReaderTests.cs: class C { vo
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #5
   errors: 1
-## csharp 193 Poly.Tests/Interpretation/CSharpReaderTests.cs: static async
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #6
   errors: 0
-## csharp 194 Poly.Tests/Interpretation/CSharpReaderTests.cs: public class
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #7
   errors: 0
-## csharp 195 Poly.Tests/Interpretation/CSharpReaderTests.cs: class C { vo
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #8
   errors: 0
-## csharp 196 Poly.Tests/Interpretation/CSharpReaderTests.cs: class C { ch
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #9
   errors: 0
-## csharp 197 Poly.Tests/Interpretation/CSharpReaderTests.cs: class C { Cu
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #10
   errors: 0
-## csharp 198 Poly.Tests/Interpretation/CSharpReaderTests.cs: class C { lo
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #11
   errors: 0
-## csharp 199 Poly.Tests/Interpretation/CSharpReaderTests.cs: class C { vo
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #12
   errors: 2
-## csharp 200 Poly.Tests/Interpretation/CSharpReaderTests.cs: a?.b;
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #13
   errors: 2
-## csharp 201 Poly.Tests/Interpretation/CSharpReaderTests.cs: a?.M(x);
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #14
   errors: 3
-## csharp 202 Poly.Tests/Interpretation/CSharpReaderTests.cs: a?.b?.c;
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #15
   errors: 3
-## csharp 203 Poly.Tests/Interpretation/CSharpReaderTests.cs: class C { vo
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #16
   errors: 2
-## csharp 204 Poly.Tests/Interpretation/CSharpReaderTests.cs: class C { vo
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #17
   errors: 2
-## csharp 205 Poly.Tests/Interpretation/CSharpReaderTests.cs: class C { vo
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #18
   errors: 3
-## csharp 206 Poly.Tests/Interpretation/CSharpReaderTests.cs: class C { vo
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #19
   errors: 2
-## csharp 207 Poly.Tests/Interpretation/CSharpReaderTests.cs: class C { vo
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #20
   errors: 2
-## csharp 208 Poly.Tests/Interpretation/CSharpReaderTests.cs: class C { vo
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #21
   errors: 2
-## csharp 209 Poly.Tests/Interpretation/CSharpReaderTests.cs: x = x << 1;
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #22
   errors: 2
-## csharp 210 Poly.Tests/Interpretation/CSharpReaderTests.cs: class C { vo
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #23
   errors: 2
-## csharp 211 Poly.Tests/Interpretation/CSharpReaderTests.cs: class C { vo
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #24
   errors: 2
-## csharp 212 Poly.Tests/Interpretation/CSharpReaderTests.cs: class C { vo
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #25
   errors: 2
-## csharp 213 Poly.Tests/Interpretation/CSharpReaderTests.cs: x = x ?? 1;
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #26
   errors: 2
-## csharp 214 Poly.Tests/Interpretation/CSharpReaderTests.cs: class C { vo
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #27
   errors: 2
-## csharp 215 Poly.Tests/Interpretation/CSharpReaderTests.cs: o.P = o.P + 
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #28
   errors: 2
-## csharp 216 Poly.Tests/Interpretation/CSharpReaderTests.cs: class C { vo
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #29
   errors: 2
-## csharp 217 Poly.Tests/Interpretation/CSharpReaderTests.cs: class C { vo
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #30
   errors: 4
-## csharp 218 Poly.Tests/Interpretation/CSharpReaderTests.cs: class C { vo
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #31
   errors: 0
-## csharp 219 Poly.Tests/Interpretation/CSharpReaderTests.cs: class C { vo
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #32
   errors: 0
-## csharp 220 Poly.Tests/Interpretation/CSharpReaderTests.cs: class C { vo
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #33
   errors: 1
-## csharp 221 Poly.Tests/Interpretation/CSharpReaderTests.cs: class C { vo
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #34
   errors: 1
-## csharp 222 Poly.Tests/Interpretation/CSharpReaderTests.cs: class C { vo
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #35
   errors: 0
-## csharp 223 Poly.Tests/Interpretation/CSharpReaderTests.cs: class C { vo
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #36
   errors: 0
-## csharp 224 Poly.Tests/Interpretation/CSharpReaderTests.cs: class C { vo
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #37
   errors: 2
-## csharp 225 Poly.Tests/Interpretation/CSharpReaderTests.cs: class C { vo
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #38
   errors: 0
-## csharp 226 Poly.Tests/Interpretation/CSharpReaderTests.cs: class C { vo
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #39
   errors: 0
-## csharp 227 Poly.Tests/Interpretation/CSharpReaderTests.cs: class C { vo
+## csharp Poly.Tests/Interpretation/CSharpReaderTests.cs #40
   errors: 1
-## csharp 228 Poly.Tests/Interpretation/CSharpScriptTests.cs: class C { C(
+## csharp Poly.Tests/Interpretation/CSharpScriptTests.cs #0
   errors: 0
-## csharp 229 Poly.Tests/Interpretation/CSharpScriptTests.cs: class C { C(
+## csharp Poly.Tests/Interpretation/CSharpScriptTests.cs #1
   errors: 0
-## csharp 230 Poly.Tests/Interpretation/CSharpScriptTests.cs: class C { C(
+## csharp Poly.Tests/Interpretation/CSharpScriptTests.cs #2
   errors: 0
-## csharp 231 Poly.Tests/Interpretation/CSharpScriptTests.cs: class C { C(
+## csharp Poly.Tests/Interpretation/CSharpScriptTests.cs #3
   errors: 0
-## csharp 232 Poly.Tests/Interpretation/CSharpScriptTests.cs: class C { C(
+## csharp Poly.Tests/Interpretation/CSharpScriptTests.cs #4
   errors: 0
-## csharp 233 Poly.Tests/Interpretation/CSharpScriptTests.cs: class C { C(
+## csharp Poly.Tests/Interpretation/CSharpScriptTests.cs #5
   errors: 0
-## csharp 234 Poly.Tests/Interpretation/CSharpScriptTests.cs: class C { C(
+## csharp Poly.Tests/Interpretation/CSharpScriptTests.cs #6
   errors: 0
-## csharp 235 Poly.Tests/Interpretation/CSharpScriptTests.cs: class C { C(
+## csharp Poly.Tests/Interpretation/CSharpScriptTests.cs #7
   errors: 4
-## csharp 236 Poly.Tests/Interpretation/CSharpScriptTests.cs: class C { vo
+## csharp Poly.Tests/Interpretation/CSharpScriptTests.cs #8
   errors: 0
-## csharp 237 Poly.Tests/Interpretation/CSharpScriptTests.cs: var k = (int
+## csharp Poly.Tests/Interpretation/CSharpScriptTests.cs #9
   errors: 1
-## csharp 238 Poly.Tests/Interpretation/CSharpScriptTests.cs: class C { vo
+## csharp Poly.Tests/Interpretation/CSharpScriptTests.cs #10
   errors: 0
-## csharp 239 Poly.Tests/Interpretation/CSharpScriptTests.cs: class C { vo
+## csharp Poly.Tests/Interpretation/CSharpScriptTests.cs #11
   errors: 2
-## csharp 240 Poly.Tests/Interpretation/CSharpScriptTests.cs: var i = 0; w
+## csharp Poly.Tests/Interpretation/CSharpScriptTests.cs #12
   errors: 3
-## csharp 241 Poly.Tests/Interpretation/CSharpScriptTests.cs: var i = 0; w
+## csharp Poly.Tests/Interpretation/CSharpScriptTests.cs #13
   errors: 3
-## csharp 242 Poly.Tests/Interpretation/CSharpScriptTests.cs: var i = 0; w
+## csharp Poly.Tests/Interpretation/CSharpScriptTests.cs #14
   errors: 4
-## csharp 243 Poly.Tests/Interpretation/CSharpScriptTests.cs: var a = new 
+## csharp Poly.Tests/Interpretation/CSharpScriptTests.cs #15
   errors: 2
-## csharp 244 Poly.Tests/Interpretation/CSharpScriptTests.cs: { 0x1F; }
+## csharp Poly.Tests/Interpretation/CSharpScriptTests.cs #16
   errors: 0
-## csharp 245 Poly.Tests/Interpretation/CSharpScriptTests.cs: { 0b1010; }
+## csharp Poly.Tests/Interpretation/CSharpScriptTests.cs #17
   errors: 0
-## csharp 246 Poly.Tests/Interpretation/CSharpScriptTests.cs: class C { in
+## csharp Poly.Tests/Interpretation/CSharpScriptTests.cs #18
   errors: 0
-## csharp 247 Poly.Tests/Interpretation/CSharpScriptTests.cs: class C { vo
+## csharp Poly.Tests/Interpretation/CSharpScriptTests.cs #19
   errors: 0
-## csharp 248 Poly.Tests/Interpretation/CSharpScriptTests.cs: var x = defa
+## csharp Poly.Tests/Interpretation/CSharpScriptTests.cs #20
   errors: 1
-## csharp 249 Poly.Tests/Interpretation/CSharpScriptTests.cs: for (var i =
+## csharp Poly.Tests/Interpretation/CSharpScriptTests.cs #21
   errors: 0
-## csharp 250 Poly.Tests/Interpretation/CSharpScriptTests.cs: class C { vo
+## csharp Poly.Tests/Interpretation/CSharpScriptTests.cs #22
   errors: 0
-## csharp 251 Poly.Tests/Interpretation/CSharpScriptTests.cs: class C { vo
+## csharp Poly.Tests/Interpretation/CSharpScriptTests.cs #23
   errors: 0
-## csharp 252 Poly.Tests/Interpretation/CSharpScriptTests.cs: { @"C:\x"; }
+## csharp Poly.Tests/Interpretation/CSharpScriptTests.cs #24
   errors: 0
-## csharp 253 Poly.Tests/Interpretation/CSharpScriptTests.cs: class C { st
+## csharp Poly.Tests/Interpretation/CSharpScriptTests.cs #25
   errors: 0
-## csharp 254 Poly.Tests/Interpretation/CSharpScriptTests.cs: { """a"b""";
+## csharp Poly.Tests/Interpretation/CSharpScriptTests.cs #26
   errors: 0
-## csharp 255 Poly.Tests/Interpretation/CSharpScriptTests.cs: { """     he
+## csharp Poly.Tests/Interpretation/CSharpScriptTests.cs #27
   errors: 0
-## csharp 256 Poly.Tests/Interpretation/CSharpScriptTests.cs: { """     a 
+## csharp Poly.Tests/Interpretation/CSharpScriptTests.cs #28
   errors: 0
-## csharp 257 Poly.Tests/Interpretation/CSharpScriptTests.cs: class C { st
+## csharp Poly.Tests/Interpretation/CSharpScriptTests.cs #29
   errors: 0
-## csharp 258 Poly.Tests/Interpretation/CSharpWriterDefectTests.cs: return
+## csharp Poly.Tests/Interpretation/CSharpWriterDefectTests.cs #0
   errors: 0
-## csharp 259 Poly.Tests/Interpretation/CSharpWriterDefectTests.cs: return
+## csharp Poly.Tests/Interpretation/CSharpWriterDefectTests.cs #1
   errors: 0
-## csharp 260 Poly.Tests/Interpretation/CSharpWriterDefectTests.cs: return
+## csharp Poly.Tests/Interpretation/CSharpWriterDefectTests.cs #2
   errors: 0
-## csharp 261 Poly.Tests/Interpretation/CSharpWriterDefectTests.cs: return
+## csharp Poly.Tests/Interpretation/CSharpWriterDefectTests.cs #3
   errors: 0
-## csharp 262 Poly.Tests/Interpretation/CSharpWriterDefectTests.cs: return
+## csharp Poly.Tests/Interpretation/CSharpWriterDefectTests.cs #4
   errors: 0
-## csharp 263 Poly.Tests/Interpretation/CSharpWriterDefectTests.cs: return
+## csharp Poly.Tests/Interpretation/CSharpWriterDefectTests.cs #5
   errors: 0
-## csharp 264 Poly.Tests/Interpretation/CSharpWriterDefectTests.cs: return
+## csharp Poly.Tests/Interpretation/CSharpWriterDefectTests.cs #6
   errors: 0
-## csharp 265 Poly.Tests/Interpretation/CSharpWriterDefectTests.cs: _ = x;
+## csharp Poly.Tests/Interpretation/CSharpWriterDefectTests.cs #7
   errors: 2
-## csharp 266 Poly.Tests/Interpretation/CSharpWriterFailClosedTests.cs: va
+## csharp Poly.Tests/Interpretation/CSharpWriterFailClosedTests.cs #0
   errors: 1
-## csharp 267 Poly.Tests/Interpretation/CSharpWriterFailClosedTests.cs: va
+## csharp Poly.Tests/Interpretation/CSharpWriterFailClosedTests.cs #1
   errors: 1
-## csharp 268 Poly.Tests/Interpretation/CSharpWriterFailClosedTests.cs: ne
+## csharp Poly.Tests/Interpretation/CSharpWriterFailClosedTests.cs #2
   errors: 0
-## csharp 269 Poly.Tests/Interpretation/CSharpWriterFailClosedTests.cs: _ 
+## csharp Poly.Tests/Interpretation/CSharpWriterFailClosedTests.cs #3
   errors: 1
   System.Numerics.BitOperations.PopCount(System.UInt64)
-## csharp 270 Poly.Tests/Interpretation/CSharpWriterUnitTests.cs: using Sy
+## csharp Poly.Tests/Interpretation/CSharpWriterUnitTests.cs #0
   errors: 0
-## csharp 271 Poly.Tests/Interpretation/CSharpWriterUnitTests.cs: using Sy
+## csharp Poly.Tests/Interpretation/CSharpWriterUnitTests.cs #1
   errors: 0
-## csharp 272 Poly.Tests/Interpretation/CSharpWriterUnitTests.cs: using Sy
+## csharp Poly.Tests/Interpretation/CSharpWriterUnitTests.cs #2
   errors: 0
-## csharp 273 Poly.Tests/Interpretation/CSharpWriterUnitTests.cs: using Po
+## csharp Poly.Tests/Interpretation/CSharpWriterUnitTests.cs #3
   errors: 0
-## csharp 274 Poly.Tests/Interpretation/CSharpWriterUnitTests.cs: using Sy
+## csharp Poly.Tests/Interpretation/CSharpWriterUnitTests.cs #4
   errors: 0
-## csharp 275 Poly.Tests/Interpretation/CSharpWriterUnitTests.cs: namespac
+## csharp Poly.Tests/Interpretation/CSharpWriterUnitTests.cs #5
   errors: 0
-## csharp 276 Poly.Tests/Interpretation/CSharpWriterUnitTests.cs: using Sy
+## csharp Poly.Tests/Interpretation/CSharpWriterUnitTests.cs #6
   errors: 0
-## csharp 277 Poly.Tests/Interpretation/CSharpWriterUnitTests.cs: using Sy
+## csharp Poly.Tests/Interpretation/CSharpWriterUnitTests.cs #7
   errors: 0
-## csharp 278 Poly.Tests/Interpretation/CSharpWriterUnitTests.cs: namespac
+## csharp Poly.Tests/Interpretation/CSharpWriterUnitTests.cs #8
   errors: 0
-## csharp 279 Poly.Tests/Interpretation/CSharpWriterUnitTests.cs: var x = 
+## csharp Poly.Tests/Interpretation/CSharpWriterUnitTests.cs #9
   errors: 1
-## csharp 280 Poly.Tests/Interpretation/CSharpWriterUnitTests.cs: var x = 
+## csharp Poly.Tests/Interpretation/CSharpWriterUnitTests.cs #10
   errors: 1
-## csharp 281 Poly.Tests/Interpretation/CSharpWriterUnitTests.cs: var x = 
+## csharp Poly.Tests/Interpretation/CSharpWriterUnitTests.cs #11
   errors: 1
-## csharp 282 Poly.Tests/Interpretation/CSharpWriterUnitTests.cs: using Sy
+## csharp Poly.Tests/Interpretation/CSharpWriterUnitTests.cs #12
   errors: 0
-## csharp 283 Poly.Tests/Interpretation/CSharpWriterUnitTests.cs: using Sy
+## csharp Poly.Tests/Interpretation/CSharpWriterUnitTests.cs #13
   errors: 0
-## csharp 284 Poly.Tests/Interpretation/CSharpWriterUnitTests.cs: using Po
+## csharp Poly.Tests/Interpretation/CSharpWriterUnitTests.cs #14
   errors: 0
-## csharp 285 Poly.Tests/Interpretation/CSharpWriterUnitTests.cs: using Sy
+## csharp Poly.Tests/Interpretation/CSharpWriterUnitTests.cs #15
   errors: 0
-## csharp 286 Poly.Tests/Interpretation/CSharpWriterUnitTests.cs: using Po
+## csharp Poly.Tests/Interpretation/CSharpWriterUnitTests.cs #16
   errors: 0
-## csharp 287 Poly.Tests/Interpretation/CSharpWriterUnitTests.cs: using Po
+## csharp Poly.Tests/Interpretation/CSharpWriterUnitTests.cs #17
   errors: 0
-## csharp 288 Poly.Tests/Interpretation/CSharpWriterUnitTests.cs: using Po
+## csharp Poly.Tests/Interpretation/CSharpWriterUnitTests.cs #18
   errors: 0
-## csharp 289 Poly.Tests/Interpretation/CSharpWriterUnitTests.cs: using Po
+## csharp Poly.Tests/Interpretation/CSharpWriterUnitTests.cs #19
   errors: 0
-## csharp 290 Poly.Tests/Interpretation/CSharpWriterUnitTests.cs: using Po
+## csharp Poly.Tests/Interpretation/CSharpWriterUnitTests.cs #20
   errors: 0
-## csharp 291 Poly.Tests/Interpretation/CSharpWriterUnitTests.cs: using Po
+## csharp Poly.Tests/Interpretation/CSharpWriterUnitTests.cs #21
   errors: 0
-## csharp 292 Poly.Tests/Interpretation/CSharpWriterUnitTests.cs: using Po
+## csharp Poly.Tests/Interpretation/CSharpWriterUnitTests.cs #22
   errors: 0
-## csharp 293 Poly.Tests/Interpretation/CSharpWriterUnitTests.cs: using Po
+## csharp Poly.Tests/Interpretation/CSharpWriterUnitTests.cs #23
   errors: 0
-## csharp 294 Poly.Tests/Interpretation/CSharpWriterUnitTests.cs: using Po
+## csharp Poly.Tests/Interpretation/CSharpWriterUnitTests.cs #24
   errors: 0
-## csharp 295 Poly.Tests/Interpretation/CSharpWriterUnitTests.cs: using Po
+## csharp Poly.Tests/Interpretation/CSharpWriterUnitTests.cs #25
   errors: 0
-## csharp 296 Poly.Tests/Interpretation/CSharpWriterUnitTests.cs: using Sy
+## csharp Poly.Tests/Interpretation/CSharpWriterUnitTests.cs #26
   errors: 0
-## csharp 297 Poly.Tests/Interpretation/CSharpWriterUnitTests.cs: using Sy
+## csharp Poly.Tests/Interpretation/CSharpWriterUnitTests.cs #27
   errors: 0
-## csharp 298 Poly.Tests/Interpretation/CSharpWriterUnitTests.cs: using Po
+## csharp Poly.Tests/Interpretation/CSharpWriterUnitTests.cs #28
   errors: 0
-## csharp 299 Poly.Tests/Interpretation/CSharpWriterUnitTests.cs: var x = 
+## csharp Poly.Tests/Interpretation/CSharpWriterUnitTests.cs #29
   errors: 1
-## csharp 300 Poly.Tests/Interpretation/CSharpWriterUnitTests.cs: namespac
+## csharp Poly.Tests/Interpretation/CSharpWriterUnitTests.cs #30
   errors: 0
-## csharp 301 Poly.Tests/Interpretation/CSharpWriterUnitTests.cs: var x = 
+## csharp Poly.Tests/Interpretation/CSharpWriterUnitTests.cs #31
   errors: 1
-## csharp 302 Poly.Tests/Interpretation/CallFrameArgumentTests.cs: class P
+## csharp Poly.Tests/Interpretation/CallFrameArgumentTests.cs #0
   errors: 0
-## csharp 303 Poly.Tests/Interpretation/CallFrameArgumentTests.cs: class P
+## csharp Poly.Tests/Interpretation/CallFrameArgumentTests.cs #1
   errors: 0
-## csharp 304 Poly.Tests/Interpretation/CallFrameArgumentTests.cs: class P
+## csharp Poly.Tests/Interpretation/CallFrameArgumentTests.cs #2
   errors: 0
-## csharp 305 Poly.Tests/Interpretation/CallFrameArgumentTests.cs: class P
+## csharp Poly.Tests/Interpretation/CallFrameArgumentTests.cs #3
   errors: 0
-## csharp 306 Poly.Tests/Interpretation/ControlFlowAnalysisTests.cs: a;
+## csharp Poly.Tests/Interpretation/ControlFlowAnalysisTests.cs #0
   errors: 1
-## csharp 307 Poly.Tests/Interpretation/InvokeMemberInstanceTests.cs: this
+## csharp Poly.Tests/Interpretation/InvokeMemberInstanceTests.cs #0
   errors: 0
-## csharp 308 Poly.Tests/Interpretation/IteratorDebuggerTests.cs: class C 
+## csharp Poly.Tests/Interpretation/IteratorDebuggerTests.cs #0
   errors: 0
-## csharp 309 Poly.Tests/Interpretation/IteratorDebuggerTests.cs: class C 
+## csharp Poly.Tests/Interpretation/IteratorDebuggerTests.cs #1
   errors: 0
-## csharp 310 Poly.Tests/Interpretation/IteratorExecutionTests.cs: new C()
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #0
   errors: 1
-## csharp 311 Poly.Tests/Interpretation/IteratorExecutionTests.cs: class C
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #1
   errors: 0
-## csharp 312 Poly.Tests/Interpretation/IteratorExecutionTests.cs: IEnumer
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #2
   errors: 0
-## csharp 313 Poly.Tests/Interpretation/IteratorExecutionTests.cs: foreach
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #3
   errors: 7
-## csharp 314 Poly.Tests/Interpretation/IteratorExecutionTests.cs: new C()
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #4
   errors: 1
-## csharp 315 Poly.Tests/Interpretation/IteratorExecutionTests.cs: IEnumer
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #5
   errors: 0
-## csharp 316 Poly.Tests/Interpretation/IteratorExecutionTests.cs: new C()
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #6
   errors: 1
-## csharp 317 Poly.Tests/Interpretation/IteratorExecutionTests.cs: class C
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #7
   errors: 0
-## csharp 318 Poly.Tests/Interpretation/IteratorExecutionTests.cs: class C
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #8
   errors: 0
-## csharp 319 Poly.Tests/Interpretation/IteratorExecutionTests.cs: class C
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #9
   errors: 0
-## csharp 320 Poly.Tests/Interpretation/IteratorExecutionTests.cs: class C
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #10
   errors: 0
-## csharp 321 Poly.Tests/Interpretation/IteratorExecutionTests.cs: class C
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #11
   errors: 0
-## csharp 322 Poly.Tests/Interpretation/IteratorExecutionTests.cs: class C
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #12
   errors: 0
-## csharp 323 Poly.Tests/Interpretation/IteratorExecutionTests.cs: class C
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #13
   errors: 0
-## csharp 324 Poly.Tests/Interpretation/IteratorExecutionTests.cs: new C()
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #14
   errors: 1
-## csharp 325 Poly.Tests/Interpretation/IteratorExecutionTests.cs: long Bu
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #15
   errors: 0
-## csharp 326 Poly.Tests/Interpretation/IteratorExecutionTests.cs: IEnumer
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #16
   errors: 0
-## csharp 327 Poly.Tests/Interpretation/IteratorExecutionTests.cs: new C()
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #17
   errors: 1
-## csharp 328 Poly.Tests/Interpretation/IteratorExecutionTests.cs: new C()
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #18
   errors: 1
-## csharp 329 Poly.Tests/Interpretation/IteratorExecutionTests.cs: class C
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #19
   errors: 1
   System.Collections.Generic.List`1[[System.Int64, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_Count()
-## csharp 330 Poly.Tests/Interpretation/IteratorExecutionTests.cs: class C
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #20
   errors: 1
   System.Collections.Generic.List`1[[System.Int64, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Add(System.Int64)
-## csharp 331 Poly.Tests/Interpretation/IteratorExecutionTests.cs: class C
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #21
   errors: 0
-## csharp 332 Poly.Tests/Interpretation/IteratorExecutionTests.cs: class C
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #22
   errors: 0
-## csharp 333 Poly.Tests/Interpretation/IteratorExecutionTests.cs: class C
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #23
   errors: 0
-## csharp 334 Poly.Tests/Interpretation/IteratorExecutionTests.cs: class C
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #24
   errors: 0
-## csharp 335 Poly.Tests/Interpretation/IteratorExecutionTests.cs: class C
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #25
   errors: 0
   System.InvalidOperationException.ctor()
-## csharp 336 Poly.Tests/Interpretation/IteratorExecutionTests.cs: class C
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #26
   status: exception InvalidOperationException
-## csharp 337 Poly.Tests/Interpretation/IteratorExecutionTests.cs: class C
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #27
   errors: 0
-## csharp 338 Poly.Tests/Interpretation/IteratorExecutionTests.cs: IEnumer
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #28
   errors: 0
-## csharp 339 Poly.Tests/Interpretation/IteratorExecutionTests.cs: IEnumer
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #29
   errors: 0
-## csharp 340 Poly.Tests/Interpretation/IteratorExecutionTests.cs: IEnumer
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #30
   errors: 0
-## csharp 341 Poly.Tests/Interpretation/IteratorExecutionTests.cs: IEnumer
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #31
   errors: 0
-## csharp 342 Poly.Tests/Interpretation/IteratorExecutionTests.cs: IEnumer
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #32
   errors: 0
   System.InvalidOperationException.ctor()
-## csharp 343 Poly.Tests/Interpretation/IteratorExecutionTests.cs: IEnumer
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #33
   errors: 0
   System.IO.MemoryStream.ctor()
-## csharp 344 Poly.Tests/Interpretation/IteratorExecutionTests.cs: IEnumer
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #34
   errors: 0
   System.IO.MemoryStream.ctor()
-## csharp 345 Poly.Tests/Interpretation/IteratorExecutionTests.cs: IEnumer
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #35
   errors: 0
-## csharp 346 Poly.Tests/Interpretation/IteratorExecutionTests.cs: IEnumer
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #36
   errors: 0
-## csharp 347 Poly.Tests/Interpretation/IteratorExecutionTests.cs: class C
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #37
   errors: 0
-## csharp 348 Poly.Tests/Interpretation/IteratorExecutionTests.cs: IEnumer
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #38
   errors: 0
-## csharp 349 Poly.Tests/Interpretation/IteratorExecutionTests.cs: class C
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #39
   errors: 1
-## csharp 350 Poly.Tests/Interpretation/IteratorExecutionTests.cs: IEnumer
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #40
   errors: 0
-## csharp 351 Poly.Tests/Interpretation/IteratorExecutionTests.cs: class D
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #41
   errors: 1
   System.Collections.ArrayList.ctor()
-## csharp 352 Poly.Tests/Interpretation/IteratorExecutionTests.cs: new D()
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #42
   errors: 1
-## csharp 353 Poly.Tests/Interpretation/IteratorExecutionTests.cs: IEnumer
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #43
   errors: 0
-## csharp 354 Poly.Tests/Interpretation/IteratorExecutionTests.cs: IEnumer
+## csharp Poly.Tests/Interpretation/IteratorExecutionTests.cs #44
   errors: 0
-## csharp 355 Poly.Tests/Interpretation/IteratorParityTests.cs: public cla
+## csharp Poly.Tests/Interpretation/IteratorParityTests.cs #0
   errors: 0
-## csharp 356 Poly.Tests/Interpretation/IteratorParityTests.cs: public cla
+## csharp Poly.Tests/Interpretation/IteratorParityTests.cs #1
   errors: 0
-## csharp 357 Poly.Tests/Interpretation/IteratorParityTests.cs: public cla
+## csharp Poly.Tests/Interpretation/IteratorParityTests.cs #2
   errors: 0
-## csharp 358 Poly.Tests/Interpretation/IteratorParityTests.cs: public cla
+## csharp Poly.Tests/Interpretation/IteratorParityTests.cs #3
   errors: 0
-## csharp 359 Poly.Tests/Interpretation/IteratorParityTests.cs: public cla
+## csharp Poly.Tests/Interpretation/IteratorParityTests.cs #4
   errors: 0
-## csharp 360 Poly.Tests/Interpretation/IteratorParityTests.cs: public cla
+## csharp Poly.Tests/Interpretation/IteratorParityTests.cs #5
   errors: 0
-## csharp 361 Poly.Tests/Interpretation/IteratorYieldTests.cs: class C { I
+## csharp Poly.Tests/Interpretation/IteratorYieldTests.cs #0
   errors: 0
-## csharp 362 Poly.Tests/Interpretation/IteratorYieldTests.cs: yield retur
+## csharp Poly.Tests/Interpretation/IteratorYieldTests.cs #1
   errors: 1
-## csharp 363 Poly.Tests/Interpretation/IteratorYieldTests.cs: yield break
+## csharp Poly.Tests/Interpretation/IteratorYieldTests.cs #2
   errors: 1
-## csharp 364 Poly.Tests/Interpretation/IteratorYieldTests.cs: class C { I
+## csharp Poly.Tests/Interpretation/IteratorYieldTests.cs #3
   errors: 0
-## csharp 365 Poly.Tests/Interpretation/IteratorYieldTests.cs: class C { I
+## csharp Poly.Tests/Interpretation/IteratorYieldTests.cs #4
   errors: 1
-## csharp 366 Poly.Tests/Interpretation/IteratorYieldTests.cs: class C { I
+## csharp Poly.Tests/Interpretation/IteratorYieldTests.cs #5
   errors: 1
-## csharp 367 Poly.Tests/Interpretation/IteratorYieldTests.cs: class C { I
+## csharp Poly.Tests/Interpretation/IteratorYieldTests.cs #6
   errors: 1
-## csharp 368 Poly.Tests/Interpretation/IteratorYieldTests.cs: class C { I
+## csharp Poly.Tests/Interpretation/IteratorYieldTests.cs #7
   errors: 0
-## csharp 369 Poly.Tests/Interpretation/IteratorYieldTests.cs: class C { v
+## csharp Poly.Tests/Interpretation/IteratorYieldTests.cs #8
   errors: 1
-## csharp 370 Poly.Tests/Interpretation/IteratorYieldTests.cs: class C { l
+## csharp Poly.Tests/Interpretation/IteratorYieldTests.cs #9
   errors: 1
-## csharp 371 Poly.Tests/Interpretation/IteratorYieldTests.cs: class C { v
+## csharp Poly.Tests/Interpretation/IteratorYieldTests.cs #10
   errors: 1
-## csharp 372 Poly.Tests/Interpretation/IteratorYieldTests.cs: class C { I
+## csharp Poly.Tests/Interpretation/IteratorYieldTests.cs #11
   errors: 1
-## csharp 373 Poly.Tests/Interpretation/IteratorYieldTests.cs: class C { I
+## csharp Poly.Tests/Interpretation/IteratorYieldTests.cs #12
   errors: 1
-## csharp 374 Poly.Tests/Interpretation/IteratorYieldTests.cs: class C { I
+## csharp Poly.Tests/Interpretation/IteratorYieldTests.cs #13
   errors: 0
-## csharp 375 Poly.Tests/Interpretation/LanguageVmTests.cs: $"x = {1 + 1}"
+## csharp Poly.Tests/Interpretation/LanguageVmTests.cs #0
   errors: 0
-## csharp 376 Poly.Tests/Interpretation/NodeFactCorpus.cs: var y = ~1L;
+## csharp Poly.Tests/Interpretation/NodeFactCorpus.cs #0
   errors: 1
-## csharp 377 Poly.Tests/Interpretation/NodeFactCorpus.cs: var x = 8L >> 2
+## csharp Poly.Tests/Interpretation/NodeFactCorpus.cs #1
   errors: 1
-## csharp 378 Poly.Tests/Interpretation/NodeFactCorpus.cs: do { var y = 1L
+## csharp Poly.Tests/Interpretation/NodeFactCorpus.cs #2
   errors: 0
-## csharp 379 Poly.Tests/Interpretation/NodeFactCorpus.cs: while (true) { 
+## csharp Poly.Tests/Interpretation/NodeFactCorpus.cs #3
   errors: 0
-## csharp 380 Poly.Tests/Interpretation/NodeFactCorpus.cs: while (true) { 
+## csharp Poly.Tests/Interpretation/NodeFactCorpus.cs #4
   errors: 0
-## csharp 381 Poly.Tests/Interpretation/NodeFactCorpus.cs: var x = 0L; got
+## csharp Poly.Tests/Interpretation/NodeFactCorpus.cs #5
   errors: 2
-## csharp 382 Poly.Tests/Interpretation/NodeFactCorpus.cs: class C { IEnum
+## csharp Poly.Tests/Interpretation/NodeFactCorpus.cs #6
   errors: 0
-## csharp 383 Poly.Tests/Interpretation/NodeFactCorpus.cs: switch (1L) { c
+## csharp Poly.Tests/Interpretation/NodeFactCorpus.cs #7
   errors: 2
-## csharp 384 Poly.Tests/Interpretation/NodeFactCorpus.cs: var o = "a" as 
+## csharp Poly.Tests/Interpretation/NodeFactCorpus.cs #8
   errors: 1
-## csharp 385 Poly.Tests/Interpretation/NodeFactCorpus.cs: class M { publi
+## csharp Poly.Tests/Interpretation/NodeFactCorpus.cs #9
   errors: 0
-## csharp 386 Poly.Tests/Interpretation/NodeFactCorpus.cs: var y = 8L / 2;
+## csharp Poly.Tests/Interpretation/NodeFactCorpus.cs #10
   errors: 1
-## csharp 387 Poly.Tests/Interpretation/NodeFactCorpus.cs: var y = 8L % 3;
+## csharp Poly.Tests/Interpretation/NodeFactCorpus.cs #11
   errors: 1
-## csharp 388 Poly.Tests/Interpretation/NodeFactCorpus.cs: var y = -1L;
+## csharp Poly.Tests/Interpretation/NodeFactCorpus.cs #12
   errors: 1
-## csharp 389 Poly.Tests/Interpretation/NodeFactCorpus.cs: var y = $"a{1 +
+## csharp Poly.Tests/Interpretation/NodeFactCorpus.cs #13
   errors: 1
-## csharp 390 Poly.Tests/Interpretation/NodeFactCorpus.cs: var y = 6L & 3L
+## csharp Poly.Tests/Interpretation/NodeFactCorpus.cs #14
   errors: 1
-## csharp 391 Poly.Tests/Interpretation/NodeFactCorpus.cs: var y = 6L | 3L
+## csharp Poly.Tests/Interpretation/NodeFactCorpus.cs #15
   errors: 1
-## csharp 392 Poly.Tests/Interpretation/NodeFactCorpus.cs: var y = 6L ^ 3L
+## csharp Poly.Tests/Interpretation/NodeFactCorpus.cs #16
   errors: 1
-## csharp 393 Poly.Tests/Interpretation/NodeFactCorpus.cs: var y = 1L << 3
+## csharp Poly.Tests/Interpretation/NodeFactCorpus.cs #17
   errors: 1
-## csharp 394 Poly.Tests/Interpretation/NodeFactCorpus.cs: var e = new Sys
+## csharp Poly.Tests/Interpretation/NodeFactCorpus.cs #18
   errors: 3
   System.InvalidOperationException.ctor()
-## csharp 395 Poly.Tests/Interpretation/NodeFactCorpus.cs: var a = new lon
+## csharp Poly.Tests/Interpretation/NodeFactCorpus.cs #19
   errors: 2
-## csharp 396 Poly.Tests/Interpretation/NodeFactCorpus.cs: var a = new lon
+## csharp Poly.Tests/Interpretation/NodeFactCorpus.cs #20
   errors: 3
-## csharp 397 Poly.Tests/Interpretation/NodeFactCorpus.cs: class C { void 
+## csharp Poly.Tests/Interpretation/NodeFactCorpus.cs #21
   errors: 0
-## csharp 398 Poly.Tests/Interpretation/NodeFactCorpus.cs: true && false;
+## csharp Poly.Tests/Interpretation/NodeFactCorpus.cs #22
   errors: 0
-## csharp 399 Poly.Tests/Interpretation/NodeFactCorpus.cs: true || false;
+## csharp Poly.Tests/Interpretation/NodeFactCorpus.cs #23
   errors: 0
-## csharp 400 Poly.Tests/Interpretation/NodeFactCorpus.cs: !true;
+## csharp Poly.Tests/Interpretation/NodeFactCorpus.cs #24
   errors: 0
-## csharp 401 Poly.Tests/Interpretation/NodeFactCorpus.cs: 1L == 2L;
+## csharp Poly.Tests/Interpretation/NodeFactCorpus.cs #25
   errors: 0
-## csharp 402 Poly.Tests/Interpretation/NodeFactCorpus.cs: 1L != 2L;
+## csharp Poly.Tests/Interpretation/NodeFactCorpus.cs #26
   errors: 0
-## csharp 403 Poly.Tests/Interpretation/NodeFactCorpus.cs: 1L <= 2L;
+## csharp Poly.Tests/Interpretation/NodeFactCorpus.cs #27
   errors: 0
-## csharp 404 Poly.Tests/Interpretation/NodeFactCorpus.cs: 1L > 2L;
+## csharp Poly.Tests/Interpretation/NodeFactCorpus.cs #28
   errors: 0
-## csharp 405 Poly.Tests/Interpretation/NodeFactCorpus.cs: 1L >= 2L;
+## csharp Poly.Tests/Interpretation/NodeFactCorpus.cs #29
   errors: 0
-## csharp 406 Poly.Tests/Interpretation/NodeFactCorpus.cs: true ? 1L : 2L;
+## csharp Poly.Tests/Interpretation/NodeFactCorpus.cs #30
   errors: 0
-## csharp 407 Poly.Tests/Interpretation/NodeFactCorpus.cs: { var f = (long
+## csharp Poly.Tests/Interpretation/NodeFactCorpus.cs #31
   errors: 0
-## csharp 408 Poly.Tests/Interpretation/NodeFactCorpus.cs: { var f = (long
+## csharp Poly.Tests/Interpretation/NodeFactCorpus.cs #32
   errors: 0
-## csharp 409 Poly.Tests/Interpretation/NodeFactCorpus.cs: class C { C() {
+## csharp Poly.Tests/Interpretation/NodeFactCorpus.cs #33
   errors: 0
-## csharp 410 Poly.Tests/Interpretation/ParameterBindingTests.cs: int x = 
+## csharp Poly.Tests/Interpretation/ParameterBindingTests.cs #0
   errors: 3
-## csharp 411 Poly.Tests/Interpretation/RejectedBodyFailClosedTests.cs: cl
+## csharp Poly.Tests/Interpretation/RejectedBodyFailClosedTests.cs #0
   errors: 0
-## csharp 412 Poly.Tests/Interpretation/RejectedBodyFailClosedTests.cs: cl
+## csharp Poly.Tests/Interpretation/RejectedBodyFailClosedTests.cs #1
   errors: 1
-## csharp 413 Poly.Tests/Interpretation/RejectedBodyFailClosedTests.cs: cl
+## csharp Poly.Tests/Interpretation/RejectedBodyFailClosedTests.cs #2
   errors: 0
-## csharp 414 Poly.Tests/Interpretation/RejectedBodyFailClosedTests.cs: cl
+## csharp Poly.Tests/Interpretation/RejectedBodyFailClosedTests.cs #3
   errors: 0
   System.String.IndexOf(System.Char)
-## csharp 415 Poly.Tests/Interpretation/RepeatedAstInvocationTests.cs: cla
+## csharp Poly.Tests/Interpretation/RepeatedAstInvocationTests.cs #0
   errors: 0
-## csharp 416 Poly.Tests/Interpretation/RepeatedAstInvocationTests.cs: cla
+## csharp Poly.Tests/Interpretation/RepeatedAstInvocationTests.cs #1
   errors: 0
-## csharp 417 Poly.Tests/Interpretation/RepeatedAstInvocationTests.cs: cla
+## csharp Poly.Tests/Interpretation/RepeatedAstInvocationTests.cs #2
   errors: 0
-## csharp 418 Poly.Tests/Interpretation/ShadowedVariableVmTests.cs: var s 
+## csharp Poly.Tests/Interpretation/ShadowedVariableVmTests.cs #0
   errors: 4
-## csharp 419 Poly.Tests/Interpretation/ShadowedVariableVmTests.cs: var s 
+## csharp Poly.Tests/Interpretation/ShadowedVariableVmTests.cs #1
   errors: 7
-## csharp 420 Poly.Tests/Interpretation/ShadowedVariableVmTests.cs: var s 
+## csharp Poly.Tests/Interpretation/ShadowedVariableVmTests.cs #2
   errors: 7
-## csharp 421 Poly.Tests/Interpretation/ShadowedVariableVmTests.cs: var n 
+## csharp Poly.Tests/Interpretation/ShadowedVariableVmTests.cs #3
   errors: 3
-## csharp 422 Poly.Tests/Interpretation/ShadowedVariableVmTests.cs: var s 
+## csharp Poly.Tests/Interpretation/ShadowedVariableVmTests.cs #4
   errors: 3
-## csharp 423 Poly.Tests/Interpretation/ShadowedVariableVmTests.cs: var s 
+## csharp Poly.Tests/Interpretation/ShadowedVariableVmTests.cs #5
   errors: 3
-## csharp 424 Poly.Tests/Interpretation/ShadowedVariableVmTests.cs: var s 
+## csharp Poly.Tests/Interpretation/ShadowedVariableVmTests.cs #6
   errors: 5
   System.InvalidOperationException.ctor(System.String)
   System.Exception.get_Message()
   System.String.get_Length()
-## csharp 425 Poly.Tests/Interpretation/VariableMultiAssignTypeExperimentT
+## csharp Poly.Tests/Interpretation/VariableMultiAssignTypeExperimentTests.cs #0
   errors: 1
-## csharp 426 Poly.Tests/Interpretation/VariableMultiAssignTypeExperimentT
+## csharp Poly.Tests/Interpretation/VariableMultiAssignTypeExperimentTests.cs #1
   errors: 1
-## csharp 427 Poly.Tests/Interpretation/Vm/Abi/ConditionalArmsTests.cs: lo
+## csharp Poly.Tests/Interpretation/Vm/Abi/ConditionalArmsTests.cs #0
   errors: 7
-## csharp 428 Poly.Tests/Interpretation/Vm/Abi/ConditionalArmsTests.cs: lo
+## csharp Poly.Tests/Interpretation/Vm/Abi/ConditionalArmsTests.cs #1
   errors: 7
-## csharp 429 Poly.Tests/Interpretation/Vm/Abi/ConditionalArmsTests.cs: lo
+## csharp Poly.Tests/Interpretation/Vm/Abi/ConditionalArmsTests.cs #2
   errors: 7
-## csharp 430 Poly.Tests/Interpretation/Vm/Abi/ConditionalArmsTests.cs: lo
+## csharp Poly.Tests/Interpretation/Vm/Abi/ConditionalArmsTests.cs #3
   errors: 7
-## csharp 431 Poly.Tests/Interpretation/Vm/Abi/ConditionalArmsTests.cs: cl
+## csharp Poly.Tests/Interpretation/Vm/Abi/ConditionalArmsTests.cs #4
   errors: 0
-## csharp 432 Poly.Tests/Interpretation/Vm/Abi/ConditionalArmsTests.cs: cl
+## csharp Poly.Tests/Interpretation/Vm/Abi/ConditionalArmsTests.cs #5
   errors: 0

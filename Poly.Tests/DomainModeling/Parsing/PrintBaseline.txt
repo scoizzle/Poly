@@ -1,0 +1,3248 @@
+# PrintBaseline.txt: the exact text DomainDslPrinter prints, one section per key.
+# Header: ##### key <TAB> pipeline <TAB> session <TAB> status <TAB> sha8 of the text. See PrintBaselineTests.
+# Regenerate only on an unchanged printer (POLY_REGEN_PRINT_BASELINE=1); comments in the sources are dropped by design.
+##### poly/demo/Poly.RestApi/library.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Product	uses=[temporal,sqlite,http]+implicit	printed	E63AFEE2
+domain Library
+uses sqlite
+uses http
+
+Genre: enum {
+  Fiction,
+  NonFiction,
+  Reference,
+}
+
+
+PatronStatus: enum {
+  Active,
+  Suspended,
+  Closed,
+}
+
+
+FineStatus: enum {
+  Unpaid,
+  Resolved,
+}
+
+
+PremiumTier: enum {
+  Silver,
+  Gold,
+  Platinum,
+}
+
+
+Book: entity {
+  Title: Text
+  Author: Text
+  ISBN: Text unique length(10, 17)
+  Pages: Number range(1, 10000)
+  Genre: Genre
+}
+
+Patron: entity {
+  Name: Text
+  Email: Text unique pattern("^[^@]+@[^@]+$")
+  MemberSince: Date default(Today)
+  Status: PatronStatus default(Active)
+  MaxItems: Number range(0, 20)
+  CurrentBorrowCount: Number default(0)
+  OutstandingFines: Number default(0)
+  loans: many Loan via borrower
+  fines: many Fine via patron
+  GoodStanding: policy { Status is "Active" }
+  AtLimit: policy { CurrentBorrowCount >= MaxItems }
+  HasFines: policy { OutstandingFines > 0 }
+  HasOverdueLoans: policy { any loans where Status is "Overdue" }
+  AccountInGoodStanding: policy { (Status is "Active" and OutstandingFines is 0) }
+  Active: stage {
+    CheckOut: action (book: Book) -> Loan
+      require GoodStanding
+      require not AtLimit
+      require not HasFines {
+      assign CurrentBorrowCount to (CurrentBorrowCount + 1)
+      create in loans {}
+    }
+    Suspend: action {
+      assign Status to "Suspended"
+      assign CurrentBorrowCount to 0
+      transition to Suspended
+    }
+    CloseAccount: action {
+      transition to Closed
+    }
+  }
+  Suspended: stage {
+    entry {
+      assign MaxItems to 0
+    }
+    exit {
+      assign MaxItems to 5
+    }
+    Reinstate: action
+      require not HasOverdueLoans {
+      assign Status to "Active"
+      transition to Active
+    }
+  }
+  Closed: stage {
+  }
+  when loans Overdue {
+    create Fine { Amount: 5 Reason: "Overdue item" }
+    assign OutstandingFines to (OutstandingFines + 5)
+  }
+  when loans Returned {
+    assign CurrentBorrowCount to (CurrentBorrowCount - 1)
+  }
+  when fines Resolved {
+    assign OutstandingFines to (OutstandingFines - 5)
+  }
+}
+
+Loan: entity {
+  Status: Text optional
+  CheckedOutAt: DateTime
+  DueDate: DateTime default(Now)
+  ReturnedAt: DateTime optional
+  TimesRenewed: Number optional
+  book: one Book
+  borrower: one Patron
+  Active: stage {
+    entry {
+      assign CheckedOutAt to Now
+    }
+    Renew: action {
+      assign DueDate to (DueDate + 14)
+      assign TimesRenewed to (TimesRenewed + 1)
+    }
+    Return: action {
+      assign ReturnedAt to Now
+      transition to Returned
+    }
+  }
+  Overdue: stage {
+    entry {
+      assign CheckedOutAt to Now
+    }
+  }
+  Returned: stage {
+  }
+}
+
+Fine: entity {
+  Amount: Number
+  Reason: Text
+  DateIssued: DateTime default(Now)
+  Paid: Boolean optional
+  patron: one Patron
+  Unpaid: stage {
+    Pay: action {
+      if (Amount <= 0) {
+        assign Paid to true
+    }
+    else {
+        assign Paid to true
+    }
+      transition to Resolved
+    }
+    Waive: action {
+      assign Amount to 0
+      assign Paid to true
+      transition to Resolved
+    }
+  }
+  Resolved: stage {
+    entry {
+      assign Paid to true
+    }
+  }
+}
+
+PremiumPatron: entity {
+  Name: Text
+  Email: Text unique pattern("^[^@]+@[^@]+$")
+  RewardPoints: Number
+  Tier: PremiumTier default(Silver)
+  PriorityAccess: Boolean
+  IsLoyal: policy { RewardPoints >= 100 }
+  HasPriority: policy { PriorityAccess is true }
+  UnlimitedItems: policy { (Tier is "Platinum" or PriorityAccess is true) }
+}
+##### poly/demo/live/checkout.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[]+implicit	printed	BD26229A
+domain Checkout
+
+Order: entity {
+  Total: Number
+  Pay: action (request: ChargeRequest) {
+    assign Total to Total
+  }
+}
+
+Stripe: contract internal stripe v1 {
+  ChargeRequest: value {
+    Amount: Number
+    Currency: Text
+  }
+  Charge: outbound operation ChargeRequest
+}
+
+ChargeOrder: bind Stripe Charge to Pay request
+##### poly/demo/live/domain.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[]+implicit	printed	CA368694
+domain Live
+
+Patron: entity {
+  Name: Text length(2, 80)
+  Email: Text unique
+}
+##### poly/docs/missions/evolve-2026-10-13/ambig-backref.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=none	uses=[]+implicit	Core:analysis-failed:DMREL005 | Product:analysis-failed:DMREL005	E3B0C442
+##### poly/docs/missions/evolve-2026-10-13/billing.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=none	uses=[temporal]+implicit	Core:analysis-failed:DMEFF011+DMLIB001 | Product:analysis-failed:DMEFF011+DMLIB001	E3B0C442
+##### poly/docs/missions/evolve-2026-10-13/claims.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=none	uses=[temporal]+implicit	Core:analysis-failed:DMEFF011+DMLIB001 | Product:analysis-failed:DMEFF011+DMLIB001	E3B0C442
+##### poly/docs/missions/evolve-2026-10-13/disputes.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=none	uses=[temporal]+implicit	Core:analysis-failed:DMSTR006 | Product:analysis-failed:DMSTR006	E3B0C442
+##### poly/docs/missions/evolve-2026-10-13/library.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=none	uses=[temporal,http]+implicit	Core:session-failed:InvalidOperationException | Product:analysis-failed:DMEFF011+DMLIB001	E3B0C442
+##### poly/docs/missions/evolve-2026-10-13/saas.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[temporal]+implicit	printed	D02B75AB
+domain Saas
+
+Plan: entity {
+  Name: Text
+  Price: Number range(0, )
+}
+
+Account: entity {
+  Name: Text
+  subscription: one Subscription
+}
+
+Subscription: entity {
+  plan: one Plan
+  StartDate: Date default(Today)
+  Expiry: Date
+  Status: Text default("trial")
+  IsExpired: policy { Expiry < Today }
+  Trial: stage {
+    entry {
+      assign Status to "trial"
+    }
+    Activate: action {
+      assign Expiry to StartDate + 30 Days
+      transition to Active
+    }
+    Cancel: action {
+      transition to Cancelled
+    }
+  }
+  Active: stage {
+    Renew: action {
+      assign Expiry to Expiry + 30 Days
+    }
+    Suspend: action {
+      transition to Suspended
+    }
+    Cancel: action {
+      transition to Cancelled
+    }
+  }
+  Suspended: stage {
+    Reinstate: action {
+      transition to Active
+    }
+    Cancel: action {
+      transition to Cancelled
+    }
+  }
+  Cancelled: stage {
+  }
+}
+##### poly/docs/missions/evolve-2026-10-13/smarthome.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[temporal]+implicit	printed	84E38588
+domain SmartHome
+
+Scene: entity {
+  Name: Text
+  IsActive: Boolean default(false)
+  devices: many Device
+  Activate: action {
+    for devices as device invoke device.TurnOn
+  }
+  Deactivate: action {
+    for devices as device where device in On invoke device.TurnOff
+  }
+  DimIdle: action {
+    for devices as device where device in Off invoke device.SetLevel(level: device MaxLevel)
+  }
+  when any devices On {
+    assign IsActive to true
+  }
+  when all devices Off {
+    assign IsActive to false
+  }
+}
+
+Device: entity {
+  Name: Text
+  Power: Number range(0, 3000)
+  MaxLevel: Number range(0, 100) default(100)
+  Draw: Number
+  scenes: many Scene via devices
+  Off: stage {
+    entry {
+      assign Draw to 0
+    }
+    TurnOn: action {
+      assign Draw to Power
+      transition to On
+    }
+    SetLevel: action (level: Number) {
+      assign MaxLevel to level
+    }
+  }
+  On: stage {
+    entry {
+      assign Draw to Power
+    }
+    TurnOff: action {
+      transition to Off
+    }
+  }
+}
+##### poly/docs/missions/evolve-2026-10-13/university-http.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=none	uses=[temporal,http]+implicit	Core:session-failed:InvalidOperationException | Product:analysis-failed:DMEFF011+DMLIB001	E3B0C442
+##### poly/docs/missions/evolve-2026-10-13/university.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=none	uses=[temporal]+implicit	Core:analysis-failed:DMEFF011+DMLIB001 | Product:analysis-failed:DMEFF011+DMLIB001	E3B0C442
+##### poly/docs/missions/evolve-2026-10-14/cart.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[temporal]+implicit	printed	FB7DC30D
+domain Cart
+
+Cart: entity {
+  Name: Text
+  Total: Number default(0)
+  ItemCount: Number default(0)
+  lines: many owned Line
+  AddItem: action (sku: Text, price: Number, qty: Number) {
+    create in lines { Sku: sku Price: price Qty: qty }
+    assign Total to (Total + (price * qty))
+    assign ItemCount to (ItemCount + 1)
+  }
+  Active: stage {
+    Checkout: action {
+      transition to CheckedOut
+    }
+  }
+  CheckedOut: stage {
+  }
+}
+
+Line: entity {
+  Sku: Text
+  Price: Number range(0, )
+  Qty: Number range(1, )
+  New: stage {
+  }
+}
+##### poly/docs/missions/evolve-2026-10-14/durtype.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[temporal]+implicit	printed	D7AB4BF3
+domain DurType
+
+Job: entity {
+  Name: Text
+  Elapsed: Duration
+  OpensAt: Time
+}
+##### poly/docs/missions/evolve-2026-10-14/jobqueue.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[temporal]+implicit	printed	CBB84CC3
+domain JobQueue
+
+Queue: entity {
+  Name: Text
+  FinishedCount: Number default(0)
+  FailedCount: Number default(0)
+  LastJob: Text
+  jobs: many Job
+  Enqueue: action (title: Text) {
+    create in jobs { Title: title }
+  }
+  when jobs Done, Failed as job {
+    assign FinishedCount to (FinishedCount + 1)
+    assign LastJob to job Title
+  }
+  when jobs Failed {
+    assign FailedCount to (FailedCount + 1)
+  }
+}
+
+Job: entity {
+  Title: Text
+  Retries: Number default(0)
+  MaxRetries: Number default(3)
+  queue: one Queue via jobs
+  CanRetry: policy { Retries < MaxRetries }
+  Queued: stage {
+    Start: action {
+      transition to Running
+    }
+  }
+  Running: stage {
+    Complete: action {
+      transition to Done
+    }
+    Fail: action {
+      assign Retries to (Retries + 1)
+      transition to Failed
+    }
+  }
+  Failed: stage {
+    Retry: action
+      require CanRetry {
+      transition to Running
+    }
+  }
+  Done: stage {
+  }
+}
+##### poly/docs/missions/evolve-2026-10-14/notifications.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[temporal]+implicit	printed	01439FF9
+domain Notifications
+
+User: entity {
+  Name: Text
+  UnreadBadge: Number default(0)
+  SeenCount: Number default(0)
+  LastBody: Text
+  notifications: many Notification
+  Active: stage {
+    when notifications Unread {
+      assign UnreadBadge to (UnreadBadge + 1)
+    }
+    when notifications Unread as n {
+      assign LastBody to n Body
+    }
+    GoAway: action {
+      transition to Away
+    }
+  }
+  Away: stage {
+    ComeBack: action {
+      transition to Active
+    }
+  }
+  Notify: action (body: Text) {
+    create in notifications { Body: body }
+  }
+  when notifications Read {
+    assign SeenCount to (SeenCount + 1)
+  }
+}
+
+Notification: entity {
+  Body: Text
+  Status: Text default("unread")
+  user: one User via notifications
+  Unread: stage {
+    entry {
+      assign Status to "unread"
+    }
+    MarkRead: action {
+      assign Status to "read"
+      transition to Read
+    }
+  }
+  Read: stage {
+  }
+}
+##### poly/docs/missions/evolve-2026-10-14/ownedunlink.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[temporal]+implicit	printed	657EEDEE
+domain OwnedUnlink
+
+Cart: entity {
+  Name: Text
+  lines: many owned Line
+  notes: many Note
+  AddLine: action (sku: Text) {
+    create in lines { Sku: sku }
+  }
+}
+
+Line: entity {
+  Sku: Text
+  New: stage {
+  }
+}
+
+Note: entity {
+  Body: Text
+}
+##### poly/docs/missions/evolve-2026-10-14/ratelimit.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=none	uses=[temporal]+implicit	Core:analysis-failed:DMLIB001 | Product:analysis-failed:DMLIB001	E3B0C442
+##### poly/docs/missions/evolve-2026-10-14/sessions.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=none	uses=[temporal]+implicit	Core:analysis-failed:DMLIB001 | Product:analysis-failed:DMLIB001	E3B0C442
+##### poly/docs/probes/dogfood/crm.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[temporal,persistence]+implicit	printed	4A52BDE7
+domain Crm
+uses persistence
+
+Industry: enum {
+  Technology,
+  Healthcare,
+  Finance,
+  Other,
+}
+
+
+Site: entity {
+  City: Text
+  Region: Text
+}
+
+Product: entity {
+  Sku: Text unique length(3, 32)
+  Name: Text
+  ListPrice: Decimal range(0, 100000000)
+}
+
+Lead: entity {
+  Name: Text
+  Email: Text unique pattern("^[^@]+@[^@]+$")
+  Company: Text
+  account: one Account
+  HasAccount: policy { account exists }
+  New: stage {
+    Convert: action
+      require HasAccount {
+      transition to Converted
+    }
+    Disqualify: action {
+      transition to Dead
+    }
+  }
+  Converted: stage {
+  }
+  Dead: stage {
+  }
+}
+
+Account: entity {
+  Name: Text
+  Industry: Industry
+  parent: one Account
+  WonCount: Number default(0)
+  OpenPipeline: Decimal default(0)
+  hq: one owned Site
+  contacts: many Contact
+  opportunities: many Opportunity via account
+  tickets: many Ticket via account
+  ClosedTickets: Number default(0)
+  HasHq: policy { hq exists }
+  IsUrban: policy { hq City is "Metropolis" }
+  Open: stage {
+    PlaceHq: action (city: Text, region: Text) -> Site {
+      create in hq { City: city Region: region }
+    }
+    AddContact: action (name: Text, email: Text) -> Contact {
+      create in contacts { Name: name Email: email }
+    }
+    ConvertLead: action (lead: Lead) -> Contact {
+      create in contacts { Name: lead Name Email: lead Email }
+    }
+    OpenDeal: action (title: Text, amount: Number) -> Opportunity {
+      create in opportunities { Title: title Amount: amount }
+    }
+    Archive: action {
+      transition to Archived
+    }
+    OpenTicket: action (subject: Text) -> Ticket {
+      create in tickets { Subject: subject }
+    }
+  }
+  Archived: stage {
+    Restore: action {
+      transition to Open
+    }
+  }
+  when opportunities Won {
+    assign WonCount to (WonCount + 1)
+  }
+  when tickets Closed {
+    assign ClosedTickets to (ClosedTickets + 1)
+  }
+  when opportunities Propose as deal {
+    assign OpenPipeline to (OpenPipeline + deal Amount)
+  }
+  when opportunities Won as deal {
+    assign OpenPipeline to (OpenPipeline - deal Amount)
+  }
+  when opportunities Lost as deal {
+    assign OpenPipeline to (OpenPipeline - deal Amount)
+  }
+}
+
+Contact: entity {
+  Name: Text
+  Email: Text unique pattern("^[^@]+@[^@]+$")
+  account: one Account
+  Active: stage {
+    Retire: action {
+      transition to Inactive
+    }
+  }
+  Inactive: stage {
+    Reactivate: action {
+      transition to Active
+    }
+  }
+}
+
+Opportunity: entity {
+  Title: Text
+  Amount: Decimal range(0, 100000000)
+  CloseBy: Date default(Today)
+  Probability: Number range(0, 100) default(10)
+  account: one Account
+  contact: one Contact
+  activities: many Activity
+  lines: many Line
+  quotes: many Quote
+  HasAccount: policy { account exists }
+  HasLines: policy { count lines > 0 }
+  Qualify: stage {
+    entry {
+      assign Probability to 10
+    }
+    Propose: action
+      require HasAccount {
+      transition to Propose
+    }
+    Lose: action {
+      transition to Lost
+    }
+    Log: action (subject: Text) -> Activity {
+      create in activities { Subject: subject }
+    }
+    AddLine: action (sku: Product, qty: Number) -> Line {
+      assign Amount to (Amount + (qty * sku ListPrice))
+      create in lines { product: sku Qty: qty UnitPrice: sku ListPrice }
+    }
+    QuoteDeal: action -> Quote {
+      create in quotes { Title: Title Amount: 0 }
+    }
+  }
+  Propose: stage {
+    entry {
+      assign Probability to 40
+    }
+    Commit: action
+      require HasLines {
+      transition to Commit
+    }
+    Lose: action {
+      transition to Lost
+    }
+    Log: action (subject: Text) -> Activity {
+      create in activities { Subject: subject }
+    }
+    AddLine: action (sku: Product, qty: Number) -> Line {
+      assign Amount to (Amount + (qty * sku ListPrice))
+      create in lines { product: sku Qty: qty UnitPrice: sku ListPrice }
+    }
+  }
+  Commit: stage {
+    entry {
+      assign Probability to 80
+    }
+    Win: action {
+      transition to Won
+    }
+    Capture: action (request: ChargeRequest) {
+      assign Amount to Amount
+    }
+    Lose: action {
+      transition to Lost
+    }
+    Log: action (subject: Text) -> Activity {
+      create in activities { Subject: subject }
+    }
+    AddLine: action (sku: Product, qty: Number) -> Line {
+      assign Amount to (Amount + (qty * sku ListPrice))
+      create in lines { product: sku Qty: qty UnitPrice: sku ListPrice }
+    }
+  }
+  Won: stage {
+    entry {
+      assign Probability to 100
+    }
+  }
+  Lost: stage {
+    entry {
+      assign Probability to 0
+    }
+  }
+  CompleteOpenWork: action {
+    for activities as act where act in Open invoke act.Complete
+  }
+}
+
+Activity: entity {
+  Subject: Text
+  DueOn: Date default(Today)
+  opportunity: one Opportunity
+  Open: stage {
+    Snooze: action {
+      assign DueOn to (DueOn + 7)
+    }
+    Complete: action {
+      transition to Done
+    }
+  }
+  Done: stage {
+  }
+}
+
+Quote: entity {
+  Title: Text
+  Amount: Decimal range(0, 100000000)
+  opportunity: one Opportunity
+  lines: many QuoteLine
+  Draft: stage {
+    AddLine: action (sku: Product, qty: Number) -> QuoteLine {
+      assign Amount to (Amount + (qty * sku ListPrice))
+      create in lines { product: sku Qty: qty UnitPrice: sku ListPrice }
+    }
+    Present: action {
+      transition to Presented
+    }
+  }
+  Presented: stage {
+    Accept: action {
+      transition to Accepted
+    }
+    Reject: action {
+      transition to Rejected
+    }
+  }
+  Accepted: stage {
+  }
+  Rejected: stage {
+  }
+}
+
+Campaign: entity {
+  Name: Text
+  members: many CampaignMember
+  Active: stage {
+    Enroll: action (who: Contact) -> CampaignMember {
+      create in members { contact: who }
+    }
+    End: action {
+      transition to Ended
+    }
+  }
+  Ended: stage {
+  }
+}
+
+CampaignMember: entity {
+  contact: one Contact
+  campaign: one Campaign
+}
+
+Ticket: entity {
+  Subject: Text
+  account: one Account
+  New: stage {
+    Work: action {
+      transition to Working
+    }
+    Close: action {
+      transition to Closed
+    }
+  }
+  Working: stage {
+    Close: action {
+      transition to Closed
+    }
+  }
+  Closed: stage {
+  }
+}
+
+Line: entity {
+  Qty: Number range(1, 10000)
+  UnitPrice: Decimal range(0, 100000000)
+  product: one Product
+  opportunity: one Opportunity
+}
+
+QuoteLine: entity {
+  Qty: Number range(1, 10000)
+  UnitPrice: Decimal range(0, 100000000)
+  product: one Product
+  quote: one Quote
+}
+
+Billing: contract internal billing v1 {
+  ChargeRequest: value {
+    Amount: Number
+    Currency: Text
+  }
+  Charge: outbound operation ChargeRequest
+}
+
+ChargeDeal: bind Billing Charge to Capture request
+##### poly/docs/probes/dogfood/entry-transition-in-first-stage.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[]+implicit	printed	31C4E97D
+domain Entry
+
+Z: entity {
+  Tag: Text
+  A: stage {
+    entry {
+      transition to B
+    }
+  }
+  B: stage {
+  }
+}
+##### poly/docs/probes/dogfood/hotel.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[temporal,persistence]+implicit	printed	864CBC24
+domain Hotel
+uses persistence
+
+RoomType: entity {
+  Name: Text length(1, 40)
+  NightlyRate: Decimal range(0, 10000)
+  MaxOccupancy: Number range(1, 8)
+}
+
+Property: entity {
+  Name: Text length(1, 80)
+  City: Text length(1, 60)
+  halls: many Hall
+  rooms: many Room
+  HasHalls: policy { count halls > 0 }
+  Open: stage {
+    AddHall: action (name: Text, seats: Number, rate: Number) -> Hall {
+      create in halls { Name: name Capacity: seats DayRate: rate }
+    }
+    Close: action {
+      transition to Closed
+    }
+  }
+  Closed: stage {
+    Reopen: action {
+      transition to Open
+    }
+  }
+}
+
+Room: entity {
+  Number: Text unique length(1, 8)
+  Floor: Number range(0, 50)
+  NightlyRate: Decimal range(0, 10000)
+  MaxOccupancy: Number range(1, 8)
+  Occupied: Boolean default(false)
+  Dirty: Boolean default(false)
+  Offline: Boolean default(false)
+  property: one Property
+  roomType: one RoomType
+  stays: many Reservation via room
+  IsVacant: policy { Occupied is false }
+  IsReady: policy { ((Occupied is false and Dirty is false) and Offline is false) }
+  HasType: policy { roomType exists }
+  InService: stage {
+    TakeOutOfService: action
+      require IsVacant {
+      assign Offline to true
+      transition to OutOfService
+    }
+    Inspect: action {
+      assign Dirty to false
+    }
+  }
+  OutOfService: stage {
+    ReturnToService: action {
+      assign Offline to false
+      transition to InService
+    }
+  }
+  when stays InHouse {
+    assign Occupied to true
+  }
+  when stays Departed, Cancelled, NoShow {
+    assign Occupied to false
+  }
+  when stays Departed {
+    assign Dirty to true
+  }
+}
+
+Hall: entity {
+  Name: Text length(1, 80)
+  Capacity: Number range(1, 5000)
+  DayRate: Decimal range(0, 100000)
+  Occupied: Boolean default(false)
+  Offline: Boolean default(false)
+  BusySections: Number default(0)
+  property: one Property
+  sections: many Section
+  IsVacant: policy { Occupied is false }
+  ChildrenFree: policy { BusySections is 0 }
+  CanBook: policy { ((Occupied is false and Offline is false) and BusySections is 0) }
+  IsOccupied: policy { Occupied is true }
+  InService: stage {
+    Occupy: action
+      require CanBook {
+      assign Occupied to true
+    }
+    Vacate: action
+      require IsOccupied {
+      assign Occupied to false
+    }
+    MarkChildBusy: action {
+      assign BusySections to (BusySections + 1)
+    }
+    ClearChildBusy: action {
+      assign BusySections to (BusySections - 1)
+    }
+    TakeOffline: action
+      require IsVacant, ChildrenFree {
+      assign Offline to true
+      transition to OutOfService
+    }
+  }
+  OutOfService: stage {
+    ReturnToService: action {
+      assign Offline to false
+      transition to InService
+    }
+  }
+}
+
+Section: entity {
+  Name: Text length(1, 80)
+  Capacity: Number range(1, 2000)
+  DayRate: Decimal range(0, 100000)
+  Occupied: Boolean default(false)
+  hall: one Hall
+  IsVacant: policy { Occupied is false }
+  IsOccupied: policy { Occupied is true }
+  ParentFree: policy { hall where (Occupied is false and Offline is false) }
+  CanBook: policy { Occupied is false }
+  InService: stage {
+    Occupy: action
+      require CanBook, ParentFree {
+      assign Occupied to true
+      invoke hall.MarkChildBusy
+    }
+    Vacate: action
+      require IsOccupied {
+      assign Occupied to false
+      invoke hall.ClearChildBusy
+    }
+  }
+}
+
+Guest: entity {
+  Name: Text
+  Email: Text unique pattern("^[^@]+@[^@]+$")
+  Phone: Text length(7, 20)
+  StayCount: Number default(0)
+  NightCount: Number default(0)
+  EventCount: Number default(0)
+  events: many EventHold via guest
+  reservations: many Reservation via guest
+  HasStays: policy { count reservations > 0 }
+  HasEvents: policy { count events > 0 }
+  Active: stage {
+    BookStay: action (room: Room, party: Number, nights: Number, arrive: Date, depart: Date) -> Reservation {
+      create in reservations { room: room PartySize: party Nights: nights NightlyRate: room NightlyRate MaxOccupancy: room MaxOccupancy CheckInDate: arrive CheckOutDate: depart }
+    }
+    BookHall: action (hall: Hall, party: Number, arrive: Date, depart: Date) -> EventHold {
+      create in events { hall: hall Headcount: party Capacity: hall Capacity DayRate: hall DayRate StartDate: arrive EndDate: depart }
+    }
+    BookSection: action (section: Section, hall: Hall, party: Number, arrive: Date, depart: Date) -> EventHold {
+      create in events { section: section hall: hall Headcount: party Capacity: section Capacity DayRate: section DayRate StartDate: arrive EndDate: depart }
+    }
+    Block: action {
+      transition to Blocked
+    }
+  }
+  Blocked: stage {
+    Reinstate: action {
+      transition to Active
+    }
+  }
+  when reservations Departed as stay {
+    assign StayCount to (StayCount + 1)
+    assign NightCount to (NightCount + stay Nights)
+  }
+  when events Released {
+    assign EventCount to (EventCount + 1)
+  }
+}
+
+Reservation: entity {
+  PartySize: Number range(1, 8)
+  Nights: Number range(1, 60)
+  NightlyRate: Decimal range(0, 10000)
+  MaxOccupancy: Number range(1, 8)
+  CheckInDate: Date
+  CheckOutDate: Date
+  folio: one owned Folio
+  guest: one Guest
+  room: one Room
+  DatesValid: policy { CheckOutDate > CheckInDate }
+  PartyFits: policy { PartySize <= MaxOccupancy }
+  RoomReady: policy { room where ((Occupied is false and Dirty is false) and Offline is false) }
+  HasRoom: policy { room exists }
+  HasGuest: policy { guest exists }
+  BillSettled: policy { folio Balance is 0 }
+  HasFolio: policy { folio exists }
+  Requested: stage {
+    Confirm: action
+      require DatesValid, PartyFits, HasRoom {
+      transition to Confirmed
+    }
+    Cancel: action {
+      transition to Cancelled
+    }
+  }
+  Confirmed: stage {
+    CheckIn: action
+      require RoomReady, HasRoom {
+      create in folio { Balance: 0 }
+      transition to InHouse
+    }
+    Cancel: action {
+      transition to Cancelled
+    }
+    MarkNoShow: action {
+      transition to NoShow
+    }
+  }
+  InHouse: stage {
+    PostStayCharge: action
+      require HasFolio {
+      invoke folio.PostRoomNight(amount: NightlyRate)
+    }
+    CheckOut: action
+      require HasFolio, BillSettled {
+      transition to Departed
+    }
+  }
+  Departed: stage {
+  }
+  Cancelled: stage {
+  }
+  NoShow: stage {
+  }
+}
+
+Folio: entity {
+  Balance: Decimal range(0, 1000000) default(0)
+  reservation: one Reservation
+  HasBalance: policy { Balance > 0 }
+  IsSettled: policy { Balance is 0 }
+  Open: stage {
+    PostRoomNight: action (amount: Decimal) {
+      assign Balance to (Balance + amount)
+    }
+    PostCharge: action (amount: Number) {
+      assign Balance to (Balance + amount)
+    }
+    Settle: action
+      require HasBalance {
+      assign Balance to 0
+      transition to Settled
+    }
+    CloseEmpty: action
+      require IsSettled {
+      transition to Settled
+    }
+  }
+  Settled: stage {
+  }
+}
+
+EventHold: entity {
+  Headcount: Number range(1, 5000)
+  Capacity: Number range(1, 5000)
+  DayRate: Decimal range(0, 100000)
+  StartDate: Date
+  EndDate: Date
+  guest: one Guest
+  hall: one Hall
+  section: one Section
+  DatesValid: policy { EndDate > StartDate }
+  PartyFits: policy { Headcount <= Capacity }
+  HasHall: policy { hall exists }
+  HasSection: policy { section exists }
+  HasSpace: policy { (hall exists or section exists) }
+  Requested: stage {
+    Confirm: action
+      require DatesValid, PartyFits, HasSpace {
+      transition to Confirmed
+    }
+    Cancel: action {
+      transition to Cancelled
+    }
+  }
+  Confirmed: stage {
+    StartHall: action
+      require HasHall
+      require not HasSection {
+      invoke hall.Occupy
+      transition to InUse
+    }
+    StartSection: action
+      require HasSection {
+      invoke section.Occupy
+      transition to InUse
+    }
+    Cancel: action {
+      transition to Cancelled
+    }
+  }
+  InUse: stage {
+    ReleaseHall: action
+      require HasHall
+      require not HasSection {
+      invoke hall.Vacate
+      transition to Released
+    }
+    ReleaseSection: action
+      require HasSection {
+      invoke section.Vacate
+      transition to Released
+    }
+  }
+  Released: stage {
+  }
+  Cancelled: stage {
+  }
+}
+##### poly/docs/probes/dogfood/nested-invoke-type-mismatch.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=none	uses=[temporal,storage]+implicit	Core:analysis-failed:DMSEM003 | Product:analysis-failed:DMSEM003	E3B0C442
+##### poly/docs/probes/dogfood/peer-tracking-transition.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[]+implicit	printed	5E6C8846
+domain Watch
+
+Paper: entity {
+  Title: Text
+  trackers: many Tr via Tracks
+  A: stage {
+    Advance: action {
+      transition to B
+    }
+  }
+  B: stage {
+  }
+}
+
+Tr: entity {
+  Tracks: one Paper
+  P: stage {
+    when Tracks B {
+      transition to Q
+    }
+  }
+  Q: stage {
+  }
+}
+##### poly/docs/probes/dogfood/simulate-create-create-in.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[temporal,storage]+implicit	printed	9EDD511D
+domain SimulateCreateCreateIn
+uses storage
+
+Patron: entity {
+  Name: Text
+  fines: many Fine
+  HasFines: policy { fines exists }
+  HasFineCount: policy { count fines > 0 }
+  NoFines: policy { count fines is 0 }
+  Active: stage {
+    AssessByType: action -> Fine {
+      create Fine { Amount: 5 Reason: "TypeCreate" }
+    }
+    AssessByRel: action -> Fine {
+      create in fines { Amount: 7 Reason: "CreateIn" }
+    }
+  }
+}
+
+Fine: entity {
+  Amount: Number range(0, 500)
+  Reason: Text
+  patron: one Patron
+}
+##### poly/docs/probes/dogfood/simulate-create-in.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[temporal,storage]+implicit	printed	8FB185F5
+domain SimulateCreateIn
+uses storage
+
+Patron: entity {
+  Name: Text
+  fines: many Fine
+  HasFines: policy { fines exists }
+  HasFineCount: policy { count fines > 0 }
+  NoFines: policy { count fines is 0 }
+  Active: stage {
+    AssessByRel: action -> Fine {
+      create in fines { Amount: 5 Reason: "CreateIn" }
+    }
+  }
+}
+
+Fine: entity {
+  Amount: Number range(0, 500)
+  Reason: Text
+  patron: one Patron
+}
+##### poly/docs/probes/dogfood/simulate-create-type.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[temporal,storage]+implicit	printed	E06D9A92
+domain SimulateCreateType
+uses storage
+
+Patron: entity {
+  Name: Text
+  fines: many Fine
+  HasFines: policy { fines exists }
+  HasFineCount: policy { count fines > 0 }
+  NoFines: policy { count fines is 0 }
+  Active: stage {
+    AssessByType: action -> Fine {
+      create Fine { Amount: 5 Reason: "TypeCreate" }
+    }
+  }
+}
+
+Fine: entity {
+  Amount: Number range(0, 500)
+  Reason: Text
+  patron: one Patron
+}
+##### poly/docs/probes/dogfood/university.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[temporal,persistence]+implicit	printed	1B68D2A8
+domain University
+uses persistence
+
+Term: enum {
+  Fall,
+  Spring,
+  Summer,
+}
+
+
+Instructor: entity {
+  Name: Text
+  Email: Text unique pattern("^[^@]+@[^@]+$")
+  Ready: stage {
+    GoOnLeave: action {
+      transition to Leave
+    }
+  }
+  Leave: stage {
+    Return: action {
+      transition to Ready
+    }
+  }
+}
+
+Course: entity {
+  Code: Text unique length(3, 12)
+  Title: Text
+}
+
+Student: entity {
+  Name: Text
+  Email: Text unique pattern("^[^@]+@[^@]+$")
+  MaxCredits: Number range(1, 24) default(18)
+  OpenCredits: Number default(0)
+  Holds: Number default(0)
+  Completions: Number default(0)
+  LastGrade: Number default(0)
+  enrollments: many Enrollment via student
+  AtLimit: policy { OpenCredits >= MaxCredits }
+  HasLoad: policy { count enrollments > 0 }
+  Active: stage {
+    Enroll: action (offering: Section) -> Enrollment
+      require not AtLimit {
+      assign OpenCredits to (OpenCredits + 3)
+      create in enrollments { section: offering }
+    }
+    DropRegistered: action {
+      for enrollments as enr where enr in Registered invoke enr.Drop
+    }
+    DropAllRegistered: action {
+      invoke DropRegistered
+    }
+    CompleteRegistered: action {
+      for enrollments as enr where enr in Registered invoke enr.Complete
+    }
+    CompletePassing: action {
+      for enrollments as enr where enr IsPassing invoke enr.Complete
+    }
+    Suspend: action {
+      transition to Suspended
+    }
+  }
+  Suspended: stage {
+    entry {
+      assign Holds to (Holds + 1)
+    }
+    Reinstate: action {
+      transition to Active
+    }
+  }
+  when enrollments Dropped, Completed {
+    assign OpenCredits to (OpenCredits - 3)
+  }
+  when enrollments Completed as done {
+    assign Completions to (Completions + 1)
+    assign LastGrade to done Grade
+  }
+}
+
+Section: entity {
+  Cap: Number range(1, 200)
+  SeatsTaken: Number default(0)
+  OfferingTerm: Term
+  course: one Course
+  instructor: one Instructor
+  enrollments: many Enrollment via section
+  waitlist: many WaitOffer via section
+  OfferedSeats: Number default(0)
+  WaitCleared: Number default(0)
+  AtCap: policy { SeatsTaken >= Cap }
+  HasInstructor: policy { instructor exists }
+  HasWaiters: policy { count waitlist > 0 }
+  Open: stage {
+    Close: action
+      require HasInstructor {
+      transition to Closed
+    }
+    Queue: action (who: Student) -> WaitOffer {
+      create in waitlist { student: who }
+    }
+    StaffLeave: action
+      require HasInstructor {
+      invoke instructor.GoOnLeave
+    }
+  }
+  Closed: stage {
+    Reopen: action {
+      transition to Open
+    }
+  }
+  when enrollments Registered {
+    assign SeatsTaken to (SeatsTaken + 1)
+  }
+  when enrollments Dropped {
+    assign SeatsTaken to (SeatsTaken - 1)
+  }
+  when any waitlist Offered {
+    assign OfferedSeats to (OfferedSeats + 1)
+  }
+  when all waitlist Cancelled {
+    assign WaitCleared to 1
+  }
+}
+
+WaitOffer: entity {
+  student: one Student
+  section: one Section
+  Queued: stage {
+    Seat: action {
+      transition to Offered
+    }
+    Cancel: action {
+      transition to Cancelled
+    }
+  }
+  Offered: stage {
+    Cancel: action {
+      transition to Cancelled
+    }
+  }
+  Cancelled: stage {
+  }
+}
+
+Enrollment: entity {
+  EnrolledOn: Date default(Today)
+  DueDate: Date default(Today)
+  Grade: Number range(0, 100) default(0)
+  section: one Section
+  student: one Student
+  SectionFull: policy { section SeatsTaken >= 1 }
+  IsPassing: policy { Grade >= 70 }
+  Pending: stage {
+    Confirm: action
+      require not SectionFull {
+      assign DueDate to (EnrolledOn + 14)
+      transition to Registered
+    }
+    Withdraw: action {
+      transition to Dropped
+    }
+  }
+  Registered: stage {
+    RecordGrade: action (score: Number) {
+      if (score >= 70) {
+        assign Grade to score
+    }
+    else {
+        assign Grade to 0
+    }
+    }
+    Complete: action {
+      transition to Completed
+    }
+    Drop: action {
+      transition to Dropped
+    }
+  }
+  Completed: stage {
+  }
+  Dropped: stage {
+  }
+}
+##### poly/docs/probes/fleet-eval/09-transport/clinic.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[]+implicit	printed	CA534623
+domain Clinic
+
+VisitState: enum {
+  Scheduled,
+  CheckedIn,
+  InTreatment,
+  Completed,
+  NoShow,
+}
+
+
+Doctor: entity {
+  Name: Text length(3, 60)
+  LicenseNo: Text unique pattern("^MD-[0-9]{6}$")
+  schedule: one Schedule
+  StartShift: action {
+    invoke schedule.Open
+  }
+}
+
+Schedule: entity {
+  Day: Text
+  Open: action {
+    assign State to "open"
+  }
+  State: Text
+}
+
+Patient: entity {
+  Name: Text
+  visits: many Visit
+  CheckInAll: action {
+    for visits as v where v in Scheduled invoke v.CheckIn
+  }
+}
+
+Visit: entity {
+  Reason: Text length(2, 200)
+  State: VisitState default(Scheduled)
+  patient: one Patient
+  primaryDoctor: one Doctor
+  AssignDoctor: action (doctor: Doctor) {
+    assign Reason to "assigned"
+  }
+  Scheduled: stage {
+    CheckIn: action {
+      transition to CheckedIn
+    }
+  }
+  CheckedIn: stage {
+    entry {
+      assign State to CheckedIn
+    }
+  }
+  InTreatment: stage {
+  }
+  Completed: stage {
+  }
+  NoShow: stage {
+  }
+}
+##### poly/docs/probes/fleet-eval/09-transport/orders.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[]+implicit	printed	06D44596
+domain Logistics
+
+OrderState: enum {
+  Pending,
+  Paid,
+  Shipped,
+  Delivered,
+  Cancelled,
+}
+
+
+Customer: entity {
+  Email: Text unique
+  Name: Text length(2, 100)
+  Tier: Text default("standard")
+  orders: many Order
+  ShipAll: action {
+    for orders as o where o IsPaid invoke o.Ship
+  }
+  CancelPending: action {
+    for orders as o where o in Pending invoke o.Cancel(reason: "customer request")
+  }
+}
+
+Order: entity {
+  Total: Decimal range(0, 100000)
+  Discount: Decimal range(0, 100)
+  State: OrderState default(Pending)
+  customer: one Customer
+  items: many OrderItem
+  IsPaid: policy { State is "Paid" }
+  Cancel: action (reason: Text) {
+    assign CancelReason to reason
+    transition to Cancelled
+  }
+  ApplyDiscount: action (amount: Number) {
+    assign Discount to amount
+  }
+  Pending: stage {
+    Pay: action {
+      transition to Paid
+    }
+  }
+  Paid: stage {
+    Ship: action {
+      transition to Shipped
+    }
+  }
+  Shipped: stage {
+  }
+  Delivered: stage {
+  }
+  Cancelled: stage {
+  }
+  CancelReason: Text length(0, 200)
+}
+
+OrderItem: entity {
+  Sku: Text pattern("^[A-Z]{3}-[0-9]{4}$")
+  Qty: Number range(1, 1000)
+  order: one Order
+}
+##### poly/docs/probes/fleet-eval/09-transport/warehouse.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[]+implicit	printed	18B16BC3
+domain Fleet
+
+TruckStatus: enum {
+  Idle,
+  EnRoute,
+  Maintenance,
+  OutOfService,
+}
+
+
+CargoKind: enum {
+  General,
+  Refrigerated,
+  Hazardous,
+  Oversize,
+}
+
+
+Warehouse: entity {
+  Code: Text length(2, 10) unique pattern("^WH-[0-9]{3}$")
+  Name: Text length(3, 50)
+  Zip: Text pattern("^\\d{5}$")
+  Capacity: Number range(1, 10000)
+  SafetyStock: Number range(0, 5000) default(100)
+  Status: TruckStatus default(Idle)
+  trucks: many Truck
+  IsOperational: policy { Capacity > 0 }
+  HasCapacity: policy { Capacity > 0 }
+  AdjustCapacity: action (delta: Number) {
+    assign Capacity to (Capacity + delta)
+  }
+  SetStatus: action (status: TruckStatus) {
+    assign Status to status
+  }
+  RegisterTruck: action (vin: Text, maxLoad: Number) -> Truck {
+    create in trucks { Vin: vin MaxLoad: maxLoad }
+  }
+}
+
+Truck: entity {
+  Vin: Text length(17) unique pattern("^[A-HJ-NPR-Z0-9]{17}$")
+  MaxLoad: Number range(1, 40000)
+  CurrentLoad: Number range(0, 40000) default(0)
+  Status: TruckStatus default(Idle)
+  warehouse: one Warehouse
+  deliveries: many Delivery
+  IsOverloaded: policy { CurrentLoad > MaxLoad }
+  Load: action (weight: Number) {
+    assign CurrentLoad to (CurrentLoad + weight)
+  }
+  Dispatch: action {
+    transition to EnRoute
+  }
+  Idle: stage {
+  }
+  EnRoute: stage {
+    entry {
+      assign Status to EnRoute
+    }
+  }
+  OutOfService: stage {
+  }
+}
+
+Delivery: entity {
+  Reference: Text length(4, 20)
+  Weight: Number range(1, 40000)
+  truck: one Truck
+  Confirm: action (notes: Text) {
+    assign Notes to notes
+  }
+  Notes: Text
+}
+##### poly/docs/probes/fleet-eval/12-mcp/mcp-library.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[]+implicit	printed	33B0A5C6
+domain Library
+
+Patron: entity {
+  Name: Text
+  Status: Text default("Active")
+  GoodStanding: policy { Status is "Active" }
+  loans: many Loan
+  fines: many Fine
+  CheckOut: action (book: Book) -> Loan
+    require GoodStanding {
+    create in loans { book: book }
+  }
+  when loans Overdue as loan {
+    create in fines { Amount: loan Amount Reason: "Overdue" }
+  }
+}
+
+Book: entity {
+  Title: Text
+  Isbn: Text unique
+  Copies: Number range(0, 1000) default(1)
+}
+
+Loan: entity {
+  book: one Book
+  patron: one Patron via loans
+  Amount: Number range(0, 500) default(0)
+  Active: stage {
+    MarkOverdue: action {
+      transition to Overdue
+    }
+  }
+  Overdue: stage {
+    Return: action {
+      assign Amount to 0
+      transition to Returned
+    }
+  }
+  Returned: stage {
+  }
+}
+
+Fine: entity {
+  Amount: Number range(0, 500) default(0)
+  Reason: Text
+  Resolved: stage {
+    Resolve: action {
+      transition to Paid
+    }
+  }
+  Paid: stage {
+  }
+}
+##### poly/docs/probes/grep-2026-10-17/grep.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Product	uses=[http]+implicit	printed	9E98ADCC
+domain Grep
+uses http
+
+Mode: enum {
+  Fixed,
+  Regex,
+}
+
+
+Query: entity {
+  PatternText: Text
+  MatchMode: Mode default(Fixed)
+  IgnoreCase: Boolean default(false)
+  Invert: Boolean default(false)
+  MaxCount: Number default(0)
+  TotalHits: Number default(0)
+  ScannedSources: Number default(0)
+  sources: many owned Source
+  Prepared: stage {
+    AddSource: action (path: Text) -> Source {
+      create in sources { Path: path }
+    }
+    Scan: action {
+      if (Invert is true) {
+        for sources as src invoke src.ScanInverted(needle: PatternText)
+    }
+    else {
+        for sources as src invoke src.Scan(needle: PatternText)
+    }
+    }
+    Report: action {
+      assign TotalHits to sum sources HitCount
+      transition to Reported
+    }
+  }
+  Reported: stage {
+  }
+  when sources Scanned {
+    assign ScannedSources to (ScannedSources + 1)
+  }
+}
+
+Source: entity {
+  Path: Text
+  HitCount: Number default(0)
+  query: one Query via sources
+  lines: many owned Line
+  hits: many owned Hit
+  Unscanned: stage {
+    LoadLine: action (number: Number, content: Text) -> Line {
+      create in lines { LineNo: number Content: content }
+    }
+    Scan: action (needle: Text) {
+      for lines as line invoke line.Check(needle: needle)
+      transition to Scanned
+    }
+    ScanInverted: action (needle: Text) {
+      for lines as line invoke line.Skew(needle: needle)
+      transition to Scanned
+    }
+  }
+  Scanned: stage {
+  }
+  when lines Marked as found {
+    create in hits { LineNumber: found LineNo Content: found Content }
+    assign HitCount to (HitCount + 1)
+  }
+}
+
+Line: entity {
+  LineNo: Number
+  Content: Text
+  source: one Source via lines
+  Unmarked: stage {
+    Check: action (needle: Text) {
+      if (Content is needle) {
+        transition to Marked
+    }
+    }
+    Skew: action (needle: Text) {
+      if (Content is not needle) {
+        transition to Marked
+    }
+    }
+  }
+  Marked: stage {
+  }
+}
+
+Hit: entity {
+  LineNumber: Number
+  Content: Text
+}
+##### poly/docs/probes/scratch-2026-10-14/banking.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Product	uses=[temporal,http,persistence]+implicit	printed	831FBBD2
+domain Banking
+uses http
+uses persistence
+
+AccountKind: enum {
+  Checking,
+  Savings,
+  Credit,
+}
+
+
+TxnKind: enum {
+  Deposit,
+  Withdrawal,
+  Transfer,
+}
+
+
+Account: entity {
+  Number: Text unique length(6, 12)
+  Kind: AccountKind default(Checking)
+  Currency: Text equals("USD")
+  Balance: Number range(0, 100000000) default(0)
+  Flags: Number default(0)
+  parent: one Account
+  txns: many Transaction via account
+  HasFunds: policy { Balance > 0 }
+  Open: stage {
+    Deposit: action (amount: Number) {
+      assign Balance to (Balance + amount)
+    }
+    Withdraw: action (amount: Number)
+      require HasFunds {
+      assign Balance to (Balance - amount)
+    }
+    Freeze: action {
+      transition to Frozen
+    }
+  }
+  Frozen: stage {
+    Unfreeze: action {
+      transition to Open
+    }
+  }
+  when any txns Flagged {
+    assign Flags to (Flags + 1)
+  }
+}
+
+Transaction: entity {
+  Amount: Number range(1, 10000000)
+  Kind: TxnKind default(Deposit)
+  account: one Account
+  Pending: stage {
+    Post: action {
+      transition to Posted
+    }
+    Flag: action {
+      transition to Flagged
+    }
+  }
+  Posted: stage {
+  }
+  Flagged: stage {
+  }
+}
+##### poly/docs/probes/scratch-2026-10-14/fleet.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Product	uses=[temporal,http,persistence]+implicit	printed	AE0F6CDB
+domain Fleet
+uses http
+uses persistence
+
+TaskState: enum {
+  Todo,
+  Done,
+  Skipped,
+}
+
+
+Vehicle: entity {
+  Vin: Text unique length(11, 17)
+  Odometer: Number range(0, 2000000) default(0)
+  LastServiceAt: Number range(0, 2000000) default(0)
+  workOrders: many WorkOrder
+  DueForService: policy { (Odometer - LastServiceAt) > 5000 }
+  Active: stage {
+    Open: action (note: Text) -> WorkOrder {
+      create in workOrders { Note: note }
+    }
+    Drive: action (km: Number) {
+      assign Odometer to (Odometer + km)
+    }
+    Serviced: action {
+      assign LastServiceAt to Odometer
+    }
+  }
+}
+
+WorkOrder: entity {
+  Note: Text
+  DoneCount: Number default(0)
+  AnyCount: Number default(0)
+  AllCount: Number default(0)
+  vehicle: one Vehicle
+  jobs: many Job via workOrder
+  Open: stage {
+    entry {
+      assign DoneCount to 0
+    }
+    AddJob: action (label: Text) -> Job {
+      create in jobs { Label: label }
+    }
+    CompleteAll: action {
+      for jobs as t where t in Todo invoke t.Complete
+    }
+    Close: action {
+      transition to Closed
+    }
+  }
+  Closed: stage {
+    exit {
+      assign DoneCount to DoneCount
+    }
+  }
+  when jobs Done {
+    assign DoneCount to (DoneCount + 1)
+  }
+  when any jobs Done {
+    assign AnyCount to (AnyCount + 1)
+  }
+  when all jobs Done {
+    assign AllCount to (AllCount + 1)
+  }
+}
+
+Job: entity {
+  Label: Text
+  workOrder: one WorkOrder
+  Todo: stage {
+    Complete: action {
+      transition to Done
+    }
+    Skip: action {
+      transition to Skipped
+    }
+  }
+  Done: stage {
+  }
+  Skipped: stage {
+  }
+}
+##### poly/docs/probes/scratch-2026-10-14/gym.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Product	uses=[temporal,http,persistence]+implicit	printed	7DE68934
+domain Gym
+uses http
+uses persistence
+
+Tier: enum {
+  Basic,
+  Plus,
+  Elite,
+}
+
+
+Plan: entity {
+  Code: Text unique length(2, 16)
+  Name: Text
+  Price: Number range(0, 5000)
+  Tier: Tier
+}
+
+Trainer: entity {
+  Name: Text
+  Specialty: Text
+  sessions: many ClassSession
+}
+
+Member: entity {
+  Name: Text
+  Email: Text unique pattern("^[^@]+@[^@]+$")
+  JoinedOn: Date default(Today)
+  ExpiresOn: Date default(Today)
+  Visits: Number default(0)
+  Tier: Tier
+  plan: one Plan
+  bookings: many Booking via member
+  HasPlan: policy { plan exists }
+  IsElite: policy { Tier is Elite }
+  Active: stage {
+    Enroll: action (plan: Plan) {
+      assign Tier to plan Tier
+    }
+    Advance: action {
+      assign ExpiresOn to Today + 365 Days
+    }
+    Freeze: action {
+      transition to Frozen
+    }
+    Cancel: action {
+      transition to Cancelled
+    }
+    ClearBookings: action {
+      for bookings as b where b in Booked invoke b.Drop
+    }
+  }
+  Frozen: stage {
+    Reinstate: action {
+      transition to Active
+    }
+    Cancel: action {
+      transition to Cancelled
+    }
+  }
+  Cancelled: stage {
+  }
+  when bookings Attended {
+    assign Visits to (Visits + 1)
+  }
+}
+
+ClassSession: entity {
+  Name: Text
+  StartsAt: Date default(Today)
+  Capacity: Number range(1, 50)
+  AttendedCount: Number default(0)
+  trainer: one Trainer
+  bookings: many Booking via session
+  HasRoom: policy { count bookings < Capacity }
+  Scheduled: stage {
+    Reserve: action (who: Member) -> Booking
+      require HasRoom {
+      create in bookings { member: who }
+    }
+    Postpone: action (days: Number) {
+      assign StartsAt to (StartsAt + days)
+    }
+    Cancel: action {
+      transition to Cancelled
+    }
+    Complete: action {
+      transition to Completed
+    }
+  }
+  Cancelled: stage {
+  }
+  Completed: stage {
+  }
+  when bookings Attended {
+    assign AttendedCount to (AttendedCount + 1)
+  }
+}
+
+Booking: entity {
+  member: one Member
+  session: one ClassSession
+  Booked: stage {
+    Attend: action {
+      transition to Attended
+    }
+    Drop: action {
+      transition to Dropped
+    }
+    Skip: action {
+      transition to NoShow
+    }
+  }
+  Attended: stage {
+  }
+  NoShow: stage {
+  }
+  Dropped: stage {
+  }
+}
+##### poly/docs/probes/scratch-2026-10-14/insurance.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[temporal,persistence]+implicit	printed	F8D5DCF2
+domain Insurance
+uses persistence
+
+ClaimStatus: enum {
+  Filed,
+  UnderReview,
+  Approved,
+  Rejected,
+  Settled,
+}
+
+
+Policyholder: entity {
+  Name: Text
+  Email: Text unique pattern("^[^@]+@[^@]+$")
+  SettledCount: Number default(0)
+  claims: many Claim via holder
+  Active: stage {
+    File: action (number: Text, amount: Number) -> Claim {
+      create in claims { ClaimNumber: number Amount: amount }
+    }
+  }
+  when claims Settled {
+    assign SettledCount to (SettledCount + 1)
+  }
+}
+
+Policy: entity {
+  Number: Text unique length(4, 16)
+  Coverage: Number range(0, 1000000)
+  holder: one Policyholder
+  claims: many Claim
+  ReviewAll: action {
+    for claims as claim where claim in Filed invoke claim.StartReview
+  }
+}
+
+Adjuster: entity {
+  Name: Text
+  Specialty: Text
+  claims: many Claim
+}
+
+Claim: entity {
+  ClaimNumber: Text unique
+  Amount: Number range(0, 1000000)
+  Reviewed: Number default(0)
+  holder: one Policyholder
+  cover: one Policy
+  adjuster: one Adjuster
+  documents: many Document via claim
+  WithinCoverage: policy { Amount <= cover Coverage }
+  HasDocuments: policy { count documents > 0 }
+  Filed: stage {
+    Attach: action (kind: Text) -> Document {
+      create in documents { Kind: kind }
+    }
+    StartReview: action
+      require HasDocuments {
+      transition to UnderReview
+    }
+    Withdraw: action {
+      transition to Rejected
+    }
+  }
+  UnderReview: stage {
+    Approve: action
+      require WithinCoverage {
+      transition to Approved
+    }
+    Reject: action {
+      transition to Rejected
+    }
+  }
+  Approved: stage {
+    Disburse: action (request: PayoutRequest) {
+      transition to Settled
+    }
+  }
+  Settled: stage {
+  }
+  Rejected: stage {
+  }
+  when documents Attached {
+    assign Reviewed to (Reviewed + 1)
+  }
+}
+
+Document: entity {
+  Kind: Text
+  claim: one Claim
+  Attached: stage {
+  }
+}
+
+Payments: contract internal paygate v1 {
+  PayoutRequest: value {
+    Amount: Number
+    Reference: Text
+  }
+  Disburse: outbound operation PayoutRequest
+}
+
+PayoutClaim: bind Payments Disburse to Disburse request
+##### poly/docs/probes/scratch-2026-10-14/logistics.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Product	uses=[temporal,http,persistence]+implicit	printed	F1C4799C
+domain Logistics
+uses http
+uses persistence
+
+Address: entity {
+  Line1: Text
+  City: Text
+  Zip: Text pattern("^\\d{5}$")
+}
+
+Courier: entity {
+  Name: Text
+  Capacity: Number range(1, 200)
+  stops: many Stop
+  Available: stage {
+    Assign: action (order: Order) -> Stop {
+      create in stops { order: order }
+    }
+    Suspend: action {
+      transition to Suspended
+    }
+  }
+  Suspended: stage {
+    Reinstate: action {
+      transition to Available
+    }
+  }
+}
+
+Customer: entity {
+  Name: Text
+  Email: Text unique pattern("^[^@]+@[^@]+$")
+  Status: Text default("open")
+  address: one owned Address
+  orders: many Order via customer
+  Active: stage {
+    Place: action (total: Number) -> Order {
+      create in orders { Total: total }
+    }
+    SetAddress: action (line1: Text, city: Text, zip: Text) -> Address {
+      create in address { Line1: line1 City: city Zip: zip }
+    }
+  }
+  when all orders Delivered {
+    assign Status to "settled"
+  }
+}
+
+Order: entity {
+  Total: Number range(0, 100000)
+  customer: one Customer
+  stops: many Stop
+  Placed: stage {
+    Ship: action {
+      transition to Shipped
+    }
+    Cancel: action {
+      transition to Cancelled
+    }
+  }
+  Shipped: stage {
+    Deliver: action {
+      transition to Delivered
+    }
+    Cancel: action {
+      transition to Cancelled
+    }
+  }
+  Delivered: stage {
+  }
+  Cancelled: stage {
+  }
+}
+
+Stop: entity {
+  courier: one Courier
+  order: one Order
+  Planned: stage {
+    Complete: action {
+      transition to Done
+    }
+  }
+  Done: stage {
+  }
+}
+##### poly/docs/probes/scratch-2026-10-14/payroll.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[temporal,persistence]+implicit	printed	466F30CF
+domain Payroll
+uses persistence
+
+PayKind: enum {
+  Salaried,
+  Hourly,
+}
+
+
+RunStatus: enum {
+  Draft,
+  Open,
+  Approved,
+  Paid,
+}
+
+
+SheetStatus: enum {
+  Draft,
+  Submitted,
+  Approved,
+  Rejected,
+}
+
+
+Employee: entity {
+  Name: Text
+  Email: Text unique pattern("^[^@]+@[^@]+$")
+  Kind: PayKind default(Salaried)
+  Rate: Number range(0, 1000)
+  Gross: Number default(0)
+  Net: Number default(0)
+  timesheets: many Timesheet via employee
+  Active: stage {
+    Log: action (hours: Number, day: Date) -> Timesheet {
+      create in timesheets { Hours: hours Day: day }
+    }
+    Terminate: action {
+      transition to Terminated
+    }
+  }
+  Terminated: stage {
+  }
+  when all timesheets Approved as sheet {
+    assign Gross to (Gross + (sheet Hours * Rate))
+  }
+}
+
+Timesheet: entity {
+  Hours: Number range(0, 400)
+  Day: Date default(Today)
+  employee: one Employee
+  Draft: stage {
+    Submit: action {
+      transition to Submitted
+    }
+  }
+  Submitted: stage {
+    Approve: action {
+      transition to Approved
+    }
+    Reject: action {
+      transition to Rejected
+    }
+  }
+  Approved: stage {
+  }
+  Rejected: stage {
+  }
+}
+
+PayRun: entity {
+  PeriodStart: Date default(Today)
+  PeriodEnd: Date
+  Total: Number range(0, 10000000) default(0)
+  slips: many Payslip via run
+  Draft: stage {
+    entry {
+      assign Total to 0
+    }
+    AddSlip: action (amount: Number) -> Payslip {
+      create in slips { Amount: amount }
+    }
+    Advance: action {
+      assign PeriodEnd to PeriodStart + 14 Days
+    }
+    Approve: action {
+      transition to Approved
+    }
+  }
+  Approved: stage {
+    exit {
+      assign Total to Total
+    }
+    Pay: action {
+      transition to Paid
+    }
+  }
+  Paid: stage {
+  }
+  when slips Added {
+    assign Total to (Total + 1)
+  }
+}
+
+Payslip: entity {
+  Amount: Number range(0, 1000000)
+  run: one PayRun
+  Added: stage {
+  }
+}
+##### poly/docs/probes/scratch-2026-10-14/restaurant.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=none	uses=[temporal,persistence]+implicit	Core:analysis-failed:DMEFF011+DMSTR006 | Product:analysis-failed:DMEFF011+DMSTR006	E3B0C442
+##### poly/docs/probes/scratch-2026-10-14/roastery.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Product	uses=[temporal,http,persistence]+implicit	printed	5F3BA772
+domain Roastery
+uses http
+uses persistence
+
+RoastLevel: enum {
+  Light,
+  Medium,
+  Dark,
+}
+
+
+Bean: entity {
+  Name: Text unique length(2, 40)
+  Roast: RoastLevel default(Medium)
+  Stock: Number range(0, 100000) default(0)
+  batches: many Batch via bean
+  Open: stage {
+    Plan: action (kg: Number, code: Text) -> Batch {
+      create in batches { Kg: kg Code: code }
+    }
+    Retire: action {
+      transition to Retired
+    }
+  }
+  Retired: stage {
+  }
+  when batches Roasted as batch {
+    assign Stock to (Stock + batch Kg)
+  }
+}
+
+Batch: entity {
+  Code: Text unique
+  Kg: Number range(1, 100)
+  bean: one Bean
+  Planned: stage {
+    Roast: action {
+      transition to Roasted
+    }
+    Discard: action {
+      transition to Discarded
+    }
+  }
+  Roasted: stage {
+  }
+  Discarded: stage {
+  }
+}
+
+Order: entity {
+  Reference: Text unique
+  lines: many Line
+  Open: stage {
+    AddLine: action (bean: Bean, kg: Number) -> Line {
+      create in lines { Kg: kg bean: bean }
+    }
+    Confirm: action {
+      transition to Confirmed
+    }
+  }
+  Confirmed: stage {
+    Fulfill: action {
+      transition to Fulfilled
+    }
+  }
+  Fulfilled: stage {
+  }
+}
+
+Line: entity {
+  Kg: Number range(1, 1000)
+  order: one Order
+  bean: one Bean
+  Added: stage {
+  }
+}
+##### poly/docs/probes/smoke/smoke.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[]+implicit	printed	B2146230
+domain smoke
+
+Placeholder: entity {
+  Name: Text
+}
+##### pack/Inventory588	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Product; authoring=true (as PolyCompiler)	uses=[sqlite,http]+implicit	printed	FD06F9B1
+domain Inventory
+uses sqlite
+uses http
+
+Category: enum {
+  Tools,
+  Toys,
+  Food,
+}
+
+
+Product: entity {
+  Sku: Text unique length(3, 12) pattern("^[A-Z0-9]+$")
+  Name: Text length(1, 50)
+  Price: Number range(0, 10000)
+  Stock: Number range(0, 100000) default(0)
+  Cat: Category default(Tools)
+  Note: Text optional length(0, 100)
+}
+
+Order: entity {
+  Qty: Number range(1, 100)
+  Total: Number range(0, 1000000)
+  Draft: stage {
+    Submit: action {
+      transition to Placed
+    }
+  }
+  Placed: stage {
+  }
+}
+##### pack/Logistics559	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Product; authoring=true (as PolyCompiler)	uses=[sqlite]+implicit	printed	CCD8AD05
+domain Logistics
+uses sqlite
+
+Shipment: entity {
+  Reference: Text unique length(4, 20)
+  WeightKg: Number range(1, 40000)
+  Declared: Decimal range(0, 1000000)
+}
+##### pack/Warehouse620	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Product; authoring=true (as PolyCompiler)	uses=[http,sqlite]+implicit	printed	EB8F17BA
+domain Logistics
+uses http
+uses sqlite
+
+Warehouse: entity table("WAREHOUSES") {
+  Code: Text unique length(3, 8) column("WH_CODE", "VARCHAR(8)")
+  Capacity: Number range(0, 100000)
+  Used: Number range(0, 100000) default(0)
+  Bad: action (units: Number) {
+    assign Capacity to (Capacity + 1)
+    assign Used to units
+  }
+}
+##### pack/Inventory626	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Product; authoring=true (as PolyCompiler)	uses=[sqlite,http]+implicit	printed	EBB27BF6
+domain Inventory
+uses sqlite
+uses http
+
+Order: entity {
+  Qty: Number range(1, 100)
+  Total: Number range(0, 1000000)
+  Draft: stage {
+    Submit: action {
+      transition to Placed
+    }
+  }
+  Placed: stage {
+    Ship: action {
+      transition to Shipped
+    }
+  }
+  Shipped: stage {
+  }
+}
+##### pack/Desk658	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Product; authoring=true (as PolyCompiler)	uses=[http,sqlite]+implicit	printed	E465D39B
+domain Desk
+uses http
+uses sqlite
+
+User: entity {
+  Email: Text unique
+}
+
+Project: entity {
+  Key: Text unique
+  tasks: many Task
+  FileTask: action (who: User) {
+    create in tasks { assignee: who }
+  }
+}
+
+Task: entity {
+  assignee: one User
+  Assigned: policy { assignee exists }
+  Todo: stage {
+    Triage: action
+      require Assigned {
+      transition to Done
+    }
+  }
+  Done: stage {
+  }
+}
+##### pack/Tally653	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Product; authoring=true (as PolyCompiler)	uses=[http,sqlite]+implicit	printed	521192C2
+domain Counter
+uses http
+uses sqlite
+
+Tally: entity {
+  Name: Text unique length(1, 20)
+  N: Number default(0) range(0, 1000000)
+  Bump: action {
+    assign N to (N + 1)
+  }
+}
+##### pack/Fulfillment675	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Product; authoring=true (as PolyCompiler)	uses=[sqlite,http]+implicit	printed	60A8D9B6
+domain Fulfillment
+uses sqlite
+uses http
+
+Order: entity initial(Open) {
+  Code: Text unique length(3, 8)
+  Draft: stage {
+  }
+  Open: stage {
+  }
+}
+##### guide/fragment/Patron: entity {	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[]+implicit	printed	0208BA1B
+domain GuidePatronLoans
+
+Book: entity {
+  Isbn: Text
+}
+
+Loan: entity {
+  book: one Book
+}
+
+Patron: entity {
+  loans: many Loan
+  CheckOut: action (book: Book) {
+    create in loans { book: book }
+  }
+}
+##### guide/fragment/// ✅ Correct — both props provided (a property is required by default)	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[]+implicit	printed	BE9A1392
+domain GuideTop
+
+Token: entity {
+  Lexeme: Text
+  Kind: Text
+}
+
+Parser: entity {
+  tokens: many Token
+  Lex: action {
+    create in tokens { Lexeme: "let" Kind: "Keyword" }
+  }
+}
+
+Draft: entity {
+  Lexeme: Text
+  Note: Text optional
+}
+
+Parser2: entity {
+  drafts: many Draft
+  Lex: action {
+    create in drafts { Lexeme: "let" }
+  }
+}
+##### guide/valid/domain MyDomain	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[storage]+implicit	printed	BE8F16AE
+domain MyDomain
+uses storage
+##### guide/fragment/Color: enum {	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[]+implicit	printed	46093309
+domain GuideTop
+
+Color: enum {
+  Red,
+  Green,
+  Blue,
+}
+
+
+MemberStatus: enum {
+  Active,
+  Suspended,
+  Closed,
+}
+##### guide/valid/domain Shop	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[]+implicit	printed	DE3E4E5A
+domain Shop
+
+Line: entity {
+  Qty: Number default(1)
+}
+
+public entity Order {
+  lines: many Line
+}
+##### guide/fragment/Color: enum { Red, Green, Blue }	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[]+implicit	printed	34685824
+domain GuideEnumDefaults
+
+MemberStatus: enum {
+  Active,
+  Suspended,
+  Closed,
+}
+
+
+Color: enum {
+  Red,
+  Green,
+  Blue,
+}
+
+
+Item: entity {
+  Name: Text
+  Color: Color default(Red)
+  Status: MemberStatus default(Active)
+}
+##### guide/fragment/Token: entity {	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[]+implicit	printed	A68D9644
+domain GuideTop
+
+Token: entity {
+  Lexeme: Text
+  Note: Text optional
+  Kind: Text default("Word")
+}
+##### guide/fragment/Item: entity table("INVENTORY") {	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[]+implicit	printed	22FBA6A8
+domain GuideTop
+
+Item: entity table("INVENTORY") {
+  Code: Text unique column("CODE", "VARCHAR2(20)")
+  Name: Text column("NAME")
+  Qty: Number range(0, ) column("QUANTITY")
+}
+##### guide/fragment/Color: enum iri("https://example.com/Color") {	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[]+implicit	printed	D9AA81E0
+domain GuideTop
+
+Color: enum iri("https://example.com/Color") {
+  Red iri("https://example.com/Color/Red") term("red"),
+  Green,
+}
+
+
+Product: entity iri("https://example.com/Product") label("Product") description("A sellable item") {
+  Sku: Text length(1, 20) iri("https://example.com/Product/sku") label("SKU")
+}
+##### guide/fragment/OrderLine: entity {	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[]+implicit	printed	B2540CDF
+domain GuideOrderMinimal
+
+Order: entity {
+  Ref: Text
+}
+
+OrderLine: entity {
+  order: one Order
+}
+
+Note: entity {
+  order: one Order
+}
+##### guide/fragment/Department: entity {	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[]+implicit	printed	46AC3DA6
+domain GuideTop
+
+Department: entity {
+  reports: many Employee via manager
+}
+
+Employee: entity {
+  manager: one Department via reports
+}
+##### guide/fragment/Draft: stage {	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[]+implicit	printed	19F2096A
+domain GuideEntityStageList
+
+Loan: entity {
+  Draft: stage {
+    Submit: action {
+      transition to Active
+    }
+  }
+  Active: stage {
+  }
+  Done: stage {
+  }
+}
+##### guide/fragment/HasNote: policy { Note is not null }	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[]+implicit	printed	EEAB71B1
+domain GuideEntityStageRequire
+
+Loan: entity {
+  Note: Text optional
+  Memo: Text optional
+  HasNote: policy { Note is not null }
+  Open: stage
+    require HasNote {
+    Copy: action {
+      assign Memo to Note
+    }
+  }
+}
+##### guide/fragment/Active: stage {	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[]+implicit	printed	84A0E52F
+domain GuideEntityStageEffects
+
+Loan: entity {
+  Status: Text optional
+  Done: stage {
+  }
+  Active: stage {
+    entry {
+      assign Status to "entered_active"
+    }
+    exit {
+      assign Status to "exited_active"
+    }
+    DoStuff: action {
+      transition to Done
+    }
+  }
+}
+##### guide/valid/domain Orders	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[]+implicit	printed	A7C68644
+domain Orders
+
+Order: entity initial(Active) {
+  Number: Text
+  Status: Text optional
+  Draft: stage {
+    Activate: action {
+      transition to Active
+    }
+  }
+  Active: stage {
+    entry {
+      assign Status to "entered_active"
+    }
+  }
+}
+##### guide/fragment/Tag: action (value: Text) {	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[]+implicit	printed	F36433C7
+domain GuideEntityBodies
+
+Order: entity {
+  Total: Number optional
+  Code: Text optional
+}
+
+Cart: entity {
+  Name: Text
+  Label: Text optional
+  Status: Text optional
+  Score: Number
+  Rush: Boolean optional
+  orders: many Order
+  Active: stage {
+  }
+  Validate: action {
+  }
+  Tag: action (value: Text) {
+    assign Label to value
+  }
+}
+##### guide/fragment/PlaceOrder: action -> Order {	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[]+implicit	printed	4FB9792E
+domain GuideEntityBodies
+
+Order: entity {
+  Total: Number optional
+  Code: Text optional
+}
+
+Cart: entity {
+  Name: Text
+  Label: Text optional
+  Status: Text optional
+  Score: Number
+  Rush: Boolean optional
+  orders: many Order
+  Active: stage {
+  }
+  Validate: action {
+  }
+  PlaceOrder: action -> Order {
+    create in orders { Total: 100 }
+  }
+}
+##### guide/fragment/// ✅ Correct — create is the final statement	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[]+implicit	printed	006E37A0
+domain GuideEntityBodies
+
+Order: entity {
+  Total: Number optional
+  Code: Text optional
+}
+
+Cart: entity {
+  Name: Text
+  Label: Text optional
+  Status: Text optional
+  Score: Number
+  Rush: Boolean optional
+  orders: many Order
+  Active: stage {
+  }
+  Validate: action {
+  }
+  PlaceOrder: action -> Order {
+    assign Status to "processing"
+    create in orders { Total: 100 }
+  }
+  Place: action -> Order {
+    if (Rush is true) {
+      create in orders { Code: "rush" }
+  }
+  else {
+      create in orders { Code: "normal" }
+  }
+  }
+}
+##### guide/fragment/PlaceOrder: action {	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[]+implicit	printed	AD553F2E
+domain GuideEntityBodies
+
+Order: entity {
+  Total: Number optional
+  Code: Text optional
+}
+
+Cart: entity {
+  Name: Text
+  Label: Text optional
+  Status: Text optional
+  Score: Number
+  Rush: Boolean optional
+  orders: many Order
+  Active: stage {
+  }
+  Validate: action {
+  }
+  PlaceOrder: action {
+    assign Status to "processing"
+    create in orders { Total: 100 }
+    transition to Active
+  }
+  Grade: action {
+    if (Score >= 90) {
+      assign Status to "A"
+  }
+  else if (Score >= 70) {
+      assign Status to "B"
+  }
+  else {
+      assign Status to "C"
+  }
+  }
+  Submit: action {
+    invoke Validate
+    transition to Active
+  }
+}
+##### guide/fragment/PositiveTotal: policy { Total > 0 }	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[]+implicit	printed	17881247
+domain GuidePolicyGate
+
+Order: entity {
+  Total: Number
+  Status: Text optional
+  Active: stage {
+  }
+  PositiveTotal: policy { Total > 0 }
+  Submit: action
+    require PositiveTotal {
+    transition to Active
+  }
+}
+##### guide/fragment/Pending: stage {	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[]+implicit	printed	16D37957
+domain GuideStageSubscriptions
+
+Order: entity {
+  cart: one Cart via orders
+  Active: stage {
+  }
+  Completed: stage {
+  }
+}
+
+Cart: entity {
+  Status: Text optional
+  orders: many Order
+  Pending: stage {
+    when any orders Active {
+      assign Status to "hasOrder"
+    }
+    when all orders Completed {
+      assign Status to "allDone"
+    }
+    when orders Active {
+      assign Status to "triggered"
+    }
+  }
+}
+##### guide/fragment/IsAdult: policy { Age >= 18 }	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[]+implicit	printed	6ED5FFFE
+domain GuidePolicyFacts
+
+Member: entity {
+  Age: Number
+  isActive: Boolean
+  role: Text
+  IsAdult: policy { Age >= 18 }
+  CanProcess: policy { (isActive is true and role is "admin") }
+}
+##### guide/fragment/HasPriorityOrder: policy { any orders where Priority > 5 }	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[]+implicit	printed	C61670CD
+domain GuidePolicyQuantifiers
+
+Order: entity {
+  Priority: Number
+  Total: Number
+  Status: Text
+}
+
+Note: entity {
+  NeedsFollowUp: Boolean
+}
+
+Line: entity {
+  Price: Number
+}
+
+Cart: entity {
+  orders: many Order
+  notes: many Note
+  lines: many Line
+  HasPriorityOrder: policy { any orders where Priority > 5 }
+  AllHighValue: policy { all orders where Total > 100 }
+  NoRush: policy { none notes where NeedsFollowUp is true }
+  OpenOrderCount: policy { count orders where Status is "Open" > 0 }
+  TotalOrderCount: policy { count orders > 5 }
+  OrderTotal: policy { sum lines Price is 150 }
+}
+##### guide/fragment/function Add(a: Number, b: Number): Number = a + b	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[]+implicit	printed	00812F95
+domain GuideTop
+
+function Add(a: Number, b: Number): Number = (a + b)
+
+function Pi(): Number = 3
+##### guide/fragment/Cart: entity {	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[]+implicit	printed	338CF328
+domain GuideTop
+
+Cart: entity {
+  Total: Number default(0)
+  Compute: action {
+    assign Total to Add(1, 2)
+  }
+  Scale: action {
+    assign Total to (Add(1, 2) * 10)
+  }
+  Nest: action {
+    assign Total to Square(Add(1, 2))
+  }
+  IsThree: policy { Total is Add(1, 2) }
+}
+
+function Add(a: Number, b: Number): Number = (a + b)
+
+function Square(a: Number): Number = (a * a)
+##### guide/fragment/SetName: action (newName: Text) {	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[]+implicit	printed	B2DA9F66
+domain GuideEntityBodies
+
+Order: entity {
+  Total: Number optional
+  Code: Text optional
+}
+
+Cart: entity {
+  Name: Text
+  Label: Text optional
+  Status: Text optional
+  Score: Number
+  Rush: Boolean optional
+  orders: many Order
+  Active: stage {
+  }
+  Validate: action {
+  }
+  SetName: action (newName: Text) {
+    assign Name to newName
+  }
+}
+##### guide/valid/domain Orders #2	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[]+implicit	printed	E8D44342
+domain Orders
+
+Customer: entity {
+  Name: Text
+  Email: Text unique
+  orders: many Order
+}
+
+Order: entity {
+  Total: Number range(0, )
+  Status: Text
+  PositiveTotal: policy { Total > 0 }
+  Draft: stage {
+    Submit: action
+      require PositiveTotal {
+      transition to Active
+    }
+  }
+  Active: stage {
+    entry {
+      assign Status to "active"
+    }
+    exit {
+      assign Status to "archived"
+    }
+  }
+  Done: stage {
+  }
+}
+##### built/key-composite-and-initial	built: print(code-built Domain)	DomainSession.ForExtensions([])	printed	BB5D4DA4
+domain Matrix
+
+A: entity initial(Done) key(Name, Code) {
+  Name: Text
+  Code: Text
+  Draft: stage {
+  }
+  Done: stage {
+  }
+}
+##### built/key-single	built: print(code-built Domain)	DomainSession.ForExtensions([])	printed	289664C9
+domain Matrix
+
+A: entity key(Name) {
+  Name: Text
+}
+##### built/initial-only	built: print(code-built Domain)	DomainSession.ForExtensions([])	printed	49E3C7AB
+domain Matrix
+
+A: entity initial(Done) {
+  Draft: stage {
+  }
+  Done: stage {
+  }
+}
+##### built/public-action	built: print(code-built Domain)	DomainSession.ForExtensions([])	printed	27AB1959
+domain Matrix
+
+A: entity {
+  Name: Text
+  public action Go {
+  }
+  Stop: action {
+  }
+}
+##### built/public-action-in-stage	built: print(code-built Domain)	DomainSession.ForExtensions([])	printed	AE082552
+domain Matrix
+
+A: entity {
+  Draft: stage {
+    public action Go {
+      transition to Done
+    }
+  }
+  Done: stage {
+  }
+}
+##### built/composite-effect	built: print(code-built Domain)	DomainSession.ForExtensions([])	printed	505F2C43
+domain Matrix
+
+B: entity {
+  Name: Text
+}
+
+A: entity {
+  Name: Text
+  bs: many B
+  Go: action {
+    assign Name to "x"
+assign Name to "y"
+  }
+}
+##### built/create-in-via-instance	built: print(code-built Domain)	DomainSession.ForExtensions([])	printed	00932E86
+domain Matrix
+
+B: entity {
+  Name: Text
+}
+
+A: entity {
+  Name: Text
+  bs: many B
+  Go: action {
+    create in bs { Name: "x" }
+  }
+}
+##### built/link-and-unlink	built: print(code-built Domain)	DomainSession.ForExtensions([])	printed	19AEDF99
+domain Matrix
+
+B: entity {
+  Name: Text
+}
+
+A: entity {
+  Name: Text
+  bs: many B
+  Go: action {
+    link bs to Name
+    unlink bs from Name
+  }
+}
+##### built/for-each	built: print(code-built Domain)	DomainSession.ForExtensions([])	printed	93362F6E
+domain Matrix
+
+B: entity {
+  Name: Text
+}
+
+A: entity {
+  Name: Text
+  bs: many B
+  Go: action {
+    for b in bs {
+      assign Name to "y"
+  }
+    for c in bs where Name is "x" {
+      assign Name to "z"
+  }
+  }
+}
+##### built/stage-policy-not-a-require	built: print(code-built Domain)	DomainSession.ForExtensions([])	failed:InvalidOperationException	E3B0C442
+##### built/stage-not-policy-without-entity-policy	built: print(code-built Domain)	DomainSession.ForExtensions([])	failed:InvalidOperationException	E3B0C442
+##### built/stage-require-not	built: print(code-built Domain)	DomainSession.ForExtensions([])	printed	68E3AABE
+domain Matrix
+
+A: entity {
+  Total: Number
+  Draft: stage
+    require Ok
+    require not Ok {
+  }
+  Ok: policy { Total > 0 }
+}
+##### built/value-types	built: print(code-built Domain)	DomainSession.ForExtensions([])	printed	AE9300EB
+domain Matrix
+
+public value V {
+  X: Number
+}
+
+W: value {
+  Y: Text length(1, 5)
+}
+##### built/facet-unregistered-annotation	built: print(code-built Domain)	DomainSession.ForExtensions([])	failed:FormatException	E3B0C442
+##### built/facet-unregistered-type	built: print(code-built Domain)	DomainSession.ForExtensions([])	failed:FormatException	E3B0C442
+##### built/annotation-registry-printer	built: print(code-built Domain)	AnnotationRegistry of ExtensionCatalog.Core.Authoring	printed	E42D7326
+domain Matrix
+
+A: entity table("T") {
+  Name: Text column("N")
+}
+##### built/implicit-ids-elided	built: print(code-built Domain)	DomainSession.ForExtensions([]); implicitIds=ProductCatalog.ImplicitIds	printed	AF48F6FC
+domain Matrix
+
+A: entity {
+  Name: Text
+}
+##### built/implicit-ids-not-elided	built: print(code-built Domain)	DomainSession.ForExtensions([]); implicitIds=ProductCatalog.ImplicitIds	printed	AEA48FD1
+domain Matrix
+uses storage
+
+A: entity {
+  Name: Text
+}
+##### built/uses-pinned	built: print(code-built Domain)	DomainSession.ForExtensions([])	printed	33AB5E10
+domain Matrix
+uses storage 2024-11-20
+
+A: entity {
+  Name: Text
+}
+##### built/literals	built: print(code-built Domain)	DomainSession.ForExtensions([])	printed	A1E8A4D6
+domain Matrix
+
+A: entity {
+  Total: Decimal
+  Dec: policy { Total > 1.5 }
+  Dbl: policy { Total > 2.5 }
+  Int: policy { Total > 3 }
+  Nul: policy { Total is not null }
+  Flag: policy { Total is true }
+}
+##### built/equality-literals	built: print(code-built Domain)	DomainSession.ForExtensions([])	printed	2E27AE73
+domain Matrix
+
+A: entity {
+  P1: Text equals(null)
+  P2: Boolean equals(true)
+  P3: Boolean equals(false)
+  P4: Text equals("s\"q")
+  P5: Decimal equals(1.5)
+  P6: Number equals(3)
+  P7: Decimal equals(2.5)
+}
+##### built/required-constraint-omitted	built: print(code-built Domain)	DomainSession.ForExtensions([])	printed	AF48F6FC
+domain Matrix
+
+A: entity {
+  Name: Text
+}
+##### built/expression-duration-unbound	built: print(code-built Domain)	DomainSession.ForExtensions([])	failed:InvalidOperationException	E3B0C442
+##### built/expression-date-operation	built: print(code-built Domain)	DomainSession.ForExtensions([])	printed	406041EF
+domain Matrix
+
+A: entity {
+  Due: Date
+  Soon: policy { Due > Now + 14 Days }
+}
+##### built/expression-kinds	built: print(code-built Domain)	DomainSession.ForExtensions([])	printed	B2B384E0
+domain Matrix
+
+B: entity {
+  Name: Text
+}
+
+A: entity {
+  Total: Number
+  bs: many B
+  Owned: policy { Addr City }
+  NotCmp: policy { not (Total > 1) }
+  NotPlain: policy { not Flag }
+  Div: policy { (Total / 2) > 1 }
+  NoB: policy { not bs Name exists }
+  Match: policy { match { Total > 1 -> 1, else -> 0 } > 0 }
+}
+##### built/entry/PrintConstraintText	entry: PrintConstraintText(constraints)	DomainSession.ForExtensions([])	printed	7EE45A90
+length(1, 5)
+length(3)
+pattern("^a$")
+range(1, 10)
+unique
+optional
+equals("x")
+default(3)
+?RequiredConstraint
+?RelationalConstraint
+##### built/entry/PrintExpressionText	entry: PrintExpressionText(expression)	DomainSession.ForExtensions([])	printed	39EC8D69
+(Total > 1 and not Flag)
+##### built/entry/PrintTestExpression	entry: PrintTestExpression(expression)	DomainSession.ForExtensions([])	printed	FD9BA50D
+(A is "x" or B <= 2)
+##### built/entry/PrintActionFragmentKey	entry: PrintActionFragmentKey(action, stage)	DomainSession.ForExtensions([])	printed	C2D58E14
+params:p:Number,
+require:Ok,
+effects:
+assign Total to 1
+transition to Done
+stagePolicies:
+Ok,onExit:
+assign Total to 2
+

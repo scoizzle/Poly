@@ -35,8 +35,7 @@ public static class TemporalExpressionPrintBinders {
             || !match.Captures.TryGetValue("unit", out var units) || units.Count == 0)
             throw new InvalidOperationException("Duration match is missing amount/unit captures.");
         // The duration row captures 'amount' with a Number value and 'unit' with an identifier predicate.
-        if (!long.TryParse(amounts[0].Span, NumberStyles.Integer, CultureInfo.InvariantCulture, out var amount))
-            throw new InvalidOperationException($"Duration amount '{DslTokenText.Shown(amounts[0])}' is not an integer.");
+        var amount = DslNumberText.ParseDurationAmount(amounts[0]);
         if (!DurationUnits.TryGetUnit(units[0].Span, out var unit))
             throw new FormatException($"Unknown duration unit '{DslTokenText.Shown(units[0])}'.");
         return new Duration(amount, unit);

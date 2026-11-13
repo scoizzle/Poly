@@ -8,10 +8,10 @@ internal static class TypeDefinitionOperatorExtensions {
     extension(ITypeDefinition left) {
         /// <summary>
         /// The operator <paramref name="kind"/> applied to <paramref name="left"/> and <paramref name="right"/>
-        /// (null for the unary <see cref="OperatorKind.Not"/>), or null when none applies or several do.
+        /// (null for a unary kind), or null when none applies or several do.
         /// </summary>
         /// <remarks>
-        /// Candidates are the operators either operand declares. A candidate applies when each operand is
+        /// Candidates are the operators either operand declares beside the other. A candidate applies when each operand is
         /// identical to its parameter type or converts to it implicitly. A candidate whose parameters are all
         /// identical wins; otherwise exactly one applicable candidate is returned. Zero, or two or more of either,
         /// is none: fail closed. Optionality is ignored: the caller lifts it (T-06).
@@ -87,11 +87,11 @@ internal static class TypeDefinitionOperatorExtensions {
     }
 
     private static IEnumerable<DeclaredOperator> Declared(ITypeDefinition left, ITypeDefinition? right, OperatorKind kind) {
-        foreach (var declared in left.GetOperators(kind))
+        foreach (var declared in left.GetOperators(kind, right))
             yield return declared;
         if (right is null || TypeDefinitionExtensions.IsSameType(left, right))
             yield break;
-        foreach (var declared in right.GetOperators(kind))
+        foreach (var declared in right.GetOperators(kind, left))
             yield return declared;
     }
 

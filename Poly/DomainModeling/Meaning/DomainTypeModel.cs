@@ -41,14 +41,14 @@ internal sealed class DomainTypeModel {
         if (ReferenceEquals(source, target))
             return Assignability.Identity;
 
-        // GetConversionFrom is the door. IsNumericWideningFrom is never used: it ranks
+        // ResolveConversionFrom is the door. IsNumericWideningFrom is never used: it ranks
         // Float64 as widening to Decimal, which the explicit-only operator contradicts.
-        if (target.GetConversionFrom(source) is { } conversion) {
+        if (target.ResolveConversionFrom(source) is { } conversion) {
             return conversion.Kind is ConversionOperatorKind.Implicit
                 ? Assignability.Widening
                 : Assignability.RoundingNarrowing;
         }
-        return BuiltInNumeric(source.PrimitiveType, target.PrimitiveType);
+        return Assignability.None;
     }
 
     public NumericKind KindOf(ExprType type) => type.Definition?.PrimitiveType switch {
@@ -57,21 +57,5 @@ internal sealed class DomainTypeModel {
         Prim.Float64 => NumericKind.Float64,
         Prim.Decimal => NumericKind.Decimal,
         _ => NumericKind.None
-    };
-
-    /// <summary>
-    /// Interim fallback for conversions the C# language defines but the CLR primitives declare no
-    /// operator for. Closed to {Int32, Int64, Float64}; Decimal pairs come from the door only.
-    /// Replace if built-in types gain conversion members (T-03b).
-    /// </summary>
-    private static Assignability BuiltInNumeric(Prim? from, Prim? to) => (from, to) switch {
-        (Prim.Int32, Prim.Int64) => Assignability.Widening,
-        (Prim.Int32, Prim.Float64) => Assignability.Widening,
-        // C# implicit, but lossy above 2^53.
-        (Prim.Int64, Prim.Float64) => Assignability.Widening,
-        (Prim.Int64, Prim.Int32) => Assignability.RoundingNarrowing,
-        (Prim.Float64, Prim.Int32) => Assignability.RoundingNarrowing,
-        (Prim.Float64, Prim.Int64) => Assignability.RoundingNarrowing,
-        _ => Assignability.None
     };
 }

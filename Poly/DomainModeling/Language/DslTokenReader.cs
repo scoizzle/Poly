@@ -238,6 +238,8 @@ public sealed class DslTokenReader : BufferedTokenReader<DslToken, DslTokenKind>
         "equals" => DslTokenKind.Equality,
         "relationship" => DslTokenKind.Relationship,
         "from" => DslTokenKind.From,
+        "link" => DslTokenKind.Link,
+        "unlink" => DslTokenKind.Unlink,
         "one" => DslTokenKind.One,
         "many" => DslTokenKind.Many,
         "owned" => DslTokenKind.Owned,

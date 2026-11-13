@@ -221,9 +221,9 @@ public class ContributedMethodTests {
             .Generate("LabDbContext");
 
         await Assert.That(source.Contains(
-            "Widget.Create(dto.Code, db, Enumerable.Empty<Tag>())", StringComparison.Ordinal)).IsTrue();
+            "Lab.Widget.Create(dto.Code, db, Enumerable.Empty<Lab.Tag>())", StringComparison.Ordinal)).IsTrue();
         await Assert.That(source.Contains(
-            "Widget.Create(\"Sample\", db, Enumerable.Empty<Tag>())", StringComparison.Ordinal)).IsTrue();
+            "Lab.Widget.Create(\"Sample\", db, Enumerable.Empty<Lab.Tag>())", StringComparison.Ordinal)).IsTrue();
     }
 
     [Test]

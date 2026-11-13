@@ -97,6 +97,8 @@ public static class DslGrammar {
         DslTokenKind.Equality => "equals",
         DslTokenKind.Relationship => "relationship",
         DslTokenKind.From => "from",
+        DslTokenKind.Link => "link",
+        DslTokenKind.Unlink => "unlink",
         DslTokenKind.One => "one",
         DslTokenKind.Many => "many",
         DslTokenKind.Owned => "owned",
@@ -312,6 +314,10 @@ public static class DslGrammar {
                 .Kind(DslTokenKind.Transition).Kind(DslTokenKind.To).Value(DslTokenKind.Identifier).Commit()
             .Pattern("assign")
                 .Kind(DslTokenKind.Assign).Value(DslTokenKind.Identifier).Kind(DslTokenKind.To).Commit()
+            .Pattern("link")
+                .Kind(DslTokenKind.Link).Value(DslTokenKind.Identifier).Kind(DslTokenKind.To).Commit()
+            .Pattern("unlink")
+                .Kind(DslTokenKind.Unlink).Value(DslTokenKind.Identifier).Kind(DslTokenKind.From).Commit()
             .Pattern("create-in")
                 .Kind(DslTokenKind.Create).Kind(DslTokenKind.In).Value(DslTokenKind.Identifier).Commit()
             .Pattern("create")

@@ -168,6 +168,13 @@ public sealed partial class EffectLoweringPass : EffectDispatch<Node?> {
 
     protected override Node? Default() => null;
 
+    // Fail closed until L-13 lowers link/unlink: Default() is null, and a null here would be dropped silently.
+    protected override Node? Link(LinkEffect e) =>
+        throw new InvalidOperationException($"Cannot lower effect '{CallerPath}: {DescribeEffect(e)}': link is not lowerable yet (L-13).");
+
+    protected override Node? Unlink(UnlinkEffect e) =>
+        throw new InvalidOperationException($"Cannot lower effect '{CallerPath}: {DescribeEffect(e)}': unlink is not lowerable yet (L-13).");
+
     /// <summary>
     /// The action body. Create-in is <c>this.Create{Nav}</c>. Constraint probes
     /// are not prefixed.
@@ -241,9 +248,19 @@ public sealed partial class EffectLoweringPass : EffectDispatch<Node?> {
     private string CallerPath =>
         _context.ActionName is { } action ? $"{_entity.Name}.{action}" : _entity.Name;
 
-    /// <summary>A callee's failure rewrapped as the caller's, prefixed with <see cref="CallerPath"/>.</summary>
+    /// <summary>
+    /// A callee's failure rewrapped as the caller's, prefixed with <see cref="CallerPath"/>. A subscription
+    /// handler is fan-out, not a caller of its own: it passes the failure through, like the notify dispatcher.
+    /// </summary>
     private Return ReturnCallerFailureFrom(Node resultVar) =>
-        FailureLowering.Propagate(CallerResultType, resultVar, CallerPath);
+        FailureLowering.Propagate(CallerResultType, resultVar, _context.ReturnsDomainResult ? null : CallerPath);
+
+    /// <summary>
+    /// Whether this body has a result channel for a nested failure. Read only at the notify site: the assign
+    /// and create guards key on <see cref="LoweringContext.ActionResultType"/> and a handler still throws there (L-04).
+    /// </summary>
+    private bool CanReturnFailure =>
+        _context.ActionResultType is not null || _context.ReturnsDomainResult;
 
     /// <summary>
     /// The entity's own guard method (<c>EnsureUnique</c>) is not a callee: its failure already
@@ -312,6 +329,11 @@ public sealed partial class EffectLoweringPass : EffectDispatch<Node?> {
         StageTransitionEffect s => $"transition to {s.TargetStage.StageName} (StageTransitionEffect)",
         CreateEntityInstance cei => $"create {cei.Type.TypeName}",
         CreateEntityInRelationshipEffect cr => $"create in {cr.RelationshipName}",
+        LinkEffect l => $"link {l.RelationshipName} to {DescribeTarget(l.Target)}",
+        UnlinkEffect u => $"unlink {u.RelationshipName} from {DescribeTarget(u.Target)}",
         _ => $"Cannot lower: {effect.GetType().Name}"
     };
+
+    private static string DescribeTarget(DomainExpression target) =>
+        target is PropertyAccess { Name: var name } ? name : "<expression>";
 }

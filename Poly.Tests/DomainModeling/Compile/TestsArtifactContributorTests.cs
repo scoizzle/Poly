@@ -153,6 +153,36 @@ public sealed class TestsArtifactContributorTests {
     }
 
     [Test]
+    public async Task GeneratedSuite_ImportsTheDomainNamespace() {
+        var text = TestText(Shop);
+
+        await Assert.That(text).Contains("using Shop;");
+        await Assert.That(text).DoesNotContain("Poly.Generated");
+    }
+
+    [Test]
+    public async Task GeneratedSuite_EntityNamedLikeItsDomain_QualifiesTheEntityAndPasses() {
+        // A bare `Library` in a global-scope file with `using Library;` binds to the namespace.
+        var (ran, failures) = RunGeneratedSuite("""
+            domain Library
+            uses tests
+            Library: entity {
+              Reference: Text
+              Draft: stage {
+                Submit: action { transition to Submitted }
+              }
+              Submitted: stage {
+                Ship: action { transition to Shipped }
+              }
+              Shipped: stage { }
+            }
+            """, mutate: null);
+
+        await Assert.That(ran).IsEqualTo(2);
+        await Assert.That(failures).IsEmpty();
+    }
+
+    [Test]
     public async Task GeneratedSuite_AgainstMutatedGuard_GoesRed() {
         // Drop the stage guard of Ship: the generated suite must notice.
         var (ran, failures) = RunGeneratedSuite(Shop, mutate: src => src.Replace(

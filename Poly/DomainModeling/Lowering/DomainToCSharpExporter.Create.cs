@@ -240,6 +240,7 @@ public sealed partial class DomainToCSharpExporter {
         // A create-in lands the child in its initial stage. When a subscription watches
         // that stage, no transition occurs, so no previousStage notify runs. One call
         // here covers both wired and unwired cases.
+        Variable? notifyResult = null;
         if (metadata.GetStructure(targetEntity)?.HasStages == true) {
             var initialStage = targetEntity.InitialStage()!.Name;
             if (subscriberSubs is { Count: > 0 }
@@ -247,9 +248,16 @@ public sealed partial class DomainToCSharpExporter {
                     string.Equals(i.Relationship.Name, rel.Name, StringComparison.Ordinal)
                     && string.Equals(i.StageName, initialStage, StringComparison.Ordinal))) {
                 var needsPrevious = StageGroupNeedsPrevious(targetEntity, initialStage, domain);
-                bodyNodes.Add(new Invoke(
+                // A handler failure fails the create-in: the dispatcher returns it, this method returns it
+                // as its own result with no caller prefix (the child's failure above is passed the same way).
+                // `__notify` is reserved, so a target property named Notify cannot collide with it.
+                notifyResult = new Variable("__notify");
+                bodyNodes.Add(new Assignment(notifyResult, new Invoke(
                     new Member(local, $"Notify{initialStage}Subscribers"),
-                    needsPrevious ? [new Constant(null)] : []));
+                    needsPrevious ? [new Constant(null)] : [])));
+                bodyNodes.Add(new IfStatement(
+                    new Syntactic.Not(new Member(notifyResult, "IsSuccess")),
+                    new Block([FailureLowering.Propagate(createResultType, notifyResult)])));
             }
         }
 
@@ -264,7 +272,7 @@ public sealed partial class DomainToCSharpExporter {
             methodName,
             new NamedTypeReference("DomainResult", TypeArguments: [targetType]),
             Parameters: methodParams.Count > 0 ? methodParams : null,
-            Body: new Block(bodyNodes, [localResult, local]),
+            Body: new Block(bodyNodes, notifyResult is null ? [localResult, local] : [localResult, local, notifyResult]),
             AccessModifier: DomainAccess.Demote(
                 AccessModifier.Public, domain,
                 [.. methodParams.Select(p => p.TypeReference), targetType])

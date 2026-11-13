@@ -72,6 +72,32 @@ public static class ExportedCSharp {
         return new AssemblyLoadContext(assemblyName, isCollectible: true).LoadFromStream(pe);
     }
 
+    /// <summary>Compiles emitted files together, one syntax tree per file as printed (each unit
+    /// carries its own usings and namespace), and loads the assembly.</summary>
+    public static Assembly CompileAndLoad(
+        IReadOnlyList<(string FileName, string Source)> files, string assemblyName = "ExportedDomain") {
+        var trees = files
+            .Where(f => f.FileName.EndsWith(".cs", StringComparison.Ordinal))
+            .Select(f => CSharpSyntaxTree.ParseText(f.Source, path: f.FileName))
+            .ToArray();
+        var references = ((string?)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES"))!
+            .Split(Path.PathSeparator)
+            .Select(p => (MetadataReference)MetadataReference.CreateFromFile(p));
+        var compilation = CSharpCompilation.Create(
+            assemblyName,
+            trees,
+            references,
+            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+        using var pe = new MemoryStream();
+        var emit = compilation.Emit(pe);
+        if (!emit.Success)
+            throw new InvalidOperationException(string.Join("\n", emit.Diagnostics
+                .Where(d => d.Severity == Microsoft.CodeAnalysis.DiagnosticSeverity.Error)
+                .Select(d => $"{d.Location.SourceTree?.FilePath}: {d}")));
+        pe.Position = 0;
+        return new AssemblyLoadContext(assemblyName, isCollectible: true).LoadFromStream(pe);
+    }
+
     /// <summary>
     /// Compiles a sample's emitted files together as one compilation with
     /// warnings-as-errors and returns the error diagnostics. Unlike

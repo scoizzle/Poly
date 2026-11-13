@@ -198,18 +198,27 @@ public sealed partial class DomainToCSharpExporter {
                     "previousStage",
                     new OptionalTypeReference(new NamedTypeReference(stageEnumTypeName!)));
                 var notifyNodes = new List<Node>();
+                var names = new LocalNames();
                 foreach (var infos in stageGroup) {
                     var fieldName = SubscriberRegistryFieldName(infos[0]);
-                    var notifyCalls = infos.Select(info => {
+                    var handlerLocals = new List<Node>();
+                    var notifyCalls = new List<Node>();
+                    foreach (var info in infos) {
                         var args = new List<Node>();
                         if (HasPeerBinding(info))
                             args.Add(new ThisReference());
                         if (NeedsAllPreviousStage(info))
                             args.Add(notifyPrevious);
-                        return (Node)new Invoke(
+                        // The first failing handler stops the fan-out and its result is the dispatcher's.
+                        var handlerResult = names.Next("handlerResult");
+                        handlerLocals.Add(handlerResult);
+                        notifyCalls.Add(new Assignment(handlerResult, new Invoke(
                             new Member(new Variable("sub"), handlerNames![info]),
-                            [.. args]);
-                    }).ToList();
+                            [.. args])));
+                        notifyCalls.Add(new IfStatement(
+                            new Syntactic.Not(new Member(handlerResult, "IsSuccess")),
+                            new Block([new Return(handlerResult)])));
+                    }
                     notifyNodes.Add(new IfStatement(
                         new NotEqual(
                             new Member(new ThisReference(), fieldName),
@@ -217,11 +226,11 @@ public sealed partial class DomainToCSharpExporter {
                         new ForEachLoop(
                             new Variable("sub"),
                             new Member(new ThisReference(), fieldName),
-                            new Block(notifyCalls))));
+                            new Block(notifyCalls, handlerLocals))));
                 }
                 methods.Add(new MethodDefinitionNode(
                     $"Notify{stageGroup.Key}Subscribers",
-                    new TypeReference("void"),
+                    new NamedTypeReference("DomainResult"),
                     Parameters: needsPrevious ? [notifyPrevious] : null,
                     Body: new Block([
                         new Invoke(
@@ -230,7 +239,8 @@ public sealed partial class DomainToCSharpExporter {
                         new TryCatchFinally(
                             notifyNodes.Count == 1 ? notifyNodes[0] : new Block(notifyNodes),
                             FinallyBlock: new Invoke(
-                                new Member(new ThisReference(), "ExitNotifyCascade")))
+                                new Member(new ThisReference(), "ExitNotifyCascade"))),
+                        DomainResultSuccess()
                     ]),
                     AccessModifier: AccessModifier.Internal
                 ));

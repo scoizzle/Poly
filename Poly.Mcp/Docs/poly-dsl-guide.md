@@ -1120,12 +1120,24 @@ relationship name.
 
 ### Failure
 
-A `when` body is void. When a `create` or `create in` inside it fails a
-constraint, the handler throws `ConstraintFailureException` with that failure
-message and drops the failed create's value. The stage change that fired the
-subscription stays assigned. Interpreter and printed C# both surface that
-exception from the action that caused the transition. An action's own failed
-effect still returns `DomainResult.Failure`.
+A `when` handler returns a result. A failed `invoke` (or `for ... invoke`) in it
+stops the handler and returns that failure: its kind, message and guard are
+unchanged, and its path is the call chain (the handler adds no segment of its
+own). The notification stops at the first failing handler, in registration
+order, so no later handler runs. The action that caused the transition, or the
+`create in` that landed the child in a watched stage, returns that failure to
+its caller; it never reports success and never throws. The stage change that
+fired the subscription is undone by the simulator (it restores the failed
+action's changes) but stays assigned in the generated C# until action rollback
+lands there, so the two hosts differ on that state until then.
+For a failed `invoke` in the handler of `Run` that finishes an `Item`, the path
+reads `Owner.Run.Item.Finish.Owner.Y`.
+
+A failed `create`, `create in` (including a `create in` inside a handler whose
+new child's own handler fails) or constraint-violating `assign` inside a handler
+still throws `ConstraintFailureException` for now, from the action that caused
+the transition; those become returned failures later. Interpreter and printed
+C# agree.
 
 ## 8. Policies
 
@@ -1504,7 +1516,23 @@ assign Tier to match { Qty > 100 -> "big", Qty > 10 -> "mid", else -> "small" }
 
 A `transition` in an exit block must target the stage every hop leaving that stage targets (`DMEFF017`; see Entry/Exit Effects). The action-only effects above are rejected in an exit block (`DMEFF018`). A `create` or `create in` initializer may not supply a property the new instance's entry chain may assign (`DMEFF019`; see Entry/Exit Effects).
 
-**Linking existing instances:** graph wiring happens through `create in Rel { … }`, which the module's own body links on the instance. To connect already-existing instances, the MCP `link_instances` and `unlink_instances` tools write the relationship field on the instance (the session executor's `Link` / `Unlink`) with relationship + entity-type validation at the tool boundary. `unlink_instances` refuses to drop the last owner of an `owned` target (see §4). There is no Link/Unlink **Effect IR** — linking existing instances is a host/tool operation only.
+**Linking existing instances:** graph wiring happens through `create in Rel { … }`, which the module's own body links on the instance. To connect already-existing instances, the MCP `link_instances` and `unlink_instances` tools write the relationship field on the instance (the session executor's `Link` / `Unlink`) with relationship + entity-type validation at the tool boundary. `unlink_instances` refuses to drop the last owner of an `owned` target (see §4).
+
+**`link` / `unlink` effects (syntax and analysis only):** `link Rel to binder` and `unlink Rel from binder` parse, print and round-trip, but analysis refuses every use with `DMEFF020` until the lowering lands (L-13). Use the MCP link tools until then. The target is a bare binder of an enclosing `for x in Rel { … }`; the relationship must be declared on the action's entity and hold the binder's type. An owned navigation's owner is fixed, so `link` / `unlink` on one is refused (`DMEFF001`): it is written only by `create in`. `link` and `unlink` are reserved lowercase words: until contextual keywords land (G-21) they cannot be used as any name (entity, member, relationship, stage, action, parameter, enum value or domain); `Link` is still an ordinary name. Because the statements are not executable yet, link relationships through the host's link operations (`link_instances` / `unlink_instances`) until L-13.
+
+<!-- poly-verify: invalid:DMEFF020 -->
+```poly
+domain Board
+
+Task: entity { Name: Text }
+Board: entity {
+  Backlog: many Task
+  Active: many Task
+  Move: action {
+    for t in Backlog { link Active to t }   // error DMEFF020: not lowerable until L-13
+  }
+}
+```
 
 ## 10. Do NOT Use (Unsupported in Phase 1a/1b)
 

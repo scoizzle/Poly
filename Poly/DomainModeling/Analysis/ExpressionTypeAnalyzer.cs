@@ -507,6 +507,16 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                         return;
                     }
                 }
+                // Any other same-granularity date difference: say what is supported, naming what was written (T-10).
+                var subtrahendLeft = InferType(context, sub.Left, props, parameters, enumTypes);
+                var subtrahendRight = InferType(context, sub.Right, props, parameters, enumTypes);
+                if (IsDate(subtrahendLeft) && IsDate(subtrahendRight) && !MixedDateGranularity(subtrahendLeft, subtrahendRight)) {
+                    Report(context, sub, "a date difference is supported only between two properties of the same entity " +
+                        $"(got '{PrintedText(context, sub.Left)}' - '{PrintedText(context, sub.Right)}')");
+                    WalkExpression(context, sub.Left, props, parameters, enumTypes, walked);
+                    WalkExpression(context, sub.Right, props, parameters, enumTypes, walked);
+                    return;
+                }
                 StampBinary(context, sub, OperatorKind.Subtract, sub.Left, sub.Right, props, parameters, enumTypes);
                 CheckArithmetic(context, sub.Left, sub.Right, props, parameters, enumTypes);
                 return;
@@ -549,6 +559,14 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                     new ExpressionTypeCheckScope(props, parameters, enumTypes));
                 return;
         }
+    }
+
+    /// <summary>An expression as the DSL spells it, for a message that names what the user wrote.</summary>
+    private static string PrintedText(AnalysisContext context, DomainExpression expr) {
+        var printer = context.GetTypeLookup()?.Domain is { } domain
+            ? new Language.DomainDslPrinter(RuntimeAnalysisCache.Session(domain))
+            : new Language.DomainDslPrinter();
+        return printer.PrintExpressionText(expr);
     }
 
     private void CheckBooleanOperands(

@@ -21,11 +21,14 @@ namespace Poly.Tests.DomainModeling.Analysis;
 /// <item><c>A-match-arm</c>: match arm unification (DMMAT002) and the assign of the match's type (DMSEM003).</item>
 /// <item><c>A-sum</c>: <c>sum</c>'s numeric check by the property's numeric kind, not its spelling (plan M2).</item>
 /// <item><c>A-sum-override</c>: fork B; a pack override onto a CLR type the model has no primitive for leaves the
-/// property untyped, so the numeric check fires (master accepted it by name and lowering seeded <c>0L</c>).</item>
+/// property untyped, so <c>sum</c>'s own numeric check fires as well. Both rows are on documents master already
+/// rejects (the undeclared legacy name's DMSEM005).</item>
 /// </list>
 /// <para>
-/// Not a row (seam N2, owner T-06): <c>null</c> compared with a path-prefix, binder or owned read keeps master's
-/// answer, accepted, because that read's type carries no optionality yet. Nor is a date minus a date of two properties:
+/// Not a row (seam N2, owner T-06): <c>null</c> compared with a path-prefix, binder or owned read, with a
+/// <c>match</c> that has a <c>null</c> arm, or with arithmetic over an optional property keeps master's answer,
+/// accepted, because those types carry no optionality yet. The two <c>A-sum</c> loosenings are API-only (a DSL
+/// document cannot declare an alias) and are not run through GateParity. Nor is a date minus a date of two properties:
 /// master's exemption for that one shape, the shape lowering rewrites to <c>Subtract</c>, stays (removing row T-10),
 /// so a typed date operand of any other shape meets the arithmetic rule (<c>A-arithmetic</c>; review F1, where
 /// GateParity shows the VM refuses those shapes). The rows are derived by the script quoted
@@ -769,12 +772,10 @@ public partial class AnalyzerClosingRoundPinTests {
         ("FormGridF3", "match { Flag -> null, else -> N + M } | form == Boolean", "ok", "DMSEM003", "A-compare"),
         ("FormGridF3", "match { Flag -> null, else -> N + M } | form == Date", "ok", "DMSEM003", "A-compare"),
         ("FormGridF3", "match { Flag -> null, else -> N + M } | form == Color", "ok", "DMSEM003", "A-compare"),
-        ("FormGridF3", "match { Flag -> null, else -> N + M } | form == null", "ok", "DMSEM003", "A-compare"),
         ("FormGridF3", "match { Flag -> null, else -> N + M } | Text == form", "ok", "DMSEM003", "A-compare"),
         ("FormGridF3", "match { Flag -> null, else -> N + M } | Boolean == form", "ok", "DMSEM003", "A-compare"),
         ("FormGridF3", "match { Flag -> null, else -> N + M } | Date == form", "ok", "DMSEM003", "A-compare"),
         ("FormGridF3", "match { Flag -> null, else -> N + M } | Color == form", "ok", "DMSEM003", "A-compare"),
-        ("FormGridF3", "match { Flag -> null, else -> N + M } | null == form", "ok", "DMSEM003", "A-compare"),
         ("FormGridF3", "match { Flag -> null, else -> N + M } | if form", "ok", "DMSEM003", "A-boolean"),
         ("FormGridF3", "match { Flag -> null, else -> N + M } | for where form", "ok", "DMSEM003", "A-boolean"),
         ("FormGridF3", "match { Flag -> null, else -> N + M } | not form", "ok", "DMSEM003", "A-boolean"),
@@ -787,8 +788,6 @@ public partial class AnalyzerClosingRoundPinTests {
         ("FormGridF3", "match { Flag -> null, else -> N + M } | match arm into Date", "ok", "DMMAT002+DMSEM003", "A-match-arm"),
         ("FormGridF3", "match { Flag -> null, else -> N + M } | match arm into Color", "ok", "DMMAT002+DMSEM003", "A-match-arm"),
         ("FormGridF3", "match { Flag -> null, else -> N + M } | policy form == Text", "ok", "DMSEM003", "A-compare"),
-        ("FormGridF3", "match { Flag -> null, else -> N + M } | policy form == null", "ok", "DMSEM003", "A-compare"),
-        ("FormGridF3", "match { Flag -> null, else -> N + M } | policy form != null", "ok", "DMSEM003", "A-compare"),
         ("FormGridF3", "match { Flag -> null, else -> N + M } | require form == Text", "ok", "DMSEM003", "A-compare"),
         ("FormGridF3", "match { Flag -> null, else -> N + M } | stage require form == Text", "ok", "DMSEM003", "A-compare"),
         ("FormGridF3", "match { Flag -> null, else -> N + M } | onEntry assign Text", "ok", "DMSEM003", "A-assign"),
@@ -801,6 +800,7 @@ public partial class AnalyzerClosingRoundPinTests {
         ("SumPropertyKinds", "Id64 | policy sum > 0", "DMSEM005", "ok", "A-sum"),
         ("SumPropertyKindsF3", "Double [Double -> float] | policy sum > 0", "DMSEM005", "DMSEM005 (not numeric)", "A-sum-override"),
         ("SumPropertyKindsF3", "Int [Int -> short] | policy sum > 0", "DMSEM005", "DMSEM005 (not numeric)", "A-sum-override"),
+        ("OptionalNull", "required (A + 1) == null", "ok", "DMSEM003", "A-compare"),
         ("DateDifference", "(part Due - Due) == (Due - Due)", "ok", "DMSEM003", "A-arithmetic"),
         ("DateDifference", "(Due - part Due) == (Due - Due)", "ok", "DMSEM003", "A-arithmetic"),
         ("DateDifference", "(part Due - part Due) == (Due - Due)", "ok", "DMSEM003", "A-arithmetic"),
@@ -863,26 +863,27 @@ public partial class AnalyzerClosingRoundPinTests {
 
     /// <summary>The totals the PR body quotes; computed by <see cref="FlipTotals"/>, never hand-summed.</summary>
     private const string Totals = """
-total 776: 774 tighten, 2 loosen
+total 773: 771 tighten, 2 loosen
 grid FormGrid: 488
-grid FormGridF3: 270
+grid FormGridF3: 266
 grid TypelessSources: 2
 grid ArithmeticDateOperand: 1
 grid DateOperationOverTypelessDate: 1
 grid ImportedContractNameClash: 1
 grid SumPropertyKinds: 2
 grid SumPropertyKindsF3: 2
+grid OptionalNull: 1
 grid DateDifference: 9
 rule A-arithmetic: 57
 rule A-assign: 258
 rule A-boolean: 87
 rule A-call: 66
-rule A-compare: 213
+rule A-compare: 210
 rule A-match-arm: 74
 rule A-return: 17
 rule A-sum: 2
 rule A-sum-override: 2
-valid on master: 713
+valid on master: 710
 already rejected on master: 63
 """;
 

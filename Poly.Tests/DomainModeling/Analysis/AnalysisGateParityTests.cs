@@ -190,7 +190,7 @@ public class AnalysisGateParityTests {
             "(got 'part Stamp' - 'Stamp')");
         await Assert.That(string.Join(" | ", Errors("Close: action { assign Gap to (Stamp + A) - Stamp }"))).IsEqualTo(
             "DMSEM003: a date difference is supported only between two properties of the same entity " +
-            "(got 'Stamp + A' - 'Stamp')");
+            "(got '(Stamp + A)' - 'Stamp')");
         await Assert.That(Errors("Close: action { assign Gap to Stamp - Stamp }").Count).IsEqualTo(0);
     }
 

@@ -1,5 +1,10 @@
 using Poly.DomainModeling.Ontology;
 
+using Add = Poly.DomainModeling.Ontology.Add;
+using Divide = Poly.DomainModeling.Ontology.Divide;
+using Multiply = Poly.DomainModeling.Ontology.Multiply;
+using Subtract = Poly.DomainModeling.Ontology.Subtract;
+
 namespace Poly.DomainModeling.Analysis;
 
 // Comparison arm: operand compatibility plus enum-member literal validity.
@@ -34,7 +39,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
         // A fractional literal against Number / Int / Int64 is rejected here. Both
         // sides are category Number, so Compatible would allow the pair.
         ReportFractionalLiteral(context, cmp.Left, left, cmp.Right, right);
-        if (MixedDateGranularity(left, right) || (!NullAgainstRead(cmp) && !Compatible(left, right)))
+        if (MixedDateGranularity(left, right) || (!NullAgainstRead(context, cmp, props) && !Compatible(left, right)))
             Report(context, cmp,
                 $"comparison between incompatible types '{Describe(left)}' and '{Describe(right)}'");
 
@@ -43,11 +48,29 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
     }
 
     /// <summary>
-    /// Seam N2 (T-05a review F2; owner T-06): <c>null</c> compared with a path-prefix, binder or owned read keeps
-    /// master's answer, accepted. That read's type carries no optionality yet (an optional member, an unlinked hop),
-    /// so rejecting it here would flip back once T-06 types optionality.
+    /// Seam N2 (T-05a review F2 and closing round; removing row T-06): <c>null</c> compared with an expression whose
+    /// type carries no optionality yet keeps master's answer, accepted, so T-06 does not flip it back: a path-prefix,
+    /// binder or owned read (an optional member, an unlinked hop), a <c>match</c> with a <c>null</c> arm, and
+    /// arithmetic over an optional property. Arithmetic over required operands meets the comparison rule.
     /// </summary>
-    private static bool NullAgainstRead(Comparison cmp) =>
-        cmp.Left is Literal { Value: null } && cmp.Right is RelationshipNavigation or OwnedAccess
-        || cmp.Right is Literal { Value: null } && cmp.Left is RelationshipNavigation or OwnedAccess;
+    private static bool NullAgainstRead(AnalysisContext context, Comparison cmp, Dictionary<string, string> props) =>
+        cmp.Left is Literal { Value: null } && MayBeAbsent(context, cmp.Right, props)
+        || cmp.Right is Literal { Value: null } && MayBeAbsent(context, cmp.Left, props);
+
+    private static bool MayBeAbsent(AnalysisContext context, DomainExpression expr, Dictionary<string, string> props) =>
+        expr switch {
+            RelationshipNavigation or OwnedAccess => true,
+            MatchExpr match => match.Arms.Any(a => a.Value is Literal { Value: null }) || match.Else is Literal { Value: null },
+            Add or Subtract or Multiply or Divide => expr.Children.OfType<DomainExpression>()
+                .Any(operand => IsOptionalProperty(context, operand, props)
+                    || operand is Add or Subtract or Multiply or Divide && MayBeAbsent(context, operand, props)),
+            _ => false,
+        };
+
+    private static bool IsOptionalProperty(AnalysisContext context, DomainExpression expr, Dictionary<string, string> props) =>
+        expr is PropertyAccess property
+        && props is EntityScope scope
+        && EntityNamed(context, scope.EntityName)?.Properties
+            .FirstOrDefault(p => string.Equals(p.Name, property.Name, StringComparison.Ordinal)) is { } declared
+        && !EntityStructureAnalyzer.IsRequired(declared);
 }

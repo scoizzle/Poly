@@ -1,7 +1,7 @@
 # A failure return inside a `when` body emits into a `void` handler and does not compile
 
 **Date:** 2026-10-17
-**Status:** defect, open. Not on the board `CURRENT` — recorded as evidence, nothing admitted.
+**Status:** resolved by L-03h (#818): a `when` handler returns `DomainResult`, the `Notify` dispatcher returns the first failure, and the transition or create-in that fired it returns it to its action. Original record below.
 **Found while:** the empty-set `for` slice (branch `fix/for-empty-set`); the slice did **not** fix it.
 **Scope:** any failure-return lowered into a subscription handler — `for` **and** plain `invoke`.
 

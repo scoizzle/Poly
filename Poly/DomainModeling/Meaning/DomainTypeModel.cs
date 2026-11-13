@@ -9,7 +9,7 @@ namespace Poly.DomainModeling.Meaning;
 /// <summary>
 /// The one type model over Introspection: resolve a domain name, relate two types, name a numeric family.
 /// Bound to one (<see cref="Domain"/>, <see cref="TypeMappingRegistry"/>) pair; a new session needs a new model.
-/// No production caller until T-04.
+/// <c>ExpressionTypeAnalyzer</c> is its production caller since T-04.
 /// </summary>
 internal sealed class DomainTypeModel {
     private readonly DomainTypeDefinitionProvider _provider;

@@ -58,15 +58,15 @@ public class DomainReportExporterTests {
           Total: Number range(0, 500) default(0)
           Big: policy { Total > 100 }
           Small: policy { Total < 20 }
-          Draft: stage require Small {
+          Draft: stage require Big {
             Submit: action
-              require Small {
+              require Big {
               transition to Active
             }
           }
           Active: stage {
             Submit: action
-              require Big {
+              require Small {
               assign Total to 0
             }
           }
@@ -191,9 +191,9 @@ public class DomainReportExporterTests {
         await Assert.That(PolicyRows(report).SequenceEqual(new[] {
             "| Big | entity | `Total > 100` |",
             "| Small | entity | `Total < 20` |",
-            "| Small | stage:Draft | `Total < 20` |",
-            "| Small | action:Draft.Submit | `Total < 20` |",
-            "| Big | action:Active.Submit | `Total > 100` |",
+            "| Big | stage:Draft | `Total > 100` |",
+            "| Big | action:Draft.Submit | `Total > 100` |",
+            "| Small | action:Active.Submit | `Total < 20` |",
             "| Big | action:Reset | `Total > 100` |",
         })).IsTrue();
     }

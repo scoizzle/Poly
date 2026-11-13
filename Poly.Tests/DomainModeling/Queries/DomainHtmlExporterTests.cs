@@ -63,15 +63,15 @@ public class DomainHtmlExporterTests {
           Total: Number range(0, 500) default(0)
           Big: policy { Total > 100 }
           Small: policy { Total < 20 }
-          Draft: stage require Small {
+          Draft: stage require Big {
             Submit: action
-              require Small {
+              require Big {
               transition to Active
             }
           }
           Active: stage {
             Submit: action
-              require Big {
+              require Small {
               assign Total to 0
             }
           }
@@ -218,9 +218,9 @@ public class DomainHtmlExporterTests {
         await Assert.That(PolicyRows(html).SequenceEqual(new[] {
             "<tr><td>Big</td><td>entity</td><td><code>Total &gt; 100</code></td></tr>",
             "<tr><td>Small</td><td>entity</td><td><code>Total &lt; 20</code></td></tr>",
-            "<tr><td>Small</td><td>stage:Draft</td><td><code>Total &lt; 20</code></td></tr>",
-            "<tr><td>Small</td><td>action:Draft.Submit</td><td><code>Total &lt; 20</code></td></tr>",
-            "<tr><td>Big</td><td>action:Active.Submit</td><td><code>Total &gt; 100</code></td></tr>",
+            "<tr><td>Big</td><td>stage:Draft</td><td><code>Total &gt; 100</code></td></tr>",
+            "<tr><td>Big</td><td>action:Draft.Submit</td><td><code>Total &gt; 100</code></td></tr>",
+            "<tr><td>Small</td><td>action:Active.Submit</td><td><code>Total &lt; 20</code></td></tr>",
             "<tr><td>Big</td><td>action:Reset</td><td><code>Total &gt; 100</code></td></tr>",
         })).IsTrue();
     }

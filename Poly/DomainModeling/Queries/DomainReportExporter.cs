@@ -27,6 +27,7 @@ public static class DomainReportExporter {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(context.Domain);
         var domain = context.Domain;
+        var printer = new Lazy<DomainDslPrinter>(context.CreatePrinter);
 
         var ordered = DomainExportOrder.Types(domain);
         var entities = ordered.OfType<Entity>().ToList();
@@ -50,7 +51,7 @@ public static class DomainReportExporter {
             sb.AppendLine("## Entities");
             sb.AppendLine();
             foreach (var entity in entities)
-                AppendEntity(sb, entity);
+                AppendEntity(sb, entity, printer);
         }
 
         if (enums.Count > 0) {
@@ -85,7 +86,7 @@ public static class DomainReportExporter {
         return sb.ToString().TrimEnd() + "\n";
     }
 
-    private static void AppendEntity(StringBuilder sb, Entity entity) {
+    private static void AppendEntity(StringBuilder sb, Entity entity, Lazy<DomainDslPrinter> printer) {
         sb.AppendLine($"### {entity.Name}");
         sb.AppendLine();
         AppendTerm(sb, entity.Facets);
@@ -136,6 +137,19 @@ public static class DomainReportExporter {
                     : string.Join(", ", action.Policies.Select(p => p.Name));
                 sb.AppendLine($"| {Cell(action.Name)} | {Cell(stage ?? "entity")} | " +
                     $"{Cell(parameters)} | {Cell(guards)} |");
+            }
+            sb.AppendLine();
+        }
+
+        var policies = PolicyProjection.For(entity, printer);
+        if (policies.Count > 0) {
+            sb.AppendLine("**Policies**");
+            sb.AppendLine();
+            sb.AppendLine("| Policy | Scope | Condition |");
+            sb.AppendLine("| --- | --- | --- |");
+            foreach (var policy in policies) {
+                sb.AppendLine($"| {Cell(policy.Name)} | {Cell(policy.Scope)} | " +
+                    $"{Code(policy.ConditionText.ReplaceLineEndings(" "))} |");
             }
             sb.AppendLine();
         }

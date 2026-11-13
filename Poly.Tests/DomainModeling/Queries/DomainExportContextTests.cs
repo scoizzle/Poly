@@ -32,6 +32,8 @@ public class DomainExportContextTests {
             _ => throw new ArgumentOutOfRangeException(nameof(format), format, null),
         };
 
+    private static DomainSession BinderlessSession() => SessionBuilder.CreateEmpty().LoadCore().Build();
+
     private static Domain WithPolicy(string name) => new Domain("Lazy", [
         new Entity("Item", [], [], name.Length == 0 ? [] : [new Policy(name, DomainExpression.Literal(true))], []),
     ]) { Extensions = ["no-such-library"] };
@@ -58,7 +60,7 @@ public class DomainExportContextTests {
         var domain = EvolvedDomain.FromDsl(Chores).Domain;
 
         var ex = Assert.Throws<InvalidOperationException>(
-            () => Export(format, true, domain, DomainSession.ForExtensions([])));
+            () => Export(format, true, domain, BinderlessSession()));
 
         await Assert.That(ex.Message).Contains("Task.Overdue (entity)");
     }
@@ -68,7 +70,7 @@ public class DomainExportContextTests {
     [Arguments("html")]
     public async Task Export_DomainBoundToASessionWithoutTheBinder_FailsClosedNamingThePolicy(string format) {
         var domain = EvolvedDomain.FromDsl(Chores).Domain;
-        RuntimeAnalysisCache.Bind(domain, DomainSession.ForExtensions([]));
+        RuntimeAnalysisCache.Bind(domain, BinderlessSession());
 
         var ex = Assert.Throws<InvalidOperationException>(() => Export(format, false, domain));
 

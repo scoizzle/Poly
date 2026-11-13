@@ -436,7 +436,7 @@ public static class PolyEdit {
             if (marked)
                 return DslGrammar.IsValueWord(first) ? "value" : "entity";
             if (reader.Peek(1).Kind == DslTokenKind.Colon)
-                return DslTokenText.LegacyText(reader.Peek(2)) switch {
+                return DslTokenText.Word(reader.Peek(2)) switch {
                     "enum" => "enum",
                     "value" => "value",
                     "contract" => "contract",

@@ -148,7 +148,7 @@ public sealed class DslOutline {
             while (i < tokens.Count) {
                 var t = tokens[i];
                 if (t.Kind == DslTokenKind.Domain && i + 1 < tokens.Count) {
-                    nodes.Add(Make("domain", DslTokenText.LegacyText(tokens[i + 1]), "$domain", i, i + 1, false, -1, -1, []));
+                    nodes.Add(Make("domain", Label(tokens[i + 1]), "$domain", i, i + 1, false, -1, -1, []));
                     i += 2;
                     continue;
                 }
@@ -163,7 +163,7 @@ public sealed class DslOutline {
                 }
 
                 if (t.Kind == DslTokenKind.Public && i + 2 < tokens.Count
-                    && (tokens[i + 1].Kind == DslTokenKind.Entity || DslTokenText.LegacyText(tokens[i + 1]) == "value")) {
+                    && (tokens[i + 1].Kind == DslTokenKind.Entity || DslGrammar.IsValueWord(tokens[i + 1]))) {
                     i = MarkedTop(i, nodes);
                     continue;
                 }
@@ -331,10 +331,14 @@ public sealed class DslOutline {
             return false;
         }
 
+        /// <summary>A node label: an identifier's name; any other token (number, string, punctuation) by its source slice, never decoded as a word.</summary>
+        private static string Label(DslToken token) =>
+            token.Kind == DslTokenKind.Identifier ? token.Name() : token.Span.ToString();
+
         private int TopLevel(int start, List<OutlineNode> nodes) {
             // TopLevel starts at IsNameColon, so the name is an identifier; the kind word is unchecked.
             var name = tokens[start].Name();
-            var word = start + 2 < tokens.Count ? DslTokenText.LegacyText(tokens[start + 2]) : "";
+            var word = start + 2 < tokens.Count ? DslTokenText.Word(tokens[start + 2]) : "";
             var kind = _topKinds.Contains(word) ? word : "unknown";
             var end = start + 1;
             var open = -1;
@@ -363,8 +367,8 @@ public sealed class DslOutline {
         }
 
         private int MarkedTop(int start, List<OutlineNode> nodes) {
-            var kind = DslTokenText.LegacyText(tokens[start + 1]);
-            var name = DslTokenText.LegacyText(tokens[start + 2]);
+            var kind = tokens[start + 1].Name();
+            var name = Label(tokens[start + 2]);
             var end = start + 2;
             var open = -1;
             var close = -1;
@@ -476,7 +480,7 @@ public sealed class DslOutline {
 
             if (t.Kind == DslTokenKind.Public && i + 2 < tokens.Count && tokens[i + 1].Kind == DslTokenKind.Action) {
                 kind = "action";
-                name = DslTokenText.LegacyText(tokens[i + 2]);
+                name = Label(tokens[i + 2]);
                 skip = 3;
                 return true;
             }

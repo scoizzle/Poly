@@ -19,8 +19,8 @@ namespace Poly.Tests.Polyc;
 /// <para>There is no pass registry in the product, so the passes driven at 256 are a fixed list, each named by its
 /// facade: parse = <c>DslExpressionFragment.ParseOnThisThread</c>; analysis = <c>DomainSession.Analyze</c>; lowering =
 /// <c>DomainExpressionLoweringPass.Lower</c>; DSL print = <c>DomainDslPrinter.Print</c>. The VM legs
-/// (<c>Interpreter.Compile</c>, <c>PolyCompiler.Produce</c>, policy evaluation) are a NAMED KNOWN GAP, see
-/// <see cref="VmCompile_LongAndChain_IsPinnedAt16Operands_Issue823"/>.</para>
+/// (<c>PolyCompiler.Produce</c>, policy evaluation) are
+/// <see cref="VmCompile_LongAndChain_AtParserLimit_CompilesAndEvaluates"/>.</para>
 /// </summary>
 [NotInParallel("ChildProcessSlots")]
 public class RecursivePassDepthTests {
@@ -190,15 +190,14 @@ public class RecursivePassDepthTests {
     }
 
     /// <summary>
-    /// NAMED KNOWN GAP (lock amendment 13): <c>Interpreter.Compile</c> is exponential in the length of a left-nested
-    /// <c>and</c> chain on master (about 2x per operand), so the VM legs, <c>PolyCompiler.Produce</c> and policy
-    /// evaluation, are only shown at 16 operands, where they compile and evaluate correctly. Tracked in issue #823,
-    /// row X-12, which extends this to 256 operands and deletes this pin. It runs on a 16 MB thread: it pins
-    /// correctness at a length the compiler can finish, not stack depth.
+    /// The VM legs (<c>PolyCompiler.Produce</c> and policy evaluation) at the parser's longest legal <c>and</c> chain:
+    /// 257 operands, 256 levels. #823 (row X-12) fixed the exponential <c>Interpreter.Compile</c> that held this pin
+    /// at 16 operands; G-25 raises it to the limit. It stays in-process on a 16 MB thread (lock amendment 8): it pins
+    /// correctness at the limit, and small-stack VM coverage lives only in the child-process grid.
     /// </summary>
     [Test]
-    public async Task VmCompile_LongAndChain_IsPinnedAt16Operands_Issue823() {
-        var body = string.Join(" and ", Enumerable.Repeat("Flag", 16));
+    public async Task VmCompile_LongAndChain_AtParserLimit_CompilesAndEvaluates() {
+        var body = string.Join(" and ", Enumerable.Repeat("Flag", Limit + 1));
         var (_, compiled) = Analyzed(body);
 
         var outcome = OnStack(LargeStackBytes, () => {

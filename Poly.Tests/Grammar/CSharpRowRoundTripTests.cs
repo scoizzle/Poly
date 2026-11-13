@@ -153,6 +153,35 @@ public class CSharpRowRoundTripTests {
         await Assert.That(() => CSharpLanguage.Write(Unit(loop))).Throws<InvalidOperationException>();
     }
 
+    // ── block-bodied lambdas ─────────────────────────────────────────────────
+
+    [Test]
+    [Arguments("Func<long, long> f = x => { return x; };", "lambda-block-ident", "x => {")]
+    [Arguments("Func<long, long> f = (long x) => { return x; };", "lambda-block-parens", "(long x) => {")]
+    [Arguments("Func<Task, Task> f = async x => { await x; };", "lambda-block-ident", "async x => {")]
+    [Arguments("Func<Task, Task> f = async (Task x) => { await x; };", "lambda-block-parens", "async (Task x) => {")]
+    public async Task BlockLambda_PrintsThroughItsOwnRow(string source, string pattern, string prefix) {
+        var unit = CSharpLanguage.Read(source);
+        using var scope = PrintTrace.Begin();
+        var printed = CSharpLanguage.Write(unit);
+
+        var rows = scope.Observations.Where(o => ReferenceEquals(o.Grammar, CSharpLanguage.Grammar)).ToArray();
+        await Assert.That(rows.Where(o => o.Rule == "expr-primary" && o.Pattern == pattern).Select(o => o.Text.Split('\n')[0]))
+            .IsEquivalentTo(new[] { prefix });
+        await Assert.That(rows.Where(o => o.Rule == "expr-primary" && o.Pattern is "lambda-ident" or "lambda-parens")
+            .Any(o => o.Text.Contains("=> {"))).IsFalse();
+        await Assert.That(CSharpLanguage.Write(CSharpLanguage.Read(printed))).IsEqualTo(printed);
+    }
+
+    /// <summary>Green guard: an expression-bodied lambda still prints through <c>lambda-ident</c>.</summary>
+    [Test]
+    public async Task ExpressionLambda_StillPrintsThroughItsExpressionRow() {
+        var unit = CSharpLanguage.Read("Func<long, long> f = x => x;");
+        using var scope = PrintTrace.Begin();
+        CSharpLanguage.Write(unit);
+        await Assert.That(scope.Observations.Any(o => o.Rule == "expr-primary" && o.Pattern == "lambda-ident")).IsTrue();
+    }
+
     /// <summary>Green guard: the fold flattens the wrapper rule, so every member survives a re-read.</summary>
     [Test]
     public async Task EnumMembers_ReReadKeepsEveryMember() {

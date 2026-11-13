@@ -169,8 +169,6 @@ internal static class PatternRowExamples {
         new(CSharp, "expr-primary", "parenthesized", "(a)"),
         new(CSharp, "expr-primary", "cast", "(long)a"),
         new(CSharp, "expr-primary", "base", "base"),
-        new(CSharp, "expr-primary", "lambda-block-ident", "x => { }"),
-        new(CSharp, "expr-primary", "lambda-block-parens", "() => { }"),
         new(CSharp, "expr-primary", "generic-name", "F<int>"),
         new(CSharp, "expr-primary", "type-keyword", "int"),
         new(CSharp, "expr-relational", "type-is", "a is long"),
@@ -237,5 +235,9 @@ internal static class PatternRowFloors {
         ("expr-coalesce", "coalesce"),
         ("postfix-tail", "invoke"),
         ("type-decl", "record"),
+        ("statement", "var-decl"),
+        ("statement", "label"),
+        ("expr-primary", "lambda-block-ident"),
+        ("expr-primary", "lambda-block-parens"),
     ];
 }

@@ -128,8 +128,10 @@ public class PolycLspTests {
         var gate = new ManualResetEventSlim(); // never disposed: a queued blocker may still touch it after the test
         JsonNode? init;
         Client? client = null;
+        var disposeBlocked = false;
         try {
-            ThreadPool.SetMaxThreads(Environment.ProcessorCount, maxIo);
+            if (!ThreadPool.SetMaxThreads(Environment.ProcessorCount, maxIo))
+                throw new InvalidOperationException("The pool could not be capped, so this test would prove nothing.");
             for (var i = 0; i < Environment.ProcessorCount * 4; i++)
                 ThreadPool.UnsafeQueueUserWorkItem(static g => g.Wait(), gate, preferLocal: false);
             client = new Client();
@@ -139,9 +141,13 @@ public class PolycLspTests {
             gate.Set();
             ThreadPool.SetMaxThreads(maxWorkers, maxIo);
             // Off the test thread and bounded: a Dispose that blocks must fail a test, not hang the run.
-            if (client is not null)
-                await Task.WhenAny(Task.Factory.StartNew(client.Dispose, TaskCreationOptions.LongRunning), Task.Delay(TimeSpan.FromSeconds(10)));
+            if (client is not null) {
+                var dispose = Task.Factory.StartNew(client.Dispose, TaskCreationOptions.LongRunning);
+                disposeBlocked = await Task.WhenAny(dispose, Task.Delay(TimeSpan.FromSeconds(10))) != dispose;
+            }
         }
+        if (disposeBlocked)
+            throw new InvalidOperationException("Client.Dispose was still blocked 10s after the pool was released.");
         await Assert.That(init["result"]!["capabilities"]!["hoverProvider"]!.GetValue<bool>()).IsTrue();
     }
 

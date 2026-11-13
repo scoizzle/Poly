@@ -18,9 +18,9 @@ jobs:
     name: Build & test
     runs-on: ubuntu-latest
     # A normal job is about 6 minutes (build, then a 3-4 minute test run). The test run's own
-    # --timeout below (10m) ends a hang first; this is the backstop for everything else
-    # (restore, build, a stuck host), not a budget: it replaces GitHub's 360-minute default.
-    timeout-minutes: 15
+    # --timeout (10m) and the test step's 11m end a hang first and leave the naming and upload
+    # steps room on a cold cache; this is the backstop for everything else, not a budget: it replaces GitHub's 360-minute default.
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -41,32 +41,54 @@ jobs:
       # --timeout ends a hung run by itself (exit 3) after 10 minutes; a normal run is 3-4.
       # It cannot end a test blocked synchronously (the host waits for that thread), so the
       # step's own timeout-minutes is the stop for that case and still leaves the next steps
-      # (which name the unfinished test and upload the log) inside the job's 15 minutes.
+      # (which name the unfinished test and upload the log) inside the job's 20 minutes.
       # The diagnostic log records a start and an end event per test (the console prints only
       # the end), so the next step can name a test that started and never finished.
       - name: Run tests
+        id: tests
         timeout-minutes: 11
         run: >
           dotnet run --project Poly.Tests/Poly.Tests.csproj --no-restore --
           --timeout 10m
           --diagnostic --diagnostic-output-directory "$RUNNER_TEMP/test-diag" --diagnostic-synchronous-write
 
+      # Runs on every build, so each green run proves the parser still matches the log: it fails
+      # (::error::) when there is no diagnostic file or no start record, and prints the counts.
+      # Starts and ends are compared as multisets (no de-duplication), so a test that started N
+      # times and finished N-1 times is listed. A test the per-test [Timeout] already failed
+      # counts as finished, so tests that ended Timeout/Cancelled/Failed/Error are listed too.
       - name: Name tests that started and never finished
-        if: ${{ !success() }}
+        if: ${{ always() && steps.tests.conclusion != 'skipped' }}
         run: |
           shopt -s nullglob
-          for f in "$RUNNER_TEMP"/test-diag/*.diag; do
+          files=("$RUNNER_TEMP"/test-diag/*.diag)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "::error::no .diag file in $RUNNER_TEMP/test-diag after the test step ran"
+            exit 1
+          fi
+          rc=0
+          for f in "${files[@]}"; do
             records=$(awk '/^20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]T/ { if (r != "") print r; r = ""; next } /^TestNodeUpdateMessage \{/ { r = $0; next } r != "" { r = r " " $0 } END { if (r != "") print r }' "$f")
-            uid() { sed -n 's/.*TestNode { Uid = TestNodeUid { Value = \([^ ]*\) }.*/\1/p' | sort -u; }
+            uid() { sed -n 's/.*TestNode { Uid = TestNodeUid { Value = \(.*\) }, DisplayName = .*/\1/p' | sort; }
             started=$(printf '%s\n' "$records" | grep 'InProgressTestNodeStateProperty' | uid)
             finished=$(printf '%s\n' "$records" | grep -E '(Passed|Failed|Error|Timeout|Cancelled|Skipped)TestNodeStateProperty' | uid)
-            echo "started: $(printf '%s\n' "$started" | grep -c .), finished: $(printf '%s\n' "$finished" | grep -c .)"
+            bad=$(printf '%s\n' "$records" | grep -E '(Failed|Error|Timeout|Cancelled)TestNodeStateProperty' | uid)
+            ns=$(printf '%s\n' "$started" | grep -c .) || true
+            nf=$(printf '%s\n' "$finished" | grep -c .) || true
+            echo "$(basename "$f"): started: $ns, finished: $nf"
+            if [ "$ns" -eq 0 ]; then
+              echo "::error::no test start record parsed from $f; the log format may have changed"
+              rc=1
+            fi
             echo "started and never finished:"
-            comm -23 <(printf '%s\n' "$started") <(printf '%s\n' "$finished") | sed 's/^/  /'
+            comm -23 <(printf '%s\n' "$started") <(printf '%s\n' "$finished") | grep . | sed 's/^/  /' || true
+            echo "ended Failed, Error, Timeout or Cancelled (a Timeout may leave its thread stuck):"
+            printf '%s\n' "$bad" | grep . | sed 's/^/  /' || true
           done
+          exit $rc
 
       - name: Upload test diagnostics
-        if: always()
+        if: ${{ failure() || cancelled() }}
         uses: actions/upload-artifact@v4
         with:
           name: test-diagnostics

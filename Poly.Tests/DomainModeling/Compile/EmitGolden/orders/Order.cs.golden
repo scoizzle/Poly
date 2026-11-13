@@ -42,6 +42,7 @@ internal class Order : Poly.Runtime.IActionScoped
     public OrderStage CurrentStage { get; private set; }
     internal void AttachItems(OrderItem child)
     {
+        Poly.Runtime.ActionScope.Touch(this);
         this._items.Add(child);
     }
     internal DomainResult Cancel(string reason)
@@ -50,6 +51,7 @@ internal class Order : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfCancel(reason);
             if (!__result.IsSuccess)
             {
@@ -89,6 +91,7 @@ internal class Order : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfApplyDiscount(amount);
             if (!__result.IsSuccess)
             {
@@ -126,6 +129,7 @@ internal class Order : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfPay();
             if (!__result.IsSuccess)
             {
@@ -159,6 +163,7 @@ internal class Order : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfShip();
             if (!__result.IsSuccess)
             {
@@ -218,6 +223,7 @@ internal class Order : Poly.Runtime.IActionScoped
             return DomainResult<Order>.Failure(Poly.Runtime.DomainFailure.Length("'CancelReason' must be at most 200 characters.", "Order.CancelReason"));
         }
         var created = new Order(total, discount, cancelReason, customer, items, state);
+        Poly.Runtime.ActionScope.Create(created, "Order");
         if (customer != null)
         {
             customer.AttachOrders(created);

@@ -24,6 +24,7 @@ internal class Doctor : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfStartShift();
             if (!__result.IsSuccess)
             {
@@ -81,6 +82,7 @@ internal class Doctor : Poly.Runtime.IActionScoped
             return DomainResult<Doctor>.Failure(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'LicenseNo' value is already used on another 'Doctor'.", "Doctor.LicenseNo"));
         }
         var created = new Doctor(name, licenseNo, schedule);
+        Poly.Runtime.ActionScope.Create(created, "Doctor");
         db.Record("Doctor", "LicenseNo", licenseNo);
         return DomainResult<Doctor>.Success(created);
     }

@@ -49,6 +49,7 @@ internal class RoomType : Poly.Runtime.IActionScoped
             return DomainResult<RoomType>.Failure(Poly.Runtime.DomainFailure.Range("'MaxOccupancy' must be <= 8.", "RoomType.MaxOccupancy"));
         }
         var created = new RoomType(name, nightlyRate, maxOccupancy);
+        Poly.Runtime.ActionScope.Create(created, "RoomType");
         return DomainResult<RoomType>.Success(created);
     }
     public object __Snapshot()

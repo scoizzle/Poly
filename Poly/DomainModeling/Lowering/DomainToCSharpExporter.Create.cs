@@ -524,6 +524,9 @@ public sealed partial class DomainToCSharpExporter {
             new New(
                 new NamedTypeReference(entity.Name),
                 ctorParams.ToArray())));
+        // The open action scope records what it created, after `new` and before any peer attach (L-03c F3; L-04's
+        // initial-stage entry follows this line). A no-op with no scope open.
+        createSuccessNodes.Add(ActionScopeCall("Create", createdLocal, new Constant(entity.Name)));
         var lookup = metadata.GetTypeLookup(domain);
         foreach (var navParam in esm.ConstructorParameters
             .Where(p => p.IsNavigation && !p.IsCollection)) {

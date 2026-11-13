@@ -1,4 +1,5 @@
 using Poly.Interpretation;
+using Poly.Interpretation.Analysis.Semantics;
 using Poly.Interpretation.Vm;
 using Poly.Introspection;
 using Poly.Tests.DomainModeling.Lowering;
@@ -22,7 +23,8 @@ public enum OperandExpect {
 /// analysis must do with it, and the result type and value a row that runs must produce.
 /// <see cref="ResultType"/> is the type the node yields (a comparison yields Boolean); the typed read uses it.
 /// <see cref="OperandCommonType"/> is the type <c>GetCommonType</c> over the operands should answer, or null where the
-/// row has no common type (it rejects, or the node is not an operand pair); T-17 swaps only this literal.
+/// row has no common type (it rejects, or the node is not an operand pair); T-17 swapped the literal of every arithmetic row for the
+/// provider's answer (ArithmeticRows_OperandCommonType_IsTheProvidersCommonType).
 /// <see cref="Read"/> replaces the typed read with an untyped one. It is temporary, used only by the two #805 rows,
 /// and T-21 deletes it with them.
 /// </summary>
@@ -88,10 +90,10 @@ public class LoweredTreeOperandCoverageTests {
         // Add: common type is the wider arithmetic type, or string when one side is text.
         Row(typeof(Add), "DecimalNumber", Converts, () => Wrap(new Add(Dec(), Num())), [1.5m, 5L], typeof(decimal), 6.5m, operandType: typeof(decimal)), // operand common type decimal: long widens to decimal
         Row(typeof(Add), "NumberDecimal", Converts, () => Wrap(new Add(Num(), Dec())), [5L, 1.5m], typeof(decimal), 6.5m, operandType: typeof(decimal)), // operand common type decimal: long widens to decimal
-        Row(typeof(Add), "TextNumber", Converts, () => Wrap(new Add(Txt(), Num())), ["a", 2L], typeof(string), "a2", operandType: typeof(string)), // operand common type string: string concatenation
-        Row(typeof(Add), "NumberText", Converts, () => Wrap(new Add(Num(), Txt())), [2L, "a"], typeof(string), "2a", operandType: typeof(string)), // operand common type string: string concatenation
+        Row(typeof(Add), "TextNumber", Converts, () => Wrap(new Add(Txt(), Num())), ["a", 2L], typeof(string), "a2"), // operand common type: none, concatenation is an operator the provider states (String + Object), not a conversion; T-17 replaced the literal string
+        Row(typeof(Add), "NumberText", Converts, () => Wrap(new Add(Num(), Txt())), [2L, "a"], typeof(string), "2a"), // operand common type: none, concatenation is an operator the provider states (Object + String), not a conversion; T-17 replaced the literal string
         Row(typeof(Add), "NumberNumber", Accepts, () => Wrap(new Add(Num(), Num("m"))), [2L, 3L], typeof(long), 5L, operandType: typeof(long)), // operand common type long: identical operand types
-        Row(typeof(Add), "OptionalNumber", Accepts, () => Wrap(new Add(OptNum(), Num())), [3L, 2L], typeof(long?), 5L, operandType: typeof(long?)), // operand common type long?: nullable lift keeps long?
+        Row(typeof(Add), "OptionalNumber", Accepts, () => Wrap(new Add(OptNum(), Num())), [3L, 2L], typeof(long?), 5L, operandType: typeof(long?)), // operand common type long?: the run, not the prediction: GetCommonType answers long? (long converts to long? implicitly); the lifted Add result is T-06's
         Row(typeof(Add), "EntityNumber", Rejects, () => Wrap(new Add(Ent(), Num())), [new Item(1m), 2L]), // operand common type: none, an entity has no + with a number
         Row(typeof(Add), "Float64Decimal", Rejects, () => Wrap(new Add(Flt(), Dec())), [1.5, 1.5m]), // operand common type: none, C# defines no double + decimal
         Row(typeof(Add), "ConstantPairFolding", Converts, () => Wrap(new Add(new Constant(1.5m), new Constant(2L))), [], typeof(decimal), 3.5m, operandType: typeof(decimal)), // operand common type decimal: long widens to decimal; T-20 folding
@@ -434,6 +436,39 @@ public class LoweredTreeOperandCoverageTests {
         if (ledgered is null)
             Assert.Fail($"unledgered gap: {SeedLine(row, seen)}");
         await Assert.That(ledgered!.Observed).IsEqualTo(seen.Observed);
+    }
+
+    /// <summary>
+    /// T-17: <c>OperandCommonType</c> of every arithmetic row is what the provider's <c>GetCommonType()</c> answers for the
+    /// operand types of its first arithmetic node (a literal no longer stands in). A concat row (Text with a number) has no common
+    /// type by design (concatenation is an operator, not a conversion), so those two literals are null; <c>long?</c> with <c>long</c> has
+    /// <c>long?</c> (the lock expected none: the run says the implicit conversion exists).
+    /// </summary>
+    [Test]
+    public async Task ArithmeticRows_OperandCommonType_IsTheProvidersCommonType() {
+        var arithmetic = new[] { typeof(Add), typeof(Subtract), typeof(Multiply), typeof(Divide), typeof(Modulo) };
+        var problems = new List<string>();
+        var checkedRows = 0;
+        foreach (var row in Rows.Where(row => arithmetic.Contains(row.Kind))) {
+            var root = row.Build();
+            var analysis = Interpreter.Analyze(root);
+            var node = Walk(root).First(candidate => candidate.GetType() == row.Kind);
+            var operands = node.Children.Where(static child => child is not null).Take(2)
+                .Select(child => analysis.GetResolvedType(child!)
+                    ?? (child is Constant { Value: { } value } ? analysis.TypeDefinitions.GetTypeDefinition(value.GetType()) : null))
+                .ToArray();
+            checkedRows++;
+            if (operands.Any(static operand => operand is null)) {
+                problems.Add($"{row}: an operand has no type");
+                continue;
+            }
+            var common = operands.Cast<ITypeDefinition>().GetCommonType()?.GetRuntimeType();
+            if (common != row.OperandCommonType)
+                problems.Add($"{row}: GetCommonType {common?.Name ?? "none"}, literal {row.OperandCommonType?.Name ?? "none"}");
+        }
+        await Assert.That(problems).IsEmpty();
+        await Assert.That(checkedRows).IsEqualTo(Rows.Count(row => arithmetic.Contains(row.Kind)));
+        await Assert.That(checkedRows).IsGreaterThan(0);
     }
 
     [Test]

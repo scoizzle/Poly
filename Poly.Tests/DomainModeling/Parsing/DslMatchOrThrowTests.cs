@@ -13,19 +13,8 @@ namespace Poly.Tests.DomainModeling.Parsing;
 public sealed class DslMatchOrThrowTests {
     private static Grammar<DslToken, DslTokenKind> Table(Action<GrammarBuilder<DslToken, DslTokenKind>> rows) => DslGrammar.Build(rows);
 
-    // Over the whole token list, as the resolver reads (a buffered reader drops nothing on a Consume before its first Peek).
-    private static DslCursor Cursor(Grammar<DslToken, DslTokenKind> grammar, string text) {
-        var scanner = new DslTokenReader(text);
-        var tokens = new List<DslToken>();
-        for (var t = scanner.Peek(); ; t = scanner.Peek()) {
-            tokens.Add(t);
-            if (t.Kind == DslTokenKind.EndOfFile)
-                break;
-            scanner.Consume(1);
-        }
-        return new(new ListTokenReader<DslToken, DslTokenKind>(tokens, kind => kind == DslTokenKind.EndOfFile),
-            reader => new Matcher<DslToken, DslTokenKind>(grammar, reader));
-    }
+    private static DslCursor Cursor(Grammar<DslToken, DslTokenKind> grammar, string text) =>
+        new(new DslTokenReader(text), reader => new Matcher<DslToken, DslTokenKind>(grammar, reader));
 
     private static GrammarException Thrown(Action act) {
         try {

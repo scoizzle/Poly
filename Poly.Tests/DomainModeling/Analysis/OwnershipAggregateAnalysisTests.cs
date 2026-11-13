@@ -509,33 +509,41 @@ public class OwnershipAggregateAnalysisTests {
         """;
 
     [Test]
-    public async Task Master_MutuallyOwnedEntities_AnalyseClean_Pin() {
-        // #586 on master: the repro has no error and no warning (a pure inverse pair is
-        // dropped from CrossReferencePass's DMDEP001 graph), so Lower runs on it.
+    public async Task MutuallyOwnedEntities_OnlyTheCycleError_NoWarning() {
+        // Master (characterised in 3f9d12c4): no error and no warning, because a pure
+        // inverse pair is dropped from CrossReferencePass's DMDEP001 graph. Now the one
+        // error is the ownership cycle, and DMDEP001 still stays silent.
         var (_, analysis) = Run(MutuallyOwnedRepro);
-        await Assert.That(AllErrors(analysis)).IsEmpty();
+        await Assert.That(string.Join(",", AllErrors(analysis).Select(static d => d.Code))).IsEqualTo("DMDEP002");
         await Assert.That(Warnings(analysis)).IsEmpty();
     }
 
     [Test]
-    public async Task Master_MutuallyOwnedEntities_AggregateTerminates_Pin() {
-        // The aggregate pass follows ownership parents. On the repro it terminates (the
-        // ResolvesTo guard stops the two-node loop) and a parentless entity is a root.
-        var (domain, analysis) = Analyze(MutuallyOwnedRepro);
-        var aggregate = Aggregate(analysis, domain);
-        await Assert.That(aggregate.Entities.Count).IsEqualTo(2);
-        await AssertParentInvariant(aggregate);
+    public async Task MutuallyOwnedEntities_AnalysisTerminates_AndReportsTheCycle() {
+        // Master pinned the aggregate built on the repro (it terminates: the ResolvesTo guard
+        // stops the two-node loop). A failed evolve keeps no aggregate to read back, so the
+        // proof now is that the whole pipeline, which runs OwnershipAggregatePass, returns
+        // and carries the cycle error: no pass loops on the cycle.
+        var (_, analysis) = Run(MutuallyOwnedRepro);
+        await Assert.That(Errors(analysis, Cycle).Count).IsEqualTo(1);
     }
 
     [Test]
-    public async Task Master_MutuallyOwnedEntities_LowerAndPrintCSharp_Pin() {
-        // Downstream of analysis, master lowers and prints the repro without throwing
-        // (the issue: "the C# export ignores ownership entirely for the pair").
+    public async Task MutuallyOwnedEntities_FailAnalysis_BeforeLower() {
+        // Master lowered and printed the repro (the issue: "the C# export ignores
+        // ownership entirely for the pair"). Analysis now fails closed, so Lower is never
+        // reached; the same shape with the cycle broken still lowers and prints.
         var session = ParitySessions.Create(ExtensionCatalog.ProductAuthoring);
         var evolved = new DomainEvolution(DomainTestFactory.Create("_", [], []))
             .ApplyAndAnalyze(new PolyDslParser(MutuallyOwnedRepro, session).Parse(), session: session);
-        await Assert.That(evolved.Succeeded).IsTrue();
-        var cs = new CSharpGenerator().Generate(session.Lower(evolved.Root!, evolved.Analysis));
+        await Assert.That(evolved.Succeeded).IsFalse();
+
+        var brokenSession = ParitySessions.Create(ExtensionCatalog.ProductAuthoring);
+        var broken = new DomainEvolution(DomainTestFactory.Create("_", [], []))
+            .ApplyAndAnalyze(new PolyDslParser(MutuallyOwnedRepro.Replace("a: owned A", "a: A", StringComparison.Ordinal), brokenSession).Parse(),
+                session: brokenSession);
+        await Assert.That(broken.Succeeded).IsTrue();
+        var cs = new CSharpGenerator().Generate(brokenSession.Lower(broken.Root!, broken.Analysis));
         await Assert.That(cs).Contains("class A");
         await Assert.That(cs).Contains("class B");
     }
@@ -578,15 +586,15 @@ public class OwnershipAggregateAnalysisTests {
     }
 
     [Test]
-    public async Task Master_ThreeEntityOwnedRing_AnalysesClean_Pin() {
-        // Master accepts the three-entity ring too (no errors); V-14 moves it.
+    public async Task ThreeEntityOwnedRing_OnlyTheCycleError() {
+        // Master (characterised in 3f9d12c4) accepted the three-entity ring with no error.
         var (_, analysis) = Run("""
             domain Ring
             A: entity { b: owned B }
             B: entity { c: owned C }
             C: entity { a: owned A }
             """);
-        await Assert.That(AllErrors(analysis)).IsEmpty();
+        await Assert.That(string.Join(",", AllErrors(analysis).Select(static d => d.Code))).IsEqualTo("DMDEP002");
     }
 
     // ── V-14 (#586, OQ-14): a multi-entity ownership cycle is an analysis error ───────────────

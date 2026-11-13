@@ -12,7 +12,6 @@ public sealed record KnownOperandGap(int Issue, string Owner, string Kind, strin
 public static class KnownOperandGaps {
     public static IReadOnlyList<KnownOperandGap> All { get; } = [
         new(812, "T-22", "Add", "EntityNumber", "analysis=unchanged;compile=ok"),
-        new(815, "T-18", "Add", "Float64Decimal", "analysis=converted;compile=ok"),
         new(812, "T-22", "Assignment", "IndexTextIntoNumberArray", "analysis=unchanged;compile=ok"),
         new(812, "T-22", "Await", "NumberOperand", "analysis=unchanged;compile=backstop"),
         new(812, "T-22", "BitwiseAnd", "NumberDecimal", "analysis=unchanged;compile=backstop"),
@@ -37,7 +36,6 @@ public static class KnownOperandGaps {
         new(813, "T-09", "Conditional", "ThreeArmsTextInside", "analysis=unchanged;compile=backstop"),
         new(812, "T-22", "DoWhileLoop", "NumberCondition", "analysis=unchanged;compile=ok"),
         new(812, "T-22", "Equal", "EntityNumber", "analysis=unchanged;compile=ok"),
-        new(815, "T-18", "Equal", "Float64Decimal", "analysis=unchanged;compile=ok"),
         new(814, "T-21", "ForEachLoop", "DeclaredDecimalElementNumber", "analysis=unchanged;compile=backstop"),
         new(812, "T-22", "ForLoop", "NumberCondition", "analysis=unchanged;compile=ok"),
         new(812, "T-22", "IfStatement", "NumberCondition", "analysis=unchanged;compile=ok"),
@@ -46,8 +44,6 @@ public static class KnownOperandGaps {
         new(812, "T-22", "IndexAccess", "IndexText", "analysis=unchanged;compile=ok"),
         new(814, "T-21", "Lambda", "ArgumentNumberForDecimalParameter", "analysis=unchanged;compile=ok"),
         new(812, "T-22", "Lambda", "ArgumentTextForNumberParameter", "analysis=unchanged;compile=ok"),
-        new(815, "T-18", "LessThan", "Float64Decimal", "analysis=unchanged;compile=ok"),
-        new(815, "T-18", "Multiply", "Float64Decimal", "analysis=converted;compile=ok"),
         new(814, "T-21", "New", "ArgumentNumberForDecimalParameter", "analysis=unchanged;compile=ok"),
         new(812, "T-22", "NewArray", "LengthDecimal", "analysis=unchanged;compile=ok"),
         new(812, "T-22", "NewArray", "LengthText", "analysis=unchanged;compile=ok"),

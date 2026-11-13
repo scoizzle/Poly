@@ -563,16 +563,37 @@ public class ConstantFoldingTests {
         await Assert.That(Fold(ast).GetConstantValue(ast) is true).IsTrue();
     }
 
+    /// <summary>T-20: C# defines no <c>ulong &gt; int</c> (the provider states none), so the pass declines; it folded
+    /// to true before. Declining is value-neutral: the VM still answers true at run time.</summary>
     [Test]
-    public async Task ULongMax_GreaterThan_One_FoldsTrue() {
+    public async Task ULongMax_GreaterThan_IntOne_DeclinesAsProviderUndefined_AndTheVmAnswersTrue() {
         var ast = new GreaterThan(Wrap(ulong.MaxValue), Wrap(1));
-        await Assert.That(Fold(ast).GetConstantValue(ast) is true).IsTrue();
+        await Assert.That(Fold(ast).IsConstant(ast)).IsFalse();
+        using var exec = Interpreter.Execute(Interpreter.Compile(ast));
+        await Assert.That(exec.GetValue<bool>()).IsTrue();
     }
 
     [Test]
-    public async Task SignedMinusOne_Equal_ULongMax_FoldsFalse() {
+    public async Task ULongMax_GreaterThan_ULongOne_FoldsTrue() {
+        var ast = new GreaterThan(Wrap(ulong.MaxValue), Wrap(1UL));
+        await Assert.That(Fold(ast).GetConstantValue(ast) is true).IsTrue();
+    }
+
+    /// <summary>T-20: C# defines no <c>int == ulong</c>, so the pass declines; it folded to false before. T-18: -1 is
+    /// not in range for <c>ulong</c> (no constant conversion, spec 10.2.11), so compile rejects the tree, as C# does.</summary>
+    [Test]
+    public async Task SignedMinusOne_Equal_ULongMax_DeclinesToFold_AndCompileIsRejected() {
         var ast = new Equal(Wrap(-1), Wrap(ulong.MaxValue));
-        await Assert.That(Fold(ast).GetConstantValue(ast) is false).IsTrue();
+        await Assert.That(Fold(ast).IsConstant(ast)).IsFalse();
+        await Assert.That(() => Interpreter.Compile(ast))
+            .Throws<InvalidOperationException>()
+            .WithMessage("VM compile rejected: comparison between incompatible types 'Int32' and 'UInt64': no Equal operator for these types");
+    }
+
+    [Test]
+    public async Task SignedMinusOne_Equal_LongMinusOne_FoldsTrue() {
+        var ast = new Equal(Wrap(-1), Wrap(-1L));
+        await Assert.That(Fold(ast).GetConstantValue(ast) is true).IsTrue();
     }
 
     [Test]

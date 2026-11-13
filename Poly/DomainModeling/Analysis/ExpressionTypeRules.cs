@@ -53,7 +53,8 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
 
     private static string Describe(ExprType t) => Family(t) switch {
         TypeFamily.Text => "Text",
-        TypeFamily.Number => "Number",
+        // Only Decimal is distinct (#581); Float and Int32 keep the family name.
+        TypeFamily.Number => t.Definition?.PrimitiveType is Prim.Decimal ? "Decimal" : "Number",
         TypeFamily.Boolean => "Boolean",
         TypeFamily.Date => $"Date ({t.DomainName ?? "date"})",
         TypeFamily.Time => $"Time ({t.DomainName ?? "time"})",
@@ -123,7 +124,12 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
     }
 
     private static string FractionalLiteralMessage(Literal literal, string typeName) {
-        var message = $"Fractional literal is not legal on {typeName}. Use Decimal.";
+        // An integer-valued literal beyond the 64-bit range (9223372036854775808, 5.0e19) is out of range,
+        // not fractional (#515). 5.0 and 1.5 stay fractional: the parser keeps no spelling.
+        var message = literal.Value is decimal value && decimal.Truncate(value) == value
+            && (value > long.MaxValue || value < long.MinValue)
+            ? $"Integer literal {value} is out of range for Number (64-bit)"
+            : $"Fractional literal is not legal on {typeName}. Use Decimal.";
         if (literal.Line > 0)
             message += $" (line {literal.Line}, col {literal.Col})";
         return message;

@@ -40,10 +40,10 @@ public class AtomicityParityTests {
         return (cs, ExportedCSharp.CompileAndLoad(cs, assemblyName));
     }
 
-    private delegate void Steps(ParitySide side, Action<string, (string Name, object? Value)[]> fail);
+    internal delegate void Steps(ParitySide side, Action<string, (string Name, object? Value)[]> fail);
 
     /// <summary>The three assertions, over the normal run and the scope-only run. Returns the normal run.</summary>
-    private static async Task<(IReadOnlyList<ParityOutcome> Simulate, IReadOnlyList<ParityOutcome> Printed)> AssertRollsBack(
+    internal static async Task<(IReadOnlyList<ParityOutcome> Simulate, IReadOnlyList<ParityOutcome> Printed)> AssertRollsBack(
         string dsl, string assemblyName, Steps steps) {
         var scenario = ParityScenario.FromDsl(dsl, assemblyName, recordGraph: true);
         (IReadOnlyList<ParityOutcome> Simulate, IReadOnlyList<ParityOutcome> Printed)? normal = null;
@@ -351,16 +351,22 @@ public class AtomicityParityTests {
         });
     }
 
-    // Amendment 4: a handler's assign-range failure after the transition that fired it. The handler still throws
-    // (L-04 owns the returned failure); the throw unwinds through the wrapper, which rolls the transition back.
+    // Amendment 4: a handler's assign-range failure after the transition that fired it. L-04a: the handler RETURNS the
+    // typed failure (it threw before), the notify site returns it to the wrapper, and the wrapper rolls the transition back.
     [Test]
     public async Task Handler_WhenItsAssignBreaksARangeAfterTheTransition_RestoresTheTransition() {
-        await AssertRollsBack(HandlerDsl, "AtomicityHandlerRange", (side, fail) => {
+        var (simulate, printed) = await AssertRollsBack(HandlerDsl, "AtomicityHandlerRange", (side, fail) => {
             var item = side.Create("Item");
             side.Create("Owner", ("items", new[] { item! }));
             side.Use(item);
             fail("Close", []);
         });
+
+        foreach (var outcome in new[] { simulate[^1], printed[^1] }) {
+            await Assert.That(outcome.ExceptionType).IsNull();
+            await Assert.That(outcome.FailureKind).IsEqualTo("Range");
+            await Assert.That(outcome.Message!).Contains("'Seen' must be >= 0");
+        }
     }
 
     // G5, the #818 repro: the nested wrapper of the failing callee rolls the frame back mid-cascade, then the cascade
@@ -690,6 +696,127 @@ public class AtomicityParityTests {
 
     private static object Unwrap(object result) =>
         result.GetType().GetProperty("Value")!.GetValue(result)!;
+
+    // ── L-04a: the initial stage's entry runs in Create, which returns its failure ────────────
+
+    private static readonly string EntryRangeDsl = InitialEntryDomains.Dsl("assign Score to Cap");
+
+    // The row's red test (#683 L-04): a range broken by the initial entry's assign is a returned, typed failure on both
+    // hosts. It used to throw ConstraintFailureException out of the constructor, which the harness records without a
+    // failure kind.
+    [Test]
+    public async Task Create_WhenInitialEntryEffectBreaksRange_ReturnsFailureNotException() {
+        var scenario = ParityScenario.FromDsl(EntryRangeDsl, "AtomicityEntryRange", recordGraph: true);
+
+        var (simulate, printed) = scenario.Run(side => side.Create("Kid"));
+
+        await Assert.That(ParityScenario.Differences(simulate, printed)).IsEmpty();
+        foreach (var outcome in new[] { simulate[^1], printed[^1] }) {
+            await Assert.That(outcome.Success).IsFalse();
+            await Assert.That(outcome.ExceptionType).IsNull();
+            await Assert.That(outcome.FailureKind).IsEqualTo("Range");
+            await Assert.That(outcome.FailurePath).IsEqualTo("Kid.Score");
+            await Assert.That(outcome.Message!).Contains("'Score' must be <= 10");
+            await Assert.That(outcome.GraphAfter == outcome.GraphBefore).IsTrue();
+        }
+        await Assert.That(ActionScope.HasOpenScope).IsFalse();
+    }
+
+    // The same entry reached through the holder's create-in: the failure reaches Make with its path prefix, the action
+    // rolls back, and the next action on the holder commits.
+    [Test]
+    public async Task Make_WhenTheKidsEntryAssignBreaksRange_RollsBackAndReturnsTheFailure() {
+        var (simulate, printed) = await AssertRollsBack(EntryRangeDsl, "AtomicityEntryRangeMake", (side, fail) => {
+            side.Create("Holder");
+            fail("Make", []);
+        });
+
+        foreach (var outcome in new[] { simulate[^1], printed[^1] }) {
+            await Assert.That(outcome.ExceptionType).IsNull();
+            await Assert.That(outcome.FailureKind).IsEqualTo("Range");
+            await Assert.That(outcome.FailurePath).IsEqualTo("Holder.Make.Kid.Score");
+            await Assert.That(outcome.State["kids"]).IsEqualTo("0");
+        }
+    }
+
+    // ── the creation order the scope records (lock amendment 5) ───────
+
+    private const string OrderDsl = """
+        domain Order
+        Leaf: entity { N: Number default(0) }
+        Kid: entity {
+          Start: stage { entry { create Leaf { } } }
+        }
+        """;
+
+    // `ActionScope.Create` records the instance after `new` and before the entry runs, so a parent now PRECEDES the
+    // children its entry creates (the child used to come first, because the constructor created it before `Create`
+    // recorded the parent). Rollback order is the reverse of this list, so a child leaves before its parent.
+    [Test]
+    public async Task Create_InsideAnOpenScope_RecordsTheParentBeforeItsEntryCreatedChildren() {
+        var (_, assembly) = Print(OrderDsl, "AtomicityCreateOrder");
+        var token = ActionScope.Begin(null);
+        IReadOnlyList<string> printed;
+        try {
+            ExportedCSharp.CreateEntity(assembly, "Kid");
+            printed = [.. ActionScope.CreatedInstances.Select(c => c.Entity)];
+            ActionScope.Commit(token);
+        }
+        finally {
+            if (ActionScope.HasOpenScope)
+                ActionScope.Rollback(token);
+        }
+
+        var (domain, _) = EvolvedDomain.FromDsl(OrderDsl);
+        var exec = ModuleExec.For(domain);
+        var simToken = ActionScope.Begin(null);
+        IReadOnlyList<string> simulated;
+        try {
+            exec.Create("Kid", new Dictionary<string, object?>());
+            simulated = [.. ActionScope.CreatedInstances.Select(c => c.Entity)];
+            ActionScope.Commit(simToken);
+        }
+        finally {
+            if (ActionScope.HasOpenScope)
+                ActionScope.Rollback(simToken);
+        }
+
+        await Assert.That(string.Join(",", printed)).IsEqualTo("Kid,Leaf");
+        await Assert.That(string.Join(",", simulated)).IsEqualTo("Kid,Leaf");
+    }
+
+    // ── a unique key a failed create reserved (X-04) ──────────────────
+
+    private const string EntryUniqueDsl = """
+        domain EntryUnique
+        Kid: entity {
+          Code: Text unique
+          Cap: Number default(100)
+          Score: Number range(0, 10) default(0)
+          Start: stage { entry { assign Score to Cap } }
+        }
+        """;
+
+    // PINNED, removed by X-04 (the storage journal; the owner's ruling 6843258728 names the release): the unique guard
+    // reserves the key BEFORE `new`, so a create whose entry then fails leaves the key reserved. The failure is returned
+    // (or, on master, thrown); either way the key is held.
+    [Test]
+    public async Task Create_WhenTheEntryFailsAfterTheUniqueGuard_LeavesTheKeyReserved_UntilX04() {
+        var (_, assembly) = Print(EntryUniqueDsl, "AtomicityEntryUnique");
+        var port = new RecordingStoragePort();
+        var type = assembly.GetType("Kid")!;
+        object? result = null;
+        try {
+            result = ExportedCSharp.InvokeCreate(type, ("code", "k"), ("db", port));
+        }
+        catch (TargetInvocationException) {
+            // master: the entry threw out of the constructor
+        }
+
+        if (result is not null)
+            await Assert.That((bool)result.GetType().GetProperty("IsSuccess")!.GetValue(result)!).IsFalse();
+        await Assert.That(port.Exists("Kid", "Code", "k")).IsTrue().Because("X-04 releases a key a failed create reserved");
+    }
 
     // ── the factory records what it created (F3, amendment 8) ─────────
 

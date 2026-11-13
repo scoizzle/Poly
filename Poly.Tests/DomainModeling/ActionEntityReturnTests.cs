@@ -1288,11 +1288,11 @@ public class ActionEntityReturnTests {
             """);
         var exec = ModuleExec.For(domain);
         var guestEntity = domain.Types.OfType<Entity>().First(e => e.Name == "Guest");
-        // DomainEntityInstance.Create threw ConstraintFailureException. The module
-        // factory still throws from the void entry effect; a result would diverge.
-        await Assert.That(() => exec.Create(guestEntity.Name, new Dictionary<string, object?>()))
-            .Throws<ConstraintFailureException>()
-            .WithMessageContaining("Code");
+        // L-04a: the initial stage's entry runs in Create and Create returns its failure (it threw
+        // ConstraintFailureException from the void constructor before).
+        var created = exec.Create(guestEntity.Name, new Dictionary<string, object?>());
+        await Assert.That(created.Succeeded).IsFalse();
+        await Assert.That(created.Error!).Contains("Code");
     }
 
     [Test]

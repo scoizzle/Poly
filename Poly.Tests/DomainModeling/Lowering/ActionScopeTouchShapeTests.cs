@@ -183,7 +183,7 @@ public class ActionScopeTouchShapeTests {
             "Create{Nav}: lowered create-in calls it from an action body or a handler, which touched `this` first"),
     ];
 
-    private static IEnumerable<TypeDefinitionNode> Lower(string poly) {
+    internal static IEnumerable<TypeDefinitionNode> Lower(string poly) {
         var session = DomainSession.ForSource(poly, ProbeSeed, ProbeCatalog);
         var changes = DomainCompilation.WithSeed(new PolyDslParser(poly, session).Parse(), ProbeSeed);
         var outcome = new DomainEvolution(new Domain("_", [])).ApplyAndAnalyze(changes, session: session);
@@ -197,7 +197,7 @@ public class ActionScopeTouchShapeTests {
             .SelectMany(a => (IEnumerable<TypeDefinitionNode>)a.Payload!);
     }
 
-    private static IEnumerable<Node> PreOrder(Node node) {
+    internal static IEnumerable<Node> PreOrder(Node node) {
         yield return node;
         foreach (var child in node.Children) {
             if (child is null)

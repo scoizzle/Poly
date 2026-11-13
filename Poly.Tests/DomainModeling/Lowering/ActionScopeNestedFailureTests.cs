@@ -329,10 +329,10 @@ public class ActionScopeNestedFailureTests {
         await Assert.That(StrictDiagnostics(cs, "NestedFailureNotifyName")).IsEqualTo("");
     }
 
-    // Amendment 7: inside a handler a create-in whose child's handler fails used to be dropped. A handler has no
-    // result channel for create failures yet (L-04), so the returned failure reaches FailCreate and throws.
+    // Amendment 7: inside a handler a create-in whose child's handler fails used to be dropped. L-03h made it throw
+    // (a handler had no result channel for create failures); L-04a gives every handler one, so the failure is returned.
     [Test]
-    public async Task HandlerCreateIn_WhenTheChildsHandlerFails_ThrowsOnBothHostsUntilL04() {
+    public async Task HandlerCreateIn_WhenTheChildsHandlerFails_ReturnsTheFailureOnBothHosts() {
         const string dsl = """
             domain P
             S: entity {
@@ -364,8 +364,50 @@ public class ActionScopeNestedFailureTests {
             });
 
         await Assert.That(outcomes[3].Success).IsFalse();
-        await Assert.That(outcomes[3].ExceptionType).IsEqualTo("ConstraintFailureException");
+        await Assert.That(outcomes[3].ExceptionType).IsNull();
         await Assert.That(outcomes[3].Message).Contains("Never");
+        await Assert.That(outcomes[3].FailureKind).IsEqualTo("Policy");
+        await Assert.That(outcomes[3].FailureGuard).IsEqualTo("Never");
+        // The handler and the child's create add no segment of their own: the path is the invoked action's, with
+        // the firing action's prefix.
+        await Assert.That(outcomes[3].FailurePath!).EndsWith("S.Y");
+    }
+
+    // A guard failure inside the handler's create-in (the child's Create returns before `new` runs) is returned too.
+    [Test]
+    public async Task HandlerCreateIn_WhenTheChildsGuardFails_ReturnsTheFailureOnBothHosts() {
+        const string dsl = """
+            domain P
+            S: entity {
+              jobs: many Job
+              kids: many Kid
+              when jobs Done as job { create in kids { Score: (job Weight) } }
+            }
+            Job: entity {
+              Weight: Number default(50)
+              s: S via jobs
+              Open: stage { Finish: action { transition to Done } }
+              Done: stage { }
+            }
+            Kid: entity {
+              s: S via kids
+              Score: Number range(0, 10) default(0)
+            }
+            """;
+
+        var outcomes = await ParityScenario.FromDsl(dsl, "NestedFailureHandlerCreateGuard", recordGraph: true)
+            .AssertAgree(side => {
+                var job = side.Create("Job");
+                side.Create("S", ("jobs", new[] { job! }));
+                side.Use(job);
+                side.Invoke("Finish");
+            });
+
+        await Assert.That(outcomes[3].Success).IsFalse();
+        await Assert.That(outcomes[3].ExceptionType).IsNull();
+        await Assert.That(outcomes[3].FailureKind).IsEqualTo("Range");
+        await Assert.That(outcomes[3].Message).Contains("'Score' must be <= 10");
+        await Assert.That(outcomes[3].GraphAfter == outcomes[3].GraphBefore).IsTrue();
     }
 
     // R6: every handler form returns a result and compiles with warnings as errors: each / any / all (previousStage),

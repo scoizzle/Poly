@@ -28,17 +28,17 @@ public class OnEntryConstraintAgreeTests {
         var exec = ModuleExec.For(domain);
         var entity = domain.Types.OfType<Entity>().First(e => e.Name == "Widget");
 
-        await Assert.That(() => exec.Create((entity).Name, new Dictionary<string, object?>()).Instance!)
-            .Throws<ConstraintFailureException>()
-            .WithMessageContaining("must be <= 10");
+        // L-04a: Create RETURNS the entry's failure on both hosts (it threw ConstraintFailureException before).
+        var created = exec.Create((entity).Name, new Dictionary<string, object?>());
+        await Assert.That(created.Succeeded).IsFalse();
+        await Assert.That(created.Error!).Contains("must be <= 10");
+        await Assert.That(created.Failure!.Kind).IsEqualTo(Poly.Runtime.DomainFailureKind.Range);
 
         var asm = ExportedCSharp.CompileAndLoad(
             new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis)));
-        var thrown = await Assert.That(() => ExportedCSharp.CreateEntity(asm, "Widget"))
-            .Throws<TargetInvocationException>();
-        // Printed assembly emits its own ConstraintFailureException type, so match by name.
-        await Assert.That(thrown!.InnerException!.GetType().Name).IsEqualTo("ConstraintFailureException");
-        await Assert.That(thrown.InnerException is InvalidOperationException).IsFalse();
-        await Assert.That(thrown.InnerException!.Message).Contains("must be <= 10");
+        var printed = ExportedCSharp.InvokeCreate(asm.GetType("Widget")!);
+        var printedType = printed.GetType();
+        await Assert.That((bool)printedType.GetProperty("IsSuccess")!.GetValue(printed)!).IsFalse();
+        await Assert.That((string)printedType.GetProperty("ErrorMessage")!.GetValue(printed)!).Contains("must be <= 10");
     }
 }

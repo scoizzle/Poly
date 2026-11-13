@@ -22,7 +22,7 @@ internal class Book : Poly.Runtime.IActionScoped
     public string ISBN { get; private set; } = default!;
     public long Pages { get; private set; }
     public Genre Genre { get; private set; }
-    internal static DomainResult<Book> Create(string title, string author, string isbn, long pages, Genre genre, Poly.Runtime.IStoragePort db)
+    internal static DomainResult<Book> Create(Poly.Runtime.IStoragePort db, string? title = default, string? author = default, string? isbn = default, long? pages = default, Genre? genre = default)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
         var __done = false;
@@ -45,51 +45,60 @@ internal class Book : Poly.Runtime.IActionScoped
             }
         }
     }
-    private static DomainResult<Book> __BodyOfCreate(string title, string author, string isbn, long pages, Genre genre, Poly.Runtime.IStoragePort db)
+    private static DomainResult<Book> __BodyOfCreate(string? title, string? author, string? isbn, long? pages, Genre? genre, Poly.Runtime.IStoragePort db)
     {
-        if (string.IsNullOrEmpty(title))
+        if (title == null)
         {
             return DomainResult<Book>.Failure(Poly.Runtime.DomainFailure.Required("'Title' is required.", "Book.Title"));
         }
-        if (string.IsNullOrEmpty(author))
+        var __title = title;
+        if (author == null)
         {
             return DomainResult<Book>.Failure(Poly.Runtime.DomainFailure.Required("'Author' is required.", "Book.Author"));
         }
-        if (string.IsNullOrEmpty(isbn))
+        var __author = author;
+        if (isbn == null)
         {
             return DomainResult<Book>.Failure(Poly.Runtime.DomainFailure.Required("'ISBN' is required.", "Book.ISBN"));
         }
-        if (isbn.Length < 10L)
+        var __isbn = isbn;
+        if (__isbn.Length < 10L)
         {
             return DomainResult<Book>.Failure(Poly.Runtime.DomainFailure.Length("'ISBN' must be at least 10 characters.", "Book.ISBN"));
         }
-        if (isbn.Length > 17L)
+        if (__isbn.Length > 17L)
         {
             return DomainResult<Book>.Failure(Poly.Runtime.DomainFailure.Length("'ISBN' must be at most 17 characters.", "Book.ISBN"));
         }
-        if (pages < 1L)
+        if (pages == null)
+        {
+            return DomainResult<Book>.Failure(Poly.Runtime.DomainFailure.Required("'Pages' is required.", "Book.Pages"));
+        }
+        var __pages = (long)pages;
+        if (__pages < 1L)
         {
             return DomainResult<Book>.Failure(Poly.Runtime.DomainFailure.Range("'Pages' must be >= 1.", "Book.Pages"));
         }
-        if (pages > 10000L)
+        if (__pages > 10000L)
         {
             return DomainResult<Book>.Failure(Poly.Runtime.DomainFailure.Range("'Pages' must be <= 10000.", "Book.Pages"));
         }
-        if ((object)genre == null)
+        if (genre == null)
         {
             return DomainResult<Book>.Failure(Poly.Runtime.DomainFailure.Required("'Genre' is required.", "Book.Genre"));
         }
-        if (genre != Genre.Fiction && genre != Genre.NonFiction && genre != Genre.Reference)
+        var __genre = (Genre)genre;
+        if (__genre != Genre.Fiction && __genre != Genre.NonFiction && __genre != Genre.Reference)
         {
-            return DomainResult<Book>.Failure(Poly.Runtime.DomainFailure.Enum(string.Concat("'", genre, "' is not a valid member of Genre for property 'Genre'."), "Book.Genre"));
+            return DomainResult<Book>.Failure(Poly.Runtime.DomainFailure.Enum(string.Concat("'", __genre, "' is not a valid member of Genre for property 'Genre'."), "Book.Genre"));
         }
-        if (Book.ExistsWithISBN(db, isbn))
+        if (Book.ExistsWithISBN(db, __isbn))
         {
             return DomainResult<Book>.Failure(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'ISBN' value is already used on another 'Book'.", "Book.ISBN"));
         }
-        var created = new Book(title, author, isbn, pages, genre);
+        var created = new Book(__title, __author, __isbn, __pages, __genre);
         Poly.Runtime.ActionScope.Create(created, "Book");
-        db.Record("Book", "ISBN", isbn);
+        db.Record("Book", "ISBN", __isbn);
         return DomainResult<Book>.Success(created);
     }
     public DomainResult EnsureUnique(string propertyName, object value)

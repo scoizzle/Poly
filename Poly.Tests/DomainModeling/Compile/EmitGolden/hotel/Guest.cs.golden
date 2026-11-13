@@ -19,7 +19,7 @@ internal class Guest : Poly.Runtime.IActionScoped
     private List<EventHold> _events = new List<EventHold>();
     private List<Reservation> _reservations = new List<Reservation>();
     private Guest() { }
-    private Guest(string name, string email, string phone, IEnumerable<EventHold>? events = null, IEnumerable<Reservation>? reservations = null, long stayCount = 0L, long nightCount = 0L, long eventCount = 0L)
+    private Guest(string name, string email, string phone, long stayCount, long nightCount, long eventCount, IEnumerable<EventHold>? events, IEnumerable<Reservation>? reservations)
     {
         this.Name = name;
         this.Email = email;
@@ -46,7 +46,7 @@ internal class Guest : Poly.Runtime.IActionScoped
         get => this._reservations;
     }
     public GuestStage CurrentStage { get; private set; }
-    internal DomainResult<EventHold> CreateEvents(long headcount, long capacity, decimal dayRate, DateOnly startDate, DateOnly endDate, Hall? hall = null, Section? section = null)
+    internal DomainResult<EventHold> CreateEvents(long? headcount = default, long? capacity = default, decimal? dayRate = default, DateOnly? startDate = default, DateOnly? endDate = default, Hall? hall = default, Section? section = default)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
         var __done = false;
@@ -70,7 +70,7 @@ internal class Guest : Poly.Runtime.IActionScoped
             }
         }
     }
-    private DomainResult<EventHold> __BodyOfCreateEvents(long headcount, long capacity, decimal dayRate, DateOnly startDate, DateOnly endDate, Hall? hall, Section? section)
+    private DomainResult<EventHold> __BodyOfCreateEvents(long? headcount, long? capacity, decimal? dayRate, DateOnly? startDate, DateOnly? endDate, Hall? hall, Section? section)
     {
         var eventHoldResult = EventHold.Create(headcount, capacity, dayRate, startDate, endDate, this, hall, section);
         if (!eventHoldResult.IsSuccess)
@@ -86,7 +86,7 @@ internal class Guest : Poly.Runtime.IActionScoped
         this._events.Add(child);
         child.RegisterGuestEventsReleasedSubscriber(this);
     }
-    internal DomainResult<Reservation> CreateReservations(long partySize, long nights, decimal nightlyRate, long maxOccupancy, DateOnly checkInDate, DateOnly checkOutDate, Folio? folio = null, Room? room = null)
+    internal DomainResult<Reservation> CreateReservations(long? partySize = default, long? nights = default, decimal? nightlyRate = default, long? maxOccupancy = default, DateOnly? checkInDate = default, DateOnly? checkOutDate = default, Folio? folio = default, Room? room = default)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
         var __done = false;
@@ -110,7 +110,7 @@ internal class Guest : Poly.Runtime.IActionScoped
             }
         }
     }
-    private DomainResult<Reservation> __BodyOfCreateReservations(long partySize, long nights, decimal nightlyRate, long maxOccupancy, DateOnly checkInDate, DateOnly checkOutDate, Folio? folio, Room? room)
+    private DomainResult<Reservation> __BodyOfCreateReservations(long? partySize, long? nights, decimal? nightlyRate, long? maxOccupancy, DateOnly? checkInDate, DateOnly? checkOutDate, Folio? folio, Room? room)
     {
         var reservationResult = Reservation.Create(partySize, nights, nightlyRate, maxOccupancy, checkInDate, checkOutDate, folio, this, room);
         if (!reservationResult.IsSuccess)
@@ -156,7 +156,7 @@ internal class Guest : Poly.Runtime.IActionScoped
         {
             return DomainResult<Reservation>.Failure(Poly.Runtime.DomainFailure.Stage("'BookStay' requires stage 'Active' on entity 'Guest'.", "Guest.BookStay", "Active"));
         }
-        var create0 = this.CreateReservations(party, nights, room.NightlyRate, room.MaxOccupancy, arrive, depart, (Folio?)null, room);
+        var create0 = this.CreateReservations(party, nights, (decimal)room.NightlyRate, room.MaxOccupancy, arrive, depart, (Folio?)null, room);
         if (!create0.IsSuccess)
         {
             return DomainResult<Reservation>.Failure(create0.Error!.At("Guest.BookStay"));
@@ -194,7 +194,7 @@ internal class Guest : Poly.Runtime.IActionScoped
         {
             return DomainResult<EventHold>.Failure(Poly.Runtime.DomainFailure.Stage("'BookHall' requires stage 'Active' on entity 'Guest'.", "Guest.BookHall", "Active"));
         }
-        var create0 = this.CreateEvents(party, hall.Capacity, hall.DayRate, arrive, depart, hall);
+        var create0 = this.CreateEvents(party, hall.Capacity, (decimal)hall.DayRate, arrive, depart, hall);
         if (!create0.IsSuccess)
         {
             return DomainResult<EventHold>.Failure(create0.Error!.At("Guest.BookHall"));
@@ -232,7 +232,7 @@ internal class Guest : Poly.Runtime.IActionScoped
         {
             return DomainResult<EventHold>.Failure(Poly.Runtime.DomainFailure.Stage("'BookSection' requires stage 'Active' on entity 'Guest'.", "Guest.BookSection", "Active"));
         }
-        var create0 = this.CreateEvents(party, section.Capacity, section.DayRate, arrive, depart, hall, section);
+        var create0 = this.CreateEvents(party, section.Capacity, (decimal)section.DayRate, arrive, depart, hall, section);
         if (!create0.IsSuccess)
         {
             return DomainResult<EventHold>.Failure(create0.Error!.At("Guest.BookSection"));
@@ -321,13 +321,13 @@ internal class Guest : Poly.Runtime.IActionScoped
         this.EventCount = this.EventCount + 1L;
         return DomainResult.Success();
     }
-    internal static DomainResult<Guest> Create(string name, string email, string phone, Poly.Runtime.IStoragePort db, IEnumerable<EventHold>? events = null, IEnumerable<Reservation>? reservations = null, long stayCount = 0L, long nightCount = 0L, long eventCount = 0L)
+    internal static DomainResult<Guest> Create(Poly.Runtime.IStoragePort db, string? name = default, string? email = default, string? phone = default, long? stayCount = default, long? nightCount = default, long? eventCount = default, IEnumerable<EventHold>? events = default, IEnumerable<Reservation>? reservations = default)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
         var __done = false;
         try
         {
-            var __result = Guest.__BodyOfCreate(name, email, phone, events, reservations, stayCount, nightCount, eventCount, db);
+            var __result = Guest.__BodyOfCreate(name, email, phone, stayCount, nightCount, eventCount, events, reservations, db);
             if (!__result.IsSuccess)
             {
                 return __result;
@@ -344,40 +344,46 @@ internal class Guest : Poly.Runtime.IActionScoped
             }
         }
     }
-    private static DomainResult<Guest> __BodyOfCreate(string name, string email, string phone, IEnumerable<EventHold>? events, IEnumerable<Reservation>? reservations, long stayCount, long nightCount, long eventCount, Poly.Runtime.IStoragePort db)
+    private static DomainResult<Guest> __BodyOfCreate(string? name, string? email, string? phone, long? stayCount, long? nightCount, long? eventCount, IEnumerable<EventHold>? events, IEnumerable<Reservation>? reservations, Poly.Runtime.IStoragePort db)
     {
-        if (string.IsNullOrEmpty(name))
+        if (name == null)
         {
             return DomainResult<Guest>.Failure(Poly.Runtime.DomainFailure.Required("'Name' is required.", "Guest.Name"));
         }
-        if (string.IsNullOrEmpty(email))
+        var __name = name;
+        if (email == null)
         {
             return DomainResult<Guest>.Failure(Poly.Runtime.DomainFailure.Required("'Email' is required.", "Guest.Email"));
         }
-        if (!System.Text.RegularExpressions.Regex.IsMatch(email, "^[^@]+@[^@]+\\z"))
+        var __email = email;
+        if (!System.Text.RegularExpressions.Regex.IsMatch(__email, "^[^@]+@[^@]+\\z"))
         {
             return DomainResult<Guest>.Failure(Poly.Runtime.DomainFailure.Pattern("'Email' does not match the required pattern.", "Guest.Email"));
         }
-        if (string.IsNullOrEmpty(phone))
+        if (phone == null)
         {
             return DomainResult<Guest>.Failure(Poly.Runtime.DomainFailure.Required("'Phone' is required.", "Guest.Phone"));
         }
-        if (phone.Length < 7L)
+        var __phone = phone;
+        if (__phone.Length < 7L)
         {
             return DomainResult<Guest>.Failure(Poly.Runtime.DomainFailure.Length("'Phone' must be at least 7 characters.", "Guest.Phone"));
         }
-        if (phone.Length > 20L)
+        if (__phone.Length > 20L)
         {
             return DomainResult<Guest>.Failure(Poly.Runtime.DomainFailure.Length("'Phone' must be at most 20 characters.", "Guest.Phone"));
         }
-        if (Guest.ExistsWithEmail(db, email))
+        var __stayCount = (stayCount == null ? 0L : (long)stayCount);
+        var __nightCount = (nightCount == null ? 0L : (long)nightCount);
+        var __eventCount = (eventCount == null ? 0L : (long)eventCount);
+        if (Guest.ExistsWithEmail(db, __email))
         {
             return DomainResult<Guest>.Failure(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'Email' value is already used on another 'Guest'.", "Guest.Email"));
         }
-        var created = new Guest(name, email, phone, events, reservations, stayCount, nightCount, eventCount);
+        var created = new Guest(__name, __email, __phone, __stayCount, __nightCount, __eventCount, events, reservations);
         Poly.Runtime.ActionScope.Create(created, "Guest");
         created.InitializeSubscriptions();
-        db.Record("Guest", "Email", email);
+        db.Record("Guest", "Email", __email);
         return DomainResult<Guest>.Success(created);
     }
     private void InitializeSubscriptions()

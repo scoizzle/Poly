@@ -1,7 +1,7 @@
 domain Checkout
 
 Order: entity {
-  Total: Number
+  Total: Number default(0)
   Pay: action (request: ChargeRequest) {
     assign Total to Total
   }

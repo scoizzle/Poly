@@ -19,11 +19,11 @@ internal class Loan : Poly.Runtime.IActionScoped
     private List<Patron>? _patronLoansOverdueSubscribers;
     private int _notifyDepth;
     private Loan() { }
-    private Loan(Book? book = null, Patron? patron = null, long amount = 0L)
+    private Loan(Book? book, Patron? patron, long amount)
     {
-        this.Amount = amount;
         this.Book = book;
         this.Patron = patron;
+        this.Amount = amount;
         this.CurrentStage = LoanStage.Active;
     }
     public long Amount { get; private set; }
@@ -141,7 +141,7 @@ internal class Loan : Poly.Runtime.IActionScoped
         }
         return DomainResult.Success();
     }
-    internal static DomainResult<Loan> Create(Book? book = null, Patron? patron = null, long amount = 0L)
+    internal static DomainResult<Loan> Create(Book? book = default, Patron? patron = default, long? amount = default)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
         var __done = false;
@@ -164,17 +164,18 @@ internal class Loan : Poly.Runtime.IActionScoped
             }
         }
     }
-    private static DomainResult<Loan> __BodyOfCreate(Book? book, Patron? patron, long amount)
+    private static DomainResult<Loan> __BodyOfCreate(Book? book, Patron? patron, long? amount)
     {
-        if (amount < 0L)
+        var __amount = (amount == null ? 0L : (long)amount);
+        if (__amount < 0L)
         {
             return DomainResult<Loan>.Failure(Poly.Runtime.DomainFailure.Range("'Amount' must be >= 0.", "Loan.Amount"));
         }
-        if (amount > 500L)
+        if (__amount > 500L)
         {
             return DomainResult<Loan>.Failure(Poly.Runtime.DomainFailure.Range("'Amount' must be <= 500.", "Loan.Amount"));
         }
-        var created = new Loan(book, patron, amount);
+        var created = new Loan(book, patron, __amount);
         Poly.Runtime.ActionScope.Create(created, "Loan");
         if (patron != null)
         {

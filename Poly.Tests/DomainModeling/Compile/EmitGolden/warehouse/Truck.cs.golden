@@ -18,7 +18,7 @@ internal class Truck : Poly.Runtime.IActionScoped
 {
     private List<Delivery> _deliveries = new List<Delivery>();
     private Truck() { }
-    private Truck(string vin, long maxLoad, Warehouse? warehouse = null, IEnumerable<Delivery>? deliveries = null, long currentLoad = 0L, TruckStatus status = TruckStatus.Idle)
+    private Truck(string vin, long maxLoad, long currentLoad, TruckStatus status, Warehouse? warehouse, IEnumerable<Delivery>? deliveries)
     {
         this.Vin = vin;
         this.MaxLoad = maxLoad;
@@ -112,13 +112,13 @@ internal class Truck : Poly.Runtime.IActionScoped
         return DomainResult.Success();
     }
     public bool IsOverloaded() => this.CurrentLoad > this.MaxLoad;
-    internal static DomainResult<Truck> Create(string vin, long maxLoad, Poly.Runtime.IStoragePort db, Warehouse? warehouse = null, IEnumerable<Delivery>? deliveries = null, long currentLoad = 0L, TruckStatus status = TruckStatus.Idle)
+    internal static DomainResult<Truck> Create(Poly.Runtime.IStoragePort db, string? vin = default, long? maxLoad = default, long? currentLoad = default, TruckStatus? status = default, Warehouse? warehouse = default, IEnumerable<Delivery>? deliveries = default)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
         var __done = false;
         try
         {
-            var __result = Truck.__BodyOfCreate(vin, maxLoad, warehouse, deliveries, currentLoad, status, db);
+            var __result = Truck.__BodyOfCreate(vin, maxLoad, currentLoad, status, warehouse, deliveries, db);
             if (!__result.IsSuccess)
             {
                 return __result;
@@ -135,55 +135,63 @@ internal class Truck : Poly.Runtime.IActionScoped
             }
         }
     }
-    private static DomainResult<Truck> __BodyOfCreate(string vin, long maxLoad, Warehouse? warehouse, IEnumerable<Delivery>? deliveries, long currentLoad, TruckStatus status, Poly.Runtime.IStoragePort db)
+    private static DomainResult<Truck> __BodyOfCreate(string? vin, long? maxLoad, long? currentLoad, TruckStatus? status, Warehouse? warehouse, IEnumerable<Delivery>? deliveries, Poly.Runtime.IStoragePort db)
     {
-        if (string.IsNullOrEmpty(vin))
+        if (vin == null)
         {
             return DomainResult<Truck>.Failure(Poly.Runtime.DomainFailure.Required("'Vin' is required.", "Truck.Vin"));
         }
-        if (vin.Length < 17L)
+        var __vin = vin;
+        if (__vin.Length < 17L)
         {
             return DomainResult<Truck>.Failure(Poly.Runtime.DomainFailure.Length("'Vin' must be at least 17 characters.", "Truck.Vin"));
         }
-        if (vin.Length > 17L)
+        if (__vin.Length > 17L)
         {
             return DomainResult<Truck>.Failure(Poly.Runtime.DomainFailure.Length("'Vin' must be at most 17 characters.", "Truck.Vin"));
         }
-        if (!System.Text.RegularExpressions.Regex.IsMatch(vin, "^[A-HJ-NPR-Z0-9]{17}\\z"))
+        if (!System.Text.RegularExpressions.Regex.IsMatch(__vin, "^[A-HJ-NPR-Z0-9]{17}\\z"))
         {
             return DomainResult<Truck>.Failure(Poly.Runtime.DomainFailure.Pattern("'Vin' does not match the required pattern.", "Truck.Vin"));
         }
-        if (maxLoad < 1L)
+        if (maxLoad == null)
+        {
+            return DomainResult<Truck>.Failure(Poly.Runtime.DomainFailure.Required("'MaxLoad' is required.", "Truck.MaxLoad"));
+        }
+        var __maxLoad = (long)maxLoad;
+        if (__maxLoad < 1L)
         {
             return DomainResult<Truck>.Failure(Poly.Runtime.DomainFailure.Range("'MaxLoad' must be >= 1.", "Truck.MaxLoad"));
         }
-        if (maxLoad > 40000L)
+        if (__maxLoad > 40000L)
         {
             return DomainResult<Truck>.Failure(Poly.Runtime.DomainFailure.Range("'MaxLoad' must be <= 40000.", "Truck.MaxLoad"));
         }
-        if (currentLoad < 0L)
+        var __currentLoad = (currentLoad == null ? 0L : (long)currentLoad);
+        if (__currentLoad < 0L)
         {
             return DomainResult<Truck>.Failure(Poly.Runtime.DomainFailure.Range("'CurrentLoad' must be >= 0.", "Truck.CurrentLoad"));
         }
-        if (currentLoad > 40000L)
+        if (__currentLoad > 40000L)
         {
             return DomainResult<Truck>.Failure(Poly.Runtime.DomainFailure.Range("'CurrentLoad' must be <= 40000.", "Truck.CurrentLoad"));
         }
-        if (status != TruckStatus.Idle && status != TruckStatus.EnRoute && status != TruckStatus.Maintenance && status != TruckStatus.OutOfService)
+        var __status = (status == null ? TruckStatus.Idle : (TruckStatus)status);
+        if (__status != TruckStatus.Idle && __status != TruckStatus.EnRoute && __status != TruckStatus.Maintenance && __status != TruckStatus.OutOfService)
         {
-            return DomainResult<Truck>.Failure(Poly.Runtime.DomainFailure.Enum(string.Concat("'", status, "' is not a valid member of TruckStatus for property 'Status'."), "Truck.Status"));
+            return DomainResult<Truck>.Failure(Poly.Runtime.DomainFailure.Enum(string.Concat("'", __status, "' is not a valid member of TruckStatus for property 'Status'."), "Truck.Status"));
         }
-        if (Truck.ExistsWithVin(db, vin))
+        if (Truck.ExistsWithVin(db, __vin))
         {
             return DomainResult<Truck>.Failure(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'Vin' value is already used on another 'Truck'.", "Truck.Vin"));
         }
-        var created = new Truck(vin, maxLoad, warehouse, deliveries, currentLoad, status);
+        var created = new Truck(__vin, __maxLoad, __currentLoad, __status, warehouse, deliveries);
         Poly.Runtime.ActionScope.Create(created, "Truck");
         if (warehouse != null)
         {
             warehouse.AttachTrucks(created);
         }
-        db.Record("Truck", "Vin", vin);
+        db.Record("Truck", "Vin", __vin);
         return DomainResult<Truck>.Success(created);
     }
     public DomainResult EnsureUnique(string propertyName, object value)

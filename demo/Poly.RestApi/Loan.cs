@@ -21,10 +21,10 @@ internal class Loan : Poly.Runtime.IActionScoped
     private List<Patron>? _patronLoansReturnedSubscribers;
     private int _notifyDepth;
     private Loan() { }
-    private Loan(Book? book = null, Patron? borrower = null, string? status = null, DateTime? dueDate = null, DateTime? returnedAt = null, long? timesRenewed = null)
+    private Loan(string? status, DateTime dueDate, DateTime? returnedAt, long? timesRenewed, Book? book, Patron? borrower)
     {
         this.Status = status;
-        this.DueDate = dueDate ?? DateTime.UtcNow;
+        this.DueDate = dueDate;
         this.ReturnedAt = returnedAt;
         this.TimesRenewed = timesRenewed;
         this.Book = book;
@@ -196,13 +196,13 @@ internal class Loan : Poly.Runtime.IActionScoped
         this.CheckedOutAt = DateTime.UtcNow;
         return DomainResult.Success();
     }
-    internal static DomainResult<Loan> Create(Book? book = null, Patron? borrower = null, string? status = null, DateTime? dueDate = null, DateTime? returnedAt = null, long? timesRenewed = null)
+    internal static DomainResult<Loan> Create(string? status = default, DateTime? dueDate = default, DateTime? returnedAt = default, long? timesRenewed = default, Book? book = default, Patron? borrower = default)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
         var __done = false;
         try
         {
-            var __result = Loan.__BodyOfCreate(book, borrower, status, dueDate, returnedAt, timesRenewed);
+            var __result = Loan.__BodyOfCreate(status, dueDate, returnedAt, timesRenewed, book, borrower);
             if (!__result.IsSuccess)
             {
                 return __result;
@@ -219,9 +219,10 @@ internal class Loan : Poly.Runtime.IActionScoped
             }
         }
     }
-    private static DomainResult<Loan> __BodyOfCreate(Book? book, Patron? borrower, string? status, DateTime? dueDate, DateTime? returnedAt, long? timesRenewed)
+    private static DomainResult<Loan> __BodyOfCreate(string? status, DateTime? dueDate, DateTime? returnedAt, long? timesRenewed, Book? book, Patron? borrower)
     {
-        var created = new Loan(book, borrower, status, dueDate, returnedAt, timesRenewed);
+        var __dueDate = (dueDate == null ? DateTime.UtcNow : (DateTime)dueDate);
+        var created = new Loan(status, __dueDate, returnedAt, timesRenewed, book, borrower);
         Poly.Runtime.ActionScope.Create(created, "Loan");
         var __entry = created.__EnterInitialStage();
         if (!__entry.IsSuccess)

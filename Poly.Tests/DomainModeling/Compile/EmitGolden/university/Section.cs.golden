@@ -18,17 +18,17 @@ internal class Section : Poly.Runtime.IActionScoped
     private List<Enrollment> _enrollments = new List<Enrollment>();
     private List<WaitOffer> _waitlist = new List<WaitOffer>();
     private Section() { }
-    private Section(long cap, Term offeringTerm, Course? course = null, Instructor? instructor = null, IEnumerable<Enrollment>? enrollments = null, IEnumerable<WaitOffer>? waitlist = null, long seatsTaken = 0L, long offeredSeats = 0L, long waitCleared = 0L)
+    private Section(long cap, long seatsTaken, Term offeringTerm, Course? course, Instructor? instructor, IEnumerable<Enrollment>? enrollments, IEnumerable<WaitOffer>? waitlist, long offeredSeats, long waitCleared)
     {
         this.Cap = cap;
-        this.OfferingTerm = offeringTerm;
         this.SeatsTaken = seatsTaken;
-        this.OfferedSeats = offeredSeats;
-        this.WaitCleared = waitCleared;
+        this.OfferingTerm = offeringTerm;
         this.Course = course;
         this.Instructor = instructor;
         this._enrollments = new List<Enrollment>(enrollments ?? new List<Enrollment>());
         this._waitlist = new List<WaitOffer>(waitlist ?? new List<WaitOffer>());
+        this.OfferedSeats = offeredSeats;
+        this.WaitCleared = waitCleared;
         this.CurrentStage = SectionStage.Open;
     }
     public long Cap { get; private set; }
@@ -54,7 +54,7 @@ internal class Section : Poly.Runtime.IActionScoped
         child.RegisterSectionEnrollmentsRegisteredSubscriber(this);
         child.RegisterSectionEnrollmentsDroppedSubscriber(this);
     }
-    internal DomainResult<WaitOffer> CreateWaitlist(Student? student = null)
+    internal DomainResult<WaitOffer> CreateWaitlist(Student? student = default)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
         var __done = false;
@@ -304,13 +304,13 @@ internal class Section : Poly.Runtime.IActionScoped
         this.WaitCleared = 1L;
         return DomainResult.Success();
     }
-    internal static DomainResult<Section> Create(long cap, Term offeringTerm, Course? course = null, Instructor? instructor = null, IEnumerable<Enrollment>? enrollments = null, IEnumerable<WaitOffer>? waitlist = null, long seatsTaken = 0L, long offeredSeats = 0L, long waitCleared = 0L)
+    internal static DomainResult<Section> Create(long? cap = default, long? seatsTaken = default, Term? offeringTerm = default, Course? course = default, Instructor? instructor = default, IEnumerable<Enrollment>? enrollments = default, IEnumerable<WaitOffer>? waitlist = default, long? offeredSeats = default, long? waitCleared = default)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
         var __done = false;
         try
         {
-            var __result = Section.__BodyOfCreate(cap, offeringTerm, course, instructor, enrollments, waitlist, seatsTaken, offeredSeats, waitCleared);
+            var __result = Section.__BodyOfCreate(cap, seatsTaken, offeringTerm, course, instructor, enrollments, waitlist, offeredSeats, waitCleared);
             if (!__result.IsSuccess)
             {
                 return __result;
@@ -327,25 +327,34 @@ internal class Section : Poly.Runtime.IActionScoped
             }
         }
     }
-    private static DomainResult<Section> __BodyOfCreate(long cap, Term offeringTerm, Course? course, Instructor? instructor, IEnumerable<Enrollment>? enrollments, IEnumerable<WaitOffer>? waitlist, long seatsTaken, long offeredSeats, long waitCleared)
+    private static DomainResult<Section> __BodyOfCreate(long? cap, long? seatsTaken, Term? offeringTerm, Course? course, Instructor? instructor, IEnumerable<Enrollment>? enrollments, IEnumerable<WaitOffer>? waitlist, long? offeredSeats, long? waitCleared)
     {
-        if (cap < 1L)
+        if (cap == null)
+        {
+            return DomainResult<Section>.Failure(Poly.Runtime.DomainFailure.Required("'Cap' is required.", "Section.Cap"));
+        }
+        var __cap = (long)cap;
+        if (__cap < 1L)
         {
             return DomainResult<Section>.Failure(Poly.Runtime.DomainFailure.Range("'Cap' must be >= 1.", "Section.Cap"));
         }
-        if (cap > 200L)
+        if (__cap > 200L)
         {
             return DomainResult<Section>.Failure(Poly.Runtime.DomainFailure.Range("'Cap' must be <= 200.", "Section.Cap"));
         }
-        if ((object)offeringTerm == null)
+        var __seatsTaken = (seatsTaken == null ? 0L : (long)seatsTaken);
+        if (offeringTerm == null)
         {
             return DomainResult<Section>.Failure(Poly.Runtime.DomainFailure.Required("'OfferingTerm' is required.", "Section.OfferingTerm"));
         }
-        if (offeringTerm != Term.Fall && offeringTerm != Term.Spring && offeringTerm != Term.Summer)
+        var __offeringTerm = (Term)offeringTerm;
+        if (__offeringTerm != Term.Fall && __offeringTerm != Term.Spring && __offeringTerm != Term.Summer)
         {
-            return DomainResult<Section>.Failure(Poly.Runtime.DomainFailure.Enum(string.Concat("'", offeringTerm, "' is not a valid member of Term for property 'OfferingTerm'."), "Section.OfferingTerm"));
+            return DomainResult<Section>.Failure(Poly.Runtime.DomainFailure.Enum(string.Concat("'", __offeringTerm, "' is not a valid member of Term for property 'OfferingTerm'."), "Section.OfferingTerm"));
         }
-        var created = new Section(cap, offeringTerm, course, instructor, enrollments, waitlist, seatsTaken, offeredSeats, waitCleared);
+        var __offeredSeats = (offeredSeats == null ? 0L : (long)offeredSeats);
+        var __waitCleared = (waitCleared == null ? 0L : (long)waitCleared);
+        var created = new Section(__cap, __seatsTaken, __offeringTerm, course, instructor, enrollments, waitlist, __offeredSeats, __waitCleared);
         Poly.Runtime.ActionScope.Create(created, "Section");
         created.InitializeSubscriptions();
         return DomainResult<Section>.Success(created);

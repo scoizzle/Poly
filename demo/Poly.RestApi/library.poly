@@ -21,7 +21,7 @@ Patron: entity {
   Email: Text unique pattern("^[^@]+@[^@]+$")
   MemberSince: Date default(Today)
   Status: PatronStatus default(Active)
-  MaxItems: Number range(0, 20)
+  MaxItems: Number range(0, 20) default(0)
   CurrentBorrowCount: Number default(0)
   OutstandingFines: Number default(0)
   loans: many Loan via borrower
@@ -97,7 +97,7 @@ Loan: entity {
 }
 
 Fine: entity {
-  Amount: Number
+  Amount: Number default(0)
   Reason: Text
   DateIssued: DateTime default(Now)
   Paid: Boolean optional

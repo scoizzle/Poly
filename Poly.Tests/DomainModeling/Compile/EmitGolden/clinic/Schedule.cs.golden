@@ -9,7 +9,7 @@ namespace Clinic;
 internal class Schedule : Poly.Runtime.IActionScoped
 {
     private Schedule() { }
-    private Schedule(string day, string state = "")
+    private Schedule(string day, string state)
     {
         this.Day = day;
         this.State = state;
@@ -45,7 +45,7 @@ internal class Schedule : Poly.Runtime.IActionScoped
         this.State = "open";
         return DomainResult.Success();
     }
-    internal static DomainResult<Schedule> Create(string day, string state = "")
+    internal static DomainResult<Schedule> Create(string? day = default, string? state = default)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
         var __done = false;
@@ -68,17 +68,19 @@ internal class Schedule : Poly.Runtime.IActionScoped
             }
         }
     }
-    private static DomainResult<Schedule> __BodyOfCreate(string day, string state)
+    private static DomainResult<Schedule> __BodyOfCreate(string? day, string? state)
     {
-        if (string.IsNullOrEmpty(day))
+        if (day == null)
         {
             return DomainResult<Schedule>.Failure(Poly.Runtime.DomainFailure.Required("'Day' is required.", "Schedule.Day"));
         }
-        if (string.IsNullOrEmpty(state))
+        var __day = day;
+        if (state == null)
         {
             return DomainResult<Schedule>.Failure(Poly.Runtime.DomainFailure.Required("'State' is required.", "Schedule.State"));
         }
-        var created = new Schedule(day, state);
+        var __state = state;
+        var created = new Schedule(__day, __state);
         Poly.Runtime.ActionScope.Create(created, "Schedule");
         return DomainResult<Schedule>.Success(created);
     }

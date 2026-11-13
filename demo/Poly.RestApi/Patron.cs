@@ -20,13 +20,13 @@ internal class Patron : Poly.Runtime.IActionScoped
     private List<Loan> _loans = new List<Loan>();
     private List<Fine> _fines = new List<Fine>();
     private Patron() { }
-    private Patron(string name, string email, long maxItems = 0L, IEnumerable<Loan>? loans = null, IEnumerable<Fine>? fines = null, DateOnly? memberSince = null, PatronStatus status = PatronStatus.Active, long currentBorrowCount = 0L, long outstandingFines = 0L)
+    private Patron(string name, string email, DateOnly memberSince, PatronStatus status, long maxItems, long currentBorrowCount, long outstandingFines, IEnumerable<Loan>? loans, IEnumerable<Fine>? fines)
     {
         this.Name = name;
         this.Email = email;
-        this.MaxItems = maxItems;
-        this.MemberSince = memberSince ?? DateOnly.FromDateTime(DateTime.UtcNow);
+        this.MemberSince = memberSince;
         this.Status = status;
+        this.MaxItems = maxItems;
         this.CurrentBorrowCount = currentBorrowCount;
         this.OutstandingFines = outstandingFines;
         this._loans = new List<Loan>(loans ?? new List<Loan>());
@@ -49,14 +49,14 @@ internal class Patron : Poly.Runtime.IActionScoped
         get => this._fines;
     }
     public PatronStage CurrentStage { get; private set; }
-    internal DomainResult<Loan> CreateLoans(Book? book = null, string? status = null, DateTime? dueDate = null, DateTime? returnedAt = null, long? timesRenewed = null)
+    internal DomainResult<Loan> CreateLoans(string? status = default, DateTime? dueDate = default, DateTime? returnedAt = default, long? timesRenewed = default, Book? book = default)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
         var __done = false;
         try
         {
             Poly.Runtime.ActionScope.Touch(this);
-            var __result = this.__BodyOfCreateLoans(book, status, dueDate, returnedAt, timesRenewed);
+            var __result = this.__BodyOfCreateLoans(status, dueDate, returnedAt, timesRenewed, book);
             if (!__result.IsSuccess)
             {
                 return __result;
@@ -73,9 +73,9 @@ internal class Patron : Poly.Runtime.IActionScoped
             }
         }
     }
-    private DomainResult<Loan> __BodyOfCreateLoans(Book? book, string? status, DateTime? dueDate, DateTime? returnedAt, long? timesRenewed)
+    private DomainResult<Loan> __BodyOfCreateLoans(string? status, DateTime? dueDate, DateTime? returnedAt, long? timesRenewed, Book? book)
     {
-        var loanResult = Loan.Create(book, this, status, dueDate, returnedAt, timesRenewed);
+        var loanResult = Loan.Create(status, dueDate, returnedAt, timesRenewed, book, this);
         if (!loanResult.IsSuccess)
         {
             return DomainResult<Loan>.Failure(loanResult.Error!);
@@ -278,7 +278,7 @@ internal class Patron : Poly.Runtime.IActionScoped
     internal DomainResult WhenEachLoanOverdue()
     {
         Poly.Runtime.ActionScope.Touch(this);
-        var create0 = Fine.Create("Overdue item", 5L);
+        var create0 = Fine.Create(5L, "Overdue item");
         if (!create0.IsSuccess)
         {
             return DomainResult.Failure(create0.Error!);
@@ -298,13 +298,13 @@ internal class Patron : Poly.Runtime.IActionScoped
         this.OutstandingFines = this.OutstandingFines - 5L;
         return DomainResult.Success();
     }
-    internal static DomainResult<Patron> Create(string name, string email, Poly.Runtime.IStoragePort db, long maxItems = 0L, IEnumerable<Loan>? loans = null, IEnumerable<Fine>? fines = null, DateOnly? memberSince = null, PatronStatus status = PatronStatus.Active, long currentBorrowCount = 0L, long outstandingFines = 0L)
+    internal static DomainResult<Patron> Create(Poly.Runtime.IStoragePort db, string? name = default, string? email = default, DateOnly? memberSince = default, PatronStatus? status = default, long? maxItems = default, long? currentBorrowCount = default, long? outstandingFines = default, IEnumerable<Loan>? loans = default, IEnumerable<Fine>? fines = default)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
         var __done = false;
         try
         {
-            var __result = Patron.__BodyOfCreate(name, email, maxItems, loans, fines, memberSince, status, currentBorrowCount, outstandingFines, db);
+            var __result = Patron.__BodyOfCreate(name, email, memberSince, status, maxItems, currentBorrowCount, outstandingFines, loans, fines, db);
             if (!__result.IsSuccess)
             {
                 return __result;
@@ -321,40 +321,47 @@ internal class Patron : Poly.Runtime.IActionScoped
             }
         }
     }
-    private static DomainResult<Patron> __BodyOfCreate(string name, string email, long maxItems, IEnumerable<Loan>? loans, IEnumerable<Fine>? fines, DateOnly? memberSince, PatronStatus status, long currentBorrowCount, long outstandingFines, Poly.Runtime.IStoragePort db)
+    private static DomainResult<Patron> __BodyOfCreate(string? name, string? email, DateOnly? memberSince, PatronStatus? status, long? maxItems, long? currentBorrowCount, long? outstandingFines, IEnumerable<Loan>? loans, IEnumerable<Fine>? fines, Poly.Runtime.IStoragePort db)
     {
-        if (string.IsNullOrEmpty(name))
+        if (name == null)
         {
             return DomainResult<Patron>.Failure(Poly.Runtime.DomainFailure.Required("'Name' is required.", "Patron.Name"));
         }
-        if (string.IsNullOrEmpty(email))
+        var __name = name;
+        if (email == null)
         {
             return DomainResult<Patron>.Failure(Poly.Runtime.DomainFailure.Required("'Email' is required.", "Patron.Email"));
         }
-        if (!System.Text.RegularExpressions.Regex.IsMatch(email, "^[^@]+@[^@]+\\z"))
+        var __email = email;
+        if (!System.Text.RegularExpressions.Regex.IsMatch(__email, "^[^@]+@[^@]+\\z"))
         {
             return DomainResult<Patron>.Failure(Poly.Runtime.DomainFailure.Pattern("'Email' does not match the required pattern.", "Patron.Email"));
         }
-        if (status != PatronStatus.Active && status != PatronStatus.Suspended && status != PatronStatus.Closed)
+        var __memberSince = (memberSince == null ? DateOnly.FromDateTime(DateTime.UtcNow) : (DateOnly)memberSince);
+        var __status = (status == null ? PatronStatus.Active : (PatronStatus)status);
+        if (__status != PatronStatus.Active && __status != PatronStatus.Suspended && __status != PatronStatus.Closed)
         {
-            return DomainResult<Patron>.Failure(Poly.Runtime.DomainFailure.Enum(string.Concat("'", status, "' is not a valid member of PatronStatus for property 'Status'."), "Patron.Status"));
+            return DomainResult<Patron>.Failure(Poly.Runtime.DomainFailure.Enum(string.Concat("'", __status, "' is not a valid member of PatronStatus for property 'Status'."), "Patron.Status"));
         }
-        if (maxItems < 0L)
+        var __maxItems = (maxItems == null ? 0L : (long)maxItems);
+        if (__maxItems < 0L)
         {
             return DomainResult<Patron>.Failure(Poly.Runtime.DomainFailure.Range("'MaxItems' must be >= 0.", "Patron.MaxItems"));
         }
-        if (maxItems > 20L)
+        if (__maxItems > 20L)
         {
             return DomainResult<Patron>.Failure(Poly.Runtime.DomainFailure.Range("'MaxItems' must be <= 20.", "Patron.MaxItems"));
         }
-        if (Patron.ExistsWithEmail(db, email))
+        var __currentBorrowCount = (currentBorrowCount == null ? 0L : (long)currentBorrowCount);
+        var __outstandingFines = (outstandingFines == null ? 0L : (long)outstandingFines);
+        if (Patron.ExistsWithEmail(db, __email))
         {
             return DomainResult<Patron>.Failure(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'Email' value is already used on another 'Patron'.", "Patron.Email"));
         }
-        var created = new Patron(name, email, maxItems, loans, fines, memberSince, status, currentBorrowCount, outstandingFines);
+        var created = new Patron(__name, __email, __memberSince, __status, __maxItems, __currentBorrowCount, __outstandingFines, loans, fines);
         Poly.Runtime.ActionScope.Create(created, "Patron");
         created.InitializeSubscriptions();
-        db.Record("Patron", "Email", email);
+        db.Record("Patron", "Email", __email);
         return DomainResult<Patron>.Success(created);
     }
     private void InitializeSubscriptions()

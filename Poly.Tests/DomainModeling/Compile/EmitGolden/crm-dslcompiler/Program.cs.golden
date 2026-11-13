@@ -33,7 +33,7 @@ app.MapGet("/api/products", async (CrmDbContext db) => await db.Products.ToListA
 app.MapGet("/api/products/{sku}", async (string sku, CrmDbContext db) => (await db.Products.FirstOrDefaultAsync(e => e.Sku == sku) is Crm.Product product ? Results.Ok(product) : Results.NotFound()));
 
 app.MapPost("/api/products", async (ProductDto dto, CrmDbContext db) => {
-    var productResult = Crm.Product.Create(dto.Sku, dto.Name, dto.ListPrice, db);
+    var productResult = Crm.Product.Create(db, dto.Sku, dto.Name, dto.ListPrice);
     if (!productResult.IsSuccess)
     {
         return FailureStatus(productResult.ErrorMessage);
@@ -48,7 +48,7 @@ app.MapGet("/api/leads", async (CrmDbContext db) => await db.Leads.ToListAsync()
 app.MapGet("/api/leads/{email}", async (string email, CrmDbContext db) => (await db.Leads.FirstOrDefaultAsync(e => e.Email == email) is Crm.Lead lead ? Results.Ok(lead) : Results.NotFound()));
 
 app.MapPost("/api/leads", async (LeadDto dto, CrmDbContext db) => {
-    var leadResult = Crm.Lead.Create(dto.Name, dto.Email, dto.Company, db, null);
+    var leadResult = Crm.Lead.Create(db, dto.Name, dto.Email, dto.Company, null);
     if (!leadResult.IsSuccess)
     {
         return FailureStatus(leadResult.ErrorMessage);
@@ -63,7 +63,7 @@ app.MapGet("/api/accounts", async (CrmDbContext db) => await db.Accounts.ToListA
 app.MapGet("/api/accounts/{id}", async (int id, CrmDbContext db) => (await db.Accounts.FindAsync(id) is Crm.Account account ? Results.Ok(account) : Results.NotFound()));
 
 app.MapPost("/api/accounts", async (AccountDto dto, CrmDbContext db) => {
-    var accountResult = Crm.Account.Create(dto.Name, dto.Industry, null, null, Enumerable.Empty<Crm.Contact>(), Enumerable.Empty<Crm.Opportunity>(), Enumerable.Empty<Crm.Ticket>());
+    var accountResult = Crm.Account.Create(dto.Name, dto.Industry, null, null, null, null, null, null, null, null);
     if (!accountResult.IsSuccess)
     {
         return FailureStatus(accountResult.ErrorMessage);
@@ -78,7 +78,7 @@ app.MapGet("/api/campaigns", async (CrmDbContext db) => await db.Campaigns.ToLis
 app.MapGet("/api/campaigns/{id}", async (int id, CrmDbContext db) => (await db.Campaigns.FindAsync(id) is Crm.Campaign campaign ? Results.Ok(campaign) : Results.NotFound()));
 
 app.MapPost("/api/campaigns", async (CampaignDto dto, CrmDbContext db) => {
-    var campaignResult = Crm.Campaign.Create(dto.Name, Enumerable.Empty<Crm.CampaignMember>());
+    var campaignResult = Crm.Campaign.Create(dto.Name, null);
     if (!campaignResult.IsSuccess)
     {
         return FailureStatus(campaignResult.ErrorMessage);
@@ -1328,22 +1328,22 @@ static async System.Threading.Tasks.Task SeedAsync(CrmDbContext db)
     {
         return;
     }
-    var productResult = Crm.Product.Create("XXXXXXXX", "Sample", 1, db);
+    var productResult = Crm.Product.Create(db, "XXXXXXXX", "Sample", 1);
     if (productResult.IsSuccess)
     {
         db.Add(productResult.Value);
     }
-    var leadResult = Crm.Lead.Create("Sample", "user@test.com", "Sample", db, null);
+    var leadResult = Crm.Lead.Create(db, "Sample", "user@test.com", "Sample", null);
     if (leadResult.IsSuccess)
     {
         db.Add(leadResult.Value);
     }
-    var accountResult = Crm.Account.Create("Sample", Crm.Industry.Technology, null, null, Enumerable.Empty<Crm.Contact>(), Enumerable.Empty<Crm.Opportunity>(), Enumerable.Empty<Crm.Ticket>());
+    var accountResult = Crm.Account.Create("Sample", Crm.Industry.Technology, null, null, null, null, null, null, null, null);
     if (accountResult.IsSuccess)
     {
         db.Add(accountResult.Value);
     }
-    var campaignResult = Crm.Campaign.Create("Sample", Enumerable.Empty<Crm.CampaignMember>());
+    var campaignResult = Crm.Campaign.Create("Sample", null);
     if (campaignResult.IsSuccess)
     {
         db.Add(campaignResult.Value);

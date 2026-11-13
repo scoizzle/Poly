@@ -12,7 +12,7 @@ public static class PolyIdeSamples {
 
         Item: entity {
           Name: Text
-          Qty: Number
+          Qty: Number default(0)
           Bump: action { assign Qty to Qty + 1 }
         }
         """;

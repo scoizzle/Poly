@@ -18,7 +18,7 @@ internal class RoomType : Poly.Runtime.IActionScoped
     public string Name { get; private set; } = default!;
     public decimal NightlyRate { get; private set; }
     public long MaxOccupancy { get; private set; }
-    internal static DomainResult<RoomType> Create(string name, decimal nightlyRate, long maxOccupancy)
+    internal static DomainResult<RoomType> Create(string? name = default, decimal? nightlyRate = default, long? maxOccupancy = default)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
         var __done = false;
@@ -41,37 +41,48 @@ internal class RoomType : Poly.Runtime.IActionScoped
             }
         }
     }
-    private static DomainResult<RoomType> __BodyOfCreate(string name, decimal nightlyRate, long maxOccupancy)
+    private static DomainResult<RoomType> __BodyOfCreate(string? name, decimal? nightlyRate, long? maxOccupancy)
     {
-        if (string.IsNullOrEmpty(name))
+        if (name == null)
         {
             return DomainResult<RoomType>.Failure(Poly.Runtime.DomainFailure.Required("'Name' is required.", "RoomType.Name"));
         }
-        if (name.Length < 1L)
+        var __name = name;
+        if (__name.Length < 1L)
         {
             return DomainResult<RoomType>.Failure(Poly.Runtime.DomainFailure.Length("'Name' must be at least 1 characters.", "RoomType.Name"));
         }
-        if (name.Length > 40L)
+        if (__name.Length > 40L)
         {
             return DomainResult<RoomType>.Failure(Poly.Runtime.DomainFailure.Length("'Name' must be at most 40 characters.", "RoomType.Name"));
         }
-        if (nightlyRate < 0m)
+        if (nightlyRate == null)
+        {
+            return DomainResult<RoomType>.Failure(Poly.Runtime.DomainFailure.Required("'NightlyRate' is required.", "RoomType.NightlyRate"));
+        }
+        var __nightlyRate = (decimal)nightlyRate;
+        if (__nightlyRate < 0m)
         {
             return DomainResult<RoomType>.Failure(Poly.Runtime.DomainFailure.Range("'NightlyRate' must be >= 0.", "RoomType.NightlyRate"));
         }
-        if (nightlyRate > 10000m)
+        if (__nightlyRate > 10000m)
         {
             return DomainResult<RoomType>.Failure(Poly.Runtime.DomainFailure.Range("'NightlyRate' must be <= 10000.", "RoomType.NightlyRate"));
         }
-        if (maxOccupancy < 1L)
+        if (maxOccupancy == null)
+        {
+            return DomainResult<RoomType>.Failure(Poly.Runtime.DomainFailure.Required("'MaxOccupancy' is required.", "RoomType.MaxOccupancy"));
+        }
+        var __maxOccupancy = (long)maxOccupancy;
+        if (__maxOccupancy < 1L)
         {
             return DomainResult<RoomType>.Failure(Poly.Runtime.DomainFailure.Range("'MaxOccupancy' must be >= 1.", "RoomType.MaxOccupancy"));
         }
-        if (maxOccupancy > 8L)
+        if (__maxOccupancy > 8L)
         {
             return DomainResult<RoomType>.Failure(Poly.Runtime.DomainFailure.Range("'MaxOccupancy' must be <= 8.", "RoomType.MaxOccupancy"));
         }
-        var created = new RoomType(name, nightlyRate, maxOccupancy);
+        var created = new RoomType(__name, __nightlyRate, __maxOccupancy);
         Poly.Runtime.ActionScope.Create(created, "RoomType");
         return DomainResult<RoomType>.Success(created);
     }

@@ -42,7 +42,13 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
         // A fractional literal against Number / Int / Int64 is rejected here. Both
         // sides are category Number, so Compatible would allow the pair.
         ReportFractionalLiteral(context, cmp.Left, left, cmp.Right, right);
-        if (MixedDateGranularity(left, right) || (!NullAgainstRead(context, cmp, props) && !Compatible(left, right)))
+        var nullAgainstRead = NullAgainstRead(context, cmp, props);
+        if (!nullAgainstRead) {
+            if (!IsTyped(left)) RequireTyped(context, cmp.Left, left, cmp, props, parameters, enumTypes);
+            if (!IsTyped(right)) RequireTyped(context, cmp.Right, right, cmp, props, parameters, enumTypes);
+        }
+        if (MixedDateGranularity(left, right)
+            || (!nullAgainstRead && IsTyped(left) && IsTyped(right) && !Compatible(left, right)))
             Report(context, cmp,
                 $"comparison between incompatible types '{Describe(left)}' and '{Describe(right)}'");
 

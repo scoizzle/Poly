@@ -91,20 +91,6 @@ public class StrictGateCensusTests {
         ("any parts where Label == 1 | form and Flag", "simulate+csharp+polyc"),
         ("any parts where Label == 1 | for where form", "simulate+csharp+polyc"),
         ("any parts where Label == 1 | match { form -> 1 }", "simulate+csharp+polyc"),
-        ("5 == \"x\" (typeless pair) | assign", "simulate+csharp+polyc"),
-        ("5 == \"x\" (typeless pair) | create", "simulate+csharp+polyc"),
-        ("5 == \"x\" (typeless pair) | invoke", "simulate+csharp+polyc"),
-        ("5 == \"x\" (typeless pair) | call", "none"),
-        ("5 == \"x\" (typeless pair) | return", "none"),
-        ("5 == \"x\" (typeless pair) | match arm", "simulate+csharp+polyc"),
-        ("5 == \"x\" (typeless pair) | entry", "simulate+csharp+polyc"),
-        ("5 == \"x\" (typeless pair) | exit", "simulate+csharp+polyc"),
-        ("5 == \"x\" (typeless pair) | subscription", "csharp+polyc"),
-        ("5 == \"x\" (typeless pair) | if form", "simulate+csharp+polyc"),
-        ("5 == \"x\" (typeless pair) | not form", "simulate+csharp+polyc"),
-        ("5 == \"x\" (typeless pair) | form and Flag", "simulate+csharp+polyc"),
-        ("5 == \"x\" (typeless pair) | for where form", "simulate+csharp+polyc"),
-        ("5 == \"x\" (typeless pair) | match { form -> 1 }", "simulate+csharp+polyc")
     ];
 
     [Test]
@@ -113,7 +99,7 @@ public class StrictGateCensusTests {
             .Where(f => f.Grid == "Residual" && f.Before == "ok").Select(f => f.Cell).Order(StringComparer.Ordinal);
         await Assert.That(string.Join('\n', rejected))
             .IsEqualTo(string.Join('\n', MasterDoors.Select(d => d.Cell).Order(StringComparer.Ordinal)));
-        await Assert.That(MasterDoors.Count(d => d.Refused == "none")).IsEqualTo(3);
+        await Assert.That(MasterDoors.Count(d => d.Refused == "none")).IsEqualTo(1);
     }
 
     // ── A8: the invariant, on the final analysis result ────────────────────

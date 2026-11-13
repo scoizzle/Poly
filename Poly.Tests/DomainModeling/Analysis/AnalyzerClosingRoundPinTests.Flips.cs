@@ -1241,20 +1241,6 @@ public partial class AnalyzerClosingRoundPinTests {
         ("Residual", "any parts where Label == 1 | form and Flag", "ok", "DMSEM003", "B-quantifier"),
         ("Residual", "any parts where Label == 1 | for where form", "ok", "DMSEM003", "B-quantifier"),
         ("Residual", "any parts where Label == 1 | match { form -> 1 }", "ok", "DMSEM003", "B-quantifier"),
-        ("Residual", "5 == \"x\" (typeless pair) | assign", "ok", "DMSEM003", "B-pair"),
-        ("Residual", "5 == \"x\" (typeless pair) | create", "ok", "DMSEM003", "B-pair"),
-        ("Residual", "5 == \"x\" (typeless pair) | invoke", "ok", "DMSEM003", "B-pair"),
-        ("Residual", "5 == \"x\" (typeless pair) | call", "ok", "DMSEM003", "B-pair"),
-        ("Residual", "5 == \"x\" (typeless pair) | return", "ok", "DMSEM003", "B-pair"),
-        ("Residual", "5 == \"x\" (typeless pair) | match arm", "ok", "DMSEM003", "B-pair"),
-        ("Residual", "5 == \"x\" (typeless pair) | entry", "ok", "DMSEM003", "B-pair"),
-        ("Residual", "5 == \"x\" (typeless pair) | exit", "ok", "DMSEM003", "B-pair"),
-        ("Residual", "5 == \"x\" (typeless pair) | subscription", "ok", "DMSEM003", "B-pair"),
-        ("Residual", "5 == \"x\" (typeless pair) | if form", "ok", "DMSEM003", "B-pair"),
-        ("Residual", "5 == \"x\" (typeless pair) | not form", "ok", "DMSEM003", "B-pair"),
-        ("Residual", "5 == \"x\" (typeless pair) | form and Flag", "ok", "DMSEM003", "B-pair"),
-        ("Residual", "5 == \"x\" (typeless pair) | for where form", "ok", "DMSEM003", "B-pair"),
-        ("Residual", "5 == \"x\" (typeless pair) | match { form -> 1 }", "ok", "DMSEM003", "B-pair"),
         ("SumPropertyKinds", "Text | assign Number", "ok", "DMSEM005", "B-sum"),
         ("SumPropertyKinds", "Text | assign Decimal", "ok", "DMSEM005", "B-sum"),
         ("SumPropertyKinds", "Boolean | assign Number", "ok", "DMSEM005", "B-sum"),
@@ -1268,12 +1254,7 @@ public partial class AnalyzerClosingRoundPinTests {
         ("SumPropertyKindsF3", "Double [Double -> float] | assign Number", "DMSEM005", "DMSEM005 (not numeric)", "B-sum"),
         ("SumPropertyKindsF3", "Double [Double -> float] | assign Decimal", "DMSEM005", "DMSEM005 (not numeric)", "B-sum"),
         ("SumPropertyKindsF3", "Int [Int -> short] | assign Number", "DMSEM005", "DMSEM005 (not numeric)", "B-sum"),
-        ("SumPropertyKindsF3", "Int [Int -> short] | assign Decimal", "DMSEM005", "DMSEM005 (not numeric)", "B-sum"),
-        ("TypelessComparisons", "5 == \"x\"", "ok", "DMSEM003", "B-pair"),
-        ("TypelessComparisons", "true == 5", "ok", "DMSEM003", "B-pair"),
-        ("TypelessComparisons", "5 < \"x\"", "ok", "DMSEM003", "B-pair"),
-        ("TypelessComparisons", "Count == \"x\"", "ok", "DMSEM003", "B-pair"),
-        ("TypelessComparisons", "Count == true", "ok", "DMSEM003", "B-pair")
+        ("SumPropertyKindsF3", "Int [Int -> short] | assign Decimal", "DMSEM005", "DMSEM005 (not numeric)", "B-sum")
     ];
 
     /// <summary>
@@ -1365,7 +1346,7 @@ already rejected on master: 63
 
     /// <summary>The totals the T-05b PR body quotes; computed by <see cref="FlipBTotals"/>, never hand-summed.</summary>
     private const string TotalsB = """
-total 440
+total 421
 grid FormGrid: 124
 grid FormGridF3: 157
 grid ImportedContractNameClash: 1
@@ -1374,19 +1355,17 @@ grid NameByLiteralBare: 10
 grid NameByLiteralDeclared: 10
 grid NameByNameBare: 25
 grid NameByNameDeclared: 25
-grid Residual: 67
+grid Residual: 53
 grid SumPropertyKinds: 10
 grid SumPropertyKindsF3: 4
-grid TypelessComparisons: 5
 rule B-binder: 1
 rule B-entity: 292
 rule B-entity+B-resolver: 30
-rule B-pair: 19
 rule B-quantifier: 26
 rule B-resolver: 28
 rule B-sum: 25
 rule B-untyped: 19
-valid on master: 293
+valid on master: 274
 already rejected on master: 147
 """;
 

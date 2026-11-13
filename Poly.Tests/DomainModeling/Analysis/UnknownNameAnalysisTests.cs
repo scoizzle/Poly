@@ -100,6 +100,8 @@ public class UnknownNameAnalysisTests {
             """));
 
         await Assert.That(HasError(analysis, DomainModelDiagnosticCodes.SemanticTypeCompatibility)).IsFalse();
+        // A12 (T-05b): the absence above is not satisfied by an earlier error; the document is valid.
+        await Assert.That(analysis.HasErrors).IsFalse();
     }
 
     // ── (c) unknown name in an `is` comparison ─────────────────
@@ -138,6 +140,8 @@ public class UnknownNameAnalysisTests {
             """));
 
         await Assert.That(HasError(analysis, DomainModelDiagnosticCodes.SemanticTypeCompatibility)).IsFalse();
+        // A12 (T-05b): the absence above is not satisfied by an earlier error; the document is valid.
+        await Assert.That(analysis.HasErrors).IsFalse();
     }
 
     // ── (d) unknown bare identifier in an assign value ─────────
@@ -188,6 +192,8 @@ public class UnknownNameAnalysisTests {
             """));
 
         await Assert.That(HasError(analysis, DomainModelDiagnosticCodes.SemanticTypeCompatibility)).IsFalse();
+        // A12 (T-05b): the absence above is not satisfied by an earlier error; the document is valid.
+        await Assert.That(analysis.HasErrors).IsFalse();
     }
 
     [Test]
@@ -201,6 +207,8 @@ public class UnknownNameAnalysisTests {
             """));
 
         await Assert.That(HasError(analysis, DomainModelDiagnosticCodes.SemanticTypeCompatibility)).IsFalse();
+        // A12 (T-05b): the absence above is not satisfied by an earlier error; the document is valid.
+        await Assert.That(analysis.HasErrors).IsFalse();
     }
 
     [Test]
@@ -215,6 +223,8 @@ public class UnknownNameAnalysisTests {
             """));
 
         await Assert.That(HasError(analysis, DomainModelDiagnosticCodes.SemanticTypeCompatibility)).IsFalse();
+        // A12 (T-05b): the absence above is not satisfied by an earlier error; the document is valid.
+        await Assert.That(analysis.HasErrors).IsFalse();
     }
 
     [Test]
@@ -229,5 +239,7 @@ public class UnknownNameAnalysisTests {
             """));
 
         await Assert.That(HasError(analysis, DomainModelDiagnosticCodes.SemanticTypeCompatibility)).IsFalse();
+        // A12 (T-05b): the absence above is not satisfied by an earlier error; the document is valid.
+        await Assert.That(analysis.HasErrors).IsFalse();
     }
 }

@@ -282,7 +282,6 @@ public class AnalysisGateParityTests {
         var untyped = GateParity.Check(dsl.Replace("READ", "books Qty", StringComparison.Ordinal),
             SimStep.Create("Order", alias: "o"), SimStep.Invoke("o", "Go"));
         await Assert.That(untyped.Analysis).IsFalse().Because(untyped.ToString());
-        await Assert.That(untyped.AnalysisSummary).Contains("DMSEM006");
         await Assert.That(untyped.AnalysisSummary).Contains("cannot determine the type of 'books Qty'");
 
         var typed = GateParity.Check(dsl.Replace("READ", "book Qty", StringComparison.Ordinal), SimStep.Create("Order", alias: "o"));

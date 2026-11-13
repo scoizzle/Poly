@@ -16,7 +16,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
     /// <summary>
     /// <c>match</c> (#409): every arm condition is Boolean (DMMAT001), the arm values and the
     /// <c>else</c> unify to one type (DMMAT002), and no two arms share a condition (DMMAT003).
-    /// Unknown types are skipped, as everywhere else in this pass. Every sub-expression is walked.
+    /// A condition or arm value the analyzer cannot type is recorded for DMSEM006. Every sub-expression is walked.
     /// </summary>
     private void CheckMatch(
         AnalysisContext context, MatchExpr match,
@@ -25,7 +25,9 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
         var where = match.Line > 0 ? $" (line {match.Line}, col {match.Col})" : "";
         foreach (var arm in match.Arms) {
             var condition = InferType(context, arm.Condition, props, parameters, enumTypes);
-            if (Family(condition) is not (TypeFamily.Boolean or TypeFamily.Unknown))
+            if (!IsTyped(condition))
+                RequireTyped(context, arm.Condition, condition, match, props, parameters, enumTypes);
+            else if (Family(condition) is not TypeFamily.Boolean)
                 context.ReportError(match,
                     $"'match' arm condition must be Boolean (got '{Describe(condition)}'){where}.",
                     DomainModelDiagnosticCodes.MatchConditionNotBoolean);
@@ -40,7 +42,11 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
         ExprType? reference = null;
         foreach (var value in match.Arms.Select(a => a.Value).Append(match.Else)) {
             var type = ArmType(context, value, props, parameters, enumTypes, hint: null);
-            if (Family(type) is TypeFamily.Unknown or TypeFamily.Null) continue;
+            if (!IsTyped(type)) {
+                RequireTyped(context, value, type, match, props, parameters, enumTypes);
+                continue;
+            }
+            if (Family(type) is TypeFamily.Null) continue;
             if (reference is null) { reference = type; continue; }
             if (!Unifies(reference.Value, type))
                 context.ReportError(match,
@@ -61,13 +67,13 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
     }
 
     /// <summary>
-    /// Two known arm types unify when they share a category (enums: the same enum), or one is an
-    /// enum and the other Text, as in comparisons. Not <see cref="Compatible"/>: that treats two
-    /// untyped values as equal by name.
+    /// Two known arm types unify when they share a family (an enum, an entity or a value type: the same name), or one
+    /// is an enum and the other Text, as in comparisons. By family across the numeric tower until T-09.
     /// </summary>
     private static bool Unifies(ExprType a, ExprType b) =>
         Family(a) == Family(b)
-            ? Family(a) is not TypeFamily.Enum || string.Equals(a.DomainName, b.DomainName, StringComparison.Ordinal)
+            ? Family(a) is not (TypeFamily.Enum or TypeFamily.Entity or TypeFamily.Value)
+              || string.Equals(a.DomainName, b.DomainName, StringComparison.Ordinal)
             : (Family(a) is TypeFamily.Enum && Family(b) is TypeFamily.Text)
               || (Family(b) is TypeFamily.Enum && Family(a) is TypeFamily.Text);
 
@@ -136,7 +142,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
         Dictionary<string, EnumType> enumTypes, ExprType? hint) {
         var types = match.Arms.Select(a => a.Value).Append(match.Else)
             .Select(v => ArmType(context, v, props, parameters, enumTypes, hint)).ToList();
-        if (types.Any(IsLenient))
+        if (!types.All(IsTyped))
             return ExprType.Unresolved;
         // A match whose every arm is `null` is typed Text, as it was before the move (an unreachable Null arm).
         return types.Cast<ExprType?>().FirstOrDefault(t => Family(t!.Value) is not TypeFamily.Null) ?? TextFamily;

@@ -14,7 +14,7 @@ namespace Poly.DomainModeling.Analysis;
 
 // Type inference: what an expression's type is, as an ExprType over the type model.
 //
-// The representation (T-04): a whole-number literal, Count, Sum, InferValueType arithmetic results and
+// The representation (T-04): a whole-number literal, Count, Sum, arithmetic results and
 // Text + Text carry NO domain name (DomainName == null) with a family definition; a decimal literal carries
 // "Decimal"; a declared or allowlisted name carries that name. Compatible applies the name rule only when
 // both names are non-null, exactly as before the move.
@@ -23,6 +23,10 @@ namespace Poly.DomainModeling.Analysis;
 // reads (the final property's type), owned access (the owned type's member) and sum (DomainTypeModel.SumResult).
 // A newly typed primitive carries no domain name (lock #679 6841065713, D1), so it meets the family rules only and
 // no verdict flips in T-05a that T-05b flips back; an enum, entity or value type keeps its name.
+//
+// T-05b types what still kept working only through leniency (a date difference, a bare enum member, the Guid
+// keyword, a navigation whose target is an expression, a path rooted at an entity-typed parameter), and an
+// expression it still cannot type is Unresolved: never compatible, recorded by its consumer for DMSEM006.
 
 internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
     // ── typeless family types ───────────────────────────────────
@@ -41,24 +45,6 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
     private static ExprType DecimalLiteral => Named(typeof(decimal), "Decimal");
 
     private static ExprType Named(Type clrType, string name) => Typeless(clrType) with { DomainName = name };
-
-    /// <summary>
-    /// <see cref="InferType"/> plus the arithmetic result types it leaves Unknown: numeric
-    /// arithmetic is Number, and Text + Text is Text. Used for call arguments and function bodies.
-    /// </summary>
-    private ExprType InferValueType(
-        AnalysisContext context, DomainExpression expr,
-        Dictionary<string, string>? props, Dictionary<string, string>? parameters,
-        Dictionary<string, EnumType> enumTypes) {
-        var type = InferType(context, expr, props, parameters, enumTypes);
-        if (type.IsResolved || expr is not (Add or Subtract or Multiply or Divide))
-            return type;
-        // Numeric operands with no CLR operator (Float with Decimal) keep the Number family this path gave them
-        // before T-05a; T-07 makes the operator table the gate.
-        var operands = expr.Children.OfType<DomainExpression>()
-            .Select(c => InferValueType(context, c, props, parameters, enumTypes)).ToList();
-        return operands.All(IsNumeric) ? NumberFamily : ExprType.Unresolved;
-    }
 
     private ExprType InferLiteralAware(
         AnalysisContext context,
@@ -120,8 +106,10 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
             Literal { Value: bool } => BooleanFamily,
             Literal { Value: decimal } => DecimalLiteral,
             Literal { Value: long or int or double or float or short or byte } => NumberFamily,
-            Exists or NotExists or AnyExpr or AllExpr or NoneExpr or Comparison or And or Or or Not => BooleanFamily,
-            CountExpr => NumberFamily,
+            Exists or NotExists or Comparison or And or Or or Not => BooleanFamily,
+            // A10: a quantifier or count is typed only where it has an entity to range over; a function body has none.
+            AnyExpr or AllExpr or NoneExpr => QuantifiedEntity(context, expr, props) is not null ? BooleanFamily : ExprType.Unresolved,
+            CountExpr => QuantifiedEntity(context, expr, props) is not null ? NumberFamily : ExprType.Unresolved,
             SumExpr sum => InferSum(context, sum, props),
             RelationshipNavigation navigation => InferNavigation(context, navigation, props, parameters, enumTypes),
             OwnedAccess owned => InferOwned(context, owned, props, enumTypes),
@@ -176,9 +164,9 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
     /// <summary>
     /// Numeric arithmetic is the CLR operator's result (the lookup the stamp makes; InferType never reads the stamp
     /// back). Date plus or minus a number keeps the date's type, as the arithmetic arm accepts it; a date minus a
-    /// date of one granularity is a duration. Anything else,
-    /// and numeric operands with no operator (Float with Decimal), stays Unresolved: the arithmetic arm reports a
-    /// non-numeric operand.
+    /// date of one granularity is a duration. Anything else, and numeric operands with no operator (Float with
+    /// Decimal), stays Unresolved: the arithmetic arm reports a non-numeric operand, and a consumer of the result
+    /// records it for DMSEM006.
     /// </summary>
     private ExprType InferArithmetic(
         AnalysisContext context, DomainExpression expr,
@@ -282,6 +270,25 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
     }
 
     /// <summary>
+    /// The entity a quantifier, <c>count</c> or <c>sum</c> ranges over: the target of the scope entity's relationship.
+    /// Null without an entity scope (a function body) or for an unknown relationship (A10).
+    /// </summary>
+    private static Entity? QuantifiedEntity(AnalysisContext context, DomainExpression expr, Dictionary<string, string>? props) {
+        var relationship = expr switch {
+            AnyExpr a => a.RelationshipName,
+            AllExpr a => a.RelationshipName,
+            NoneExpr n => n.RelationshipName,
+            CountExpr c => c.RelationshipName,
+            SumExpr s => s.RelationshipName,
+            _ => null,
+        };
+        return relationship is not null && props is EntityScope scope && EntityNamed(context, scope.EntityName) is { } entity
+            ? EntityNamed(context, entity.Navigations
+                .FirstOrDefault(n => string.Equals(n.Name, relationship, StringComparison.Ordinal))?.Target.TypeName)
+            : null;
+    }
+
+    /// <summary>
     /// An owned access <c>Owned Member</c> (IR only; lowered as <c>this.Owned.Member</c>): the member's type on the
     /// value type of the entity's <c>Owned</c> property, or on the target of its to-one navigation <c>Owned</c>.
     /// The value type is the first declared under that name, as the provider resolves it. Anything else stays
@@ -315,10 +322,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
     /// <c>PolicyConstraintAnalyzer</c> reports the bad shapes.
     /// </summary>
     private static ExprType InferSum(AnalysisContext context, SumExpr sum, Dictionary<string, string>? props) {
-        if (props is EntityScope scope
-            && EntityNamed(context, scope.EntityName) is { } entity
-            && EntityNamed(context, entity.Navigations
-                .FirstOrDefault(n => string.Equals(n.Name, sum.RelationshipName, StringComparison.Ordinal))?.Target.TypeName) is { } target
+        if (QuantifiedEntity(context, sum, props) is { } target
             && target.Properties.FirstOrDefault(p => string.Equals(p.Name, sum.PropertyName, StringComparison.Ordinal)) is { } property
             && ModelOf(context) is { } model
             && model.SumResult(model.OfProperty(property)) is { IsResolved: true } result) {

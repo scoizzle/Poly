@@ -177,7 +177,10 @@ Recorded by T-03b from [#679 comment 6837489066](https://github.com/scoizzle/Pol
   `GetElementType` also name CLR types but do not answer a conversion), T-17 (`PromoteNumeric`/`GetNumericRank`/`ResolveAddType`),
   T-18 (`SyntaxTypeCompatibilityAnalyzer`: converged, its arithmetic and comparison verdicts and the Decimal
   rewrite read `GetOperator` and `ResolveConversionFrom`; the named rules it keeps, with their removing rows T-07,
-  T-10, T-21, T-22, T-25, T-26, T-27 and T-28, are listed in CORE), T-19 (`LambdaBridge.PromoteNumeric`), T-20
+  T-10, T-21, T-22, T-25, T-26, T-27 and T-28, are listed in CORE), T-19 (`LambdaBridge.PromoteNumeric`: converged, the
+bridge's operators over a CLR primitive or decimal operand read `GetOperator`, lifted for a nullable operand, its
+conditional reads `GetCommonType` and its return, argument and coalesce conversions an implicit `ResolveConversionFrom`;
+it calls T-18's `ConstantOperandRule` and refuses, positioned, what the provider leaves undefined), T-20
   (`ConstantFoldingPass.Promote`: converged, folding asks `GetOperator` and applies the chosen signature; it leaves
   the resolved-type guard for T-17 and the declared-operator fence for T-10; folding no longer masks `VmTypeCompatibility`
   for a mismatched-type constant equality (672 rows of the fold grid, Text against Char included since T-18) or a

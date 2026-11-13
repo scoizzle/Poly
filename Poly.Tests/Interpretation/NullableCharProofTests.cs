@@ -5,7 +5,6 @@ using Microsoft.CSharp.RuntimeBinder;
 using Poly.Analysis;
 using Poly.Interpretation;
 using Poly.Interpretation.Vm;
-using Poly.Interpretation.Vm.Abi;
 using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Tests.DomainModeling.Analysis;
@@ -13,11 +12,12 @@ using Poly.Tests.DomainModeling.Analysis;
 namespace Poly.Tests.Interpretation;
 
 /// <summary>
-/// Review F2 (lock amendment 4): does the VM execute a <c>char?</c> operand beside a number correctly? Every cell the
-/// lowered analysis's <c>NullableCharRule</c> decides is run on the interpreter with that rule's error alone bypassed
-/// (the analysis is otherwise exactly what compile sees), and compared with the C# binder: its verdict on the
-/// unwrapped operands, the lifted result type, and the value for present and absent operands. Cells whose verdict
-/// another rule would still decide are named. Each class is pinned by count and by a checksum of its cell keys.
+/// Review F2 (lock amendment 4): the VM executes a <c>char?</c> operand beside a number correctly, so T-18's
+/// <c>NullableCharRule</c> is deleted. Every cell the rule used to decide (a <c>char?</c> in arithmetic, or beside a
+/// number in a comparison, that the provider defines once unwrapped) is analyzed and compiled as it is now, run on the
+/// interpreter, and compared with the C# binder: its verdict on the unwrapped operands, the lifted result type, and
+/// the value for present and absent operands. The proof commit ran the same grid with the rule's error alone
+/// bypassed and pinned the same classes, counts and checksums. Each class is pinned by count and key checksum.
 /// </summary>
 internal static class NullableCharGrid {
     public sealed record Cell(Type Left, OperatorKind Op, Type Right, string Class) {
@@ -49,7 +49,7 @@ internal static class NullableCharGrid {
         return values;
     }
 
-    /// <summary>The message the rule reports, which compile surfaces.</summary>
+    /// <summary>The message the rule reported; <c>VmExecutesDeclaredOperator</c> reports the same text.</summary>
     private static string RuleMessage(OperatorKind kind, Type left, Type right) => Arithmetic(kind)
         ? $"arithmetic operand is not numeric (got '{left.Name}' and '{right.Name}')"
         : $"comparison between incompatible types '{left.Name}' and '{right.Name}'";
@@ -67,12 +67,13 @@ internal static class NullableCharGrid {
                         var resolution = Clr(Unwrap(left)).GetOperator(kind, Clr(Unwrap(right)));
                         if (resolution is null)
                             continue;
+                        // String concatenation and enum comparisons were judged before the rule, and still are.
+                        if (kind is OperatorKind.Add && (left == typeof(string) || right == typeof(string)))
+                            continue;
+                        if (!Arithmetic(kind) && (Unwrap(left).IsEnum || Unwrap(right).IsEnum))
+                            continue;
                         var node = ExtraOperandGrid.Build(kind, new Parameter("a", new ClrTypeReference(left)), new Parameter("b", new ClrTypeReference(right)));
                         var analysis = Interpreter.Analyze(node, ClrTypeDefinitionRegistry.Shared);
-                        var errors = analysis.Diagnostics.Where(static d => d.Severity == DiagnosticSeverity.Error).ToArray();
-                        // Only cells the rule decides: string concatenation and enum comparisons are judged before it.
-                        if (errors.Length == 0 || errors.Length > 1 || errors[0].Message != RuleMessage(kind, left, right))
-                            continue;
                         cells.Add(new Cell(left, kind, right, Classify(kind, left, right, node, analysis, resolution.Value)));
                     }
             return cells;
@@ -85,12 +86,17 @@ internal static class NullableCharGrid {
     private static ITypeDefinition Clr(Type type) => ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(type);
 
     private static string Classify(OperatorKind kind, Type left, Type right, Node node, AnalysisResult analysis, OperatorResolution resolution) {
-        if (Arithmetic(kind) && !resolution.PlatformApplied
-            && !(resolution.Signature.DeclaringTypeDefinition.TryGetRuntimeType(out var declaring) && declaring == typeof(decimal)))
-            return "still rejected without the rule: VmExecutesDeclaredOperator";
+        var errors = analysis.Diagnostics.Where(static d => d.Severity == DiagnosticSeverity.Error).Select(static d => d.Message).ToArray();
+        if (errors.Length > 0) {
+            var declared = Arithmetic(kind) && !resolution.PlatformApplied
+                && !(resolution.Signature.DeclaringTypeDefinition.TryGetRuntimeType(out var declaring) && declaring == typeof(decimal));
+            return declared && errors.SequenceEqual([RuleMessage(kind, left, right)])
+                ? "still rejected without the rule: VmExecutesDeclaredOperator"
+                : $"analysis rejects: {string.Join("; ", errors)}";
+        }
         VmProgram program;
         try {
-            program = AbiEmitter.Emit(node, analysis, CompilationMode.Normal);
+            program = Interpreter.Compile(node, analysis);
         }
         catch (Exception ex) {
             return $"VM refuses: {ex.GetType().Name}";
@@ -184,45 +190,47 @@ internal static class NullableCharGrid {
 public class NullableCharProofTests {
     private static Parameter Param<T>(string name) => new(name, TypeReference.To<T>());
 
-    /// <summary>The emitted program for a tree whose only analysis error is the rule's, so the VM runs what it would run without the rule.</summary>
-    private static async Task<long> RunBypassingTheRule(Node node, string ruleMessage, params object?[] args) {
-        var analysis = Interpreter.Analyze(node);
-        var errors = analysis.Diagnostics.Where(static d => d.Severity == DiagnosticSeverity.Error).Select(static d => d.Message).ToArray();
-        await Assert.That(errors).IsEquivalentTo([ruleMessage]);
-        using var exec = Interpreter.Execute(AbiEmitter.Emit(node, analysis, CompilationMode.Normal), s => s.SetArgs(args));
-        return exec.Result.Value is null ? long.MinValue : exec.RawValue;
+    private static ExecutionResult Execute(Node node, params object?[] args) =>
+        Interpreter.Execute(Interpreter.Compile(node), s => s.SetArgs(args));
+
+    // The five probes the review asked for: accepted at compile now, and right on the VM.
+
+    [Test]
+    public async Task Probe_NullableCharPresent_GreaterThanInt_IsTrue() {
+        using var exec = Execute(new GreaterThan(Param<char?>("c"), Param<int>("n")), 'a', 96);
+        await Assert.That(exec.RawValue).IsEqualTo(1L);
     }
 
-    private const string GreaterMessage = "comparison between incompatible types 'Nullable`1' and 'Int32'";
-    private const string AddMessage = "arithmetic operand is not numeric (got 'Nullable`1' and 'Int32')";
+    [Test]
+    public async Task Probe_NullableCharAbsent_GreaterThanInt_IsFalse() {
+        using var exec = Execute(new GreaterThan(Param<char?>("c"), Param<int>("n")), null, 96);
+        await Assert.That(exec.RawValue).IsEqualTo(0L);
+    }
 
     [Test]
-    public async Task Probe_NullableCharPresent_GreaterThanInt_IsTrue() =>
-        await Assert.That(await RunBypassingTheRule(new GreaterThan(Param<char?>("c"), Param<int>("n")), GreaterMessage, 'a', 96)).IsEqualTo(1L);
-
-    [Test]
-    public async Task Probe_NullableCharAbsent_GreaterThanInt_IsFalse() =>
-        await Assert.That(await RunBypassingTheRule(new GreaterThan(Param<char?>("c"), Param<int>("n")), GreaterMessage, null, 96)).IsEqualTo(0L);
-
-    [Test]
-    public async Task Probe_NullableCharPresent_EqualInt_IsTrue() =>
-        await Assert.That(await RunBypassingTheRule(new Equal(Param<char?>("c"), Param<int>("n")), "comparison between incompatible types 'Nullable`1' and 'Int32'", 'a', 97)).IsEqualTo(1L);
+    public async Task Probe_NullableCharPresent_EqualInt_IsTrue() {
+        using var exec = Execute(new Equal(Param<char?>("c"), Param<int>("n")), 'a', 97);
+        await Assert.That(exec.RawValue).IsEqualTo(1L);
+    }
 
     [Test]
     public async Task Probe_NullableCharPresent_PlusInt_Is98() {
-        var node = new Add(Param<char?>("c"), Param<int>("n"));
-        var analysis = Interpreter.Analyze(node);
-        await Assert.That(analysis.Diagnostics.Where(static d => d.Severity == DiagnosticSeverity.Error).Select(static d => d.Message).ToArray()).IsEquivalentTo([AddMessage]);
-        using var exec = Interpreter.Execute(AbiEmitter.Emit(node, analysis, CompilationMode.Normal), s => s.SetArgs('a', 1));
+        using var exec = Execute(new Add(Param<char?>("c"), Param<int>("n")), 'a', 1);
         await Assert.That(exec.GetValue<int>()).IsEqualTo(98);
     }
 
     [Test]
     public async Task Probe_NullableCharAbsent_PlusInt_IsAbsent() {
-        var node = new Add(Param<char?>("c"), Param<int>("n"));
-        var analysis = Interpreter.Analyze(node);
-        using var exec = Interpreter.Execute(AbiEmitter.Emit(node, analysis, CompilationMode.Normal), s => s.SetArgs(null, 1));
+        using var exec = Execute(new Add(Param<char?>("c"), Param<int>("n")), null, 1);
         await Assert.That(exec.Result.Value).IsNull();
+    }
+
+    /// <summary>A nullable char is still not concatenated with a number, nor compared with Text: those stay rejected.</summary>
+    [Test]
+    public async Task NullableChar_BesideText_IsStillRejected() {
+        await Assert.That(() => Interpreter.Compile(new Equal(Param<char?>("c"), Param<string>("s"))))
+            .Throws<InvalidOperationException>()
+            .WithMessage("VM compile rejected: comparison between incompatible types 'Nullable`1' and 'String': no Equal operator for these types");
     }
 
     /// <summary>Count and key checksum per class over every cell the rule decides.</summary>

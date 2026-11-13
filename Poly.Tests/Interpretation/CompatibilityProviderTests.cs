@@ -113,7 +113,9 @@ public class CompatibilityProviderTests {
     /// Count and key checksum per family, verdict and provider answer. T-18 moved these from master (pinned in its
     /// characterisation commit) only accepted to rejected, in four families: 408 nullable variants of the ledger
     /// grid's 212 newly rejected cells, 40 Decimal cells beside an enum or DateTimeOffset, 2,184 IntPtr or UIntPtr
-    /// cells, and 144 comparisons of two different enum types. No cell moved from rejected to accepted.
+    /// cells, and 144 comparisons of two different enum types. One family moved from rejected to accepted, on
+    /// purpose (review F2): 499 cells with a <c>char?</c> beside a number, once the VM was shown to execute them as C#
+    /// does (<c>NullableCharProofTests</c>).
     /// </summary>
     private static readonly Dictionary<string, (int Count, string Checksum)> ExpectedBuckets = new(StringComparer.Ordinal) {
         ["DateTimeOffset|accepts|defined"] = (20, "b83fed908612bc49"),
@@ -128,9 +130,9 @@ public class CompatibilityProviderTests {
         ["IntPtr|accepts|none"] = (24, "6c0426819d4a7d42"),
         ["IntPtr|rejects|defined"] = (96, "1dc2ea92a3789937"),
         ["IntPtr|rejects|none"] = (3992, "79538a64597e6b04"),
-        ["Nullable|accepts|defined"] = (3949, "faeba0813049adf0"),
+        ["Nullable|accepts|defined"] = (4448, "2de1f3caa17904d4"),
         ["Nullable|accepts|none"] = (78, "f788f25092bfd0cd"),
-        ["Nullable|rejects|defined"] = (730, "3c9ac5bd83614c7d"),
+        ["Nullable|rejects|defined"] = (231, "cb4b463a4d1108f3"),
         ["Nullable|rejects|none"] = (7564, "49cbcd4ee4e1228f"),
     };
 
@@ -177,16 +179,13 @@ public class CompatibilityProviderTests {
         await Assert.That(OperatorOperands.Clr(typeof(float)).GetOperator(OperatorKind.LessThan, OperatorOperands.Clr(typeof(float))) is { PlatformApplied: true }).IsTrue();
     }
 
-    // ---- a nullable char beside a number (lock amendment 4): rejected today, and it stays rejected ----
+    // ---- a nullable char beside a number (lock amendment 4): rejected on master, accepted since the VM is shown correct ----
 
     [Test]
-    public async Task NullableChar_BesideANumber_IsCompileRejected() {
-        await Assert.That(() => Interpreter.Compile(new GreaterThan(Param<char?>("c"), Param<int>("n"))))
-            .Throws<InvalidOperationException>()
-            .WithMessage("VM compile rejected: comparison between incompatible types 'Nullable`1' and 'Int32'");
-        await Assert.That(() => Interpreter.Compile(new Add(Param<char?>("c"), Param<int>("n"))))
-            .Throws<InvalidOperationException>()
-            .WithMessage("VM compile rejected: arithmetic operand is not numeric (got 'Nullable`1' and 'Int32')");
+    public async Task NullableChar_BesideANumber_IsAccepted_AndRuns() {
+        await Assert.That(Run(new GreaterThan(Param<char?>("c"), Param<int>("n")), 'a', 96)).IsEqualTo(1L);
+        using var sum = Interpreter.Execute(Interpreter.Compile(new Add(Param<char?>("c"), Param<int>("n"))), s => s.SetArgs('a', 1));
+        await Assert.That(sum.GetValue<int>()).IsEqualTo(98);
     }
 
     [Test]

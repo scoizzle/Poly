@@ -236,15 +236,14 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
             if (TextAndBooleanOrderingRule(kind, left, right))
                 return;
         }
-        if (NullableCharRule(arithmetic, left, right)) {
-            Report(context, leftNode, incompatible);
-            return;
-        }
 
+        // Fail closed: a provider that cannot define an operand type cannot answer the operator either.
         var leftDef = context.TypeDefinitions.GetTypeDefinition(Nullable.GetUnderlyingType(left) ?? left);
         var rightDef = context.TypeDefinitions.GetTypeDefinition(Nullable.GetUnderlyingType(right) ?? right);
-        if (leftDef is null || rightDef is null)
+        if (leftDef is null || rightDef is null) {
+            Report(context, leftNode, $"{incompatible}: the type provider has no definition for '{(leftDef is null ? left : right).Name}'");
             return;
+        }
         if (leftDef.GetOperator(kind, rightDef) is not { } resolution) {
             Report(context, leftNode, noOperator);
             return;
@@ -296,17 +295,6 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
             return false;
         var (l, r) = (Nullable.GetUnderlyingType(left) ?? left, Nullable.GetUnderlyingType(right) ?? right);
         return l == r && (l == typeof(string) || l == typeof(bool));
-    }
-
-    /// <summary>
-    /// A veto: a <c>char?</c> operand in arithmetic, or beside a number in a comparison, stays rejected (lock amendment 4)
-    /// until the VM is shown to lift it. Removed by T-21.
-    /// </summary>
-    private static bool NullableCharRule(bool arithmetic, Type left, Type right) {
-        var (l, r) = (left == typeof(char?), right == typeof(char?));
-        if (!l && !r)
-            return false;
-        return arithmetic || (l && CategoryOf(right) is Cat.Number) || (r && CategoryOf(left) is Cat.Number);
     }
 
     /// <summary>

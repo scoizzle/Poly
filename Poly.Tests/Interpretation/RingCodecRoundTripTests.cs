@@ -91,7 +91,7 @@ public class RingCodecRoundTripTests {
         await Assert.That(RingCodec.TryInlineConstant(value, out long raw)).IsTrue();
         await Assert.That(raw).IsEqualTo(42L);
         using var heap = new VmManagedObjectHeap();
-        await Assert.That(RingCodec.ToRing(value, heap)).IsEqualTo(42L);
+        await Assert.That(LocalType.Write(value, typeof(nint), heap)).IsEqualTo(42L);
         await Assert.That(RoundTrip(value)).IsEqualTo(value);
     }
 
@@ -101,7 +101,7 @@ public class RingCodecRoundTripTests {
         await Assert.That(RingCodec.TryInlineConstant(value, out long raw)).IsTrue();
         await Assert.That(raw).IsEqualTo(unchecked((long)nuint.MaxValue));
         using var heap = new VmManagedObjectHeap();
-        await Assert.That(RingCodec.ToRing(value, heap)).IsEqualTo(unchecked((long)nuint.MaxValue));
+        await Assert.That(LocalType.Write(value, typeof(nuint), heap)).IsEqualTo(unchecked((long)nuint.MaxValue));
         await Assert.That(RoundTrip(value)).IsEqualTo(value);
     }
 }

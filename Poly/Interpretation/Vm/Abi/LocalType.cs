@@ -48,10 +48,6 @@ internal abstract record LocalType(Type Clr) {
         return Of(source).FromWord(word, target, heap);
     }
 
-    /// <summary>The frame word for a runtime value. Null is the absent sentinel.</summary>
-    public static long Write(object? value, VmManagedObjectHeap heap) =>
-        value is null ? 0L : Of(value.GetType()).ToRing(value, heap);
-
     /// <summary>The frame word for a runtime value stored where <paramref name="declared"/> is the static type. A
     /// handle-typed declaration (a reference, a nullable, a heap struct) gets a handle to the value whatever the
     /// value's own type is: a boxed <c>int</c> for an <c>object</c> is not the word 7. Null is the absent sentinel.</summary>

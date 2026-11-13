@@ -103,8 +103,6 @@ public sealed class VmState : IDisposable {
         }
     }
 
-    internal long ToRing(object? arg) => RingCodec.ToRing(arg, Heap);
-
     /// <summary>Resets the VM state to its initial condition, clearing the
     /// stack, heap, loop ticks, and current node tracking. Does not
     /// change the <see cref="Program"/> reference. Useful for reusing a

@@ -2,22 +2,23 @@ using System.Runtime.CompilerServices;
 
 using Poly.Interpretation;
 using Poly.Interpretation.Vm;
+using Poly.Interpretation.Vm.Abi;
 
 namespace Poly.Tests.Interpretation;
 
 /// <summary>
-/// Ring-slot conversion (<see cref="VmState.ToRing"/>) for the narrow integer kinds, and the frame word a root argument
+/// Ring-slot conversion (<see cref="LocalType.Write(object?, Type, VmManagedObjectHeap)"/>) for the narrow integer kinds, and the frame word a root argument
 /// gets from its parameter's declared type (issue 881): a scalar written where the declared type is a reference is a
 /// handle to the boxed value, never the scalar's own inline word.
 /// </summary>
 public class VmStateRingConversionTests {
     [Test]
     public async Task ToRing_NarrowIntegers_WidenToLong() {
-        using var state = new VmState(Interpreter.Compile(new Constant(0L)));
-        await Assert.That(state.ToRing((byte)200)).IsEqualTo(200L);
-        await Assert.That(state.ToRing((sbyte)-1)).IsEqualTo(-1L);
-        await Assert.That(state.ToRing((short)300)).IsEqualTo(300L);
-        await Assert.That(state.ToRing((ushort)40000)).IsEqualTo(40000L);
+        using var heap = new VmManagedObjectHeap();
+        await Assert.That(LocalType.Write((byte)200, typeof(byte), heap)).IsEqualTo(200L);
+        await Assert.That(LocalType.Write((sbyte)-1, typeof(sbyte), heap)).IsEqualTo(-1L);
+        await Assert.That(LocalType.Write((short)300, typeof(short), heap)).IsEqualTo(300L);
+        await Assert.That(LocalType.Write((ushort)40000, typeof(ushort), heap)).IsEqualTo(40000L);
     }
 
     private static Parameter ObjectParameter(string name) => new(name, new ClrTypeReference(typeof(object)));

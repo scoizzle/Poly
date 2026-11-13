@@ -13,7 +13,7 @@ namespace Poly.Interpretation.Vm.Abi;
 /// The single definition of the VM's long-slot ABI: how a value is classified
 /// (inline word — numeric, boolean 0/non-zero, or IEEE bit pattern — and heap
 /// handle) and converted in both directions — at compile time (<see cref="Expression"/> factories) and at
-/// runtime (<see cref="ToRing(object?, VmManagedObjectHeap)"/> and friends).
+/// runtime (<see cref="LocalType.Write(object?, Type, VmManagedObjectHeap)"/>, by the declared type).
 /// </summary>
 /// <remarks>
 /// Every ABI site delegates here. Analysis passes use <see cref="IsInline(Type)"/>
@@ -242,16 +242,6 @@ internal static class RingCodec {
         Convert(Call(heap, HeapAllocate, value), typeof(long));
 
     // ── Runtime conversion ───────────────────────────────────────
-
-    /// <summary>Convert a runtime value to its ring slot — the single runtime
-    /// implementation used by <see cref="VmState.SetArgs"/>, restoration, and
-    /// the emitted boxing call.</summary>
-    public static long ToRing(object? value, VmManagedObjectHeap heap) =>
-        LocalType.Write(value, heap);
-
-    /// <summary>Heap-first runtime conversion used by emitted calls and the
-    /// emitter's boxing sites. Delegates to <see cref="ToRing(object?, VmManagedObjectHeap)"/>.</summary>
-    public static long BoxToAbi(VmManagedObjectHeap heap, object? value) => ToRing(value, heap);
 
     /// <summary>Runtime cast of a heap handle to <paramref name="target"/>.
     /// A non-matching value fails closed as an <see cref="InvalidCastException"/>.</summary>

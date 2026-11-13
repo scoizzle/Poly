@@ -101,13 +101,24 @@ public static class TemporalMeaning {
                 { DefaultTargetTypeName: { } target } => ("default value", target),
                 { Site: CheckSite.Assign } => ("assign value", scope.SiteTypeName),
                 { Site: CheckSite.Operand } => ("comparison operand", scope.SiteTypeName),
+                { Site: CheckSite.OptionalOperand } => ("comparison operand", scope.SiteTypeName),
                 _ => ("operand", null),
             };
+            if (scope.Site is CheckSite.OptionalOperand && string.Equals(typeName, "Duration", StringComparison.OrdinalIgnoreCase)) {
+                context.ReportError(expression,
+                    $"{position} '{d.Amount} {d.Unit}' cannot be compared with an optional Duration yet (#484): no door compares an optional value",
+                    DomainModelDiagnosticCodes.SemanticTypeCompatibility);
+                return;
+            }
             if (string.Equals(typeName, "Duration", StringComparison.OrdinalIgnoreCase)) {
                 if (d.Unit is DurationUnit.Months or DurationUnit.Years)
                     context.ReportError(expression,
                         $"{position} '{d.Amount} {d.Unit}' has no fixed length " +
                         "(months and years vary; use Days or a smaller unit)",
+                        DomainModelDiagnosticCodes.SemanticTypeCompatibility);
+                else if (!TemporalLowering.FitsATimeSpan(d))
+                    context.ReportError(expression,
+                        $"{position} '{d.Amount} {d.Unit}' is too long for a TimeSpan",
                         DomainModelDiagnosticCodes.SemanticTypeCompatibility);
                 return;
             }

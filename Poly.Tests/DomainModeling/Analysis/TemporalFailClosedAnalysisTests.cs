@@ -158,13 +158,44 @@ public class TemporalFailClosedAnalysisTests {
     [Arguments("assign to a required Duration", "Go: action { assign Len to 30 Minutes }")]
     [Arguments("assign to an optional Duration", "Go: action { assign Gap to 2 Hours }")]
     [Arguments("compared with a required Duration", "Slow: policy { Len > 1 Hours }")]
-    [Arguments("compared with an optional Duration", "Slow: policy { Gap > 1 Hours }")]
     [Arguments("the literal on the left", "Slow: policy { 1 Hours < Len }")]
     public async Task DurationProperty_BareDurationAtAssignAndComparison_AnalyzesClean(string row, string members) {
         var result = Evolve(DurationDocument(members), ExtensionCatalog.Core.Language);
 
         await Assert.That(Errors(result)).IsEmpty().Because(row);
         await Assert.That(result.Succeeded).IsTrue().Because(row);
+    }
+
+    /// <summary>
+    /// #484: no door compares an optional value (the simulator and <c>polyc</c> refuse <c>Nullable&lt;TimeSpan&gt;</c> against
+    /// <c>TimeSpan</c>), so a bare duration compared with an optional Duration is refused, either operand order and operator.
+    /// An optional Duration reached through a path read (<c>part Gap &gt; 1 Hours</c>) is not seen by this check until T-06a.
+    /// </summary>
+    [Test]
+    [Arguments("Slow: policy { Gap > 1 Hours }")]
+    [Arguments("Slow: policy { Gap == 1 Hours }")]
+    [Arguments("Slow: policy { 1 Hours >= Gap }")]
+    public async Task OptionalDuration_ComparedWithABareDuration_IsRefusedAtAnalysis(string members) {
+        var result = Evolve(DurationDocument(members), ExtensionCatalog.Core.Language);
+
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(Errors(result).Any(e => e.Contains("optional Duration", StringComparison.Ordinal) && e.Contains("#484", StringComparison.Ordinal)))
+            .IsTrue().Because(string.Join(" | ", Errors(result)));
+    }
+
+    /// <summary>A duration beyond what a <c>TimeSpan</c> holds throws at define or run time on a host; analysis refuses it, positioned.</summary>
+    [Test]
+    [Arguments("Go: action { assign Len to 9223372036854775807 Hours }")]
+    [Arguments("Go: action { assign Len to 9223372036854775807 Days }")]
+    [Arguments("Go: action { assign Len to 9223372036854775807 Weeks }")]
+    [Arguments("Go: action { assign Len to 9223372036854775807 Milliseconds }")]
+    [Arguments("Slow: policy { Len > 9223372036854775807 Hours }")]
+    public async Task BareDuration_BeyondATimeSpan_IsRefusedAtAnalysis(string members) {
+        var result = Evolve(DurationDocument(members), ExtensionCatalog.Core.Language);
+
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(Errors(result).Any(e => e.Contains("too long for a TimeSpan", StringComparison.Ordinal))).IsTrue()
+            .Because(string.Join(" | ", Errors(result)));
     }
 
     /// <summary>The create initializer is the third stamp site: a bare duration for a Duration property of the created entity.</summary>
@@ -197,7 +228,7 @@ public class TemporalFailClosedAnalysisTests {
     [Arguments("Go: action { assign Len to 2 Months }")]
     [Arguments("Go: action { assign Gap to 1 Years }")]
     [Arguments("Slow: policy { Len > 3 Months }")]
-    [Arguments("Slow: policy { 1 Years < Gap }")]
+    [Arguments("Slow: policy { 1 Years < Len }")]
     public async Task DurationAtAssignAndComparison_MonthsOrYears_FailsAtAnalysis(string members) {
         var result = Evolve(DurationDocument(members), ExtensionCatalog.Core.Language);
 

@@ -27,10 +27,10 @@ public interface IExpressionTypeCheck {
 
 /// <summary>
 /// Where the analyzer reached a pack-owned expression, stamped on the node by the walk sites that know it (an assign
-/// value, a create initializer, a comparison operand). <see cref="Default"/> is every other position, and a
+/// value, a create initializer, a comparison operand, a comparison operand beside an optional property). <see cref="Default"/> is every other position, and a
 /// <c>default(...)</c> (see <see cref="ExpressionTypeCheckScope.DefaultTargetTypeName"/>).
 /// </summary>
-public enum CheckSite { Default, Assign, Operand }
+public enum CheckSite { Default, Assign, Operand, OptionalOperand }
 
 /// <summary>
 /// Context bundle for a registered expression type check. Mirrors the surface the analyzer

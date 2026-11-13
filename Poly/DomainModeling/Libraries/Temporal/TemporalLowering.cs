@@ -228,6 +228,17 @@ internal static class TemporalLowering {
         }
     }
 
+    /// <summary>False for a fixed-length duration a <c>TimeSpan</c> cannot hold (a host throws on it at define or run time).</summary>
+    internal static bool FitsATimeSpan(Duration d) {
+        try {
+            _ = ToTimeSpan(d);
+            return true;
+        }
+        catch (Exception e) when (e is OverflowException or ArgumentOutOfRangeException or NotSupportedException) {
+            return false;
+        }
+    }
+
     private static TimeSpan ToTimeSpan(Duration d) => d.Unit switch {
         DurationUnit.Milliseconds => TimeSpan.FromMilliseconds(d.Amount),
         DurationUnit.Seconds => TimeSpan.FromSeconds(d.Amount),

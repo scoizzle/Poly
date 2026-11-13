@@ -367,6 +367,8 @@ public class AnalysisGateParityTests {
           OptStamp: DateTime optional
           OptA: Number optional
           OptD: Decimal optional
+          Opens: Time
+          OutM: Time optional
           OutD: Date optional
           OutT: DateTime optional
           Gap: Duration optional
@@ -376,7 +378,7 @@ public class AnalysisGateParityTests {
         """;
 
     private const string OffsetItem =
-        """{"A":1,"D":2.5,"Due":"2026-01-01","Due2":"2026-01-05","Stamp":"2026-01-01T00:00:00Z","Stamp2":"2026-01-02T00:00:00Z","Len":"01:00:00","OptDue":"2026-02-01","OptStamp":"2026-02-01T00:00:00Z","OptA":2,"OptD":1.5}""";
+        """{"A":1,"D":2.5,"Due":"2026-01-01","Due2":"2026-01-05","Stamp":"2026-01-01T00:00:00Z","Stamp2":"2026-01-02T00:00:00Z","Len":"01:00:00","Opens":"09:00:00","OptDue":"2026-02-01","OptStamp":"2026-02-01T00:00:00Z","OptA":2,"OptD":1.5}""";
 
     /// <summary>
     /// T-10a: every temporal expression a DSL author can write means the same on the simulator, the generated C# and
@@ -405,6 +407,12 @@ public class AnalysisGateParityTests {
     [Arguments("Duration compared (R1)", "Go: policy { Len > 1 Hours }", null, "")]
     [Arguments("the duration on the left (R1)", "Go: policy { 1 Hours < Len }", null, "")]
     [Arguments("Duration equality (R1)", "Go: policy { Len == 60 Minutes }", null, "")]
+    [Arguments("DateTime difference compared with a duration", "Go: policy { (Stamp2 - Stamp) > 1 Hours }", null, "")]
+    [Arguments("two duration literals compared", "Go: policy { 1 Hours < 2 Hours }", null, "")]
+    [Arguments("Date + a calendar literal (unchanged)", "Go: action { assign OutD to Due + 2 Months }", null, "")]
+    [Arguments("Time + a literal (unchanged)", "Go: action { assign OutM to Opens + 2 Hours }", null, "")]
+    [Arguments("Time - a literal (unchanged)", "Go: action { assign OutM to Opens - 30 Minutes }", null, "")]
+    [Arguments("a negative duration literal does not parse", "Go: action { assign Len to -5 Minutes }", null, "Parse error")]
     [Arguments("DateTime - DateTime", "Go: action { assign Gap to Stamp - Stamp2 }", null, "")]
     [Arguments("Date - Date (R6)", "Go: action { assign Gap to Due2 - Due }", null, "")]
     [Arguments("Date - Date in a policy (R6)", "Go: policy { (Due - Due2) == (Due - Due2) }", null, "")]
@@ -493,6 +501,93 @@ public class AnalysisGateParityTests {
 
         await Assert.That(outcomes[^1].Success).IsTrue();
         await Assert.That(outcomes[^1].State["Elapsed"]).IsEqualTo(TimeSpan.FromDays(4).ToString());
+    }
+
+    /// <summary>R6: the earlier date on the left is a negative difference, the same on both hosts.</summary>
+    [Test]
+    public async Task DateOnlyDifference_Negative_BothHostsAnswerMinusTheDayCount() {
+        const string dsl = """
+            domain Span
+            uses temporal
+            Job: entity {
+              Started: Date
+              Finished: Date
+              Elapsed: Duration optional
+              Close: action { assign Elapsed to Finished - Started }
+            }
+            """;
+        var outcomes = await ParityScenario.FromDsl(dsl, "T10aDateDifferenceNegative").AssertAgree(side => {
+            side.Create("Job", ("Started", new DateOnly(2026, 1, 5)), ("Finished", new DateOnly(2026, 1, 1)));
+            side.Invoke("Close");
+        });
+
+        await Assert.That(outcomes[^1].State["Elapsed"]).IsEqualTo(TimeSpan.FromDays(-4).ToString());
+    }
+
+    /// <summary>
+    /// The lowering of a bare duration runs on the VM and in the printed C# for every unit with a fixed length: the same
+    /// <c>TimeSpan</c>, computed here from the platform.
+    /// </summary>
+    [Test]
+    [Arguments("Milliseconds", 1500L)]
+    [Arguments("Seconds", 90L)]
+    [Arguments("Minutes", 30L)]
+    [Arguments("Hours", 5L)]
+    [Arguments("Days", 3L)]
+    [Arguments("Weeks", 2L)]
+    public async Task BareDuration_EveryFixedUnit_BothHostsAssignTheSameTimeSpan(string unit, long amount) {
+        var dsl = $$"""
+            domain Sla
+            uses temporal
+            Job: entity {
+              Budget: Duration optional
+              Set: action { assign Budget to {{amount}} {{unit}} }
+            }
+            """;
+        var expected = unit switch {
+            "Milliseconds" => TimeSpan.FromMilliseconds(amount),
+            "Seconds" => TimeSpan.FromSeconds(amount),
+            "Minutes" => TimeSpan.FromMinutes(amount),
+            "Hours" => TimeSpan.FromHours(amount),
+            "Days" => TimeSpan.FromDays(amount),
+            _ => TimeSpan.FromDays(amount * 7),
+        };
+        var outcomes = await ParityScenario.FromDsl(dsl, "T10aUnit" + unit).AssertAgree(side => {
+            side.Create("Job");
+            side.Invoke("Set");
+        });
+
+        await Assert.That(outcomes[^1].Success).IsTrue().Because(unit);
+        await Assert.That(outcomes[^1].State["Budget"]).IsEqualTo(expected.ToString()).Because(unit);
+    }
+
+    /// <summary>
+    /// The product round trip the round-trip matrix cannot make: define, export the DSL, define that text in a fresh workspace,
+    /// export again. The two texts and the two models are equal, and the reread document runs.
+    /// </summary>
+    [Test]
+    public async Task BareDurationAssign_ProductRoundTrip_RereadsAsTheSameModel() {
+        const string dsl = """
+            domain Sla
+            uses temporal
+            Job: entity {
+              Len: Duration
+              Fast: policy { Len < 1 Hours }
+              Set: action { assign Len to 30 Minutes }
+            }
+            """;
+        var surface = PolySurfaceHarness.New();
+        var first = surface.Open("RoundTrip1");
+        await Assert.That(surface.Define(first, dsl).Success).IsTrue();
+        var text = surface.Export(first, "dsl").Content;
+        var second = surface.Open("RoundTrip2");
+        await Assert.That(surface.Define(second, text).Success).IsTrue().Because(text);
+
+        await Assert.That(surface.Export(second, "dsl").Content).IsEqualTo(text);
+        await Assert.That(surface.Inspect(second, detail: "full").Summary).IsEqualTo(surface.Inspect(first, detail: "full").Summary);
+        await Assert.That(text).Contains("assign Len to 30 Minutes").And.Contains("Len < 1 Hours");
+        var run = surface.Simulate(second, SimStep.Create("Job", """{"Len":"02:00:00"}""", "j"), SimStep.Invoke("j", "Set"), SimStep.Evaluate("Job", "Fast", "j"));
+        await Assert.That(run.Success).IsTrue().Because(run.Summary);
     }
 
     /// <summary>R1: a bare duration assigned to a Duration property and compared with one answers the same value on both hosts.</summary>

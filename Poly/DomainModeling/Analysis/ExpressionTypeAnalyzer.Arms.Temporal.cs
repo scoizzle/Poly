@@ -23,10 +23,18 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
         AnalysisContext context, Comparison cmp,
         Dictionary<string, string> props, Dictionary<string, string>? parameters, Dictionary<string, EnumType> enumTypes) {
         if (IsLeaf(cmp.Left))
-            StampSite(context, cmp.Left, CheckSite.Operand, SiteTypeName(InferType(context, cmp.Right, props, parameters, enumTypes)));
+            StampOperand(context, cmp.Left, cmp.Right, props, parameters, enumTypes);
         if (IsLeaf(cmp.Right))
-            StampSite(context, cmp.Right, CheckSite.Operand, SiteTypeName(InferType(context, cmp.Left, props, parameters, enumTypes)));
+            StampOperand(context, cmp.Right, cmp.Left, props, parameters, enumTypes);
     }
+
+    /// <summary>An operand compared with an optional property is stamped <see cref="CheckSite.OptionalOperand"/> (#484: no door compares an optional).</summary>
+    private void StampOperand(
+        AnalysisContext context, DomainExpression operand, DomainExpression other,
+        Dictionary<string, string> props, Dictionary<string, string>? parameters, Dictionary<string, EnumType> enumTypes) =>
+        StampSite(context, operand,
+            IsOptionalProperty(context, other, props) ? CheckSite.OptionalOperand : CheckSite.Operand,
+            SiteTypeName(InferType(context, other, props, parameters, enumTypes)));
 
     private static bool IsLeaf(DomainExpression expr) => !expr.Children.OfType<DomainExpression>().Any();
 

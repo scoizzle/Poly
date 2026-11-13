@@ -110,7 +110,7 @@ public partial class AnalyzerClosingRoundPinTests {
     }
 
     internal static string AllNullMatchRows() {
-        DomainExpression Match(DomainExpression a, DomainExpression b) =>
+        static DomainExpression Match(DomainExpression a, DomainExpression b) =>
             DomainExpression.Match([new MatchArm(DomainExpression.Literal(true), a)], b);
         var nul = DomainExpression.Literal(null);
         (string Label, string Target, Func<DomainExpression> Build)[] cases = [

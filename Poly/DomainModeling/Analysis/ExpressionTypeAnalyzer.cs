@@ -1,14 +1,13 @@
 using Poly.DomainModeling.Meaning;
 using Poly.DomainModeling.Ontology;
 
-using OperatorKind = Poly.Introspection.OperatorKind;
-
 using Action = Poly.DomainModeling.Ontology.Action;
 using Add = Poly.DomainModeling.Ontology.Add;
 using And = Poly.DomainModeling.Ontology.And;
 using Divide = Poly.DomainModeling.Ontology.Divide;
 using Multiply = Poly.DomainModeling.Ontology.Multiply;
 using Not = Poly.DomainModeling.Ontology.Not;
+using OperatorKind = Poly.Introspection.OperatorKind;
 using Or = Poly.DomainModeling.Ontology.Or;
 using Subtract = Poly.DomainModeling.Ontology.Subtract;
 

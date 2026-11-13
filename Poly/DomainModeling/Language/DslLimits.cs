@@ -33,11 +33,13 @@ public static class DslLimits {
     public const string StatementDepthDetail = "statement nesting exceeds the limit of 64";
 
     /// <summary>
-    /// Stack for the thread the compiler and the structure parser run on. The expression parser no longer needs it
-    /// (its depth is a counted limit); statement nesting (<c>if</c>, <c>else if</c> ladders) has no counted limit
-    /// yet, and every pass after the parse (analysis, lowering, VM compile, print) recurses over it. Measured
-    /// (G-10 fix round 1): without this hop a 1 MB thread aborts at about 600 nested <c>if</c> or <c>else if</c>
-    /// rungs, where the 16 MB thread survives thousands. Row G-25 bounds statement nesting and removes it.
+    /// Stack for the thread the compiler and the structure parser run on (<c>PolyCompiler.Compile</c> and
+    /// <c>Analyze</c>, <c>DomainResolver.Resolve</c>). Statement nesting (64, <see cref="MaxStatementDepth"/>) and
+    /// expression nesting (256) are counted parse limits, but they are not a stack guarantee for the passes after
+    /// the parse (analysis, lowering, VM compile, print), which still recurse over the tree: measured in G-25 step 0,
+    /// without this hop a 512 KB thread aborts <c>Compile</c> at 137 to 153 expression levels and at 500 chained
+    /// stages. The hop therefore remains; row G-25b decides it. <c>PolyCompiler.Produce</c>, a direct
+    /// <c>DomainSession.Lower</c> and the DSL printer do not hop: they run on the caller's stack.
     /// </summary>
     internal const int ParseStackBytes = 16 * 1024 * 1024;
 

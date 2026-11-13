@@ -885,7 +885,8 @@ Statements may nest at most 64 levels: the level of an `if` or `for` is the numb
 `if` and `for` statements, itself included, so a top-level `if` is level 1, and each `else if` rung
 is one level below the rung before it (it is a nested `if`). A statement at level 65 is a positioned
 parse error (`DSL0001`, "statement nesting exceeds the limit of 64") on its `if` or `for` keyword,
-not a crash, however deep the input goes.
+not a crash, however deep the input goes. Like the expression limit, it is a parse limit, not a
+stack guarantee for the steps after the parse.
 
 ### Invoke
 
@@ -1189,8 +1190,10 @@ The DSL accepts boolean and scalar expressions through the following precedence 
 An expression may nest at most 256 levels: the top level is 0, and each paren group, `not`,
 comparison operand, `where` body or call/match argument adds 1, while a chain of N operands
 adds N - 1, and so does a path of N words (`a b c` is one navigation per word after the first).
-Deeper input is a positioned parse error, not a crash, and the limit does not depend on the
-host's stack size. Statements have their own limit of 64 levels (§6).
+Deeper input is a positioned parse error, not a crash, and the parser enforces the limit without
+depending on the host's stack size. That is a guarantee about parsing only: the steps after the
+parse (analysis, compile, export) still walk the tree and need enough stack for it.
+Statements have their own limit of 64 levels (§6).
 
 Valid expressions:
 <!-- poly-verify: skip:illustration owner:M-02 -->

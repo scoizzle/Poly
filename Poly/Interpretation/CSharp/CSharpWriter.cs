@@ -832,26 +832,14 @@ public sealed class CSharpWriter {
         }
 
         if (kind is TypeKind.Interface) {
-            var body = new StringBuilder();
-            if (typeDef.Properties != null) {
-                foreach (var property in typeDef.Properties) {
-                    body.Append('\n');
-                    body.Append(Pad(indent + 1));
-                    body.Append(InterfacePropertyText(property));
-                }
-            }
-            if (typeDef.Methods != null) {
-                foreach (var method in typeDef.Methods) {
-                    body.Append('\n');
-                    body.Append(Pad(indent + 1));
-                    body.Append(InterfaceMethodText(method));
-                }
-            }
-            body.Append('\n');
-            body.Append(Pad(indent));
+            var interfaceMembers = new List<(Node Member, string? CtorName)>();
+            foreach (var property in typeDef.Properties ?? [])
+                interfaceMembers.Add((property, null));
+            foreach (var method in typeDef.Methods ?? [])
+                interfaceMembers.Add((method, null));
             sb.Append(Pad(indent));
             sb.AppendLine(RenderFills("type-decl", "interface", TypeNameFill(typeDef.Name), null, mods,
-                GenericParamsText(typeDef.GenericParameters), LineageText(typeDef), body.ToString()));
+                GenericParamsText(typeDef.GenericParameters), LineageText(typeDef), TypeBodyText(interfaceMembers, indent)));
             return;
         }
 
@@ -864,26 +852,16 @@ public sealed class CSharpWriter {
             return;
         }
 
-        var membersBlock = new StringBuilder();
-        void AddMember(Node member, string? name = null) {
-            membersBlock.Append('\n');
-            membersBlock.Append(name is null ? MemberText(member, indent + 1) : MemberText(member, indent + 1, name));
-        }
-        if (typeDef.Fields != null) {
-            foreach (var field in typeDef.Fields)
-                AddMember(field);
-        }
-        if (typeDef.Constructors != null) {
-            foreach (var ctor in typeDef.Constructors)
-                AddMember(ctor, typeDef.Name);
-        }
+        var bodyMembers = new List<(Node Member, string? CtorName)>();
+        foreach (var field in typeDef.Fields ?? [])
+            bodyMembers.Add((field, null));
+        foreach (var ctor in typeDef.Constructors ?? [])
+            bodyMembers.Add((ctor, typeDef.Name));
         foreach (var prop in GetBodyProperties(typeDef))
-            AddMember(prop);
-        if (typeDef.Methods != null) {
-            foreach (var method in typeDef.Methods)
-                AddMember(method);
-        }
-        var bodyText = "\n" + Pad(indent) + RenderFills("type-body", "body", Braces(), membersBlock + "\n" + Pad(indent));
+            bodyMembers.Add((prop, null));
+        foreach (var method in typeDef.Methods ?? [])
+            bodyMembers.Add((method, null));
+        var bodyText = TypeBodyText(bodyMembers, indent);
 
         sb.Append(Pad(indent));
         sb.AppendLine(isRecord
@@ -897,14 +875,15 @@ public sealed class CSharpWriter {
 
     private static Dictionary<string, string> TypeNameFill(string name) => Names(("name", EscapeIdent(name)));
 
-    private string InterfaceMethodText(MethodDefinitionNode method) =>
-        TypeText(method.ReturnType) + " " + EscapeIdent(method.Name) + "(" + ParamListText(method.Parameters) + ");";
-
-    private string InterfacePropertyText(PropertyDefinitionNode prop) {
-        var accessors = new StringBuilder();
-        if (prop.Getter != null) accessors.Append("get; ");
-        if (prop.Setter != null) accessors.Append("set; ");
-        return $"{TypeText(prop.MemberType)} {EscapeIdent(prop.Name)} {{ {accessors.ToString().TrimEnd()} }}";
+    /// <summary>A class, record or interface body: every member through its member row, in the braces of
+    /// <c>type-body/body</c>. The constructor name is the type's own name.</summary>
+    private string TypeBodyText(IReadOnlyList<(Node Member, string? CtorName)> members, int indent) {
+        var block = new StringBuilder();
+        foreach (var (member, ctorName) in members) {
+            block.Append('\n');
+            block.Append(MemberText(member, indent + 1, ctorName));
+        }
+        return "\n" + Pad(indent) + RenderFills("type-body", "body", Braces(), block + "\n" + Pad(indent));
     }
 
     private static bool TypeDefinitionHasBody(TypeDefinitionNode typeDef) =>

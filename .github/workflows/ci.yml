@@ -39,9 +39,13 @@ jobs:
         run: dotnet build Poly.slnx --no-restore --nologo
 
       # --timeout ends a hung run by itself (exit 3) after 10 minutes; a normal run is 3-4.
+      # It cannot end a test blocked synchronously (the host waits for that thread), so the
+      # step's own timeout-minutes is the stop for that case and still leaves the next steps
+      # (which name the unfinished test and upload the log) inside the job's 15 minutes.
       # The diagnostic log records a start and an end event per test (the console prints only
       # the end), so the next step can name a test that started and never finished.
       - name: Run tests
+        timeout-minutes: 11
         run: >
           dotnet run --project Poly.Tests/Poly.Tests.csproj --no-restore --
           --timeout 10m

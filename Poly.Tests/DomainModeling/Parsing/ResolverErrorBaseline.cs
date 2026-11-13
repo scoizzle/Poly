@@ -43,13 +43,7 @@ internal static class ResolverErrorBaseline {
     // ── the closed owner set ─────────────────────────────────────────────────────────
 
     /// <summary>The rows that will replace a pinned-wrong result (owner ruling, #677 comment 6843661801).</summary>
-    public static readonly string[] Fixers = ["G-13c", "T-15", "G-29", "G-05", "S-09", "G-27"];
-
-    /// <summary>
-    /// The tag for a wrong result that no row of the programme owns. Such a result is reported (the PR body lists each), never
-    /// presented as right, and still stale-checked.
-    /// </summary>
-    public const string Unowned = "unowned";
+    public static readonly string[] Fixers = ["G-13c", "T-15", "G-29", "G-05", "S-09", "G-27", "G-28", "G-32"];
 
     /// <summary>
     /// A result that is known wrong, by the row that will fix it. <c>Key</c> is <c>S:site/case</c> or <c>X:doc#token/filler/door</c>
@@ -78,13 +72,45 @@ internal static class ResolverErrorBaseline {
         ("S:Relationships.navline.text/case", "G-29", "ERR FormatException: 'PARALLEL' is not supported in Phase 1a (used as type for 'Owner')"),
         ("X:entities#3/ident/R", "G-29", "InvalidOperationException: Unknown domain extension 'zz'"),
         ("X:expressions#3/ident/R", "G-29", "InvalidOperationException: Unknown domain extension 'zz'"),
-        // G-05 and S-09: the top-level refusals ('Order: actor', 'Child: Parent entity { }') have no position (TopLevelRejection).
+        // G-05 keeps `actor` (S-09 owns the rest of TopLevelRejection's unpositioned refusals: `Function`, `schedule`); G-29 owns the inheritance error.
         ("S:TopLevel.rejection.unsupported/ok", "G-05", "ERR FormatException: 'actor' is not supported in Phase 1a (use 'entity' instead)"),
-        ("S:TopLevel.rejection.unsupported/case", "G-05", "ERR FormatException: 'Function' is not supported in Phase 1a (use 'entity' instead)"),
-        ("S:TopLevel.rejection.unsupported-message/ok", "G-05", "ERR FormatException: 'schedule' is not supported in Phase 1a (use 'entity' instead)"),
-        ("S:TopLevel.rejection.inheritance/ok", "S-09", "ERR FormatException: Entity inheritance ('X: Base entity') is no longer supported."),
-        ("S:TopLevel.rejection.inheritance-define/unicode", "S-09", "ERR FormatException: Entity inheritance ('X: Größe entity') is no longer supported."),
+        ("S:TopLevel.rejection.unsupported/case", "S-09", "ERR FormatException: 'Function' is not supported in Phase 1a (use 'entity' instead)"),
+        ("S:TopLevel.rejection.unsupported-message/ok", "S-09", "ERR FormatException: 'schedule' is not supported in Phase 1a (use 'entity' instead)"),
+        ("S:TopLevel.rejection.inheritance/ok", "G-29", "ERR FormatException: Entity inheritance ('X: Base entity') is no longer supported."),
+        ("S:TopLevel.rejection.inheritance-define/unicode", "G-29", "ERR FormatException: Entity inheritance ('X: Größe entity') is no longer supported."),
+        // G-32 (#871): a `require` of a missing policy is reported at the end of the entity body, not at the `require` (frozen @33:1 for a require on line 23).
+        ("E:site:Entities:ResolvePendingRequires#1", "G-32", "@33:1 off=-1 len=0 :: Action 'Act' requires policy 'Q'"),
+        ("E:site:Entities:ResolvePendingRequires#2", "G-32", "@33:1 off=-1 len=0 :: Action 'Run' requires policy 'P'"),
+        ("E:ladder:Entities:ResolvePendingRequires#1/Entities:ResolvePendingRequires#2", "G-32", "@5:2 off=-1 len=0 :: Action 'Go' requires policy 'M1'"),
+        ("E:ladder:Entities:ResolvePendingRequires#2/Entities:ResolvePendingRequires#3", "G-32", "@5:2 off=-1 len=0 :: Action 'Go' requires policy 'M1'"),
+        ("E:defer:order:requires-before-navs", "G-32", "@7:2 off=-1 len=0 :: Action 'Go' requires policy 'M'"),
+        // G-28: the message does not show the token kind (a quoted string reads as `got 'value'`).
+        ("E:pub:1", "G-28", "after 'public', got 'value'"),
+        ("E:pub:2", "G-28", "after 'public', got 'str'"),
+        ("E:pub:3", "G-28", "after 'public', got '5'"),
+        ("E:pub:4", "G-28", "after 'public', got '{'"),
+        ("E:pub:5", "G-28", "after 'public', got 'action'"),
+        ("E:pub:8", "G-28", "after 'public', got ''"),
     ];
+
+    /// <summary>Where a tag's fixing row lives when that is not obvious from the fixer: a site in G-30 or G-33 code is fixed by whichever row converts it.</summary>
+    public static readonly Dictionary<string, string> KnownWrongNotes = new(StringComparer.Ordinal) {
+        ["S:Effects.unsupported.check/ok"] = "site in DomainResolver.Effects.cs (G-33 converts the effect forms; G-29 owns the message)",
+        ["S:Effects.unsupported.check/case"] = "site in DomainResolver.Effects.cs (G-33 converts the effect forms; G-29 owns the message)",
+        ["S:Effects.unsupported.message/ok"] = "site in DomainResolver.Effects.cs (G-33 converts the effect forms; G-29 owns the message)",
+        ["S:Effects.unsupported.message/function"] = "site in DomainResolver.Effects.cs (G-33 converts the effect forms; G-29 owns the message)",
+        ["S:Entities.typed-line.unsupported/ok"] = "site in the entity body (G-30 converts it; G-29 owns the message)",
+        ["S:Entities.typed-line.unsupported/case"] = "site in the entity body (G-30 converts it; G-29 owns the message)",
+        ["S:Entities.typed-line.unsupported/function"] = "site in the entity body (G-30 converts it; G-29 owns the message)",
+        ["S:Entities.fallback.unsupported/mis-keyword"] = "site in the entity body (G-30 converts it; G-29 owns the message)",
+        ["S:Relationships.navline.text/unsupported"] = "site in the navigation line (G-30 converts it; G-29 owns the message)",
+        ["S:Relationships.navline.text/case"] = "site in the navigation line (G-30 converts it; G-29 owns the message)",
+        ["E:site:Entities:ResolvePendingRequires#1"] = "#871; the site is in the entity body (G-30 converts it), the position fix is G-32's action `require`",
+        ["E:site:Entities:ResolvePendingRequires#2"] = "#871; the site is in the entity body (G-30 converts it), the position fix is G-32's action `require`",
+        ["E:ladder:Entities:ResolvePendingRequires#1/Entities:ResolvePendingRequires#2"] = "#871",
+        ["E:ladder:Entities:ResolvePendingRequires#2/Entities:ResolvePendingRequires#3"] = "#871",
+        ["E:defer:order:requires-before-navs"] = "#871",
+    };
 
     // ── sites no input can reach (stale-checked both ways) ───────────────────────────
 
@@ -376,8 +402,10 @@ internal static class ResolverErrorBaseline {
     public static List<string> TagProblems(IReadOnlyDictionary<string, string> results, IEnumerable<(string Key, string Fixer, string Fragment)> tags) {
         var problems = new List<string>();
         var tagged = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var note in KnownWrongNotes.Keys.Where(k => !KnownWrong.Any(t => t.Key == k)))
+            problems.Add($"{note}: a note for a key that has no tag");
         foreach (var (key, fixer, fragment) in tags) {
-            if (!Fixers.Contains(fixer) && fixer != Unowned)
+            if (!Fixers.Contains(fixer))
                 problems.Add($"{key}: fixer '{fixer}' is not in the closed set");
             if (!results.TryGetValue(key, out var result))
                 problems.Add($"{key}: tag names no row");

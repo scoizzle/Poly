@@ -13,7 +13,7 @@ namespace Poly.Tests.DomainModeling.Parsing;
 /// the replace was byte-identical, or the error code.
 ///
 /// <para>No invariant is asserted. "Replace with its own text is byte-identical" was run over every sampled node and does NOT hold:
-/// 69 of the sampled stage and action nodes grow (first counter-example: <c>demo/Poly.RestApi/library.poly</c>, stage
+/// 71 of the sampled stage and action nodes grow (first counter-example: <c>demo/Poly.RestApi/library.poly</c>, stage
 /// <c>Patron.Active</c>, +36 characters: a multi-line node's continuation lines are indented again). The rows freeze that result.</para>
 /// </summary>
 public sealed class EditSpliceBaselineTests {

@@ -188,8 +188,11 @@ public sealed class ResolverErrorSiteTests {
 
         // Pinned so a change in what the oracle reaches is a reviewed change, not a silent one.
         await Assert.That(all.Count).IsEqualTo(228);
-        await Assert.That(bySite.Count).IsGreaterThan(60);
-        await Assert.That(existing.Count).IsGreaterThanOrEqualTo(127);
+        await Assert.That(bySite.Count).IsEqualTo(73);
+        await Assert.That(byN.Count).IsEqualTo(102);
+        await Assert.That(existing.Count).IsEqualTo(127);
+        await Assert.That(byE.Count(s => !existing.Contains(s))).IsEqualTo(32);
+        await Assert.That(unreachable).IsEqualTo(69);
         await Assert.That(existing.Union(byE).Count() + unreachable).IsEqualTo(all.Count);
     }
 

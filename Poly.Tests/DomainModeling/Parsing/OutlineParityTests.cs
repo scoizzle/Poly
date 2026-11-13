@@ -13,9 +13,9 @@ namespace Poly.Tests.DomainModeling.Parsing;
 public sealed class OutlineParityTests {
     private const string FilePath = "Poly.Tests/DomainModeling/Parsing/OutlineHeadParity.txt";
 
-    /// <summary>The classes of known difference. An owner of <c>none</c> means no row of the programme owns it: it is reported, not tagged.</summary>
+    /// <summary>The classes of known difference. Every class names the row that removes it.</summary>
     internal static readonly (string Class, string Owner, string Why)[] DifferenceClasses = [
-        ("bare-navigation", "none", "the outline reads tokens with no session, so `P: Entity` is a property; the resolver knows the entity and says navigation"),
+        ("bare-navigation", "G-30", "the outline reads tokens with no session, so `P: Entity` is a property; the resolver knows the entity and says navigation"),
         ("top-level-function", "G-29", "the outline has no head for `function Name(...)`: it reads the parameter `a: Number` as an unknown top-level declaration and every declaration after it is missing"),
     ];
 
@@ -139,7 +139,7 @@ public sealed class OutlineParityTests {
 
         await Assert.That(unclassified).IsEmpty();
         await Assert.That(counts.Where(c => c.Value == 0).Select(c => c.Key)).IsEmpty().Because("a class with no difference is stale: delete it");
-        await Assert.That(DifferenceClasses.Select(c => c.Owner).Except(["none", "G-29", "G-30", "G-05", "S-09", "G-27", "G-13c", "T-15"])).IsEmpty();
+        await Assert.That(DifferenceClasses.Select(c => c.Owner).Except(ResolverErrorBaseline.Fixers.Append("G-30"))).IsEmpty();
     }
 
     // ── self-tests ───────────────────────────────────────────────────────────────────

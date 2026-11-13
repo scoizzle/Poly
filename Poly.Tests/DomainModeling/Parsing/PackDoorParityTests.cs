@@ -202,12 +202,11 @@ public sealed class PackDoorParityTests {
 
     /// <summary>
     /// The resolver column of a pack-door cell that is known wrong. An unknown id surfaces as a raw <c>InvalidOperationException</c> with no
-    /// position (G-29 positions it); a duplicate id is an unpositioned <c>FormatException</c> thrown by the header reader, which no row of
-    /// the programme owns (the compiler re-derives its position by rescanning the tokens). Both are stale-checked.
+    /// position (G-29 positions it); a duplicate id is an unpositioned <c>FormatException</c> thrown by the header reader (#872, G-29 positions it; the compiler re-derives its position by rescanning the tokens). Both are stale-checked.
     /// </summary>
     internal static readonly (string Key, string Fixer, string Fragment)[] KnownWrong = [
         .. Forms.Where(f => f.Form != "duplicate").Select(f => ($"P:zz|{f.Form}", "G-29", "InvalidOperationException @0:0 off=-1 len=0 :: Unknown domain extension 'zz'")),
-        .. Ids.Select(id => ($"P:{id}|duplicate", ResolverErrorBaseline.Unowned, $"FormatException @0:0 off=-1 len=0 :: Domain lists extension '{id}' more than once.")),
+        .. Ids.Select(id => ($"P:{id}|duplicate", "G-29", $"FormatException @0:0 off=-1 len=0 :: Domain lists extension '{id}' more than once.")),
     ];
 
     [Test]

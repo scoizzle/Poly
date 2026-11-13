@@ -504,6 +504,9 @@ public sealed class DslExpressionParser {
 
         // ── match ─────────────────────────────────────────────────────────────────────
 
+        /// <summary>A parse error positioned at <paramref name="at"/>, the token the fault is on.</summary>
+        private static Exception ErrorAt(DslToken at, string message) => GrammarError.Error(message, at.Line, at.Col);
+
         private static string At(DslToken t) => $" (line {t.Line}, col {t.Col})";
 
         private static bool IsOpen(DslTokenKind k) => k is DslTokenKind.LParen or DslTokenKind.LBrace or DslTokenKind.LBracket;
@@ -528,7 +531,7 @@ public sealed class DslExpressionParser {
                 else if (IsClose(token.Kind)) depth--;
                 if (depth == 0 && token.Kind == DslTokenKind.Comma) {
                     if (i == start)
-                        throw _c.Error($"Expected an arm in 'match' before '{NameOf(token)}'{At(token)}");
+                        throw ErrorAt(token, $"Expected an arm in 'match' before '{NameOf(token)}'{At(token)}");
                     segments.Add((start, i));
                     start = i + 1;
                 }
@@ -536,14 +539,14 @@ public sealed class DslExpressionParser {
 
             if (start < tokens.Count - 1) segments.Add((start, tokens.Count - 1));
             else if (segments.Count > 0)
-                throw _c.Error($"Expected an arm in 'match' after the trailing ','{At(closing)}");
+                throw ErrorAt(closing, $"Expected an arm in 'match' after the trailing ','{At(closing)}");
 
             if (segments.Count == 0)
-                throw _c.Error($"'match' needs at least an 'else' arm (else -> value){At(keyword)}");
+                throw ErrorAt(keyword, $"'match' needs at least an 'else' arm (else -> value){At(keyword)}");
 
             var elseSegments = segments.Where(sg => tokens[sg.Start].Kind == DslTokenKind.Else).ToList();
             if (elseSegments.Count > 1)
-                throw _c.Error($"'match' has more than one 'else' arm{At(tokens[elseSegments[1].Start])}");
+                throw ErrorAt(tokens[elseSegments[1].Start], $"'match' has more than one 'else' arm{At(tokens[elseSegments[1].Start])}");
 
             Take();
             Take();
@@ -565,7 +568,7 @@ public sealed class DslExpressionParser {
             var segments = f.Segments!;
             if (f.Index == segments.Count) {
                 if (f.ElseValue is null)
-                    throw _c.Error($"'match' requires a final 'else' arm (else -> value){At(f.Token)}");
+                    throw ErrorAt(f.Token, $"'match' requires a final 'else' arm (else -> value){At(f.Token)}");
                 Take();
                 Pop();
                 _hard--;
@@ -588,22 +591,22 @@ public sealed class DslExpressionParser {
             }
 
             if (arrow < 0)
-                throw _c.Error($"Expected '->' in 'match' arm starting at '{NameOf(first)}'{At(first)}");
+                throw ErrorAt(first, $"Expected '->' in 'match' arm starting at '{NameOf(first)}'{At(first)}");
             var isElse = arrow - start == 1 && first.Kind == DslTokenKind.Else;
             if (arrow == start)
-                throw _c.Error($"Expected a condition before '->' in 'match'{At(tokens[arrow])}");
+                throw ErrorAt(tokens[arrow], $"Expected a condition before '->' in 'match'{At(tokens[arrow])}");
             if (arrow == end - 1)
-                throw _c.Error($"Expected a value after '->' in 'match'{At(tokens[arrow])}");
+                throw ErrorAt(tokens[arrow], $"Expected a value after '->' in 'match'{At(tokens[arrow])}");
             if (isElse) {
                 if (f.ElseValue is not null)
-                    throw _c.Error($"'match' has more than one 'else' arm{At(first)}");
+                    throw ErrorAt(first, $"'match' has more than one 'else' arm{At(first)}");
                 if (f.Index != segments.Count - 1)
-                    throw _c.Error($"'else' must be the last arm of a 'match'{At(first)}");
+                    throw ErrorAt(first, $"'else' must be the last arm of a 'match'{At(first)}");
             }
             else {
                 for (var j = start; j < arrow; j++) {
                     if (tokens[j].Kind == DslTokenKind.Else)
-                        throw _c.Error($"'else' cannot appear inside a 'match' condition{At(first)}");
+                        throw ErrorAt(first, $"'else' cannot appear inside a 'match' condition{At(first)}");
                 }
             }
 

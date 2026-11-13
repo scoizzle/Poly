@@ -13,7 +13,8 @@ namespace Poly.Tests.Polyc;
 /// G-10 / OQ-4 and lock amendment 13: the ruled 256 nesting levels have to survive every pass that walks an expression
 /// tree, on the 1 MB stack a host or worker gives a thread. A stack overflow cannot be caught, so the measurement runs
 /// in a child process; the probe is payload only in the parent and acts when the child runner sets
-/// <c>POLY_CHILD_PROBE</c>.
+/// <c>POLY_CHILD_PROBE</c>. The parse stack hop (<c>DslLimits.RunOnParseStack</c>) is still in place for statements; see
+/// <see cref="ChildProbe_StatementAndExpressionShapes_OnFixedStack"/>.
 ///
 /// <para>There is no pass registry in the product, so the passes driven at 256 are a fixed list, each named by its
 /// facade: parse = <c>DslExpressionFragment.ParseOnThisThread</c>; analysis = <c>DomainSession.Analyze</c>; lowering =
@@ -123,43 +124,61 @@ public class RecursivePassDepthTests {
         }
     }
 
-    private static string NestedStatements(string open, string close, int levels, string outerOpen = "", string outerClose = "") =>
-        "domain D\nE: entity {\n  Flag: Boolean\n  Note: Text\n  Lines: many L\n  Go: action {\n" + outerOpen
-        + string.Concat(Enumerable.Repeat(open, levels)) + "assign Note to \"x\"\n" + string.Concat(Enumerable.Repeat(close, levels)) + outerClose
-        + "  }\n}\nL: entity { N: Text }\n";
+    private static string StatementDocument(string shape, int n) {
+        const string head = "domain D\nL: entity { N: Text }\nE: entity {\n  Flag: Boolean\n  Note: Text\n  Lines: many L\n";
+        return shape switch {
+            "not" => head + "  Ok: policy { " + string.Concat(Enumerable.Repeat("not ", n)) + "Flag }\n}\n",
+            "paren" => head + "  Ok: policy { " + new string('(', n) + "Flag" + new string(')', n) + " }\n}\n",
+            "elseif" => head + "  Go: action {\n    if (Flag) { assign Note to \"x\" }"
+                + string.Concat(Enumerable.Repeat(" else if (Flag) { assign Note to \"x\" }", n)) + "\n  }\n}\n",
+            "nestif" => head + "  Go: action {\n    " + string.Concat(Enumerable.Repeat("if (Flag) { ", n)) + "assign Note to \"x\"\n"
+                + string.Concat(Enumerable.Repeat("} ", n)) + "\n  }\n}\n",
+            "forif" => head + "  Go: action {\n    for l in Lines { " + string.Concat(Enumerable.Repeat("if (Flag) { ", n)) + "assign Note to \"x\"\n"
+                + string.Concat(Enumerable.Repeat("} ", n)) + "}\n  }\n}\n",
+            _ => throw new InvalidOperationException(shape),
+        };
+    }
+
+    /// <summary>shape x depth cells the probe runs; statement nesting has no counted limit, so these are the regression guard row G-25 tightens.</summary>
+    private static readonly (string Shape, int Depth)[] StackCells = [
+        ("not", Limit), ("paren", Limit), ("elseif", Limit), ("elseif", 1000), ("nestif", Limit), ("nestif", 1000), ("forif", Limit),
+    ];
 
     /// <summary>
-    /// Lock amendment 12/13(d), the hop probe: with the 16 MB parse-stack hop gone, the analysis path
-    /// (<c>PolyCompiler.Analyze</c>: parse, resolve, evolve, analyze) and the structure parser run on a plain 1 MB
-    /// thread at the limit, including 256 nested <c>if</c> statements and 256 <c>if</c>s inside a <c>for</c> (a <c>for</c> inside a <c>for</c> is rejected, so that nesting is bounded at one). Statement nesting has no counted
-    /// limit, so this is the evidence the hop could go; the crash threshold for unbounded statement nesting is lower now.
+    /// Fix round 1 (lock amendment 12), the stack probe: every shape in <see cref="StackCells"/> through parse
+    /// (<c>PolyDslParser</c>), <c>PolyCompiler.Analyze</c> and <c>PolyCompiler.Compile</c>, each on a fresh thread of a fixed
+    /// stack (the POLY_PROBE_STACK_KB variable). Statement shapes are the hazard: the large-stack hop in
+    /// <c>DslLimits.RunOnParseStack</c> is what keeps them alive. Measured WITHOUT the hop (scratch run), a 1 MB thread aborts at
+    /// 600 nested <c>if</c> or <c>else if</c> rungs through every door and a 512 KB thread aborts <c>Compile</c> at 256; master
+    /// (with the hop) survived all of these. The probe passes with the hop in place; G-25 removes the hop and bounds the nesting.
     /// </summary>
     [Test]
-    public async Task ChildProbe_AnalysisPathAndStatementNesting_On1MbStack_NoHop() {
+    public async Task ChildProbe_StatementAndExpressionShapes_OnFixedStack() {
         if (Environment.GetEnvironmentVariable("POLY_CHILD_PROBE") is null)
             return;
 
-        var outcome = OnStack(SmallStackBytes, () => {
-            var compiler = new PolyCompiler(ProductCatalog.Catalog, new SessionOptions(ProductCatalog.Catalog, ProductCatalog.ImplicitIds));
-            foreach (var (_, body) in Cases()) {
-                var compiled = compiler.Analyze(Document(body));
-                if (!compiled.Succeeded)
-                    throw new InvalidOperationException("analysis path: " + string.Join("; ", compiled.Diagnostics.Select(d => d.Message)));
+        var stackKb = int.Parse(Environment.GetEnvironmentVariable("POLY_PROBE_STACK_KB")!, System.Globalization.CultureInfo.InvariantCulture);
+        foreach (var (shape, depth) in StackCells) {
+            var document = StatementDocument(shape, depth);
+            foreach (var door in new[] { "parse", "analyze", "compile" }) {
+                var outcome = OnStack(stackKb * 1024, () => {
+                    if (door == "parse")
+                        return new PolyDslParser(document).Parse().Count > 0;
+                    var compiler = new PolyCompiler(ProductCatalog.Catalog, new SessionOptions(ProductCatalog.Catalog, ProductCatalog.ImplicitIds));
+                    return (door == "analyze" ? compiler.Analyze(document) : compiler.Compile(document)).Succeeded;
+                });
+                await Assert.That(outcome).IsTrue();
             }
-
-            var ifs = new PolyDslParser(NestedStatements("if (Flag) { ", "} ", Limit)).Parse().Count;
-            var fors = new PolyDslParser(NestedStatements("if (Flag) { ", "} ", Limit, "for l in Lines { ", "} ")).Parse().Count;
-            return ifs + fors;
-        });
-
-        await Assert.That(outcome).IsGreaterThan(0);
+        }
     }
 
     [Test]
-    public async Task AnalysisPathAndStatementNesting_On1MbStack_NeedNoHop() {
+    [Arguments(1024)]
+    [Arguments(512)]
+    public async Task StatementAndExpressionShapes_SurviveFixedStacks_ThroughEveryDoor(int stackKb) {
         var result = await PolycProcess.RunTestInChildAsync(
-            $"/*/*/{nameof(RecursivePassDepthTests)}/{nameof(ChildProbe_AnalysisPathAndStatementNesting_On1MbStack_NoHop)}",
-            new Dictionary<string, string?> { ["POLY_CHILD_PROBE"] = "g10-hop" });
+            $"/*/*/{nameof(RecursivePassDepthTests)}/{nameof(ChildProbe_StatementAndExpressionShapes_OnFixedStack)}",
+            new Dictionary<string, string?> { ["POLY_CHILD_PROBE"] = "g10-stack", ["POLY_PROBE_STACK_KB"] = stackKb.ToString(System.Globalization.CultureInfo.InvariantCulture) });
 
         await Assert.That(result.IsAborted).IsFalse();
         await Assert.That(result.ExitCode).IsEqualTo(0);
@@ -169,7 +188,8 @@ public class RecursivePassDepthTests {
     /// NAMED KNOWN GAP (lock amendment 13): <c>Interpreter.Compile</c> is exponential in the length of a left-nested
     /// <c>and</c> chain on master (about 2x per operand), so the VM legs, <c>PolyCompiler.Produce</c> and policy
     /// evaluation, are only shown at 16 operands, where they compile and evaluate correctly. Tracked in issue #823,
-    /// row X-12, which extends this to 256 operands and deletes this pin.
+    /// row X-12, which extends this to 256 operands and deletes this pin. It runs on a 16 MB thread: it pins
+    /// correctness at a length the compiler can finish, not stack depth.
     /// </summary>
     [Test]
     public async Task VmCompile_LongAndChain_IsPinnedAt16Operands_Issue823() {

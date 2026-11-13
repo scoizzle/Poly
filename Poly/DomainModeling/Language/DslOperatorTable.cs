@@ -105,7 +105,26 @@ public sealed class DslOperatorTable {
             [new PrefixRow(DslTokenKind.Not, add, DomainExpression.Not)]);
     }
 
-    public DslOperatorTable With(BinaryRow row) => new([.. _binary.Values, row], _prefix.Values);
+    /// <summary>
+    /// A copy with one more binary row. A row whose precedence falls between a prefix row's head level and its operand
+    /// precedence would silently change how that prefix binds (<c>not a &gt; b</c> would become <c>(not a) &gt; b</c>), so it
+    /// is refused: give the row a precedence outside that gap, or change the prefix row deliberately.
+    /// </summary>
+    public DslOperatorTable With(BinaryRow row) {
+        var next = new DslOperatorTable([.. _binary.Values, row], _prefix.Values);
+        foreach (var prefix in _prefix.Values) {
+            if (HeadPrecedence(prefix) != next.HeadPrecedence(prefix))
+                throw new InvalidOperationException(
+                    $"Binary row '{row.Op}' at precedence {row.Precedence} would change how prefix '{prefix.Op}' binds.");
+        }
+
+        return next;
+    }
+
+    private int HeadPrecedence(PrefixRow row) {
+        var head = HeadLevel(row);
+        return head < 0 ? int.MinValue : Levels[head].Precedence;
+    }
 
     public DslOperatorTable With(PrefixRow row) => new(_binary.Values, [.. _prefix.Values, row]);
 

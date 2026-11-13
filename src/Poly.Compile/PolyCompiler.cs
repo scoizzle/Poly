@@ -64,7 +64,7 @@ public sealed class PolyCompiler {
         string text, string file = "<input>", CancellationToken cancel = default, string? target = null) {
         ArgumentNullException.ThrowIfNull(text);
         lock (_gate)
-            return CompileCore(text, file, target, cancel, produce: true);
+            return DslLimits.RunOnParseStack(() => CompileCore(text, file, target, cancel, produce: true));
     }
 
     /// <summary>
@@ -75,7 +75,7 @@ public sealed class PolyCompiler {
         string text, string file = "<input>", CancellationToken cancel = default, string? target = null) {
         ArgumentNullException.ThrowIfNull(text);
         lock (_gate)
-            return CompileCore(text, file, target, cancel, produce: false);
+            return DslLimits.RunOnParseStack(() => CompileCore(text, file, target, cancel, produce: false));
     }
 
     /// <summary>

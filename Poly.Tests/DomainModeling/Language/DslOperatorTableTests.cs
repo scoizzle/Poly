@@ -76,13 +76,13 @@ public sealed class DslOperatorTableTests {
         await Assert.That(() => table.With(new PrefixRow(DslTokenKind.Not, 50, DomainExpression.Not))).Throws<InvalidOperationException>();
     }
 
-    /// <summary>A row registered on a copy of the table parses with no grammar change: <c>in</c> binds between a comparison and a sum.</summary>
+    /// <summary>A row registered on a copy of the table parses with no grammar change: <c>in</c> binds tighter than a sum and looser than a product.</summary>
     [Test]
     public async Task With_ExtraRow_ParsesWithNoGrammarEdit() {
         var table = DslOperatorTable.Core().With(new BinaryRow(
-            DslTokenKind.In, 45, Assoc.Left, (left, right) => DomainExpression.Equal(left, right)));
+            DslTokenKind.In, 55, Assoc.Left, (left, right) => DomainExpression.Equal(left, right)));
 
-        var reader = new DslTokenReader("a in b + c");
+        var reader = new DslTokenReader("a in b * c");
         var cursor = new DslCursor(reader, new Matcher<DslToken, DslTokenKind>(DslGrammar.Core, reader));
         var parsed = new DslExpressionParser(cursor, operators: table).ParseExpression();
 
@@ -90,7 +90,26 @@ public sealed class DslOperatorTableTests {
         var comparison = (Comparison)parsed;
         await Assert.That(comparison.Kind).IsEqualTo(ComparisonKind.Equal);
         await Assert.That(((PropertyAccess)comparison.Left).Name).IsEqualTo("a");
-        await Assert.That(comparison.Right).IsTypeOf<Poly.DomainModeling.Ontology.Add>();
+        await Assert.That(comparison.Right).IsTypeOf<Poly.DomainModeling.Ontology.Multiply>();
+    }
+
+    /// <summary>
+    /// F-04 / F-05 hazard, pinned: a binary row between the comparison level and the sum level (here 45) would move the
+    /// level at whose head <c>not</c> applies and silently turn <c>not a &gt; b</c> into <c>(not a) &gt; b</c>, so <c>With</c> refuses it.
+    /// A row outside that gap (55) leaves <c>not a &gt; b</c> a parse error exactly as in the core table.
+    /// </summary>
+    [Test]
+    public async Task With_RowBetweenNotHeadAndOperand_IsRefused_AndOutsideRowKeepsNotClosedToCompare() {
+        await Assert.That(() => DslOperatorTable.Core().With(new BinaryRow(
+            DslTokenKind.In, 45, Assoc.Left, DomainExpression.Equal))).Throws<InvalidOperationException>();
+
+        var table = DslOperatorTable.Core().With(new BinaryRow(DslTokenKind.In, 55, Assoc.Left, DomainExpression.Equal));
+        var reader = new DslTokenReader("not a > b");
+        var cursor = new DslCursor(reader, new Matcher<DslToken, DslTokenKind>(DslGrammar.Core, reader));
+        var parsed = new DslExpressionParser(cursor, operators: table).ParseExpression();
+
+        await Assert.That(parsed).IsTypeOf<Poly.DomainModeling.Ontology.Not>();
+        await Assert.That(cursor.Current.Kind).IsEqualTo(DslTokenKind.Gt);
     }
 
     /// <summary>The same token with no row is not an operator: the default table does not know <c>in</c>.</summary>

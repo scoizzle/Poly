@@ -529,9 +529,9 @@ public class ParserLimitsTests {
     // ── F2 / A4: depth is a parameter, so nothing survives a failed parse ─────────────
 
     /// <summary>
-    /// A4 wanted the depth reset to be un-forgettable. Both calls below hop to their own parse
-    /// thread, so this proves only that the thread is left clean: after a depth error the next
-    /// parse on that thread parses a shallow expression. The durable guard is
+    /// A4 wanted the depth reset to be un-forgettable. Both calls below run on the same thread
+    /// (the expression fragment parse takes no stack hop), so this proves the thread is left clean:
+    /// after a depth error the next parse on that thread parses a shallow expression. The durable guard is
     /// <see cref="A4_ParserCarriesNoMutableIntInstanceField"/>: depth is a parameter, and a field
     /// would be the stale state A4 warned about.
     /// </summary>

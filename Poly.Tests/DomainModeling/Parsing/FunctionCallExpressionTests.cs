@@ -254,6 +254,40 @@ public sealed class FunctionCallExpressionTests {
         await Assert.That(outcomes[2].State["Total"]).IsEqualTo("10");
     }
 
+    /// <summary>
+    /// G-10 (reviewer F2): a <c>match</c> with commas in its arms is now a legal call argument (master cut the argument at the
+    /// first comma inside the braces, by accident; a comma-free <c>match { else -> 1 }</c> argument already parsed). End to end: analysed, run on the
+    /// simulator and on the printed C#, and the two agree. The fail-closed neighbours (mixed Decimal and whole-number arms) are
+    /// <c>CalleeFrameIsolationTests.DecimalMatch_*</c>, which cover the arm shapes the call argument shares.
+    /// </summary>
+    [Test]
+    public async Task Evaluate_MatchWithCommasAsCallArgument_AgreesOnBothSides() {
+        const string poly = """
+            domain Shop
+
+            Cart: entity {
+              Total: Number default(0)
+              Qty: Number default(0)
+              Compute: action { assign Total to Add(match { Qty > 3 -> 10, Qty > 1 -> 5, else -> 1 }, 1) }
+            }
+
+            function Add(a: Number, b: Number): Number = a + b
+            """;
+        await Assert.That(Apply(poly).Succeeded).IsTrue();
+
+        var outcomes = await ParityScenario.FromDsl(poly, "FnCallMatchArgument").AssertAgree(side => {
+            side.Create("Cart", ("Qty", 5L));
+            side.Invoke("Compute");
+            side.Create("Cart", ("Qty", 2L));
+            side.Invoke("Compute");
+            side.Create("Cart", ("Qty", 0L));
+            side.Invoke("Compute");
+        });
+        await Assert.That(outcomes[1].State["Total"]).IsEqualTo("11");
+        await Assert.That(outcomes[3].State["Total"]).IsEqualTo("6");
+        await Assert.That(outcomes[5].State["Total"]).IsEqualTo("2");
+    }
+
     [Test]
     public async Task Evaluate_CallInPolicy_AnswersOnBothSides() {
         var outcomes = await ParityScenario.FromDsl(Cart, "FnCallPolicy").AssertAgree(side => {

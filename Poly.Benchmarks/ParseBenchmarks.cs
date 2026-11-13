@@ -72,8 +72,9 @@ public class ParseBenchmarks {
     /// <summary>The single aggregate C# case.</summary>
     public static IEnumerable<ParseCorpusEntry> CSharpCorpus() => [LoadCSharp()];
 
-    /// <summary>Tokenizes and resolves one document on the calling thread: G-09's parse-stack hop is gone,
-    /// so compare Allocated and time against pre-G-09 runs, not against G-09 runs that paid a thread start.</summary>
+    /// <summary>Tokenizes and resolves one document. The resolve runs on
+    /// <see cref="Poly.DomainModeling.Language.DslLimits.RunOnParseStack"/>'s shared stack, so
+    /// every case pays one thread start and hop: compare Allocated only against post-hop runs.</summary>
     [Benchmark]
     [ArgumentsSource(nameof(DslCorpus))]
     public int Parse_DslCorpus(ParseCorpusEntry entry) =>

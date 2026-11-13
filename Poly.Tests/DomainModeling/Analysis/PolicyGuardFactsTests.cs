@@ -432,6 +432,123 @@ public class PolicyGuardFactsTests {
             .IsEqualTo("control=clean create=clean createIn=clean");
     }
 
+    // ── Closing-round probe (review 6854179390): the loop and write-back environments composed with the new
+    // narrowing. Each document runs on the simulator with the instance named; both analyzers' verdicts are data,
+    // recorded on master 68816824 and on this PR's head 6412c514. ──
+
+    /// <summary>(a) <c>require not Small</c>, then a loop that raises <c>Qty</c>, then an assign that reads it.
+    /// master: <c>DMEFF008? [5, 100] can fall outside range(12, 100) on 'Seen'</c>. 6412c514: no finding on
+    /// <c>Seen</c> (a NEW false clean: the loop body is walked once on the pre-loop environment, #863, V-15).</summary>
+    private const string ProbeLoopUnderRequireNot = """
+        domain L
+        Line: entity { N: Number optional }
+        Order: entity {
+          Qty: Number range(0, 100)
+          Seen: Number range(12, 100) optional
+          Lines: many Line
+          Small: policy { Qty <= 10 }
+          Go: action require not Small { for l in Lines { assign Qty to Qty + 5 }  assign Seen to Qty }
+        }
+        """;
+
+    /// <summary>(b) the positive guard, <c>Seen range(0, 14)</c>: master and 6412c514 both
+    /// <c>DMEFF008? [5, 15] can fall outside range(0, 14) on 'Seen'</c>, so not false clean.</summary>
+    private const string ProbeLoopUnderRequire = """
+        domain L
+        Line: entity { N: Number optional }
+        Order: entity {
+          Qty: Number range(0, 100)
+          Seen: Number range(0, 14) optional
+          Lines: many Line
+          Small: policy { Qty <= 10 }
+          Go: action require Small { for l in Lines { assign Qty to Qty + 5 }  assign Seen to Qty }
+        }
+        """;
+
+    /// <summary>(b2) the same with <c>Seen range(0, 15)</c>: master and 6412c514 both report nothing on
+    /// <c>Seen</c>, and two lines give 20: false clean, #863, V-15 (already on master; not this PR's).</summary>
+    private const string ProbeLoopUnderRequireTwoLines = """
+        domain L
+        Line: entity { N: Number optional }
+        Order: entity {
+          Qty: Number range(0, 100)
+          Seen: Number range(0, 15) optional
+          Lines: many Line
+          Small: policy { Qty <= 10 }
+          Go: action require Small { for l in Lines { assign Qty to Qty + 5 }  assign Seen to Qty }
+        }
+        """;
+
+    /// <summary>(c) the cross-entity write-back under <c>require not Small</c>: <c>Bump</c> sets <c>Qty</c> to 5
+    /// through <c>line.Poke</c>. master: <c>DMEFF008? [0, 100] can fall outside range(11, 100) on 'Seen'</c>.
+    /// 6412c514: clean (a NEW false clean: the walk does not carry a cross-entity callee's write-back).</summary>
+    private const string ProbeWriteBackUnderRequireNot = """
+        domain X
+        Order: entity {
+          Qty: Number range(0, 100)
+          Seen: Number range(11, 100) optional
+          line: one Line
+          Small: policy { Qty <= 10 }
+          Go: action require not Small { invoke line.Poke  assign Seen to Qty }
+          Bump: action { assign Qty to 5 }
+        }
+        Line: entity {
+          order: one Order
+          Poke: action { invoke order.Bump }
+        }
+        """;
+
+    /// <summary>(d) the loop, then a create: master and 6412c514 both
+    /// <c>DMEFF008? [0, 100] can fall outside range(12, 100) on 'Qty'</c> (the create keeps the declared path).</summary>
+    private const string ProbeLoopThenCreateUnderRequireNot = """
+        domain L
+        Item: entity { Qty: Number range(12, 100) }
+        Line: entity { N: Number optional }
+        Order: entity {
+          Qty: Number range(0, 100)
+          Lines: many Line
+          Small: policy { Qty <= 10 }
+          Go: action require not Small { for l in Lines { assign Qty to Qty + 5 }  create Item { Qty: Qty } }
+        }
+        """;
+
+    [Test]
+    public async Task Probe_LoopAndWriteBack_Simulator_FailsWithGuardHeld() {
+        var a = Simulator(ProbeLoopUnderRequireNot, out _);
+        await Assert.That(Outcome(a.Invoke(Make(a, "Order", ("Qty", 11L)), "Go"))).IsEqualTo("fail: 'Seen' must be >= 12.");
+
+        var b = Simulator(ProbeLoopUnderRequire, out _);
+        var ten = Make(b, "Order", ("Qty", 10L));
+        await Assert.That(b.Link("Lines", ten, Make(b, "Line")).Succeeded).IsTrue();
+        await Assert.That(Outcome(b.Invoke(ten, "Go"))).IsEqualTo("fail: 'Seen' must be <= 14.");
+
+        var b2 = Simulator(ProbeLoopUnderRequireTwoLines, out _);
+        var twice = Make(b2, "Order", ("Qty", 10L));
+        foreach (var _ in Enumerable.Range(0, 2))
+            await Assert.That(b2.Link("Lines", twice, Make(b2, "Line")).Succeeded).IsTrue();
+        await Assert.That(Outcome(b2.Invoke(twice, "Go"))).IsEqualTo("fail: 'Seen' must be <= 15.");
+
+        var c = Simulator(ProbeWriteBackUnderRequireNot, out _);
+        var caller = Make(c, "Order", ("Qty", 50L));
+        var line = Make(c, "Line");
+        await Assert.That(c.Link("line", caller, line).Succeeded).IsTrue();
+        await Assert.That(c.Link("order", line, caller).Succeeded).IsTrue();
+        await Assert.That(Outcome(c.Invoke(caller, "Go"))).IsEqualTo("fail: 'Seen' must be >= 11.");
+
+        var d = Simulator(ProbeLoopThenCreateUnderRequireNot, out _);
+        await Assert.That(Outcome(d.Invoke(Make(d, "Order", ("Qty", 11L)), "Go"))).IsEqualTo("fail: 'Qty' must be >= 12.");
+    }
+
+    /// <summary>The probe cells that are flagged on master and here alike: (b) and (d). (b2) is false clean, #863,
+    /// V-15, on master and here: its verdict is data in its summary, never asserted as passing.</summary>
+    [Test]
+    public async Task Probe_FlaggedCells_KeepMastersVerdict() {
+        await Assert.That(RangeFindings(Analyze(ProbeLoopUnderRequire).Analysis)).IsEqualTo(
+            "DMEFF008? Assigned expression value range [5, 15] can fall outside constraint range(0, 14) on property 'Seen'.");
+        await Assert.That(RangeFindings(Analyze(ProbeLoopThenCreateUnderRequireNot).Analysis)).Contains(
+            "DMEFF008? Assigned expression value range [0, 100] can fall outside constraint range(12, 100) on property 'Qty'.");
+    }
+
     // ── Census (plan §4, lock amendment 8) ──────────────────────
 
     private static readonly string[] CensusCodes = [

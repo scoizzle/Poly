@@ -79,7 +79,7 @@ public sealed partial class DomainToCSharpExporter {
                         LifecycleEnumTypeName: esm.LifecycleEnumTypeName,
                         PostTransitionNotifyStages: postTransitionNotifyStages,
                         PreviousStageNotifyStages: previousStageNotifyStages,
-                        ReturnsDomainResult: true);
+                        ActionResultType: new NamedTypeReference("DomainResult"));
                     var effectPass = new EffectLoweringPass(entity, context);
                     var composite = new CompositeEffect(subscriptionEffects);
                     handlerBody = effectPass.TryLowerVmNode(composite)

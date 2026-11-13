@@ -95,7 +95,7 @@ public class LoweringContextBoundaryTests {
     public async Task Lowering_WhenStructureBagMissing_FailsClosedInsteadOfRecomputing() {
         var entity = RequiredNameWidget();
         var (domain, analysis) = LoweringFixtures.Analyze(entity);
-        var context = new LoweringContext(new ThisReference(), analysis, domain)
+        var context = new LoweringContext(new ThisReference(), analysis, domain, ActionResultType: new NamedTypeReference("DomainResult"))
             with { Analysis = new BagOmittedProvider(analysis, typeof(EntityStructureMetadata)) };
         var pass = new EffectLoweringPass(entity, context);
 
@@ -201,7 +201,7 @@ public class LoweringContextBoundaryTests {
             Properties: [new Property("Plate", new DomainTypeReference("Text"), [new UniqueConstraint()])],
             Actions: [], Policies: [], Stages: []);
         var (domain, analysis) = LoweringFixtures.Analyze(permit);
-        var context = new LoweringContext(new Parameter("entity", new TypeReference("Permit")), analysis, domain)
+        var context = new LoweringContext(new Parameter("entity", new TypeReference("Permit")), analysis, domain, ActionResultType: new NamedTypeReference("DomainResult"))
             with { Analysis = new BagOmittedProvider(analysis, typeof(StorageMappingMetadata)) };
         var pass = new EffectLoweringPass(permit, context);
 

@@ -58,18 +58,18 @@ public class FailureLoweringTests {
         await Assert.That(Print(node)).Contains("DomainResult.Failure(result1.Error!)");
     }
 
+    // L-04a replaced the two tests of FailureLowering.Throw and FailureLowering.ThrowFrom (a failure thrown from a void body)
+    // with this one: no lowered body is void any more, so the seam has no throwing form, and a failure is only ever built
+    // as a returned value. The members left are the three that build one.
     [Test]
-    public async Task Throw_PrintsConstraintFailureExceptionWithTheMessage() {
-        var node = FailureLowering.Throw(
-            new FailureLowering.Spec(DomainFailureKind.Required, new Constant("'Name' is required."), "Widget.Name"));
+    public async Task FailureLowering_HasNoThrowingForm() {
+        var members = typeof(FailureLowering)
+            .GetMethods(System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic
+                | System.Reflection.BindingFlags.DeclaredOnly)
+            .Select(m => m.Name)
+            .Order(StringComparer.Ordinal)
+            .ToList();
 
-        await Assert.That(Print(node)).Contains("throw new ConstraintFailureException(\"'Name' is required.\")");
-    }
-
-    [Test]
-    public async Task ThrowFrom_PrintsTheCalleeErrorMessageWithACoalesce() {
-        var node = FailureLowering.ThrowFrom(new Variable("result1"));
-
-        await Assert.That(Print(node)).Contains("throw new ConstraintFailureException(result1.ErrorMessage ?? \"\")");
+        await Assert.That(string.Join(",", members)).IsEqualTo("Call,Propagate,Return");
     }
 }

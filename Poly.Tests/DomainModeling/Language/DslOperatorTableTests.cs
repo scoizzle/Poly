@@ -115,6 +115,23 @@ public sealed class DslOperatorTableTests {
         await Assert.That(cursor.Current.Kind).IsEqualTo(DslTokenKind.Gt);
     }
 
+    /// <summary>
+    /// G-20: the binary-fold bridge is gone; a library claims <c>+</c>/<c>-</c> through the operator table.
+    /// Reflection by full name, so this compiles whether or not the symbols exist; the guard names the replacements.
+    /// </summary>
+    [Test]
+    public async Task BinaryFoldBridge_IsRetired() {
+        var poly = typeof(DslOperatorTable).Assembly;
+        var registry = poly.GetType("Poly.DomainModeling.Meaning.ExpressionFormRegistry")!;
+
+        await Assert.That(poly.GetType("Poly.DomainModeling.Meaning.IBinaryExpressionFold")).IsNull();
+        await Assert.That(registry.GetMethod("RegisterBinaryFold")).IsNull();
+        await Assert.That(registry.GetMethod("TryFoldBinary")).IsNull();
+
+        await Assert.That(registry.GetMethod("RegisterBinaryClaim")).IsNotNull();
+        await Assert.That(poly.GetType("Poly.DomainModeling.Libraries.Temporal.DateOperationFold")).IsNotNull();
+    }
+
     /// <summary>The same token with no row is not an operator: the default table does not know <c>in</c>.</summary>
     [Test]
     public async Task Core_DoesNotKnowAnUnregisteredOperator() {

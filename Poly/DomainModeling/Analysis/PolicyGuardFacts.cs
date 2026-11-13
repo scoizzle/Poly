@@ -21,12 +21,16 @@ internal static class PolicyGuardFacts {
     /// <summary>The name prefix of the resolver's <c>require not P</c> marker policy (<c>not_P</c>).</summary>
     internal const string NegatedPrefix = "not_";
 
-    /// <summary>The guards <paramref name="action"/> runs under in <paramref name="stage"/>'s context: the action's
-    /// own policies, then the stage's.</summary>
+    /// <summary>
+    /// The guards <paramref name="action"/> runs under in <paramref name="stage"/>'s context, as the lowered body
+    /// checks them: the action's own policies (<c>require not P</c> included), then the stage's, except a stage
+    /// policy <c>P</c> the action negates (<c>require not P</c>), whose gate the body suppresses
+    /// (<c>DomainToCSharpExporter.EmitStagePolicyGuards</c>; <c>ProvableGuards.StagePresence</c> mirrors it).
+    /// </summary>
     public static IReadOnlyList<GuardedPolicy> Guards(Action action, Stage? stage) =>
         action.Policies
-            .Where(p => !p.Name.StartsWith(NegatedPrefix, StringComparison.Ordinal))
-            .Concat(stage?.Policies ?? [])
+            .Concat((stage?.Policies ?? []).Where(p => !action.Policies.Any(a =>
+                string.Equals(a.Name, NegatedPrefix + p.Name, StringComparison.Ordinal))))
             .Select(p => new GuardedPolicy(p, p.Name.StartsWith(NegatedPrefix, StringComparison.Ordinal)))
             .ToList();
 

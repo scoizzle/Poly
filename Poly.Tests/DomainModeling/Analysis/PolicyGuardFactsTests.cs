@@ -277,16 +277,16 @@ public class PolicyGuardFactsTests {
     [Arguments("assign-require", "Qty=[0,10] errors=none clean")]
     [Arguments("create-require", "Qty=[0,10] errors=none DMEFF008? Assigned expression value range [0, 100] can fall outside constraint range(0, 10) on property 'Qty'.")]
     [Arguments("create-in-require", "Qty=[0,10] errors=none DMEFF008? Assigned expression value range [0, 100] can fall outside constraint range(0, 10) on property 'Qty'.")]
-    [Arguments("create-require-not-0-10", "Qty=[0,100] errors=none DMEFF008? Assigned expression value range [0, 100] can fall outside constraint range(0, 10) on property 'Qty'.")]
-    [Arguments("create-require-not-11-100", "Qty=[0,100] errors=none DMEFF008? Assigned expression value range [0, 100] can fall outside constraint range(11, 100) on property 'Qty'.")]
+    [Arguments("create-require-not-0-10", "Qty=[11,100] errors=none DMEFF008? Assigned expression value range [0, 100] can fall outside constraint range(0, 10) on property 'Qty'.")] // V-18 C: require not narrows; master "Qty=[0,100] errors=none DMEFF008? Assigned expression value range [0, 100] can fall outside constraint range(0, 10) on property 'Qty'."
+    [Arguments("create-require-not-11-100", "Qty=[11,100] errors=none DMEFF008? Assigned expression value range [0, 100] can fall outside constraint range(11, 100) on property 'Qty'.")] // V-18 C: require not narrows; master "Qty=[0,100] errors=none DMEFF008? Assigned expression value range [0, 100] can fall outside constraint range(11, 100) on property 'Qty'."
     [Arguments("create-require-not-and", "A=[0,10] errors=none DMEFF008? Assigned expression value range [0, 10] can fall outside constraint range(0, 5) on property 'Qty'.")]
-    [Arguments("stage-p-action-not-p", "Qty=[0,10] errors=none clean")] // WRONG on master: refined by the suppressed stage gate; Qty=70 passes both guards and fails the assign
+    [Arguments("stage-p-action-not-p", "Qty=[11,100] errors=none DMEFF008? Assigned expression value range [11, 100] can fall outside constraint range(0, 60) on property 'Seen'.")] // V-18 C: the stage gate the action negates is suppressed; master "Qty=[0,10] errors=none clean" was WRONG (Qty=70 passes both guards and fails the assign)
     [Arguments("create-inside-loop", "Qty=[0,10] errors=none DMEFF008? Assigned expression value range [0, 100] can fall outside constraint range(0, 10) on property 'Qty'.")]
     [Arguments("create-after-loop", "Qty=[0,10] errors=none DMEFF008? Assigned expression value range [0, 100] can fall outside constraint range(5, 15) on property 'Qty'.")]
     [Arguments("create-after-transition", "Qty=[0,10] errors=none DMEFF008? Assigned expression value range [0, 100] can fall outside constraint range(0, 10) on property 'Qty'.")]
     [Arguments("create-after-cross-invoke", "Qty=[0,10] errors=none DMEFF008? Assigned expression value range [0, 100] can fall outside constraint range(0, 10) on property 'Qty'.")]
     [Arguments("untyped-initializer", "Qty=[0,10] errors=none DMCS003? Cannot verify 'create Item { Qty: parts Qty }' against constraint range(0, 10) on property 'Qty': the assigned value has no bound analysis can use. | DMCS003? Cannot verify 'assign Local to parts Qty' against constraint range(0, 10) on property 'Local': the assigned value has no bound analysis can use.")]
-    [Arguments("self-invoke-require-not", "Qty=[0,100] errors=none DMEFF008? Assigned expression value range [0, 100] can fall outside constraint range(11, 100) on property 'Local'. | DMEFF008? Call-chain postcondition (Go → Keep): assigned value range [0, 100] can fall outside constraint range(11, 100) on property 'Local'.")]
+    [Arguments("self-invoke-require-not", "Qty=[11,100] errors=none clean")] // V-18 C: the callee's require not narrows its entry; master "Qty=[0,100] errors=none DMEFF008? Assigned expression value range [0, 100] can fall outside constraint range(11, 100) on property 'Local'. | DMEFF008? Call-chain postcondition (Go → Keep): assigned value range [0, 100] can fall outside constraint range(11, 100) on property 'Local'."
     public async Task Shape_Verdict_IsPinned(string shape, string expected) {
         var (dsl, entity, action) = Shapes[shape];
         var (domain, analysis) = Analyze(dsl);
@@ -352,8 +352,8 @@ public class PolicyGuardFactsTests {
     [Test]
     public async Task NotPolicy_SkippedToday_PinsCurrentVerdict() {
         var (domain, analysis) = Analyze(CreateUnderRequireNot("range(0, 10)"));
-        // master: `require not Small` is skipped, so Qty keeps its declared range and the create is a warning.
-        await Assert.That(Narrowed(Context(domain, analysis, "Order", "Make"), "Qty")).IsEqualTo("[0,100]");
+        // V-18 C: `require not Small` narrows Qty (master: skipped, "[0,100]"). Step D makes the create read it.
+        await Assert.That(Narrowed(Context(domain, analysis, "Order", "Make"), "Qty")).IsEqualTo("[11,100]");
         await Assert.That(RangeFindings(analysis)).IsEqualTo(PossibleOutside0To10);
     }
 

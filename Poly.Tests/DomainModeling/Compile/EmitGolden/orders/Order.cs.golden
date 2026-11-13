@@ -194,6 +194,29 @@ internal class Order : Poly.Runtime.IActionScoped
     public bool IsPaid() => this.State == OrderState.Paid;
     internal static DomainResult<Order> Create(decimal total, decimal discount, string cancelReason = "", Customer? customer = null, IEnumerable<OrderItem>? items = null, OrderState state = OrderState.Pending)
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = Order.__BodyOfCreate(total, discount, cancelReason, customer, items, state);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private static DomainResult<Order> __BodyOfCreate(decimal total, decimal discount, string cancelReason, Customer? customer, IEnumerable<OrderItem>? items, OrderState state)
+    {
         if (total < 0m)
         {
             return DomainResult<Order>.Failure(Poly.Runtime.DomainFailure.Range("'Total' must be >= 0.", "Order.Total"));

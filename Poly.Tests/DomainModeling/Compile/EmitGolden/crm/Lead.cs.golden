@@ -102,6 +102,29 @@ internal class Lead : Poly.Runtime.IActionScoped
     public bool HasAccount() => this.Account != null;
     internal static DomainResult<Lead> Create(string name, string email, string company, Poly.Runtime.IStoragePort db, Account? account = null)
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = Lead.__BodyOfCreate(name, email, company, account, db);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private static DomainResult<Lead> __BodyOfCreate(string name, string email, string company, Account? account, Poly.Runtime.IStoragePort db)
+    {
         if (string.IsNullOrEmpty(name))
         {
             return DomainResult<Lead>.Failure(Poly.Runtime.DomainFailure.Required("'Name' is required.", "Lead.Name"));

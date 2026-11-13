@@ -185,8 +185,9 @@ public class ActionScopeEmitTests {
     [Test]
     public async Task StageDispatchedAction_OpensOneScope() {
         var (cs, _) = Print(StageDispatchDsl, "ActionScopeStageDispatch");
-        // Cancel (two stages, one merged method) and Activate: one wrapper each, one shared body each.
-        await Assert.That(Occurrences(cs, "ActionScope.Begin(")).IsEqualTo(2);
+        // Cancel (two stages, one merged method) and Activate: one wrapper each, one shared body each; plus the factory
+        // wrapper of each of the two entities (L-04b), which a bare `Create` opens its root scope with.
+        await Assert.That(Occurrences(cs, "ActionScope.Begin(")).IsEqualTo(2 + 2);
         // L-03c: one Touch per wrapper; the merged body and the Receipt factory touch nothing.
         await Assert.That(Occurrences(cs, "ActionScope.Touch(this)")).IsEqualTo(2);
         await Assert.That(Occurrences(cs, "DomainResult<Receipt> Cancel(")).IsEqualTo(1);

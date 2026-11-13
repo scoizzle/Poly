@@ -28,16 +28,19 @@ public static class ExportedCSharp {
         throw new InvalidOperationException($"Unbalanced braces for '{signature}'.");
     }
 
-    /// <summary>A public action is a scope wrapper that calls its private <c>__BodyOf{Action}</c>
-    /// partner; the wrapper text is returned with the partner's text, so body-content assertions
+    /// <summary>A public action, the static <c>Create</c> factory and a <c>Create{Nav}</c> are scope wrappers that call their
+    /// private <c>__BodyOf{Name}</c> partner (<c>this.</c> or <c>Entity.</c>); the wrapper text is returned with the partner's text, so body-content assertions
     /// keep seeing the lowered body.</summary>
     private static string WithBodyPartner(string cs, string method) {
-        var call = System.Text.RegularExpressions.Regex.Match(method, "this\\.(" + System.Text.RegularExpressions.Regex.Escape(Poly.DomainModeling.Lowering.DomainToCSharpExporter.ActionBodyPrefix) + "\\w+)\\(");
+        var call = System.Text.RegularExpressions.Regex.Match(method, "(this|\\b[A-Z]\\w*)\\.(" + System.Text.RegularExpressions.Regex.Escape(Poly.DomainModeling.Lowering.DomainToCSharpExporter.ActionBodyPrefix) + "\\w+)\\(");
         if (!call.Success)
             return method;
-        var declaration = System.Text.RegularExpressions.Regex.Match(cs, @"(?<![.\w])[\w<>?.]+ " + call.Groups[1].Value + @"\(");
+        // A static factory's partner is the one returning that entity's result: every entity declares a `__BodyOfCreate`.
+        var receiver = call.Groups[1].Value;
+        var returns = receiver == "this" ? @"[\w<>?.]+" : $"DomainResult<{receiver}>";
+        var declaration = System.Text.RegularExpressions.Regex.Match(cs, @"(?<![.\w])" + returns + " " + call.Groups[2].Value + @"\(");
         if (!declaration.Success)
-            throw new InvalidOperationException($"Body method '{call.Groups[1].Value}' not found.");
+            throw new InvalidOperationException($"Body method '{call.Groups[2].Value}' not found.");
         return method + "\n" + ExtractMethod(cs, declaration.Value);
     }
 

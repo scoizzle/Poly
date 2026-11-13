@@ -44,6 +44,30 @@ internal class Student : Poly.Runtime.IActionScoped
     public StudentStage CurrentStage { get; private set; }
     internal DomainResult<Enrollment> CreateEnrollments(Section? section = null, DateOnly? enrolledOn = null, DateOnly? dueDate = null, long grade = 0L)
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            Poly.Runtime.ActionScope.Touch(this);
+            var __result = this.__BodyOfCreateEnrollments(section, enrolledOn, dueDate, grade);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult<Enrollment> __BodyOfCreateEnrollments(Section? section, DateOnly? enrolledOn, DateOnly? dueDate, long grade)
+    {
         var enrollmentResult = Enrollment.Create(section, this, enrolledOn, dueDate, grade);
         if (!enrollmentResult.IsSuccess)
         {
@@ -360,6 +384,29 @@ internal class Student : Poly.Runtime.IActionScoped
         return DomainResult.Success();
     }
     internal static DomainResult<Student> Create(string name, string email, Poly.Runtime.IStoragePort db, IEnumerable<Enrollment>? enrollments = null, long maxCredits = 18L, long openCredits = 0L, long holds = 0L, long completions = 0L, long lastGrade = 0L)
+    {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = Student.__BodyOfCreate(name, email, enrollments, maxCredits, openCredits, holds, completions, lastGrade, db);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private static DomainResult<Student> __BodyOfCreate(string name, string email, IEnumerable<Enrollment>? enrollments, long maxCredits, long openCredits, long holds, long completions, long lastGrade, Poly.Runtime.IStoragePort db)
     {
         if (string.IsNullOrEmpty(name))
         {

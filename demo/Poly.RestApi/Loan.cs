@@ -198,6 +198,29 @@ internal class Loan : Poly.Runtime.IActionScoped
     }
     internal static DomainResult<Loan> Create(Book? book = null, Patron? borrower = null, string? status = null, DateTime? dueDate = null, DateTime? returnedAt = null, long? timesRenewed = null)
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = Loan.__BodyOfCreate(book, borrower, status, dueDate, returnedAt, timesRenewed);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private static DomainResult<Loan> __BodyOfCreate(Book? book, Patron? borrower, string? status, DateTime? dueDate, DateTime? returnedAt, long? timesRenewed)
+    {
         var created = new Loan(book, borrower, status, dueDate, returnedAt, timesRenewed);
         Poly.Runtime.ActionScope.Create(created, "Loan");
         var __entry = created.__EnterInitialStage();

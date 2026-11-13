@@ -218,7 +218,11 @@ public sealed class Printer<TToken, TTokenKind>
                 return;
 
             case NotFollowedBy<TToken, TTokenKind>:
+            case Cut<TToken, TTokenKind>:
                 return;
+
+            case Refuse<TToken, TTokenKind> refuse:
+                throw new InvalidOperationException($"A refusal row ('{refuse.Message}') is never printed.");
 
             case Balanced<TToken, TTokenKind> b:
                 ctx.Emit(b.Open);

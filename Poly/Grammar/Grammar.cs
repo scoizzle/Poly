@@ -53,6 +53,45 @@ public sealed class Grammar<TToken, TTokenKind>
     public IReadOnlyList<Pattern<TToken, TTokenKind>> GetPatterns(string ruleName) =>
         _rules.TryGetValue(ruleName, out var list) ? list : [];
 
+    private IReadOnlySet<string>? _committing;
+
+    /// <summary>
+    /// True when <paramref name="ruleName"/> holds a <see cref="Cut{TToken,TTokenKind}"/> or a
+    /// <see cref="Refuse{TToken,TTokenKind}"/>, directly or through a rule a row references (<c>Ref</c>,
+    /// <c>Repeat</c>, a <c>LeftAssoc</c> operand, an optional <c>Ref</c>). Computed once per table.
+    /// </summary>
+    internal bool CanCommit(string ruleName) {
+        var committing = Volatile.Read(ref _committing) ?? ComputeCommitting();
+        return committing.Count != 0 && committing.Contains(ruleName);
+    }
+
+    private IReadOnlySet<string> ComputeCommitting() {
+        var committing = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var (rule, patterns) in _rules) {
+            if (patterns.Exists(p => p.Elements.Any(e => e is Cut<TToken, TTokenKind> or Refuse<TToken, TTokenKind>)))
+                committing.Add(rule);
+        }
+        for (var grew = committing.Count != 0; grew;) {
+            grew = false;
+            foreach (var (rule, patterns) in _rules) {
+                if (!committing.Contains(rule) && patterns.Exists(p => p.Elements.Any(e => References(e) is { } target && committing.Contains(target))))
+                    grew |= committing.Add(rule);
+            }
+        }
+        IReadOnlySet<string> frozen = committing.Count == 0 ? NoRules : committing;
+        return Interlocked.CompareExchange(ref _committing, frozen, null) ?? frozen;
+    }
+
+    private static readonly IReadOnlySet<string> NoRules = new HashSet<string>();
+
+    private static string? References(IPatternElement<TToken, TTokenKind> element) => element switch {
+        Ref<TToken, TTokenKind> r => r.RuleName,
+        Repeat<TToken, TTokenKind> r => r.RuleName,
+        LeftAssoc<TToken, TTokenKind> l => l.OperandRule,
+        Optional<TToken, TTokenKind> o => References(o.Inner),
+        _ => null,
+    };
+
     /// <summary>True when a rule with this name is defined.</summary>
     public bool HasRule(string ruleName) => _rules.ContainsKey(ruleName);
 

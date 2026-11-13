@@ -1,5 +1,3 @@
-using System.Globalization;
-
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Ontology;
@@ -112,152 +110,51 @@ public class CompatibilityDslParityTests {
             .WithMessageContaining("error CS0019: Operator '<' cannot be applied to operands of type 'string' and 'string'");
     }
 
-    static string DateOffset(string type, string op) => $$"""
-        domain Cal
-        uses temporal
-        Plan: entity {
-          Start: {{type}}
-          Days: Decimal
-          Due: {{type}}
-          Shift: action { assign Due to Start {{op}} Days }
-        }
-        """;
-
-    /// <summary>
-    /// Date ± Decimal passes the domain analyzer (its temporal offset permission, T-10), and the domain lowering emits
-    /// <c>Start.AddDays((Int32)Days)</c>: no Date-with-Decimal operator node reaches the lowered compatibility analysis.
-    /// Pinned as each host behaves today, so T-18 is shown not to change it. Subtraction lowers to
-    /// <c>AddDays((Int32)-Days)</c>: the interpreter throws on it while the printed C# runs. That is a known-wrong
-    /// result, pinned as it is and not as it should be: the VM's decimal negation (issue 832, row T-21) gives -1 for
-    /// <c>-2m</c> and throws on <c>(int)-2m</c>.
-    /// </summary>
-    [Test]
-    [Arguments("Date", "+", "simulate: success=True; exception=none; message=; Due=03/01/2024 | printed: success=True; exception=none; message=; Due=03/01/2024")]
-    [Arguments("Date", "-", "simulate: success=False; exception=IndexOutOfRangeException; message=Index was outside the bounds of the array.; Due=<state not read> | printed: success=True; exception=none; message=; Due=02/26/2024")]
-    public async Task DateOffsetByDecimal_BothHosts_AsToday(string type, string op, string expected) {
-        var culture = CultureInfo.CurrentCulture;
-        CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
-        try {
-            object start = type == "Date" ? new DateOnly(2024, 2, 28) : new DateTime(2024, 2, 28, 10, 0, 0);
-            object due = type == "Date" ? new DateOnly(2000, 1, 1) : new DateTime(2000, 1, 1);
-            var scenario = ParityScenario.FromDsl(DateOffset(type, op), $"T18Offset{type}{(op == "+" ? "Add" : "Sub")}",
-                recordedExceptions: ["IndexOutOfRangeException"]);
-            var (simulate, printed) = scenario.Run(side => {
-                side.Create("Plan", ("Start", start), ("Days", 2m), ("Due", due));
-                side.Invoke("Shift");
-            });
-            await Assert.That($"simulate: {Describe(simulate[1])} | printed: {Describe(printed[1])}").IsEqualTo(expected);
-        }
-        finally {
-            CultureInfo.CurrentCulture = culture;
-        }
-    }
-
-    /// <summary>
-    /// DateTime ± Decimal: the lowering passes the decimal to <c>DateTime.AddDays(double)</c>. The printed C# does not
-    /// compile, and the interpreter's compile is refused by the lowered analysis's invoke check (not an operator check).
-    /// A known-wrong result: the domain analyzer accepts a form neither host runs (temporal offsets, row T-10).
-    /// </summary>
-    [Test]
-    [Arguments("+", "success=False; exception=InvalidOperationException; message=VM compile rejected: AST member body analysis reported errors: no matching member 'AddDays' on 'DateTime' for invoke with 1 argument(s); Due=<state not read>")]
-    [Arguments("-", "success=False; exception=InvalidOperationException; message=VM compile rejected: AST member body analysis reported errors: no matching member 'AddDays' on 'DateTime' for invoke with 1 argument(s); Due=<state not read>")]
-    public async Task DateTimeOffsetByDecimal_Interpreter_AsToday(string op, string expected) {
-        var culture = CultureInfo.CurrentCulture;
-        CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
-        try {
-            var domain = EvolvedDomain.FromDsl(DateOffset("DateTime", op)).Domain;
-            RuntimeAnalysisCache.Bind(domain, ParitySessions.Create(domain.Extensions.Count > 0 ? domain.Extensions : ExtensionCatalog.ProductAuthoring));
-            var side = new SimulateSide(domain, new HashSet<string>(["IndexOutOfRangeException", "InvalidCastException"], StringComparer.Ordinal));
-            side.Create("Plan", ("Start", new DateTime(2024, 2, 28, 10, 0, 0)), ("Days", 2m), ("Due", new DateTime(2000, 1, 1)));
-            side.Invoke("Shift");
-            await Assert.That(Describe(side.Outcomes[1])).IsEqualTo(expected);
-        }
-        finally {
-            CultureInfo.CurrentCulture = culture;
-        }
-    }
-
-    [Test]
-    [Arguments("+")]
-    [Arguments("-")]
-    public async Task DateTimeOffsetByDecimal_PrintedHost_RefusesToCompile(string op) {
-        await Assert.That(() => ParityScenario.FromDsl(DateOffset("DateTime", op), "T18OffsetDateTimePrinted" + (op == "+" ? "Add" : "Sub")))
-            .Throws<InvalidOperationException>()
-            .WithMessageContaining("error CS1503: Argument 1: cannot convert from 'decimal' to 'double'");
-    }
-
-    static string OffsetPlan(string due, string expression, string parameters = "", bool linked = false) => $$"""
+    static string OffsetPlan(string due, string expression, string parameters = "", bool linked = false, string start = "Date") => $$"""
         domain D
         uses temporal
         {{(linked ? "Item: entity {\n  Start: Date\n}\n" : "")}}Plan: entity {
           Days: Decimal
           Due: {{due}}
-          {{(linked ? "item: Item\n  " : "")}}Start: Date
+          {{(linked ? "item: Item\n  " : "")}}Start: {{start}}
           Shift: action {{parameters}}{ assign Due to {{expression}} }
         }
         """;
 
     /// <summary>
-    /// Review F1: the domain lowering turns a Date ± Decimal into <c>AddDays</c> only when the left is a date-typed
-    /// property or parameter; any other left reaches the lowered analysis as a Date-with-Decimal operator node. On
-    /// master those shapes passed analysis and failed on both hosts: the interpreter threw at run time
-    /// (<c>InvalidCastException</c> from the <c>Convert.ToDecimal</c> rewrite) and the printed C# did not compile (CS0019).
-    /// T-18 rejects them at analysis (the provider defines no such operator), so the interpreter's compile fails
-    /// with that message and the printed C# still fails with CS0019.
+    /// Owner ruling 2026-11-13 (T-10a): every Decimal day count is refused at analysis. This replaces the pins of what ran or
+    /// failed before. On master a Date property or parameter ± a Decimal ran on both hosts and silently dropped the fraction
+    /// (`(Int32)2.5m` is 2; subtraction threw in the interpreter); a DateTime ± a Decimal failed on both hosts; any other
+    /// left (<c>Now</c>, <c>Today</c>, a parenthesised date, a path) reached the lowered analysis as a Date-with-Decimal
+    /// operator node, which the interpreter refused and the printed C# did not compile (T-18 review F1).
     /// </summary>
     [Test]
-    [Arguments("DateTime", "Now + Days", false, "'DateTime' and 'Decimal'): no Add operator", "'+' cannot be applied to operands of type 'DateTime' and 'decimal'")]
-    [Arguments("DateTime", "Now - Days", false, "'DateTime' and 'Decimal'): no Subtract operator", "'-' cannot be applied to operands of type 'DateTime' and 'decimal'")]
-    [Arguments("Date", "Today + Days", false, "'DateOnly' and 'Decimal'): no Add operator", "'+' cannot be applied to operands of type 'DateOnly' and 'decimal'")]
-    [Arguments("Date", "Today - Days", false, "'DateOnly' and 'Decimal'): no Subtract operator", "'-' cannot be applied to operands of type 'DateOnly' and 'decimal'")]
-    [Arguments("Date", "(Start + 1) + Days", false, "'DateOnly' and 'Decimal'): no Add operator", "'+' cannot be applied to operands of type 'DateOnly' and 'decimal'")]
-    [Arguments("Date", "(Start + 1) - Days", false, "'DateOnly' and 'Decimal'): no Subtract operator", "'-' cannot be applied to operands of type 'DateOnly' and 'decimal'")]
-    [Arguments("Date", "item Start + Days", true, "'DateOnly' and 'Decimal'): no Add operator", "'+' cannot be applied to operands of type 'DateOnly' and 'decimal'")]
-    [Arguments("Date", "item Start - Days", true, "'DateOnly' and 'Decimal'): no Subtract operator", "'-' cannot be applied to operands of type 'DateOnly' and 'decimal'")]
-    public async Task DateWithDecimalOperatorNode_IsRejectedByTheLoweredAnalysis_AndThePrintedHostDoesNotCompile(
-        string due, string expression, bool linked, string analysis, string printed) {
-        var dsl = OffsetPlan(due, expression, linked: linked);
-        var domain = EvolvedDomain.FromDsl(dsl).Domain;
-        RuntimeAnalysisCache.Bind(domain, ParitySessions.Create(domain.Extensions.Count > 0 ? domain.Extensions : ExtensionCatalog.ProductAuthoring));
-        var side = new SimulateSide(domain);
-        object dueValue = due == "Date" ? new DateOnly(2000, 1, 1) : new DateTime(2000, 1, 1);
-        if (linked) {
-            var item = side.Create("Item", ("Start", new DateOnly(2024, 2, 28)));
-            side.Create("Plan", ("Days", 2m), ("Due", dueValue), ("item", item), ("Start", new DateOnly(2024, 2, 28)));
-        }
-        else {
-            side.Create("Plan", ("Days", 2m), ("Due", dueValue), ("Start", new DateOnly(2024, 2, 28)));
-        }
-        side.Invoke("Shift");
-        var shift = side.Outcomes[^1];
-        await Assert.That(shift.Success).IsFalse();
-        await Assert.That(shift.ExceptionType).IsEqualTo("InvalidOperationException");
-        await Assert.That(shift.Message).IsEqualTo(
-            "VM compile rejected: AST member body analysis reported errors: arithmetic operand is not numeric (got " + analysis + " for these types");
-        await Assert.That(() => ParityScenario.FromDsl(dsl, "T18F1" + (linked ? "Linked" : "") + expression.Replace(" ", "").Replace("(", "").Replace(")", "").Replace("+", "Plus").Replace("-", "Minus")))
+    [Arguments("DateTime", "Now + Days", false)]
+    [Arguments("DateTime", "Now - Days", false)]
+    [Arguments("Date", "Today + Days", false)]
+    [Arguments("Date", "Today - Days", false)]
+    [Arguments("Date", "(Start + 1) + Days", false)]
+    [Arguments("Date", "(Start + 1) - Days", false)]
+    [Arguments("Date", "item Start + Days", true)]
+    [Arguments("Date", "item Start - Days", true)]
+    [Arguments("Date", "Start + Days", false)]
+    [Arguments("Date", "Start - Days", false)]
+    [Arguments("Date", "Start + 1.5", false)]
+    [Arguments("DateTime", "Start + Days", false)]
+    [Arguments("DateTime", "Start - Days", false)]
+    public async Task DateWithDecimalCount_IsRefusedAtAnalysis(string due, string expression, bool linked) {
+        var dsl = OffsetPlan(due, expression, linked: linked, start: due == "DateTime" && expression.StartsWith("Start", StringComparison.Ordinal) ? "DateTime" : "Date");
+
+        await Assert.That(() => EvolvedDomain.FromDsl(dsl))
             .Throws<InvalidOperationException>()
-            .WithMessageContaining("error CS0019: Operator " + printed);
+            .WithMessageContaining("a Decimal day count is refused");
     }
 
-    /// <summary>The accepting sibling: a date action parameter is lowered to <c>AddDays</c> and both hosts agree.</summary>
+    /// <summary>A date parameter plus a Decimal parameter ran on both hosts on master; it is refused now.</summary>
     [Test]
-    public async Task DateParameterPlusDecimal_IsLoweredToAddDays_BothHostsAgree() {
-        var culture = CultureInfo.CurrentCulture;
-        CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
-        try {
-            var outcomes = await ParityScenario.FromDsl(OffsetPlan("Date", "start + Days", parameters: "(start: Date) "), "T18F1DateParam").AssertAgree(side => {
-                side.Create("Plan", ("Days", 2m), ("Due", new DateOnly(2000, 1, 1)), ("Start", new DateOnly(2000, 1, 1)));
-                side.Invoke("Shift", ("start", new DateOnly(2024, 2, 28)));
-            });
-            await Assert.That(outcomes[^1].Success).IsTrue();
-            await Assert.That(outcomes[^1].State["Due"]).IsEqualTo("03/01/2024");
-        }
-        finally {
-            CultureInfo.CurrentCulture = culture;
-        }
+    public async Task DateParameterPlusDecimal_IsRefusedAtAnalysis() {
+        await Assert.That(() => EvolvedDomain.FromDsl(OffsetPlan("Date", "start + Days", parameters: "(start: Date) ")))
+            .Throws<InvalidOperationException>()
+            .WithMessageContaining("a Decimal day count is refused");
     }
-
-    /// <summary>A step that threw reports no state (the harness default), so its Due is named as not read.</summary>
-    static string Describe(ParityOutcome outcome) =>
-        $"success={outcome.Success}; exception={outcome.ExceptionType ?? "none"}; message={outcome.Message}; Due={(outcome.ExceptionType is null ? outcome.State["Due"] : "<state not read>")}";
 }

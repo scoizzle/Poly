@@ -9,6 +9,9 @@ public class T10aProbes {
     private static string Doc(string members) => $$"""
         domain T
         uses temporal
+        function Shift(d: Date, n: Number): Date = d + n
+        function ShiftT(d: DateTime, n: Number): DateTime = d + n
+        function ShiftD(d: Date, n: Decimal): Date = d + n
         Part: entity {
           Due: Date
           Stamp: DateTime
@@ -39,20 +42,9 @@ public class T10aProbes {
     [Test]
     public async Task Run() {
         var rows = new List<(string Id, string Members, string? Params, string? Args, bool Evaluate)> {
-            ("g1 Due + n Days param", "Go: action (n: Number) { assign OutD to Due + n Days }", null, """{"n":2}""", false),
-            ("g2 Due + A Days prop", "Go: action { assign OutD to Due + A Days }", null, null, false),
-            ("l1 Today + 1", "Go: action { assign OutD to Today + 1 }", null, null, false),
-            ("l2 Now + 1", "Go: action { assign OutT to Now + 1 }", null, null, false),
-            ("l3 Today - 1", "Go: action { assign OutD to Today - 1 }", null, null, false),
-            ("l4 (Due + 1) + 1", "Go: action { assign OutD to (Due + 1) + 1 }", null, null, false),
-            ("l5 Due + 1 + 1", "Go: action { assign OutD to Due + 1 + 1 }", null, null, false),
-            ("l6 Today + 3 Days", "Go: action { assign OutD to Today + 3 Days }", null, null, false),
-            ("l7 Now + 3 Hours", "Go: action { assign OutT to Now + 3 Hours }", null, null, false),
-            ("l8 part Due + 3 Days", "Go: action { assign OutD to part Due + 3 Days }", null, null, false),
-            ("l9 (Due + 3 Days) + 2 Days", "Go: action { assign OutD to (Due + 3 Days) + 2 Days }", null, null, false),
-            ("l10 Due2 + 1 == Due", "Go: policy { Due + 1 == Due2 }", null, null, true),
-            ("l11 Now + 1 Hours > Stamp", "Go: policy { Now + 1 Hours > Stamp }", null, null, true),
-            ("o11 Due + OptA null count", "Go: action { assign OutD to Due + OptA }", null, null, false),
+            ("fn1 Date + Number", "Go: policy { Shift(Due, A) > Due }", null, null, true),
+            ("fn2 DateTime + Number", "Go: policy { ShiftT(Stamp, A) > Stamp }", null, null, true),
+            ("fn4 Date + Decimal", "Go: policy { ShiftD(Due, D) > Due }", null, null, true),
         };
 
         var lines = new List<string>();
@@ -69,21 +61,20 @@ public class T10aProbes {
             }
         }
 
-        var defaults = new[] {
-            ("df0 control default(Now)", "Stamp3: DateTime default(Now)"),
-            ("df0b control default(1)", "Stamp3: Number default(1)"),
-        };
-        foreach (var (id, member) in defaults) {
-            try {
-                var r = GateParity.Check(Doc(member), SimStep.Create("Item", Create, "i"));
-                lines.Add($"{id}\n    {r}");
-            }
-            catch (Exception e) {
-                lines.Add($"{id}\n    THREW {e.GetType().Name}: {e.Message.Split('\n')[0]}");
-            }
-        }
-
         File.WriteAllLines(Out, lines);
         await Assert.That(lines.Count).IsGreaterThan(0);
+    }
+
+    [Test]
+    public async Task RoundTripCell() {
+        var cell = Poly.Tests.DomainModeling.Parsing.RoundTripMatrixCells.All.First(c => c.Id == "duration/Days");
+        var session = Poly.DomainModeling.Compile.DomainSession.ForExtensions([Poly.DomainModeling.Compile.ExtensionCatalog.TemporalId]);
+        var built = cell.Build();
+        var first = new Poly.DomainModeling.Language.DomainDslPrinter(session).Print(built);
+        var changes = new Poly.DomainModeling.Language.PolyDslParser(first, session).Parse();
+        var result = new Poly.DomainModeling.Evolution.DomainEvolution(new Poly.DomainModeling.Ontology.Domain("_", [])).Apply(changes, session: session);
+        var second = new Poly.DomainModeling.Language.DomainDslPrinter(session).Print(result.Root);
+        File.WriteAllLines(Out + ".rt", [first, "-----", second, "-----", Poly.Tests.DomainModeling.Parsing.DomainGraphCanon.Of(built), "-----", Poly.Tests.DomainModeling.Parsing.DomainGraphCanon.Of(result.Root)]);
+        await Assert.That(first).IsNotNull();
     }
 }

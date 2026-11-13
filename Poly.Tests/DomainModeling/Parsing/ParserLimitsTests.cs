@@ -257,17 +257,22 @@ public class ParserLimitsTests {
 
     // ── the matcher budget, and the where-chain, are positioned errors too ────────────
 
-    /// <summary>The matcher is still recursive, so a chain far past the fold's reach has to stop at
-    /// the rule budget with a position rather than at the stack with a crash.</summary>
+    /// <summary>
+    /// G-10 supersedes G-09's <c>Parse_5000Nots_IsPositionedMatcherLimitError</c>, which asserted the
+    /// matcher's "matching limit" budget. That budget is gone: the driver counts depth itself, so a chain
+    /// far past the limit stops at the 257th <c>not</c> with the same detail as 257 of them (stricter:
+    /// the exact column, not just a positive line).
+    /// </summary>
     [Test]
-    public async Task Parse_5000Nots_IsPositionedMatcherLimitError() {
+    public async Task Parse_5000Nots_IsRejectedAtDepth256_PositionedAtThe257thNot() {
         var (parsed, failure) = ParseOnLarge(Nots(5000));
 
         await Assert.That(parsed).IsNull();
         await Assert.That(failure).IsTypeOf<GrammarException>();
         var error = (GrammarException)failure!;
-        await Assert.That(error.Detail).Contains("matching limit");
-        await Assert.That(error.Line).IsGreaterThan(0);
+        await Assert.That(error.Detail).IsEqualTo(DslLimits.DepthDetail);
+        await Assert.That(error.Offset).IsEqualTo(1024);
+        await Assert.That(error.Column).IsEqualTo(1025);
     }
 
     /// <summary>A deep <c>where</c> chain is a positioned depth error: each <c>where</c> body costs
@@ -283,6 +288,242 @@ public class ParserLimitsTests {
         await Assert.That(error.Detail).IsEqualTo(DslLimits.DepthDetail);
         await Assert.That(error.Line).IsGreaterThan(0);
         await Assert.That(error.Column).IsGreaterThan(0);
+    }
+
+    // ── G-10: nothing recurses over expression depth, so even 64 KB is enough ─────────
+
+    /// <summary>A stack far below the 1 MB OQ-4 measured: only an iterative parse survives 256 levels on it.</summary>
+    private const int TinyStackBytes = 64 * 1024;
+
+    private static (DomainExpression? Parsed, Exception? Failure) ParseOnTinyStack(string text) {
+        DomainExpression? parsed = null;
+        Exception? failure = null;
+        var thread = new Thread(() => {
+            try {
+                parsed = DslExpressionFragment.ParseOnThisThread(text);
+            }
+            catch (Exception ex) {
+                failure = ex;
+            }
+        }, TinyStackBytes);
+        thread.Start();
+        thread.Join();
+        return (parsed, failure);
+    }
+
+    /// <summary>The calibration: an ordinary expression parses on the 64 KB harness thread, so a failure
+    /// below means recursion over depth, not a harness that cannot parse at all.</summary>
+    [Test]
+    public async Task Parse_ShallowExpression_On64KbThread_Succeeds() {
+        var (parsed, failure) = ParseOnTinyStack("Flag and (Price > 3 or Kids where Qty < 2)");
+
+        await Assert.That(failure).IsNull();
+        await Assert.That(parsed).IsNotNull();
+    }
+
+    [Test]
+    public async Task ChildProbe_NestedToLimitMinus1_On64KbThread_Returns() {
+        if (Environment.GetEnvironmentVariable("POLY_CHILD_PROBE") is null)
+            return;
+
+        foreach (var text in new[] {
+                     Parens(Limit - 1),
+                     Nots(Limit - 1),
+                     Mixed(Limit - 1),
+                     Calls(Limit - 1),
+                     Matches(Limit - 1),
+                     RightNestedWhere(Limit / 3 - 1),
+                     string.Join(" and ", Enumerable.Repeat("Flag", Limit - 1)),
+                 }) {
+            var (parsed, failure) = ParseOnTinyStack(text);
+            await Assert.That(failure).IsNull();
+            await Assert.That(parsed).IsNotNull();
+        }
+    }
+
+    [Test]
+    public async Task ChildProbe_FarBeyondLimit_On64KbThread_IsPositionedDepthError() {
+        if (Environment.GetEnvironmentVariable("POLY_CHILD_PROBE") is null)
+            return;
+
+        foreach (var text in new[] {
+                     string.Join(" and ", Enumerable.Repeat("Flag", 5000)),
+                     Nots(5000),
+                     Parens(5000),
+                     Calls(5000),
+                     Matches(2000),
+                     RightNestedWhere(2000),
+                 }) {
+            var (parsed, failure) = ParseOnTinyStack(text);
+            await Assert.That(parsed).IsNull();
+            await Assert.That(failure).IsTypeOf<GrammarException>();
+            await Assert.That(((GrammarException)failure!).Detail).IsEqualTo(DslLimits.DepthDetail);
+        }
+    }
+
+    internal static string RightNestedWhere(int levels) {
+        var body = "Flag";
+        for (var i = 0; i < levels; i++)
+            body = $"Kids where (Flag and {body})";
+        return body;
+    }
+
+    [Test]
+    public async Task Parse_NestedToLimitMinus1_OnA64KbStackThread_Succeeds() {
+        var result = await PolycProcess.RunTestInChildAsync(
+            $"/*/*/{nameof(ParserLimitsTests)}/{nameof(ChildProbe_NestedToLimitMinus1_On64KbThread_Returns)}",
+            new Dictionary<string, string?> { ["POLY_CHILD_PROBE"] = "g10-tiny-ok" });
+
+        await Assert.That(result.IsAborted).IsFalse();
+        await Assert.That(result.ExitCode).IsEqualTo(0);
+    }
+
+    /// <summary>The row's <c>Parse_5000AndChain_IsRejectedAtDepth256_NoStackOverflow</c>, with the other
+    /// deeply nested forms in the same child run.</summary>
+    [Test]
+    public async Task Parse_5000AndChain_IsRejectedAtDepth256_NoStackOverflow() {
+        var result = await PolycProcess.RunTestInChildAsync(
+            $"/*/*/{nameof(ParserLimitsTests)}/{nameof(ChildProbe_FarBeyondLimit_On64KbThread_IsPositionedDepthError)}",
+            new Dictionary<string, string?> { ["POLY_CHILD_PROBE"] = "g10-tiny-reject" });
+
+        await Assert.That(result.IsAborted).IsFalse();
+        await Assert.That(result.ExitCode).IsEqualTo(0);
+    }
+
+    // ── G-10 boundary pins: every operator, right-nested and flat, and compare operands ──
+
+    /// <summary>Right-nested chain whose depth is exactly <paramref name="depth"/> levels: each nesting costs a
+    /// group and a fold (2 levels), and an odd depth wraps the whole in one more group.</summary>
+    internal static string RightNestedAtDepth(string op, int depth) {
+        var nested = "Flag";
+        for (var i = 0; i < depth / 2; i++)
+            nested = $"Flag {op} ({nested})";
+        return depth % 2 == 0 ? nested : "(" + nested + ")";
+    }
+
+    public static IEnumerable<string> ChainOperators() => ["and", "or", "+", "*"];
+
+    [Test]
+    [MethodDataSource(nameof(ChainOperators))]
+    public async Task RightNestedChain_BoundaryAt255And256Accepted_257Rejected(string op) {
+        foreach (var depth in new[] { Limit - 1, Limit }) {
+            var (parsed, failure) = ParseOnLarge(RightNestedAtDepth(op, depth));
+            await Assert.That(failure).IsNull();
+            await Assert.That(parsed).IsNotNull();
+        }
+
+        var (over, rejected) = ParseOnLarge(RightNestedAtDepth(op, Limit + 1));
+        await Assert.That(over).IsNull();
+        await Assert.That(rejected).IsTypeOf<GrammarException>();
+        await Assert.That(((GrammarException)rejected!).Detail).IsEqualTo(DslLimits.DepthDetail);
+    }
+
+    [Test]
+    [MethodDataSource(nameof(ChainOperators))]
+    public async Task FlatChain_257OperandsAccepted_258Rejected(string op) {
+        var (parsed, failure) = ParseOnLarge(string.Join($" {op} ", Enumerable.Repeat("Flag", Limit + 1)));
+        await Assert.That(failure).IsNull();
+        await Assert.That(parsed).IsNotNull();
+
+        var (over, rejected) = ParseOnLarge(string.Join($" {op} ", Enumerable.Repeat("Flag", Limit + 2)));
+        await Assert.That(over).IsNull();
+        await Assert.That(((GrammarException)rejected!).Detail).IsEqualTo(DslLimits.DepthDetail);
+    }
+
+    /// <summary>F5: a chain longer than the limit stops at the first operator that crosses it, the 257th, not the last.</summary>
+    [Test]
+    [MethodDataSource(nameof(ChainOperators))]
+    public async Task LongChain_IsPositionedAtThe257thOperator(string op) {
+        var text = string.Join($" {op} ", Enumerable.Repeat("Flag", 600));
+        var (parsed, failure) = ParseOnLarge(text);
+
+        await Assert.That(parsed).IsNull();
+        await Assert.That(failure).IsTypeOf<GrammarException>();
+        var error = (GrammarException)failure!;
+        await Assert.That(error.Detail).IsEqualTo(DslLimits.DepthDetail);
+        // "Flag op " is 5 + op.Length + 2 characters wide; operator k starts at (k - 1) * width + 5 + 1.
+        var width = "Flag ".Length + op.Length + 1;
+        await Assert.That(error.Offset).IsEqualTo(Limit * width + "Flag ".Length);
+        await Assert.That(text.Substring(error.Offset, error.Length)).IsEqualTo(op);
+    }
+
+    /// <summary>A comparison adds one level over its deeper operand, so a 256-operand sum on either side sits at the limit.</summary>
+    [Test]
+    public async Task CompareOperands_BoundaryAt256Accepted_257Rejected() {
+        foreach (var make in new Func<int, string>[] {
+                     n => string.Join(" + ", Enumerable.Repeat("Flag", n)) + " > Flag",
+                     n => "Flag > " + string.Join(" + ", Enumerable.Repeat("Flag", n)),
+                 }) {
+            foreach (var operands in new[] { Limit - 1, Limit }) {
+                var (parsed, failure) = ParseOnLarge(make(operands));
+                await Assert.That(failure).IsNull();
+                await Assert.That(parsed).IsNotNull();
+            }
+
+            var (over, rejected) = ParseOnLarge(make(Limit + 1));
+            await Assert.That(over).IsNull();
+            await Assert.That(((GrammarException)rejected!).Detail).IsEqualTo(DslLimits.DepthDetail);
+        }
+    }
+
+    // ── G-10: the where flag and malformed shapes the driver has to keep ───────────────
+
+    /// <summary>
+    /// A group, a call argument and a match arm each start a fresh expression, so <c>where</c> inside any of them
+    /// is not "nested": <c>Parse_DeepWhereChain_IsPositionedError</c> depends on it. A directly nested <c>where</c> still is.
+    /// </summary>
+    [Test]
+    public async Task Where_FlagResetsInGroupCallAndMatch_ButNotInPlainBody() {
+        foreach (var text in new[] {
+                     "Kids where (Kids where Flag)",
+                     "Kids where F(Kids where Flag)",
+                     "Kids where match { Kids where Flag -> 1, else -> 2 } > 0",
+                     "Kids where Qty > match { Flag -> Kids where Flag, else -> 3 }",
+                 }) {
+            var (parsed, failure) = ParseOnLarge(text);
+            await Assert.That(failure).IsNull();
+            await Assert.That(parsed).IsNotNull();
+        }
+
+        var (nested, rejected) = ParseOnLarge("Kids where Kids where Flag");
+        await Assert.That(nested).IsNull();
+        await Assert.That(rejected).IsTypeOf<GrammarException>();
+        await Assert.That(((GrammarException)rejected!).Detail).Contains("Nested 'where'");
+    }
+
+    /// <summary>
+    /// The malformed shapes the old longest-match fell back on and a committing driver reports directly.
+    /// Every one is a positioned parse error, never a crash and never an accepted wrong tree.
+    /// </summary>
+    [Test]
+    [Arguments("(Flag")]
+    [Arguments("F(Flag")]
+    [Arguments("match { Flag -> 1, else -> 2")]
+    [Arguments("Kids where")]
+    [Arguments("any Kids where")]
+    [Arguments("Flag and")]
+    [Arguments("Flag >")]
+    [Arguments("Order Price >")]
+    [Arguments("Order Price is not")]
+    public async Task Unterminated_IsPositionedParseError(string text) {
+        var (parsed, failure) = ParseOnLarge(text);
+
+        await Assert.That(parsed).IsNull();
+        await Assert.That(failure).IsTypeOf<GrammarException>();
+        await Assert.That(((GrammarException)failure!).Line).IsGreaterThan(0);
+    }
+
+    /// <summary>G-04's sign-off follow-up (names G-10): a group closes at its own <c>)</c>, so a token before it is the error, at that token.</summary>
+    [Test]
+    public async Task Parse_ParenGroupWithTrailingToken_IsRejected() {
+        var (parsed, failure) = ParseOnLarge("(Price > 3 4)");
+
+        await Assert.That(parsed).IsNull();
+        await Assert.That(failure).IsTypeOf<GrammarException>();
+        var error = (GrammarException)failure!;
+        await Assert.That(error.Detail).IsEqualTo("Unexpected '4' in group");
+        await Assert.That(error.Line).IsEqualTo(1);
+        await Assert.That(error.Column).IsEqualTo(12);
     }
 
     // ── F2 / A4: depth is a parameter, so nothing survives a failed parse ─────────────

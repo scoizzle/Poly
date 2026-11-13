@@ -27,7 +27,8 @@ public static class DslExpressionFragment {
         return DslLimits.RunOnParseStack(() => ParseOnThisThread(expression));
     }
 
-    private static DomainExpression ParseOnThisThread(string expression) {
+    /// <summary>The parse with no stack hop: the stack tests run it on a 64 KB thread to prove nothing recurses over depth.</summary>
+    internal static DomainExpression ParseOnThisThread(string expression) {
         if (string.IsNullOrWhiteSpace(expression))
             throw GrammarError.Error("Expression must not be empty");
 

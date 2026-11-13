@@ -14,14 +14,17 @@ public sealed class DslExpressionParser {
     private readonly IDslParseCursor _c;
     private readonly ExpressionFormRegistry _forms;
     private readonly ExpressionFoldTable _folds;
+    private readonly DslOperatorTable _operators;
 
     public DslExpressionParser(
         IDslParseCursor cursor,
         ExpressionFormRegistry? forms = null,
-        ExpressionFoldTable? folds = null) {
+        ExpressionFoldTable? folds = null,
+        DslOperatorTable? operators = null) {
         _c = cursor ?? throw new ArgumentNullException(nameof(cursor));
         _forms = forms ?? new ExpressionFormRegistry();
         _folds = folds ?? ExpressionFoldTable.Core();
+        _operators = operators ?? DslOperatorTable.Core(_forms);
     }
 
     public DomainExpression ParseExpression() => ParseExpressionAt(0);

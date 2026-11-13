@@ -264,8 +264,7 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
         return FoldResult.NotFoldable;
     }
 
-    private FoldResult FoldBinaryBoolean(AnalysisContext context, Node left, Node right, Func<bool, bool, bool> operation, IReadOnlyDictionary<NodeId, object?>? parameterValues = null) {
-        var leftValue = GetConstantValue(context, left, parameterValues);
+    private FoldResult FoldBinaryBoolean(AnalysisContext context, FoldResult leftValue, Node right, Func<bool, bool, bool> operation, IReadOnlyDictionary<NodeId, object?>? parameterValues = null) {
         var rightValue = GetConstantValue(context, right, parameterValues);
 
         if (!leftValue.HasValue || !rightValue.HasValue)
@@ -284,7 +283,7 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
             return FoldResult.Success(false);
         }
 
-        return FoldBinaryBoolean(context, and.LeftHandValue, and.RightHandValue, (a, b) => a && b, parameterValues);
+        return FoldBinaryBoolean(context, leftValue, and.RightHandValue, (a, b) => a && b, parameterValues);
     }
 
     private FoldResult FoldOr(AnalysisContext context, Or or, IReadOnlyDictionary<NodeId, object?>? parameterValues = null) {
@@ -293,7 +292,7 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
             return FoldResult.Success(true);
         }
 
-        return FoldBinaryBoolean(context, or.LeftHandValue, or.RightHandValue, (a, b) => a || b, parameterValues);
+        return FoldBinaryBoolean(context, leftValue, or.RightHandValue, (a, b) => a || b, parameterValues);
     }
 
     private FoldResult FoldUnaryBoolean(AnalysisContext context, Node operand, Func<bool, bool> operation, IReadOnlyDictionary<NodeId, object?>? parameterValues = null) {

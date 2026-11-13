@@ -20,8 +20,9 @@ public class HtmlToolTests {
 
     [Test]
     public async Task ExportDomainToHtml_ReturnsDocumentWithoutMutatingTheSession() {
-        var (sessionId, _) = McpTestTools.Store.Create("Inventory");
-        await Assert.That(McpTestTools.Dsl.ApplyDsl(sessionId, Dsl).Success).IsTrue();
+        var surface = McpTestTools.Surface;
+        var sessionId = surface.Open("Inventory");
+        await Assert.That(surface.Define(sessionId, Dsl).Success).IsTrue();
         await Assert.That(McpTestTools.Store.TryGet(sessionId, out var afterApply)).IsTrue();
         var revision = afterApply.Revision;
 
@@ -36,7 +37,9 @@ public class HtmlToolTests {
         await Assert.That(data.Html).Contains("https://example.com/Item");
         await Assert.That(data.Html).Contains("<code>range(0, 1000)</code>");
 
-        await Assert.That(McpTestTools.Query.GetDomainOverview(sessionId).Revision).IsEqualTo(revision);
+        var inspected = surface.Inspect(sessionId).Revision;
+        await Assert.That(inspected).IsNotNull();
+        await Assert.That(inspected).IsEqualTo(revision);
     }
 
     [Test]

@@ -24,10 +24,10 @@ public class ManyToManyExportTests {
             """{"name":"OrderItems","source":"Order","target":"Item","cardinality":"ManyToMany"}""");
         await Assert.That(rel.Success).IsTrue();
 
-        var export = McpTestTools.Dsl.ExportDsl(sessionId);
+        var export = McpTestTools.Surface.Export(sessionId, "dsl");
         await Assert.That(export.Success).IsFalse();
-        await Assert.That(export.Message).Contains("OrderItems");
-        await Assert.That(export.Message).Contains("ManyToMany");
+        await Assert.That(export.Summary).Contains("OrderItems");
+        await Assert.That(export.Summary).Contains("ManyToMany");
     }
 
     [Test]
@@ -39,9 +39,8 @@ public class ManyToManyExportTests {
             """{"name":"OrderItems","source":"Order","target":"Item","cardinality":"OneToMany"}""");
         await Assert.That(rel.Success).IsTrue();
 
-        var export = McpTestTools.Dsl.ExportDsl(sessionId);
+        var export = McpTestTools.Surface.Export(sessionId, "dsl");
         await Assert.That(export.Success).IsTrue();
-        var json = System.Text.Json.JsonSerializer.Serialize(export.Data);
-        await Assert.That(json).Contains("OrderItems: many Item");
+        await Assert.That(export.Content).Contains("OrderItems: many Item");
     }
 }

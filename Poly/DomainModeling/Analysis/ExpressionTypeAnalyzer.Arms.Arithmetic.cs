@@ -19,11 +19,11 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
         // (path-prefix reads, peer binders) are out of this scope — skip. A duration
         // without a temporal left operand (Number + days, days + date) is an unresolved
         // temporal specialization — reject, never a silent numeric constant.
-        if (leftType.Category is not TypeCategory.Unknown && rightType.Category is not TypeCategory.Unknown
-            && !(IsNumeric(leftType.Category) && IsNumeric(rightType.Category))
-            && !(allowTextConcat && leftType.Category is TypeCategory.Text && rightType.Category is TypeCategory.Text)
-            && !(IsDate(leftType.Category) && IsNumeric(rightType.Category))
-            && !(IsDate(leftType.Category) && rightType.Category is TypeCategory.Duration))
+        if (!IsLenient(leftType) && !IsLenient(rightType)
+            && !(IsNumeric(leftType) && IsNumeric(rightType))
+            && !(allowTextConcat && Family(leftType) is TypeFamily.Text && Family(rightType) is TypeFamily.Text)
+            && !(IsDate(leftType) && IsNumeric(rightType))
+            && !(IsDate(leftType) && Family(rightType) is TypeFamily.Duration))
             Report(context, left,
                 $"arithmetic operand is not numeric (got '{Describe(leftType)}' and '{Describe(rightType)}')");
         WalkExpression(context, left, props, parameters, enumTypes);
@@ -37,8 +37,8 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
         var leftType = InferType(context, left, props, parameters, enumTypes);
         var rightType = InferType(context, right, props, parameters, enumTypes);
         ReportFractionalLiteral(context, left, leftType, right, rightType);
-        if (leftType.Category is not TypeCategory.Unknown && rightType.Category is not TypeCategory.Unknown
-            && (!IsNumeric(leftType.Category) || !IsNumeric(rightType.Category)))
+        if (!IsLenient(leftType) && !IsLenient(rightType)
+            && (!IsNumeric(leftType) || !IsNumeric(rightType)))
             Report(context, left,
                 $"arithmetic operand is not numeric (got '{Describe(leftType)}' and '{Describe(rightType)}')");
         WalkExpression(context, left, props, parameters, enumTypes);

@@ -77,10 +77,10 @@ public class CompileRefusesErrorsTests {
         var (sessionId, state) = McpTestTools.Store.Create("Broken");
         await Assert.That(McpTestTools.Store.Replace(sessionId, domain, analysis, state.Modeling)).IsTrue();
 
-        var response = McpTestTools.Runtime.CreateInstance(sessionId, "Order");
+        var response = McpTestTools.Surface.Create(sessionId, "Order");
 
-        await Assert.That(response.Success).IsFalse();
-        await Assert.That(response.Message).Contains(first);
+        await Assert.That(response.Ok).IsFalse();
+        await Assert.That(response.Summary).Contains(first);
     }
 
     /// <summary>

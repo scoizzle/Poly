@@ -1,6 +1,6 @@
 # Domain type model and numeric rules (Q5, Q6, OQ-3, OQ-6, OQ-11)
 
-Status: **Transcription of owner rulings Q5, Q6, OQ-3, OQ-6, OQ-11, plus the two contract clauses T-02 decided and the one T-03 decided (see *Open or newly decided*, below). `ExprType` and `DomainTypeModel` have landed (T-03, internal, no production caller until T-04). T-03b landed the Introspection contract for conversions and operators (internal, no production caller until T-04).**
+Status: **Transcription of owner rulings Q5, Q6, OQ-3, OQ-6, OQ-11, plus the two contract clauses T-02 decided and the one T-03 decided (see *Open or newly decided*, below). `ExprType` and `DomainTypeModel` have landed (T-03, internal; the analyzer is its production caller since T-04). T-03b landed the Introspection contract for conversions and operators (internal; the analyzer calls `GetOperator` since T-04 to state a `BinaryTyping`, as a stamp and never a gate).**
 
 Recorded by slice T-01 of theme T ([#679](https://github.com/scoizzle/Poly/issues/679), epic
 [#677](https://github.com/scoizzle/Poly/issues/677)) so the slices that implement the model are held to the
@@ -77,7 +77,7 @@ owner-approved plan, not a ruling. **Open** — not settled by either; the named
 | # | Rule | Provenance |
 |---|---|---|
 | R0 | define/check acceptance is the one gate: what it accepts, simulate, printed C# and polyc accept. | **ruling clause (Q5: gate) + #679 plan direction (host parity)** — Q5: "domain analysis is the one gate"; #679 goal: "anything define/check accepts compiles on the VM, in generated C# and in polyc". The harness is T-05 `GateParity`, closed by T-13 |
-| R1 | `Unknown` is never compatible; the model's `ExprType.Unresolved` (landed, T-03; no production caller until T-04) is never assignable — not a wildcard. | **#679 plan direction** (goal: "`Unknown` never compatible"; contract: `ExprType.Unresolved` is never assignable/comparable). Q5 says replace the model; it does not say this |
+| R1 | `Unknown` is never compatible; the model's `ExprType.Unresolved` (landed, T-03; in use by the analyzer since T-04) is never assignable — not a wildcard. | **#679 plan direction** (goal: "`Unknown` never compatible"; contract: `ExprType.Unresolved` is never assignable/comparable). Q5 says replace the model; it does not say this |
 | R2 | `Decimal` ≠ `Number`; `Number` ≡ `Int64`. | **#679 plan direction** — "Decimal distinct from Number" in the goal, and "Number ≡ Int64" in T-03's red test; the existing mapping (below) already spells `Number` as `long`/`bigint` |
 | R3 | optionality is a flag beside the definition, not a wrapped type; `null` only into an optional target. | **#679 plan direction** — goal: "first-class optionality"; the shape is the `ExprType(Definition, Optional, DomainName)` contract (T-03) and T-06's `OptionalTyping` row |
 | R4 | `Number / Number` is integer division; assigning it to `Decimal` warns. | **ruling clause** — Q6: "Number / Number is integer division (+ warning when assigned to Decimal)" |
@@ -94,11 +94,22 @@ Open or newly decided, named by the contract (an open item names the slice that 
 - **`Float64 op Decimal`** — decided by T-03b: none. Neither type converts implicitly to the other, which is C#.
   Nothing else agrees today (the ledger): the lowered-tree analysis types it `Decimal` (T-17, T-18) and the ABI
   executes it as `Decimal` (T-21); the domain DSL cannot state a Float operand, so its analyzer column is n/a.
-- **Known limit: the built-in set is closed** (owned by T-24). The contract answers none for cells C# defines
-  outside {Int32, Int64, Float64} conversions and {Int32, Int64, Float64, Boolean, String} operators: small-integer
-  and unsigned arithmetic and mixes, Float32 arithmetic and conversions, Char, string concatenation with a
-  non-string operand; there are no `OperatorKind`s for shift, unary minus, modulo or bitwise. CLR-declared
-  members (`decimal`'s conversions, Float32's comparisons) stay open through reflection.
+- **The built-in set answers what C# defines** (T-24). The contract answers every conversion and operator C#
+  defines for built-in types: the §10.2.3 implicit numeric conversions and §10.3.2's explicit ones, conversion into
+  `object` from any other CLR type (§10.2.8, §10.2.9), unary and binary numeric promotion (§12.4.7) through one
+  `Promote` function, arithmetic, modulo, comparison, bitwise, shift (the count converts implicitly to `int`,
+  §12.11), unary minus and plus, the Boolean operators, and `string + object` (§12.10.5). Nine `OperatorKind`s
+  were added for modulo, unary minus and plus, bitwise and shift. The C# runtime binder is the test oracle: 51
+  implicit and 81 explicit of the 132 ordered numeric pairs, and 3,584 operator cells. Decimal's conversions and
+  operators stay the CLR's declared members. Deliberately none: enum, lifted, reference-equality, delegate and
+  object operators.
+- **`GetOperators(kind, other)` is pair-aware** — decided by T-24, not a tie-break. `UInt32 + Int32` is `Int64`,
+  which neither operand owns, and a "most specific" tie-break over per-operand sets cannot rank `Byte + Byte`
+  between `int` and `uint` without §12.6.4.7's C#-only rule in neutral code. `other` is neutral (`ITypeDefinition?`;
+  null is the same type).
+- **`Text + X` is language policy** — decided by T-24 and the orchestrator's ruling: the platform defines
+  `string + object` for every CLR operand, and Poly allows only `Text + Text`. The provider states the platform
+  fact; the domain analyzer's rejection of the 16 `Text + X` cells is a permanent, named ledger rule (T-07).
 - **`Text` operators** — decided by T-03b: `Text + Text` is `Text`, equality is defined, and ordering and
   subtraction are none (#631 is T-07's).
 - **Implicit `Number -> Decimal` widening** — decided by T-03: `Assign(Number -> Decimal)` is `Widening`,
@@ -123,7 +134,7 @@ mirrors the T-02…T-13 rows in #679.
 |---|---|---|
 | R0 | no general "analysis accepts ⇒ every host accepts" gate exists; specific parity tests do — `Poly.Tests/DomainModeling/Compile/SampleRoslynGateTests.cs:14`, `Poly.Tests/DomainModeling/Compile/UniqueSimulatePrintAgreeTests.cs:20`, `Poly.Tests/DomainModeling/Lowering/ActionParameterEnvelopeParityTests.cs:13`, `Poly.Tests/DomainModeling/Lowering/DurationDefaultParityTests.cs:21`, `Poly.Tests/Interpretation/AstParityTests.cs:21`. | T-05 `GateParity`; closed by T-13 |
 | R1 | `Unknown` on either side is compatible — `Poly/DomainModeling/Analysis/ExpressionTypeAnalyzer.cs:785-786`; the assign check returns silently, `:585-586`; and an assigned numeric arithmetic expression is `Unknown`, `:696`. | T-04 keeps a provisional lenient flag; T-05 flips it |
-| R2 | one `TypeCategory.Number` for both — `Poly/DomainModeling/Analysis/ExpressionTypeAnalyzer.cs:750`; messages print "Number" for Decimal, `:768`. | T-03 model, T-04 messages |
+| R2 | one `TypeCategory.Number` for both — `Poly/DomainModeling/Analysis/ExpressionTypeAnalyzer.cs:750`; messages print "Number" for Decimal, `:768`. | T-03 model, T-04 messages. **Resolved by T-04:** `TypeCategory` is gone; a Decimal is named "Decimal" in messages (#581). |
 | R3 | `null` accepted for Text/Guid regardless of optionality, and rejected into a Number/Boolean/Date target even when optional (`CheckCompatible` has no optionality input) — `Poly/DomainModeling/Analysis/ExpressionTypeAnalyzer.cs:787-790`, `:541-600`; `IsRequired` is the only optionality definition — `Poly/DomainModeling/Analysis/EntityStructureAnalyzer.cs:135-136`. | T-06 |
 | R4 | no rule; every numeric result is a bare `Number` (call args, function bodies, Sum/Count — `Poly/DomainModeling/Analysis/ExpressionTypeAnalyzer.cs:133`, `:357`, `:716`; an assigned numeric arithmetic expression stays `Unknown`, see R5). | T-03b result typing (`GetOperator(...).Result`; `Int64 / Int64` is `Int64`); T-04 adopts it; T-08 warning |
 | R5 | an assigned numeric arithmetic expression is `Unknown` and unchecked (this is #491's path) — `Poly/DomainModeling/Analysis/ExpressionTypeAnalyzer.cs:585-586`, `:696`; Decimal -> Number on a *typed* source errors with a "Number to Number" message (#581) — `:768`; rounding modes diverge per OQ-3's recorded correction. | T-08 fail-closed baseline (error), T-12 rounding |
@@ -161,7 +172,8 @@ Recorded by T-03b from [#679 comment 6837489066](https://github.com/scoizzle/Pol
   emit-time rejection is its first instance.
 - **Convergence.** One row per remaining copy after T-04: T-16 (to answer a conversion four things still name .NET: `GetConversionFrom`'s CLR branch,
   `IsAssignableFrom`'s `ClrTypeDefinition` branch, `IsNumericWideningFrom`'s `TypeCode` table and the second conversion
-  door, the internal `ResolveConversionFrom` beside the public `GetConversionFrom`; `IsCollectionShape` and
+  door, the internal `ResolveConversionFrom` beside the public `GetConversionFrom`, whose conversion into `object`
+  duplicates `IsAssignableFrom`'s CLR branch since T-24; `IsCollectionShape` and
   `GetElementType` also name CLR types but do not answer a conversion), T-17 (`PromoteNumeric`/`GetNumericRank`/`ResolveAddType`),
   T-18 (`SyntaxTypeCompatibilityAnalyzer`), T-19 (`LambdaBridge.PromoteNumeric`), T-20
   (`ConstantFoldingPass.Promote`), T-21 (the emitter's promotion).
@@ -170,8 +182,9 @@ Landed shape (T-03b): `TypeConversion(Kind, Method?)` (null `Method` means the p
 `DeclaredOperator(Signature, PlatformApplied)`, `OperatorResolution(Signature, PlatformApplied)` with `Result`,
 `GetOperator(kind, right)` with the identity-then-unique tie rule, and `GetCommonType(types)`. `And` and `Or` have
 no declared form; the `op_*` names are Poly's modeled convention, not a platform fact. The closed numeric set
-{Int32, Int64, Float64} moved verbatim from the interim `DomainTypeModel.BuiltInNumeric`, which is deleted:
-`Int64 → Float64` stays implicit and lossy above 2^53.
+{Int32, Int64, Float64} moved verbatim from the interim `DomainTypeModel.BuiltInNumeric`, which is deleted; T-24
+replaced it with the full C# table and made `GetOperators(kind, other)` pair-aware. `Int64 → Float64` stays
+implicit and lossy above 2^53.
 
 ## P-05: which bound type goes with which column type
 

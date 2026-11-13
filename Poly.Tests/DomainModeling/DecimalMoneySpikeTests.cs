@@ -46,22 +46,22 @@ public class DecimalMoneySpikeTests {
     [Test]
     public async Task Ingest_FractionalJson_StoresDecimalAndRejectsFractionalNumber() {
         var (sessionId, _) = McpTestTools.Store.Create("Stay");
-        var applied = McpTestTools.Dsl.ApplyDsl(sessionId, Stay);
+        var applied = McpTestTools.Surface.Define(sessionId, Stay);
         await Assert.That(applied.Success).IsTrue();
 
-        var created = McpTestTools.Runtime.CreateInstance(sessionId, "Booking",
+        var created = McpTestTools.Surface.Create(sessionId, "Booking",
             """{"NightlyRate":199.50,"Nights":3,"Total":0}""");
-        await Assert.That(created.Success).IsTrue();
+        await Assert.That(created.Ok).IsTrue();
         McpTestTools.Store.TryGet(sessionId, out var state);
         var stored = state!.InstanceMap.Values.Single();
         await Assert.That((decimal)stored["NightlyRate"]!).IsEqualTo(199.50m);
 
         var (rejectId, _) = McpTestTools.Store.Create("Stay");
-        await Assert.That(McpTestTools.Dsl.ApplyDsl(rejectId, Stay).Success).IsTrue();
-        var fraction = McpTestTools.Runtime.CreateInstance(rejectId, "Booking",
+        await Assert.That(McpTestTools.Surface.Define(rejectId, Stay).Success).IsTrue();
+        var fraction = McpTestTools.Surface.Create(rejectId, "Booking",
             """{"NightlyRate":199.50,"Nights":1.5,"Total":0}""");
-        await Assert.That(fraction.Success).IsFalse();
-        await Assert.That(fraction.Message).Contains("Decimal");
+        await Assert.That(fraction.Ok).IsFalse();
+        await Assert.That(fraction.Summary).Contains("Decimal");
         McpTestTools.Store.TryGet(rejectId, out var after);
         await Assert.That(after!.InstanceMap.Count).IsEqualTo(0);
     }

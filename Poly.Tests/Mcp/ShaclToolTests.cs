@@ -20,8 +20,9 @@ public class ShaclToolTests {
 
     [Test]
     public async Task ExportDomainToShacl_ReturnsShapesWithoutMutatingTheSession() {
-        var (sessionId, _) = McpTestTools.Store.Create("Inventory");
-        await Assert.That(McpTestTools.Dsl.ApplyDsl(sessionId, Dsl).Success).IsTrue();
+        var surface = McpTestTools.Surface;
+        var sessionId = surface.Open("Inventory");
+        await Assert.That(surface.Define(sessionId, Dsl).Success).IsTrue();
         await Assert.That(McpTestTools.Store.TryGet(sessionId, out var afterApply)).IsTrue();
         var revision = afterApply.Revision;
 
@@ -42,7 +43,9 @@ public class ShaclToolTests {
         await Assert.That(node["sh:targetClass"]!["@id"]!.GetValue<string>())
             .IsEqualTo("https://example.com/Item");
 
-        await Assert.That(McpTestTools.Query.GetDomainOverview(sessionId).Revision).IsEqualTo(revision);
+        var inspected = surface.Inspect(sessionId).Revision;
+        await Assert.That(inspected).IsNotNull();
+        await Assert.That(inspected).IsEqualTo(revision);
     }
 
     [Test]

@@ -100,8 +100,8 @@ public sealed partial class DomainResolver : DslCursor {
     /// that, when applied via evolution, produces the declared domain.
     /// </summary>
     public List<DomainChange> Resolve() =>
-        // The single resolve point, so every facade that reaches the resolver — PolyDslParser,
-        // DomainCompilation, PolyCompiler — parses on the shared stack (OQ-4 / Q17 condition 1).
+        // The single resolve point, so every facade that reaches the resolver (PolyDslParser,
+        // DomainCompilation, PolyCompiler) parses statements on the shared large stack.
         DslLimits.RunOnParseStack(ResolveOnParseStack);
 
     private List<DomainChange> ResolveOnParseStack() {

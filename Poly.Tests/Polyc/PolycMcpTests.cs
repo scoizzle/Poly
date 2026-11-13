@@ -141,6 +141,29 @@ public class PolycMcpTests {
         await Assert.That(finding["path"]!.GetValue<string>()).IsEqualTo(expected.Path);
     }
 
+    /// <summary>
+    /// G-10 (#527): 500 nested parentheses are the positioned parse error DSL0001 through the one MCP host, and the
+    /// host keeps serving afterwards. New in G-10: G-09 pinned the same document through <c>polyc check</c> only.
+    /// </summary>
+    [Test]
+    public async Task PolyDefine_500NestedParentheses_IsDsl0001_AndTheHostStaysAlive() {
+        var text = "domain Deep\n\nA: entity {\n  Flag: Boolean\n  Ok: policy { "
+            + new string('(', 500) + "Flag" + new string(')', 500) + " }\n}\n";
+
+        using var host = await PolycProcess.McpAsync();
+        await host.InitializeAsync();
+        var workspace = (await host.ToolAsync("poly_workspace", new JsonObject { ["name"] = "Deep" }))["state"]!["workspace"]!.GetValue<string>();
+        var define = await host.ToolAsync("poly_define", new JsonObject { ["workspace"] = workspace, ["poly"] = text, ["apply"] = false });
+
+        var finding = define["findings"]!.AsArray().Single(f =>
+            string.Equals(f!["severity"]!.GetValue<string>(), "Error", StringComparison.OrdinalIgnoreCase))!;
+        await Assert.That(finding["code"]!.GetValue<string>()).IsEqualTo("DSL0001");
+        await Assert.That(finding["line"]!.GetValue<int>()).IsEqualTo(5);
+
+        var alive = await host.ToolAsync("poly_workspace", new JsonObject { ["op"] = "list" });
+        await Assert.That(alive["ok"]!.GetValue<bool>()).IsTrue();
+    }
+
     /// <summary>#533: a wrong JSON type is a typed caller error, and the host keeps serving.</summary>
     [Test]
     public async Task StdioWrongTypedArgument_IsATypedError_AndTheHostStaysAlive() {

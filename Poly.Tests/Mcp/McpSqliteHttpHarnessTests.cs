@@ -26,7 +26,7 @@ public sealed class McpSqliteHttpHarnessTests {
     public async Task Apply_SellableShape_OpensAnalyzeSimulateAndExport() {
         var (sessionId, _) = McpTestTools.Store.Create("Catalog");
 
-        var applied = McpTestTools.Dsl.ApplyDsl(sessionId, SellableShape);
+        var applied = McpTestTools.Surface.Define(sessionId, SellableShape);
         await Assert.That(applied.Success).IsTrue();
         await Assert.That(McpTestTools.Store.TryGet(sessionId, out var state)).IsTrue();
         await Assert.That(state.Domain.Extensions).Contains("sqlite");
@@ -39,16 +39,16 @@ public sealed class McpSqliteHttpHarnessTests {
         await Assert.That(analysis.Data).IsTypeOf<AnalysisData>();
         await Assert.That(((AnalysisData)analysis.Data!).ErrorCount).IsEqualTo(0);
 
-        var created = McpTestTools.Runtime.CreateInstance(sessionId, "Item", """{"Name":"Widget","Qty":1}""");
-        await Assert.That(created.Success).IsTrue();
+        var created = McpTestTools.Surface.Create(sessionId, "Item", """{"Name":"Widget","Qty":1}""");
+        await Assert.That(created.Ok).IsTrue();
         await Assert.That(McpTestTools.Store.TryGet(sessionId, out state)).IsTrue();
         var instanceId = state.Executor.Instances.First(i => i.EntityName == "Item").Id;
-        var bumped = McpTestTools.Runtime.InvokeAction(sessionId, instanceId, "Bump");
-        await Assert.That(bumped.Success).IsTrue();
+        var bumped = McpTestTools.Surface.Invoke(sessionId, instanceId, "Bump");
+        await Assert.That(bumped.Ok).IsTrue();
 
-        var exported = McpTestTools.Dsl.ExportDsl(sessionId);
+        var exported = McpTestTools.Surface.Export(sessionId, "dsl");
         await Assert.That(exported.Success).IsTrue();
-        var poly = exported.Data!.GetType().GetProperty("poly")?.GetValue(exported.Data) as string;
+        var poly = exported.Content;
         await Assert.That(poly).IsNotNull();
         await Assert.That(poly!).Contains("uses sqlite");
         await Assert.That(poly).Contains("uses http");
@@ -67,13 +67,13 @@ public sealed class McpSqliteHttpHarnessTests {
     public async Task Apply_UnknownExtension_FailClosed() {
         var (sessionId, _) = McpTestTools.Store.Create("Nope");
 
-        var applied = McpTestTools.Dsl.ApplyDsl(sessionId, """
+        var applied = McpTestTools.Surface.Define(sessionId, """
             domain Catalog
             uses nope
 
             Item: entity { Name: Text }
             """);
         await Assert.That(applied.Success).IsFalse();
-        await Assert.That(applied.Message).Contains("Unknown domain extension 'nope'");
+        await Assert.That(applied.Summary).Contains("Unknown domain extension 'nope'");
     }
 }

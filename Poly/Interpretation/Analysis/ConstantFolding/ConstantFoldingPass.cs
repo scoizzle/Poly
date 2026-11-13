@@ -1,4 +1,9 @@
+using System.Globalization;
+using System.Numerics;
+using System.Reflection;
+
 using Poly.Interpretation.Analysis.Semantics;
+using Poly.Introspection.CommonLanguageRuntime;
 
 namespace Poly.Interpretation.Analysis.ConstantFolding;
 
@@ -79,28 +84,26 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
             Constant c => FoldResult.Success(c.Value),
             Parameter parameter => FoldParameter(parameter, parameterValues),
 
-            // Arithmetic operations
-            Add add => FoldBinaryArithmetic(context, add.LeftHandValue, add.RightHandValue, Add, parameterValues),
-            Subtract sub => FoldBinaryArithmetic(context, sub.LeftHandValue, sub.RightHandValue, Subtract, parameterValues),
-            Multiply mul => FoldBinaryArithmetic(context, mul.LeftHandValue, mul.RightHandValue, Multiply, parameterValues),
-            Divide div => FoldBinaryArithmetic(context, div.LeftHandValue, div.RightHandValue, Divide, parameterValues),
-            Modulo mod => FoldBinaryArithmetic(context, mod.LeftHandValue, mod.RightHandValue, Modulo, parameterValues),
-            UnaryMinus neg => FoldUnaryArithmetic(context, neg.Operand, Negate, parameterValues),
+            // Operators: the type provider states which apply and what they mean (GetOperator).
+            Add add => FoldOperator(context, node, OperatorKind.Add, add.LeftHandValue, add.RightHandValue, parameterValues),
+            Subtract sub => FoldOperator(context, node, OperatorKind.Subtract, sub.LeftHandValue, sub.RightHandValue, parameterValues),
+            Multiply mul => FoldOperator(context, node, OperatorKind.Multiply, mul.LeftHandValue, mul.RightHandValue, parameterValues),
+            Divide div => FoldOperator(context, node, OperatorKind.Divide, div.LeftHandValue, div.RightHandValue, parameterValues),
+            Modulo mod => FoldOperator(context, node, OperatorKind.Modulo, mod.LeftHandValue, mod.RightHandValue, parameterValues),
+            UnaryMinus neg => FoldOperator(context, node, OperatorKind.UnaryMinus, neg.Operand, null, parameterValues),
 
             // Boolean operations
             And and => FoldAnd(context, and, parameterValues),
             Or or => FoldOr(context, or, parameterValues),
             Not not => FoldUnaryBoolean(context, not.Value, a => !a, parameterValues),
 
-            // Comparison operations
-            GreaterThan gt => FoldComparison(context, gt.LeftHandValue, gt.RightHandValue, (a, b) => FloatingCompare(a, b, (x, y) => x > y), parameterValues),
-            GreaterThanOrEqual gte => FoldComparison(context, gte.LeftHandValue, gte.RightHandValue, (a, b) => FloatingCompare(a, b, (x, y) => x >= y), parameterValues),
-            LessThan lt => FoldComparison(context, lt.LeftHandValue, lt.RightHandValue, (a, b) => FloatingCompare(a, b, (x, y) => x < y), parameterValues),
-            LessThanOrEqual lte => FoldComparison(context, lte.LeftHandValue, lte.RightHandValue, (a, b) => FloatingCompare(a, b, (x, y) => x <= y), parameterValues),
-
-            // Equality operations — floating-point == for float/double (NaN != NaN), object.Equals otherwise.
-            Equal eq => FoldEquality(context, eq.LeftHandValue, eq.RightHandValue, FloatingEquals, parameterValues),
-            NotEqual neq => FoldEquality(context, neq.LeftHandValue, neq.RightHandValue, (a, b) => !FloatingEquals(a, b), parameterValues),
+            // Comparison and equality operations
+            GreaterThan gt => FoldOperator(context, node, OperatorKind.GreaterThan, gt.LeftHandValue, gt.RightHandValue, parameterValues),
+            GreaterThanOrEqual gte => FoldOperator(context, node, OperatorKind.GreaterThanOrEqual, gte.LeftHandValue, gte.RightHandValue, parameterValues),
+            LessThan lt => FoldOperator(context, node, OperatorKind.LessThan, lt.LeftHandValue, lt.RightHandValue, parameterValues),
+            LessThanOrEqual lte => FoldOperator(context, node, OperatorKind.LessThanOrEqual, lte.LeftHandValue, lte.RightHandValue, parameterValues),
+            Equal eq => FoldOperator(context, node, OperatorKind.Equal, eq.LeftHandValue, eq.RightHandValue, parameterValues),
+            NotEqual neq => FoldOperator(context, node, OperatorKind.NotEqual, neq.LeftHandValue, neq.RightHandValue, parameterValues),
 
             // Conditional with constant condition
             Conditional cond => FoldConditional(context, cond, parameterValues),
@@ -110,12 +113,12 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
             Coalesce coalesce => FoldCoalesce(context, coalesce, parameterValues),
 
             // Bitwise operations
-            BitwiseAnd ba => FoldBitwiseBinary(context, ba.LeftHandValue, ba.RightHandValue, (a, b) => (long)a & (long)b, parameterValues),
-            BitwiseOr bor => FoldBitwiseBinary(context, bor.LeftHandValue, bor.RightHandValue, (a, b) => (long)a | (long)b, parameterValues),
-            BitwiseXor bx => FoldBitwiseBinary(context, bx.LeftHandValue, bx.RightHandValue, (a, b) => (long)a ^ (long)b, parameterValues),
-            ShiftLeft sl => FoldBitwiseBinary(context, sl.LeftHandValue, sl.RightHandValue, (a, b) => (long)a << (int)(long)b, parameterValues),
-            ShiftRight sr => FoldBitwiseBinary(context, sr.LeftHandValue, sr.RightHandValue, (a, b) => (long)a >> (int)(long)b, parameterValues),
-            BitwiseNot bn => FoldBitwiseUnary(context, bn.Operand, a => ~(long)a, parameterValues),
+            BitwiseAnd ba => FoldOperator(context, node, OperatorKind.BitwiseAnd, ba.LeftHandValue, ba.RightHandValue, parameterValues),
+            BitwiseOr bor => FoldOperator(context, node, OperatorKind.BitwiseOr, bor.LeftHandValue, bor.RightHandValue, parameterValues),
+            BitwiseXor bx => FoldOperator(context, node, OperatorKind.BitwiseXor, bx.LeftHandValue, bx.RightHandValue, parameterValues),
+            ShiftLeft sl => FoldOperator(context, node, OperatorKind.ShiftLeft, sl.LeftHandValue, sl.RightHandValue, parameterValues),
+            ShiftRight sr => FoldOperator(context, node, OperatorKind.ShiftRight, sr.LeftHandValue, sr.RightHandValue, parameterValues),
+            BitwiseNot bn => FoldOperator(context, node, OperatorKind.BitwiseNot, bn.Operand, null, parameterValues),
 
             // Lambda invocation with constant arguments
             Invoke invoke => FoldInvocation(context, invoke, parameterValues),
@@ -175,28 +178,13 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
         if (resolvedType is null)
             return replacement;
 
-        var valueType = c.Value.GetType();
-        var resolvedFullName = resolvedType.FullName;
-
-        string valueTypeName = valueType switch {
-            Type t when t == typeof(int) => "System.Int32",
-            Type t when t == typeof(long) => "System.Int64",
-            Type t when t == typeof(short) => "System.Int16",
-            Type t when t == typeof(byte) => "System.Byte",
-            Type t when t == typeof(uint) => "System.UInt32",
-            Type t when t == typeof(ulong) => "System.UInt64",
-            Type t when t == typeof(double) => "System.Double",
-            Type t when t == typeof(float) => "System.Single",
-            Type t when t == typeof(bool) => "System.Boolean",
-            _ => valueType.FullName ?? valueType.Name
-        };
-
-        if (valueTypeName == resolvedFullName)
+        if (context.TypeDefinitions.GetTypeDefinition(c.Value.GetType()) is { } valueType
+            && TypeDefinitionExtensions.IsSameType(valueType, resolvedType))
             return replacement;
 
         // Type mismatch — wrap in a cast to preserve the original type,
         // and propagate the resolved type so backends can lower it.
-        var cast = new TypeCast(replacement, new TypeReference(resolvedFullName));
+        var cast = new TypeCast(replacement, new TypeReference(resolvedType.FullName));
         context.SetResolvedType(cast, resolvedType);
         return cast;
     }
@@ -214,55 +202,6 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
     }
 
     private static bool IsPowerOf2(long n) => n > 0 && (n & (n - 1)) == 0;
-
-    private FoldResult FoldBinaryArithmetic(AnalysisContext context, Node left, Node right, Func<object, object, object?> operation, IReadOnlyDictionary<NodeId, object?>? parameterValues = null) {
-        var leftValue = GetConstantValue(context, left, parameterValues);
-        var rightValue = GetConstantValue(context, right, parameterValues);
-
-        if (!leftValue.HasValue || !rightValue.HasValue)
-            return FoldResult.NotFoldable;
-
-        try {
-            var result = operation(leftValue.Value!, rightValue.Value!);
-            return result != null ? FoldResult.Success(result) : FoldResult.NotFoldable;
-        }
-        catch {
-            return FoldResult.NotFoldable;
-        }
-    }
-
-    private FoldResult FoldUnaryArithmetic(AnalysisContext context, Node operand, Func<object, object?> operation, IReadOnlyDictionary<NodeId, object?>? parameterValues = null) {
-        var value = GetConstantValue(context, operand, parameterValues);
-        if (!value.HasValue)
-            return FoldResult.NotFoldable;
-
-        try {
-            var result = operation(value.Value!);
-            return result != null ? FoldResult.Success(result) : FoldResult.NotFoldable;
-        }
-        catch {
-            return FoldResult.NotFoldable;
-        }
-    }
-
-    private FoldResult FoldBitwiseBinary(AnalysisContext context, Node left, Node right, Func<object, object, object> operation, IReadOnlyDictionary<NodeId, object?>? parameterValues = null) {
-        var leftValue = GetConstantValue(context, left, parameterValues);
-        var rightValue = GetConstantValue(context, right, parameterValues);
-
-        if (!leftValue.HasValue || !rightValue.HasValue)
-            return FoldResult.NotFoldable;
-
-        if (leftValue.Value is long lv && rightValue.Value is long rv)
-            return FoldResult.Success(operation(lv, rv));
-        return FoldResult.NotFoldable;
-    }
-
-    private FoldResult FoldBitwiseUnary(AnalysisContext context, Node operand, Func<object, object> operation, IReadOnlyDictionary<NodeId, object?>? parameterValues = null) {
-        var operandResult = GetConstantValue(context, operand, parameterValues);
-        if (operandResult.HasValue && operandResult.Value is long ov)
-            return FoldResult.Success(operation(ov));
-        return FoldResult.NotFoldable;
-    }
 
     private FoldResult FoldBinaryBoolean(AnalysisContext context, FoldResult leftValue, Node right, Func<bool, bool, bool> operation, IReadOnlyDictionary<NodeId, object?>? parameterValues = null) {
         var rightValue = GetConstantValue(context, right, parameterValues);
@@ -430,10 +369,6 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
         return null;
     }
 
-    /// <summary>C# negates a 32-bit-width operand at 32 bits: -int.MinValue wraps to
-    /// int.MinValue, the same width model EmitUnaryMinus uses.</summary>
-    private static object NegateInt(int x) => unchecked(-x);
-
     private static long? ToLong(object? value) => value switch {
         int i => i,
         long l => l,
@@ -459,44 +394,6 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
         }
 
         return leftBool ? or.LeftHandValue : or.RightHandValue;
-    }
-
-    private FoldResult FoldComparison(AnalysisContext context, Node left, Node right, Func<object, object, bool> operation, IReadOnlyDictionary<NodeId, object?>? parameterValues = null) {
-        var leftValue = GetConstantValue(context, left, parameterValues);
-        var rightValue = GetConstantValue(context, right, parameterValues);
-
-        if (!leftValue.HasValue || !rightValue.HasValue)
-            return FoldResult.NotFoldable;
-
-        // C# has no ordering operator for bool. The emitter fails closed; folding
-        // here would hide the rejection behind a constant.
-        if (leftValue.Value is bool || rightValue.Value is bool)
-            return FoldResult.NotFoldable;
-
-        try {
-            var result = operation(leftValue.Value!, rightValue.Value!);
-            return FoldResult.Success(result);
-        }
-        catch {
-            return FoldResult.NotFoldable;
-        }
-    }
-
-    private FoldResult FoldEquality(AnalysisContext context, Node left, Node right, Func<object?, object?, bool> operation, IReadOnlyDictionary<NodeId, object?>? parameterValues = null) {
-        var leftValue = GetConstantValue(context, left, parameterValues);
-        var rightValue = GetConstantValue(context, right, parameterValues);
-
-        if (!leftValue.HasValue || !rightValue.HasValue)
-            return FoldResult.NotFoldable;
-
-        // A comparison of two constants the operation cannot handle declines to fold
-        // rather than failing the whole analysis (matches FoldComparison).
-        try {
-            return FoldResult.Success(operation(leftValue.Value, rightValue.Value));
-        }
-        catch (Exception e) when (e is InvalidOperationException or ArgumentException or FormatException or OverflowException or InvalidCastException) {
-            return FoldResult.NotFoldable;
-        }
     }
 
     private FoldResult FoldConditional(AnalysisContext context, Conditional cond, IReadOnlyDictionary<NodeId, object?>? parameterValues = null) {
@@ -585,21 +482,23 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
 
     private bool IsZero(AnalysisContext context, Node node) {
         var value = GetConstantValue(context, node);
-        return value.HasValue && value.Value switch {
-            sbyte x => x == 0,
-            byte x => x == 0,
-            short x => x == 0,
-            ushort x => x == 0,
-            int x => x == 0,
-            uint x => x == 0,
-            long x => x == 0,
-            ulong x => x == 0,
-            float x => x == 0,
-            double x => x == 0,
-            decimal x => x == 0,
-            _ => false
-        };
+        return value.HasValue && IsZeroValue(value.Value);
     }
+
+    private static bool IsZeroValue(object? value) => value switch {
+        sbyte x => x == 0,
+        byte x => x == 0,
+        short x => x == 0,
+        ushort x => x == 0,
+        int x => x == 0,
+        uint x => x == 0,
+        long x => x == 0,
+        ulong x => x == 0,
+        float x => x == 0,
+        double x => x == 0,
+        decimal x => x == 0,
+        _ => false
+    };
 
     private bool IsOne(AnalysisContext context, Node node) {
         var value = GetConstantValue(context, node);
@@ -619,206 +518,237 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
         };
     }
 
-    // Arithmetic operations with type coercion
-    private static object? Add(object a, object b) => (a, b) switch {
-        (int x, int y) => x + y,
-        (long x, long y) => x + y,
-        (double x, double y) => x + y,
-        (float x, float y) => x + y,
-        (decimal x, decimal y) => x + y,
-        (int x, long y) => x + y,
-        (long x, int y) => x + y,
-        (int x, double y) => x + y,
-        (double x, int y) => x + y,
-        // C# promotes char arithmetic to int (and to the wider operand otherwise), so a
-        // char add folds to a number — which also lets a concat chain see a constant part.
-        (char x, char y) => x + y,
-        (char x, int y) => x + y,
-        (int x, char y) => x + y,
-        (char x, long y) => x + y,
-        (long x, char y) => x + y,
-        (char x, double y) => x + y,
-        (double x, char y) => x + y,
-        (string x, string y) => x + y,
-        _ => null
-    };
+    /// <summary>
+    /// Folds an operator over constant operands. The type provider decides: <c>GetOperator</c> states whether the
+    /// operator applies and which signature it is, each operand converts to that signature's parameter type, and the
+    /// operator is applied. A cell the provider states nothing for declines (fail closed), except equality of two values
+    /// of one non-numeric type with no operator (an enum), which keeps <see cref="object.Equals(object?, object?)"/>.
+    /// </summary>
+    private FoldResult FoldOperator(AnalysisContext context, Node node, OperatorKind kind, Node left, Node? right, IReadOnlyDictionary<NodeId, object?>? parameterValues) {
+        if (!TryGetOperand(context, left, parameterValues, out var leftValue))
+            return FoldResult.NotFoldable;
+        object? rightValue = null;
+        if (right is not null && !TryGetOperand(context, right, parameterValues, out rightValue))
+            return FoldResult.NotFoldable;
 
-    private static object? Subtract(object a, object b) => (a, b) switch {
-        (int x, int y) => x - y,
-        (long x, long y) => x - y,
-        (double x, double y) => x - y,
-        (float x, float y) => x - y,
-        (decimal x, decimal y) => x - y,
-        (int x, long y) => x - y,
-        (long x, int y) => x - y,
-        (int x, double y) => x - y,
-        (double x, int y) => x - y,
-        _ => null
-    };
+        var equality = kind is OperatorKind.Equal or OperatorKind.NotEqual;
+        if (leftValue is null || (right is not null && rightValue is null))
+            return equality ? Equality(kind, Equals(leftValue, rightValue)) : FoldResult.NotFoldable;
 
-    private static object? Multiply(object a, object b) => (a, b) switch {
-        // int * int is int: the fold runs at the resolved width, so it wraps like the CLR does.
-        (int x, int y) => unchecked(x * y),
-        (long x, long y) => x * y,
-        (double x, double y) => x * y,
-        (float x, float y) => x * y,
-        (decimal x, decimal y) => x * y,
-        (int x, long y) => x * y,
-        (long x, int y) => x * y,
-        (int x, double y) => x * y,
-        (double x, int y) => x * y,
-        _ => null
-    };
+        var leftType = leftValue.GetType();
+        var rightType = rightValue?.GetType();
+        var handled = IsFoldableCell(kind, leftType, rightType);
+        var sameTypeEquality = equality && leftType == rightType && !NumericTypes.Contains(leftType);
+        if (!handled && !sameTypeEquality)
+            return FoldResult.NotFoldable;
 
-    private static object? Divide(object a, object b) => (a, b) switch {
-        (int x, int y) when y != 0 => x / y,
-        (long x, long y) when y != 0 => x / y,
-        (ulong x, ulong y) when y != 0 => x / y,
-        (double x, double y) when y != 0 => x / y,
-        (float x, float y) when y != 0 => x / y,
-        (decimal x, decimal y) when y != 0 => x / y,
-        (int x, long y) when y != 0 => x / y,
-        (long x, int y) when y != 0 => x / y,
-        (int x, double y) when y != 0 => x / y,
-        (double x, int y) when y != 0 => x / y,
-        _ => null
-    };
+        var leftDefinition = context.TypeDefinitions.GetTypeDefinition(leftType);
+        var rightDefinition = rightType is null ? null : context.TypeDefinitions.GetTypeDefinition(rightType);
+        if (leftDefinition is null || (right is not null && rightDefinition is null))
+            return FoldResult.NotFoldable;
+        if (leftDefinition.GetOperator(kind, rightDefinition) is not { } resolution)
+            return sameTypeEquality ? Equality(kind, Equals(leftValue, rightValue)) : FoldResult.NotFoldable;
+        // A declared operator outside the handled cells is never run at analysis time.
+        if (!handled)
+            return FoldResult.NotFoldable;
 
-    private static object? Modulo(object a, object b) => (a, b) switch {
-        (int x, int y) when y != 0 => x % y,
-        (long x, long y) when y != 0 => x % y,
-        (double x, double y) when y != 0 => x % y,
-        (float x, float y) when y != 0 => x % y,
-        (decimal x, decimal y) when y != 0 => x % y,
-        _ => null
-    };
+        // T-17 removes this guard: until the resolver types operators through GetOperator, a node it types
+        // differently keeps its own type and does not fold.
+        if (context.GetResolvedType(node) is { } resolved && !TypeDefinitionExtensions.IsSameType(resolved, resolution.Result))
+            return FoldResult.NotFoldable;
 
-    private static object? Negate(object a) => a switch {
-        int x => NegateInt(x),
-        long x => -x,
-        double x => -x,
-        float x => -x,
-        decimal x => -x,
-        _ => null
-    };
+        if (kind is OperatorKind.Divide or OperatorKind.Modulo && IsZeroValue(rightValue))
+            return FoldResult.NotFoldable;
 
-    /// <summary>The same promotion the VM comparison uses. An integral operand
-    /// becomes <c>float</c> when the other side is <c>float</c>, not <c>double</c>:
-    /// <c>16777217 == 16777216f</c> is true only after the float rounding.</summary>
-    private enum NumericPromotion { None, Double, Float, Decimal }
-
-    private static NumericPromotion Promote(object a, object b) {
-        bool aReal = a is float or double;
-        bool bReal = b is float or double;
-        if ((a is decimal && bReal) || (b is decimal && aReal))
-            return NumericPromotion.Double;
-        if (a is double || b is double)
-            return NumericPromotion.Double;
-        if (a is float || b is float)
-            return NumericPromotion.Float;
-        if (a is decimal || b is decimal)
-            return NumericPromotion.Decimal;
-        if (IsIntegralOrChar(a) && IsIntegralOrChar(b))
-            return NumericPromotion.Decimal;
-        return NumericPromotion.None;
+        return TryEvaluate(kind, resolution, leftValue, rightValue, out var result)
+            ? FoldResult.Success(result)
+            : FoldResult.NotFoldable;
     }
 
-    private static bool IsIntegralOrChar(object value) =>
-        value is byte or sbyte or short or ushort or int or uint or long or ulong or char;
+    private static FoldResult Equality(OperatorKind kind, bool equal) =>
+        FoldResult.Success(kind is OperatorKind.Equal ? equal : !equal);
 
-    private static double AsDouble(object value) => value switch {
-        double d => d,
-        float f => f,
-        decimal m => (double)m,
-        char c => c,
-        ulong ul => ul,
-        uint ui => ui,
-        long l => l,
-        int i => i,
-        short s => s,
-        ushort us => us,
-        byte b => b,
-        sbyte sb => sb,
-        _ => throw new InvalidOperationException($"Cannot promote {value.GetType().Name} to double."),
-    };
+    /// <summary>
+    /// An operand's constant value. A constant and a folded child are typed by their value. A parameter is typed by
+    /// its stamp: a value of another type, or no stamp, declines.
+    /// </summary>
+    private bool TryGetOperand(AnalysisContext context, Node node, IReadOnlyDictionary<NodeId, object?>? parameterValues, out object? value) {
+        var operand = GetConstantValue(context, node, parameterValues);
+        value = operand.HasValue ? operand.Value : null;
+        if (!operand.HasValue)
+            return false;
+        if (node is not Parameter || value is null)
+            return true;
+        return context.GetResolvedType(node) is { } stamp
+            && stamp.TryGetRuntimeType(out var stamped)
+            && value.GetType() == stamped;
+    }
 
-    private static float AsFloat(object value) => value switch {
-        float f => f,
-        char c => c,
-        ulong ul => (float)ul,
-        uint ui => (float)ui,
-        long l => (float)l,
-        int i => (float)i,
-        short s => (float)s,
-        ushort us => (float)us,
-        byte b => b,
-        sbyte sb => sb,
-        decimal m => (float)m,
-        double d => (float)d,
-        _ => throw new InvalidOperationException($"Cannot promote {value.GetType().Name} to float."),
-    };
+    private static readonly HashSet<Type> NumericTypes = [
+        typeof(sbyte), typeof(byte), typeof(short), typeof(ushort), typeof(int), typeof(uint),
+        typeof(long), typeof(ulong), typeof(char), typeof(float), typeof(double), typeof(decimal)
+    ];
 
-    private static decimal AsDecimal(object value) => value switch {
-        decimal m => m,
-        char c => c,
-        ulong ul => ul,
-        uint ui => ui,
-        long l => l,
-        int i => i,
-        short s => s,
-        ushort us => us,
-        byte b => b,
-        sbyte sb => sb,
-        _ => throw new InvalidOperationException($"Cannot promote {value.GetType().Name} to decimal."),
-    };
+    /// <summary>The declaring types whose declared operators may run at analysis time.</summary>
+    private static readonly HashSet<Type> DeclaredOperatorTypes = [
+        typeof(decimal), typeof(string), typeof(DateTime), typeof(DateOnly), typeof(TimeOnly), typeof(TimeSpan),
+        typeof(DateTimeOffset), typeof(Guid)
+    ];
 
-    private static bool FloatingEquals(object? a, object? b) {
-        if (a is null || b is null)
-            return object.Equals(a, b);
-        return Promote(a, b) switch {
-            NumericPromotion.Double => AsDouble(a) == AsDouble(b),
-            NumericPromotion.Float => AsFloat(a) == AsFloat(b),
-            NumericPromotion.Decimal => AsDecimal(a) == AsDecimal(b),
-            _ => object.Equals(a, b),
+    private static readonly HashSet<(Type, Type)> MixedArithmetic = [
+        (typeof(int), typeof(long)), (typeof(long), typeof(int)), (typeof(int), typeof(double)), (typeof(double), typeof(int))
+    ];
+
+    private static readonly HashSet<Type> SameTypeArithmetic = [typeof(int), typeof(long), typeof(double), typeof(float), typeof(decimal)];
+
+    /// <summary>
+    /// The (operator, left type, right type) cells the pass evaluates. Which cells are defined and what they mean is the
+    /// provider's answer; this table only bounds where folding runs: the cells that folded before the provider decided
+    /// (T-20 keeps them) and the ones T-20 adds by name. A cell outside it declines, so no fold lands in a cell whose VM
+    /// value is wrong (issue 832) without a test. Temporal arithmetic and unary minus are not cells here (T-10).
+    /// </summary>
+    private static bool IsFoldableCell(OperatorKind kind, Type left, Type? right) {
+        var arithmetic = right is not null && ((left == right && SameTypeArithmetic.Contains(left)) || MixedArithmetic.Contains((left, right)));
+        var decimalWithInteger = (left == typeof(decimal) && right == typeof(int)) || (left == typeof(decimal) && right == typeof(long))
+            || (right == typeof(decimal) && left == typeof(int)) || (right == typeof(decimal) && left == typeof(long));
+        return kind switch {
+            OperatorKind.Equal or OperatorKind.NotEqual or OperatorKind.LessThan or OperatorKind.LessThanOrEqual
+                or OperatorKind.GreaterThan or OperatorKind.GreaterThanOrEqual =>
+                right is not null && ((NumericTypes.Contains(left) && NumericTypes.Contains(right))
+                    || (left == right && (left == typeof(bool) || DeclaredOperatorTypes.Contains(left)))),
+            OperatorKind.Add => arithmetic || decimalWithInteger || IsCharAdd(left, right)
+                || (left == typeof(string) && right == typeof(string)),
+            OperatorKind.Subtract or OperatorKind.Multiply or OperatorKind.Modulo => arithmetic || decimalWithInteger,
+            OperatorKind.Divide => arithmetic || decimalWithInteger || (left == typeof(ulong) && right == typeof(ulong)),
+            OperatorKind.UnaryMinus => SameTypeArithmetic.Contains(left),
+            OperatorKind.BitwiseAnd or OperatorKind.BitwiseOr or OperatorKind.BitwiseXor =>
+                left == right && (left == typeof(int) || left == typeof(long) || left == typeof(bool)),
+            OperatorKind.ShiftLeft or OperatorKind.ShiftRight => left == typeof(int) && right == typeof(int),
+            OperatorKind.BitwiseNot => left == typeof(int) || left == typeof(long),
+            _ => false
         };
     }
 
-    private static bool FloatingCompare(object a, object b, Func<double, double, bool> op) {
-        // C# has no ordering operator for bool. Declining leaves the node for the
-        // emitter, which rejects it. Folding it would answer a value C# does not have.
-        if (a is bool && b is bool)
-            throw new InvalidOperationException("ordering comparison of bool");
-        return Promote(a, b) switch {
-            NumericPromotion.Double => op(AsDouble(a), AsDouble(b)),
-            NumericPromotion.Float => op(AsFloat(a), AsFloat(b)),
-            NumericPromotion.Decimal => op(AsDecimal(a).CompareTo(AsDecimal(b)), 0),
-            _ => op(Compare(a, b), 0),
-        };
-    }
+    private static bool IsCharAdd(Type left, Type? right) =>
+        (left == typeof(char) && (right == typeof(char) || right == typeof(int) || right == typeof(long) || right == typeof(double)))
+        || (right == typeof(char) && (left == typeof(int) || left == typeof(long) || left == typeof(double)));
 
-    private static int Compare(object a, object b) {
-        if (a is IComparable ca && b is IComparable cb && a.GetType() == b.GetType()) {
-            return ca.CompareTo(cb);
+    /// <summary>
+    /// Applies the chosen operator: each operand converts to its parameter's type, then the platform applies the
+    /// operator or its declared method runs. Any exception, from a conversion, the operator or an invoked method,
+    /// declines. The result must be of the operator's result type.
+    /// </summary>
+    private static bool TryEvaluate(OperatorKind kind, OperatorResolution resolution, object left, object? right, out object? result) {
+        result = null;
+        var parameters = resolution.Signature.Parameters.ToArray();
+        if (!resolution.Result.TryGetRuntimeType(out var resultType))
+            return false;
+        try {
+            if (!TryConvert(left, parameters[0].ParameterTypeDefinition, out var x))
+                return false;
+            object? y = null;
+            if (parameters.Length > 1 && !TryConvert(right!, parameters[1].ParameterTypeDefinition, out y))
+                return false;
+            result = resolution.PlatformApplied ? ApplyPlatformOperator(kind, x, y) : InvokeDeclaredOperator(kind, resolution.Signature, x, y);
         }
-
-        if (TryConvertToDouble(a, out var da) && TryConvertToDouble(b, out var db)) {
-            return da.CompareTo(db);
+        catch {
+            result = null;
+            return false;
         }
-
-        throw new InvalidOperationException($"Cannot compare {a.GetType()} and {b.GetType()}");
+        return result is not null && result.GetType() == resultType;
     }
 
-    private static bool TryConvertToDouble(object value, out double result) {
-        result = value switch {
-            int i => i,
-            long l => l,
-            double d => d,
-            float f => f,
-            decimal m => (double)m,
-            char c => c,
-            _ => 0
+    /// <summary>
+    /// Converts an operand to a parameter type. <c>GetOperator</c> chose the operator, so the conversion is implicit.
+    /// Decimal's conversions are its declared <c>op_Implicit</c> members; the rest are the platform's numeric
+    /// conversions, with a char going through its code point.
+    /// </summary>
+    private static bool TryConvert(object value, ITypeDefinition parameter, out object converted) {
+        converted = value;
+        if (!parameter.TryGetRuntimeType(out var target))
+            return false;
+        if (value.GetType() == target)
+            return true;
+        if (target == typeof(decimal)) {
+            var implicitConversion = typeof(decimal).GetMethod("op_Implicit", BindingFlags.Public | BindingFlags.Static, [value.GetType()]);
+            if (implicitConversion is null || implicitConversion.Invoke(null, [value]) is not { } widened)
+                return false;
+            converted = widened;
+            return true;
+        }
+        if (!NumericTypes.Contains(target))
+            return false;
+        converted = Convert.ChangeType(value is char c ? (int)c : value, target, CultureInfo.InvariantCulture);
+        return true;
+    }
+
+    /// <summary>An operator the platform applies itself, over operands already of its parameter types.</summary>
+    private static object? ApplyPlatformOperator(OperatorKind kind, object x, object? y) => x switch {
+        bool a => kind switch {
+            OperatorKind.Equal => a == (bool)y!,
+            OperatorKind.NotEqual => a != (bool)y!,
+            OperatorKind.BitwiseAnd => a & (bool)y!,
+            OperatorKind.BitwiseOr => a | (bool)y!,
+            OperatorKind.BitwiseXor => a ^ (bool)y!,
+            _ => null
+        },
+        string a => kind is OperatorKind.Add ? string.Concat(a, (string)y!) : null,
+        int a => ApplyInteger(kind, a, y),
+        uint a => ApplyInteger(kind, a, y),
+        long a => ApplyInteger(kind, a, y),
+        ulong a => ApplyInteger(kind, a, y),
+        float a => ApplyNumber(kind, a, y),
+        double a => ApplyNumber(kind, a, y),
+        _ => null
+    };
+
+    private static object? ApplyInteger<T>(OperatorKind kind, T a, object? y) where T : IBinaryInteger<T> => kind switch {
+        OperatorKind.ShiftLeft => unchecked(a << (int)y!),
+        OperatorKind.ShiftRight => unchecked(a >> (int)y!),
+        OperatorKind.BitwiseAnd => a & (T)y!,
+        OperatorKind.BitwiseOr => a | (T)y!,
+        OperatorKind.BitwiseXor => a ^ (T)y!,
+        OperatorKind.BitwiseNot => ~a,
+        _ => ApplyNumber(kind, a, y)
+    };
+
+    private static object? ApplyNumber<T>(OperatorKind kind, T a, object? y) where T : INumber<T> {
+        if (kind is OperatorKind.UnaryMinus)
+            return unchecked(-a);
+        var b = (T)y!;
+        return kind switch {
+            OperatorKind.Add => unchecked(a + b),
+            OperatorKind.Subtract => unchecked(a - b),
+            OperatorKind.Multiply => unchecked(a * b),
+            OperatorKind.Divide => a / b,
+            OperatorKind.Modulo => a % b,
+            OperatorKind.Equal => a == b,
+            OperatorKind.NotEqual => a != b,
+            OperatorKind.LessThan => a < b,
+            OperatorKind.LessThanOrEqual => a <= b,
+            OperatorKind.GreaterThan => a > b,
+            OperatorKind.GreaterThanOrEqual => a >= b,
+            _ => null
         };
-        return value is int or long or double or float or decimal or char;
+    }
+
+    /// <summary>
+    /// A declared operator runs only for Decimal arithmetic and unary minus, and for the comparisons of the declaring
+    /// types in <see cref="DeclaredOperatorTypes"/>. Temporal arithmetic and any user-declared operator decline
+    /// (T-10 owns the temporal fold fence).
+    /// </summary>
+    private static object? InvokeDeclaredOperator(OperatorKind kind, ITypeMethod signature, object x, object? y) {
+        if (signature is not ClrMethod { MethodInfo: { DeclaringType: { } declaring } method })
+            return null;
+        var allowed = declaring == typeof(decimal)
+                && kind is OperatorKind.Add or OperatorKind.Subtract or OperatorKind.Multiply or OperatorKind.Divide
+                    or OperatorKind.Modulo or OperatorKind.UnaryMinus
+            || DeclaredOperatorTypes.Contains(declaring)
+                && kind is OperatorKind.Equal or OperatorKind.NotEqual or OperatorKind.LessThan or OperatorKind.LessThanOrEqual
+                    or OperatorKind.GreaterThan or OperatorKind.GreaterThanOrEqual;
+        if (!allowed)
+            return null;
+        return method.Invoke(null, y is null ? [x] : [x, y]);
     }
 
     private readonly struct FoldResult {

@@ -585,22 +585,23 @@ public class ConstantFoldingProviderTests {
     }
 
     /// <summary>
-    /// Companion to <c>LoweredTreeOperandCoverageTests</c>' <c>ConstantPairFolding</c> row (amendment 9): once
-    /// <c>1.5m + 2L</c> folds, the replacement that row reads is the fold's constant, so its <c>converted</c> verdict
-    /// says nothing about the conversion. Here the replacement is the decimal constant 3.5, and the Parameter twin still
-    /// records the compatibility pass's conversion of the Int64 operand.
+    /// Companion to <c>LoweredTreeOperandCoverageTests</c>' <c>ConstantPairFolding</c> row (amendment 9). <c>1.5m + 2L</c>
+    /// now folds to the decimal 3.5. The replacement that row reads is not the fold's constant: the compatibility pass
+    /// runs after folding and rewrites decimal arithmetic to <c>decimal.Add</c> (as it does for a folded
+    /// <c>decimal + decimal</c> on master), so the row's <c>converted</c> verdict still observes the conversion. The
+    /// Parameter twin converts the same way and does not fold.
     /// </summary>
     [Test]
-    public async Task ConstantPairFolding_ReplacementIsTheFoldedDecimal_AndTheParameterTwinStillConverts() {
+    public async Task ConstantPairFolding_FoldsToTheDecimal_AndTheReplacementIsStillTheCompatibilityRewrite() {
         var pair = new Add(new Constant(1.5m), new Constant(2L));
         var analysis = Interpreter.Analyze(pair);
-        await Assert.That(analysis.GetNodeReplacement(pair) is Constant { Value: decimal folded } && folded == 3.5m).IsTrue();
+        await Assert.That(ConstantFoldGrid.Typed(analysis.GetConstantValue(pair))).IsEqualTo("Decimal:3.5");
+        await Assert.That(analysis.GetNodeReplacement(pair) is Invoke { Delegate: Member { MemberName: "Add" } }).IsTrue();
 
-        var number = new Parameter("n", TypeReference.To<long>());
-        var twin = new Add(new Parameter("d", TypeReference.To<decimal>()), number);
+        var twin = new Add(new Parameter("d", TypeReference.To<decimal>()), new Parameter("n", TypeReference.To<long>()));
         var twinAnalysis = Interpreter.Analyze(twin);
         await Assert.That(twinAnalysis.IsConstant(twin)).IsFalse();
-        await Assert.That(twinAnalysis.GetNodeReplacement(number) ?? twinAnalysis.GetNodeReplacement(twin)).IsNotNull();
+        await Assert.That(twinAnalysis.GetNodeReplacement(twin) is Invoke { Delegate: Member { MemberName: "Add" } }).IsTrue();
     }
 
     [Test]

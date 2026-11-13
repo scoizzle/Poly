@@ -8,6 +8,7 @@ using System.Text.RegularExpressions;
 using Poly.Analysis;
 using Poly.Ast.Nodes;
 using Poly.DomainModeling;
+using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
 using Poly.Interpretation;
 using Poly.Interpretation.Analysis.Semantics;
@@ -187,7 +188,11 @@ internal static class OperatorOracle {
         try {
             var changes = new PolyDslParser(dsl).Parse();
             var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes);
-            return result.Succeeded ? "accepts" : "rejects";
+            // A value type is not a storable property (DMSTR006): the oracle's Money cell has no DSL path, so it is n/a.
+            return result.Succeeded ? "accepts"
+                : result.Analysis.Diagnostics.Where(d => d.Severity == Poly.Analysis.DiagnosticSeverity.Error)
+                    .All(d => d.Code == DomainModelDiagnosticCodes.StoredValueTypeProperty) ? null
+                : "rejects";
         }
         catch (Exception ex) {
             return $"error:{ex.GetType().Name}";
@@ -470,15 +475,9 @@ public class OperatorOracleTests {
     private const string AllButOrder = "Number,Int32,Decimal,Float,Text,Boolean,Date,Time,DateTime,Duration,Uuid,Status,Money";
 
     private static readonly LedgerRule[] AnalyzerRules = [
-        // T-05b: an entity is a family compared by name, so the 203 cells the analyzer accepted beside an entity (T-05's,
-        // mislabelled T-06) close; entity ordering stays accepted, an interim rule T-07 removes.
-        new(OracleKind.AnalyzerDisagrees, "Order", Ordering, "Order", "analyzer accepts", "T-07 (ordering legality: entities)", 4, "6e8a8b7f1e28e52c"),
-        // Enum member literals compared as Text, and enum ordering.
-        new(OracleKind.AnalyzerDisagrees, "Status", Comparisons, "Text", "analyzer accepts", "T-07 (enum member literals)", 6, "82d668327422d63d"),
-        new(OracleKind.AnalyzerDisagrees, "Text", Comparisons, "Status", "analyzer accepts", "T-07 (enum member literals)", 6, "79e5d5c94c300ad5"),
-        new(OracleKind.AnalyzerDisagrees, "Status", Ordering, "Status", "analyzer accepts", "T-07 (ordering legality)", 4, "cd41fe5cc653aa1f"),
-        // Same-category pairs the analyzer accepts and no platform defines.
-        new(OracleKind.AnalyzerDisagrees, "Text,Boolean", Ordering, "Text,Boolean", "analyzer accepts", "T-07 (#631 ordering legality)", 8, "91cd7271c7004160"),
+        // Enum member literals compared as Text.
+        new(OracleKind.AnalyzerDisagrees, "Status", Comparisons, "Text", "analyzer accepts", "T-07 (enum member literals)", 2, "0c366c038c3e6e39"),
+        new(OracleKind.AnalyzerDisagrees, "Text", Comparisons, "Status", "analyzer accepts", "T-07 (enum member literals)", 2, "a3b0e50adb3c6b77"),
         // Temporal cells: the analyzer's offset permission and its rejection of CLR-defined duration arithmetic.
         new(OracleKind.AnalyzerDisagrees, "Date,DateTime", "Add,Subtract", "Date,DateTime,Decimal,Number,Duration", "analyzer accepts", "T-10 (temporal offset permission)", 11, "edbb26e174a06a9f"),
         new(OracleKind.AnalyzerDisagrees, "Duration,Time,Number", "*", "Duration,Time,Number", "analyzer rejects", "T-10 (temporal operands the CLR defines)", 7, "0409473254198adb"),
@@ -523,7 +522,7 @@ public class OperatorOracleTests {
 
     [Test]
     public async Task AnalyzerDisagrees_EveryDivergenceIsOwned_AndNoEntryIsStale() =>
-        await AssertOwned(OracleKind.AnalyzerDisagrees, AnalyzerRules, 62);
+        await AssertOwned(OracleKind.AnalyzerDisagrees, AnalyzerRules, 38);
 
     [Test]
     public async Task LoweredAnalysisDisagrees_EveryDivergenceIsOwned_AndNoEntryIsStale() =>

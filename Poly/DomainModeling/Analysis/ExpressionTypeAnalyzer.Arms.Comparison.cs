@@ -1,3 +1,4 @@
+using Poly.DomainModeling.Meaning;
 using Poly.DomainModeling.Ontology;
 
 using Add = Poly.DomainModeling.Ontology.Add;
@@ -51,10 +52,18 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
             || (!nullAgainstRead && IsTyped(left) && IsTyped(right) && !Compatible(left, right)))
             Report(context, cmp,
                 $"comparison between incompatible types '{Describe(left)}' and '{Describe(right)}'");
+        else if (!nullAgainstRead && IsOrdering(cmp.Kind) && IsTyped(left) && IsTyped(right)
+            && left.Definition is { } leftDefinition && right.Definition is { } rightDefinition
+            && leftDefinition.GetOperator(OperatorTable.KindOf(cmp.Kind), rightDefinition) is null)
+            Report(context, cmp, $"ordering is not defined for '{Describe(left)}'");
 
         WalkExpression(context, cmp.Left, props, parameters, enumTypes);
         WalkExpression(context, cmp.Right, props, parameters, enumTypes);
     }
+
+    private static bool IsOrdering(ComparisonKind kind) =>
+        kind is ComparisonKind.LessThan or ComparisonKind.LessThanOrEqual
+            or ComparisonKind.GreaterThan or ComparisonKind.GreaterThanOrEqual;
 
     /// <summary>A bare name that is no property or parameter, against an enum that declares it, is that enum's member.</summary>
     private static ExprType AsEnumMember(

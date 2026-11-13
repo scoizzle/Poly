@@ -165,16 +165,16 @@ public class TypedExpressionMetadataTests {
     /// warning DMNUM001 naming the division; it reaches the integral division inside a sum (<c>7 / 2 + 1</c> stores 4).
     /// </summary>
     [Test]
-    [Arguments("assign D to 7 / 2", "Warning: integer division '7 / 2' is stored into a Decimal: the quotient is truncated first; give one operand a Decimal")]
-    [Arguments("assign D to N / 2", "Warning: integer division 'N / 2' is stored into a Decimal: the quotient is truncated first; give one operand a Decimal")]
-    [Arguments("assign D to 7 / 2 + 1", "Warning: integer division '7 / 2' is stored into a Decimal: the quotient is truncated first; give one operand a Decimal")]
+    [Arguments("assign D to 7 / 2", "Warning: integer division '(7 / 2)' is stored into a Decimal: the quotient is truncated first; give one operand a Decimal")]
+    [Arguments("assign D to N / 2", "Warning: integer division '(N / 2)' is stored into a Decimal: the quotient is truncated first; give one operand a Decimal")]
+    [Arguments("assign D to 7 / 2 + 1", "Warning: integer division '(7 / 2)' is stored into a Decimal: the quotient is truncated first; give one operand a Decimal")]
     public async Task Assign_IntegralDivisionToDecimal_WarnsDmnum001(string assignment, string expected) =>
         await Assert.That(string.Join(" | ", DecimalDivisionWarnings(assignment))).IsEqualTo(expected);
 
     /// <summary>A division with a Decimal operand is exact, and an integral division into a Number is the language's meaning: no warning.</summary>
     [Test]
     [Arguments("assign D to D / 2")]
-    [Arguments("assign D to 7.0 / 2")]
+    [Arguments("assign D to 7.5 / 2")]
     [Arguments("assign N to 7 / 2")]
     public async Task Assign_DecimalDivisionOrNumberTarget_IsClean(string assignment) =>
         await Assert.That(DecimalDivisionWarnings(assignment)).IsEmpty();

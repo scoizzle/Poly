@@ -651,6 +651,27 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
         if (!Compatible(inferred, target, assigning: true))
             Report(context, value,
                 $"type mismatch in {what}: cannot assign '{Describe(inferred)}' to '{targetTypeName}'");
+        else if (ModelOf(context) is { } model && model.KindOf(target) is NumericKind.Decimal)
+            WarnIntegerDivisionIntoDecimal(context, value, model, props ?? new Dictionary<string, string>(StringComparer.Ordinal), parameters, enumTypes);
+    }
+
+    /// <summary>
+    /// DMNUM001 (T-07a, #657): an integral division inside a value stored into a Decimal truncates before it widens
+    /// (<c>assign D to 7 / 2</c> stores 3, <c>7 / 2 + 1</c> stores 4). The walk follows the arithmetic spine only.
+    /// </summary>
+    private void WarnIntegerDivisionIntoDecimal(
+        AnalysisContext context, DomainExpression expr, DomainTypeModel model,
+        Dictionary<string, string> props, Dictionary<string, string>? parameters, Dictionary<string, EnumType> enumTypes) {
+        if (expr is not (Add or Subtract or Multiply or Divide))
+            return;
+        if (expr is Divide divide
+            && model.KindOf(InferType(context, divide.Left, props, parameters, enumTypes)) is NumericKind.Integer64
+            && model.KindOf(InferType(context, divide.Right, props, parameters, enumTypes)) is NumericKind.Integer64)
+            context.ReportWarning(divide,
+                $"integer division '{PrintedText(context, divide)}' is stored into a Decimal: the quotient is truncated first; give one operand a Decimal",
+                DomainModelDiagnosticCodes.NumericIntegerDivisionIntoDecimal);
+        foreach (var operand in expr.Children.OfType<DomainExpression>())
+            WarnIntegerDivisionIntoDecimal(context, operand, model, props, parameters, enumTypes);
     }
 
     private void CheckDefault(

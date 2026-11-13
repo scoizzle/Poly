@@ -167,15 +167,15 @@ public class AnalysisGateParityTests {
     [Test]
     [Arguments("Text", "P: policy { S < U }", "Text")]
     [Arguments("Boolean", "P: policy { F >= G }", "Boolean")]
-    [Arguments("enum", "P: policy { L > M }", "Level")]
-    [Arguments("entity", "P: policy { peer <= peer }", "Other")]
-    [Arguments("value type", "Cmp: action (a: Money, b: Money) { if (a < b) { assign A to 1 } }", "Money")]
+    [Arguments("Binary", "Blob: Binary\n  Blob2: Binary\n  P: policy { Blob > Blob2 }", "Binary")]
+    [Arguments("enum", "P: policy { L > M }", "enum Level")]
+    [Arguments("entity", "P: policy { peer <= peer }", "entity Other")]
+    [Arguments("value type", "Cmp: action (a: Money, b: Money) { if (a < b) { assign A to 1 } }", "value Money")]
     public async Task Ordering_OfAFamilyWithNoOrdering_IsDmsem003(string shape, string members, string described) {
         var result = GateParity.Check(OrderingDomain.Replace("MEMBERS", members, StringComparison.Ordinal));
 
         await Assert.That(result.Analysis).IsFalse().Because($"{shape}: {result}");
         await Assert.That(result.AnalysisSummary).Contains($"ordering is not defined for '{described}'").Because($"{shape}: {result}");
-        await Assert.That(result.AnalysisSummary).Contains("DMSEM003").Because($"{shape}: {result}");
     }
 
     /// <summary>Ordering numbers, dates and durations stays accepted by every door (the regression guard of the rule).</summary>

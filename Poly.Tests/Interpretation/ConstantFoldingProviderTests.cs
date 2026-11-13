@@ -266,14 +266,91 @@ public class ConstantFoldingProviderTests {
     // ---- (a) the master fold list ----
 
     /// <summary>
-    /// The fold list of master (0f79ba45), persisted: 2,640 grid rows fold there, each with its value and type
-    /// (<see cref="MasterFolds"/>). It is the kept folds (asserted live below) plus the 828 provider-undefined delta
-    /// rows (<see cref="MasterUndefinedFolds"/>, recorded on master: they no longer fold). A change detector, not a proof.
+    /// The fold list of master (0f79ba45), persisted as <see cref="MasterFolds"/> (2,640 rows, each with its value and
+    /// type) and re-derived from the head: the kept folds (folded now) plus the 36 short-circuit rows and the 828
+    /// provider-undefined rows, whose master values <see cref="MasterUndefinedRowsAsOnMaster"/> reconstructs. Equal
+    /// checksums mean every master fold is either kept to the same value and type or a listed delta row with the value
+    /// master gave it. A change detector, not a proof.
     /// </summary>
     [Test]
-    public async Task MasterFoldList_IsTheKeptFoldsPlusTheDeltaRows() {
-        static int Count(string pin) => int.Parse(pin[..pin.IndexOf(' ')], CultureInfo.InvariantCulture);
-        await Assert.That(Count(KeptFolds) + Count(MasterUndefinedFolds) + 36).IsEqualTo(Count(MasterFolds));
+    public async Task MasterFoldList_IsReconstructedFromTheHead() {
+        var kept = ConstantFoldGrid.Folded().Where(static f => !ConstantFoldGrid.IsNamedNewFold(f.Row))
+            .Select(static f => $"{f.Row.Key} = {f.Fold}");
+        var shortCircuit = ShortCircuitRows().Select(static row => $"{row.Key} = Boolean:{(row.Op is OperatorKind.Or ? "True" : "False")}");
+        var undefined = MasterUndefinedRowsAsOnMaster();
+        await Assert.That(ConstantFoldGrid.Pin([.. kept, .. shortCircuit, .. undefined])).IsEqualTo(MasterFolds);
+    }
+
+    /// <summary>
+    /// The 828 provider-undefined rows master folded, with master's values: a comparison or shift the unfolded VM
+    /// still computes (Decimal against Float, signed against UInt64, Int64 shifted by Int64, Text ordering) has the VM's
+    /// value, which is value-neutral; an equality across mismatched types without a Decimal or Float operand was
+    /// <c>object.Equals</c>, false. The checksum is the one recorded on master (<see cref="MasterUndefinedFolds"/>).
+    /// </summary>
+    [Test]
+    public async Task MasterUndefinedFolds_AreReconstructedWithTheirMasterValues() =>
+        await Assert.That(ConstantFoldGrid.Pin(MasterUndefinedRowsAsOnMaster())).IsEqualTo(MasterUndefinedFolds);
+
+    private static readonly HashSet<string> NumericOperands = ["Number", "Int32", "Decimal", "Float", "Float32", "Int8", "Int16", "UInt8", "UInt16", "UInt32", "UInt64", "Char"];
+
+    private static bool IsComparison(OperatorKind kind) => kind is OperatorKind.Equal or OperatorKind.NotEqual
+        or OperatorKind.LessThan or OperatorKind.LessThanOrEqual or OperatorKind.GreaterThan or OperatorKind.GreaterThanOrEqual;
+
+    /// <summary>The 672 rows master folded through <c>object.Equals</c>: <c>==</c>/<c>!=</c> across mismatched types with a non-numeric operand and no Decimal or Float one.</summary>
+    private static bool IsMismatchedEquality(FoldGridRow row) =>
+        row.Op is OperatorKind.Equal or OperatorKind.NotEqual && row.Left.Name != row.Right!.Name
+        && (!NumericOperands.Contains(row.Left.Name) || !NumericOperands.Contains(row.Right.Name))
+        && row.Left.Name is not ("Decimal" or "Float" or "Float32") && row.Right.Name is not ("Decimal" or "Float" or "Float32");
+
+    private static bool IsMasterUndefinedFold(FoldGridRow row) {
+        if (ConstantFoldGrid.IsLogical(row.Op) || ConstantFoldGrid.Resolution(row) is not null)
+            return false;
+        var (l, r) = (row.Left.Name, row.Right?.Name);
+        return (IsComparison(row.Op) && ((l, r) is ("Decimal", "Float" or "Float32") or ("Float" or "Float32", "Decimal")
+                || (l, r) is ("Int8" or "Int16" or "Int32" or "Number", "UInt64") or ("UInt64", "Int8" or "Int16" or "Int32" or "Number")
+                || (row.Op is not (OperatorKind.Equal or OperatorKind.NotEqual) && (l, r) is ("Text", "Text"))))
+            || (row.Op is OperatorKind.ShiftLeft or OperatorKind.ShiftRight && (l, r) is ("Number", "Number"))
+            || IsMismatchedEquality(row);
+    }
+
+    private static string[] MasterUndefinedRowsAsOnMaster() =>
+        [.. ConstantFoldGrid.Rows.Where(IsMasterUndefinedFold).Select(static row => IsMismatchedEquality(row)
+            ? $"{row.Key} = Boolean:{(row.Op is OperatorKind.NotEqual ? "True" : "False")}"
+            : $"{row.Key} = {ConstantFoldGrid.UnfoldedVm(row)}")];
+
+    private static FoldGridRow[] ShortCircuitRows() =>
+        [.. ConstantFoldGrid.Rows.Where(static row => row.Op is OperatorKind.And or OperatorKind.Or
+            && row.Left.Name == "Boolean" && row.Right!.Name != "Boolean"
+            && row.LeftValue is bool left && left == (row.Op is OperatorKind.Or))];
+
+    /// <summary>
+    /// Round-1 amendment A10 said every stopped fold is value-neutral with the VM. It is not for 664 rows: an equality
+    /// across mismatched types (a non-numeric operand, no Decimal or Float one) that master folded to false/true is now
+    /// rejected at compile with <c>VmTypeCompatibility</c> ("comparison between incompatible types"), as C# rejects it
+    /// (CS0019). The 8 Char against Text rows, which the VM still computes, are excluded.
+    /// </summary>
+    [Test]
+    public async Task MismatchedTypeEqualities_MasterFolded_AreRejectedAtCompile() {
+        var rows = ConstantFoldGrid.Rows.Where(static row => IsMismatchedEquality(row) && ConstantFoldGrid.Resolution(row) is null
+            && ConstantFoldGrid.UnfoldedVm(row).StartsWith("throws", StringComparison.Ordinal)).ToArray();
+        await Assert.That(ConstantFoldGrid.Pin([.. rows.Select(static row => row.Key)])).IsEqualTo(RejectedMismatchedEqualities);
+        var notRejected = new List<string>();
+        foreach (var row in rows) {
+            if (ConstantFoldGrid.FoldOf(row) is { } fold) {
+                notRejected.Add($"{row.Key}: folds {fold}");
+                continue;
+            }
+            try {
+                Interpreter.Compile(ConstantFoldGrid.ConstantTree(row));
+                notRejected.Add($"{row.Key}: compiles");
+            }
+            catch (InvalidOperationException ex) when (ex.Message.Contains("incompatible types", StringComparison.Ordinal)) {
+            }
+            catch (Exception ex) {
+                notRejected.Add($"{row.Key}: {ex.GetType().Name}: {ex.Message}");
+            }
+        }
+        await Assert.That(notRejected).IsEmpty();
     }
 
     /// <summary>
@@ -424,9 +501,7 @@ public class ConstantFoldingProviderTests {
     /// </summary>
     [Test]
     public async Task ShortCircuitRowsOverANonBooleanRight_DoNotFold_AndCompileRejects() {
-        var rows = ConstantFoldGrid.Rows.Where(static row => row.Op is OperatorKind.And or OperatorKind.Or
-            && row.Left.Name == "Boolean" && row.Right!.Name != "Boolean"
-            && row.LeftValue is bool left && left == (row.Op is OperatorKind.Or)).ToArray();
+        var rows = ShortCircuitRows();
         await Assert.That(ConstantFoldGrid.Pin([.. rows.Select(static row => row.Key)])).IsEqualTo("36 c3b0062e01363e1c");
         var folding = rows.Where(static row => ConstantFoldGrid.FoldOf(row) is not null).Select(static row => row.Key).ToArray();
         await Assert.That(folding).IsEmpty();
@@ -763,4 +838,5 @@ public class ConstantFoldingProviderTests {
     private const string AllowedDisagree = "4 97551d7e2ef40a1f";
     private const string LogicalFolds = "6 d49ba859ff062537";
     private const string UndefinedCells = "7800 1786e1cb3f6eaa59";
+    private const string RejectedMismatchedEqualities = "664 e544c78cf28685b8";
 }

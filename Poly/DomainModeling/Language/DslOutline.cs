@@ -203,13 +203,13 @@ public sealed class DslOutline {
             var starts = ScanDeclarations(topLevel);
             var faults = new List<(int Offset, SnippetFault Fault)>();
             if (unmatchedClose >= 0)
-                faults.Add((tokens[unmatchedClose].Offset, Fault(SnippetFaultKind.UnexpectedClose, unmatchedClose)));
+                faults.Add((tokens[unmatchedClose].Start, Fault(SnippetFaultKind.UnexpectedClose, unmatchedClose)));
             if (open.Count > 0) {
                 var unclosed = open.Min();
-                faults.Add((tokens[unclosed].Offset, Fault(SnippetFaultKind.Unclosed, unclosed)));
+                faults.Add((tokens[unclosed].Start, Fault(SnippetFaultKind.Unclosed, unclosed)));
             }
             if (starts.Count > 1)
-                faults.Add((tokens[starts[1]].Offset, Fault(SnippetFaultKind.Multiple, starts[1])));
+                faults.Add((tokens[starts[1]].Start, Fault(SnippetFaultKind.Multiple, starts[1])));
 
             if (faults.Count > 0)
                 return new SnippetShape(starts.Count, faults.MinBy(f => f.Offset).Fault);
@@ -532,21 +532,21 @@ public sealed class DslOutline {
             bool addressable, int open, int close, IReadOnlyList<OutlineNode> children) {
             var first = tokens[firstToken];
             var last = tokens[Math.Min(lastToken, tokens.Count - 1)];
-            var end = last.Offset + last.Length;
+            var end = last.Start + last.Length;
             var lineEnd = last.Line;
-            for (var k = last.Offset; k < end; k++)
+            for (var k = last.Start; k < end; k++)
                 if (text[k] == '\n') lineEnd++;
-            var lineStart = first.Offset;
+            var lineStart = first.Start;
             while (lineStart > 0 && text[lineStart - 1] is not ('\n' or '\r'))
                 lineStart--;
             var indentEnd = lineStart;
             while (indentEnd < text.Length && text[indentEnd] is ' ' or '\t')
                 indentEnd++;
             return new OutlineNode(
-                kind, name, path, first.Offset, end, first.Line, lineEnd,
+                kind, name, path, first.Start, end, first.Line, lineEnd,
                 text[lineStart..indentEnd], addressable,
-                open >= 0 ? tokens[open].Offset : -1,
-                close >= 0 ? tokens[close].Offset : -1,
+                open >= 0 ? tokens[open].Start : -1,
+                close >= 0 ? tokens[close].Start : -1,
                 children);
         }
 

@@ -39,14 +39,14 @@ public class DslBomTests {
             await Assert.That(actual.Length).IsEqualTo(expected.Length);
             // Offsets stay relative to the original text (the BOM occupies index 0), so offset
             // consumers splice the caller's own string instead of landing one character early.
-            await Assert.That(actual.Offset).IsEqualTo(expected.Offset + 1);
+            await Assert.That(actual.Start).IsEqualTo(expected.Start + 1);
         }
 
         var first = withBom.Tokens[0];
         await Assert.That(first.Kind).IsEqualTo(DslTokenKind.Domain);
         await Assert.That(first.Line).IsEqualTo(1);
         await Assert.That(first.Col).IsEqualTo(1);
-        await Assert.That(first.Offset).IsEqualTo(1);
+        await Assert.That(first.Start).IsEqualTo(1);
     }
 
     [Test]

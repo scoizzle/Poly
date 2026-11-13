@@ -5,26 +5,43 @@ using Poly.Tests.TestHelpers;
 namespace Poly.Tests.Grammar;
 
 /// <summary>
-/// <see cref="SourceText"/> and <see cref="SpanToken{TKind}"/>: the source-position surface. The oracle is
-/// <see cref="DslTokenReader"/>'s own line/column counters (only <c>'\n'</c> ends a line, a leading BOM is not a
-/// document character), which G-12 deletes against these tests.
+/// <see cref="SourceText"/> and <see cref="SpanToken{TKind}"/>: the source-position surface. The oracle is the
+/// legacy line/column rule of <see cref="DslTokenReader"/>'s deleted counters, replayed by <see cref="Legacy"/>
+/// (only <c>'\n'</c> ends a line, a leading BOM is not a document character); since G-12 a token's
+/// <c>Line</c>/<c>Col</c> are computed by <see cref="SourceText.GetLineColumn"/>, so they are checked against the
+/// replay, never against each other.
 /// </summary>
 public class SourceTextTests {
     private const string CrlfDomain = "domain A\r\nX: entity {\r\n  N: Text\r\n}\r\n";
 
     private static readonly string[] InlineTexts = [
-        "", "a", "a\n", "a\r\nb", "﻿domain A", CrlfDomain,
+        "", "a", "a\n", "a\r\nb", "\uFEFFdomain A", CrlfDomain,
     ];
 
     // The legacy rule replayed: counters start at 1:1 after the BOM; '\n' resets the column.
     private static (int Line, int Col) Legacy(string text, int offset) {
-        var origin = text.Length > 0 && text[0] == '﻿' ? 1 : 0;
+        var origin = text.Length > 0 && text[0] == '\uFEFF' ? 1 : 0;
         int line = 1, col = 1;
         for (var pos = origin; pos < offset; pos++) {
             if (text[pos] == '\n') { line++; col = 1; }
             else { col++; }
         }
         return (line, col);
+    }
+
+    // Legacy(text, offset) for every offset 0..Length, in one pass.
+    private static (int Line, int Col)[] LegacyPositions(string text) {
+        var origin = text.Length > 0 && text[0] == '\uFEFF' ? 1 : 0;
+        var positions = new (int Line, int Col)[text.Length + 1];
+        int line = 1, col = 1;
+        for (var pos = 0; pos <= text.Length; pos++) {
+            positions[pos] = (line, col);
+            if (pos >= origin && pos < text.Length) {
+                if (text[pos] == '\n') { line++; col = 1; }
+                else { col++; }
+            }
+        }
+        return positions;
     }
 
     private static IEnumerable<string> CorpusTexts() =>
@@ -35,13 +52,15 @@ public class SourceTextTests {
         var checkedTokens = 0;
         foreach (var text in CorpusTexts()) {
             var source = new SourceText(text);
+            var legacy = LegacyPositions(text);
             var reader = new DslTokenReader(text);
             for (var i = 0; ; i++) {
                 var t = reader.Peek(i);
-                await Assert.That(source.GetLineColumn(t.Offset)).IsEqualTo((t.Line, t.Col));
+                await Assert.That(source.GetLineColumn(t.Start)).IsEqualTo(legacy[t.Start]);
+                await Assert.That((t.Line, t.Col)).IsEqualTo(legacy[t.Start]);
                 checkedTokens++;
                 if (t.Kind == DslTokenKind.EndOfFile) {
-                    await Assert.That(source.GetLineColumn(text.Length)).IsEqualTo((t.Line, t.Col));
+                    await Assert.That(source.GetLineColumn(text.Length)).IsEqualTo(legacy[text.Length]);
                     break;
                 }
             }
@@ -53,7 +72,7 @@ public class SourceTextTests {
     [Test]
     public async Task GetLineColumn_EveryOffset_MatchesLegacyCounters() {
         string[] texts = [
-            "", "a", "a\n", "a\r\nb", "a\rb", "a\tb", "// c\nx", "﻿\nx", "﻿domain A", CrlfDomain,
+            "", "a", "a\n", "a\r\nb", "a\rb", "a\tb", "// c\nx", "\uFEFF\nx", "\uFEFFdomain A", CrlfDomain,
         ];
         foreach (var text in texts) {
             var source = new SourceText(text);
@@ -64,7 +83,7 @@ public class SourceTextTests {
 
     [Test]
     public async Task GetLineColumn_BomText_OffsetsZeroAndOneAreBothOrigin() {
-        var source = new SourceText("﻿domain A");
+        var source = new SourceText("\uFEFFdomain A");
         await Assert.That(source.GetLineColumn(0)).IsEqualTo((1, 1));
         await Assert.That(source.GetLineColumn(1)).IsEqualTo((1, 1));
         await Assert.That(source.GetLineColumn(2)).IsEqualTo((1, 2));
@@ -76,7 +95,7 @@ public class SourceTextTests {
         var source = new SourceText(text);
         var reader = new DslTokenReader(text);
         var task = reader.Peek(2);
-        var token = new SpanToken<DslTokenKind>(task.Kind, task.Offset, task.Length);
+        var token = new SpanToken<DslTokenKind>(task.Kind, task.Start, task.Length);
 
         await Assert.That(source.Span(token).ToString()).IsEqualTo("Task");
     }
@@ -149,7 +168,7 @@ public class SourceTextTests {
         for (var i = 0; ; i++) {
             var t = reader.Peek(i);
             if (t.Kind == DslTokenKind.EndOfFile) return words;
-            if (char.IsLetter(t.Text[0])) words.Add(new(t.Kind, t.Offset, t.Length));
+            if (t.Span.Length > 0 && char.IsLetter(t.Span[0])) words.Add(new(t.Kind, t.Start, t.Length));
         }
     }
 
@@ -200,9 +219,12 @@ public class SourceTextTests {
     }
 
     /// <summary>
-    /// The exchange rule: a fixed kind's text is the writer table (<see cref="DslGrammar.CanonicalText"/>), a
-    /// value-bearing kind's text is the <see cref="SourceText"/> slice. Which kinds are fixed versus value-bearing
-    /// is pinned by <c>GrammarChangeProtocolTests</c>. The oracle is the legacy path (<c>DslToken.Text</c>).
+    /// The exchange rule: a fixed kind's text is the writer table (<see cref="DslGrammar.CanonicalText"/>); an
+    /// identifier's or a number's text is the <see cref="SourceText"/> slice. A string literal is the exception:
+    /// its slice is raw (quotes and escapes kept) and its decoded value is <c>DslToken.Unescape()</c>, pinned by
+    /// <see cref="StringLiteral_SliceIsRaw_DecodedTextUnescapes"/>; this document has none. Which kinds are fixed
+    /// versus value-bearing is pinned by <c>GrammarChangeProtocolTests</c>. The oracle is the transitional
+    /// <c>DslToken.Text</c>, frozen against the pre-span tokenizer by <c>DslTokenStreamBaselineTests</c>.
     /// </summary>
     [Test]
     public async Task SyntheticToken_RoundTripsThroughWriterTextTable() {
@@ -215,7 +237,7 @@ public class SourceTextTests {
         for (var i = 0; ; i++) {
             var t = reader.Peek(i);
             if (t.Kind == DslTokenKind.EndOfFile) break;
-            var span = new SpanToken<DslTokenKind>(t.Kind, t.Offset, t.Length);
+            var span = new SpanToken<DslTokenKind>(t.Kind, t.Start, t.Length);
             if (TryCanonical(t.Kind, out _)) { viaSpans.Write(span.Kind); legacy.Write(t.Kind); }
             else { viaSpans.Write(span.Kind, source.Span(span).ToString()); legacy.Write(t.Kind, t.Text); }
         }
@@ -227,5 +249,21 @@ public class SourceTextTests {
         var writer = new DslTokenWriter();
         writer.Write(new SpanToken<DslTokenKind>(DslTokenKind.Colon, 0, 0).Kind);
         await Assert.That(writer.ToText()).IsEqualTo(":");
+    }
+
+    /// <summary>A quoted string's slice keeps its quotes and escapes; its decoded value drops them (G-11 exchange input 1).</summary>
+    [Test]
+    public async Task StringLiteral_SliceIsRaw_DecodedTextUnescapes() {
+        const string text = "x \"a\\\"b\\\\c\" y";
+        var source = new SourceText(text);
+        var reader = new DslTokenReader(source);
+        var literal = reader.Peek(1);
+        var span = new SpanToken<DslTokenKind>(literal.Kind, literal.Start, literal.Length);
+
+        await Assert.That(literal.Kind).IsEqualTo(DslTokenKind.StringLiteral);
+        await Assert.That(source.Span(span).ToString()).IsEqualTo("\"a\\\"b\\\\c\"");
+        await Assert.That(literal.Span.ToString()).IsEqualTo(source.Span(span).ToString());
+        await Assert.That(literal.Unescape()).IsEqualTo("a\"b\\c");
+        await Assert.That(literal.Text).IsEqualTo(literal.Unescape());
     }
 }

@@ -1,9 +1,12 @@
+using Poly.DomainModeling.Meaning;
 using Poly.DomainModeling.Ontology;
 
 using Action = Poly.DomainModeling.Ontology.Action;
 using Add = Poly.DomainModeling.Ontology.Add;
 using And = Poly.DomainModeling.Ontology.And;
 using Multiply = Poly.DomainModeling.Ontology.Multiply;
+using Not = Poly.DomainModeling.Ontology.Not;
+using Or = Poly.DomainModeling.Ontology.Or;
 using Subtract = Poly.DomainModeling.Ontology.Subtract;
 
 namespace Poly.DomainModeling.Analysis;
@@ -52,13 +55,14 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
     public void Analyze(AnalysisContext context, Node node) {
 
         if (node is Domain domain) {
+            var axes = new DomainGuardAxes(TypeModelOf(context, domain));
             foreach (var type in domain.Types) {
                 if (type is Entity entity) {
                     foreach (var action in entity.Actions)
-                        Publish(context, action, entity, domain);
+                        Publish(context, action, entity, domain, axes);
                     foreach (var stage in entity.Stages)
                         foreach (var action in stage.Actions)
-                            Publish(context, action, entity, domain);
+                            Publish(context, action, entity, domain, axes);
                 }
             }
             return;
@@ -67,20 +71,53 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
         this.AnalyzeChildren(context, node);
     }
 
-    private static void Publish(AnalysisContext context, Action action, Entity entity, Domain domain) {
+    /// <summary>
+    /// The domain type model this pass reads integrality from: <see cref="DomainTypeModelMetadata"/>, stamped on the
+    /// <see cref="Domain"/> node by the <c>DomainExpressionType</c> pass, which runs before this one (<c>CorePasses</c>
+    /// order). An absent stamp is a wrong pass order: this fails closed rather than treat every axis as non-integral.
+    /// </summary>
+    private static DomainTypeModel TypeModelOf(AnalysisContext context, Domain domain) =>
+        context.GetMetadata<DomainTypeModelMetadata>(domain)?.Model
+        ?? throw new InvalidOperationException(
+            $"The {Id} pass reads {nameof(DomainTypeModelMetadata)} on domain '{domain.Name}', which the " +
+            $"{ExpressionTypeAnalyzer.Id} pass stamps; it is absent, so that pass did not run before this one.");
+
+    /// <summary>What a guard needs to know about one entity's properties: which hold integers (a strict bound on one
+    /// is exact) and which are optional (a guard that also holds for a null value cannot empty one).</summary>
+    private sealed record GuardAxes(IReadOnlySet<string> Integral, IReadOnlySet<string> Optional);
+
+    /// <summary>The <see cref="GuardAxes"/> of each entity, computed once per entity from the domain type model:
+    /// integral is <see cref="NumericKind.Integer64"/>. A guard narrows an environment with the axes of the entity
+    /// that environment belongs to, so a callee's guard uses the callee entity's.</summary>
+    private sealed class DomainGuardAxes(DomainTypeModel model) {
+        private readonly Dictionary<Entity, GuardAxes> _byEntity = new(ReferenceEqualityComparer.Instance);
+
+        public GuardAxes For(Entity entity) {
+            if (_byEntity.TryGetValue(entity, out var axes)) return axes;
+            axes = new GuardAxes(
+                entity.Properties.Where(p => model.KindOf(model.OfProperty(p)) == NumericKind.Integer64)
+                    .Select(p => p.Name).ToHashSet(StringComparer.Ordinal),
+                entity.Properties.Where(p => !EntityStructureAnalyzer.IsRequired(p))
+                    .Select(p => p.Name).ToHashSet(StringComparer.Ordinal));
+            _byEntity[entity] = axes;
+            return axes;
+        }
+    }
+
+    private static void Publish(AnalysisContext context, Action action, Entity entity, Domain domain, DomainGuardAxes axes) {
         var contexts = new List<ActionStageInvariant>();
         foreach (var (stageName, stage) in ValidStages(action, entity)) {
             var preconditions = CollectPreconditions(action, entity, stage);
             var conflicts = new List<RelationConflict>();
-            var env = BuildInitialEnv(entity, preconditions, conflicts);
-            var scalarEnv = conflicts.Count == 0 ? env : BuildInitialEnv(entity, preconditions, relations: false);
+            var env = BuildInitialEnv(entity, preconditions, axes.For(entity), conflicts);
+            var scalarEnv = conflicts.Count == 0 ? env : BuildInitialEnv(entity, preconditions, axes.For(entity), relations: false);
             ReportUnsatisfiablePreconditions(context, action, stageName, env, scalarEnv, conflicts);
             var narrowed = env.ToDictionary(kv => kv.Key, kv => kv.Value.NumericRange, StringComparer.Ordinal);
             var merged = env.ToDictionary(kv => kv.Key, kv => (IReadOnlyList<Constraint>)kv.Value.Constraints, StringComparer.Ordinal);
             var postconditions = new List<EffectPostcondition>();
             // Call-stack scoped: an action is in the set only while its walk is on the stack.
             var visited = new HashSet<Action>(ReferenceEqualityComparer.Instance) { action };
-            ApplyEffects(action.Effects, entity, action, env, paramEnv: null, visited, postconditions, domain, stageName);
+            ApplyEffects(action.Effects, entity, action, env, paramEnv: null, visited, postconditions, domain, stageName, axes);
             contexts.Add(new ActionStageInvariant(stageName, preconditions, narrowed, merged, postconditions));
         }
         context.SetMetadata(action, new ActionInvariantMetadata(contexts));
@@ -111,13 +148,13 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
     /// <summary>The initial abstract environment: each property's declared constraints as an
     /// <see cref="AbstractValue"/>, refined by every precondition's bounds.</summary>
     private static Dictionary<string, AbstractValue> BuildInitialEnv(
-        Entity entity, IReadOnlyList<Policy> preconditions,
+        Entity entity, IReadOnlyList<Policy> preconditions, GuardAxes axes,
         List<RelationConflict>? conflicts = null, bool relations = true) {
         var env = new Dictionary<string, AbstractValue>(StringComparer.Ordinal);
         foreach (var prop in entity.Properties)
             env[prop.Name] = AbstractValue.From(prop.Constraints);
         foreach (var policy in preconditions)
-            Refine(env, policy.Expression, conflicts, relations);
+            Refine(env, policy.Expression, axes, conflicts, relations);
         return env;
     }
 
@@ -125,23 +162,156 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
     /// satisfiable properties unsatisfiable: one cause, reported once (#367 B-7).</summary>
     private readonly record struct RelationConflict(string Left, string Right, RelationalOrdering Orderings);
 
-    /// <summary>Narrows the symbols an environment mentions by a boolean condition's bounds
-    /// (a guard, an if-branch, or a where-filter). Single-primitive refinement.</summary>
+    /// <summary>
+    /// Narrows the symbols an environment mentions by a boolean condition (a guard, an if-branch, or a where-filter).
+    /// With <see cref="RefineNegated"/> this is the one condition refiner: a comparison against a literal or between
+    /// two properties, <c>and</c>, <c>or</c> (the hull of the arms) and <c>not</c> (the complement). Soundness
+    /// contract: the refined environment never excludes a value the condition admits, so a leaf the flow does not
+    /// model narrows nothing, positively or negated. A strict bound is exact on an integral axis
+    /// (<see cref="GuardAxes.Integral"/>) and inclusive on any other (OQ-5). Ranges describe present values: a guard
+    /// that is also true for a null optional property still narrows its present values (F4, as the else-branch does),
+    /// but never empties it.
+    /// </summary>
     private static void Refine(
-        Dictionary<string, AbstractValue> env, DomainExpression condition,
+        Dictionary<string, AbstractValue> env, DomainExpression condition, GuardAxes axes,
         List<RelationConflict>? conflicts = null, bool relations = true) {
-        foreach (var conjunct in FlattenAnds(condition)) {
-            if (conjunct is not Comparison cmp) continue;
-            if (TryGetRelation(cmp, out var left, out var right, out var orderings)) {
-                if (relations) RefineRelation(env, left, right, orderings, conflicts);
-                continue;
-            }
-            if (!TryGetComparisonBound(cmp, out var propName, out decimal value, out var bound)) continue;
-            if (!env.TryGetValue(propName, out var current)) continue;
-            if (BoundConstraint(bound, value) is { } narrowing)
-                env[propName] = current.Narrow(narrowing);
+        switch (condition) {
+            case And and:
+                Refine(env, and.Left, axes, conflicts, relations);
+                Refine(env, and.Right, axes, conflicts, relations);
+                return;
+            case Or or:
+                RefineDisjunction(env,
+                    arm => Refine(arm, or.Left, axes, conflicts: null, relations: false),
+                    arm => Refine(arm, or.Right, axes, conflicts: null, relations: false));
+                return;
+            case Not not:
+                RefineNegated(env, not.Operand, axes, conflicts, relations);
+                return;
+            case Comparison cmp:
+                RefineComparison(env, cmp, negated: false, axes, conflicts, relations);
+                return;
         }
     }
+
+    /// <summary>Narrows an environment by the negation of <paramref name="condition"/> (an else-branch, or the operand
+    /// of <c>not</c>): <c>not not x</c> is <c>x</c>, <c>not (a and b)</c> is <c>not a or not b</c>, <c>not (a or b)</c>
+    /// is <c>not a and not b</c>, and a comparison takes its complement kind. Same contract as <see cref="Refine"/>.</summary>
+    private static void RefineNegated(
+        Dictionary<string, AbstractValue> env, DomainExpression condition, GuardAxes axes,
+        List<RelationConflict>? conflicts = null, bool relations = true) {
+        switch (condition) {
+            case Not not:
+                Refine(env, not.Operand, axes, conflicts, relations);
+                return;
+            case And and:
+                RefineDisjunction(env,
+                    arm => RefineNegated(arm, and.Left, axes, conflicts: null, relations: false),
+                    arm => RefineNegated(arm, and.Right, axes, conflicts: null, relations: false));
+                return;
+            case Or or:
+                RefineNegated(env, or.Left, axes, conflicts, relations);
+                RefineNegated(env, or.Right, axes, conflicts, relations);
+                return;
+            case Comparison cmp:
+                RefineComparison(env, cmp, negated: true, axes, conflicts, relations);
+                return;
+        }
+    }
+
+    /// <summary>
+    /// One comparison leaf, or its negation. A comparison is false for a null operand except <c>!=</c>, which is
+    /// true, so the leaf holds for a null value exactly when it is a positive <c>!=</c> or a negated other kind. Such
+    /// a leaf never empties an optional property, and a relation it records is dropped when it would contradict one:
+    /// the value is then null, which a range does not describe, so neither is a contradiction.
+    /// </summary>
+    private static void RefineComparison(
+        Dictionary<string, AbstractValue> env, Comparison cmp, bool negated, GuardAxes axes,
+        List<RelationConflict>? conflicts, bool relations) {
+        var holdsForNull = negated != (cmp.Kind == ComparisonKind.NotEqual);
+        if (TryGetRelation(cmp, out var left, out var right, out var orderings)) {
+            // A property-vs-property comparison negates exactly: the ordering is trichotomous
+            // (Less | Equal | Greater), so the negation is the complement of the positive orderings.
+            if (!relations) return;
+            var relation = negated ? RelationalOrdering.All & ~orderings : orderings;
+            if (holdsForNull && (axes.Optional.Contains(left) || axes.Optional.Contains(right))) {
+                var trial = CloneEnv(env);
+                RefineRelation(trial, left, right, relation);
+                if (!ArmIsDead(env, trial)) AdoptArm(env, trial);
+                return;
+            }
+            RefineRelation(env, left, right, relation, conflicts);
+            return;
+        }
+        if (!TryGetComparisonBound(cmp, out var propName, out decimal value, out var bound)) return;
+        if (!env.TryGetValue(propName, out var current)) return;
+        if (negated) bound = Complement(bound);
+        var integral = axes.Integral.Contains(propName);
+        var narrowed = bound == ComparisonKind.NotEqual
+            ? NarrowNotEqual(current, value, integral)
+            : BoundConstraint(bound, value, integral) is { } narrowing ? current.Narrow(narrowing) : current;
+        if (narrowed.Unsatisfiable && !current.Unsatisfiable && holdsForNull && axes.Optional.Contains(propName))
+            return;
+        env[propName] = narrowed;
+    }
+
+    /// <summary>
+    /// <c>a or b</c>: each arm refines its own copy and the environment becomes their hull (lub), never one arm alone.
+    /// The dead-arm and branch-join discipline of <see cref="JoinBranches"/>: an arm whose refinement turned a
+    /// satisfiable symbol unsatisfiable cannot hold and is skipped; both dead leaves the incoming environment; a
+    /// symbol an arm left as it came in admits every incoming value, so only symbols both arms changed are rewritten.
+    /// The arms run with relations off (their callers pass <c>relations: false</c>), so no relation recorded inside an
+    /// arm is kept or reported.
+    /// </summary>
+    private static void RefineDisjunction(
+        Dictionary<string, AbstractValue> env,
+        System.Action<Dictionary<string, AbstractValue>> refineLeft,
+        System.Action<Dictionary<string, AbstractValue>> refineRight) {
+        var left = CloneEnv(env);
+        refineLeft(left);
+        var right = CloneEnv(env);
+        refineRight(right);
+        var leftDead = ArmIsDead(env, left);
+        var rightDead = ArmIsDead(env, right);
+        if (leftDead && rightDead) return;
+        if (leftDead) { AdoptArm(env, right); return; }
+        if (rightDead) { AdoptArm(env, left); return; }
+        foreach (var key in env.Keys.ToList()) {
+            var incoming = env[key];
+            if (!left.TryGetValue(key, out var fromLeft) || !right.TryGetValue(key, out var fromRight)) continue;
+            if (ReferenceEquals(fromLeft, incoming) || ReferenceEquals(fromRight, incoming)) continue;
+            env[key] = fromLeft.Join(fromRight);
+        }
+    }
+
+    /// <summary>
+    /// <c>x != v</c> excludes one value, which an interval can drop only at an endpoint: a point range at
+    /// <paramref name="value"/> becomes empty on any axis; on an integral axis an endpoint equal to an integral
+    /// <paramref name="value"/> moves inward by one. Anything else (an interior value, a decimal axis, a range
+    /// open on that side) is not narrowed. <see cref="ValueRange.Above"/>/<see cref="ValueRange.Below"/> run only on
+    /// the bounded receiver, where null means empty.
+    /// </summary>
+    private static AbstractValue NarrowNotEqual(AbstractValue current, decimal value, bool integral) {
+        if (current.NumericRange is not { } range) return current;
+        if (range.Min == value && range.Max == value) return current.AsUnsatisfiable();
+        if (!integral || value != decimal.Truncate(value)) return current;
+        ValueRange? tightened;
+        if (range.Min == value) tightened = range.Above(value, integral: true);
+        else if (range.Max == value) tightened = range.Below(value, integral: true);
+        else return current;
+        return tightened?.ToRangeConstraint() is { } narrowing ? current.Narrow(narrowing) : current.AsUnsatisfiable();
+    }
+
+    /// <summary>The comparison that holds exactly when <paramref name="kind"/> does not.</summary>
+    private static ComparisonKind Complement(ComparisonKind kind) => kind switch {
+        ComparisonKind.LessThan => ComparisonKind.GreaterThanOrEqual,
+        ComparisonKind.LessThanOrEqual => ComparisonKind.GreaterThan,
+        ComparisonKind.GreaterThan => ComparisonKind.LessThanOrEqual,
+        ComparisonKind.GreaterThanOrEqual => ComparisonKind.LessThan,
+        ComparisonKind.Equal => ComparisonKind.NotEqual,
+        ComparisonKind.NotEqual => ComparisonKind.Equal,
+        _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "no complement for this comparison kind"),
+    };
 
     /// <summary>A comparison between two properties (<c>Start &lt; End</c>) as the orderings the left
     /// property may have against the right one (#367 A-6).</summary>
@@ -188,47 +358,20 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
         env[right] = r;
     }
 
-    private static void RefineNegated(Dictionary<string, AbstractValue> env, DomainExpression condition) {
-        // A property-vs-property comparison negates exactly: the ordering is trichotomous
-        // (Less | Equal | Greater), so the negation is the complement of the positive orderings.
-        if (condition is Comparison rel
-            && TryGetRelation(rel, out var left, out var right, out var orderings)) {
-            RefineRelation(env, left, right, RelationalOrdering.All & ~orderings);
-            return;
-        }
-        if (condition is Comparison cmp
-            && TryGetComparisonBound(cmp, out var propName, out decimal value, out var bound)
-            && NegateBound(bound) is { } negated
-            && env.TryGetValue(propName, out var current)
-            && negated != ComparisonKind.Equal
-            && BoundConstraint(negated, value) is { } narrowing)
-            env[propName] = current.Narrow(narrowing);
-    }
-
     /// <summary>
-    /// The one-sided (or point) constraint a comparison against an exact bound implies. A strict bound
-    /// goes through <see cref="ValueRange.Below"/>/<see cref="ValueRange.Above"/> on the decimal axis, so
-    /// it stays inclusive and the endpoint is the bound itself (F5: soundly over-approximate; the
-    /// integral <c>v − 1</c> narrowing is V-02's). The constraint carries CLR decimals (A1).
+    /// The one-sided (or point) constraint a comparison against an exact bound implies. A strict bound goes through
+    /// <see cref="ValueRange.Below"/>/<see cref="ValueRange.Above"/>: exact on an integral axis (<c>ceil(v) − 1</c>,
+    /// <c>floor(v) + 1</c>), inclusive on any other, where the endpoint is the bound itself (F5, OQ-5: soundly
+    /// over-approximate). The constraint carries CLR decimals (A1).
     /// </summary>
-    private static RangeConstraint? BoundConstraint(ComparisonKind kind, decimal value) => kind switch {
-        ComparisonKind.LessThan => new ValueRange(null, null).Below(value, integral: false)?.ToRangeConstraint(),
+    private static RangeConstraint? BoundConstraint(ComparisonKind kind, decimal value, bool integral) => kind switch {
+        ComparisonKind.LessThan => new ValueRange(null, null).Below(value, integral)?.ToRangeConstraint(),
         ComparisonKind.LessThanOrEqual => new RangeConstraint(null, value),
-        ComparisonKind.GreaterThan => new ValueRange(null, null).Above(value, integral: false)?.ToRangeConstraint(),
+        ComparisonKind.GreaterThan => new ValueRange(null, null).Above(value, integral)?.ToRangeConstraint(),
         ComparisonKind.GreaterThanOrEqual => new RangeConstraint(value, null),
         ComparisonKind.Equal => new RangeConstraint(value, value),
         _ => null,
     };
-
-    private static IEnumerable<DomainExpression> FlattenAnds(DomainExpression expr) {
-        if (expr is And and) {
-            foreach (var sub in FlattenAnds(and.Left)) yield return sub;
-            foreach (var sub in FlattenAnds(and.Right)) yield return sub;
-        }
-        else {
-            yield return expr;
-        }
-    }
 
     private static bool TryGetComparisonBound(
         Comparison cmp, out string propName, out decimal value, out ComparisonKind bound) {
@@ -254,19 +397,11 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
         _ => kind
     };
 
-    private static ComparisonKind? NegateBound(ComparisonKind kind) => kind switch {
-        ComparisonKind.LessThan => ComparisonKind.GreaterThanOrEqual,
-        ComparisonKind.LessThanOrEqual => ComparisonKind.GreaterThan,
-        ComparisonKind.GreaterThan => ComparisonKind.LessThanOrEqual,
-        ComparisonKind.GreaterThanOrEqual => ComparisonKind.LessThan,
-        _ => null,
-    };
-
     private static bool SetBound(ComparisonKind kind, decimal v, out decimal value, out ComparisonKind bound) {
         switch (kind) {
             case ComparisonKind.LessThan or ComparisonKind.LessThanOrEqual
                 or ComparisonKind.GreaterThan or ComparisonKind.GreaterThanOrEqual
-                or ComparisonKind.Equal:
+                or ComparisonKind.Equal or ComparisonKind.NotEqual:
                 value = v;
                 bound = kind;
                 return true;
@@ -387,7 +522,7 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
         Dictionary<string, AbstractValue> env,
         IReadOnlyDictionary<string, AbstractValue>? paramEnv,
         HashSet<Action> visited, List<EffectPostcondition> result, Domain domain,
-        string? currentStage) {
+        string? currentStage, DomainGuardAxes axes) {
         foreach (var effect in effects) {
             switch (effect) {
                 case AssignEffect { Target: PropertyAccess target } assign: {
@@ -411,33 +546,33 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
                     }
                 case ConditionalEffect cond:
                     var thenEnv = CloneEnv(env);
-                    Refine(thenEnv, cond.Condition);
+                    Refine(thenEnv, cond.Condition, axes.For(entity));
                     var thenDead = ArmIsDead(env, thenEnv);
-                    ApplyEffects(cond.ThenEffects, entity, action, thenEnv, paramEnv, visited, result, domain, currentStage);
+                    ApplyEffects(cond.ThenEffects, entity, action, thenEnv, paramEnv, visited, result, domain, currentStage, axes);
                     Dictionary<string, AbstractValue>? elseEnv = null;
                     var elseDead = false;
                     if (cond.ElseEffects is not null) {
                         elseEnv = CloneEnv(env);
-                        RefineNegated(elseEnv, cond.Condition);
+                        RefineNegated(elseEnv, cond.Condition, axes.For(entity));
                         elseDead = ArmIsDead(env, elseEnv);
-                        ApplyEffects(cond.ElseEffects, entity, action, elseEnv, paramEnv, visited, result, domain, currentStage);
+                        ApplyEffects(cond.ElseEffects, entity, action, elseEnv, paramEnv, visited, result, domain, currentStage, axes);
                     }
                     JoinBranches(env, thenEnv, thenDead, elseEnv, elseDead, entity);
                     break;
                 case CompositeEffect composite:
-                    ApplyEffects(composite.Effects, entity, action, env, paramEnv, visited, result, domain, currentStage);
+                    ApplyEffects(composite.Effects, entity, action, env, paramEnv, visited, result, domain, currentStage, axes);
                     break;
                 case InvokeActionEffect invoke:
-                    ApplyInvoke(invoke, entity, action, env, paramEnv, visited, result, domain, currentStage);
+                    ApplyInvoke(invoke, entity, action, env, paramEnv, visited, result, domain, currentStage, axes);
                     DropAllRelations(env);
                     break;
                 case ForEachEffect fe:
                     // Zero or more iterations: assigns join into the env (Merge), so the
                     // pre-loop value still holds for zero iterations.
-                    ApplyEffects(fe.Body, entity, action, env, paramEnv, visited, result, domain, currentStage);
+                    ApplyEffects(fe.Body, entity, action, env, paramEnv, visited, result, domain, currentStage, axes);
                     break;
                 case ForEachInvokeEffect efe:
-                    ApplyForEachInvoke(efe, entity, action, env, paramEnv, visited, result, domain);
+                    ApplyForEachInvoke(efe, entity, action, env, paramEnv, visited, result, domain, axes);
                     DropAllRelations(env);
                     break;
             }
@@ -460,9 +595,9 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
         Dictionary<string, AbstractValue> env,
         IReadOnlyDictionary<string, AbstractValue>? paramEnv,
         HashSet<Action> visited, List<EffectPostcondition> result, Domain domain,
-        string? currentStage) {
+        string? currentStage, DomainGuardAxes axes) {
         if (invoke.TargetRelationship is not null) {
-            ApplyCrossEntityInvoke(invoke, entity, action, env, paramEnv, visited, result, domain);
+            ApplyCrossEntityInvoke(invoke, entity, action, env, paramEnv, visited, result, domain, axes);
             return;
         }
 
@@ -471,7 +606,7 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
 
         var targetEnv = CloneEnv(env);
         foreach (var policy in CollectPreconditions(target, entity, null))
-            Refine(targetEnv, policy.Expression);
+            Refine(targetEnv, policy.Expression, axes.For(entity));
 
         Dictionary<string, AbstractValue>? targetParams = null;
         if (invoke.ParameterBindings.Count > 0) {
@@ -485,7 +620,7 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
         var atEntry = CloneEnv(targetEnv);
 
         try {
-            ApplyEffects(target.Effects, entity, target, targetEnv, targetParams, visited, result, domain, currentStage);
+            ApplyEffects(target.Effects, entity, target, targetEnv, targetParams, visited, result, domain, currentStage, axes);
         }
         finally {
             visited.Remove(target);
@@ -518,7 +653,7 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
         InvokeActionEffect invoke, Entity entity, Action action,
         Dictionary<string, AbstractValue> env,
         IReadOnlyDictionary<string, AbstractValue>? paramEnv,
-        HashSet<Action> visited, List<EffectPostcondition> result, Domain domain) {
+        HashSet<Action> visited, List<EffectPostcondition> result, Domain domain, DomainGuardAxes axes) {
         var relationship = entity.Navigations.FirstOrDefault(r =>
             string.Equals(r.Name, invoke.TargetRelationship, StringComparison.Ordinal));
         if (relationship is null) return;
@@ -535,7 +670,7 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
         foreach (var prop in targetEntity.Properties)
             targetEnv[prop.Name] = AbstractValue.From(prop.Constraints);
         foreach (var policy in CollectPreconditions(targetAction, targetEntity, null))
-            Refine(targetEnv, policy.Expression);
+            Refine(targetEnv, policy.Expression, axes.For(targetEntity));
 
         Dictionary<string, AbstractValue>? targetParams = null;
         if (invoke.ParameterBindings.Count > 0) {
@@ -545,7 +680,7 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
         }
 
         try {
-            ApplyEffects(targetAction.Effects, targetEntity, targetAction, targetEnv, targetParams, visited, result, domain, currentStage: null);
+            ApplyEffects(targetAction.Effects, targetEntity, targetAction, targetEnv, targetParams, visited, result, domain, currentStage: null, axes);
         }
         finally {
             visited.Remove(targetAction);
@@ -559,7 +694,7 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
         ForEachInvokeEffect efe, Entity entity, Action action,
         Dictionary<string, AbstractValue> env,
         IReadOnlyDictionary<string, AbstractValue>? paramEnv,
-        HashSet<Action> visited, List<EffectPostcondition> result, Domain domain) {
+        HashSet<Action> visited, List<EffectPostcondition> result, Domain domain, DomainGuardAxes axes) {
         var relationship = entity.Navigations.FirstOrDefault(r =>
             string.Equals(r.Name, efe.RelationshipName, StringComparison.Ordinal));
         if (relationship is null) return;
@@ -576,12 +711,12 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
         foreach (var prop in targetEntity.Properties)
             targetEnv[prop.Name] = AbstractValue.From(prop.Constraints);
         foreach (var policy in CollectPreconditions(targetAction, targetEntity, null))
-            Refine(targetEnv, policy.Expression);
+            Refine(targetEnv, policy.Expression, axes.For(targetEntity));
         if (efe.Predicate is ForEachNamedPolicy { PolicyName: var policyName }) {
             var predicatePolicy = targetEntity.Policies.FirstOrDefault(p =>
                 string.Equals(p.Name, policyName, StringComparison.Ordinal));
             if (predicatePolicy is not null)
-                Refine(targetEnv, predicatePolicy.Expression);
+                Refine(targetEnv, predicatePolicy.Expression, axes.For(targetEntity));
         }
 
         Dictionary<string, AbstractValue>? targetParams = null;
@@ -593,7 +728,7 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
         }
 
         try {
-            ApplyEffects(targetAction.Effects, targetEntity, targetAction, targetEnv, targetParams, visited, result, domain, currentStage: null);
+            ApplyEffects(targetAction.Effects, targetEntity, targetAction, targetEnv, targetParams, visited, result, domain, currentStage: null, axes);
         }
         finally {
             visited.Remove(targetAction);

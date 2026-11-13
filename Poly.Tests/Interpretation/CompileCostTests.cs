@@ -14,7 +14,7 @@ namespace Poly.Tests.Interpretation;
 /// </summary>
 public class CompileCostTests {
     private const int ChainLength = 256;
-    private const double BoundMs = 5000;
+    private const double BoundMs = 30000;
 
     private static Node[] BoolParameters(int count) =>
         Enumerable.Range(0, count).Select(i => (Node)new Parameter("p" + i, TypeReference.To<bool>())).ToArray();
@@ -50,7 +50,7 @@ public class CompileCostTests {
         return sw.Elapsed.TotalMilliseconds;
     }
 
-    // Wall clock is used only as an absolute bound with two orders of magnitude of headroom: a quadratic chain of
+    // Wall clock is used only as an absolute bound sized for a shared CI runner about 7x slower than a dev machine: a quadratic chain of
     // 256 operands takes tens of milliseconds, an exponential one never finishes. Task.Run lets [Timeout] fail a
     // regression instead of hanging the suite.
     private static async Task AssertFinishesWithinBound(string label, Func<double> measure, CancellationToken cancellationToken) {
@@ -59,7 +59,7 @@ public class CompileCostTests {
             .Because($"{label}: a {ChainLength}-operand chain took {ms:F0} ms (#823)");
     }
 
-    [Test, Timeout(60_000)]
+    [Test, Timeout(120_000)]
     [Arguments("and")]
     [Arguments("or")]
     [Arguments("mixed")]
@@ -69,7 +69,7 @@ public class CompileCostTests {
         await AssertFinishesWithinBound("analyze " + shape, () => Elapsed(() => Interpreter.Analyze(node)), cancellationToken);
     }
 
-    [Test, Timeout(60_000)]
+    [Test, Timeout(120_000)]
     [Arguments("and")]
     [Arguments("or")]
     [Arguments("mixed")]
@@ -99,7 +99,7 @@ public class CompileCostTests {
         _ => throw new ArgumentOutOfRangeException(nameof(shape), shape, null)
     };
 
-    [Test, Timeout(60_000)]
+    [Test, Timeout(120_000)]
     [Arguments("and")]
     [Arguments("or")]
     [Arguments("mixed")]

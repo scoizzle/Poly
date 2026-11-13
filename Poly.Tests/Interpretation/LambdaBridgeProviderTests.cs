@@ -442,17 +442,25 @@ internal static class BridgeGrid {
         return false;
     }
 
-    /// <summary>Runs one cell through analysis, the emitter (which quotes the lambda) and the probe, once per value set.</summary>
-    public static BridgeOutcome Evaluate(BridgeCase c) {
+    /// <summary>
+    /// Runs one cell through analysis, the emitter (which quotes the lambda) and the probe, once per value set.
+    /// <paramref name="asDelegate"/>: pass the lambda where the parameter is a <c>Func</c> instead (a binary cell), so its
+    /// body is a function-table entry the main emitter compiles; the positive control of the stage harness.
+    /// </summary>
+    public static BridgeOutcome Evaluate(BridgeCase c, bool asDelegate = false) {
         var a = new Parameter("a", new ClrTypeReference(c.Left.Clr));
         var b = c.Right is null ? null : new Parameter("b", new ClrTypeReference(c.Right.Clr));
         var x = new Parameter("x", new ClrTypeReference(c.Left.Clr));
         var y = c.Right is null ? null : new Parameter("y", new ClrTypeReference(c.Right.Clr));
         var body = c.Body(x, y);
         var lambda = new Lambda(y is null ? [x] : [x, y], body);
-        var probe = y is null
-            ? typeof(BridgeProbe<,>).MakeGenericType(c.Left.Clr, c.Return)
-            : typeof(BridgeProbe<,,>).MakeGenericType(c.Left.Clr, c.Right!.Clr, c.Return);
+        if (asDelegate && y is null)
+            throw new ArgumentException("a delegate-position cell needs two operands", nameof(c));
+        var probe = asDelegate
+            ? typeof(DelegateProbe<,,>).MakeGenericType(c.Left.Clr, c.Right!.Clr, c.Return)
+            : y is null
+                ? typeof(BridgeProbe<,>).MakeGenericType(c.Left.Clr, c.Return)
+                : typeof(BridgeProbe<,,>).MakeGenericType(c.Left.Clr, c.Right!.Clr, c.Return);
         var apply = new Member(new ClrTypeReference(probe), "Apply");
         Node call = b is null ? new Invoke(apply, lambda, a) : new Invoke(apply, lambda, a, b);
 
@@ -860,6 +868,15 @@ internal static class BridgeGrid {
     /// <summary>Whether the cell's answer is the provider's (<see cref="ProviderExpectation"/>).</summary>
     public static bool Agrees(BridgeCase c) => Matches(Outcome(c).Observed, ProviderExpectation(c));
 
+    /// <summary>A refusal the bridge made from a raw exception in the body compile (<c>AbiEmitter.QuoteBodyRefusal</c>).</summary>
+    public static bool RewrappedRaw(string? message) => message?.Contains("cannot quote the body", StringComparison.Ordinal) == true;
+
+    /// <summary>A message that says <c>VM compile rejected:</c> more than once.</summary>
+    public static bool DoublePrefixed(string? message) => message?.Split("VM compile rejected:").Length > 2;
+
+    /// <summary>A rendered run's values, without its stage and type: <c>S1=…; S2=…</c>.</summary>
+    public static string ValuesOf(string render) => string.Join("; ", render.Split("; ").Skip(2));
+
     // ---- the main emitter: the operator ledger's ABI column ----
 
     private static readonly Lazy<IReadOnlyDictionary<string, OracleCell>> LedgerCells = new(static () =>
@@ -1237,6 +1254,8 @@ public class LambdaBridgeProviderTests {
         // The identity cells run whatever the provider knows: nint -> nint, nuint -> nuint, and the same-type conditionals.
         await Assert.That(outcomes.Count(static o => o.Outcome.Stage == "ran")).IsGreaterThanOrEqualTo(4);
         await Assert.That(outcomes.Count(static o => o.Outcome.Stage == "main-rejected")).IsEqualTo(0);
+        await Assert.That(outcomes.Where(static o => BridgeGrid.RewrappedRaw(o.Outcome.Message)).Select(static o => o.Cell.Key).ToArray()).IsEmpty();
+        await Assert.That(outcomes.Where(static o => BridgeGrid.DoublePrefixed(o.Outcome.Message)).Select(static o => o.Cell.Key).ToArray()).IsEmpty();
         // T-18b defines the native operators: each (stage, provider answer) bucket is pinned by count. A positioned bridge
         // refusal of a provider-defined cell is T-21's (the ABI executes what the provider states or refuses it).
         var buckets = outcomes.GroupBy(static o => $"{o.Outcome.Stage}|{(o.Answer is null ? "undefined" : "defined")}")
@@ -1353,6 +1372,10 @@ public class LambdaBridgeProviderTests {
         var master = BridgeGrid.Cases.Where(BridgeGrid.MainRejectedOnMaster).ToArray();
         await Assert.That(ConstantFoldGrid.Pin([.. master.Select(static c => c.Line)])).IsEqualTo(MainRejectedOnMasterPin);
         await Assert.That(now).IsEmpty();
+        // The positive control in the harness itself: the same body in delegate position is still the main emitter's.
+        var control = BridgeGrid.Evaluate(Cell("conditional", "Decimal ? Int32"), asDelegate: true);
+        await Assert.That(control.Stage).IsEqualTo("main-rejected");
+        await Assert.That(control.Message).Contains("conditional arms differ in representation");
         var moved = master.Where(static c => BridgeGrid.Outcome(c).Stage is not ("ran" or "bridge-rejected"))
             .Select(static c => $"{c.Line}: {BridgeGrid.Outcome(c).Render}").ToArray();
         await Assert.That(moved).IsEmpty();
@@ -1448,6 +1471,10 @@ public class LambdaBridgeProviderTests {
     public async Task Bridge_RefusesUndefinedCells_WithItsOwnPositionedMessage() {
         var raw = BridgeGrid.Cases.Where(static c => BridgeGrid.Outcome(c).Stage == "emit-throws").Select(static c => c.Line).ToArray();
         await Assert.That(raw).IsEmpty();
+        // T-19b's catch around the body compile turns a raw Expression API exception into a bridge refusal; it fires on
+        // no cell (so "emit-throws is empty" is not its doing), and no refusal says "VM compile rejected:" twice.
+        await Assert.That(BridgeGrid.Cases.Where(static c => BridgeGrid.RewrappedRaw(BridgeGrid.Outcome(c).Message)).Select(static c => c.Line).ToArray()).IsEmpty();
+        await Assert.That(BridgeGrid.Cases.Where(static c => BridgeGrid.DoublePrefixed(BridgeGrid.Outcome(c).Message)).Select(static c => c.Line).ToArray()).IsEmpty();
         var undefined = BridgeGrid.Cases.Where(static c => !BridgeGrid.ProviderExpectation(c).Defined).ToArray();
         var notOwn = undefined.Where(static c => BridgeGrid.BridgeDecides(c)
                 && !(BridgeGrid.Outcome(c) is { Stage: "bridge-rejected", Message: { } m } && m.StartsWith("VM compile rejected: lambda bridge", StringComparison.Ordinal)))
@@ -1502,11 +1529,29 @@ public class LambdaBridgeProviderTests {
         var disagreeing = BridgeGrid.Cases.Where(static c => BridgeGrid.BridgeDecides(c) && !BridgeGrid.Matches(BridgeGrid.Outcome(c).Observed, BridgeGrid.Expectation(c))).ToArray();
         await Assert.That(disagreeing.All(static c => c.Grid is "uint32-constant" or "constant-parameter"
             || (c.Grid == "coalesce" && c.Key.EndsWith("?? Int32(0)", StringComparison.Ordinal)))).IsTrue();
-        // The run, not the prediction (23): constant folding replaces uint x * 1, 1 * x, x / 1 and x % 1 before the bridge
-        // sees them (typed uint, as C# types them; owned by T-17, then T-26, above), so the bridge decides 19 of these cells.
-        // Closing round: plus uint? ?? 0 and ulong? ?? 0, which C# types uint and ulong (the constant converts); the provider
-        // states no type for int beside uint or ulong, so the bridge refuses them.
+        // 25 cells, each where only C#'s constant conversion makes the answer:
+        // - 12 uint32-constant cells run typed Int64 where C# says UInt32 (constant folding replaces uint x * 1, 1 * x, x / 1
+        //   and x % 1 first, typed uint as C# types them: T-17, then T-26, above);
+        // - 4 coalesce cells, Int8?, Int16?, UInt8? and UInt16? ?? 0, run typed Int32 where C# says the narrow type
+        //   (T-19b: the function-table compile refused them before the bridge decided them);
+        // - 9 are the bridge's refusal where C# converts the constant: 7 constant-parameter returns, and uint? ?? 0 and
+        //   ulong? ?? 0 (the provider states no type for int beside uint or ulong).
         await Assert.That(ConstantFoldGrid.Pin([.. disagreeing.Select(static c => c.Line)])).IsEqualTo("25 254344135303ec67");
+        var runs = disagreeing.Where(static c => BridgeGrid.Outcome(c).Stage == "ran").ToArray();
+        await Assert.That(runs.Length).IsEqualTo(16);
+        await Assert.That(runs.All(static c => BridgeGrid.Expectation(c).Defined)).IsTrue();
+        var refusedHere = disagreeing.Except(runs).ToArray();
+        await Assert.That(refusedHere.Length).IsEqualTo(9);
+        await Assert.That(refusedHere.All(static c => BridgeGrid.Outcome(c).Stage == "bridge-rejected"
+            && c.Grid is "constant-parameter" or "coalesce")).IsTrue();
+        // Type only, except where the provider's wider type changes the value at uint's wrap: C# computes uint.MaxValue + 1
+        // as 0 and 1 - x in uint, the provider's Int64 does not wrap. Those three are the owner's ruling (uint + 1 is Int64,
+        // #679 6842272727) and ran the same way before T-19b; T-26 removes them with the rest.
+        var valueDiffers = runs.Where(static c => BridgeGrid.ValuesOf(BridgeGrid.Outcome(c).Observed) != BridgeGrid.ValuesOf(BridgeGrid.Expectation(c).Render))
+            .Select(static c => c.Line).Order(StringComparer.Ordinal).ToArray();
+        await Assert.That(valueDiffers).IsEquivalentTo([
+            "uint32-constant Int32(1) Add x", "uint32-constant Int32(1) Subtract x", "uint32-constant x Add Int32(1)"
+        ]);
     }
 
     /// <summary>

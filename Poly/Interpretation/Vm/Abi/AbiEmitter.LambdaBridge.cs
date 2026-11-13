@@ -126,6 +126,13 @@ public static partial class AbiEmitter {
     }
 
     /// <summary>
+    /// The bridge's positioned refusal for a raw exception from the body compile (the Expression API's own, or another
+    /// emitter's): it names the body and keeps the raw reason, without a second <c>VM compile rejected:</c>.
+    /// </summary>
+    internal static InvalidOperationException QuoteBodyRefusal(Node body, Type delegateType, Exception raw) =>
+        new($"VM compile rejected: lambda bridge cannot quote the body '{body.GetType().Name}' of a lambda for '{delegateType.Name}': {Reason(raw.Message)}.", raw);
+
+    /// <summary>
     /// The bridge's refusal of a lambda's shape before it builds the argument: its message and its mark, so a caller never
     /// counts it as the main emitter's.
     /// </summary>
@@ -334,9 +341,7 @@ public static partial class AbiEmitter {
         }
         catch (Exception ex) when (ex is ArgumentException or InvalidOperationException
             && !ex.Message.StartsWith("VM compile rejected: lambda bridge", StringComparison.Ordinal)) {
-            // The Expression API's own refusal, raw: the bridge's positioned one, naming the body.
-            throw new InvalidOperationException(
-                $"VM compile rejected: lambda bridge cannot quote the body '{lambda.Body.GetType().Name}' of a lambda for '{delegateType.Name}': {ex.Message}", ex);
+            throw QuoteBodyRefusal(lambda.Body, delegateType, ex);
         }
         var returnType = invokeMethod.ReturnType;
         if (returnType == typeof(void)) {

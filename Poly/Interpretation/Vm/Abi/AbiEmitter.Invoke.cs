@@ -187,6 +187,16 @@ public static partial class AbiEmitter {
             if (IsTypeNameReceiver(member.Value, ctx))
                 throw new InvalidOperationException(
                     $"Member '{member.MemberName}' on a type name is not a resolved static method.");
+            // A lambda quoted at this call's Expression<> parameter has no closure to pass by name; the body's own
+            // reject is why the call came here, so it is the reason to name.
+            if (astBodyReject is not null) {
+                foreach (var argument in invoke.Arguments) {
+                    if (argument is Lambda quoted && ctx.QuoteOnlyLambdas.Contains(quoted))
+                        throw new InvalidOperationException(
+                            $"VM compile rejected: AST method '{member.MemberName}' has no compilable body, so the call is dispatched by name, "
+                            + $"which cannot pass a lambda quoted for its Expression<> parameter: {Reason(astBodyReject)}.");
+                }
+            }
 
             var astReceiver = ctx.OpenRing();
             var astInstanceSlot = astReceiver.AddValue(CompileNode(member.Value, ctx));

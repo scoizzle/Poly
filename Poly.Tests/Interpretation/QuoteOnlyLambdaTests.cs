@@ -203,7 +203,8 @@ public class QuoteOnlyLambdaTests {
     /// The one shape where the call site can disagree with the boundary decision: a module method the analysis resolves,
     /// whose body the VM cannot compile (a lambda inside it), called on a variable, so the call falls through to name
     /// dispatch and compiles the lambda argument as a closure value. The boundary decided the lambda is quoted, so it has
-    /// no function-table entry: the emitter's guard refuses the closure at compile time, where master failed at run time.
+    /// no function-table entry: the call is refused at compile time, where master failed at run time, and the refusal names
+    /// the method and the reason its body did not compile (master named both too). <c>EmitLambda</c>'s guard stays the net.
     /// </summary>
     [Test]
     public async Task ModuleMethodWithoutACompilableBody_LiteralLambdaArgument() {
@@ -225,8 +226,10 @@ public class QuoteOnlyLambdaTests {
             new Invoke(new Member(new Variable("host"), "Take"), new Lambda([x], new Equal(x, x)))
         ], [host]);
         var stage = Run(node, [], Provider(typeNode));
-        await Assert.That(stage).StartsWith("main-rejected: InvalidOperationException: VM compile rejected: ");
-        await Assert.That(stage).Contains("has no function-table entry");
+        await Assert.That(stage).StartsWith("main-rejected: InvalidOperationException: VM compile rejected: AST method 'Take' ");
+        await Assert.That(stage).Contains("a lambda inside an AST constructor or method is not yet compiled as its own frame");
+        await Assert.That(stage).DoesNotContain("has no function-table entry");
+        await Assert.That(stage.Split("VM compile rejected:").Length).IsEqualTo(2);
     }
 
     /// <summary>
@@ -242,6 +245,24 @@ public class QuoteOnlyLambdaTests {
         await Assert.That(Run(new Invoke(probe, lambda, a), [7])).StartsWith("analysis-rejected: no matching member 'Apply'");
         var wide = new Parameter("x", new ClrTypeReference(typeof(long)));
         await Assert.That(Run(new Invoke(probe, new Lambda([wide], wide), a), [7])).StartsWith("analysis-rejected: no matching member 'Apply'");
+    }
+
+    /// <summary>
+    /// The refusal the bridge makes from a raw exception in the body compile (lock amendment 4) names the body and keeps
+    /// the raw reason, and says <c>VM compile rejected:</c> once even when the raw exception said it too. No grid cell
+    /// reaches it (the grids assert that), so it is tested here directly.
+    /// </summary>
+    [Test]
+    public async Task QuoteBodyRefusal_NamesTheBody_AndSaysThePrefixOnce() {
+        var fromEmitter = Poly.Interpretation.Vm.Abi.AbiEmitter.QuoteBodyRefusal(
+            new Constant(1), typeof(Func<int>), new InvalidOperationException("VM compile rejected: no operator for 'A' and 'B'."));
+        await Assert.That(fromEmitter.Message).IsEqualTo(
+            "VM compile rejected: lambda bridge cannot quote the body 'Constant' of a lambda for 'Func`1': no operator for 'A' and 'B'.");
+        var raw = new ArgumentException("Expression of type 'System.Int64' cannot be used for assignment to type 'System.Int32'");
+        var fromExpressionApi = Poly.Interpretation.Vm.Abi.AbiEmitter.QuoteBodyRefusal(new Constant(1), typeof(Func<int>), raw);
+        await Assert.That(fromExpressionApi.Message).IsEqualTo(
+            "VM compile rejected: lambda bridge cannot quote the body 'Constant' of a lambda for 'Func`1': Expression of type 'System.Int64' cannot be used for assignment to type 'System.Int32'.");
+        await Assert.That(fromExpressionApi.InnerException).IsSameReferenceAs(raw);
     }
 
     /// <summary>
@@ -420,6 +441,9 @@ public class QuoteOnlyLambdaTests {
                 && !a.Vm.StartsWith("bridge-rejected", StringComparison.Ordinal))
             .Select(static a => $"{a.Cell.Name}: {a.Vm}").ToArray();
         await Assert.That(raw).IsEmpty();
+        // T-19b's catch around the body compile fires on no cell here either, and no refusal says the prefix twice.
+        await Assert.That(answers.Where(static a => BridgeGrid.RewrappedRaw(a.Vm)).Select(static a => a.Cell.Name).ToArray()).IsEmpty();
+        await Assert.That(answers.Where(static a => BridgeGrid.DoublePrefixed(a.Vm)).Select(static a => a.Cell.Name).ToArray()).IsEmpty();
         var refused = answers.Where(static a => a.CSharp == "refused" && !a.Vm.StartsWith("analysis-rejected", StringComparison.Ordinal)
                 && !a.Vm.StartsWith("bridge-rejected", StringComparison.Ordinal))
             .Select(static a => $"{a.Cell.Name}: {a.Vm}").ToArray();

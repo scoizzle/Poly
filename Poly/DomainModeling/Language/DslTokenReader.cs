@@ -88,7 +88,7 @@ public sealed class DslTokenReader : BufferedTokenReader<DslToken, DslTokenKind>
         if (char.IsAsciiDigit(ch))
             return ScanNumber();
 
-        if (char.IsDigit(ch)) {
+        if (char.GetUnicodeCategory(ch) == UnicodeCategory.DecimalDigitNumber) {
             var (digitLine, digitCol) = Source.GetLineColumn(_pos);
             throw GrammarError.Error($"Numeric literal contains non-ASCII digit 'U+{(int)ch:X4}'; use 0-9.", digitLine, digitCol);
         }

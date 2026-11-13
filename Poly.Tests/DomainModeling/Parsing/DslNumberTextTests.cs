@@ -78,7 +78,7 @@ public sealed class DslNumberTextTests {
 
     [Test]
     public async Task Format_ReaderRefusedRows_StillReadAsRefused() {
-        // Pins the reader's refusal (T-15 owns it): a double below decimal's scale is printed exactly, and the reader says so.
+        // A double below decimal's scale is printed exactly, and the reader refuses it (T-15: a positioned error, see Format_ThenRead_GivesTheSameValueOrAPositionedError).
         foreach (var (label, value, expected) in Rows().Where(r => r.Item3 is null)) {
             var text = DslNumberText.Format(value);
             await Assert.That(() => ReadBack(text)).ThrowsException().Because(label);
@@ -252,6 +252,54 @@ public sealed class DslNumberTextTests {
         await Assert.That(ExprDifferentialTests.Result($"{printed} Days", digest: false)).StartsWith("OK ");
         await Assert.That(InLateTemporalPolicy($"Now - {printed} Days")).StartsWith("OK ");
         await Assert.That(ExprDifferentialTests.Result("9223372036854775808 Days", digest: false)).Contains($"from 0 to {printed}.");
+    }
+
+    [Test]
+    public async Task Format_ThenRead_GivesTheSameValueOrAPositionedError() {
+        // The independent authority is the C# runtime: double/float/decimal parse of the digits the reader accepted.
+        var invariant = System.Globalization.CultureInfo.InvariantCulture;
+        var refused = new List<string>();
+        foreach (var (label, value, _) in Rows().Concat([("float 1e-45", (object)float.Epsilon, null), ("double 1e-28 sum", 1e-28d + 1e-29d, null)])) {
+            var text = DslNumberText.Format(value).TrimStart('-');
+            var read = ReadLiteral(text);
+            if (read.Detail is not null) {
+                refused.Add(label);
+                await Assert.That((read.Line, read.Column)).IsEqualTo((1, 1)).Because(label);
+                await Assert.That(read.Detail).StartsWith("Number '").Because(label);
+                continue;
+            }
+
+            var digits = Convert.ToDecimal(read.Value, invariant).ToString(invariant);
+            var same = value switch {
+                double d => double.Parse(digits, invariant) == Math.Abs(d),
+                float f => float.Parse(digits, invariant) == Math.Abs(f),
+                decimal m => Convert.ToDecimal(read.Value, invariant) == Math.Abs(m),
+                _ => Convert.ToDecimal(read.Value, invariant) == Math.Abs(Convert.ToDecimal(value, invariant)),
+            };
+            await Assert.That(same).IsTrue().Because($"{label} printed '{text}' and the reader gave {digits}");
+        }
+
+        await Assert.That(refused).Contains("double 5e-324 (reader refuses)");
+        await Assert.That(refused).Contains("float 1e-45");
+    }
+
+    [Test]
+    [Arguments("ar-SA")]
+    [Arguments("de-DE")]
+    public async Task LiteralReads_AreCultureInvariant(string culture) {
+        var previous = System.Globalization.CultureInfo.CurrentCulture;
+        System.Globalization.CultureInfo.CurrentCulture = new System.Globalization.CultureInfo(culture);
+        try {
+            await Assert.That(ReadLiteral("1234567890123456789012.5").Value).IsEqualTo(1234567890123456789012.5m);
+            await Assert.That(ReadLiteral("007").Value).IsEqualTo(7L);
+            await Assert.That(ReadLiteral("0.00000000000000000000000000001").Detail).IsEqualTo("Number '0.00000000000000000000000000001' has 29 digits after the point; the maximum is 28.");
+            await Assert.That(OnTextProperty("length(12)")).StartsWith("OK ");
+            await Assert.That(OnTextProperty("column(\"c\", 1.5)")).Contains("AnnotationNumber(Value=Double:1.5)");
+            await Assert.That(DslNumberText.Format(1.5d)).IsEqualTo("1.5");
+        }
+        finally {
+            System.Globalization.CultureInfo.CurrentCulture = previous;
+        }
     }
 
     private static string OnTextProperty(string annotation) => ResolverBaselineTests.Resolve($"domain A\nX: entity {{\n  N: Text {annotation}\n}}\n");

@@ -345,11 +345,9 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
         context.GetTypeLookup()?.Domain is { } domain ? DomainTypeModel.Of(context, domain) : null;
 
     /// <summary>
-    /// Resolves a domain type name. Order is the order the category rules had: a declared enum, a declared
-    /// primitive (typed by its semantics, never by the temporal map), the legacy allowlist, then the model's
-    /// entity and value type definitions. Anything else keeps its name with no definition (named-unresolved):
-    /// the lenient case, which includes the lowercase CLR spellings. T-05 removes the allowlist and the
-    /// named-unresolved leniency.
+    /// Resolves a domain type name through the run's type model (<see cref="DomainTypeModel.Resolve"/>): the one
+    /// resolver, so a pack override or a lowercase CLR spelling means here what it means to lowering (fork B). A name
+    /// the model cannot resolve keeps its name with no definition: untyped, never compatible (T-05b).
     /// </summary>
     private static ExprType ResolveName(
         AnalysisContext context, string name, Dictionary<string, EnumType> enumTypes) {
@@ -365,39 +363,6 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                 return own;
             return new ExprType(null, false, name);
         }
-        var declared = context.GetTypeLookup()?.Domain.Types.FirstOrDefault(t => string.Equals(t.Name, name, StringComparison.Ordinal));
-        if (declared is Ontology.PrimitiveType primitive)
-            return Named(ClrTypeOf(primitive.Semantics), name);
-        if (LegacyClrType(name) is { } legacy)
-            return Named(legacy, name);
-        if (declared is Entity or Ontology.ValueType && model?.Resolve(name) is { IsResolved: true } modeled)
-            return modeled;
-        return new ExprType(null, false, name);
+        return model?.Resolve(name) is { IsResolved: true } modeled ? modeled : new ExprType(null, false, name);
     }
-
-    private static Type? LegacyClrType(string typeName) => typeName switch {
-        "Text" or "String" => typeof(string),
-        "Number" or "Int" or "Int64" => typeof(long),
-        "Int32" => typeof(int),
-        "Decimal" => typeof(decimal),
-        "Float" or "Double" => typeof(double),
-        "Boolean" or "Bool" => typeof(bool),
-        "Uuid" or "Guid" => typeof(Guid),
-        _ => null,
-    };
-
-    private static Type ClrTypeOf(PrimitiveSemantics semantics) => semantics switch {
-        PrimitiveSemantics.Boolean => typeof(bool),
-        PrimitiveSemantics.Number => typeof(long),
-        PrimitiveSemantics.Decimal => typeof(decimal),
-        PrimitiveSemantics.Text => typeof(string),
-        PrimitiveSemantics.Uuid => typeof(Guid),
-        PrimitiveSemantics.Binary => typeof(byte[]),
-        PrimitiveSemantics.Date => typeof(DateOnly),
-        // DateTime keeps the Date family; granularity is compared through the definition.
-        PrimitiveSemantics.DateTime => typeof(DateTime),
-        PrimitiveSemantics.Time => typeof(TimeOnly),
-        PrimitiveSemantics.Duration => typeof(TimeSpan),
-        _ => throw new InvalidOperationException($"Unmapped primitive semantics '{semantics}'."),
-    };
 }

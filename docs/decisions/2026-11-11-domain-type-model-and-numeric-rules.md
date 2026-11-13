@@ -92,8 +92,8 @@ Open or newly decided, named by the contract (an open item names the slice that 
 - **Mixed `Number op Decimal` result type** — decided by T-03b: `Decimal`. `Decimal + Int64` resolves to the
   declared `decimal.op_Addition(decimal, decimal)` because `Int64` converts implicitly to `Decimal`.
 - **`Float64 op Decimal`** — decided by T-03b: none. Neither type converts implicitly to the other, which is C#.
-  Nothing else agrees today (the ledger): the lowered-tree analysis types it `Decimal` (T-17, T-18) and the ABI
-  executes it as `Decimal` (T-21); the domain DSL cannot state a Float operand, so its analyzer column is n/a.
+  The lowered-tree analysis rejects it since T-18 (issue 815), so the ABI no longer runs it; the domain DSL cannot
+  state a Float operand, so its analyzer column is n/a.
 - **The built-in set answers what C# defines** (T-24). The contract answers every conversion and operator C#
   defines for built-in types: the §10.2.3 implicit numeric conversions and §10.3.2's explicit ones, conversion into
   `object` from any other CLR type (§10.2.8, §10.2.9), unary and binary numeric promotion (§12.4.7) through one
@@ -175,12 +175,15 @@ Recorded by T-03b from [#679 comment 6837489066](https://github.com/scoizzle/Pol
   is listed in `Poly/Introspection/README.md`: the tier-sum scoring, the boxing rule stated twice and the analyzer's
   `IsImplicitlyConvertible(Type, Type)` residuals, none with a removing row yet; `IsCollectionShape` and
   `GetElementType` also name CLR types but do not answer a conversion), T-17 (`PromoteNumeric`/`GetNumericRank`/`ResolveAddType`),
-  T-18 (`SyntaxTypeCompatibilityAnalyzer`), T-19 (`LambdaBridge.PromoteNumeric`), T-20
+  T-18 (`SyntaxTypeCompatibilityAnalyzer`: converged, its arithmetic and comparison verdicts and the Decimal
+  rewrite read `GetOperator` and `ResolveConversionFrom`; the named rules it keeps, with their removing rows T-07,
+  T-10, T-21, T-22, T-25, T-26, T-27 and T-28, are listed in CORE), T-19 (`LambdaBridge.PromoteNumeric`), T-20
   (`ConstantFoldingPass.Promote`: converged, folding asks `GetOperator` and applies the chosen signature; it leaves
   the resolved-type guard for T-17 and the declared-operator fence for T-10; folding no longer masks `VmTypeCompatibility`
-  for a mismatched-type constant comparison or a short-circuit over a non-Boolean operand, which are now rejected at
-  compile as C# rejects them, and control-flow pruning is lost for the 828 provider-undefined constant shapes master
-  folded; the master fold list is re-derived from the head and compared by checksum, not by count only), T-21 (the
+  for a mismatched-type constant equality (672 rows of the fold grid, Text against Char included since T-18) or a
+  short-circuit over a non-Boolean operand, which are now rejected at compile as C# rejects them, and control-flow
+  pruning is lost for the 828 provider-undefined constant shapes master folded, of which T-18 also rejects at compile
+  the 144 Decimal-against-Float and signed-against-UInt64 comparisons; the master fold list is re-derived from the head and compared by checksum, not by count only), T-21 (the
   emitter's promotion).
 
 Landed shape (T-03b): `TypeConversion(Kind, Method?)` (null `Method` means the platform applies it),

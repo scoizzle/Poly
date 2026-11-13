@@ -78,19 +78,28 @@ public class AbiEmitterCompareDomainTests {
         await Assert.That(Run(new Equal(Optional<int>("count"), Optional<decimal>("amount")), null, 4.0m)).IsEqualTo(0L);
     }
 
+    /// <summary>The platform defines no <c>decimal == double</c> (C# CS0019; issue 815), so the lowered analysis rejects it (T-18).</summary>
     [Test]
-    public async Task DecimalParameter_Equal_DoubleParameter_UsesValue() {
-        await Assert.That(Run(new Equal(Param<decimal>("amount"), Param<double>("width")), 1.5m, 1.5d)).IsEqualTo(1L);
+    public async Task DecimalParameter_Equal_DoubleParameter_IsCompileRejected() {
+        await Assert.That(() => Interpreter.Compile(new Equal(Param<decimal>("amount"), Param<double>("width"))))
+            .Throws<InvalidOperationException>()
+            .WithMessage("VM compile rejected: comparison between incompatible types 'Decimal' and 'Double': no Equal operator for these types");
     }
 
+    /// <summary>The platform defines no <c>decimal == float</c> (C# CS0019; issue 815), so the lowered analysis rejects it (T-18).</summary>
     [Test]
-    public async Task DecimalParameter_Equal_FloatParameter_UsesValue() {
-        await Assert.That(Run(new Equal(Param<decimal>("amount"), Param<float>("width")), 1.5m, 1.5f)).IsEqualTo(1L);
+    public async Task DecimalParameter_Equal_FloatParameter_IsCompileRejected() {
+        await Assert.That(() => Interpreter.Compile(new Equal(Param<decimal>("amount"), Param<float>("width"))))
+            .Throws<InvalidOperationException>()
+            .WithMessage("VM compile rejected: comparison between incompatible types 'Decimal' and 'Single': no Equal operator for these types");
     }
 
+    /// <summary>Was a value test of the same pair with different values; the pair is rejected before any value is read (T-18).</summary>
     [Test]
-    public async Task DecimalParameter_Equal_DoubleParameter_DifferentValues_IsFalse() {
-        await Assert.That(Run(new Equal(Param<decimal>("amount"), Param<double>("width")), 1.5m, 1.9d)).IsEqualTo(0L);
+    public async Task DecimalParameter_Equal_DoubleParameter_DifferentValues_IsCompileRejected() {
+        await Assert.That(() => Interpreter.Compile(new Equal(Param<decimal>("amount"), Param<double>("width"))))
+            .Throws<InvalidOperationException>()
+            .WithMessage("VM compile rejected: comparison between incompatible types 'Decimal' and 'Double': no Equal operator for these types");
     }
 
     [Test]
@@ -117,9 +126,15 @@ public class AbiEmitterCompareDomainTests {
         await Assert.That(Run(new GreaterThan(Param<ulong>("count"), new Constant(1)), ulong.MaxValue)).IsEqualTo(1L);
     }
 
+    /// <summary>
+    /// -1 is not in range for <c>ulong</c>, so C# has no constant conversion and no operator for the pair (spec 10.2.11;
+    /// owner ruling #679 6842272727): rejected, where a non-negative constant is accepted (the test above, T-18).
+    /// </summary>
     [Test]
-    public async Task ULongParameter_Equal_SignedMinusOne_IsFalse() {
-        await Assert.That(Run(new Equal(new Constant(-1), Param<ulong>("count")), ulong.MaxValue)).IsEqualTo(0L);
+    public async Task ULongParameter_Equal_SignedMinusOne_IsCompileRejected() {
+        await Assert.That(() => Interpreter.Compile(new Equal(new Constant(-1), Param<ulong>("count"))))
+            .Throws<InvalidOperationException>()
+            .WithMessage("VM compile rejected: comparison between incompatible types 'Int32' and 'UInt64': no Equal operator for these types");
     }
 
     [Test]
@@ -157,10 +172,13 @@ public class AbiEmitterCompareDomainTests {
         await Assert.That(Run(new GreaterThan(new Constant('a'), Param<ulong>("count")), ulong.MaxValue)).IsEqualTo(0L);
     }
 
+    /// <summary>An API-built double constant beside a decimal is the fail-closed outcome issue 815 names: no operator, rejected (T-18).</summary>
     [Test]
-    public async Task DecimalParameter_Equal_DoubleBeyondPrecision_MatchesFold() {
+    public async Task DecimalParameter_Equal_DoubleConstant_IsCompileRejected() {
         const decimal exact = 9007199254740993m;
-        await Assert.That(Run(new Equal(Param<decimal>("amount"), new Constant((double)exact)), exact)).IsEqualTo(1L);
+        await Assert.That(() => Interpreter.Compile(new Equal(Param<decimal>("amount"), new Constant((double)exact))))
+            .Throws<InvalidOperationException>()
+            .WithMessage("VM compile rejected: comparison between incompatible types 'Decimal' and 'Double': no Equal operator for these types");
     }
 
     private enum Shade { Red, Blue }

@@ -87,13 +87,6 @@ internal static class ResolverErrorBaseline {
         ("E:ladder:Entities:ResolvePendingRequires#1/Entities:ResolvePendingRequires#2", "G-32", "@5:2 off=-1 len=0 :: Action 'Go' requires policy 'M1'"),
         ("E:ladder:Entities:ResolvePendingRequires#2/Entities:ResolvePendingRequires#3", "G-32", "@5:2 off=-1 len=0 :: Action 'Go' requires policy 'M1'"),
         ("E:defer:order:requires-before-navs", "G-32", "@7:2 off=-1 len=0 :: Action 'Go' requires policy 'M'"),
-        // G-28: the message does not show the token kind (a quoted string reads as `got 'value'`).
-        ("E:pub:1", "G-28", "after 'public', got 'value'"),
-        ("E:pub:2", "G-28", "after 'public', got 'str'"),
-        ("E:pub:3", "G-28", "after 'public', got '5'"),
-        ("E:pub:4", "G-28", "after 'public', got '{'"),
-        ("E:pub:5", "G-28", "after 'public', got 'action'"),
-        ("E:pub:8", "G-28", "after 'public', got ''"),
     ];
 
     /// <summary>Where a tag's fixing row lives when that is not obvious from the fixer: a site in G-30 or G-33 code is fixed by whichever row converts it.</summary>

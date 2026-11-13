@@ -1,7 +1,10 @@
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Ontology;
+using Poly.Interpretation.CSharp;
+using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.DomainModeling.Analysis;
 
@@ -486,5 +489,103 @@ public class OwnershipAggregateAnalysisTests {
 
         await Assert.That(Errors(analysis, DomainModelDiagnosticCodes.StructuralDuplicate).Count).IsGreaterThan(0);
         await Assert.That(Errors(analysis, Dmstr010)).IsEmpty();
+    }
+
+    // ── V-14 (#586): characterisation of master, before the ownership-cycle error ──────────────
+
+    private static IReadOnlyList<Diagnostic> Warnings(AnalysisResult analysis) =>
+        analysis.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Warning).ToList();
+
+    private const string MutuallyOwnedRepro = """
+        domain OwnCycle
+        A: entity {
+          Name: Text
+          b: owned B
+        }
+        B: entity {
+          Name: Text
+          a: owned A
+        }
+        """;
+
+    [Test]
+    public async Task Master_MutuallyOwnedEntities_AnalyseClean_Pin() {
+        // #586 on master: the repro has no error and no warning (a pure inverse pair is
+        // dropped from CrossReferencePass's DMDEP001 graph), so Lower runs on it.
+        var (_, analysis) = Run(MutuallyOwnedRepro);
+        await Assert.That(AllErrors(analysis)).IsEmpty();
+        await Assert.That(Warnings(analysis)).IsEmpty();
+    }
+
+    [Test]
+    public async Task Master_MutuallyOwnedEntities_AggregateTerminates_Pin() {
+        // The aggregate pass follows ownership parents. On the repro it terminates (the
+        // ResolvesTo guard stops the two-node loop) and a parentless entity is a root.
+        var (domain, analysis) = Analyze(MutuallyOwnedRepro);
+        var aggregate = Aggregate(analysis, domain);
+        await Assert.That(aggregate.Entities.Count).IsEqualTo(2);
+        await AssertParentInvariant(aggregate);
+    }
+
+    [Test]
+    public async Task Master_MutuallyOwnedEntities_LowerAndPrintCSharp_Pin() {
+        // Downstream of analysis, master lowers and prints the repro without throwing
+        // (the issue: "the C# export ignores ownership entirely for the pair").
+        var session = ParitySessions.Create(ExtensionCatalog.ProductAuthoring);
+        var evolved = new DomainEvolution(DomainTestFactory.Create("_", [], []))
+            .ApplyAndAnalyze(new PolyDslParser(MutuallyOwnedRepro, session).Parse(), session: session);
+        await Assert.That(evolved.Succeeded).IsTrue();
+        var cs = new CSharpGenerator().Generate(session.Lower(evolved.Root!, evolved.Analysis));
+        await Assert.That(cs).Contains("class A");
+        await Assert.That(cs).Contains("class B");
+    }
+
+    [Test]
+    public async Task Master_NeighbourShapes_AnalyseClean_Pin() {
+        // Shapes the V-14 rule must NOT move: an owned chain, and an owned navigation
+        // with a plain inverse. (Self-owning is pinned above by SelfOwning_IsClean_Pin.)
+        string[] clean = [
+            """
+            domain Chain
+            A: entity {
+              Name: Text
+              b: owned B
+            }
+            B: entity {
+              Name: Text
+              c: owned C
+            }
+            C: entity {
+              Name: Text
+            }
+            """,
+            """
+            domain OwnedWithPlainInverse
+            A: entity {
+              Name: Text
+              b: owned B
+            }
+            B: entity {
+              Name: Text
+              a: A
+            }
+            """,
+        ];
+        foreach (var dsl in clean) {
+            var (_, analysis) = Run(dsl);
+            await Assert.That(AllErrors(analysis)).IsEmpty();
+        }
+    }
+
+    [Test]
+    public async Task Master_ThreeEntityOwnedRing_AnalysesClean_Pin() {
+        // Master accepts the three-entity ring too (no errors); V-14 moves it.
+        var (_, analysis) = Run("""
+            domain Ring
+            A: entity { b: owned B }
+            B: entity { c: owned C }
+            C: entity { a: owned A }
+            """);
+        await Assert.That(AllErrors(analysis)).IsEmpty();
     }
 }

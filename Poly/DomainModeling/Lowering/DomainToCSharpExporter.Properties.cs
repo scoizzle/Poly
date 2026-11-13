@@ -200,7 +200,7 @@ public sealed partial class DomainToCSharpExporter {
         // Required scalars first, then optional assign-only scalars, each in
         // declaration order. Defaulted properties are not in this list; they stay
         // in defaultedCtorParams (L-08 removes that split).
-        var scalarOrder = esm.ConstructorParameters.Where(p => !p.IsNavigation).ToList();
+        var scalarOrder = LegacyConstructorOrder(esm).Where(p => !p.IsNavigation).ToList();
         if (scalarOrder.Count > 0 && ctorParams.Count > 0) {
             var paramsByName = ctorParams.ToDictionary(p => p.Name, StringComparer.Ordinal);
             var scalarProps = scalarOrder.Select(o => o.Name).ToHashSet(StringComparer.Ordinal);

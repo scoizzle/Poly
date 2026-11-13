@@ -36,11 +36,11 @@ public sealed record EntityStructureMetadata(
     IReadOnlyDictionary<string, Stage>? StageByName,
 
     /// <summary>
-    /// Constructor parameter order for entity creation lowering: declaration order
-    /// within the required block, then within the trailing defaulted/optional block.
-    /// The block split itself is L-08's (it makes every Create parameter optional).
+    /// The slots of the entity's <c>Create</c>, in member declaration order: every property that is
+    /// not definitely entry-assigned, and every navigation. The one fact every <c>Create</c> signature,
+    /// caller and guard reads (<see cref="CreateSlot"/>).
     /// </summary>
-    IReadOnlyList<ConstructorParameterOrder> ConstructorParameters,
+    IReadOnlyList<CreateSlot> CreateSlots,
 
     /// <summary>
     /// Every entity property that is required at create — the property has no
@@ -106,6 +106,44 @@ public sealed record EntityStructureMetadata(
     /// <summary>True when the entity designates a key.</summary>
     public bool HasKey => Id.Count > 0;
 }
+
+/// <summary>What omitting a create slot means.</summary>
+public enum CreateSlotKind {
+    /// <summary>The caller must supply a value; null fails <c>Required</c>.</summary>
+    Required,
+
+    /// <summary>Null takes the authored <c>default(...)</c>.</summary>
+    Defaulted,
+
+    /// <summary>Null is stored as null.</summary>
+    Optional,
+}
+
+/// <summary>The member a create slot stands for.</summary>
+public enum CreateSlotShape {
+    /// <summary>A property.</summary>
+    Scalar,
+
+    /// <summary>A singular navigation.</summary>
+    Reference,
+
+    /// <summary>A collection navigation.</summary>
+    Collection,
+}
+
+/// <summary>
+/// One <c>Create</c> slot. <paramref name="Default"/> is the AUTHORED default (lowering lowers it);
+/// <paramref name="IsSelfNavigation"/> marks a navigation whose target is the entity itself, and says
+/// nothing about which navigation a <c>create in</c> fills automatically.
+/// </summary>
+public sealed record CreateSlot(
+    string Name,
+    CreateSlotKind Kind,
+    DomainTypeReference Type,
+    CreateSlotShape Shape,
+    DefaultValueConstraint? Default = null,
+    bool IsSelfNavigation = false,
+    bool InventsEmptyDefault = false);
 
 public sealed record ConstructorParameterOrder(
     string Name,

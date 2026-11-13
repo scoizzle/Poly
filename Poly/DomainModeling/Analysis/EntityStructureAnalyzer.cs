@@ -69,8 +69,8 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
         }
 
         var assignOnlyPropertyNames = ComputeAssignOnlyPropertyNames(entity);
-        var constructorParameters = ComputeConstructorParameterOrder(entity, lookup, assignOnlyPropertyNames);
         var entryAssignedPropertyNames = ComputeEntryAssignedPropertyNames(entity);
+        var createSlots = ComputeCreateSlots(entity, lookup, assignOnlyPropertyNames, entryAssignedPropertyNames);
         var requiredPropertyNames = ComputeRequiredPropertyNames(entity);
 
         // ── Lifecycle detection ────────────────────────────────
@@ -115,7 +115,7 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
 
         return new EntityStructureMetadata(
             isRoot, hasNaturalKey, keyPropName, keyClrType,
-            hasStages, stageEnumTypeName, stageByName, constructorParameters,
+            hasStages, stageEnumTypeName, stageByName, createSlots,
             requiredPropertyNames, enumPropertyNames, entryAssignedPropertyNames,
             lifecyclePropertyName, lifecycleEnumTypeName, assignOnlyPropertyNames,
             GuardClosedProperties.Compute(entity, domain).Closed,
@@ -297,51 +297,52 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
                 || stage.Subscriptions.Any(s => In(s.Effects, stageName)));
     }
 
-    private static IReadOnlyList<ConstructorParameterOrder> ComputeConstructorParameterOrder(
-        Entity entity, DomainTypeLookupMetadata lookup, IReadOnlySet<string> assignOnly) {
-        var parameters = new List<ConstructorParameterOrder>();
-        var required = new List<ConstructorParameterOrder>();
-        var optional = new List<ConstructorParameterOrder>();
-
-        // Props assigned by the initial stage's entry effects are body-initialized in
-        // the exported ctor (which runs those effects after setting CurrentStage) —
-        // they are NOT ctor params. Shared rule published as
-        // EntityStructureMetadata.EntryAssignedPropertyNames (single source of truth).
-        var entryAssignedProps = ComputeEntryAssignedPropertyNames(entity);
-        var requiredProps = ComputeRequiredPropertyNames(entity);
-
-        // Declaration order. The required/optional block split is C#-mandated
-        // (defaulted parameters must be last); L-08 removes it by emitting every
-        // Create parameter as `T? x = default` in declaration order.
-        foreach (var prop in entity.Properties) {
-            // Optional properties are trailing `T? = null` parameters, added after
-            // the required scalar and navigation parameters.
-            if (!requiredProps.Contains(prop.Name)) continue;
-            if (prop.Constraints.Any(c => c is DefaultValueConstraint)) continue;
-            if (entryAssignedProps.Contains(prop.Name)) continue;
-            var isOptional = assignOnly.Contains(prop.Name)
-                && EmptyIsLegal(prop, lookup);
-            var order = new ConstructorParameterOrder(
-                prop.Name, prop.Type, IsNavigation: false, IsBackReference: false,
-                IsOptional: isOptional);
-            (isOptional ? optional : required).Add(order);
-        }
-        parameters.AddRange(required);
-        parameters.AddRange(optional);
-
-        foreach (var rel in entity.Navigations) {
-            var isMany = rel.Cardinality is RelationshipCardinality.OneToMany
-                         or RelationshipCardinality.ManyToMany;
-            if (string.Equals(rel.Target.TypeName, entity.Name, StringComparison.Ordinal)) {
-                parameters.Add(new ConstructorParameterOrder(rel.Name, rel.Target, IsNavigation: true, IsBackReference: true, IsCollection: isMany));
-                continue;
+    /// <summary>
+    /// The entity's <c>Create</c> slots in member declaration order: every property that is not
+    /// definitely entry-assigned (the constructor's entry effects initialize those), and every
+    /// navigation.
+    /// </summary>
+    private static IReadOnlyList<CreateSlot> ComputeCreateSlots(
+        Entity entity, DomainTypeLookupMetadata lookup, IReadOnlySet<string> assignOnly,
+        IReadOnlySet<string> entryAssigned) {
+        var slots = new List<CreateSlot>();
+        foreach (var member in EntityDeclarationOrder.Members(entity)) {
+            switch (member.Node) {
+                case Property prop when !entryAssigned.Contains(prop.Name): {
+                        var kind = SlotKindFor(prop);
+                        slots.Add(new CreateSlot(
+                            prop.Name, kind, prop.Type, CreateSlotShape.Scalar,
+                            prop.Constraints.OfType<DefaultValueConstraint>().FirstOrDefault(),
+                            InventsEmptyDefault: kind == CreateSlotKind.Required
+                                && assignOnly.Contains(prop.Name)
+                                && EmptyIsLegal(prop, lookup)));
+                        break;
+                    }
+                case Relationship rel: {
+                        var isMany = rel.Cardinality is RelationshipCardinality.OneToMany
+                            or RelationshipCardinality.ManyToMany;
+                        slots.Add(new CreateSlot(
+                            rel.Name, SlotKindFor(rel), rel.Target,
+                            isMany ? CreateSlotShape.Collection : CreateSlotShape.Reference,
+                            IsSelfNavigation: string.Equals(rel.Target.TypeName, entity.Name, StringComparison.Ordinal)));
+                        break;
+                    }
             }
-
-            parameters.Add(new ConstructorParameterOrder(rel.Name, rel.Target, IsNavigation: true, IsBackReference: false, IsCollection: isMany));
         }
-
-        return parameters;
+        return slots;
     }
+
+    /// <summary>
+    /// A property's create slot kind: a <c>default(...)</c> makes it Defaulted (with or without
+    /// <c>optional</c>); otherwise a required property is Required and an optional one Optional.
+    /// </summary>
+    internal static CreateSlotKind SlotKindFor(Property property) =>
+        property.Constraints.Any(static c => c is DefaultValueConstraint) ? CreateSlotKind.Defaulted
+        : IsRequired(property) ? CreateSlotKind.Required
+        : CreateSlotKind.Optional;
+
+    /// <summary>A navigation's create slot kind. The one place a navigation's kind is decided.</summary>
+    internal static CreateSlotKind SlotKindFor(Relationship navigation) => CreateSlotKind.Optional;
 
     /// <summary>
     /// Determines if an entity has a required entity reference in its

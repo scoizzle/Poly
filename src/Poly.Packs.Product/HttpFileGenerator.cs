@@ -2,6 +2,7 @@ using System.Text;
 
 using Poly.Analysis;
 using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Lowering;
 
 namespace Poly.Packs.Product;
 
@@ -42,7 +43,7 @@ public sealed class HttpFileGenerator {
     /// </summary>
     private IReadOnlyList<ConstructorParameterOrder> GetCreateScalarParams(Entity entity) {
         if (_analysis.GetStructure(entity) is { } esm)
-            return esm.ConstructorParameters.Where(p => !p.IsNavigation).ToList();
+            return DomainToCSharpExporter.LegacyConstructorOrder(esm).Where(p => !p.IsNavigation).ToList();
         return [];
     }
 

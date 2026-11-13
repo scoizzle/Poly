@@ -478,7 +478,7 @@ public class DomainToCSharpExporterTests {
         var loan = domain.Types.OfType<Entity>().Single(e => e.Name == "Loan");
         var esm = analysis.GetMetadata<EntityStructureMetadata>(loan);
         await Assert.That(esm).IsNotNull();
-        await Assert.That(esm!.ConstructorParameters.Count).IsGreaterThan(0);
+        await Assert.That(esm!.CreateSlots.Count).IsGreaterThan(0);
 
         var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var patron = types.First(t => t.Name == "Patron");
@@ -487,7 +487,7 @@ public class DomainToCSharpExporterTests {
 
         var createParams = createLoans!.Parameters?.Select(p => p.Name).ToArray() ?? [];
         var autoWireBackRef = DomainToCSharpExporter.FindAutoWireBackReference(loan, "Patron");
-        var expected = esm.ConstructorParameters
+        var expected = DomainToCSharpExporter.GetConstructorParameters(loan, analysis)
             .Where(p => !p.IsBackReference)
             .Where(p => autoWireBackRef is null
                 || !string.Equals(p.Name, autoWireBackRef.Name, StringComparison.Ordinal))
@@ -1863,9 +1863,9 @@ public class DomainToCSharpExporterTests {
 
     [Test]
     public async Task EsmConstructorSignature_IncludesCollectionNavs() {
-        // The shared constructor metadata (EntityStructureMetadata.ConstructorParameters)
-        // is now the COMPLETE create signature — collection navs included with
-        // IsCollection=true. Consumers read this instead of re-scanning
+        // The shared create metadata (EntityStructureMetadata.CreateSlots) is the
+        // COMPLETE create signature — collection navs included with
+        // Shape=Collection. Consumers read this instead of re-scanning
         // domain.Relationships (the CS7036 bug class).
         var (domain, analysis) = ParseAndAnalyze("""
             domain Demo
@@ -1881,14 +1881,12 @@ public class DomainToCSharpExporterTests {
         var esm = analysis.GetMetadata<EntityStructureMetadata>(compilation);
         await Assert.That(esm).IsNotNull();
 
-        var tokens = esm!.ConstructorParameters.Single(p => p.Name == "tokens");
-        await Assert.That(tokens.IsNavigation).IsTrue();
-        await Assert.That(tokens.IsCollection).IsTrue();
-        await Assert.That(tokens.IsBackReference).IsFalse();
+        var tokens = esm!.CreateSlots.Single(s => s.Name == "tokens");
+        await Assert.That(tokens.Shape).IsEqualTo(CreateSlotShape.Collection);
+        await Assert.That(tokens.IsSelfNavigation).IsFalse();
 
-        var source = esm.ConstructorParameters.Single(p => p.Name == "source");
-        await Assert.That(source.IsNavigation).IsTrue();
-        await Assert.That(source.IsCollection).IsFalse();
+        var source = esm.CreateSlots.Single(s => s.Name == "source");
+        await Assert.That(source.Shape).IsEqualTo(CreateSlotShape.Reference);
     }
 
     [Test]

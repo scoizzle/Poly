@@ -303,10 +303,27 @@ public sealed partial class DomainToCSharpExporter {
         Entity targetEntity,
         INodeMetadataProvider analysis) {
         if (analysis.GetStructure(targetEntity) is EntityStructureMetadata esm)
-            return esm.ConstructorParameters;
+            return LegacyConstructorOrder(esm);
 
         throw new InvalidOperationException(
             $"EntityStructureMetadata is required for constructor ordering on entity '{targetEntity.Name}'.");
+    }
+
+    /// <summary>
+    /// The constructor slots in today's block order, read from <see cref="EntityStructureMetadata.CreateSlots"/>:
+    /// required scalars, then required scalars that get an empty default, then navigations.
+    /// </summary>
+    internal static IReadOnlyList<ConstructorParameterOrder> LegacyConstructorOrder(EntityStructureMetadata esm) {
+        var slots = esm.CreateSlots;
+        return [
+            .. slots.Where(s => s is { Shape: CreateSlotShape.Scalar, Kind: CreateSlotKind.Required, InventsEmptyDefault: false })
+                .Select(s => new ConstructorParameterOrder(s.Name, s.Type, IsNavigation: false, IsBackReference: false)),
+            .. slots.Where(s => s is { Shape: CreateSlotShape.Scalar, Kind: CreateSlotKind.Required, InventsEmptyDefault: true })
+                .Select(s => new ConstructorParameterOrder(s.Name, s.Type, IsNavigation: false, IsBackReference: false, IsOptional: true)),
+            .. slots.Where(s => s.Shape != CreateSlotShape.Scalar)
+                .Select(s => new ConstructorParameterOrder(s.Name, s.Type, IsNavigation: true,
+                    IsBackReference: s.IsSelfNavigation, IsCollection: s.Shape == CreateSlotShape.Collection)),
+        ];
     }
 
     /// <summary>
@@ -331,16 +348,10 @@ public sealed partial class DomainToCSharpExporter {
         Entity entity,
         INodeMetadataProvider metadata) {
         var structure = RequireStructure(entity, metadata);
-        var entryAssigned = structure.EntryAssignedPropertyNames;
-        var required = structure.RequiredPropertyNames;
         var list = new List<Property>();
-        foreach (var prop in entity.Properties) {
-            if (required.Contains(prop.Name)
-                && !prop.Constraints.OfType<DefaultValueConstraint>().Any())
-                continue;
-            if (entryAssigned.Contains(prop.Name))
-                continue;
-            list.Add(prop);
+        foreach (var slot in structure.CreateSlots) {
+            if (slot is { Shape: CreateSlotShape.Scalar, Kind: not CreateSlotKind.Required })
+                list.Add(entity.Properties.First(p => string.Equals(p.Name, slot.Name, StringComparison.Ordinal)));
         }
         return list;
     }
@@ -554,7 +565,7 @@ public sealed partial class DomainToCSharpExporter {
             createSuccessNodes.Add(new Invoke(new Member(createdLocal, "InitializeSubscriptions")));
         }
         var lookup = metadata.GetTypeLookup(domain);
-        foreach (var navParam in esm.ConstructorParameters
+        foreach (var navParam in LegacyConstructorOrder(esm)
             .Where(p => p.IsNavigation && !p.IsCollection)) {
             var paramName = ToCamelCase(navParam.Name);
             // The signature parameter, not a same-named copy. A copy has no

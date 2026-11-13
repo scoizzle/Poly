@@ -197,18 +197,18 @@ public sealed partial class DomainToCSharpExporter {
 
     /// <summary>
     /// Constructor parameters and assignments for navigation slots, taken from the
-    /// COMPLETE published signature (<see cref="EntityStructureMetadata.ConstructorParameters"/>).
+    /// COMPLETE published signature (<see cref="EntityStructureMetadata.CreateSlots"/>).
     /// </summary>
     private static void AddNavigationCtorParameters(
         EntityStructureMetadata esm, Domain domain, INodeMetadataProvider metadata,
         List<Parameter> ctorParams, List<Node> ctorAssignments) {
         // ── Constructor params for navs — from the COMPLETE signature (ESM) ──
-        // EntityStructureMetadata.ConstructorParameters now includes collection navs
+        // EntityStructureMetadata.CreateSlots includes collection navs
         // (IsCollection). This is the single source of truth for the emitted Create(...)
         // signature — no per-consumer re-derivation of cardinality/order here (the
         // callers already read the same bag). Order matches the nav loop above
         // (relationship order), so output is unchanged.
-        foreach (var navParam in esm.ConstructorParameters.Where(p => p.IsNavigation)) {
+        foreach (var navParam in LegacyConstructorOrder(esm).Where(p => p.IsNavigation)) {
             var paramName = ToCamelCase(navParam.Name);
             if (navParam.IsCollection) {
                 var fieldName = $"_{paramName}";

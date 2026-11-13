@@ -37,9 +37,9 @@ public sealed class CreateDeclarationOrderTests {
         var entity = domain.Types.OfType<Entity>().Single(e => e.Name == "Product");
 
         // (a) the published fact every Create consumer reads.
-        var fact = analysis.GetStructure(entity)!.ConstructorParameters.Select(p => p.Name);
+        var fact = analysis.GetStructure(entity)!.CreateSlots.Select(s => s.Name);
         await Assert.That(fact).IsEquivalentTo(["Price", "OnHand", "Sku"], CollectionOrdering.Matching)
-            .Because("ESM.ConstructorParameters is declaration order, not ordinal");
+            .Because("ESM.CreateSlots is declaration order, not ordinal");
 
         // (b) the printed Create factory's parameters.
         var create = CreateMethod(domain, analysis, "Product");

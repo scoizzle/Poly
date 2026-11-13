@@ -3,6 +3,7 @@ using Poly.Ast;
 using Poly.Ast.Nodes;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Compile;
+using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Runtime;
 using Poly.Interpretation.CSharp;
 using Poly.Runtime;
@@ -80,7 +81,7 @@ public sealed partial class MinimalApiGenerator {
                 $"EntityStructureMetadata is required for constructor ordering on entity '{entity.Name}'.");
         }
 
-        return metadata.ConstructorParameters;
+        return DomainToCSharpExporter.LegacyConstructorOrder(metadata);
     }
 
     /// <summary>

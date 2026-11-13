@@ -535,7 +535,7 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
     /// Folds an operator over constant operands. The type provider decides: <c>GetOperator</c> states whether the
     /// operator applies and which signature it is, each operand converts to that signature's parameter type, and the
     /// operator is applied. A cell the provider states nothing for declines (fail closed), except equality of two values
-    /// of one non-numeric type with no operator (an enum), which keeps <see cref="object.Equals(object?, object?)"/>.
+    /// of one enum type, which keeps <see cref="object.Equals(object?, object?)"/>.
     /// </summary>
     private FoldResult FoldOperator(AnalysisContext context, Node node, OperatorKind kind, Node left, Node? right, IReadOnlyDictionary<NodeId, object?>? parameterValues) {
         if (!TryGetOperand(context, left, parameterValues, out var leftValue))
@@ -551,7 +551,8 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
         var leftType = leftValue.GetType();
         var rightType = rightValue?.GetType();
         var handled = IsFoldableCell(kind, leftType, rightType);
-        var sameTypeEquality = equality && leftType == rightType && !NumericTypes.Contains(leftType);
+        // Two values of one enum type have no operator from the provider; they keep object.Equals.
+        var sameTypeEquality = equality && leftType == rightType && leftType.IsEnum;
         if (!handled && !sameTypeEquality)
             return FoldResult.NotFoldable;
 

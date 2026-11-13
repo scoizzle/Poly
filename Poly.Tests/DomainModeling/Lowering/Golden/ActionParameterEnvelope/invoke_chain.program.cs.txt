@@ -60,8 +60,9 @@ app.MapPost("/api/meters/{id}/bump", async (int id, BumpDto dto, TDbCtx db) => {
             return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
+        app.Logger.LogError(ex, "Action {Action} failed", "Meter.Bump");
         return StatusProblem(500, "Internal Server Error");
     }
 });
@@ -85,8 +86,9 @@ app.MapPost("/api/meters/{id}/ship", async (int id, ShipDto dto, TDbCtx db) => {
             return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
+        app.Logger.LogError(ex, "Action {Action} failed", "Meter.Ship");
         return StatusProblem(500, "Internal Server Error");
     }
 });

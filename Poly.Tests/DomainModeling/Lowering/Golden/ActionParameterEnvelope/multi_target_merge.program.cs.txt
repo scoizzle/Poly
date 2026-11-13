@@ -60,8 +60,9 @@ app.MapPost("/api/pairs/{id}/both", async (int id, BothDto dto, TDbCtx db) => {
             return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
+        app.Logger.LogError(ex, "Action {Action} failed", "Pair.Both");
         return StatusProblem(500, "Internal Server Error");
     }
 });
@@ -85,8 +86,9 @@ app.MapPost("/api/pairs/{id}/conflict", async (int id, ConflictDto dto, TDbCtx d
             return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
+        app.Logger.LogError(ex, "Action {Action} failed", "Pair.Conflict");
         return StatusProblem(500, "Internal Server Error");
     }
 });

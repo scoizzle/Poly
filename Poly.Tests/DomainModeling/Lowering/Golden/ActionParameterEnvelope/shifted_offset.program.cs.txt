@@ -60,8 +60,9 @@ app.MapPost("/api/books/{id}/shift", async (int id, ShiftDto dto, TDbCtx db) => 
             return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
+        app.Logger.LogError(ex, "Action {Action} failed", "Book.Shift");
         return StatusProblem(500, "Internal Server Error");
     }
 });

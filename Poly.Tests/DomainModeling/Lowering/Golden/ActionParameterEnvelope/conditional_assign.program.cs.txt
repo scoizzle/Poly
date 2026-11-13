@@ -60,8 +60,9 @@ app.MapPost("/api/books/{id}/restock", async (int id, RestockDto dto, TDbCtx db)
             return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
+        app.Logger.LogError(ex, "Action {Action} failed", "Book.Restock");
         return StatusProblem(500, "Internal Server Error");
     }
 });
@@ -85,8 +86,9 @@ app.MapPost("/api/books/{id}/either", async (int id, EitherDto dto, TDbCtx db) =
             return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
+        app.Logger.LogError(ex, "Action {Action} failed", "Book.Either");
         return StatusProblem(500, "Internal Server Error");
     }
 });

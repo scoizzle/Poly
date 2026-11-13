@@ -86,8 +86,9 @@ app.MapPost("/api/orders/{id}/addline", async (int id, AddLineDto dto, TDbCtx db
             return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
+        app.Logger.LogError(ex, "Action {Action} failed", "Order.AddLine");
         return StatusProblem(500, "Internal Server Error");
     }
 });

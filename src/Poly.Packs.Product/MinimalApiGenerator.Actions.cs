@@ -131,14 +131,16 @@ public sealed partial class MinimalApiGenerator {
                     failure));
             }
 
-            // Catch: a ProblemDetails 500 with no exception text. No variable — the exception is
-            // swallowed (avoids CS0168 unused-variable warnings).
-            var catchBody = new Return(ProblemResponse(500, "Internal Server Error"));
+            // Catch: logs the exception, then a ProblemDetails 500 with no exception text.
+            var catchBody = new Block(
+                new Invoke(new Member(new Member(new TypeReference(AppVar), "Logger"), "LogError"),
+                    new Variable("ex"), new Constant("Action {Action} failed"), new Constant($"{entity.Name}.{ia.Name}")),
+                new Return(ProblemResponse(500, "Internal Server Error")));
 
             var bodyNodes = new List<Node>(preActionNodes);
             bodyNodes.Add(new TryCatchFinally(
                 Stmts(tryBody),
-                CatchClauses: [new CatchClause(new NamedTypeReference("Exception"), null, catchBody)]));
+                CatchClauses: [new CatchClause(new NamedTypeReference("Exception"), "ex", catchBody)]));
 
             statements.Add(new Invoke(
                 new Member(new TypeReference(AppVar), "MapPost"),

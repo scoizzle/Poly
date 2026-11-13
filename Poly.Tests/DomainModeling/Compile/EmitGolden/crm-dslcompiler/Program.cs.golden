@@ -318,8 +318,9 @@ app.MapPost("/api/leads/{email}/convert", async (string email, CrmDbContext db) 
             return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
+        app.Logger.LogError(ex, "Action {Action} failed", "Lead.Convert");
         return StatusProblem(500, "Internal Server Error");
     }
 });
@@ -343,8 +344,9 @@ app.MapPost("/api/leads/{email}/disqualify", async (string email, CrmDbContext d
             return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
+        app.Logger.LogError(ex, "Action {Action} failed", "Lead.Disqualify");
         return StatusProblem(500, "Internal Server Error");
     }
 });
@@ -371,8 +373,9 @@ app.MapPost("/api/accounts/{id}/placehq", async (int id, PlaceHqDto dto, CrmDbCo
             return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
+        app.Logger.LogError(ex, "Action {Action} failed", "Account.PlaceHq");
         return StatusProblem(500, "Internal Server Error");
     }
 });
@@ -399,8 +402,9 @@ app.MapPost("/api/accounts/{id}/addcontact", async (int id, AddContactDto dto, C
             return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
+        app.Logger.LogError(ex, "Action {Action} failed", "Account.AddContact");
         return StatusProblem(500, "Internal Server Error");
     }
 });
@@ -432,8 +436,9 @@ app.MapPost("/api/accounts/{id}/convertlead", async (int id, ConvertLeadDto dto,
             return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
+        app.Logger.LogError(ex, "Action {Action} failed", "Account.ConvertLead");
         return StatusProblem(500, "Internal Server Error");
     }
 });
@@ -460,8 +465,9 @@ app.MapPost("/api/accounts/{id}/opendeal", async (int id, OpenDealDto dto, CrmDb
             return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
+        app.Logger.LogError(ex, "Action {Action} failed", "Account.OpenDeal");
         return StatusProblem(500, "Internal Server Error");
     }
 });
@@ -488,8 +494,9 @@ app.MapPost("/api/accounts/{id}/archive", async (int id, CrmDbContext db) => {
             return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
+        app.Logger.LogError(ex, "Action {Action} failed", "Account.Archive");
         return StatusProblem(500, "Internal Server Error");
     }
 });
@@ -516,8 +523,9 @@ app.MapPost("/api/accounts/{id}/openticket", async (int id, OpenTicketDto dto, C
             return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
+        app.Logger.LogError(ex, "Action {Action} failed", "Account.OpenTicket");
         return StatusProblem(500, "Internal Server Error");
     }
 });
@@ -544,8 +552,9 @@ app.MapPost("/api/accounts/{id}/restore", async (int id, CrmDbContext db) => {
             return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
+        app.Logger.LogError(ex, "Action {Action} failed", "Account.Restore");
         return StatusProblem(500, "Internal Server Error");
     }
 });
@@ -579,8 +588,9 @@ app.MapPost("/api/accounts/{id}/contacts/{email}/retire", async (int id, string 
             return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
+        app.Logger.LogError(ex, "Action {Action} failed", "Contact.Retire");
         return StatusProblem(500, "Internal Server Error");
     }
 });
@@ -614,8 +624,9 @@ app.MapPost("/api/accounts/{id}/contacts/{email}/reactivate", async (int id, str
             return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
+        app.Logger.LogError(ex, "Action {Action} failed", "Contact.Reactivate");
         return StatusProblem(500, "Internal Server Error");
     }
 });
@@ -652,8 +663,9 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/completeopenwork",
             return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
+        app.Logger.LogError(ex, "Action {Action} failed", "Opportunity.CompleteOpenWork");
         return StatusProblem(500, "Internal Server Error");
     }
 });
@@ -690,8 +702,9 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/propose", async (i
             return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
+        app.Logger.LogError(ex, "Action {Action} failed", "Opportunity.Propose");
         return StatusProblem(500, "Internal Server Error");
     }
 });
@@ -728,8 +741,9 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/lose", async (int 
             return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
+        app.Logger.LogError(ex, "Action {Action} failed", "Opportunity.Lose");
         return StatusProblem(500, "Internal Server Error");
     }
 });
@@ -766,8 +780,9 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/log", async (int i
             return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
+        app.Logger.LogError(ex, "Action {Action} failed", "Opportunity.Log");
         return StatusProblem(500, "Internal Server Error");
     }
 });
@@ -809,8 +824,9 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/addline", async (i
             return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
+        app.Logger.LogError(ex, "Action {Action} failed", "Opportunity.AddLine");
         return StatusProblem(500, "Internal Server Error");
     }
 });
@@ -847,8 +863,9 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/quotedeal", async 
             return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
+        app.Logger.LogError(ex, "Action {Action} failed", "Opportunity.QuoteDeal");
         return StatusProblem(500, "Internal Server Error");
     }
 });
@@ -885,8 +902,9 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/commit", async (in
             return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
+        app.Logger.LogError(ex, "Action {Action} failed", "Opportunity.Commit");
         return StatusProblem(500, "Internal Server Error");
     }
 });
@@ -923,8 +941,9 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/win", async (int i
             return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
+        app.Logger.LogError(ex, "Action {Action} failed", "Opportunity.Win");
         return StatusProblem(500, "Internal Server Error");
     }
 });
@@ -961,8 +980,9 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/capture", async (i
             return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
+        app.Logger.LogError(ex, "Action {Action} failed", "Opportunity.Capture");
         return StatusProblem(500, "Internal Server Error");
     }
 });
@@ -996,8 +1016,9 @@ app.MapPost("/api/opportunities/{id}/activities/{activityId}/snooze", async (int
             return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
+        app.Logger.LogError(ex, "Action {Action} failed", "Activity.Snooze");
         return StatusProblem(500, "Internal Server Error");
     }
 });
@@ -1031,8 +1052,9 @@ app.MapPost("/api/opportunities/{id}/activities/{activityId}/complete", async (i
             return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
+        app.Logger.LogError(ex, "Action {Action} failed", "Activity.Complete");
         return StatusProblem(500, "Internal Server Error");
     }
 });
@@ -1072,8 +1094,9 @@ app.MapPost("/api/opportunities/{id}/quotes/{quoteId}/addline", async (int id, i
             return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
+        app.Logger.LogError(ex, "Action {Action} failed", "Quote.AddLine");
         return StatusProblem(500, "Internal Server Error");
     }
 });
@@ -1108,8 +1131,9 @@ app.MapPost("/api/opportunities/{id}/quotes/{quoteId}/present", async (int id, i
             return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
+        app.Logger.LogError(ex, "Action {Action} failed", "Quote.Present");
         return StatusProblem(500, "Internal Server Error");
     }
 });
@@ -1144,8 +1168,9 @@ app.MapPost("/api/opportunities/{id}/quotes/{quoteId}/accept", async (int id, in
             return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
+        app.Logger.LogError(ex, "Action {Action} failed", "Quote.Accept");
         return StatusProblem(500, "Internal Server Error");
     }
 });
@@ -1180,8 +1205,9 @@ app.MapPost("/api/opportunities/{id}/quotes/{quoteId}/reject", async (int id, in
             return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
+        app.Logger.LogError(ex, "Action {Action} failed", "Quote.Reject");
         return StatusProblem(500, "Internal Server Error");
     }
 });
@@ -1211,8 +1237,9 @@ app.MapPost("/api/campaigns/{id}/enroll", async (int id, EnrollDto dto, CrmDbCon
             return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
+        app.Logger.LogError(ex, "Action {Action} failed", "Campaign.Enroll");
         return StatusProblem(500, "Internal Server Error");
     }
 });
@@ -1237,8 +1264,9 @@ app.MapPost("/api/campaigns/{id}/end", async (int id, CrmDbContext db) => {
             return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
+        app.Logger.LogError(ex, "Action {Action} failed", "Campaign.End");
         return StatusProblem(500, "Internal Server Error");
     }
 });
@@ -1272,8 +1300,9 @@ app.MapPost("/api/accounts/{id}/tickets/{ticketId}/work", async (int id, int tic
             return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
+        app.Logger.LogError(ex, "Action {Action} failed", "Ticket.Work");
         return StatusProblem(500, "Internal Server Error");
     }
 });
@@ -1307,8 +1336,9 @@ app.MapPost("/api/accounts/{id}/tickets/{ticketId}/close", async (int id, int ti
             return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
+        app.Logger.LogError(ex, "Action {Action} failed", "Ticket.Close");
         return StatusProblem(500, "Internal Server Error");
     }
 });

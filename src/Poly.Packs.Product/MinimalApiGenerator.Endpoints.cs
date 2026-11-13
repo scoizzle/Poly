@@ -26,7 +26,7 @@ public sealed partial class MinimalApiGenerator {
                             "ToListAsync"))))));
 
         // app.MapGet("/api/books/{key}", async (keyType key, dbContextName db) =>
-        //     await db.Books.FindAsync(key) is Book book ? Results.Ok(book) : Results.NotFound())
+        //     await db.Books.FindAsync(key) is Book book ? Results.Ok(book) : a 404 ProblemDetails)
         // A natural key compares the unique property; FindAsync is the shadow key.
         var keyParam = new Parameter(keyName, ClrTypeNode(keyType));
         var camelName = ToCamelCase(entity.Name);
@@ -45,28 +45,24 @@ public sealed partial class MinimalApiGenerator {
                     ProblemResponse(404, "Not Found")))));
 
         // POST endpoint for root entities (S3: proper Entity.Create + result handling)
-        if (store.IsRoot) {
+        if (store.IsRoot && CreatesDirectly(_entities, entity)) {
             var dtoParam = new Parameter("dto", new TypeReference($"{entity.Name}Dto"));
             AppendCreateCallStatements(statements, entity, dtoParam, dbParam, route, keyProp);
         }
     }
 
+    /// <summary>
+    /// False for an entity with an entity-typed property: such an entity has no POST route (and no sample
+    /// request), never a route that always answers 400. The DSL cannot declare that property; only an
+    /// API-built model reaches it.
+    /// </summary>
+    internal static bool CreatesDirectly(IEnumerable<Entity> entities, Entity entity) =>
+        !entity.Properties.Any(p => entities.Any(e => string.Equals(e.Name, p.Type.TypeName, StringComparison.Ordinal)));
+
     /// <summary>Appends Syntax IR for POST /api/entities endpoint — calls Entity.Create with result handling.</summary>
     private void AppendCreateCallStatements(List<Node> statements, Entity entity,
         Parameter dtoParam, Parameter dbParam,
         string route, Property? uniqueProp) {
-        // Check if entity references other entities (cannot create directly) — emit BadRequest endpoint
-        if (entity.Properties.Any(p => _entities.Any(e => string.Equals(e.Name, p.Type.TypeName, StringComparison.Ordinal)))) {
-            statements.Add(new Invoke(
-                new Member(new TypeReference(AppVar), "MapPost"),
-                new Constant(route),
-                new Lambda([dtoParam, dbParam],
-                    new Block(new Return(
-                        ProblemResponse(400, "Bad Request",
-                            $"{entity.Name} requires related entities and cannot be created directly."))))));
-            return;
-        }
-
         var createArgs = BuildCreateCallArgs(entity, GetConstructorOrder(entity),
             prop => new Member(new Variable("dto"), prop.Name));
 

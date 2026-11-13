@@ -60,8 +60,9 @@ app.MapPost("/api/notes/{id}/setbody", async (int id, SetBodyDto dto, TDbCtx db)
             return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
+        app.Logger.LogError(ex, "Action {Action} failed", "Note.SetBody");
         return StatusProblem(500, "Internal Server Error");
     }
 });
@@ -85,8 +86,9 @@ app.MapPost("/api/notes/{id}/setmemo", async (int id, SetMemoDto dto, TDbCtx db)
             return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
+        app.Logger.LogError(ex, "Action {Action} failed", "Note.SetMemo");
         return StatusProblem(500, "Internal Server Error");
     }
 });

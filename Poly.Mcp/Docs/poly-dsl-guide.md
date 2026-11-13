@@ -1858,8 +1858,10 @@ Author a closed set as an **enum**, not a property constraint.
 The generated host reads a failure's **kind** to pick the status; it never reads the message text. Every error
 response is `application/problem+json` (ProblemDetails): `status`, `title` and `detail`, where `title` is the kind
 name and `detail` is the failure's message, plus `elementPath` (for example `Item.Qty`) and `guard` (the stage or
-policy name) when the failure has them. An unknown id is `404` with title `Not Found`; an unexpected exception in an
-action is `500` with title `Internal Server Error` and no exception text.
+policy name) when the failure has them. A client switches on `status` first, and on `title` (the failure kind)
+within a status. `type` is not part of the contract in this release (ASP.NET fills it with a per-status link).
+Success bodies are unchanged. An unknown id is `404` with title `Not Found`; an unexpected exception in an
+action is logged by the host and answers `500` with title `Internal Server Error` and no exception text.
 
 | Status | Kinds |
 |--------|-------|

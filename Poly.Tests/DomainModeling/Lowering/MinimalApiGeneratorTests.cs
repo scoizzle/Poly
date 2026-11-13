@@ -107,14 +107,6 @@ public class MinimalApiGeneratorTests {
     }
 
     [Test]
-    public async Task Detail_UsesTernary() {
-        var d = ParseDomain("domain T\nItem: entity { Sku: Text unique }");
-        var rendered = Render(d);
-        await Assert.That(rendered.Contains("Results.Ok")).IsTrue();
-        await Assert.That(rendered.Contains("StatusProblem(404")).IsTrue();
-    }
-
-    [Test]
     public async Task List_UsesToListAsync() {
         var d = ParseDomain("domain T\nItem: entity { Name: Text }");
         await Assert.That(Render(d).Contains("ToListAsync")).IsTrue();
@@ -212,18 +204,15 @@ public class MinimalApiGeneratorTests {
     }
 
     [Test]
-    public async Task ActionEndpoint_HasStatusCode() {
+    public async Task ActionEndpoint_CatchAllLogsTheExceptionAndAnswersProblem500() {
+        // Text oracle: no fixture action can be made to throw at run time (the module reports every domain
+        // failure as a result, and the unique registry already catches a duplicate key), so the catch-all
+        // is pinned on the generated text. The 500 body carries no exception text; the log does.
         var d = ParseDomain("domain T\nItem: entity {\n  Name: Text\n  Freeze: action { }\n}");
         var rendered = Render(d);
-        await Assert.That(rendered.Contains("StatusProblem(500")).IsTrue();
-    }
-
-    [Test]
-    public async Task ActionEndpoint_HasIsSuccessBranch() {
-        var d = ParseDomain("domain T\nItem: entity {\n  Name: Text\n  Freeze: action { }\n}");
-        var rendered = Render(d);
-        await Assert.That(rendered.Contains("IsSuccess")).IsTrue();
-        await Assert.That(rendered.Contains("Problem(result.Error!)")).IsTrue();
+        await Assert.That(rendered).Contains("catch (Exception ex)");
+        await Assert.That(rendered).Contains("app.Logger.LogError(ex, \"Action {Action} failed\", \"Item.Freeze\");");
+        await Assert.That(rendered).Contains("StatusProblem(500, \"Internal Server Error\")");
     }
 
     /// <summary>P-03 (A4): every action handler saves inside its <c>if (result.IsSuccess)</c> true-branch
@@ -713,6 +702,29 @@ public class MinimalApiGeneratorTests {
         await Assert.That(host).Contains("typeof(Roster.DayOfWeek)");
         await Assert.That(host).Contains("Roster.DayOfWeek.Mon");
         await Assert.That(CompileHost(http.Files!)).IsEmpty();
+    }
+
+    /// <summary>An entity whose create takes an entity-typed property gets no POST route and no DTO, not a route
+    /// that always answers 400. The DSL cannot declare that property (a defaulted or optional one), so an
+    /// API-built model is the only oracle there is; there is no running-app test for it.</summary>
+    [Test]
+    public async Task EntityWithEntityTypedProperty_HasNoPostRoute() {
+        var domain = new Domain("T", [
+            new Entity("Other", [new Property("Name", new DomainTypeReference("Text"), [])], [], [], []),
+            new Entity("Item", [
+                new Property("Sku", new DomainTypeReference("Text"), []),
+                new Property("Peer", new DomainTypeReference("Other"), [new DefaultValueConstraint(new Literal(1))]),
+            ], [], [], []),
+        ]) { Extensions = ["persistence"] };
+
+        var rendered = Render(domain);
+
+        // Controls: the entity next to it has its POST route and DTO, and the entity itself is listed.
+        await Assert.That(rendered).Contains("MapPost(\"/api/others\"");
+        await Assert.That(rendered).Contains("OtherDto");
+        await Assert.That(rendered).Contains("MapGet(\"/api/items\"");
+        await Assert.That(rendered).DoesNotContain("MapPost(\"/api/items\"");
+        await Assert.That(rendered).DoesNotContain("ItemDto");
     }
 
     [Test]

@@ -60,8 +60,9 @@ app.MapPost("/api/gauges/{id}/setlevel", async (int id, SetLevelDto dto, TDbCtx 
             return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
+        app.Logger.LogError(ex, "Action {Action} failed", "Gauge.SetLevel");
         return StatusProblem(500, "Internal Server Error");
     }
 });
@@ -85,8 +86,9 @@ app.MapPost("/api/gauges/{id}/setpeak", async (int id, SetPeakDto dto, TDbCtx db
             return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
+        app.Logger.LogError(ex, "Action {Action} failed", "Gauge.SetPeak");
         return StatusProblem(500, "Internal Server Error");
     }
 });
@@ -110,8 +112,9 @@ app.MapPost("/api/gauges/{id}/surge", async (int id, TDbCtx db) => {
             return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
+        app.Logger.LogError(ex, "Action {Action} failed", "Gauge.Surge");
         return StatusProblem(500, "Internal Server Error");
     }
 });

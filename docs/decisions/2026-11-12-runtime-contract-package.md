@@ -41,7 +41,7 @@ until **P-14** deletes it.
 Q3 is why the mapping lives on the kind at all: a host maps kind→status, and the kind is the
 contract, not the message.
 
-**Honest "today".** Only `Unique`, `Link` and the ten 400 rows have a producer that reproduces
+**Honest "today".** Only `Unique`, `Link` and the eight 400 rows (ten before the 2026-11-13 rulings) have a producer that reproduces
 today's observable status. `Conflict` is decided by Q2 ahead of its producer. `Cascade`'s 500 is
 today's *incidental* status, ratified rather than derived. `Stage` and `Policy` were placeholders
 until the owner ruled them (409, 422); changing a row is one arm plus one test row - exactly the
@@ -72,7 +72,7 @@ R-07 deletes it rather than a host keeping a dead token.
 
 ### 3. What this file does not decide
 
-- **422 vs 400.** O-R3 stayed with today's 400; a move to 422 for any row is a separate ruling.
+- **422 vs 400.** O-R3 stayed with today's 400. Superseded 2026-11-13: the owner ruled `Policy` 422 (and `Stage` 409), so 422 is no longer open; no other row moves without a new ruling.
 - **`Stage` and `Policy` conflict-ness.** Ruled by the owner (#677): `Stage` 409, `Policy` 422 (P-14a).
 - **`NotFound`.** Not a kind and not a row. R-02's lock made `NotFound` a host-level status for an
   unknown id; P-14 owns that 404 branch.

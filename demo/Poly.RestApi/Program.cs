@@ -150,8 +150,9 @@ app.MapPost("/api/patrons/{email}/checkout", async (string email, CheckOutDto dt
             return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
+        app.Logger.LogError(ex, "Action {Action} failed", "Patron.CheckOut");
         return StatusProblem(500, "Internal Server Error");
     }
 });
@@ -177,8 +178,9 @@ app.MapPost("/api/patrons/{email}/suspend", async (string email, LibraryDbContex
             return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
+        app.Logger.LogError(ex, "Action {Action} failed", "Patron.Suspend");
         return StatusProblem(500, "Internal Server Error");
     }
 });
@@ -204,8 +206,9 @@ app.MapPost("/api/patrons/{email}/closeaccount", async (string email, LibraryDbC
             return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
+        app.Logger.LogError(ex, "Action {Action} failed", "Patron.CloseAccount");
         return StatusProblem(500, "Internal Server Error");
     }
 });
@@ -231,8 +234,9 @@ app.MapPost("/api/patrons/{email}/reinstate", async (string email, LibraryDbCont
             return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
+        app.Logger.LogError(ex, "Action {Action} failed", "Patron.Reinstate");
         return StatusProblem(500, "Internal Server Error");
     }
 });
@@ -266,8 +270,9 @@ app.MapPost("/api/patrons/{email}/loans/{id}/renew", async (string email, int id
             return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
+        app.Logger.LogError(ex, "Action {Action} failed", "Loan.Renew");
         return StatusProblem(500, "Internal Server Error");
     }
 });
@@ -301,8 +306,9 @@ app.MapPost("/api/patrons/{email}/loans/{id}/return", async (string email, int i
             return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
+        app.Logger.LogError(ex, "Action {Action} failed", "Loan.Return");
         return StatusProblem(500, "Internal Server Error");
     }
 });
@@ -336,8 +342,9 @@ app.MapPost("/api/patrons/{email}/fines/{id}/pay", async (string email, int id, 
             return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
+        app.Logger.LogError(ex, "Action {Action} failed", "Fine.Pay");
         return StatusProblem(500, "Internal Server Error");
     }
 });
@@ -371,8 +378,9 @@ app.MapPost("/api/patrons/{email}/fines/{id}/waive", async (string email, int id
             return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
+        app.Logger.LogError(ex, "Action {Action} failed", "Fine.Waive");
         return StatusProblem(500, "Internal Server Error");
     }
 });

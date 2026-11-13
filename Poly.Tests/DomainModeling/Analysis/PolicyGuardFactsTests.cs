@@ -544,7 +544,7 @@ public class PolicyGuardFactsTests {
         var (domain, _) = Analyze(StageSmallActionNotSmall("range(0, 100)"));
         var order = EntityNamed(domain, "Order");
         var open = order.Stages.Single();
-        var guards = PolicyGuardFacts.Guards(ActionNamed(order, "Peek"), order, open);
+        var guards = PolicyGuardFacts.Guards(ActionNamed(order, "Peek"), open);
         await Assert.That(string.Join(",", guards.Select(g => (g.Negated ? "!" : "") + g.Policy.Name)))
             .IsEqualTo("!not_Small");
     }

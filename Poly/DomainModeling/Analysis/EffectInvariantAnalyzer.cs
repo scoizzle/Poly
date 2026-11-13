@@ -123,9 +123,10 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
         var contexts = new List<ActionStageInvariant>();
         foreach (var (stageName, stage) in ValidStages(action, entity)) {
             var preconditions = CollectPreconditions(action, entity, stage);
+            var guards = PolicyGuardFacts.Guards(action, stage);
             var conflicts = new List<RelationConflict>();
-            var env = BuildInitialEnv(entity, preconditions, axes.For(entity), conflicts);
-            var scalarEnv = conflicts.Count == 0 ? env : BuildInitialEnv(entity, preconditions, axes.For(entity), relations: false);
+            var env = BuildInitialEnv(entity, guards, axes.For(entity), conflicts);
+            var scalarEnv = conflicts.Count == 0 ? env : BuildInitialEnv(entity, guards, axes.For(entity), relations: false);
             ReportUnsatisfiablePreconditions(context, action, stageName, env, scalarEnv, conflicts);
             var narrowed = env.ToDictionary(kv => kv.Key, kv => kv.Value.NumericRange, StringComparer.Ordinal);
             var merged = env.ToDictionary(kv => kv.Key, kv => (IReadOnlyList<Constraint>)kv.Value.Constraints, StringComparer.Ordinal);
@@ -161,15 +162,15 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
     // ── Abstract environment ────────────────────────────────────
 
     /// <summary>The initial abstract environment: each property's declared constraints as an
-    /// <see cref="AbstractValue"/>, refined by every precondition's bounds.</summary>
+    /// <see cref="AbstractValue"/>, refined by every guard (<see cref="PolicyGuardFacts"/>).</summary>
     private static Dictionary<string, AbstractValue> BuildInitialEnv(
-        Entity entity, IReadOnlyList<Policy> preconditions, GuardAxes axes,
+        Entity entity, IReadOnlyList<GuardedPolicy> guards, GuardAxes axes,
         List<RelationConflict>? conflicts = null, bool relations = true) {
         var env = new Dictionary<string, AbstractValue>(StringComparer.Ordinal);
         foreach (var prop in entity.Properties)
             env[prop.Name] = AbstractValue.From(prop.Constraints);
-        foreach (var policy in preconditions)
-            Refine(env, policy.Expression, axes, conflicts, relations);
+        foreach (var guard in guards)
+            PolicyGuardFacts.Refine(env, guard, entity, args: null, instantiate: null, axes, conflicts, relations);
         return env;
     }
 
@@ -187,7 +188,7 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
     /// that is also true for a null optional property still narrows its present values (F4, as the else-branch does),
     /// but never empties it.
     /// </summary>
-    private static void Refine(
+    internal static void Refine(
         Dictionary<string, AbstractValue> env, DomainExpression condition, GuardAxes axes,
         List<RelationConflict>? conflicts = null, bool relations = true) {
         switch (condition) {
@@ -212,7 +213,7 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
     /// <summary>Narrows an environment by the negation of <paramref name="condition"/> (an else-branch, or the operand
     /// of <c>not</c>): <c>not not x</c> is <c>x</c>, <c>not (a and b)</c> is <c>not a or not b</c>, <c>not (a or b)</c>
     /// is <c>not a and not b</c>, and a comparison takes its complement kind. Same contract as <see cref="Refine"/>.</summary>
-    private static void RefineNegated(
+    internal static void RefineNegated(
         Dictionary<string, AbstractValue> env, DomainExpression condition, GuardAxes axes,
         List<RelationConflict>? conflicts = null, bool relations = true) {
         switch (condition) {
@@ -620,8 +621,8 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
         if (target is null || !visited.Add(target)) return;
 
         var targetEnv = CloneEnv(env);
-        foreach (var policy in CollectPreconditions(target, entity, null))
-            Refine(targetEnv, policy.Expression, axes.For(entity));
+        foreach (var guard in PolicyGuardFacts.Guards(target, stage: null))
+            PolicyGuardFacts.Refine(targetEnv, guard, entity, args: null, instantiate: null, axes.For(entity));
 
         Dictionary<string, AbstractValue>? targetParams = null;
         if (invoke.ParameterBindings.Count > 0) {
@@ -684,8 +685,8 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
         var targetEnv = new Dictionary<string, AbstractValue>(StringComparer.Ordinal);
         foreach (var prop in targetEntity.Properties)
             targetEnv[prop.Name] = AbstractValue.From(prop.Constraints);
-        foreach (var policy in CollectPreconditions(targetAction, targetEntity, null))
-            Refine(targetEnv, policy.Expression, axes.For(targetEntity));
+        foreach (var guard in PolicyGuardFacts.Guards(targetAction, stage: null))
+            PolicyGuardFacts.Refine(targetEnv, guard, targetEntity, args: null, instantiate: null, axes.For(targetEntity));
 
         Dictionary<string, AbstractValue>? targetParams = null;
         if (invoke.ParameterBindings.Count > 0) {
@@ -725,13 +726,14 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
         var targetEnv = new Dictionary<string, AbstractValue>(StringComparer.Ordinal);
         foreach (var prop in targetEntity.Properties)
             targetEnv[prop.Name] = AbstractValue.From(prop.Constraints);
-        foreach (var policy in CollectPreconditions(targetAction, targetEntity, null))
-            Refine(targetEnv, policy.Expression, axes.For(targetEntity));
+        foreach (var guard in PolicyGuardFacts.Guards(targetAction, stage: null))
+            PolicyGuardFacts.Refine(targetEnv, guard, targetEntity, args: null, instantiate: null, axes.For(targetEntity));
         if (efe.Predicate is ForEachNamedPolicy { PolicyName: var policyName }) {
             var predicatePolicy = targetEntity.Policies.FirstOrDefault(p =>
                 string.Equals(p.Name, policyName, StringComparison.Ordinal));
             if (predicatePolicy is not null)
-                Refine(targetEnv, predicatePolicy.Expression, axes.For(targetEntity));
+                PolicyGuardFacts.Refine(targetEnv, new GuardedPolicy(predicatePolicy, Negated: false), targetEntity,
+                    args: null, instantiate: null, axes.For(targetEntity));
         }
 
         Dictionary<string, AbstractValue>? targetParams = null;

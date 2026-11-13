@@ -1,3 +1,5 @@
+using System.Text.RegularExpressions;
+
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Compile;
@@ -5,6 +7,9 @@ using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Ontology;
 using Poly.Packs.Product;
+using Poly.Tests.TestHelpers;
+
+using static Poly.Tests.DomainModeling.Parsing.ModelKit;
 
 namespace Poly.Tests.DomainModeling.Parsing;
 
@@ -398,7 +403,50 @@ public sealed class DomainDslPrinterTests {
         var after = DomainSession.Create(DslSyntaxTree.Parse(text).Uses, new SessionOptions(ProductCatalog.Model, ProductCatalog.ImplicitIds));
         await Assert.That(string.Join(",", after.Extensions)).IsEqualTo(string.Join(",", before.Extensions));
     }
+
+    [Test]
+    public async Task Print_RangeBound1E15_HasNoExponentAndReparses() {
+        // #531's text: the parsed repro, then the same bound built in code as a float (prints `1E+15` today) and as 1e21 doubles.
+        const string repro = "domain T\nA: entity {\n  N: Number range(0, 1000000000000000)\n}\n";
+        await Assert.That(PrintWithImplicitSet(repro)).Contains("range(0, 1000000000000000)");
+
+        var printer = new DomainDslPrinter();
+        foreach (var bound in new object[] { 1e15f, 1e15d, 1e21d, 1e-7d }) {
+            var text = printer.Print(Dom(Ent("A", [Prop("N", "Decimal", new RangeConstraint(0L, bound))])));
+            await Assert.That(Regex.IsMatch(text, "[0-9][Ee][+-]?[0-9]")).IsFalse().Because($"{bound.GetType().Name} {bound} printed:\n{text}");
+            var reparsed = new DomainEvolution(DomainTestFactory.Create("_", [], []))
+                .ApplyAndAnalyze(new PolyDslParser(text).Parse());
+            await Assert.That(reparsed.Succeeded).IsTrue().Because(text);
+            var range = reparsed.Root!.Types.OfType<Entity>().Single().Properties.Single().Constraints.OfType<RangeConstraint>().Single();
+            await Assert.That(Convert.ToDecimal(range.Maximum)).IsEqualTo(Convert.ToDecimal(bound)).Because(text);
+        }
+    }
+
+    [Test]
+    public async Task Print_EveryNumberSite_WithExponentProneValues_HasNoExponentAndKeepsTheDigits() {
+        var printer = new DomainDslPrinter();
+        var text = printer.Print(Dom(Ent("A", [
+            Prop("R", "Decimal", new RangeConstraint(1e-7d, 1e21d)),
+            Prop("F", "Decimal", new RangeConstraint(0L, 1e15f)),
+            Prop("E", "Decimal", new EqualityConstraint(1e21d)),
+            Prop("G", "Decimal", new EqualityConstraint(1e-7d)),
+            Prop("L", "Text", new LengthConstraint(1, 5)),
+        ], policies: [
+            Pol("Big", DomainExpression.GreaterThan(Prp("R"), DomainExpression.Literal(1e21d))),
+            Pol("Small", DomainExpression.GreaterThan(Prp("R"), DomainExpression.Literal(1e-7d))),
+            Pol("Single", DomainExpression.GreaterThan(Prp("R"), DomainExpression.Literal(1e15f))),
+            Pol("Dec", DomainExpression.GreaterThan(Prp("R"), DomainExpression.Literal(0.0000001m))),
+            Pol("Long", DomainExpression.GreaterThan(Prp("R"), DomainExpression.Literal(long.MinValue))),
+        ])));
+        await Assert.That(Regex.IsMatch(text, "[0-9][Ee][+-]")).IsFalse().Because(text);
+        // Presence control: the values are in the text, so the absence above is not an empty print.
+        await Assert.That(text).Contains("1000000000000000000000");
+        await Assert.That(text).Contains("0.0000001");
+        await Assert.That(text).Contains("1000000000000000");
+        await Assert.That(text).Contains("length(1, 5)");
+    }
 }
+
 
 /// <summary>
 /// G-03 characterisation: what the printer writes today for a number, per site. <see cref="Stable"/> rows must NOT move when

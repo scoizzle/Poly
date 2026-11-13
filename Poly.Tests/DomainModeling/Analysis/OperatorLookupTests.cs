@@ -486,11 +486,21 @@ public class OperatorLookupTests {
         var mismatches = new List<string>();
         var defined = 0;
         var undefined = 0;
+        var policy = 0;
         foreach (var kind in Enum.GetValues<OperatorKind>()) {
             var rights = UnaryKinds.Contains(kind) ? [null] : BinderOperands.Select(static t => (Type?)t).ToArray();
             foreach (var left in BinderOperands) {
                 foreach (var right in rights) {
                     var cell = right is null ? $"{kind} {NameOf(left)}" : $"{NameOf(left)} {kind} {NameOf(right)}";
+                    // Poly's shift-count policy (C# rejects, Poly defines): the cell is C#'s shift by an int count, its count
+                    // parameter the wider count type itself.
+                    if (IsPolicyShift(kind, right) && Binder(kind, One(left, kind), 1) is { } shifted) {
+                        policy++;
+                        if (ClrOp(left, kind, right) is not { } policyShift || !policyShift.Result.TryGetRuntimeType(out var shiftResult) || shiftResult != shifted
+                            || ParametersOf(policyShift).Select(static p => p.GetRuntimeType()).ToArray() is not [var l, var r] || l != shifted || r != right)
+                            mismatches.Add($"{cell}: policy expects C#'s int-count shift ({NameOf(shifted)}) over ({NameOf(left)}, {NameOf(right!)})");
+                        continue;
+                    }
                     var expected = Binder(kind, One(left, kind), right is null ? null : One(right, kind));
                     var operands = right is null ? new[] { OperatorOperands.Clr(left) } : [OperatorOperands.Clr(left), OperatorOperands.Clr(right)];
                     var resolution = operands[0].GetOperator(kind, right is null ? null : operands[1]);
@@ -520,10 +530,16 @@ public class OperatorLookupTests {
             }
         }
         await Assert.That(mismatches).IsEmpty();
-        // Both counts are pinned, so a family that answers none on both sides moves a number and fails here.
+        // The counts are pinned, so a family that answers none on both sides moves a number and fails here. The 54 policy
+        // cells are the 9 integral lefts by the 3 wider counts (long, uint, ulong) by the 2 shifts.
         await Assert.That(defined).IsEqualTo(1848);
-        await Assert.That(undefined).IsEqualTo(1736);
+        await Assert.That(undefined).IsEqualTo(1682);
+        await Assert.That(policy).IsEqualTo(54);
     }
+
+    private static bool IsPolicyShift(OperatorKind kind, Type? count) =>
+        kind is OperatorKind.ShiftLeft or OperatorKind.ShiftRight
+        && count?.GetPrimitiveType() is { } primitive && ClrBuiltInRules.IsPolicyShiftCount(primitive);
 
     private static OperatorResolution? ClrOp(Type left, OperatorKind kind, Type? right) =>
         OperatorOperands.Clr(left).GetOperator(kind, right is null ? null : OperatorOperands.Clr(right));
@@ -589,18 +605,31 @@ public class OperatorLookupTests {
         await AssertResult(ClrOp(typeof(long), OperatorKind.UnaryMinus, null), OperatorOperands.Clr(typeof(long)));
     }
 
+    /// <summary>
+    /// C# (§12.11) shifts by a count that converts implicitly to int. Poly's policy (owner ruling 2026-11-13) adds a count
+    /// of any other built-in integer type: the operator takes it as its own type and the result is the left operand's.
+    /// A non-integer count stays none.
+    /// </summary>
     [Test]
-    public async Task Shift_CountMustConvertToInt32() {
-        foreach (var count in new[] { typeof(long), typeof(uint), typeof(ulong) }) {
-            await Assert.That(ClrOp(typeof(int), OperatorKind.ShiftLeft, count)).IsNull();
-            await Assert.That(ClrOp(typeof(int), OperatorKind.ShiftRight, count)).IsNull();
+    public async Task Shift_CountConvertsToInt32_OrIsAWiderIntegerByPolicy() {
+        foreach (var count in new[] { typeof(long), typeof(uint), typeof(ulong), typeof(nint), typeof(nuint) }) {
+            foreach (var kind in new[] { OperatorKind.ShiftLeft, OperatorKind.ShiftRight }) {
+                var shift = ClrOp(typeof(int), kind, count);
+                await AssertResult(shift, OperatorOperands.Clr(typeof(int)));
+                await AssertParameters(shift, typeof(int), count);
+            }
         }
+        foreach (var count in new[] { typeof(double), typeof(decimal), typeof(string), typeof(bool) })
+            await Assert.That(ClrOp(typeof(int), OperatorKind.ShiftLeft, count)).IsNull();
         foreach (var count in new[] { typeof(short), typeof(char) })
             await AssertResult(ClrOp(typeof(int), OperatorKind.ShiftLeft, count), OperatorOperands.Clr(typeof(int)));
         var wide = ClrOp(typeof(long), OperatorKind.ShiftLeft, typeof(short));
         await AssertResult(wide, OperatorOperands.Clr(typeof(long)));
         await AssertParameters(wide, typeof(long), typeof(int));
-        await Assert.That(ClrOp(typeof(short), OperatorKind.ShiftLeft, typeof(long))).IsNull();
+        // A small left promotes as for an int count.
+        var small = ClrOp(typeof(short), OperatorKind.ShiftLeft, typeof(long));
+        await AssertResult(small, OperatorOperands.Clr(typeof(int)));
+        await AssertParameters(small, typeof(int), typeof(long));
         var bytes = ClrOp(typeof(byte), OperatorKind.ShiftLeft, typeof(byte));
         await AssertResult(bytes, OperatorOperands.Clr(typeof(int)));
         await AssertParameters(bytes, typeof(int), typeof(int));
@@ -655,9 +684,9 @@ public class OperatorLookupTests {
     }
 
     [Test]
-    public async Task DeliberateNone_EnumLiftedReferenceDelegateAndObjectOperators() {
-        // C# defines these; the rule set leaves them none on purpose. Enum and lifted operators are the caller's
-        // (T-06); reference, delegate and object equality are not value operators.
+    public async Task DeliberateNone_EnumLiftedAndDelegateOperators() {
+        // C# defines these; the rule set leaves them none on purpose. Enum operators are T-25b's and T-29's, lifted
+        // operators the caller's (T-06), delegate equality is not modelled.
         var day = typeof(DayOfWeek);
         await Assert.That(ClrOp(day, OperatorKind.Add, typeof(int))).IsNull();
         await Assert.That(ClrOp(day, OperatorKind.Equal, day)).IsNull();
@@ -665,13 +694,47 @@ public class OperatorLookupTests {
         await Assert.That(ClrOp(day, OperatorKind.BitwiseOr, day)).IsNull();
         await Assert.That(ClrOp(typeof(int?), OperatorKind.Add, typeof(int?))).IsNull();
         await Assert.That(ClrOp(typeof(int?), OperatorKind.Equal, typeof(int))).IsNull();
-        await Assert.That(ClrOp(typeof(object), OperatorKind.Equal, typeof(string))).IsNull();
+        // A value type has no reference equality: int == object is none (C# boxes nothing for ==).
         await Assert.That(ClrOp(typeof(int), OperatorKind.Equal, typeof(object))).IsNull();
-        await Assert.That(ClrOp(typeof(object), OperatorKind.Equal, typeof(object))).IsNull();
         await Assert.That(ClrOp(typeof(System.Action), OperatorKind.Equal, typeof(System.Action))).IsNull();
         // The siblings: the underlying value operators are defined.
         await AssertResult(ClrOp(typeof(int), OperatorKind.Add, typeof(int)), OperatorOperands.Clr(typeof(int)));
         await AssertResult(ClrOp(typeof(int), OperatorKind.Equal, typeof(int)), OperatorOperands.Clr(typeof(bool)));
         await AssertResult(ClrOp(typeof(string), OperatorKind.Equal, typeof(string)), OperatorOperands.Clr(typeof(bool)));
+    }
+
+    private interface IShape;
+
+    private class Shape : IShape;
+
+    private sealed class Circle : Shape;
+
+    private class Unrelated;
+
+    private sealed class Sealed;
+
+    /// <summary>
+    /// T-22a, C# 12.12.7 reference type equality: <c>bool ==(object, object)</c> and <c>!=</c> when both operands are
+    /// reference types with a reference conversion between them in either direction. Two unrelated classes have none, and
+    /// string's own equality wins over the reference one.
+    /// </summary>
+    [Test]
+    public async Task ReferenceEquality_IsCSharps_1212_7() {
+        var boolean = OperatorOperands.Clr(typeof(bool));
+        foreach (var (left, right) in new[] {
+                     (typeof(object), typeof(object)), (typeof(object), typeof(string)), (typeof(Shape), typeof(Circle)),
+                     (typeof(Circle), typeof(Shape)), (typeof(IShape), typeof(Circle)), (typeof(IShape), typeof(Unrelated)),
+                     (typeof(long[]), typeof(long[])), (typeof(List<int>), typeof(object)) }) {
+            foreach (var kind in new[] { OperatorKind.Equal, OperatorKind.NotEqual }) {
+                var found = ClrOp(left, kind, right);
+                await AssertResult(found, boolean);
+                await AssertParameters(found, typeof(object), typeof(object));
+            }
+        }
+        await Assert.That(ClrOp(typeof(Circle), OperatorKind.Equal, typeof(Unrelated))).IsNull();
+        await Assert.That(ClrOp(typeof(IShape), OperatorKind.Equal, typeof(Sealed))).IsNull();
+        await Assert.That(ClrOp(typeof(long[]), OperatorKind.Equal, typeof(int[]))).IsNull();
+        await Assert.That(ClrOp(typeof(Shape), OperatorKind.LessThan, typeof(Shape))).IsNull();
+        await AssertParameters(ClrOp(typeof(string), OperatorKind.Equal, typeof(string)), typeof(string), typeof(string));
     }
 }

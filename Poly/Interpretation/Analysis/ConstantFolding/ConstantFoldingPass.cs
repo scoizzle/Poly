@@ -218,7 +218,7 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
 
     private FoldResult FoldAnd(AnalysisContext context, And and, IReadOnlyDictionary<NodeId, object?>? parameterValues = null) {
         var leftValue = GetConstantValue(context, and.LeftHandValue, parameterValues);
-        if (leftValue.HasValue && leftValue.Value is bool leftBool && !leftBool) {
+        if (leftValue.HasValue && leftValue.Value is bool leftBool && !leftBool && RightCanBeBoolean(context, and.RightHandValue, parameterValues)) {
             return FoldResult.Success(false);
         }
 
@@ -227,11 +227,24 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
 
     private FoldResult FoldOr(AnalysisContext context, Or or, IReadOnlyDictionary<NodeId, object?>? parameterValues = null) {
         var leftValue = GetConstantValue(context, or.LeftHandValue, parameterValues);
-        if (leftValue.HasValue && leftValue.Value is bool leftBool && leftBool) {
+        if (leftValue.HasValue && leftValue.Value is bool leftBool && leftBool && RightCanBeBoolean(context, or.RightHandValue, parameterValues)) {
             return FoldResult.Success(true);
         }
 
         return FoldBinaryBoolean(context, leftValue, or.RightHandValue, (a, b) => a || b, parameterValues);
+    }
+
+    /// <summary>
+    /// A short-circuit answers from its left operand only when its right operand can be a Boolean: a constant right
+    /// operand holds a <c>bool</c>, any other has no resolved type or a Boolean one. Otherwise the node stays for the
+    /// compatibility pass, which rejects <c>false and 5</c> as C# does.
+    /// </summary>
+    private bool RightCanBeBoolean(AnalysisContext context, Node right, IReadOnlyDictionary<NodeId, object?>? parameterValues = null) {
+        var value = GetConstantValue(context, right, parameterValues);
+        if (value.HasValue)
+            return value.Value is bool;
+        return context.GetResolvedType(right) is not { } type
+            || (type.TryGetRuntimeType(out var clr) && clr == typeof(bool));
     }
 
     private FoldResult FoldUnaryBoolean(AnalysisContext context, Node operand, Func<bool, bool> operation, IReadOnlyDictionary<NodeId, object?>? parameterValues = null) {
@@ -380,7 +393,7 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
 
     private Node? SimplifyAnd(AnalysisContext context, And and) {
         var leftValue = GetConstantValue(context, and.LeftHandValue);
-        if (!leftValue.HasValue || leftValue.Value is not bool leftBool) {
+        if (!leftValue.HasValue || leftValue.Value is not bool leftBool || !RightCanBeBoolean(context, and.RightHandValue)) {
             return null;
         }
 
@@ -389,7 +402,7 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
 
     private Node? SimplifyOr(AnalysisContext context, Or or) {
         var leftValue = GetConstantValue(context, or.LeftHandValue);
-        if (!leftValue.HasValue || leftValue.Value is not bool leftBool) {
+        if (!leftValue.HasValue || leftValue.Value is not bool leftBool || !RightCanBeBoolean(context, or.RightHandValue)) {
             return null;
         }
 

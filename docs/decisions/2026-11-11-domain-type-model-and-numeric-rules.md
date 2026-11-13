@@ -177,7 +177,11 @@ Recorded by T-03b from [#679 comment 6837489066](https://github.com/scoizzle/Pol
   `GetElementType` also name CLR types but do not answer a conversion), T-17 (`PromoteNumeric`/`GetNumericRank`/`ResolveAddType`),
   T-18 (`SyntaxTypeCompatibilityAnalyzer`), T-19 (`LambdaBridge.PromoteNumeric`), T-20
   (`ConstantFoldingPass.Promote`: converged, folding asks `GetOperator` and applies the chosen signature; it leaves
-  the resolved-type guard for T-17 and the declared-operator fence for T-10), T-21 (the emitter's promotion).
+  the resolved-type guard for T-17 and the declared-operator fence for T-10; folding no longer masks `VmTypeCompatibility`
+  for a mismatched-type constant comparison or a short-circuit over a non-Boolean operand, which are now rejected at
+  compile as C# rejects them, and control-flow pruning is lost for the 828 provider-undefined constant shapes master
+  folded; the master fold list is re-derived from the head and compared by checksum, not by count only), T-21 (the
+  emitter's promotion).
 
 Landed shape (T-03b): `TypeConversion(Kind, Method?)` (null `Method` means the platform applies it),
 `DeclaredOperator(Signature, PlatformApplied)`, `OperatorResolution(Signature, PlatformApplied)` with `Result`,

@@ -558,7 +558,6 @@ public class ExpressionTypeAnalysisTests {
     [Arguments("invoke Send(dest: null)", "Send: action (dest: Addr) { assign Qty to 1 }", "",
         "argument 'dest' of invoke 'Send': cannot assign 'null' to 'Addr'")]
     [Arguments("assign Done to null", "", "", "cannot assign 'null' to 'Boolean'")]
-    [Arguments("assign Hue to null", "Hue: Kind optional", "", "cannot assign 'null' to 'Kind'")]
     [Arguments("create in lines { Qty: null }", "", "", "create initializer for property 'Qty': cannot assign 'null' to 'Number'")]
     [Arguments("invoke Take(n: null)", "", "", "argument 'n' of invoke 'Take': cannot assign 'null' to 'Number'")]
     [Arguments("assign Q to 1", "Z: Text default(null)", "",
@@ -580,6 +579,10 @@ public class ExpressionTypeAnalysisTests {
         "cannot assign 'null' to 'Number'")]
     [Arguments("create in lines { Qty: match { Done -> null, else -> 7 } }", "", "cannot assign 'null' to 'Number'")]
     [Arguments("invoke Take(n: match { Done -> null, else -> 7 })", "", "cannot assign 'null' to 'Number'")]
+    [Arguments("assign Name to Echo(match { Done -> null, else -> \"x\" })", "function Echo(a: Text): Text = a",
+        "Argument 'a' of 'Echo' expects 'Text', got 'null'")]
+    [Arguments("assign Q to 1", "Item2: entity { Z: Number default(match { true -> null, else -> 1 }) }",
+        "default value of type 'null' is not compatible with property type 'Number'")]
     [Arguments("assign Qty to Pick(true)", "function Pick(b: Boolean): Number = match { b -> null, else -> 7 }",
         "body is 'null' but it is declared to return 'Number'")]
     public async Task Assign_MatchWithNullArm_IntoRequiredTarget_IsRefusedAtTheArm(string body, string top, string message) {
@@ -599,6 +602,8 @@ public class ExpressionTypeAnalysisTests {
     [Arguments("assign Flag to match { Done -> null, else -> true }", "")]
     [Arguments("create in lines { Qty: 1 Flag: null }", "")]
     [Arguments("assign Q to 1", "Z: Text optional default(null)")]
+    [Arguments("assign Hue to null", "Hue: Kind optional")]
+    [Arguments("assign Hue to match { Done -> null, else -> B }", "Hue: Kind optional")]
     public async Task Assign_NullIntoOptionalTarget_IsAccepted(string body, string members) {
         var result = Parse(Optionals(body, members));
         await Assert.That(result.Succeeded).IsTrue();
@@ -665,5 +670,35 @@ public class ExpressionTypeAnalysisTests {
             .Where(d => d.Message.StartsWith("cannot determine the type of 'W'", StringComparison.Ordinal))
             .Select(d => d.Code ?? "");
         await Assert.That(string.Join(",", untyped)).IsEqualTo("DMSEM006,DMSEM006");
+    }
+
+    /// <summary>
+    /// A navigation to a condition (`line Qty == "x"`) is typed in the target entity's scope like any condition, every
+    /// read there through the hop that may find nothing: a Number against Text and an ordering against `null` are
+    /// refused (both fail on a host otherwise); `line Qty == null` runs today on every host and stays accepted.
+    /// </summary>
+    [Test]
+    [Arguments("line Qty == \"x\"", "comparison between incompatible types")]
+    [Arguments("line Qty < null", "comparison between incompatible types")]
+    [Arguments("line Qty == null", null)]
+    [Arguments("null == line Qty", null)]
+    [Arguments("line Qty > 0", null)]
+    public async Task NavigationToCondition_IsTypedInTheTargetScope(string where, string? refused) {
+        var result = Parse(Optionals($"for line in lines where {where} {{ assign Qty to 1 }}"));
+        await Assert.That(result.Succeeded).IsEqualTo(refused is null);
+        if (refused is not null)
+            await Assert.That(HasError(result, refused)).IsTrue();
+    }
+
+    /// <summary>
+    /// The function-body Boolean position cannot hold an optional Boolean: a function reads only its parameters, which
+    /// are never optional, and a navigation in a body is DMFUN005; a `null` arm into a Boolean return is refused at the arm.
+    /// </summary>
+    [Test]
+    public async Task FunctionBody_CannotBeAnOptionalBoolean() {
+        var navigation = Parse(Optionals("assign Q to 1", top: "function IsOn(l: Line): Boolean = l Flag"));
+        await Assert.That(navigation.Analysis.Diagnostics.Any(d => d.Code == "DMFUN005")).IsTrue();
+        var nullArm = Parse(Optionals("assign Q to 1", top: "function Maybe(b: Boolean): Boolean = match { b -> null, else -> true }"));
+        await Assert.That(nullArm.Analysis.Diagnostics.Any(d => d.Code == "DMFUN006" && d.Node is Literal { Value: null })).IsTrue();
     }
 }

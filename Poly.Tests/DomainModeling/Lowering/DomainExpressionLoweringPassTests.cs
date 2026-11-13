@@ -495,6 +495,17 @@ public class DomainExpressionLoweringPassTests {
           PAndIsTrue: action { assign Out to Done and Flag is true }
           PNotIsTrue: action { assign Out to not (Flag is true) }
           PAnyIsFalse: action { assign Out to any lines where Flag is false }
+          PEqualsDone: action { assign Out to Flag == Done }
+          PNotIsFalse: action { assign Out to not (Flag is false) }
+          PEntryIf: action { transition to Entered }
+          PToGated: action { transition to Gated }
+          Idle: stage { }
+          Entered: stage {
+            entry { if (Flag) { assign Out to true } else { assign Out to false } }
+          }
+          Gated: stage require Ok {
+            PRequireStage: action { assign Out to true }
+          }
         }
         """;
 
@@ -547,14 +558,22 @@ public class DomainExpressionLoweringPassTests {
     [Arguments("PAndIsTrue", "True", "False", "False")]
     [Arguments("PNotIsTrue", "False", "True", "True")]
     [Arguments("PAnyIsFalse", "False", "True", "False")]
+    [Arguments("PEqualsDone", "True", "False", "False")]
+    [Arguments("PNotIsFalse", "True", "False", "True")]
+    [Arguments("PEntryIf", "True", "False", "False")]
+    [Arguments("PToGated+PRequireStage", "True", null, null)]
     public async Task OptionalBoolean_InEveryConditionPosition_MeansEqualsTrue_OnBothHosts(
         string action, string? whenTrue, string? whenFalse, string? whenAbsent) {
         bool?[] flags = [true, false, null];
         string?[] expected = [whenTrue, whenFalse, whenAbsent];
         for (var i = 0; i < flags.Length; i++) {
-            var outcome = RunOptionalBoolean(flags[i], side => side.Invoke(action))[^1];
+            var outcome = RunOptionalBoolean(flags[i], side => {
+                foreach (var step in action.Split('+'))
+                    side.Invoke(step);
+            })[^1];
+            var last = action.Split('+')[^1];
             await Assert.That(outcome.ExceptionType).IsNull();
-            await Assert.That(outcome.Success).IsEqualTo(expected[i] is not null || !action.StartsWith("PRequire", StringComparison.Ordinal));
+            await Assert.That(outcome.Success).IsEqualTo(expected[i] is not null || !last.StartsWith("PRequire", StringComparison.Ordinal));
             await Assert.That(outcome.State["Out"]).IsEqualTo(expected[i]);
         }
     }
@@ -588,6 +607,7 @@ public class DomainExpressionLoweringPassTests {
           NullFlag: action { assign Flag to null }
           QIsNull: action { assign Flag to Q == null }
           LevelIsNull: action { assign Flag to Level == null }
+          NullLevel: action { assign Level to null }
         }
         """;
 
@@ -613,6 +633,7 @@ public class DomainExpressionLoweringPassTests {
     [Arguments("NullFlag", false, "Flag", null)]
     [Arguments("QIsNull", false, "Flag", "False")]
     [Arguments("LevelIsNull", false, "Flag", "False")]
+    [Arguments("NullLevel", false, "Level", null)]
     public async Task NullIntoOptionalTarget_StoresAbsent_OnBothHosts(string action, bool big, string member, string? stored) {
         IReadOnlyList<ParityOutcome> simulate;
         List<string> differences;
@@ -625,6 +646,141 @@ public class DomainExpressionLoweringPassTests {
         }
         await Assert.That(differences).IsEmpty();
         await Assert.That(simulate[^1].Success).IsTrue();
+        await Assert.That(simulate[^1].State[member]).IsEqualTo(stored);
+    }
+
+    // ── T-06: an optional slot of every kind takes `null`; its assign guard lets the absent value through ──
+
+    private static string OptionalKindDsl(string type) => $$"""
+        domain T06aKind
+        uses temporal
+        T06KindHost: entity {
+          Big: Boolean
+          D: {{type}} optional
+          NullD: action { assign D to null }
+          ArmD: action { assign D to match { Big -> null, else -> D } }
+        }
+        """;
+
+    private static readonly Lock OptionalKindGate = new();
+
+    /// <summary>
+    /// `null` into an optional Date, DateTime, Duration, Decimal or Uuid stores absent on both hosts; the other arm of a
+    /// `null`-arm `match` stores its value. (A domain value type is no property, DMSTR006, and an entity link is no
+    /// assign target, DMEFF001. Time is not run here: its generated C# does not compile with or without `null`.)
+    /// </summary>
+    [Test]
+    [Arguments("Date", "NullD", false, null)]
+    [Arguments("Date", "ArmD", true, null)]
+    [Arguments("Date", "ArmD", false, "present")]
+    [Arguments("DateTime", "NullD", false, null)]
+    [Arguments("DateTime", "ArmD", true, null)]
+    [Arguments("DateTime", "ArmD", false, "present")]
+    [Arguments("Duration", "NullD", false, null)]
+    [Arguments("Duration", "ArmD", true, null)]
+    [Arguments("Duration", "ArmD", false, "present")]
+    [Arguments("Decimal", "NullD", false, null)]
+    [Arguments("Decimal", "ArmD", true, null)]
+    [Arguments("Decimal", "ArmD", false, "present")]
+    [Arguments("Uuid", "NullD", false, null)]
+    [Arguments("Uuid", "ArmD", true, null)]
+    [Arguments("Uuid", "ArmD", false, "present")]
+    public async Task NullIntoOptionalSlotOfEveryKind_StoresAbsent_OnBothHosts(string type, string action, bool big, string? stored) {
+        object value = type switch {
+            "Date" => new DateOnly(2026, 1, 2),
+            "DateTime" => new DateTime(2026, 1, 2, 3, 4, 5, DateTimeKind.Utc),
+            "Duration" => TimeSpan.FromHours(2),
+            "Decimal" => 2.5m,
+            _ => Guid.Parse("00000000-0000-0000-0000-000000000007"),
+        };
+        IReadOnlyList<ParityOutcome> simulate;
+        List<string> differences;
+        lock (OptionalKindGate) {
+            (simulate, var printed) = ParityScenario.FromDsl(OptionalKindDsl(type), "T06aKind" + type).Run(side => {
+                side.Create("T06KindHost", ("Big", big), ("D", value));
+                side.Invoke(action);
+            });
+            differences = ParityScenario.Differences(simulate, printed);
+        }
+        await Assert.That(differences).IsEmpty();
+        await Assert.That(simulate[^1].Success).IsTrue();
+        await Assert.That(simulate[^1].State["D"]).IsEqualTo(stored is null ? null : simulate[0].State["D"]);
+    }
+
+    private const string OptionalGuardDsl = """
+        domain T06aGuard
+        T06Lvl: enum { Low, High }
+        T06Guarded: entity {
+          Big: Boolean
+          Level: T06Lvl optional
+          Level2: T06Lvl optional
+          Req: T06Lvl
+          EqN: Number optional equals(5)
+          RngN: Number optional range(0, 10)
+          EqT: Text optional equals("a")
+          LenT: Text optional length(2, 3)
+          PatT: Text optional pattern("^a")
+          ArmLevel: action { assign Level to match { Big -> null, else -> High } }
+          CopyLevel: action { assign Level2 to Level }
+          SetLevel: action (v: T06Lvl) { assign Level to v }
+          SetReq: action (v: T06Lvl) { assign Req to v }
+          ArmEqN: action { assign EqN to match { Big -> null, else -> 5 } }
+          SetEqN: action (v: Number) { assign EqN to v }
+          ArmRngN: action { assign RngN to match { Big -> null, else -> 4 } }
+          SetRngN: action (v: Number) { assign RngN to v }
+          ArmEqT: action { assign EqT to match { Big -> null, else -> "a" } }
+          SetEqT: action (v: Text) { assign EqT to v }
+          ArmLenT: action { assign LenT to match { Big -> null, else -> "ab" } }
+          ArmPatT: action { assign PatT to match { Big -> null, else -> "ab" } }
+        }
+        """;
+
+    private static readonly Lazy<ParityScenario> OptionalGuard =
+        new(() => ParityScenario.FromDsl(OptionalGuardDsl, "T06aOptionalGuard"));
+
+    private static readonly Lock OptionalGuardGate = new();
+
+    /// <summary>
+    /// The assign-time guard of an optional property lets an absent value through and still refuses a present wrong
+    /// one, on both hosts: an enum's member check, an equality, a range; Length and Pattern already guarded (regression
+    /// rows). A required enum still refuses a non-member. <c>arg</c> is the action's argument; "Bogus" is no member.
+    /// The absent value is a <c>null</c> arm or an absent copy: a bare <c>null</c> literal into a constrained property is
+    /// refused at analysis by the literal constraint check (<c>EffectAnalyzer.Assign</c>).
+    /// </summary>
+    [Test]
+    [Arguments("ArmLevel", true, true, null, "Level", null, true)]
+    [Arguments("ArmLevel", false, true, null, "Level", "High", true)]
+    [Arguments("CopyLevel", false, false, null, "Level2", null, true)]
+    [Arguments("CopyLevel", false, true, null, "Level2", "High", true)]
+    [Arguments("SetLevel", false, true, "Bogus", "Level", "High", false)]
+    [Arguments("SetReq", false, true, "Bogus", "Req", "Low", false)]
+    [Arguments("ArmEqN", true, true, null, "EqN", null, true)]
+    [Arguments("SetEqN", false, true, 6L, "EqN", "5", false)]
+    [Arguments("ArmRngN", true, true, null, "RngN", null, true)]
+    [Arguments("ArmRngN", false, true, null, "RngN", "4", true)]
+    [Arguments("SetRngN", false, true, 11L, "RngN", "3", false)]
+    [Arguments("ArmEqT", true, true, null, "EqT", null, true)]
+    [Arguments("SetEqT", false, true, "b", "EqT", "a", false)]
+    [Arguments("ArmLenT", true, true, null, "LenT", null, true)]
+    [Arguments("ArmPatT", true, true, null, "PatT", null, true)]
+    public async Task OptionalProperty_AssignGuard_PassesAbsent_RefusesAWrongValue_OnBothHosts(
+        string action, bool big, bool levelPresent, object? arg, string member, string? stored, bool success) {
+        IReadOnlyList<ParityOutcome> simulate;
+        List<string> differences;
+        lock (OptionalGuardGate) {
+            (simulate, var printed) = OptionalGuard.Value.Run(side => {
+                (string, object?)[] level = levelPresent ? [("Level", "High")] : [];
+                side.Create("T06Guarded", [("Big", big), .. level, ("Level2", "Low"), ("Req", "Low"),
+                    ("EqN", 5L), ("RngN", 3L), ("EqT", "a"), ("LenT", "ab"), ("PatT", "ab")]);
+                if (arg is null)
+                    side.Invoke(action);
+                else
+                    side.Invoke(action, ("v", arg));
+            });
+            differences = ParityScenario.Differences(simulate, printed);
+        }
+        await Assert.That(differences).IsEmpty();
+        await Assert.That(simulate[^1].Success).IsEqualTo(success);
         await Assert.That(simulate[^1].State[member]).IsEqualTo(stored);
     }
 }

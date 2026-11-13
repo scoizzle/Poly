@@ -113,6 +113,47 @@ public sealed class EditSpliceBaselineTests {
         await Assert.That(failures).IsEmpty();
     }
 
+    // ── Reindent: the first line sits at the node's own position (PolyEdit.Reindent, skipFirst) ──
+
+    private const string StageDocument = "domain A\nX: entity {\n  S: stage {\n    Go: action { }\n  }\n  N: Text\n}\n";
+
+    private static string ReplaceStage(string document, string dsl) =>
+        PolyEdit.Apply(document, JsonSerializer.Serialize(new[] { new { op = "replace", path = "X.S", dsl } })).Text!;
+
+    [Test]
+    public async Task Reindent_ASnippetWrittenFromColumnZeroWithADeeperBody_LandsAtTheNodesIndent() =>
+        await Assert.That(ReplaceStage(StageDocument, "S: stage {\n  Go: action { }\n}")).IsEqualTo(StageDocument);
+
+    [Test]
+    public async Task Reindent_AOneLineSnippet_LandsAtTheNodesIndent() =>
+        await Assert.That(ReplaceStage(StageDocument, "S: stage { }")).IsEqualTo("domain A\nX: entity {\n  S: stage { }\n  N: Text\n}\n");
+
+    [Test]
+    public async Task Reindent_ContinuationLinesAllDeeperThanTheNodesIndent_AreBroughtToIt() =>
+        await Assert.That(ReplaceStage(StageDocument, "S: stage {\n        Go: action { }\n        }"))
+            .IsEqualTo("domain A\nX: entity {\n  S: stage {\n  Go: action { }\n  }\n  N: Text\n}\n");
+
+    [Test]
+    public async Task Reindent_BlankLinesInTheSnippet_StayBlank() =>
+        await Assert.That(ReplaceStage(StageDocument, "S: stage {\n\n    Go: action { }\n  }"))
+            .IsEqualTo("domain A\nX: entity {\n  S: stage {\n\n    Go: action { }\n  }\n  N: Text\n}\n");
+
+    [Test]
+    public async Task Reindent_CrLf_KeepsTheDocumentsLineEndingsAndIsIdentical() {
+        var crlf = StageDocument.Replace("\n", "\r\n", StringComparison.Ordinal);
+        var node = DslOutline.Build(crlf).All().First(n => n.Path == "X.S");
+
+        await Assert.That(ReplaceStage(crlf, crlf[node.StartOffset..node.EndOffset])).IsEqualTo(crlf);
+    }
+
+    [Test]
+    public async Task Reindent_ASnippetTakenFromTheLineStart_IsStillIdentical() {
+        var node = DslOutline.Build(StageDocument).All().First(n => n.Path == "X.S");
+        var lineStart = StageDocument.LastIndexOf('\n', node.StartOffset - 1) + 1;
+
+        await Assert.That(ReplaceStage(StageDocument, StageDocument[lineStart..node.EndOffset])).IsEqualTo(StageDocument);
+    }
+
     [Test]
     public async Task SelfTest_OneEditResultChanged_FailsTheBaseline() {
         var frozen = ReadRows();

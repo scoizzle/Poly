@@ -453,14 +453,18 @@ public static class PolyEdit {
         var lines = dsl.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n').ToList();
         while (lines.Count > 0 && string.IsNullOrWhiteSpace(lines[0])) lines.RemoveAt(0);
         while (lines.Count > 0 && string.IsNullOrWhiteSpace(lines[^1])) lines.RemoveAt(lines.Count - 1);
+        // With skipFirst the first line sits at the node's own position and says nothing about the snippet's indent.
         var common = lines
+            .Skip(skipFirst ? 1 : 0)
             .Where(l => !string.IsNullOrWhiteSpace(l))
             .Select(l => l.Length - l.TrimStart().Length)
             .DefaultIfEmpty(0)
             .Min();
         var shifted = lines.Select((l, i) => {
+            if (i == 0 && skipFirst)
+                return l.Trim();
             var trimmed = string.IsNullOrWhiteSpace(l) ? "" : l[common..].TrimEnd();
-            return trimmed.Length == 0 || (i == 0 && skipFirst) ? trimmed : indent + trimmed;
+            return trimmed.Length == 0 ? trimmed : indent + trimmed;
         });
         return string.Join(nl, shifted);
     }

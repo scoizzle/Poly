@@ -17,7 +17,10 @@ namespace Poly.Tests.Introspection;
 /// corpus. The instrument is <see cref="CallSiteCatalogMetadata"/>: one identity
 /// (<c>Ns.Type.Method(ParamType1,ParamType2)</c>) per Invoke, New and getter site. The emitted C# cannot show a
 /// winner change, because the C# compiler rebinds. <c>OverloadSweepBaseline.txt</c> was captured from origin/master
-/// before any production edit; a difference is a defect or a row in the PR, never a new baseline.
+/// (0f79ba45, in a scratch worktree, with this file) before any production edit; a difference is a defect or a row in
+/// <see cref="ExplainedDeltas"/> and the PR, never a new baseline. The first capture (master 072d8803) also swept the printed
+/// goldens; one of them analyzed or threw depending on the run's test order, so they were dropped and the baseline was
+/// captured again from master, with no production change in between.
 /// Set <c>POLY_SWEEP_OUT</c> to a path to write the current sweep there instead of comparing.
 /// </summary>
 public class OverloadSweepTests {
@@ -35,11 +38,13 @@ public class OverloadSweepTests {
     /// <c>OverloadScoringTests</c>; a row here that does not match the baseline exactly once fails the test.
     /// </summary>
     private static readonly (string Before, string After, string Why)[] ExplainedDeltas = [
-        ("  errors: 1\n  System.Numerics.BitOperations.PopCount(System.UInt32)\n## csharp 244",
-         "  errors: 2\n## csharp 244",
+        ("  errors: 1\n  System.Numerics.BitOperations.PopCount(System.UInt32)\n## csharp 182",
+         "  errors: 2\n## csharp 182",
          "C# reader corpus, not the DSL: PopCount(1) bound PopCount(uint) through the removed Int32 -> UInt32 widening; "
          + "C# 10.2.11 allows it for a constant, Poly does not model constant-expression conversions, so no overload is left"),
     ];
+
+    private const string GoldenPrefix = "Poly.Tests/DomainModeling/Compile/EmitGolden/";
 
     private static string BaselinePath() =>
         Path.Combine(GoldenDomains.RepoRoot, "Poly.Tests", "Introspection", "OverloadSweepBaseline.txt");
@@ -77,8 +82,14 @@ public class OverloadSweepTests {
         foreach (var (name, source) in PolyDocuments())
             text.Append(SweepPoly(name, source));
         var index = 0;
-        foreach (var (source, unit) in NodeFactCorpus.Units)
+        foreach (var (source, unit) in NodeFactCorpus.Units) {
+            // The printed goldens name types a sibling golden declares (Order in OrderItem.cs), and whether those resolve
+            // depends on what the run has already registered: the same unit threw alone and analyzed in the full suite.
+            // The domains they print are swept above, from their .poly sources.
+            if (source.StartsWith(GoldenPrefix, StringComparison.Ordinal))
+                continue;
             text.Append(SweepCSharp(index++, source, unit));
+        }
         return text.ToString();
     }
 

@@ -302,7 +302,8 @@ public sealed class CSharpWriter {
                 if (content[i] is { Length: > 0 } text)
                     ctx.Emit(text);
             },
-            fills);
+            fills,
+            suppliedContentCount: content.Length);
     }
 
     private static Dictionary<string, string> Names(params (string Name, string Value)[] entries) {

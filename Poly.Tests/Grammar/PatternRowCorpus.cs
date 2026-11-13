@@ -36,9 +36,11 @@ internal static class PatternRowCorpus {
 
             Invoice: entity {
               Title: Text
+              Note: Text optional
               Amount: Number
               Paid: Boolean
               DueDate: Date
+              HasNote: policy { Note != null }
               IsLarge: policy { Amount > 100 }
               IsNamed: policy { Title != "none" }
               IsSettled: policy { Paid == true }
@@ -62,11 +64,27 @@ internal static class PatternRowCorpus {
             var e = 1L << 3 >> 1;
             """),
         ("coalesce", "string s = null; var t = s ?? \"x\";"),
+        ("accessors", """
+            class Accessors {
+                long _a;
+                long A { get; set => _a = value; }
+                long B { get => 1; set; }
+                long C { get => 1; private set => _a = value; }
+                long D { get => 1; private set; }
+            }
+            """),
+        ("generic-method", "class G { T Id<T>(T x) { return x; } }"),
+        ("records", "record R<T>(T Value) : Base { long X() { return 1; } } record S<T>(T V) : Base;"),
+        ("generic-interface-with-base", "interface IBox<T> : IShape { }"),
+        ("async-ident-lambda", "Func<Task, Task> f = async t => await t;"),
     ];
 
-    /// <summary>Code-built types the reader cannot read: an empty enum (#849).</summary>
+    /// <summary>Code-built types the reader cannot read: an empty enum (#849) and a body-less method.</summary>
     public static IReadOnlyList<(string Name, TypeDefinitionNode Type)> CSharpTypes { get; } = [
         ("empty-enum", new TypeDefinitionNode("Empty", Kind: TypeKind.Enum)),
+        ("body-less-method", new TypeDefinitionNode("Shell", Methods: [
+            new MethodDefinitionNode("Declared", TypeReference.To<long>()),
+        ])),
     ];
 
     /// <summary>Every observation of the drive, in print order. Computed once.</summary>

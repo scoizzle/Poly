@@ -306,6 +306,17 @@ public sealed class GrammarPatternRowTests {
         await Assert.That(On(violations, PatternRowCheck.Stale, "type-decl", "interface")).IsEmpty();
     }
 
+    [Test]
+    public async Task Check_DefectEntry_DoesNotExemptASlotCountFailure() {
+        var entry = PatternRowEntry.Defect(CSharpKey, "attribute", "bare", "[Obsolete]", "self-test", "G-23b (#848)");
+        var spare = Observed(CSharp, "attribute", "bare", "[Obsolete]", fills: ["close", "open"], emitted: [true], supplied: 2);
+
+        var violations = CheckCSharp(CSharp, [spare], [entry]);
+
+        await Assert.That(On(violations, PatternRowCheck.Arity, "attribute", "bare")).Count().IsEqualTo(1);
+        await Assert.That(On(violations, PatternRowCheck.Stale, "attribute", "bare")).Count().IsEqualTo(1);
+    }
+
     // ── allow-list schema ─────────────────────────────────────────────────────
 
     [Test]

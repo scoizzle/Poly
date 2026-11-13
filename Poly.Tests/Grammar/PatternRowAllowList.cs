@@ -24,10 +24,11 @@ internal enum PatternRowEntryKind {
 /// One allow-list entry. Keyed by <c>(Surface, Rule, Pattern)</c>; an unobserved entry may instead be
 /// keyed by <c>(Surface, Rule)</c> with the rule's row count pinned, so a new row in that rule cannot
 /// pass unseen. <see cref="PatternRowEntryKind.AlwaysNull"/> adds the slot index;
-/// <see cref="PatternRowEntryKind.Defect"/> adds a witness: only violations on an observation whose text
-/// contains it are exempt. Every entry carries a reason and an owner: the row that removes it
-/// (<c>G-nn</c>, <c>E-nn</c>, <c>F-nn</c>, optionally with its issue, or <c>#nnn</c>), or
-/// <c>none: permanent — &lt;why&gt;</c>.
+/// <see cref="PatternRowEntryKind.Defect"/> adds a witness (an asymmetry may): only read-back failures on an
+/// observation whose text contains it are exempt. Asymmetry and defect entries exempt read-back only.
+/// Every entry carries a reason and an owner: the row that removes it (<c>G-nn</c>, <c>E-nn</c>,
+/// <c>F-nn</c>, optionally with its issue, or <c>#nnn</c>), <c>none: permanent — &lt;why&gt;</c>, or
+/// <c>pending orchestrator</c> for a finding no row owns yet.
 /// </summary>
 internal sealed record PatternRowEntry(
     string Surface,
@@ -82,6 +83,9 @@ internal static class PatternRowAllowList {
     private const string ComposedByHand =
         "none: permanent — the writer composes this text by hand (TypeText, ParamText and the like); Write(Read(x)) guards it";
 
+    /// <summary>A finding no row owns yet: the PR lists it for the orchestrator to place.</summary>
+    private const string PendingOrchestrator = "pending orchestrator";
+
     private const string NonLiveChain =
         "The non-live expr chain: a recogniser only tests use; the driver's precedence table is the live expression grammar.";
 
@@ -99,8 +103,11 @@ internal static class PatternRowAllowList {
             "Stage member heads; DomainDslPrinter prints stages by hand.", HandPrinted),
         PatternRowEntry.WholeRule(Dsl, PatternRowEntryKind.ReaderHead, "effect", 9,
             "Effect heads; DomainDslPrinter prints effects by hand.", HandPrinted),
-        PatternRowEntry.WholeRule(Dsl, PatternRowEntryKind.ReaderHead, "annotation", 2,
+        PatternRowEntry.Row(Dsl, PatternRowEntryKind.ReaderHead, "annotation", "with-args",
             "Annotation heads; DomainDslPrinter prints annotations by hand.", HandPrinted),
+        PatternRowEntry.Row(Dsl, PatternRowEntryKind.NonLive, "annotation", "no-args",
+            "Shadowed: with-args with zero arguments matches the same tokens and sorts first, so the matcher never selects no-args (found by G-23's example check; the real fix deletes the row).",
+            PendingOrchestrator),
         PatternRowEntry.WholeRule(Dsl, PatternRowEntryKind.ReaderHead, "annotation-args", 5,
             "Annotation argument heads; DomainDslPrinter prints arguments by hand.", HandPrinted),
         PatternRowEntry.WholeRule(Dsl, PatternRowEntryKind.ReaderHead, "visibility", 1,
@@ -158,9 +165,29 @@ internal static class PatternRowAllowList {
         PatternRowEntry.AlwaysNull(CSharp, "enum-body", "body", 1,
             "The writer prints every member into the first-member slot; the repeated tail slot is part of that text.",
             "none: permanent — one member list string fills the enum body"),
+        PatternRowEntry.AlwaysNull(CSharp, "expr-shift", "shift", 1,
+            "BinaryChain prints the whole chain into the operand slot; the repeated shift-tail slot is part of that text.",
+            "none: permanent — one chain string fills the shift row, as for the LeftAssoc levels"),
         .. AttributesSlot("type-decl", "class"), .. AttributesSlot("type-decl", "record"),
         .. AttributesSlot("type-decl", "record-semi"), .. AttributesSlot("type-decl", "interface"),
-        .. AttributesSlot("type-decl", "enum"),
+        .. AttributesSlot("type-decl", "enum"), .. AttributesSlot("member", "field"),
+        .. AttributesSlot("member", "property"), .. AttributesSlot("member", "method"),
+        .. AttributesSlot("member", "ctor"),
+        PatternRowEntry.Row(CSharp, PatternRowEntryKind.RowOwnsText, "statement", "expr-stmt",
+            "AssignmentText spells a fused declaration `var x = v` by hand and prints it through expr-stmt; the reader reads that text as statement/var-decl.",
+            PendingOrchestrator) with { Witness = "var " },
+        PatternRowEntry.Row(CSharp, PatternRowEntryKind.RowOwnsText, "expr-primary", "lambda-ident",
+            "A block-bodied lambda prints its block into the expression slot; the reader reads that text as expr-primary/lambda-block-ident.",
+            PendingOrchestrator) with { Witness = "=> {" },
+        PatternRowEntry.Row(CSharp, PatternRowEntryKind.RowOwnsText, "expr-primary", "lambda-parens",
+            "A block-bodied lambda prints its block into the expression slot; the reader reads that text as expr-primary/lambda-block-parens.",
+            PendingOrchestrator) with { Witness = "=> {" },
+        .. InitializerDefect("new int[] {", "statement", "foreach"),
+        .. InitializerDefect("new List<int> {", "statement", "return"),
+        .. InitializerDefect("new int[] {", "block", "block"), .. InitializerDefect("new List<int> {", "block", "block"),
+        .. InitializerDefect("new int[] {", "member", "method"), .. InitializerDefect("new List<int> {", "member", "method"),
+        .. InitializerDefect("new int[] {", "type-body", "body"), .. InitializerDefect("new List<int> {", "type-body", "body"),
+        .. InitializerDefect("new int[] {", "type-decl", "class"), .. InitializerDefect("new List<int> {", "type-decl", "class"),
         PatternRowEntry.Defect(CSharp, "type-decl", "interface", "interface ",
             "The interface path fills the type-body slot with raw member lines and no braces, so a printed interface does not re-read.",
             "G-23b (#848)"),
@@ -189,6 +216,16 @@ internal static class PatternRowAllowList {
     private static IEnumerable<PatternRowEntry> ReaderOnlyRules(params (string Rule, int RowCount)[] rules) =>
         rules.Select(rule => PatternRowEntry.WholeRule(CSharp, PatternRowEntryKind.ReaderOnly, rule.Rule, rule.RowCount,
             "No Render site names a row of this rule; the writer composes the text by hand.", ComposedByHand));
+
+    /// <summary>
+    /// A Constant holding an <c>int[]</c> or a <c>List&lt;int&gt;</c> prints as an initializer
+    /// (<c>ArrayLiteral</c>, <c>CollectionLiteral</c>) that no C# row reads, so every row whose text
+    /// contains one fails read-back.
+    /// </summary>
+    private static IEnumerable<PatternRowEntry> InitializerDefect(string witness, string rule, string pattern) =>
+        [PatternRowEntry.Defect(CSharp, rule, pattern, witness,
+            "The writer prints an array or collection initializer by hand (ArrayLiteral, CollectionLiteral); no C# row reads `new T[] { … }` or `new List<T> { … }`, so Read(Write(x)) fails.",
+            PendingOrchestrator)];
 
     private static IEnumerable<PatternRowEntry> AttributesSlot(string rule, string pattern) =>
         [PatternRowEntry.AlwaysNull(CSharp, rule, pattern, 0,

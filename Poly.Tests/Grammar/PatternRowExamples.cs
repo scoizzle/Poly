@@ -46,7 +46,6 @@ internal static class PatternRowExamples {
         new(Dsl, "effect", "for", "for"),
         new(Dsl, "effect", "if", "if ("),
 
-        new(Dsl, "annotation", "no-args", "unique()"),
         new(Dsl, "annotation", "with-args", "max(10)"),
 
         new(Dsl, "annotation-args", "str", "\"a\""),

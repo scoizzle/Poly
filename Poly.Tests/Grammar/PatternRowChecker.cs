@@ -154,9 +154,12 @@ internal static class PatternRowChecker {
         return violations;
     }
 
-    /// <summary>An owner is a removing row (optionally with its issue), an issue, or a permanent justification.</summary>
+    /// <summary>
+    /// An owner is a removing row (optionally with its issue), an issue, a permanent justification, or
+    /// <c>pending orchestrator</c>: a finding this check surfaced that no row owns yet, listed so the PR shows it.
+    /// </summary>
     private static readonly Regex OwnerFormat = new(
-        @"^(?:[A-Z]-\d+[a-z]?(?: \(#\d+\))?|#\d+|none: permanent — \S.*)$", RegexOptions.CultureInvariant);
+        @"^(?:[A-Z]-\d+[a-z]?(?: \(#\d+\))?|#\d+|none: permanent — \S.*|pending orchestrator)$", RegexOptions.CultureInvariant);
 
     private const string PermanentOwnerPrefix = "none: permanent";
 
@@ -416,7 +419,9 @@ internal static class PatternRowChecker {
                 return false;
             if (entry.Witness is { } witness && !candidate.Observation.Text.Contains(witness, StringComparison.Ordinal))
                 return false;
-            return entry.Kind == PatternRowEntryKind.Defect || violation.Check == PatternRowCheck.ReadBack;
+            // Asymmetry and defect entries exempt read-back only: a hole or slot-count failure on the
+            // same observation is still reported.
+            return violation.Check == PatternRowCheck.ReadBack;
         }
 
         // ── A3 coverage ──────────────────────────────────────────────────────

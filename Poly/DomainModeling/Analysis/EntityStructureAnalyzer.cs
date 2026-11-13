@@ -64,10 +64,7 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
         string? stageEnumTypeName = null;
         IReadOnlyDictionary<string, Stage>? stageByName = null;
         if (hasStages) {
-            stageEnumTypeName = domain.Types
-                .OfType<EnumType>()
-                .FirstOrDefault(e => e.Name == $"{entity.Name}Stage")
-                ?.Name ?? $"{entity.Name}Stage";
+            stageEnumTypeName = StageEnumTypeNameFor(entity, domain);
             stageByName = entity.Stages.ToDictionary(s => s.Name, StringComparer.Ordinal);
         }
 
@@ -229,6 +226,11 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
     /// Such a stage is constant, so the printer omits the stage enum and
     /// <c>CurrentStage</c>; stage-scoped actions become entity-level.
     /// </summary>
+    internal static string? StageEnumTypeNameFor(Entity entity, Domain domain) =>
+        entity.Stages.Count > 0 && !IsImplicitStage(entity, domain)
+            ? domain.Types.OfType<EnumType>().FirstOrDefault(e => e.Name == $"{entity.Name}Stage")?.Name ?? $"{entity.Name}Stage"
+            : null;
+
     internal static bool IsImplicitStage(Entity entity, Domain? domain = null) {
         if (entity.Stages.Count != 1)
             return false;

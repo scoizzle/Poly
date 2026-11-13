@@ -184,7 +184,7 @@ internal sealed class SubscriptionAnalyzer : INodeAnalyzer {
         Domain domain,
         DomainTypeLookupMetadata lookup) {
 
-        ReportReservedPeerBinder(context, subscription, entity);
+        ReportReservedPeerBinder(context, subscription, entity, domain);
 
         // ── Empty/blank checks ──────────────────────────────────
         if (string.IsNullOrWhiteSpace(subscription.RelationshipName)) {
@@ -307,15 +307,15 @@ internal sealed class SubscriptionAnalyzer : INodeAnalyzer {
     /// expression position shadows it (<see cref="ReservedNames.TryReservedAsPeerBinder"/>): the same
     /// <see cref="DomainModelDiagnosticCodes.ReservedMemberName"/> rule as an action parameter.
     /// </summary>
-    private static void ReportReservedPeerBinder(AnalysisContext context, StageSubscription subscription, Entity entity) {
+    private static void ReportReservedPeerBinder(AnalysisContext context, StageSubscription subscription, Entity entity, Domain domain) {
         if (subscription.PeerBinding is not { Length: > 0 } binder
-            || !ReservedNames.TryReservedAsPeerBinder(binder, out var row))
+            || !ReservedNames.TryReservedAsPeerBinder(binder, domain, out var row))
             return;
         var handler = $"Peer binder '{binder}' of the 'when {subscription.RelationshipName} " +
             $"{string.Join(", ", subscription.StageNames)}' handler on entity '{entity.Name}'";
         context.ReportError(
             subscription,
-            ReservedNames.IsActionScopeName(binder)
+            ReservedNames.IsActionScopeName(binder) || ReservedNames.IsStageEnumRow(row)
                 ? $"{handler}: {row.Reason}; rename it."
                 : $"{handler} would shadow the generated C# type '{row.Name}' that Emit calls from the generated " +
                 "handler body; rename it.",

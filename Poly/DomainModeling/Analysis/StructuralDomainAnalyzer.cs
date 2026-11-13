@@ -44,6 +44,20 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
         // Type names remain domain-global (entities, enums, primitives).
         ReportDuplicateNames(context, domain.Types.Cast<DomainMember>(), "domain", domain.Name);
 
+        // A parameter named exactly like a generated stage enum type shadows it where the body reads the enum. The
+        // domain is in hand here, before the type lookup exists, so this is the one place the rule runs for parameters.
+        foreach (var entity in domain.Types.OfType<Entity>())
+            DomainAnalysis.ForEachAction(entity, action => {
+                foreach (var parameter in action.Parameters) {
+                    if (ReservedNames.TryReservedAsActionParameter(parameter.Name, action, domain, out var row)
+                        && ReservedNames.IsStageEnumRow(row))
+                        context.ReportError(
+                            parameter,
+                            $"Parameter '{parameter.Name}' of action '{action.Name}': {row.Reason}; rename it.",
+                            DomainModelDiagnosticCodes.ReservedMemberName);
+                }
+            });
+
         // Relationship names must not collide with type names (DSL/export ambiguity).
         var typeNames = domain.Types.Cast<DomainMember>()
             .GroupBy(static t => t.Name, StringComparer.Ordinal)
@@ -789,7 +803,7 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
     private static void AnalyzeAction(AnalysisContext context, Action action) {
         ReportDuplicateNames(context, action.Parameters, "action", action.Name);
         foreach (var parameter in action.Parameters) {
-            if (!ReservedNames.TryReservedAsActionParameter(parameter.Name, action, out var row))
+            if (!ReservedNames.TryReservedAsActionParameter(parameter.Name, action, null, out var row))
                 continue;
             context.ReportError(
                 parameter,

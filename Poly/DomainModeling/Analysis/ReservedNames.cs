@@ -72,7 +72,7 @@ internal sealed record ReservedName(
 /// on <see cref="StructuralDomainAnalyzer"/> stays a second, expression-only list (G-06/G-21).
 /// </summary>
 internal static class ReservedNames {
-    /// <summary>The prefix the generated action-scope surface (snapshot/restore members, wrapper locals) lives under.</summary>
+    /// <summary>The prefix the generated action-scope surface (snapshot/restore members, wrapper locals, the handler locals <c>__linkedTarget</c>, <c>__linkedMatched</c> and <c>__previousStage</c>, and <c>__EnterInitialStage</c>) lives under.</summary>
     internal const string ActionScopePrefix = "__";
 
     internal const string ActionScopeReason = "names beginning `__` are the generated action-scope surface";
@@ -181,9 +181,9 @@ internal static class ReservedNames {
     /// action with no result members, because a typed action prints <c>DomainResult&lt;T&gt;</c>, which
     /// binds as a type beside the parameter.
     /// </summary>
-    public static bool TryReservedAsActionParameter(string identity, Ontology.Action action, out ReservedName row) =>
+    public static bool TryReservedAsActionParameter(string identity, Ontology.Action action, Domain? domain, out ReservedName row) =>
         // A stage-dispatched method merged from a void and a typed copy is deliberately over-rejected.
-        TryReservedInGeneratedBody(identity,
+        TryReservedInGeneratedBody(identity, domain,
             candidate => candidate.AppliesToAction is null || candidate.AppliesToAction(action), out row);
 
     /// <summary>
@@ -194,23 +194,32 @@ internal static class ReservedNames {
     /// The fan-out <c>for Rel as name</c> and general <c>for name in Rel</c> binders need no row: they lower to a
     /// generated <c>target{N}</c> local, never to the authored name.
     /// </summary>
-    public static bool TryReservedAsPeerBinder(string identity, out ReservedName row) =>
-        TryReservedInGeneratedBody(identity, static _ => true, out row);
+    public static bool TryReservedAsPeerBinder(string identity, Domain? domain, out ReservedName row) =>
+        TryReservedInGeneratedBody(identity, domain, static _ => true, out row);
+
+    /// <summary>True for a row <see cref="TryReservedAsActionParameter"/> or <see cref="TryReservedAsPeerBinder"/> built for a stage enum.</summary>
+    internal static bool IsStageEnumRow(ReservedName row) =>
+        row.Reason.StartsWith("the generated stage enum", StringComparison.Ordinal);
+
+    /// <summary>The entity whose generated stage enum type is named <paramref name="identity"/>, else null.</summary>
+    private static string? StageEnumOwner(string identity, Domain domain) {
+        foreach (var entity in domain.Types.OfType<Entity>())
+            if (string.Equals(EntityStructureAnalyzer.StageEnumTypeNameFor(entity, domain), identity, StringComparison.Ordinal))
+                return entity.Name;
+        return null;
+    }
 
     private static bool TryReservedInGeneratedBody(
-        string identity, Func<ReservedName, bool> applies, out ReservedName row) {
+        string identity, Domain? domain, Func<ReservedName, bool> applies, out ReservedName row) {
         if (IsActionScopeName(identity)) {
             row = ActionScopeRow;
             return true;
         }
-        // L-04a (L-03c's review, nit 3): the names the generated handler declares (`linkedTarget`, `linkedMatched`, and
-        // its `previousStage` parameter: CS0136 / CS0100) and the stage enums it reads from expression position
-        // (`{Entity}Stage`). Without the domain an enum name cannot be told from any other PascalCase `...Stage` name,
-        // so that shape is refused.
-        if (identity is "linkedTarget" or "linkedMatched" or "previousStage"
-            || (identity.Length > 5 && identity.EndsWith("Stage", StringComparison.Ordinal) && char.IsUpper(identity[0]))) {
+        // A parameter or binder named EXACTLY like a generated stage enum type shadows it where an action or handler reads
+        // that enum (`ActivityStage.Open`). The set is the domain's: the names the emitter gives, from one function.
+        if (domain is not null && StageEnumOwner(identity, domain) is { } owner) {
             row = new ReservedName(identity, ReservedKind.GeneratedReference,
-                "shadows a name the generated handler or action body declares or reads");
+                $"the generated stage enum of entity '{owner}'");
             return true;
         }
         foreach (var candidate in Fixed) {

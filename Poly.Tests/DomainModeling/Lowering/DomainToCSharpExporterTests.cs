@@ -1322,7 +1322,7 @@ public class DomainToCSharpExporterTests {
     public async Task Export_WhenAllGate_UsesTargetStageEnumName() {
         // Round-5 F8: the `when all` gate must reference the TARGET's stage enum (via the
         // target's EntityStructureMetadata), not the subscriber's convention — the gate
-        // checks linkedTarget.CurrentStage != {Target}Stage.Done.
+        // checks __linkedTarget.CurrentStage != {Target}Stage.Done.
         var (domain, analysis) = ParseAndAnalyze("""
             domain Test
             Task: entity {
@@ -1339,7 +1339,7 @@ public class DomainToCSharpExporterTests {
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
-        await Assert.That(cs).Contains("linkedTarget.CurrentStage != TaskStage.Done");
+        await Assert.That(cs).Contains("__linkedTarget.CurrentStage != TaskStage.Done");
     }
 
     private static IEnumerable<Invoke> FindAllInvokes(Node node) {
@@ -1609,8 +1609,8 @@ public class DomainToCSharpExporterTests {
 
         var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var csharp = new CSharpGenerator().Generate(types);
-        await Assert.That(csharp).Contains("linkedTarget.CurrentStage != WorkItemStage.Done");
-        await Assert.That(csharp).Contains("if (!linkedMatched)");
+        await Assert.That(csharp).Contains("__linkedTarget.CurrentStage != WorkItemStage.Done");
+        await Assert.That(csharp).Contains("if (!__linkedMatched)");
     }
 
     [Test]
@@ -3853,7 +3853,7 @@ public class DomainToCSharpExporterTests {
         var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var cs = new CSharpGenerator().Generate(types);
 
-        await Assert.That(cs).Contains("DomainResult NotifyBSubscribers(ItemStage? previousStage)");
+        await Assert.That(cs).Contains("DomainResult NotifyBSubscribers(ItemStage? __previousStage)");
     }
 
     [Test]

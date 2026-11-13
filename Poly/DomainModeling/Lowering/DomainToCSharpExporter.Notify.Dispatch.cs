@@ -193,7 +193,7 @@ public sealed partial class DomainToCSharpExporter {
                 // "transitioned from" and a fresh entry must not match.
                 var needsPrevious = stageGroup.Any(infos => infos.Any(NeedsAllPreviousStage));
                 var notifyPrevious = new Parameter(
-                    "previousStage",
+                    "__previousStage",
                     new OptionalTypeReference(new NamedTypeReference(stageEnumTypeName!)));
                 var notifyNodes = new List<Node>();
                 var names = new LocalNames();

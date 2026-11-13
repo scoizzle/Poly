@@ -45,7 +45,7 @@ public sealed partial class DomainToCSharpExporter {
                 var targetStageEnumName = metadata.GetStructure(info.TargetEntity)
                     ?.StageEnumTypeName ?? $"{info.TargetEntity.Name}Stage";
                 Parameter? previousStageParam = NeedsAllPreviousStage(info)
-                    ? new Parameter("previousStage",
+                    ? new Parameter("__previousStage",
                         new OptionalTypeReference(new NamedTypeReference(targetStageEnumName)))
                     : null;
                 var handlerParamList = new List<Parameter>();
@@ -117,8 +117,8 @@ public sealed partial class DomainToCSharpExporter {
                 // one linked record must exist. Later transitions while every linked
                 // record still matches do not fire again.
                 if (previousStageParam is not null) {
-                    var linkedVar = new Variable("linkedTarget");
-                    var matchedVar = new Variable("linkedMatched");
+                    var linkedVar = new Variable("__linkedTarget");
+                    var matchedVar = new Variable("__linkedMatched");
                     var currentStage = new Member(linkedVar, "CurrentStage");
                     var gateLoop = new ForEachLoop(
                         linkedVar,
@@ -154,8 +154,8 @@ public sealed partial class DomainToCSharpExporter {
                 if (info.Subscription.Quantifier == StageSubscriptionQuantifier.Any
                     && metadata.GetStructure(info.TargetEntity)?.HasStages == true
                     && info.Subscription.StageNames.Count > 0) {
-                    var linkedVar = new Variable("linkedTarget");
-                    var matchedVar = new Variable("linkedMatched");
+                    var linkedVar = new Variable("__linkedTarget");
+                    var matchedVar = new Variable("__linkedMatched");
                     var gateLoop = new ForEachLoop(
                         linkedVar,
                         new Member(new ThisReference(), ToPascalCase(info.Relationship.Name)),

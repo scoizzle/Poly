@@ -153,7 +153,7 @@ public sealed partial class DomainResolver {
         // necessarily a reserved word (symbols like `,`/`:` fall through to the
         // normal RBrace error; EndOfFile has no text).
         if (Current.Kind is not (TokenKind.RBrace or TokenKind.Comma or TokenKind.EndOfFile)
-            && DslTokenText.LegacyText(Current) is { Length: > 0 } word
+            && DslTokenText.Word(Current) is { Length: > 0 } word
             && char.IsLetter(word[0])) {
             throw Error(
                 $"Enum member '{word}' is a reserved keyword and cannot be used as an enum member. " +

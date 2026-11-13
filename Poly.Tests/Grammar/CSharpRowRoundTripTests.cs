@@ -153,6 +153,24 @@ public class CSharpRowRoundTripTests {
         await Assert.That(() => CSharpLanguage.Write(Unit(loop))).Throws<InvalidOperationException>();
     }
 
+    // ── statement/label ──────────────────────────────────────────────────────
+
+    [Test]
+    public async Task Label_PrintsItsStatementThroughTheRow() {
+        var unit = Unit(new Block([new LabelDeclaration("exit", new Return(new Constant(0L)))], Array.Empty<Node>()));
+        using var scope = PrintTrace.Begin();
+        var printed = CSharpLanguage.Write(unit);
+
+        var labels = scope.Observations
+            .Where(o => ReferenceEquals(o.Grammar, CSharpLanguage.Grammar) && o.Rule == "statement" && o.Pattern == "label")
+            .Select(o => o.Text.ReplaceLineEndings("\n")).ToArray();
+        await Assert.That(labels).Count().IsEqualTo(1);
+        await Assert.That(labels[0]).Contains("exit:").And.Contains("return 0L;");
+        await Assert.That(CSharpLanguage.Write(CSharpLanguage.Read(printed))).IsEqualTo(printed);
+        await Assert.That(CSharpLanguage.Write(new LabelDeclaration("exit", new Return(new Constant(0L))))
+            .ReplaceLineEndings("\n")).IsEqualTo("exit:\nreturn 0L;");
+    }
+
     // ── block-bodied lambdas ─────────────────────────────────────────────────
 
     [Test]

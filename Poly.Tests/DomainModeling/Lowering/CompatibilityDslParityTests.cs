@@ -186,6 +186,77 @@ public class CompatibilityDslParityTests {
             .WithMessageContaining("error CS1503: Argument 1: cannot convert from 'decimal' to 'double'");
     }
 
+    static string OffsetPlan(string due, string expression, string parameters = "", bool linked = false) => $$"""
+        domain D
+        uses temporal
+        {{(linked ? "Item: entity {\n  Start: Date\n}\n" : "")}}Plan: entity {
+          Days: Decimal
+          Due: {{due}}
+          {{(linked ? "item: Item\n  " : "")}}Start: Date
+          Shift: action {{parameters}}{ assign Due to {{expression}} }
+        }
+        """;
+
+    /// <summary>
+    /// Review F1: the domain lowering turns a Date ± Decimal into <c>AddDays</c> only when the left is a date-typed
+    /// property or parameter; any other left reaches the lowered analysis as a Date-with-Decimal operator node. On
+    /// master those shapes passed analysis and failed on both hosts: the interpreter threw at run time
+    /// (<c>InvalidCastException</c> from the <c>Convert.ToDecimal</c> rewrite) and the printed C# did not compile (CS0019).
+    /// T-18 rejects them at analysis (the provider defines no such operator), so the interpreter's compile fails
+    /// with that message and the printed C# still fails with CS0019.
+    /// </summary>
+    [Test]
+    [Arguments("DateTime", "Now + Days", false, "'DateTime' and 'Decimal'): no Add operator", "'+' cannot be applied to operands of type 'DateTime' and 'decimal'")]
+    [Arguments("DateTime", "Now - Days", false, "'DateTime' and 'Decimal'): no Subtract operator", "'-' cannot be applied to operands of type 'DateTime' and 'decimal'")]
+    [Arguments("Date", "Today + Days", false, "'DateOnly' and 'Decimal'): no Add operator", "'+' cannot be applied to operands of type 'DateOnly' and 'decimal'")]
+    [Arguments("Date", "Today - Days", false, "'DateOnly' and 'Decimal'): no Subtract operator", "'-' cannot be applied to operands of type 'DateOnly' and 'decimal'")]
+    [Arguments("Date", "(Start + 1) + Days", false, "'DateOnly' and 'Decimal'): no Add operator", "'+' cannot be applied to operands of type 'DateOnly' and 'decimal'")]
+    [Arguments("Date", "(Start + 1) - Days", false, "'DateOnly' and 'Decimal'): no Subtract operator", "'-' cannot be applied to operands of type 'DateOnly' and 'decimal'")]
+    [Arguments("Date", "item Start + Days", true, "'DateOnly' and 'Decimal'): no Add operator", "'+' cannot be applied to operands of type 'DateOnly' and 'decimal'")]
+    [Arguments("Date", "item Start - Days", true, "'DateOnly' and 'Decimal'): no Subtract operator", "'-' cannot be applied to operands of type 'DateOnly' and 'decimal'")]
+    public async Task DateWithDecimalOperatorNode_IsRejectedByTheLoweredAnalysis_AndThePrintedHostDoesNotCompile(
+        string due, string expression, bool linked, string analysis, string printed) {
+        var dsl = OffsetPlan(due, expression, linked: linked);
+        var domain = EvolvedDomain.FromDsl(dsl).Domain;
+        RuntimeAnalysisCache.Bind(domain, ParitySessions.Create(domain.Extensions.Count > 0 ? domain.Extensions : ExtensionCatalog.ProductAuthoring));
+        var side = new SimulateSide(domain);
+        object dueValue = due == "Date" ? new DateOnly(2000, 1, 1) : new DateTime(2000, 1, 1);
+        if (linked) {
+            var item = side.Create("Item", ("Start", new DateOnly(2024, 2, 28)));
+            side.Create("Plan", ("Days", 2m), ("Due", dueValue), ("item", item), ("Start", new DateOnly(2024, 2, 28)));
+        }
+        else {
+            side.Create("Plan", ("Days", 2m), ("Due", dueValue), ("Start", new DateOnly(2024, 2, 28)));
+        }
+        side.Invoke("Shift");
+        var shift = side.Outcomes[^1];
+        await Assert.That(shift.Success).IsFalse();
+        await Assert.That(shift.ExceptionType).IsEqualTo("InvalidOperationException");
+        await Assert.That(shift.Message).IsEqualTo(
+            "VM compile rejected: AST member body analysis reported errors: arithmetic operand is not numeric (got " + analysis + " for these types");
+        await Assert.That(() => ParityScenario.FromDsl(dsl, "T18F1" + (linked ? "Linked" : "") + expression.Replace(" ", "").Replace("(", "").Replace(")", "").Replace("+", "Plus").Replace("-", "Minus")))
+            .Throws<InvalidOperationException>()
+            .WithMessageContaining("error CS0019: Operator " + printed);
+    }
+
+    /// <summary>The accepting sibling: a date action parameter is lowered to <c>AddDays</c> and both hosts agree.</summary>
+    [Test]
+    public async Task DateParameterPlusDecimal_IsLoweredToAddDays_BothHostsAgree() {
+        var culture = CultureInfo.CurrentCulture;
+        CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
+        try {
+            var outcomes = await ParityScenario.FromDsl(OffsetPlan("Date", "start + Days", parameters: "(start: Date) "), "T18F1DateParam").AssertAgree(side => {
+                side.Create("Plan", ("Days", 2m), ("Due", new DateOnly(2000, 1, 1)), ("Start", new DateOnly(2000, 1, 1)));
+                side.Invoke("Shift", ("start", new DateOnly(2024, 2, 28)));
+            });
+            await Assert.That(outcomes[^1].Success).IsTrue();
+            await Assert.That(outcomes[^1].State["Due"]).IsEqualTo("03/01/2024");
+        }
+        finally {
+            CultureInfo.CurrentCulture = culture;
+        }
+    }
+
     /// <summary>A step that threw reports no state (the harness default), so its Due is named as not read.</summary>
     static string Describe(ParityOutcome outcome) =>
         $"success={outcome.Success}; exception={outcome.ExceptionType ?? "none"}; message={outcome.Message}; Due={(outcome.ExceptionType is null ? outcome.State["Due"] : "<state not read>")}";

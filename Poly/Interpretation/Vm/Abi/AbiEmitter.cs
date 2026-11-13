@@ -66,8 +66,6 @@ public static partial class AbiEmitter {
         Ref<IEnumerator>.Method(e => e.MoveNext());
     private static readonly PropertyInfo EnumeratorCurrent =
         Ref<IEnumerator>.Property(e => e.Current);
-    private static readonly MethodInfo BoxToAbiInfo =
-        Ref.Method((Expression<Func<VmManagedObjectHeap, object?, long>>)((h, v) => RingCodec.BoxToAbi(h, v)));
     private static readonly MethodInfo CastAbiInfo =
         Ref.Method((Expression<Func<VmManagedObjectHeap, long, Type, long>>)((h, r, t) => RingCodec.Cast(h, r, t)));
     private static readonly MethodInfo CastToNullableAbiInfo =

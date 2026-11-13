@@ -1368,13 +1368,12 @@ public static partial class AbiEmitter {
         return Call(ctx.HeapLocal, HeapUnsafeGet, Convert(word, typeof(int)));
     }
 
-    /// <summary>A scalar argument of a name-dispatched call. A temporal word boxes
-    /// the CLR value; an int or IEEE word boxes as it always has.</summary>
-    private static Expression ScalarArgument(Expression word, Type? clr, Context ctx) {
-        if (TemporalWord(clr))
-            return Convert(LocalType.Decode(word, clr, clr!, ctx.HeapLocal), typeof(object));
-        return Convert(word, typeof(object));
-    }
+    /// <summary>A scalar argument of a name-dispatched call: the word read as its own type, then boxed, so a
+    /// <c>bool</c> arrives as a bool and a <c>double</c> as the double, not its IEEE bits.</summary>
+    private static Expression ScalarArgument(Expression word, Type? clr, Context ctx) =>
+        clr is null
+            ? throw new InvalidOperationException("VM compile rejected: cannot resolve the type of a name-dispatched argument.")
+            : Convert(LocalType.Decode(word, clr, clr, ctx.HeapLocal), typeof(object));
 
     private static bool TemporalWord(Type? clr) =>
         clr is not null && LocalType.Of(clr) is LocalType.TemporalLocal { IsWord: true };

@@ -332,6 +332,17 @@ public class ValueRepresentationEmitTests {
         }, TUnit.Assertions.Enums.CollectionOrdering.Matching);
     }
 
+    /// <summary>
+    /// The tree the domain lowering gives a date minus a decimal day count, <c>Start.AddDays((Int32)-Days)</c>, built
+    /// through the API (the DSL refuses a decimal day count from T-10a on). The decimal is negated, not its handle.
+    /// </summary>
+    [Test]
+    public async Task DateMinusDecimalDays_AddDaysOfTheNegatedCount_IsTheEarlierDate() {
+        var node = new Invoke(new Member(P<DateOnly>("start"), nameof(DateOnly.AddDays)),
+            new TypeCast(new UnaryMinus(P<decimal>("days")), TypeReference.To<int>()));
+        await Assert.That(Answer(node, new DateOnly(2024, 2, 28), 2m)).IsEqualTo($"DateOnly {new DateOnly(2024, 2, 26)}");
+    }
+
     private static string Constructed<T>(Node argument, params object?[] args) =>
         Answer(new Member(new New(new ClrTypeReference(typeof(T)), argument), nameof(CtorProbe.ObjectBox.Text)), args);
 
@@ -352,6 +363,73 @@ public class ValueRepresentationEmitTests {
         };
         await Assert.That(answers).IsEquivalentTo(new[] {
             "String Int32:7", "String String:x", "String 1.5", "String 1.5", "String 1.5", "String 5", "String <null>", "String True",
+        }, TUnit.Assertions.Enums.CollectionOrdering.Matching);
+    }
+
+    private static Invoke ToText(Node value) =>
+        new(new Member(new ClrTypeReference(typeof(Convert)), nameof(Convert.ToString)), value);
+
+    private static Parameter ObjectParameter(string name) => new(name, new ClrTypeReference(typeof(object)));
+
+    private static string HostArrayAfter(Node stored) {
+        var host = new object?[] { null };
+        var node = new Block([new Assignment(new IndexAccess(P<object[]>("arr"), new Constant(0)), stored), new Constant(0)]);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node), (object)host);
+        return host[0] is { } value ? $"{value.GetType().Name}:{value}" : "null";
+    }
+
+    private static string NameDispatched(Type type, object argument) {
+        var typeDef = new TypeDefinitionNode(Name: "BoundaryPerson", Methods: [
+            new MethodDefinitionNode("Take", new TypeReference("void"),
+                Parameters: [new Parameter("x", new ClrTypeReference(type))], Body: new Block([]))]);
+        var context = AnalysisContext.CreateDefault();
+        new TypeDefinitionNodeAnalyzer().Analyze(context, typeDef);
+        var taker = new BoundaryProbe.Taker();
+        var node = new Invoke(new Member(new Parameter("e", new TypeReference("BoundaryPerson")), "Take"),
+            new Parameter("v", new ClrTypeReference(type)));
+        using var exec = Interpreter.Execute(Interpreter.Compile(node, context.TypeDefinitions), taker, argument);
+        return taker.Seen;
+    }
+
+    /// <summary>
+    /// Every boundary where a value crosses between a frame word and a CLR object carries the value, by the static
+    /// type on the word's side: an <c>object[]</c> element read and written, a <c>foreach</c> element with no declared
+    /// type, a bridged delegate's <c>object</c> parameter, a forwarded host delegate's <c>object</c> result, and a
+    /// name-dispatched call's argument. Each used to carry the word (a boxed long, the IEEE bits or a handle's number).
+    /// </summary>
+    [Test]
+    public async Task BoundarySites_CarryTheValue_NotTheWord() {
+        var element = new Variable("e");
+        var text = new Variable("r");
+        var forEach = new Block([
+            new Assignment(text, new Constant("")),
+            new ForEachLoop(element, P<List<object>>("list"), new Assignment(text, ToText(element))),
+            text
+        ], [text]);
+        var array = new Variable("v");
+        var vmArray = new Block([
+            new Assignment(array, new NewArray(new ClrTypeReference(typeof(object)), new Constant(1))),
+            new Assignment(new IndexAccess(array, new Constant(0)), new Constant(7)),
+            ToText(new IndexAccess(array, new Constant(0)))
+        ], [array]);
+        var o = ObjectParameter("o");
+        var forwarded = P<Func<object>>("g");
+        var answers = new[] {
+            Answer(ToText(new IndexAccess(P<object[]>("arr"), new Constant(0))), (object)new object[] { 7 }),
+            Answer(vmArray),
+            HostArrayAfter(new Constant(7)),
+            HostArrayAfter(new Constant("s")),
+            Answer(forEach, new List<object> { 7 }),
+            Answer(new Invoke(new Member(new ClrTypeReference(typeof(BoundaryProbe)), nameof(BoundaryProbe.Apply)), new Lambda([o], ToText(o)))),
+            Answer(new Invoke(new Lambda([forwarded], new Invoke(new Member(new ClrTypeReference(typeof(BoundaryProbe)), nameof(BoundaryProbe.CallIt)), forwarded)),
+                P<Func<object>>("f")), (object)(Func<object>)(static () => 7)),
+            NameDispatched(typeof(bool), true),
+            NameDispatched(typeof(int), 7),
+            NameDispatched(typeof(double), 1.5),
+        };
+        await Assert.That(answers).IsEquivalentTo(new[] {
+            "String 7", "String 7", "Int32:7", "String:s", "String 7", "String 7", "String 7",
+            "Boolean:True", "Int32:7", "Double:1.5",
         }, TUnit.Assertions.Enums.CollectionOrdering.Matching);
     }
 }
@@ -398,4 +476,17 @@ public static class CtorProbe {
     public sealed class BoolBox(bool value) {
         public string Text { get; } = value.ToString();
     }
+}
+
+public static class BoundaryProbe {
+    public sealed class Taker {
+        public string Seen { get; private set; } = "";
+
+        public void Take(object? value) =>
+            Seen = value is null ? "null" : $"{value.GetType().Name}:{Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture)}";
+    }
+
+    public static string Apply(Func<object, string> f) => f(7);
+
+    public static string CallIt(Func<object> f) => Convert.ToString(f()) ?? "<null>";
 }

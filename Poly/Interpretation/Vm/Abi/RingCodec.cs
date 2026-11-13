@@ -23,8 +23,8 @@ namespace Poly.Interpretation.Vm.Abi;
 internal static class RingCodec {
     private static readonly MethodInfo HeapUnsafeGet = Ref<VmManagedObjectHeap>.Method(h => h.UnsafeGet(0));
     private static readonly MethodInfo HeapAllocate = Ref<VmManagedObjectHeap>.Method(h => h.Allocate(default!));
-    private static readonly MethodInfo BoxToAbiInfo =
-        Ref.Method((Expression<Func<VmManagedObjectHeap, object?, long>>)((h, v) => BoxToAbi(h, v)));
+    private static readonly MethodInfo WriteDeclaredInfo =
+        Ref.Method((Expression<Func<object?, Type, VmManagedObjectHeap, long>>)((v, t, h) => LocalType.Write(v, t, h)));
     private static readonly MethodInfo BitConverterInt64BitsToDouble =
         Ref.Method((Expression<Func<long, double>>)(v => BitConverter.Int64BitsToDouble(v)));
     private static readonly MethodInfo BitConverterDoubleToInt64Bits =
@@ -222,6 +222,20 @@ internal static class RingCodec {
         return FromFrame(ringVal, sourceClr, targetType, heap);
     }
 
+    /// <summary>A CLR value crossing into the frame as a word of <paramref name="declared"/>: the run-time
+    /// <see cref="LocalType.Write(object?, Type, VmManagedObjectHeap)"/>, for a value only the run time holds
+    /// (an array element, an enumerator's current, a delegate's argument or result).</summary>
+    public static Expression WriteAs(Expression value, Type declared, Expression heap) =>
+        Call(WriteDeclaredInfo, Convert(value, typeof(object)), Constant(declared, typeof(Type)), heap);
+
+    /// <summary>A frame word of <paramref name="source"/> as the CLR object an <c>object[]</c> element holds.
+    /// A word whose type is unknown has no object form: it fails closed.</summary>
+    private static Expression AsElementObject(Expression word, Type? source, Expression heap) =>
+        source is null
+            ? throw new InvalidOperationException(
+                "VM compile rejected: cannot store a value of unresolved type into an array element.")
+            : Convert(LocalType.Decode(word, source, source, heap), typeof(object));
+
     /// <summary>Allocate a value on the heap and return its ring handle. Use for
     /// a value whose representation is known to be heap-resident.</summary>
     public static Expression Box(Expression value, Expression heap) =>
@@ -379,7 +393,7 @@ internal static class RingCodec {
             var objArr = Variable(typeof(object[]), "_objArr");
             return Block([objArr],
                 Assign(objArr, ObjectArray(heap, handle)),
-                Call(BoxToAbiInfo, heap, ArrayAccess(objArr, idx)));
+                WriteAs(ArrayAccess(objArr, idx), elementClr, heap));
         }
         var raw = DerefObject(heap, handle);
         var longArrU = Variable(typeof(long[]), "_longArr");
@@ -391,7 +405,7 @@ internal static class RingCodec {
                 ArrayAccess(longArrU, idx)),
             Block([objArrU],
                 Assign(objArrU, Convert(raw, typeof(object[]))),
-                Call(BoxToAbiInfo, heap, ArrayAccess(objArrU, idx))));
+                WriteAs(ArrayAccess(objArrU, idx), typeof(object), heap)));
     }
 
     /// <summary>Store one element of a VM array. A value-type element
@@ -401,7 +415,7 @@ internal static class RingCodec {
     /// stores the raw slot in the <c>long[]</c> arm.</summary>
     public static Expression ArrayElementWrite(
         Expression heap, Expression handle, Expression index, Expression value,
-        Type? elementClr, bool valueIsIeee) {
+        Type? elementClr, Type? valueClr, bool valueIsIeee) {
         var idx = Convert(index, typeof(int));
         if (elementClr is { IsValueType: true }) {
             var longArr = Variable(typeof(long[]), "_assignLongArr");
@@ -414,7 +428,7 @@ internal static class RingCodec {
             var objArr = Variable(typeof(object[]), "_assignObjArr");
             return Block([objArr],
                 Assign(objArr, ObjectArray(heap, handle)),
-                Assign(ArrayAccess(objArr, idx), Convert(value, typeof(object))));
+                Assign(ArrayAccess(objArr, idx), AsElementObject(value, valueClr, heap)));
         }
         var raw = DerefObject(heap, handle);
         var longArrU = Variable(typeof(long[]), "_assignLongArr");
@@ -426,7 +440,7 @@ internal static class RingCodec {
                 Assign(ArrayAccess(longArrU, idx), value)),
             Block([objArrU],
                 Assign(objArrU, Convert(raw, typeof(object[]))),
-                Assign(ArrayAccess(objArrU, idx), Convert(value, typeof(object)))));
+                Assign(ArrayAccess(objArrU, idx), AsElementObject(value, valueClr, heap))));
     }
 
     /// <summary>Store a value into a value-type VM array element: bit-encode an
@@ -453,7 +467,7 @@ internal static class RingCodec {
         var idx = Convert(index, typeof(int));
         return arrayLocal.Type == typeof(long[])
             ? ArrayAccess(arrayLocal, idx)
-            : Call(BoxToAbiInfo, heap, ArrayAccess(Convert(arrayLocal, typeof(object[])), idx));
+            : WriteAs(ArrayAccess(Convert(arrayLocal, typeof(object[])), idx), typeof(object), heap);
     }
 
     /// <summary>Store one element through a promoted array's typed CLR local. The element
@@ -461,12 +475,12 @@ internal static class RingCodec {
     /// the same bits the heap path wrote.</summary>
     public static Expression CachedElementWrite(
         Expression arrayLocal, Expression index, Expression value,
-        Type? elementClr, bool valueIsIeee) {
+        Type? elementClr, Type? valueClr, bool valueIsIeee, Expression heap) {
         var idx = Convert(index, typeof(int));
         if (arrayLocal.Type == typeof(long[]))
             return Assign(ArrayAccess(arrayLocal, idx),
                 elementClr is null ? value : CoerceIndexStore(value, elementClr, valueIsIeee));
         return Assign(ArrayAccess(Convert(arrayLocal, typeof(object[])), idx),
-            Convert(value, typeof(object)));
+            AsElementObject(value, valueClr, heap));
     }
 }

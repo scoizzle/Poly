@@ -139,6 +139,62 @@ public class TemporalFailClosedAnalysisTests {
             e.Contains("duration", StringComparison.OrdinalIgnoreCase))).IsTrue();
     }
 
+    private static string DurationDocument(string members) => $$"""
+        domain T
+        uses temporal
+        Item: entity {
+          Qty: Number
+          Len: Duration
+          Gap: Duration optional
+          {{members}}
+        }
+        """;
+
+    /// <summary>
+    /// T-10a R1 (#468): a bare duration is the value of an assign to a Duration property and an operand compared
+    /// with one, required or optional, on either side. Everywhere else it still needs a temporal left operand.
+    /// </summary>
+    [Test]
+    [Arguments("assign to a required Duration", "Go: action { assign Len to 30 Minutes }")]
+    [Arguments("assign to an optional Duration", "Go: action { assign Gap to 2 Hours }")]
+    [Arguments("compared with a required Duration", "Slow: policy { Len > 1 Hours }")]
+    [Arguments("compared with an optional Duration", "Slow: policy { Gap > 1 Hours }")]
+    [Arguments("the literal on the left", "Slow: policy { 1 Hours < Len }")]
+    public async Task DurationProperty_BareDurationAtAssignAndComparison_AnalyzesClean(string row, string members) {
+        var result = Evolve(DurationDocument(members), ExtensionCatalog.Core.Language);
+
+        await Assert.That(Errors(result)).IsEmpty().Because(row);
+        await Assert.That(result.Succeeded).IsTrue().Because(row);
+    }
+
+    /// <summary>Months and years have no fixed length: refused at the new sites as they are for a default.</summary>
+    [Test]
+    [Arguments("Go: action { assign Len to 2 Months }")]
+    [Arguments("Go: action { assign Gap to 1 Years }")]
+    [Arguments("Slow: policy { Len > 3 Months }")]
+    [Arguments("Slow: policy { 1 Years < Gap }")]
+    public async Task DurationAtAssignAndComparison_MonthsOrYears_FailsAtAnalysis(string members) {
+        var result = Evolve(DurationDocument(members), ExtensionCatalog.Core.Language);
+
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(Errors(result).Any(e => e.Contains("no fixed length", StringComparison.Ordinal))).IsTrue()
+            .Because(string.Join(" | ", Errors(result)));
+    }
+
+    /// <summary>#551: every other position names itself; only a default says "default value".</summary>
+    [Test]
+    [Arguments("Go: action { assign Qty to 3 Days }", "assign value '3 Days'")]
+    [Arguments("Slow: policy { Qty > 3 Days }", "comparison operand '3 Days'")]
+    [Arguments("Slow: policy { Qty > 5 + 3 Days }", "operand '3 Days'")]
+    public async Task BareDuration_InPolicyAndAssign_MessageNamesThePosition(string members, string position) {
+        var result = Evolve(DurationDocument(members), ExtensionCatalog.Core.Language);
+
+        var messages = string.Join(" | ", Errors(result));
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(messages).Contains(position);
+        await Assert.That(messages).DoesNotContain("default value");
+    }
+
     [Test]
     public async Task NumberPropertyPlusDays_NoTemporalLeftOperand_Policy_ReportsDateError() {
         // The parser fold (TryFoldDateOperation) is syntactic — it folds any

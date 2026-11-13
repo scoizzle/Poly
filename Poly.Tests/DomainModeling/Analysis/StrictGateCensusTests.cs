@@ -108,6 +108,58 @@ public class StrictGateCensusTests {
     ];
 
     [Test]
+    public async Task DeadGrid_IsMasterPlusTheFlips() =>
+        await Assert.That(AnalyzerClosingRoundPinTests.GridDifferences(StrictGateCensus.DeadRows(),
+            AnalyzerClosingRoundPinTests.MasterPlusFlips("Dead", Expected.Dead))).IsEqualTo("");
+
+    /// <summary>
+    /// C1: every dead cell valid on master that T-05b rejects, with the doors that refused it ON MASTER
+    /// (<see cref="StrictGateCensus.DeadDoorRows"/>). The doors compile dead code, so a dead position is refused
+    /// wherever the live one is; "none" is the one cell every door accepted on master.
+    /// </summary>
+    internal static readonly (string Cell, string Refused)[] DeadMasterDoors = [
+        ("parts Qty (to-many hop) | pruned assign", "simulate+csharp+polyc"),
+        ("parts Qty (to-many hop) | pruned invoke", "simulate+csharp+polyc"),
+        ("parts Qty (to-many hop) | dead match arm", "simulate+csharp+polyc"),
+        ("parts Qty (to-many hop) | action never invoked", "simulate+csharp+polyc"),
+        ("Bogus (unknown name) | pruned invoke", "simulate+csharp+polyc"),
+        ("sum parts Label (#846) | pruned assign", "simulate+csharp+polyc"),
+        ("sum parts Label (#846) | pruned invoke", "simulate+csharp+polyc"),
+        ("sum parts Label (#846) | dead match arm", "simulate+csharp+polyc"),
+        ("sum parts Label (#846) | action never invoked", "csharp+polyc"),
+        ("count parts where Label == 1 | pruned assign", "simulate+csharp+polyc"),
+        ("count parts where Label == 1 | pruned invoke", "simulate+csharp+polyc"),
+        ("count parts where Label == 1 | dead match arm", "simulate+csharp+polyc"),
+        ("count parts where Label == 1 | unused policy", "csharp+polyc"),
+        ("count parts where Label == 1 | action require", "simulate+csharp+polyc"),
+        ("count parts where Label == 1 | stage require", "simulate+csharp+polyc"),
+        ("count parts where Label == 1 | action never invoked", "csharp+polyc"),
+        ("any parts where Label == 1 | pruned assign", "simulate+csharp+polyc"),
+        ("any parts where Label == 1 | pruned invoke", "simulate+csharp+polyc"),
+        ("any parts where Label == 1 | dead match arm", "simulate+csharp+polyc"),
+        ("any parts where Label == 1 | unused policy", "csharp+polyc"),
+        ("any parts where Label == 1 | action require", "simulate+csharp+polyc"),
+        ("any parts where Label == 1 | stage require", "simulate+csharp+polyc"),
+        ("any parts where Label == 1 | action never invoked", "csharp+polyc"),
+        ("5 == \"x\" (typeless pair) | pruned assign", "simulate+csharp+polyc"),
+        ("5 == \"x\" (typeless pair) | pruned invoke", "simulate+csharp+polyc"),
+        ("5 == \"x\" (typeless pair) | dead match arm", "simulate+csharp+polyc"),
+        ("5 == \"x\" (typeless pair) | unused policy", "csharp+polyc"),
+        ("5 == \"x\" (typeless pair) | action require", "simulate+csharp+polyc"),
+        ("5 == \"x\" (typeless pair) | stage require", "simulate+csharp+polyc"),
+        ("5 == \"x\" (typeless pair) | action never invoked", "csharp+polyc"),
+        ("5 == \"x\" (typeless pair) | function called from an uncalled function", "none")
+    ];
+
+    [Test]
+    public async Task DeadCensus_EveryValidCellItRejects_HasItsMasterDoors() {
+        var rejected = AnalyzerClosingRoundPinTests.FlipsDead.Concat(AnalyzerClosingRoundPinTests.FlipsA4)
+            .Where(f => f.Grid == "Dead" && f.Before == "ok").Select(f => f.Cell).Order(StringComparer.Ordinal);
+        await Assert.That(string.Join('\n', rejected))
+            .IsEqualTo(string.Join('\n', DeadMasterDoors.Select(d => d.Cell).Order(StringComparer.Ordinal)));
+    }
+
+    [Test]
     public async Task ResidualCensus_EveryValidCellItRejects_HasItsMasterDoors() {
         var rejected = AnalyzerClosingRoundPinTests.FlipsB.Concat(AnalyzerClosingRoundPinTests.FlipsA4)
             .Where(f => f.Grid == "Residual" && f.Before == "ok").Select(f => f.Cell).Order(StringComparer.Ordinal);
@@ -119,8 +171,11 @@ public class StrictGateCensusTests {
     /// <summary>
     /// B-entity in the DSL: every FlipsB B-entity row is API-built, so each rule shape is also written as a whole
     /// document (<see cref="EntityShapes"/>) where the DSL can express it, and run through every door ON MASTER with a
-    /// create-and-invoke scenario: the doors that refused it there (an entity-typed parameter's simulate refusal is the
-    /// scenario passing no Part instance and is not counted), and the code the head gives. Not expressible in the DSL:
+    /// create-and-invoke scenario: the doors that refused it there (for an entity-typed action parameter the
+    /// simulator door is NOT CONSTRUCTIBLE and is not counted: a simulate step resolves an instance alias only in
+    /// <c>instanceId</c>, <c>sourceInstanceId</c> and <c>targetInstanceId</c>, never inside <c>args</c>, and an instance's
+    /// generated id is unknown before the run; tried in the closing round: create a Part as <c>pt</c>, pass <c>"pt"</c>,
+    /// answer "instance 'pt' of 'Part' not found"), and the code the head gives. Not expressible in the DSL:
     /// an entity- or value-typed stored property (a DSL entity reference is a relationship; a value type cannot be
     /// stored, DMSTR006), so the FlipsB cells that assign into or read out of one are API-only.
     /// </summary>
@@ -154,6 +209,7 @@ public class StrictGateCensusTests {
     /// </summary>
     internal static IEnumerable<string> RunsOnMasterRejectedHere() =>
         MasterDoors.Where(d => d.Refused == "none").Select(d => $"residual: {d.Cell}")
+            .Concat(DeadMasterDoors.Where(d => d.Refused == "none").Select(d => $"dead: {d.Cell}"))
             .Concat(EntityShapeDoors.Where(d => d.RefusedOnMaster == "none").Select(d => $"B-entity DSL: {d.Shape} ({d.HeadCode})"));
 
     [Test]
@@ -162,6 +218,7 @@ public class StrictGateCensusTests {
             "residual: Bogus (unknown name) | call",
             "residual: 5 == \"x\" (typeless pair) | call",
             "residual: 5 == \"x\" (typeless pair) | return",
+            "dead: 5 == \"x\" (typeless pair) | function called from an uncalled function",
             "B-entity DSL: entity parameter as a Number function argument (DMFUN003)",
             "B-entity DSL: entity-typed function parameter returned as Number (function never called) (DMFUN006)",
             "B-entity DSL: to-one navigation as a Number function argument (DMFUN003)",
@@ -383,10 +440,160 @@ public class StrictGateCensusTests {
             File.WriteAllText(Path.Combine(directory, $"{name}.txt"), rows());
         if (Environment.GetEnvironmentVariable("POLY_CENSUS_DOORS") is "1")
             File.WriteAllText(Path.Combine(directory, "ResidualDoors.txt"), StrictGateCensus.ResidualDoorRows());
+        if (Environment.GetEnvironmentVariable("POLY_CENSUS_DOORS") is "1")
+            File.WriteAllText(Path.Combine(directory, "DeadDoors.txt"), StrictGateCensus.DeadDoorRows());
         await Assert.That(Directory.EnumerateFiles(directory).Any()).IsTrue();
     }
 
     private static class Expected {
+        public const string Dead = """
+residual form | dead position = verdict
+High (bare enum member) | pruned assign = ok
+High (bare enum member) | pruned invoke = ok
+High (bare enum member) | dead match arm = ok
+High (bare enum member) | unused policy = ok
+High (bare enum member) | action require = ok
+High (bare enum member) | stage require = ok
+High (bare enum member) | default = ok
+High (bare enum member) | action never invoked = ok
+High (bare enum member) | function called from an uncalled function = DMFUN005
+Guid (keyword) | pruned assign = ok
+Guid (keyword) | pruned invoke = ok
+Guid (keyword) | dead match arm = ok
+Guid (keyword) | unused policy = DMSEM005
+Guid (keyword) | action require = DMSEM005
+Guid (keyword) | stage require = DMSEM005
+Guid (keyword) | default = ok
+Guid (keyword) | action never invoked = ok
+Guid (keyword) | function called from an uncalled function = n/a
+Stamp - Stamp (DateTime) | pruned assign = ok
+Stamp - Stamp (DateTime) | pruned invoke = ok
+Stamp - Stamp (DateTime) | dead match arm = ok
+Stamp - Stamp (DateTime) | unused policy = ok
+Stamp - Stamp (DateTime) | action require = ok
+Stamp - Stamp (DateTime) | stage require = ok
+Stamp - Stamp (DateTime) | default = ok
+Stamp - Stamp (DateTime) | action never invoked = ok
+Stamp - Stamp (DateTime) | function called from an uncalled function = n/a
+Day - Day (Date) | pruned assign = ok
+Day - Day (Date) | pruned invoke = ok
+Day - Day (Date) | dead match arm = ok
+Day - Day (Date) | unused policy = ok
+Day - Day (Date) | action require = ok
+Day - Day (Date) | stage require = ok
+Day - Day (Date) | default = ok
+Day - Day (Date) | action never invoked = ok
+Day - Day (Date) | function called from an uncalled function = n/a
+parts Qty (to-many hop) | pruned assign = ok
+parts Qty (to-many hop) | pruned invoke = ok
+parts Qty (to-many hop) | dead match arm = ok
+parts Qty (to-many hop) | unused policy = DMREL001
+parts Qty (to-many hop) | action require = DMREL001
+parts Qty (to-many hop) | stage require = DMREL001
+parts Qty (to-many hop) | default = ok
+parts Qty (to-many hop) | action never invoked = ok
+parts Qty (to-many hop) | function called from an uncalled function = n/a
+part book Qty (to-one hops, control) | pruned assign = ok
+part book Qty (to-one hops, control) | pruned invoke = ok
+part book Qty (to-one hops, control) | dead match arm = ok
+part book Qty (to-one hops, control) | unused policy = ok
+part book Qty (to-one hops, control) | action require = ok
+part book Qty (to-one hops, control) | stage require = ok
+part book Qty (to-one hops, control) | default = ok
+part book Qty (to-one hops, control) | action never invoked = ok
+part book Qty (to-one hops, control) | function called from an uncalled function = n/a
+p book Qty (binder hops) | pruned assign = ok
+p book Qty (binder hops) | pruned invoke = ok
+p book Qty (binder hops) | dead match arm = n/a
+p book Qty (binder hops) | unused policy = n/a
+p book Qty (binder hops) | action require = n/a
+p book Qty (binder hops) | stage require = n/a
+p book Qty (binder hops) | default = n/a
+p book Qty (binder hops) | action never invoked = ok
+p book Qty (binder hops) | function called from an uncalled function = n/a
+Bogus (unknown name) | pruned assign = DMSEM003
+Bogus (unknown name) | pruned invoke = ok
+Bogus (unknown name) | dead match arm = DMMAT004
+Bogus (unknown name) | unused policy = DMSEM005
+Bogus (unknown name) | action require = DMSEM005
+Bogus (unknown name) | stage require = DMSEM005
+Bogus (unknown name) | default = DMSEM003
+Bogus (unknown name) | action never invoked = DMSEM003
+Bogus (unknown name) | function called from an uncalled function = DMFUN005
+sum parts Label (#846) | pruned assign = ok
+sum parts Label (#846) | pruned invoke = ok
+sum parts Label (#846) | dead match arm = ok
+sum parts Label (#846) | unused policy = DMSEM005
+sum parts Label (#846) | action require = DMSEM005
+sum parts Label (#846) | stage require = DMSEM005
+sum parts Label (#846) | default = ok
+sum parts Label (#846) | action never invoked = ok
+sum parts Label (#846) | function called from an uncalled function = n/a
+sum parts Qty (control) | pruned assign = ok
+sum parts Qty (control) | pruned invoke = ok
+sum parts Qty (control) | dead match arm = ok
+sum parts Qty (control) | unused policy = ok
+sum parts Qty (control) | action require = ok
+sum parts Qty (control) | stage require = ok
+sum parts Qty (control) | default = ok
+sum parts Qty (control) | action never invoked = ok
+sum parts Qty (control) | function called from an uncalled function = n/a
+count parts where Label == 1 | pruned assign = ok
+count parts where Label == 1 | pruned invoke = ok
+count parts where Label == 1 | dead match arm = ok
+count parts where Label == 1 | unused policy = ok
+count parts where Label == 1 | action require = ok
+count parts where Label == 1 | stage require = ok
+count parts where Label == 1 | default = ok
+count parts where Label == 1 | action never invoked = ok
+count parts where Label == 1 | function called from an uncalled function = n/a
+any parts where Label == 1 | pruned assign = ok
+any parts where Label == 1 | pruned invoke = ok
+any parts where Label == 1 | dead match arm = ok
+any parts where Label == 1 | unused policy = ok
+any parts where Label == 1 | action require = ok
+any parts where Label == 1 | stage require = ok
+any parts where Label == 1 | default = ok
+any parts where Label == 1 | action never invoked = ok
+any parts where Label == 1 | function called from an uncalled function = n/a
+Nope(N) (undeclared function) | pruned assign = DMFUN001
+Nope(N) (undeclared function) | pruned invoke = DMFUN001
+Nope(N) (undeclared function) | dead match arm = DMFUN001
+Nope(N) (undeclared function) | unused policy = DMFUN001
+Nope(N) (undeclared function) | action require = DMFUN001
+Nope(N) (undeclared function) | stage require = DMFUN001
+Nope(N) (undeclared function) | default = DMFUN008
+Nope(N) (undeclared function) | action never invoked = DMFUN001
+Nope(N) (undeclared function) | function called from an uncalled function = DMFUN001
+match with an untyped arm | pruned assign = DMMAT004
+match with an untyped arm | pruned invoke = DMMAT004
+match with an untyped arm | dead match arm = DMMAT004
+match with an untyped arm | unused policy = DMMAT004+DMSEM005
+match with an untyped arm | action require = DMMAT004+DMSEM005
+match with an untyped arm | stage require = DMMAT004+DMSEM005
+match with an untyped arm | default = ok
+match with an untyped arm | action never invoked = DMMAT004
+match with an untyped arm | function called from an uncalled function = DMFUN005+DMMAT004
+5 == "x" (typeless pair) | pruned assign = ok
+5 == "x" (typeless pair) | pruned invoke = ok
+5 == "x" (typeless pair) | dead match arm = ok
+5 == "x" (typeless pair) | unused policy = ok
+5 == "x" (typeless pair) | action require = ok
+5 == "x" (typeless pair) | stage require = ok
+5 == "x" (typeless pair) | default = ok
+5 == "x" (typeless pair) | action never invoked = ok
+5 == "x" (typeless pair) | function called from an uncalled function = ok
+count parts (function body) | pruned assign = ok
+count parts (function body) | pruned invoke = ok
+count parts (function body) | dead match arm = ok
+count parts (function body) | unused policy = ok
+count parts (function body) | action require = ok
+count parts (function body) | stage require = ok
+count parts (function body) | default = ok
+count parts (function body) | action never invoked = ok
+count parts (function body) | function called from an uncalled function = DMFUN005
+""";
+
         public const string Residual = """
 residual form | position = verdict
 High (bare enum member) | assign = ok

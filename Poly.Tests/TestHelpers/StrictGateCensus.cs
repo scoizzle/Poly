@@ -78,6 +78,17 @@ internal static class StrictGateCensus {
             if (tick is null) return null;
             tick = $"for p in parts {{ {tick} }}";
         }
+        return Template(tick, entry, exit, subscription, function);
+    }
+
+    /// <summary>
+    /// The residual fixture with the form placed by the caller: the action <c>Tick</c> body (and its <c>require</c>), the
+    /// first stage's entry, exit and subscription bodies and header <c>require</c>, an entity member, and top-level
+    /// functions. Every other slot holds a typed no-op.
+    /// </summary>
+    private static string Template(
+        string? tick, string? entry, string? exit, string? subscription, string? function,
+        string? orderMember = null, string? tickRequire = null, string? stageRequire = null) {
         var targets = string.Join("\n", TargetTypes.Select(type => $"  T_{type}: {type} optional"));
         var callees = string.Join("\n", TargetTypes.Select(type => $"  Callee_{type}: action (x: {type}) {{ assign T_{type} to x }}"));
         var boxes = string.Join("\n", TargetTypes.Select(type => $"Box_{type}: entity {{\n  W: {type} optional\n}}"));
@@ -107,9 +118,10 @@ internal static class StrictGateCensus {
             {{targets}}
               part: Part
               parts: many Part
-              Tick: action { {{tick ?? "assign N to 3"}} }
+              {{orderMember ?? ""}}
+              Tick: action{{tickRequire ?? ""}} { {{tick ?? "assign N to 3"}} }
             {{callees}}
-              Open: stage {
+              Open: stage{{stageRequire ?? ""}} {
                 entry { {{entry ?? "assign N to 4"}} }
                 exit { {{exit ?? "assign N to 5"}} }
                 when parts Done as o { {{subscription ?? "assign N to 6"}} }
@@ -120,6 +132,70 @@ internal static class StrictGateCensus {
             {{functions}}
             {{function ?? ""}}
             """;
+    }
+
+
+    /// <summary>
+    /// C1 (closing round): the DEAD positions the live grid never generates, where a door may accept a form only because
+    /// the code never runs: a constant-false branch, a constant-false match arm, a policy no action requires, an action
+    /// require, a stage require, a default value, an action never invoked, and a function called only from an uncalled
+    /// function.
+    /// </summary>
+    internal static readonly string[] DeadPositions = [
+        "pruned assign", "pruned invoke", "dead match arm", "unused policy", "action require", "stage require",
+        "default", "action never invoked", "function called from an uncalled function",
+    ];
+
+    /// <summary>The form as a Boolean: itself when it is one, else compared with a property of its type.</summary>
+    private static string AsCondition(ResidualForm form) =>
+        form.Type == "Boolean" ? form.Dsl : $"({form.Dsl}) == T_{form.Type}";
+
+    /// <summary>The whole document for one dead cell, or null when the form cannot be written there.</summary>
+    internal static string? DeadDocument(ResidualForm form, string position) {
+        var t = form.Type;
+        var f = form.Dsl;
+        var policy = $"P: policy {{ {AsCondition(form)} }}";
+        var doc = position switch {
+            "pruned assign" => Template($"if (1 == 2) {{ {Bind(form, $"assign T_{t} to {f}")} }}", null, null, null, null),
+            "pruned invoke" => Template($"if (1 == 2) {{ {Bind(form, $"invoke Callee_{t}(x: {f})")} }}", null, null, null, null),
+            "dead match arm" => form.Binder ? null : Template($"assign T_{t} to match {{ 1 == 2 -> {f}, else -> T_{t} }}", null, null, null, null),
+            "unused policy" => form.Binder ? null : Template(null, null, null, null, null, orderMember: policy),
+            "action require" => form.Binder ? null : Template(null, null, null, null, null, orderMember: policy, tickRequire: " require P"),
+            "stage require" => form.Binder ? null : Template(null, null, null, null, null, orderMember: policy, stageRequire: " require P"),
+            "default" => form.Binder ? null : Template(null, null, null, null, null, orderMember: $"D: {t} optional default({f})"),
+            "action never invoked" => Template(null, null, null, null, null, orderMember: $"Never: action {{ {Bind(form, $"assign T_{t} to {f}")} }}"),
+            "function called from an uncalled function" => form.InFunction is null ? null
+                : Template(null, null, null, null,
+                    $"function R(a: Number, f: Boolean): {t} = {form.InFunction}\nfunction H(a: Number, f: Boolean): {t} = R(a, f)"),
+            _ => throw new InvalidOperationException(position),
+        };
+        return doc;
+    }
+
+    private static string Bind(ResidualForm form, string effect) => form.Binder ? $"for p in parts {{ {effect} }}" : effect;
+
+    /// <summary>One line per dead cell: <c>form | position = verdict</c>.</summary>
+    internal static string DeadRows() {
+        var lines = new List<string> { "residual form | dead position = verdict" };
+        foreach (var form in ResidualForms)
+            foreach (var position in DeadPositions)
+                lines.Add($"{form.Label} | {position} = {(DeadDocument(form, position) is { } dsl ? Verdict(dsl) : "n/a")}");
+        return string.Join('\n', lines);
+    }
+
+    /// <summary>Every dead cell analysis accepts, through every door with <see cref="ResidualSteps"/>.</summary>
+    internal static string DeadDoorRows() {
+        var lines = new List<string> { "residual form | dead position = doors" };
+        foreach (var form in ResidualForms)
+            foreach (var position in DeadPositions) {
+                if (DeadDocument(form, position) is not { } dsl) continue;
+                var result = GateParity.Check(dsl, ResidualSteps);
+                var doors = !result.Analysis
+                    ? "analysis rejects"
+                    : $"simulate={Door(result.Simulate, result.SimulateSummary)} csharp={Door(result.CSharp, result.CSharpSummary)} polyc={Door(result.PolycCheck, result.PolycSummary)}";
+                lines.Add($"{form.Label} | {position} = {doors}");
+            }
+        return string.Join('\n', lines);
     }
 
     /// <summary>The scenario every residual cell runs through the doors: create, the action, leave the first stage.</summary>
@@ -195,5 +271,6 @@ internal static class StrictGateCensus {
         ("ArithmeticDateOperand", AnalyzerBehaviourPinTests.ArithmeticDateOperandRows),
         ("Match", AnalyzerBehaviourPinTests.MatchGrid),
         ("Residual", ResidualRows),
+        ("Dead", DeadRows),
     ];
 }

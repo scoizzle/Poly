@@ -1258,10 +1258,43 @@ public partial class AnalyzerClosingRoundPinTests {
     ];
 
     /// <summary>
+    /// The closing round's dead positions (C1): the residual forms where the code never runs (a constant-false branch,
+    /// a constant-false match arm, a policy no action requires, an action or stage require, an action never invoked,
+    /// a function called only from an uncalled function). Rule ids as in <see cref="FlipsB"/>; the A4 rows are in
+    /// <see cref="FlipsA4"/>. Door evidence on master: <see cref="StrictGateCensusTests.DeadMasterDoors"/>.
+    /// </summary>
+    internal static readonly (string Grid, string Cell, string Before, string After, string Rule)[] FlipsDead = [
+        ("Dead", "parts Qty (to-many hop) | pruned assign", "ok", "DMSEM006", "B-untyped"),
+        ("Dead", "parts Qty (to-many hop) | pruned invoke", "ok", "DMSEM006", "B-untyped"),
+        ("Dead", "parts Qty (to-many hop) | dead match arm", "ok", "DMSEM006", "B-untyped"),
+        ("Dead", "parts Qty (to-many hop) | action never invoked", "ok", "DMSEM006", "B-untyped"),
+        ("Dead", "Bogus (unknown name) | pruned invoke", "ok", "DMSEM006", "B-untyped"),
+        ("Dead", "sum parts Label (#846) | pruned assign", "ok", "DMSEM005", "B-sum"),
+        ("Dead", "sum parts Label (#846) | pruned invoke", "ok", "DMSEM005", "B-sum"),
+        ("Dead", "sum parts Label (#846) | dead match arm", "ok", "DMSEM005", "B-sum"),
+        ("Dead", "sum parts Label (#846) | action never invoked", "ok", "DMSEM005", "B-sum"),
+        ("Dead", "count parts where Label == 1 | pruned assign", "ok", "DMSEM003", "B-quantifier"),
+        ("Dead", "count parts where Label == 1 | pruned invoke", "ok", "DMSEM003", "B-quantifier"),
+        ("Dead", "count parts where Label == 1 | dead match arm", "ok", "DMSEM003", "B-quantifier"),
+        ("Dead", "count parts where Label == 1 | unused policy", "ok", "DMSEM003", "B-quantifier"),
+        ("Dead", "count parts where Label == 1 | action require", "ok", "DMSEM003", "B-quantifier"),
+        ("Dead", "count parts where Label == 1 | stage require", "ok", "DMSEM003", "B-quantifier"),
+        ("Dead", "count parts where Label == 1 | action never invoked", "ok", "DMSEM003", "B-quantifier"),
+        ("Dead", "any parts where Label == 1 | pruned assign", "ok", "DMSEM003", "B-quantifier"),
+        ("Dead", "any parts where Label == 1 | pruned invoke", "ok", "DMSEM003", "B-quantifier"),
+        ("Dead", "any parts where Label == 1 | dead match arm", "ok", "DMSEM003", "B-quantifier"),
+        ("Dead", "any parts where Label == 1 | unused policy", "ok", "DMSEM003", "B-quantifier"),
+        ("Dead", "any parts where Label == 1 | action require", "ok", "DMSEM003", "B-quantifier"),
+        ("Dead", "any parts where Label == 1 | stage require", "ok", "DMSEM003", "B-quantifier"),
+        ("Dead", "any parts where Label == 1 | action never invoked", "ok", "DMSEM003", "B-quantifier")
+    ];
+
+    /// <summary>
     /// Lock amendment A4, kept apart from <see cref="FlipsB"/> so the one commit that makes it can be reverted alone
     /// (owner ruling pending): two typed operands of different families no longer compare equal because neither has a
-    /// domain name (<c>5 == "x"</c>, <c>Count == true</c>): DMSEM003. Two residual cells of this rule run on every
-    /// door on master (<see cref="StrictGateCensusTests.MasterDoors"/>, refused "none").
+    /// domain name (<c>5 == "x"</c>, <c>Count == true</c>): DMSEM003. Two residual cells and one dead cell of this
+    /// rule run on every door on master (<see cref="StrictGateCensusTests.MasterDoors"/> and
+    /// <see cref="StrictGateCensusTests.DeadMasterDoors"/>, refused "none").
     /// </summary>
     internal static readonly (string Grid, string Cell, string Before, string After, string Rule)[] FlipsA4 = [
 ("Residual", "5 == \"x\" (typeless pair) | assign", "ok", "DMSEM003", "A4"),
@@ -1282,7 +1315,15 @@ public partial class AnalyzerClosingRoundPinTests {
         ("TypelessComparisons", "true == 5", "ok", "DMSEM003", "A4"),
         ("TypelessComparisons", "5 < \"x\"", "ok", "DMSEM003", "A4"),
         ("TypelessComparisons", "Count == \"x\"", "ok", "DMSEM003", "A4"),
-        ("TypelessComparisons", "Count == true", "ok", "DMSEM003", "A4")
+        ("TypelessComparisons", "Count == true", "ok", "DMSEM003", "A4"),
+        ("Dead", "5 == \"x\" (typeless pair) | pruned assign", "ok", "DMSEM003", "A4"),
+        ("Dead", "5 == \"x\" (typeless pair) | pruned invoke", "ok", "DMSEM003", "A4"),
+        ("Dead", "5 == \"x\" (typeless pair) | dead match arm", "ok", "DMSEM003", "A4"),
+        ("Dead", "5 == \"x\" (typeless pair) | unused policy", "ok", "DMSEM003", "A4"),
+        ("Dead", "5 == \"x\" (typeless pair) | action require", "ok", "DMSEM003", "A4"),
+        ("Dead", "5 == \"x\" (typeless pair) | stage require", "ok", "DMSEM003", "A4"),
+        ("Dead", "5 == \"x\" (typeless pair) | action never invoked", "ok", "DMSEM003", "A4"),
+        ("Dead", "5 == \"x\" (typeless pair) | function called from an uncalled function", "ok", "DMSEM003", "A4")
     ];
 
     /// <summary>
@@ -1295,7 +1336,7 @@ public partial class AnalyzerClosingRoundPinTests {
         var index = new Dictionary<string, int>(StringComparer.Ordinal);
         for (var i = 1; i < lines.Length; i++)
             index.Add(CellOf(lines[i]), i);
-        foreach (var flip in FlipsA.Concat(FlipsB).Concat(FlipsA4).Where(f => f.Grid == grid)) {
+        foreach (var flip in FlipsA.Concat(FlipsB).Concat(FlipsA4).Concat(FlipsDead).Where(f => f.Grid == grid)) {
             if (!index.TryGetValue(flip.Cell, out var at))
                 throw new InvalidOperationException($"Flip row '{grid}/{flip.Cell}' names no cell of the grid.");
             var verdict = VerdictOf(lines[at]);

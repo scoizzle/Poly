@@ -1,3 +1,5 @@
+using System.Text.RegularExpressions;
+
 using Poly.Grammar;
 
 namespace Poly.Tests.Grammar;
@@ -123,7 +125,7 @@ internal static class PatternRowChecker {
         ArgumentNullException.ThrowIfNull(observations);
         ArgumentNullException.ThrowIfNull(allowList);
         ArgumentNullException.ThrowIfNull(examples);
-        return [];
+        return new Run<TToken, TTokenKind>(surface).Check(observations, allowList, examples);
     }
 
     /// <summary>
@@ -139,6 +141,359 @@ internal static class PatternRowChecker {
         ArgumentNullException.ThrowIfNull(surface);
         ArgumentNullException.ThrowIfNull(observations);
         ArgumentNullException.ThrowIfNull(floor);
-        return [];
+        var violations = new List<PatternRowViolation>();
+        foreach (var (rule, pattern) in floor) {
+            if (!surface.Grammar.HasRule(rule) || !surface.Grammar.TryGetPattern(rule, pattern, out _)) {
+                violations.Add(new(PatternRowCheck.Unobserved, rule, pattern,
+                    $"the {surface.Name} floor names a row that is not a row of the table: rename or remove it in PatternRowFloors"));
+                continue;
+            }
+            if (!observations.Any(o => o.Rule == rule && o.Pattern == pattern))
+                violations.Add(new(PatternRowCheck.Unobserved, rule, pattern, $"the {surface.Name} floor row is never observed"));
+        }
+        return violations;
+    }
+
+    /// <summary>An owner is a removing row (optionally with its issue), an issue, or a permanent justification.</summary>
+    private static readonly Regex OwnerFormat = new(
+        @"^(?:[A-Z]-\d+[a-z]?(?: \(#\d+\))?|#\d+|none: permanent — \S.*)$", RegexOptions.CultureInvariant);
+
+    private const string PermanentOwnerPrefix = "none: permanent";
+
+    private static string Shown(string text) => text.Replace("\n", "\\n", StringComparison.Ordinal);
+
+    /// <summary>A sink for the slot probe: the probe counts content callbacks and keeps no text.</summary>
+    private sealed class DiscardWriter<TTokenKind> : ITokenWriter<TTokenKind> where TTokenKind : struct {
+        public void Write(TTokenKind kind) { }
+
+        public void Write(TTokenKind kind, string text) { }
+
+        public string ToText() => "";
+    }
+
+    /// <summary>A violation that an asymmetry or defect entry may exempt, with the observation it came from.</summary>
+    private sealed record Candidate(PatternRowViolation Violation, PrintObservation Observation);
+
+    /// <summary>One run of the check over one surface.</summary>
+    private sealed class Run<TToken, TTokenKind>(PatternRowSurface<TToken, TTokenKind> surface)
+        where TToken : struct, IToken<TTokenKind>
+        where TTokenKind : struct {
+        private readonly Grammar<TToken, TTokenKind> _grammar = surface.Grammar;
+        private readonly List<PatternRowViolation> _violations = [];
+        private readonly Printer<TToken, TTokenKind> _probe =
+            new(surface.Grammar, _ => "", () => new DiscardWriter<TTokenKind>());
+
+        public IReadOnlyList<PatternRowViolation> Check(
+            IReadOnlyList<PrintObservation> observations,
+            IReadOnlyList<PatternRowEntry> allowList,
+            IReadOnlyList<PatternRowExample> examples) {
+            var entries = ValidEntries(allowList);
+            var unobservedCover = UnobservedCover(entries);
+
+            if (observations.Count == 0)
+                _violations.Add(new(PatternRowCheck.Unobserved, "*", null, $"the surface '{surface.Name}' has zero observations"));
+
+            var observed = new HashSet<(string Rule, string Pattern)>();
+            var optionalSlots = new Dictionary<(string Rule, string Pattern), SortedSet<int>>();
+            var filledSlots = new Dictionary<(string Rule, string Pattern), HashSet<int>>();
+            var candidates = new List<Candidate>();
+
+            foreach (var observation in observations) {
+                if (observation.Rule is not { Length: > 0 } rule || !_grammar.HasRule(rule)
+                    || !_grammar.TryGetPattern(rule, observation.Pattern, out var row)) {
+                    _violations.Add(new(PatternRowCheck.UnknownRow, observation.Rule ?? "?", observation.Pattern,
+                        $"'{Shown(observation.Text)}' was printed from a pattern that is not a row of the table"));
+                    continue;
+                }
+                var key = (rule, observation.Pattern);
+                observed.Add(key);
+                var slots = CheckObservation(rule, row, observation, candidates);
+                var optional = optionalSlots.TryGetValue(key, out var known) ? known : optionalSlots[key] = [];
+                var filled = filledSlots.TryGetValue(key, out var seen) ? seen : filledSlots[key] = [];
+                for (var i = 0; i < slots.Count; i++) {
+                    if (slots[i] != ElementRole.OptionalSlot)
+                        continue;
+                    optional.Add(i);
+                    if (i < observation.ContentEmitted.Count && observation.ContentEmitted[i])
+                        filled.Add(i);
+                }
+            }
+
+            ApplyExemptions(entries, candidates);
+            CheckRowCoverage(unobservedCover, observed);
+            CheckSlotCoverage(entries, optionalSlots, filledSlots);
+            CheckExamples(entries, examples);
+            return _violations;
+        }
+
+        // ── A1 and A2, per observation ───────────────────────────────────────
+
+        /// <summary>Checks one observation of a known row; returns the row's slot roles in printer order.</summary>
+        private List<ElementRole> CheckObservation(
+            string rule, Pattern<TToken, TTokenKind> row, PrintObservation observation, List<Candidate> candidates) {
+            var pattern = row.Name;
+            var supplied = new HashSet<string>(observation.FillKeys, StringComparer.Ordinal);
+            var requiredHoles = new List<string>();
+            var predicateLabels = new HashSet<string>(StringComparer.Ordinal);
+            var slots = new List<ElementRole>();
+            foreach (var element in row.Elements) {
+                switch (Classify(element)) {
+                    case ElementRole.Fixed:
+                        break;
+                    case ElementRole.Hole:
+                        requiredHoles.Add(((Value<TToken, TTokenKind>)element).Name!);
+                        break;
+                    case ElementRole.PredicateLabel: {
+                            var label = ((MatchPredicate<TToken, TTokenKind>)element).Label;
+                            predicateLabels.Add(label);
+                            if (!supplied.Contains(label))
+                                slots.Add(ElementRole.Slot);
+                            break;
+                        }
+                    case ElementRole.Slot:
+                        slots.Add(ElementRole.Slot);
+                        break;
+                    case ElementRole.OptionalSlot:
+                        slots.Add(ElementRole.OptionalSlot);
+                        break;
+                }
+            }
+
+            void Report(PatternRowCheck check, string message) =>
+                candidates.Add(new(new(check, rule, pattern, $"'{Shown(observation.Text)}' {message}"), observation));
+
+            foreach (var hole in requiredHoles.Where(hole => !supplied.Contains(hole)))
+                Report(PatternRowCheck.Holes, $"has no fill for the named hole '{hole}'");
+            foreach (var key in observation.FillKeys.Where(key => !requiredHoles.Contains(key) && !predicateLabels.Contains(key)))
+                Report(PatternRowCheck.Holes, $"supplies the fill '{key}', which names no hole of the row");
+
+            var probeFills = requiredHoles.Concat(predicateLabels.Where(supplied.Contains))
+                .ToDictionary(name => name, _ => "x", StringComparer.Ordinal);
+            var slotCount = ProbeSlotCount(rule, pattern, probeFills);
+            if (slotCount != slots.Count)
+                throw new InvalidOperationException(
+                    $"The printer visits {slotCount} content slots of {rule}/{pattern}; the classification names {slots.Count}.");
+
+            if (observation.ContentEmitted.Count != slotCount)
+                Report(PatternRowCheck.Arity,
+                    $"was observed with {observation.ContentEmitted.Count} content slots; the printer visits {slotCount}");
+            if (surface.ReportsSuppliedContent) {
+                if (observation.SuppliedContentCount is not { } count)
+                    Report(PatternRowCheck.Arity, "does not report how many content values its caller supplied");
+                else if (count != slotCount)
+                    Report(PatternRowCheck.Arity, $"supplies {count} content values; the row has {slotCount} content slots");
+            }
+
+            if (ReadBack(rule, pattern, observation.Text) is { } failure)
+                Report(PatternRowCheck.ReadBack, failure);
+            return slots;
+        }
+
+        /// <summary>The number of content callbacks the real printer makes for this row and these fills.</summary>
+        private int ProbeSlotCount(string rule, string pattern, IReadOnlyDictionary<string, string> fills) {
+            var count = 0;
+            _probe.PrintInto(new DiscardWriter<TTokenKind>(), rule, pattern, _ => count++, fills);
+            return count;
+        }
+
+        /// <summary>
+        /// Re-reads <paramref name="text"/> as <paramref name="rule"/> through the full grammar and the
+        /// reader's tokenizer. Null when the top match is <paramref name="pattern"/> and consumes every
+        /// token before end of input; otherwise why not.
+        /// </summary>
+        private string? ReadBack(string rule, string pattern, string text) {
+            ITokenReader<TToken, TTokenKind> reader;
+            var tokens = 0;
+            try {
+                reader = surface.Tokenize(text);
+                while (!reader.EndOfStream(reader.Peek(tokens).Kind))
+                    tokens++;
+            }
+            catch (FormatException ex) {
+                return $"does not tokenize: {ex.Message}";
+            }
+            var match = new Matcher<TToken, TTokenKind>(_grammar, reader).TryMatch(rule);
+            if (match is null)
+                return $"does not re-read as rule '{rule}'";
+            if (!string.Equals(match.PatternName, pattern, StringComparison.Ordinal))
+                return $"re-reads as {rule}/{match.PatternName}";
+            if (match.Consumed != tokens)
+                return $"re-reads {match.Consumed} of its {tokens} tokens as {rule}/{pattern}";
+            return null;
+        }
+
+        // ── the allow-list ───────────────────────────────────────────────────
+
+        /// <summary>Reports malformed entries (schema) and returns the well-formed ones.</summary>
+        private List<PatternRowEntry> ValidEntries(IReadOnlyList<PatternRowEntry> allowList) {
+            var valid = new List<PatternRowEntry>();
+            var keys = new HashSet<(PatternRowEntryKind, string, string?, int?, string?)>();
+            foreach (var entry in allowList) {
+                var problem = SchemaProblem(entry);
+                if (problem is null && !keys.Add((entry.Kind, entry.Rule, entry.Pattern, entry.Slot, entry.Witness)))
+                    problem = "is listed twice";
+                if (problem is not null) {
+                    _violations.Add(new(PatternRowCheck.Schema, entry.Rule, entry.Pattern, $"{entry} {problem}"));
+                    continue;
+                }
+                valid.Add(entry);
+            }
+            return valid;
+        }
+
+        private string? SchemaProblem(PatternRowEntry entry) {
+            if (!string.Equals(entry.Surface, surface.Name, StringComparison.Ordinal))
+                return $"is for the surface '{entry.Surface}', not '{surface.Name}'";
+            if (string.IsNullOrWhiteSpace(entry.Reason))
+                return "has no reason";
+            if (entry.Owner is null || !OwnerFormat.IsMatch(entry.Owner))
+                return $"has a malformed owner '{entry.Owner}' (a row such as G-24 or G-23b (#848), an issue #nnn, or 'none: permanent — why')";
+            if (!_grammar.HasRule(entry.Rule))
+                return "names a rule that is not in the table";
+            if (entry.Pattern is { } pattern && !_grammar.TryGetPattern(entry.Rule, pattern, out _))
+                return "names a row that is not in the table";
+
+            if (entry.IsUnobserved) {
+                if ((entry.Pattern is null) == (entry.RowCount is null))
+                    return "must name exactly one of a pattern or a pinned row count";
+                if (entry.RowCount is { } rows && rows != _grammar.GetPatterns(entry.Rule).Count)
+                    return $"pins {rows} rows; the rule has {_grammar.GetPatterns(entry.Rule).Count}";
+                if (entry.Slot is not null || entry.Witness is not null)
+                    return "is an unobserved entry and takes no slot or witness";
+                return null;
+            }
+
+            if (entry.Pattern is null || entry.RowCount is not null)
+                return "must name one row";
+            return entry.Kind switch {
+                PatternRowEntryKind.AlwaysNull when entry.Slot is not >= 0 => "must name a content-slot index",
+                PatternRowEntryKind.AlwaysNull when entry.Witness is not null => "takes no witness",
+                PatternRowEntryKind.Defect when string.IsNullOrEmpty(entry.Witness) => "must name a witness text",
+                PatternRowEntryKind.Defect when entry.Owner.StartsWith(PermanentOwnerPrefix, StringComparison.Ordinal) =>
+                    "is a defect and needs the row that fixes it as its owner",
+                PatternRowEntryKind.Defect or PatternRowEntryKind.PrefixOnly or PatternRowEntryKind.ContextOnly
+                    or PatternRowEntryKind.RowOwnsText when entry.Slot is not null => "takes no slot",
+                _ => null,
+            };
+        }
+
+        /// <summary>Each row an unobserved entry covers, with the entry. A row covered twice is a schema error.</summary>
+        private Dictionary<(string Rule, string Pattern), PatternRowEntry> UnobservedCover(List<PatternRowEntry> entries) {
+            var cover = new Dictionary<(string Rule, string Pattern), PatternRowEntry>();
+            foreach (var entry in entries.Where(e => e.IsUnobserved)) {
+                var rows = entry.Pattern is { } pattern
+                    ? [pattern]
+                    : _grammar.GetPatterns(entry.Rule).Select(row => row.Name);
+                foreach (var row in rows) {
+                    if (!cover.TryAdd((entry.Rule, row), entry))
+                        _violations.Add(new(PatternRowCheck.Schema, entry.Rule, row,
+                            $"{entry} covers a row {cover[(entry.Rule, row)]} already covers"));
+                }
+            }
+            return cover;
+        }
+
+        /// <summary>Applies asymmetry and defect entries to the per-observation violations; unused entries are stale.</summary>
+        private void ApplyExemptions(List<PatternRowEntry> entries, List<Candidate> candidates) {
+            var exempting = entries.Where(e => e.IsAsymmetry || e.Kind == PatternRowEntryKind.Defect).ToList();
+            var used = new HashSet<PatternRowEntry>();
+            foreach (var candidate in candidates) {
+                var exempt = exempting.FirstOrDefault(entry => Exempts(entry, candidate));
+                if (exempt is null)
+                    _violations.Add(candidate.Violation);
+                else
+                    used.Add(exempt);
+            }
+            foreach (var entry in exempting.Where(e => !used.Contains(e)))
+                _violations.Add(new(PatternRowCheck.Stale, entry.Rule, entry.Pattern,
+                    $"{entry} exempts nothing: no observation of the row fails the rule it names"));
+        }
+
+        private static bool Exempts(PatternRowEntry entry, Candidate candidate) {
+            var violation = candidate.Violation;
+            if (!string.Equals(entry.Rule, violation.Rule, StringComparison.Ordinal)
+                || !string.Equals(entry.Pattern, violation.Pattern, StringComparison.Ordinal))
+                return false;
+            if (entry.Witness is { } witness && !candidate.Observation.Text.Contains(witness, StringComparison.Ordinal))
+                return false;
+            return entry.Kind == PatternRowEntryKind.Defect || violation.Check == PatternRowCheck.ReadBack;
+        }
+
+        // ── A3 coverage ──────────────────────────────────────────────────────
+
+        private void CheckRowCoverage(
+            Dictionary<(string Rule, string Pattern), PatternRowEntry> cover,
+            HashSet<(string Rule, string Pattern)> observed) {
+            foreach (var rule in _grammar.KnownRules.Order(StringComparer.Ordinal)) {
+                foreach (var row in _grammar.GetPatterns(rule)) {
+                    var key = (rule, row.Name);
+                    var isObserved = observed.Contains(key);
+                    var entry = cover.GetValueOrDefault(key);
+                    if (isObserved && entry is not null)
+                        _violations.Add(new(PatternRowCheck.Stale, rule, row.Name,
+                            $"{entry} says the row is never printed, but it is observed"));
+                    else if (!isObserved && entry is null)
+                        _violations.Add(new(PatternRowCheck.Unobserved, rule, row.Name,
+                            "is never printed and carries no unobserved entry: add an observation to the drive, or an entry with its reason and owner"));
+                }
+            }
+        }
+
+        private void CheckSlotCoverage(
+            List<PatternRowEntry> entries,
+            Dictionary<(string Rule, string Pattern), SortedSet<int>> optionalSlots,
+            Dictionary<(string Rule, string Pattern), HashSet<int>> filledSlots) {
+            var alwaysNull = entries.Where(e => e.Kind == PatternRowEntryKind.AlwaysNull).ToList();
+            var used = new HashSet<PatternRowEntry>();
+            foreach (var ((rule, pattern), optional) in optionalSlots) {
+                foreach (var slot in optional.Where(slot => !filledSlots[(rule, pattern)].Contains(slot))) {
+                    var entry = alwaysNull.FirstOrDefault(e => e.Rule == rule && e.Pattern == pattern && e.Slot == slot);
+                    if (entry is not null) {
+                        used.Add(entry);
+                        continue;
+                    }
+                    _violations.Add(new(PatternRowCheck.SlotNeverFilled, rule, pattern,
+                        $"optional content slot {slot} is empty in every observation: add an observation that fills it, or an AlwaysNull entry"));
+                }
+            }
+            foreach (var entry in alwaysNull.Where(e => !used.Contains(e)))
+                _violations.Add(new(PatternRowCheck.Stale, entry.Rule, entry.Pattern,
+                    $"{entry} names a slot that is not an always-empty optional slot of an observed row"));
+        }
+
+        private void CheckExamples(List<PatternRowEntry> entries, IReadOnlyList<PatternRowExample> examples) {
+            var heads = new HashSet<(string Rule, string Pattern)>();
+            foreach (var entry in entries.Where(e => e.Kind == PatternRowEntryKind.ReaderHead)) {
+                if (entry.Pattern is { } pattern)
+                    heads.Add((entry.Rule, pattern));
+                else
+                    heads.UnionWith(_grammar.GetPatterns(entry.Rule).Select(row => (entry.Rule, row.Name)));
+            }
+
+            var exampled = new HashSet<(string Rule, string Pattern)>();
+            foreach (var example in examples) {
+                void Report(string message) =>
+                    _violations.Add(new(PatternRowCheck.Example, example.Rule, example.Pattern, $"example '{Shown(example.Text)}' {message}"));
+
+                if (!string.Equals(example.Surface, surface.Name, StringComparison.Ordinal)) {
+                    Report($"is for the surface '{example.Surface}', not '{surface.Name}'");
+                    continue;
+                }
+                if (!_grammar.HasRule(example.Rule) || !_grammar.TryGetPattern(example.Rule, example.Pattern, out _)) {
+                    Report("names a row that is not in the table");
+                    continue;
+                }
+                if (!heads.Contains((example.Rule, example.Pattern))) {
+                    Report("is for a row that is not a reader head: delete the example, or the row's entry is missing");
+                    continue;
+                }
+                exampled.Add((example.Rule, example.Pattern));
+                if (ReadBack(example.Rule, example.Pattern, example.Text) is { } failure)
+                    Report(failure);
+            }
+
+            foreach (var (rule, pattern) in heads.Where(head => !exampled.Contains(head)).Order())
+                _violations.Add(new(PatternRowCheck.Example, rule, pattern, "is a reader head with no example"));
+        }
     }
 }

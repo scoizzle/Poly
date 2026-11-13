@@ -187,6 +187,9 @@ public sealed class Printer<TToken, TTokenKind>
                 ctx.EmitFill(name);
                 return;
 
+            case Slot<TToken, TTokenKind>:
+                throw new NotImplementedException("G-27: Slot is not printed yet.");
+
             case Word<TToken, TTokenKind> w:
                 ctx.Emit(w.Kind, w.Text);
                 return;

@@ -189,6 +189,16 @@ public sealed class PatternBuilder<TToken, TTokenKind>
         return this;
     }
 
+    /// <summary>
+    /// Ends the row at a zero-width print hole named <paramref name="name"/>: the reader stops here, the
+    /// printer writes the fill. Must be the last element.
+    /// </summary>
+    public PatternBuilder<TToken, TTokenKind> Slot(string name) {
+        ArgumentException.ThrowIfNullOrEmpty(name);
+        _elements.Add(new Slot<TToken, TTokenKind>(name));
+        return this;
+    }
+
     /// <summary>Makes <paramref name="inner"/> optional — matches zero or one occurrence.</summary>
     public PatternBuilder<TToken, TTokenKind> Optional(IPatternElement<TToken, TTokenKind> inner) {
         _elements.Add(new Optional<TToken, TTokenKind>(inner));

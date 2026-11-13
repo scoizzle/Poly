@@ -184,6 +184,9 @@ public sealed class Matcher<TToken, TTokenKind>
                 piece = Piece.TokensOnly([wt]);
                 return true;
 
+            case Slot<TToken, TTokenKind>:
+                throw new NotImplementedException("G-27: Slot is not matched yet.");
+
             case Optional<TToken, TTokenKind> o:
                 if (TryMatchElement(o.Inner, offset, captures, out piece))
                     return true;

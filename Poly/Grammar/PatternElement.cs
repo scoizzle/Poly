@@ -109,3 +109,13 @@ public sealed record Word<TToken, TTokenKind>(TTokenKind Kind, string Text, Func
     : IPatternElement<TToken, TTokenKind>
     where TToken : struct, IToken<TTokenKind>
     where TTokenKind : struct;
+
+/// <summary>
+/// A zero-width print hole at the end of a row: the reader stops here (the host reads what follows, such
+/// as an expression, with its own parser) and the printer writes the fill <paramref name="Name"/>, so the
+/// writer spaces it like any token. A Slot is the row's last element and is never inside an
+/// <see cref="Optional{TToken,TTokenKind}"/> (the builder rejects both).
+/// </summary>
+public sealed record Slot<TToken, TTokenKind>(string Name) : IPatternElement<TToken, TTokenKind>
+    where TToken : struct, IToken<TTokenKind>
+    where TTokenKind : struct;

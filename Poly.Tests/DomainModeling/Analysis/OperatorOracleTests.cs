@@ -634,6 +634,21 @@ public class OperatorOracleTests {
         await Assert.That(Cell("UInt8", OperatorKind.BitwiseOr, "UInt64").Abi).IsEqualTo("Byte; S1=255; S2=-1");
     }
 
+    /// <summary>
+    /// A tool, not a pin: with <c>POLY_ORACLE_DUMP</c> set to a file path, prints every cell's four columns and its
+    /// divergences, one line per cell, so a slice can diff the grid on its base against its head. Nothing is recorded.
+    /// </summary>
+    [Test]
+    public async Task Dump_WhenRequested_PrintsEveryCell() {
+        if (Environment.GetEnvironmentVariable("POLY_ORACLE_DUMP") is not { } path)
+            return;
+        var lines = OperatorOracle.Run.Value.Cells
+            .Select(static c => $"{c.Key}\t{c.Tree}\t{c.Lowered}\t{c.Abi}\t{string.Join(" | ", c.Divergences.Select(static d => $"{d.Kind}: {d.Reason}"))}")
+            .ToArray();
+        File.WriteAllLines(path, lines);
+        await Assert.That(lines.Length).IsEqualTo(OperatorOracle.Run.Value.Cells.Count);
+    }
+
     [Test]
     public async Task AnalyzerColumn_NeverSwallowsAnException() {
         // An exception in the analyzer column is a finding, not a blank cell.

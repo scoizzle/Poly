@@ -38,16 +38,20 @@ jobs:
       - name: Build
         run: dotnet build Poly.slnx --no-restore --nologo
 
-      # --timeout ends a hung run by itself (exit 3) after 10 minutes; a normal run is 3-4.
-      # It cannot end a test blocked synchronously (the host waits for that thread), so the
-      # step's own timeout-minutes is the stop for that case and still leaves the next steps
-      # (which name the unfinished test and upload the log) inside the job's 20 minutes.
+      # Four deadlines, each a little after the one before, so the earliest that can act does:
+      #   1. --timeout 10m in the test host ends an async hang cleanly, with a summary (exit 3).
+      #   2. scripts/run-with-deadline.sh 630 SIGKILLs the whole process group at 10m30s: a host
+      #      blocked on a synchronous wait ignores a polite stop (PR #878: the step timeout did
+      #      not end it and the job was cancelled, so nothing below ever ran). The step then
+      #      FAILS, which is what lets the next two steps run.
+      #   3. the step's timeout-minutes: 12 and 4. the job's 20 are backstops for the script itself.
       # The diagnostic log records a start and an end event per test (the console prints only
       # the end), so the next step can name a test that started and never finished.
       - name: Run tests
         id: tests
-        timeout-minutes: 11
+        timeout-minutes: 12
         run: >
+          scripts/run-with-deadline.sh 630
           dotnet run --project Poly.Tests/Poly.Tests.csproj --no-restore --
           --timeout 10m
           --diagnostic --diagnostic-output-directory "$RUNNER_TEMP/test-diag" --diagnostic-synchronous-write

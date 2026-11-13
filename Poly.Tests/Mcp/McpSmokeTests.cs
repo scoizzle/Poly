@@ -259,6 +259,7 @@ public class McpSmokeTests {
 
             Loan: entity {
               Status: Text
+              patron: Patron via loans
               Active: stage {}
               Overdue: stage {}
             }
@@ -1106,6 +1107,7 @@ public class McpSmokeTests {
             }
 
             Order: entity {
+              trackers: many Tracker via Tracks
               Draft: stage {
                 Activate: action {
                   transition to Active
@@ -1117,11 +1119,13 @@ public class McpSmokeTests {
 
         await Assert.That(response.Success).IsTrue();
         await Assert.That(response.Message).Contains("2 entities");
-        await Assert.That(response.Message).Contains("1 relationships");
+        // S-13a: Order.trackers (via Tracks) is the subscription's explicit inverse, so the pair is two relationships.
+        await Assert.That(response.Message).Contains("2 relationships");
 
         var exists = McpTestTools.Store.TryGet(sessionId, out var state);
         await Assert.That(exists).IsTrue();
-        await Assert.That(state!.LatestAnalysis!.GetAllRelationships(state!.Domain).Count).IsEqualTo(1);
+        // S-13a: the explicit inverse (Order.trackers via Tracks) is the second relationship; Tracks stays first.
+        await Assert.That(state!.LatestAnalysis!.GetAllRelationships(state!.Domain).Count).IsEqualTo(2);
         await Assert.That(state.LatestAnalysis!.GetAllRelationships(state.Domain)[0].Name).IsEqualTo("Tracks");
 
         var tracker = state.Domain.Types.OfType<Entity>().Single(e => e.Name == "Tracker");
@@ -1337,6 +1341,7 @@ public class McpSmokeTests {
 
             Order: entity {
               Status: Text
+              customer: Customer via orders
               Draft: stage {
                 Activate: action {
                   transition to Active
@@ -1348,11 +1353,12 @@ public class McpSmokeTests {
 
         await Assert.That(response.Success).IsTrue();
         await Assert.That(response.Message).Contains("2 entities");
-        await Assert.That(response.Message).Contains("1 relationships");
+        // S-13a: Order.customer (via orders) is the subscription's explicit inverse, so the pair is two relationships.
+        await Assert.That(response.Message).Contains("2 relationships");
 
         var exists = McpTestTools.Store.TryGet(sessionId, out var state);
         await Assert.That(exists).IsTrue();
-        await Assert.That(state!.LatestAnalysis!.GetAllRelationships(state!.Domain).Count).IsEqualTo(1);
+        await Assert.That(state!.LatestAnalysis!.GetAllRelationships(state!.Domain).Count).IsEqualTo(2);
         await Assert.That(state.LatestAnalysis!.GetAllRelationships(state.Domain)[0].Name).IsEqualTo("orders");
 
         // Verify create-in effect parsed correctly

@@ -29,6 +29,7 @@ public class WhenAnySimulatePrintAgreeTests {
             domain Watch
             Loan: entity {
               Code: Text
+              patron: Patron via loans
               Draft: stage {
                 Overdue: action { transition to Overdue }
               }
@@ -98,6 +99,7 @@ public class WhenAnySimulatePrintAgreeTests {
             domain Watch
             Loan: entity {
               Code: Text
+              patron: Patron via loans
               Draft: stage {
                 Overdue: action { transition to Overdue }
                 Lose: action { transition to Lost }

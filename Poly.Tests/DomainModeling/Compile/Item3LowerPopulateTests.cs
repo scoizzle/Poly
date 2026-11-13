@@ -49,6 +49,7 @@ public class Item3LowerPopulateTests {
         var (domain, analysis, session) = Evolve("""
             domain Watch
             Order: entity {
+              trackers: many Tracker via Tracks
               Open: stage { }
               Active: stage { }
               Activate: action { transition to Active }
@@ -113,6 +114,7 @@ public class Item3LowerPopulateTests {
         var (domain, analysis, session) = Evolve("""
             domain Watch
             Order: entity {
+              trackers: many Tracker via Tracks
               Open: stage { }
               Active: stage { }
               Activate: action { transition to Active }
@@ -252,6 +254,7 @@ public class Item3LowerPopulateTests {
             domain Watch
             Order: entity {
               Plate: Text
+              trackers: many Tracker via Tracks
               Open: stage { }
               Active: stage { }
               Activate: action { transition to Active }

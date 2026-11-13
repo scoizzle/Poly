@@ -50,8 +50,8 @@ Account: entity {
   OpenPipeline: Decimal default(0)
   hq: owned Site
   contacts: many Contact
-  opportunities: many Opportunity
-  tickets: many Ticket
+  opportunities: many Opportunity via account
+  tickets: many Ticket via account
   ClosedTickets: Number default(0)
   HasHq: policy { hq exists }
   IsUrban: policy { hq City is "Metropolis" }

@@ -13,7 +13,7 @@ Account: entity {
   Balance: Number range(0, 100000000) default(0)
   Flags: Number default(0)
   parent: Account
-  txns: many Transaction
+  txns: many Transaction via account
   HasFunds: policy { Balance > 0 }
   Open: stage {
     Deposit: action (amount: Number) {

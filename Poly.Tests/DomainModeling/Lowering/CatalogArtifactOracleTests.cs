@@ -85,6 +85,7 @@ public class CatalogArtifactOracleTests {
             Order: entity {
               Code: Text
               Total: Number default(0)
+              ledger: Ledger via orders
               Open: stage { Close: action { transition to Closed } }
               Closed: stage { }
             }

@@ -27,6 +27,7 @@ public class CrossEntityMutationAnalysisTests {
         }
         Line: entity {
           Sku: Text
+          invoice: Invoice via lines
           Open: stage {
             Post: action { transition to Posted }
           }

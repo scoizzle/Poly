@@ -24,8 +24,8 @@ Patron: entity {
   MaxItems: Number range(0, 20)
   CurrentBorrowCount: Number default(0)
   OutstandingFines: Number default(0)
-  loans: many Loan
-  fines: many Fine
+  loans: many Loan via borrower
+  fines: many Fine via patron
   GoodStanding: policy { Status is "Active" }
   AtLimit: policy { CurrentBorrowCount >= MaxItems }
   HasFines: policy { OutstandingFines > 0 }

@@ -54,6 +54,7 @@ public class StageNotifyDispatchTests {
         var poly = """
             domain Workshop
             Widget: entity {
+              bin: Bin via widgets
               Draft: stage {
                 Go: action { transition to Active }
               }
@@ -95,6 +96,8 @@ public class StageNotifyDispatchTests {
         var poly = """
             domain Workshop
             Widget: entity {
+              binViaExtras: Bin via extras
+              bin: Bin via widgets
               Draft: stage {
                 Go: action { transition to Active }
               }

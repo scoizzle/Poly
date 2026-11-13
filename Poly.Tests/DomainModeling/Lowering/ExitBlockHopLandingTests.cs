@@ -38,6 +38,7 @@ public class ExitBlockHopLandingTests {
         const string dsl = """
             domain H2
             Z: entity {
+              ws: many W via tracks
               A: stage {
                 exit { transition to B }
                 Go: action { transition to B }
@@ -66,6 +67,7 @@ public class ExitBlockHopLandingTests {
         const string dsl = """
             domain H3
             Z: entity {
+              board: Board via items
               A: stage {
                 exit { transition to B }
                 Go: action { transition to B }
@@ -229,7 +231,10 @@ public class ExitBlockHopLandingTests {
     public async Task Lower_StageWhenDeadArm_DoesNotThrow() {
         const string dsl = """
             domain H11
-            W: entity { Y: stage { } }
+            W: entity {
+              zs: many Z via w
+              Y: stage { }
+            }
             Z: entity {
               w: W
               A: stage {
@@ -258,7 +263,10 @@ public class ExitBlockHopLandingTests {
     public async Task Lower_StageWhenDeadArm_KeepsTheDifferingHopFallThrough() {
         const string dsl = """
             domain H11b
-            W: entity { Y: stage { } }
+            W: entity {
+              zs: many Z via w
+              Y: stage { }
+            }
             Z: entity {
               w: W
               A: stage {

@@ -291,6 +291,7 @@ public class FailureTypingTests {
             }
             Order: entity {
               Qty: Number default(1)
+              trackers: many Tracker via Tracks
               Draft: stage { }
               Active: stage { }
             }

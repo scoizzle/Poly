@@ -1450,8 +1450,8 @@ diverging:
   action: its `require` gates and stage policies, an enclosing `if`, and an earlier assign
   (`require Small { create Item { Qty: Qty } }` reads Qty ≤ 10). A create inside a `for`
   body, or after an effect the analysis does not follow on that path (a `for`, a
-  transition, a cross-entity or fan-out `invoke`, a `create`, a `create in`, a link or an
-  unlink), is judged against the declared ranges, as is a create outside an action body.
+  transition, a cross-entity or fan-out `invoke`, a `create` or a `create in`), is judged
+  against the declared ranges, as is a create outside an action body.
   `range(...)` is the only kind decided against a computed
   value on an `assign` or an initializer in this slice, so `length(...)`, `pattern(...)` and
   `equals(...)` are not flow-checked there — but `length` **is** decided on an observed flow

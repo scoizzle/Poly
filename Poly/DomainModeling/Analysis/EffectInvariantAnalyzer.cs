@@ -642,8 +642,8 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
                     flow.Untrust();
                     break;
                 default:
-                    // A transition runs the target stage's entry block; a link, an unlink or any effect without an
-                    // arm here may notify a subscriber on this instance. The walk models none of them.
+                    // A transition runs the target stage's entry block, and an effect without an arm here (a link
+                    // or an unlink, which analysis refuses today, or a later kind) is one the walk does not model.
                     flow.Untrust();
                     break;
             }

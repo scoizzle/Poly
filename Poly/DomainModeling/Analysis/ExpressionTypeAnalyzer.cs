@@ -1,6 +1,8 @@
 using Poly.DomainModeling.Meaning;
 using Poly.DomainModeling.Ontology;
 
+using OperatorKind = Poly.Introspection.OperatorKind;
+
 using Action = Poly.DomainModeling.Ontology.Action;
 using Add = Poly.DomainModeling.Ontology.Add;
 using And = Poly.DomainModeling.Ontology.And;
@@ -64,6 +66,8 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
     public void Analyze(AnalysisContext context, Node node) {
 
         if (node is Domain domain) {
+            context.SetMetadata(domain, new DomainTypeModelMetadata(
+                new DomainTypeModel(domain, RuntimeAnalysisCache.Session(domain).TypeMaps)));
             AnalyzeObservedFlows(context, domain);
             FunctionAnalysis.CheckDeclarations(context, domain);
             AnalyzeFunctionBodies(context, domain);
@@ -123,34 +127,14 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
             WalkExpression(context, function.Body, noProps, parameters, enumTypes);
             var bodyType = InferValueType(context, function.Body, noProps, parameters, enumTypes);
             var returnName = function.ReturnType.TypeName;
-            var returnType = new TypeInfo(CategoryOf(context, returnName, enumTypes), returnName);
-            if (bodyType.Category is not TypeCategory.Unknown
-                && returnType.Category is not TypeCategory.Unknown
-                && !Compatible(context, bodyType, returnType, assigning: true))
+            var returnType = ResolveName(context, returnName, enumTypes);
+            if (!IsLenient(bodyType)
+                && !IsLenient(returnType)
+                && !Compatible(bodyType, returnType, assigning: true))
                 context.ReportError(function,
                     $"Function '{function.Name}' body is '{Describe(bodyType)}' but it is declared to return '{returnName}'.",
                     DomainModelDiagnosticCodes.FunctionReturnType);
         }
-    }
-
-    /// <summary>
-    /// <see cref="InferType"/> plus the arithmetic result types it leaves Unknown: numeric
-    /// arithmetic is Number, and Text + Text is Text. Used for call arguments and function bodies.
-    /// </summary>
-    private TypeInfo InferValueType(
-        AnalysisContext context, DomainExpression expr,
-        Dictionary<string, string>? props, Dictionary<string, string>? parameters,
-        Dictionary<string, EnumType> enumTypes) {
-        if (expr is Add or Subtract or Multiply or Divide) {
-            var operands = expr.Children.OfType<DomainExpression>()
-                .Select(c => InferValueType(context, c, props, parameters, enumTypes)).ToList();
-            if (operands.All(o => IsNumeric(o.Category)))
-                return new(TypeCategory.Number);
-            if (expr is Add && operands.All(o => o.Category is TypeCategory.Text))
-                return new(TypeCategory.Text);
-            return new(TypeCategory.Unknown);
-        }
-        return InferType(context, expr, props, parameters, enumTypes);
     }
 
     // ── Entry points per entity ────────────────────────────────
@@ -295,7 +279,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
             case ConditionalEffect cond:
                 WalkExpression(context, cond.Condition, props, parameters, enumTypes);
                 var condType = InferType(context, cond.Condition, props, parameters, enumTypes);
-                if (condType.Category is not (TypeCategory.Boolean or TypeCategory.Unknown))
+                if (Family(condType) is not (TypeFamily.Boolean or TypeFamily.Unknown))
                     Report(context, cond.Condition,
                         $"if-condition must be Boolean (got '{Describe(condType)}')");
                 CheckEffectTree(context, cond.ThenEffects, callerEntityName, props, parameters, enumTypes);
@@ -329,7 +313,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                     var whereType = BindsToBinder(where, fe.BinderName)
                         ? InferBinderExpressionType(context, iteratedTypeName, fe.BinderName, where, enumTypes)
                         : InferType(context, where, props, parameters, enumTypes);
-                    if (whereType.Category is not (TypeCategory.Boolean or TypeCategory.Unknown))
+                    if (Family(whereType) is not (TypeFamily.Boolean or TypeFamily.Unknown))
                         Report(context, where,
                             $"'for' where condition must be Boolean (got '{Describe(whereType)}')");
                 }
@@ -370,20 +354,20 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                 var inferred = binderName is not null && BindsToBinder(binding.Expression, binderName)
                     ? InferBinderExpressionType(context, targetEntityName, binderName, binding.Expression, enumTypes)
                     : InferLiteralAware(context, binding.Expression, paramType, enumTypes, callerProps, parameters);
-                var targetCategory = CategoryOf(context, paramType, enumTypes);
-                if (inferred.Category is not TypeCategory.Unknown
-                    && targetCategory is not TypeCategory.Unknown
-                    && !Compatible(context, inferred, new TypeInfo(targetCategory, paramType), assigning: true)) {
+                var target = ResolveName(context, paramType, enumTypes);
+                if (!IsLenient(inferred)
+                    && !IsLenient(target)
+                    && !Compatible(inferred, target, assigning: true)) {
                     Report(context, binding.Expression,
                         $"type mismatch in argument '{binding.PropertyName}' of invoke '{actionName}': " +
                         $"cannot assign '{Describe(inferred)}' to '{paramType}'");
                 }
-                // Entity type names (Widget, Gadget, …) resolve to Unknown CategoryOf, so
-                // the primitive-category check above misses entity-type mismatches.
-                // Reject when the inferred type is an entity (Unknown category with a known
+                // Entity type names (Widget, Gadget, …) are lenient to the family rules, so
+                // the primitive-family check above misses entity-type mismatches.
+                // Reject when the inferred type is an entity (lenient with a known
                 // name) and it differs from the target parameter type.
-                if (inferred.Category is TypeCategory.Unknown
-                    && inferred.TypeName is { } argTypeName
+                if (IsLenient(inferred)
+                    && inferred.DomainName is { } argTypeName
                     && !string.Equals(argTypeName, paramType, StringComparison.Ordinal)) {
                     Report(context, binding.Expression,
                         $"type mismatch in argument '{binding.PropertyName}' of invoke '{actionName}': " +
@@ -402,45 +386,6 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
         if (expr is Add or Subtract or Multiply or Divide)
             return expr.Children.OfType<DomainExpression>().Any(c => BindsToBinder(c, binderName));
         return false;
-    }
-
-    /// <summary>Infers the type of a binder-rooted argument expression: a binder-root property
-    /// access, or arithmetic (numeric/numeric, date/number) over it. Non-scalar binder roots
-    /// (nested path-prefix) resolve to Unknown.</summary>
-    private static TypeInfo InferBinderExpressionType(
-        AnalysisContext context, string? targetEntityName, string binderName,
-        DomainExpression expr, Dictionary<string, EnumType> enumTypes) {
-        switch (expr) {
-            case RelationshipNavigation rn when string.Equals(rn.RelationshipName, binderName, StringComparison.Ordinal):
-                if (rn.TargetProperty is not PropertyAccess pa) return new(TypeCategory.Unknown);
-                var propType = ResolveTargetPropType(context, targetEntityName, pa.Name);
-                return propType is null ? new(TypeCategory.Unknown) : new(CategoryOf(context, propType, enumTypes), propType);
-            case Add or Subtract or Multiply or Divide:
-                var operandTypes = expr.Children.OfType<DomainExpression>()
-                    .Select(c => InferBinderExpressionType(context, targetEntityName, binderName, c, enumTypes))
-                    .ToList();
-                if (operandTypes.Any(t => t.Category is TypeCategory.Unknown)) return new(TypeCategory.Unknown);
-                if (operandTypes.All(t => IsNumeric(t.Category))) return new(TypeCategory.Number);
-                if (operandTypes.Count == 2 && IsDate(operandTypes[0].Category) && IsNumeric(operandTypes[1].Category))
-                    return operandTypes[0];
-                // Mixed non-numeric binder prop + number (line Status + 1): surface the
-                // non-numeric type so the param-type mismatch fires instead of passing.
-                return operandTypes.FirstOrDefault(t => !IsNumeric(t.Category));
-            case Literal { Value: long or int or double or float or decimal or short or byte }:
-                return new(TypeCategory.Number);
-            case Literal { Value: string }:
-                return new(TypeCategory.Text);
-            default:
-                return new(TypeCategory.Unknown);
-        }
-    }
-
-    private static string? ResolveTargetPropType(AnalysisContext context, string? targetEntityName, string propName) {
-        if (targetEntityName is null) return null;
-        var lookup = context.GetTypeLookup();
-        var entity = lookup?.Domain?.Types.OfType<Entity>()
-            .FirstOrDefault(e => string.Equals(e.Name, targetEntityName, StringComparison.Ordinal));
-        return entity?.Properties.FirstOrDefault(p => string.Equals(p.Name, propName, StringComparison.Ordinal))?.Type.TypeName;
     }
 
     private static string? ResolveCalleeEntityName(
@@ -537,6 +482,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                 CheckComparison(context, cmp, props, parameters, enumTypes);
                 return; // operands already checked
             case Add add:
+                StampBinary(context, add, OperatorKind.Add, add.Left, add.Right, props, parameters, enumTypes);
                 CheckArithmetic(context, add.Left, add.Right, props, parameters, enumTypes, allowTextConcat: true);
                 return;
             case Subtract sub:
@@ -544,24 +490,27 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                     var leftType = InferType(context, sub.Left, props, parameters, enumTypes);
                     var rightType = InferType(context, sub.Right, props, parameters, enumTypes);
                     // Same-family date minus date is a difference, not arithmetic; mixed families stay errors.
-                    if (leftType.Category is TypeCategory.Date && rightType.Category is TypeCategory.Date
-                        && !MixedDateGranularity(context, leftType, rightType)) {
+                    if (IsDate(leftType) && IsDate(rightType)
+                        && !MixedDateGranularity(leftType, rightType)) {
                         WalkExpression(context, sub.Left, props, parameters, enumTypes, walked);
                         WalkExpression(context, sub.Right, props, parameters, enumTypes, walked);
                         return;
                     }
                 }
+                StampBinary(context, sub, OperatorKind.Subtract, sub.Left, sub.Right, props, parameters, enumTypes);
                 CheckArithmetic(context, sub.Left, sub.Right, props, parameters, enumTypes);
                 return;
             case Multiply mul:
+                StampBinary(context, mul, OperatorKind.Multiply, mul.Left, mul.Right, props, parameters, enumTypes);
                 CheckNumericArithmetic(context, mul.Left, mul.Right, props, parameters, enumTypes);
                 return;
             case Divide div:
+                StampBinary(context, div, OperatorKind.Divide, div.Left, div.Right, props, parameters, enumTypes);
                 CheckNumericArithmetic(context, div.Left, div.Right, props, parameters, enumTypes);
                 return;
             case Not not:
                 var operand = InferType(context, not.Operand, props, parameters, enumTypes);
-                if (operand.Category is not (TypeCategory.Boolean or TypeCategory.Unknown))
+                if (Family(operand) is not (TypeFamily.Boolean or TypeFamily.Unknown))
                     Report(context, expr, $"'not' requires a Boolean operand (got '{Describe(operand)}')");
                 WalkExpression(context, not.Operand, props, parameters, enumTypes, walked);
                 return;
@@ -598,8 +547,8 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
         Dictionary<string, EnumType> enumTypes, WalkedExpressions? walked = null) {
         var leftType = InferType(context, left, props, parameters, enumTypes);
         var rightType = InferType(context, right, props, parameters, enumTypes);
-        if (leftType.Category is not (TypeCategory.Boolean or TypeCategory.Unknown)
-            || rightType.Category is not (TypeCategory.Boolean or TypeCategory.Unknown))
+        if (Family(leftType) is not (TypeFamily.Boolean or TypeFamily.Unknown)
+            || Family(rightType) is not (TypeFamily.Boolean or TypeFamily.Unknown))
             Report(context, left,
                 $"'and'/'or' requires Boolean operands (got '{Describe(leftType)}' and '{Describe(rightType)}')");
         WalkExpression(context, left, props, parameters, enumTypes, walked);
@@ -636,26 +585,26 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
             return;
         }
         var inferred = InferLiteralAware(context, value, targetTypeName, enumTypes, props, parameters);
-        var targetCategory = CategoryOf(context, targetTypeName, enumTypes);
+        var target = ResolveName(context, targetTypeName, enumTypes);
         // Unresolved bare identifier (`assign CheckIn to now`, `assign Name to Bogus` →
         // `this.Bogus`). Enum targets keep the member diagnostic. `Guid` lowers to
         // Guid.NewGuid, not a member access, and CheckDefault owns that keyword.
-        if (inferred.Category is TypeCategory.Unknown
+        if (IsLenient(inferred)
             && value is PropertyAccess { Name: var bare }
             && ResolvePropertyType(bare, props, parameters) is null
             && !string.Equals(bare, "Guid", StringComparison.Ordinal)) {
-            if (targetCategory is TypeCategory.Enum)
+            if (Family(target) is TypeFamily.Enum)
                 Report(context, value, $"'{bare}' is not a member of enum '{targetTypeName}'");
             else
                 Report(context, value, $"'{bare}' is not a property, parameter, or enum member");
             return;
         }
-        if (inferred.Category is TypeCategory.Unknown || targetCategory is TypeCategory.Unknown)
+        if (IsLenient(inferred) || IsLenient(target))
             return;
         // enum member validity for the RHS
-        if (targetCategory is TypeCategory.Enum && value is Literal { Value: string s })
+        if (Family(target) is TypeFamily.Enum && value is Literal { Value: string s })
             CheckEnumMember(context, value, targetTypeName, s, enumTypes);
-        if (!Compatible(context, inferred, new TypeInfo(targetCategory, targetTypeName), assigning: true))
+        if (!Compatible(inferred, target, assigning: true))
             Report(context, value,
                 $"type mismatch in {what}: cannot assign '{Describe(inferred)}' to '{targetTypeName}'");
     }
@@ -672,12 +621,12 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                     null, enumTypes, propTypeName)))
             return;
 
-        var targetCategory = CategoryOf(context, propTypeName, enumTypes);
-        if (targetCategory is TypeCategory.Unknown)
+        var target = ResolveName(context, propTypeName, enumTypes);
+        if (IsLenient(target))
             return;
 
         switch (expr) {
-            case Literal { Value: string s } when targetCategory is TypeCategory.Enum:
+            case Literal { Value: string s } when Family(target) is TypeFamily.Enum:
                 CheckEnumMember(context, expr, propTypeName, s, enumTypes);
                 return;
             case Literal { Value: decimal } fractional when IsIntegralTypeName(propTypeName):
@@ -685,19 +634,19 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                 return;
             case Literal lit:
                 var inferred = InferType(context, expr, null, null, enumTypes);
-                if (!Compatible(context, inferred, new TypeInfo(targetCategory, propTypeName), assigning: true))
+                if (!Compatible(inferred, target, assigning: true))
                     Report(context, expr,
                         $"default value of type '{Describe(inferred)}' is not compatible with property type '{propTypeName}'");
                 return;
             case PropertyAccess pa:
                 if (pa.Name is "Guid") {
-                    if (targetCategory is not TypeCategory.Guid
-                        && targetCategory is not TypeCategory.Text)
+                    if (Family(target) is not TypeFamily.Guid
+                        && Family(target) is not TypeFamily.Text)
                         Report(context, expr,
                             $"default(Guid) is not compatible with property type '{propTypeName}' (use a Uuid/Guid or Text property)");
                     return;
                 }
-                if (targetCategory is TypeCategory.Enum) {
+                if (Family(target) is TypeFamily.Enum) {
                     // C4e (b): Level: Sev default(Nope) — bare identifier must be a member of the enum.
                     CheckEnumMember(context, expr, propTypeName, pa.Name, enumTypes);
                     return;
@@ -721,221 +670,4 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
             return;
         Report(context, where, $"'{member}' is not a member of enum '{enumTypeName}'");
     }
-
-    // ── Type inference ──────────────────────────────────────────
-
-    internal enum TypeCategory { Text, Number, Boolean, Date, Time, Duration, Enum, Guid, Null, Unknown }
-
-    private readonly record struct TypeInfo(TypeCategory Category, string? TypeName = null);
-
-    private TypeInfo InferLiteralAware(
-        AnalysisContext context,
-        DomainExpression expr, string targetTypeName, Dictionary<string, EnumType> enumTypes,
-        Dictionary<string, string>? props = null, Dictionary<string, string>? parameters = null) {
-        // For the assign RHS / default check, a bare enum-member identifier (PropertyAccess)
-        // is valid when the target is enum-typed and the name is a member.
-        if (expr is PropertyAccess pa && CategoryOf(context, targetTypeName, enumTypes) is TypeCategory.Enum) {
-            if (enumTypes.TryGetValue(targetTypeName, out var enumType)
-                && enumType.MemberNames.Contains(pa.Name, StringComparer.Ordinal))
-                return new(TypeCategory.Enum, targetTypeName);
-        }
-        return InferType(context, expr, props, parameters, enumTypes);
-    }
-
-    private TypeInfo InferType(
-        AnalysisContext context,
-        DomainExpression expr,
-        Dictionary<string, string>? props,
-        Dictionary<string, string>? parameters,
-        Dictionary<string, EnumType> enumTypes) {
-        expr = RewriteLibraryIdent(expr);
-        if (context.GetMetadata<CatalogTypedExpressionMetadata>(expr) is { TypeName: { } stamped })
-            return new(CategoryOf(context, stamped, enumTypes), stamped);
-
-        if (_meaning.Inference.TryDispatch(
-                expr,
-                child => InferType(context, child, props, parameters, enumTypes).TypeName ?? "",
-                out var inferredName)
-            && !string.IsNullOrEmpty(inferredName)) {
-            context.SetMetadata(expr, new CatalogTypedExpressionMetadata(inferredName));
-            return new(CategoryOf(context, inferredName, enumTypes), inferredName);
-        }
-
-        // Text + Text is concatenation and yields Text; every other arithmetic result stays Unknown here.
-        if (expr is Add add
-            && InferType(context, add.Left, props, parameters, enumTypes).Category is TypeCategory.Text
-            && InferType(context, add.Right, props, parameters, enumTypes).Category is TypeCategory.Text)
-            return new(TypeCategory.Text);
-
-        return expr switch {
-            PropertyAccess pa => ResolvePropertyType(pa.Name, props, parameters) is { } pt
-                ? new(CategoryOf(context, pt, enumTypes), pt)
-                : new(TypeCategory.Unknown),
-            ParameterAccess pa => parameters?.TryGetValue(pa.Name, out var pt) == true
-                ? new(CategoryOf(context, pt, enumTypes), pt)
-                : new(TypeCategory.Unknown),
-            Literal { Value: null } => new(TypeCategory.Null),
-            Literal { Value: string } => new(TypeCategory.Text),
-            Literal { Value: bool } => new(TypeCategory.Boolean),
-            Literal { Value: decimal } => new(TypeCategory.Number, "Decimal"),
-            Literal { Value: long or int or double or float or short or byte } => new(TypeCategory.Number),
-            Exists or NotExists or AnyExpr or AllExpr or NoneExpr or Comparison or And or Or or Not => new(TypeCategory.Boolean),
-            CountExpr => new(TypeCategory.Number),
-            SumExpr => new(TypeCategory.Number),
-            MatchExpr match => InferMatch(context, match, props, parameters, enumTypes),
-            FunctionCall call => FunctionAnalysis.Find(context, call.Name) is { } function
-                ? new(CategoryOf(context, function.ReturnType.TypeName, enumTypes), function.ReturnType.TypeName)
-                : new(TypeCategory.Unknown),
-            _ => new(TypeCategory.Unknown),
-        };
-    }
-
-    private static string? ResolvePropertyType(string name, Dictionary<string, string>? props, Dictionary<string, string>? parameters) {
-        if (props?.TryGetValue(name, out var pt) == true) return pt;
-        if (parameters?.TryGetValue(name, out var ptype) == true) return ptype;
-        return null;
-    }
-
-    private static TypeCategory CategoryOf(
-        AnalysisContext context, string typeName, Dictionary<string, EnumType> enumTypes) {
-        if (enumTypes.ContainsKey(typeName)) return TypeCategory.Enum;
-        var lookup = context.GetTypeLookup();
-        if (lookup?.Domain.Types.OfType<Ontology.PrimitiveType>().FirstOrDefault(p =>
-                string.Equals(p.Name, typeName, StringComparison.Ordinal)) is { } primitive)
-            return FromSemantics(primitive.Semantics);
-        return typeName switch {
-            "Text" or "String" => TypeCategory.Text,
-            "Number" or "Int" or "Int64" or "Int32" or "Decimal" or "Float" or "Double" => TypeCategory.Number,
-            "Boolean" or "Bool" => TypeCategory.Boolean,
-            "Uuid" or "Guid" => TypeCategory.Guid,
-            _ => TypeCategory.Unknown,
-        };
-    }
-
-    private static TypeCategory FromSemantics(PrimitiveSemantics semantics) => semantics switch {
-        PrimitiveSemantics.Boolean => TypeCategory.Boolean,
-        PrimitiveSemantics.Number => TypeCategory.Number,
-        PrimitiveSemantics.Decimal => TypeCategory.Number,
-        PrimitiveSemantics.Text => TypeCategory.Text,
-        PrimitiveSemantics.Uuid => TypeCategory.Guid,
-        PrimitiveSemantics.Binary => TypeCategory.Unknown,
-        PrimitiveSemantics.Date => TypeCategory.Date,
-        // DateTime keeps the Date category; granularity is compared through SemanticsOf.
-        PrimitiveSemantics.DateTime => TypeCategory.Date,
-        PrimitiveSemantics.Time => TypeCategory.Time,
-        PrimitiveSemantics.Duration => TypeCategory.Duration,
-        _ => throw new InvalidOperationException($"Unmapped primitive semantics '{semantics}'."),
-    };
-
-    private static bool IsNumeric(TypeCategory c) => c is TypeCategory.Number;
-
-    private static bool IsDate(TypeCategory c) => c is TypeCategory.Date;
-
-    private static string Describe(TypeInfo t) => t.Category switch {
-        TypeCategory.Text => "Text",
-        TypeCategory.Number => "Number",
-        TypeCategory.Boolean => "Boolean",
-        TypeCategory.Date => $"Date ({t.TypeName ?? "date"})",
-        TypeCategory.Time => $"Time ({t.TypeName ?? "time"})",
-        TypeCategory.Duration => "duration",
-        TypeCategory.Enum => $"enum {t.TypeName ?? "?"}",
-        TypeCategory.Guid => "Guid",
-        TypeCategory.Null => "null",
-        TypeCategory.Unknown => "unknown",
-        _ => "unknown",
-    };
-
-    /// <param name="assigning">
-    /// When true, <paramref name="left"/> is the source and <paramref name="right"/> is the
-    /// target. Catalog semantics: Date onto DateTime is a widen; DateTime onto Date is not.
-    /// </param>
-    private static bool Compatible(AnalysisContext context, TypeInfo left, TypeInfo right, bool assigning = false) {
-        if (left.Category is TypeCategory.Unknown || right.Category is TypeCategory.Unknown)
-            return true;
-        if (left.Category is TypeCategory.Null)
-            return right.Category is TypeCategory.Text or TypeCategory.Guid;
-        if (right.Category is TypeCategory.Null)
-            return left.Category is TypeCategory.Text or TypeCategory.Guid;
-        if (left.Category is TypeCategory.Enum && right.Category is TypeCategory.Enum)
-            return string.Equals(left.TypeName, right.TypeName, StringComparison.Ordinal);
-        if (left.Category is TypeCategory.Enum && right.Category is TypeCategory.Text)
-            return true;
-        if (right.Category is TypeCategory.Enum && left.Category is TypeCategory.Text)
-            return true;
-
-        if (assigning) {
-            var leftSemantics = SemanticsOf(context, left.TypeName);
-            var rightSemantics = SemanticsOf(context, right.TypeName);
-            if (leftSemantics is PrimitiveSemantics.Date && rightSemantics is PrimitiveSemantics.DateTime)
-                return true;
-            if (leftSemantics is PrimitiveSemantics.DateTime && rightSemantics is PrimitiveSemantics.Date)
-                return false;
-            if (left.Category != right.Category)
-                return false;
-            // Number, Int, and Int64 widen onto Decimal at the assign site only.
-            if (right.TypeName is "Decimal" && IsIntegralTypeName(left.TypeName))
-                return true;
-            if (left.TypeName is { } ln && right.TypeName is { } rn)
-                return string.Equals(CanonicalName(ln), CanonicalName(rn), StringComparison.Ordinal);
-            return true;
-        }
-
-        return left.Category == right.Category
-            || string.Equals(CanonicalName(left.TypeName), CanonicalName(right.TypeName), StringComparison.Ordinal);
-    }
-
-    /// <summary>
-    /// A <c>decimal</c> literal combined with <c>Number</c>, <c>Int</c>, or <c>Int64</c>.
-    /// A <c>Decimal</c> property combined with a <c>Number</c> property stays legal.
-    /// </summary>
-    private bool ReportFractionalLiteral(
-        AnalysisContext context,
-        DomainExpression left, TypeInfo leftType,
-        DomainExpression right, TypeInfo rightType) {
-        if (left is Literal { Value: decimal } leftLit && IsIntegralTypeName(rightType.TypeName)) {
-            Report(context, leftLit, FractionalLiteralMessage(leftLit, rightType.TypeName!));
-            return true;
-        }
-        if (right is Literal { Value: decimal } rightLit && IsIntegralTypeName(leftType.TypeName)) {
-            Report(context, rightLit, FractionalLiteralMessage(rightLit, leftType.TypeName!));
-            return true;
-        }
-        return false;
-    }
-
-    private static string FractionalLiteralMessage(Literal literal, string typeName) {
-        var message = $"Fractional literal is not legal on {typeName}. Use Decimal.";
-        if (literal.Line > 0)
-            message += $" (line {literal.Line}, col {literal.Col})";
-        return message;
-    }
-
-    private static bool IsIntegralTypeName(string? typeName) =>
-        typeName is "Number" or "Int" or "Int64";
-
-    private static string? CanonicalName(string? typeName) => typeName switch {
-        "String" => "Text",
-        "Bool" => "Boolean",
-        "Int" or "Int64" => "Number",
-        "Guid" => "Uuid",
-        _ => typeName
-    };
-
-    private static PrimitiveSemantics? SemanticsOf(AnalysisContext context, string? typeName) {
-        if (typeName is null) return null;
-        var lookup = context.GetTypeLookup();
-        var primitive = lookup?.Domain.Types.OfType<Ontology.PrimitiveType>().FirstOrDefault(p =>
-            string.Equals(p.Name, typeName, StringComparison.Ordinal));
-        return primitive?.Semantics;
-    }
-
-    private static bool MixedDateGranularity(AnalysisContext context, TypeInfo left, TypeInfo right) {
-        var leftSemantics = SemanticsOf(context, left.TypeName);
-        var rightSemantics = SemanticsOf(context, right.TypeName);
-        return leftSemantics is PrimitiveSemantics.Date && rightSemantics is PrimitiveSemantics.DateTime
-            || leftSemantics is PrimitiveSemantics.DateTime && rightSemantics is PrimitiveSemantics.Date;
-    }
-
-    private static void Report(AnalysisContext context, Node where, string message) =>
-        context.ReportError(where, message, DomainModelDiagnosticCodes.SemanticTypeCompatibility);
 }

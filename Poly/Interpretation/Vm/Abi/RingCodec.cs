@@ -286,6 +286,13 @@ internal static class RingCodec {
         if (obj is null) return null;
         if (underlying.IsInstanceOfType(obj))
             return obj;
+        // IntPtr and UIntPtr are not IConvertible: a native integer goes through its word (LocalType.WordTypeOf).
+        if (obj is nint or nuint)
+            obj = obj is nint signed ? (long)signed : (ulong)(nuint)obj;
+        if (underlying == typeof(nint) || underlying == typeof(nuint)) {
+            var bits = obj is ulong unsigned ? unchecked((long)unsigned) : System.Convert.ToInt64(obj, System.Globalization.CultureInfo.InvariantCulture);
+            return underlying == typeof(nint) ? (nint)bits : unchecked((nuint)(ulong)bits);
+        }
         return System.Convert.ChangeType(obj, underlying, System.Globalization.CultureInfo.InvariantCulture);
     }
 

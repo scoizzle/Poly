@@ -79,6 +79,9 @@ public readonly record struct InterpreterResult {
             if (typeof(T) == typeof(ushort)) return (T)(object)unchecked((ushort)l);
             if (typeof(T) == typeof(double)) return (T)(object)BitConverter.Int64BitsToDouble(l);
             if (typeof(T) == typeof(float)) return (T)(object)(float)BitConverter.Int64BitsToDouble(l);
+            // IntPtr and UIntPtr are not IConvertible: a native integer's word is the long (nint) or ulong (nuint).
+            if (typeof(T) == typeof(nint)) return (T)(object)(nint)l;
+            if (typeof(T) == typeof(nuint)) return (T)(object)unchecked((nuint)(ulong)l);
         }
         if (typeof(T) == typeof(object)) return (T)Value;
         return (T)Convert.ChangeType(Value, typeof(T))!;

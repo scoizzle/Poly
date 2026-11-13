@@ -12,15 +12,15 @@ A domain is a library of legal operations. Session compile is Load → one analy
 
 1. **Domain model is the artifact** — when infra and the domain disagree, fix lower, analyze, or node replacement.
 2. **End-to-end ownership** — one path through CORE seams.
-3. **Only what helps the customer** — time-to-value, correctness, or operability.
+3. **Only what helps the customer** — time-to-value, correctness, or operability. A workaround that hides a wrong answer helps no customer. "Nothing shipped reaches it" is a reason not to build a feature, never a reason to park a real fix.
 4. **Go well to go fast** — small test→code loops; tests specific, production generic.
-5. **Shipped capability over completeness** — thinnest slice through the right seam. Shrink the language before a host escape. Do not ship a known-wrong shape.
+5. **Shipped capability over completeness** — thinnest slice through the right seam. Shrink the language before a host escape. Do not ship a known-wrong shape. No temporary fix in place of the real one: a pinned wrong result, a gate that skips the hard case, or an interim rule is not a fix. When the real fix does not fit the slice, refuse the shape (fail closed) or name the interim rule, the row that removes it and its test. A workstream is not shippable while an interim rule remains.
 6. **Seam when multiplicity is known** — libraries, artifact producers, and `uses` doors get a named seam. No framework for an imaginary second use. A public instance runtime type is the cautionary tale.
 7. **Guardrails only with real consumers.**
 
 When tenets conflict: domain fidelity and CORE seams over a smaller wrong path; a smaller tested loop over a large untested batch; a known multi-impl seam over a one-off; no speculative framework.
 
-**Hard nos:** `Main` in core · `Comment` / `null` lower / second interpreter as shipped meaning · consumer-specific lowering flag · Lower-inside-analysis · twin trees (`UseThisReference`; historical name, do not reintroduce) · `LowerActionBody` as shipped execute input · host-escape keyword · DEI/MCP walk as product proof · empty artifact catalog when required · a second CURRENT.
+**Hard nos:** `Main` in core · `Comment` / `null` lower / second interpreter as shipped meaning · consumer-specific lowering flag · Lower-inside-analysis · twin trees (`UseThisReference`; historical name, do not reintroduce) · `LowerActionBody` as shipped execute input · host-escape keyword · DEI/MCP walk as product proof · empty artifact catalog when required · a second CURRENT · an interim rule with no removing row.
 
 ## Frozen core
 
@@ -50,8 +50,11 @@ Compilation unit = library. Interpreter sim and C# print share the Syntax module
 
 - **TFM:** `net10.0`, nullable on.
 - **Build:** `dotnet build Poly.Benchmarks/Poly.Benchmarks.csproj`
-- **Test:** `dotnet run --project Poly.Tests/Poly.Tests.csproj` — not `dotnet test`. While iterating, add `-- --treenode-filter` for the tests you changed. The full suite runs at the pre-ship gate, in the parent session: run it there and record the pass count in the summary — the `verifier` runs the build and changed-area tests and cannot run the full suite. Do not weaken audit in-repo.
+- **Test:** `dotnet run --project Poly.Tests/Poly.Tests.csproj` — not `dotnet test`. While iterating, add `-- --treenode-filter` for the tests you changed. The full suite runs at the pre-ship gate, in the parent session: run it there and record the pass count in the summary — the `verifier` runs the build and changed-area tests and cannot run the full suite. Do not weaken audit in-repo. Exception for stream work (see Integration branch): the unit that produced the slice head runs the full suite and records the command, totals and sha.
 - **Commit hook:** the `pre-commit` hook runs `dotnet format` on staged `.cs` files and re-stages them, so a commit can carry formatting your verification run never saw. Formatting is semantically inert — do not re-run the build or suite after a commit that changes only formatting; the green run before the commit still stands.
+- **Workstreams:** one workstream at a time, taken to shippable (every row merged, every interim rule it introduced removed, release notes final); at most one filler stream that shares no files with it; no new row starts while an approved pull request waits for its closing round; the stream's owner questions are asked in one sitting before it starts. Owner ruling, [#677 comment](https://github.com/scoizzle/Poly/issues/677#issuecomment-6855444684).
+- **Integration branch:** a stream's slices are small pull requests against `stream/<name>`, cut from master when the stream starts. A slice merges when its head is up to date with that branch and ONE full local suite is green on exactly that head (the command, totals and sha recorded), with the Benchmarks build at 0 warnings. A draft pull request from the stream branch to master runs GitHub CI and CodeQL in the background; a red run there stops the stream. The stream lands on master as one merge. Owner ruling, [#677 comment](https://github.com/scoizzle/Poly/issues/677#issuecomment-6855770465).
+- **Behaviour that runs today:** anything that runs end to end on master comes to the owner, with the concrete example, numbered options and a recommendation, before a slice rejects it, unless the row's approved text names the class. Owner precedent, e.g. [#677 comment](https://github.com/scoizzle/Poly/issues/677#issuecomment-6854270157).
 - **MCP after code changes:** run `scripts/restart-poly-mcp.sh` after touching anything the MCP server exposes — Ast, analysis, the VM, `Poly.Mcp` tool code, the `polyc mcp` host, or the DSL guide.
 - A red build means the task is incomplete; the user may waive that, an agent may not. **Test-first:** every behavior change starts with a test that fails for the stated reason — run it red, record the command and output, then implement to green and keep the test. Mechanical work (typo, rename, version bump) uses the existing suite as its oracle instead. TUnit: `async [Test]`, `await Assert.That(…).IsEqualTo(…)`, `Method_Condition_ExpectedResult`. `Poly.Tests/TestHelpers/` stays test-only.
 - Minimal diffs. Names say what they are (`UopCompiler`). No drive-by comments. No new `#region`.
@@ -73,7 +76,7 @@ Compilation unit = library. Interpreter sim and C# print share the Syntax module
 
 ## Branching and PRs
 
-- Base a feature branch on `origin/master`, not on a local `master` that may be behind.
+- Base a feature branch on `origin/master`, not on a local `master` that may be behind. Exception: a stream slice bases on `origin/stream/<name>`.
 - Never stage or commit files you do not own, or pre-existing modifications you did not make. If a file is already dirty when you start, leave it dirty; do not `git add` in the user's tree.
 - A PR contains the task's work only. Check `git status` against the PR diff before you push.
 - Removing a worktree whose untracked `bin/`/`obj/` blocks the delete needs `force`, and only with the user's confirmation.

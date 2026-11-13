@@ -649,8 +649,9 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
 
     /// <summary>
     /// Applies the chosen operator: each operand converts to its parameter's type, then the platform applies the
-    /// operator or its declared method runs. Any exception, from a conversion, the operator or an invoked method,
-    /// declines. The result must be of the operator's result type.
+    /// operator or its declared method runs. An overflow, a division by zero, a failed conversion or any exception an
+    /// invoked method throws (<see cref="TargetInvocationException"/>) declines. The result must be of the operator's
+    /// result type.
     /// </summary>
     private static bool TryEvaluate(OperatorKind kind, OperatorResolution resolution, object left, object? right, out object? result) {
         result = null;
@@ -665,7 +666,7 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
                 return false;
             result = resolution.PlatformApplied ? ApplyPlatformOperator(kind, x, y) : InvokeDeclaredOperator(kind, resolution.Signature, x, y);
         }
-        catch {
+        catch (Exception ex) when (ex is OverflowException or DivideByZeroException or TargetInvocationException or InvalidCastException) {
             result = null;
             return false;
         }

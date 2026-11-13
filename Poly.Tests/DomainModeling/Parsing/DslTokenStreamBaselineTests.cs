@@ -362,6 +362,15 @@ public sealed class DslTokenStreamBaselineTests {
 
         var fragment = await Assert.That(() => DslExpressionFragment.ParseExpressionFragment("Age > ٣")).Throws<GrammarException>();
         await Assert.That((fragment!.Detail, fragment.Line, fragment.Column)).IsEqualTo((NonAsciiDigitError, 1, 7));
+
+        var afterDigit = await Assert.That(() => DslExpressionFragment.ParseExpressionFragment("1٣")).Throws<GrammarException>();
+        await Assert.That((afterDigit!.Detail, afterDigit.Line, afterDigit.Column)).IsEqualTo((NonAsciiDigitError, 1, 2));
+
+        // The fragment parser stops at the stray '.' first; the lexer's own error for the digit after it is at column 3.
+        var reader = new DslTokenReader("1.٣");
+        reader.Consume(2);
+        var afterPoint = await Assert.That(() => reader.Peek()).Throws<GrammarException>();
+        await Assert.That((afterPoint!.Detail, afterPoint.Line, afterPoint.Column)).IsEqualTo((NonAsciiDigitError, 1, 3));
     }
 
     [Test]

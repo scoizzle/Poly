@@ -37,7 +37,7 @@ internal enum NumberLiteralKind {
 /// </remarks>
 internal static class DslNumberText {
     private const string LongMaxDigits = "9223372036854775807";
-    private const string DecimalMaxDigits = "79228162514264337593543950335";
+    private static readonly string DecimalMaxDigits = ExactNumber.MaxMantissa.ToString(CultureInfo.InvariantCulture);
 
     /// <summary>True when <see cref="Format"/> accepts the value's type.</summary>
     public static bool IsNumber(object? value) => value is
@@ -86,7 +86,6 @@ internal static class DslNumberText {
     // ── reading a number token's value: exact, or a positioned error (T-15) ─────────────
 
     private const int MaxShownLength = 40;
-    private const int ExactSignificantDigits = 28;
 
     /// <summary>The value of a Number token: a <see cref="long"/> when integral and in range, else an exact <see cref="decimal"/>; anything else is a positioned error.</summary>
     public static object ParseLiteral(DslToken token) {
@@ -141,7 +140,7 @@ internal static class DslNumberText {
     private static bool TryExactDecimal(ReadOnlySpan<char> text, out decimal value, out int fractionDigits) {
         Shape(text, out var integerDigits, out fractionDigits);
         // At most 28 significant digits is always exact: no allocation on the common path.
-        if (integerDigits + fractionDigits <= ExactSignificantDigits
+        if (integerDigits + fractionDigits <= ExactNumber.MaxScale
             && decimal.TryParse(text, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out value))
             return true;
         if (ExactNumber.TryParseDecimalText(text.ToString()) is { } exact) {
@@ -166,11 +165,14 @@ internal static class DslNumberText {
         var shown = Shown(token);
         var places = fractionDigits.ToString(CultureInfo.InvariantCulture);
         if (kind == NumberLiteralKind.IntegerOverflow)
-            return $"Number '{shown}' is larger than the maximum {decimal.MaxValue.ToString(CultureInfo.InvariantCulture)}.";
-        if (fractionDigits > ExactSignificantDigits)
-            return $"Number '{shown}' has {places} digits after the point; the maximum is {ExactSignificantDigits.ToString(CultureInfo.InvariantCulture)}.";
-        var scaledMax = new decimal(-1, -1, -1, false, (byte)fractionDigits).ToString(CultureInfo.InvariantCulture);
-        return $"Number '{shown}' is larger than the maximum {scaledMax} for {places} digits after the point.";
+            return $"Number '{shown}' is larger than the maximum {DecimalMaxDigits}.";
+        if (fractionDigits > ExactNumber.MaxScale)
+            return $"Number '{shown}' has {places} digits after the point; the maximum is {ExactNumber.MaxScale.ToString(CultureInfo.InvariantCulture)}.";
+        var scaledMax = fractionDigits == 0
+            ? DecimalMaxDigits
+            : DecimalMaxDigits[..^fractionDigits] + "." + DecimalMaxDigits[^fractionDigits..];
+        var noun = fractionDigits == 1 ? "digit" : "digits";
+        return $"Number '{shown}' is larger than the maximum {scaledMax} for {places} {noun} after the point.";
     }
 
     private static FormatException WholeNumberError(DslToken token, string what, string maximum) {

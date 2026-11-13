@@ -176,7 +176,7 @@ public sealed class DslNumberTextTests {
     [Arguments("79228162514264337593543950336", "Number '79228162514264337593543950336' is larger than the maximum 79228162514264337593543950335.")]
     [Arguments("99999999999999999999999999999999", "Number '99999999999999999999999999999999' is larger than the maximum 79228162514264337593543950335.")]
     [Arguments("9.9999999999999999999999999999", "Number '9.9999999999999999999999999999' is larger than the maximum 7.9228162514264337593543950335 for 28 digits after the point.")]
-    [Arguments("79228162514264337593543950335.5", "Number '79228162514264337593543950335.5' is larger than the maximum 7922816251426433759354395033.5 for 1 digits after the point.")]
+    [Arguments("79228162514264337593543950335.5", "Number '79228162514264337593543950335.5' is larger than the maximum 7922816251426433759354395033.5 for 1 digit after the point.")]
     public async Task Literal_NotHeldExactly_IsPositionedErrorNamingTheLimit(string text, string detail) {
         var read = ReadLiteral(text);
         await Assert.That(read.Detail).IsEqualTo(detail);

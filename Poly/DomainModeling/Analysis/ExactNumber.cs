@@ -13,8 +13,8 @@ namespace Poly.DomainModeling.Analysis;
 /// trailing zeros, or a scale above 28. That is reported as <c>null</c>, the same as overflow.
 /// </remarks>
 internal readonly struct ExactNumber : IEquatable<ExactNumber> {
-    private static readonly BigInteger DecimalMaxMantissa = (BigInteger.One << 96) - 1;
-    private const int DecimalMaxScale = 28;
+    internal static readonly BigInteger MaxMantissa = (BigInteger.One << 96) - 1;
+    internal const int MaxScale = 28;
     private const int DecimalMaxIntegerDigits = 29;
     private const double ExactDoubleLimit = 9007199254740992d; // 2^53
 
@@ -66,25 +66,25 @@ internal readonly struct ExactNumber : IEquatable<ExactNumber> {
             return null;
         digits = digits.TrimStart('0');
         if (digits.Length == 0)
-            return new ExactNumber(new decimal(0, 0, 0, false, (byte)(scale <= DecimalMaxScale ? scale : 0)));
+            return new ExactNumber(new decimal(0, 0, 0, false, (byte)(scale <= MaxScale ? scale : 0)));
         // Refuse by digit count before any BigInteger: a text this long cannot fit, however many digits it has.
         var integerDigits = digits.Length - scale;
         var fractionDigits = scale;
         for (var end = digits.Length; fractionDigits > 0 && end > 0 && digits[end - 1] == '0'; end--)
             fractionDigits--;
-        if (integerDigits > DecimalMaxIntegerDigits || fractionDigits > DecimalMaxScale)
+        if (integerDigits > DecimalMaxIntegerDigits || fractionDigits > MaxScale)
             return null;
         var mantissa = BigInteger.Parse(digits, CultureInfo.InvariantCulture);
         // Keep the declared scale whenever decimal can hold it; trim trailing zeros only to fit.
         // (The arithmetic path still normalises in FromMantissaScale; a parsed bound keeps its text.)
-        if (scale > DecimalMaxScale || mantissa > DecimalMaxMantissa) {
+        if (scale > MaxScale || mantissa > MaxMantissa) {
             var end = digits.Length;
             while (end > 0 && scale > 0 && digits[end - 1] == '0') {
                 end--;
                 scale--;
             }
             mantissa = BigInteger.Parse(digits[..end], CultureInfo.InvariantCulture);
-            if (scale > DecimalMaxScale || mantissa > DecimalMaxMantissa)
+            if (scale > MaxScale || mantissa > MaxMantissa)
                 return null;
         }
         return new ExactNumber(BuildDecimal(mantissa, scale));
@@ -158,9 +158,9 @@ internal readonly struct ExactNumber : IEquatable<ExactNumber> {
             mantissa /= 10;
             scale--;
         }
-        if (scale < 0 || scale > DecimalMaxScale)
+        if (scale < 0 || scale > MaxScale)
             return null;
-        if (BigInteger.Abs(mantissa) > DecimalMaxMantissa)
+        if (BigInteger.Abs(mantissa) > MaxMantissa)
             return null;
         return new ExactNumber(BuildDecimal(mantissa, scale));
     }

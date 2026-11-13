@@ -164,6 +164,35 @@ public class PolycMcpTests {
         await Assert.That(alive["ok"]!.GetValue<bool>()).IsTrue();
     }
 
+    /// <summary>
+    /// G-25 (#835): one document nested one statement past the limit is refused the same way by every door: the
+    /// compiler, <c>polyc check</c> and the MCP define path each report one DSL0001 with the statement limit's
+    /// message, on the 65th <c>if</c>.
+    /// </summary>
+    [Test]
+    public async Task StatementNestingPastTheLimit_IsTheSameDsl0001AtEveryDoor() {
+        var text = Poly.Tests.DomainModeling.Parsing.StatementLimitsTests.StatementDocument("nestif", Poly.DomainModeling.Language.DslLimits.MaxStatementDepth + 1);
+        var offset = Poly.Tests.DomainModeling.Parsing.StatementLimitsTests.HeadOffset(text, Poly.DomainModeling.Language.DslLimits.MaxStatementDepth + 1);
+        var (line, column) = Poly.Tests.DomainModeling.Parsing.StatementLimitsTests.Position(text, offset);
+
+        var compiled = new PolyCompiler(ProductCatalog.Model, new SessionOptions(ProductCatalog.Model, ProductCatalog.ImplicitIds)).Compile(text, "<workspace>");
+        var expected = compiled.Diagnostics.Single(d => d.IsError);
+        await Assert.That(expected.Code).IsEqualTo("DSL0001");
+        await Assert.That(expected.Message).IsEqualTo(Poly.DomainModeling.Language.DslLimits.StatementDepthDetail);
+        await Assert.That(expected.Line).IsEqualTo(line);
+        await Assert.That(expected.Column).IsEqualTo(column);
+
+        var check = await PolycProcess.CheckTextAsync(text);
+        await Assert.That(check.IsAborted).IsFalse();
+        await Assert.That(check.ExitCode).IsEqualTo(1);
+        await Assert.That(check.Stdout).Contains($":{line}:{column}: error DSL0001: {Poly.DomainModeling.Language.DslLimits.StatementDepthDetail}");
+
+        using var host = await PolycProcess.McpAsync();
+        await host.InitializeAsync();
+        var workspace = (await host.ToolAsync("poly_workspace", new JsonObject { ["name"] = "Deep" }))["state"]!["workspace"]!.GetValue<string>();
+        await AssertMatchesCheck(host, workspace, text);
+    }
+
     /// <summary>#533: a wrong JSON type is a typed caller error, and the host keeps serving.</summary>
     [Test]
     public async Task StdioWrongTypedArgument_IsATypedError_AndTheHostStaysAlive() {

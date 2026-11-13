@@ -188,8 +188,8 @@ bridge's operators read `GetOperator`, lifted for a nullable operand, its condit
 argument and coalesce conversions an implicit `ResolveConversionFrom` (coalesce typed by C# 12.15); it calls T-18's
 `ConstantOperandRule` and refuses, positioned, what the provider leaves undefined. Outside the fence it keeps the
 Expression API's own rules: enum arithmetic and bitwise (T-25), temporal operators (T-10), string concatenation with a
-non-string, Guid, reference and null equality and `TypeCast`/`TypeAs`/`TypeIs`/`Default` (T-23); the main emitter's
-function-table compile of a quoted lambda is T-19b), T-20
+non-string, Guid, reference and null equality and `TypeCast`/`TypeAs`/`TypeIs`/`Default` (T-23); since T-19b a lambda
+quoted at an `Expression<D>` parameter has no function-table entry, so the main emitter no longer refuses its body first), T-20
   (`ConstantFoldingPass.Promote`: converged, folding asks `GetOperator` and applies the chosen signature; it leaves
   the resolved-type guard for T-17 and the declared-operator fence for T-10; folding no longer masks `VmTypeCompatibility`
   for a mismatched-type constant equality (672 rows of the fold grid, Text against Char included since T-18) or a

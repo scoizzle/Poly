@@ -488,10 +488,9 @@ public class OperatorOracleTests {
 
     // The lowered analysis reads the provider for arithmetic and comparison (T-18): an undefined Decimal-with-X, UInt64
     // with a signed operand or Decimal-with-Float cell is rejected there. The domain DSL has no Float, so the analyzer
-    // column is n/a for those; the remaining owners are the lowered analysis (T-07, T-10, T-17, T-22) and the ABI (T-21).
+    // column is n/a for those; the remaining owners are the lowered analysis (T-07, T-10, T-22) and the ABI (T-21). T-17 typed every arithmetic node through the provider and deleted the arithmetic type rule (240 cells: the 150 of the 19 CLR operands and 90 native-integer pairs); the stated type now is C#'s.
     private static readonly LedgerRule[] LoweredRules = [
         new(OracleKind.LoweredAnalysisDisagrees, "*", "*", "*", "analysis error on a defined cell", "T-21 (the ABI cannot execute declared temporal and Duration-scalar arithmetic: VmExecutesDeclaredOperator); 7 temporal cells with T-10; T-18b adds 6, Duration with nint or nuint (T-21: 'the rule analysis error on a defined cell is about 46 (Duration × native integers)')", 46, "ec7a9e70d97b4629"),
-        new(OracleKind.LoweredAnalysisDisagrees, "*", Arithmetic, "*", "type: analysis", "T-17 (result typing: small integers, char and uint with a signed operand keep the operand type); T-18b adds 90 native-integer pairs typed as the left operand (T-17: 'its common-type pass must give the right result for native-integer pairs')", 240, "16e9cabd50914419"),
         // The same wrong type on the node kinds the lowered analysis has no case for (issue 812): it passes the operand type through.
         new(OracleKind.LoweredAnalysisDisagrees, "*", BitwiseShiftAndUnaryMinus, "*", "type: analysis", "T-22 (bitwise, shift and unary minus cases: the operand type passes through); T-18b adds 42 native-integer cells (T-17's lock: 'its bitwise type line 263')", 263, "c722cc646ed78cc9"),
         new(OracleKind.LoweredAnalysisDisagrees, "*", "Add,Subtract", "*", "typed DateOnly", "T-10 (RewriteDateOffset); T-18b adds Date ± nint or nuint, 4 (T-10: 'T-18b adds 8 Date/DateTime ± nint/nuint cells to the date fence's accepted-undefined line')", 24, "6782a41016a1baec"),
@@ -505,7 +504,7 @@ public class OperatorOracleTests {
     private static readonly LedgerRule[] AbiRules = [
         new(OracleKind.AbiDivergesFromTree, "*", "*", "*", "executes an undefined cell", "T-21 (the ABI must reject what the tree does not define); T-18b adds 231 native-integer cells: the accepted-undefined bitwise, shift and date cells above that the VM runs", 1290, "cf1253256569c5f2"),
         new(OracleKind.AbiDivergesFromTree, "*", "*", "*", "unstated conversion", "T-21 (T-04 and Lower state the conversion node; the emitter stops converting); T-18b adds 520 native-integer cells (T-18b lock amendment 7: 'its unstated conversion is then T-21's ledger line')", 2249, "0018c569d72f44e5"),
-        new(OracleKind.AbiDivergesFromTree, "*", "*", "*", "^type: VM [^;]*$", "T-21 (the emitter's own promotion: the VM keeps the operand type); T-18b adds 132 native-integer cells: the stated type is the lowered analysis's and the word is the tree's value (T-18b lock residuals: 'result types for the 142 diverging cells (T-17')", 495, "17d47740f68f3f09"),
+        new(OracleKind.AbiDivergesFromTree, "*", "*", "*", "^type: VM [^;]*$", "T-21 (the emitter's own promotion: the VM keeps the operand type); T-17 typed arithmetic through the provider: the 240 arithmetic cells (150 + 90 native) left this rule, 90 of the 132 native-integer cells left with it; the 42 that remain are bitwise and shift ones", 255, "414297d201bfefdc"),
         // Wrong values (issue 832): the type and the value in one reason, then the value alone (-Decimal and -Duration give -1).
         new(OracleKind.AbiDivergesFromTree, "*", "*", "*", "^type: VM .*; value S", "T-21 (issue 832: wrong type and value)", 8, "2e73ee06e20095c0"),
         new(OracleKind.AbiDivergesFromTree, "*", "*", "*", "^value S", "T-21 (issue 832: wrong values)", 115, "ae35f7db5640776e")
@@ -528,11 +527,11 @@ public class OperatorOracleTests {
 
     [Test]
     public async Task LoweredAnalysisDisagrees_EveryDivergenceIsOwned_AndNoEntryIsStale() =>
-        await AssertOwned(OracleKind.LoweredAnalysisDisagrees, LoweredRules, 2390);
+        await AssertOwned(OracleKind.LoweredAnalysisDisagrees, LoweredRules, 2150);
 
     [Test]
     public async Task AbiDivergesFromTree_EveryDivergenceIsOwned_AndNoEntryIsStale() =>
-        await AssertOwned(OracleKind.AbiDivergesFromTree, AbiRules, 4157);
+        await AssertOwned(OracleKind.AbiDivergesFromTree, AbiRules, 3917);
 
     [Test]
     public async Task AbiRejectsDefined_EveryDivergenceIsOwned_AndNoEntryIsStale() =>
@@ -543,12 +542,12 @@ public class OperatorOracleTests {
     /// checksum) on them, in rule order. A rule that grew grew only by cells with a native-integer operand.
     /// </summary>
     private static readonly (int Count, string Checksum)[] MasterLowered = [
-        (40, "8f48a0defcb327e9"), (150, "ff6f45d8a9c3a166"), (221, "1a89fb5312f00f92"), (20, "7ba4ce6c196e991e"),
+        (40, "8f48a0defcb327e9"), (221, "1a89fb5312f00f92"), (20, "7ba4ce6c196e991e"),
         (20, "5b5cc5a3f2ece6cd"), (8, "a2d892f80f998382"), (1492, "f06be2a866cf6b37")
     ];
 
     private static readonly (int Count, string Checksum)[] MasterAbi = [
-        (1059, "7fada48079f73965"), (1729, "6699a0d31e9728fb"), (363, "fdfd5dee091d1059"), (8, "2e73ee06e20095c0"), (115, "ae35f7db5640776e")
+        (1059, "7fada48079f73965"), (1729, "6699a0d31e9728fb"), (213, "af39c0ce64fd29e0"), (8, "2e73ee06e20095c0"), (115, "ae35f7db5640776e")
     ];
 
     private static bool IsNative(string? operand) => operand is "NInt" or "NUInt";

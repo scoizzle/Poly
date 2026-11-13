@@ -449,20 +449,63 @@ public static class PolyEdit {
         return "entity";
     }
 
+    /// <summary>
+    /// Re-indents a snippet for <paramref name="indent"/>. <c>add</c> (<paramref name="skipFirst"/> false) adds the target's indent to every
+    /// line after trimming the snippet's common indent. <c>replace</c> (<paramref name="skipFirst"/>, the first line sits at the node)
+    /// reads the first line's own indent w0 as evidence: (1) w0 above 0 and different from the target's indent: the snippet states its own
+    /// base (pasted uniformly indented): the common indent of its other lines is stripped (a column-0 line does not vote and keeps no
+    /// indent of its own) and the target's indent is added; (2) w0 equal to the target's indent and above 0: taken from the line start,
+    /// document coordinates: every line is kept as written; (3) w0 is 0 (taken from the node start, or authored from column 0): if the
+    /// last non-blank continuation line is indented at least as far as the target the snippet is in document coordinates and kept as
+    /// written, otherwise it is authored and every line gets the target's indent. Lines inside a multi-line string literal are never
+    /// re-indented by <c>replace</c>.
+    /// </summary>
     private static string Reindent(string dsl, string indent, string nl, bool skipFirst) {
         var lines = dsl.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n').ToList();
         while (lines.Count > 0 && string.IsNullOrWhiteSpace(lines[0])) lines.RemoveAt(0);
         while (lines.Count > 0 && string.IsNullOrWhiteSpace(lines[^1])) lines.RemoveAt(lines.Count - 1);
+        static int Indent(string line) => line.Length - line.TrimStart().Length;
+        var verbatim = skipFirst ? StringContentLines(lines) : [];
+        var first = skipFirst && lines.Count > 0 ? Indent(lines[0]) : 0;
+        var last = Enumerable.Range(1, Math.Max(0, lines.Count - 1)).Where(i => !verbatim.Contains(i) && !string.IsNullOrWhiteSpace(lines[i])).Select(i => (int?)i).LastOrDefault();
+        var inDocument = first == 0 ? last is not { } l || Indent(lines[l]) >= indent.Length : first == indent.Length;
+        if (skipFirst && inDocument)
+            return string.Join(nl, lines.Select((line, i) => i == 0 ? line.Trim() : line));
+        var stated = skipFirst && first > 0;
         var common = lines
-            .Where(l => !string.IsNullOrWhiteSpace(l))
-            .Select(l => l.Length - l.TrimStart().Length)
+            .Where((line, i) => !verbatim.Contains(i) && !string.IsNullOrWhiteSpace(line) && !(stated && i > 0 && Indent(line) == 0))
+            .Select(Indent)
             .DefaultIfEmpty(0)
             .Min();
-        var shifted = lines.Select((l, i) => {
-            var trimmed = string.IsNullOrWhiteSpace(l) ? "" : l[common..].TrimEnd();
+        var shifted = lines.Select((line, i) => {
+            if (verbatim.Contains(i))
+                return line;
+            var trimmed = string.IsNullOrWhiteSpace(line) ? "" : line[Math.Min(common, Indent(line))..].TrimEnd();
             return trimmed.Length == 0 || (i == 0 && skipFirst) ? trimmed : indent + trimmed;
         });
         return string.Join(nl, shifted);
+    }
+
+    /// <summary>The indexes of the lines that start inside a multi-line string literal.</summary>
+    private static HashSet<int> StringContentLines(List<string> lines) {
+        var verbatim = new HashSet<int>();
+        try {
+            var text = string.Join("\n", lines);
+            var reader = new DslTokenReader(text);
+            for (var t = reader.Peek(); t.Kind != DslTokenKind.EndOfFile; t = reader.Peek()) {
+                if (t.Kind == DslTokenKind.StringLiteral) {
+                    var breaks = text.AsSpan(t.Start, t.Length).Count('\n');
+                    for (var k = 1; k <= breaks; k++)
+                        verbatim.Add(t.Line - 1 + k);
+                }
+                reader.Consume(1);
+            }
+        }
+        catch (FormatException) {
+            // A snippet that does not lex is refused by the gate that parses the spliced text.
+        }
+
+        return verbatim;
     }
 
     private static EditRegion RegionOf(string text, int index, int start, int length) {

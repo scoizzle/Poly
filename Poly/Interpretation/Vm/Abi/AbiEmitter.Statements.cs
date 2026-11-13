@@ -855,6 +855,10 @@ public static partial class AbiEmitter {
     private static Expression EmitLambda(Lambda lambda, Context ctx) {
         if (lambda.LambdaIndex < 0)
             throw new InvalidOperationException("Lambda.LambdaIndex not set during lambda collection");
+        if (ctx.QuoteOnlyLambdas.Contains(lambda))
+            throw new InvalidOperationException(
+                "VM compile rejected: the lambda is quoted for an Expression<> parameter, so it has no function-table entry, "
+                + "but this call compiles it as a closure value (a module method whose body does not compile is dispatched by name).");
         var captures = FindBodyCaptures(lambda, ctx.Analysis);
         int arrLen = 1 + captures.Count;
         var closureArrVar = Variable(typeof(object[]), "_closureArr");

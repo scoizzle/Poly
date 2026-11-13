@@ -98,3 +98,37 @@ public sealed record NotFollowedBy<TToken, TTokenKind>(TTokenKind Kind)
     : IPatternElement<TToken, TTokenKind>
     where TToken : struct, IToken<TTokenKind>
     where TTokenKind : struct;
+
+/// <summary>
+/// Matches one token that <paramref name="Matches"/> accepts: a contextual word, such as an identifier
+/// spelled <c>via</c>. The host supplies the test (the engine knows only token kinds); it captures nothing,
+/// and the printer writes <paramref name="Text"/> as a token of <paramref name="Kind"/>, so the row owns
+/// the spelling.
+/// </summary>
+public sealed record Word<TToken, TTokenKind>(TTokenKind Kind, string Text, Func<TToken, bool> Matches)
+    : IPatternElement<TToken, TTokenKind>
+    where TToken : struct, IToken<TTokenKind>
+    where TTokenKind : struct;
+
+/// <summary>
+/// A zero-width print hole at the end of a row: the reader stops here (the host reads what follows, such
+/// as an expression, with its own parser) and the printer writes the fill <paramref name="Name"/>, so the
+/// writer spaces it like any token. A Slot is the row's last element and is never inside an
+/// <see cref="Optional{TToken,TTokenKind}"/> (the builder rejects both).
+/// </summary>
+public sealed record Slot<TToken, TTokenKind>(string Name) : IPatternElement<TToken, TTokenKind>
+    where TToken : struct, IToken<TTokenKind>
+    where TTokenKind : struct;
+
+/// <summary>
+/// Matches one or more tokens that continue the token before them, captured as <paramref name="Name"/>
+/// (and printed from that fill). <paramref name="Continues"/> is <c>(previous, candidate, index)</c>: the
+/// host decides what continues (the DSL: the same line, and adjacent from index 1), so the engine stays
+/// position-free. The first candidate's previous token is the last token this row has matched, so a Run
+/// is never the first element, never preceded only by optional elements, and never optional (the builder
+/// rejects each); a Run that matches no token fails.
+/// </summary>
+public sealed record Run<TToken, TTokenKind>(Func<TToken, TToken, int, bool> Continues, string Name)
+    : IPatternElement<TToken, TTokenKind>
+    where TToken : struct, IToken<TTokenKind>
+    where TTokenKind : struct;

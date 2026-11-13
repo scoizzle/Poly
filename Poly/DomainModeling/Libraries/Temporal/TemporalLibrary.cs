@@ -20,7 +20,8 @@ public sealed class TemporalLibrary : IDomainLibrary {
 
     public void Register(SessionBuilder builder) {
         ArgumentNullException.ThrowIfNull(builder);
-        builder.ExpressionForms.RegisterBinaryFold(new DateOperationFold());
+        builder.ExpressionForms.RegisterBinaryClaim(DslTokenKind.Plus, DateOperationFold.Plus);
+        builder.ExpressionForms.RegisterBinaryClaim(DslTokenKind.Minus, DateOperationFold.Minus);
         TemporalExpressionPrintBinders.Register(builder.ExpressionForms);
         TemporalExpressionPrintBinders.RegisterFolds(builder.ExpressionForms);
         TemporalMeaning.Register(builder.Meaning);

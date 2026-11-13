@@ -1,4 +1,6 @@
 using Poly.DomainModeling.Language;
+using Poly.DomainModeling.Libraries.Temporal;
+using Poly.DomainModeling.Meaning;
 using Poly.DomainModeling.Ontology;
 using Poly.Grammar;
 
@@ -113,6 +115,139 @@ public sealed class DslOperatorTableTests {
 
         await Assert.That(parsed).IsTypeOf<Poly.DomainModeling.Ontology.Not>();
         await Assert.That(cursor.Current.Kind).IsEqualTo(DslTokenKind.Gt);
+    }
+
+    private static ExpressionFormRegistry TemporalClaims() {
+        var forms = new ExpressionFormRegistry();
+        forms.RegisterBinaryClaim(DslTokenKind.Plus, DateOperationFold.Plus);
+        forms.RegisterBinaryClaim(DslTokenKind.Minus, DateOperationFold.Minus);
+        return forms;
+    }
+
+    private static readonly Duration TwoHours = new(2, DurationUnit.Hours);
+
+    /// <summary>G-20: a library claims <c>+</c>/<c>-</c> as a claim on the operator table's own row, and the row fold returns the claim.</summary>
+    [Test]
+    public async Task TemporalClaim_IsARowOfTheOperatorTable() {
+        var table = DslOperatorTable.Core(TemporalClaims());
+
+        var claimed = table.Claim(DslTokenKind.Plus, new Now(), TwoHours);
+        await Assert.That(claimed).IsTypeOf<DateOperation>();
+        await Assert.That(((DateOperation)claimed!).Kind).IsEqualTo(DateOperationKind.AddHours);
+        await Assert.That(((Literal)((DateOperation)claimed).Offset).Value).IsEqualTo(2L);
+
+        var viaRow = (DateOperation)Binary(table, DslTokenKind.Plus).Fold(new Now(), TwoHours);
+        await Assert.That(viaRow.Kind).IsEqualTo(DateOperationKind.AddHours);
+        await Assert.That(((Literal)viaRow.Offset).Value).IsEqualTo(2L);
+        var minus = (DateOperation)Binary(table, DslTokenKind.Minus).Fold(new Now(), TwoHours);
+        await Assert.That(((Literal)minus.Offset).Value).IsEqualTo(-2L);
+        var viaFold = (DateOperation)table.Fold(DslTokenKind.Plus, new Now(), TwoHours);
+        await Assert.That(viaFold.Kind).IsEqualTo(DateOperationKind.AddHours);
+    }
+
+    /// <summary>An unclaimed pair is the row's own fallback, in one place: <c>Claim</c> is null and the row folds to the plain node.</summary>
+    [Test]
+    public async Task UnclaimedPair_ClaimIsNull_AndTheRowFoldsToPlainAdd() {
+        var table = DslOperatorTable.Core(TemporalClaims());
+        var age = DomainExpression.Property("Age");
+        var one = DomainExpression.Literal(1L, new DomainTypeReference("Number"));
+
+        await Assert.That(table.Claim(DslTokenKind.Plus, age, one)).IsNull();
+        var add = (Poly.DomainModeling.Ontology.Add)Binary(table, DslTokenKind.Plus).Fold(age, one);
+        await Assert.That(add.Left).IsSameReferenceAs(age);
+        await Assert.That(add.Right).IsSameReferenceAs(one);
+        var subtract = (Poly.DomainModeling.Ontology.Subtract)table.Fold(DslTokenKind.Minus, age, one);
+        await Assert.That(subtract.Left).IsSameReferenceAs(age);
+        await Assert.That(subtract.Right).IsSameReferenceAs(one);
+    }
+
+    [Test]
+    public async Task Core_WithNoClaims_PlusIsPlainAdd() {
+        var table = DslOperatorTable.Core();
+
+        await Assert.That(table.Claim(DslTokenKind.Plus, new Now(), TwoHours)).IsNull();
+        var now = new Now();
+        var add = (Poly.DomainModeling.Ontology.Add)Binary(table, DslTokenKind.Plus).Fold(now, TwoHours);
+        await Assert.That(add.Left).IsSameReferenceAs(now);
+        await Assert.That(add.Right).IsSameReferenceAs(TwoHours);
+    }
+
+    /// <summary>Claims survive <c>With</c> (F-04 and F-05 add rows through it): the copy still claims and its <c>+</c> row still folds the claim.</summary>
+    [Test]
+    public async Task CoreWithRow_StillClaims() {
+        var table = DslOperatorTable.Core(TemporalClaims())
+            .With(new BinaryRow(DslTokenKind.In, 55, Assoc.Left, DomainExpression.Equal))
+            .With(new PrefixRow(DslTokenKind.Minus, 50, DomainExpression.Not));
+
+        await Assert.That(table.Claim(DslTokenKind.Plus, new Now(), TwoHours)).IsTypeOf<DateOperation>();
+        await Assert.That(Binary(table, DslTokenKind.Plus).Fold(new Now(), TwoHours)).IsTypeOf<DateOperation>();
+    }
+
+    /// <summary>A claim may sit on any binary row of the core table, not just <c>+</c>/<c>-</c>: <c>Core</c> wraps every row.</summary>
+    [Test]
+    public async Task ClaimOnAnotherRow_WrapsThatRow() {
+        var forms = new ExpressionFormRegistry();
+        forms.RegisterBinaryClaim(DslTokenKind.Star, (l, r) => l is Duration ? DomainExpression.Literal(0L) : null);
+        var table = DslOperatorTable.Core(forms);
+
+        await Assert.That(Binary(table, DslTokenKind.Star).Fold(TwoHours, new Now())).IsTypeOf<Literal>();
+        await Assert.That(Binary(table, DslTokenKind.Star).Fold(new Now(), TwoHours)).IsTypeOf<Poly.DomainModeling.Ontology.Multiply>();
+    }
+
+    /// <summary>A claim wraps the plain row of an operator, not its follow-word variants: a claim on <c>is</c> leaves <c>is not</c> alone.</summary>
+    [Test]
+    public async Task ClaimOnIs_DoesNotAffectIsNot() {
+        var forms = new ExpressionFormRegistry();
+        forms.RegisterBinaryClaim(DslTokenKind.Is, (l, r) => DomainExpression.Literal(true));
+        var table = DslOperatorTable.Core(forms);
+
+        await Assert.That(Binary(table, DslTokenKind.Is).Fold(TwoHours, new Now())).IsTypeOf<Literal>();
+        await Assert.That(Binary(table, DslTokenKind.Is, DslTokenKind.Not).Fold(TwoHours, new Now())).IsTypeOf<Comparison>();
+    }
+
+    /// <summary>A table snapshots the claims when <c>Core</c> builds it: a claim registered afterwards is ignored.</summary>
+    [Test]
+    public async Task ClaimRegisteredAfterCore_IsIgnoredByThatTable() {
+        var forms = new ExpressionFormRegistry();
+        var table = DslOperatorTable.Core(forms);
+        forms.RegisterBinaryClaim(DslTokenKind.Plus, DateOperationFold.Plus);
+
+        await Assert.That(table.Claim(DslTokenKind.Plus, new Now(), TwoHours)).IsNull();
+        await Assert.That(DslOperatorTable.Core(forms).Claim(DslTokenKind.Plus, new Now(), TwoHours)).IsNotNull();
+    }
+
+    [Test]
+    public async Task Claim_ForOpWithoutRow_Throws() {
+        var table = DslOperatorTable.Core(TemporalClaims());
+
+        var ex = Assert.Throws<InvalidOperationException>(() => table.Claim(DslTokenKind.In, new Now(), TwoHours));
+        await Assert.That(ex.Message).Contains("In");
+    }
+
+    [Test]
+    public async Task RegisterBinaryClaim_ForOpWithoutRow_Throws() {
+        var forms = new ExpressionFormRegistry();
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            forms.RegisterBinaryClaim(DslTokenKind.In, (l, r) => null));
+        await Assert.That(ex.Message).Contains("In");
+    }
+
+    /// <summary>
+    /// G-20: the binary-fold bridge is gone; a library claims <c>+</c>/<c>-</c> through the operator table.
+    /// Reflection by full name, so this compiles whether or not the symbols exist; the guard names the replacements.
+    /// </summary>
+    [Test]
+    public async Task BinaryFoldBridge_IsRetired() {
+        var poly = typeof(DslOperatorTable).Assembly;
+        var registry = poly.GetType("Poly.DomainModeling.Meaning.ExpressionFormRegistry")!;
+
+        await Assert.That(poly.GetType("Poly.DomainModeling.Meaning.IBinaryExpressionFold")).IsNull();
+        await Assert.That(registry.GetMethod("RegisterBinaryFold")).IsNull();
+        await Assert.That(registry.GetMethod("TryFoldBinary")).IsNull();
+
+        await Assert.That(registry.GetMethod("RegisterBinaryClaim")).IsNotNull();
+        await Assert.That(poly.GetType("Poly.DomainModeling.Libraries.Temporal.DateOperationFold")).IsNotNull();
     }
 
     /// <summary>The same token with no row is not an operator: the default table does not know <c>in</c>.</summary>

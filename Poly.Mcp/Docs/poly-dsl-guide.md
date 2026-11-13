@@ -881,6 +881,13 @@ Submit: action {
 
 `else if` is sugar for a nested `if` in the `else` branch (round-trips as `else if`).
 
+Statements may nest at most 64 levels: the level of an `if` or `for` is the number of enclosing
+`if` and `for` statements, itself included, so a top-level `if` is level 1, and each `else if` rung
+is one level below the rung before it (it is a nested `if`). A statement at level 65 is a positioned
+parse error (`DSL0001`, "statement nesting exceeds the limit of 64") on its `if` or `for` keyword,
+not a crash, however deep the input goes. Like the expression limit, it is a parse limit, not a
+stack guarantee for the steps after the parse.
+
 ### Invoke
 
 `invoke` chains another action on the same instance by default.
@@ -1182,8 +1189,11 @@ The DSL accepts boolean and scalar expressions through the following precedence 
 
 An expression may nest at most 256 levels: the top level is 0, and each paren group, `not`,
 comparison operand, `where` body or call/match argument adds 1, while a chain of N operands
-adds N - 1. Deeper input is a positioned parse error, not a crash, and the limit does not depend on the
-host's stack size.
+adds N - 1, and so does a path of N words (`a b c` is one navigation per word after the first).
+Deeper input is a positioned parse error, not a crash, and the parser enforces the limit without
+depending on the host's stack size. That is a guarantee about parsing only: the steps after the
+parse (analysis, compile, export) still walk the tree and need enough stack for it.
+Statements have their own limit of 64 levels (§6).
 
 Valid expressions:
 <!-- poly-verify: skip:illustration owner:M-02 -->
@@ -1866,7 +1876,7 @@ revision bump as a whole-document define. A rejected edit changes nothing.
 |---|---|---|
 | `add` | `parent`, `dsl` | Inserts `dsl` before the closing `}` of the entity or stage `parent` (`Product`, `Product.Draft`). `parent: ""` adds at top level. |
 | `remove` | `path` | Deletes the member (`Product.Total`, `Product.Draft.Publish`) and its line. |
-| `replace` | `path`, `dsl` | Replaces the member with `dsl`, re-indented. A trailing `//` comment on the last line stays. |
+| `replace` | `path`, `dsl` | Replaces the member with `dsl`. A snippet pasted with its own uniform indent (its first line is indented differently from the member) has that base stripped and the member's indent added; a snippet taken from the member's own line start is kept as written; a snippet starting at column 0 is kept as written when its last line is indented at least as far as the member (so a member's own text replaces itself unchanged) and otherwise gets the member's indent added to every line. Lines inside a multi-line string are never re-indented. A trailing `//` comment on the last line stays. |
 
 `uses` lines have their own root path, `uses:<pack>`: `{"op":"remove","path":"uses:storage"}`
 removes the line, and `replace` swaps it for another `uses` line. A `uses` path takes no entity

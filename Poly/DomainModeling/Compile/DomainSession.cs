@@ -173,6 +173,9 @@ public sealed partial class DomainSession {
         DiagnosticAllowances = diagnosticAllowances ?? [];
         ContractContributions = contractContributions ?? [];
         Options = options;
+        // `with` bypasses SessionOptions, so the session is the one place a blank target fails.
+        if (options.Target is not null)
+            ArgumentException.ThrowIfNullOrWhiteSpace(options.Target, nameof(SessionOptions.Target));
     }
 
     /// <summary>

@@ -16,8 +16,8 @@ internal sealed class Options {
     public string Verbosity { get; set; } = Severities.Warning;
 
     /// <summary>
-    /// The host target (<c>posix</c>, <c>windows</c>), or null when the driver names none.
-    /// Forwarded to the compile call; never defaulted from a document's <c>uses</c> line.
+    /// The host target, or null when the driver names none. Forwarded to the compile call, which
+    /// reports an undeclared one as <c>DSL0005</c>; never defaulted from a document's <c>uses</c> line.
     /// </summary>
     public string? Target { get; set; }
 
@@ -37,8 +37,9 @@ internal sealed class Options {
         is an alias for it, and --seed language loads no ids. A document's non-empty `uses`
         list replaces the seed, so a `unique` property needs persistence or a vendor library
         in that list.
-        --target is the host target (for example posix or windows). It is a host fact the
-        driver forwards; `uses` never chooses it, and a platform package without it is an error.
+        --target is the host target. An unknown id is DSL0005 and lists the known ones. It is a
+        host fact the driver forwards; `uses` never chooses it, and a platform package without
+        it is an error.
         Exit codes: 0 no errors, 1 errors or usage, 2 unexpected failure.
         --format json prints a JSON array of diagnostic records. A build also prints each
         written path on stderr as `wrote <path>`.

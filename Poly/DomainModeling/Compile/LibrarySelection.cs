@@ -89,6 +89,9 @@ public static class LibrarySelection {
         ArgumentNullException.ThrowIfNull(options);
         var catalog = options.Catalog;
         ArgumentNullException.ThrowIfNull(catalog);
+        // `with` bypasses SessionOptions' property validation, so re-check here as Resolve does.
+        SessionOptions.ValidateIds(options.ImplicitIds, nameof(SessionOptions.ImplicitIds));
+        SessionOptions.ValidateIds(options.HostIds, nameof(SessionOptions.HostIds));
         var builder = SessionBuilder.CreateEmpty();
         builder.LoadCore();
         if (!ids.Any(id => string.Equals(id, ExtensionCatalog.TemporalId, StringComparison.Ordinal)))

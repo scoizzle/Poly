@@ -788,7 +788,7 @@ public sealed class LibrarySelectionTests {
             .Throws<ArgumentException>();
         await Assert.That(() => LibrarySelection.Load([], bare with { HostIds = [" "] }))
             .Throws<ArgumentException>();
-        await Assert.That(LibrarySelection.Load([], bare).Extensions).Contains(ExtensionCatalog.TemporalId);
+        await Assert.That(ReferenceEquals(LibrarySelection.Load([], bare).Options.Catalog, ExtensionCatalog.Core)).IsTrue();
     }
 
     private sealed class CountingLibrary(string id) : IDomainLibrary {

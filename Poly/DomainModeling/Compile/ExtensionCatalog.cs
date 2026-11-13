@@ -100,7 +100,28 @@ public sealed class ExtensionCatalog {
     public IReadOnlyList<string> KnownTargets => SortedDistinct(
         _libraries.Keys.SelectMany(id => Probe(id).Info.HostTargets));
 
-    public string? TargetError(string? target) => null;
+    /// <summary>
+    /// Why <paramref name="target"/> is not a host target this catalog declares, or null when it
+    /// is one or when there is no target. The one message every host reports: <c>polyc</c> as
+    /// <c>DSL0005</c>, an MCP host as an <see cref="ArgumentException"/>. Ids are case-sensitive,
+    /// and a blank target is an error here, not "no target".
+    /// </summary>
+    public string? TargetError(string? target) {
+        if (target is null)
+            return null;
+        var known = KnownTargets;
+        var blank = string.IsNullOrWhiteSpace(target);
+        if (!blank && known.Contains(target, StringComparer.Ordinal))
+            return null;
+        var list = known.Count == 0
+            ? "This catalog declares no host targets."
+            : $"Known targets: {string.Join(", ", known)}.";
+        if (blank)
+            return $"Host target is empty. {list}";
+        var near = known.Where(id => string.Equals(id, target, StringComparison.OrdinalIgnoreCase)).ToArray();
+        var hint = near.Length == 1 ? $" (ids are case-sensitive; did you mean '{near[0]}'?)" : "";
+        return $"Unknown host target '{target}'{hint}. {list}";
+    }
 
     /// <summary>
     /// The library's read-only facts, from one cached

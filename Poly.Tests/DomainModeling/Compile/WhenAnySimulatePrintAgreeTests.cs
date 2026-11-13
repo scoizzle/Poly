@@ -1,6 +1,5 @@
 using System.Reflection;
 using System.Runtime.Loader;
-using Poly.Tests.TestHelpers;
 
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -15,6 +14,7 @@ using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Runtime;
 using Poly.Interpretation.CSharp;
+using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.DomainModeling.Compile;
 

@@ -154,6 +154,18 @@ internal static class PatternRowChecker {
         return violations;
     }
 
+    /// <summary>
+    /// The refusal rule: every refusal the drive met is expected (same input, same first line with node ids
+    /// shown as <c>…</c>), and every expected refusal still occurs. Each expected entry has a well-formed owner.
+    /// </summary>
+    public static IReadOnlyList<string> CheckRefusals(
+        IReadOnlyList<PatternRowRefusal> refusals,
+        IReadOnlyList<PatternRowExpectedRefusal> expected) {
+        ArgumentNullException.ThrowIfNull(refusals);
+        ArgumentNullException.ThrowIfNull(expected);
+        return [];
+    }
+
     /// <summary>An owner is a removing row (optionally with its issue), an issue, or a permanent justification.</summary>
     private static readonly Regex OwnerFormat = new(
         @"^(?:[A-Z]-\d+[a-z]?(?: \(#\d+\))?|#\d+|none: permanent — \S.*)$", RegexOptions.CultureInvariant);

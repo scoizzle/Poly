@@ -11,6 +11,12 @@ using Poly.Tests.Interpretation;
 
 namespace Poly.Tests.Grammar;
 
+/// <summary>One input the drive's writer or parser refused: the input's identity and the refusal message.</summary>
+internal sealed record PatternRowRefusal(string Input, string Message);
+
+/// <summary>An expected refusal: the input's identity, the message's first line (node ids shown as <c>…</c>) and its owner.</summary>
+internal sealed record PatternRowExpectedRefusal(string Input, string FirstLine, string Owner);
+
 /// <summary>
 /// The change-protocol drive (G-23): prints both corpora inside one <see cref="PrintTrace"/> scope and
 /// keeps every observation. The DSL drive is <see cref="GoldenDomains.Compilable"/> (parse, analyse, print)
@@ -90,20 +96,34 @@ internal static class PatternRowCorpus {
     /// <summary>Every observation of the drive, in print order. Computed once.</summary>
     public static IReadOnlyList<PrintObservation> Observations => Driven.Value.Observations;
 
-    /// <summary>Inputs the writer or parser refused (label and message), so a shrinking drive is visible.</summary>
-    public static IReadOnlyList<string> Refusals => Driven.Value.Refusals;
+    /// <summary>Inputs the writer or parser refused, in drive order. <see cref="ExpectedRefusals"/> pins them.</summary>
+    public static IReadOnlyList<PatternRowRefusal> Refusals => Driven.Value.Refusals;
 
-    private static readonly Lazy<(IReadOnlyList<PrintObservation> Observations, IReadOnlyList<string> Refusals)> Driven =
+    /// <summary>
+    /// The refusals the drive expects, each with its owner. The protocol test fails on a refusal that is not
+    /// listed (a writer that starts refusing more inputs would shrink coverage silently) and on a listed one
+    /// that no longer occurs (stale).
+    /// </summary>
+    public static IReadOnlyList<PatternRowExpectedRefusal> ExpectedRefusals { get; } = [
+        new("unit Poly.Tests/Interpretation/ShadowedVariableVmTests.cs: var s = \"hi\"; var n = ((long s) => s + 1)(4); n;",
+            "CSharpWriter rejected Lambda (NodeId …): a lambda used as a callee needs a delegate type to cast to, and its result type did not resolve.",
+            "G-23b"),
+        new("unit Poly.Tests/Interpretation/ShadowedVariableVmTests.cs: var s = 1000; var n = ((long s) => ((long s) => s + 1)(5) + …",
+            "CSharpWriter rejected Lambda (NodeId …): a lambda used as a callee needs a delegate type to cast to, and its result type did not resolve.",
+            "G-23b"),
+    ];
+
+    private static readonly Lazy<(IReadOnlyList<PrintObservation> Observations, IReadOnlyList<PatternRowRefusal> Refusals)> Driven =
         new(Drive, LazyThreadSafetyMode.ExecutionAndPublication);
 
-    private static (IReadOnlyList<PrintObservation>, IReadOnlyList<string>) Drive() {
+    private static (IReadOnlyList<PrintObservation>, IReadOnlyList<PatternRowRefusal>) Drive() {
         // Load the static corpora before the scope begins, so the observation set does not depend on
         // which test touched them first.
         var units = NodeFactCorpus.Units;
         var programs = AstParityTests.Corpus().ToList();
         var goldens = GoldenDomains.Compilable.Select(domain => (domain.Name, domain.Poly)).ToList();
 
-        var refusals = new List<string>();
+        var refusals = new List<PatternRowRefusal>();
         using var scope = PrintTrace.Begin();
 
         foreach (var (name, poly) in goldens.Concat(DslDocuments))
@@ -122,15 +142,15 @@ internal static class PatternRowCorpus {
         return (scope.Observations, refusals);
     }
 
-    private static void Refusing(List<string> refusals, string label, Func<string> print) {
+    private static void Refusing(List<PatternRowRefusal> refusals, string label, Func<string> print) {
         try {
             print();
         }
         catch (InvalidOperationException ex) {
-            refusals.Add($"{label}: {ex.Message}");
+            refusals.Add(new(label, ex.Message));
         }
         catch (FormatException ex) {
-            refusals.Add($"{label}: {ex.Message}");
+            refusals.Add(new(label, ex.Message));
         }
     }
 

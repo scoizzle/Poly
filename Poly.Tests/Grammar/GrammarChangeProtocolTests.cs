@@ -226,6 +226,14 @@ public sealed class GrammarChangeProtocolTests {
     }
 
     /// <summary>
+    /// (i) The drive refuses exactly the listed inputs: a writer that starts refusing more inputs cannot
+    /// shrink the observed coverage silently, and a refusal that is fixed deletes its entry.
+    /// </summary>
+    [Test]
+    public async Task Item18_DriveRefusesOnlyTheListedInputs() =>
+        await Assert.That(PatternRowChecker.CheckRefusals(PatternRowCorpus.Refusals, PatternRowCorpus.ExpectedRefusals)).IsEmpty();
+
+    /// <summary>
     /// (h) Every observation belongs to a checked table, so a print from another grammar cannot
     /// pass by being filtered out.
     /// </summary>

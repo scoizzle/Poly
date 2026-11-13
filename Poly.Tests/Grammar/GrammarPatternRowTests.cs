@@ -417,6 +417,49 @@ public sealed class GrammarPatternRowTests {
         await Assert.That(observed).IsEmpty();
     }
 
+    // ── refusals ──────────────────────────────────────────────────────────────
+
+    private static readonly PatternRowRefusal Refused =
+        new("unit a.cs: f();", "CSharpWriter rejected Lambda (NodeId 01a1d3): no delegate type.\nmore detail");
+
+    private static readonly PatternRowExpectedRefusal Expected =
+        new("unit a.cs: f();", "CSharpWriter rejected Lambda (NodeId …): no delegate type.", "G-23b");
+
+    [Test]
+    public async Task CheckRefusals_ListedRefusal_Passes() =>
+        await Assert.That(PatternRowChecker.CheckRefusals([Refused], [Expected])).IsEmpty();
+
+    [Test]
+    public async Task CheckRefusals_UnlistedRefusal_Fails() {
+        var violations = PatternRowChecker.CheckRefusals([Refused, new("unit b.cs: g();", "Other refusal.")], [Expected]);
+
+        await Assert.That(violations).Count().IsEqualTo(1);
+        await Assert.That(violations[0]).Contains("unit b.cs");
+    }
+
+    [Test]
+    public async Task CheckRefusals_ListedRefusalThatNoLongerOccurs_IsStale() {
+        var violations = PatternRowChecker.CheckRefusals([], [Expected]);
+
+        await Assert.That(violations).Count().IsEqualTo(1);
+        await Assert.That(violations[0]).Contains("stale");
+    }
+
+    [Test]
+    public async Task CheckRefusals_SameInputWithAnotherMessage_FailsBothWays() {
+        var changed = PatternRowChecker.CheckRefusals([new("unit a.cs: f();", "A different refusal.")], [Expected]);
+
+        await Assert.That(changed).Count().IsEqualTo(2);
+    }
+
+    [Test]
+    public async Task CheckRefusals_MalformedOwner_Fails() {
+        var violations = PatternRowChecker.CheckRefusals([Refused], [Expected with { Owner = "pending orchestrator" }]);
+
+        await Assert.That(violations).Count().IsEqualTo(1);
+        await Assert.That(violations[0]).Contains("owner");
+    }
+
     // ── the observer on the real printer ──────────────────────────────────────
 
     private static Printer<DslToken, DslTokenKind> DslPrinter() =>

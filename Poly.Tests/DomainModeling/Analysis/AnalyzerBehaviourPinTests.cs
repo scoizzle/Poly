@@ -364,7 +364,9 @@ public class AnalyzerBehaviourPinTests {
 
     [Test]
     public async Task ArithmeticAsDateOperand_AndAssignedArithmetic_AreFrozen() =>
-        await Assert.That(ArithmeticDateOperandRows()).IsEqualTo(Expected.ArithmeticDateOperand);
+        // T-05a: master plus the FlipsA rows of grid "ArithmeticDateOperand" (arithmetic is typed; A-assign).
+        await Assert.That(AnalyzerClosingRoundPinTests.GridDifferences(ArithmeticDateOperandRows(),
+            AnalyzerClosingRoundPinTests.MasterPlusFlips("ArithmeticDateOperand", Expected.ArithmeticDateOperand))).IsEqualTo("");
 
     [Test]
     public async Task MatchArmUnification_IsFrozen() =>

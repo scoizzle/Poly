@@ -16,7 +16,7 @@ namespace Poly.Tests.DomainModeling.Analysis;
 /// compare equal (a load-bearing quirk for T-05). A match whose arms are all <c>null</c> is typed Text; T-06
 /// changes that case deliberately, so its rows are expected to move then.
 /// </summary>
-public class AnalyzerClosingRoundPinTests {
+public partial class AnalyzerClosingRoundPinTests {
     private static DomainTypeReference Ref(string name) => new(name);
 
     private static string Verdict(AnalysisResult analysis) {
@@ -147,7 +147,9 @@ public class AnalyzerClosingRoundPinTests {
 
     [Test]
     public async Task TypelessSourcesIntoNamedTargets_AndFunctionReturns_AreFrozen() =>
-        await Assert.That(TypelessSourceRows()).IsEqualTo(Expected.TypelessSources);
+        // T-05a: master plus the FlipsA rows of grid "TypelessSources" (N + M is typed; A-assign).
+        await Assert.That(GridDifferences(TypelessSourceRows(), MasterPlusFlips("TypelessSources", Expected.TypelessSources)))
+            .IsEqualTo("");
 
     [Test]
     public async Task TypelessComparisonsOfDifferentFamilies_AreFrozen() =>

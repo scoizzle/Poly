@@ -23,9 +23,11 @@ public static class SyntaxTypeCompatibilityAnalyzerExtensions {
 /// runtime fails loud even for programmatically-constructed or MCP-driven expressions
 /// that bypass the DSL authoring analyzer.
 ///
-/// Compatibility is checked at the CLR-type-category level. Unknown and null operands
-/// are skipped (the property bag is loosely typed; null comparisons are supported), and
-/// enum operands accept the enum's name as text.
+/// An arithmetic or comparison verdict is the type provider's operator for the operands
+/// (<c>GetOperator</c>, nullable unwrapped), after a short list of named rules the provider
+/// cannot answer yet, each naming the row that removes it. Assignment, casts and Boolean
+/// operands are still checked at the CLR-type-category level. Unknown and null operands
+/// are skipped (the property bag is loosely typed; null comparisons are supported).
 /// </summary>
 internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
     public const string Id = "SyntaxTypeCompatibility";
@@ -38,37 +40,37 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
     public void Analyze(AnalysisContext context, Node node) {
         switch (node) {
             case Equal eq:
-                CheckComparison(context, eq.LeftHandValue, eq.RightHandValue);
+                CheckOperator(context, eq, eq.LeftHandValue, eq.RightHandValue, OperatorKind.Equal);
                 break;
             case NotEqual ne:
-                CheckComparison(context, ne.LeftHandValue, ne.RightHandValue);
+                CheckOperator(context, ne, ne.LeftHandValue, ne.RightHandValue, OperatorKind.NotEqual);
                 break;
             case LessThan lt:
-                CheckComparison(context, lt.LeftHandValue, lt.RightHandValue);
+                CheckOperator(context, lt, lt.LeftHandValue, lt.RightHandValue, OperatorKind.LessThan);
                 break;
             case LessThanOrEqual lte:
-                CheckComparison(context, lte.LeftHandValue, lte.RightHandValue);
+                CheckOperator(context, lte, lte.LeftHandValue, lte.RightHandValue, OperatorKind.LessThanOrEqual);
                 break;
             case GreaterThan gt:
-                CheckComparison(context, gt.LeftHandValue, gt.RightHandValue);
+                CheckOperator(context, gt, gt.LeftHandValue, gt.RightHandValue, OperatorKind.GreaterThan);
                 break;
             case GreaterThanOrEqual gte:
-                CheckComparison(context, gte.LeftHandValue, gte.RightHandValue);
+                CheckOperator(context, gte, gte.LeftHandValue, gte.RightHandValue, OperatorKind.GreaterThanOrEqual);
                 break;
             case Add add:
-                CheckArithmetic(context, add, add.LeftHandValue, add.RightHandValue, ArithmeticKind.Add);
+                CheckOperator(context, add, add.LeftHandValue, add.RightHandValue, OperatorKind.Add);
                 break;
             case Subtract sub:
-                CheckArithmetic(context, sub, sub.LeftHandValue, sub.RightHandValue, ArithmeticKind.Subtract);
+                CheckOperator(context, sub, sub.LeftHandValue, sub.RightHandValue, OperatorKind.Subtract);
                 break;
             case Multiply mul:
-                CheckArithmetic(context, mul, mul.LeftHandValue, mul.RightHandValue, ArithmeticKind.Multiply);
+                CheckOperator(context, mul, mul.LeftHandValue, mul.RightHandValue, OperatorKind.Multiply);
                 break;
             case Divide div:
-                CheckArithmetic(context, div, div.LeftHandValue, div.RightHandValue, ArithmeticKind.Divide);
+                CheckOperator(context, div, div.LeftHandValue, div.RightHandValue, OperatorKind.Divide);
                 break;
             case Modulo mod:
-                CheckArithmetic(context, mod, mod.LeftHandValue, mod.RightHandValue, ArithmeticKind.Modulo);
+                CheckOperator(context, mod, mod.LeftHandValue, mod.RightHandValue, OperatorKind.Modulo);
                 break;
             case TypeAs typeAs:
                 CheckTypeAs(context, typeAs);
@@ -179,68 +181,134 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
     }
 
 
-    private void CheckComparison(AnalysisContext context, Node leftNode, Node rightNode) {
+    /// <summary>
+    /// An arithmetic or comparison node. The verdict is the type provider's operator for the operands with their
+    /// nullable unwrapped; a nullable operand is lifted by the VM. The steps before the provider keep verdicts it
+    /// cannot give yet, each named with the row that removes it. The order is part of the verdict.
+    /// </summary>
+    private void CheckOperator(AnalysisContext context, Node parent, Node leftNode, Node rightNode, OperatorKind kind) {
         var left = ClrTypeOf(context, leftNode);
         var right = ClrTypeOf(context, rightNode);
         if (left is null || right is null) return;
         var lc = CategoryOf(left);
         var rc = CategoryOf(right);
+        // Scalar gate: unknown and null operands are not checked (T-22).
         if (lc is Cat.Unknown or Cat.Null || rc is Cat.Unknown or Cat.Null) return;
-        // A char compares with a numeric operand after promotion (`'a' > 96`).
-        if (IsNumericLike(left) && IsNumericLike(right))
-            return;
-        if (!Compatible(lc, left, rc, right))
-            Report(context, leftNode,
-                $"comparison between incompatible types '{left.Name}' and '{right.Name}'");
-    }
+        var arithmetic = kind is OperatorKind.Add or OperatorKind.Subtract or OperatorKind.Multiply
+            or OperatorKind.Divide or OperatorKind.Modulo;
 
-    private enum ArithmeticKind { Add, Subtract, Multiply, Divide, Modulo }
-
-    private void CheckArithmetic(
-        AnalysisContext context, Node parent, Node leftNode, Node rightNode, ArithmeticKind kind) {
-        var left = ClrTypeOf(context, leftNode);
-        var right = ClrTypeOf(context, rightNode);
-        if (left is null || right is null) return;
-        var lc = CategoryOf(left);
-        var rc = CategoryOf(right);
-        if (lc is Cat.Unknown or Cat.Null || rc is Cat.Unknown or Cat.Null) return;
-
-        // Add is string concatenation when an operand is a string (`"a" + 1`, `'a' + "b"`).
-        // `char + char` is numeric in C# (both are Cat.Text, so it is excluded here).
-        if (kind is ArithmeticKind.Add && (left == typeof(string) || right == typeof(string))) {
+        // Add is string concatenation when an operand is exactly a string (`"a" + 1`, `'a' + "b"`); `char + char` is
+        // numeric. The Text + X policy is T-07's, the boxing conversion T-21's.
+        if (kind is OperatorKind.Add && (left == typeof(string) || right == typeof(string))) {
             if (!RewriteStringConcat(context, parent, leftNode, rightNode))
                 Report(context, leftNode, "string concatenation could not be resolved to String.Concat");
             return;
         }
 
-        // Decimal.Add does not lift: rewriting `decimal? + 1m` would turn null into 0.
-        // A nullable operand keeps the operator so the VM can lift it.
-        if ((left == typeof(decimal) || right == typeof(decimal))
-            && Nullable.GetUnderlyingType(left) is null
-            && Nullable.GetUnderlyingType(right) is null) {
-            if (!RewriteDecimalArithmetic(context, parent, leftNode, rightNode, kind))
-                Report(context, leftNode,
-                    $"decimal arithmetic could not be resolved ({kind})");
+        if (ConstantOperandRule.Applies(kind, context.GetEffectiveNode(leftNode), left, context.GetEffectiveNode(rightNode), right))
             return;
-        }
 
-        if ((lc is Cat.Date && rc is Cat.Number)
-            && kind is ArithmeticKind.Add or ArithmeticKind.Subtract) {
-            if (!RewriteDateOffset(context, parent, leftNode, rightNode, negate: kind is ArithmeticKind.Subtract))
+        // Date-offset fence (T-10): a Date-category left and a number right add days. A non-nullable left beside a
+        // non-nullable decimal right is not fenced: the provider judges that pair.
+        if (kind is OperatorKind.Add or OperatorKind.Subtract && lc is Cat.Date && rc is Cat.Number
+            && !(Nullable.GetUnderlyingType(left) is null && right == typeof(decimal))) {
+            if (!RewriteDateOffset(context, parent, leftNode, rightNode, negate: kind is OperatorKind.Subtract))
                 Report(context, leftNode,
                     $"temporal offset requires a date type with AddDays (got '{left.Name}')");
             return;
         }
 
-        bool ok = IsNumericLike(left) && IsNumericLike(right);
-        if (!ok)
-            Report(context, leftNode,
-                $"arithmetic operand is not numeric (got '{left.Name}' and '{right.Name}')");
+        var incompatible = arithmetic
+            ? $"arithmetic operand is not numeric (got '{left.Name}' and '{right.Name}')"
+            : $"comparison between incompatible types '{left.Name}' and '{right.Name}'";
+        var noOperator = $"{incompatible}: no {kind} operator for these types";
+
+        if (!arithmetic) {
+            if (EnumOperandRule(left, right) is { } sameEnum) {
+                if (!sameEnum)
+                    Report(context, leftNode, noOperator);
+                return;
+            }
+            if (NullableDateRule(left, right)) {
+                Report(context, leftNode, incompatible);
+                return;
+            }
+            if (TextAndBooleanOrderingRule(kind, left, right))
+                return;
+        }
+
+        // Fail closed: a provider that cannot define an operand type cannot answer the operator either.
+        var leftDef = context.TypeDefinitions.GetTypeDefinition(Nullable.GetUnderlyingType(left) ?? left);
+        var rightDef = context.TypeDefinitions.GetTypeDefinition(Nullable.GetUnderlyingType(right) ?? right);
+        if (leftDef is null || rightDef is null) {
+            Report(context, leftNode, $"{incompatible}: the type provider has no definition for '{(leftDef is null ? left : right).Name}'");
+            return;
+        }
+        if (leftDef.GetOperator(kind, rightDef) is not { } resolution) {
+            Report(context, leftNode, noOperator);
+            return;
+        }
+        if (!arithmetic)
+            return;
+        if (!VmExecutesDeclaredOperator(resolution)) {
+            Report(context, leftNode, incompatible);
+            return;
+        }
+        // Decimal's operators are declared members, invoked by name. Decimal.Add does not lift: rewriting
+        // `decimal? + 1m` would turn null into 0, so a nullable operand keeps the operator for the VM to lift.
+        if (!resolution.PlatformApplied
+            && Nullable.GetUnderlyingType(left) is null && Nullable.GetUnderlyingType(right) is null
+            && !RewriteDecimalOperator(context, parent, leftNode, rightNode, kind, resolution))
+            Report(context, leftNode, $"decimal arithmetic could not be resolved ({kind})");
     }
 
-    /// <summary>True when the type takes part in arithmetic as a number. <c>char</c> is
-    /// <see cref="Cat.Text"/> (string concatenation needs that) but promotes to <c>int</c>
-    /// in arithmetic and comparison, as in C#.</summary>
+    /// <summary>
+    /// Enum comparisons, which the provider leaves undefined (T-24's deliberate none): two enums compare when they are
+    /// the same type, and an enum compares with Text (its member name). Null when neither applies. Removed by T-25;
+    /// the Text allowance by T-07.
+    /// </summary>
+    private static bool? EnumOperandRule(Type left, Type right) {
+        var (l, r) = (Nullable.GetUnderlyingType(left) ?? left, Nullable.GetUnderlyingType(right) ?? right);
+        if (l.IsEnum && r.IsEnum)
+            return l == r;
+        if ((l.IsEnum && CategoryOf(r) is Cat.Text) || (r.IsEnum && CategoryOf(l) is Cat.Text))
+            return true;
+        return null;
+    }
+
+    /// <summary>
+    /// A veto: a nullable Date-category operand compares only with the identical type; the VM does not lift a mixed
+    /// optional temporal comparison. Any other pair goes to the provider. Removed by T-10 (optional temporal operands).
+    /// </summary>
+    private static bool NullableDateRule(Type left, Type right) =>
+        (IsNullableDate(left) || IsNullableDate(right)) && left != right;
+
+    private static bool IsNullableDate(Type type) =>
+        Nullable.GetUnderlyingType(type) is { } underlying && CategoryOf(underlying) is Cat.Date;
+
+    /// <summary>
+    /// Ordering of two exact <c>string</c> or two exact <c>bool</c> operands: the DSL accepts it and the interpreter
+    /// orders Text (the emitter refuses Boolean ordering itself); the provider defines neither. Removed by T-07 (#631).
+    /// </summary>
+    private static bool TextAndBooleanOrderingRule(OperatorKind kind, Type left, Type right) {
+        if (kind is not (OperatorKind.LessThan or OperatorKind.LessThanOrEqual or OperatorKind.GreaterThan or OperatorKind.GreaterThanOrEqual))
+            return false;
+        var (l, r) = (Nullable.GetUnderlyingType(left) ?? left, Nullable.GetUnderlyingType(right) ?? right);
+        return l == r && (l == typeof(string) || l == typeof(bool));
+    }
+
+    /// <summary>
+    /// Arithmetic the VM executes: an operator the platform applies, or one of decimal's declared members. Other
+    /// declared arithmetic (temporal and Duration operators, IntPtr's) is refused. Removed by T-21 (the emitter executes
+    /// or refuses declared arithmetic itself).
+    /// </summary>
+    private static bool VmExecutesDeclaredOperator(OperatorResolution resolution) =>
+        resolution.PlatformApplied
+        || (resolution.Signature.DeclaringTypeDefinition.TryGetRuntimeType(out var declaring) && declaring == typeof(decimal));
+
+    /// <summary>True when the type takes part in a cast as a number. <c>char</c> is
+    /// <see cref="Cat.Text"/> (string concatenation needs that) but converts as a number, as in C#.
+    /// Only <see cref="CheckTypeCast"/> reads it; removed by T-28.</summary>
     private static bool IsNumericLike(Type t) => t == typeof(char) || CategoryOf(t) is Cat.Number;
 
     private void CheckTypeAs(AnalysisContext context, TypeAs typeAs) {
@@ -579,7 +647,7 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         var rc = CategoryOf(rhs);
         if (tc is Cat.Unknown or Cat.Null || rc is Cat.Unknown or Cat.Null) return;
         if (tc is Cat.Enum && rc is Cat.Text) return;
-        if (!Compatible(tc, target, rc, rhs, destThenSource: true))
+        if (!AssignCategoryRule(tc, target, rc, rhs))
             Report(context, destination,
                 $"cannot assign '{rhs.Name}' to '{destination.MemberName}' (type '{target.Name}')");
     }
@@ -826,36 +894,50 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         return enumerable;
     }
 
-    private static bool RewriteDecimalArithmetic(
-        AnalysisContext context, Node parent, Node left, Node right, ArithmeticKind kind) {
-        var decimalDef = context.TypeDefinitions.GetTypeDefinition(typeof(decimal));
-        if (decimalDef is null)
-            return false;
+    /// <summary>
+    /// Rewrites decimal arithmetic to the named member decimal declares (<c>Decimal.Add</c> for <c>op_Addition</c>), each
+    /// operand converted to the operator's parameter as the provider states: identity or an intrinsic conversion inserts
+    /// nothing, a declared conversion inserts its <c>op_Implicit</c> call.
+    /// </summary>
+    private static bool RewriteDecimalOperator(
+        AnalysisContext context, Node parent, Node left, Node right, OperatorKind kind, OperatorResolution resolution) {
+        var decimalDef = resolution.Signature.DeclaringTypeDefinition;
         var name = kind switch {
-            ArithmeticKind.Add => "Add",
-            ArithmeticKind.Subtract => "Subtract",
-            ArithmeticKind.Multiply => "Multiply",
-            ArithmeticKind.Divide => "Divide",
-            ArithmeticKind.Modulo => "Remainder",
+            OperatorKind.Add => "Add",
+            OperatorKind.Subtract => "Subtract",
+            OperatorKind.Multiply => "Multiply",
+            OperatorKind.Divide => "Divide",
+            OperatorKind.Modulo => "Remainder",
             _ => null
         };
-        if (name is null)
+        var parameters = resolution.Signature.Parameters.ToArray();
+        if (name is null || parameters.Length != 2)
             return false;
-        var leftArg = CoerceTo(context, left, decimalDef) ?? left;
-        var rightArg = CoerceTo(context, right, decimalDef) ?? right;
-        var leftType = context.GetResolvedType(leftArg)
-            ?? context.TypeDefinitions.GetTypeDefinition(typeof(decimal));
-        var rightType = context.GetResolvedType(rightArg)
-            ?? context.TypeDefinitions.GetTypeDefinition(typeof(decimal));
-        if (leftType is null || rightType is null)
-            return false;
-        var method = decimalDef.FindMatchingMethodOverloads(name, [leftType, rightType]).FirstOrDefault()
-            ?? decimalDef.FindMatchingMethodOverloads(name, [decimalDef, decimalDef]).FirstOrDefault();
+        var leftArg = ConvertOperand(context, left, parameters[0].ParameterTypeDefinition) ?? left;
+        var rightArg = ConvertOperand(context, right, parameters[1].ParameterTypeDefinition) ?? right;
+        var method = decimalDef.FindMatchingMethodOverloads(name, [decimalDef, decimalDef]).FirstOrDefault();
         if (method is null)
             return false;
         var invoke = StampStaticInvoke(context, method, leftArg, rightArg);
         Replace(context, parent, invoke);
         return true;
+    }
+
+    /// <summary>The operand converted to <paramref name="parameter"/> as the provider states, or null when it states no implicit conversion.</summary>
+    private static Node? ConvertOperand(AnalysisContext context, Node operand, ITypeDefinition parameter) {
+        var source = context.GetResolvedType(operand)
+            ?? (ClrTypeOf(context, operand) is { } clr
+                ? context.TypeDefinitions.GetTypeDefinition(clr)
+                : null);
+        if (source is null)
+            return null;
+        if (TypeDefinitionExtensions.IsSameType(parameter, source))
+            return operand;
+        if (parameter.ResolveConversionFrom(source) is not { Kind: ConversionOperatorKind.Implicit } conversion)
+            return null;
+        return conversion.Method is null
+            ? operand
+            : TryConversionInvoke(context, operand, parameter, source, implicitOnly: true);
     }
 
     private static bool RewriteDateOffset(
@@ -961,6 +1043,7 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         || type == typeof(sbyte) || type == typeof(uint) || type == typeof(ulong) || type == typeof(ushort)
         || type == typeof(char);
 
+    /// <summary>The Date-offset fence's amount conversion; its <c>Convert.To*</c> fallback is a private conversion rule. Removed by T-10.</summary>
     private static Node? CoerceTo(AnalysisContext context, Node value, ITypeDefinition destDef) {
         var srcDef = context.GetResolvedType(value)
             ?? (ClrTypeOf(context, value) is { } clr
@@ -1051,7 +1134,8 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         return Cat.Unknown;
     }
 
-    private static bool Compatible(Cat lc, Type left, Cat rc, Type right, bool destThenSource = false) {
+    /// <summary>Member assignment by CLR-type category, as before T-18 (no provider verdict yet). Removed by T-27.</summary>
+    private static bool AssignCategoryRule(Cat lc, Type left, Cat rc, Type right) {
         if (lc == rc && lc is not Cat.Date) return true;
         if (lc == rc && lc is Cat.Date)
             return left == right || (IsClrTimestamp(left) && IsClrTimestamp(right));

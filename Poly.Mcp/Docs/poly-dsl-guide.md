@@ -1233,11 +1233,13 @@ and a property of the related entity binds to the **parameter**.
 | `all Rel where body` | ∀ related match body | `all items where Reserved is true` |
 | `none Rel where body` | ¬∃ related matching body | `none notes where NeedsFollowUp is true` |
 | `count Rel` / `count Rel where body` | Number of related (optionally filtered) | `count orders > 5` / `count orders where Status is "Open" > 0` |
-| `sum Rel Prop` | Sum of a Number property over related | `sum lines Price == 150` |
+| `sum Rel Prop` | Sum of a numeric property over related | `sum lines Price == 150` |
 
-`count` produces a numeric value for use in comparisons. `sum Rel Prop` produces the numeric sum
-of `Prop`, a **Number** property on the related entity, over the related set; `sum Rel where …` and
-`sum Rel (expression)` are **not** forms — only a bare property name follows the relationship.
+`count` produces a numeric value for use in comparisons. `sum Rel Prop` produces the sum of `Prop`, a
+numeric property (`Number` or `Decimal`) on the related entity, over the related set, in `Prop`'s own type:
+a `Decimal` sum is an exact decimal (`sum accounts Balance == 3.0`). A non-numeric `Prop` in a policy is
+`DMSEM005`. `sum Rel where …` and `sum Rel (expression)` are **not** forms — only a bare property name
+follows the relationship.
 `any`/`all`/`none` produce booleans.
 
 **Empty collection semantics:**

@@ -382,6 +382,13 @@ public sealed class PatternBuilder<TToken, TTokenKind>
     }
 
     /// <summary>Ends the row with a refusal: reaching it yields a committed failure with <paramref name="message"/> (<see cref="Refuse{TToken,TTokenKind}"/>).</summary>
+    /// <remarks>
+    /// A <c>Repeat</c> over a rule that has a Refuse-only catch-all cannot end at its terminator: at the terminator no other
+    /// row matches, the catch-all commits and the whole match ends, so such loops stay host-driven (the host matches one
+    /// item at a time and tests for the terminator itself). A Refuse-only catch-all also outranks a deeper plain failure of a
+    /// sibling (committed failures only are reported), so a sibling whose own error must win needs a <c>Cut</c> after its
+    /// discriminating token, not after a prefix it shares with other rows.
+    /// </remarks>
     public PatternBuilder<TToken, TTokenKind> Refuse(string message, string? at = null) {
         ArgumentException.ThrowIfNullOrEmpty(message);
         _elements.Add(new Refuse<TToken, TTokenKind>(message, at));

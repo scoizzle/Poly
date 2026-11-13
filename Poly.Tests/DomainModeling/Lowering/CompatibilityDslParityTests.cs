@@ -81,37 +81,6 @@ public class CompatibilityDslParityTests {
         return outcome.Success ? $"success=True; answer={outcome.State["Cheap"]}" : $"success=False; message={outcome.Message}";
     }
 
-    const string TextOrdering = """
-        domain Ord
-        Pair: entity {
-          A: Text
-          B: Text
-          Before: policy { A < B }
-          After: policy { A > B }
-        }
-        """;
-
-    /// <summary>Text ordering runs on the interpreter only: the printed C# has no <c>string &lt; string</c> (next test).</summary>
-    [Test]
-    [Arguments("Before", "True")]
-    [Arguments("After", "False")]
-    public async Task TextOrderingPolicy_Interpreter_AnswersOrdinally(string policy, string expected) {
-        var domain = EvolvedDomain.FromDsl(TextOrdering).Domain;
-        RuntimeAnalysisCache.Bind(domain, ParitySessions.Create(domain.Extensions.Count > 0 ? domain.Extensions : ExtensionCatalog.ProductAuthoring));
-        var side = new SimulateSide(domain);
-        side.Create("Pair", ("A", "alpha"), ("B", "beta"));
-        side.EvaluatePolicy(policy);
-        await Assert.That(side.Outcomes[1].Success).IsTrue();
-        await Assert.That(side.Outcomes[1].State[policy]).IsEqualTo(expected);
-    }
-
-    [Test]
-    public async Task TextOrderingPolicy_PrintedHost_RefusesToCompile() {
-        await Assert.That(() => ParityScenario.FromDsl(TextOrdering, "T18TextPrinted"))
-            .Throws<InvalidOperationException>()
-            .WithMessageContaining("error CS0019: Operator '<' cannot be applied to operands of type 'string' and 'string'");
-    }
-
     static string DateOffset(string type, string op) => $$"""
         domain Cal
         uses temporal

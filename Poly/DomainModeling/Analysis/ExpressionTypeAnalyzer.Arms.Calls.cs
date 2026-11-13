@@ -46,6 +46,8 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                     $"got '{Describe(argument)}'{where}.",
                     DomainModelDiagnosticCodes.FunctionArgumentType);
             }
+            else
+                WarnIntegerDivisionIntoDecimal(context, call.Arguments[i], target, props, parameters, enumTypes);
         }
     }
 }

@@ -139,6 +139,8 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                 context.ReportError(function,
                     $"Function '{function.Name}' body is '{Describe(bodyType)}' but it is declared to return '{returnName}'.",
                     DomainModelDiagnosticCodes.FunctionReturnType);
+            else
+                WarnIntegerDivisionIntoDecimal(context, function.Body, returnType, noProps, parameters, enumTypes);
         }
     }
 
@@ -375,6 +377,8 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                         $"type mismatch in argument '{binding.PropertyName}' of invoke '{actionName}': " +
                         $"cannot assign '{Describe(inferred)}' to '{paramType}'");
                 }
+                else
+                    WarnIntegerDivisionIntoDecimal(context, binding.Expression, target, scope, parameters, enumTypes);
             }
             WalkExpression(context, binding.Expression, scope, parameters, enumTypes);
         }
@@ -651,6 +655,35 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
         if (!Compatible(inferred, target, assigning: true))
             Report(context, value,
                 $"type mismatch in {what}: cannot assign '{Describe(inferred)}' to '{targetTypeName}'");
+        else
+            WarnIntegerDivisionIntoDecimal(context, value, target, props ?? new Dictionary<string, string>(StringComparer.Ordinal), parameters, enumTypes);
+    }
+
+    /// <summary>
+    /// DMNUM001 (T-07a, #657): an integral division inside a value stored into a Decimal truncates before it widens
+    /// (<c>assign D to 7 / 2</c> stores 3, <c>7 / 2 + 1</c> stores 4). The walk follows the arithmetic spine only.
+    /// </summary>
+    private void WarnIntegerDivisionIntoDecimal(
+        AnalysisContext context, DomainExpression expr, ExprType target,
+        Dictionary<string, string> props, Dictionary<string, string>? parameters, Dictionary<string, EnumType> enumTypes) {
+        if (ModelOf(context) is { } model && model.KindOf(target) is NumericKind.Decimal)
+            WarnIntegerDivisions(context, expr, model, props, parameters, enumTypes);
+    }
+
+    private void WarnIntegerDivisions(
+        AnalysisContext context, DomainExpression expr, DomainTypeModel model,
+        Dictionary<string, string> props, Dictionary<string, string>? parameters, Dictionary<string, EnumType> enumTypes) {
+        if (expr is not (Add or Subtract or Multiply or Divide))
+            return;
+        if (expr is Divide divide
+            && model.KindOf(InferType(context, divide.Left, props, parameters, enumTypes)) is NumericKind.Integer64
+            && model.KindOf(InferType(context, divide.Right, props, parameters, enumTypes)) is NumericKind.Integer64)
+            context.ReportWarning(divide,
+                $"integer division '{PrintedText(context, divide)}' is stored into a Decimal: the quotient is truncated first; " +
+                "divide by a Decimal property or a literal with a fraction (a literal with a zero fraction, like 7.0, is a whole number)",
+                DomainModelDiagnosticCodes.NumericIntegerDivisionIntoDecimal);
+        foreach (var operand in expr.Children.OfType<DomainExpression>())
+            WarnIntegerDivisions(context, operand, model, props, parameters, enumTypes);
     }
 
     private void CheckDefault(
@@ -714,6 +747,8 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                 if (!Compatible(value, target, assigning: true))
                     Report(context, expr,
                         $"default value of type '{Describe(value)}' is not compatible with property type '{propTypeName}'");
+                else
+                    WarnIntegerDivisionIntoDecimal(context, expr, target, noProps, null, enumTypes);
                 return;
         }
     }

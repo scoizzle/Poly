@@ -774,6 +774,32 @@ public class AtomicityParityTests {
         await Assert.That(items.Count).IsEqualTo(1).Because("L-04b: a bare Create{Nav} rolls the child back");
     }
 
+    // ── F3 probe (X-04's territory): an entry that ASSIGNS a unique property, then fails ──────────
+
+    private const string EntryAssignsUniqueDsl = """
+        domain EntryAssignsUnique
+        uses persistence
+        Kid: entity {
+          Code: Text unique
+          Cap: Number default(100)
+          Score: Number range(0, 10) default(0)
+          Start: stage { entry { assign Code to "x" assign Score to Cap } }
+        }
+        """;
+
+    // F3 result: neither host gets as far as a failed create. Lowering refuses the shape (fail closed): on master the
+    // storage library refused "Assign of unique property on 'Kid' constructor is not the EnsureUnique-then-assign shape";
+    // now it cannot thread the storage port into `created.__EnterInitialStage()` (a call through a variable, not `this`
+    // or a type name). So the question "is the key held after the failed create" has no answer yet. Owner X-04 (the
+    // storage journal) with L-13: when lowering accepts a unique assign in an initial entry, this row becomes the probe.
+    [Test]
+    public async Task Create_WhenTheInitialEntryAssignsAUniqueProperty_LoweringRefusesIt_UntilX04() {
+        var thrown = Assert.Throws<InvalidOperationException>(() =>
+            ParityScenario.FromDsl(EntryAssignsUniqueDsl, "AtomicityEntryAssignsUnique", recordGraph: true));
+
+        await Assert.That(thrown!.Message).Contains("Cannot thread '__EnterInitialStage'");
+    }
+
     // ── the creation order the scope records (lock amendment 5) ───────
 
     private const string OrderDsl = """

@@ -65,6 +65,56 @@ public class TypeRulesTests {
         await Assert.That(mismatches).IsEmpty();
     }
 
+    /// <summary>
+    /// T-16: the 21 pairs the private rank table called widening and the C# specification (10.2.3) does not:
+    /// a signed integral to an unsigned one, an unsigned one to its signed sibling, anything into Char, and
+    /// Float32 or Float64 into Decimal (explicit). The provider answers none, so overload scoring stops counting them.
+    /// </summary>
+    internal static readonly (Prim From, Prim To)[] RemovedWidenings = [
+        (Prim.UInt8, Prim.Int8), (Prim.UInt16, Prim.Int16), (Prim.UInt32, Prim.Int32), (Prim.UInt64, Prim.Int64), (Prim.Char, Prim.Int16),
+        (Prim.Int8, Prim.UInt8), (Prim.Int8, Prim.UInt16), (Prim.Int8, Prim.UInt32), (Prim.Int8, Prim.UInt64),
+        (Prim.Int16, Prim.UInt16), (Prim.Int16, Prim.UInt32), (Prim.Int16, Prim.UInt64),
+        (Prim.Int32, Prim.UInt32), (Prim.Int32, Prim.UInt64), (Prim.Int64, Prim.UInt64),
+        (Prim.Int8, Prim.Char), (Prim.Int16, Prim.Char), (Prim.UInt8, Prim.Char), (Prim.UInt16, Prim.Char),
+        (Prim.Float32, Prim.Decimal), (Prim.Float64, Prim.Decimal),
+    ];
+
+    private static bool IsRankedNumber(Prim primitive) => primitive is
+        Prim.Int8 or Prim.Int16 or Prim.Int32 or Prim.Int64 or Prim.UInt8 or Prim.UInt16 or Prim.UInt32 or Prim.UInt64
+        or Prim.Float32 or Prim.Float64 or Prim.Decimal or Prim.Char;
+
+    /// <summary>
+    /// The matrix captured from master is the oracle; this reads it through the provider alone. Letter 1 is a declared
+    /// operator (a conversion that states a method), letter 2 is assignability, letter 3 is "implicitly convertible":
+    /// the same ranked number, or any implicit conversion into a non-object target. The provider reproduces every cell
+    /// except the 21 removed widenings, each of which master's rank table said yes to and the specification says no.
+    /// </summary>
+    [Test]
+    public async Task ConversionDoor_ProviderReproducesTheMasterMatrix_ExceptTheRemovedWidenings() {
+        var prims = Enum.GetValues<Prim>();
+        var removed = RemovedWidenings.ToHashSet();
+        await Assert.That(removed.Count).IsEqualTo(21);
+        var mismatches = new List<string>();
+        foreach (var to in prims) {
+            var cells = MasterDoorMatrix[to].Split(' ');
+            var target = Clr(to.GetClrType()!);
+            for (var i = 0; i < prims.Length; i++) {
+                var from = prims[i];
+                var source = Clr(from.GetClrType()!);
+                var conversion = target.ResolveConversionFrom(source);
+                var declared = conversion is { Method: not null } stated
+                    ? (stated.Kind == ConversionOperatorKind.Implicit ? 'I' : 'E')
+                    : 'N';
+                var convertible = to != Prim.Structure && ((from == to && IsRankedNumber(from)) || conversion is { Kind: ConversionOperatorKind.Implicit });
+                var actual = string.Concat(declared, target.IsAssignableFrom(source) ? 'T' : 'F', convertible ? 'T' : 'F');
+                var expected = string.Concat(cells[i][0], cells[i][1], cells[i][2] == 'T' && !removed.Contains((from, to)) ? 'T' : 'F');
+                if (actual != expected)
+                    mismatches.Add($"{from} -> {to}: expected {expected}, was {actual}");
+            }
+        }
+        await Assert.That(mismatches).IsEmpty();
+    }
+
     private static ITypeDefinition Clr(Type type) => ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(type);
 
     private static ITypeDefinition[] ParametersOf(DeclaredOperator declared) =>

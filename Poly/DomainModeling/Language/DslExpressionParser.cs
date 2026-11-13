@@ -251,8 +251,9 @@ public sealed class DslExpressionParser {
                 case "path-is-not": StartPathCmp(match, notEqual: true); break;
                 case "path-cmp": StartPathCmp(match, notEqual: false); break;
                 case "path":
+                    CheckPath(match);
                     var names = PathNames(match);
-                    Leaf(match, WrapPath(names, DomainExpression.Property(names[^1])));
+                    Leaf(match, WrapPath(names, DomainExpression.Property(names[^1])), names.Count - 1);
                     break;
                 default:
                     throw new InvalidOperationException(
@@ -260,10 +261,10 @@ public sealed class DslExpressionParser {
             }
         }
 
-        private void Leaf(MatchResult<DslToken, DslTokenKind> match, DomainExpression value) {
+        private void Leaf(MatchResult<DslToken, DslTokenKind> match, DomainExpression value, int height = 0) {
             _c.Consume(match);
             _last = match.Tokens[^1];
-            Return(value, 0);
+            Return(value, height);
         }
 
         private static List<string> PathNames(MatchResult<DslToken, DslTokenKind> match) {
@@ -271,6 +272,23 @@ public sealed class DslExpressionParser {
             foreach (var hop in match.Children)
                 names.Add(CaptureText(hop, "hop"));
             return names;
+        }
+
+        /// <summary>Word <paramref name="index"/> of a path (<c>rel prop hop*</c>), in source order.</summary>
+        private static DslToken PathWord(MatchResult<DslToken, DslTokenKind> match, int index) => index switch {
+            0 => CaptureToken(match, "rel"),
+            1 => CaptureToken(match, "prop"),
+            _ => CaptureToken(match.Children[index - 2], "hop"),
+        };
+
+        /// <summary>
+        /// A path of N words nests N - 1 navigations: word i (from 0) opens level i under the enclosing ones, so the
+        /// first word past the limit is the positioned error.
+        /// </summary>
+        private void CheckPath(MatchResult<DslToken, DslTokenKind> match) {
+            var words = 2 + match.Children.Count;
+            if (_hard + words - 1 > DslLimits.MaxExpressionDepth)
+                throw DepthError(PathWord(match, DslLimits.MaxExpressionDepth - _hard + 1));
         }
 
         private DomainExpression FoldUnresolvedDuration(MatchResult<DslToken, DslTokenKind> match) {
@@ -420,26 +438,29 @@ public sealed class DslExpressionParser {
 
         private void StartPathCmp(MatchResult<DslToken, DslTokenKind> match, bool notEqual) {
             var first = match.Tokens[0];
-            CheckNode(first, 1);
+            CheckPath(match);
+            var names = PathNames(match);
+            // The comparison sits under the path's navigations: one more level than the path.
+            CheckNode(first, names.Count);
             var frame = new Frame(FrameKind.PathCmp) {
                 Token = first,
-                Names = PathNames(match),
+                Names = names,
                 NotEqual = notEqual,
                 CompareKind = notEqual ? DslTokenKind.Neq : match.Captures["op"][0].Kind,
             };
             for (var i = 0; i < match.Tokens.Count; i++)
                 Take();
             Push(frame);
-            _hard++;
+            _hard += names.Count;
             DescendTo(_t.Levels.Count);
         }
 
         private void OnPathCmp(Frame f) {
             Pop();
-            _hard--;
-            var height = _height + 1;
-            CheckNode(f.Token, height);
             var names = f.Names!;
+            _hard -= names.Count;
+            var height = _height + names.Count;
+            CheckNode(f.Token, height);
             DomainExpression inner = f.NotEqual
                 ? DomainExpression.NotEqual(DomainExpression.Property(names[^1]), _value)
                 : Compare(f.CompareKind, DomainExpression.Property(names[^1]), _value);

@@ -1,4 +1,5 @@
 using Poly.DomainModeling.Ontology;
+using Poly.Grammar;
 
 using TokenKind = Poly.DomainModeling.Language.DslTokenKind;
 
@@ -85,55 +86,107 @@ public sealed partial class DomainResolver {
                 Consume(match);
                 return ParseInvokeEffectTail();
 
-            case "for":
-                if (_forBodyDepth > 0)
-                    throw Error("A 'for' inside a 'for' body is not supported");
-                Consume(match);
-                return ParseForEffect();
+            case "for": {
+                    if (_forBodyDepth > 0)
+                        throw Error("A 'for' inside a 'for' body is not supported");
+                    // The match starts at the cursor, so Current is its head keyword.
+                    var entered = EnterStatement(Current);
+                    try {
+                        Consume(match);
+                        return ParseForEffect();
+                    }
+                    finally {
+                        _statementDepth = entered;
+                    }
+                }
 
-            case "if":
-                // Head is `if (` — the condition and then/else bodies are parsed
-                // by the handler (B1: the pattern never spans IR-bearing bodies).
-                Consume(match);
-                return ParseIfEffectCore();
+            case "if": {
+                    // Head is `if (` — the condition and then/else bodies are parsed
+                    // by the handler (B1: the pattern never spans IR-bearing bodies).
+                    var entered = EnterStatement(Current);
+                    try {
+                        Consume(match);
+                        return ParseIfEffectCore();
+                    }
+                    finally {
+                        // Every else-if rung entered one more level; all of them close here.
+                        _statementDepth = entered;
+                    }
+                }
 
             default:
                 throw Error($"Unhandled effect pattern '{match.PatternName}'");
         }
     }
 
+    private int _statementDepth;
+
+    /// <summary>
+    /// Enters one statement level at <paramref name="head"/> (an <c>if</c> or <c>for</c> keyword) and returns the
+    /// level before it, for the caller's <c>finally</c> to restore. A level past
+    /// <see cref="DslLimits.MaxStatementDepth"/> is a positioned error on the head, built the way the
+    /// expression parser builds its depth error.
+    /// </summary>
+    private int EnterStatement(DslToken head) {
+        var entered = _statementDepth;
+        if (entered >= DslLimits.MaxStatementDepth)
+            throw new GrammarException(DslLimits.StatementDepthDetail, head.Line, head.Col, head.Start, head.Length);
+        _statementDepth = entered + 1;
+        return entered;
+    }
+
     /// <summary>
     /// Parses <c>if (cond) { … } [else if (cond) { … }]* [else { … }]</c>.
     /// Called with the cursor at the condition (the <c>if (</c> head already
-    /// consumed). Chains of <c>else if</c> lower to nested
-    /// <see cref="ConditionalEffect"/> nodes.
+    /// consumed and its level entered). The <c>else if</c> rungs are read in a
+    /// loop, each one level deeper than the one before, then folded right to left
+    /// into nested <see cref="ConditionalEffect"/> nodes: the innermost is built
+    /// first, as the recursive reader built it, so the tree is unchanged.
     /// </summary>
     private Effect ParseIfEffectCore() {
-        var condition = ParseExpression();
-        Expect(TokenKind.RParen);
-        Expect(TokenKind.LBrace);
-        var thenEffects = new List<Effect>();
-        while (Current.Kind != TokenKind.RBrace)
-            thenEffects.Add(ParseEffect());
-        Expect(TokenKind.RBrace);
-
+        // Rungs before the last; a lone `if` (the common case) never allocates the list.
+        List<(DomainExpression Condition, List<Effect> Then)>? outer = null;
         List<Effect>? elseEffects = null;
-        if (Current.Kind == TokenKind.Else) {
+        DomainExpression condition;
+        List<Effect> thenEffects;
+        while (true) {
+            condition = ParseExpression();
+            Expect(TokenKind.RParen);
+            Expect(TokenKind.LBrace);
+            thenEffects = new List<Effect>();
+            while (Current.Kind != TokenKind.RBrace)
+                thenEffects.Add(ParseEffect());
+            Expect(TokenKind.RBrace);
+
+            if (Current.Kind != TokenKind.Else)
+                break;
             Advance(); // consume 'else'
             if (Current.Kind == TokenKind.If) {
-                // else if → nest another ConditionalEffect as the sole else branch
-                elseEffects = [ParseEffect()];
+                // else if → another ConditionalEffect as the sole else branch, one level deeper.
+                // A malformed head is ParseEffect's error, reported where it always was.
+                var rung = MatchRule("effect");
+                if (rung is not { PatternName: "if" }) {
+                    elseEffects = [ParseEffect()];
+                    break;
+                }
+                EnterStatement(Current);
+                Consume(rung);
+                (outer ??= []).Add((condition, thenEffects));
+                continue;
             }
-            else {
-                Expect(TokenKind.LBrace);
-                elseEffects = new List<Effect>();
-                while (Current.Kind != TokenKind.RBrace)
-                    elseEffects.Add(ParseEffect());
-                Expect(TokenKind.RBrace);
-            }
+
+            Expect(TokenKind.LBrace);
+            elseEffects = new List<Effect>();
+            while (Current.Kind != TokenKind.RBrace)
+                elseEffects.Add(ParseEffect());
+            Expect(TokenKind.RBrace);
+            break;
         }
 
-        return new ConditionalEffect(condition, thenEffects, elseEffects);
+        var folded = new ConditionalEffect(condition, thenEffects, elseEffects);
+        for (var i = (outer?.Count ?? 0) - 1; i >= 0; i--)
+            folded = new ConditionalEffect(outer![i].Condition, outer[i].Then, new List<Effect> { folded });
+        return folded;
     }
 
     /// <summary>

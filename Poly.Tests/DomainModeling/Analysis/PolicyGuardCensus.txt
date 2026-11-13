@@ -104,7 +104,8 @@ docs/probes/scratch-2026-10-14/roastery.poly | 44:5 | DMCS003? | Cannot verify '
 #   create-require-not-11-100 (-> clean)     NotPolicy_AcceptDirection_IsClean (same runs)
 #   stage-p-action-not-p (clean -> warning)  StagePAndActionNotP_Simulator_AssignFailsAboveSeenRange: Qty 70 passes both guards, the assign fails
 #   self-invoke-require-not (-> clean)       SelfInvoke_CalleeRequireNot_NarrowsCalleeEnv: Qty 10 blocked by the callee guard, 11 writes
-# One row was added after the characterisation commit: create-after-create-in-subscription (declared path; its simulator run
+# One row was added after the characterisation commit: create-after-create-in-subscription (declared path, the same verdict
+# measured on master 68816824 in the closing round; its simulator run
 # is in FlaggedCreates_Simulator_FailWithGuardHeld: the create-in notifies the creator's subscription, which rewrites Qty).
 # Not predicted, found while implementing D: the naive create arm (fork A with no fallback) turned the loop, after-loop,
 # after-transition and after-cross-entity-invoke pins clean ([0,10], [5,15], [0,10], [0,10]); the trust rule restores

@@ -191,9 +191,10 @@ public sealed class InternalDomainProducer {
 
     /// <summary>
     /// The endpoint's public precondition set. <see cref="EffectInvariantAnalyzer.CollectPreconditions"/>
-    /// is the effect-invariant abstract environment, and it deliberately drops <c>not_*</c>
-    /// policies; a <c>require not Positive</c> gate is still runtime surface, so the export set
-    /// adds the action's negated policies back. Dedupe is by name plus canonical printed
+    /// is the action's positive policies plus its stage's (it drops <c>not_*</c> markers; the analysis
+    /// environment is narrowed through <c>PolicyGuardFacts.Guards</c>, not this list); a
+    /// <c>require not Positive</c> gate is still runtime surface, so the export set adds the action's
+    /// negated policies back. Dedupe is by name plus canonical printed
     /// expression (never record equality: a node's <c>Id</c> participates, and each
     /// <c>require not</c> allocates a fresh <c>Not</c>).
     /// </summary>

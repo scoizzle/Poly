@@ -307,7 +307,7 @@ public class PolicyGuardFactsTests {
     [Arguments("create-after-loop", "Qty=[0,10] errors=none DMEFF008? Assigned expression value range [0, 100] can fall outside constraint range(5, 15) on property 'Qty'.")]
     [Arguments("create-after-transition", "Qty=[0,10] errors=none DMEFF008? Assigned expression value range [0, 100] can fall outside constraint range(0, 10) on property 'Qty'.")]
     [Arguments("create-after-cross-invoke", "Qty=[0,10] errors=none DMEFF008? Assigned expression value range [0, 100] can fall outside constraint range(0, 10) on property 'Qty'.")]
-    [Arguments("create-after-create-in-subscription", "Qty=[0,10] errors=none DMEFF008? Assigned expression value range [0, 100] can fall outside constraint range(0, 10) on property 'Qty'.")] // added after the characterisation commit: master judges every initializer on the declared path, so this is master's verdict too
+    [Arguments("create-after-create-in-subscription", "Qty=[0,10] errors=none DMEFF008? Assigned expression value range [0, 100] can fall outside constraint range(0, 10) on property 'Qty'.")] // added after the characterisation commit; the same verdict on master 68816824, measured on master's tree
     [Arguments("untyped-initializer", "Qty=[0,10] errors=none DMCS003? Cannot verify 'create Item { Qty: parts Qty }' against constraint range(0, 10) on property 'Qty': the assigned value has no bound analysis can use. | DMCS003? Cannot verify 'assign Local to parts Qty' against constraint range(0, 10) on property 'Local': the assigned value has no bound analysis can use.")]
     [Arguments("self-invoke-require-not", "Qty=[11,100] errors=none clean")] // V-18 C: the callee's require not narrows its entry; master "Qty=[0,100] errors=none DMEFF008? Assigned expression value range [0, 100] can fall outside constraint range(11, 100) on property 'Local'. | DMEFF008? Call-chain postcondition (Go → Keep): assigned value range [0, 100] can fall outside constraint range(11, 100) on property 'Local'."
     public async Task Shape_Verdict_IsPinned(string shape, string expected) {
@@ -369,7 +369,7 @@ public class PolicyGuardFactsTests {
     }
 
     [Test]
-    public async Task RequiredPolicy_RefinesEnv_SameAsInlineToday() {
+    public async Task RequiredPolicy_RefinesEnv_AssignReadsNarrowedQty() {
         var (domain, analysis) = Analyze(AssignUnderRequire);
         var context = Context(domain, analysis, "Order", "Copy");
         await Assert.That(Narrowed(context, "Qty")).IsEqualTo("[0,10]");
@@ -378,7 +378,7 @@ public class PolicyGuardFactsTests {
     }
 
     [Test]
-    public async Task NotPolicy_SkippedToday_PinsCurrentVerdict() {
+    public async Task NotPolicy_NarrowsQty_CreateIntoExcludedRangeIsError() {
         var (domain, analysis) = Analyze(CreateUnderRequireNot("range(0, 10)"));
         // V-18 C+D: `require not Small` narrows Qty and the create reads it; master skipped the guard ("[0,100]") and
         // the create was the PossibleOutside0To10 warning.
@@ -422,7 +422,7 @@ public class PolicyGuardFactsTests {
     }
 
     [Test]
-    public async Task Item23c_CreateInitializer_FlaggedToday() {
+    public async Task Item23c_AssignCreateAndCreateIn_AllReadTheGuard() {
         var (_, control) = Analyze(AssignUnderRequire);
         var (_, create) = Analyze(CreateUnderRequire);
         var (_, createIn) = Analyze(CreateInUnderRequire);
@@ -1019,7 +1019,8 @@ public class PolicyGuardFactsTests {
 
     /// <summary>The guard fact does not outlive an assign: after <c>assign Qty to 50</c> the create reads 50, so a
     /// create into <c>range(0, 10)</c> is entirely outside (a guard fact kept past the assign would accept it).
-    /// The simulator: the guard holds at 5 and the create still fails.</summary>
+    /// The simulator: the guard holds at 5 and the create still fails. Master 68816824, measured on master's tree:
+    /// <c>DMEFF008? [0, 100] can fall outside range(0, 10)</c> (the declared path).</summary>
     [Test]
     public async Task AssignBeforeCreate_FlowEnvWins() {
         const string dsl = """

@@ -29,13 +29,28 @@ public sealed record EffectPostcondition(
     public ValueRange? ValueRange => Value.NumericRange;
 }
 
+/// <summary>
+/// A create or create-in initializer's abstract value in one stage context: <see cref="Initializer"/>'s expression
+/// evaluated in the creating action's environment at the create (guards, branch conditions and earlier assigns
+/// applied), in the creator's scope. <see cref="DeclaringAction"/> is the action whose body holds the create.
+/// </summary>
+public sealed record InitializerValue(PropertyBinding Initializer, AbstractValue Value, Action DeclaringAction) {
+    /// <summary>The value's numeric range, when the value carries one.</summary>
+    public ValueRange? ValueRange => Value.NumericRange;
+}
+
 /// <summary>The additive invariant picture for an action in ONE stage context.</summary>
 public sealed record ActionStageInvariant(
     string? StageName,
     IReadOnlyList<Policy> Preconditions,
     IReadOnlyDictionary<string, ValueRange?> NarrowedRanges,
     IReadOnlyDictionary<string, IReadOnlyList<Constraint>> MergedConstraints,
-    IReadOnlyList<EffectPostcondition> Postconditions);
+    IReadOnlyList<EffectPostcondition> Postconditions) {
+    /// <summary>The values of the action's own create and create-in initializers in this context. An initializer
+    /// with no entry here (a create in a loop body, or after an effect the flow does not model) is judged against
+    /// declared ranges.</summary>
+    public IReadOnlyList<InitializerValue> InitializerValues { get; init; } = [];
+}
 
 /// <summary>Per-action invariant metadata: one <see cref="ActionStageInvariant"/> per stage
 /// the action is valid in.</summary>
@@ -84,7 +99,7 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
 
     /// <summary>What a guard needs to know about one entity's properties: which hold integers (a strict bound on one
     /// is exact) and which are optional (a guard that also holds for a null value cannot empty one).</summary>
-    private sealed record GuardAxes(IReadOnlySet<string> Integral, IReadOnlySet<string> Optional);
+    internal sealed record GuardAxes(IReadOnlySet<string> Integral, IReadOnlySet<string> Optional);
 
     /// <summary>The <see cref="GuardAxes"/> of each entity, computed once per entity from the domain type model:
     /// integral is <see cref="NumericKind.Integer64"/>. A guard narrows an environment with the axes of the entity
@@ -160,7 +175,7 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
 
     /// <summary>A relation (<c>Start &lt; End</c>) whose refinement is what made two previously
     /// satisfiable properties unsatisfiable: one cause, reported once (#367 B-7).</summary>
-    private readonly record struct RelationConflict(string Left, string Right, RelationalOrdering Orderings);
+    internal readonly record struct RelationConflict(string Left, string Right, RelationalOrdering Orderings);
 
     /// <summary>
     /// Narrows the symbols an environment mentions by a boolean condition (a guard, an if-branch, or a where-filter).

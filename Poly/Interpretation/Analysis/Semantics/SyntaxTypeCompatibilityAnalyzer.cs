@@ -449,7 +449,7 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
                 : null);
         if (shape is not null && MethodInvocationSemanticResolver.AcceptsLambdaArgument(context, shape, paramType))
             return true;
-        if (paramType.IsNumericWideningFrom(argType))
+        if (paramType.ResolveConversionFrom(argType) is { Kind: ConversionOperatorKind.Implicit })
             return true;
         if (paramType.Kind == TypeKind.Enum && argType.TryGetRuntimeType(out var enumArg) && enumArg == typeof(string))
             return true; // projected enums are string-valued consts (BuildEnumTypeDef)
@@ -795,15 +795,13 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         ITypeDefinition destDef,
         ITypeDefinition srcDef,
         bool implicitOnly) {
-        if (destDef is IClrTypeDefinition destClr
-            && srcDef is IClrTypeDefinition srcClr
-            && destClr.RuntimeType.IsAssignableFrom(srcClr.RuntimeType))
+        if (destDef.IsAssignableWithoutConversion(srcDef))
             return null;
-        if (destDef.GetConversionFrom(srcDef) is not { } conversion)
+        // A conversion with no method is applied by the platform: no node states it, so none is added here.
+        if (destDef.ResolveConversionFrom(srcDef) is not { Method: { } method } conversion)
             return null;
         if (implicitOnly && conversion.Kind is not ConversionOperatorKind.Implicit)
             return null;
-        var method = conversion.Method;
         var extras = method.Parameters.ToArray();
         Invoke invoke;
         if (method.IsStatic) {

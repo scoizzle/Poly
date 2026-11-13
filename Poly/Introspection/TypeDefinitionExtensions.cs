@@ -9,13 +9,6 @@ public enum ConversionOperatorKind {
     Explicit
 }
 
-/// <summary>
-/// A conversion operator discovered on a type definition.
-/// <see cref="Method"/> is the operator to invoke; CLR <c>Methods</c> omit
-/// <c>IsSpecialName</c> members, so this is the discovery door.
-/// </summary>
-public readonly record struct ConversionOperator(ConversionOperatorKind Kind, ITypeMethod Method);
-
 public static class TypeDefinitionExtensions {
     /// <summary>
     /// True when <paramref name="type"/> exposes a sequence shape: a synthetic AST
@@ -34,19 +27,46 @@ public static class TypeDefinitionExtensions {
     }
 
     /// <summary>
-    /// The one type-identity notion: reference identity, or two synthetic collections of one kind and element.
-    /// Each resolve of a synthetic collection builds a fresh instance, so reference equality alone never matches
-    /// an omitted collection argument. <see cref="IsAssignableFrom"/>, <c>GetOperator</c> and <c>GetCommonType</c> share it.
+    /// The one type-identity notion: reference identity, two synthetic collections of one kind and element, or two
+    /// resolutions of one generic parameter. Each resolve of a synthetic collection or a generic parameter builds a fresh
+    /// instance, so reference equality alone never matches an omitted collection argument.
+    /// <see cref="IsAssignableFrom"/>, <c>GetOperator</c>, <c>GetCommonType</c> and overload scoring share it.
     /// </summary>
     internal static bool IsSameType(ITypeDefinition a, ITypeDefinition b) =>
-        ReferenceEquals(a, b) || SyntheticCollectionsMatch(a, b);
+        ReferenceEquals(a, b) || SyntheticCollectionsMatch(a, b) || GenericParametersMatch(a, b);
+
+    /// <summary>
+    /// A generic parameter is its name on its declaring type. The definition holds no declaring member, so two
+    /// method-level parameters of one name on one type are the same type here: a stated limitation, and no DSL construct
+    /// declares a method-level type parameter.
+    /// </summary>
+    private static bool GenericParametersMatch(ITypeDefinition a, ITypeDefinition b) =>
+        a is AstGenericParameterTypeDefinition left
+        && b is AstGenericParameterTypeDefinition right
+        && string.Equals(left.Name, right.Name, StringComparison.Ordinal)
+        && IsSameType(left.DeclaringType, right.DeclaringType);
+
+    /// <summary>The platform-neutral part of assignability: the same type, a base type, or an interface.</summary>
+    internal static bool IsAssignableByHierarchy(ITypeDefinition destination, ITypeDefinition source) {
+        if (IsSameType(destination, source))
+            return true;
+        for (var current = source.BaseType; current != null; current = current.BaseType) {
+            if (destination == current)
+                return true;
+        }
+        return source.Interfaces.Any(i => destination == i);
+    }
 
     private static bool SyntheticCollectionsMatch(ITypeDefinition to, ITypeDefinition from) {
         if (to is not AstCollectionTypeDefinition left
             || from is not AstCollectionTypeDefinition right)
             return false;
-        return left.Kind == right.Kind
-            && string.Equals(left.ElementType.Name, right.ElementType.Name, StringComparison.Ordinal)
+        if (left.Kind != right.Kind)
+            return false;
+        // A nested collection's name does not carry its element's namespace, so it compares by this notion again.
+        if (left.ElementType is AstCollectionTypeDefinition || right.ElementType is AstCollectionTypeDefinition)
+            return IsSameType(left.ElementType, right.ElementType);
+        return string.Equals(left.ElementType.Name, right.ElementType.Name, StringComparison.Ordinal)
             && string.Equals(left.ElementType.Namespace, right.ElementType.Namespace, StringComparison.Ordinal);
     }
 
@@ -141,68 +161,15 @@ public static class TypeDefinitionExtensions {
         }
 
         /// <summary>
-        /// Determines if a value of <paramref name="from"/> widens to this type by C#'s
-        /// implicit numeric conversion — the relation that makes
-        /// <c>Add(long, long)</c> accept <c>Add(1, 2)</c>.
+        /// Determines if values of <paramref name="other"/> can be assigned to this type: no conversion is needed
+        /// (<see cref="ITypeDefinition.IsAssignableWithoutConversion"/>), or a declared implicit operator does it.
+        /// A conversion the platform applies itself (numeric widening) is not assignment; ask
+        /// <see cref="ITypeDefinition.ResolveConversionFrom"/> for it.
         /// </summary>
-        /// <remarks>
-        /// <see cref="IsAssignableFrom"/> cannot answer this: CLR assignability does not
-        /// include numeric widening, so <c>typeof(long).IsAssignableFrom(typeof(int))</c>
-        /// is false. Overload scoring and syntax compatibility both ask this question, and
-        /// they must not answer it twice.
-        /// </remarks>
-        public bool IsNumericWideningFrom(ITypeDefinition from) {
-            ArgumentNullException.ThrowIfNull(from);
-            if (!from.TryGetRuntimeType(out var fromClr) || !typeDefinition.TryGetRuntimeType(out var toClr))
-                return false;
-            var fromCode = Type.GetTypeCode(fromClr);
-            var toCode = Type.GetTypeCode(toClr);
-            // TypeCode identity alone is not widening: Object==Object for unrelated
-            // classes (Uri vs StringBuilder) must not count as a plausible overload.
-            if (fromCode == toCode)
-                return NumericWidenRank(fromCode) is not null;
-            return NumericWidenRank(fromCode) is int fromRank
-                && NumericWidenRank(toCode) is int toRank
-                && fromRank <= toRank;
-        }
-
-        /// <summary>
-        /// Determines if values of <paramref name="other"/> can be assigned to this type.
-        /// </summary>
-        /// <remarks>
-        /// Default implementation walks the base type chain and interface list. Implementations
-        /// can override with more precise or faster logic.
-        /// </remarks>
         public bool IsAssignableFrom(ITypeDefinition other) {
             ArgumentNullException.ThrowIfNull(other);
-            if (typeDefinition == other) return true;
-            if (typeDefinition is ClrTypeDefinition clrTypeDef) {
-                // CLR object is the VM box of every modeled type def (module
-                // entity at DomainResult.Success). Two ClrTypeDefinitions still
-                // use RuntimeType.IsAssignableFrom below.
-                if (clrTypeDef.RuntimeType == typeof(object))
-                    return true;
-                if (other is ClrTypeDefinition otherClrTypeDef) {
-                    if (clrTypeDef.RuntimeType.IsAssignableFrom(otherClrTypeDef.RuntimeType))
-                        return true;
-                    // C# lifts T to T?. CLR IsAssignableFrom does not.
-                    if (Nullable.GetUnderlyingType(clrTypeDef.RuntimeType) == otherClrTypeDef.RuntimeType)
-                        return true;
-                }
-            }
-
-            if (IsSameType(typeDefinition, other))
-                return true;
-
-            var current = other.BaseType;
-            while (current != null) {
-                if (typeDefinition == current) return true;
-                current = current.BaseType;
-            }
-
-            if (other.Interfaces.Any(i => typeDefinition == i)) return true;
-
-            return typeDefinition.GetConversionFrom(other)?.Kind is ConversionOperatorKind.Implicit;
+            return typeDefinition.IsAssignableWithoutConversion(other)
+                || typeDefinition.ResolveConversionFrom(other) is { Kind: ConversionOperatorKind.Implicit, Method: not null };
         }
 
         /// <summary>
@@ -211,46 +178,6 @@ public static class TypeDefinitionExtensions {
         public bool IsAssignableTo(ITypeDefinition other) {
             ArgumentNullException.ThrowIfNull(other);
             return other.IsAssignableFrom(typeDefinition);
-        }
-
-        /// <summary>
-        /// User-defined conversion from <paramref name="source"/> to this type, if any.
-        /// Implicit is preferred when both exist. Inheritance is not a conversion
-        /// operator — use <see cref="IsAssignableFrom"/>.
-        /// CLR conversion operators live outside <see cref="ITypeDefinition.Methods"/>
-        /// (those omit <c>IsSpecialName</c>); this is the shared discovery API.
-        /// </summary>
-        public ConversionOperator? GetConversionFrom(ITypeDefinition source) {
-            ArgumentNullException.ThrowIfNull(source);
-            if (typeDefinition is ClrTypeDefinition destClr && source is ClrTypeDefinition sourceClr) {
-                if (destClr.FindConversionFrom(sourceClr, ConversionOperatorKind.Implicit) is { } implicitMethod)
-                    return new ConversionOperator(ConversionOperatorKind.Implicit, implicitMethod);
-                if (destClr.FindConversionFrom(sourceClr, ConversionOperatorKind.Explicit) is { } explicitMethod)
-                    return new ConversionOperator(ConversionOperatorKind.Explicit, explicitMethod);
-                return null;
-            }
-
-            if (FindModeledConversion(source, typeDefinition, implicitName: true) is { } modeledImplicit)
-                return new ConversionOperator(ConversionOperatorKind.Implicit, modeledImplicit);
-            if (FindModeledConversion(source, typeDefinition, implicitName: false) is { } modeledExplicit)
-                return new ConversionOperator(ConversionOperatorKind.Explicit, modeledExplicit);
-            return null;
-        }
-
-        private static ITypeMethod? FindModeledConversion(ITypeDefinition from, ITypeDefinition to, bool implicitName) {
-            var name = implicitName ? "op_Implicit" : "op_Explicit";
-            foreach (var candidate in new[] { from, to }) {
-                foreach (var method in candidate.Methods) {
-                    if (!string.Equals(method.Name, name, StringComparison.Ordinal))
-                        continue;
-                    var parameters = method.Parameters.ToArray();
-                    if (parameters.Length == 1
-                        && IsSameType(method.MemberTypeDefinition, to)
-                        && IsSameType(parameters[0].ParameterTypeDefinition, from))
-                        return method;
-                }
-            }
-            return null;
         }
 
         /// <summary>
@@ -272,17 +199,4 @@ public static class TypeDefinitionExtensions {
                 .FirstOrDefault(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IEnumerable<>));
         }
     }
-
-    /// <summary>Widening order for C#'s implicit numeric conversions. A <c>null</c>
-    /// rank is not a number, so it never widens.</summary>
-    private static int? NumericWidenRank(TypeCode code) => code switch {
-        TypeCode.SByte or TypeCode.Byte => 1,
-        TypeCode.Int16 or TypeCode.UInt16 or TypeCode.Char => 2,
-        TypeCode.Int32 or TypeCode.UInt32 => 3,
-        TypeCode.Int64 or TypeCode.UInt64 => 4,
-        TypeCode.Single => 5,
-        TypeCode.Double => 6,
-        TypeCode.Decimal => 7,
-        _ => null
-    };
 }

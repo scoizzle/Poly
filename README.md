@@ -92,7 +92,8 @@ each its own compilation unit; with no path and piped stdin, stdin is one docume
   endLine, endColumn, severity, code, message, path, placed). It is not filtered. A build also
   prints each written path on stderr as `wrote <path>`. Text shows errors and warnings, and
   `--verbosity info|hint` shows more. Codes: `DSL0001` parse, `DSL0002` unknown extension,
-  `DSL0003` duplicate extension, `DSL0004` lower or emit refused; analyzer codes pass through.
+  `DSL0003` duplicate extension, `DSL0004` lower or emit refused, `DSL0005` unknown host target;
+  analyzer codes pass through.
 - **`uses` resolution:** with no `uses`, omitting `--seed` loads the implicit set
   `[storage, persistence]`; `--seed authoring` is an alias for the same set (CLI only) and
   `--seed language` loads no ids. A document's non-empty `uses` list replaces the seed, so a `unique` property
@@ -102,8 +103,9 @@ each its own compilation unit; with no path and piped stdin, stdin is one docume
   An unknown id is `DSL0002` on its header token.
 - **`polyc build` output:** a domain that lists no `uses` writes `<Domain>DbContext.cs`
   (persistence is implicit), and a `unique` entity's `Create` gains a `db` parameter.
-- **`--target <id>`** is the host target (for example `posix` or `windows`) forwarded to the
-  compile. It is a host fact, never read from a `uses` line. A package that declares targets
+- **`--target <id>`** is the host target forwarded to the compile. Known targets: `posix`. Any
+  other id, including a wrong-case spelling, is `DSL0005` and the message lists the known
+  targets. It is a host fact, never read from a `uses` line. A package that declares targets
   (for example `uses posix`) is `DMCON004` when the host target is absent or not one the package
   declares; the target does not change the surface fingerprint. `polyc build` and `polyc check`
   are the only doors that carry a target in this slice; `polyc lsp` and the MCP tools name none,

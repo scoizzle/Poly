@@ -723,6 +723,74 @@ public sealed class LibrarySelectionTests {
         }
     }
 
+    [Test]
+    public async Task TargetError_NullAndKnown_AreNull() {
+        var catalog = ProductCatalog.Catalog;
+
+        await Assert.That(catalog.TargetError(null)).IsNull();
+        await Assert.That(catalog.TargetError("posix")).IsNull();
+        await Assert.That(catalog.KnownTargets.Count).IsGreaterThan(0);
+    }
+
+    [Test]
+    public async Task TargetError_Unknown_NamesTheTargetAndListsTheKnownOnes() {
+        var catalog = ProductCatalog.Catalog;
+
+        await Assert.That(catalog.TargetError("bogus"))
+            .IsEqualTo("Unknown host target 'bogus'. Known targets: posix.");
+        await Assert.That(catalog.TargetError("POSIX")).IsEqualTo(
+            "Unknown host target 'POSIX' (ids are case-sensitive; did you mean 'posix'?). Known targets: posix.");
+        await Assert.That(catalog.TargetError(" ")).IsEqualTo("Host target is empty. Known targets: posix.");
+    }
+
+    [Test]
+    public async Task TargetError_TwoTargets_AreOrdinalSortedAndJoined() {
+        var catalog = ProductCatalog.Catalog.With(new SortedProbeLibrary());
+
+        await Assert.That(catalog.TargetError("windows")).IsNull();
+        await Assert.That(catalog.TargetError("bogus"))
+            .IsEqualTo("Unknown host target 'bogus'. Known targets: posix, windows.");
+    }
+
+    [Test]
+    public async Task TargetError_CatalogWithNoTargets_SaysSo() {
+        await Assert.That(new ExtensionCatalog().TargetError("x"))
+            .IsEqualTo("Unknown host target 'x'. This catalog declares no host targets.");
+    }
+
+    /// <summary>
+    /// C-07: a blank host target fails at session creation. The record alone does not throw
+    /// (the guard is the <c>DomainSession</c> constructor), and <c>with</c> bypasses nothing.
+    /// </summary>
+    [Test]
+    public async Task Session_BlankTarget_ThrowsArgumentException_IncludingThroughWith() {
+        var catalog = ExtensionCatalog.Core;
+        var positional = new SessionOptions(catalog, [], " ");
+        await Assert.That(positional.Target).IsEqualTo(" ");
+
+        var viaWith = SessionOptions.Bare(catalog) with { Target = "  " };
+        await Assert.That(() => DomainSession.Create([], positional)).Throws<ArgumentException>();
+        await Assert.That(() => DomainSession.Create([], viaWith)).Throws<ArgumentException>();
+        await Assert.That(() => LibrarySelection.Load([], viaWith)).Throws<ArgumentException>();
+        await Assert.That(() => DomainSession.Create([], SessionOptions.Bare(catalog)).WithTarget(" "))
+            .Throws<ArgumentException>();
+
+        var none = DomainSession.Create([], SessionOptions.Bare(catalog));
+        await Assert.That(none.Target).IsNull();
+    }
+
+    /// <summary>C-04 sign-off follow-up: <c>Load</c> re-validates ids a <c>with</c> set, as <c>Resolve</c> does.</summary>
+    [Test]
+    public async Task Load_BlankIdSetThroughWith_Throws() {
+        var bare = SessionOptions.Bare(ExtensionCatalog.Core);
+
+        await Assert.That(() => LibrarySelection.Load([], bare with { ImplicitIds = [" "] }))
+            .Throws<ArgumentException>();
+        await Assert.That(() => LibrarySelection.Load([], bare with { HostIds = [" "] }))
+            .Throws<ArgumentException>();
+        await Assert.That(ReferenceEquals(LibrarySelection.Load([], bare).Options.Catalog, ExtensionCatalog.Core)).IsTrue();
+    }
+
     private sealed class CountingLibrary(string id) : IDomainLibrary {
         public int Registrations { get; private set; }
 

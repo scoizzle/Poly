@@ -1,5 +1,6 @@
 using Poly.Compile;
 using Poly.DomainModeling.Compile;
+using Poly.DomainModeling.Ontology.Contract;
 using Poly.Packs.Product;
 
 namespace Poly.Tests.Polyc;
@@ -7,6 +8,31 @@ namespace Poly.Tests.Polyc;
 public class PolycCompileTests {
     private static PolyCompiler Compiler(string seed = "authoring") =>
         new(ProductCatalog.Catalog, new SessionOptions(ProductCatalog.Catalog, ExtensionCatalog.Seed(seed)));
+
+    /// <summary>A library declaring only the <c>windows</c> target, so a catalog can know it.</summary>
+    private sealed class WindowsOnlyLibrary : IDomainLibrary {
+        public string Id => "winstub";
+
+        public void Register(SessionBuilder builder) =>
+            builder.AddContract(
+                new ImportedContract("WinStub", ContractSourceKind.ExternalProvider, "winstub", "1", []),
+                targets: ["windows"]);
+    }
+
+    private sealed class CaseTargetsLibrary : IDomainLibrary {
+        public string Id => "casestub";
+
+        public void Register(SessionBuilder builder) =>
+            builder.AddContract(
+                new ImportedContract("CaseStub", ContractSourceKind.ExternalProvider, "casestub", "1", []),
+                targets: ["Win", "win"]);
+    }
+
+    private static PolyCompiler CompilerOver(ExtensionCatalog catalog) =>
+        new(catalog, new SessionOptions(catalog, ProductCatalog.ImplicitIds));
+
+    private const string UsesPosix = "domain Shop\nuses posix\n\nOrder: entity { Total: Number }\n";
+    private const string Valid = "domain Shop\n\nOrder: entity { Total: Number }\n";
 
     [Test]
     public async Task Compile_WarningsOnly_SucceedsAndReportsWarning() {
@@ -131,15 +157,116 @@ public class PolycCompileTests {
         await Assert.That(names).Contains("ShopDbContext.cs");
     }
 
+    /// <summary>
+    /// C-07 (ruling Q9): the shipped catalog knows only posix, so windows is DSL0005 there. The
+    /// wrong-target DMCON004 is kept under test on a catalog whose only extra target is windows.
+    /// </summary>
     [Test]
     public async Task Compile_UsesPosix_WindowsTarget_ReportsDmcon004() {
-        var result = Compiler().Compile(
-            "domain Shop\nuses posix\n\nOrder: entity { Total: Number }\n", "posix.poly", target: "windows");
+        var catalog = ProductCatalog.Catalog.With(new WindowsOnlyLibrary());
+        var result = CompilerOver(catalog).Compile(UsesPosix, "posix.poly", target: "windows");
 
         var error = result.Diagnostics.Single(d => d.IsError);
         await Assert.That(error.Code).IsEqualTo("DMCON004");
         await Assert.That(error.Message).Contains("windows");
         await Assert.That(result.Files.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task Compile_UsesPosix_WindowsTarget_ProductCatalog_IsDsl0005() {
+        var result = Compiler().Compile(UsesPosix, "posix.poly", target: "windows");
+
+        var error = result.Diagnostics.Single();
+        await Assert.That(error.Code).IsEqualTo("DSL0005");
+        await Assert.That(error.Message).Contains("windows");
+        await Assert.That(result.Files.Count).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task Compile_UnknownTarget_IsExactlyOneDsl0005() {
+        const string invalid = "not a domain @";
+        var control = Compiler().Compile(invalid, "bad.poly");
+        var result = Compiler().Compile(invalid, "bad.poly", target: "bogus");
+
+        await Assert.That(control.Diagnostics.Select(d => d.Code)).Contains("DSL0001");
+        var error = result.Diagnostics.Single();
+        await Assert.That(error.Code).IsEqualTo("DSL0005");
+        await Assert.That(error.Severity).IsEqualTo("error");
+        await Assert.That(error.Placed).IsFalse();
+        await Assert.That(error.File).IsEqualTo("bad.poly");
+        await Assert.That(error.Message).IsEqualTo("Unknown host target 'bogus'. Known targets: posix.");
+        await Assert.That(result.Files.Count).IsEqualTo(0);
+        await Assert.That(result.Session).IsNull();
+        await Assert.That(result.Domain).IsNull();
+    }
+
+    [Test]
+    public async Task Compile_UnknownTarget_WithUnknownUsesId_ReportsOnlyDsl0005() {
+        const string document = "domain Shop\nuses nope\n\nOrder: entity { Total: Number }\n";
+        var control = Compiler().Compile(document, "shop.poly");
+        var result = Compiler().Compile(document, "shop.poly", target: "bogus");
+
+        await Assert.That(control.Diagnostics.Select(d => d.Code)).Contains("DSL0002");
+        await Assert.That(result.Diagnostics.Single().Code).IsEqualTo("DSL0005");
+    }
+
+    [Test]
+    public async Task Compile_UnknownTarget_TwoKnownTargetsDifferingByCase_GivesNoHint() {
+        var catalog = ProductCatalog.Catalog.With(new CaseTargetsLibrary());
+
+        var near = CompilerOver(catalog).Compile(Valid, "shop.poly", target: "WIN");
+        var exact = CompilerOver(catalog).Compile(Valid, "shop.poly", target: "win");
+
+        await Assert.That(exact.Diagnostics.Where(d => d.Code == "DSL0005").Count()).IsEqualTo(0);
+        var error = near.Diagnostics.Single();
+        await Assert.That(error.Code).IsEqualTo("DSL0005");
+        await Assert.That(error.Message).DoesNotContain("did you mean");
+        await Assert.That(error.Message).Contains("Known targets: Win, posix, win.");
+    }
+
+    [Test]
+    public async Task Analyze_UnknownTarget_IsDsl0005() {
+        var control = Compiler().Analyze(Valid, "shop.poly");
+        var result = Compiler().Analyze(Valid, "shop.poly", target: "bogus");
+
+        await Assert.That(control.Succeeded).IsTrue();
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.Diagnostics.Single().Code).IsEqualTo("DSL0005");
+        await Assert.That(result.Domain).IsNull();
+    }
+
+    [Test]
+    public async Task Compile_WrongCaseTarget_IsDsl0005_WithDidYouMeanHint() {
+        var result = Compiler().Compile(Valid, "shop.poly", target: "POSIX");
+
+        var error = result.Diagnostics.Single();
+        await Assert.That(error.Code).IsEqualTo("DSL0005");
+        await Assert.That(error.Message).IsEqualTo(
+            "Unknown host target 'POSIX' (ids are case-sensitive; did you mean 'posix'?). Known targets: posix.");
+    }
+
+    [Test]
+    [Arguments("")]
+    [Arguments("  ")]
+    public async Task Compile_BlankTarget_IsDsl0005_NotDsl0004(string target) {
+        var result = Compiler().Compile(Valid, "shop.poly", target: target);
+
+        var error = result.Diagnostics.Single();
+        await Assert.That(error.Code).IsEqualTo("DSL0005");
+        await Assert.That(error.Message).IsEqualTo("Host target is empty. Known targets: posix.");
+    }
+
+    [Test]
+    public async Task Compile_UnknownTarget_EmptyCatalog_SaysNoHostTargets() {
+        var catalog = ExtensionCatalog.Core;
+        var compiler = new PolyCompiler(catalog, SessionOptions.Bare(catalog));
+
+        var result = compiler.Compile(Valid, "shop.poly", target: "x");
+
+        var error = result.Diagnostics.Single();
+        await Assert.That(error.Code).IsEqualTo("DSL0005");
+        await Assert.That(error.Message).IsEqualTo(
+            "Unknown host target 'x'. This catalog declares no host targets.");
     }
 
     [Test]
@@ -149,6 +276,20 @@ public class PolycCompileTests {
 
         await Assert.That(result.Succeeded).IsTrue();
         await Assert.That(result.Domain!.Extensions).Contains("posix");
+    }
+
+    /// <summary>C-07 pin: a known target needs no loaded library; a null target is not validated.</summary>
+    [Test]
+    public async Task Compile_KnownTarget_NoLibraryLoaded_AndNullTarget_Succeed() {
+        const string document = "domain Shop\n\nOrder: entity { Total: Number }\n";
+
+        var posix = Compiler().Compile(document, "shop.poly", target: "posix");
+        var none = Compiler().Compile(document, "shop.poly", target: null);
+
+        await Assert.That(posix.Succeeded).IsTrue();
+        await Assert.That(posix.Diagnostics.Where(d => d.IsError).Count()).IsEqualTo(0);
+        await Assert.That(none.Succeeded).IsTrue();
+        await Assert.That(none.Files.Count).IsEqualTo(posix.Files.Count);
     }
 
     [Test]

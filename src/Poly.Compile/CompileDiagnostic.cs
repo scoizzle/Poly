@@ -42,5 +42,6 @@ public static class DiagnosticCodes {
     public const string UnknownExtension = "DSL0002";
     public const string DuplicateExtension = "DSL0003";
     public const string Refused = "DSL0004";
+    public const string UnknownTarget = "DSL0005";
     public const string AnalysisUncoded = "DM0000";
 }

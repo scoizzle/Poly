@@ -40,7 +40,7 @@ jobs:
 
       # Four deadlines, each a little after the one before, so the earliest that can act does:
       #   1. --timeout 10m in the test host ends an async hang cleanly, with a summary (exit 3).
-      #   2. scripts/run-with-deadline.sh 90 SIGKILLs the whole process group at 10m30s: a host
+      #   2. scripts/run-with-deadline.sh 630 SIGKILLs the whole process group at 10m30s: a host
       #      blocked on a synchronous wait ignores a polite stop (PR #878: the step timeout did
       #      not end it and the job was cancelled, so nothing below ever ran). The step then
       #      FAILS, which is what lets the next two steps run.
@@ -51,9 +51,9 @@ jobs:
         id: tests
         timeout-minutes: 12
         run: >
-          scripts/run-with-deadline.sh 90
+          scripts/run-with-deadline.sh 630
           dotnet run --project Poly.Tests/Poly.Tests.csproj --no-restore --
-          --treenode-filter "/*/*/ScratchHangTests/*" --timeout 1m
+          --timeout 10m
           --diagnostic --diagnostic-output-directory "$RUNNER_TEMP/test-diag" --diagnostic-synchronous-write
 
       # Runs on every build, so each green run proves the parser still matches the log: it fails

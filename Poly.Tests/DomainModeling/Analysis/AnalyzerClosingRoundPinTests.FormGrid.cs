@@ -1,9 +1,11 @@
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Libraries.Temporal;
 using Poly.DomainModeling.Ontology;
+using Poly.DomainModeling.Ontology.Constraints;
 using Poly.DomainModeling.Ontology.Contract;
 using Poly.DomainModeling.Ontology.Effects;
 
@@ -35,7 +37,9 @@ public partial class AnalyzerClosingRoundPinTests {
         Func<DomainExpression>? InFunction = null,
         bool Binder = false,
         bool Owned = false,
-        bool Peer = false);
+        bool Peer = false,
+        bool Extended = false,
+        bool Cash = false);
 
     private static DomainExpression A(string parameter) => DomainExpression.Parameter(parameter);
 
@@ -113,7 +117,8 @@ public partial class AnalyzerClosingRoundPinTests {
     /// </summary>
     private static Domain GridDomain(
         IReadOnlyList<Effect> tick, IReadOnlyList<Property>? extra = null, IReadOnlyList<DomainFunction>? functions = null,
-        bool owned = false, bool peer = false) {
+        bool owned = false, bool peer = false, bool extended = false, bool cash = false,
+        IReadOnlyList<Policy>? policies = null, IReadOnlyList<Policy>? tickPolicies = null, IReadOnlyList<Stage>? stages = null) {
         List<Property> props = [
             new("N", Ref("Number"), []), new("M", Ref("Number"), []), new("C", Ref("Decimal"), []),
             new("Name", Ref("Text"), []), new("Flag", Ref("Boolean"), []), new("Due", Ref("Date"), []),
@@ -123,10 +128,10 @@ public partial class AnalyzerClosingRoundPinTests {
         if (owned) props.Add(new("Cost", Ref("Money"), []));
         if (extra is not null) props.AddRange(extra);
         List<DmAction> actions = [
-            new("Tick", InvocationResult.Void, [], tick, []),
+            new("Tick", InvocationResult.Void, [], tick, tickPolicies ?? []),
             .. GridTypes.Select(t => new DmAction($"Callee_{t}", InvocationResult.Void, [new Property("X", Ref(t), [])], [], [])),
         ];
-        var order = new Entity("Order", props, peer ? [.. actions.Skip(1)] : actions, [], []);
+        var order = new Entity("Order", props, peer ? [.. actions.Skip(1)] : actions, policies ?? [], stages ?? []);
         if (peer)
             order = order with { Subscriptions = [new StageSubscription("parts", "Done", tick, peerBinding: "o")] };
         var boxes = GridTypes.Select(t => (DomainType)new Entity($"Box_{t}", [new Property("W", Ref(t), [])], [], [], []));
@@ -145,10 +150,27 @@ public partial class AnalyzerClosingRoundPinTests {
                     new Stage("Done", [], [], [], []),
                 ],
             } : t)];
-        var domain = DomainTestFactory.Create("T", [.. types, order, .. boxes], [
+        List<Relationship> relationships = [
             new Relationship("part", Ref("Order"), Ref("Part"), RelationshipCardinality.OneToOne, []),
             new Relationship("parts", Ref("Order"), Ref("Part"), RelationshipCardinality.OneToMany, []),
-        ]);
+        ];
+        if (extended || cash) {
+            // F3 (fix round 1): an optional, an entity-typed and (cash only) a value-typed member behind the prefix,
+            // and a second to-one hop to Book. Only the forms that need them get them, so the master cells of the
+            // first grid keep their fixture.
+            types = [.. types.Select(t => t is Entity { Name: "Part" } part ? part with {
+                Properties = [
+                    .. part.Properties,
+                    .. extended
+                        ? new[] { new Property("Opt", Ref("Number"), [new OptionalConstraint()]), new Property("Owner", Ref("Widget"), []) }
+                        : [],
+                    .. cash ? new[] { new Property("Cash", Ref("Money"), []) } : [],
+                ],
+            } : t)];
+            types.Add(new Entity("Book", [new Property("Qty", Ref("Number"), []), new Property("Title", Ref("Text"), [])], [], [], []));
+            relationships.Add(new Relationship("book", Ref("Part"), Ref("Book"), RelationshipCardinality.OneToOne, []));
+        }
+        var domain = DomainTestFactory.Create("T", [.. types, order, .. boxes], relationships);
         return domain with { Functions = fns, Extensions = [ExtensionCatalog.TemporalId] };
     }
 
@@ -198,21 +220,21 @@ public partial class AnalyzerClosingRoundPinTests {
                 new Property("c", Ref("Decimal"), []), new Property("d", Ref("Date"), []),
                 new Property("f", Ref("Boolean"), []),
             ], Ref(position["return ".Length..]), form.InFunction());
-            return Run(GridDomain([], functions: [function]));
+            return Run(GridDomain([], functions: [function], extended: form.Extended, cash: form.Cash));
         }
         if (position.StartsWith("default ", StringComparison.Ordinal)) {
             if (form.Binder || form.Peer) return "n/a";
             var type = position["default ".Length..];
             return Run(GridDomain([], [new Property($"D_{type}", Ref(type), [new DefaultValueConstraint(form.InEntity())])],
-                owned: form.Owned));
+                owned: form.Owned, extended: form.Extended, cash: form.Cash));
         }
         if (form.Binder && position == "for where form")
-            return Run(GridDomain([new ForEachEffect("p", "parts", form.InEntity(), [])]));
+            return Run(GridDomain([new ForEachEffect("p", "parts", form.InEntity(), [])], extended: form.Extended, cash: form.Cash));
         Effect effect = position == "for where form"
             ? new ForEachEffect("q", "parts", form.InEntity(), [])
             : EffectAt(position, form.InEntity) ?? throw new InvalidOperationException(position);
         if (form.Binder) effect = new ForEachEffect("p", "parts", null, [effect]);
-        return Run(GridDomain([effect], owned: form.Owned, peer: form.Peer));
+        return Run(GridDomain([effect], owned: form.Owned, peer: form.Peer, extended: form.Extended, cash: form.Cash));
     }
 
     /// <summary>One line per (form, position): <c>form | position = verdict</c>.</summary>
@@ -221,6 +243,145 @@ public partial class AnalyzerClosingRoundPinTests {
         foreach (var form in Forms)
             foreach (var position in GridPositions())
                 lines.Add($"{form.Label} | {position} = {GridCell(form, position)}");
+        return string.Join('\n', lines);
+    }
+
+    // ── fix round 1, F3: the forms and positions the first grid lacks ──
+
+    private static readonly GridForm[] FormsF3 = [
+        new("N (control)", () => P("N"), () => A("a")),
+        new("part book Qty", () => DomainExpression.RelationshipNav("part", Nav("book", "Qty")), Extended: true),
+        new("p book Qty", () => DomainExpression.RelationshipNav("p", Nav("book", "Qty")), Binder: true, Extended: true),
+        new("part Opt", () => Nav("part", "Opt"), Extended: true),
+        new("part Owner", () => Nav("part", "Owner"), Extended: true),
+        new("part Cash", () => Nav("part", "Cash"), Cash: true),
+        new("match { Flag -> N, else -> N + M }",
+            () => DomainExpression.Match([new MatchArm(P("Flag"), P("N"))], DomainExpression.Add(P("N"), P("M"))),
+            () => DomainExpression.Match([new MatchArm(A("f"), A("a"))], DomainExpression.Add(A("a"), A("b")))),
+        new("match { Flag -> null, else -> N + M }",
+            () => DomainExpression.Match([new MatchArm(P("Flag"), DomainExpression.Literal(null))], DomainExpression.Add(P("N"), P("M"))),
+            () => DomainExpression.Match([new MatchArm(A("f"), DomainExpression.Literal(null))], DomainExpression.Add(A("a"), A("b")))),
+    ];
+
+    /// <summary>The positions that are not an action effect: a policy, an action guard, a stage guard and onEntry.</summary>
+    internal static readonly string[] PositionsF3 = [
+        "policy form == Number", "policy form == Text", "policy form == null", "policy form != null",
+        "require form == Number", "require form == Text", "stage require form == Text",
+        "onEntry assign Number", "onEntry assign Text",
+    ];
+
+    private static string GridCellF3(GridForm form, string position) {
+        if (!PositionsF3.Contains(position, StringComparer.Ordinal))
+            return GridCell(form, position);
+        if (form.Peer || (form.Binder && !position.StartsWith("onEntry", StringComparison.Ordinal)))
+            return "n/a";
+        DomainExpression Compared(string tail) => tail == "null"
+            ? DomainExpression.Literal(null)
+            : P($"P_{tail}");
+        Policy Guard() {
+            var text = position[(position.IndexOf("form ", StringComparison.Ordinal) + "form ".Length)..];
+            var op = text[..2];
+            var operand = Compared(text[3..]);
+            return new Policy("G", op == "!="
+                ? DomainExpression.NotEqual(form.InEntity(), operand)
+                : DomainExpression.Equal(form.InEntity(), operand));
+        }
+        if (position.StartsWith("policy ", StringComparison.Ordinal))
+            return Run(GridDomain([], extended: form.Extended, cash: form.Cash, owned: form.Owned, policies: [Guard()]));
+        if (position.StartsWith("require ", StringComparison.Ordinal))
+            return Run(GridDomain([], extended: form.Extended, cash: form.Cash, owned: form.Owned, tickPolicies: [Guard()]));
+        if (position.StartsWith("stage require ", StringComparison.Ordinal))
+            return Run(GridDomain([], extended: form.Extended, cash: form.Cash, owned: form.Owned,
+                stages: [new Stage("S", [], [Guard()], [], [])]));
+        Effect entry = AssignTo(position["onEntry assign ".Length..], form.InEntity());
+        if (form.Binder) entry = new ForEachEffect("p", "parts", null, [entry]);
+        return Run(GridDomain([], extended: form.Extended, cash: form.Cash, owned: form.Owned,
+            stages: [new Stage("S", [], [], [entry], [])]));
+    }
+
+    /// <summary>
+    /// The second grid: every form of the first grid in the positions it lacked (policy, guards, onEntry), and the
+    /// forms it lacked (a multi-hop path, a binder hop, an optional, an entity-typed and a value-typed member, a
+    /// form in a match's else and beside a null arm, plus a typed control) in every position.
+    /// </summary>
+    internal static string FormGridF3Rows() {
+        var lines = new List<string> { "form | position = verdict" };
+        foreach (var form in Forms)
+            foreach (var position in PositionsF3)
+                lines.Add($"{form.Label} | {position} = {GridCellF3(form, position)}");
+        foreach (var form in FormsF3)
+            foreach (var position in GridPositions().Concat(PositionsF3))
+                lines.Add($"{form.Label} | {position} = {GridCellF3(form, position)}");
+        return string.Join('\n', lines);
+    }
+
+    // ── fix round 1, F1 and F2: date differences beyond two bare properties; null against an optional path ──
+
+    private static string DslVerdictF1(string body) {
+        var dsl = $$"""
+            domain T
+            uses temporal
+            Part: entity {
+              Due: Date
+              Stamp: DateTime
+              Qty: Number optional
+            }
+            Item: entity {
+              A: Number
+              Due: Date
+              Stamp: DateTime
+              Qty: Number optional
+              Gap: Duration optional
+              part: Part
+              parts: many Part
+              {{body}}
+            }
+            """;
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(new PolyDslParser(dsl).Parse());
+        return Verdict(result.Analysis);
+    }
+
+    internal static readonly (string Label, string Body)[] DateDifferenceCases = [
+        ("control (Due - Due) == (Due - Due)", "Ok: policy { (Due - Due) == (Due - Due) }"),
+        ("(part Due - Due) == (Due - Due)", "Ok: policy { (part Due - Due) == (Due - Due) }"),
+        ("(Due - part Due) == (Due - Due)", "Ok: policy { (Due - part Due) == (Due - Due) }"),
+        ("(part Due - part Due) == (Due - Due)", "Ok: policy { (part Due - part Due) == (Due - Due) }"),
+        ("((Due + A) - Due) == (Due - Due)", "Ok: policy { ((Due + A) - Due) == (Due - Due) }"),
+        ("(Due - (Due + A)) == (Due - Due)", "Ok: policy { (Due - (Due + A)) == (Due - Due) }"),
+        ("control assign Gap to Stamp - Stamp", "Close: action { assign Gap to Stamp - Stamp }"),
+        ("assign Gap to part Stamp - Stamp", "Close: action { assign Gap to part Stamp - Stamp }"),
+        ("assign Gap to (Stamp + A) - Stamp", "Close: action { assign Gap to (Stamp + A) - Stamp }"),
+        ("for p in parts { assign Gap to p Stamp - Stamp }", "Close: action { for p in parts { assign Gap to p Stamp - Stamp } }"),
+        ("mixed assign Gap to part Stamp - Due", "Close: action { assign Gap to part Stamp - Due }"),
+        ("mixed control assign Gap to Stamp - Due", "Close: action { assign Gap to Stamp - Due }"),
+        ("library assign Gap to Now - Stamp", "Close: action { assign Gap to Now - Stamp }"),
+        ("library (Today - Due) == (Due - Due)", "Ok: policy { (Today - Due) == (Due - Due) }"),
+        ("library assign Gap to (Stamp + 1 Days) - Stamp", "Close: action { assign Gap to (Stamp + 1 Days) - Stamp }"),
+    ];
+
+    internal static string DateDifferenceRows() {
+        var lines = new List<string> { "case = verdict" };
+        foreach (var (label, body) in DateDifferenceCases)
+            lines.Add($"{label} = {DslVerdictF1(body)}");
+        return string.Join('\n', lines);
+    }
+
+    /// <summary>F2: <c>null</c> against an optional property, bare and behind a path prefix (optionality is T-06's).</summary>
+    internal static readonly (string Label, string Body)[] OptionalNullCases = [
+        ("Qty is not null", "Ok: policy { Qty is not null }"),
+        ("Qty is null", "Ok: policy { Qty is null }"),
+        ("Qty == null", "Ok: policy { Qty == null }"),
+        ("part Qty is not null", "Ok: policy { part Qty is not null }"),
+        ("part Qty is null", "Ok: policy { part Qty is null }"),
+        ("part Qty == null", "Ok: policy { part Qty == null }"),
+        ("null == part Qty", "Ok: policy { null == part Qty }"),
+        ("for p in parts where p Qty is not null", "Close: action { for p in parts where p Qty is not null { assign A to 1 } }"),
+    ];
+
+    internal static string OptionalNullRows() {
+        var lines = new List<string> { "case = verdict" };
+        foreach (var (label, body) in OptionalNullCases)
+            lines.Add($"{label} = {DslVerdictF1(body)}");
         return string.Join('\n', lines);
     }
 
@@ -305,6 +466,15 @@ public partial class AnalyzerClosingRoundPinTests {
         "Number", "Decimal", "Cents", "Id64", "Int32", "Float", "long", "decimal", "Text", "Boolean", "Color", "Money", "Bin", "Nope",
     ];
 
+    /// <summary>F3: the legacy spellings the first sum grid lacked.</summary>
+    internal static readonly string[] SumPropertyTypesF3 = ["Int", "Int64", "Double"];
+
+    /// <summary>F3: a pack's CLR type-name override, per property type (fork B: analysis honours it).</summary>
+    internal static readonly (string Label, string Name, string Clr)[] SumOverrides = [
+        ("Number -> int", "Number", "int"), ("Decimal -> double", "Decimal", "double"),
+        ("Double -> float", "Double", "float"), ("Int -> short", "Int", "short"),
+    ];
+
     /// <summary><c>sum parts X</c> per property type of <c>X</c>, in a policy and assigned into Number and Decimal.</summary>
     internal static string SumPropertyKindRows() {
         var lines = new List<string> { "sum parts X, X: <type> | position = verdict" };
@@ -333,6 +503,64 @@ public partial class AnalyzerClosingRoundPinTests {
             }
         return string.Join('\n', lines);
     }
+
+    private static Domain SumDomain(string type, string position) {
+        var sum = DomainExpression.Sum("parts", "X");
+        var item = new Entity("Item", [new Property("X", Ref(type), [])], [], [], []);
+        var host = new Entity("Host", [new Property("N", Ref("Number"), []), new Property("C", Ref("Decimal"), [])],
+            position == "policy sum > 0" ? [] : [new DmAction("Set", InvocationResult.Void, [],
+                [new AssignEffect(P(position == "assign Number" ? "N" : "C"), sum)], [])],
+            position == "policy sum > 0" ? [new Policy("Big", DomainExpression.GreaterThan(sum, DomainExpression.Literal(0L)))] : [],
+            []);
+        return DomainTestFactory.Create("T", [
+            new DmPrimitive("Number", PrimitiveSemantics.Number, []),
+            new DmPrimitive("Decimal", PrimitiveSemantics.Decimal, []),
+            item, host,
+        ], [new Relationship("parts", Ref("Host"), Ref("Item"), RelationshipCardinality.OneToMany, [])]);
+    }
+
+    /// <summary>
+    /// The verdict, plus <c>(not numeric)</c> when the sum check itself fired. The legacy spellings are undeclared
+    /// names, so every row carries their DMSEM005 reference error; the marker separates the sum's own DMSEM005.
+    /// </summary>
+    private static string SumVerdict(AnalysisResult analysis) =>
+        Verdict(analysis) + (analysis.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error
+            && d.Message.Contains("which is not numeric", StringComparison.Ordinal)) ? " (not numeric)" : "");
+
+    /// <summary>F3: <c>sum parts X</c> for the legacy spellings Int, Int64 and Double, then under each pack override.</summary>
+    internal static string SumPropertyKindF3Rows() {
+        var lines = new List<string> { "sum parts X, X: <type> [override] | position = verdict" };
+        string[] positions = ["policy sum > 0", "assign Number", "assign Decimal"];
+        foreach (var type in SumPropertyTypesF3)
+            foreach (var position in positions)
+                lines.Add($"{type} | {position} = {SumVerdict(DomainModelAnalyzer.Analyze(SumDomain(type, position)))}");
+        foreach (var (label, name, clr) in SumOverrides)
+            foreach (var position in positions) {
+                var builder = SessionBuilder.CreateEmpty().LoadCore();
+                builder.TypeMaps.OverrideClrTypeName(name, clr);
+                lines.Add($"{name} [{label}] | {position} = {SumVerdict(builder.Build().Analyze(SumDomain(name, position)))}");
+            }
+        return string.Join('\n', lines);
+    }
+
+    [Test]
+    public async Task FormByPositionGridF3_IsMasterPlusTheFlips() =>
+        await Assert.That(GridDifferences(FormGridF3Rows(), MasterPlusFlips("FormGridF3", FormGridExpected.FormGridF3))).IsEqualTo("");
+
+    [Test]
+    public async Task DateDifferenceBeyondTwoProperties_IsMasterPlusTheFlips() =>
+        await Assert.That(GridDifferences(DateDifferenceRows(),
+            MasterPlusFlips("DateDifference", FormGridExpected.DateDifference))).IsEqualTo("");
+
+    [Test]
+    public async Task NullAgainstAnOptionalPath_IsMasterPlusTheFlips() =>
+        await Assert.That(GridDifferences(OptionalNullRows(),
+            MasterPlusFlips("OptionalNull", FormGridExpected.OptionalNull))).IsEqualTo("");
+
+    [Test]
+    public async Task SumOverLegacySpellingsAndPackOverrides_IsMasterPlusTheFlips() =>
+        await Assert.That(GridDifferences(SumPropertyKindF3Rows(),
+            MasterPlusFlips("SumPropertyKindsF3", FormGridExpected.SumPropertyKindsF3))).IsEqualTo("");
 
     [Test]
     public async Task SumOverEachPropertyKind_IsMasterPlusTheFlips() =>
@@ -1628,6 +1856,883 @@ policy (Due + A) + 5 Days < Due = DMSEM003
 assign Due to Stamp + 1 = ok
 assign Stamp to Due + 1 = ok
 assign A to part Due + 5 Days = DMSEM003
+""";
+
+        public const string FormGridF3 = """
+form | position = verdict
+N + M | policy form == Number = ok
+N + M | policy form == Text = ok
+N + M | policy form == null = ok
+N + M | policy form != null = ok
+N + M | require form == Number = ok
+N + M | require form == Text = ok
+N + M | stage require form == Text = ok
+N + M | onEntry assign Number = ok
+N + M | onEntry assign Text = ok
+C + C | policy form == Number = ok
+C + C | policy form == Text = ok
+C + C | policy form == null = ok
+C + C | policy form != null = ok
+C + C | require form == Number = ok
+C + C | require form == Text = ok
+C + C | stage require form == Text = ok
+C + C | onEntry assign Number = ok
+C + C | onEntry assign Text = ok
+Due + N | policy form == Number = ok
+Due + N | policy form == Text = ok
+Due + N | policy form == null = ok
+Due + N | policy form != null = ok
+Due + N | require form == Number = ok
+Due + N | require form == Text = ok
+Due + N | stage require form == Text = ok
+Due + N | onEntry assign Number = ok
+Due + N | onEntry assign Text = ok
+part Qty | policy form == Number = ok
+part Qty | policy form == Text = ok
+part Qty | policy form == null = ok
+part Qty | policy form != null = ok
+part Qty | require form == Number = ok
+part Qty | require form == Text = ok
+part Qty | stage require form == Text = ok
+part Qty | onEntry assign Number = ok
+part Qty | onEntry assign Text = ok
+part Label | policy form == Number = ok
+part Label | policy form == Text = ok
+part Label | policy form == null = ok
+part Label | policy form != null = ok
+part Label | require form == Number = ok
+part Label | require form == Text = ok
+part Label | stage require form == Text = ok
+part Label | onEntry assign Number = ok
+part Label | onEntry assign Text = ok
+part Due | policy form == Number = ok
+part Due | policy form == Text = ok
+part Due | policy form == null = ok
+part Due | policy form != null = ok
+part Due | require form == Number = ok
+part Due | require form == Text = ok
+part Due | stage require form == Text = ok
+part Due | onEntry assign Number = ok
+part Due | onEntry assign Text = ok
+part Tone | policy form == Number = ok
+part Tone | policy form == Text = ok
+part Tone | policy form == null = ok
+part Tone | policy form != null = ok
+part Tone | require form == Number = ok
+part Tone | require form == Text = ok
+part Tone | stage require form == Text = ok
+part Tone | onEntry assign Number = ok
+part Tone | onEntry assign Text = ok
+p Qty | policy form == Number = n/a
+p Qty | policy form == Text = n/a
+p Qty | policy form == null = n/a
+p Qty | policy form != null = n/a
+p Qty | require form == Number = n/a
+p Qty | require form == Text = n/a
+p Qty | stage require form == Text = n/a
+p Qty | onEntry assign Number = ok
+p Qty | onEntry assign Text = ok
+p Label | policy form == Number = n/a
+p Label | policy form == Text = n/a
+p Label | policy form == null = n/a
+p Label | policy form != null = n/a
+p Label | require form == Number = n/a
+p Label | require form == Text = n/a
+p Label | stage require form == Text = n/a
+p Label | onEntry assign Number = ok
+p Label | onEntry assign Text = ok
+o Qty | policy form == Number = n/a
+o Qty | policy form == Text = n/a
+o Qty | policy form == null = n/a
+o Qty | policy form != null = n/a
+o Qty | require form == Number = n/a
+o Qty | require form == Text = n/a
+o Qty | stage require form == Text = n/a
+o Qty | onEntry assign Number = n/a
+o Qty | onEntry assign Text = n/a
+o Label | policy form == Number = n/a
+o Label | policy form == Text = n/a
+o Label | policy form == null = n/a
+o Label | policy form != null = n/a
+o Label | require form == Number = n/a
+o Label | require form == Text = n/a
+o Label | stage require form == Text = n/a
+o Label | onEntry assign Number = n/a
+o Label | onEntry assign Text = n/a
+count parts | policy form == Number = ok
+count parts | policy form == Text = DMSEM003
+count parts | policy form == null = DMSEM003
+count parts | policy form != null = DMSEM003
+count parts | require form == Number = ok
+count parts | require form == Text = DMSEM003
+count parts | stage require form == Text = DMSEM003
+count parts | onEntry assign Number = ok
+count parts | onEntry assign Text = DMSEM003
+sum parts Qty | policy form == Number = ok
+sum parts Qty | policy form == Text = DMSEM003
+sum parts Qty | policy form == null = DMSEM003
+sum parts Qty | policy form != null = DMSEM003
+sum parts Qty | require form == Number = ok
+sum parts Qty | require form == Text = DMSEM003
+sum parts Qty | stage require form == Text = DMSEM003
+sum parts Qty | onEntry assign Number = ok
+sum parts Qty | onEntry assign Text = DMSEM003
+sum parts Price | policy form == Number = ok
+sum parts Price | policy form == Text = DMSEM003
+sum parts Price | policy form == null = DMSEM003
+sum parts Price | policy form != null = DMSEM003
+sum parts Price | require form == Number = ok
+sum parts Price | require form == Text = DMSEM003
+sum parts Price | stage require form == Text = DMSEM003
+sum parts Price | onEntry assign Number = ok
+sum parts Price | onEntry assign Text = DMSEM003
+Cost Amount | policy form == Number = DMSTR006
+Cost Amount | policy form == Text = DMSTR006
+Cost Amount | policy form == null = DMSTR006
+Cost Amount | policy form != null = DMSTR006
+Cost Amount | require form == Number = DMSTR006
+Cost Amount | require form == Text = DMSTR006
+Cost Amount | stage require form == Text = DMSTR006
+Cost Amount | onEntry assign Number = DMSTR006
+Cost Amount | onEntry assign Text = DMSTR006
+match { Flag -> N + M, else -> N } | policy form == Number = ok
+match { Flag -> N + M, else -> N } | policy form == Text = ok
+match { Flag -> N + M, else -> N } | policy form == null = ok
+match { Flag -> N + M, else -> N } | policy form != null = ok
+match { Flag -> N + M, else -> N } | require form == Number = ok
+match { Flag -> N + M, else -> N } | require form == Text = ok
+match { Flag -> N + M, else -> N } | stage require form == Text = ok
+match { Flag -> N + M, else -> N } | onEntry assign Number = ok
+match { Flag -> N + M, else -> N } | onEntry assign Text = ok
+G(N) | policy form == Number = ok
+G(N) | policy form == Text = DMSEM003
+G(N) | policy form == null = DMSEM003
+G(N) | policy form != null = DMSEM003
+G(N) | require form == Number = ok
+G(N) | require form == Text = DMSEM003
+G(N) | stage require form == Text = DMSEM003
+G(N) | onEntry assign Number = ok
+G(N) | onEntry assign Text = DMSEM003
+N (control) | assign Number = ok
+N (control) | assign Decimal = ok
+N (control) | assign Text = DMSEM003
+N (control) | assign Boolean = DMSEM003
+N (control) | assign Date = DMSEM003
+N (control) | assign Color = DMSEM003
+N (control) | assign Widget = ok
+N (control) | create Number = ok
+N (control) | create Decimal = ok
+N (control) | create Text = DMSEM003
+N (control) | create Boolean = DMSEM003
+N (control) | create Date = DMSEM003
+N (control) | create Color = DMSEM003
+N (control) | create Widget = ok
+N (control) | invoke Number = ok
+N (control) | invoke Decimal = ok
+N (control) | invoke Text = DMSEM003
+N (control) | invoke Boolean = DMSEM003
+N (control) | invoke Date = DMSEM003
+N (control) | invoke Color = DMSEM003
+N (control) | invoke Widget = ok
+N (control) | call Number = ok
+N (control) | call Decimal = ok
+N (control) | call Text = DMFUN003
+N (control) | call Boolean = DMFUN003
+N (control) | call Date = DMFUN003
+N (control) | call Color = DMFUN003
+N (control) | call Widget = ok
+N (control) | return Number = ok
+N (control) | return Decimal = ok
+N (control) | return Text = DMFUN006
+N (control) | return Boolean = DMFUN006
+N (control) | return Date = DMFUN006
+N (control) | return Color = DMFUN006
+N (control) | return Widget = ok
+N (control) | default Number = DMSEM003
+N (control) | default Decimal = DMSEM003
+N (control) | default Text = DMSEM003
+N (control) | default Boolean = DMSEM003
+N (control) | default Date = DMSEM003
+N (control) | default Color = DMSEM003
+N (control) | default Widget = ok
+N (control) | form == Number = ok
+N (control) | form == Decimal = ok
+N (control) | form == Text = DMSEM003
+N (control) | form == Boolean = DMSEM003
+N (control) | form == Date = DMSEM003
+N (control) | form == Color = DMSEM003
+N (control) | form == Widget = ok
+N (control) | form == null = DMSEM003
+N (control) | Number == form = ok
+N (control) | Decimal == form = ok
+N (control) | Text == form = DMSEM003
+N (control) | Boolean == form = DMSEM003
+N (control) | Date == form = DMSEM003
+N (control) | Color == form = DMSEM003
+N (control) | Widget == form = ok
+N (control) | null == form = DMSEM003
+N (control) | if form = DMSEM003
+N (control) | for where form = DMSEM003
+N (control) | not form = DMSEM003
+N (control) | form and Flag = DMSEM003
+N (control) | match { form -> 1 } = DMMAT001
+N (control) | form * N = ok
+N (control) | N * form = ok
+N (control) | form * Name = DMSEM003
+N (control) | Name * form = DMSEM003
+N (control) | match arm into Number = ok
+N (control) | match arm into Decimal = ok
+N (control) | match arm into Text = DMMAT002+DMSEM003
+N (control) | match arm into Boolean = DMMAT002+DMSEM003
+N (control) | match arm into Date = DMMAT002+DMSEM003
+N (control) | match arm into Color = DMMAT002+DMSEM003
+N (control) | match arm into Widget = ok
+N (control) | policy form == Number = ok
+N (control) | policy form == Text = DMSEM003
+N (control) | policy form == null = DMSEM003
+N (control) | policy form != null = DMSEM003
+N (control) | require form == Number = ok
+N (control) | require form == Text = DMSEM003
+N (control) | stage require form == Text = DMSEM003
+N (control) | onEntry assign Number = ok
+N (control) | onEntry assign Text = DMSEM003
+part book Qty | assign Number = ok
+part book Qty | assign Decimal = ok
+part book Qty | assign Text = ok
+part book Qty | assign Boolean = ok
+part book Qty | assign Date = ok
+part book Qty | assign Color = ok
+part book Qty | assign Widget = ok
+part book Qty | create Number = ok
+part book Qty | create Decimal = ok
+part book Qty | create Text = ok
+part book Qty | create Boolean = ok
+part book Qty | create Date = ok
+part book Qty | create Color = ok
+part book Qty | create Widget = ok
+part book Qty | invoke Number = ok
+part book Qty | invoke Decimal = ok
+part book Qty | invoke Text = ok
+part book Qty | invoke Boolean = ok
+part book Qty | invoke Date = ok
+part book Qty | invoke Color = ok
+part book Qty | invoke Widget = ok
+part book Qty | call Number = ok
+part book Qty | call Decimal = ok
+part book Qty | call Text = ok
+part book Qty | call Boolean = ok
+part book Qty | call Date = ok
+part book Qty | call Color = ok
+part book Qty | call Widget = ok
+part book Qty | return Number = n/a
+part book Qty | return Decimal = n/a
+part book Qty | return Text = n/a
+part book Qty | return Boolean = n/a
+part book Qty | return Date = n/a
+part book Qty | return Color = n/a
+part book Qty | return Widget = n/a
+part book Qty | default Number = ok
+part book Qty | default Decimal = ok
+part book Qty | default Text = ok
+part book Qty | default Boolean = ok
+part book Qty | default Date = ok
+part book Qty | default Color = ok
+part book Qty | default Widget = ok
+part book Qty | form == Number = ok
+part book Qty | form == Decimal = ok
+part book Qty | form == Text = ok
+part book Qty | form == Boolean = ok
+part book Qty | form == Date = ok
+part book Qty | form == Color = ok
+part book Qty | form == Widget = ok
+part book Qty | form == null = ok
+part book Qty | Number == form = ok
+part book Qty | Decimal == form = ok
+part book Qty | Text == form = ok
+part book Qty | Boolean == form = ok
+part book Qty | Date == form = ok
+part book Qty | Color == form = ok
+part book Qty | Widget == form = ok
+part book Qty | null == form = ok
+part book Qty | if form = ok
+part book Qty | for where form = ok
+part book Qty | not form = ok
+part book Qty | form and Flag = ok
+part book Qty | match { form -> 1 } = ok
+part book Qty | form * N = ok
+part book Qty | N * form = ok
+part book Qty | form * Name = ok
+part book Qty | Name * form = ok
+part book Qty | match arm into Number = ok
+part book Qty | match arm into Decimal = ok
+part book Qty | match arm into Text = ok
+part book Qty | match arm into Boolean = ok
+part book Qty | match arm into Date = ok
+part book Qty | match arm into Color = ok
+part book Qty | match arm into Widget = ok
+part book Qty | policy form == Number = ok
+part book Qty | policy form == Text = ok
+part book Qty | policy form == null = ok
+part book Qty | policy form != null = ok
+part book Qty | require form == Number = ok
+part book Qty | require form == Text = ok
+part book Qty | stage require form == Text = ok
+part book Qty | onEntry assign Number = ok
+part book Qty | onEntry assign Text = ok
+p book Qty | assign Number = ok
+p book Qty | assign Decimal = ok
+p book Qty | assign Text = ok
+p book Qty | assign Boolean = ok
+p book Qty | assign Date = ok
+p book Qty | assign Color = ok
+p book Qty | assign Widget = ok
+p book Qty | create Number = ok
+p book Qty | create Decimal = ok
+p book Qty | create Text = ok
+p book Qty | create Boolean = ok
+p book Qty | create Date = ok
+p book Qty | create Color = ok
+p book Qty | create Widget = ok
+p book Qty | invoke Number = ok
+p book Qty | invoke Decimal = ok
+p book Qty | invoke Text = ok
+p book Qty | invoke Boolean = ok
+p book Qty | invoke Date = ok
+p book Qty | invoke Color = ok
+p book Qty | invoke Widget = ok
+p book Qty | call Number = ok
+p book Qty | call Decimal = ok
+p book Qty | call Text = ok
+p book Qty | call Boolean = ok
+p book Qty | call Date = ok
+p book Qty | call Color = ok
+p book Qty | call Widget = ok
+p book Qty | return Number = n/a
+p book Qty | return Decimal = n/a
+p book Qty | return Text = n/a
+p book Qty | return Boolean = n/a
+p book Qty | return Date = n/a
+p book Qty | return Color = n/a
+p book Qty | return Widget = n/a
+p book Qty | default Number = n/a
+p book Qty | default Decimal = n/a
+p book Qty | default Text = n/a
+p book Qty | default Boolean = n/a
+p book Qty | default Date = n/a
+p book Qty | default Color = n/a
+p book Qty | default Widget = n/a
+p book Qty | form == Number = ok
+p book Qty | form == Decimal = ok
+p book Qty | form == Text = ok
+p book Qty | form == Boolean = ok
+p book Qty | form == Date = ok
+p book Qty | form == Color = ok
+p book Qty | form == Widget = ok
+p book Qty | form == null = ok
+p book Qty | Number == form = ok
+p book Qty | Decimal == form = ok
+p book Qty | Text == form = ok
+p book Qty | Boolean == form = ok
+p book Qty | Date == form = ok
+p book Qty | Color == form = ok
+p book Qty | Widget == form = ok
+p book Qty | null == form = ok
+p book Qty | if form = ok
+p book Qty | for where form = ok
+p book Qty | not form = ok
+p book Qty | form and Flag = ok
+p book Qty | match { form -> 1 } = ok
+p book Qty | form * N = ok
+p book Qty | N * form = ok
+p book Qty | form * Name = ok
+p book Qty | Name * form = ok
+p book Qty | match arm into Number = ok
+p book Qty | match arm into Decimal = ok
+p book Qty | match arm into Text = ok
+p book Qty | match arm into Boolean = ok
+p book Qty | match arm into Date = ok
+p book Qty | match arm into Color = ok
+p book Qty | match arm into Widget = ok
+p book Qty | policy form == Number = n/a
+p book Qty | policy form == Text = n/a
+p book Qty | policy form == null = n/a
+p book Qty | policy form != null = n/a
+p book Qty | require form == Number = n/a
+p book Qty | require form == Text = n/a
+p book Qty | stage require form == Text = n/a
+p book Qty | onEntry assign Number = ok
+p book Qty | onEntry assign Text = ok
+part Opt | assign Number = ok
+part Opt | assign Decimal = ok
+part Opt | assign Text = ok
+part Opt | assign Boolean = ok
+part Opt | assign Date = ok
+part Opt | assign Color = ok
+part Opt | assign Widget = ok
+part Opt | create Number = ok
+part Opt | create Decimal = ok
+part Opt | create Text = ok
+part Opt | create Boolean = ok
+part Opt | create Date = ok
+part Opt | create Color = ok
+part Opt | create Widget = ok
+part Opt | invoke Number = ok
+part Opt | invoke Decimal = ok
+part Opt | invoke Text = ok
+part Opt | invoke Boolean = ok
+part Opt | invoke Date = ok
+part Opt | invoke Color = ok
+part Opt | invoke Widget = ok
+part Opt | call Number = ok
+part Opt | call Decimal = ok
+part Opt | call Text = ok
+part Opt | call Boolean = ok
+part Opt | call Date = ok
+part Opt | call Color = ok
+part Opt | call Widget = ok
+part Opt | return Number = n/a
+part Opt | return Decimal = n/a
+part Opt | return Text = n/a
+part Opt | return Boolean = n/a
+part Opt | return Date = n/a
+part Opt | return Color = n/a
+part Opt | return Widget = n/a
+part Opt | default Number = ok
+part Opt | default Decimal = ok
+part Opt | default Text = ok
+part Opt | default Boolean = ok
+part Opt | default Date = ok
+part Opt | default Color = ok
+part Opt | default Widget = ok
+part Opt | form == Number = ok
+part Opt | form == Decimal = ok
+part Opt | form == Text = ok
+part Opt | form == Boolean = ok
+part Opt | form == Date = ok
+part Opt | form == Color = ok
+part Opt | form == Widget = ok
+part Opt | form == null = ok
+part Opt | Number == form = ok
+part Opt | Decimal == form = ok
+part Opt | Text == form = ok
+part Opt | Boolean == form = ok
+part Opt | Date == form = ok
+part Opt | Color == form = ok
+part Opt | Widget == form = ok
+part Opt | null == form = ok
+part Opt | if form = ok
+part Opt | for where form = ok
+part Opt | not form = ok
+part Opt | form and Flag = ok
+part Opt | match { form -> 1 } = ok
+part Opt | form * N = ok
+part Opt | N * form = ok
+part Opt | form * Name = ok
+part Opt | Name * form = ok
+part Opt | match arm into Number = ok
+part Opt | match arm into Decimal = ok
+part Opt | match arm into Text = ok
+part Opt | match arm into Boolean = ok
+part Opt | match arm into Date = ok
+part Opt | match arm into Color = ok
+part Opt | match arm into Widget = ok
+part Opt | policy form == Number = ok
+part Opt | policy form == Text = ok
+part Opt | policy form == null = ok
+part Opt | policy form != null = ok
+part Opt | require form == Number = ok
+part Opt | require form == Text = ok
+part Opt | stage require form == Text = ok
+part Opt | onEntry assign Number = ok
+part Opt | onEntry assign Text = ok
+part Owner | assign Number = ok
+part Owner | assign Decimal = ok
+part Owner | assign Text = ok
+part Owner | assign Boolean = ok
+part Owner | assign Date = ok
+part Owner | assign Color = ok
+part Owner | assign Widget = ok
+part Owner | create Number = ok
+part Owner | create Decimal = ok
+part Owner | create Text = ok
+part Owner | create Boolean = ok
+part Owner | create Date = ok
+part Owner | create Color = ok
+part Owner | create Widget = ok
+part Owner | invoke Number = ok
+part Owner | invoke Decimal = ok
+part Owner | invoke Text = ok
+part Owner | invoke Boolean = ok
+part Owner | invoke Date = ok
+part Owner | invoke Color = ok
+part Owner | invoke Widget = ok
+part Owner | call Number = ok
+part Owner | call Decimal = ok
+part Owner | call Text = ok
+part Owner | call Boolean = ok
+part Owner | call Date = ok
+part Owner | call Color = ok
+part Owner | call Widget = ok
+part Owner | return Number = n/a
+part Owner | return Decimal = n/a
+part Owner | return Text = n/a
+part Owner | return Boolean = n/a
+part Owner | return Date = n/a
+part Owner | return Color = n/a
+part Owner | return Widget = n/a
+part Owner | default Number = ok
+part Owner | default Decimal = ok
+part Owner | default Text = ok
+part Owner | default Boolean = ok
+part Owner | default Date = ok
+part Owner | default Color = ok
+part Owner | default Widget = ok
+part Owner | form == Number = ok
+part Owner | form == Decimal = ok
+part Owner | form == Text = ok
+part Owner | form == Boolean = ok
+part Owner | form == Date = ok
+part Owner | form == Color = ok
+part Owner | form == Widget = ok
+part Owner | form == null = ok
+part Owner | Number == form = ok
+part Owner | Decimal == form = ok
+part Owner | Text == form = ok
+part Owner | Boolean == form = ok
+part Owner | Date == form = ok
+part Owner | Color == form = ok
+part Owner | Widget == form = ok
+part Owner | null == form = ok
+part Owner | if form = ok
+part Owner | for where form = ok
+part Owner | not form = ok
+part Owner | form and Flag = ok
+part Owner | match { form -> 1 } = ok
+part Owner | form * N = ok
+part Owner | N * form = ok
+part Owner | form * Name = ok
+part Owner | Name * form = ok
+part Owner | match arm into Number = ok
+part Owner | match arm into Decimal = ok
+part Owner | match arm into Text = ok
+part Owner | match arm into Boolean = ok
+part Owner | match arm into Date = ok
+part Owner | match arm into Color = ok
+part Owner | match arm into Widget = ok
+part Owner | policy form == Number = ok
+part Owner | policy form == Text = ok
+part Owner | policy form == null = ok
+part Owner | policy form != null = ok
+part Owner | require form == Number = ok
+part Owner | require form == Text = ok
+part Owner | stage require form == Text = ok
+part Owner | onEntry assign Number = ok
+part Owner | onEntry assign Text = ok
+part Cash | assign Number = ok
+part Cash | assign Decimal = ok
+part Cash | assign Text = ok
+part Cash | assign Boolean = ok
+part Cash | assign Date = ok
+part Cash | assign Color = ok
+part Cash | assign Widget = ok
+part Cash | create Number = ok
+part Cash | create Decimal = ok
+part Cash | create Text = ok
+part Cash | create Boolean = ok
+part Cash | create Date = ok
+part Cash | create Color = ok
+part Cash | create Widget = ok
+part Cash | invoke Number = ok
+part Cash | invoke Decimal = ok
+part Cash | invoke Text = ok
+part Cash | invoke Boolean = ok
+part Cash | invoke Date = ok
+part Cash | invoke Color = ok
+part Cash | invoke Widget = ok
+part Cash | call Number = ok
+part Cash | call Decimal = ok
+part Cash | call Text = ok
+part Cash | call Boolean = ok
+part Cash | call Date = ok
+part Cash | call Color = ok
+part Cash | call Widget = ok
+part Cash | return Number = n/a
+part Cash | return Decimal = n/a
+part Cash | return Text = n/a
+part Cash | return Boolean = n/a
+part Cash | return Date = n/a
+part Cash | return Color = n/a
+part Cash | return Widget = n/a
+part Cash | default Number = ok
+part Cash | default Decimal = ok
+part Cash | default Text = ok
+part Cash | default Boolean = ok
+part Cash | default Date = ok
+part Cash | default Color = ok
+part Cash | default Widget = ok
+part Cash | form == Number = ok
+part Cash | form == Decimal = ok
+part Cash | form == Text = ok
+part Cash | form == Boolean = ok
+part Cash | form == Date = ok
+part Cash | form == Color = ok
+part Cash | form == Widget = ok
+part Cash | form == null = ok
+part Cash | Number == form = ok
+part Cash | Decimal == form = ok
+part Cash | Text == form = ok
+part Cash | Boolean == form = ok
+part Cash | Date == form = ok
+part Cash | Color == form = ok
+part Cash | Widget == form = ok
+part Cash | null == form = ok
+part Cash | if form = ok
+part Cash | for where form = ok
+part Cash | not form = ok
+part Cash | form and Flag = ok
+part Cash | match { form -> 1 } = ok
+part Cash | form * N = ok
+part Cash | N * form = ok
+part Cash | form * Name = ok
+part Cash | Name * form = ok
+part Cash | match arm into Number = ok
+part Cash | match arm into Decimal = ok
+part Cash | match arm into Text = ok
+part Cash | match arm into Boolean = ok
+part Cash | match arm into Date = ok
+part Cash | match arm into Color = ok
+part Cash | match arm into Widget = ok
+part Cash | policy form == Number = DMSTR006
+part Cash | policy form == Text = DMSTR006
+part Cash | policy form == null = DMSTR006
+part Cash | policy form != null = DMSTR006
+part Cash | require form == Number = DMSTR006
+part Cash | require form == Text = DMSTR006
+part Cash | stage require form == Text = DMSTR006
+part Cash | onEntry assign Number = DMSTR006
+part Cash | onEntry assign Text = DMSTR006
+match { Flag -> N, else -> N + M } | assign Number = ok
+match { Flag -> N, else -> N + M } | assign Decimal = ok
+match { Flag -> N, else -> N + M } | assign Text = ok
+match { Flag -> N, else -> N + M } | assign Boolean = ok
+match { Flag -> N, else -> N + M } | assign Date = ok
+match { Flag -> N, else -> N + M } | assign Color = ok
+match { Flag -> N, else -> N + M } | assign Widget = ok
+match { Flag -> N, else -> N + M } | create Number = ok
+match { Flag -> N, else -> N + M } | create Decimal = ok
+match { Flag -> N, else -> N + M } | create Text = ok
+match { Flag -> N, else -> N + M } | create Boolean = ok
+match { Flag -> N, else -> N + M } | create Date = ok
+match { Flag -> N, else -> N + M } | create Color = ok
+match { Flag -> N, else -> N + M } | create Widget = ok
+match { Flag -> N, else -> N + M } | invoke Number = ok
+match { Flag -> N, else -> N + M } | invoke Decimal = ok
+match { Flag -> N, else -> N + M } | invoke Text = ok
+match { Flag -> N, else -> N + M } | invoke Boolean = ok
+match { Flag -> N, else -> N + M } | invoke Date = ok
+match { Flag -> N, else -> N + M } | invoke Color = ok
+match { Flag -> N, else -> N + M } | invoke Widget = ok
+match { Flag -> N, else -> N + M } | call Number = ok
+match { Flag -> N, else -> N + M } | call Decimal = ok
+match { Flag -> N, else -> N + M } | call Text = ok
+match { Flag -> N, else -> N + M } | call Boolean = ok
+match { Flag -> N, else -> N + M } | call Date = ok
+match { Flag -> N, else -> N + M } | call Color = ok
+match { Flag -> N, else -> N + M } | call Widget = ok
+match { Flag -> N, else -> N + M } | return Number = DMFUN005
+match { Flag -> N, else -> N + M } | return Decimal = DMFUN005
+match { Flag -> N, else -> N + M } | return Text = DMFUN005
+match { Flag -> N, else -> N + M } | return Boolean = DMFUN005
+match { Flag -> N, else -> N + M } | return Date = DMFUN005
+match { Flag -> N, else -> N + M } | return Color = DMFUN005
+match { Flag -> N, else -> N + M } | return Widget = DMFUN005
+match { Flag -> N, else -> N + M } | default Number = ok
+match { Flag -> N, else -> N + M } | default Decimal = ok
+match { Flag -> N, else -> N + M } | default Text = ok
+match { Flag -> N, else -> N + M } | default Boolean = ok
+match { Flag -> N, else -> N + M } | default Date = ok
+match { Flag -> N, else -> N + M } | default Color = ok
+match { Flag -> N, else -> N + M } | default Widget = ok
+match { Flag -> N, else -> N + M } | form == Number = ok
+match { Flag -> N, else -> N + M } | form == Decimal = ok
+match { Flag -> N, else -> N + M } | form == Text = ok
+match { Flag -> N, else -> N + M } | form == Boolean = ok
+match { Flag -> N, else -> N + M } | form == Date = ok
+match { Flag -> N, else -> N + M } | form == Color = ok
+match { Flag -> N, else -> N + M } | form == Widget = ok
+match { Flag -> N, else -> N + M } | form == null = ok
+match { Flag -> N, else -> N + M } | Number == form = ok
+match { Flag -> N, else -> N + M } | Decimal == form = ok
+match { Flag -> N, else -> N + M } | Text == form = ok
+match { Flag -> N, else -> N + M } | Boolean == form = ok
+match { Flag -> N, else -> N + M } | Date == form = ok
+match { Flag -> N, else -> N + M } | Color == form = ok
+match { Flag -> N, else -> N + M } | Widget == form = ok
+match { Flag -> N, else -> N + M } | null == form = ok
+match { Flag -> N, else -> N + M } | if form = ok
+match { Flag -> N, else -> N + M } | for where form = ok
+match { Flag -> N, else -> N + M } | not form = ok
+match { Flag -> N, else -> N + M } | form and Flag = ok
+match { Flag -> N, else -> N + M } | match { form -> 1 } = ok
+match { Flag -> N, else -> N + M } | form * N = ok
+match { Flag -> N, else -> N + M } | N * form = ok
+match { Flag -> N, else -> N + M } | form * Name = ok
+match { Flag -> N, else -> N + M } | Name * form = ok
+match { Flag -> N, else -> N + M } | match arm into Number = ok
+match { Flag -> N, else -> N + M } | match arm into Decimal = ok
+match { Flag -> N, else -> N + M } | match arm into Text = ok
+match { Flag -> N, else -> N + M } | match arm into Boolean = ok
+match { Flag -> N, else -> N + M } | match arm into Date = ok
+match { Flag -> N, else -> N + M } | match arm into Color = ok
+match { Flag -> N, else -> N + M } | match arm into Widget = ok
+match { Flag -> N, else -> N + M } | policy form == Number = ok
+match { Flag -> N, else -> N + M } | policy form == Text = ok
+match { Flag -> N, else -> N + M } | policy form == null = ok
+match { Flag -> N, else -> N + M } | policy form != null = ok
+match { Flag -> N, else -> N + M } | require form == Number = ok
+match { Flag -> N, else -> N + M } | require form == Text = ok
+match { Flag -> N, else -> N + M } | stage require form == Text = ok
+match { Flag -> N, else -> N + M } | onEntry assign Number = ok
+match { Flag -> N, else -> N + M } | onEntry assign Text = ok
+match { Flag -> null, else -> N + M } | assign Number = ok
+match { Flag -> null, else -> N + M } | assign Decimal = ok
+match { Flag -> null, else -> N + M } | assign Text = ok
+match { Flag -> null, else -> N + M } | assign Boolean = ok
+match { Flag -> null, else -> N + M } | assign Date = ok
+match { Flag -> null, else -> N + M } | assign Color = ok
+match { Flag -> null, else -> N + M } | assign Widget = ok
+match { Flag -> null, else -> N + M } | create Number = ok
+match { Flag -> null, else -> N + M } | create Decimal = ok
+match { Flag -> null, else -> N + M } | create Text = ok
+match { Flag -> null, else -> N + M } | create Boolean = ok
+match { Flag -> null, else -> N + M } | create Date = ok
+match { Flag -> null, else -> N + M } | create Color = ok
+match { Flag -> null, else -> N + M } | create Widget = ok
+match { Flag -> null, else -> N + M } | invoke Number = ok
+match { Flag -> null, else -> N + M } | invoke Decimal = ok
+match { Flag -> null, else -> N + M } | invoke Text = ok
+match { Flag -> null, else -> N + M } | invoke Boolean = ok
+match { Flag -> null, else -> N + M } | invoke Date = ok
+match { Flag -> null, else -> N + M } | invoke Color = ok
+match { Flag -> null, else -> N + M } | invoke Widget = ok
+match { Flag -> null, else -> N + M } | call Number = ok
+match { Flag -> null, else -> N + M } | call Decimal = ok
+match { Flag -> null, else -> N + M } | call Text = ok
+match { Flag -> null, else -> N + M } | call Boolean = ok
+match { Flag -> null, else -> N + M } | call Date = ok
+match { Flag -> null, else -> N + M } | call Color = ok
+match { Flag -> null, else -> N + M } | call Widget = ok
+match { Flag -> null, else -> N + M } | return Number = DMFUN005
+match { Flag -> null, else -> N + M } | return Decimal = DMFUN005
+match { Flag -> null, else -> N + M } | return Text = DMFUN005
+match { Flag -> null, else -> N + M } | return Boolean = DMFUN005
+match { Flag -> null, else -> N + M } | return Date = DMFUN005
+match { Flag -> null, else -> N + M } | return Color = DMFUN005
+match { Flag -> null, else -> N + M } | return Widget = DMFUN005
+match { Flag -> null, else -> N + M } | default Number = ok
+match { Flag -> null, else -> N + M } | default Decimal = ok
+match { Flag -> null, else -> N + M } | default Text = ok
+match { Flag -> null, else -> N + M } | default Boolean = ok
+match { Flag -> null, else -> N + M } | default Date = ok
+match { Flag -> null, else -> N + M } | default Color = ok
+match { Flag -> null, else -> N + M } | default Widget = ok
+match { Flag -> null, else -> N + M } | form == Number = ok
+match { Flag -> null, else -> N + M } | form == Decimal = ok
+match { Flag -> null, else -> N + M } | form == Text = ok
+match { Flag -> null, else -> N + M } | form == Boolean = ok
+match { Flag -> null, else -> N + M } | form == Date = ok
+match { Flag -> null, else -> N + M } | form == Color = ok
+match { Flag -> null, else -> N + M } | form == Widget = ok
+match { Flag -> null, else -> N + M } | form == null = ok
+match { Flag -> null, else -> N + M } | Number == form = ok
+match { Flag -> null, else -> N + M } | Decimal == form = ok
+match { Flag -> null, else -> N + M } | Text == form = ok
+match { Flag -> null, else -> N + M } | Boolean == form = ok
+match { Flag -> null, else -> N + M } | Date == form = ok
+match { Flag -> null, else -> N + M } | Color == form = ok
+match { Flag -> null, else -> N + M } | Widget == form = ok
+match { Flag -> null, else -> N + M } | null == form = ok
+match { Flag -> null, else -> N + M } | if form = ok
+match { Flag -> null, else -> N + M } | for where form = ok
+match { Flag -> null, else -> N + M } | not form = ok
+match { Flag -> null, else -> N + M } | form and Flag = ok
+match { Flag -> null, else -> N + M } | match { form -> 1 } = ok
+match { Flag -> null, else -> N + M } | form * N = ok
+match { Flag -> null, else -> N + M } | N * form = ok
+match { Flag -> null, else -> N + M } | form * Name = ok
+match { Flag -> null, else -> N + M } | Name * form = ok
+match { Flag -> null, else -> N + M } | match arm into Number = ok
+match { Flag -> null, else -> N + M } | match arm into Decimal = ok
+match { Flag -> null, else -> N + M } | match arm into Text = ok
+match { Flag -> null, else -> N + M } | match arm into Boolean = ok
+match { Flag -> null, else -> N + M } | match arm into Date = ok
+match { Flag -> null, else -> N + M } | match arm into Color = ok
+match { Flag -> null, else -> N + M } | match arm into Widget = ok
+match { Flag -> null, else -> N + M } | policy form == Number = ok
+match { Flag -> null, else -> N + M } | policy form == Text = ok
+match { Flag -> null, else -> N + M } | policy form == null = ok
+match { Flag -> null, else -> N + M } | policy form != null = ok
+match { Flag -> null, else -> N + M } | require form == Number = ok
+match { Flag -> null, else -> N + M } | require form == Text = ok
+match { Flag -> null, else -> N + M } | stage require form == Text = ok
+match { Flag -> null, else -> N + M } | onEntry assign Number = ok
+match { Flag -> null, else -> N + M } | onEntry assign Text = ok
+""";
+
+        public const string DateDifference = """
+case = verdict
+control (Due - Due) == (Due - Due) = ok
+(part Due - Due) == (Due - Due) = ok
+(Due - part Due) == (Due - Due) = ok
+(part Due - part Due) == (Due - Due) = ok
+((Due + A) - Due) == (Due - Due) = ok
+(Due - (Due + A)) == (Due - Due) = ok
+control assign Gap to Stamp - Stamp = ok
+assign Gap to part Stamp - Stamp = ok
+assign Gap to (Stamp + A) - Stamp = ok
+for p in parts { assign Gap to p Stamp - Stamp } = ok
+mixed assign Gap to part Stamp - Due = ok
+mixed control assign Gap to Stamp - Due = DMSEM003
+library assign Gap to Now - Stamp = DMSEM003
+library (Today - Due) == (Due - Due) = DMSEM003
+library assign Gap to (Stamp + 1 Days) - Stamp = DMSEM003
+""";
+
+        public const string OptionalNull = """
+case = verdict
+Qty is not null = DMSEM003
+Qty is null = DMSEM003
+Qty == null = DMSEM003
+part Qty is not null = ok
+part Qty is null = ok
+part Qty == null = ok
+null == part Qty = ok
+for p in parts where p Qty is not null = ok
+""";
+
+        public const string SumPropertyKindsF3 = """
+sum parts X, X: <type> [override] | position = verdict
+Int | policy sum > 0 = DMSEM005
+Int | assign Number = DMSEM005
+Int | assign Decimal = DMSEM005
+Int64 | policy sum > 0 = DMSEM005
+Int64 | assign Number = DMSEM005
+Int64 | assign Decimal = DMSEM005
+Double | policy sum > 0 = DMSEM005
+Double | assign Number = DMSEM005
+Double | assign Decimal = DMSEM005
+Number [Number -> int] | policy sum > 0 = ok
+Number [Number -> int] | assign Number = ok
+Number [Number -> int] | assign Decimal = ok
+Decimal [Decimal -> double] | policy sum > 0 = ok
+Decimal [Decimal -> double] | assign Number = ok
+Decimal [Decimal -> double] | assign Decimal = ok
+Double [Double -> float] | policy sum > 0 = DMSEM005
+Double [Double -> float] | assign Number = DMSEM005
+Double [Double -> float] | assign Decimal = DMSEM005
+Int [Int -> short] | policy sum > 0 = DMSEM005
+Int [Int -> short] | assign Number = DMSEM005
+Int [Int -> short] | assign Decimal = DMSEM005
 """;
 
         public const string SumPropertyKinds = """

@@ -360,7 +360,8 @@ public class ActionScopeTouchShapeTests {
     /// The predicted hunk classes, read off every checked-in golden and demo file: H1 a Touch first in each wrapper's
     /// try, H2 one in each handler, H3 one first in each <c>Attach*</c>, H4 one first in each <c>Register*Subscriber</c>,
     /// H5 the entry depth captured and assigned back in each notify method, H6 <c>ActionScope.Create</c> after
-    /// <c>new</c> in each factory. The counts are the files' own mutators on the merged head (S-13a included): a file
+    /// <c>new</c> in each factory body. L-04b: every static <c>Create</c> is a root-scope wrapper (an H1 with no Touch of its
+    /// own: the body records and the entry method touches), and every <c>Create{Nav}</c> an H1 with a Touch. The counts are the files' own mutators on the merged head (S-13a included): a file
     /// outside the predicted set, or a mutator without its hunk, fails here.
     /// </summary>
     [Test]
@@ -397,14 +398,14 @@ public class ActionScopeTouchShapeTests {
                 method[(method.IndexOf('{') + 1)..].TrimStart().Split('\n')[0].Trim();
 
             Each("H1", @"DomainResult(<[\w.?<>]+>)? \w+\([^)]*\)\n\s*\{\n\s*var __scope = ",
-                m => System.Text.RegularExpressions.Regex.IsMatch(m, @"try\n\s*\{\n\s*Poly\.Runtime\.ActionScope\.Touch\(this\);\n\s*var __result = "));
+                m => System.Text.RegularExpressions.Regex.IsMatch(m, @"try\n\s*\{\n\s*(Poly\.Runtime\.ActionScope\.Touch\(this\);\n\s*var __result = |var __result = \w+\.__BodyOfCreate\()"));
             Each("H2", @"DomainResult When(Each|Any|All)\w*\(", m => m.Contains(Touch, StringComparison.Ordinal));
             Each("H3", @"void Attach\w+\(", m => FirstStatement(m) == Touch);
             Each("H4", @"void Register\w+Subscriber\(", m => FirstStatement(m) == Touch);
             Each("H5", @"DomainResult Notify\w+Subscribers\(", m =>
                 FirstStatement(m).StartsWith("var __depth = this.EnterNotifyCascade(", StringComparison.Ordinal)
                 && m.Contains("this.ExitNotifyCascade(__depth);", StringComparison.Ordinal));
-            Each("H6", @"static DomainResult<\w+> Create\(", m => {
+            Each("H6", @"static DomainResult<\w+> __BodyOfCreate\(", m => {
                 var entity = System.Text.RegularExpressions.Regex.Match(m, @"DomainResult<(\w+)>").Groups[1].Value;
                 return System.Text.RegularExpressions.Regex.IsMatch(m,
                     $@"var created = new {entity}\([^\n]*\);\n\s*Poly\.Runtime\.ActionScope\.Create\(created, ""{entity}""\);");
@@ -420,7 +421,7 @@ public class ActionScopeTouchShapeTests {
         await Assert.That(string.Join("\n", problems)).IsEqualTo("");
         await Assert.That((goldens, demo)).IsEqualTo((48, 5));
         await Assert.That(string.Join(",", counts.Select(c => $"{c.Key}={c.Value}")))
-            .IsEqualTo("H1=118,H2=23,H3=29,H4=20,H5=18,H6=53");
+            .IsEqualTo("H1=192,H2=23,H3=29,H4=20,H5=18,H6=53");
     }
 
     private static Node Strip(Node body) => body switch {

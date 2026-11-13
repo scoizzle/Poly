@@ -86,6 +86,17 @@ public class AtomicityParityTests {
         }
         """;
 
+    // #565, verbatim.
+    [Test]
+    public async Task MultiAssign_WhenLaterAssignBreaksRange_LeavesStateUnchanged() {
+        var (simulate, _) = await AssertRollsBack(SettleDsl, "AtomicitySettle", (side, fail) => {
+            side.Create("Member");
+            fail("Settle", [("amount", 10L)]);
+        });
+
+        await Assert.That(simulate[^1].FailureKind).IsEqualTo("Range");
+        await Assert.That(simulate[^1].State["Status"]).IsEqualTo("Active");
+    }
 
     private const string PractDsl = """
         domain Min2
@@ -105,6 +116,19 @@ public class AtomicityParityTests {
         }
         """;
 
+    // #568, verbatim: the third Book fails and leaves two appointments.
+    [Test]
+    public async Task CreateIn_WhenLaterAssignFails_DoesNotAppendChild() {
+        var (simulate, _) = await AssertRollsBack(PractDsl, "AtomicityPract", (side, fail) => {
+            side.Create("Pract", ("Name", "Dr"));
+            side.Invoke("Book", ("key", "k0"));
+            side.Invoke("Book", ("key", "k1"));
+            fail("Book", [("key", "k2")]);
+        });
+
+        await Assert.That(simulate[^1].State["appts"]).IsEqualTo("2");
+        await Assert.That(simulate[^1].State["Booked"]).IsEqualTo("2");
+    }
 
     // ── #567 ───────────────────────────────────────────────────────────
 
@@ -126,6 +150,17 @@ public class AtomicityParityTests {
         Entry: entity { Amount: Decimal range(0.01, 100) }
         """;
 
+    [Test]
+    public async Task Dep_WhenTheChildCreateFailsLast_LeavesBalanceAndCount() {
+        var (simulate, _) = await AssertRollsBack(AcctDsl, "AtomicityDep", (side, fail) => {
+            side.Create("Acct", ("Balance", 10m));
+            fail("Dep", [("amount", -5m)]);
+        });
+
+        await Assert.That(simulate[^1].State["Balance"]).IsEqualTo("10");
+        await Assert.That(simulate[^1].State["Count"]).IsEqualTo("0");
+        await Assert.That(simulate[^1].State["entries"]).IsEqualTo("0");
+    }
 
     // #567's bank cases are described in prose only; these DSLs are reconstructed from it.
     private const string BankDsl = """
@@ -165,9 +200,55 @@ public class AtomicityParityTests {
         }
         """;
 
+    // Reconstructed: Settle to a frozen target debits the source on the generated C# today.
+    [Test]
+    public async Task Settle_WhenTheTargetIsFrozen_RestoresTheDebitedSource() {
+        var (simulate, _) = await AssertRollsBack(BankDsl, "AtomicitySettleFrozen", (side, fail) => {
+            var source = side.Create("Account", ("Balance", 1000m));
+            var target = side.Create("Account", ("Balance", 0m));
+            side.Use(target);
+            side.Invoke("Freeze");
+            side.Create("Transfer", ("Amount", 100m), ("source", source), ("target", target));
+            fail("Settle", []);
+        });
 
+        await Assert.That(simulate[^1].FailureKind).IsEqualTo("Stage");
+        await Assert.That(simulate[^1].State["Stage"]).IsEqualTo("Pending");
+    }
 
+    // Reconstructed: Settle with no target debits the source, then fails on the missing link.
+    [Test]
+    public async Task Settle_WhenTheTargetIsMissing_RestoresTheDebitedSource() {
+        await AssertRollsBack(BankDsl, "AtomicitySettleNull", (side, fail) => {
+            var source = side.Create("Account", ("Balance", 1000m));
+            side.Create("Transfer", ("Amount", 100m), ("source", source));
+            fail("Settle", []);
+        });
+    }
 
+    // Reconstructed: FreezeAll over [Open, Frozen] freezes the first account, then fails on the second.
+    [Test]
+    public async Task FreezeAll_WhenTheSecondAccountIsFrozen_RestoresTheFirst() {
+        await AssertRollsBack(BankDsl, "AtomicityFreezeAll", (side, fail) => {
+            var open = side.Create("Account", ("Balance", 1m));
+            var frozen = side.Create("Account", ("Balance", 1m));
+            side.Use(frozen);
+            side.Invoke("Freeze");
+            side.Create("Customer", ("Name", "c"), ("accounts", new[] { open!, frozen! }));
+            fail("FreezeAll", []);
+        });
+    }
+
+    // Reconstructed: Accrue creates the accrual before the balance range check.
+    [Test]
+    public async Task Accrue_WhenTheBalanceBreaksItsRange_DropsTheAccrual() {
+        var (simulate, _) = await AssertRollsBack(BankDsl, "AtomicityAccrue", (side, fail) => {
+            side.Create("Account", ("Balance", 99990m));
+            fail("Accrue", [("amount", 20m)]);
+        });
+
+        await Assert.That(simulate[^1].State["accruals"]).IsEqualTo("0");
+    }
 
     // ── A2: callees on other entities ──────────────────────────────────
 
@@ -191,7 +272,26 @@ public class AtomicityParityTests {
         }
         """;
 
+    [Test]
+    public async Task Invoke_WhenTheCalleeSucceedsAndTheCallerFailsAfter_RestoresTheCallee() {
+        await AssertRollsBack(CalleeDsl, "AtomicityCallee", (side, fail) => {
+            var kid = side.Create("Kid");
+            side.Create("Holder", ("child", kid));
+            fail("Run", [("n", 9L)]);
+        });
+    }
 
+    [Test]
+    public async Task ForInvoke_WhenTheSecondRecordFails_RestoresTheFirst() {
+        await AssertRollsBack(CalleeDsl, "AtomicityForInvoke", (side, fail) => {
+            var first = side.Create("Kid");
+            var second = side.Create("Kid");
+            side.Use(second);
+            side.Invoke("Finish");
+            side.Create("Holder", ("kids", new[] { first!, second! }));
+            fail("FinishAll", []);
+        });
+    }
 
     // ── handlers ──────────────────────────────────────────────────────
 
@@ -229,8 +329,39 @@ public class AtomicityParityTests {
         }
         """;
 
+    // G3: the first handler's write on the subscriber is restored when the second handler fails.
+    [Test]
+    public async Task Handler_WhenALaterHandlerFails_RestoresTheEarlierHandlersWrite() {
+        await AssertRollsBack(HandlerDsl, "AtomicityHandlerPair", (side, fail) => {
+            var item = side.Create("Item");
+            side.Create("Owner", ("items", new[] { item! }));
+            side.Use(item);
+            fail("Finish", []);
+        });
+    }
 
+    // Amendment 4: the handler succeeds, then a later effect of the action that fired it fails.
+    [Test]
+    public async Task Handler_WhenItSucceedsAndALaterOuterEffectFails_RestoresTheHandlersWrite() {
+        await AssertRollsBack(HandlerDsl, "AtomicityHandlerThenOuter", (side, fail) => {
+            var item = side.Create("Item");
+            side.Create("Watcher", ("items", new[] { item! }));
+            side.Use(item);
+            fail("FinishThenBreak", [("n", 1L)]);
+        });
+    }
 
+    // Amendment 4: a handler's assign-range failure after the transition that fired it. The handler still throws
+    // (L-04 owns the returned failure); the throw unwinds through the wrapper, which rolls the transition back.
+    [Test]
+    public async Task Handler_WhenItsAssignBreaksARangeAfterTheTransition_RestoresTheTransition() {
+        await AssertRollsBack(HandlerDsl, "AtomicityHandlerRange", (side, fail) => {
+            var item = side.Create("Item");
+            side.Create("Owner", ("items", new[] { item! }));
+            side.Use(item);
+            fail("Close", []);
+        });
+    }
 
     // G5, the #818 repro: the nested wrapper of the failing callee rolls the frame back mid-cascade, then the cascade
     // unwinds. The child's _notifyDepth is in the graph, so it must come back to 0, not -1.
@@ -253,6 +384,17 @@ public class AtomicityParityTests {
         }
         """;
 
+    [Test]
+    public async Task NotifyDepth_WhenANestedWrapperRollsBackMidCascade_ComesBackToZero() {
+        var (_, printed) = await AssertRollsBack(CascadeDsl, "AtomicityDepth", (side, fail) => {
+            side.Create("Owner");
+            side.Invoke("Add");
+            fail("Run", []);
+        });
+
+        await Assert.That(printed[^1].GraphAfter!).Contains("_notifyDepth=0");
+        await Assert.That(printed[^1].GraphAfter!).DoesNotContain("_notifyDepth=-1");
+    }
 
     // A thrown failure: the subscription cascade overflows its depth guard and throws on both hosts. The throw unwinds
     // through every wrapper's finally, so the whole cascade is rolled back (the cascade-overflow seed, #599).
@@ -279,6 +421,23 @@ public class AtomicityParityTests {
         }
         """;
 
+    [Test]
+    public async Task CascadeOverflow_WhenTheDepthGuardThrows_RollsTheWholeCascadeBack() {
+        var (simulate, printed) = await AssertRollsBack(OverflowDsl, "AtomicityOverflow", (side, fail) => {
+            var left = side.Create("Left", ("Name", "L"));
+            var right = side.Create("Right", ("Name", "R"));
+            side.Use(left);
+            side.Link("rights", right);
+            side.Use(right);
+            side.Link("lefts", left);
+            fail("Poke", []);
+        });
+
+        foreach (var outcome in new[] { simulate[^1], printed[^1] }) {
+            await Assert.That(outcome.ExceptionType).IsEqualTo("InvalidOperationException");
+            await Assert.That(outcome.Message!).Contains("exceeded max depth");
+        }
+    }
 
     // ── stage, peers and registries ───────────────────────────────────
 
@@ -300,6 +459,17 @@ public class AtomicityParityTests {
         }
         """;
 
+    [Test]
+    public async Task Transition_WhenALaterAssignFails_RestoresExitEntryAndStage() {
+        var (simulate, _) = await AssertRollsBack(StageDsl, "AtomicityStage", (side, fail) => {
+            side.Create("Item");
+            fail("Go", [("n", 1L)]);
+        });
+
+        await Assert.That(simulate[^1].State["Stage"]).IsEqualTo("A");
+        await Assert.That(simulate[^1].State["K"]).IsEqualTo("0");
+        await Assert.That(simulate[^1].State["M"]).IsEqualTo("0");
+    }
 
     // G4 (the L-03a review's item 1): a create-in whose child names an existing peer. The child's factory attaches it to
     // the peer's collection; the owner's later failure must take it out again, or the peer keeps an orphan.
@@ -328,7 +498,24 @@ public class AtomicityParityTests {
         }
         """;
 
+    [Test]
+    public async Task CreateIn_WhenTheChildNamesAnExistingPeer_TakesTheChildOutOfThePeer() {
+        await AssertRollsBack(PeerDsl, "AtomicityPeerCreateIn", (side, fail) => {
+            var shelf = side.Create("Shelf", ("Label", "s"));
+            side.Create("Owner");
+            fail("Add", [("s", shelf), ("code", "c"), ("n", 9L)]);
+        });
+    }
 
+    // A4: a by-type create whose child names an existing peer.
+    [Test]
+    public async Task CreateByType_WhenTheChildNamesAnExistingPeer_TakesTheChildOutOfThePeer() {
+        await AssertRollsBack(PeerDsl, "AtomicityPeerCreate", (side, fail) => {
+            var shelf = side.Create("Shelf", ("Label", "s"));
+            side.Create("Owner");
+            fail("Make", [("s", shelf), ("code", "c"), ("n", 9L)]);
+        });
+    }
 
     // A4: the new child subscribes to an existing entity, which records it in a subscriber registry; the later failure
     // must take the registry entry out again.
@@ -354,6 +541,14 @@ public class AtomicityParityTests {
         }
         """;
 
+    [Test]
+    public async Task CreateIn_WhenTheChildSubscribesToAnExistingEntity_TakesItOutOfTheRegistry() {
+        await AssertRollsBack(RegistryDsl, "AtomicityRegistry", (side, fail) => {
+            var thing = side.Create("Thing");
+            side.Create("Owner");
+            fail("Watch", [("t", thing), ("n", 9L)]);
+        });
+    }
 
     // ── success characterisation: what a successful action leaves is unchanged by the slice ──
 
@@ -470,6 +665,23 @@ public class AtomicityParityTests {
         }
         """;
 
+    // PINNED, removed by X-04 (the storage journal hook, `ActionScope.Begin(db)`): the wrapper opens its scope with no
+    // journal, so a rolled-back action restores the entity's Code but not the storage port. The new key stays reserved.
+    [Test]
+    public async Task Unique_WhenTheActionRollsBack_LeavesTheNewKeyReserved_UntilX04() {
+        var (_, assembly) = Print(UniqueDsl, "AtomicityUnique");
+        var port = new RecordingStoragePort();
+        var type = assembly.GetType("Tag")!;
+        var tag = Unwrap(ExportedCSharp.InvokeCreate(type, ("code", "old"), ("db", port)));
+        var rename = type.GetMethods(PrintedMembers.Any).Single(m => m.Name == "Rename");
+
+        var result = rename.Invoke(tag, [.. rename.GetParameters()
+            .Select(p => p.ParameterType == typeof(IStoragePort) ? port : p.ParameterType == typeof(long) ? 1L : (object)"new")])!;
+
+        await Assert.That((bool)result.GetType().GetProperty("IsSuccess")!.GetValue(result)!).IsFalse();
+        await Assert.That(type.GetProperty("Code", PrintedMembers.Any)!.GetValue(tag)).IsEqualTo("old");
+        await Assert.That(port.Exists("Tag", "Code", "new")).IsTrue().Because("X-04 releases it");
+    }
 
     private static object Unwrap(object result) =>
         result.GetType().GetProperty("Value")!.GetValue(result)!;
@@ -481,6 +693,44 @@ public class AtomicityParityTests {
         Item: entity { Code: Text }
         """;
 
+    [Test]
+    public async Task Create_InsideAnOpenScope_RecordsTheInstanceOnBothHosts() {
+        var (_, assembly) = Print(CreatedDsl, "AtomicityCreated");
+        var type = assembly.GetType("Item")!;
+        var token = ActionScope.Begin(null);
+        object printed;
+        IReadOnlyList<(object Instance, string Entity)> recorded;
+        try {
+            printed = Unwrap(ExportedCSharp.InvokeCreate(type, ("code", "c")));
+            recorded = ActionScope.CreatedInstances;
+            ActionScope.Commit(token);
+        }
+        finally {
+            if (ActionScope.HasOpenScope)
+                ActionScope.Rollback(token);
+        }
+        await Assert.That(recorded.Count).IsEqualTo(1);
+        await Assert.That(ReferenceEquals(recorded[0].Instance, printed)).IsTrue();
+        await Assert.That(recorded[0].Entity).IsEqualTo("Item");
+
+        var (domain, _) = EvolvedDomain.FromDsl(CreatedDsl);
+        var exec = ModuleExec.For(domain);
+        var simToken = ActionScope.Begin(null);
+        Poly.DomainModeling.Runtime.ModuleOutcome created;
+        try {
+            created = exec.Create("Item", new Dictionary<string, object?> { ["Code"] = "c" });
+            recorded = ActionScope.CreatedInstances;
+            ActionScope.Commit(simToken);
+        }
+        finally {
+            if (ActionScope.HasOpenScope)
+                ActionScope.Rollback(simToken);
+        }
+        await Assert.That(created.Succeeded).IsTrue();
+        await Assert.That(recorded.Count).IsEqualTo(1);
+        await Assert.That(ReferenceEquals(recorded[0].Instance, created.Instance!.Bag)).IsTrue();
+        await Assert.That(recorded[0].Entity).IsEqualTo("Item");
+    }
 
     // ── the oracle itself: an orphan cannot hide (amendment 3) ────────
 

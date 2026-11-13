@@ -180,7 +180,7 @@ internal static class PatternRowCorpus {
 
     /// <summary>
     /// A pinned <c>uses</c> with a dotted numeric pin, so <c>uses/pinned</c> is observed and its
-    /// read-back asymmetry fires deterministically. The pin needs a seeded contract, so the domain is
+    /// dotted pin re-reads through the row's same-line Run (G-27). The pin needs a seeded contract, so the domain is
     /// built in code.
     /// </summary>
     private static void PrintPinnedUses() {

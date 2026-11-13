@@ -19,30 +19,34 @@ internal sealed class OwnershipAggregatePass : INodeAnalyzer {
 
         var topology = context.GetMetadata<EffectTopologyMetadata>(domain)?.Topology;
         var aggregate = BuildAggregate(domain, context, topology);
-        var edges = OwnedEdges(domain)
+        var owned = OwnedEdges(domain);
+        var edges = owned
             .Select(static e => new OwnedEdge(e.Source.Name, e.Nav.Name, e.Nav.Target.TypeName, e.Nav.Cardinality))
             .ToList();
         context.SetMetadata(domain, new OwnershipAggregateMetadata(aggregate, edges));
-        ReportOwnershipCycles(context, domain);
+        ReportOwnershipCycles(context, domain, owned);
     }
 
     /// <summary>
     /// V-14 (#586, OQ-14): a cycle of <c>owned</c> navigations through more than one entity
-    /// type has no root, so it is an error, one per cycle. A self-owning navigation is a
+    /// type has no root, so it is an error: one per cycle the walk closes. A self-owning navigation is a
     /// tree and is not an edge here, also when its entity sits in a real cycle. The graph is
     /// <see cref="OwnedEdges"/>, the same definition of ownership DMSTR010 uses. The walk
     /// visits entities and their owned navigations in declaration order; each back edge is a
-    /// cycle. A cycle is named from its earliest-declared entity (so <c>A -&gt; B -&gt; A</c> and
+    /// cycle the walk closes, so a cycle that is only reachable through an already-finished
+    /// entity is silent until the first is fixed (fixing the named navigation may reveal
+    /// another; the document is rejected either way). A cycle is named from its earliest-declared entity (so <c>A -&gt; B -&gt; A</c> and
     /// <c>B -&gt; A -&gt; B</c> are one cycle, reported once) and positioned on the owned
     /// navigation that returns to that entity.
     /// </summary>
-    private static void ReportOwnershipCycles(AnalysisContext context, Domain domain) {
+    private static void ReportOwnershipCycles(
+        AnalysisContext context, Domain domain, IReadOnlyList<(Entity Source, Relationship Nav)> owned) {
         var order = new Dictionary<string, int>(StringComparer.Ordinal);
         foreach (var entity in domain.Types.OfType<Entity>())
             order.TryAdd(entity.Name, order.Count);
 
         var outgoing = new Dictionary<string, List<(Entity Source, Relationship Nav)>>(StringComparer.Ordinal);
-        foreach (var edge in OwnedEdges(domain)) {
+        foreach (var edge in owned) {
             if (string.Equals(edge.Source.Name, edge.Nav.Target.TypeName, StringComparison.Ordinal))
                 continue;
             if (!outgoing.TryGetValue(edge.Source.Name, out var list))
@@ -180,7 +184,8 @@ internal sealed class OwnershipAggregatePass : INodeAnalyzer {
         // immediately so a parentless owner (Member, which only references Plan) is
         // visible as a root to the children that name it — otherwise they skip it and end
         // up parentless too. Plain singulars never create parents here, so the only shapes
-        // that can still cycle are mutual collections, which DMDEP001 reports.
+        // that can still cycle are mutual collections; owned ones are DMDEP002 (V-14), and
+        // the ResolvesTo guard keeps this loop finite for the rest.
         for (var pass = 0; pass < drafts.Count; pass++) {
             var changed = false;
             foreach (var (name, isRoot) in drafts) {

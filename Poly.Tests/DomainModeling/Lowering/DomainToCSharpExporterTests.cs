@@ -2019,8 +2019,9 @@ public class DomainToCSharpExporterTests {
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
-        await Assert.That(cs).Contains("internal DomainResult WhenEachOrderLineComplete(OrderLine line)\n    {\n        this.Total = line.Price + this.Total;");
-        await Assert.That(cs).DoesNotContain("WhenEachOrderLineComplete(OrderLine line)\n    {\n        if (this.CurrentStage");
+        // L-03c: the handler's first statement is its Touch, then the effects; no stage gate anywhere in it.
+        await Assert.That(cs).Contains("internal DomainResult WhenEachOrderLineComplete(OrderLine line)\n    {\n        Poly.Runtime.ActionScope.Touch(this);\n        this.Total = line.Price + this.Total;");
+        await Assert.That(ExportedCSharp.ExtractMethod(cs, "WhenEachOrderLineComplete(OrderLine line)")).DoesNotContain("this.CurrentStage");
     }
 
     [Test]

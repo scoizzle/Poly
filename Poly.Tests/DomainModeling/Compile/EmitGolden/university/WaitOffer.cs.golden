@@ -35,6 +35,7 @@ internal class WaitOffer : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfSeat();
             if (!__result.IsSuccess)
             {
@@ -72,6 +73,7 @@ internal class WaitOffer : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfCancel();
             if (!__result.IsSuccess)
             {
@@ -106,6 +108,7 @@ internal class WaitOffer : Poly.Runtime.IActionScoped
     }
     internal void RegisterSectionWaitlistOfferedSubscriber(Section subscriber)
     {
+        Poly.Runtime.ActionScope.Touch(this);
         if (this._sectionWaitlistOfferedSubscribers == null)
         {
             this._sectionWaitlistOfferedSubscribers = new List<Section>();
@@ -121,6 +124,7 @@ internal class WaitOffer : Poly.Runtime.IActionScoped
     }
     internal void RegisterSectionWaitlistCancelledSubscriber(Section subscriber)
     {
+        Poly.Runtime.ActionScope.Touch(this);
         if (this._sectionWaitlistCancelledSubscribers == null)
         {
             this._sectionWaitlistCancelledSubscribers = new List<Section>();
@@ -136,7 +140,7 @@ internal class WaitOffer : Poly.Runtime.IActionScoped
     }
     internal DomainResult NotifyOfferedSubscribers()
     {
-        this.EnterNotifyCascade("Offered");
+        var __depth = this.EnterNotifyCascade("Offered");
         try
         {
             if (this._sectionWaitlistOfferedSubscribers != null)
@@ -153,13 +157,13 @@ internal class WaitOffer : Poly.Runtime.IActionScoped
         }
         finally
         {
-            this.ExitNotifyCascade();
+            this.ExitNotifyCascade(__depth);
         }
         return DomainResult.Success();
     }
     internal DomainResult NotifyCancelledSubscribers(WaitOfferStage? previousStage)
     {
-        this.EnterNotifyCascade("Cancelled");
+        var __depth = this.EnterNotifyCascade("Cancelled");
         try
         {
             if (this._sectionWaitlistCancelledSubscribers != null)
@@ -176,30 +180,32 @@ internal class WaitOffer : Poly.Runtime.IActionScoped
         }
         finally
         {
-            this.ExitNotifyCascade();
+            this.ExitNotifyCascade(__depth);
         }
         return DomainResult.Success();
     }
     internal static DomainResult<WaitOffer> Create(Student? student = null, Section? section = null)
     {
         var created = new WaitOffer(student, section);
+        Poly.Runtime.ActionScope.Create(created, "WaitOffer");
         if (section != null)
         {
             section.AttachWaitlist(created);
         }
         return DomainResult<WaitOffer>.Success(created);
     }
-    private void EnterNotifyCascade(string stageName)
+    private int EnterNotifyCascade(string stageName)
     {
         if (this._notifyDepth >= 16)
         {
             throw new System.InvalidOperationException(string.Concat("Subscription cascade on entity 'WaitOffer' exceeded max depth (16) while notifying '", stageName, "'."));
         }
         this._notifyDepth = this._notifyDepth + 1;
+        return this._notifyDepth - 1;
     }
-    private void ExitNotifyCascade()
+    private void ExitNotifyCascade(int depth)
     {
-        this._notifyDepth = this._notifyDepth - 1;
+        this._notifyDepth = depth;
     }
     public object __Snapshot()
     {

@@ -78,6 +78,7 @@ internal class Account : Poly.Runtime.IActionScoped
     }
     internal void AttachContacts(Contact child)
     {
+        Poly.Runtime.ActionScope.Touch(this);
         this._contacts.Add(child);
     }
     internal DomainResult<Opportunity> CreateOpportunities(string title, decimal amount, Contact? contact = null, DateOnly? closeBy = null)
@@ -92,6 +93,7 @@ internal class Account : Poly.Runtime.IActionScoped
     }
     internal void AttachOpportunities(Opportunity child)
     {
+        Poly.Runtime.ActionScope.Touch(this);
         this._opportunities.Add(child);
         child.RegisterAccountOpportunitiesWonSubscriber(this);
         child.RegisterAccountOpportunitiesProposeSubscriber(this);
@@ -109,6 +111,7 @@ internal class Account : Poly.Runtime.IActionScoped
     }
     internal void AttachTickets(Ticket child)
     {
+        Poly.Runtime.ActionScope.Touch(this);
         this._tickets.Add(child);
         child.RegisterAccountTicketsClosedSubscriber(this);
     }
@@ -118,6 +121,7 @@ internal class Account : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfPlaceHq(city, region);
             if (!__result.IsSuccess)
             {
@@ -159,6 +163,7 @@ internal class Account : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfAddContact(name, email, db);
             if (!__result.IsSuccess)
             {
@@ -196,6 +201,7 @@ internal class Account : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfConvertLead(lead, db);
             if (!__result.IsSuccess)
             {
@@ -233,6 +239,7 @@ internal class Account : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfOpenDeal(title, amount);
             if (!__result.IsSuccess)
             {
@@ -270,6 +277,7 @@ internal class Account : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfArchive();
             if (!__result.IsSuccess)
             {
@@ -302,6 +310,7 @@ internal class Account : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfOpenTicket(subject);
             if (!__result.IsSuccess)
             {
@@ -339,6 +348,7 @@ internal class Account : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfRestore();
             if (!__result.IsSuccess)
             {
@@ -369,26 +379,31 @@ internal class Account : Poly.Runtime.IActionScoped
     public bool IsUrban() => this.Hq != null && this.Hq!.City == "Metropolis";
     internal DomainResult WhenEachOpportunityWon()
     {
+        Poly.Runtime.ActionScope.Touch(this);
         this.WonCount = this.WonCount + 1L;
         return DomainResult.Success();
     }
     internal DomainResult WhenEachOpportunityPropose(Opportunity deal)
     {
+        Poly.Runtime.ActionScope.Touch(this);
         this.OpenPipeline = this.OpenPipeline + deal.Amount;
         return DomainResult.Success();
     }
     internal DomainResult WhenEachOpportunityWon(Opportunity deal)
     {
+        Poly.Runtime.ActionScope.Touch(this);
         this.OpenPipeline = this.OpenPipeline - deal.Amount;
         return DomainResult.Success();
     }
     internal DomainResult WhenEachOpportunityLost(Opportunity deal)
     {
+        Poly.Runtime.ActionScope.Touch(this);
         this.OpenPipeline = this.OpenPipeline - deal.Amount;
         return DomainResult.Success();
     }
     internal DomainResult WhenEachTicketClosed()
     {
+        Poly.Runtime.ActionScope.Touch(this);
         this.ClosedTickets = this.ClosedTickets + 1L;
         return DomainResult.Success();
     }
@@ -407,6 +422,7 @@ internal class Account : Poly.Runtime.IActionScoped
             return DomainResult<Account>.Failure(Poly.Runtime.DomainFailure.Enum(string.Concat("'", industry, "' is not a valid member of Industry for property 'Industry'."), "Account.Industry"));
         }
         var created = new Account(name, industry, parent, hq, contacts, opportunities, tickets, wonCount, openPipeline, closedTickets);
+        Poly.Runtime.ActionScope.Create(created, "Account");
         return DomainResult<Account>.Success(created);
     }
     private void InitializeSubscriptions()

@@ -45,6 +45,7 @@ internal class Enrollment : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfConfirm();
             if (!__result.IsSuccess)
             {
@@ -91,6 +92,7 @@ internal class Enrollment : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfWithdraw();
             if (!__result.IsSuccess)
             {
@@ -128,6 +130,7 @@ internal class Enrollment : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfRecordGrade(score);
             if (!__result.IsSuccess)
             {
@@ -176,6 +179,7 @@ internal class Enrollment : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfComplete();
             if (!__result.IsSuccess)
             {
@@ -213,6 +217,7 @@ internal class Enrollment : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfDrop();
             if (!__result.IsSuccess)
             {
@@ -248,6 +253,7 @@ internal class Enrollment : Poly.Runtime.IActionScoped
     public bool IsPassing() => this.Grade >= 70L;
     internal void RegisterStudentEnrollmentsDroppedSubscriber(Student subscriber)
     {
+        Poly.Runtime.ActionScope.Touch(this);
         if (this._studentEnrollmentsDroppedSubscribers == null)
         {
             this._studentEnrollmentsDroppedSubscribers = new List<Student>();
@@ -263,6 +269,7 @@ internal class Enrollment : Poly.Runtime.IActionScoped
     }
     internal void RegisterStudentEnrollmentsCompletedSubscriber(Student subscriber)
     {
+        Poly.Runtime.ActionScope.Touch(this);
         if (this._studentEnrollmentsCompletedSubscribers == null)
         {
             this._studentEnrollmentsCompletedSubscribers = new List<Student>();
@@ -278,6 +285,7 @@ internal class Enrollment : Poly.Runtime.IActionScoped
     }
     internal void RegisterSectionEnrollmentsRegisteredSubscriber(Section subscriber)
     {
+        Poly.Runtime.ActionScope.Touch(this);
         if (this._sectionEnrollmentsRegisteredSubscribers == null)
         {
             this._sectionEnrollmentsRegisteredSubscribers = new List<Section>();
@@ -293,6 +301,7 @@ internal class Enrollment : Poly.Runtime.IActionScoped
     }
     internal void RegisterSectionEnrollmentsDroppedSubscriber(Section subscriber)
     {
+        Poly.Runtime.ActionScope.Touch(this);
         if (this._sectionEnrollmentsDroppedSubscribers == null)
         {
             this._sectionEnrollmentsDroppedSubscribers = new List<Section>();
@@ -308,7 +317,7 @@ internal class Enrollment : Poly.Runtime.IActionScoped
     }
     internal DomainResult NotifyDroppedSubscribers()
     {
-        this.EnterNotifyCascade("Dropped");
+        var __depth = this.EnterNotifyCascade("Dropped");
         try
         {
             if (this._studentEnrollmentsDroppedSubscribers != null)
@@ -336,13 +345,13 @@ internal class Enrollment : Poly.Runtime.IActionScoped
         }
         finally
         {
-            this.ExitNotifyCascade();
+            this.ExitNotifyCascade(__depth);
         }
         return DomainResult.Success();
     }
     internal DomainResult NotifyCompletedSubscribers()
     {
-        this.EnterNotifyCascade("Completed");
+        var __depth = this.EnterNotifyCascade("Completed");
         try
         {
             if (this._studentEnrollmentsCompletedSubscribers != null)
@@ -364,13 +373,13 @@ internal class Enrollment : Poly.Runtime.IActionScoped
         }
         finally
         {
-            this.ExitNotifyCascade();
+            this.ExitNotifyCascade(__depth);
         }
         return DomainResult.Success();
     }
     internal DomainResult NotifyRegisteredSubscribers()
     {
-        this.EnterNotifyCascade("Registered");
+        var __depth = this.EnterNotifyCascade("Registered");
         try
         {
             if (this._sectionEnrollmentsRegisteredSubscribers != null)
@@ -387,7 +396,7 @@ internal class Enrollment : Poly.Runtime.IActionScoped
         }
         finally
         {
-            this.ExitNotifyCascade();
+            this.ExitNotifyCascade(__depth);
         }
         return DomainResult.Success();
     }
@@ -402,6 +411,7 @@ internal class Enrollment : Poly.Runtime.IActionScoped
             return DomainResult<Enrollment>.Failure(Poly.Runtime.DomainFailure.Range("'Grade' must be <= 100.", "Enrollment.Grade"));
         }
         var created = new Enrollment(section, student, enrolledOn, dueDate, grade);
+        Poly.Runtime.ActionScope.Create(created, "Enrollment");
         if (section != null)
         {
             section.AttachEnrollments(created);
@@ -412,17 +422,18 @@ internal class Enrollment : Poly.Runtime.IActionScoped
         }
         return DomainResult<Enrollment>.Success(created);
     }
-    private void EnterNotifyCascade(string stageName)
+    private int EnterNotifyCascade(string stageName)
     {
         if (this._notifyDepth >= 16)
         {
             throw new System.InvalidOperationException(string.Concat("Subscription cascade on entity 'Enrollment' exceeded max depth (16) while notifying '", stageName, "'."));
         }
         this._notifyDepth = this._notifyDepth + 1;
+        return this._notifyDepth - 1;
     }
-    private void ExitNotifyCascade()
+    private void ExitNotifyCascade(int depth)
     {
-        this._notifyDepth = this._notifyDepth - 1;
+        this._notifyDepth = depth;
     }
     public object __Snapshot()
     {

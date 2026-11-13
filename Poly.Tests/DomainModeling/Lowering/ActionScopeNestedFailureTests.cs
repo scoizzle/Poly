@@ -183,9 +183,9 @@ public class ActionScopeNestedFailureTests {
         var (cs, assembly) = Print(CreateInDsl, "NestedFailureCreateIn");
         var printedOwner = ExportedCSharp.CreateEntity(assembly, "Owner");
         await Assert.That(IsSuccess(Call(printedOwner, "Add"))).IsFalse();
-        // Today's behaviour of the generated C#, which L-03c's rollback changes: the failed child is not undone. It
-        // was already added to the owner's collection before its initial-stage handler ran.
-        await Assert.That(((ICollection)Read(printedOwner, "Items")!).Count).IsEqualTo(1);
+        // L-03c: the wrapper touched the owner, so the rollback takes the failed child back out of its collection, as on
+        // the simulator (it was added before its initial-stage handler ran).
+        await Assert.That(((ICollection)Read(printedOwner, "Items")!).Count).IsEqualTo(0);
         await Assert.That(StrictDiagnostics(cs, "NestedFailureCreateInStrict")).IsEqualTo("");
     }
 
@@ -204,10 +204,11 @@ public class ActionScopeNestedFailureTests {
             await Assert.That(outcome.FailurePath).IsEqualTo(CreateInPath);
             await Assert.That(outcome.FailureGuard).IsEqualTo("Never");
         }
-        // The one difference is the state the failed child leaves behind: the simulator restores it, the generated
-        // C# does not (L-03c's rollback closes this).
-        await Assert.That(ParityScenario.Differences(simulate, printed))
-            .IsEquivalentTo(new[] { "invoke Add: 'items' differs (simulate '0', printed '1')" });
+        // L-03c closed the one difference this row used to expect (the failed child left in the generated owner): the
+        // hosts agree, and both leave the owner with no child.
+        await Assert.That(ParityScenario.Differences(simulate, printed)).IsEmpty();
+        foreach (var outcome in new[] { simulate[2], printed[2] })
+            await Assert.That(outcome.State["items"]).IsEqualTo("0");
     }
 
     private static int NotifyDepth(object instance) =>
@@ -297,9 +298,11 @@ public class ActionScopeNestedFailureTests {
             await Assert.That(outcome.FailurePath).IsEqualTo("Item.Finish.Boss.Y");
             await Assert.That(outcome.FailureGuard).IsEqualTo("Never");
         }
-        // The one difference is the child's stage: the simulator restores it, the generated C# does not (L-03c).
-        await Assert.That(ParityScenario.Differences(simulate, printed))
-            .IsEquivalentTo(new[] { "invoke Finish: 'Stage' differs (simulate 'Open', printed 'Done')" });
+        // L-03c closed the one difference this row used to expect (the child's stage kept on the generated C#): the
+        // hosts agree, and both roll the child back to Open.
+        await Assert.That(ParityScenario.Differences(simulate, printed)).IsEmpty();
+        foreach (var outcome in new[] { simulate[4], printed[4] })
+            await Assert.That(outcome.State["Stage"]).IsEqualTo("Open");
     }
 
     // A target property named Notify must not collide with the notify local of Create{Nav}.
@@ -418,12 +421,13 @@ public class ActionScopeNestedFailureTests {
         await Assert.That(cs).DoesNotContain("void NotifyDoneSubscribers(");
     }
 
-    // R8: the depth guard still throws (L-05 owns it).
+    // R8: the depth guard still throws (L-05 owns it). L-03c (F2) makes the entry return the depth it entered at, so the
+    // exit can assign it back; the signature changes on purpose.
     [Test]
     public async Task NotifyCascadeDepthGuard_StillThrows() {
         var cs = PrintOnly(Dsl);
 
-        await Assert.That(cs).Contains("private void EnterNotifyCascade(");
+        await Assert.That(cs).Contains("private int EnterNotifyCascade(");
         await Assert.That(cs).Contains("throw new System.InvalidOperationException(");
     }
 
@@ -456,12 +460,11 @@ public class ActionScopeNestedFailureTests {
         await Assert.That(ActionScope.HasOpenScope).IsFalse();
     }
 
-    // STEP 2: on this head the wrapper emits no Touch, so nothing is snapshotted and _notifyDepth cannot be restored
-    // under the unwinding finally. Pinned at 0 on the watched child (the entity that carries the guard). L-03c adds Touch: the generated snapshot
-    // captures _notifyDepth, and a rollback (restores 0) followed by the cascade's exit decrement would leave -1 on the
-    // generated C#; this test is L-03c's red-in-waiting if it goes negative.
+    // L-03c: the wrapper touches the watched child, so the snapshot captures _notifyDepth and the nested rollback restores
+    // 0 mid-cascade; the cascade's exit assigns the depth it entered at (F2), not a decrement, so it stays 0 (a relative
+    // exit read -1 here at the Touch step, before the depth step).
     [Test]
-    public async Task Wrapper_NotifyDepth_StaysZeroAfterTheFailedRepro_UntilL03cAddsTouch() {
+    public async Task Wrapper_NotifyDepth_IsZeroAfterTheFailedRepro() {
         var (_, assembly) = Print(Dsl, "NestedFailureWrapperDepth");
         var owner = ExportedCSharp.CreateEntity(assembly, "Owner");
         Call(owner, "Add");
@@ -472,16 +475,15 @@ public class ActionScopeNestedFailureTests {
         await Assert.That(NotifyDepth(child)).IsEqualTo(0);
     }
 
-    // STEP 4: on top of the wrapper the generated C# still leaves the failed create-in child in the owner's collection
-    // (the wrapper snapshots nothing yet). L-03c's Touch changes this: the owner's collection is then restored.
+    // L-03c: the wrapper touches the owner, so a failed create-in takes the child back out of the generated owner.
     [Test]
-    public async Task Wrapper_FailedCreateIn_LeavesTheChildInTheGeneratedOwner_UntilL03c() {
+    public async Task Wrapper_FailedCreateIn_TakesTheChildOutOfTheGeneratedOwner() {
         var (_, assembly) = Print(CreateInDsl, "NestedFailureWrapperCreateIn");
         var owner = ExportedCSharp.CreateEntity(assembly, "Owner");
 
         await Assert.That(IsSuccess(Call(owner, "Add"))).IsFalse();
 
-        await Assert.That(((ICollection)Read(owner, "Items")!).Count).IsEqualTo(1);
+        await Assert.That(((ICollection)Read(owner, "Items")!).Count).IsEqualTo(0);
         await Assert.That(ActionScope.HasOpenScope).IsFalse();
     }
 }

@@ -43,6 +43,7 @@ internal class Hall : Poly.Runtime.IActionScoped
     public HallStage CurrentStage { get; private set; }
     internal void AttachSections(Section child)
     {
+        Poly.Runtime.ActionScope.Touch(this);
         this._sections.Add(child);
     }
     internal DomainResult Occupy()
@@ -51,6 +52,7 @@ internal class Hall : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfOccupy();
             if (!__result.IsSuccess)
             {
@@ -87,6 +89,7 @@ internal class Hall : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfVacate();
             if (!__result.IsSuccess)
             {
@@ -123,6 +126,7 @@ internal class Hall : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfMarkChildBusy();
             if (!__result.IsSuccess)
             {
@@ -155,6 +159,7 @@ internal class Hall : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfClearChildBusy();
             if (!__result.IsSuccess)
             {
@@ -187,6 +192,7 @@ internal class Hall : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfTakeOffline();
             if (!__result.IsSuccess)
             {
@@ -228,6 +234,7 @@ internal class Hall : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfReturnToService();
             if (!__result.IsSuccess)
             {
@@ -290,6 +297,7 @@ internal class Hall : Poly.Runtime.IActionScoped
             return DomainResult<Hall>.Failure(Poly.Runtime.DomainFailure.Range("'DayRate' must be <= 100000.", "Hall.DayRate"));
         }
         var created = new Hall(name, capacity, dayRate, property, sections, occupied, offline, busySections);
+        Poly.Runtime.ActionScope.Create(created, "Hall");
         if (property != null)
         {
             property.AttachHalls(created);

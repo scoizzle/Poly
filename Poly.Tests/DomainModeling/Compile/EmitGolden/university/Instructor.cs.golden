@@ -30,6 +30,7 @@ internal class Instructor : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfGoOnLeave();
             if (!__result.IsSuccess)
             {
@@ -62,6 +63,7 @@ internal class Instructor : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfReturn();
             if (!__result.IsSuccess)
             {
@@ -107,6 +109,7 @@ internal class Instructor : Poly.Runtime.IActionScoped
             return DomainResult<Instructor>.Failure(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'Email' value is already used on another 'Instructor'.", "Instructor.Email"));
         }
         var created = new Instructor(name, email);
+        Poly.Runtime.ActionScope.Create(created, "Instructor");
         db.Record("Instructor", "Email", email);
         return DomainResult<Instructor>.Success(created);
     }

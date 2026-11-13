@@ -32,6 +32,7 @@ internal class Patron : Poly.Runtime.IActionScoped
     }
     internal void AttachFines(Fine child)
     {
+        Poly.Runtime.ActionScope.Touch(this);
         this._fines.Add(child);
     }
     internal DomainResult<Fine> AssessByType()
@@ -40,6 +41,7 @@ internal class Patron : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfAssessByType();
             if (!__result.IsSuccess)
             {
@@ -73,6 +75,7 @@ internal class Patron : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfAssessByRel();
             if (!__result.IsSuccess)
             {
@@ -110,6 +113,7 @@ internal class Patron : Poly.Runtime.IActionScoped
             return DomainResult<Patron>.Failure(Poly.Runtime.DomainFailure.Required("'Name' is required.", "Patron.Name"));
         }
         var created = new Patron(name, fines);
+        Poly.Runtime.ActionScope.Create(created, "Patron");
         return DomainResult<Patron>.Success(created);
     }
     public object __Snapshot()

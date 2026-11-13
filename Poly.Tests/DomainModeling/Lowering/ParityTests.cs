@@ -1147,8 +1147,10 @@ public class ParityTests {
         await Assert.That(outcomes[6].State["Stage"]).IsEqualTo("R");
     }
 
-    // A failing create inside a void when-handler throws. The transition that
-    // fired it stays; the action is not a DomainResult failure and is not rolled back.
+    // A failing create inside a when-handler throws (L-04 returns it instead). L-03c: the throw unwinds through the
+    // action wrapper, which rolls the frame back, so the transition that fired the handler is undone on both hosts: the
+    // loan is Active again. The scope-only run is X-04's evidence: the simulator's module restores it with no executor
+    // transaction, so keepConstraintMutations decides nothing any more.
     [Test]
     public async Task Invoke_WhenSubscriptionCreateFails_Agrees() {
         const string dsl = """
@@ -1174,7 +1176,8 @@ public class ParityTests {
               Reason: Text
             }
             """;
-        var outcomes = await ParityScenario.FromDsl(dsl, "ParitySubscriptionCreateFail")
+        var scenario = ParityScenario.FromDsl(dsl, "ParitySubscriptionCreateFail");
+        var outcomes = await scenario
             .AssertAgree(side => {
                 var loan = side.Create("Loan", ("Amount", 50L));
                 var patron = side.Create("Patron", ("Name", "Ada"), ("loans", new[] { loan! }));
@@ -1186,9 +1189,19 @@ public class ParityTests {
         await Assert.That(outcomes[3].Success).IsFalse();
         await Assert.That(outcomes[3].Message).IsEqualTo("'Amount' must be <= 10.");
         await Assert.That(outcomes[3].ExceptionType).IsEqualTo("ConstraintFailureException");
-        await Assert.That(outcomes[4].State["Stage"]).IsEqualTo("Overdue");
+        await Assert.That(outcomes[4].State["Stage"]).IsEqualTo("Active");
         await Assert.That(outcomes[4].State["Amount"]).IsEqualTo("50");
         await Assert.That(outcomes[5].State["fines"]).IsEqualTo("0");
+
+        var scopeOnly = await scenario.AssertAgree(side => {
+            var loan = side.Create("Loan", ("Amount", 50L));
+            side.Create("Patron", ("Name", "Ada"), ("loans", new[] { loan! }));
+            side.Use(loan);
+            side.InvokeScopeOnly("MarkOverdue");
+            side.Use(loan);
+        });
+        await Assert.That(scopeOnly[3].ExceptionType).IsEqualTo("ConstraintFailureException");
+        await Assert.That(scopeOnly[4].State["Stage"]).IsEqualTo("Active");
     }
 
     [Test]
@@ -1217,7 +1230,8 @@ public class ParityTests {
               Reason: Text
             }
             """;
-        var outcomes = await ParityScenario.FromDsl(dsl, "ParityNestedSubscriptionCreateFail")
+        var scenario = ParityScenario.FromDsl(dsl, "ParityNestedSubscriptionCreateFail");
+        var outcomes = await scenario
             .AssertAgree(side => {
                 var loan = side.Create("Loan", ("Amount", 50L));
                 var patron = side.Create("Patron", ("Name", "Ada"), ("loans", new[] { loan! }));
@@ -1229,8 +1243,18 @@ public class ParityTests {
         await Assert.That(outcomes[3].Success).IsFalse();
         await Assert.That(outcomes[3].Message).IsEqualTo("'Amount' must be <= 10.");
         await Assert.That(outcomes[3].ExceptionType).IsEqualTo("ConstraintFailureException");
-        await Assert.That(outcomes[4].State["Stage"]).IsEqualTo("Overdue");
+        // L-03c: the nested wrapper's finally rolls the shared frame back on the throw, as in the row above.
+        await Assert.That(outcomes[4].State["Stage"]).IsEqualTo("Active");
         await Assert.That(outcomes[5].State["fines"]).IsEqualTo("0");
+
+        var scopeOnly = await scenario.AssertAgree(side => {
+            var loan = side.Create("Loan", ("Amount", 50L));
+            side.Create("Patron", ("Name", "Ada"), ("loans", new[] { loan! }));
+            side.Use(loan);
+            side.InvokeScopeOnly("Go");
+            side.Use(loan);
+        });
+        await Assert.That(scopeOnly[4].State["Stage"]).IsEqualTo("Active");
     }
 
     // Each Differences row differs from the baseline in exactly one field, so deleting that field's compare turns it red.

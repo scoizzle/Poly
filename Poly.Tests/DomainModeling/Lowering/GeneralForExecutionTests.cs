@@ -141,8 +141,9 @@ public class GeneralForExecutionTests {
         await Assert.That(Marks(bad)).IsEqualTo(0L);
         await Assert.That(Marks(later)).IsEqualTo(0L);
 
-        // Generated C# has no rollback, so it shows where the loop stopped: the record before
-        // the failure ran, the record after it was never invoked.
+        // L-03c: generated C# rolls the failed action back too. Each record's Mark wrapper touched it, so the record
+        // that ran before the failure is restored and no record keeps a mark, as on the simulator; where the loop
+        // stopped is no longer visible in the state, because nothing the action did survives it.
         var asm = ExportedCSharp.CompileAndLoad(
             new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis)));
         var lineType = asm.GetType("Line")!;
@@ -156,7 +157,7 @@ public class GeneralForExecutionTests {
         await Assert.That((bool)printedResult.GetType().GetProperty("IsSuccess", PrintedMembers.Any)!.GetValue(printedResult)!).IsFalse();
         var after = ((System.Collections.IEnumerable)invoiceType.GetProperty("Lines", PrintedMembers.Any)!.GetValue(printed)!)
             .Cast<object>().Select(l => Convert.ToInt64(lineType.GetProperty("Marks", PrintedMembers.Any)!.GetValue(l))).ToList();
-        await Assert.That(after).IsEquivalentTo(new List<long> { 1L, 0L, 0L });
+        await Assert.That(after).IsEquivalentTo(new List<long> { 0L, 0L, 0L });
     }
 
     [Test]

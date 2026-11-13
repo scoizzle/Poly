@@ -68,22 +68,6 @@ public static class KnownDomainDivergences {
             new(1, "create Thing", "failureKind", null, "Unique"),
             new(1, "create Thing", "failurePath", null, "Thing.K"),
         ]),
-        new(565, "L-03", "multi-assign", ["simulate", "printed"], [
-            new(1, "invoke Settle", "state:Status", "Active", "Suspended"),
-        ]),
-        new(599, "L-05", "cascade-overflow", ["simulate", "printed"], [
-            new(6, "invoke Poke", "state:Hops", "0", "16"),
-            new(6, "invoke Poke", "state:Stage", "X", "Y"),
-            new(7, "use Left", "state:Hops", "0", "16"),
-        ]),
-        // Same family as cascade-overflow: a guard throws after the cascade has run, the module
-        // rolls back to the stage it started in, and the printed side keeps the stage it reached.
-        new(599, "L-05", "guarded-cycle-loop-guard", ["simulate", "printed"], [
-            new(1, "invoke Go", "state:Stage", "A", "C"),
-        ]),
-        new(607, "L-25", "create-in-iterated-collection", ["simulate", "printed"], [
-            new(4, "invoke Grow", "state:lines", "1", "2"),
-        ]),
     ];
 }
 
@@ -92,9 +76,17 @@ public static class DomainParityExclusions {
     public static IReadOnlyList<DomainParityExclusion> All { get; } = [
         new(585, "L-13", "Both sides accept a second owner, so the module has no divergence to ratchet; "
             + "absolute single-owner state is S-12b's done-when."),
+        new(599, "L-05", "Both sides throw the same depth-overflow or loop-guard exception and roll the cascade back "
+            + "since L-03c (every mutator touches its receiver), so the module has no divergence to ratchet; the "
+            + "returned failure in place of the throw is L-05's done-when."),
+        new(607, "L-25", "Both sides throw 'Collection was modified' and roll the action back since L-03c, so the "
+            + "module has no divergence to ratchet; what a body that grows the collection it iterates should do is "
+            + "L-25's done-when."),
         new(611, "L-11", "Both sides throw NullReferenceException on the unset optional unique Text, so the "
             + "module has no divergence to ratchet."),
-        new(617, "L-05", "The sides agree; absolute atomicity is L-05's done-when."),
+        new(617, "L-05", "The sides agree and both roll the transition back since L-03c (AtomicityParityTests "
+            + "proves the absolute state); the handler's range failure still throws, which L-04 and L-05 turn into a "
+            + "returned failure."),
         new(621, "L-08", "The printed Create fills an omitted required parameter with its default, so a "
             + "module-level omission cannot be represented in this harness; Date/DateTime/Duration need "
             + "`uses temporal`, which this harness cannot parse on the simulate side."),
@@ -109,36 +101,6 @@ public static class DomainParityExclusions {
 /// </summary>
 public static class DomainParityScenarios {
     public static IReadOnlyList<ParityCase> All { get; } = [
-        new("multi-assign", 565, """
-            domain Library
-            MemberStatus: enum { Active, Suspended }
-
-            Member: entity {
-              Status: MemberStatus default(Active)
-              FineBalance: Number range(0, 100000) default(0)
-              Settle: action (amount: Number) {
-                assign Status to Suspended
-                assign FineBalance to (FineBalance - amount)
-              }
-            }
-            """, """
-            domain Library
-            MemberStatus: enum { Active, Suspended }
-
-            Member: entity {
-              Status: MemberStatus default(Active)
-              FineBalance: Number range(0, 100000) default(0)
-              Settle: action (amount: Number) {
-                assign Status to Suspended
-                assign FineBalance to (FineBalance - amount)
-              }
-            }
-            """,
-            side => {
-                side.Create("Member");
-                side.Invoke("Settle", ("amount", 10L));
-            }, []),
-
         new("owned-second-owner", 585, """
             domain Shop
             Order: entity { Total: Number default(0) }

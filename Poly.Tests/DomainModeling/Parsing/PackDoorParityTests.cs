@@ -57,8 +57,15 @@ public sealed class PackDoorParityTests {
     }
 
     internal static string Resolver(string text) {
-        var exception = ResolverErrorSiteScanner.Capture(text);
-        return exception is null ? "OK" : ResolverErrorBaseline.ResultOf(exception);
+        try {
+            var tree = DslSyntaxTree.Parse(text);
+            var session = DomainSession.Create(tree.Uses, new SessionOptions(ProductCatalog.Catalog, ProductCatalog.ImplicitIds) with { Authoring = true });
+            new DomainResolver(tree, session).Resolve();
+            return "OK";
+        }
+        catch (Exception ex) {
+            return ResolverErrorBaseline.ResultOf(ex);
+        }
     }
 
     private static PolyCompiler? _compiler;

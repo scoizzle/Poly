@@ -1,4 +1,3 @@
-using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 
@@ -20,13 +19,11 @@ namespace Poly.Tests.DomainModeling.Parsing;
 public sealed class EditSpliceBaselineTests {
     private const string FilePath = "Poly.Tests/DomainModeling/Parsing/EditSpliceBaseline.txt";
 
-    internal static string Sha(string text) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text)))[..12];
-
     internal static string Result(string source, EditOutcome outcome, bool replace) {
         if (!outcome.Ok)
             return "err " + outcome.ErrorCode;
         var identical = replace ? (outcome.Text == source ? "Y" : "N") : "-";
-        return $"ok identical={identical} delta={outcome.Text!.Length - source.Length} sha={Sha(outcome.Text)}";
+        return $"ok identical={identical} delta={outcome.Text!.Length - source.Length} sha={ResolverErrorBaseline.Sha(outcome.Text)}";
     }
 
     private static string Json(string op, string? parent, string? path, string? dsl) => op switch {

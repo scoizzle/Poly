@@ -16,10 +16,8 @@ internal static class ParityDocuments {
     private static List<(string, string)> Load() {
         var root = GuideBlocks.RepoRoot();
         var documents = new List<(string, string)>();
-        foreach (var folder in new[] { "demo", "docs" }) {
-            foreach (var path in Directory.EnumerateFiles(Path.Combine(root, folder), "*.poly", SearchOption.AllDirectories).OrderBy(p => p, StringComparer.Ordinal))
-                documents.Add((Path.GetRelativePath(root, path).Replace('\\', '/'), File.ReadAllText(path)));
-        }
+        foreach (var path in PrintBaselineTests.ShippedDocuments())
+            documents.Add((path, File.ReadAllText(Path.Combine(root, path))));
 
         foreach (var (name, text) in ResolverBaselineTests.SweepDocuments)
             documents.Add(("sweep:" + name, text));

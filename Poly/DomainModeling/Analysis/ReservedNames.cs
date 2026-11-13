@@ -203,6 +203,16 @@ internal static class ReservedNames {
             row = ActionScopeRow;
             return true;
         }
+        // L-04a (L-03c's review, nit 3): the names the generated handler declares (`linkedTarget`, `linkedMatched`, and
+        // its `previousStage` parameter: CS0136 / CS0100) and the stage enums it reads from expression position
+        // (`{Entity}Stage`). Without the domain an enum name cannot be told from any other PascalCase `...Stage` name,
+        // so that shape is refused.
+        if (identity is "linkedTarget" or "linkedMatched" or "previousStage"
+            || (identity.Length > 5 && identity.EndsWith("Stage", StringComparison.Ordinal) && char.IsUpper(identity[0]))) {
+            row = new ReservedName(identity, ReservedKind.GeneratedReference,
+                "shadows a name the generated handler or action body declares or reads");
+            return true;
+        }
         foreach (var candidate in Fixed) {
             if (candidate.Kind != ReservedKind.GeneratedReference)
                 continue;

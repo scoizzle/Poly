@@ -161,14 +161,64 @@ public class CSharpRowRoundTripTests {
     /// which is the fail-closed contract; the analysed print of the same unit prints and re-reads.
     /// </summary>
     [Test]
-    [Arguments("""var s = "hi"; var n = ((long s) => s + 1)(4); n;""")]
-    [Arguments("""var s = 1000; var n = ((long s) => ((long s) => s + 1)(5) + s)(10); n;""")]
-    public async Task ShadowedParameterCallee_AnalysedPrint_ReReads(string body) {
+    [Arguments("""var s = "hi"; var n = ((long s) => s + 1)(4); n;""",
+        "var n = ((System.Func<long, long>)((long s_2) => s_2 + 1))(4);")]
+    [Arguments("""var s = 1000; var n = ((long s) => ((long s) => s + 1)(5) + s)(10); n;""",
+        "var n = ((System.Func<long, long>)((long s_2) => ((System.Func<long, long>)((long s_3) => s_3 + 1))(5) + s_2))(10);")]
+    public async Task ShadowedParameterCallee_AnalysedPrint_ReReads(string body, string printedDeclaration) {
         var unit = CSharpLanguage.Read($"class C {{ void M() {{ {body} }} }}");
         await Assert.That(() => CSharpLanguage.Write(unit)).Throws<InvalidOperationException>();
 
         var analysed = new CSharpWriter(Interpreter.Analyze(unit)).Write(unit);
         await Assert.That(CSharpLanguage.Read(analysed).Types.Single().Methods!.Single().Name).IsEqualTo("M");
+        await Assert.That(analysed).Contains(printedDeclaration);
+        await Assert.That(CSharpLanguage.Write(CSharpLanguage.Read(analysed))).IsEqualTo(analysed);
+    }
+
+    // ── F2: nested shadowed names print distinct names ───────────────────────
+
+    private static string[] PrintedLocals(string printed, string pattern) =>
+        [.. System.Text.RegularExpressions.Regex.Matches(printed, pattern).Select(m => m.Groups[1].Value)];
+
+    [Test]
+    public async Task NestedShadowedLambdaParameters_PrintDistinctNames_AndComputeTheSameValue() {
+        const string source = "class C { long M() { var s = 1000; var n = ((long s) => ((long s) => s + 1)(5) + s)(10); return n; } }";
+        var unit = CSharpLanguage.Read(source);
+        var analysed = new CSharpWriter(Interpreter.Analyze(unit)).Write(unit);
+
+        var parameters = PrintedLocals(analysed, @"\(long (\w+)\) =>");
+        await Assert.That(parameters.Distinct().Count()).IsEqualTo(parameters.Length).Because(analysed);
+        await Assert.That(CSharpLanguage.Write(CSharpLanguage.Read(analysed))).IsEqualTo(analysed);
+
+        var original = CSharpScript.Run(source + " new C().M();");
+        var reRead = CSharpScript.Run(analysed + "\nnew C().M();");
+        await Assert.That(original.Success).IsTrue().Because(string.Join(";", original.Diagnostics));
+        await Assert.That(reRead.Success).IsTrue().Because(string.Join(";", reRead.Diagnostics));
+        await Assert.That(original.Value).IsEqualTo("1016");
+        await Assert.That(reRead.Value).IsEqualTo(original.Value);
+    }
+
+    [Test]
+    public async Task ThreeDeepShadowedBlockLocals_PrintDistinctNames() {
+        var unit = CSharpLanguage.Read("class C { void M() { var s = 1; { var s = 2; { var s = 3; _ = s; } } } }");
+        var printed = CSharpLanguage.Write(unit);
+
+        var locals = PrintedLocals(printed, @"var (\w+) =");
+        await Assert.That(locals.Length).IsEqualTo(3).Because(printed);
+        await Assert.That(locals.Distinct().Count()).IsEqualTo(3).Because(printed);
+        await Assert.That(CSharpLanguage.Write(CSharpLanguage.Read(printed))).IsEqualTo(printed);
+    }
+
+    /// <summary>A generated name must not collide with a real source name already in scope.</summary>
+    [Test]
+    public async Task GeneratedShadowName_DoesNotCollideWithASourceName() {
+        var unit = CSharpLanguage.Read("class C { void M() { var s = 1; { var s = 2; var s_2 = 3; _ = s + s_2; } } }");
+        var printed = CSharpLanguage.Write(unit);
+
+        var locals = PrintedLocals(printed, @"var (\w+) =");
+        await Assert.That(locals.Length).IsEqualTo(3).Because(printed);
+        await Assert.That(locals.Distinct().Count()).IsEqualTo(3).Because(printed);
+        await Assert.That(CSharpLanguage.Write(CSharpLanguage.Read(printed))).IsEqualTo(printed);
     }
 
     // ── statement/label ──────────────────────────────────────────────────────

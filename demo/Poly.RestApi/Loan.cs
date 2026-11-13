@@ -54,7 +54,11 @@ internal class Loan : Poly.Runtime.IActionScoped
         }
         this.ReturnedAt = DateTime.UtcNow;
         this.CurrentStage = LoanStage.Returned;
-        this.NotifyReturnedSubscribers();
+        var notify0 = this.NotifyReturnedSubscribers();
+        if (!notify0.IsSuccess)
+        {
+            return DomainResult.Failure(notify0.Error!.At("Loan.Return"));
+        }
         return DomainResult.Success();
     }
     internal void RegisterPatronLoansOverdueSubscriber(Patron subscriber)
@@ -87,7 +91,7 @@ internal class Loan : Poly.Runtime.IActionScoped
         }
         this._patronLoansReturnedSubscribers.Add(subscriber);
     }
-    internal void NotifyOverdueSubscribers()
+    internal DomainResult NotifyOverdueSubscribers()
     {
         this.EnterNotifyCascade("Overdue");
         try
@@ -96,7 +100,11 @@ internal class Loan : Poly.Runtime.IActionScoped
             {
                 foreach (var sub in this._patronLoansOverdueSubscribers)
                 {
-                    sub.WhenEachLoanOverdue();
+                    var handlerResult0 = sub.WhenEachLoanOverdue();
+                    if (!handlerResult0.IsSuccess)
+                    {
+                        return handlerResult0;
+                    }
                 }
             }
         }
@@ -104,8 +112,9 @@ internal class Loan : Poly.Runtime.IActionScoped
         {
             this.ExitNotifyCascade();
         }
+        return DomainResult.Success();
     }
-    internal void NotifyReturnedSubscribers()
+    internal DomainResult NotifyReturnedSubscribers()
     {
         this.EnterNotifyCascade("Returned");
         try
@@ -114,7 +123,11 @@ internal class Loan : Poly.Runtime.IActionScoped
             {
                 foreach (var sub in this._patronLoansReturnedSubscribers)
                 {
-                    sub.WhenEachLoanReturned();
+                    var handlerResult0 = sub.WhenEachLoanReturned();
+                    if (!handlerResult0.IsSuccess)
+                    {
+                        return handlerResult0;
+                    }
                 }
             }
         }
@@ -122,6 +135,7 @@ internal class Loan : Poly.Runtime.IActionScoped
         {
             this.ExitNotifyCascade();
         }
+        return DomainResult.Success();
     }
     internal static DomainResult<Loan> Create(Book? book = null, Patron? borrower = null, string? status = null, DateTime? dueDate = null, DateTime? returnedAt = null, long? timesRenewed = null)
     {

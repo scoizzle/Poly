@@ -202,25 +202,30 @@ internal class Account : Poly.Runtime.IActionScoped
     }
     public bool HasHq() => this.Hq != null;
     public bool IsUrban() => this.Hq != null && this.Hq!.City == "Metropolis";
-    internal void WhenEachOpportunityWon()
+    internal DomainResult WhenEachOpportunityWon()
     {
         this.WonCount = this.WonCount + 1L;
+        return DomainResult.Success();
     }
-    internal void WhenEachOpportunityPropose(Opportunity deal)
+    internal DomainResult WhenEachOpportunityPropose(Opportunity deal)
     {
         this.OpenPipeline = this.OpenPipeline + deal.Amount;
+        return DomainResult.Success();
     }
-    internal void WhenEachOpportunityWon(Opportunity deal)
+    internal DomainResult WhenEachOpportunityWon(Opportunity deal)
     {
         this.OpenPipeline = this.OpenPipeline - deal.Amount;
+        return DomainResult.Success();
     }
-    internal void WhenEachOpportunityLost(Opportunity deal)
+    internal DomainResult WhenEachOpportunityLost(Opportunity deal)
     {
         this.OpenPipeline = this.OpenPipeline - deal.Amount;
+        return DomainResult.Success();
     }
-    internal void WhenEachTicketClosed()
+    internal DomainResult WhenEachTicketClosed()
     {
         this.ClosedTickets = this.ClosedTickets + 1L;
+        return DomainResult.Success();
     }
     internal static DomainResult<Account> Create(string name, Industry industry, Account? parent = null, Site? hq = null, IEnumerable<Contact>? contacts = null, IEnumerable<Opportunity>? opportunities = null, IEnumerable<Ticket>? tickets = null, long wonCount = 0L, decimal openPipeline = 0m, long closedTickets = 0L)
     {

@@ -46,7 +46,11 @@ internal class Fine : Poly.Runtime.IActionScoped
         }
         this.CurrentStage = FineStage.Resolved;
         this.Paid = true;
-        this.NotifyResolvedSubscribers();
+        var notify0 = this.NotifyResolvedSubscribers();
+        if (!notify0.IsSuccess)
+        {
+            return DomainResult.Failure(notify0.Error!.At("Fine.Pay"));
+        }
         return DomainResult.Success();
     }
     internal DomainResult Waive()
@@ -59,7 +63,11 @@ internal class Fine : Poly.Runtime.IActionScoped
         this.Paid = true;
         this.CurrentStage = FineStage.Resolved;
         this.Paid = true;
-        this.NotifyResolvedSubscribers();
+        var notify0 = this.NotifyResolvedSubscribers();
+        if (!notify0.IsSuccess)
+        {
+            return DomainResult.Failure(notify0.Error!.At("Fine.Waive"));
+        }
         return DomainResult.Success();
     }
     internal void RegisterPatronFinesResolvedSubscriber(Patron subscriber)
@@ -77,7 +85,7 @@ internal class Fine : Poly.Runtime.IActionScoped
         }
         this._patronFinesResolvedSubscribers.Add(subscriber);
     }
-    internal void NotifyResolvedSubscribers()
+    internal DomainResult NotifyResolvedSubscribers()
     {
         this.EnterNotifyCascade("Resolved");
         try
@@ -86,7 +94,11 @@ internal class Fine : Poly.Runtime.IActionScoped
             {
                 foreach (var sub in this._patronFinesResolvedSubscribers)
                 {
-                    sub.WhenEachFineResolved();
+                    var handlerResult0 = sub.WhenEachFineResolved();
+                    if (!handlerResult0.IsSuccess)
+                    {
+                        return handlerResult0;
+                    }
                 }
             }
         }
@@ -94,6 +106,7 @@ internal class Fine : Poly.Runtime.IActionScoped
         {
             this.ExitNotifyCascade();
         }
+        return DomainResult.Success();
     }
     internal static DomainResult<Fine> Create(string reason, long amount = 0L, Patron? patron = null, DateTime? dateIssued = null, bool? paid = null)
     {

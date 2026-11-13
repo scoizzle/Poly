@@ -125,7 +125,11 @@ internal class Opportunity : Poly.Runtime.IActionScoped
         }
         this.CurrentStage = OpportunityStage.Propose;
         this.Probability = 40L;
-        this.NotifyProposeSubscribers();
+        var notify0 = this.NotifyProposeSubscribers();
+        if (!notify0.IsSuccess)
+        {
+            return DomainResult.Failure(notify0.Error!.At("Opportunity.Propose"));
+        }
         return DomainResult.Success();
     }
     internal DomainResult Lose()
@@ -134,7 +138,11 @@ internal class Opportunity : Poly.Runtime.IActionScoped
         {
             this.CurrentStage = OpportunityStage.Lost;
             this.Probability = 0L;
-            this.NotifyLostSubscribers();
+            var notify0 = this.NotifyLostSubscribers();
+            if (!notify0.IsSuccess)
+            {
+                return DomainResult.Failure(notify0.Error!.At("Opportunity.Lose"));
+            }
             return DomainResult.Success();
         }
         return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Lose' is not valid for the current stage on entity 'Opportunity'.", "Opportunity.Lose"));
@@ -213,7 +221,11 @@ internal class Opportunity : Poly.Runtime.IActionScoped
         }
         this.CurrentStage = OpportunityStage.Won;
         this.Probability = 100L;
-        this.NotifyWonSubscribers();
+        var notify0 = this.NotifyWonSubscribers();
+        if (!notify0.IsSuccess)
+        {
+            return DomainResult.Failure(notify0.Error!.At("Opportunity.Win"));
+        }
         return DomainResult.Success();
     }
     internal DomainResult Capture(ChargeRequest request)
@@ -281,7 +293,7 @@ internal class Opportunity : Poly.Runtime.IActionScoped
         }
         this._accountOpportunitiesLostSubscribers.Add(subscriber);
     }
-    internal void NotifyWonSubscribers()
+    internal DomainResult NotifyWonSubscribers()
     {
         this.EnterNotifyCascade("Won");
         try
@@ -290,8 +302,16 @@ internal class Opportunity : Poly.Runtime.IActionScoped
             {
                 foreach (var sub in this._accountOpportunitiesWonSubscribers)
                 {
-                    sub.WhenEachOpportunityWon();
-                    sub.WhenEachOpportunityWon(this);
+                    var handlerResult0 = sub.WhenEachOpportunityWon();
+                    if (!handlerResult0.IsSuccess)
+                    {
+                        return handlerResult0;
+                    }
+                    var handlerResult1 = sub.WhenEachOpportunityWon(this);
+                    if (!handlerResult1.IsSuccess)
+                    {
+                        return handlerResult1;
+                    }
                 }
             }
         }
@@ -299,8 +319,9 @@ internal class Opportunity : Poly.Runtime.IActionScoped
         {
             this.ExitNotifyCascade();
         }
+        return DomainResult.Success();
     }
-    internal void NotifyProposeSubscribers()
+    internal DomainResult NotifyProposeSubscribers()
     {
         this.EnterNotifyCascade("Propose");
         try
@@ -309,7 +330,11 @@ internal class Opportunity : Poly.Runtime.IActionScoped
             {
                 foreach (var sub in this._accountOpportunitiesProposeSubscribers)
                 {
-                    sub.WhenEachOpportunityPropose(this);
+                    var handlerResult0 = sub.WhenEachOpportunityPropose(this);
+                    if (!handlerResult0.IsSuccess)
+                    {
+                        return handlerResult0;
+                    }
                 }
             }
         }
@@ -317,8 +342,9 @@ internal class Opportunity : Poly.Runtime.IActionScoped
         {
             this.ExitNotifyCascade();
         }
+        return DomainResult.Success();
     }
-    internal void NotifyLostSubscribers()
+    internal DomainResult NotifyLostSubscribers()
     {
         this.EnterNotifyCascade("Lost");
         try
@@ -327,7 +353,11 @@ internal class Opportunity : Poly.Runtime.IActionScoped
             {
                 foreach (var sub in this._accountOpportunitiesLostSubscribers)
                 {
-                    sub.WhenEachOpportunityLost(this);
+                    var handlerResult0 = sub.WhenEachOpportunityLost(this);
+                    if (!handlerResult0.IsSuccess)
+                    {
+                        return handlerResult0;
+                    }
                 }
             }
         }
@@ -335,6 +365,7 @@ internal class Opportunity : Poly.Runtime.IActionScoped
         {
             this.ExitNotifyCascade();
         }
+        return DomainResult.Success();
     }
     internal static DomainResult<Opportunity> Create(string title, decimal amount, Account? account = null, Contact? contact = null, IEnumerable<Activity>? activities = null, IEnumerable<Line>? lines = null, IEnumerable<Quote>? quotes = null, DateOnly? closeBy = null)
     {

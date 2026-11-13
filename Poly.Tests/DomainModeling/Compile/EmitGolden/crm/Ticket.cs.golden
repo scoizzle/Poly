@@ -38,7 +38,11 @@ internal class Ticket : Poly.Runtime.IActionScoped
         if (this.CurrentStage == TicketStage.New || this.CurrentStage == TicketStage.Working)
         {
             this.CurrentStage = TicketStage.Closed;
-            this.NotifyClosedSubscribers();
+            var notify0 = this.NotifyClosedSubscribers();
+            if (!notify0.IsSuccess)
+            {
+                return DomainResult.Failure(notify0.Error!.At("Ticket.Close"));
+            }
             return DomainResult.Success();
         }
         return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Close' is not valid for the current stage on entity 'Ticket'.", "Ticket.Close"));
@@ -58,7 +62,7 @@ internal class Ticket : Poly.Runtime.IActionScoped
         }
         this._accountTicketsClosedSubscribers.Add(subscriber);
     }
-    internal void NotifyClosedSubscribers()
+    internal DomainResult NotifyClosedSubscribers()
     {
         this.EnterNotifyCascade("Closed");
         try
@@ -67,7 +71,11 @@ internal class Ticket : Poly.Runtime.IActionScoped
             {
                 foreach (var sub in this._accountTicketsClosedSubscribers)
                 {
-                    sub.WhenEachTicketClosed();
+                    var handlerResult0 = sub.WhenEachTicketClosed();
+                    if (!handlerResult0.IsSuccess)
+                    {
+                        return handlerResult0;
+                    }
                 }
             }
         }
@@ -75,6 +83,7 @@ internal class Ticket : Poly.Runtime.IActionScoped
         {
             this.ExitNotifyCascade();
         }
+        return DomainResult.Success();
     }
     internal static DomainResult<Ticket> Create(string subject, Account? account = null)
     {

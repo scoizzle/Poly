@@ -805,7 +805,7 @@ public sealed class CSharpWriter {
                     list.Append(Pad(indent + 1));
                     list.Append(RenderFills("enum-member", "member", Names(
                         ("name", EscapeIdent(fields[i].Name)),
-                        ("value", i.ToString(CultureInfo.InvariantCulture)))));
+                        ("value", EnumMemberValueText(fields[i], i)))));
                     if (i < fields.Count - 1)
                         list.Append(',');
                 }
@@ -863,6 +863,13 @@ public sealed class CSharpWriter {
     }
 
     private static Dictionary<string, string> TypeNameFill(string name) => Names(("name", EscapeIdent(name)));
+
+    /// <summary>An enum member's value: its integral constant default, else its ordinal (the domain
+    /// exporter stores member-name strings as defaults, so those print as ordinals).</summary>
+    private static string EnumMemberValueText(FieldDefinitionNode field, int ordinal) =>
+        field.DefaultValue is Constant { Value: sbyte or byte or short or ushort or int or uint or long or ulong } constant
+            ? Convert.ToString(constant.Value, CultureInfo.InvariantCulture)!
+            : ordinal.ToString(CultureInfo.InvariantCulture);
 
     /// <summary>A class, record or interface body: every member through its member row, in the braces of
     /// <c>type-body/body</c>. The constructor name is the type's own name.</summary>

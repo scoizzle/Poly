@@ -289,6 +289,7 @@ public static class CSharpReader {
                 fields.Add(new FieldDefinitionNode(
                     Capture(target, "name"),
                     new PrimitiveTypeReference(PrimitiveType.Int32),
+                    new Constant(FoldNumber(Capture(target, "value"))),
                     IsStatic: true,
                     IsConst: true));
             }

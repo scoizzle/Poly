@@ -67,9 +67,9 @@ public class CSharpRowCharacterisationTests {
     }
 
     [Test]
-    public async Task EnumValues_PrintAsOrdinalsToday() {
+    public async Task EnumValues_PrintTheirDeclaredValue() {
         await Assert.That(UnitBody(CSharpLanguage.Read("enum E { A = 5, B = 7 }")))
-            .IsEqualTo("public enum E\n{\n    A = 0,\n    B = 1\n}");
+            .IsEqualTo("public enum E\n{\n    A = 5,\n    B = 7\n}");
     }
 
     [Test]

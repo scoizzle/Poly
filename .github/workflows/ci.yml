@@ -18,7 +18,7 @@ jobs:
     name: Build & test
     runs-on: ubuntu-latest
     # A normal job is about 6 minutes (build, then a 3-4 minute test run). The test run's own
-    # --timeout (10m) and the test step's 11m end a hang first and leave the naming and upload
+    # --timeout (10m), the script's 630 s kill and the test step's 12m end a hang first and leave the naming and upload
     # steps room on a cold cache; this is the backstop for everything else, not a budget: it replaces GitHub's 360-minute default.
     timeout-minutes: 20
     steps:

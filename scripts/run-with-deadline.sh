@@ -15,6 +15,11 @@ flag=$(mktemp)
 rm -f "$flag"
 
 set -m # job control: each background job gets its own process group, pgid == its pid
+watchdog=
+pid=
+# A TERM/INT/HUP to this script (a cancelled job, the step's timeout) must not orphan the command's
+# group or the watchdog: they would live on holding the step's output pipe.
+trap 'kill -KILL -- "-$pid" 2>/dev/null; [ -n "$watchdog" ] && kill -KILL -- "-$watchdog" 2>/dev/null; exit 143' TERM INT HUP
 "$@" &
 pid=$!
 (
@@ -31,7 +36,13 @@ wait "$pid"
 rc=$?
 kill -KILL -- "-$watchdog" 2>/dev/null
 wait "$watchdog" 2>/dev/null
-kill -KILL -- "-$pid" 2>/dev/null # stragglers of a finished run still hold the output pipe
+# Stragglers of a finished run still hold the output pipe: say what they are, then kill them.
+left=$(ps -eo pid,pgid,args | awk -v g="$pid" '$2 == g { print }' | cut -c1-200)
+if [ -n "$left" ]; then
+  echo "::warning::processes still alive in the test command's group after it exited (killed now):"
+  echo "$left"
+fi
+kill -KILL -- "-$pid" 2>/dev/null
 
 if [ -e "$flag" ]; then
   rm -f "$flag"

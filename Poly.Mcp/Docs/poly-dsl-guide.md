@@ -1499,16 +1499,18 @@ diverging:
   body, or after an effect the analysis does not follow on that path (a `for`, a
   transition, a cross-entity or fan-out `invoke`, a `create` or a `create in`), is judged
   against the declared ranges, as is a create outside an action body.
-  `range(...)` is the only kind decided against a computed
-  value on an `assign` or an initializer in this slice, so `length(...)`, `pattern(...)` and
-  `equals(...)` are not flow-checked there — but `length` **is** decided on an observed flow
-  and in the parameter arm, which compare declared bounds. The **call chain** decides
+  `range(...)` and `length(...)` are the kinds decided against a computed
+  value on an `assign` or an initializer: a Text value is proven only when its own `length(...)`
+  lies inside the target's (a copy of a shorter-bounded Text property), never disproven, and
+  `S + "xx"` or any value with no length stays unverified. `pattern(...)` and
+  `equals(...)` are not flow-checked there. The **call chain** decides
   each postcondition through the same range decision and records a fact for every
   non-satisfied outcome (deduplicated per callee write node, so a satisfied write is not
   counted twice): an error is a violation fact and a warning an unverified fact. A
   call-chain postcondition whose value range is not known is still skipped silently.
-  `poly_check` still prints `proven` for a model whose only findings are
-  warnings (the verdict flip is M-05), so read the findings, not the verdict word. A
+  `poly_check` reports `unknown`, not `proven`, while any write could not be verified
+  (a write finding, or a `DMCS003` from `default()` beside a `range` or `length`), and its
+  summary says how many; `proven` means every write was decided inside its constraint. A
   call-chain finding is attributed to the **callee** element that assigns (the chain is
   named in its message), so a summary scoped to the caller reads `proven` while the whole
   domain reads `violated`.

@@ -141,6 +141,30 @@ public class PolySurfaceV2Tests {
     }
 
     [Test]
+    public async Task PolyCheck_UnverifiedWrite_IsUnknown() {
+        var surface = Surface();
+        var workspace = Open(surface);
+        await Assert.That(surface.Define(workspace, """
+            domain V2
+            Box: entity {
+              S: Text length(1, 3)
+              T: Text length(1, 5)
+              Go: action { assign S to T }
+            }
+            """).Ok).IsTrue();
+
+        var whole = surface.Check(workspace);
+        var selected = surface.Check(workspace, select: "Box");
+
+        foreach (var response in new[] { whole, selected }) {
+            await Assert.That(response.Ok).IsTrue();
+            var data = JsonSerializer.SerializeToNode(response.Data)!;
+            await Assert.That(data["verdict"]!.GetValue<string>()).IsEqualTo("unknown");
+            await Assert.That(response.Summary).Contains("1 write");
+        }
+    }
+
+    [Test]
     public async Task Check_ViolatedWhenTheModelHasErrors() {
         var (sessionId, state) = McpTestTools.Store.Create("Broken");
         var broken = new Domain("Broken", [

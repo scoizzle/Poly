@@ -90,25 +90,30 @@ internal class Room : Poly.Runtime.IActionScoped
     public bool IsVacant() => !this.Occupied;
     public bool IsReady() => !this.Occupied && !this.Dirty && !this.Offline;
     public bool HasType() => this.RoomType != null;
-    internal void WhenEachReservationInHouse()
+    internal DomainResult WhenEachReservationInHouse()
     {
         this.Occupied = true;
+        return DomainResult.Success();
     }
-    internal void WhenEachReservationDeparted_SetOccupied()
+    internal DomainResult WhenEachReservationDeparted_SetOccupied()
     {
         this.Occupied = false;
+        return DomainResult.Success();
     }
-    internal void WhenEachReservationCancelled()
+    internal DomainResult WhenEachReservationCancelled()
     {
         this.Occupied = false;
+        return DomainResult.Success();
     }
-    internal void WhenEachReservationNoShow()
+    internal DomainResult WhenEachReservationNoShow()
     {
         this.Occupied = false;
+        return DomainResult.Success();
     }
-    internal void WhenEachReservationDeparted_SetDirty()
+    internal DomainResult WhenEachReservationDeparted_SetDirty()
     {
         this.Dirty = true;
+        return DomainResult.Success();
     }
     internal static DomainResult<Room> Create(string number, long floor, decimal nightlyRate, long maxOccupancy, Poly.Runtime.IStoragePort db, Property? property = null, RoomType? roomType = null, IEnumerable<Reservation>? stays = null, bool occupied = false, bool dirty = false, bool offline = false)
     {

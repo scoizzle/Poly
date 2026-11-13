@@ -78,13 +78,14 @@ internal class Patron : Poly.Runtime.IActionScoped
         return DomainResult<Loan>.Success(created1);
     }
     public bool GoodStanding() => this.Status == "Active";
-    internal void WhenEachLoanOverdue(Loan loan)
+    internal DomainResult WhenEachLoanOverdue(Loan loan)
     {
         var create0 = this.CreateFines("Overdue", loan.Amount);
         if (!create0.IsSuccess)
         {
             throw new ConstraintFailureException(create0.ErrorMessage ?? "");
         }
+        return DomainResult.Success();
     }
     internal static DomainResult<Patron> Create(string name, IEnumerable<Loan>? loans = null, IEnumerable<Fine>? fines = null, string status = "Active")
     {

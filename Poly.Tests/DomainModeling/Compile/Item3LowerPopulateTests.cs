@@ -287,7 +287,9 @@ public class Item3LowerPopulateTests {
         new Block([
             new Assignment(
                 new Member(new Parameter("entity", new TypeReference(entityName)), prop),
-                new Constant(value))
+                new Constant(value)),
+            // A handler returns a result; the sentinel body must too.
+            new Return(new Invoke(new Member(new NamedTypeReference("DomainResult"), "Success")))
         ]);
 
     private static (Domain Domain, AnalysisResult Analysis, DomainSession Session) Evolve(string poly) {

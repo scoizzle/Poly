@@ -411,14 +411,30 @@ public sealed class DomainDslPrinterTests {
         await Assert.That(PrintWithImplicitSet(repro)).Contains("range(0, 1000000000000000)");
 
         var printer = new DomainDslPrinter();
-        foreach (var bound in new object[] { 1e15f, 1e15d, 1e21d, 1e-7d }) {
+        (object Bound, decimal Expected, string Printed)[] rows = [
+            (1e15f, 1000000000000000m, "1000000000000000"),
+            (1e15d, 1000000000000000m, "1000000000000000"),
+            (1e21d, 1000000000000000000000m, "1000000000000000000000"),
+            (1e-7d, 0.0000001m, "0.0000001"),
+            (0.1d + 0.2d, 0.30000000000000004m, "0.30000000000000004"),
+            (1e23d, 100000000000000000000000m, "100000000000000000000000"),
+            ((double)long.MaxValue, 9223372036854776000m, "9223372036854776000"),
+        ];
+        foreach (var (bound, expected, printed) in rows) {
             var text = printer.Print(Dom(Ent("A", [Prop("N", "Decimal", new RangeConstraint(0L, bound))])));
             await Assert.That(Regex.IsMatch(text, "[0-9][Ee][+-]?[0-9]")).IsFalse().Because($"{bound.GetType().Name} {bound} printed:\n{text}");
+            await Assert.That(text).Contains($"range(0, {printed})");
             var reparsed = new DomainEvolution(DomainTestFactory.Create("_", [], []))
                 .ApplyAndAnalyze(new PolyDslParser(text).Parse());
             await Assert.That(reparsed.Succeeded).IsTrue().Because(text);
             var range = reparsed.Root!.Types.OfType<Entity>().Single().Properties.Single().Constraints.OfType<RangeConstraint>().Single();
-            await Assert.That(Convert.ToDecimal(range.Maximum)).IsEqualTo(Convert.ToDecimal(bound)).Because(text);
+            var read = (decimal)range.Maximum!;
+            await Assert.That(read).IsEqualTo(expected).Because(text);
+            // Round trip: the same double or float comes back, never a different one.
+            if (bound is double d)
+                await Assert.That((double)read).IsEqualTo(d).Because(text);
+            else
+                await Assert.That((float)read).IsEqualTo((float)bound).Because(text);
         }
     }
 

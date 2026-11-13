@@ -86,17 +86,23 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
     /// <summary>
     /// The declared <c>op_Implicit</c> or <c>op_Explicit</c> first (implicit preferred), so a conversion that names a
     /// method is never replaced by a built-in rule; then the built-in rules, only between two CLR definitions. A
-    /// modeled source is answered by the modeled convention.
+    /// modeled source is answered by the modeled convention. A native integer's implicit built-in conversion answers
+    /// first: C# 11 makes <c>nint</c> to <c>long</c> implicit where IntPtr declares an explicit <c>op_Explicit</c>; an
+    /// explicit one keeps IntPtr's declared method (<c>(int)nint</c>).
     /// </summary>
     TypeConversion? ITypeDefinition.ResolveConversionFrom(ITypeDefinition source) {
         ArgumentNullException.ThrowIfNull(source);
         if (source is not ClrTypeDefinition clrSource)
             return ModeledConversions.Find(source, this);
+        var builtIn = ClrBuiltInRules.Conversion(GetPrimitiveTypeId(clrSource.RuntimeType), GetPrimitiveTypeId(RuntimeType));
+        if (builtIn is { Kind: ConversionOperatorKind.Implicit }
+            && (ClrBuiltInRules.IsNativeInteger(clrSource.RuntimeType) || ClrBuiltInRules.IsNativeInteger(RuntimeType)))
+            return builtIn;
         if (FindConversionFrom(clrSource, ConversionOperatorKind.Implicit) is { } declaredImplicit)
             return new TypeConversion(ConversionOperatorKind.Implicit, declaredImplicit);
         if (FindConversionFrom(clrSource, ConversionOperatorKind.Explicit) is { } declaredExplicit)
             return new TypeConversion(ConversionOperatorKind.Explicit, declaredExplicit);
-        return ClrBuiltInRules.Conversion(GetPrimitiveTypeId(clrSource.RuntimeType), GetPrimitiveTypeId(RuntimeType));
+        return builtIn;
     }
 
     /// <summary>
@@ -122,8 +128,8 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
 
     /// <summary>
     /// The operators C# applies itself beside <paramref name="other"/>, then the reflected static special-name <c>op_*</c>
-    /// members. Where the CLR also declares an intrinsic's exact signature (Double and Single declare their
-    /// comparisons), the intrinsic is the answer. The built-in rules read the other operand only through its
+    /// members, except a native integer's, which C# 11 does not consult. Where the CLR also declares an intrinsic's
+    /// exact signature (Double and Single declare their comparisons), the intrinsic is the answer. The built-in rules read the other operand only through its
     /// primitive, so the cache is keyed by the kind and that primitive: keyed by the kind alone, the first pair would
     /// answer for every other; keyed by the other definition, it would grow without bound on fresh synthetic
     /// collection types, which are a new instance per resolve.
@@ -133,7 +139,7 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
         var otherPrimitive = other is null ? GetPrimitiveTypeId(RuntimeType) : other.PrimitiveType;
         return _operators.GetOrAdd((kind, otherPrimitive), key => {
             var intrinsic = ClrBuiltInRules.Operators(this, key.Other, _provider, key.Kind);
-            var reflected = FindOperators(key.Kind)
+            var reflected = (ClrBuiltInRules.IsNativeInteger(RuntimeType) ? [] : FindOperators(key.Kind))
                 .Where(method => !intrinsic.Any(declared => SameSignature(declared.Signature, method)))
                 .Select(static method => new DeclaredOperator(method, PlatformApplied: false));
             return [.. intrinsic, .. reflected];

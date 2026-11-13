@@ -44,7 +44,11 @@ public enum PrimitiveType {
     ByteArray,
 
     // Structured
-    Structure
+    Structure,
+
+    // Native-sized integers (C# 11 nint and nuint), appended so no earlier member's ordinal moves
+    NInt,
+    NUInt
 }
 
 /// <summary>
@@ -84,6 +88,8 @@ public static class PrimitiveTypeExtensions {
         PrimitiveType.Guid => "Guid",
         PrimitiveType.ByteArray => "ByteArray",
         PrimitiveType.Structure => "Object",
+        PrimitiveType.NInt => "NInt",
+        PrimitiveType.NUInt => "NUInt",
         _ => id.ToString()
     };
 
@@ -113,6 +119,8 @@ public static class PrimitiveTypeExtensions {
         PrimitiveType.Guid => "Guid",
         PrimitiveType.ByteArray => "byte[]",
         PrimitiveType.Structure => "object",
+        PrimitiveType.NInt => "nint",
+        PrimitiveType.NUInt => "nuint",
         _ => id.ToString()
     };
 
@@ -156,6 +164,8 @@ public static class PrimitiveTypeExtensions {
         Type t when t == typeof(Guid) => PrimitiveType.Guid,
         Type t when t == typeof(byte[]) => PrimitiveType.ByteArray,
         Type t when t == typeof(object) => PrimitiveType.Structure,
+        Type t when t == typeof(nint) => PrimitiveType.NInt,
+        Type t when t == typeof(nuint) => PrimitiveType.NUInt,
         _ => null
     };
 
@@ -185,6 +195,8 @@ public static class PrimitiveTypeExtensions {
         PrimitiveType.Guid => typeof(Guid),
         PrimitiveType.ByteArray => typeof(byte[]),
         PrimitiveType.Structure => typeof(object),
+        PrimitiveType.NInt => typeof(nint),
+        PrimitiveType.NUInt => typeof(nuint),
         _ => null
     };
 }

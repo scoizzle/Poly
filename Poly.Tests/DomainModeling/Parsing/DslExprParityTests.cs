@@ -29,7 +29,7 @@ public sealed class DslExprParityTests {
     }
 
     /// <summary>Normalized structural text for a DomainExpression (Id-agnostic).</summary>
-    private static string Canonical(DomainExpression e) => e switch {
+    internal static string Canonical(DomainExpression e) => e switch {
         PropertyAccess p => $"Prop({p.Name})",
         ParameterAccess p => $"Param({p.Name})",
         Literal l => $"Lit({l.Value ?? "null"})",
@@ -70,7 +70,7 @@ public sealed class DslExprParityTests {
     }
 
     // Product side: full .poly parse whose policy body is the expression.
-    private static bool ProductAccepts(string expr) {
+    internal static bool ProductAccepts(string expr) {
         var poly = $"domain D\nE: entity {{ P: policy {{ {expr} }} }}";
         try {
             new PolyDslParser(poly).Parse();

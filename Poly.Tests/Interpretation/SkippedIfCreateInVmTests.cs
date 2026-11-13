@@ -60,7 +60,7 @@ public class SkippedIfCreateInVmTests {
     [Test]
     public async Task CreateInstance_FractionalNumber_IsRejected() {
         var (sessionId, _) = McpTestTools.Store.Create("Billing");
-        var applied = McpTestTools.Dsl.ApplyDsl(sessionId, """
+        var applied = McpTestTools.Surface.Define(sessionId, """
             domain Billing
 
             Meter: entity {
@@ -69,25 +69,25 @@ public class SkippedIfCreateInVmTests {
             """);
         await Assert.That(applied.Success).IsTrue();
 
-        var fraction = McpTestTools.Runtime.CreateInstance(sessionId, "Meter", """{"Rate":0.25}""");
-        await Assert.That(fraction.Success).IsFalse();
-        await Assert.That(fraction.Message).Contains("Number is integral");
-        await Assert.That(fraction.Message).Contains("Decimal");
+        var fraction = McpTestTools.Surface.Create(sessionId, "Meter", """{"Rate":0.25}""");
+        await Assert.That(fraction.Ok).IsFalse();
+        await Assert.That(fraction.Summary).Contains("Number is integral");
+        await Assert.That(fraction.Summary).Contains("Decimal");
         McpTestTools.Store.TryGet(sessionId, out var afterFraction);
         await Assert.That(afterFraction!.InstanceMap.Count).IsEqualTo(0);
 
-        var whole = McpTestTools.Runtime.CreateInstance(sessionId, "Meter", """{"Rate":1}""");
-        await Assert.That(whole.Success).IsTrue();
+        var whole = McpTestTools.Surface.Create(sessionId, "Meter", """{"Rate":1}""");
+        await Assert.That(whole.Ok).IsTrue();
 
-        var integralJson = McpTestTools.Runtime.CreateInstance(sessionId, "Meter", """{"Rate":1.0}""");
-        await Assert.That(integralJson.Success).IsTrue();
+        var integralJson = McpTestTools.Surface.Create(sessionId, "Meter", """{"Rate":1.0}""");
+        await Assert.That(integralJson.Ok).IsTrue();
 
-        var edge = McpTestTools.Runtime.CreateInstance(sessionId, "Meter", """{"Rate":256}""");
-        await Assert.That(edge.Success).IsTrue();
+        var edge = McpTestTools.Surface.Create(sessionId, "Meter", """{"Rate":256}""");
+        await Assert.That(edge.Ok).IsTrue();
         await Assert.That(Rates(sessionId)).IsEquivalentTo(new long[] { 1L, 1L, 256L });
 
-        var outOfRange = McpTestTools.Runtime.CreateInstance(sessionId, "Meter", """{"Rate":1e30}""");
-        await Assert.That(outOfRange.Success).IsFalse();
+        var outOfRange = McpTestTools.Surface.Create(sessionId, "Meter", """{"Rate":1e30}""");
+        await Assert.That(outOfRange.Ok).IsFalse();
 
         await Assert.That(DictionaryBackedValue.CoerceReadValue(1.0d, Poly.Introspection.PrimitiveType.Int64)).IsEqualTo(1L);
         await Assert.That(DictionaryBackedValue.CoerceReadValue(1.0m, Poly.Introspection.PrimitiveType.Int64)).IsEqualTo(1L);

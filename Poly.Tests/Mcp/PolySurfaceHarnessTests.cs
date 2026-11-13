@@ -397,7 +397,7 @@ public class PolySurfaceHarnessTests {
     [Test]
     public async Task Over_SharesTheStore() {
         var (ws, _) = McpTestTools.Store.Create("Q05aShared");
-        var h = PolySurfaceHarness.Over(McpTestTools.Store);
+        var h = McpTestTools.Surface;
 
         var define = h.Define(ws, Valid);
 

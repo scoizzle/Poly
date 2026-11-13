@@ -24,7 +24,7 @@ public class ManyToManyExportTests {
             """{"name":"OrderItems","source":"Order","target":"Item","cardinality":"ManyToMany"}""");
         await Assert.That(rel.Success).IsTrue();
 
-        var export = PolySurfaceHarness.Over(McpTestTools.Store).Export(sessionId, "dsl");
+        var export = McpTestTools.Surface.Export(sessionId, "dsl");
         await Assert.That(export.Success).IsFalse();
         await Assert.That(export.Summary).Contains("OrderItems");
         await Assert.That(export.Summary).Contains("ManyToMany");
@@ -39,7 +39,7 @@ public class ManyToManyExportTests {
             """{"name":"OrderItems","source":"Order","target":"Item","cardinality":"OneToMany"}""");
         await Assert.That(rel.Success).IsTrue();
 
-        var export = PolySurfaceHarness.Over(McpTestTools.Store).Export(sessionId, "dsl");
+        var export = McpTestTools.Surface.Export(sessionId, "dsl");
         await Assert.That(export.Success).IsTrue();
         await Assert.That(export.Content).Contains("OrderItems: many Item");
     }

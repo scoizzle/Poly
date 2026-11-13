@@ -534,7 +534,7 @@ public class GuideExamplesTests {
             var mismatches = new List<string>();
             foreach (var (label, block) in samples) {
                 var composed = GuideBlocks.Compose(block, wrappers);
-                var mcp = PolySurfaceHarness.Over(McpTestTools.Store).Define(sessionId, composed.Text, apply: false);
+                var mcp = McpTestTools.Surface.Define(sessionId, composed.Text, apply: false);
                 if (composed.Result.Succeeded != mcp.Success)
                     mismatches.Add($"{label} block at guide line {block.Line}: harness says {composed.Result.Succeeded}, "
                                    + $"validate_dsl says {mcp.Success}");
@@ -546,7 +546,7 @@ public class GuideExamplesTests {
                 ? GuideBlocks.Compose(parseError, wrappers).Text
                 : "domain Q10Parse\n\nA: entity {\n";
             var parseHarness = GuideBlocks.Analyze(parseText);
-            var parseMcp = PolySurfaceHarness.Over(McpTestTools.Store).Define(sessionId, parseText, apply: false);
+            var parseMcp = McpTestTools.Surface.Define(sessionId, parseText, apply: false);
             if (parseHarness.Succeeded != parseMcp.Success)
                 mismatches.Add($"parse-error document: harness says {parseHarness.Succeeded}, validate_dsl says {parseMcp.Success}");
 

@@ -14,7 +14,7 @@ namespace Poly.Tests.TestHelpers;
 [NotInParallel("ChildProcessSlots")]
 public class PolycProcessTests {
     /// <summary>Length of a <c>not not ... Flag is true</c> chain. Before G-09 this aborted with exit 134 ("Stack overflow." in
-    /// Poly.Grammar.Matcher) at 2000 and above; the matcher budget now reports it as a positioned DSL0001 instead. The abort
+    /// Poly.Grammar.Matcher) at 2000 and above; the expression driver's depth limit reports it as a positioned DSL0001 instead. The abort
     /// mechanism's permanent proof is <see cref="RunTestInChild_OverflowingChild_ReportsAbortNotHostCrash"/>.</summary>
     private const int OverflowDepth = 20_000;
 
@@ -53,7 +53,9 @@ public class PolycProcessTests {
             await Assert.That(result.IsAborted).IsFalse();
             await Assert.That(result.ExitCode).IsEqualTo(1);
             await Assert.That(result.Stdout).Contains(": error DSL0001: ");
-            await Assert.That(result.Stdout).Contains(":5:16: error DSL0001: ");
+            // The depth error sits on the 257th `not`: the policy line starts "  Ok: policy { " (first `not` at column 16),
+            // and each "not " is four columns, so 16 + 4 * 256. G-09's matcher budget reported column 16 (the first `not`).
+            await Assert.That(result.Stdout).Contains(":5:1040: error DSL0001: ");
         }
         finally {
             Directory.Delete(dir, recursive: true);

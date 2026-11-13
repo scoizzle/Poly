@@ -1168,7 +1168,8 @@ The DSL accepts boolean and scalar expressions through the following precedence 
 
 An expression may nest at most 256 levels: the top level is 0, and each paren group, `not`,
 comparison operand, `where` body or call/match argument adds 1, while a chain of N operands
-adds N - 1. Deeper input is a positioned parse error, not a crash.
+adds N - 1. Deeper input is a positioned parse error, not a crash, and the limit does not depend on the
+host's stack size.
 
 Valid expressions:
 <!-- poly-verify: skip:illustration owner:M-02 -->
@@ -1499,7 +1500,7 @@ assign Tier to match { Qty > 100 -> "big", Qty > 10 -> "mid", else -> "small" }
 - **`else -> value` is required and must be the last arm**, so a match is always total. A missing,
   repeated or non-final `else` is a positioned parse error. There is no implicit default.
 - Arms are **expressions**, never effects. It works wherever an expression does (assign RHS, `if`
-  conditions, policy bodies, `create` initializers, nested inside another `match`).
+  conditions, policy bodies, `create` initializers, nested inside another `match`, or as a function-call argument such as `Add(match { Qty > 3 -> 10, else -> 1 }, 1)`).
 - Conditions must be Boolean (**DMMAT001**). The arm values and the `else` must unify to one type
   (**DMMAT002**; `Text` and an enum unify, `Text` and `Number` do not). Two arms with the same
   condition are an error, the later arm is unreachable (**DMMAT003**); only identical conditions

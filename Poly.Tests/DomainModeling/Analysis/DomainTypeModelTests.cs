@@ -305,14 +305,23 @@ public class DomainTypeModelTests {
             seen.Add(kind);
         }
         await Assert.That(seen.Distinct().Count()).IsEqualTo(OperatorCases.Length);
-        await Assert.That(seen.Order().ToArray()).IsEquivalentTo(Enum.GetValues<OperatorKind>().Order().ToArray());
+        // Every kind is either a domain syntax's or one the platform defines and the DSL has no syntax for (T-24).
+        await Assert.That(seen.Intersect(PlatformOnlyKinds).ToArray()).IsEmpty();
+        await Assert.That(seen.Concat(PlatformOnlyKinds).Order().ToArray()).IsEquivalentTo(Enum.GetValues<OperatorKind>().Order().ToArray());
     }
 
+    /// <summary>The kinds the .NET rule set answers that no domain syntax denotes yet (F-04, F-05 map the syntax).</summary>
+    private static readonly OperatorKind[] PlatformOnlyKinds = [
+        OperatorKind.Modulo, OperatorKind.UnaryMinus, OperatorKind.UnaryPlus, OperatorKind.BitwiseAnd, OperatorKind.BitwiseOr,
+        OperatorKind.BitwiseXor, OperatorKind.BitwiseNot, OperatorKind.ShiftLeft, OperatorKind.ShiftRight
+    ];
+
     [Test]
-    public async Task OperatorKind_HasExactlyTheThirteenKnownMembers() {
+    public async Task OperatorKind_HasExactlyTheTwentyTwoKnownMembers() {
         string[] expected = [
             "Add", "Subtract", "Multiply", "Divide", "Equal", "NotEqual", "LessThan", "LessThanOrEqual",
-            "GreaterThan", "GreaterThanOrEqual", "And", "Or", "Not"
+            "GreaterThan", "GreaterThanOrEqual", "And", "Or", "Not",
+            "Modulo", "UnaryMinus", "UnaryPlus", "BitwiseAnd", "BitwiseOr", "BitwiseXor", "BitwiseNot", "ShiftLeft", "ShiftRight"
         ];
         await Assert.That(Enum.GetNames<OperatorKind>().Order().ToArray()).IsEquivalentTo(expected.Order().ToArray());
     }

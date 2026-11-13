@@ -368,7 +368,7 @@ public sealed class LibrarySelectionTests {
         const string UsesSqlite = "domain S\nuses sqlite\n\nA: entity {\n  X: Text\n}\n";
         var polycSqlite = global::Polyc.Options.CreateCompiler(null).Compile(UsesSqlite, "s.poly");
         await Assert.That(polycSqlite.Succeeded).IsTrue();
-        await Assert.That(McpTestTools.Dsl.ApplyDsl(id, UsesSqlite).Success).IsTrue();
+        await Assert.That(McpTestTools.Surface.Define(id, UsesSqlite).Success).IsTrue();
         await Assert.That(McpTestTools.Store.TryGet(id, out var applied)).IsTrue();
         await Assert.That(applied.Domain.Extensions).IsEquivalentTo(new[] { "sqlite" });
         await Assert.That(applied.Modeling.Extensions).IsEquivalentTo(polycSqlite.Session!.Extensions);
@@ -644,19 +644,19 @@ public sealed class LibrarySelectionTests {
     [Test]
     public async Task UsesStoragePlusPersistence_McpCSharpExport_GuardsUnique() {
         var (sessionId, _) = McpTestTools.Store.Create("StorageUnique");
-        var applied = McpTestTools.Dsl.ApplyDsl(
+        var applied = McpTestTools.Surface.Define(
             sessionId,
             "domain StorageUnique\nuses storage\nuses persistence\n\nAgent: entity {\n  Handle: Text unique\n}\n");
         await Assert.That(applied.Success).IsTrue();
 
-        var first = McpTestTools.Runtime.CreateInstance(sessionId, "Agent", """{"Handle":"sam"}""");
-        await Assert.That(first.Success).IsTrue();
-        var exported = McpTestTools.Oracle.ExportDomainToCSharp(sessionId);
+        var first = McpTestTools.Surface.Create(sessionId, "Agent", """{"Handle":"sam"}""");
+        await Assert.That(first.Ok).IsTrue();
+        var exported = McpTestTools.Surface.Export(sessionId, "csharp");
         await Assert.That(exported.Success).IsTrue();
 
-        var duplicate = McpTestTools.Runtime.CreateInstance(sessionId, "Agent", """{"Handle":"sam"}""");
-        await Assert.That(duplicate.Success).IsFalse();
-        await Assert.That(duplicate.Message).Contains("Unique constraint");
+        var duplicate = McpTestTools.Surface.Create(sessionId, "Agent", """{"Handle":"sam"}""");
+        await Assert.That(duplicate.Ok).IsFalse();
+        await Assert.That(duplicate.Summary).Contains("Unique constraint");
     }
 
     private sealed class AliasedCompilerLibrary(string id, string compilerLibraryId) : IDomainLibrary {

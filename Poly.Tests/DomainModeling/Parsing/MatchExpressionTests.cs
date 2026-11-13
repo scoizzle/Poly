@@ -55,13 +55,15 @@ public class MatchExpressionTests {
 
     private static AnalysisResult Analyze(string poly) => DomainModelAnalyzer.Analyze(Apply(poly));
 
-    private static string ParseError(string poly) {
+    private static string ParseError(string poly) => ParseException(poly).Detail;
+
+    private static GrammarException ParseException(string poly) {
         GrammarException? caught = null;
         try { new PolyDslParser(poly).Parse(); }
         catch (GrammarException ex) { caught = ex; }
         if (caught is null) throw new InvalidOperationException("expected a parse error");
         if (caught.Line <= 0) throw new InvalidOperationException("parse error is not positioned: " + caught.Detail);
-        return caught.Detail;
+        return caught;
     }
 
     [Test]
@@ -129,20 +131,24 @@ public class MatchExpressionTests {
         await Assert.That(analysis.HasErrors).IsTrue();
     }
 
+    /// <summary>Each malformed match is a parse error at the token the fault is on: line 9 of the wrapped document, and
+    /// <paramref name="faultColumn"/> columns into the match text (the assign right-hand side starts at column 22).</summary>
     [Test]
-    [Arguments("match { }", "else")]
-    [Arguments("match { Qty > 1 -> \"a\" }", "'else'")]
-    [Arguments("match { else -> \"b\", Qty > 1 -> \"a\" }", "'else' must be the last")]
-    [Arguments("match { else -> \"a\", else -> \"b\" }", "more than one 'else'")]
-    [Arguments("match { Qty > 1 \"a\", else -> \"b\" }", "'->'")]
-    [Arguments("match { Qty > 1 -> , else -> \"b\" }", "value")]
-    [Arguments("match { -> \"a\", else -> \"b\" }", "condition")]
-    [Arguments("match { Qty > 1 -> \"a\", , else -> \"b\" }", "Expected an arm")]
-    [Arguments("match { Qty > 1 -> \"a\", else -> \"b\", }", "Expected an arm")]
-    public async Task Match_Malformed_IsPositionedParseError(string rhs, string expected) {
-        var detail = ParseError(Wrap(rhs));
+    [Arguments("match { }", "else", 1)]
+    [Arguments("match { Qty > 1 -> \"a\" }", "'else'", 1)]
+    [Arguments("match { else -> \"b\", Qty > 1 -> \"a\" }", "'else' must be the last", 9)]
+    [Arguments("match { else -> \"a\", else -> \"b\" }", "more than one 'else'", 22)]
+    [Arguments("match { Qty > 1 \"a\", else -> \"b\" }", "'->'", 9)]
+    [Arguments("match { Qty > 1 -> , else -> \"b\" }", "value", 17)]
+    [Arguments("match { -> \"a\", else -> \"b\" }", "condition", 9)]
+    [Arguments("match { Qty > 1 -> \"a\", , else -> \"b\" }", "Expected an arm", 25)]
+    [Arguments("match { Qty > 1 -> \"a\", else -> \"b\", }", "Expected an arm", 38)]
+    public async Task Match_Malformed_IsPositionedParseError(string rhs, string expected, int faultColumn) {
+        var error = ParseException(Wrap(rhs));
 
-        await Assert.That(detail).Contains(expected);
+        await Assert.That(error.Detail).Contains(expected);
+        await Assert.That(error.Line).IsEqualTo(9);
+        await Assert.That(error.Column).IsEqualTo(21 + faultColumn);
     }
 
     [Test]

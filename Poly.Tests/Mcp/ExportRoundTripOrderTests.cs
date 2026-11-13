@@ -29,7 +29,7 @@ public sealed class ExportRoundTripOrderTests {
 
     public static IEnumerable<GoldenDomain> CompilableDomains() => GoldenDomains.Compilable;
 
-    private static readonly PolySurfaceHarness Surface = PolySurfaceHarness.Over(McpTestTools.Store);
+    private static readonly PolySurfaceHarness Surface = McpTestTools.Surface;
 
     private static string Apply(string poly) {
         var workspace = Surface.Open("RoundTrip");

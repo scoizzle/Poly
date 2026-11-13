@@ -11,15 +11,10 @@ namespace Poly.DomainModeling.Language;
 public class DslCursor : IDslParseCursor {
     private readonly ITokenReader<DslToken, DslTokenKind> _reader;
     private readonly Matcher<DslToken, DslTokenKind> _matcher;
-    private bool _inWhereBody;
 
     public DslCursor(ITokenReader<DslToken, DslTokenKind> reader, Matcher<DslToken, DslTokenKind> matcher) {
         _reader = reader ?? throw new ArgumentNullException(nameof(reader));
         _matcher = matcher ?? throw new ArgumentNullException(nameof(matcher));
-        // The DSL's recursion is deep enough to overflow a 1 MB thread below the ruled
-        // nesting limit, so every DSL cursor carries the matcher budget. One place sets it.
-        if (_matcher.MaxRuleDepth == 0)
-            _matcher.MaxRuleDepth = DslLimits.MaxRuleDepth;
     }
 
     /// <summary>
@@ -59,27 +54,13 @@ public class DslCursor : IDslParseCursor {
 
     public DslToken Peek(int n = 1) => _reader.Peek(n);
 
-    public MatchResult<DslToken, DslTokenKind>? MatchRule(string ruleName) {
-        try {
-            return _matcher.TryMatch(ruleName);
-        }
-        catch (GrammarException ex) when (ex.Line < 1) {
-            // The engine knows no positions; a match budget it reports is re-anchored here.
-            var t = Current;
-            throw new GrammarException(ex.Detail, t.Line, t.Col, t.Offset, t.Length);
-        }
-    }
+    public MatchResult<DslToken, DslTokenKind>? MatchRule(string ruleName) => _matcher.TryMatch(ruleName);
 
     public void Consume(MatchResult<DslToken, DslTokenKind> match) => _reader.Consume(match.Consumed);
 
     public Exception Error(string message) {
         var t = Current;
         return GrammarError.Error(message, t.Line, t.Col);
-    }
-
-    public bool InWhereBody {
-        get => _inWhereBody;
-        set => _inWhereBody = value;
     }
 
     private bool _inPropertyInitializerValue;
@@ -104,6 +85,5 @@ public interface IDslParseCursor {
     MatchResult<DslToken, DslTokenKind>? MatchRule(string ruleName);
     void Consume(MatchResult<DslToken, DslTokenKind> match);
     Exception Error(string message);
-    bool InWhereBody { get; set; }
     bool InPropertyInitializerValue { get; set; }
 }

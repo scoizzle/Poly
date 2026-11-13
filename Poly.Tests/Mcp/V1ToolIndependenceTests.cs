@@ -86,16 +86,6 @@ public partial class V1ToolIndependenceTests {
         new("Mcp/UniqueSurvivesRejectedEvolveTests.cs", "McpTestTools.Evolve", 4, "M-13"),
         new("Mcp/ValidateDslTests.cs", "McpTestTools.Query", 3, "M-13"),
         // Q-05 (a "Q-05x+M-nn" label: one entry per (file, key); the Q-05x PR lowers the count and rewrites the label to M-nn)
-        // Q-05c
-        new("DomainModeling/Compile/CompileRefusesErrorsTests.cs", "McpTestTools.Runtime", 1, "Q-05c"),
-        new("DomainModeling/Compile/LibrarySelectionTests.cs", "McpTestTools.Dsl", 2, "Q-05c"),
-        new("DomainModeling/Compile/LibrarySelectionTests.cs", "McpTestTools.Oracle", 1, "Q-05c"),
-        new("DomainModeling/Compile/LibrarySelectionTests.cs", "McpTestTools.Runtime", 2, "Q-05c"),
-        new("DomainModeling/DecimalMoneySpikeTests.cs", "McpTestTools.Dsl", 2, "Q-05c"),
-        new("DomainModeling/DecimalMoneySpikeTests.cs", "McpTestTools.Runtime", 2, "Q-05c"),
-        new("Interpretation/SkippedIfCreateInVmTests.cs", "McpTestTools.Dsl", 1, "Q-05c"),
-        new("Interpretation/SkippedIfCreateInVmTests.cs", "McpTestTools.Runtime", 5, "Q-05c"),
-        new("Mcp/DomainFactsTests.cs", "McpTestTools.Dsl", 3, "Q-05c"),
         // Q-05d1
         new("Mcp/CreateInstanceCoercionTests.cs", "DomainToolResponse", 2, "Q-05d1"),
         new("Mcp/CreateInstanceCoercionTests.cs", "McpTestTools.Dsl", 4, "Q-05d1"),

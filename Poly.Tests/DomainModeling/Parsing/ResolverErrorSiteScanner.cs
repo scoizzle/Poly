@@ -64,7 +64,7 @@ internal sealed record ErrorOrigin(string? SiteId, string Class, int Line) {
 
 /// <summary>
 /// G-26b's site scanner and reach probe. The scanner reads the resolver partials with Roslyn (the test
-/// project already references it) and lists the 91 <c>Expect</c>, 55 <c>ExpectIdentifier</c> and 80 <c>throw</c>
+/// project already references it) and lists the 91 <c>Expect</c>, 55 <c>ExpectIdentifier</c> and 81 <c>throw</c>
 /// sites; the probe resolves a document, catches the exception and walks its stack: the first frame above
 /// <see cref="DslCursor"/>'s helpers is the call site. The walk fails closed (see <see cref="AssertProbeIsSound"/>).
 /// </summary>

@@ -281,6 +281,33 @@ public static partial class AbiEmitter {
         Context ctx,
         out Expression prelude,
         out Expression callArgument) {
+        try {
+            return QuoteExpressionArgument(lambda, delegateType, invokeMethod, ctx, out prelude, out callArgument);
+        }
+        catch (Exception ex) when (MarkAsLambdaBridge(ex)) {
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// The <see cref="Exception.Data"/> key set on every exception raised while the bridge quotes a lambda, so a caller can
+    /// tell the bridge's refusal from the main emitter's (which compiles the same body into the function table first).
+    /// </summary>
+    internal const string LambdaBridgeExceptionKey = "Poly.Interpretation.Vm.Abi.LambdaBridge";
+
+    /// <summary>Marks the exception and declines to catch it, so it propagates with its stack unchanged.</summary>
+    private static bool MarkAsLambdaBridge(Exception ex) {
+        ex.Data[LambdaBridgeExceptionKey] = true;
+        return false;
+    }
+
+    private static bool QuoteExpressionArgument(
+        Lambda lambda,
+        Type delegateType,
+        MethodInfo invokeMethod,
+        Context ctx,
+        out Expression prelude,
+        out Expression callArgument) {
         var pure = new PureLambdaContext(lambda, delegateType, invokeMethod, ctx);
         var spills = new List<Expression>();
         foreach (var capture in FindBodyCaptures(lambda, ctx.Analysis)) {
@@ -488,7 +515,7 @@ public static partial class AbiEmitter {
             BitwiseNot bitNot => PureUnary(OperatorKind.BitwiseNot, bitNot, bitNot.Operand, Not, ctx),
             Conditional conditional => CompilePureConditional(conditional, ctx),
             Coalesce coalesce => CompilePureCoalesce(coalesce, ctx),
-            TypeCast cast => Convert(CompilePureNode(cast.Operand, ctx), TargetClrType(cast.TargetTypeReference, cast, ctx)),
+            TypeCast cast => ConvertOperand(cast, CompilePureNode(cast.Operand, ctx), TargetClrType(cast.TargetTypeReference, cast, ctx)),
             TypeAs typeAs => TypeAs(CompilePureNode(typeAs.Operand, ctx), TargetClrType(typeAs.TargetTypeReference, typeAs, ctx)),
             TypeIs typeIs => TypeIs(CompilePureNode(typeIs.Operand, ctx), TargetClrType(typeIs.TargetTypeReference, typeIs, ctx)),
             TypeOf typeOf => Constant(TargetClrType(typeOf.Type, typeOf, ctx), typeof(Type)),
@@ -653,7 +680,8 @@ public static partial class AbiEmitter {
         var lifted = Nullable.GetUnderlyingType(operand.Type) is not null;
         var parameter = Lift(RuntimeTypeOf(resolution.Signature.Parameters.Single().ParameterTypeDefinition, node), lifted);
         var expected = Lift(RuntimeTypeOf(resolution.Result, node), lifted);
-        var result = Combine(node, () => factory(Convert(operand, parameter)));
+        var converted = ConvertOperand(node, operand, parameter);
+        var result = Combine(node, () => factory(converted));
         if (result.Type != expected)
             throw RejectOperator(node, $"the {kind} operator over '{TypeName(parameter)}' is '{TypeName(result.Type)}' in the expression tree, but the type provider states '{TypeName(expected)}'");
         return result;
@@ -676,7 +704,7 @@ public static partial class AbiEmitter {
             or OperatorKind.LessThanOrEqual or OperatorKind.GreaterThan or OperatorKind.GreaterThanOrEqual;
         if (ConstantOperandRule.Applies(kind, analysis.GetEffectiveNode(leftNode), left.Type, analysis.GetEffectiveNode(rightNode), right.Type)) {
             var uint64 = Lift(typeof(ulong), lifted);
-            return (Convert(left, uint64), Convert(right, uint64), comparison ? typeof(bool) : uint64);
+            return (ConvertOperand(node, left, uint64), ConvertOperand(node, right, uint64), comparison ? typeof(bool) : uint64);
         }
         var leftDefinition = OperandDefinition(left.Type, node, ctx);
         var rightDefinition = OperandDefinition(right.Type, node, ctx);
@@ -685,7 +713,7 @@ public static partial class AbiEmitter {
         var parameters = resolution.Signature.Parameters
             .Select(parameter => Lift(RuntimeTypeOf(parameter.ParameterTypeDefinition, node), lifted)).ToArray();
         var result = RuntimeTypeOf(resolution.Result, node);
-        return (Convert(left, parameters[0]), Convert(right, parameters[1]), comparison ? result : Lift(result, lifted));
+        return (ConvertOperand(node, left, parameters[0]), ConvertOperand(node, right, parameters[1]), comparison ? result : Lift(result, lifted));
     }
 
     /// <summary>The type provider's definition of an operand's type, its nullable unwrapped; a missing definition is a refusal.</summary>
@@ -732,6 +760,13 @@ public static partial class AbiEmitter {
         }
     }
 
+    /// <summary>
+    /// A conversion the provider stated, built by the Expression API, which may still have no conversion for the pair
+    /// (<c>IntPtr</c> to <c>double</c>): then the bridge's positioned refusal.
+    /// </summary>
+    private static Expression ConvertOperand(Node node, Expression value, Type type) =>
+        value.Type == type ? value : Combine(node, () => Convert(value, type));
+
     private static Expression CompilePureCondition(Node node, PureLambdaContext ctx) {
         var value = CompilePureNode(node, ctx);
         if (value.Type == typeof(bool))
@@ -747,7 +782,7 @@ public static partial class AbiEmitter {
             throw RejectPure(conditional, "a conditional arm produces no value");
         if (IsGovernedPair(whenTrue, whenFalse)) {
             var common = ConditionalType(conditional, whenTrue.Type, whenFalse.Type, ctx);
-            return Condition(condition, Convert(whenTrue, common), Convert(whenFalse, common));
+            return Condition(condition, ConvertOperand(conditional, whenTrue, common), ConvertOperand(conditional, whenFalse, common));
         }
         var (promotedTrue, promotedFalse) = Promote(whenTrue, whenFalse);
         return Combine(conditional, () => Condition(condition, promotedTrue, promotedFalse));
@@ -775,13 +810,30 @@ public static partial class AbiEmitter {
             : throw RejectOperator(conditional, $"the arms '{TypeName(whenTrue)}' and '{TypeName(whenFalse)}' have no common type: neither converts implicitly to the other");
     }
 
+    /// <summary>
+    /// <c>a ?? b</c> typed by C# 12.15, with A the left's type and A0 its underlying type when it is nullable: A0 when b
+    /// converts implicitly to A0; else A when b converts to A; else B when A0 converts to B (a unwrapped and converted);
+    /// else B when a converts to B; otherwise a positioned refusal. The conversions are <see cref="TryCoercePure"/>'s.
+    /// </summary>
     private static Expression CompilePureCoalesce(Coalesce coalesce, PureLambdaContext ctx) {
         var left = CompilePureNode(coalesce.LeftHandValue, ctx);
         var right = CompilePureNode(coalesce.RightHandValue, ctx);
         if (left.Type.IsValueType && Nullable.GetUnderlyingType(left.Type) is null)
             throw RejectPure(coalesce, "the left operand is a non-nullable value type");
-        var rightCoerced = CoercePure(right, left.Type, "the coalesce right operand", ctx);
-        return Coalesce(left, rightCoerced);
+        var underlying = Nullable.GetUnderlyingType(left.Type);
+        if (underlying is not null && TryCoercePure(right, underlying, ctx, out var toUnderlying, out _))
+            return Combine(coalesce, () => Coalesce(left, toUnderlying));
+        if (TryCoercePure(right, left.Type, ctx, out var toLeft, out _))
+            return Combine(coalesce, () => Coalesce(left, toLeft));
+        if (!IsNullLiteral(right)) {
+            if (underlying is not null && TryCoercePure(Default(underlying), right.Type, ctx, out _, out _)) {
+                var lifted = ConvertOperand(coalesce, left, Lift(right.Type, true));
+                return Combine(coalesce, () => Coalesce(lifted, right));
+            }
+            if (TryCoercePure(left, right.Type, ctx, out var leftToRight, out _))
+                return Combine(coalesce, () => Coalesce(leftToRight, right));
+        }
+        throw RejectOperator(coalesce, $"C# states no type for '{TypeName(left.Type)} ?? {TypeName(right.Type)}': neither operand converts implicitly to the other");
     }
 
     private static Type TargetClrType(Node typeReference, Node owner, PureLambdaContext ctx) =>
@@ -791,15 +843,15 @@ public static partial class AbiEmitter {
 
     /// <summary>
     /// The Expression API's typing for an operation over non-governed operands: identity, a null literal typed as the
-    /// reference operand, and reference widening. Fails closed rather than asking <see cref="Expression"/> to invent a
+    /// other operand when that can be null (a reference or a <c>Nullable&lt;&gt;</c>), and reference widening. Fails closed rather than asking <see cref="Expression"/> to invent a
     /// conversion the language does not have.
     /// </summary>
     private static (Expression Left, Expression Right) Promote(Expression left, Expression right) {
         if (left.Type == right.Type)
             return (left, right);
-        if (left is ConstantExpression { Value: null } && !right.Type.IsValueType)
+        if (IsNullLiteral(left) && CanBeNull(right.Type))
             return (Constant(null, right.Type), right);
-        if (right is ConstantExpression { Value: null } && !left.Type.IsValueType)
+        if (IsNullLiteral(right) && CanBeNull(left.Type))
             return (left, Constant(null, left.Type));
 
         if (left.Type.IsAssignableFrom(right.Type))
@@ -812,30 +864,55 @@ public static partial class AbiEmitter {
     }
 
     /// <summary>
-    /// The conversion of a value to a CLR target (an argument, the lambda's return, the coalesce right operand). Between
-    /// governed types it is the type provider's implicit <c>ResolveConversionFrom</c> over the underlying types, lifted to a
-    /// nullable target (C# 10.6.1); a nullable value never converts implicitly to a non-nullable target. Otherwise:
-    /// identity, a typed null, assignability.
+    /// The conversion of a value to a CLR target (an argument, the lambda's return). Between governed types it is the type
+    /// provider's implicit <c>ResolveConversionFrom</c> over the underlying types, lifted to a nullable target (C# 10.6.1);
+    /// a nullable value never converts implicitly to a non-nullable target. A null literal converts to a reference or a
+    /// <c>Nullable&lt;&gt;</c> target (C# 10.2.7). Otherwise: identity, assignability.
     /// </summary>
-    private static Expression CoercePure(Expression value, Type target, string context, PureLambdaContext ctx) {
+    private static Expression CoercePure(Expression value, Type target, string context, PureLambdaContext ctx) =>
+        TryCoercePure(value, target, ctx, out var converted, out var reason)
+            ? converted
+            : throw new InvalidOperationException(
+                $"VM compile rejected: lambda bridge cannot convert '{TypeName(value.Type)}' to '{TypeName(target)}' for {context}{reason}.");
+
+    private static bool TryCoercePure(Expression value, Type target, PureLambdaContext ctx, out Expression converted, out string reason) {
+        converted = value;
+        reason = "";
         if (value.Type == target)
-            return value;
-        if (value is ConstantExpression { Value: null } && !target.IsValueType)
-            return Constant(null, target);
-        if (IsGoverned(value.Type) && IsGoverned(target) && !IsNullLiteral(value)) {
-            if (ImplicitlyConverts(value.Type, target, ctx))
-                return Convert(value, target);
-            throw new InvalidOperationException(
-                $"VM compile rejected: lambda bridge cannot convert '{TypeName(value.Type)}' to '{TypeName(target)}' for {context}: the type provider states no implicit conversion.");
+            return true;
+        if (IsNullLiteral(value)) {
+            if (!CanBeNull(target))
+                return false;
+            converted = Constant(null, target);
+            return true;
         }
-        if (target.IsAssignableFrom(value.Type))
-            return Convert(value, target);
+        if (IsGoverned(value.Type) && IsGoverned(target)) {
+            if (!ImplicitlyConverts(value.Type, target, ctx)) {
+                reason = ": the type provider states no implicit conversion";
+                return false;
+            }
+            return TryConvert(value, target, out converted, out reason);
+        }
         var underlying = Nullable.GetUnderlyingType(target);
-        if (underlying is not null && (underlying == value.Type || underlying.IsAssignableFrom(value.Type)))
-            return Convert(value, target);
-        throw new InvalidOperationException(
-            $"VM compile rejected: lambda bridge cannot convert '{value.Type.Name}' to '{target.Name}' for {context}.");
+        if (target.IsAssignableFrom(value.Type) || (underlying is not null && (underlying == value.Type || underlying.IsAssignableFrom(value.Type))))
+            return TryConvert(value, target, out converted, out reason);
+        return false;
     }
+
+    private static bool TryConvert(Expression value, Type target, out Expression converted, out string reason) {
+        try {
+            converted = Convert(value, target);
+            reason = "";
+            return true;
+        }
+        catch (InvalidOperationException ex) {
+            converted = value;
+            reason = $": {ex.Message}";
+            return false;
+        }
+    }
+
+    private static bool CanBeNull(Type type) => !type.IsValueType || Nullable.GetUnderlyingType(type) is not null;
 
     private static bool ImplicitlyConverts(Type source, Type target, PureLambdaContext ctx) {
         var (sourceUnderlying, targetUnderlying) = (Nullable.GetUnderlyingType(source), Nullable.GetUnderlyingType(target));

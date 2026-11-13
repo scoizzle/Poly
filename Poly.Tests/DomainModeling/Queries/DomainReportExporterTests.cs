@@ -1,4 +1,7 @@
+using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Queries;
+
+using Entity = Poly.DomainModeling.Ontology.Entity;
 
 namespace Poly.Tests.DomainModeling.Queries;
 
@@ -45,6 +48,31 @@ public class DomainReportExporterTests {
             }
           }
           Active: stage {
+          }
+        }
+        """;
+
+    private const string Gate = """
+        domain Gate
+        Order: entity {
+          Total: Number range(0, 500) default(0)
+          Big: policy { Total > 100 }
+          Small: policy { Total < 20 }
+          Draft: stage require Small {
+            Submit: action
+              require Small {
+              transition to Active
+            }
+          }
+          Active: stage {
+            Submit: action
+              require Big {
+              assign Total to 0
+            }
+          }
+          Reset: action
+            require Big {
+            assign Total to 0
           }
         }
         """;
@@ -129,5 +157,80 @@ public class DomainReportExporterTests {
         await Assert.That(report).Contains("**Stages**")
             .Because("the same output still renders its other sections");
         await Assert.That(report).DoesNotContain("**Policies**");
+    }
+
+    private static string[] PolicyRows(string report) {
+        var lines = report.Split('\n');
+        var start = Array.IndexOf(lines, "**Policies**");
+        return start < 0 ? [] : [.. lines.Skip(start + 4).TakeWhile(l => l.StartsWith("| "))];
+    }
+
+    private static string Export(Domain domain) => DomainReportExporter.Export(domain);
+
+    private static Domain WithEntityPolicies(string dsl, params Policy[] policies) {
+        var domain = EvolvedDomain.FromDsl(dsl).Domain;
+        return domain with { Types = [.. domain.Types.Select(t => t is Entity e ? e with { Policies = policies } : t)] };
+    }
+
+    [Test]
+    public async Task Export_ListsEveryPolicyWithItsCondition() {
+        var report = Export(Shop);
+
+        await Assert.That(report).Contains("**Policies**");
+        await Assert.That(PolicyRows(report).SequenceEqual(new[] {
+            "| Big | entity | `Total > 100` |",
+            "| Small | entity | `Total < 20` |",
+            "| Big | action:Draft.Submit | `Total > 100` |",
+        })).IsTrue();
+    }
+
+    [Test]
+    public async Task Export_PolicyScopes_FollowDeclarationOrder() {
+        var report = Export(Gate);
+
+        await Assert.That(PolicyRows(report).SequenceEqual(new[] {
+            "| Big | entity | `Total > 100` |",
+            "| Small | entity | `Total < 20` |",
+            "| Small | stage:Draft | `Total < 20` |",
+            "| Small | action:Draft.Submit | `Total < 20` |",
+            "| Big | action:Active.Submit | `Total > 100` |",
+            "| Big | action:Reset | `Total > 100` |",
+        })).IsTrue();
+    }
+
+    [Test]
+    public async Task Export_PolicyCondition_UsesPrintedSpelling() {
+        var domain = WithEntityPolicies("domain Spell\nItem: entity { Note: Text }",
+            new Policy("Q", DomainExpression.Equal(DomainExpression.Property("Note"), DomainExpression.Literal("say \"hi\""))));
+
+        await Assert.That(PolicyRows(Export(domain)).SequenceEqual(new[] {
+            "| Q | entity | `Note is \"say \\\"hi\\\"\"` |",
+        })).IsTrue();
+    }
+
+    [Test]
+    public async Task Export_NewlineInStringLiteral_DoesNotSplitTheRow() {
+        var domain = WithEntityPolicies("domain Spell\nItem: entity { Note: Text }",
+            new Policy("N", DomainExpression.Equal(DomainExpression.Property("Note"), DomainExpression.Literal("a\nb"))));
+
+        await Assert.That(PolicyRows(Export(domain)).SequenceEqual(new[] {
+            "| N | entity | `Note is \"a b\"` |",
+        })).IsTrue();
+    }
+
+    [Test]
+    [Arguments("<", "a<b")]
+    [Arguments(">", "a>b")]
+    [Arguments("&", "a&b")]
+    [Arguments("|", "a\\|b")]
+    [Arguments("`", "a`b")]
+    [Arguments("\"", "a\"b")]
+    public async Task Export_PolicyNameWithSpecialCharacter_StaysOneEscapedRow(string special, string cell) {
+        var domain = WithEntityPolicies("domain Esc\nItem: entity { Total: Number }",
+            new Policy("a" + special + "b", DomainExpression.LessThan(DomainExpression.Property("Total"), DomainExpression.Literal(5))));
+
+        await Assert.That(PolicyRows(Export(domain)).SequenceEqual(new[] {
+            $"| {cell} | entity | `Total < 5` |",
+        })).IsTrue();
     }
 }

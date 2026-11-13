@@ -20,6 +20,13 @@ namespace Poly.DomainModeling.Queries;
 public static class DomainReportExporter {
     public static string Export(Domain domain) {
         ArgumentNullException.ThrowIfNull(domain);
+        return Export(new DomainExportContext(domain));
+    }
+
+    public static string Export(DomainExportContext context) {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(context.Domain);
+        var domain = context.Domain;
 
         var ordered = DomainExportOrder.Types(domain);
         var entities = ordered.OfType<Entity>().ToList();

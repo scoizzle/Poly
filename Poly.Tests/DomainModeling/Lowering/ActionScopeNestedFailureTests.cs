@@ -161,6 +161,9 @@ public class ActionScopeNestedFailureTests {
         }
         """;
 
+    // Create{Nav} passes the handler's failure through with no prefix; the action's FailCreate adds Owner.Add.
+    private const string CreateInPath = "Owner.Add.Owner.Y";
+
     [Test]
     public async Task CreateIn_WhenTheChildsInitialStageHandlerFails_TheActionReturnsTheFailure() {
         var (domain, _) = EvolvedDomain.FromDsl(CreateInDsl);
@@ -172,12 +175,125 @@ public class ActionScopeNestedFailureTests {
         await Assert.That(add.Succeeded).IsFalse();
         await Assert.That(add.Failure!.Kind).IsEqualTo(DomainFailureKind.Policy);
         await Assert.That(add.Failure.Guard).IsEqualTo("Never");
+        await Assert.That(add.Failure.ElementPath).IsEqualTo(CreateInPath);
         await Assert.That(ModuleReads.Related(exec, "items", owner).Count).IsEqualTo(0);
 
         var (cs, assembly) = Print(CreateInDsl, "NestedFailureCreateIn");
         var printedOwner = ExportedCSharp.CreateEntity(assembly, "Owner");
         await Assert.That(IsSuccess(Call(printedOwner, "Add"))).IsFalse();
+        // Today's behaviour of the generated C#, which L-03c's rollback changes: the failed child is not undone. It
+        // was already added to the owner's collection before its initial-stage handler ran.
+        await Assert.That(((ICollection)Read(printedOwner, "Items")!).Count).IsEqualTo(1);
         await Assert.That(StrictDiagnostics(cs, "NestedFailureCreateInStrict")).IsEqualTo("");
+    }
+
+    [Test]
+    public async Task Parity_CreateInWhenTheChildsInitialStageHandlerFails_BothHostsReturnTheSameFailure() {
+        var (simulate, printed) = ParityScenario.FromDsl(CreateInDsl, "NestedFailureCreateInParity")
+            .Run(side => {
+                var owner = side.Create("Owner");
+                side.Use(owner);
+                side.Invoke("Add");
+            });
+
+        foreach (var outcome in new[] { simulate[2], printed[2] }) {
+            await Assert.That(outcome.Success).IsFalse();
+            await Assert.That(outcome.FailureKind).IsEqualTo("Policy");
+            await Assert.That(outcome.FailurePath).IsEqualTo(CreateInPath);
+            await Assert.That(outcome.FailureGuard).IsEqualTo("Never");
+        }
+        // The one difference is the state the failed child leaves behind: the simulator restores it, the generated
+        // C# does not (L-03c's rollback closes this).
+        await Assert.That(ParityScenario.Differences(simulate, printed))
+            .IsEquivalentTo(new[] { "invoke Add: 'items' differs (simulate '0', printed '1')" });
+    }
+
+    private static int NotifyDepth(object instance) =>
+        (int)instance.GetType().GetField("_notifyDepth", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)!.GetValue(instance)!;
+
+    // F2: the cascade depth is balanced after a failure return and after a handler that throws.
+    [Test]
+    public async Task Printed_NotifyDepth_IsZeroAfterAFailingHandlerAndAfterAThrowingHandler() {
+        var (_, assembly) = Print(Dsl, "NestedFailureDepth");
+        var owner = ExportedCSharp.CreateEntity(assembly, "Owner");
+        Call(owner, "Add");
+        var child = ((IEnumerable)Read(owner, "Items")!).Cast<object>().Single();
+        await Assert.That(IsSuccess(Call(child, "Finish"))).IsFalse();
+        await Assert.That(NotifyDepth(child)).IsEqualTo(0);
+
+        const string throwing = """
+            domain P
+            S: entity {
+              Count: Number default(0)
+              jobs: many Job
+              kids: many Kid
+              Never: policy { Count > 100 }
+              Y: action require Never { assign Count to Count + 1 }
+              when jobs Done { create in kids { } }
+              when kids Open { invoke Y }
+            }
+            Job: entity {
+              Open: stage { Finish: action { transition to Done } }
+              Done: stage { }
+            }
+            Kid: entity {
+              Open: stage { }
+            }
+            """;
+        var (_, throwingAssembly) = Print(throwing, "NestedFailureDepthThrow");
+        var job = Poly.Tests.DomainModeling.Compile.WhenAnySimulatePrintAgreeTests.CreateEntity(throwingAssembly, "Job");
+        var holder = Poly.Tests.DomainModeling.Compile.WhenAnySimulatePrintAgreeTests.CreateEntity(throwingAssembly, "S");
+        Poly.Tests.DomainModeling.Compile.WhenAnySimulatePrintAgreeTests.Attach(holder, "Jobs", job);
+        var threw = false;
+        try { Call(job, "Finish"); }
+        catch (TargetInvocationException e) when (e.InnerException?.GetType().Name == "ConstraintFailureException") { threw = true; }
+        await Assert.That(threw).IsTrue();
+        await Assert.That(NotifyDepth(job)).IsEqualTo(0);
+    }
+
+    // F3: a handler's own transition enters a stage another entity watches. The notify site inside the handler
+    // returns the second handler's failure, and the handler adds no path segment.
+    private const string HandlerTransitionDsl = """
+        domain P
+        Boss: entity {
+          Count: Number default(0)
+          owners: many Owner
+          Never: policy { Count > 100 }
+          Y: action require Never { assign Count to Count + 1 }
+          when owners Busy { invoke Y }
+        }
+        Owner: entity {
+          items: many Item
+          Idle: stage { }
+          Busy: stage { }
+          when items Done { transition to Busy }
+        }
+        Item: entity {
+          Open: stage { Finish: action { transition to Done } }
+          Done: stage { }
+        }
+        """;
+
+    [Test]
+    public async Task Parity_AHandlersOwnTransitionIntoAWatchedStage_ReturnsTheSecondHandlersFailure() {
+        var (simulate, printed) = ParityScenario.FromDsl(HandlerTransitionDsl, "NestedFailureHandlerTransition")
+            .Run(side => {
+                var item = side.Create("Item");
+                var owner = side.Create("Owner", ("items", new[] { item! }));
+                side.Create("Boss", ("owners", new[] { owner! }));
+                side.Use(item);
+                side.Invoke("Finish");
+            });
+
+        foreach (var outcome in new[] { simulate[4], printed[4] }) {
+            await Assert.That(outcome.Success).IsFalse();
+            await Assert.That(outcome.FailureKind).IsEqualTo("Policy");
+            await Assert.That(outcome.FailurePath).IsEqualTo("Item.Finish.Boss.Y");
+            await Assert.That(outcome.FailureGuard).IsEqualTo("Never");
+        }
+        // The one difference is the child's stage: the simulator restores it, the generated C# does not (L-03c).
+        await Assert.That(ParityScenario.Differences(simulate, printed))
+            .IsEquivalentTo(new[] { "invoke Finish: 'Stage' differs (simulate 'Open', printed 'Done')" });
     }
 
     // A target property named Notify must not collide with the notify local of Create{Nav}.
@@ -273,6 +389,7 @@ public class ActionScopeNestedFailureTests {
         var cs = PrintOnly(EveryFormDsl);
 
         await Assert.That(StrictDiagnostics(cs, "NestedFailureEveryForm")).IsEqualTo("");
+        await Assert.That(cs).Contains("DomainResult WhenEachItemDone");
         await Assert.That(cs).DoesNotContain("void WhenEach");
         await Assert.That(cs).DoesNotContain("void WhenAny");
         await Assert.That(cs).DoesNotContain("void WhenAll");

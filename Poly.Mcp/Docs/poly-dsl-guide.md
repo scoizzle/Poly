@@ -1127,7 +1127,9 @@ own). The notification stops at the first failing handler, in registration
 order, so no later handler runs. The action that caused the transition, or the
 `create in` that landed the child in a watched stage, returns that failure to
 its caller; it never reports success and never throws. The stage change that
-fired the subscription stays assigned until rollback of a failed action lands.
+fired the subscription is undone by the simulator (it restores the failed
+action's changes) but stays assigned in the generated C# until action rollback
+lands there, so the two hosts differ on that state until then.
 For a failed `invoke` in the handler of `Run` that finishes an `Item`, the path
 reads `Owner.Run.Item.Finish.Owner.Y`.
 

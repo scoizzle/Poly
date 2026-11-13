@@ -77,6 +77,8 @@ public static partial class AbiEmitter {
         // ulong.MaxValue as -1.
         var leftClr = UnderlyingOf(left, lv, ctx) ?? lv.Type;
         var rightClr = UnderlyingOf(right, rv, ctx) ?? rv.Type;
+        if (SameEnumUnderlying(leftClr, rightClr) is { } enumUnderlying)
+            leftClr = rightClr = enumUnderlying;
         if (leftClr == typeof(ulong) || rightClr == typeof(ulong)) {
             var target = IsUnsignedOrChar(leftClr) && IsUnsignedOrChar(rightClr)
                 ? typeof(ulong)
@@ -92,6 +94,11 @@ public static partial class AbiEmitter {
             : lv.Type;
         return cf(RingCodec.AsRepresentation(lv, width), RingCodec.AsRepresentation(rv, width));
     }
+
+    /// <summary>Two operands of the same enum type compare as C# compares them: at the underlying
+    /// integer type, with its width and signedness. Any other pair is not the enum rule.</summary>
+    private static Type? SameEnumUnderlying(Type? left, Type? right) =>
+        left is { IsEnum: true } && left == right ? Enum.GetUnderlyingType(left) : null;
 
     private static bool IsNullConstant(Node node) => node is Constant { Value: null };
 
@@ -112,6 +119,8 @@ public static partial class AbiEmitter {
         if (leftType is null || rightType is null)
             throw new InvalidOperationException(
                 "VM compile rejected: cannot resolve a nullable comparison.");
+        if (SameEnumUnderlying(leftType, rightType) is { } enumUnderlying)
+            leftType = rightType = enumUnderlying;
         Type promoted;
         if (leftType == typeof(bool) || rightType == typeof(bool)) {
             if (!eq || leftType != typeof(bool) || rightType != typeof(bool))

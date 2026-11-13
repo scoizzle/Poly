@@ -803,9 +803,11 @@ public sealed class CSharpWriter {
                 for (var i = 0; i < fields.Count; i++) {
                     list.Append('\n');
                     list.Append(Pad(indent + 1));
+                    var value = EnumMemberValueText(fields[i], i);
+                    var negative = value.StartsWith('-');
                     list.Append(RenderFills("enum-member", "member", Names(
                         ("name", EscapeIdent(fields[i].Name)),
-                        ("value", EnumMemberValueText(fields[i], i)))));
+                        ("value", negative ? value[1..] : value)), negative ? "-" : null));
                     if (i < fields.Count - 1)
                         list.Append(',');
                 }

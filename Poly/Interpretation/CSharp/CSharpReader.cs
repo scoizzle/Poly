@@ -289,11 +289,21 @@ public static class CSharpReader {
                 fields.Add(new FieldDefinitionNode(
                     Capture(target, "name"),
                     new PrimitiveTypeReference(PrimitiveType.Int32),
-                    new Constant(FoldNumber(Capture(target, "value"))),
+                    new Constant(FoldEnumValue(target)),
                     IsStatic: true,
                     IsConst: true));
             }
             return fields;
+        }
+
+        /// <summary>An enum member's value: the number literal, negated when a minus precedes it. A negated
+        /// value that fits <c>int</c> is an <c>int</c> (<c>-2147483648</c> folds as the long 2147483648).</summary>
+        private static object FoldEnumValue(MatchResult<CSharpToken, CSharpTokenKind> member) {
+            var value = FoldNumber(Capture(member, "value"));
+            if (!member.Tokens.Any(token => token.Kind == CSharpTokenKind.Minus))
+                return value;
+            var negated = -Convert.ToInt64(value, CultureInfo.InvariantCulture);
+            return negated >= int.MinValue ? (object)(int)negated : negated;
         }
 
         // ── members ──────────────────────────────────────────────────────────

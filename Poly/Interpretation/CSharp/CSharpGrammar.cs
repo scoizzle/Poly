@@ -239,7 +239,7 @@ public static class CSharpGrammar {
         b.Define("enum-members")
             .Pattern("list").Ref("enum-member").Repeat("enum-member-tail").Commit();
         b.Define("enum-member")
-            .Pattern("member").Value(CSharpTokenKind.Identifier, "name").Kind(CSharpTokenKind.Assign).Value(CSharpTokenKind.NumberLiteral, "value").Commit();
+            .Pattern("member").Value(CSharpTokenKind.Identifier, "name").Kind(CSharpTokenKind.Assign).Optional(CSharpTokenKind.Minus).Value(CSharpTokenKind.NumberLiteral, "value").Commit();
         b.Define("enum-member-tail")
             .Pattern("tail").Kind(CSharpTokenKind.Comma).Ref("enum-member").Commit();
 

@@ -447,8 +447,8 @@ public class OperatorOracleTests {
         new(OracleKind.AnalyzerDisagrees, "Order", "*", "*", "analyzer accepts", "T-06 (Unknown operands: R1)", 107, "7284367a02f5ff13"),
         new(OracleKind.AnalyzerDisagrees, AllButOrder, "*", "Order", "analyzer accepts", "T-06 (Unknown operands: R1)", 96, "e18f5f561a8a8e60"),
         // Enum member literals compared as Text, and enum ordering.
-        new(OracleKind.AnalyzerDisagrees, "Status", Comparisons, "Text", "analyzer accepts", "T-06 (enum member literals)", 6, "82d668327422d63d"),
-        new(OracleKind.AnalyzerDisagrees, "Text", Comparisons, "Status", "analyzer accepts", "T-06 (enum member literals)", 6, "79e5d5c94c300ad5"),
+        new(OracleKind.AnalyzerDisagrees, "Status", Comparisons, "Text", "analyzer accepts", "T-07 (enum member literals)", 6, "82d668327422d63d"),
+        new(OracleKind.AnalyzerDisagrees, "Text", Comparisons, "Status", "analyzer accepts", "T-07 (enum member literals)", 6, "79e5d5c94c300ad5"),
         new(OracleKind.AnalyzerDisagrees, "Status", Ordering, "Status", "analyzer accepts", "T-07 (ordering legality)", 4, "cd41fe5cc653aa1f"),
         // Same-category pairs the analyzer accepts and no platform defines.
         new(OracleKind.AnalyzerDisagrees, "Text,Boolean", Ordering, "Text,Boolean", "analyzer accepts", "T-07 (#631 ordering legality)", 8, "91cd7271c7004160"),
@@ -459,24 +459,24 @@ public class OperatorOracleTests {
         new(OracleKind.AnalyzerDisagrees, "*", "Add", "*", "analyzer rejects, tree String", "T-07 (language policy: only Text + Text concatenates)", 16, "a66331455543d1e9")
     ];
 
-    // Float64 x Decimal and every Decimal-with-X cell the lowered analysis types: the domain DSL has no Float, so
-    // the analyzer column is n/a for those; the owners are the lowered analysis (T-10, T-17, T-18, T-22) and the ABI (T-21).
+    // The lowered analysis reads the provider for arithmetic and comparison (T-18): an undefined Decimal-with-X, UInt64
+    // with a signed operand or Decimal-with-Float cell is rejected there. The domain DSL has no Float, so the analyzer
+    // column is n/a for those; the remaining owners are the lowered analysis (T-07, T-10, T-17, T-22) and the ABI (T-21).
     private static readonly LedgerRule[] LoweredRules = [
-        new(OracleKind.LoweredAnalysisDisagrees, "*", "*", "*", "analysis error on a defined cell", "T-18 (SyntaxTypeCompatibilityAnalyzer arithmetic rules; temporal operands with T-10)", 40, "8f48a0defcb327e9"),
+        new(OracleKind.LoweredAnalysisDisagrees, "*", "*", "*", "analysis error on a defined cell", "T-21 (the ABI cannot execute declared temporal and Duration-scalar arithmetic: VmExecutesDeclaredOperator); 7 temporal cells with T-10", 40, "8f48a0defcb327e9"),
         new(OracleKind.LoweredAnalysisDisagrees, "*", Arithmetic, "*", "type: analysis", "T-17 (result typing: small integers, char and uint with a signed operand keep the operand type)", 150, "ff6f45d8a9c3a166"),
         // The same wrong type on the node kinds the lowered analysis has no case for (issue 812): it passes the operand type through.
         new(OracleKind.LoweredAnalysisDisagrees, "*", BitwiseShiftAndUnaryMinus, "*", "type: analysis", "T-22 (bitwise, shift and unary minus cases: the operand type passes through)", 221, "1a89fb5312f00f92"),
-        new(OracleKind.LoweredAnalysisDisagrees, "*", Arithmetic, "*", "typed Decimal", "T-17 (PromoteNumeric / ResolveAddType)", 88, "b1f45630c1054ca7"),
-        new(OracleKind.LoweredAnalysisDisagrees, "*", Arithmetic, "*", "typed UInt64", "T-17 (promotion: ulong with a signed operand)", 40, "718e56090af03352"),
         new(OracleKind.LoweredAnalysisDisagrees, "*", "Add,Subtract", "*", "typed DateOnly", "T-10 (RewriteDateOffset)", 20, "7ba4ce6c196e991e"),
         new(OracleKind.LoweredAnalysisDisagrees, "*", "Add,Subtract", "*", "typed DateTime", "T-10 (RewriteDateOffset)", 20, "5b5cc5a3f2ece6cd"),
-        new(OracleKind.LoweredAnalysisDisagrees, "*", Comparisons, "*", "typed Boolean", "T-18 (Compatible accepts same-category and Float-with-Decimal pairs)", 92, "d99266997f9099df"),
+        // Text and Boolean ordering: the lowered analysis keeps accepting it (TextAndBooleanOrderingRule); the DSL and the interpreter order Text.
+        new(OracleKind.LoweredAnalysisDisagrees, "Text,Boolean", Ordering, "Text,Boolean", "typed Boolean", "T-07 (#631 ordering legality)", 8, "a2d892f80f998382"),
         // The node kinds the lowered-tree analysis has no case for (issue 812): it accepts every operand.
         new(OracleKind.LoweredAnalysisDisagrees, "*", BitwiseShiftAndUnaryMinus, "*", "analysis accepts an undefined cell", "T-22 (bitwise, shift and unary minus cases)", 1492, "f06be2a866cf6b37")
     ];
 
     private static readonly LedgerRule[] AbiRules = [
-        new(OracleKind.AbiDivergesFromTree, "*", "*", "*", "executes an undefined cell", "T-21 (the ABI must reject what the tree does not define)", 1271, "6d6bb6491fbe7a81"),
+        new(OracleKind.AbiDivergesFromTree, "*", "*", "*", "executes an undefined cell", "T-21 (the ABI must reject what the tree does not define)", 1059, "7fada48079f73965"),
         new(OracleKind.AbiDivergesFromTree, "*", "*", "*", "unstated conversion", "T-21 (T-04 and Lower state the conversion node; the emitter stops converting)", 1729, "6699a0d31e9728fb"),
         new(OracleKind.AbiDivergesFromTree, "*", "*", "*", "^type: VM [^;]*$", "T-21 (the emitter's own promotion: the VM keeps the operand type)", 363, "fdfd5dee091d1059"),
         // Wrong values (issue 832): the type and the value in one reason, then the value alone (-Decimal and -Duration give -1).
@@ -501,11 +501,11 @@ public class OperatorOracleTests {
 
     [Test]
     public async Task LoweredAnalysisDisagrees_EveryDivergenceIsOwned_AndNoEntryIsStale() =>
-        await AssertOwned(OracleKind.LoweredAnalysisDisagrees, LoweredRules, 2163);
+        await AssertOwned(OracleKind.LoweredAnalysisDisagrees, LoweredRules, 1951);
 
     [Test]
     public async Task AbiDivergesFromTree_EveryDivergenceIsOwned_AndNoEntryIsStale() =>
-        await AssertOwned(OracleKind.AbiDivergesFromTree, AbiRules, 3486);
+        await AssertOwned(OracleKind.AbiDivergesFromTree, AbiRules, 3274);
 
     [Test]
     public async Task AbiRejectsDefined_EveryDivergenceIsOwned_AndNoEntryIsStale() =>
@@ -553,12 +553,13 @@ public class OperatorOracleTests {
         await Assert.That(mixed.Divergences.Any(static d => d.Kind == OracleKind.AbiDivergesFromTree && d.Reason.StartsWith("unstated conversion", StringComparison.Ordinal))).IsTrue();
     }
 
+    /// <summary>Issue 815: the platform defines no Float64 * Decimal, and the lowered analysis now says so (T-18); the ABI never runs it.</summary>
     [Test]
-    public async Task Probe_Float64TimesDecimal_IsNoneInTheTree_TypedDecimalByTheLoweredAnalysis_AndRunByTheAbi() {
+    public async Task Probe_Float64TimesDecimal_IsNoneInTheTree_RejectedByTheLoweredAnalysis() {
         var cell = Cell("Float", OperatorKind.Multiply, "Decimal");
         await Assert.That(cell.Tree).IsEqualTo("none");
-        await Assert.That(cell.Lowered).IsEqualTo("Decimal");
-        await Assert.That(cell.Abi).StartsWith("Decimal;");
+        await Assert.That(cell.Lowered).StartsWith("error: arithmetic operand is not numeric (got 'Double' and 'Decimal')");
+        await Assert.That(cell.Abi).IsEqualTo("not run (analysis error)");
     }
 
     /// <summary>

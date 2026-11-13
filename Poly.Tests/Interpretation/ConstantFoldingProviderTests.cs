@@ -9,6 +9,7 @@ using Poly.Interpretation.Analysis.Semantics;
 using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
 using Poly.Tests.DomainModeling.Analysis;
+using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Interpretation;
 
@@ -62,7 +63,10 @@ internal static class ConstantFoldGrid {
         return [.. rows];
     }
 
-    /// <summary>And, Or and Not fold through <c>FoldAnd</c>, <c>FoldOr</c> and the Boolean arm, which T-20 does not touch.</summary>
+    /// <summary>
+    /// And, Or and Not fold through <c>FoldAnd</c>, <c>FoldOr</c> and the Boolean arm, not through <c>GetOperator</c>.
+    /// T-20 changed one thing there: <c>false and X</c> and <c>true or X</c> answer from the left only when X can be Boolean.
+    /// </summary>
     public static bool IsLogical(OperatorKind kind) => kind is OperatorKind.And or OperatorKind.Or or OperatorKind.Not;
 
     /// <summary>
@@ -316,7 +320,36 @@ public class ConstantFoldingProviderTests {
     private static string[] MasterUndefinedRowsAsOnMaster() =>
         [.. ConstantFoldGrid.Rows.Where(IsMasterUndefinedFold).Select(static row => IsMismatchedEquality(row)
             ? $"{row.Key} = Boolean:{(row.Op is OperatorKind.NotEqual ? "True" : "False")}"
-            : $"{row.Key} = {ConstantFoldGrid.UnfoldedVm(row)}")];
+            : IsRejectedByTheLoweredAnalysis(row) ? MasterUnfoldedValues.Value[row.Key] : $"{row.Key} = {ConstantFoldGrid.UnfoldedVm(row)}")];
+
+    /// <summary>
+    /// The comparisons T-18 rejects at compile (the provider defines no operator for Decimal against Float or Float32,
+    /// nor for a signed integer against UInt64), so the unfolded VM no longer computes them. Their master values are the
+    /// unfolded VM's on master (77704337), persisted as <c>ConstantFoldMasterValues.txt</c>; every such row has a line.
+    /// </summary>
+    private static bool IsRejectedByTheLoweredAnalysis(FoldGridRow row) =>
+        IsComparison(row.Op) && ((row.Left.Name, row.Right!.Name) is ("Decimal", "Float" or "Float32") or ("Float" or "Float32", "Decimal")
+            or ("Int8" or "Int16" or "Int32" or "Number", "UInt64") or ("UInt64", "Int8" or "Int16" or "Int32" or "Number"));
+
+    private static readonly Lazy<IReadOnlyDictionary<string, string>> MasterUnfoldedValues = new(static () => {
+        var lines = File.ReadAllLines(Path.Combine(GoldenDomains.RepoRoot, "Poly.Tests", "Interpretation", "ConstantFoldMasterValues.txt"));
+        return lines.ToDictionary(static line => line[..line.IndexOf(" = ", StringComparison.Ordinal)], static line => line, StringComparer.Ordinal);
+    });
+
+    [Test]
+    public async Task MasterUnfoldedValues_HaveALineForEveryRowTheLoweredAnalysisNowRejects() {
+        var rows = ConstantFoldGrid.Rows.Where(static row => IsMasterUndefinedFold(row) && !IsMismatchedEquality(row) && IsRejectedByTheLoweredAnalysis(row)).ToArray();
+        await Assert.That(rows.Length).IsEqualTo(144);
+        await Assert.That(MasterUnfoldedValues.Value.Keys.Order(StringComparer.Ordinal).ToArray())
+            .IsEquivalentTo(rows.Select(static row => row.Key).Order(StringComparer.Ordinal).ToArray());
+        foreach (var row in rows) {
+            var a = new Parameter("a", new ClrTypeReference(row.Left.Clr!));
+            var b = new Parameter("b", new ClrTypeReference(row.Right!.Clr!));
+            await Assert.That(ConstantFoldGrid.UnfoldedVm(row)).IsEqualTo("throws InvalidOperationException");
+            await Assert.That(() => Interpreter.Compile(ConstantFoldGrid.Build(row.Op, a, b)))
+                .Throws<InvalidOperationException>().WithMessageContaining("comparison between incompatible types");
+        }
+    }
 
     private static FoldGridRow[] ShortCircuitRows() =>
         [.. ConstantFoldGrid.Rows.Where(static row => row.Op is OperatorKind.And or OperatorKind.Or
@@ -324,10 +357,10 @@ public class ConstantFoldingProviderTests {
             && row.LeftValue is bool left && left == (row.Op is OperatorKind.Or))];
 
     /// <summary>
-    /// Round-1 amendment A10 said every stopped fold is value-neutral with the VM. It is not for 664 rows: an equality
+    /// Round-1 amendment A10 said every stopped fold is value-neutral with the VM. It is not for 672 rows: an equality
     /// across mismatched types (a non-numeric operand, no Decimal or Float one) that master folded to false/true is now
     /// rejected at compile with <c>VmTypeCompatibility</c> ("comparison between incompatible types"), as C# rejects it
-    /// (CS0019). The 8 Char against Text rows, which the VM still computes, are excluded.
+    /// (CS0019). That includes the 8 Char against Text rows since T-18: the provider defines no <c>string == char</c>.
     /// </summary>
     [Test]
     public async Task MismatchedTypeEqualities_MasterFolded_AreRejectedAtCompile() {
@@ -851,5 +884,5 @@ public class ConstantFoldingProviderTests {
     private const string AllowedDisagree = "4 97551d7e2ef40a1f";
     private const string LogicalFolds = "6 d49ba859ff062537";
     private const string UndefinedCells = "7800 1786e1cb3f6eaa59";
-    private const string RejectedMismatchedEqualities = "664 e544c78cf28685b8";
+    private const string RejectedMismatchedEqualities = "672 88f2cc26c94956cb";
 }

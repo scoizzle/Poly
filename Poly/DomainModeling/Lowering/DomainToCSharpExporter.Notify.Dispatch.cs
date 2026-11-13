@@ -71,7 +71,9 @@ public sealed partial class DomainToCSharpExporter {
 
     /// <summary>
     /// Nested <c>Notify{Stage}Subscribers</c> calls past <see cref="MaxNotifyDepth"/>
-    /// throw instead of overflowing the stack.
+    /// throw instead of overflowing the stack. <c>EnterNotifyCascade</c> returns the depth it entered at and
+    /// <c>ExitNotifyCascade</c> assigns that depth back (L-03c, F2): a rollback inside the cascade restores the depth
+    /// the action started with, and a relative decrement in the unwinding <c>finally</c> would then leave it one below.
     /// </summary>
     private static void AddNotifyCascadeDepthGuard(
         Entity entity, List<FieldDefinitionNode> fields, List<MethodDefinitionNode> methods) {
@@ -79,9 +81,10 @@ public sealed partial class DomainToCSharpExporter {
             "_notifyDepth",
             new PrimitiveTypeReference(PrimType.Int32),
             AccessModifier: AccessModifier.Private));
+        var depth = new Member(new ThisReference(), "_notifyDepth");
         methods.Add(new MethodDefinitionNode(
             "EnterNotifyCascade",
-            new TypeReference("void"),
+            new PrimitiveTypeReference(PrimType.Int32),
             Parameters: [new Parameter("stageName", new PrimitiveTypeReference(PrimType.String))],
             Body: new Block([
                 new IfStatement(
@@ -95,23 +98,16 @@ public sealed partial class DomainToCSharpExporter {
                             new Constant($"Subscription cascade on entity '{entity.Name}' exceeded max depth ({MaxNotifyDepth}) while notifying '"),
                             new Parameter("stageName"),
                             new Constant("'."))))),
-                new Assignment(
-                    new Member(new ThisReference(), "_notifyDepth"),
-                    new Syntactic.Add(
-                        new Member(new ThisReference(), "_notifyDepth"),
-                        new Constant(1)))
+                new Assignment(depth, new Syntactic.Add(depth, new Constant(1))),
+                new Return(new Syntactic.Subtract(depth, new Constant(1)))
             ]),
             AccessModifier: AccessModifier.Private));
+        var entered = new Parameter("depth", new PrimitiveTypeReference(PrimType.Int32));
         methods.Add(new MethodDefinitionNode(
             "ExitNotifyCascade",
             new TypeReference("void"),
-            Body: new Block([
-                new Assignment(
-                    new Member(new ThisReference(), "_notifyDepth"),
-                    new Syntactic.Subtract(
-                        new Member(new ThisReference(), "_notifyDepth"),
-                        new Constant(1)))
-            ]),
+            Parameters: [entered],
+            Body: new Block([new Assignment(depth, entered)]),
             AccessModifier: AccessModifier.Private));
     }
 
@@ -152,10 +148,12 @@ public sealed partial class DomainToCSharpExporter {
                 // the store under simulate, and printed hosts may attach twice.
                 // ReferenceEquals keeps distinct-but-equal records from deduping.
                 // The body must use this parameter, not a same-named copy: a copy
-                // has no type, so the VM cannot place the argument.
+                // has no type, so the VM cannot place the argument. The registry is the target's state, so it is
+                // touched first (L-03c): a subscriber created in the action registers on an existing target.
                 var existing = new Variable("existing");
                 var subscriber = new Parameter(paramName, srcType);
                 var registerBody = new Block([
+                    TouchThis(),
                     new IfStatement(
                         new Equal(fieldAcc, new Constant(null)),
                         new Block([
@@ -228,20 +226,22 @@ public sealed partial class DomainToCSharpExporter {
                             new Member(new ThisReference(), fieldName),
                             new Block(notifyCalls, handlerLocals))));
                 }
+                // `__depth` is reserved, so no handler local or parameter can collide with it.
+                var depth = new Variable("__depth");
                 methods.Add(new MethodDefinitionNode(
                     $"Notify{stageGroup.Key}Subscribers",
                     new NamedTypeReference("DomainResult"),
                     Parameters: needsPrevious ? [notifyPrevious] : null,
                     Body: new Block([
-                        new Invoke(
+                        new Assignment(depth, new Invoke(
                             new Member(new ThisReference(), "EnterNotifyCascade"),
-                            new Constant(stageGroup.Key)),
+                            new Constant(stageGroup.Key))),
                         new TryCatchFinally(
                             notifyNodes.Count == 1 ? notifyNodes[0] : new Block(notifyNodes),
                             FinallyBlock: new Invoke(
-                                new Member(new ThisReference(), "ExitNotifyCascade"))),
+                                new Member(new ThisReference(), "ExitNotifyCascade"), depth)),
                         DomainResultSuccess()
-                    ]),
+                    ], [depth]),
                     AccessModifier: AccessModifier.Internal
                 ));
             }

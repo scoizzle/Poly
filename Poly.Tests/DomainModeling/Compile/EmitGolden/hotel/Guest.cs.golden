@@ -59,6 +59,7 @@ internal class Guest : Poly.Runtime.IActionScoped
     }
     internal void AttachEvents(EventHold child)
     {
+        Poly.Runtime.ActionScope.Touch(this);
         this._events.Add(child);
         child.RegisterGuestEventsReleasedSubscriber(this);
     }
@@ -74,6 +75,7 @@ internal class Guest : Poly.Runtime.IActionScoped
     }
     internal void AttachReservations(Reservation child)
     {
+        Poly.Runtime.ActionScope.Touch(this);
         this._reservations.Add(child);
         child.RegisterGuestReservationsDepartedSubscriber(this);
     }
@@ -83,6 +85,7 @@ internal class Guest : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfBookStay(room, party, nights, arrive, depart);
             if (!__result.IsSuccess)
             {
@@ -120,6 +123,7 @@ internal class Guest : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfBookHall(hall, party, arrive, depart);
             if (!__result.IsSuccess)
             {
@@ -157,6 +161,7 @@ internal class Guest : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfBookSection(section, hall, party, arrive, depart);
             if (!__result.IsSuccess)
             {
@@ -194,6 +199,7 @@ internal class Guest : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfBlock();
             if (!__result.IsSuccess)
             {
@@ -226,6 +232,7 @@ internal class Guest : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfReinstate();
             if (!__result.IsSuccess)
             {
@@ -256,12 +263,14 @@ internal class Guest : Poly.Runtime.IActionScoped
     public bool HasEvents() => this.Events.Count > 0;
     internal DomainResult WhenEachReservationDeparted(Reservation stay)
     {
+        Poly.Runtime.ActionScope.Touch(this);
         this.StayCount = this.StayCount + 1L;
         this.NightCount = this.NightCount + stay.Nights;
         return DomainResult.Success();
     }
     internal DomainResult WhenEachEventHoldReleased()
     {
+        Poly.Runtime.ActionScope.Touch(this);
         this.EventCount = this.EventCount + 1L;
         return DomainResult.Success();
     }
@@ -296,6 +305,7 @@ internal class Guest : Poly.Runtime.IActionScoped
             return DomainResult<Guest>.Failure(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'Email' value is already used on another 'Guest'.", "Guest.Email"));
         }
         var created = new Guest(name, email, phone, events, reservations, stayCount, nightCount, eventCount);
+        Poly.Runtime.ActionScope.Create(created, "Guest");
         db.Record("Guest", "Email", email);
         return DomainResult<Guest>.Success(created);
     }

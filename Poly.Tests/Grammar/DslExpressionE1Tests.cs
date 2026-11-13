@@ -12,7 +12,7 @@ namespace Poly.Tests.Grammar;
 public class DslExpressionE1Tests {
     private static bool IsMagicIdentifier(DslToken token) =>
         token.Kind == DslTokenKind.Identifier
-        && string.Equals(token.Text, "MAGIC", StringComparison.Ordinal);
+        && token.TextEquals("MAGIC");
 
     /// <summary>
     /// Pack IR for MAGIC: a tiny test-only node. The print binder owns
@@ -78,11 +78,11 @@ public class DslExpressionE1Tests {
     private static DomainSession BuildMagicPackInputs() {
         var builder = SessionBuilder.CreateEmpty().LoadCore();
         builder.Meaning.Inference.Register(new NumberTyped<MagicLiteral>());
-        foreach (var rule in new[] { "expr-primary", "expr-primary-no-not" })
+        foreach (var rule in new[] { "expr-primary" })
             builder.ExpressionForms.RegisterFold(rule, "magic", _ => new MagicLiteral(42));
         builder.ExpressionForms.RegisterPrintMapping(new MagicBinder());
         builder.ExpressionForms.RegisterGrammarContributor(g => {
-            foreach (var rule in new[] { "expr-primary", "expr-primary-no-not" }) {
+            foreach (var rule in new[] { "expr-primary" }) {
                 g.Define(rule)
                     .Pattern("magic", priority: 1)
                     .Predicate(IsMagicIdentifier, "magic")
@@ -95,10 +95,10 @@ public class DslExpressionE1Tests {
     private static DomainSession BuildDurationPackInputs() {
         var builder = SessionBuilder.CreateEmpty().LoadCore();
         builder.Meaning.Inference.Register(new NumberTyped<DurationLiteral>());
-        foreach (var rule in new[] { "expr-primary", "expr-primary-no-not" }) {
+        foreach (var rule in new[] { "expr-primary" }) {
             builder.ExpressionForms.RegisterFold(rule, "duration", match => {
-                var amount = match.Captures["amount"][0].Text;
-                var unit = match.Captures["unit"][0].Text;
+                var amount = match.Captures["amount"][0].Span.ToString();
+                var unit = match.Captures["unit"][0].Name();
                 return new DurationLiteral($"{amount} {unit}");
             });
         }
@@ -203,15 +203,15 @@ public class DslExpressionE1Tests {
     }
 
     /// <summary>
-    /// pack-1-4: pack patterns register on BOTH primary rules (with and without <c>not</c>),
+    /// pack-1-4: pack patterns register on <c>expr-primary</c>, the one expression rule,
     /// the matcher recognizes them, and the full expression still matches end to end.
     /// The <c>magic</c> pattern is predicate-led + an optional comma so it wins the
     /// longest-match tie against the core <c>ident</c> pattern deterministically.
     /// </summary>
     [Test]
-    public async Task PackPattern_MagicAndNumberUnit_RegisterOnBothPrimaries() {
+    public async Task PackPattern_MagicAndNumberUnit_RegisterOnExprPrimary() {
         var g = DslGrammar.Build(grammar => {
-            foreach (var rule in new[] { "expr-primary", "expr-primary-no-not" }) {
+            foreach (var rule in new[] { "expr-primary" }) {
                 grammar.Define(rule)
                     .Pattern("magic", priority: 1)
                     .Predicate(IsMagicIdentifier, "magic")
@@ -219,7 +219,7 @@ public class DslExpressionE1Tests {
             }
         });
 
-        foreach (var rule in new[] { "expr-primary", "expr-primary-no-not" }) {
+        foreach (var rule in new[] { "expr-primary" }) {
             await Assert.That(g.GetPatterns(rule).Any(p => p.Name == "magic")).IsTrue();
             await Assert.That(g.GetPatterns(rule).Any(p => p.Name == "duration")).IsTrue();
 
@@ -234,9 +234,13 @@ public class DslExpressionE1Tests {
             await Assert.That(durationPrimary!.Consumed).IsEqualTo(2);
         }
 
-        var full = new Matcher<DslToken, DslTokenKind>(g, new DslTokenReader("MAGIC == 42"));
-        var expr = full.TryMatch("expr");
-        await Assert.That(expr).IsNotNull();
-        await Assert.That(expr!.Consumed).IsEqualTo(3);
+        // The whole expression goes through the product parser with the same pack: one comparison, pack node on the left.
+        var changes = new PolyDslParser(
+            "domain D\nE: entity {\n  P: policy { MAGIC == 42 }\n}",
+            BuildMagicPackInputs()).Parse();
+        var cmp = (Comparison)changes.OfType<AddPolicyToEntityChange>().Single().Policy.Expression;
+        await Assert.That(cmp.Left).IsTypeOf<MagicLiteral>();
+        await Assert.That(((MagicLiteral)cmp.Left).Value).IsEqualTo(42L);
+        await Assert.That(cmp.Right).IsTypeOf<Literal>();
     }
 }

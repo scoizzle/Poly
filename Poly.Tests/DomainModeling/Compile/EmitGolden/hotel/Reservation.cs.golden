@@ -67,6 +67,7 @@ internal class Reservation : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfConfirm();
             if (!__result.IsSuccess)
             {
@@ -111,6 +112,7 @@ internal class Reservation : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfCancel();
             if (!__result.IsSuccess)
             {
@@ -148,6 +150,7 @@ internal class Reservation : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfCheckIn();
             if (!__result.IsSuccess)
             {
@@ -206,6 +209,7 @@ internal class Reservation : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfMarkNoShow();
             if (!__result.IsSuccess)
             {
@@ -243,6 +247,7 @@ internal class Reservation : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfPostStayCharge();
             if (!__result.IsSuccess)
             {
@@ -287,6 +292,7 @@ internal class Reservation : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfCheckOut();
             if (!__result.IsSuccess)
             {
@@ -339,6 +345,7 @@ internal class Reservation : Poly.Runtime.IActionScoped
     public bool HasFolio() => this.Folio != null;
     internal void RegisterRoomStaysInHouseSubscriber(Room subscriber)
     {
+        Poly.Runtime.ActionScope.Touch(this);
         if (this._roomStaysInHouseSubscribers == null)
         {
             this._roomStaysInHouseSubscribers = new List<Room>();
@@ -354,6 +361,7 @@ internal class Reservation : Poly.Runtime.IActionScoped
     }
     internal void RegisterRoomStaysDepartedSubscriber(Room subscriber)
     {
+        Poly.Runtime.ActionScope.Touch(this);
         if (this._roomStaysDepartedSubscribers == null)
         {
             this._roomStaysDepartedSubscribers = new List<Room>();
@@ -369,6 +377,7 @@ internal class Reservation : Poly.Runtime.IActionScoped
     }
     internal void RegisterRoomStaysCancelledSubscriber(Room subscriber)
     {
+        Poly.Runtime.ActionScope.Touch(this);
         if (this._roomStaysCancelledSubscribers == null)
         {
             this._roomStaysCancelledSubscribers = new List<Room>();
@@ -384,6 +393,7 @@ internal class Reservation : Poly.Runtime.IActionScoped
     }
     internal void RegisterRoomStaysNoShowSubscriber(Room subscriber)
     {
+        Poly.Runtime.ActionScope.Touch(this);
         if (this._roomStaysNoShowSubscribers == null)
         {
             this._roomStaysNoShowSubscribers = new List<Room>();
@@ -399,6 +409,7 @@ internal class Reservation : Poly.Runtime.IActionScoped
     }
     internal void RegisterGuestReservationsDepartedSubscriber(Guest subscriber)
     {
+        Poly.Runtime.ActionScope.Touch(this);
         if (this._guestReservationsDepartedSubscribers == null)
         {
             this._guestReservationsDepartedSubscribers = new List<Guest>();
@@ -414,7 +425,7 @@ internal class Reservation : Poly.Runtime.IActionScoped
     }
     internal DomainResult NotifyInHouseSubscribers()
     {
-        this.EnterNotifyCascade("InHouse");
+        var __depth = this.EnterNotifyCascade("InHouse");
         try
         {
             if (this._roomStaysInHouseSubscribers != null)
@@ -431,13 +442,13 @@ internal class Reservation : Poly.Runtime.IActionScoped
         }
         finally
         {
-            this.ExitNotifyCascade();
+            this.ExitNotifyCascade(__depth);
         }
         return DomainResult.Success();
     }
     internal DomainResult NotifyDepartedSubscribers()
     {
-        this.EnterNotifyCascade("Departed");
+        var __depth = this.EnterNotifyCascade("Departed");
         try
         {
             if (this._roomStaysDepartedSubscribers != null)
@@ -470,13 +481,13 @@ internal class Reservation : Poly.Runtime.IActionScoped
         }
         finally
         {
-            this.ExitNotifyCascade();
+            this.ExitNotifyCascade(__depth);
         }
         return DomainResult.Success();
     }
     internal DomainResult NotifyCancelledSubscribers()
     {
-        this.EnterNotifyCascade("Cancelled");
+        var __depth = this.EnterNotifyCascade("Cancelled");
         try
         {
             if (this._roomStaysCancelledSubscribers != null)
@@ -493,13 +504,13 @@ internal class Reservation : Poly.Runtime.IActionScoped
         }
         finally
         {
-            this.ExitNotifyCascade();
+            this.ExitNotifyCascade(__depth);
         }
         return DomainResult.Success();
     }
     internal DomainResult NotifyNoShowSubscribers()
     {
-        this.EnterNotifyCascade("NoShow");
+        var __depth = this.EnterNotifyCascade("NoShow");
         try
         {
             if (this._roomStaysNoShowSubscribers != null)
@@ -516,7 +527,7 @@ internal class Reservation : Poly.Runtime.IActionScoped
         }
         finally
         {
-            this.ExitNotifyCascade();
+            this.ExitNotifyCascade(__depth);
         }
         return DomainResult.Success();
     }
@@ -555,6 +566,7 @@ internal class Reservation : Poly.Runtime.IActionScoped
             return DomainResult<Reservation>.Failure(Poly.Runtime.DomainFailure.Range("'MaxOccupancy' must be <= 8.", "Reservation.MaxOccupancy"));
         }
         var created = new Reservation(partySize, nights, nightlyRate, maxOccupancy, checkInDate, checkOutDate, folio, guest, room);
+        Poly.Runtime.ActionScope.Create(created, "Reservation");
         if (guest != null)
         {
             guest.AttachReservations(created);
@@ -565,17 +577,18 @@ internal class Reservation : Poly.Runtime.IActionScoped
         }
         return DomainResult<Reservation>.Success(created);
     }
-    private void EnterNotifyCascade(string stageName)
+    private int EnterNotifyCascade(string stageName)
     {
         if (this._notifyDepth >= 16)
         {
             throw new System.InvalidOperationException(string.Concat("Subscription cascade on entity 'Reservation' exceeded max depth (16) while notifying '", stageName, "'."));
         }
         this._notifyDepth = this._notifyDepth + 1;
+        return this._notifyDepth - 1;
     }
-    private void ExitNotifyCascade()
+    private void ExitNotifyCascade(int depth)
     {
-        this._notifyDepth = this._notifyDepth - 1;
+        this._notifyDepth = depth;
     }
     public object __Snapshot()
     {

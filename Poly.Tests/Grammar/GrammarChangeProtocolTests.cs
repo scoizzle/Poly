@@ -1,4 +1,6 @@
 using Poly.DomainModeling.Language;
+using Poly.Grammar;
+using Poly.Interpretation.CSharp;
 
 namespace Poly.Tests.Grammar;
 
@@ -9,10 +11,24 @@ namespace Poly.Tests.Grammar;
 /// row + grammar pattern row + DomainResolver/DslExpressionParser fold + printer fill
 /// + round-trip case + fail-closed case + guide section.</para>
 ///
-/// <para>This class enforces the two rungs a machine can read from the type system:
-/// the token kind, and the canonical text that is the tokenizer's inverse. The pattern
-/// row, the fold, the printer fill, the fail-closed case and the guide line stay review
-/// rungs — they have no reflection surface, so a reviewer names them in the PR.</para>
+/// <para>This class enforces four rungs. Two are read from the type system: the token kind,
+/// and the canonical text that is the tokenizer's inverse. Two are read from the printers
+/// (G-23): every pattern row against its printer fill, on both table surfaces (the DSL and
+/// C#). The fold, the fail-closed case and the guide line stay review rungs — they have no
+/// reflection surface, so a reviewer names them in the PR.</para>
+///
+/// <para><b>Pattern rows and printer fills.</b> The drive (<see cref="PatternRowCorpus"/>)
+/// prints both corpora under a <see cref="Poly.Grammar.PrintTrace"/> scope; the pure
+/// <see cref="PatternRowChecker"/> checks every observed print: its holes and slot count
+/// (A1), its read-back through the full grammar and the reader's own tokenizer (A2), and
+/// coverage of rows, optional slots and reader-head examples (A3). A missing
+/// labelled-predicate fill is caught by A2 only: the hole check is circular for predicate
+/// labels, because an unfilled label is a positional slot. Exemptions are the keyed
+/// <see cref="PatternRowAllowList"/>, checked both ways.</para>
+///
+/// <para>A slice that adds or changes a pattern row adds an observation for it (a corpus
+/// line, or an example for a reader head) and deletes its stale allow-list entry in the
+/// same change.</para>
 ///
 /// <para>Value-bearing kinds (content positions whose text a handler supplies) have no
 /// canonical text, which is what the exemption list below says. The list is local to
@@ -144,5 +160,92 @@ public sealed class GrammarChangeProtocolTests {
         }
 
         await Assert.That(violations).IsEmpty();
+    }
+
+    private static IReadOnlyList<PrintObservation> ObservationsOf(object grammar) =>
+        [.. PatternRowCorpus.Observations.Where(o => ReferenceEquals(o.Grammar, grammar))];
+
+    private static IReadOnlyList<PatternRowViolation> CheckDsl(Grammar<DslToken, DslTokenKind> grammar) =>
+        PatternRowChecker.Check(
+            PatternRowCorpus.DslSurface(grammar),
+            ObservationsOf(DslGrammar.Core),
+            PatternRowAllowList.For(PatternRowAllowList.Dsl),
+            PatternRowExamples.For(PatternRowAllowList.Dsl));
+
+    private static IReadOnlyList<PatternRowViolation> CheckCSharp() =>
+        PatternRowChecker.Check(
+            PatternRowCorpus.CSharpSurface(CSharpGrammar.Table),
+            ObservationsOf(CSharpGrammar.Table),
+            PatternRowAllowList.For(PatternRowAllowList.CSharp),
+            PatternRowExamples.For(PatternRowAllowList.CSharp));
+
+    /// <summary>
+    /// (e) Every pattern row of both tables against its printer fill: no violation on the real
+    /// tables, with the allow-list as it stands.
+    /// </summary>
+    [Test]
+    public async Task Item18_GrammarChangeProtocol_ChecksPatternRowsAgainstPrinterFills() {
+        var violations = new List<string>();
+        violations.AddRange(CheckDsl(DslGrammar.Core).Select(v => $"dsl {v}"));
+        violations.AddRange(CheckCSharp().Select(v => $"csharp {v}"));
+
+        await Assert.That(violations).IsEmpty();
+    }
+
+    /// <summary>
+    /// (f) A synthetic pattern row with no printer fill fails the check: it is the only violation
+    /// the real drive reports against a table that adds it.
+    /// </summary>
+    [Test]
+    public async Task Item18_SyntheticRowWithNoPrinterFill_FailsTheProtocolCheck() {
+        var widened = DslGrammar.Core.ToBuilder()
+            .Define("synthetic-row").Pattern("no-fill").Kind(DslTokenKind.Domain).Commit()
+            .Build();
+
+        var violations = CheckDsl(widened);
+
+        await Assert.That(violations.Select(v => $"{v.Check} {v.Rule}/{v.Pattern}"))
+            .IsEquivalentTo(new[] { "Unobserved synthetic-row/no-fill" });
+    }
+
+    /// <summary>
+    /// (g) The floors: the drive observes the named rows on each surface. A floor row's name is
+    /// first looked up in the table, so renaming one fails here instead of shrinking the floor.
+    /// </summary>
+    [Test]
+    public async Task Item18_DriveObservesTheFloorRows() {
+        var violations = new List<string>();
+        violations.AddRange(PatternRowChecker.CheckFloor(
+            PatternRowCorpus.DslSurface(DslGrammar.Core), ObservationsOf(DslGrammar.Core), PatternRowFloors.Dsl)
+            .Select(v => $"dsl {v}"));
+        violations.AddRange(PatternRowChecker.CheckFloor(
+            PatternRowCorpus.CSharpSurface(CSharpGrammar.Table), ObservationsOf(CSharpGrammar.Table), PatternRowFloors.CSharp)
+            .Select(v => $"csharp {v}"));
+
+        await Assert.That(violations).IsEmpty();
+    }
+
+    /// <summary>
+    /// (i) The drive refuses exactly the listed inputs: a writer that starts refusing more inputs cannot
+    /// shrink the observed coverage silently, and a refusal that is fixed deletes its entry.
+    /// </summary>
+    [Test]
+    public async Task Item18_DriveRefusesOnlyTheListedInputs() =>
+        await Assert.That(PatternRowChecker.CheckRefusals(PatternRowCorpus.Refusals, PatternRowCorpus.ExpectedRefusals)).IsEmpty();
+
+    /// <summary>
+    /// (h) Every observation belongs to a checked table, so a print from another grammar cannot
+    /// pass by being filtered out.
+    /// </summary>
+    [Test]
+    public async Task Item18_EveryObservation_IsOfACheckedTable() {
+        var observations = PatternRowCorpus.Observations;
+        var fromOtherTables = observations
+            .Where(o => !ReferenceEquals(o.Grammar, DslGrammar.Core) && !ReferenceEquals(o.Grammar, CSharpGrammar.Table))
+            .Select(o => $"{o.Rule}/{o.Pattern}: {o.Text}")
+            .ToList();
+
+        await Assert.That(observations).IsNotEmpty();
+        await Assert.That(fromOtherTables).IsEmpty();
     }
 }

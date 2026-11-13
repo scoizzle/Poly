@@ -1,7 +1,6 @@
 using System.Collections;
 using System.Reflection;
 using System.Text.RegularExpressions;
-using Poly.Tests.TestHelpers;
 
 using Poly.DomainModeling;
 using Poly.DomainModeling.Compile;
@@ -10,6 +9,7 @@ using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Lowering;
 using Poly.DslCompiler;
 using Poly.Interpretation.CSharp;
+using Poly.Tests.TestHelpers;
 
 using CompileMode = Poly.DslCompiler.CompileMode;
 using Compiler = Poly.DslCompiler.DslCompiler;
@@ -144,6 +144,9 @@ public class ActionScopeEmitTests {
         await Assert.That(new CSharpGenerator().Generate(wrapper.Body!)).Contains("ActionScope.Begin(");
         await Assert.That(new CSharpGenerator().Generate(wrapper.Body!)).Contains(ActionBodies.Prefix + "Bump(");
         await Assert.That(new CSharpGenerator().Generate(body.Body!)).DoesNotContain("ActionScope.Begin(");
+        // L-03c: the wrapper touches `this` before the body runs; the body carries no Touch of its own.
+        await Assert.That(new CSharpGenerator().Generate(wrapper.Body!)).Contains("ActionScope.Touch(this)");
+        await Assert.That(new CSharpGenerator().Generate(body.Body!)).DoesNotContain("ActionScope.Touch(");
         await Assert.That(new CSharpGenerator().Generate(body.Body!)).Contains("Score");
 
         var outcomes = await ParityScenario.FromDsl(Dsl, "ActionScopeWrapperParity")
@@ -184,6 +187,8 @@ public class ActionScopeEmitTests {
         var (cs, _) = Print(StageDispatchDsl, "ActionScopeStageDispatch");
         // Cancel (two stages, one merged method) and Activate: one wrapper each, one shared body each.
         await Assert.That(Occurrences(cs, "ActionScope.Begin(")).IsEqualTo(2);
+        // L-03c: one Touch per wrapper; the merged body and the Receipt factory touch nothing.
+        await Assert.That(Occurrences(cs, "ActionScope.Touch(this)")).IsEqualTo(2);
         await Assert.That(Occurrences(cs, "DomainResult<Receipt> Cancel(")).IsEqualTo(1);
         await Assert.That(Occurrences(cs, ActionBodies.Prefix + "Cancel(")).IsEqualTo(2);
     }
@@ -195,7 +200,8 @@ public class ActionScopeEmitTests {
         // separate method, and an authored binder never becomes a printed local (it maps to a
         // generated `target{N}` variable). The test pins the printed side of that argument.
         var (cs, _) = Print(Dsl, "ActionScopeNames");
-        var allowed = new Regex(@"^__(Snapshot|Restore|state|saved|item\d+|scope|done|result|BodyOf\w+)$");
+        // L-03c adds `__depth`, the notify cascade's entry depth (a local of Notify{Stage}Subscribers).
+        var allowed = new Regex(@"^__(Snapshot|Restore|state|saved|item\d+|scope|done|result|depth|BodyOf\w+)$");
         var stray = Regex.Matches(cs, @"\b__\w+").Select(m => m.Value).Where(n => !allowed.IsMatch(n)).Distinct().ToList();
         await Assert.That(string.Join(",", stray)).IsEqualTo("");
 

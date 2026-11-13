@@ -148,7 +148,7 @@ public sealed class DslOutline {
             while (i < tokens.Count) {
                 var t = tokens[i];
                 if (t.Kind == DslTokenKind.Domain && i + 1 < tokens.Count) {
-                    nodes.Add(Make("domain", tokens[i + 1].Text, "$domain", i, i + 1, false, -1, -1, []));
+                    nodes.Add(Make("domain", Label(tokens[i + 1]), "$domain", i, i + 1, false, -1, -1, []));
                     i += 2;
                     continue;
                 }
@@ -163,7 +163,7 @@ public sealed class DslOutline {
                 }
 
                 if (t.Kind == DslTokenKind.Public && i + 2 < tokens.Count
-                    && (tokens[i + 1].Kind == DslTokenKind.Entity || tokens[i + 1].Text == "value")) {
+                    && (tokens[i + 1].Kind == DslTokenKind.Entity || DslGrammar.IsValueWord(tokens[i + 1]))) {
                     i = MarkedTop(i, nodes);
                     continue;
                 }
@@ -315,7 +315,7 @@ public sealed class DslOutline {
             // A top-level `function` declaration starts with the word and is not the legacy
             // `function: entity` name form (mirrors DomainResolver.IsFunctionDeclarationStart).
             if (t.Kind == DslTokenKind.Identifier
-                && string.Equals(t.Text, "function", StringComparison.Ordinal)
+                && t.TextEquals("function")
                 && !(i + 1 < tokens.Count && tokens[i + 1].Kind == DslTokenKind.Colon)) {
                 kind = "function";
                 skip = 2;
@@ -331,9 +331,14 @@ public sealed class DslOutline {
             return false;
         }
 
+        /// <summary>A node label: an identifier's name; any other token (number, string, punctuation) by its source slice, never decoded as a word.</summary>
+        private static string Label(DslToken token) =>
+            token.Kind == DslTokenKind.Identifier ? token.Name() : token.Span.ToString();
+
         private int TopLevel(int start, List<OutlineNode> nodes) {
-            var name = tokens[start].Text;
-            var word = start + 2 < tokens.Count ? tokens[start + 2].Text : "";
+            // TopLevel starts at IsNameColon, so the name is an identifier; the kind word is unchecked.
+            var name = tokens[start].Name();
+            var word = start + 2 < tokens.Count ? DslTokenText.Word(tokens[start + 2]) : "";
             var kind = _topKinds.Contains(word) ? word : "unknown";
             var end = start + 1;
             var open = -1;
@@ -362,8 +367,8 @@ public sealed class DslOutline {
         }
 
         private int MarkedTop(int start, List<OutlineNode> nodes) {
-            var kind = tokens[start + 1].Text;
-            var name = tokens[start + 2].Text;
+            var kind = tokens[start + 1].Name();
+            var name = Label(tokens[start + 2]);
             var end = start + 2;
             var open = -1;
             var close = -1;
@@ -468,14 +473,14 @@ public sealed class DslOutline {
 
             if (!inHeader && t.Kind is DslTokenKind.When or DslTokenKind.Require or DslTokenKind.Entry or DslTokenKind.Exit) {
                 kind = "unnamed";
-                name = t.Text;
+                name = t.Name();
                 skip = 1;
                 return true;
             }
 
             if (t.Kind == DslTokenKind.Public && i + 2 < tokens.Count && tokens[i + 1].Kind == DslTokenKind.Action) {
                 kind = "action";
-                name = tokens[i + 2].Text;
+                name = Label(tokens[i + 2]);
                 skip = 3;
                 return true;
             }
@@ -483,7 +488,7 @@ public sealed class DslOutline {
             var isPrimitiveName = t.Kind is DslTokenKind.Text or DslTokenKind.NumberType or DslTokenKind.BooleanType;
             if ((t.Kind == DslTokenKind.Identifier || isPrimitiveName)
                 && i + 1 < tokens.Count && tokens[i + 1].Kind == DslTokenKind.Colon) {
-                name = t.Text;
+                name = t.Name();
                 skip = 2;
                 var third = i + 2 < tokens.Count ? tokens[i + 2] : default;
                 kind = third.Kind switch {
@@ -504,7 +509,7 @@ public sealed class DslOutline {
                     else if (tokens[j].Kind == DslTokenKind.RParen && --depth == 0) {
                         if (j + 1 < tokens.Count && tokens[j + 1].Kind == DslTokenKind.Colon) {
                             kind = "action";
-                            name = t.Text;
+                            name = t.Name();
                             skip = 1;
                             return true;
                         }

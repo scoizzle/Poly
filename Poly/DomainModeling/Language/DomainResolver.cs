@@ -180,7 +180,7 @@ public sealed partial class DomainResolver : DslCursor {
         for (var i = 2; i + 1 < _tree.Tokens.Count && i < _tree.HeaderEnd; i++) {
             if (_tree.Tokens[i].Kind != TokenKind.Uses
                 || _tree.Tokens[i + 1].Kind != TokenKind.Identifier
-                || !string.Equals(_tree.Tokens[i + 1].Text, extensionId, StringComparison.Ordinal))
+                || !_tree.Tokens[i + 1].TextEquals(extensionId))
                 continue;
             var token = _tree.Tokens[i + 1];
             return GrammarError.Error(message, token.Line, token.Col);
@@ -223,11 +223,11 @@ public sealed partial class DomainResolver : DslCursor {
     /// </summary>
     private string ExpectPropertyName() {
         if (Current.Kind == TokenKind.Identifier || DslGrammar.IsPrimitiveTypeKind(Current.Kind)) {
-            var name = Current.Text;
+            var name = Current.Name();
             Advance();
             return name;
         }
-        throw Error($"Expected property name, got '{Current.Text}'");
+        throw Error($"Expected property name, got '{Shown(Current)}'");
     }
 
     // ── Helpers ───────────────────────────────────────────────
@@ -249,7 +249,7 @@ public sealed partial class DomainResolver : DslCursor {
     /// </summary>
     private void RejectRetiredRequiredWord() {
         if (Current.Kind == TokenKind.Identifier
-            && string.Equals(Current.Text, "required", StringComparison.Ordinal)
+            && Current.TextEquals("required")
             && !PeekIs(TokenKind.Colon)) {
             throw Error(
                 "'required' is not a constraint. A property is required unless it is marked 'optional'.");

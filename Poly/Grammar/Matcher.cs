@@ -189,8 +189,13 @@ public sealed class Matcher<TToken, TTokenKind>
         var pos = offset;
         var cut = false;
         var elements = pattern.Elements;
+        // A refusal that names its position stands on that element's first token (Match only: a Refuse is never under TryMatch).
+        var anchor = _tracker is not null && elements[^1] is Refuse<TToken, TTokenKind> { At: { } at } ? Refuse<TToken, TTokenKind>.AnchorOf(elements, at) : -1;
+        var anchorPos = -1;
         for (var index = 0; index < elements.Count; index++) {
             var element = elements[index];
+            if (index == anchor)
+                anchorPos = pos;
             if (_tracker is not null)
                 _frame = new Frame(ruleName, pattern, index, captures);
             switch (element) {
@@ -200,7 +205,7 @@ public sealed class Matcher<TToken, TTokenKind>
                 case Refuse<TToken, TTokenKind>:
                     // The row matched every token up to here and refuses at the last one; a Refuse-only row (a catch-all)
                     // matched none, so it stands on the head token and any sibling that matches a token rescues it.
-                    Commit.Add(ref committed, new Commit(pattern, pos, [new Entry(ruleName, pattern, index, element, pos > offset ? pos - 1 : pos, null, captures)]));
+                    Commit.Add(ref committed, new Commit(pattern, pos, [new Entry(ruleName, pattern, index, element, anchorPos >= 0 ? anchorPos : pos > offset ? pos - 1 : pos, null, captures)]));
                     match = null!;
                     return false;
             }

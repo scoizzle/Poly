@@ -567,4 +567,29 @@ public sealed class GrammarFailureTests {
         await Assert.That((deeper.Failure!.Refused, deeper.Failure.Offset, Expected(deeper.Failure))).IsEqualTo((false, 2, "type name"));
         await Assert.That(matched.Result?.PatternName).IsEqualTo("stage");
     }
+
+    [Test]
+    public async Task Refuse_AtANamedCaptureOrWord_StandsOnThatToken_NotTheLastOne() {
+        var grammar = Table()
+            .Define("keyword").Pattern("p").Value(TestKind.Identifier, "name").Kind(TestKind.Colon).Value(TestKind.Identifier, "keyword")
+                .Kind(TestKind.Comma).Refuse("'{keyword}' is not supported (used as type for '{name}')", at: "keyword").Commit()
+            .Define("via").Pattern("p").Value(TestKind.Identifier, "name").Kind(TestKind.Colon).Word(TestKind.Identifier, "via", t => IsWord(t, "via"))
+                .Kind(TestKind.Comma).Refuse("'via' requires the inverse navigation name", at: "via").Commit()
+            .Build();
+
+        var keyword = Match(grammar, "keyword", "Who : actor ,").Failure;
+        var via = Match(grammar, "via", "Kids : via ,").Failure;
+
+        await Assert.That(keyword).IsNotNull();
+        await Assert.That((keyword!.Offset, keyword.Token.Text)).IsEqualTo((2, "actor"));
+        await Assert.That(keyword.Expand("", t => t.Text)).IsEqualTo("'actor' is not supported (used as type for 'Who')");
+        await Assert.That((via!.Offset, via.Token.Text)).IsEqualTo((2, "via"));
+    }
+
+    [Test]
+    public async Task Refuse_AtAPositionTheRowDoesNotHaveOrThatIsOptional_IsRejected() {
+        await Assert.That(() => Table().Define("r").Pattern("p").Kind(TestKind.Entity).Refuse("no", at: "nothing").Commit()).Throws<InvalidOperationException>();
+        await Assert.That(() => Table().Define("r").Pattern("p").Kind(TestKind.Entity)
+            .Optional(new Value<TestToken, TestKind>(TestKind.Identifier, "name")).Refuse("no", at: "name").Commit()).Throws<InvalidOperationException>();
+    }
 }

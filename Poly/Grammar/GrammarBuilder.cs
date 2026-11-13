@@ -121,6 +121,8 @@ public sealed class GrammarBuilder<TToken, TTokenKind>
                     throw new InvalidOperationException($"The Refuse is {Where(i)} of {elements.Count}; a Refuse must be the last element.");
                 case Refuse<TToken, TTokenKind> when !required && i != 0:
                     throw new InvalidOperationException($"The Refuse is {Where(i)} after only optional elements; a refusal stands on a matched token, or is the whole row (a catch-all).");
+                case Refuse<TToken, TTokenKind> { At: { } at } when Refuse<TToken, TTokenKind>.AnchorOf(elements, at) is var anchor && (anchor < 0 || anchor >= i):
+                    throw new InvalidOperationException($"The Refuse of '{ruleName}/{pattern.Name}' stands at '{at}', which names no required capture or Word before it.");
                 case Optional<TToken, TTokenKind> { Inner: Cut<TToken, TTokenKind> or Refuse<TToken, TTokenKind> }:
                     throw new InvalidOperationException($"{Where(i)} is an Optional Cut or Refuse; neither is ever optional.");
             }
@@ -325,9 +327,9 @@ public sealed class PatternBuilder<TToken, TTokenKind>
     }
 
     /// <summary>Ends the row with a refusal: reaching it yields a committed failure with <paramref name="message"/> (<see cref="Refuse{TToken,TTokenKind}"/>).</summary>
-    public PatternBuilder<TToken, TTokenKind> Refuse(string message) {
+    public PatternBuilder<TToken, TTokenKind> Refuse(string message, string? at = null) {
         ArgumentException.ThrowIfNullOrEmpty(message);
-        _elements.Add(new Refuse<TToken, TTokenKind>(message));
+        _elements.Add(new Refuse<TToken, TTokenKind>(message, at));
         return this;
     }
 

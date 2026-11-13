@@ -187,6 +187,26 @@ public sealed record Cut<TToken, TTokenKind> : IPatternElement<TToken, TTokenKin
 /// alone (a catch-all that matches no token: it stands on the head token, and any sibling that matches a token
 /// rescues it), never inside an <see cref="Optional{TToken,TTokenKind}"/>; a refusal row is never printed (the printer throws).
 /// </summary>
-public sealed record Refuse<TToken, TTokenKind>(string Message) : IPatternElement<TToken, TTokenKind>
+/// <remarks>
+/// <paramref name="At"/> names another position: the capture of a required element before it (a value, a labelled
+/// predicate, a Run) or the text of a required Word before it; the refusal then stands on that element's first token.
+/// </remarks>
+public sealed record Refuse<TToken, TTokenKind>(string Message, string? At = null) : IPatternElement<TToken, TTokenKind>
     where TToken : struct, IToken<TTokenKind>
-    where TTokenKind : struct;
+    where TTokenKind : struct {
+    /// <summary>The index of the row element <paramref name="at"/> names (a top-level capture or Word text), or -1.</summary>
+    internal static int AnchorOf(IReadOnlyList<IPatternElement<TToken, TTokenKind>> elements, string at) {
+        for (var i = 0; i < elements.Count; i++) {
+            var named = elements[i] switch {
+                Value<TToken, TTokenKind> v => v.Name,
+                MatchPredicate<TToken, TTokenKind> p => p.Label,
+                Run<TToken, TTokenKind> r => r.Name,
+                Word<TToken, TTokenKind> w => w.Text,
+                _ => null,
+            };
+            if (string.Equals(named, at, StringComparison.Ordinal))
+                return i;
+        }
+        return -1;
+    }
+}

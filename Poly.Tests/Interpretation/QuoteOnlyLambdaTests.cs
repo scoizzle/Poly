@@ -108,8 +108,9 @@ public class QuoteOnlyLambdaTests {
             "conditional arms differ in representation"),
         ("no operator", typeof(ulong?), typeof(ulong?), static (x, _) => new Add(x, new Constant(1)), 7UL, 7UL,
             "no operator for 'UInt64' and 'Int32'"),
-        // T-22a rejects `long & decimal` at analysis, as C# does; a nullable enum `&` is accepted there (T-29's interim
-        // EnumBitwiseRule) and the main emitter still refuses it with the raw Expression API message.
+        // T-22a rejects `long & decimal` at analysis, as C# does; a nullable enum `&` is accepted there (the interim
+        // EnumBitwiseRule) and the main emitter still refuses it with the raw Expression API message. T-29 removes the rule
+        // and must find this case another body the main emitter refuses (KnownInterimRules: BitwiseAnd.OptionalEnumEnum).
         ("raw bitwise", typeof(AttributeTargets?), typeof(AttributeTargets), static (x, y) => new BitwiseAnd(x, y), AttributeTargets.Class, AttributeTargets.Method,
             "The binary operator And is not defined")
     ];

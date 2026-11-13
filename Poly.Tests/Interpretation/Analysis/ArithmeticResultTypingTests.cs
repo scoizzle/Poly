@@ -309,13 +309,29 @@ public class ArithmeticResultTypingTests {
     }
 
     /// <summary>
-    /// T-22a, lock amendment 8: <c>uint x &amp; 1</c> is Int64 (C# says uint through its constant conversion, T-26), with the
-    /// value master computed; <c>uint x | -1</c> is Int64 -1 as in C# (master computed 4294967295).
+    /// T-22a, lock amendment 8: <c>uint x | -1</c> is Int64 -1, as in C# (master computed 4294967295). Its sibling
+    /// <c>uint x &amp; 1</c>, typed Int64 where C# says uint, is on the interim list (T-26).
     /// </summary>
     [Test]
-    public async Task UInt32WithAnIntConstant_IsInt64() {
-        await Assert.That(Run(new BitwiseAnd(Param("a", typeof(uint)), new Constant(1)), uint.MaxValue)).IsEqualTo("Int64; 1");
+    public async Task UInt32OrMinusOne_IsInt64MinusOne_AsCSharp() =>
         await Assert.That(Run(new BitwiseOr(Param("a", typeof(uint)), new Constant(-1)), 5u)).IsEqualTo("Int64; -1");
+
+    /// <summary>
+    /// The shift-count policy with a nullable count: the tree states <c>(int?)count</c> and the VM runs it. A present count
+    /// is C#'s shift by the count converted to <c>int</c> unchecked (33 is 1, 2^32 + 2 is 2), an absent count or left is
+    /// null, as C# lifts a shift.
+    /// </summary>
+    [Test]
+    public async Task ShiftByANullableWiderCount_RunsAsCSharpForTheIntCount() {
+        Node Shift() => new ShiftLeft(Param("a", typeof(int)), Param("b", typeof(long?)));
+        await Assert.That(Run(Shift(), 3, 2L)).IsEqualTo($"Nullable`1; {3 << 2}");
+        await Assert.That(Run(Shift(), 3, 33L)).IsEqualTo($"Nullable`1; {3 << unchecked((int)33L)}");
+        await Assert.That(Run(Shift(), 3, 4294967298L)).IsEqualTo($"Nullable`1; {3 << unchecked((int)4294967298L)}");
+        await Assert.That(Run(Shift(), 3, null)).IsEqualTo("Nullable`1; null");
+        Node Lifted() => new ShiftRight(Param("a", typeof(long?)), Param("b", typeof(ulong?)));
+        await Assert.That(Run(Lifted(), -64L, 3UL)).IsEqualTo($"Nullable`1; {-64L >> 3}");
+        await Assert.That(Run(Lifted(), null, 3UL)).IsEqualTo("Nullable`1; null");
+        await Assert.That(Run(Lifted(), -64L, null)).IsEqualTo("Nullable`1; null");
     }
 
     public sealed class Target {

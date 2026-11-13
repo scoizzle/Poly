@@ -77,10 +77,6 @@ public class EntryExitTransitionEmitTests {
         session = session.WithDomain(domain);
         var analysis = session.Analyze(domain);
         var files = session.Emit(domain, analysis);
-        // One compilation unit: each file's usings move to the top.
-        var sources = files.Select(f => f.Source.Split('\n')).ToList();
-        var usings = sources.SelectMany(l => l).Where(l => l.StartsWith("using ", StringComparison.Ordinal)).Distinct();
-        var bodies = sources.Select(l => string.Join('\n', l.Where(x => !x.StartsWith("using ", StringComparison.Ordinal))));
-        return (domain, analysis, ExportedCSharp.CompileAndLoad(string.Join('\n', usings.Concat(bodies)), assemblyName));
+        return (domain, analysis, ExportedCSharp.CompileAndLoad(files, assemblyName));
     }
 }

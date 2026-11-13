@@ -103,7 +103,7 @@ public class MinimalApiGeneratorTests {
     [Test]
     public async Task Detail_UsesBindingName() {
         var d = ParseDomain("domain T\nItem: entity { Sku: Text unique }");
-        await Assert.That(Render(d).Contains("is Item item")).IsTrue();
+        await Assert.That(Render(d).Contains("is T.Item item")).IsTrue();
     }
 
     [Test]
@@ -640,20 +640,93 @@ public class MinimalApiGeneratorTests {
         await Assert.That(db.Success).IsTrue();
         await Assert.That(db.Files!.Any(f => f.FileName == "Program.cs")).IsFalse();
         var entity = db.Files!.Single(f => f.FileName == "Program.Entity.cs").Source;
-        await Assert.That(entity).Contains("namespace Poly.Generated");
+        await Assert.That(entity).Contains("namespace Registration;");
         await Assert.That(entity).Contains("class Program");
+        await Assert.That(db.Files!.Single(f => f.FileName == "Registration" + "DbContext.cs").Source)
+            .Contains("namespace Registration;");
         await Assert.That(db.Files!.Single(f => f.FileName == "Student.cs").Source)
-            .Contains("namespace Poly.Generated");
+            .Contains("namespace Registration;");
 
         var http = CompilerWithHttpHost().Compile(poly, CompileMode.All, DbmsPack.Sqlite);
         await Assert.That(http.Success).IsTrue();
         await Assert.That(http.Files!.Count(f => f.FileName == "Program.cs")).IsEqualTo(1);
         await Assert.That(http.Files!.Any(f => f.FileName == "Program.Entity.cs")).IsTrue();
         var host = http.Files!.Single(f => f.FileName == "Program.cs").Source;
-        await Assert.That(host).Contains("Poly.Generated.Program");
+        await Assert.That(host).Contains("using Registration;");
+        await Assert.That(host).Contains("Registration.Program");
+        await Assert.That(host).DoesNotContain("Poly.Generated");
 
         var errors = CompileHost(http.Files!);
         await Assert.That(errors).IsEmpty();
+    }
+
+    [Test]
+    public async Task EntityNamedLikeItsDomain_HostQualifiesItAndCompiles() {
+        // A bare `Library` in the host (global scope, `using Library;`) binds to the namespace, not the entity.
+        const string poly = """
+            domain Library
+            Library: entity {
+              Code: Text unique
+              Name: Text
+            }
+            Shelf: entity {
+              Label: Text unique
+              library: Library
+            }
+            """;
+
+        var http = CompilerWithHttpHost().Compile(poly, CompileMode.All, DbmsPack.Sqlite);
+
+        await Assert.That(http.Success).IsTrue();
+        var host = http.Files!.Single(f => f.FileName == "Program.cs").Source;
+        await Assert.That(host).Contains("using Library;");
+        await Assert.That(host).Contains("Library.Library");
+        var errors = CompileHost(http.Files!);
+        await Assert.That(errors).IsEmpty();
+    }
+
+    [Test]
+    public async Task EntityNamedLikeAnImportedBclType_HostQualifiesItAndCompiles() {
+        // The host imports System.Threading.Tasks and the domain namespace: a bare `Task` is ambiguous (CS0104).
+        // Red tail from the Desk658 oracle fixture before the fix: "'Task' is an ambiguous reference between
+        // 'Desk.Task' and 'System.Threading.Tasks.Task'".
+        const string poly = """
+            domain Desk
+            Project: entity {
+              Key: Text unique
+              tasks: many Task
+            }
+            Task: entity {
+              Title: Text unique
+            }
+            """;
+
+        var http = CompilerWithHttpHost().Compile(poly, CompileMode.All, DbmsPack.Sqlite);
+
+        await Assert.That(http.Success).IsTrue();
+        await Assert.That(http.Files!.Single(f => f.FileName == "Program.cs").Source).Contains("Desk.Task");
+        await Assert.That(CompileHost(http.Files!)).IsEmpty();
+    }
+
+    [Test]
+    public async Task EnumNamedLikeAnImportedBclType_HostQualifiesEveryReferenceAndCompiles() {
+        // typeof(DayOfWeek) in [EnumDataType] and the seed DayOfWeek.Mon must be qualified like the property type.
+        const string poly = """
+            domain Roster
+            DayOfWeek: enum { Mon, Tue }
+            Shift: entity {
+              Code: Text unique
+              Day: DayOfWeek
+            }
+            """;
+
+        var http = CompilerWithHttpHost().Compile(poly, CompileMode.All, DbmsPack.Sqlite);
+
+        await Assert.That(http.Success).IsTrue();
+        var host = http.Files!.Single(f => f.FileName == "Program.cs").Source;
+        await Assert.That(host).Contains("typeof(Roster.DayOfWeek)");
+        await Assert.That(host).Contains("Roster.DayOfWeek.Mon");
+        await Assert.That(CompileHost(http.Files!)).IsEmpty();
     }
 
     [Test]

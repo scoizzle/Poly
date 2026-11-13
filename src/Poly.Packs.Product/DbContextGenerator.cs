@@ -1,6 +1,7 @@
 using Poly.Ast;
 using Poly.Ast.Nodes;
 using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Compile;
 using Poly.Interpretation.CSharp;
 using Poly.Introspection;
 using Poly.Runtime;
@@ -42,11 +43,12 @@ public sealed partial class DbContextGenerator {
     }
 
     /// <summary>Generates the complete DbContext C# source via IR.</summary>
-    public string Generate(string @namespace = "Poly.Generated") =>
+    public string Generate(string? @namespace = null) =>
         new CSharpWriter().Write(GenerateCompilationUnit(@namespace));
 
     /// <summary>Generates the DbContext as a Syntax IR compilation unit.</summary>
-    public CompilationUnitNode GenerateCompilationUnit(string @namespace = "Poly.Generated") {
+    public CompilationUnitNode GenerateCompilationUnit(string? @namespace = null) {
+        @namespace ??= DomainSession.CSharpNamespace(_domain);
         var props = new List<PropertyDefinitionNode>();
         var entityConfigMethods = new List<Node>();
 

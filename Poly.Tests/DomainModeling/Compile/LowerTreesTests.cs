@@ -272,9 +272,9 @@ public sealed class LowerTreesTests {
     }
 
     [Test]
-    public async Task Emit_EmptyTypesFile_ForProgramDomain_NestsInPolyGenerated() {
-        // R4: an entity named Program still nests printed types, and the types file
-        // nests with nothing in it.
+    public async Task Emit_ProgramNamedEntity_IsInTheDomainNamespace_AndTheTypesFileStaysEmpty() {
+        // E-03: an entity named Program lives in the domain namespace (no Poly.Generated surgery);
+        // the file is still Program.Entity.cs, and the empty types file is the header alone (A4).
         var (domain, analysis, session) = SliceCProducerLoopCatalogTests.Evolve("""
             domain Entry
             Program: entity { Name: Text }
@@ -282,9 +282,13 @@ public sealed class LowerTreesTests {
 
         var files = session.Emit(domain, analysis);
 
+        var program = files.Single(f => f.FileName == "Program.Entity.cs").Source;
+        await Assert.That(program).Contains("namespace Entry;");
+        await Assert.That(program).Contains("class Program");
+        await Assert.That(program).DoesNotContain("Poly.Generated");
         var types = files.Single(f => f.FileName == "Poly.Types.cs").Source;
-        await Assert.That(types).Contains("namespace Poly.Generated {");
-        await Assert.That(types).DoesNotContain("DomainResult");
+        await Assert.That(types).IsEqualTo("#nullable enable");
+        await Assert.That(types).DoesNotContain("Poly.Generated");
     }
 
     [Test]

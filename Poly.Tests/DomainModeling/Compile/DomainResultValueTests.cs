@@ -1,7 +1,7 @@
 using System.Reflection;
-using Poly.Tests.TestHelpers;
 
 using Poly.Interpretation;
+using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.DomainModeling.Compile;
 
@@ -21,8 +21,8 @@ public sealed class DomainResultValueTests {
     public async Task ItemCreate_FailedResult_IsTheRuntimeType_AndValueThrows() {
         var (domain, analysis, session) = SliceCProducerLoopCatalogTests.Evolve(Dsl);
         var files = session.Emit(domain, analysis);
-        var asm = ExportedCSharp.CompileAndLoad(Join(files), "DomainResultValue");
-        var item = asm.GetType("Item")!;
+        var asm = ExportedCSharp.CompileAndLoad(files, "DomainResultValue");
+        var item = asm.GetType("Spot.Item")!;
 
         var failed = ExportedCSharp.InvokeCreate(item, ("Name", "n"), ("Qty", 99L));
 
@@ -60,8 +60,8 @@ public sealed class DomainResultValueTests {
             }
             """);
         var files = session.Emit(domain, analysis);
-        var asm = ExportedCSharp.CompileAndLoad(Join(files), "ConstraintFailure");
-        var widget = asm.GetType("Widget")!;
+        var asm = ExportedCSharp.CompileAndLoad(files, "ConstraintFailure");
+        var widget = asm.GetType("Lab.Widget")!;
         var ctor = widget
             .GetConstructors(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
             .OrderByDescending(c => c.GetParameters().Length)
@@ -88,14 +88,4 @@ public sealed class DomainResultValueTests {
 
     static object? Value(object result) =>
         result.GetType().GetProperty("Value", PrintedMembers.Any)!.GetValue(result);
-
-    static string Join(IReadOnlyList<(string FileName, string Source)> files) {
-        var sources = files.Select(f => f.Source.Replace("\r\n", "\n").Split('\n')).ToList();
-        var usings = sources.SelectMany(lines => lines)
-            .Where(line => line.StartsWith("using ", StringComparison.Ordinal))
-            .Distinct();
-        var bodies = sources.Select(lines => string.Join('\n', lines.Where(line =>
-            !line.StartsWith("using ", StringComparison.Ordinal) && line.Trim() != "#nullable enable")));
-        return string.Join('\n', usings.Concat(bodies));
-    }
 }

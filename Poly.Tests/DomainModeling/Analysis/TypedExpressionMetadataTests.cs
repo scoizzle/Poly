@@ -81,14 +81,16 @@ public class TypedExpressionMetadataTests {
     }
 
     [Test]
-    public async Task Multiply_FloatDecimal_StampsNothing_AndStillAccepts_WhileTextIsRejected() {
-        var (accepted, node, _) = Analyze(() => DomainExpression.Multiply(P("F"), P("D")));
+    public async Task Multiply_FloatDecimal_StampsNothing_AndIsRejected_WhileTextIsRejected() {
+        var (untyped, node, _) = Analyze(() => DomainExpression.Multiply(P("F"), P("D")));
         var (rejected, _, _) = Analyze(() => DomainExpression.Multiply(P("F"), P("T")));
 
-        // The accepted-but-none pair: no operator is stated, and the analyzer still accepts it.
-        await Assert.That(accepted.GetMetadata<TypedExpressionMetadata>(node)?.Binary).IsNull();
-        await Assert.That(accepted.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error
-            && d.Code == DomainModelDiagnosticCodes.SemanticTypeCompatibility)).IsFalse();
+        // No operator is defined for Float with Decimal, so none is stated. T-05b (fork F2): the product has no type, so
+        // its consumer rejects it with DMSEM006 naming the operands (the lowered analysis already refused it, T-18).
+        await Assert.That(untyped.GetMetadata<TypedExpressionMetadata>(node)?.Binary).IsNull();
+        await Assert.That(untyped.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error
+            && d.Code == DomainModelDiagnosticCodes.SemanticUntypedExpression
+            && d.Message.Contains("no arithmetic operator is defined for 'Number' and 'Decimal'", StringComparison.Ordinal))).IsTrue();
         // A positive pairing: the same shape over Text is rejected, so "stamps nothing" is not vacuous.
         await Assert.That(rejected.Diagnostics.Any(d => d.Code == DomainModelDiagnosticCodes.SemanticTypeCompatibility)).IsTrue();
     }

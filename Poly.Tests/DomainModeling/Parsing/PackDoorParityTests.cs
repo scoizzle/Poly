@@ -205,7 +205,7 @@ public sealed class PackDoorParityTests {
     /// position (G-29 positions it); a duplicate id is an unpositioned <c>FormatException</c> thrown by the header reader (#872, G-29 positions it; the compiler re-derives its position by rescanning the tokens). Both are stale-checked.
     /// </summary>
     internal static readonly (string Key, string Fixer, string Fragment)[] KnownWrong = [
-        .. Forms.Where(f => f.Form != "duplicate").Select(f => ($"P:zz|{f.Form}", "G-29", "InvalidOperationException @0:0 off=-1 len=0 :: Unknown domain extension 'zz'")),
+        .. Forms.Where(f => f.Form != "duplicate").Select(f => ($"P:zz|{f.Form}", "G-29", "InvalidOperationException @0:0 off=-1 len=0 :: Unknown domain extension 'zz'. Record only ids this catalog can resolve.")),
         .. Ids.Select(id => ($"P:{id}|duplicate", "G-29", $"FormatException @0:0 off=-1 len=0 :: Domain lists extension '{id}' more than once.")),
     ];
 

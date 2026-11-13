@@ -48,18 +48,19 @@ E	off:T:Entities:ParseEntityAfterKind#18:kw	Entities:ParseEntityAfterKind#18	-	d
 E	off:T:Entities:ParseEntityAfterKind#18:str	Entities:ParseEntityAfterKind#18	-	domain A\nS: enum { A, B }\nX: entity iri("http://e.org/x") label("x") initial(Draft) key(Code, Other) {\n  Code: Text length(3, 5) pattern("^a$") unique\n  Other: Number range(-5, 10) default(1) equals(1)\n  St: S optional\n  Tx: Text label("t") iri("http://e.org/p")\n  Kids: many owned Y via parent\n  One: one Y\n  Bare: Y\n  Own: owned Y\n  Draft: stage require P, Q {\n    entry { assign Other to 2 }\n    exit { transition to Done }\n    when any Kids Draft, Done as k { }\n    public action Pub { }\n    Go: action (p: Number) -> Number { }\n    LegacyGo(p: Number): action { }\n  }\n  Done: stage { }\n  P: policy { Other > 1 }\n  Q: policy { Other > 2 }\n  public action Run (p: Text) require P { }\n  Act: action require not Q { }\n  Leg(p: Number): "q\\"r" { }	GrammarException @25:19 off=-1 len=0 :: Expected action after 'Leg(...)', got 'q"r'
 E	off:T:Entities:ParseKeyClause#5:kw	Entities:ParseKeyClause#5	-	domain A\nuses temporal\nS: enum { A iri("http://e.org/a"), B }\nX: entity iri("http://e.org/x") key(Code to  {	GrammarException @4:42 off=-1 len=0 :: Expected ',' or ')' in 'key(...)', got 'to'
 E	off:T:TopLevel:ParseFunction#6:kw	TopLevel:ParseFunction#6	-	domain A\nfunction Twice(a: Number to : Number = a * 2	GrammarException @2:26 off=-1 len=0 :: Expected ',' or ')' in function 'Twice' parameter list, got 'to'
-E	pub:1	TopLevel:ParseMarkedTop#3	-	domain A\npublic "value" X	GrammarException @2:8 off=-1 len=0 :: Expected 'entity' or 'value' after 'public', got 'value'
-E	pub:2	TopLevel:ParseMarkedTop#3	-	domain A\npublic "str"	GrammarException @2:8 off=-1 len=0 :: Expected 'entity' or 'value' after 'public', got 'str'
-E	pub:3	TopLevel:ParseMarkedTop#3	-	domain A\npublic 5	GrammarException @2:8 off=-1 len=0 :: Expected 'entity' or 'value' after 'public', got '5'
-E	pub:4	TopLevel:ParseMarkedTop#3	-	domain A\npublic {	GrammarException @2:8 off=-1 len=0 :: Expected 'entity' or 'value' after 'public', got '{'
-E	pub:5	TopLevel:ParseMarkedTop#3	-	domain A\npublic action	GrammarException @2:8 off=-1 len=0 :: Expected 'entity' or 'value' after 'public', got 'action'
-E	pub:6	TopLevel:ParseMarkedTop#1	-	domain A\npublic entity {	GrammarException @2:15 off=-1 len=0 :: Expected entity name, got '{'
-E	pub:7	TopLevel:ParseMarkedTop#2	-	domain A\npublic value 5	GrammarException @2:14 off=-1 len=0 :: Expected value type name, got '5'
-E	pub:8	TopLevel:ParseMarkedTop#3	-	domain A\nX: entity {\n  N: Text\n}\n\npublic\n	GrammarException @7:1 off=-1 len=0 :: Expected 'entity' or 'value' after 'public', got ''
+E	pub:1	table:marked-top/entity#3	-	domain A\npublic "value" X	GrammarException @2:8 off=-1 len=0 :: Expected 'entity' or 'value' after 'public', got 'value' (StringLiteral)
+E	pub:2	table:marked-top/entity#3	-	domain A\npublic "str"	GrammarException @2:8 off=-1 len=0 :: Expected 'entity' or 'value' after 'public', got 'str' (StringLiteral)
+E	pub:3	table:marked-top/entity#3	-	domain A\npublic 5	GrammarException @2:8 off=-1 len=0 :: Expected 'entity' or 'value' after 'public', got '5' (Number)
+E	pub:4	table:marked-top/entity#3	-	domain A\npublic {	GrammarException @2:8 off=-1 len=0 :: Expected 'entity' or 'value' after 'public', got '{' (LBrace)
+E	pub:5	table:marked-top/entity#3	-	domain A\npublic action	GrammarException @2:8 off=-1 len=0 :: Expected 'entity' or 'value' after 'public', got 'action' (Action)
+E	pub:6	table:marked-top/entity#4	-	domain A\npublic entity {	GrammarException @2:15 off=-1 len=0 :: Expected entity name, got '{'
+E	pub:7	table:marked-top/value#4	-	domain A\npublic value 5	GrammarException @2:14 off=-1 len=0 :: Expected value type name, got '5'
+E	pub:8	table:marked-top/entity#3	-	domain A\nX: entity {\n  N: Text\n}\n\npublic\n	GrammarException @7:1 off=-1 len=0 :: Expected 'entity' or 'value' after 'public', got '' (EndOfFile)
 E	match:top:1	Core:ResolveOnParseStack#4	-	domain A\nX 5	GrammarException @2:1 off=-1 len=0 :: Expected 'entity', 'enum', 'value', 'contract', 'function', or 'bind' definition, got 'X'
 E	match:top:2	Core:ResolveOnParseStack#4	-	domain A\nX: 5	GrammarException @2:1 off=-1 len=0 :: Expected 'entity', 'enum', 'value', 'contract', 'function', or 'bind' definition, got 'X'
 E	match:top:3	TopLevel:ParseEnumType#4	-	domain A\nX: enum 5	GrammarException @2:9 off=-1 len=0 :: Expected LBrace, got '5' (Number)
-E	match:visibility:1	TopLevel:ParseMarkedTop#3	-	domain A\npublic X	GrammarException @2:8 off=-1 len=0 :: Expected 'entity' or 'value' after 'public', got 'X'
+E	match:marked-top:1	table:marked-top/entity#3	-	domain A\npublic X	GrammarException @2:8 off=-1 len=0 :: Expected 'entity' or 'value' after 'public', got 'X' (Identifier)
+E	match:marked-top:2	table:marked-top/value#4	-	domain A\npublic value "V"	GrammarException @2:14 off=-1 len=0 :: Expected value type name, got 'V'
 E	match:entity-body:1	Entities:ParseEntityAfterKind#31	-	domain A\nX: entity {\n  public 5\n}	GrammarException @3:3 off=-1 len=0 :: Expected property, stage, action, or policy, got 'public'
 E	match:entity-body:2	Entities:ParseEntityAfterKind#31	-	domain A\nX: entity {\n  public action 5\n}	GrammarException @3:3 off=-1 len=0 :: Expected property, stage, action, or policy, got 'public'
 E	match:entity-body:3	Actions:ParseActionBody#1	-	domain A\nX: entity {\n  public action Go 5\n}	GrammarException @3:20 off=-1 len=0 :: Expected LBrace, got '5' (Number)
@@ -132,7 +133,6 @@ E	ladder:Stages:ParseSubscription#3/Stages:ParseSubscription#4	Stages:ParseSubsc
 E	ladder:Stages:ParseSubscription#4/Stages:ParseSubscription#5	Stages:ParseSubscription#4	Stages:ParseSubscription#5	domain A\nS: enum { A, B }\nX: entity iri("http://e.org/x") label("x") initial(Draft) key(Code, Other) {\n  Code: Text length(3, 5) pattern("^a$") unique\n  Other: Number range(-5, 10) default(1) equals(1)\n  St: S optional\n  Tx: Text label("t") iri("http://e.org/p")\n  Kids: many owned Y via parent\n  One: one Y\n  Bare: Y\n  Own: owned Y\n  Draft: stage require P, Q {\n    entry { assign Other to 2 }\n    exit { transition to Done }\n    when any Kids Draft, Done as 7 	GrammarException @15:34 off=-1 len=0 :: Expected peer binding name, got '7'
 E	ladder:Stages:ParseEntitySubscription#1/Stages:ParseEntitySubscription#2	Stages:ParseEntitySubscription#1	Stages:ParseEntitySubscription#2	domain A\nS: enum { A, B }\nX: entity iri("http://e.org/x") label("x") initial(Draft) key(Code, Other) {\n  Code: Text length(3, 5) pattern("^a$") unique\n  Other: Number range(-5, 10) default(1) equals(1)\n  St: S optional\n  Tx: Text label("t") iri("http://e.org/p")\n  Kids: many owned Y via parent\n  One: one Y\n  Bare: Y\n  Own: owned Y\n  Draft: stage require P, Q {\n    entry { assign Other to 2 }\n    exit { transition to Done }\n    when any Kids Draft, Done as k { }\n    public action Pub { }\n    Go: action (p: Number) -> Number { }\n    LegacyGo(p: Number): action { }\n  }\n  Done: stage { }\n  P: policy { Other > 1 }\n  Q: policy { Other > 2 }\n  public action Run (p: Text) require P { }\n  Act: action require not Q { }\n  Leg(p: Number): action { }\n  Old: { }\n  Old2: require P { }\n  when all 7 	GrammarException @28:12 off=-1 len=0 :: Expected relationship name, got '7'
 E	ladder:Stages:ParseEntitySubscription#2/Stages:ParseEntitySubscription#3	Stages:ParseEntitySubscription#2	Stages:ParseEntitySubscription#3	domain A\nS: enum { A, B }\nX: entity iri("http://e.org/x") label("x") initial(Draft) key(Code, Other) {\n  Code: Text length(3, 5) pattern("^a$") unique\n  Other: Number range(-5, 10) default(1) equals(1)\n  St: S when\n  Tx: Text label("t") iri("http://e.org/p")\n  Kids: many owned Y via parent\n  One: one Y\n  Bare: Y\n  Own: owned Y\n  Draft: stage require P, Q {\n    entry { assign Other to 2 }\n    exit { transition to Done }\n    when any Kids Draft, Done as k { }\n    public action Pub { }\n    Go: action (p: Number) -> Number { }\n    LegacyGo(p: Number): action { }\n  }\n  Done: stage { }\n  P: policy { Other > 1 }\n  Q: policy { Other > 2 }\n  public action Run (p: Text) require P { }\n  Act: action require not Q { }\n  Leg(p: Number): action { }\n  Old: { }\n  Old2: require P { }\n  when all Kids Done , transition to Done }\n  Text: Text\n  Number: Number\n  required: Text\n}\nY: entity { parent: X }\n	GrammarException @7:5 off=-1 len=0 :: Expected target stage name, got ':'
-E	ladder:TopLevel:ParseMarkedTop#2/TopLevel:ParseMarkedTop#3	TopLevel:ParseMarkedTop#2	TopLevel:ParseMarkedTop#3	domain A\nfunction Twice(a: Number): Number = a * 2\nV: value { A: Text B: Number }\npublic value  { C: Boolean }\nC: contract external "src" v1 {\n  P: value { A: Text }\n  E: inbound operation P\n  F: outbound event Text\n}\npublic 	GrammarException @4:15 off=-1 len=0 :: Expected value type name, got '{'
 E	ladder:TopLevel:ParseEnumType#4/TopLevel:ParseEnumType#5	TopLevel:ParseEnumType#4	TopLevel:ParseEnumType#5	domain A\nuses temporal\nS: enum  A iri(	GrammarException @3:10 off=-1 len=0 :: Expected LBrace, got 'A' (Identifier)
 E	ladder:TopLevel:ParseEnumType#7/TopLevel:ParseEnumType#8	TopLevel:ParseEnumType#7	TopLevel:ParseEnumType#8	domain A\nS: enum { to	GrammarException @2:11 off=-1 len=0 :: Enum member 'to' is a reserved keyword and cannot be used as an enum member. Rename it (e.g. 'Number' \u2192 'Numeric').
 E	ladder:TopLevel:ParseFunction#1/TopLevel:ParseFunction#2	TopLevel:ParseFunction#1	TopLevel:ParseFunction#2	domain A\nfunction 7	GrammarException @2:10 off=-1 len=0 :: Expected function name after 'function', got '7'
@@ -290,6 +290,7 @@ E	kind:plain:Exit	Types:ParseTypeName#3	-	domain A\nfunction F(a: exit	GrammarEx
 E	kind:plain:As	Types:ParseTypeName#3	-	domain A\nfunction F(a: as	GrammarException @2:15 off=-1 len=0 :: Expected a type name, got 'as'
 E	kind:plain:Public	Types:ParseTypeName#3	-	domain A\nfunction F(a: public	GrammarException @2:15 off=-1 len=0 :: Expected a type name, got 'public'
 E	pair:top:enum/entity	TopLevel:ParseEnumType#4	-	domain A\nzz : enum	GrammarException @2:10 off=-1 len=0 :: Expected LBrace, got '' (EndOfFile)
+E	pair:marked-top:entity/value	table:marked-top/entity#3	-	domain A\npublic	GrammarException @2:7 off=-1 len=0 :: Expected 'entity' or 'value' after 'public', got '' (EndOfFile)
 E	pair:entity-body:stage/action	Stages:ParseStage#3	-	domain A\nX: entity {\n  zz : stage	GrammarException @3:13 off=-1 len=0 :: Expected LBrace, got '' (EndOfFile)
 E	pair:entity-body:stage/policy	Stages:ParseStage#3	-	domain A\nX: entity {\n  zz : stage	GrammarException @3:13 off=-1 len=0 :: Expected LBrace, got '' (EndOfFile)
 E	pair:entity-body:stage/typed-line	Stages:ParseStage#3	-	domain A\nX: entity {\n  zz : stage	GrammarException @3:13 off=-1 len=0 :: Expected LBrace, got '' (EndOfFile)
@@ -416,7 +417,6 @@ R	ladder:Stages:ParseSubscription#3/Stages:ParseSubscription#4	domain A\nS: enum
 R	ladder:Stages:ParseSubscription#4/Stages:ParseSubscription#5	domain A\nS: enum { A, B }\nX: entity iri("http://e.org/x") label("x") initial(Draft) key(Code, Other) {\n  Code: Text length(3, 5) pattern("^a$") unique\n  Other: Number range(-5, 10) default(1) equals(1)\n  St: S optional\n  Tx: Text label("t") iri("http://e.org/p")\n  Kids: many owned Y via parent\n  One: one Y\n  Bare: Y\n  Own: owned Y\n  Draft: stage require P, Q {\n    entry { assign Other to 2 }\n    exit { transition to Done }\n    when any Kids Draft, Done as k 	GrammarException @15:36 off=-1 len=0 :: Expected LBrace, got '' (EndOfFile)
 R	ladder:Stages:ParseEntitySubscription#1/Stages:ParseEntitySubscription#2	domain A\nS: enum { A, B }\nX: entity iri("http://e.org/x") label("x") initial(Draft) key(Code, Other) {\n  Code: Text length(3, 5) pattern("^a$") unique\n  Other: Number range(-5, 10) default(1) equals(1)\n  St: S optional\n  Tx: Text label("t") iri("http://e.org/p")\n  Kids: many owned Y via parent\n  One: one Y\n  Bare: Y\n  Own: owned Y\n  Draft: stage require P, Q {\n    entry { assign Other to 2 }\n    exit { transition to Done }\n    when any Kids Draft, Done as k { }\n    public action Pub { }\n    Go: action (p: Number) -> Number { }\n    LegacyGo(p: Number): action { }\n  }\n  Done: stage { }\n  P: policy { Other > 1 }\n  Q: policy { Other > 2 }\n  public action Run (p: Text) require P { }\n  Act: action require not Q { }\n  Leg(p: Number): action { }\n  Old: { }\n  Old2: require P { }\n  when all Kids 	GrammarException @28:17 off=-1 len=0 :: Expected target stage name, got ''
 R	ladder:Stages:ParseEntitySubscription#2/Stages:ParseEntitySubscription#3	domain A\nS: enum { A, B }\nX: entity iri("http://e.org/x") label("x") initial(Draft) key(Code, Other) {\n  Code: Text length(3, 5) pattern("^a$") unique\n  Other: Number range(-5, 10) default(1) equals(1)\n  St: S optional\n  Tx: Text label("t") iri("http://e.org/p")\n  Kids: many owned Y via parent\n  One: one Y\n  Bare: Y\n  Own: owned Y\n  Draft: stage require P, Q {\n    entry { assign Other to 2 }\n    exit { transition to Done }\n    when any Kids Draft, Done as k { }\n    public action Pub { }\n    Go: action (p: Number) -> Number { }\n    LegacyGo(p: Number): action { }\n  }\n  Done: stage { }\n  P: policy { Other > 1 }\n  Q: policy { Other > 2 }\n  public action Run (p: Text) require P { }\n  Act: action require not Q { }\n  Leg(p: Number): action { }\n  Old: { }\n  Old2: require P { }\n  when all Kids Done , transition to Done }\n  Text: Text\n  Number: Number\n  required: Text\n}\nY: entity { parent: X }\n	GrammarException @28:24 off=-1 len=0 :: Expected target stage name, got 'transition'
-R	ladder:TopLevel:ParseMarkedTop#2/TopLevel:ParseMarkedTop#3	domain A\nfunction Twice(a: Number): Number = a * 2\nV: value { A: Text B: Number }\npublic value W { C: Boolean }\nC: contract external "src" v1 {\n  P: value { A: Text }\n  E: inbound operation P\n  F: outbound event Text\n}\npublic 	GrammarException @10:8 off=-1 len=0 :: Expected 'entity' or 'value' after 'public', got ''
 R	ladder:TopLevel:ParseEnumType#4/TopLevel:ParseEnumType#5	domain A\nuses temporal\nS: enum { A iri(	GrammarException @3:13 off=-1 len=0 :: Unknown or unregistered annotation 'iri' on enum member 'A'. Enum members accept only iri, term, label, or description.
 R	ladder:TopLevel:ParseEnumType#7/TopLevel:ParseEnumType#8	domain A\nS: enum { A	GrammarException @2:12 off=-1 len=0 :: Expected RBrace, got '' (EndOfFile)
 R	ladder:TopLevel:ParseFunction#1/TopLevel:ParseFunction#2	domain A\nfunction Twice	GrammarException @2:15 off=-1 len=0 :: Expected LParen, got '' (EndOfFile)
@@ -531,9 +531,6 @@ U	off:EI:domain name:str	Core:ResolveOnParseStack#2	69F683E8B501
 U	off:EI:endpoint name:eof	TopLevel:ParseBind#4	469960A75B66
 U	off:EI:endpoint name:kw	TopLevel:ParseContract#11	C0FB00B0BEB2
 U	off:EI:endpoint name:str	TopLevel:ParseContract#11	C4286AA260E9
-U	off:EI:entity name:eof	TopLevel:ParseMarkedTop#1	F6F991164AEC
-U	off:EI:entity name:kw	TopLevel:ParseMarkedTop#1	282B348F2018
-U	off:EI:entity name:str	TopLevel:ParseMarkedTop#1	3C4F95BE33E1
 U	off:EI:identifier:eof	Core:ParseIdentifierList#1	7FA1E6F5AEF0
 U	off:EI:identifier:kw	Core:ParseIdentifierList#1	BA679646328D
 U	off:EI:identifier:str	Core:ParseIdentifierList#1	364FC8362B45
@@ -558,9 +555,6 @@ U	off:EI:target stage name:str	Stages:ParseSubscription#2	54ADFBED699F
 U	off:EI:type name:eof	TopLevel:ParseValueTypeProperties#3	7B1F02BF83F9
 U	off:EI:type name:kw	TopLevel:ParseValueTypeProperties#3	644EC044B8C8
 U	off:EI:type name:str	TopLevel:ParseValueTypeProperties#3	600C2A4B61A0
-U	off:EI:value type name:eof	TopLevel:ParseMarkedTop#2	5DABF9D92E0F
-U	off:EI:value type name:kw	TopLevel:ParseMarkedTop#2	6876130484A8
-U	off:EI:value type name:str	TopLevel:ParseMarkedTop#2	DD5E1C77EAAA
 U	off:T:Constraints:ParseNumberBound#1:eof	Constraints:ParseNumberBound#1	9BEAA1AE9009
 U	off:T:Constraints:ParseNumberBound#1:kw	Constraints:ParseNumberBound#1	4D270000443B
 U	off:T:Constraints:ParseNumberBound#1:str	Constraints:ParseNumberBound#1	6AFE32C387E8
@@ -597,9 +591,6 @@ U	off:T:TopLevel:ParseFunction#6:str	TopLevel:ParseFunction#6	E93E96CAF0C4
 U	off:T:TopLevel:ParseFunction#9:eof	TopLevel:ParseFunction#9	F286148B8C18
 U	off:T:TopLevel:ParseFunction#9:kw	TopLevel:ParseFunction#9	FDFCE61102D1
 U	off:T:TopLevel:ParseFunction#9:str	TopLevel:ParseFunction#9	7C3E28850813
-U	off:T:TopLevel:ParseMarkedTop#3:eof	TopLevel:ParseMarkedTop#3	ABE6BFC724A3
-U	off:T:TopLevel:ParseMarkedTop#3:kw	TopLevel:ParseMarkedTop#3	EBEDD9F34BDC
-U	off:T:TopLevel:ParseMarkedTop#3:str	TopLevel:ParseMarkedTop#3	1767F6754A2E
 U	off:T:Types:ParseTypeName#3:eof	Types:ParseTypeName#3	AFBC9D55B6A8
 U	off:T:Types:ParseTypeName#3:kw	Types:ParseTypeName#3	6B4AC3044DD4
 U	off:T:Types:ParseTypeName#3:str	Types:ParseTypeName#3	01784BFC4A9E
@@ -694,5 +685,4 @@ X	ladder:Effects:ParseEffect#1/Effects:ParseEffect#2	exclusive branches: the cur
 X	ladder:Effects:ParseEffect#2/Effects:ParseEffect#3	exclusive branches: the current token is an unsupported keyword or it is not
 X	ladder:Entities:ParseInitialStageClause#3/Entities:ParseInitialStageClause#4	exclusive branches: after the stage name the token is a comma or it is not
 X	ladder:Entities:ParseEntityAfterKind#1/Entities:ParseEntityAfterKind#2	exclusive branches: if/else on whether an initial clause was already read
-X	ladder:TopLevel:ParseMarkedTop#1/TopLevel:ParseMarkedTop#2	exclusive branches: the token after `public` is `entity` or the word `value`
 X	ladder:Core:ResolveOnParseStack#5/Core:ResolveOnParseStack#6	exclusive branches: the token after the declarations is `relationship` or it is not

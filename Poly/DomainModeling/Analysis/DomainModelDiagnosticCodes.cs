@@ -78,6 +78,13 @@ internal static class DomainModelDiagnosticCodes {
     public const string SemanticConstraintMismatch = "DMSEM004";
     public const string SemanticReferenceResolution = "DMSEM005";
 
+    /// <summary>
+    /// The analyzer cannot determine the type of an expression a consumer needs (T-05b): an unknown name with no
+    /// other diagnostic, a path the type model cannot follow, an operator with no definition for its operands, a
+    /// declared type the model cannot represent. Reported only when no other error explains the same expression.
+    /// </summary>
+    public const string SemanticUntypedExpression = "DMSEM006";
+
     // #406 function calls (DMFUN): a declared function is callable from a domain expression.
 
     /// <summary>A call names a function the domain does not declare.</summary>

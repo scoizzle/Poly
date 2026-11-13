@@ -18,7 +18,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
             if (context.GetTypeLookup()?.Domain is { } domain
                 && ContractCallResolver.IsExported(domain, call.Name)) {
                 var argumentType = call.Arguments.Count == 1
-                    ? InferValueType(context, call.Arguments[0], props, parameters, enumTypes).DomainName
+                    ? InferType(context, call.Arguments[0], props, parameters, enumTypes).DomainName
                     : null;
                 ContractCallResolver.Resolve(context, domain, call, argumentType);
                 ContractCallResolver.RejectUnlowerable(context, call);
@@ -30,10 +30,16 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
         for (var i = 0; i < call.Arguments.Count; i++) {
             var parameterType = function.Parameters[i].Type.TypeName;
             var target = ResolveName(context, parameterType, enumTypes);
-            var argument = InferValueType(context, call.Arguments[i], props, parameters, enumTypes);
-            if (!IsLenient(argument)
-                && !IsLenient(target)
-                && !Compatible(argument, target, assigning: true)) {
+            var argument = InferLiteralAware(context, call.Arguments[i], parameterType, enumTypes, props, parameters);
+            if (!IsTyped(target)) {
+                RequireTypedTarget(context, call, parameterType);
+                continue;
+            }
+            if (!IsTyped(argument)) {
+                RequireTyped(context, call.Arguments[i], argument, call, props, parameters, enumTypes);
+                continue;
+            }
+            if (!Compatible(argument, target, assigning: true)) {
                 var where = call.Line > 0 ? $" (line {call.Line}, col {call.Col})" : "";
                 context.ReportError(call,
                     $"Argument '{function.Parameters[i].Name}' of '{call.Name}' expects '{parameterType}', " +

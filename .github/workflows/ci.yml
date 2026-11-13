@@ -38,7 +38,8 @@ jobs:
       - name: Build
         run: dotnet build Poly.slnx --no-restore --nologo
 
-      # Frees the compiler server the Build step leaves alive (0.6 to 2.4 GB resident during the tests, #870).
+      # Frees the compiler server the Build step leaves alive (0.6 to 2.4 GB resident during the tests, #870);
+      # it does not lower the test host's own peak.
       - name: Stop build servers
         run: dotnet build-server shutdown
 
@@ -60,10 +61,11 @@ jobs:
         id: tests
         timeout-minutes: 12
         env:
-          # One measurement each (PR body): test-host peak 13.7 GB -> 8.5 GB with this alone (plus the
-          # build-server stop, which alone changed nothing); glibc's per-thread arenas kept freed native memory.
+          # Measured on this runner type, see issue #870. Arena cap: test-host peak 13.7 GB -> 8.5 GB
+          # (one run); glibc's per-thread arenas kept freed native memory resident.
           MALLOC_ARENA_MAX: '2'
-          # 8.5 GB -> 6.0 GB on top of the arena cap, at no measurable cost in duration (4m12s vs 4m29s, run-to-run noise).
+          # On top of the arena cap: peak 6.0 GB and 6.1 GB (two runs: 5,996 and 6,082 MB), lowest
+          # available memory 8.8 and 8.7 GB, durations 4m29s and 3m50s against about 4m30s before.
           DOTNET_GCConserveMemory: '7'
         run: >
           scripts/run-with-deadline.sh 630

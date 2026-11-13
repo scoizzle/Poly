@@ -92,10 +92,10 @@ public class DslExpressionFragmentTests {
     [Test]
     public async Task Fragment_OpenForm_Registry_Honored() {
         var builder = SessionBuilder.CreateEmpty();
-        foreach (var rule in new[] { "expr-primary", "expr-primary-no-not" })
+        foreach (var rule in new[] { "expr-primary" })
             builder.ExpressionForms.RegisterFold(rule, "magic", _ => DomainExpression.Literal(42L));
         builder.ExpressionForms.RegisterGrammarContributor(g => {
-            foreach (var rule in new[] { "expr-primary", "expr-primary-no-not" }) {
+            foreach (var rule in new[] { "expr-primary" }) {
                 g.Define(rule)
                     .Pattern("magic", priority: 1)
                     .Predicate(IsMagic, "magic")

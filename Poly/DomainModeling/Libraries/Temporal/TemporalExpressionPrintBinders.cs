@@ -10,8 +10,8 @@ namespace Poly.DomainModeling.Libraries.Temporal;
 /// pack-3a: temporal print binders + grammar patterns. The temporal pack registers
 /// <c>Now</c>/<c>Today</c>/<c>DateOperation</c> print binders so export_dsl re-emits
 /// the library spellings (<c>Now - 12 Days</c>, <c>DueDate + 14 Days</c>, <c>Today - 3 Months</c>)
-/// and apply_dsl re-folds them into the same IR. Patterns register on both primary
-/// rules (with and without <c>not</c>) so the Grammar matcher recognizes the pack
+/// and apply_dsl re-folds them into the same IR. Patterns register on the one expression
+/// rule, <c>expr-primary</c>, so the Grammar matcher recognizes the pack
 /// surface; the <c>date-operation</c> rule is the DateOperation print table.
 /// </summary>
 public static class TemporalExpressionPrintBinders {
@@ -53,7 +53,7 @@ public static class TemporalExpressionPrintBinders {
     /// <summary>Optional: bind duration fold onto the core duration pattern.</summary>
     public static void ContributeGrammarPatterns(GrammarBuilder<DslToken, DslTokenKind> g) {
         ArgumentNullException.ThrowIfNull(g);
-        foreach (var rule in new[] { "expr-primary", "expr-primary-no-not" })
+        foreach (var rule in new[] { "expr-primary" })
             g.AttachFold(rule, "duration", FoldDuration);
     }
 

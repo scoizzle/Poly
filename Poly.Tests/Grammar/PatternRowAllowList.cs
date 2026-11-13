@@ -80,9 +80,6 @@ internal static class PatternRowAllowList {
     private const string ComposedByHand =
         "none: permanent — the writer composes this sub-form inside a parent row's slot by design (TypeText, ParamText and the like); the parent's read-back matches this rule, so no print site needs to name it";
 
-    private const string NonLiveChain =
-        "The non-live expr chain: a recogniser only tests use; the driver's precedence table is the live expression grammar.";
-
     /// <summary>A DSL head <c>DomainDslPrinter</c> spells by hand until the named table-driven family row (#856) moves it.</summary>
     private static string HandPrintedUntil(string familyRow) =>
         $"DomainDslPrinter spells this head by hand; the row is the reader's MatchRule dispatch head until {familyRow} (#856) prints it through the table.";
@@ -112,10 +109,6 @@ internal static class PatternRowAllowList {
             ["group", "not", "duration", "match", "call", "quant-where", "count-bare", "sum-prop", "exists",
                 "where-nav", "path-is-not", "path-cmp", "path"],
             "ExpressionPrinter dispatches this head by hand (the FallbackBinding list) until G-34 (#856) gives expression rows their print half.", "G-34"),
-        .. NonLive("expr", 1), .. NonLive("expr-or", 1), .. NonLive("expr-and", 1), .. NonLive("expr-not", 2),
-        .. NonLive("expr-compare", 2), .. NonLive("expr-add-no-not", 1), .. NonLive("expr-mul-no-not", 1),
-        .. NonLive("expr-primary-no-not", 18), .. NonLive("expr-add", 1), .. NonLive("expr-mul", 1),
-        .. NonLive("expr-operand", 3),
         PatternRowEntry.Row(Dsl, PatternRowEntryKind.PrefixOnly, "uses", "pinned",
             "The pin is a raw same-line token run (DslSyntaxTree.TryReadUse); the row's Identifier is only its print hole, so a dotted numeric pin does not re-read through the row. G-27's same-line Run element gives the row a real pin slot, and G-29 moves `uses` onto it.",
             "G-29"),
@@ -212,9 +205,6 @@ internal static class PatternRowAllowList {
     private static IEnumerable<PatternRowEntry> Rows(
         string surface, PatternRowEntryKind kind, string rule, string[] patterns, string reason, string owner) =>
         patterns.Select(pattern => PatternRowEntry.Row(surface, kind, rule, pattern, reason, owner));
-
-    private static IEnumerable<PatternRowEntry> NonLive(string rule, int rowCount) =>
-        [PatternRowEntry.WholeRule(Dsl, PatternRowEntryKind.NonLive, rule, rowCount, NonLiveChain, "G-24")];
 
     private static IEnumerable<PatternRowEntry> ReaderOnlyRules(params (string Rule, int RowCount)[] rules) =>
         rules.Select(rule => PatternRowEntry.WholeRule(CSharp, PatternRowEntryKind.ReaderOnly, rule.Rule, rule.RowCount,

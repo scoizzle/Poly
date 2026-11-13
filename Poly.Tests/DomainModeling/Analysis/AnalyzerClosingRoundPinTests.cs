@@ -16,7 +16,7 @@ namespace Poly.Tests.DomainModeling.Analysis;
 /// compare equal (a load-bearing quirk for T-05). A match whose arms are all <c>null</c> is typed Text; T-06
 /// changes that case deliberately, so its rows are expected to move then.
 /// </summary>
-public class AnalyzerClosingRoundPinTests {
+public partial class AnalyzerClosingRoundPinTests {
     private static DomainTypeReference Ref(string name) => new(name);
 
     private static string Verdict(AnalysisResult analysis) {

@@ -171,13 +171,72 @@ public class PolycCliTests {
         var dir = PolycTestSupport.TempDir();
         var path = Write(dir, "posix.poly", "domain Shop\nuses posix\n\nOrder: entity { Total: Number }\n");
 
+        // C-07 (ruling Q9): windows is not a shipped target, so the shipped catalog reports it as
+        // unknown (DSL0005). The DMCON004 wrong-target behaviour is kept under test in
+        // PolycCompileTests on a catalog that declares windows.
         var windows = Run(["check", path, "--target", "windows"]);
         await Assert.That(windows.Exit).IsEqualTo(1);
-        await Assert.That(windows.Out).Contains("DMCON004");
+        await Assert.That(windows.Out).Contains("DSL0005");
         await Assert.That(windows.Out).Contains("windows");
 
         var posix = Run(["check", path, "--target", "posix"]);
         await Assert.That(posix.Exit).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task Check_BogusTarget_ExitsOneListingKnownTargets() {
+        var dir = PolycTestSupport.TempDir();
+        var path = Write(dir, "orders.poly", PolycTestSupport.Orders);
+
+        var control = Run(["check", path]);
+        var bogus = Run(["check", path, "--target", "bogus"]);
+
+        await Assert.That(control.Exit).IsEqualTo(0);
+        await Assert.That(bogus.Exit).IsEqualTo(1);
+        await Assert.That(bogus.Out).Contains("error DSL0005: Unknown host target 'bogus'. Known targets: posix.");
+        await Assert.That(bogus.Out).Contains($"{path}:");
+        await Assert.That(bogus.Err).DoesNotContain("Usage:");
+    }
+
+    [Test]
+    public async Task Build_WindowsTarget_IsErrorAndWritesNothing() {
+        var dir = PolycTestSupport.TempDir();
+        var path = Write(dir, "orders.poly", PolycTestSupport.Orders);
+        var okOut = Path.Combine(dir, "ok-out");
+        var badOut = Path.Combine(dir, "bad-out");
+
+        var control = Run(["build", path, "--out", okOut, "--target", "posix"]);
+        var windows = Run(["build", path, "--out", badOut, "--target", "windows"]);
+
+        await Assert.That(control.Exit).IsEqualTo(0);
+        await Assert.That(File.Exists(Path.Combine(okOut, "Orders", "Order.cs"))).IsTrue();
+        await Assert.That(windows.Exit).IsEqualTo(1);
+        await Assert.That(windows.Out).Contains("DSL0005");
+        await Assert.That(Directory.Exists(badOut)).IsFalse();
+    }
+
+    [Test]
+    public async Task Check_BogusTarget_Json_IsOneUnplacedErrorRecord() {
+        var dir = PolycTestSupport.TempDir();
+        var path = Write(dir, "orders.poly", PolycTestSupport.Orders);
+
+        var records = JsonNode.Parse(Run(["check", path, "--target", "bogus", "--format", "json"]).Out)!.AsArray();
+
+        await Assert.That(records.Count).IsEqualTo(1);
+        var record = DiagnosticFormat.FromJson(records[0]!);
+        await Assert.That(record.Code).IsEqualTo("DSL0005");
+        await Assert.That(record.Severity).IsEqualTo("error");
+        await Assert.That(record.Placed).IsFalse();
+        await Assert.That(record.File).IsEqualTo(path);
+    }
+
+    [Test]
+    public async Task Usage_NamesTargetFlag_AndNoUnshippedTarget() {
+        var (_, _, err) = Run([]);
+
+        await Assert.That(err).Contains("Usage:");
+        await Assert.That(err).Contains("--target");
+        await Assert.That(err).DoesNotContain("windows");
     }
 
     /// <summary>C-07 pin: a known target is a host fact; it needs no loaded library to be accepted.</summary>

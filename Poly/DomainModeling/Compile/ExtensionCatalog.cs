@@ -100,6 +100,8 @@ public sealed class ExtensionCatalog {
     public IReadOnlyList<string> KnownTargets => SortedDistinct(
         _libraries.Keys.SelectMany(id => Probe(id).Info.HostTargets));
 
+    public string? TargetError(string? target) => null;
+
     /// <summary>
     /// The library's read-only facts, from one cached
     /// <see cref="IDomainLibrary.Register"/> on a throwaway builder. An unknown id

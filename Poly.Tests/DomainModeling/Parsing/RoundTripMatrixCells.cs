@@ -6,8 +6,8 @@ using Poly.DomainModeling.Ontology.Contract;
 using static Poly.Tests.DomainModeling.Parsing.ModelKit;
 
 using Action = Poly.DomainModeling.Ontology.Action;
-using Not = Poly.DomainModeling.Ontology.Not;
 using Duration = Poly.DomainModeling.Libraries.Temporal.Duration;
+using Not = Poly.DomainModeling.Ontology.Not;
 using ValueType = Poly.DomainModeling.Ontology.ValueType;
 
 namespace Poly.Tests.DomainModeling.Parsing;

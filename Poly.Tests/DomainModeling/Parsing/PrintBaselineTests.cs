@@ -36,8 +36,8 @@ namespace Poly.Tests.DomainModeling.Parsing;
 /// straight from a code-built <see cref="Domain"/> through a printer whose session the header names; there is
 /// no parse and no analysis.</para>
 ///
-/// <para><b>Trivia.</b> The printer drops comments: 12 of the 42 shipped files carry <c>//</c> lines and
-/// none of them is in the baseline. That is frozen as designed. Line endings are normalised to <c>\n</c>.</para>
+/// <para><b>Trivia.</b> The printer drops comments: 13 of the 42 shipped files carry <c>//</c> lines (the G-26 lock says 12; a count on 2026-11-13 finds 13) and
+/// none of them is in the baseline text. That is frozen as designed. Line endings are normalised to <c>\n</c>.</para>
 ///
 /// <para><b>Regeneration.</b> <c>POLY_REGEN_PRINT_BASELINE=1</c> rewrites the file from the CURRENT printer
 /// (run <c>Regenerate_WritesBaselineFromCurrentPrinter</c>). Regenerate only on an UNCHANGED printer, for example
@@ -375,6 +375,23 @@ public sealed class PrintBaselineTests {
             var shown = (entry.Status + "\n" + entry.Text).Contains(fragment, StringComparison.Ordinal);
             await Assert.That(shown).IsTrue().Because($"{key} (owner {owner}) no longer shows its recorded oddity: delete the entry (stale)");
         }
+    }
+
+    /// <summary>
+    /// The printer drops comments: 13 of the 42 shipped files carry <c>//</c> lines, and no printed text does. Frozen as designed;
+    /// a printer that starts to keep comments moves those keys and names them.
+    /// </summary>
+    [Test]
+    public async Task Comments_AreDroppedByDesign() {
+        var root = GuideBlocks.RepoRoot();
+        var withComments = ShippedDocuments()
+            .Where(path => File.ReadAllLines(Path.Combine(root, path)).Any(l => l.TrimStart().StartsWith("//", StringComparison.Ordinal)))
+            .ToList();
+        await Assert.That(withComments.Count).IsEqualTo(13);
+
+        var frozen = Frozen().ToDictionary(e => e.Key, StringComparer.Ordinal);
+        foreach (var path in withComments.Where(p => frozen["poly/" + p].Status == "printed"))
+            await Assert.That(frozen["poly/" + path].Text.Split('\n').Any(l => l.TrimStart().StartsWith("//", StringComparison.Ordinal))).IsFalse().Because(path);
     }
 
     [Test]

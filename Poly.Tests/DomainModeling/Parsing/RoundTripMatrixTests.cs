@@ -321,6 +321,20 @@ public sealed class RoundTripMatrixTests {
         await Assert.That(outcome.Class).IsNotEqualTo(CellOutcome.Ok);
     }
 
+    /// <summary>
+    /// A loss the PRINTED TEXT cannot show: entity-level constraints have no DSL form, so the reparse lacks them and both prints are equal.
+    /// Only the structural compare sees it; with the compare neutered this test is red.
+    /// </summary>
+    [Test]
+    public async Task SelfTest_AttributeTheTextDoesNotShow_FailsTheStructuralCompareOnly() {
+        var cell = new MatrixCell("self-test/entity-constraint", "self-test", CellSession.Bare,
+            () => ModelKit.Dom(ModelKit.Ent("A", [ModelKit.Prop("Name")]) with { Constraints = [new UniqueConstraint()] }), []);
+
+        var outcome = Run(cell);
+
+        await Assert.That(outcome.Class).IsEqualTo("compare");
+    }
+
     [Test]
     public async Task SelfTest_ReparseThatLosesAnInternalAttribute_Fails() {
         // KeyProperties is internal: the compare reads non-public attributes too.

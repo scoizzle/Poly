@@ -62,3 +62,33 @@ docs/probes/scratch-2026-10-14/roastery.poly | 8:1 | DMCS003? | Cannot verify 'a
 docs/probes/scratch-2026-10-14/roastery.poly | 14:5 | DMCS003? | Cannot verify 'create Batch { Kg: kg }' against constraint range(1, 100) on property 'Kg': the assigned value has no bound analysis can use.
 docs/probes/scratch-2026-10-14/roastery.poly | 44:5 | DMCS003? | Cannot verify 'create Line { Kg: kg }' against constraint range(1, 1000) on property 'Kg': the assigned value has no bound analysis can use.
 # end measured
+
+## Predicted (committed before production, at the red-tests commit; the run wins, and each difference is explained below)
+#
+# Shipped corpus: the measured block does not move (0 rows appear, 0 disappear, 0 change; denominators unchanged).
+#   - The 5 documents with a create under require initialise from parameters, Today/Now, navigations or literals:
+#     no policy narrows a parameter, Eval answers a navigation from declared constraints only when given the domain
+#     (the initializer arm does not pass it, as InferValue did not), and a literal keeps the literal path.
+#   - The 7 documents with require not: AtLimit/HasFines/Overloaded/OverLimit/SectionFull/HasSection are relations
+#     to an unranged property, counts, navigations or exists tests, so negating them narrows no range a finding reads.
+#
+# PolicyGuardFactsTests.Shape_Verdict_IsPinned rows (master -> predicted):
+#   assign-require              unchanged
+#   create-require              DMEFF008? [0, 100]                         -> clean (initializer reads [0,10])
+#   create-in-require           DMEFF008? [0, 100]                         -> clean
+#   create-require-not-0-10     Qty=[0,100] DMEFF008? [0, 100]             -> Qty=[11,100] errors=DMEFF008 DMEFF008! [11, 100] entirely outside
+#   create-require-not-11-100   Qty=[0,100] DMEFF008? [0, 100]             -> Qty=[11,100] clean
+#   create-require-not-and      unchanged (the hull of the negated arms is A's declared range)
+#   stage-p-action-not-p        Qty=[0,10] clean (WRONG)                   -> Qty=[11,100] DMEFF008? [11, 100] can fall outside range(0, 60) on 'Seen'
+#   create-inside-loop          unchanged (amendment 1: declared path)
+#   create-after-loop           unchanged (loop environment, #863)
+#   create-after-transition     unchanged (amendment 3)
+#   create-after-cross-invoke   unchanged (amendment 3)
+#   untyped-initializer         unchanged (DMCS003 x2: fails closed)
+#   self-invoke-require-not     Qty=[0,100] DMEFF008? x2 (own + Go -> Keep) -> Qty=[11,100] clean
+#
+# Other changed-area classes (GuardNarrowing, ProvableGuard, WriteVerification, AssignConstraintAnalysis, UnverifiedWrite,
+# VerificationSummary, ConstraintValidationFailClosed, InternalDomainProducer, ContractSurfaceFingerprint, DomainFacts,
+# ModuleInstanceExecutor, PathPrefixRequireFailure, CorpusVerdictSweep, GuideExamples): no assertion moves. None of them
+# pins a create initializer under a guard or a require not narrowing (read: they pin assigns, literal creates and
+# preconditions lists; Preconditions and the export set are unchanged).

@@ -497,6 +497,322 @@ public class PolicyGuardFactsTests {
         await Assert.That(measured).IsEqualTo(string.Join('\n', lines.Skip(start + 1).Take(end - start - 1)));
     }
 
+    // ── B. The seam ─────────────────────────────────────────────
+
+    private static readonly EffectInvariantAnalyzer.GuardAxes QtyIntegral = new(
+        new HashSet<string>(["Qty"], StringComparer.Ordinal), new HashSet<string>(StringComparer.Ordinal));
+
+    private static Dictionary<string, AbstractValue> QtyEnv() =>
+        new(StringComparer.Ordinal) { ["Qty"] = AbstractValue.From([new RangeConstraint(0L, 100L)]) };
+
+    /// <summary><c>Small(Max)</c> is <c>Qty &lt;= Max</c>; F-09's substitution (here a delegate) binds
+    /// <c>Max</c> to 10. A no-op refinement leaves <c>[0,100]</c>.</summary>
+    private static readonly Policy ParameterisedSmall = new(
+        "Small", DomainExpression.LessThanOrEqual(DomainExpression.Property("Qty"), DomainExpression.Property("Max")));
+
+    private static Entity OrderEntity() => EntityNamed(Analyze(AssignUnderRequire).Domain, "Order");
+
+    [Test]
+    public async Task RequireWithArgs_Instantiated_RefinesEnv() {
+        var env = QtyEnv();
+        PolicyGuardFacts.Refine(env, new GuardedPolicy(ParameterisedSmall, Negated: false), OrderEntity(),
+            [DomainExpression.Literal(10L)],
+            (policy, args) => DomainExpression.LessThanOrEqual(DomainExpression.Property("Qty"), args[0]),
+            QtyIntegral);
+        await Assert.That(Range(env["Qty"].NumericRange)).IsEqualTo("[0,10]");
+    }
+
+    [Test]
+    public async Task RefineWithArgsButNoInstantiator_Throws() {
+        Exception? thrown = null;
+        try {
+            PolicyGuardFacts.Refine(
+                QtyEnv(), new GuardedPolicy(ParameterisedSmall, Negated: false), OrderEntity(),
+                [DomainExpression.Literal(10L)], instantiate: null, QtyIntegral);
+        }
+        catch (Exception e) {
+            thrown = e;
+        }
+        await Assert.That(thrown?.GetType()).IsEqualTo(typeof(InvalidOperationException));
+        await Assert.That(thrown!.Message).IsEqualTo(
+            "Policy 'Small' on entity 'Order' is required with 1 argument(s), but no policy instantiator was " +
+            "supplied to substitute them, so analysis cannot narrow by it.");
+    }
+
+    [Test]
+    public async Task Guards_ActionThenStage_StagePolicyTheActionNegatesIsSuppressed() {
+        var (domain, _) = Analyze(StageSmallActionNotSmall("range(0, 100)"));
+        var order = EntityNamed(domain, "Order");
+        var open = order.Stages.Single();
+        var guards = PolicyGuardFacts.Guards(ActionNamed(order, "Peek"), order, open);
+        await Assert.That(string.Join(",", guards.Select(g => (g.Negated ? "!" : "") + g.Policy.Name)))
+            .IsEqualTo("!not_Small");
+    }
+
+    // ── C. require not P ────────────────────────────────────────
+
+    /// <summary>The soundness pin: <c>require not Small</c> narrows by <c>Small</c> negated once, to
+    /// <c>[11,100]</c>, so a create into <c>range(0, 10)</c> is entirely outside. Narrowing by <c>Small</c> itself,
+    /// or by <c>not (not Small)</c>, gives <c>[0,10]</c> and accepts a create the runtime always rejects
+    /// (master: skipped, <c>[0,100]</c> and a warning).</summary>
+    [Test]
+    public async Task NotPolicy_NarrowsByNegatedPolicy() {
+        var (domain, analysis) = Analyze(CreateUnderRequireNot("range(0, 10)"));
+        await Assert.That(Narrowed(Context(domain, analysis, "Order", "Make"), "Qty")).IsEqualTo("[11,100]");
+        await Assert.That(RangeFindings(analysis)).IsEqualTo(
+            "DMEFF008! Assigned expression value range [11, 100] is entirely outside constraint range(0, 10) on property 'Qty'.");
+    }
+
+    /// <summary>The accept direction (amendment 6): wrong polarity would give <c>[0,10]</c> and an error. The
+    /// simulator runs the guard's boundary: 10 is blocked, 11 and 100 create.</summary>
+    [Test]
+    public async Task NotPolicy_AcceptDirection_IsClean() {
+        var dsl = CreateUnderRequireNot("range(11, 100)");
+        var (domain, analysis) = Analyze(dsl);
+        await Assert.That(Narrowed(Context(domain, analysis, "Order", "Make"), "Qty")).IsEqualTo("[11,100]");
+        await Assert.That(RangeFindings(analysis)).IsEqualTo("clean");
+
+        var exec = Simulator(dsl, out _);
+        await Assert.That(Outcome(exec.Invoke(Make(exec, "Order", ("Qty", 10L)), "Make")))
+            .IsEqualTo("fail: 'Make' blocked by policy 'Small'.");
+        foreach (var qty in new[] { 11L, 100L }) {
+            var made = exec.Invoke(Make(exec, "Order", ("Qty", qty)), "Make");
+            await Assert.That(Outcome(made)).IsEqualTo("ok");
+            await Assert.That(made.CreatedChildren.Single().Bag["Qty"]).IsEqualTo(qty);
+        }
+    }
+
+    /// <summary><c>not (A &gt; 5 and B &gt; 5)</c> is the hull of <c>A &lt;= 5</c> and <c>B &lt;= 5</c>: A is not
+    /// narrowed, so a create of A into <c>range(0, 5)</c> stays a warning. A treated as <c>A &lt;= 5</c> would accept
+    /// it; A treated as <c>A &gt; 5</c> would reject it. Green on master too (master skips the guard).</summary>
+    [Test]
+    public async Task NotAnd_NarrowsToHullOfNegatedArms() {
+        var (domain, analysis) = Analyze(CreateUnderRequireNotAnd);
+        await Assert.That(Narrowed(Context(domain, analysis, "Order", "Make"), "A")).IsEqualTo("[0,10]");
+        await Assert.That(RangeFindings(analysis)).IsEqualTo(
+            "DMEFF008? Assigned expression value range [0, 10] can fall outside constraint range(0, 5) on property 'Qty'.");
+
+        var exec = Simulator(CreateUnderRequireNotAnd, out _);
+        await Assert.That(exec.Invoke(Make(exec, "Order", ("A", 9L), ("B", 1L)), "Make").Succeeded).IsFalse();
+        await Assert.That(Outcome(exec.Invoke(Make(exec, "Order", ("A", 1L), ("B", 9L)), "Make"))).IsEqualTo("ok");
+        await Assert.That(Outcome(exec.Invoke(Make(exec, "Order", ("A", 9L), ("B", 9L)), "Make")))
+            .IsEqualTo("fail: 'Make' blocked by policy 'Big'.");
+    }
+
+    /// <summary>An API-built <c>not_Small</c> whose expression is NOT negated narrows exactly as the resolver's:
+    /// the seam reads the entity's <c>Small</c>, as the runtime does, and ignores the marker's expression.</summary>
+    [Test]
+    public async Task ApiBuiltNotPolicy_UnNegatedExpression_StillNarrowsByEntityPolicy() {
+        const string bare = """
+            domain C
+            Item: entity { Qty: Number range(11, 100) }
+            Order: entity {
+              Qty: Number range(0, 100)
+              Small: policy { Qty <= 10 }
+              Make: action { create Item { Qty: Qty } }
+            }
+            """;
+        var unNegated = new Policy("not_Small",
+            DomainExpression.LessThanOrEqual(DomainExpression.Property("Qty"), DomainExpression.Literal(10L)));
+        var (apiDomain, apiAnalysis) = Analyze(bare, new AddPolicyToActionChange("Order", "Make", unNegated));
+        var (dslDomain, dslAnalysis) = Analyze(CreateUnderRequireNot("range(11, 100)"));
+        await Assert.That(Narrowed(Context(apiDomain, apiAnalysis, "Order", "Make"), "Qty")).IsEqualTo("[11,100]");
+        await Assert.That(Narrowed(Context(dslDomain, dslAnalysis, "Order", "Make"), "Qty")).IsEqualTo("[11,100]");
+    }
+
+    /// <summary>Amendment 7, red first: the action's <c>require not Small</c> suppresses the stage's <c>Small</c>,
+    /// so a write that relies on the stage's <c>Small</c> is not accepted (master: refined by the suppressed gate,
+    /// <c>[0,10]</c>, clean; <c>StagePAndActionNotP_Simulator_AssignFailsAboveSeenRange</c> runs 70).</summary>
+    [Test]
+    public async Task StagePAndActionNotP_WriteRelyingOnStageP_IsNotAccepted() {
+        var (domain, analysis) = Analyze(StageSmallActionNotSmall("range(0, 60)"));
+        await Assert.That(Narrowed(Context(domain, analysis, "Order", "Peek"), "Qty")).IsEqualTo("[11,100]");
+        await Assert.That(RangeFindings(analysis)).IsEqualTo(
+            "DMEFF008? Assigned expression value range [11, 100] can fall outside constraint range(0, 60) on property 'Seen'.");
+    }
+
+    /// <summary>The policy is not applied both ways: no false "unsatisfiable preconditions" (DMCS001).</summary>
+    [Test]
+    public async Task StagePAndActionNotP_NoFalseUnsatisfiable() {
+        var (domain, analysis) = Analyze(StageSmallActionNotSmall("range(0, 100)"));
+        await Assert.That(Narrowed(Context(domain, analysis, "Order", "Peek"), "Qty")).IsEqualTo("[11,100]");
+        await Assert.That(ErrorCodes(analysis)).IsEqualTo("none");
+        await Assert.That(RangeFindings(analysis)).IsEqualTo("clean");
+    }
+
+    /// <summary>Amendment 5: a <c>not_Ghost</c> whose <c>Ghost</c> is not an entity policy narrows nothing and does
+    /// not throw. The companion action in the same domain shows the seam does narrow a resolvable <c>not_</c>.</summary>
+    [Test]
+    public async Task NotPolicy_MissingEntityPolicy_NarrowsNothing() {
+        const string dsl = """
+            domain C
+            Order: entity {
+              Qty: Number range(0, 100)
+              Small: policy { Qty <= 10 }
+              Ghostly: action { }
+              Make: action require not Small { }
+            }
+            """;
+        var ghost = new Policy("not_Ghost",
+            DomainExpression.Not(DomainExpression.LessThanOrEqual(DomainExpression.Property("Qty"), DomainExpression.Literal(10L))));
+        var (domain, analysis) = Analyze(dsl, new AddPolicyToActionChange("Order", "Ghostly", ghost));
+        await Assert.That(Narrowed(Context(domain, analysis, "Order", "Ghostly"), "Qty")).IsEqualTo("[0,100]");
+        await Assert.That(Narrowed(Context(domain, analysis, "Order", "Make"), "Qty")).IsEqualTo("[11,100]");
+    }
+
+    /// <summary>A self-invoked callee's <c>require not Small</c> narrows its entry environment, in its own context
+    /// and in the caller's call chain (master: both <c>[0,100]</c> warnings). The simulator shows the invoke runs the
+    /// callee's guard: 10 is blocked, 11 writes.</summary>
+    [Test]
+    public async Task SelfInvoke_CalleeRequireNot_NarrowsCalleeEnv() {
+        var (domain, analysis) = Analyze(SelfInvokeRequireNot);
+        await Assert.That(Narrowed(Context(domain, analysis, "Order", "Keep"), "Qty")).IsEqualTo("[11,100]");
+        await Assert.That(Range(Context(domain, analysis, "Order", "Go").Postconditions.Single().ValueRange)).IsEqualTo("[11,100]");
+        await Assert.That(RangeFindings(analysis)).IsEqualTo("clean");
+
+        var exec = Simulator(SelfInvokeRequireNot, out _);
+        await Assert.That(exec.Invoke(Make(exec, "Order", ("Qty", 10L)), "Go").Succeeded).IsFalse();
+        var eleven = Make(exec, "Order", ("Qty", 11L));
+        await Assert.That(Outcome(exec.Invoke(eleven, "Go"))).IsEqualTo("ok");
+        await Assert.That(eleven.Bag["Local"]).IsEqualTo(11L);
+    }
+
+    // ── D. Create and create-in initializers (#809) ─────────────
+
+    private static string InitializerOf(ActionStageInvariant context, string property) {
+        var values = context.InitializerValues.Where(v => v.Initializer.PropertyName == property).ToList();
+        return values.Count == 0 ? "absent" : string.Join(",", values.Select(v => Range(v.ValueRange)));
+    }
+
+    /// <summary>#809's probe (EvidenceBacklogProbes b0484719), ported: the create initializer reads the
+    /// <c>require</c>-narrowed <c>Qty</c>, as the assignment control does (master: a <c>[0, 100]</c> warning).</summary>
+    [Test]
+    public async Task Item23c_CreateInitializerNarrowedByRequire_IsNotFlagged() {
+        var (_, control) = Analyze(AssignUnderRequire);
+        var (domain, create) = Analyze(CreateUnderRequire);
+        await Assert.That($"control={RangeFindings(control)} create={RangeFindings(create)}")
+            .IsEqualTo("control=clean create=clean");
+        await Assert.That(InitializerOf(Context(domain, create, "Order", "Make"), "Qty")).IsEqualTo("[0,10]");
+    }
+
+    [Test]
+    public async Task CreateIn_NarrowedByRequire_IsNotFlagged() {
+        var (domain, analysis) = Analyze(CreateInUnderRequire);
+        await Assert.That(RangeFindings(analysis)).IsEqualTo("clean");
+        await Assert.That(InitializerOf(Context(domain, analysis, "Order", "Make"), "Qty")).IsEqualTo("[0,10]");
+    }
+
+    /// <summary>The guard fact does not outlive an assign: after <c>assign Qty to 50</c> the create reads 50, so a
+    /// create into <c>range(0, 10)</c> is entirely outside (a guard fact kept past the assign would accept it).
+    /// The simulator: the guard holds at 5 and the create still fails.</summary>
+    [Test]
+    public async Task AssignBeforeCreate_FlowEnvWins() {
+        const string dsl = """
+            domain C
+            Item: entity { Qty: Number range(0, 10) }
+            Order: entity {
+              Qty: Number range(0, 100)
+              Small: policy { Qty <= 10 }
+              Make: action require Small { assign Qty to 50  create Item { Qty: Qty } }
+            }
+            """;
+        var (domain, analysis) = Analyze(dsl);
+        await Assert.That(InitializerOf(Context(domain, analysis, "Order", "Make"), "Qty")).IsEqualTo("[50,50]");
+        await Assert.That(RangeFindings(analysis)).IsEqualTo(
+            "DMEFF008! Assigned expression value range [50, 50] is entirely outside constraint range(0, 10) on property 'Qty'.");
+        var twin = dsl.Replace("Item: entity { Qty: Number range(0, 10) }", "Item: entity { Qty: Number range(0, 100) }",
+            StringComparison.Ordinal);
+        var exec = Simulator(twin, out _);
+        var made = exec.Invoke(Make(exec, "Order", ("Qty", 5L)), "Make");
+        await Assert.That(made.CreatedChildren.Single().Bag["Qty"]).IsEqualTo(50L);
+    }
+
+    /// <summary>Amendment 2: a create in a loop body keeps the declared-range path (the body is walked once on the
+    /// pre-loop environment); <c>FlaggedCreates_Simulator_FailWithGuardHeld</c> runs the second iteration.</summary>
+    [Test]
+    public async Task CreateInsideLoop_AssignedInBody_NotNarrowed() {
+        var (domain, analysis) = Analyze(CreateInsideLoop);
+        await Assert.That(InitializerOf(Context(domain, analysis, "Order", "Go"), "Qty")).IsEqualTo("absent");
+        await Assert.That(RangeFindings(analysis)).IsEqualTo(PossibleOutside0To10);
+    }
+
+    /// <summary>A create after a loop keeps the declared path: the loop's environment is its first iteration's
+    /// (#863), and with zero records the create reads the entry value 0.</summary>
+    [Test]
+    public async Task CreateAfterLoop_NotNarrowed() {
+        var (domain, analysis) = Analyze(CreateAfterLoop);
+        await Assert.That(InitializerOf(Context(domain, analysis, "Order", "Go"), "Qty")).IsEqualTo("absent");
+        await Assert.That(RangeFindings(analysis)).IsEqualTo(
+            "DMEFF008? Assigned expression value range [0, 100] can fall outside constraint range(5, 15) on property 'Qty'.");
+    }
+
+    /// <summary>Amendment 3: the transition runs the target stage's entry block, which the flow does not model.</summary>
+    [Test]
+    public async Task CreateAfterTransition_EntryAssign() {
+        var (domain, analysis) = Analyze(CreateAfterTransition);
+        await Assert.That(InitializerOf(Context(domain, analysis, "Order", "Go"), "Qty")).IsEqualTo("absent");
+        await Assert.That(RangeFindings(analysis)).IsEqualTo(PossibleOutside0To10);
+    }
+
+    /// <summary>Amendment 3: the cross-entity callee invokes back into the caller, which the flow does not model.</summary>
+    [Test]
+    public async Task CreateAfterCrossEntityInvoke_WriteBack() {
+        var (domain, analysis) = Analyze(CreateAfterCrossEntityInvoke);
+        await Assert.That(InitializerOf(Context(domain, analysis, "Order", "Go"), "Qty")).IsEqualTo("absent");
+        await Assert.That(RangeFindings(analysis)).IsEqualTo(PossibleOutside0To10);
+    }
+
+    /// <summary>No guard: the create stays a warning, and its initializer is recorded at the declared range (the
+    /// presence control that shows the arm ran).</summary>
+    [Test]
+    public async Task CreateOutsideGuard_StillFlagged() {
+        var dsl = CreateUnderRequire.Replace("action require Small {", "action {", StringComparison.Ordinal);
+        var (domain, analysis) = Analyze(dsl);
+        await Assert.That(InitializerOf(Context(domain, analysis, "Order", "Make"), "Qty")).IsEqualTo("[0,100]");
+        await Assert.That(RangeFindings(analysis)).IsEqualTo(PossibleOutside0To10);
+    }
+
+    /// <summary>One record per initializer per stage context: an entity-level action has one context per stage, and
+    /// each arm of an <c>if</c> records its own create once, under the arm's condition.</summary>
+    [Test]
+    public async Task InitializerFacts_RecordedOncePerStageContext() {
+        var (domain, analysis) = Analyze("""
+            domain C
+            Item: entity { Qty: Number range(0, 10) }
+            Order: entity {
+              Qty: Number range(0, 100)
+              Small: policy { Qty <= 10 }
+              Make: action require Small {
+                if (Qty <= 5) { create Item { Qty: Qty } } else { create Item { Qty: Qty } }
+              }
+              A: stage { }
+              B: stage { }
+            }
+            """);
+        var make = ActionNamed(EntityNamed(domain, "Order"), "Make");
+        var contexts = analysis.GetActionInvariants(make)!.StageContexts();
+        await Assert.That(string.Join(" ", contexts.Select(c => $"{c.StageName}:{InitializerOf(c, "Qty")}")))
+            .IsEqualTo("A:[0,5],[6,10] B:[0,5],[6,10]");
+        await Assert.That(RangeFindings(analysis)).IsEqualTo("clean");
+    }
+
+    /// <summary>T-05b's ordering note (#680 V-18 also-line): this analyzer runs before <c>UntypedExpressionPass</c>
+    /// and fails closed on an expression it cannot type. <c>parts Qty</c> is a many hop (untyped on master; DMSEM006
+    /// once #868 merges): its value carries no range, so neither write is verified nor flagged as out of range, under
+    /// a guard that narrows <c>Qty</c>. The recorded initializer is the presence control.</summary>
+    [Test]
+    public async Task UntypedInitializer_FailsClosed() {
+        var (domain, analysis) = Analyze(UntypedInitializer);
+        var make = Context(domain, analysis, "Order", "Make");
+        await Assert.That(InitializerOf(make, "Qty")).IsEqualTo("none");
+        await Assert.That(Range(Context(domain, analysis, "Order", "Copy").Postconditions.Single().ValueRange)).IsEqualTo("none");
+        await Assert.That(analysis.Diagnostics.Any(d => d.Code == DomainModelDiagnosticCodes.EffectConstraintViolation)).IsFalse();
+        var facts = analysis.GetMetadata<WriteVerificationFacts>(domain)!;
+        await Assert.That(facts.Verified).IsEqualTo(0);
+        await Assert.That(string.Join(",", facts.Unverified.Select(u => u.TargetProperty).Order(StringComparer.Ordinal)))
+            .IsEqualTo("Local,Qty");
+    }
+
     [Test]
     public async Task StageRequireNot_NarrowsAsToday() {
         var (domain, analysis) = Analyze("""

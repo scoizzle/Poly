@@ -68,6 +68,62 @@ public class ActionScopeSpikeTests {
         await Assert.That(ActionScope.HasOpenScope).IsFalse();
     }
 
+    /// <summary>
+    /// L-03c S0: the shapes L-03c emits, on the VM and a bag. <c>ActionScope.Create(bag, "Item")</c> records the bag;
+    /// a throw through the <c>TryFinally</c> rolls the touched bag back; and the notify cascade's absolute exit (an
+    /// int local captured before the <c>try</c> and written back in the <c>finally</c>, after the rollback) survives
+    /// the unwind. <c>__depth = CreatedInstances.Count; Touch(bag); Create(bag, "Item"); __created =
+    /// CreatedInstances.Count; try { bag.Clear(); throw } finally { Rollback; bag["d"] = __depth;
+    /// bag["created"] = __created }</c>, the writes spelled <c>Remove</c>/<c>Add</c> because the VM indexes a
+    /// hand-built <c>IndexAccess</c> as an array (the module writes bag fields through <c>this</c> members instead).
+    /// </summary>
+    [Test]
+    public async Task Vm_CreateRecordsTheBag_AThrowRollsBack_AndTheExitAssignsTheEntryDepth() {
+        var bag = new Parameter("bag", BagType);
+        var scope = new Variable("__scope");
+        var depth = new Variable("__depth");
+        var created = new Variable("__created");
+        // Cast to its own type, as the wrapper casts its token: the VM analysis does not resolve a static member's type.
+        Node CreatedCount() => new TypeCast(new Member(new Member(Scope, "CreatedInstances"), "Count"), TypeReference.To<int>());
+        Node Put(string key, Node value) => new Block([
+            new Invoke(new Member(bag, "Remove"), new Constant(key)),
+            new Invoke(new Member(bag, "Add"), new Constant(key), value)
+        ]);
+        var body = new Block([
+            new Assignment(scope, ScopeCall("Begin", new Constant(null))),
+            new Assignment(depth, CreatedCount()),
+            ScopeCall("Touch", bag),
+            ScopeCall("Create", bag, new Constant("Item")),
+            new Assignment(created, CreatedCount()),
+            new TryCatchFinally(
+                new Block([
+                    new Invoke(new Member(bag, "Clear")),
+                    new ThrowStatement(new New(new ClrTypeReference(typeof(InvalidOperationException)), new Constant("boom")))
+                ]),
+                FinallyBlock: new Block([
+                    ScopeCall("Rollback", scope),
+                    Put("d", depth),
+                    Put("created", created)
+                ]))
+        ], [scope, depth, created]);
+        var program = Interpreter.Compile(body);
+
+        var state = new Dictionary<string, object?> { ["d"] = 7, ["x"] = 1L };
+        Exception? thrown = null;
+        try {
+            using var exec = Interpreter.Execute(program, s => s.SetArgs(state));
+        }
+        catch (Exception ex) {
+            thrown = ex;
+        }
+
+        await Assert.That(thrown?.Message == "boom").IsTrue().Because(thrown?.ToString() ?? "no throw");
+        await Assert.That(state["created"]).IsEqualTo(1);
+        await Assert.That(state["x"]).IsEqualTo(1L);
+        await Assert.That(state["d"]).IsEqualTo(0);
+        await Assert.That(ActionScope.HasOpenScope).IsFalse();
+    }
+
     [Test]
     public async Task Print_SameTree_RoslynCompilesWithWarningsAsErrors() {
         var (body, bag, commit) = Tree();

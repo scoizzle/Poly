@@ -291,4 +291,43 @@ public class CompatibilityProviderTests {
         };
         await Assert.That(actual).IsEqualTo(row.Value);
     }
+
+    // ---- member assignment keeps its category rule, AssignCategoryRule (T-27 removes it): pinned in both directions ----
+
+    internal sealed class AssignHost {
+        public ExtraOperandGrid.Shade Color { get; set; }
+        public string Label { get; set; } = "";
+        public long Count { get; set; }
+    }
+
+    private static Node AssignMember(string member, object? value) {
+        var host = new Variable("host");
+        return new Block([
+            new Assignment(host, new New(TypeReference.To<AssignHost>())),
+            new Assignment(new Member(host, member), new Constant(value))
+        ], [host]);
+    }
+
+    private static string[] AssignErrors(string member, object? value) =>
+        [.. Interpreter.Analyze(AssignMember(member, value)).Diagnostics.Where(static d => d.Severity == DiagnosticSeverity.Error).Select(static d => d.Message)];
+
+    [Test]
+    public async Task MemberAssign_TextIntoEnum_AndEnumIntoText_AreAccepted() {
+        await Assert.That(AssignErrors("Color", "Blue")).IsEmpty();
+        await Assert.That(AssignErrors("Label", ExtraOperandGrid.Shade.Red)).IsEmpty();
+    }
+
+    /// <summary>
+    /// Pinned as they are, and three of them are not what C# says (row T-27 replaces the category rule with the
+    /// provider's assignability): <c>char</c> into a <c>long</c> member is rejected though C# converts it implicitly;
+    /// <c>decimal</c> into a <c>long</c> member is accepted though C# needs an explicit cast; <c>char</c> into a
+    /// <c>string</c> member is accepted though C# has no such conversion.
+    /// </summary>
+    [Test]
+    public async Task MemberAssign_ByCategory_AsToday_T27InvertsThreeOfThem() {
+        await Assert.That(AssignErrors("Count", 'a')).IsEquivalentTo(["cannot assign 'Char' to 'Count' (type 'Int64')"]);
+        await Assert.That(AssignErrors("Count", 1.5m)).IsEmpty();
+        await Assert.That(AssignErrors("Label", 'a')).IsEmpty();
+        await Assert.That(AssignErrors("Count", true)).IsEquivalentTo(["cannot assign 'Boolean' to 'Count' (type 'Int64')"]);
+    }
 }

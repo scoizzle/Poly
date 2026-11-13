@@ -232,6 +232,49 @@ public class CSharpRowRoundTripTests {
         await Assert.That(CSharpLanguage.Write(CSharpLanguage.Read(printed))).IsEqualTo(printed);
     }
 
+    private static TypeDefinitionNode EnumOf(params (string Name, object Value)[] members) =>
+        new("E", Kind: TypeKind.Enum, Fields: [.. members.Select(m =>
+            new FieldDefinitionNode(m.Name, TypeReference.To<int>(), new Constant(m.Value), IsStatic: true, IsConst: true))]);
+
+    [Test]
+    public async Task EnumNegativeValue_ReReadsToTheSameTree() {
+        var printed = CSharpLanguage.Write([EnumOf(("A", -1), ("B", 2))]);
+        var reRead = CSharpLanguage.Read(printed).Types.Single();
+
+        await Assert.That(printed.ReplaceLineEndings("\n")).Contains("A = -1,");
+        await Assert.That(reRead.Fields!.Select(f => ((Constant)f.DefaultValue!).Value!)).IsEquivalentTo(new object[] { -1, 2 });
+        await Assert.That(CSharpLanguage.Write([reRead])).IsEqualTo(printed);
+    }
+
+    [Test]
+    public async Task EnumNegativeValue_TextIsAFixpoint_AndIntMinValueFolds() {
+        var printed = CSharpLanguage.Write(CSharpLanguage.Read("enum E { A = -1, B = 2, C = -2147483648 }"));
+        await Assert.That(CSharpLanguage.Write(CSharpLanguage.Read(printed))).IsEqualTo(printed);
+        var values = CSharpLanguage.Read(printed).Types.Single().Fields!.Select(f => ((Constant)f.DefaultValue!).Value!).ToArray();
+        await Assert.That(values).IsEquivalentTo(new object[] { -1, 2, int.MinValue });
+    }
+
+    [Test]
+    [Arguments("enum E { A = - -1 }")]
+    [Arguments("enum E { A = -x }")]
+    public async Task EnumValue_ThatIsNotASignedNumber_IsAPositionedError(string source) {
+        await Assert.That(() => CSharpLanguage.Read(source)).Throws<FormatException>().WithMessageContaining("line 1");
+    }
+
+    // ── F3: an enum value that is not an integer ─────────────────────────────
+
+    [Test]
+    public async Task EnumValue_ThatIsNotAnInteger_IsAPositionedError() {
+        await Assert.That(() => CSharpLanguage.Read("enum E { A = 1.5 }")).Throws<FormatException>()
+            .WithMessageContaining("not an integer").And.WithMessageContaining("(line 1, col 14)");
+    }
+
+    [Test]
+    public async Task EnumValue_OutsideLong_IsAPositionedError() {
+        await Assert.That(() => CSharpLanguage.Read("enum E { A = 99999999999999999999 }")).Throws<FormatException>()
+            .WithMessageContaining("outside the range of long").And.WithMessageContaining("(line 1, col 14)");
+    }
+
     /// <summary>The domain exporter stores member-name strings as defaults; they print as ordinals, as before.</summary>
     [Test]
     public async Task EnumMember_WithANonIntegralDefault_PrintsItsOrdinal() {

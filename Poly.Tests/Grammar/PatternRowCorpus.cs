@@ -90,6 +90,9 @@ internal static class PatternRowCorpus {
     /// <summary>Code-built types no source text carries: an empty enum (a null <c>Fields</c>) and a body-less method.</summary>
     public static IReadOnlyList<(string Name, TypeDefinitionNode Type)> CSharpTypes { get; } = [
         ("empty-enum", new TypeDefinitionNode("Empty", Kind: TypeKind.Enum)),
+        ("negative-enum", new TypeDefinitionNode("Negative", Kind: TypeKind.Enum, Fields: [
+            new FieldDefinitionNode("A", TypeReference.To<int>(), new Constant(-1), IsStatic: true, IsConst: true),
+        ])),
         ("body-less-method", new TypeDefinitionNode("Shell", Methods: [
             new MethodDefinitionNode("Declared", TypeReference.To<long>()),
         ])),

@@ -83,6 +83,7 @@ internal static class PatternRowCorpus {
         ("records", "record R<T>(T Value) : Base { long X() { return 1; } } record S<T>(T V) : Base;"),
         ("generic-interface-with-base", "interface IBox<T> : IShape { }"),
         ("async-ident-lambda", "Func<Task, Task> f = async t => await t;"),
+        ("async-block-ident-lambda", "Func<Task, Task> f = async t => { await t; };"),
     ];
 
     /// <summary>Code-built types no source text carries: an empty enum (a null <c>Fields</c>) and a body-less method.</summary>

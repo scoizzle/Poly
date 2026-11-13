@@ -1030,6 +1030,9 @@ public static partial class AbiEmitter {
 
         public HashSet<object> CapturedBindings { get; set; } = new(ReferenceEqualityComparer.Instance);
 
+        /// <summary>The lambdas the bridge quotes and the function table does not hold (<see cref="CollectQuoteOnlyLambdas"/>).</summary>
+        public HashSet<Lambda> QuoteOnlyLambdas { get; set; } = new(ReferenceEqualityComparer.Instance);
+
         private readonly HashSet<object> _cellBacked = new(ReferenceEqualityComparer.Instance);
 
         public bool NeedsCell(Variable v) => CapturedBindings.Contains(v);

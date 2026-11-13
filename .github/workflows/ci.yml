@@ -44,7 +44,10 @@ jobs:
       #      blocked on a synchronous wait ignores a polite stop (PR #878: the step timeout did
       #      not end it and the job was cancelled, so nothing below ever ran). The step then
       #      FAILS, which is what lets the next two steps run.
-      #   3. the step's timeout-minutes: 12 and 4. the job's 20 are backstops for the script itself.
+      #   3. the same script SIGKILLs the group when MemAvailable falls below 400 MB (a starved
+      #      runner enforces neither the step timeout nor a watchdog: four hangs, #870), and prints a
+      #      heartbeat every 30 s and one `memory:` summary line.
+      #   4. the step's timeout-minutes: 12 and the job's 20 are backstops for the script itself.
       # The diagnostic log records a start and an end event per test (the console prints only
       # the end), so the next step can name a test that started and never finished.
       - name: Run tests
@@ -55,6 +58,14 @@ jobs:
           dotnet run --project Poly.Tests/Poly.Tests.csproj --no-restore --
           --timeout 10m
           --diagnostic --diagnostic-output-directory "$RUNNER_TEMP/test-diag" --diagnostic-synchronous-write
+
+      # Prints nothing on a healthy run and never fails the job: the kernel's own account of an
+      # out-of-memory kill, if the runner was starved (#870).
+      - name: Kernel messages (OOM)
+        if: always()
+        run: |
+          sudo dmesg -T 2>/dev/null | grep -i -E 'out of memory|oom-kill|killed process' | tail -20 || true
+          journalctl -k --no-pager 2>/dev/null | grep -i -E 'oom|out of memory' | tail -20 || true
 
       # Runs on every build, so each green run proves the parser still matches the log: it fails
       # (::error::) when there is no diagnostic file or no start record, and prints the counts.

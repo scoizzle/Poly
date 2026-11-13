@@ -221,9 +221,8 @@ public sealed class Printer<TToken, TTokenKind>
             case Cut<TToken, TTokenKind>:
                 return;
 
-            case Refuse<TToken, TTokenKind>:
-                // STUB (G-28 red phase).
-                return;
+            case Refuse<TToken, TTokenKind> refuse:
+                throw new InvalidOperationException($"A refusal row ('{refuse.Message}') is never printed.");
 
             case Balanced<TToken, TTokenKind> b:
                 ctx.Emit(b.Open);

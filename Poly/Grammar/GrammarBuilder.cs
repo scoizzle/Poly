@@ -80,12 +80,20 @@ public sealed class GrammarBuilder<TToken, TTokenKind>
 
     /// <summary>
     /// Fails closed on an element where it cannot work: a <see cref="Slot{TToken,TTokenKind}"/> that is not
-    /// the row's last element; a <see cref="Run{TToken,TTokenKind}"/> with no required element before it (it
-    /// continues the token before it); and a Slot or Run inside an <see cref="Optional{TToken,TTokenKind}"/>.
+    /// the row's last element or has no required element before it (a Slot-only row matches zero tokens
+    /// anywhere); a <see cref="Run{TToken,TTokenKind}"/> with no required element before it (it continues the
+    /// token before it); a Slot or Run inside an <see cref="Optional{TToken,TTokenKind}"/>; a
+    /// <see cref="Cut{TToken,TTokenKind}"/> with no required element before it, last, inside an Optional, or a
+    /// second one; a <see cref="Refuse{TToken,TTokenKind}"/> that is not last, has no required element before it, or
+    /// is inside an Optional; and a template placeholder that is not <c>{expected}</c>, <c>{got}</c> or the capture
+    /// of a required element before it.
     /// </summary>
     private static void EnsurePlacement(string ruleName, Pattern<TToken, TTokenKind> pattern) {
         var elements = pattern.Elements;
         var required = false;
+        var cuts = 0;
+        var captured = new HashSet<string>(StringComparer.Ordinal);
+        string Where(int i) => $"element {i + 1} of '{ruleName}/{pattern.Name}'";
         for (var i = 0; i < elements.Count; i++) {
             switch (elements[i]) {
                 case Run<TToken, TTokenKind> run when !required:
@@ -97,12 +105,44 @@ public sealed class GrammarBuilder<TToken, TTokenKind>
                 case Slot<TToken, TTokenKind> slot when i != elements.Count - 1:
                     throw new InvalidOperationException(
                         $"Slot '{slot.Name}' on '{ruleName}/{pattern.Name}' is element {i + 1} of {elements.Count}; a Slot must be the last element.");
+                case Slot<TToken, TTokenKind> slot when !required:
+                    throw new InvalidOperationException(
+                        $"Slot '{slot.Name}' on '{ruleName}/{pattern.Name}' has no required element before it; a row of only a Slot matches zero tokens anywhere.");
                 case Optional<TToken, TTokenKind> { Inner: Slot<TToken, TTokenKind> inner }:
                     throw new InvalidOperationException(
                         $"Slot '{inner.Name}' on '{ruleName}/{pattern.Name}' is inside an Optional; a Slot is never optional.");
+                case Cut<TToken, TTokenKind> when !required:
+                    throw new InvalidOperationException($"The Cut is {Where(i)} with no required element before it; a Cut commits a row once its head has matched.");
+                case Cut<TToken, TTokenKind> when i == elements.Count - 1:
+                    throw new InvalidOperationException($"The Cut is the last element of '{ruleName}/{pattern.Name}'; a Cut with nothing after it commits nothing.");
+                case Cut<TToken, TTokenKind> when ++cuts > 1:
+                    throw new InvalidOperationException($"'{ruleName}/{pattern.Name}' holds more than one Cut; a row commits once.");
+                case Refuse<TToken, TTokenKind> when i != elements.Count - 1:
+                    throw new InvalidOperationException($"The Refuse is {Where(i)} of {elements.Count}; a Refuse must be the last element.");
+                case Refuse<TToken, TTokenKind> when !required:
+                    throw new InvalidOperationException($"The Refuse is {Where(i)} with no required element before it; a refusal row must match something.");
+                case Optional<TToken, TTokenKind> { Inner: Cut<TToken, TTokenKind> or Refuse<TToken, TTokenKind> }:
+                    throw new InvalidOperationException($"{Where(i)} is an Optional Cut or Refuse; neither is ever optional.");
             }
-            if (elements[i] is not (Optional<TToken, TTokenKind> or NotFollowedBy<TToken, TTokenKind>))
+            var template = elements[i] switch {
+                Refuse<TToken, TTokenKind> refuse => refuse.Message,
+                IExpectedElement { ExpectTemplate: { } t } => t,
+                Optional<TToken, TTokenKind> { Inner: IExpectedElement { ExpectTemplate: { } t } } => t,
+                _ => null,
+            };
+            if (template is not null) {
+                foreach (var name in MatchFailure<TToken, TTokenKind>.PlaceholdersOf(template)) {
+                    if (name is not ("expected" or "got") && !captured.Contains(name))
+                        throw new InvalidOperationException(
+                            $"The template of {Where(i)} names '{{{name}}}', which is not {{expected}}, {{got}} or the capture of a required element before it.");
+                }
+            }
+            if (elements[i] is not (Optional<TToken, TTokenKind> or NotFollowedBy<TToken, TTokenKind>
+                or Cut<TToken, TTokenKind> or Refuse<TToken, TTokenKind> or Slot<TToken, TTokenKind>)) {
                 required = true;
+                foreach (var name in CaptureNames([elements[i]]))
+                    captured.Add(name);
+            }
         }
     }
 

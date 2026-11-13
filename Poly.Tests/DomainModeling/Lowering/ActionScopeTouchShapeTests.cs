@@ -143,8 +143,12 @@ public class ActionScopeTouchShapeTests {
     [Test]
     public async Task Factory_RecordsTheCreatedInstanceAfterNewAndBeforeAttach() {
         var cs = Print(Dsl);
-        var create = Method(cs, "static DomainResult<Book> Create(");
+        var wrapper = Method(cs, "static DomainResult<Book> Create(");
+        var create = Method(cs, "static DomainResult<Book> __BodyOfCreate(");
 
+        // L-04b: the public factory is the root-scope wrapper; the lowered factory body is its private partner.
+        await Assert.That(wrapper).Contains("ActionScope.Begin(");
+        await Assert.That(wrapper).Contains("Book.__BodyOfCreate(");
         await Assert.That(create).Contains("Poly.Runtime.ActionScope.Create(created, \"Book\");");
         await Assert.That(At(create, "new Book(")).IsLessThan(At(create, "ActionScope.Create(created"));
         await Assert.That(At(create, "ActionScope.Create(created")).IsLessThan(At(create, ".AttachBooks(created)"));

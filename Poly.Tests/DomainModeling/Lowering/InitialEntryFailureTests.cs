@@ -103,7 +103,7 @@ public class InitialEntryFailureTests {
         await AssertFailedWithNothingLeft(simulate, printed);
         foreach (var outcome in new[] { simulate[^1], printed[^1] }) {
             await Assert.That(outcome.FailureKind).IsEqualTo("Range");
-            await Assert.That(outcome.GraphAfter!).Contains("Total=0");
+            await Assert.That(outcome.GraphAfter!).DoesNotContain("Total=");
         }
     }
 

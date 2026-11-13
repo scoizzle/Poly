@@ -179,8 +179,7 @@ internal static class ConstraintCompilation {
         var type = FindType(module, typeName);
         var methods = type.Methods ?? [];
         IEnumerable<string> names = anchor switch {
-            ConstraintAnchor.Create =>
-                methods.Where(m => string.Equals(m.Name, "Create", StringComparison.Ordinal)).Select(m => m.Name),
+            ConstraintAnchor.Create => CreateAnchor(methods),
             ConstraintAnchor.Named named =>
                 methods.Where(m => string.Equals(m.Name, named.MethodName, StringComparison.Ordinal)).Select(m => m.Name),
             _ => throw new InvalidOperationException(
@@ -191,6 +190,17 @@ internal static class ConstraintCompilation {
             throw new InvalidOperationException(
                 $"Library '{libraryId}' anchor {anchor} matched no method on '{typeName}'.");
         return resolved;
+    }
+
+    /// <summary>
+    /// The factory's body method when the factory is a scoped wrapper (L-04b), else the factory itself: the wrapper has
+    /// no top-level construction or return, and the library's guard and record belong around the construction.
+    /// </summary>
+    private static IEnumerable<string> CreateAnchor(IReadOnlyList<MethodDefinitionNode> methods) {
+        var body = DomainToCSharpExporter.ActionBodyPrefix + "Create";
+        return methods.Any(m => string.Equals(m.Name, body, StringComparison.Ordinal))
+            ? [body]
+            : methods.Where(m => string.Equals(m.Name, "Create", StringComparison.Ordinal)).Select(m => m.Name);
     }
 
     private static void ValidateParameters(

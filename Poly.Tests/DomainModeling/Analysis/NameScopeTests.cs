@@ -143,17 +143,23 @@ public sealed class NameScopeTests {
             emitted.AddRange(typeDef.Fields?.Select(f => f.Name) ?? []);
             var scopeNames = emitted.Where(ReservedNames.IsActionScopeName).Order(StringComparer.Ordinal);
             var entity = domain.Types.OfType<Entity>().First(e => e.Name == typeDef.Name);
-            var bodies = entity.Actions.Concat(entity.Stages.SelectMany(s => s.Actions))
-                .Select(a => Poly.DomainModeling.Lowering.DomainToCSharpExporter.ActionBodyPrefix + a.Name).Distinct(StringComparer.Ordinal);
+            // An action, the static Create factory and each Create{Nav} are scope wrappers with a private body partner (L-04b).
+            var bodies = entity.Actions.Concat(entity.Stages.SelectMany(s => s.Actions)).Select(a => a.Name)
+                .Concat(["Create"]).Concat(entity.Navigations.Select(n => "Create" + Poly.DomainModeling.Lowering.DomainToCSharpExporter.ToPascalCase(n.Name)))
+                .Select(n => Poly.DomainModeling.Lowering.DomainToCSharpExporter.ActionBodyPrefix + n).Distinct(StringComparer.Ordinal);
             var expected = bodies.Concat(["__Restore", "__Snapshot"]).Order(StringComparer.Ordinal);
             await Assert.That(string.Join(",", scopeNames)).IsEqualTo(string.Join(",", expected));
         }
     }
 
-    /// <summary>The private body method an action wrapper calls: <c>__BodyOf</c> plus an authored ACTION name (not any member).</summary>
-    private static bool IsBodyOfAuthoredAction(string name, IReadOnlySet<string> authored) =>
+    /// <summary>
+    /// The private body method a scope wrapper calls: <c>__BodyOf</c> plus an authored ACTION name (not any member), or
+    /// the name of a generated wrapper (<c>Create</c>, <c>Create{Nav}</c>), which is a reserved row.
+    /// </summary>
+    private static bool IsBodyOfAuthoredAction(string name, IReadOnlySet<string> authored, IReadOnlySet<string> reserved) =>
         name.StartsWith(Poly.DomainModeling.Lowering.DomainToCSharpExporter.ActionBodyPrefix, StringComparison.Ordinal)
-        && authored.Contains(name[Poly.DomainModeling.Lowering.DomainToCSharpExporter.ActionBodyPrefix.Length..]);
+        && name[Poly.DomainModeling.Lowering.DomainToCSharpExporter.ActionBodyPrefix.Length..] is var wrapped
+        && (authored.Contains(wrapped) || reserved.Contains(wrapped));
 
     [Test]
     public async Task MemberNamedCreate_IsError() {
@@ -437,7 +443,7 @@ public sealed class NameScopeTests {
 
         var unexplained = emitted
             .Where(name => !authored.Contains(name) && !reserved.Contains(name) && !subscriptionGap.Contains(name)
-                && !IsBodyOfAuthoredAction(name, actionNames))
+                && !IsBodyOfAuthoredAction(name, actionNames, reserved))
             .ToList();
         await Assert.That(string.Join(",", unexplained)).IsEqualTo("");
 

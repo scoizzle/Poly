@@ -159,7 +159,7 @@ public class DomainModelingSurfaceCompletionTests {
             domain T
             Parent: entity {
               Name: Text
-              kids: many Child
+              kids: many Child via parent
               when kids Active {
                 create Child { Name: "spawned" }
               }

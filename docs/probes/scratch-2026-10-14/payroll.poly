@@ -13,7 +13,7 @@ Employee: entity {
   Rate: Number range(0, 1000)
   Gross: Number default(0)
   Net: Number default(0)
-  timesheets: many Timesheet
+  timesheets: many Timesheet via employee
   Active: stage {
     Log: action (hours: Number, day: Date) -> Timesheet {
       create in timesheets {
@@ -48,7 +48,7 @@ PayRun: entity {
   PeriodStart: Date default(Today)
   PeriodEnd: Date
   Total: Number range(0, 10000000) default(0)
-  slips: many Payslip
+  slips: many Payslip via run
   Draft: stage {
     entry { assign Total to 0 }
     AddSlip: action (amount: Number) -> Payslip {

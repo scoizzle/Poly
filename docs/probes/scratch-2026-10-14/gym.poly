@@ -26,7 +26,7 @@ Member: entity {
   Visits: Number default(0)
   Tier: Tier
   plan: Plan
-  bookings: many Booking
+  bookings: many Booking via member
   HasPlan: policy { plan exists }
   IsElite: policy { Tier is Elite }
   Active: stage {
@@ -59,7 +59,7 @@ ClassSession: entity {
   Capacity: Number range(1, 50)
   AttendedCount: Number default(0)
   trainer: Trainer
-  bookings: many Booking
+  bookings: many Booking via session
   HasRoom: policy { count bookings < Capacity }
   Scheduled: stage {
     Reserve: action (who: Member) -> Booking

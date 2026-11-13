@@ -28,7 +28,7 @@ Guest: entity {
   Name: Text
   Email: Text unique pattern("^[^@]+@[^@]+$")
   Visits: Number default(0)
-  reservations: many Reservation
+  reservations: many Reservation via guest
   Active: stage {
     Book: action (table: DiningTable, size: Number, day: Date) -> Reservation {
       create in reservations {
@@ -78,7 +78,7 @@ Order: entity {
   PlacedAt: Date default(Today)
   Bill: Money
   reservation: Reservation
-  lines: many OrderLine
+  lines: many OrderLine via order
   Placed: stage {
     AddLine: action (item: MenuItem, qty: Number) -> OrderLine {
       create in lines {

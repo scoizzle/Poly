@@ -44,8 +44,8 @@ public class DomainToCSharpExporterTests {
           MaxItems: Number range(0, 20)
           CurrentBorrowCount: Number default(0)
           OutstandingFines: Number default(0)
-          loans: many Loan
-          fines: many Fine
+          loans: many Loan via borrower
+          fines: many Fine via patron
           GoodStanding: policy { Status is "Active" }
           AtLimit: policy { CurrentBorrowCount >= MaxItems }
           HasFines: policy { OutstandingFines > 0 }
@@ -1951,7 +1951,7 @@ public class DomainToCSharpExporterTests {
             domain Test
             Order: entity {
               Total: Number
-              lines: many OrderLine
+              lines: many OrderLine via order
               Done: stage {
                 when lines Complete as line {
                   assign Total to line Price + Total
@@ -1981,7 +1981,7 @@ public class DomainToCSharpExporterTests {
             domain Test
             Order: entity {
               Total: Number
-              lines: many OrderLine
+              lines: many OrderLine via order
               when lines Complete as line {
                 assign Total to line Price + Total
               }
@@ -3122,7 +3122,7 @@ public class DomainToCSharpExporterTests {
         Room: entity {
           Number: Text
           Occupied: Boolean default(false)
-          stays: many Reservation
+          stays: many Reservation via room
           when stays InHouse {
             assign Occupied to true
           }

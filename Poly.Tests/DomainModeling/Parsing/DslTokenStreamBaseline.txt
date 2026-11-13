@@ -497,9 +497,9 @@ D	docs/probes/fleet-eval/09-transport/warehouse.poly	314	05F81FE3600419B4
 D	docs/probes/fleet-eval/09-transport/orders.poly	232	0665D5195C35A0A7
 D	docs/probes/fleet-eval/09-transport/clinic.poly	182	4FD4138B093BAF22
 D	docs/probes/fleet-eval/12-mcp/mcp-library.poly	197	FBD871826112E7B8
-D	docs/probes/dogfood/university.poly	681	4333DDC61B97D645
-D	docs/probes/dogfood/crm.poly	1215	8A934F9A1D4792C4
-D	docs/probes/dogfood/hotel.poly	1452	D3A82908420C6A8E
+D	docs/probes/dogfood/university.poly	687	33D5D64B1927BE0F
+D	docs/probes/dogfood/crm.poly	1219	F09458E089E999D6
+D	docs/probes/dogfood/hotel.poly	1458	3235A9B4F7D447AA
 D	docs/probes/dogfood/simulate-create-type.poly	86	89E32BBD899A2E1D
 D	docs/probes/dogfood/simulate-create-in.poly	87	C729EA00E25A5882
 D	docs/probes/dogfood/simulate-create-create-in.poly	104	6AFA037DAE6146D9

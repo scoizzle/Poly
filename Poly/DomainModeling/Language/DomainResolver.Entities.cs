@@ -1,5 +1,3 @@
-using System.Globalization;
-
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Ontology;
 using Poly.Grammar;
@@ -468,8 +466,7 @@ public sealed partial class DomainResolver {
                 Advance();
             }
             else if (Current.Kind == TokenKind.Number) {
-                args[positionalIndex.ToString()] = new AnnotationNumber(
-                    double.Parse(Current.Span, CultureInfo.InvariantCulture));
+                args[positionalIndex.ToString()] = new AnnotationNumber(DslNumberText.ParseAnnotationNumber(Current));
                 Advance();
             }
             else if (Current.Kind == TokenKind.True) {

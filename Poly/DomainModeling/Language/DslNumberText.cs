@@ -119,9 +119,8 @@ internal static class DslNumberText {
     }
 
     /// <summary>The whole value of an integral range bound (<c>100.0</c> is whole), or false when it is fractional or outside <see cref="long"/>. A magnitude of 2^63 with a minus is <see cref="long.MinValue"/>.</summary>
-    public static bool TryParseWholeInt64(string digitText, bool negative, out long value) {
-        if (ExactNumber.TryParseDecimalText(digitText) is { } exact) {
-            var dec = exact.ToDecimal();
+    public static bool TryParseWholeInt64(ReadOnlySpan<char> digitText, bool negative, out long value) {
+        if (TryExactDecimal(digitText, out var dec, out _)) {
             var signed = negative ? -dec : dec;
             if (dec == decimal.Truncate(dec) && signed >= long.MinValue && signed <= long.MaxValue) {
                 value = (long)signed;
@@ -134,14 +133,23 @@ internal static class DslNumberText {
 
     private static decimal ExactDecimalOrThrow(DslToken token) {
         var text = token.Span;
-        Shape(text, out var integerDigits, out var fractionDigits);
+        if (TryExactDecimal(text, out var value, out var fractionDigits))
+            return value;
+        throw GrammarError.Error(NotExactMessage(token, Classify(text), fractionDigits), token.Line, token.Col);
+    }
+
+    private static bool TryExactDecimal(ReadOnlySpan<char> text, out decimal value, out int fractionDigits) {
+        Shape(text, out var integerDigits, out fractionDigits);
         // At most 28 significant digits is always exact: no allocation on the common path.
         if (integerDigits + fractionDigits <= ExactSignificantDigits
-            && decimal.TryParse(text, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out var small))
-            return small;
-        if (ExactNumber.TryParseDecimalText(text.ToString()) is { } exact)
-            return exact.ToDecimal();
-        throw GrammarError.Error(NotExactMessage(token, Classify(text), fractionDigits), token.Line, token.Col);
+            && decimal.TryParse(text, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture, out value))
+            return true;
+        if (ExactNumber.TryParseDecimalText(text.ToString()) is { } exact) {
+            value = exact.ToDecimal();
+            return true;
+        }
+        value = 0;
+        return false;
     }
 
     // Significant digits either side of the point: leading zeros of the integer part and trailing zeros of the fraction are free.

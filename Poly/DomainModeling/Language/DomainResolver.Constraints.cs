@@ -1,5 +1,3 @@
-using System.Globalization;
-
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Ontology;
 
@@ -69,13 +67,13 @@ public sealed partial class DomainResolver {
                 int lenMin = 0;
                 int lenMax = int.MaxValue;
                 if (Current.Kind == TokenKind.Number) {
-                    lenMin = int.Parse(Current.Span, CultureInfo.InvariantCulture);
+                    lenMin = DslNumberText.ParseLengthBound(Current);
                     Advance();
                 }
                 if (Current.Kind == TokenKind.Comma) {
                     Advance();
                     if (Current.Kind == TokenKind.Number) {
-                        lenMax = int.Parse(Current.Span, CultureInfo.InvariantCulture);
+                        lenMax = DslNumberText.ParseLengthBound(Current);
                         Advance();
                     }
                 }
@@ -129,19 +127,8 @@ public sealed partial class DomainResolver {
     }
 
     /// <summary>Exact long parse of an integral bound; a magnitude of 2^63 with a minus is long.MinValue.</summary>
-    private static bool TryParseLongBound(string text, bool negative, out long value) {
-        // Decimal carries every 19-digit long and 2^63 exactly, so it normalises "100.0" first.
-        if (decimal.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var dec)
-            && dec == decimal.Truncate(dec)) {
-            var signed = negative ? -dec : dec;
-            if (signed >= long.MinValue && signed <= long.MaxValue) {
-                value = (long)signed;
-                return true;
-            }
-        }
-        value = 0;
-        return false;
-    }
+    private static bool TryParseLongBound(string text, bool negative, out long value) =>
+        DslNumberText.TryParseWholeInt64(text, negative, out value);
 
     private static bool IsIntegralRangeType(string? typeName) =>
         typeName is "Number" or "Int" or "Int64";

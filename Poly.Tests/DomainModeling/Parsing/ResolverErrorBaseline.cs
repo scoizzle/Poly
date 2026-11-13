@@ -46,7 +46,7 @@ internal static class ResolverErrorBaseline {
     // ── the closed owner set ─────────────────────────────────────────────────────────
 
     /// <summary>The rows that will replace a pinned-wrong result (owner ruling, #677 comment 6843661801).</summary>
-    public static readonly string[] Fixers = ["G-13c", "T-15", "G-29", "G-05", "S-09", "G-27", "G-28", "G-32"];
+    public static readonly string[] Fixers = ["G-13c", "G-29", "G-05", "S-09", "G-27", "G-28", "G-32"];
 
     /// <summary>
     /// A result that is known wrong, by the row that will fix it. <c>Key</c> is <c>S:site/case</c> or <c>X:doc#token/filler/door</c>
@@ -54,10 +54,6 @@ internal static class ResolverErrorBaseline {
     /// (before its <c> @line:col</c>). A tag whose row's message no longer ends with its fragment is stale and fails until it is deleted.
     /// </summary>
     public static readonly (string Key, string Fixer, string Fragment)[] KnownWrong = [
-        // T-15: number and duration text surfaces as a raw .NET exception message.
-        ("S:Constraints.length.min/overflow", "T-15", "OverflowException: Value was either too large or too small for an Int32."),
-        ("S:Constraints.length.min/fraction", "T-15", "ERR FormatException: The input string '1.5' was not in a correct format."),
-        ("S:Constraints.length.max/overflow", "T-15", "OverflowException: Value was either too large or too small for an Int32."),
         // G-29: unsupported-keyword errors with no position, and the unknown `uses` id with no position.
         ("S:Effects.unsupported.check/ok", "G-29", "ERR FormatException: 'actor' is not supported in Phase 1a"),
         ("S:Effects.unsupported.check/case", "G-29", "ERR FormatException: 'Schedule' is not supported in Phase 1a"),

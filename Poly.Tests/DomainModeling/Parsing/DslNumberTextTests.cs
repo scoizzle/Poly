@@ -254,6 +254,42 @@ public sealed class DslNumberTextTests {
         await Assert.That(ExprDifferentialTests.Result("9223372036854775808 Days", digest: false)).Contains($"from 0 to {printed}.");
     }
 
+    private static string OnTextProperty(string annotation) => ResolverBaselineTests.Resolve($"domain A\nX: entity {{\n  N: Text {annotation}\n}}\n");
+
+    [Test]
+    [Arguments("length(2147483648)", "ERR Length bound '2147483648' must be a whole number from 0 to 2147483647. @3:18")]
+    [Arguments("length(1.5)", "ERR Length bound '1.5' must be a whole number from 0 to 2147483647, written without a decimal point. @3:18")]
+    [Arguments("length(1.0)", "ERR Length bound '1.0' must be a whole number from 0 to 2147483647, written without a decimal point. @3:18")]
+    [Arguments("length(3, 99999999999)", "ERR Length bound '99999999999' must be a whole number from 0 to 2147483647. @3:21")]
+    [Arguments("length(3, 1.5)", "ERR Length bound '1.5' must be a whole number from 0 to 2147483647, written without a decimal point. @3:21")]
+    public async Task LengthBound_NotAWholeInt_IsPositionedErrorNamingTheLimit(string annotation, string expected) {
+        await Assert.That(OnTextProperty(annotation)).IsEqualTo(expected);
+    }
+
+    [Test]
+    public async Task LengthBound_LimitInTheMessage_IsTheLimitEnforced() {
+        var printed = int.MaxValue.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        await Assert.That(OnTextProperty($"length({printed})")).StartsWith("OK ");
+        await Assert.That(OnTextProperty("length(2147483648)")).Contains($"from 0 to {printed}.");
+    }
+
+    [Test]
+    [Arguments("column(\"c\", 123456789012345678901234567890)", "ERR Number '123456789012345678901234567890' is larger than the maximum 79228162514264337593543950335. @3:23")]
+    [Arguments("column(\"c\", 0.0000000000000000000000000000000001)", "ERR Number '0.0000000000000000000000000000000001' has 34 digits after the point; the maximum is 28. @3:23")]
+    [Arguments("label(123456789012345678901234567890)", "ERR Number '123456789012345678901234567890' is larger than the maximum 79228162514264337593543950335. @3:17")]
+    public async Task AnnotationNumber_NotHeldExactly_IsPositionedErrorNamingTheLimit(string annotation, string expected) {
+        await Assert.That(OnTextProperty(annotation)).IsEqualTo(expected);
+        await Assert.That(OnTextProperty("column(\"c\", " + new string('9', 400) + ")")).Contains("is larger than the maximum 79228162514264337593543950335. @3:23");
+    }
+
+    [Test]
+    public async Task AnnotationNumber_ExactLiterals_StillRun() {
+        // The same rule as every literal: exact digits run; 79228162514264337593543950335 is the largest.
+        await Assert.That(OnTextProperty("column(\"c\", 1.5)")).StartsWith("OK ");
+        await Assert.That(OnTextProperty("column(\"c\", 79228162514264337593543950335)")).StartsWith("OK ");
+        await Assert.That(OnTextProperty("column(\"c\", 79228162514264337593543950336)")).StartsWith("ERR Number ");
+    }
+
     [Test]
     public async Task PrinterSites_UseNoNumericFormattingOfTheirOwn() {
         var root = GuideBlocks.RepoRoot();

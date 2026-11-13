@@ -112,4 +112,82 @@ public class GeneratedHandlerNameCollisionTests {
 
         await Assert.That(string.Join("\n", problems)).IsEqualTo("");
     }
+
+    // ── fix round 1: no shape rule; the generated locals are `__`-prefixed; the stage enums are reserved exactly ──
+
+    private static string StagelessParameterDsl(string parameter) => $$"""
+        domain Names
+        Shelf: entity {
+          Label: Text default("")
+          Tag: action ({{parameter}}: Text) { assign Label to {{parameter}} }
+        }
+        """;
+
+    /// <summary>The verdict of one document: the analysis errors, or the compile diagnostics of the printed C#. Empty is accepted and compiles.</summary>
+    private static (IReadOnlyList<Poly.Analysis.Diagnostic> Errors, string Compile) Verdict(string dsl, string name) {
+        var session = ParitySessions.Create(ExtensionCatalog.ProductAuthoring);
+        var changes = new PolyDslParser(dsl, session).Parse();
+        var evolved = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes, session: session);
+        var errors = evolved.Analysis.Diagnostics.Where(d => d.Severity == Poly.Analysis.DiagnosticSeverity.Error).ToList();
+        if (errors.Count > 0)
+            return (errors, "");
+        var cs = new Poly.Interpretation.CSharp.CSharpGenerator().Generate(session.Lower(evolved.Root!, evolved.Analysis));
+        return ([], string.Join("\n", ExportedCSharp.CompileWithWarningsAsErrors("Verdict" + name, [("N.cs", cs)]).Select(d => d.ToString())));
+    }
+
+    [Test]
+    [Arguments("NextStage")]
+    [Arguments("FromStage")]
+    [Arguments("CurrentStage")]
+    [Arguments("linkedTarget")]
+    [Arguments("linkedMatched")]
+    [Arguments("previousStage")]
+    public async Task ActionParameter_WithANameThatIsNoGeneratedEnum_IsAcceptedAndCompiles(string name) {
+        var (errors, compile) = Verdict(ParameterDsl(name), "Accept" + name);
+
+        await Assert.That(string.Join("\n", errors.Select(e => e.Code + " " + e.Message))).IsEqualTo("");
+        await Assert.That(compile).IsEqualTo("");
+    }
+
+    [Test]
+    [Arguments("NextStage")]
+    [Arguments("CurrentStage")]
+    [Arguments("linkedTarget")]
+    [Arguments("linkedMatched")]
+    [Arguments("previousStage")]
+    public async Task PeerBinder_WithANameThatIsNoGeneratedEnum_IsAcceptedAndCompiles(string name) {
+        foreach (var dsl in new[] { BinderDsl(name), AllBinderDsl(name) }) {
+            var (errors, compile) = Verdict(dsl, "BAccept" + name);
+
+            await Assert.That(string.Join("\n", errors.Select(e => e.Code + " " + e.Message))).IsEqualTo("");
+            await Assert.That(compile).IsEqualTo("");
+        }
+    }
+
+    [Test]
+    public async Task ActionParameter_NamedLikeAGeneratedStageEnum_IsRefusedAtTheParameterNamingTheEntity() {
+        var (errors, _) = Verdict(ParameterDsl("ShelfStage"), "EnumParam");
+
+        await Assert.That(errors.Count).IsGreaterThan(0);
+        var error = errors.First(e => e.Code == DomainModelDiagnosticCodes.ReservedMemberName);
+        await Assert.That(error.Message).Contains("'ShelfStage'");
+        await Assert.That(error.Message).Contains("generated stage enum of entity 'Shelf'");
+        await Assert.That(error.Node.GetType().GetProperty("Name")!.GetValue(error.Node)).IsEqualTo("ShelfStage");
+    }
+
+    [Test]
+    public async Task PeerBinder_NamedLikeAnotherEntitysStageEnum_IsRefusedNamingTheEntity() {
+        var (errors, _) = Verdict(BinderDsl("BookStage"), "EnumBinder");
+
+        var error = errors.First(e => e.Code == DomainModelDiagnosticCodes.ReservedMemberName);
+        await Assert.That(error.Message).Contains("generated stage enum of entity 'Book'");
+    }
+
+    [Test]
+    public async Task ActionParameter_NamedLikeAStageEnumThatIsNotGenerated_IsAcceptedAndCompiles() {
+        var (errors, compile) = Verdict(StagelessParameterDsl("ShelfStage"), "NoEnum");
+
+        await Assert.That(string.Join("\n", errors.Select(e => e.Code + " " + e.Message))).IsEqualTo("");
+        await Assert.That(compile).IsEqualTo("");
+    }
 }

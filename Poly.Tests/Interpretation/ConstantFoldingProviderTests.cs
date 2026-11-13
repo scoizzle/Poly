@@ -267,22 +267,30 @@ public class ConstantFoldingProviderTests {
     // ---- (a) the master fold list ----
 
     /// <summary>
-    /// The fold list of master (0f79ba45): every grid row the pass folds, with its value and type. A change detector,
-    /// not a proof: the proof is the oracle below.
+    /// The fold list of master (0f79ba45), persisted: 2,640 grid rows fold there, each with its value and type
+    /// (<see cref="MasterFolds"/>). It is the kept folds (asserted live below) plus the 828 provider-undefined delta
+    /// rows (<see cref="MasterUndefinedFolds"/>, recorded on master: they no longer fold). A change detector, not a proof.
     /// </summary>
     [Test]
-    public async Task MasterFoldList_IsPinned() {
-        var lines = ConstantFoldGrid.Folded().Select(static f => $"{f.Row.Key} = {f.Fold}").ToArray();
-        await Assert.That(ConstantFoldGrid.Pin(lines)).IsEqualTo(MasterFolds);
+    public async Task MasterFoldList_IsTheKeptFoldsPlusTheDeltaRows() {
+        static int Count(string pin) => int.Parse(pin[..pin.IndexOf(' ')], CultureInfo.InvariantCulture);
+        await Assert.That(Count(KeptFolds) + Count(MasterUndefinedFolds)).IsEqualTo(Count(MasterFolds));
     }
 
-    /// <summary>The master folds whose operator the provider does not state (outside And, Or and Not): T-20's delta rows.</summary>
+    /// <summary>
+    /// The delta rows: no fold where the provider states no operator (outside And, Or and Not). On master 828 of these
+    /// rows folded (Decimal against Float comparison and equality, signed integers against UInt64, Int64 shifted by
+    /// Int64, Text ordering, and <c>==</c> across mismatched non-numeric types). The undefined cells are pinned
+    /// independently of folding, so a provider change cannot hide here.
+    /// </summary>
     [Test]
-    public async Task MasterFoldList_ProviderUndefinedRows_ArePinned() {
-        var lines = ConstantFoldGrid.Folded()
-            .Where(static f => !ConstantFoldGrid.IsLogical(f.Row.Op) && ConstantFoldGrid.Resolution(f.Row) is null)
-            .Select(static f => $"{f.Row.Key} = {f.Fold}").ToArray();
-        await Assert.That(ConstantFoldGrid.Pin(lines)).IsEqualTo(MasterUndefinedFolds);
+    public async Task ProviderUndefinedCells_DoNotFold() {
+        var undefined = ConstantFoldGrid.Rows
+            .Where(static row => !ConstantFoldGrid.IsLogical(row.Op) && ConstantFoldGrid.Resolution(row) is null).ToArray();
+        await Assert.That(ConstantFoldGrid.Pin([.. undefined.Select(static row => row.Key)])).IsEqualTo(UndefinedCells);
+        var folding = undefined.Where(static row => ConstantFoldGrid.FoldOf(row) is not null)
+            .Select(static row => $"{row.Key} = {ConstantFoldGrid.FoldOf(row)}").ToArray();
+        await Assert.That(folding).IsEmpty();
     }
 
     /// <summary>The master folds T-20 keeps: every fold outside the delta rows and outside the named new folds, to the same value and type.</summary>
@@ -295,36 +303,39 @@ public class ConstantFoldingProviderTests {
         await Assert.That(ConstantFoldGrid.Pin(lines)).IsEqualTo(KeptFolds);
     }
 
+    /// <summary>
+    /// The named new folds (the lock): every named cell folds. Their values are checked by the oracle below, which
+    /// covers every fold; none sits in a ledger value-wrong cell.
+    /// </summary>
     [Test]
-    public async Task NamedNewFoldCells_DoNotFoldOnMaster() {
+    public async Task NamedNewFoldCells_Fold() {
         var named = ConstantFoldGrid.Rows.Where(ConstantFoldGrid.IsNamedNewFold).ToArray();
         await Assert.That(named.Length).IsEqualTo(66);
-        // Boolean == and != are named and already fold; the named cells here are the ones that do not.
-        var folding = named.Where(static row => ConstantFoldGrid.FoldOf(row) is not null).Select(static row => row.Key).ToArray();
-        await Assert.That(folding).IsEmpty();
+        var declining = named.Where(static row => ConstantFoldGrid.FoldOf(row) is null).Select(static row => row.Key).ToArray();
+        await Assert.That(declining).IsEmpty();
     }
 
     // ---- (b) the oracle: AGREE, C# rejects, allowed DISAGREE ----
 
-    /// <summary>Every fold of a provider-defined cell is the value and the type the binder computes for that operator.</summary>
+    /// <summary>Every fold is the value and the type the binder computes for the operator the provider states (none: no fold).</summary>
     [Test]
-    public async Task EveryDefinedFold_IsTheBinderValueAndType() {
+    public async Task EveryFold_IsTheBinderValueAndType() {
         var wrong = ConstantFoldGrid.Folded()
-            .Where(static f => !ConstantFoldGrid.IsLogical(f.Row.Op) && ConstantFoldGrid.Resolution(f.Row) is not null)
+            .Where(static f => !ConstantFoldGrid.IsLogical(f.Row.Op))
             .Where(static f => f.Fold != ConstantFoldGrid.Binder(f.Row))
             .Select(static f => $"{f.Row.Key}: fold {f.Fold}, binder {ConstantFoldGrid.Binder(f.Row)}").ToArray();
         await Assert.That(wrong).IsEmpty();
     }
 
     /// <summary>
-    /// Every fold of a provider-defined cell agrees with Roslyn on the authored tree. A cell Roslyn rejects for its
-    /// operator (CS0019, CS0020) must not fold; a constant the writer cannot print, or CS0220 alone (the writer's missing
-    /// <c>unchecked</c>), is compared with the binder above instead.
+    /// Every fold agrees with Roslyn on the authored tree (AGREE). A cell Roslyn rejects for its operator (CS0019:
+    /// <c>ulong &gt; int</c> beyond a constant conversion, <c>decimal == double</c>, string ordering) must not fold (C#
+    /// REJECTS); a constant the writer cannot print, or CS0220 alone (the writer's missing <c>unchecked</c>), is compared
+    /// with the binder above instead.
     /// </summary>
     [Test]
-    public async Task EveryDefinedFold_AgreesWithRoslyn_AndNoCellRoslynRejectsFolds() {
-        var defined = ConstantFoldGrid.Folded()
-            .Where(static f => !ConstantFoldGrid.IsLogical(f.Row.Op) && ConstantFoldGrid.Resolution(f.Row) is not null).ToArray();
+    public async Task EveryFold_AgreesWithRoslyn_AndNoCellRoslynRejectsFolds() {
+        var defined = ConstantFoldGrid.Folded().Where(static f => !ConstantFoldGrid.IsLogical(f.Row.Op)).ToArray();
         var disagree = new List<string>();
         var rejected = new List<string>();
         var checkedConstant = new List<string>();
@@ -366,12 +377,11 @@ public class ConstantFoldingProviderTests {
         await Assert.That(named).IsEmpty();
     }
 
-    /// <summary>Every fold of a provider-defined cell is the value the unfolded VM computes, except in a ledger value-wrong cell.</summary>
+    /// <summary>Every fold is the value the unfolded VM computes, except in a ledger value-wrong cell (allowed DISAGREE).</summary>
     [Test]
-    public async Task EveryDefinedFold_IsTheUnfoldedVmValue_OutsideTheLedgerValueWrongCells() {
+    public async Task EveryFold_IsTheUnfoldedVmValue_OutsideTheLedgerValueWrongCells() {
         var wrong = ConstantFoldGrid.Folded()
-            .Where(static f => !ConstantFoldGrid.IsLogical(f.Row.Op) && ConstantFoldGrid.Resolution(f.Row) is not null
-                && !ConstantFoldGrid.LedgerValueWrongCells.Contains(f.Row.Cell))
+            .Where(static f => !ConstantFoldGrid.IsLogical(f.Row.Op) && !ConstantFoldGrid.LedgerValueWrongCells.Contains(f.Row.Cell))
             .Select(static f => (f.Row, f.Fold, Vm: ConstantFoldGrid.UnfoldedVm(f.Row)))
             .Where(static f => !ConstantFoldGrid.SameValue(f.Fold, f.Vm))
             .Select(static f => $"{f.Row.Key}: fold {f.Fold}, unfolded VM {f.Vm}").ToArray();
@@ -533,6 +543,152 @@ public class ConstantFoldingProviderTests {
         await AssertFolds(new LessThan(new Constant(day), new Constant(day.AddDays(1))), true);
     }
 
+    // ---- the delta: folds that stop (provider-undefined) and the named new folds ----
+
+    private static OperatorResolution? Operator<TLeft, TRight>(OperatorKind kind) =>
+        ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(typeof(TLeft)).GetOperator(kind, ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(typeof(TRight)));
+
+    [Test]
+    public async Task DecimalWithInt32OrInt64_Folds() {
+        await AssertFolds(new Add(new Constant(1.5m), new Constant(2L)), 3.5m);
+        await AssertFolds(new Subtract(new Constant(2), new Constant(0.5m)), 1.5m);
+        await AssertFolds(new Multiply(new Constant(2.50m), new Constant(2)), 5.00m);
+        await AssertFolds(new Divide(new Constant(7L), new Constant(2m)), 3.5m);
+        await AssertFolds(new Modulo(new Constant(7.5m), new Constant(2)), 1.5m);
+    }
+
+    [Test]
+    public async Task Int32BitwiseAndShift_Fold() {
+        await AssertFolds(new BitwiseAnd(new Constant(6), new Constant(3)), 2);
+        await AssertFolds(new BitwiseOr(new Constant(6), new Constant(3)), 7);
+        await AssertFolds(new BitwiseXor(new Constant(6), new Constant(3)), 5);
+        await AssertFolds(new ShiftLeft(new Constant(1), new Constant(3)), 8);
+        await AssertFolds(new ShiftRight(new Constant(-16), new Constant(2)), -4);
+        // C# masks an Int32 shift count to five bits.
+        await AssertFolds(new ShiftLeft(new Constant(1), new Constant(33)), 2);
+        await AssertFolds(new BitwiseNot(new Constant(5)), -6);
+    }
+
+    [Test]
+    public async Task BooleanLogicalOperators_Fold() {
+        await AssertFolds(new BitwiseAnd(new Constant(true), new Constant(false)), false);
+        await AssertFolds(new BitwiseOr(new Constant(true), new Constant(false)), true);
+        await AssertFolds(new BitwiseXor(new Constant(true), new Constant(true)), false);
+    }
+
+    [Test]
+    public async Task MixedModulo_Folds() {
+        await AssertFolds(new Modulo(new Constant(7), new Constant(4L)), 3L);
+        await AssertFolds(new Modulo(new Constant(7L), new Constant(4)), 3L);
+        await AssertFolds(new Modulo(new Constant(7.5), new Constant(2)), 1.5);
+        await AssertFolds(new Modulo(new Constant(7), new Constant(2.5)), 2.0);
+    }
+
+    /// <summary>
+    /// Companion to <c>LoweredTreeOperandCoverageTests</c>' <c>ConstantPairFolding</c> row (amendment 9): once
+    /// <c>1.5m + 2L</c> folds, the replacement that row reads is the fold's constant, so its <c>converted</c> verdict
+    /// says nothing about the conversion. Here the replacement is the decimal constant 3.5, and the Parameter twin still
+    /// records the compatibility pass's conversion of the Int64 operand.
+    /// </summary>
+    [Test]
+    public async Task ConstantPairFolding_ReplacementIsTheFoldedDecimal_AndTheParameterTwinStillConverts() {
+        var pair = new Add(new Constant(1.5m), new Constant(2L));
+        var analysis = Interpreter.Analyze(pair);
+        await Assert.That(analysis.GetNodeReplacement(pair) is Constant { Value: decimal folded } && folded == 3.5m).IsTrue();
+
+        var number = new Parameter("n", TypeReference.To<long>());
+        var twin = new Add(new Parameter("d", TypeReference.To<decimal>()), number);
+        var twinAnalysis = Interpreter.Analyze(twin);
+        await Assert.That(twinAnalysis.IsConstant(twin)).IsFalse();
+        await Assert.That(twinAnalysis.GetNodeReplacement(number) ?? twinAnalysis.GetNodeReplacement(twin)).IsNotNull();
+    }
+
+    [Test]
+    public async Task DecimalAgainstFloat_Declines_ProviderUndefined_AndDecimalAgainstInt32Folds() {
+        await Assert.That(Operator<decimal, double>(OperatorKind.Equal)).IsNull();
+        await AssertDoesNotFold(new Equal(new Constant(1.5m), new Constant(1.5)));
+        await AssertDoesNotFold(new LessThan(new Constant(1.5f), new Constant(2m)));
+        await AssertFolds(new Equal(new Constant(2m), new Constant(2)), true);
+    }
+
+    [Test]
+    public async Task SignedAgainstUInt64_Declines_ProviderUndefined_AndUnsignedAgainstUInt64Folds() {
+        await Assert.That(Operator<int, ulong>(OperatorKind.LessThan)).IsNull();
+        await AssertDoesNotFold(new LessThan(new Constant(1), new Constant(ulong.MaxValue)));
+        await AssertDoesNotFold(new Equal(new Constant(-1L), new Constant(ulong.MaxValue)));
+        await AssertFolds(new LessThan(new Constant(1u), new Constant(ulong.MaxValue)), true);
+    }
+
+    [Test]
+    public async Task Int64ShiftedByInt64_Declines_ProviderUndefined_AndInt32ShiftFolds() {
+        await Assert.That(Operator<long, long>(OperatorKind.ShiftLeft)).IsNull();
+        await AssertDoesNotFold(new ShiftLeft(new Constant(1L), new Constant(3L)));
+        await AssertDoesNotFold(new ShiftRight(new Constant(16L), new Constant(2L)));
+        await AssertFolds(new ShiftLeft(new Constant(1), new Constant(3)), 8);
+    }
+
+    [Test]
+    public async Task TextOrdering_Declines_ProviderUndefined_AndTextEqualityFolds() {
+        await Assert.That(Operator<string, string>(OperatorKind.LessThan)).IsNull();
+        await AssertDoesNotFold(new LessThan(new Constant("a"), new Constant("b")));
+        await AssertFolds(new Equal(new Constant("a"), new Constant("a")), true);
+    }
+
+    private enum Shade { Light, Dark }
+
+    [Test]
+    public async Task EnumOrdering_Declines_ProviderUndefined_AndEnumEqualityFolds() {
+        await Assert.That(Operator<Shade, Shade>(OperatorKind.LessThan)).IsNull();
+        await AssertDoesNotFold(new LessThan(new Constant(Shade.Light), new Constant(Shade.Dark)));
+        await AssertFolds(new Equal(new Constant(Shade.Light), new Constant(Shade.Light)), true);
+        await AssertFolds(new NotEqual(new Constant(Shade.Light), new Constant(Shade.Dark)), true);
+    }
+
+    [Test]
+    public async Task EqualityAcrossMismatchedTypes_Declines_ProviderUndefined_AndSameTypeEqualityFolds() {
+        await Assert.That(Operator<string, long>(OperatorKind.Equal)).IsNull();
+        await AssertDoesNotFold(new Equal(new Constant("7"), new Constant(7L)));
+        await AssertDoesNotFold(new NotEqual(new Constant(true), new Constant(1)));
+        await AssertFolds(new Equal(new Constant(Guid.Empty), new Constant(Guid.Empty)), true);
+        await AssertFolds(new Equal(new Constant(null), new Constant("a")), false);
+    }
+
+    private sealed record Box(int Value) {
+        public static int Invocations;
+        public static Box operator +(Box a, Box b) {
+            Invocations++;
+            return new Box(a.Value + b.Value);
+        }
+    }
+
+    /// <summary>
+    /// Amendment 6: a user-declared operator never runs at analysis time. On master <c>Box == Box</c> folded through
+    /// <c>object.Equals</c> and the user operator <c>+</c> did not fold; both decline now. A Guid comparison (an
+    /// allowlisted declaring type) folds.
+    /// </summary>
+    [Test]
+    public async Task UserDeclaredOperators_DoNotRunAtAnalysisTime_AndAllowlistedDeclaredOperatorsFold() {
+        await Assert.That(Operator<Box, Box>(OperatorKind.Equal)).IsNotNull();
+        await AssertDoesNotFold(new Equal(new Constant(new Box(1)), new Constant(new Box(1))));
+        var before = Box.Invocations;
+        await AssertDoesNotFold(new Add(new Constant(new Box(1)), new Constant(new Box(2))));
+        await Assert.That(Box.Invocations).IsEqualTo(before);
+        await AssertFolds(new LessThan(new Constant(Guid.Empty), new Constant(Guid.Parse("00000000-0000-0000-0000-000000000001"))), true);
+    }
+
+    /// <summary>
+    /// Amendment 10: a Parameter is typed by its stamp. A lambda parameter stamped Int32 bound to an Int64 argument
+    /// disagrees with its stamp and declines (master folded it as Int64 + Int32); bound to an Int32 argument it folds.
+    /// </summary>
+    [Test]
+    public async Task ParameterWhoseValueDisagreesWithItsStamp_Declines_AndAnAgreeingOneFolds() {
+        var x = new Parameter("x", TypeReference.To<int>());
+        var disagreeing = new Invoke(new Lambda([x], new Add(x, new Constant(1))), new Constant(5L));
+        await AssertDoesNotFold(disagreeing);
+        var y = new Parameter("y", TypeReference.To<int>());
+        await AssertFolds(new Invoke(new Lambda([y], new Add(y, new Constant(1))), new Constant(5)), 6);
+    }
+
     // The persisted counts and checksums.
     private const string MasterFolds = "2640 68cba717a778d527";
     private const string MasterUndefinedFolds = "828 0d020bf27c2afbb7";
@@ -540,4 +696,5 @@ public class ConstantFoldingProviderTests {
     private const string UnprintableDefinedFolds = "48 ace2db05f3c87b7b";
     private const string AllowedDisagree = "4 97551d7e2ef40a1f";
     private const string LogicalFolds = "42 ea3948634df0953b";
+    private const string UndefinedCells = "7800 1786e1cb3f6eaa59";
 }

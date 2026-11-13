@@ -1,5 +1,3 @@
-using Poly.Mcp.Tools;
-
 namespace Poly.Tests.Mcp;
 
 /// <summary>
@@ -29,34 +27,21 @@ public class RuntimeStageActionResolutionTests {
         """;
 
     private static string NewOrder(string sessionId) {
-        var create = McpTestTools.Runtime.CreateInstance(sessionId, "Order", """{"Memo":"m"}""");
-        if (!create.Success)
-            throw new InvalidOperationException(create.Message);
-        using var doc = System.Text.Json.JsonDocument.Parse(System.Text.Json.JsonSerializer.Serialize(create.Data));
-        return doc.RootElement.GetProperty("instance").GetProperty("instanceId").GetString()!;
-    }
-
-    private sealed record Outcome(bool Succeeded, string? ErrorMessage, string? NewStage, IReadOnlyList<string> FailedGuards);
-
-    private static Outcome Result(DomainToolResponse response) {
-        using var doc = System.Text.Json.JsonDocument.Parse(System.Text.Json.JsonSerializer.Serialize(response.Data));
-        var r = doc.RootElement.GetProperty("invokeActionResult");
-        string? Str(string name) => r.TryGetProperty(name, out var v) && v.ValueKind == System.Text.Json.JsonValueKind.String
-            ? v.GetString() : null;
-        return new Outcome(r.GetProperty("succeeded").GetBoolean(), Str("errorMessage"), Str("newStage"),
-            r.TryGetProperty("failedGuards", out var g) && g.ValueKind == System.Text.Json.JsonValueKind.Array
-                ? g.EnumerateArray().Select(x => x.GetString()!).ToList() : []);
+        var create = McpTestTools.Surface.Create(sessionId, "Order", """{"Memo":"m"}""");
+        if (!create.Ok)
+            throw new InvalidOperationException(create.Summary);
+        return create.InstanceId;
     }
 
     [Test]
     public async Task InvokeAction_FromActiveStage_MapsGuardsOfActiveCancelNotDraftCancel() {
-        var (sessionId, _) = McpTestTools.Store.Create("Stages");
-        var applied = McpTestTools.Dsl.ApplyDsl(sessionId, Dsl);
-        await Assert.That(applied.Success).IsTrue().Because(applied.Message);
+        var sessionId = McpTestTools.Surface.Open("Stages");
+        var applied = McpTestTools.Surface.Define(sessionId, Dsl);
+        await Assert.That(applied.Success).IsTrue().Because(applied.Summary);
         var id = NewOrder(sessionId);
-        await Assert.That(McpTestTools.Runtime.InvokeAction(sessionId, id, "Activate").Success).IsTrue();
+        await Assert.That(McpTestTools.Surface.Invoke(sessionId, id, "Activate").Ok).IsTrue();
 
-        var result = Result(McpTestTools.Runtime.InvokeAction(sessionId, id, "Cancel"));
+        var result = McpTestTools.Surface.Invoke(sessionId, id, "Cancel").Result;
 
         await Assert.That(result.Succeeded).IsFalse();
         await Assert.That(string.Join(",", result.FailedGuards)).IsEqualTo("not_Ready");
@@ -83,20 +68,21 @@ public class RuntimeStageActionResolutionTests {
 
     [Test]
     public async Task InvokeAction_StageWithoutAction_DoesNotBorrowGuardsFromSiblingStages() {
-        var (sessionId, _) = McpTestTools.Store.Create("Siblings");
-        var applied = McpTestTools.Dsl.ApplyDsl(sessionId, SiblingGuardDsl);
-        await Assert.That(applied.Success).IsTrue().Because(applied.Message);
+        var sessionId = McpTestTools.Surface.Open("Siblings");
+        var applied = McpTestTools.Surface.Define(sessionId, SiblingGuardDsl);
+        await Assert.That(applied.Success).IsTrue().Because(applied.Summary);
         var id = NewOrder(sessionId);
 
-        var response = McpTestTools.Runtime.InvokeAction(sessionId, id, "Cancel");
+        var response = McpTestTools.Surface.Invoke(sessionId, id, "Cancel");
 
-        await Assert.That(response.Success).IsFalse();
+        await Assert.That(response.Ok).IsFalse();
         // The module rejects the call ("not valid for the current stage"); nothing about
         // the result may be borrowed from a sibling stage's Cancel (its guards or its Receipt).
-        var result = Result(response);
+        await Assert.That(response.Data?["invokeActionResult"]).IsNotNull();
+        var result = response.Result;
         await Assert.That(result.Succeeded).IsFalse();
         await Assert.That(result.FailedGuards.Count).IsEqualTo(0);
-        await Assert.That(ReturnShape(response).ReturnTypeName).IsNull();
+        await Assert.That(result.ReturnTypeName).IsNull();
     }
 
     private const string ReturnDsl = """
@@ -113,46 +99,37 @@ public class RuntimeStageActionResolutionTests {
         Receipt: entity { Note: Text }
         """;
 
-    private static (string? ReturnTypeName, string? NewStage) ReturnShape(DomainToolResponse response) {
-        using var doc = System.Text.Json.JsonDocument.Parse(System.Text.Json.JsonSerializer.Serialize(response.Data));
-        var r = doc.RootElement.GetProperty("invokeActionResult");
-        string? Str(string name) => r.TryGetProperty(name, out var v) && v.ValueKind == System.Text.Json.JsonValueKind.String
-            ? v.GetString() : null;
-        return (Str("returnTypeName"), Str("newStage"));
-    }
-
     [Test]
     public async Task InvokeAction_SameNamedStageActions_ReportReturnTypeAndNewStagePerStage() {
-        var (sessionId, _) = McpTestTools.Store.Create("Tickets");
-        var applied = McpTestTools.Dsl.ApplyDsl(sessionId, ReturnDsl);
-        await Assert.That(applied.Success).IsTrue().Because(applied.Message);
+        var sessionId = McpTestTools.Surface.Open("Tickets");
+        var applied = McpTestTools.Surface.Define(sessionId, ReturnDsl);
+        await Assert.That(applied.Success).IsTrue().Because(applied.Summary);
 
         var draft = NewTicket(sessionId);
-        var fromDraft = ReturnShape(McpTestTools.Runtime.InvokeAction(sessionId, draft, "Cancel"));
+        var fromDraft = McpTestTools.Surface.Invoke(sessionId, draft, "Cancel").Result;
         await Assert.That(fromDraft.ReturnTypeName).IsEqualTo("Receipt");
 
         var active = NewTicket(sessionId);
-        await Assert.That(McpTestTools.Runtime.InvokeAction(sessionId, active, "Activate").Success).IsTrue();
-        var fromActive = ReturnShape(McpTestTools.Runtime.InvokeAction(sessionId, active, "Cancel"));
+        await Assert.That(McpTestTools.Surface.Invoke(sessionId, active, "Activate").Ok).IsTrue();
+        var fromActive = McpTestTools.Surface.Invoke(sessionId, active, "Cancel").Result;
         await Assert.That(fromActive.ReturnTypeName).IsNull();
         await Assert.That(fromActive.NewStage).IsEqualTo("Closed");
     }
 
     private static string NewTicket(string sessionId) {
-        var create = McpTestTools.Runtime.CreateInstance(sessionId, "Ticket", """{"Memo":"m"}""");
-        if (!create.Success)
-            throw new InvalidOperationException(create.Message);
-        using var doc = System.Text.Json.JsonDocument.Parse(System.Text.Json.JsonSerializer.Serialize(create.Data));
-        return doc.RootElement.GetProperty("instance").GetProperty("instanceId").GetString()!;
+        var create = McpTestTools.Surface.Create(sessionId, "Ticket", """{"Memo":"m"}""");
+        if (!create.Ok)
+            throw new InvalidOperationException(create.Summary);
+        return create.InstanceId;
     }
 
     [Test]
     public async Task InvokeAction_FromDraftStage_UnguardedCancelTransitions() {
-        var (sessionId, _) = McpTestTools.Store.Create("Stages");
-        await Assert.That(McpTestTools.Dsl.ApplyDsl(sessionId, Dsl).Success).IsTrue();
+        var sessionId = McpTestTools.Surface.Open("Stages");
+        await Assert.That(McpTestTools.Surface.Define(sessionId, Dsl).Success).IsTrue();
         var id = NewOrder(sessionId);
 
-        var result = Result(McpTestTools.Runtime.InvokeAction(sessionId, id, "Cancel"));
+        var result = McpTestTools.Surface.Invoke(sessionId, id, "Cancel").Result;
 
         await Assert.That(result.Succeeded).IsTrue().Because(result.ErrorMessage ?? "");
         await Assert.That(result.NewStage).IsEqualTo("Closed");

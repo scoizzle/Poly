@@ -13,7 +13,7 @@ public sealed partial class DomainResolver {
 
         // P2′′′′.3: Clear error if someone tries the removed 'prev' keyword
         if (Current.Kind == TokenKind.Identifier &&
-            string.Equals(Current.Text, "prev", StringComparison.Ordinal)) {
+            Current.TextEquals("prev")) {
             throw Error("'prev' is no longer supported. Stage hierarchy has been removed; all stages are flat.");
         }
 
@@ -51,7 +51,7 @@ public sealed partial class DomainResolver {
                 switch (match.PatternName) {
                     case "entry":
                         if (parsedEntry)
-                            throw Error($"'{Current.Text}' must appear at the beginning of the stage block, before actions and subscriptions.");
+                            throw Error($"'{Shown(Current)}' must appear at the beginning of the stage block, before actions and subscriptions.");
                         parsedEntry = true;
                         Advance(); // consume 'entry'
                         Expect(TokenKind.LBrace);
@@ -64,7 +64,7 @@ public sealed partial class DomainResolver {
 
                     case "exit":
                         if (parsedExit)
-                            throw Error($"'{Current.Text}' must appear at the beginning of the stage block, before actions and subscriptions.");
+                            throw Error($"'{Shown(Current)}' must appear at the beginning of the stage block, before actions and subscriptions.");
                         parsedExit = true;
                         Advance(); // consume 'exit'
                         Expect(TokenKind.LBrace);
@@ -93,7 +93,7 @@ public sealed partial class DomainResolver {
             if (Current.Kind == TokenKind.Require)
                 throw Error("'require' must appear before the stage's '{', as in 'Name: stage require Policy {'.");
             if ((Current.Kind == TokenKind.Entry || Current.Kind == TokenKind.Exit) && Current.Kind != TokenKind.Identifier) {
-                throw Error($"'{Current.Text}' must appear at the beginning of the stage block, before actions and subscriptions.");
+                throw Error($"'{Shown(Current)}' must appear at the beginning of the stage block, before actions and subscriptions.");
             }
             var actionName = ExpectIdentifier(TokenKind.Identifier, "action name");
             // Stage members also use Name: kind. Legacy Name(params): action accepted.
@@ -147,12 +147,12 @@ public sealed partial class DomainResolver {
     /// </summary>
     private StageSubscriptionQuantifier ParseSubscriptionQuantifier() {
         if (Current.Kind == TokenKind.Identifier &&
-            string.Equals(Current.Text, "any", StringComparison.OrdinalIgnoreCase)) {
+            Current.TextEquals("any", StringComparison.OrdinalIgnoreCase)) {
             Advance(); // consume 'any'
             return StageSubscriptionQuantifier.Any;
         }
         if (Current.Kind == TokenKind.Identifier &&
-            string.Equals(Current.Text, "all", StringComparison.OrdinalIgnoreCase)) {
+            Current.TextEquals("all", StringComparison.OrdinalIgnoreCase)) {
             Advance(); // consume 'all'
             return StageSubscriptionQuantifier.All;
         }

@@ -22,6 +22,7 @@ internal class Schedule : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfOpen();
             if (!__result.IsSuccess)
             {
@@ -55,6 +56,7 @@ internal class Schedule : Poly.Runtime.IActionScoped
             return DomainResult<Schedule>.Failure(Poly.Runtime.DomainFailure.Required("'State' is required.", "Schedule.State"));
         }
         var created = new Schedule(day, state);
+        Poly.Runtime.ActionScope.Create(created, "Schedule");
         return DomainResult<Schedule>.Success(created);
     }
     public object __Snapshot()

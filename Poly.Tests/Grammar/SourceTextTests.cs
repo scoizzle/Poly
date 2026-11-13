@@ -223,8 +223,9 @@ public class SourceTextTests {
     /// identifier's or a number's text is the <see cref="SourceText"/> slice. A string literal is the exception:
     /// its slice is raw (quotes and escapes kept) and its decoded value is <c>DslToken.Unescape()</c>, pinned by
     /// <see cref="StringLiteral_SliceIsRaw_DecodedTextUnescapes"/>; this document has none. Which kinds are fixed
-    /// versus value-bearing is pinned by <c>GrammarChangeProtocolTests</c>. The oracle is the transitional
-    /// <c>DslToken.Text</c>, frozen against the pre-span tokenizer by <c>DslTokenStreamBaselineTests</c>.
+    /// versus value-bearing is pinned by <c>GrammarChangeProtocolTests</c>. The oracle is the token's own read
+    /// (an identifier's <c>Name()</c>, a number's slice of the reader's own source), frozen against the
+    /// pre-span tokenizer by <c>DslTokenStreamBaselineTests</c>.
     /// </summary>
     [Test]
     public async Task SyntheticToken_RoundTripsThroughWriterTextTable() {
@@ -239,7 +240,7 @@ public class SourceTextTests {
             if (t.Kind == DslTokenKind.EndOfFile) break;
             var span = new SpanToken<DslTokenKind>(t.Kind, t.Start, t.Length);
             if (TryCanonical(t.Kind, out _)) { viaSpans.Write(span.Kind); legacy.Write(t.Kind); }
-            else { viaSpans.Write(span.Kind, source.Span(span).ToString()); legacy.Write(t.Kind, t.Text); }
+            else { viaSpans.Write(span.Kind, source.Span(span).ToString()); legacy.Write(t.Kind, t.Kind == DslTokenKind.Identifier ? t.Name() : t.Span.ToString()); }
         }
 
         await Assert.That(viaSpans.ToText()).IsEqualTo(legacy.ToText());
@@ -264,6 +265,6 @@ public class SourceTextTests {
         await Assert.That(source.Span(span).ToString()).IsEqualTo("\"a\\\"b\\\\c\"");
         await Assert.That(literal.Span.ToString()).IsEqualTo(source.Span(span).ToString());
         await Assert.That(literal.Unescape()).IsEqualTo("a\"b\\c");
-        await Assert.That(literal.Text).IsEqualTo(literal.Unescape());
+        await Assert.That(DslTokenText.Shown(literal)).IsEqualTo(literal.Unescape());
     }
 }

@@ -184,6 +184,8 @@ internal sealed class SubscriptionAnalyzer : INodeAnalyzer {
         Domain domain,
         DomainTypeLookupMetadata lookup) {
 
+        ReportReservedPeerBinder(context, subscription, entity);
+
         // ── Empty/blank checks ──────────────────────────────────
         if (string.IsNullOrWhiteSpace(subscription.RelationshipName)) {
             context.ReportError(
@@ -300,6 +302,26 @@ internal sealed class SubscriptionAnalyzer : INodeAnalyzer {
     /// (<c>as name</c> → scalar <c>name Prop</c>), reject legacy event, unbound peer-like
     /// roots, peer l-values, and nested peer path-prefix (F1–F4, F7).
     /// </summary>
+    /// <summary>
+    /// A peer binder prints as the generated handler's parameter, so a binder of a name the handler body calls from
+    /// expression position shadows it (<see cref="ReservedNames.TryReservedAsPeerBinder"/>): the same
+    /// <see cref="DomainModelDiagnosticCodes.ReservedMemberName"/> rule as an action parameter.
+    /// </summary>
+    private static void ReportReservedPeerBinder(AnalysisContext context, StageSubscription subscription, Entity entity) {
+        if (subscription.PeerBinding is not { Length: > 0 } binder
+            || !ReservedNames.TryReservedAsPeerBinder(binder, out var row))
+            return;
+        var handler = $"Peer binder '{binder}' of the 'when {subscription.RelationshipName} " +
+            $"{string.Join(", ", subscription.StageNames)}' handler on entity '{entity.Name}'";
+        context.ReportError(
+            subscription,
+            ReservedNames.IsActionScopeName(binder)
+                ? $"{handler}: {row.Reason}; rename it."
+                : $"{handler} would shadow the generated C# type '{row.Name}' that Emit calls from the generated " +
+                "handler body; rename it.",
+            DomainModelDiagnosticCodes.ReservedMemberName);
+    }
+
     private static void ValidateSubscriptionEffectBindings(
         AnalysisContext context,
         StageSubscription subscription,

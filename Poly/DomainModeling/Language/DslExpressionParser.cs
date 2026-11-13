@@ -32,16 +32,19 @@ public sealed class DslExpressionParser {
 
     public DomainExpression ParseExpression() => new Run(this).Parse();
 
-    // Every token-text read in the parser goes through these two, so a span-token tokenizer changes one place.
-    private static string NameOf(DslToken token) => token.Text;
-
+    // A token in a message: end of input is named, any other token shows its text.
     private static string Describe(DslToken token) =>
-        token.Kind == DslTokenKind.EndOfFile ? "end of input" : token.Text;
+        token.Kind == DslTokenKind.EndOfFile ? "end of input" : DslTokenText.Shown(token);
 
-    private static string CaptureText(MatchResult<DslToken, DslTokenKind> match, string name) =>
+    private static DslToken CaptureToken(MatchResult<DslToken, DslTokenKind> match, string name) =>
         match.Captures.TryGetValue(name, out var tokens) && tokens.Count > 0
-            ? NameOf(tokens[0])
+            ? tokens[0]
             : throw new InvalidOperationException($"Match '{match.PatternName}' is missing capture '{name}'.");
+
+    // Every capture read as a name is a word: the rows capture it with an Identifier value or an
+    // identifier predicate (rel, prop, hop, quant, unit).
+    private static string CaptureText(MatchResult<DslToken, DslTokenKind> match, string name) =>
+        CaptureToken(match, name).Name();
 
     private DomainExpression RewriteIdent(DomainExpression expression) =>
         expression is PropertyAccess pa && _forms.TryRewriteIdent(pa.Name, out var claimed)
@@ -271,9 +274,10 @@ public sealed class DslExpressionParser {
         }
 
         private DomainExpression FoldUnresolvedDuration(MatchResult<DslToken, DslTokenKind> match) {
-            var amountText = CaptureText(match, "amount");
-            if (!long.TryParse(amountText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var amount))
-                throw _c.Error($"Duration amount '{amountText}' is not an integer.");
+            // The duration row captures 'amount' with a Number value.
+            var amountToken = CaptureToken(match, "amount");
+            if (!long.TryParse(amountToken.Span, NumberStyles.Integer, CultureInfo.InvariantCulture, out var amount))
+                throw _c.Error($"Duration amount '{DslTokenText.Shown(amountToken)}' is not an integer.");
             return new UnresolvedDuration(amount, CaptureText(match, "unit"));
         }
 
@@ -291,7 +295,7 @@ public sealed class DslExpressionParser {
             if (DslGrammar.IsFunctionDeclarationWord(current)) return;
             if (DslGrammar.IsDurationUnitToken(current)) return;
             throw _c.Error(
-                $"Unknown duration unit '{NameOf(current)}'. Legal units: {DurationUnits.LegalUnits}.");
+                $"Unknown duration unit '{DslTokenText.Shown(current)}'. Legal units: {DurationUnits.LegalUnits}.");
         }
 
         // ── chain levels ──────────────────────────────────────────────────────────────
@@ -451,7 +455,8 @@ public sealed class DslExpressionParser {
             Take();
             Push(new Frame(FrameKind.Call) {
                 Token = name,
-                Name = NameOf(name),
+                // The call row's name is an identifier (IsPathHopIdent).
+                Name = name.Name(),
                 Args = [],
                 SavedInWhere = _inWhere,
             });
@@ -531,7 +536,7 @@ public sealed class DslExpressionParser {
                 else if (IsClose(token.Kind)) depth--;
                 if (depth == 0 && token.Kind == DslTokenKind.Comma) {
                     if (i == start)
-                        throw ErrorAt(token, $"Expected an arm in 'match' before '{NameOf(token)}'{At(token)}");
+                        throw ErrorAt(token, $"Expected an arm in 'match' before '{DslTokenText.Shown(token)}'{At(token)}");
                     segments.Add((start, i));
                     start = i + 1;
                 }
@@ -591,7 +596,7 @@ public sealed class DslExpressionParser {
             }
 
             if (arrow < 0)
-                throw ErrorAt(first, $"Expected '->' in 'match' arm starting at '{NameOf(first)}'{At(first)}");
+                throw ErrorAt(first, $"Expected '->' in 'match' arm starting at '{DslTokenText.Shown(first)}'{At(first)}");
             var isElse = arrow - start == 1 && first.Kind == DslTokenKind.Else;
             if (arrow == start)
                 throw ErrorAt(tokens[arrow], $"Expected a condition before '->' in 'match'{At(tokens[arrow])}");

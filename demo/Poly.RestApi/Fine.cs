@@ -40,6 +40,7 @@ internal class Fine : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfPay();
             if (!__result.IsSuccess)
             {
@@ -86,6 +87,7 @@ internal class Fine : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfWaive();
             if (!__result.IsSuccess)
             {
@@ -122,6 +124,7 @@ internal class Fine : Poly.Runtime.IActionScoped
     }
     internal void RegisterPatronFinesResolvedSubscriber(Patron subscriber)
     {
+        Poly.Runtime.ActionScope.Touch(this);
         if (this._patronFinesResolvedSubscribers == null)
         {
             this._patronFinesResolvedSubscribers = new List<Patron>();
@@ -137,7 +140,7 @@ internal class Fine : Poly.Runtime.IActionScoped
     }
     internal DomainResult NotifyResolvedSubscribers()
     {
-        this.EnterNotifyCascade("Resolved");
+        var __depth = this.EnterNotifyCascade("Resolved");
         try
         {
             if (this._patronFinesResolvedSubscribers != null)
@@ -154,7 +157,7 @@ internal class Fine : Poly.Runtime.IActionScoped
         }
         finally
         {
-            this.ExitNotifyCascade();
+            this.ExitNotifyCascade(__depth);
         }
         return DomainResult.Success();
     }
@@ -165,23 +168,25 @@ internal class Fine : Poly.Runtime.IActionScoped
             return DomainResult<Fine>.Failure(Poly.Runtime.DomainFailure.Required("'Reason' is required.", "Fine.Reason"));
         }
         var created = new Fine(reason, amount, patron, dateIssued, paid);
+        Poly.Runtime.ActionScope.Create(created, "Fine");
         if (patron != null)
         {
             patron.AttachFines(created);
         }
         return DomainResult<Fine>.Success(created);
     }
-    private void EnterNotifyCascade(string stageName)
+    private int EnterNotifyCascade(string stageName)
     {
         if (this._notifyDepth >= 16)
         {
             throw new System.InvalidOperationException(string.Concat("Subscription cascade on entity 'Fine' exceeded max depth (16) while notifying '", stageName, "'."));
         }
         this._notifyDepth = this._notifyDepth + 1;
+        return this._notifyDepth - 1;
     }
-    private void ExitNotifyCascade()
+    private void ExitNotifyCascade(int depth)
     {
-        this._notifyDepth = this._notifyDepth - 1;
+        this._notifyDepth = depth;
     }
     public object __Snapshot()
     {

@@ -11,7 +11,7 @@ namespace Poly.Tests.DomainModeling.Parsing;
 public class DslExpressionFragmentTests {
     private static bool IsMagic(DslToken token) =>
         token.Kind == DslTokenKind.Identifier
-        && string.Equals(token.Text, "MAGIC", StringComparison.Ordinal);
+        && token.TextEquals("MAGIC");
 
     [Test]
     public async Task Fragment_AgeGte18_IsComparison() {

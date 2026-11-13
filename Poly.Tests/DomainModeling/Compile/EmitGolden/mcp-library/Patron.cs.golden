@@ -43,6 +43,7 @@ internal class Patron : Poly.Runtime.IActionScoped
     }
     internal void AttachLoans(Loan child)
     {
+        Poly.Runtime.ActionScope.Touch(this);
         this._loans.Add(child);
         child.RegisterPatronLoansOverdueSubscriber(this);
     }
@@ -59,6 +60,7 @@ internal class Patron : Poly.Runtime.IActionScoped
     }
     internal void AttachFines(Fine child)
     {
+        Poly.Runtime.ActionScope.Touch(this);
         this._fines.Add(child);
     }
     internal DomainResult<Loan> CheckOut(Book book)
@@ -67,6 +69,7 @@ internal class Patron : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfCheckOut(book);
             if (!__result.IsSuccess)
             {
@@ -101,6 +104,7 @@ internal class Patron : Poly.Runtime.IActionScoped
     public bool GoodStanding() => this.Status == "Active";
     internal DomainResult WhenEachLoanOverdue(Loan loan)
     {
+        Poly.Runtime.ActionScope.Touch(this);
         var create0 = this.CreateFines("Overdue", loan.Amount);
         if (!create0.IsSuccess)
         {
@@ -115,6 +119,7 @@ internal class Patron : Poly.Runtime.IActionScoped
             return DomainResult<Patron>.Failure(Poly.Runtime.DomainFailure.Required("'Name' is required.", "Patron.Name"));
         }
         var created = new Patron(name, loans, fines, status);
+        Poly.Runtime.ActionScope.Create(created, "Patron");
         return DomainResult<Patron>.Success(created);
     }
     private void InitializeSubscriptions()

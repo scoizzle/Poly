@@ -37,6 +37,7 @@ internal class OrderItem : Poly.Runtime.IActionScoped
             return DomainResult<OrderItem>.Failure(Poly.Runtime.DomainFailure.Range("'Qty' must be <= 1000.", "OrderItem.Qty"));
         }
         var created = new OrderItem(sku, qty, order);
+        Poly.Runtime.ActionScope.Create(created, "OrderItem");
         if (order != null)
         {
             order.AttachItems(created);

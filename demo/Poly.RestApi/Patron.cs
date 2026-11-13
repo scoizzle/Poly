@@ -63,12 +63,14 @@ internal class Patron : Poly.Runtime.IActionScoped
     }
     internal void AttachLoans(Loan child)
     {
+        Poly.Runtime.ActionScope.Touch(this);
         this._loans.Add(child);
         child.RegisterPatronLoansOverdueSubscriber(this);
         child.RegisterPatronLoansReturnedSubscriber(this);
     }
     internal void AttachFines(Fine child)
     {
+        Poly.Runtime.ActionScope.Touch(this);
         this._fines.Add(child);
         child.RegisterPatronFinesResolvedSubscriber(this);
     }
@@ -78,6 +80,7 @@ internal class Patron : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfCheckOut(book);
             if (!__result.IsSuccess)
             {
@@ -128,6 +131,7 @@ internal class Patron : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfSuspend();
             if (!__result.IsSuccess)
             {
@@ -164,6 +168,7 @@ internal class Patron : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfCloseAccount();
             if (!__result.IsSuccess)
             {
@@ -197,6 +202,7 @@ internal class Patron : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfReinstate();
             if (!__result.IsSuccess)
             {
@@ -249,6 +255,7 @@ internal class Patron : Poly.Runtime.IActionScoped
     public bool AccountInGoodStanding() => this.Status == PatronStatus.Active && this.OutstandingFines == 0L;
     internal DomainResult WhenEachLoanOverdue()
     {
+        Poly.Runtime.ActionScope.Touch(this);
         var create0 = Fine.Create("Overdue item", 5L);
         if (!create0.IsSuccess)
         {
@@ -259,11 +266,13 @@ internal class Patron : Poly.Runtime.IActionScoped
     }
     internal DomainResult WhenEachLoanReturned()
     {
+        Poly.Runtime.ActionScope.Touch(this);
         this.CurrentBorrowCount = this.CurrentBorrowCount - 1L;
         return DomainResult.Success();
     }
     internal DomainResult WhenEachFineResolved()
     {
+        Poly.Runtime.ActionScope.Touch(this);
         this.OutstandingFines = this.OutstandingFines - 5L;
         return DomainResult.Success();
     }
@@ -298,6 +307,7 @@ internal class Patron : Poly.Runtime.IActionScoped
             return DomainResult<Patron>.Failure(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'Email' value is already used on another 'Patron'.", "Patron.Email"));
         }
         var created = new Patron(name, email, maxItems, loans, fines, memberSince, status, currentBorrowCount, outstandingFines);
+        Poly.Runtime.ActionScope.Create(created, "Patron");
         db.Record("Patron", "Email", email);
         return DomainResult<Patron>.Success(created);
     }

@@ -29,8 +29,8 @@ idempotent), analyzes, lowers and executes in simulation and generated C#.
   record. **Zero records is a no-op:** an empty relationship, or a `where` that matches none, runs
   nothing and the action succeeds (`2026-10-17-for-zero-records-is-a-no-op.md`).
 - **Fail-fast:** the first failing body effect fails the whole `for`; later records are not
-  visited. The simulator rolls back the failed action; generated C# keeps what earlier records
-  already wrote.
+  visited. Both hosts roll the failed action back (L-03c), so nothing earlier records wrote
+  survives it.
 - **Legality:** the body may write only the owning entity's own state. An `assign` through the
   binder or a relationship is another entity's state and is `DMEFF012`; mutate that entity with
   `invoke x.Action` instead.

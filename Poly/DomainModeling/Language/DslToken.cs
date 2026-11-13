@@ -66,10 +66,10 @@ public readonly record struct DslToken(DslTokenKind Kind, int Start, int Length,
 
     /// <summary>
     /// Transitional decoded text: a fixed kind's canonical text, an identifier's <see cref="Name"/>, a number's
-    /// slice, a string literal's <see cref="Unescape"/>, and <c>""</c> at end of input. G-13 moves its readers
-    /// onto the span members and deletes it.
+    /// slice, a string literal's <see cref="Unescape"/>, and <c>""</c> at end of input. G-13a moved every reader
+    /// onto the span members and made a read a compile error; G-13b deletes it.
     /// </summary>
-    [Obsolete("Read Span, Name(), Unescape() or TextEquals instead; Text is the G-12 transitional shim that G-13 deletes.", DiagnosticId = "POLYTOK001")]
+    [Obsolete("Read Span, Name(), Unescape() or TextEquals instead; Text is the G-12 transitional shim that G-13 deletes.", error: true, DiagnosticId = "POLYTOK001")]
     public string Text => Kind switch {
         DslTokenKind.EndOfFile => "",
         DslTokenKind.Identifier => Name(),

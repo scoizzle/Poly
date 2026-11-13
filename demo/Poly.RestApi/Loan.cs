@@ -46,6 +46,7 @@ internal class Loan : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfRenew();
             if (!__result.IsSuccess)
             {
@@ -79,6 +80,7 @@ internal class Loan : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfReturn();
             if (!__result.IsSuccess)
             {
@@ -113,6 +115,7 @@ internal class Loan : Poly.Runtime.IActionScoped
     }
     internal void RegisterPatronLoansOverdueSubscriber(Patron subscriber)
     {
+        Poly.Runtime.ActionScope.Touch(this);
         if (this._patronLoansOverdueSubscribers == null)
         {
             this._patronLoansOverdueSubscribers = new List<Patron>();
@@ -128,6 +131,7 @@ internal class Loan : Poly.Runtime.IActionScoped
     }
     internal void RegisterPatronLoansReturnedSubscriber(Patron subscriber)
     {
+        Poly.Runtime.ActionScope.Touch(this);
         if (this._patronLoansReturnedSubscribers == null)
         {
             this._patronLoansReturnedSubscribers = new List<Patron>();
@@ -143,7 +147,7 @@ internal class Loan : Poly.Runtime.IActionScoped
     }
     internal DomainResult NotifyOverdueSubscribers()
     {
-        this.EnterNotifyCascade("Overdue");
+        var __depth = this.EnterNotifyCascade("Overdue");
         try
         {
             if (this._patronLoansOverdueSubscribers != null)
@@ -160,13 +164,13 @@ internal class Loan : Poly.Runtime.IActionScoped
         }
         finally
         {
-            this.ExitNotifyCascade();
+            this.ExitNotifyCascade(__depth);
         }
         return DomainResult.Success();
     }
     internal DomainResult NotifyReturnedSubscribers()
     {
-        this.EnterNotifyCascade("Returned");
+        var __depth = this.EnterNotifyCascade("Returned");
         try
         {
             if (this._patronLoansReturnedSubscribers != null)
@@ -183,30 +187,32 @@ internal class Loan : Poly.Runtime.IActionScoped
         }
         finally
         {
-            this.ExitNotifyCascade();
+            this.ExitNotifyCascade(__depth);
         }
         return DomainResult.Success();
     }
     internal static DomainResult<Loan> Create(Book? book = null, Patron? borrower = null, string? status = null, DateTime? dueDate = null, DateTime? returnedAt = null, long? timesRenewed = null)
     {
         var created = new Loan(book, borrower, status, dueDate, returnedAt, timesRenewed);
+        Poly.Runtime.ActionScope.Create(created, "Loan");
         if (borrower != null)
         {
             borrower.AttachLoans(created);
         }
         return DomainResult<Loan>.Success(created);
     }
-    private void EnterNotifyCascade(string stageName)
+    private int EnterNotifyCascade(string stageName)
     {
         if (this._notifyDepth >= 16)
         {
             throw new System.InvalidOperationException(string.Concat("Subscription cascade on entity 'Loan' exceeded max depth (16) while notifying '", stageName, "'."));
         }
         this._notifyDepth = this._notifyDepth + 1;
+        return this._notifyDepth - 1;
     }
-    private void ExitNotifyCascade()
+    private void ExitNotifyCascade(int depth)
     {
-        this._notifyDepth = this._notifyDepth - 1;
+        this._notifyDepth = depth;
     }
     public object __Snapshot()
     {

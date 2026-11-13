@@ -10,7 +10,8 @@ namespace Poly.DomainModeling.Lowering;
 public sealed partial class DomainToCSharpExporter {
     /// <summary>
     /// Inverse of a create-in to-one initializer: add an already-constructed child
-    /// to this collection and register this entity's subscriptions on it.
+    /// to this collection and register this entity's subscriptions on it. It touches <c>this</c> first (L-03c): the
+    /// peer it runs on may be an entity the action never touched otherwise.
     /// </summary>
     private static void AddAttachNavMethod(
         Entity entity,
@@ -21,6 +22,7 @@ public sealed partial class DomainToCSharpExporter {
         var targetType = new NamedTypeReference(rel.Target.TypeName);
         var child = new Parameter("child", targetType);
         var body = new List<Node> {
+            TouchThis(),
             new Invoke(
                 new Member(new Member(new ThisReference(), fieldName), "Add"),
                 [child])

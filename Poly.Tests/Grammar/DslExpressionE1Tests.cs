@@ -12,7 +12,7 @@ namespace Poly.Tests.Grammar;
 public class DslExpressionE1Tests {
     private static bool IsMagicIdentifier(DslToken token) =>
         token.Kind == DslTokenKind.Identifier
-        && string.Equals(token.Text, "MAGIC", StringComparison.Ordinal);
+        && token.TextEquals("MAGIC");
 
     /// <summary>
     /// Pack IR for MAGIC: a tiny test-only node. The print binder owns
@@ -82,8 +82,8 @@ public class DslExpressionE1Tests {
         var builder = SessionBuilder.CreateEmpty();
         foreach (var rule in new[] { "expr-primary" }) {
             builder.ExpressionForms.RegisterFold(rule, "duration", match => {
-                var amount = match.Captures["amount"][0].Text;
-                var unit = match.Captures["unit"][0].Text;
+                var amount = match.Captures["amount"][0].Span.ToString();
+                var unit = match.Captures["unit"][0].Name();
                 return new DurationLiteral($"{amount} {unit}");
             });
         }

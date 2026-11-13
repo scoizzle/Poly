@@ -1853,7 +1853,7 @@ revision bump as a whole-document define. A rejected edit changes nothing.
 |---|---|---|
 | `add` | `parent`, `dsl` | Inserts `dsl` before the closing `}` of the entity or stage `parent` (`Product`, `Product.Draft`). `parent: ""` adds at top level. |
 | `remove` | `path` | Deletes the member (`Product.Total`, `Product.Draft.Publish`) and its line. |
-| `replace` | `path`, `dsl` | Replaces the member with `dsl`, re-indented. A trailing `//` comment on the last line stays. |
+| `replace` | `path`, `dsl` | Replaces the member with `dsl`. A snippet whose last line is indented at least as far as the member is kept exactly as written (so a member's own text replaces itself unchanged); a snippet written from column 0 gets the member's indent added to every line. Lines inside a multi-line string are never re-indented. A trailing `//` comment on the last line stays. |
 
 `uses` lines have their own root path, `uses:<pack>`: `{"op":"remove","path":"uses:storage"}`
 removes the line, and `replace` swaps it for another `uses` line. A `uses` path takes no entity

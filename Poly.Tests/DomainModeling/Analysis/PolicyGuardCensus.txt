@@ -98,7 +98,7 @@ docs/probes/scratch-2026-10-14/roastery.poly | 44:5 | DMCS003? | Cannot verify '
 # Shipped corpus: the measured block is unchanged (Census_MatchesGolden green without POLY_UPDATE_GOLDEN);
 # CorpusVerdictSweepTests and GuideExamplesTests green. Appear 0, disappear 0, change 0, so no row needs a simulator test.
 # Shape rows: each moved exactly as predicted. The simulator test behind each moved verdict:
-#   create-require, create-in-require        no runtime claim moved to an error (warning -> clean; the guard admits [0,10] only)
+#   create-require, create-in-require        Item23c_CreateInitializerNarrowedByRequire_IsNotFlagged, CreateIn_NarrowedByRequire_IsNotFlagged: Qty 10 creates, 11 is blocked
 #   create-require-not-0-10 (warning->error) NotPolicy_AcceptDirection_IsClean: Qty 10 blocked, 11 and 100 run (every guard-passing Qty >= 11)
 #   create-require-not-11-100 (-> clean)     NotPolicy_AcceptDirection_IsClean (same runs)
 #   stage-p-action-not-p (clean -> warning)  StagePAndActionNotP_Simulator_AssignFailsAboveSeenRange: Qty 70 passes both guards, the assign fails

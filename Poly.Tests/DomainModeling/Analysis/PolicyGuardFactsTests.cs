@@ -724,6 +724,13 @@ public class PolicyGuardFactsTests {
         await Assert.That($"control={RangeFindings(control)} create={RangeFindings(create)}")
             .IsEqualTo("control=clean create=clean");
         await Assert.That(InitializerOf(Context(domain, create, "Order", "Make"), "Qty")).IsEqualTo("[0,10]");
+
+        // The disappearance is sound at the guard's boundary: 10 creates, 11 is blocked before the create.
+        var exec = Simulator(CreateUnderRequire.Replace("Make: action require", "Make: action -> Item require", StringComparison.Ordinal), out _);
+        await Assert.That(Outcome(exec.Invoke(Make(exec, "Order", ("Qty", 10L)), "Make"))).IsEqualTo("ok");
+        await Assert.That(Items(exec).Single().Bag["Qty"]).IsEqualTo(10L);
+        await Assert.That(Outcome(exec.Invoke(Make(exec, "Order", ("Qty", 11L)), "Make")))
+            .IsEqualTo("fail: 'Make' blocked by policy 'Small'.");
     }
 
     [Test]
@@ -731,6 +738,13 @@ public class PolicyGuardFactsTests {
         var (domain, analysis) = Analyze(CreateInUnderRequire);
         await Assert.That(RangeFindings(analysis)).IsEqualTo("clean");
         await Assert.That(InitializerOf(Context(domain, analysis, "Order", "Make"), "Qty")).IsEqualTo("[0,10]");
+
+        var exec = Simulator(CreateInUnderRequire, out _);
+        var made = exec.Invoke(Make(exec, "Order", ("Qty", 10L)), "Make");
+        await Assert.That(Outcome(made)).IsEqualTo("ok");
+        await Assert.That(made.CreatedChildren.Single().Bag["Qty"]).IsEqualTo(10L);
+        await Assert.That(Outcome(exec.Invoke(Make(exec, "Order", ("Qty", 11L)), "Make")))
+            .IsEqualTo("fail: 'Make' blocked by policy 'Small'.");
     }
 
     /// <summary>The guard fact does not outlive an assign: after <c>assign Qty to 50</c> the create reads 50, so a

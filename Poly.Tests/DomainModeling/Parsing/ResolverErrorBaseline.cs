@@ -58,8 +58,6 @@ internal static class ResolverErrorBaseline {
         ("S:Constraints.length.min/overflow", "T-15", "OverflowException: Value was either too large or too small for an Int32."),
         ("S:Constraints.length.min/fraction", "T-15", "ERR FormatException: The input string '1.5' was not in a correct format."),
         ("S:Constraints.length.max/overflow", "T-15", "OverflowException: Value was either too large or too small for an Int32."),
-        ("S:Temporal.amount.message/fraction", "T-15", "InvalidOperationException: Duration amount '1.5' is not an integer."),
-        ("S:Temporal.amount.message/overflow", "T-15", "InvalidOperationException: Duration amount '99999999999999999999' is not an integer."),
         // G-29: unsupported-keyword errors with no position, and the unknown `uses` id with no position.
         ("S:Effects.unsupported.check/ok", "G-29", "ERR FormatException: 'actor' is not supported in Phase 1a"),
         ("S:Effects.unsupported.check/case", "G-29", "ERR FormatException: 'Schedule' is not supported in Phase 1a"),

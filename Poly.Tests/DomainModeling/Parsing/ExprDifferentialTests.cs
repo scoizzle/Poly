@@ -561,6 +561,9 @@ public sealed class ExprDifferentialTests {
     /// moved result fails until a reviewed entry lists it here.
     /// </summary>
     private static readonly (string Key, string Result, string Reason)[] AcceptedDeltas = [
+        ("99999999999999999999 Days",
+            "ERR Duration amount '99999999999999999999' must be a whole number from 0 to 9223372036854775807. @1:1",
+            "T-15: the message states the real limit of a duration amount."),
         ("0.00000000000000000000000000005",
             "ERR Number '0.00000000000000000000000000005' has 29 digits after the point; the maximum is 28. @1:1",
             "T-15: master rounded the literal to the integer 0; a literal is held exactly or is a positioned error."),

@@ -233,6 +233,27 @@ public sealed class DslNumberTextTests {
         await Assert.That(ReadLiteral("1." + new string('0', 100_000)).Value).IsEqualTo(1L);
     }
 
+    private static string InLateTemporalPolicy(string expression) =>
+        ResolverBaselineTests.Resolve($"domain A\nuses temporal\nX: entity {{\n  Due: Date\n  Late: policy {{ {expression} > Due }}\n}}\n");
+
+    [Test]
+    [Arguments("1.5", "Duration amount '1.5' must be a whole number from 0 to 9223372036854775807, written without a decimal point.")]
+    [Arguments("1.0", "Duration amount '1.0' must be a whole number from 0 to 9223372036854775807, written without a decimal point.")]
+    [Arguments("99999999999999999999", "Duration amount '99999999999999999999' must be a whole number from 0 to 9223372036854775807.")]
+    [Arguments("9223372036854775808", "Duration amount '9223372036854775808' must be a whole number from 0 to 9223372036854775807.")]
+    public async Task DurationAmount_NotAWholeLong_IsPositionedError_InBothFoldPaths(string amount, string detail) {
+        await Assert.That(ExprDifferentialTests.Result($"{amount} Days", digest: false)).IsEqualTo($"ERR {detail} @1:1");
+        await Assert.That(InLateTemporalPolicy($"Now - {amount} Days")).IsEqualTo($"ERR {detail} @5:24");
+    }
+
+    [Test]
+    public async Task DurationAmount_LimitInTheMessage_IsTheLimitEnforced() {
+        var printed = long.MaxValue.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        await Assert.That(ExprDifferentialTests.Result($"{printed} Days", digest: false)).StartsWith("OK ");
+        await Assert.That(InLateTemporalPolicy($"Now - {printed} Days")).StartsWith("OK ");
+        await Assert.That(ExprDifferentialTests.Result("9223372036854775808 Days", digest: false)).Contains($"from 0 to {printed}.");
+    }
+
     [Test]
     public async Task PrinterSites_UseNoNumericFormattingOfTheirOwn() {
         var root = GuideBlocks.RepoRoot();

@@ -1,5 +1,3 @@
-using Poly.Mcp.Tools;
-
 namespace Poly.Tests.Mcp;
 
 /// <summary>
@@ -59,15 +57,10 @@ public class SubscriptionSingleFireTests {
         """;
 
     private static string CreateAndId(string sessionId, string entity, string? props = null) {
-        var create = McpTestTools.Runtime.CreateInstance(sessionId, entity, props);
-        if (!create.Success)
-            throw new InvalidOperationException($"create_instance {entity}: {create.Message}");
-        var json = System.Text.Json.JsonSerializer.Serialize(create.Data);
-        using var doc = System.Text.Json.JsonDocument.Parse(json);
-        if (doc.RootElement.TryGetProperty("instance", out var instance)
-            && instance.TryGetProperty("instanceId", out var id))
-            return id.GetString() ?? throw new InvalidOperationException("missing instanceId");
-        throw new InvalidOperationException("missing instance payload");
+        var create = McpTestTools.Surface.Create(sessionId, entity, props);
+        if (!create.Ok)
+            throw new InvalidOperationException($"create_instance {entity}: {create.Summary}");
+        return create.InstanceId;
     }
 
     private static long Counter(string sessionId, string instanceId, string property) {
@@ -76,16 +69,16 @@ public class SubscriptionSingleFireTests {
     }
 
     private static bool Invoke(string sessionId, string instanceId, string action, string? args = null) {
-        var result = McpTestTools.Runtime.InvokeAction(sessionId, instanceId, action, args);
-        if (!result.Success)
-            throw new InvalidOperationException($"invoke_action {action}: {result.Message}");
+        var result = McpTestTools.Surface.Invoke(sessionId, instanceId, action, args);
+        if (!result.Ok)
+            throw new InvalidOperationException($"invoke_action {action}: {result.Summary}");
         return true;
     }
 
     [Test]
     public async Task OneFailTransition_FiresEachHandlerOnce() {
-        var (sessionId, _) = McpTestTools.Store.Create("SingleFire");
-        await Assert.That(McpTestTools.Dsl.ApplyDsl(sessionId, Queue).Success).IsTrue();
+        var sessionId = McpTestTools.Surface.Open("SingleFire");
+        await Assert.That(McpTestTools.Surface.Define(sessionId, Queue).Success).IsTrue();
 
         var queueId = CreateAndId(sessionId, "Queue", """{"Name":"Q"}""");
         Invoke(sessionId, queueId, "Enqueue", """{"title":"build"}""");
@@ -102,8 +95,8 @@ public class SubscriptionSingleFireTests {
 
     [Test]
     public async Task ThreeFailRetries_CountersStayPerTransition() {
-        var (sessionId, _) = McpTestTools.Store.Create("SingleFireMulti");
-        await Assert.That(McpTestTools.Dsl.ApplyDsl(sessionId, Queue).Success).IsTrue();
+        var sessionId = McpTestTools.Surface.Open("SingleFireMulti");
+        await Assert.That(McpTestTools.Surface.Define(sessionId, Queue).Success).IsTrue();
 
         var queueId = CreateAndId(sessionId, "Queue", """{"Name":"Q"}""");
         Invoke(sessionId, queueId, "Enqueue", """{"title":"build"}""");

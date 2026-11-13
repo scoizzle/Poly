@@ -98,7 +98,7 @@ public sealed class DslTokenStreamBaselineTests {
                 return lines;
             }
 
-            lines.Add($"{t.Kind}\t{t.Offset}\t{t.Length}\t{t.Line}\t{t.Col}\t{Escape(t.Text)}");
+            lines.Add($"{t.Kind}\t{t.Start}\t{t.Length}\t{t.Line}\t{t.Col}\t{Escape(t.Text)}");
             if (t.Kind == DslTokenKind.EndOfFile)
                 return lines;
             reader.Consume(1);

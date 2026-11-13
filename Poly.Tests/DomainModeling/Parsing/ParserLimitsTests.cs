@@ -255,6 +255,69 @@ public class ParserLimitsTests {
         await Assert.That(parsed).IsNotNull();
     }
 
+    // ── G-25: a path of N words nests N - 1 navigations, counted like a chain ─────────
+
+    internal static string Words(int words) => string.Concat(Enumerable.Repeat("Next ", words - 1)) + "Flag";
+
+    /// <summary>The zero-based offset of word <paramref name="index"/> in <see cref="Words"/>: every word before
+    /// <c>Flag</c> is "Next " (five characters).</summary>
+    private static int WordOffset(int index) => 5 * index;
+
+    [Test]
+    public async Task Path_257Words_ReturnsExpression() {
+        var (parsed, failure) = ParseOnLarge(Words(Limit + 1));
+
+        await Assert.That(failure).IsNull();
+        await Assert.That(parsed).IsNotNull();
+    }
+
+    [Test]
+    [Arguments(258)]
+    [Arguments(2000)]
+    public async Task Path_PastTheLimit_IsPositionedDepthErrorOnThe258thWord(int words) {
+        var text = Words(words);
+        var (parsed, failure) = ParseOnLarge(text);
+
+        await Assert.That(parsed).IsNull();
+        await Assert.That(failure).IsTypeOf<GrammarException>();
+        var error = (GrammarException)failure!;
+        await Assert.That(error.Detail).IsEqualTo(DslLimits.DepthDetail);
+        await Assert.That(error.Offset).IsEqualTo(WordOffset(Limit + 1));
+        await Assert.That(error.Column).IsEqualTo(WordOffset(Limit + 1) + 1);
+        await Assert.That(text.Substring(error.Offset, error.Length)).IsEqualTo(words == 258 ? "Flag" : "Next");
+    }
+
+    /// <summary>A path's navigations count under the enclosing levels: 255 <c>not</c>s leave room for two words, not three.</summary>
+    [Test]
+    public async Task Path_UnderNots_CountsItsNavigationsWithTheEnclosingLevels() {
+        var (fits, accepted) = ParseOnLarge(string.Concat(Enumerable.Repeat("not ", Limit - 1)) + "Next Flag");
+        await Assert.That(accepted).IsNull();
+        await Assert.That(fits).IsNotNull();
+
+        var text = string.Concat(Enumerable.Repeat("not ", Limit - 1)) + "Next Next Flag";
+        var (over, rejected) = ParseOnLarge(text);
+        await Assert.That(over).IsNull();
+        var error = (GrammarException)rejected!;
+        await Assert.That(error.Detail).IsEqualTo(DslLimits.DepthDetail);
+        // 255 nots, then the second word opens level 256 and the third would open 257.
+        await Assert.That(error.Offset).IsEqualTo(4 * (Limit - 1) + WordOffset(2));
+    }
+
+    /// <summary>A path comparison sits one level under its path: 256 words plus the comparison is 256 levels, 257 words is past it.</summary>
+    [Test]
+    public async Task PathComparison_CountsTheComparisonUnderThePath() {
+        var (fits, accepted) = ParseOnLarge(string.Concat(Enumerable.Repeat("Next ", Limit - 1)) + "Qty > 1");
+        await Assert.That(accepted).IsNull();
+        await Assert.That(fits).IsNotNull();
+
+        var (over, rejected) = ParseOnLarge(string.Concat(Enumerable.Repeat("Next ", Limit)) + "Qty > 1");
+        await Assert.That(over).IsNull();
+        var error = (GrammarException)rejected!;
+        await Assert.That(error.Detail).IsEqualTo(DslLimits.DepthDetail);
+        // Every navigation fits (256), so the comparison is the level past the limit: the error is on the path's first word.
+        await Assert.That(error.Offset).IsEqualTo(0);
+    }
+
     // ── the matcher budget, and the where-chain, are positioned errors too ────────────
 
     /// <summary>

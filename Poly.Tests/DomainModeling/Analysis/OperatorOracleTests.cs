@@ -547,9 +547,10 @@ public class OperatorOracleTests {
     ];
 
     private static readonly LedgerRule[] AbiRules = [
-        // T-22a rejects the undefined bitwise, shift and unary-minus cells: what still executes is the 48 Date/DateTime offset
-        // cells (T-10) and the 4 Text ordering cells (T-07; Boolean ordering the emitter refuses).
-        new(OracleKind.AbiDivergesFromTree, "*", "*", "*", "executes an undefined cell", "T-21 (the ABI must reject what the tree does not define); T-18b adds 231 native-integer cells: the accepted-undefined bitwise, shift and date cells above that the VM runs; T-22a leaves the date and Text-ordering cells", 52, "536f37f3fdec568c"),
+        // T-22a rejects the undefined bitwise, shift and unary-minus cells: what still executes is the Date and DateTime
+        // offset cells the analysis's date fence accepts (T-10) and Text ordering (T-07); Boolean ordering the emitter refuses.
+        new(OracleKind.AbiDivergesFromTree, "Date,DateTime", "Add,Subtract", "*", "executes an undefined cell", "T-10 (the date fence accepts Date and DateTime plus or minus a number the provider defines no operator for)", 48, "10a8b9989a446795"),
+        new(OracleKind.AbiDivergesFromTree, "Text", Ordering, "Text", "executes an undefined cell", "T-07 (#631 ordering legality: TextAndBooleanOrderingRule)", 4, "04c3d80b8bd14c13"),
         // T-22a adds 50: the shift-count policy cells of a small integer or char left, whose left converts to Int32 as for an int count.
         new(OracleKind.AbiDivergesFromTree, "*", "*", "*", "unstated conversion", "T-21 (T-04 and Lower state the conversion node; the emitter stops converting); T-18b adds 520 native-integer cells (T-18b lock amendment 7: 'its unstated conversion is then T-21's ledger line'); T-22a adds the 50 shift-count policy cells of a small left", 2299, "0e5ea4c8443835bf"),
         // Wrong values (issue 832; -Decimal and -Duration give -1). T-22a states the bitwise and shift type, so the 255 type-only and
@@ -606,9 +607,9 @@ public class OperatorOracleTests {
         (40, "8f48a0defcb327e9"), (20, "7ba4ce6c196e991e"), (20, "5b5cc5a3f2ece6cd"), (8, "a2d892f80f998382")
     ];
 
-    /// <summary>T-22a moved these (its PR lists each cell): 1059 to 44, 1729 to 1759, and 115 to 129.</summary>
+    /// <summary>T-22a moved these (its PR lists each cell): 1059 to 44 (40 date cells, T-10; 4 Text ordering cells, T-07), 1729 to 1759, and 115 to 129.</summary>
     private static readonly (int Count, string Checksum)[] MasterAbi = [
-        (44, "fb7ed96371e3fd22"), (1759, "c6974bac9345ce1e"), (129, "dc63aa48893c21ef")
+        (40, "975825d5af45e060"), (4, "04c3d80b8bd14c13"), (1759, "c6974bac9345ce1e"), (129, "dc63aa48893c21ef")
     ];
 
     private static bool IsNative(string? operand) => operand is "NInt" or "NUInt";

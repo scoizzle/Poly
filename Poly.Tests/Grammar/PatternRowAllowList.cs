@@ -106,9 +106,6 @@ internal static class PatternRowAllowList {
             ["group", "not", "duration", "match", "call", "quant-where", "count-bare", "sum-prop", "exists",
                 "where-nav", "path-is-not", "path-cmp", "path"],
             "ExpressionPrinter dispatches this head by hand (the FallbackBinding list) until G-34 (#856) gives expression rows their print half.", "G-34"),
-        PatternRowEntry.Row(Dsl, PatternRowEntryKind.PrefixOnly, "uses", "pinned",
-            "The pin is a raw same-line token run (DslSyntaxTree.TryReadUse); the row's Identifier is only its print hole, so a dotted numeric pin does not re-read through the row. G-27's same-line Run element gives the row a real pin slot, and G-29 moves `uses` onto it.",
-            "G-29"),
     ];
 
     private static readonly PatternRowEntry[] CSharpEntries = [

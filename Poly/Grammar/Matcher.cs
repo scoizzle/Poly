@@ -118,7 +118,7 @@ public sealed class Matcher<TToken, TTokenKind>
         var captures = new Dictionary<string, IReadOnlyList<TToken>>(StringComparer.Ordinal);
         var pos = offset;
         foreach (var element in pattern.Elements) {
-            if (!TryMatchElement(element, pos, captures, out var piece)) {
+            if (!TryMatchElement(element, pos, captures, tokens, out var piece)) {
                 match = null!;
                 return false;
             }
@@ -141,10 +141,12 @@ public sealed class Matcher<TToken, TTokenKind>
         captures[name] = tokens;
     }
 
+    /// <param name="matched">The tokens this pattern has matched before <paramref name="element"/> (a Run's first previous token).</param>
     private bool TryMatchElement(
         IPatternElement<TToken, TTokenKind> element,
         int offset,
         Dictionary<string, IReadOnlyList<TToken>> captures,
+        IReadOnlyList<TToken> matched,
         out Piece piece) {
         switch (element) {
             case MatchKind<TToken, TTokenKind> k:
@@ -176,7 +178,7 @@ public sealed class Matcher<TToken, TTokenKind>
                 return true;
 
             case Optional<TToken, TTokenKind> o:
-                if (TryMatchElement(o.Inner, offset, captures, out piece))
+                if (TryMatchElement(o.Inner, offset, captures, matched, out piece))
                     return true;
                 piece = Piece.Empty;
                 return true;
@@ -222,6 +224,29 @@ public sealed class Matcher<TToken, TTokenKind>
                 piece = Piece.Empty;
                 return true;
 
+            case Word<TToken, TTokenKind> w:
+                var wt = _reader.Peek(offset);
+                if (_reader.EndOfStream(wt.Kind) || !w.Matches(wt)) {
+                    piece = default;
+                    return false;
+                }
+                piece = Piece.TokensOnly([wt]);
+                return true;
+
+            case Slot<TToken, TTokenKind>:
+                // Zero width: the row ends here and the host reads what follows.
+                piece = Piece.Empty;
+                return true;
+
+            case Run<TToken, TTokenKind> run:
+                if (!TryRun(run, offset, matched, out var runTokens)) {
+                    piece = default;
+                    return false;
+                }
+                RecordCapture(captures, run.Name, runTokens);
+                piece = Piece.TokensOnly(runTokens);
+                return true;
+
             default:
                 throw new InvalidOperationException($"Unknown pattern element '{element.GetType().Name}'");
         }
@@ -235,6 +260,22 @@ public sealed class Matcher<TToken, TTokenKind>
         }
         consumed = [t];
         return true;
+    }
+
+    /// <summary>Takes tokens while each continues the one before it; the first's previous token is the last one matched.</summary>
+    private bool TryRun(Run<TToken, TTokenKind> run, int offset, IReadOnlyList<TToken> matched, out List<TToken> consumed) {
+        consumed = [];
+        if (matched.Count == 0)
+            return false;
+        var previous = matched[^1];
+        for (var index = 0; ; index++) {
+            var candidate = _reader.Peek(offset + index);
+            if (_reader.EndOfStream(candidate.Kind) || !run.Continues(previous, candidate, index))
+                break;
+            consumed.Add(candidate);
+            previous = candidate;
+        }
+        return consumed.Count > 0;
     }
 
     private bool TryRepeat(Repeat<TToken, TTokenKind> r, int offset, out Piece piece) {

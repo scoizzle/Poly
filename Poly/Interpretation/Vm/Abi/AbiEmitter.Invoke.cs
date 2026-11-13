@@ -64,9 +64,7 @@ public static partial class AbiEmitter {
                     int[] argSlots = new int[invoke.Arguments.Length];
                     var bridgeArgs = new Expression?[invoke.Arguments.Length];
                     for (int i = 0; i < invoke.Arguments.Length; i++) {
-                        var parameterType = i < methodParams.Length
-                            ? methodParams[i].ParameterType
-                            : null;
+                        var parameterType = CallParameterType(invoke, i, ctx.Analysis);
                         if (TryBuildLambdaBridgeArgument(
                                 invoke.Arguments[i], parameterType, ctx,
                                 out var bridgePrelude, out var bridgeArgument)) {
@@ -189,6 +187,16 @@ public static partial class AbiEmitter {
             if (IsTypeNameReceiver(member.Value, ctx))
                 throw new InvalidOperationException(
                     $"Member '{member.MemberName}' on a type name is not a resolved static method.");
+            // A lambda quoted at this call's Expression<> parameter has no closure to pass by name; the body's own
+            // reject is why the call came here, so it is the reason to name.
+            if (astBodyReject is not null) {
+                foreach (var argument in invoke.Arguments) {
+                    if (argument is Lambda quoted && ctx.QuoteOnlyLambdas.Contains(quoted))
+                        throw new InvalidOperationException(
+                            $"VM compile rejected: AST method '{member.MemberName}' has no compilable body, so the call is dispatched by name, "
+                            + $"which cannot pass a lambda quoted for its Expression<> parameter: {Reason(astBodyReject)}.");
+                }
+            }
 
             var astReceiver = ctx.OpenRing();
             var astInstanceSlot = astReceiver.AddValue(CompileNode(member.Value, ctx));
@@ -504,6 +512,83 @@ public static partial class AbiEmitter {
     }
 
     /// <summary>
+    /// The CLR type of the parameter that receives argument <paramref name="index"/> of <paramref name="call"/>: of the
+    /// resolved CLR method, the resolved module method with a body, or the module constructor. Null when the call resolves
+    /// to none of them, the CLR method has no <see cref="MethodInfo"/>, or the index is past the parameter list. The one
+    /// answer to where a lambda argument is quoted: <see cref="EmitInvoke"/>, <see cref="EmitAstArguments"/> and
+    /// <see cref="CollectQuoteOnlyLambdas"/> all read it.
+    /// </summary>
+    private static Type? CallParameterType(Node call, int index, AnalysisResult? analysis) {
+        if (analysis is null || index < 0)
+            return null;
+        var resolved = call switch {
+            Invoke { Delegate: Member member } invoke => analysis.GetResolvedMember(invoke) ?? analysis.GetResolvedMember(member),
+            New created => analysis.GetResolvedMember(created),
+            _ => null
+        };
+        return resolved switch {
+            ClrMethod { MethodInfo: { } method } when call is Invoke =>
+                method.GetParameters() is var parameters && index < parameters.Length ? parameters[index].ParameterType : null,
+            AstMethodDefinition astMethod when call is Invoke && HasExecutableBody(astMethod.DefinitionNode.Body) =>
+                AstParameterType(astMethod.DefinitionNode.Parameters, index, analysis),
+            AstConstructorDefinition constructor when call is New =>
+                AstParameterType(constructor.Definition.Parameters, index, analysis),
+            _ => null
+        };
+    }
+
+    private static Type? AstParameterType(IReadOnlyList<Parameter>? parameters, int index, AnalysisResult analysis) =>
+        parameters is not null && index < parameters.Count ? ParameterClrType(parameters[index], analysis) : null;
+
+    /// <summary>
+    /// The lambdas the bridge quotes and the main emitter never compiles (T-19b): every occurrence is a direct argument of
+    /// a call whose parameter there is <c>Expression&lt;D&gt;</c> (<see cref="CallParameterType"/>). A lambda used anywhere
+    /// else (a delegate argument, a stored value, an invoked lambda) keeps its function-table entry, and so does a lambda
+    /// nested in a quoted one, which the bridge refuses. The walk follows the analysis's node replacements as
+    /// <see cref="Compile"/> does; an occurrence it cannot place keeps the entry.
+    /// </summary>
+    private static HashSet<Lambda> CollectQuoteOnlyLambdas(Node root, AnalysisResult analysis) {
+        var quoted = new HashSet<Lambda>(ReferenceEqualityComparer.Instance);
+        var kept = new HashSet<Lambda>(ReferenceEqualityComparer.Instance);
+        var replacements = new HashSet<Node>(ReferenceEqualityComparer.Instance);
+        Visit(root, quotedHere: false, insideQuote: false);
+        quoted.ExceptWith(kept);
+        return quoted;
+
+        void Visit(Node node, bool quotedHere, bool insideQuote) {
+            if (node is Lambda lambda) {
+                (quotedHere && !insideQuote ? quoted : kept).Add(lambda);
+                insideQuote |= quotedHere;
+            }
+            Node[]? arguments = node switch {
+                Invoke invoke => invoke.Arguments,
+                New created => created.Arguments,
+                _ => null
+            };
+            if (arguments is not null) {
+                for (int i = 0; i < arguments.Length; i++) {
+                    bool quote = arguments[i] is Lambda && IsExpressionBridgeParameter(CallParameterType(node, i, analysis));
+                    Visit(arguments[i], quote, insideQuote);
+                }
+            }
+            foreach (var child in node.Children) {
+                if (child is not null && (arguments is null || !IsArgument(arguments, child)))
+                    Visit(child, quotedHere: false, insideQuote);
+            }
+            if (analysis.GetNodeReplacement(node) is { } replacement && replacement != node && replacements.Add(replacement))
+                Visit(replacement, quotedHere: false, insideQuote);
+        }
+
+        static bool IsArgument(Node[] arguments, Node child) {
+            foreach (var argument in arguments) {
+                if (ReferenceEquals(argument, child))
+                    return true;
+            }
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Compile a lambda body as a standalone <c>Action&lt;VmState&gt;</c> delegate.
     /// Parameters are read from value-stack slots.
     /// Captured bindings are read from/written to upvalue cells in
@@ -519,7 +604,8 @@ public static partial class AbiEmitter {
         HashSet<object> capturedBindings,
         bool instanceSlot = false,
         Type? asyncReturn = null,
-        Type? iteratorElement = null) {
+        Type? iteratorElement = null,
+        HashSet<Lambda>? quoteOnlyLambdas = null) {
 
         var fnCtx = new Context();
         if (iteratorElement is not null) {
@@ -532,6 +618,8 @@ public static partial class AbiEmitter {
         fnCtx.AsyncReturn = asyncReturn;
         fnCtx.IsCompiledFunctionBody = true;
         fnCtx.CapturedBindings = capturedBindings;
+        if (quoteOnlyLambdas is not null)
+            fnCtx.QuoteOnlyLambdas = quoteOnlyLambdas;
         // Instance calls pass the receiver handle at frame slot 0. User
         // parameters start at slot 1 and are matched by the parameter node.
         if (instanceSlot)
@@ -827,7 +915,7 @@ public static partial class AbiEmitter {
     /// the caller's analysis of the argument node.
     /// </summary>
     private static List<Expression> EmitAstArguments(
-        IReadOnlyList<Node> arguments, IReadOnlyList<Parameter> parameters,
+        Node call, IReadOnlyList<Node> arguments, IReadOnlyList<Parameter> parameters,
         IReadOnlyList<IParameter> declaredParameters,
         string callee, List<Expression> seq, Context ctx) {
         if (arguments.Count > parameters.Count)
@@ -840,7 +928,7 @@ public static partial class AbiEmitter {
         var values = new List<Expression>(parameters.Count);
         var ring = ctx.OpenRing();
         for (int i = 0; i < arguments.Count; i++) {
-            var parameterType = ParameterClrType(parameters[i], ctx);
+            var parameterType = CallParameterType(call, i, ctx.Analysis);
             if (IsExpressionBridgeParameter(parameterType)
                 && TryBuildLambdaBridgeArgument(
                     arguments[i], parameterType, ctx,
@@ -935,7 +1023,7 @@ public static partial class AbiEmitter {
         }
 
         var parameters = definition.Parameters ?? [];
-        var args = EmitAstArguments(invoke.Arguments, parameters, method.Parameters.ToArray(),
+        var args = EmitAstArguments(invoke, invoke.Arguments, parameters, method.Parameters.ToArray(),
             $"method '{method.Name}'", seq, ctx);
         var inits = new List<Expression>(parameters.Count + 1);
         if (receiver is not null)

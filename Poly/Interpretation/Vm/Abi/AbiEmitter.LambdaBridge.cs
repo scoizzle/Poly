@@ -42,8 +42,7 @@ public static partial class AbiEmitter {
         if (!DelegateShape.TryGet(parameterType, out var delegateType, out _))
             return false;
         if (delegateType.ContainsGenericParameters)
-            throw new InvalidOperationException(
-                $"VM compile rejected: open generic delegate '{delegateType}' is not supported by the lambda bridge.");
+            throw ShapeRefusal($"the open generic delegate '{delegateType}' is not supported.");
 
         var invokeMethod = delegateType.GetMethod(nameof(Action.Invoke))
             ?? throw new InvalidOperationException(
@@ -115,20 +114,32 @@ public static partial class AbiEmitter {
     private static void CheckDelegateShape(
         Lambda lambda, Type delegateType, MethodInfo invokeMethod, Context ctx) {
         var delegateParameters = invokeMethod.GetParameters();
-        if (lambda.Parameters.Count != delegateParameters.Length) {
-            throw new InvalidOperationException(
-                $"VM compile rejected: lambda has {lambda.Parameters.Count} parameter(s) but delegate '{delegateType.Name}' expects {delegateParameters.Length}.");
-        }
+        if (lambda.Parameters.Count != delegateParameters.Length)
+            throw ShapeRefusal($"it has {lambda.Parameters.Count} parameter(s) but delegate '{delegateType.Name}' expects {delegateParameters.Length}.");
         for (int i = 0; i < delegateParameters.Length; i++) {
             if (delegateParameters[i].ParameterType.IsByRef)
-                throw new InvalidOperationException(
-                    $"VM compile rejected: delegate parameter '{delegateParameters[i].Name}' is by-ref; the lambda bridge supports value parameters only.");
+                throw ShapeRefusal($"delegate parameter '{delegateParameters[i].Name}' is by-ref; the bridge supports value parameters only.");
             var declared = ParameterClrType(lambda.Parameters[i], ctx);
-            if (declared is not null && declared != delegateParameters[i].ParameterType) {
-                throw new InvalidOperationException(
-                    $"VM compile rejected: lambda parameter '{lambda.Parameters[i].Name}' is '{declared.Name}' but delegate '{delegateType.Name}' expects '{delegateParameters[i].ParameterType.Name}'.");
-            }
+            if (declared is not null && declared != delegateParameters[i].ParameterType)
+                throw ShapeRefusal($"lambda parameter '{lambda.Parameters[i].Name}' is '{declared.Name}' but delegate '{delegateType.Name}' expects '{delegateParameters[i].ParameterType.Name}'.");
         }
+    }
+
+    /// <summary>
+    /// The bridge's positioned refusal for a raw exception from the body compile (the Expression API's own, or another
+    /// emitter's): it names the body and keeps the raw reason, without a second <c>VM compile rejected:</c>.
+    /// </summary>
+    internal static InvalidOperationException QuoteBodyRefusal(Node body, Type delegateType, Exception raw) =>
+        new($"VM compile rejected: lambda bridge cannot quote the body '{body.GetType().Name}' of a lambda for '{delegateType.Name}': {Reason(raw.Message)}.", raw);
+
+    /// <summary>
+    /// The bridge's refusal of a lambda's shape before it builds the argument: its message and its mark, so a caller never
+    /// counts it as the main emitter's.
+    /// </summary>
+    private static InvalidOperationException ShapeRefusal(string reason) {
+        var refusal = new InvalidOperationException($"VM compile rejected: lambda bridge refuses the lambda: {reason}");
+        refusal.Data[LambdaBridgeExceptionKey] = true;
+        return refusal;
     }
 
     /// <summary>A forwarded delegate has no lambda AST to check, but a by-ref Invoke
@@ -290,8 +301,10 @@ public static partial class AbiEmitter {
     }
 
     /// <summary>
-    /// The <see cref="Exception.Data"/> key set on every exception raised while the bridge quotes a lambda, so a caller can
-    /// tell the bridge's refusal from the main emitter's (which compiles the same body into the function table first).
+    /// The <see cref="Exception.Data"/> key set on every exception raised while the bridge checks or quotes a lambda, so a
+    /// caller can tell the bridge's refusal from the main emitter's. A lambda passed directly at an <c>Expression&lt;D&gt;</c>
+    /// boundary has no function-table entry (<see cref="CollectQuoteOnlyLambdas"/>); any other lambda the main emitter still
+    /// compiles there, before the call quotes it.
     /// </summary>
     internal const string LambdaBridgeExceptionKey = "Poly.Interpretation.Vm.Abi.LambdaBridge";
 
@@ -322,7 +335,14 @@ public static partial class AbiEmitter {
             pure.AddCapture(capture, local);
         }
 
-        var body = CompilePureLambdaBody(lambda.Body, pure);
+        Expression body;
+        try {
+            body = CompilePureLambdaBody(lambda.Body, pure);
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException
+            && !ex.Message.StartsWith("VM compile rejected: lambda bridge", StringComparison.Ordinal)) {
+            throw QuoteBodyRefusal(lambda.Body, delegateType, ex);
+        }
         var returnType = invokeMethod.ReturnType;
         if (returnType == typeof(void)) {
             if (body.Type != typeof(void)) {
@@ -433,9 +453,11 @@ public static partial class AbiEmitter {
     }
 
 
-    private static Type? ParameterClrType(Parameter parameter, Context ctx) =>
+    private static Type? ParameterClrType(Parameter parameter, Context ctx) => ParameterClrType(parameter, ctx.Analysis);
+
+    private static Type? ParameterClrType(Parameter parameter, AnalysisResult? analysis) =>
         ClrTypeResolution.Resolve(
-            parameter.TypeReference, parameter, node => ctx.Analysis?.GetResolvedType(node));
+            parameter.TypeReference, parameter, node => analysis?.GetResolvedType(node));
 
     private static string CaptureName(Capture capture) =>
         capture.Variable?.Name ?? capture.Parameter!.Name;

@@ -38,7 +38,6 @@ internal class Opportunity : Poly.Runtime.IActionScoped
         this._lines = new List<Line>(lines ?? new List<Line>());
         this._quotes = new List<Quote>(quotes ?? new List<Quote>());
         this.CurrentStage = OpportunityStage.Qualify;
-        this.Probability = 10L;
     }
     public string Title { get; private set; } = default!;
     public decimal Amount { get; private set; }
@@ -593,6 +592,12 @@ internal class Opportunity : Poly.Runtime.IActionScoped
         }
         return DomainResult.Success();
     }
+    private DomainResult __EnterInitialStage()
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.Probability = 10L;
+        return DomainResult.Success();
+    }
     internal static DomainResult<Opportunity> Create(string title, decimal amount, Account? account = null, Contact? contact = null, IEnumerable<Activity>? activities = null, IEnumerable<Line>? lines = null, IEnumerable<Quote>? quotes = null, DateOnly? closeBy = null)
     {
         if (string.IsNullOrEmpty(title))
@@ -609,6 +614,11 @@ internal class Opportunity : Poly.Runtime.IActionScoped
         }
         var created = new Opportunity(title, amount, account, contact, activities, lines, quotes, closeBy);
         Poly.Runtime.ActionScope.Create(created, "Opportunity");
+        var __entry = created.__EnterInitialStage();
+        if (!__entry.IsSuccess)
+        {
+            return DomainResult<Opportunity>.Failure(__entry.Error!);
+        }
         if (account != null)
         {
             account.AttachOpportunities(created);

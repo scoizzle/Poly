@@ -29,7 +29,6 @@ internal class Student : Poly.Runtime.IActionScoped
         this.LastGrade = lastGrade;
         this._enrollments = new List<Enrollment>(enrollments ?? new List<Enrollment>());
         this.CurrentStage = StudentStage.Active;
-        this.InitializeSubscriptions();
     }
     public string Name { get; private set; } = default!;
     public string Email { get; private set; } = default!;
@@ -388,6 +387,7 @@ internal class Student : Poly.Runtime.IActionScoped
         }
         var created = new Student(name, email, enrollments, maxCredits, openCredits, holds, completions, lastGrade);
         Poly.Runtime.ActionScope.Create(created, "Student");
+        created.InitializeSubscriptions();
         db.Record("Student", "Email", email);
         return DomainResult<Student>.Success(created);
     }

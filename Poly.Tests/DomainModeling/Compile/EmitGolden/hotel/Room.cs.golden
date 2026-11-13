@@ -30,7 +30,6 @@ internal class Room : Poly.Runtime.IActionScoped
         this.RoomType = roomType;
         this._stays = new List<Reservation>(stays ?? new List<Reservation>());
         this.CurrentStage = RoomStage.InService;
-        this.InitializeSubscriptions();
     }
     public string Number { get; private set; } = default!;
     public long Floor { get; private set; }
@@ -237,6 +236,7 @@ internal class Room : Poly.Runtime.IActionScoped
         }
         var created = new Room(number, floor, nightlyRate, maxOccupancy, property, roomType, stays, occupied, dirty, offline);
         Poly.Runtime.ActionScope.Create(created, "Room");
+        created.InitializeSubscriptions();
         if (property != null)
         {
             property.AttachRooms(created);

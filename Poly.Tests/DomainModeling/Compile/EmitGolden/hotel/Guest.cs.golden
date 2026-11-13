@@ -30,7 +30,6 @@ internal class Guest : Poly.Runtime.IActionScoped
         this._events = new List<EventHold>(events ?? new List<EventHold>());
         this._reservations = new List<Reservation>(reservations ?? new List<Reservation>());
         this.CurrentStage = GuestStage.Active;
-        this.InitializeSubscriptions();
     }
     public string Name { get; private set; } = default!;
     public string Email { get; private set; } = default!;
@@ -306,6 +305,7 @@ internal class Guest : Poly.Runtime.IActionScoped
         }
         var created = new Guest(name, email, phone, events, reservations, stayCount, nightCount, eventCount);
         Poly.Runtime.ActionScope.Create(created, "Guest");
+        created.InitializeSubscriptions();
         db.Record("Guest", "Email", email);
         return DomainResult<Guest>.Success(created);
     }

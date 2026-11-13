@@ -30,7 +30,6 @@ internal class Section : Poly.Runtime.IActionScoped
         this._enrollments = new List<Enrollment>(enrollments ?? new List<Enrollment>());
         this._waitlist = new List<WaitOffer>(waitlist ?? new List<WaitOffer>());
         this.CurrentStage = SectionStage.Open;
-        this.InitializeSubscriptions();
     }
     public long Cap { get; private set; }
     public long SeatsTaken { get; private set; }
@@ -301,6 +300,7 @@ internal class Section : Poly.Runtime.IActionScoped
         }
         var created = new Section(cap, offeringTerm, course, instructor, enrollments, waitlist, seatsTaken, offeredSeats, waitCleared);
         Poly.Runtime.ActionScope.Create(created, "Section");
+        created.InitializeSubscriptions();
         return DomainResult<Section>.Success(created);
     }
     private void InitializeSubscriptions()

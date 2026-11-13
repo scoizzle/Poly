@@ -4,7 +4,6 @@
 
 using System;
 using System.Collections.Generic;
-using Poly.DomainModeling.Runtime;
 using Poly.Runtime;
 
 namespace Library;
@@ -33,7 +32,6 @@ internal class Patron : Poly.Runtime.IActionScoped
         this._loans = new List<Loan>(loans ?? new List<Loan>());
         this._fines = new List<Fine>(fines ?? new List<Fine>());
         this.CurrentStage = PatronStage.Active;
-        this.InitializeSubscriptions();
     }
     public string Name { get; private set; } = default!;
     public string Email { get; private set; } = default!;
@@ -259,7 +257,7 @@ internal class Patron : Poly.Runtime.IActionScoped
         var create0 = Fine.Create("Overdue item", 5L);
         if (!create0.IsSuccess)
         {
-            throw new ConstraintFailureException(create0.ErrorMessage ?? "");
+            return DomainResult.Failure(create0.Error!);
         }
         this.OutstandingFines = this.OutstandingFines + 5L;
         return DomainResult.Success();
@@ -308,6 +306,7 @@ internal class Patron : Poly.Runtime.IActionScoped
         }
         var created = new Patron(name, email, maxItems, loans, fines, memberSince, status, currentBorrowCount, outstandingFines);
         Poly.Runtime.ActionScope.Create(created, "Patron");
+        created.InitializeSubscriptions();
         db.Record("Patron", "Email", email);
         return DomainResult<Patron>.Success(created);
     }

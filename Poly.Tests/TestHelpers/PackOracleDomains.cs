@@ -314,8 +314,42 @@ public static class PackOracleDomains {
         """,
         "/api/orders");
 
+    /// <summary>P-14a (row P-14). One host with every failure the HTTP contract maps: a Range, a unique,
+    /// an occupied to-one link, the unreachable-create 400, a Stage and a Policy failure.</summary>
+    public static PackOracleDomain Failures687 { get; } = new(
+        "Failures687",
+        """
+        domain Failures
+        uses http
+        uses sqlite
+
+        Child: entity {
+          Code: Text unique length(1, 8)
+          Qty: Number range(1, 100)
+        }
+
+        Node: entity {
+          Code: Text unique length(1, 8)
+          next: Node
+          Extend: action { create in next { Code: "N" } }
+        }
+
+        Ticket: entity {
+          Code: Text unique length(1, 8)
+          Ok: Boolean
+          IsOk: policy { Ok is true }
+          Draft: stage {
+            Go: action require IsOk { transition to Done }
+            Cancel: action { transition to Closed }
+          }
+          Done: stage { }
+          Closed: stage { }
+        }
+        """,
+        "/api/children");
+
     public static IReadOnlyList<PackOracleDomain> All { get; } =
-        [Inventory588, Logistics559, Warehouse620, Inventory626, Desk658, Tally653, Fulfillment675];
+        [Inventory588, Logistics559, Warehouse620, Inventory626, Desk658, Tally653, Fulfillment675, Failures687];
 
     /// <summary>The PR-tier boot set (OQ-10): exactly Inventory588 and Warehouse620.</summary>
     public static IReadOnlyList<PackOracleDomain> Subset { get; } = [Inventory588, Warehouse620];

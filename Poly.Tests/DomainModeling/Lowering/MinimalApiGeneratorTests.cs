@@ -178,12 +178,6 @@ public class MinimalApiGeneratorTests {
     }
 
     [Test]
-    public async Task Post_HasConflict() {
-        var d = ParseDomain("domain T\nItem: entity { Name: Text }");
-        await Assert.That(Render(d).Contains("Conflict")).IsTrue();
-    }
-
-    [Test]
     public async Task Setup_HasUsingScope() {
         var d = ParseDomain("domain T\nItem: entity { Name: Text }");
         await Assert.That(Render(d).Contains("using (var scope")).IsTrue();
@@ -199,13 +193,6 @@ public class MinimalApiGeneratorTests {
     public async Task Dto_RecordPresent() {
         var d = ParseDomain("domain T\nItem: entity { Name: Text }");
         await Assert.That(Render(d).Contains("ItemDto")).IsTrue();
-    }
-
-    [Test]
-    public async Task BadRequest_Present() {
-        var d = ParseDomain("domain T\nItem: entity {\n  Name: Text\n  Freeze: action { }\n}");
-        var rendered = Render(d);
-        await Assert.That(rendered.Contains("Conflict")).IsTrue();
     }
 
     [Test]
@@ -730,15 +717,22 @@ public class MinimalApiGeneratorTests {
     }
 
     [Test]
-    public async Task DomainFailure_BadRequestUnlessUniqueOrConflict() {
+    public async Task GeneratedHost_ParsesNoFailureText() {
         var rendered = Render(ParseDomain("""
             domain T
             Item: entity { Name: Text }
             """));
-        await Assert.That(rendered).Contains("Results.BadRequest");
-        await Assert.That(rendered).Contains("Results.Conflict");
-        await Assert.That(rendered).Contains("Unique constraint");
-        await Assert.That(rendered).Contains("already has a target");
+        // Positive control: the typed path is present.
+        await Assert.That(rendered).Contains("DomainFailureStatus.Http");
+        await Assert.That(rendered).Contains("Results.Problem");
+        // No failure text is read: not the old matching strings, not the old status function, not the shim.
+        await Assert.That(rendered).DoesNotContain("Unique constraint");
+        await Assert.That(rendered).DoesNotContain("already has a target");
+        await Assert.That(rendered).DoesNotContain("FailureStatus(");
+        await Assert.That(rendered).DoesNotContain("ErrorMessage");
+        await Assert.That(rendered).DoesNotContain("Results.BadRequest");
+        await Assert.That(rendered).DoesNotContain("Results.NotFound");
+        await Assert.That(rendered).DoesNotContain("Results.Conflict");
     }
 
     [Test]

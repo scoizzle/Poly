@@ -652,6 +652,70 @@ public class PackOracleTests {
         return pid;
     }
 
+    /// <summary>P-14a: a failure's status comes from its typed kind and every failure body is ProblemDetails.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task Failure_KindDrivesStatus_AndBodyIsProblemDetails(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.Failures687);
+
+        static StringContent Json(string body) => new(body, Encoding.UTF8, "application/json");
+
+        static async Task<JsonDocument> ExpectProblem(HttpResponseMessage response, int status, string title) {
+            await Assert.That((int)response.StatusCode).IsEqualTo(status);
+            await Assert.That(response.Content.Headers.ContentType?.MediaType).IsEqualTo("application/problem+json");
+            var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            await Assert.That(json.RootElement.GetProperty("status").GetInt32()).IsEqualTo(status);
+            await Assert.That(json.RootElement.GetProperty("title").GetString()).IsEqualTo(title);
+            await Assert.That(json.RootElement.TryGetProperty("kind", out _)).IsFalse();
+            return json;
+        }
+
+        // Range: 400, with the element path and the message as detail.
+        using var range = await oracle.Client.PostAsync("/api/children", Json("""{"Code":"A1","Qty":500}"""));
+        using var rangeBody = await ExpectProblem(range, 400, "Range");
+        await Assert.That(rangeBody.RootElement.GetProperty("elementPath").GetString()).IsEqualTo("Child.Qty");
+        await Assert.That(rangeBody.RootElement.GetProperty("detail").GetString()).Contains("Qty");
+        await Assert.That(rangeBody.RootElement.TryGetProperty("guard", out _)).IsFalse();
+
+        // Unique: 409.
+        using var first = await oracle.Client.PostAsync("/api/children", Json("""{"Code":"A1","Qty":5}"""));
+        await Assert.That((int)first.StatusCode).IsEqualTo(201);
+        using var duplicate = await oracle.Client.PostAsync("/api/children", Json("""{"Code":"A1","Qty":5}"""));
+        using var duplicateBody = await ExpectProblem(duplicate, 409, "Unique");
+
+        // Link: a second link on an occupied to-one is 409.
+        // The seed row's key is its sample value: eight X for a length(1, 8) Text.
+        using var linked = await oracle.Client.PostAsync("/api/nodes/XXXXXXXX/extend", Json("{}"));
+        await Assert.That((int)linked.StatusCode).IsEqualTo(200);
+        using var relinked = await oracle.Client.PostAsync("/api/nodes/XXXXXXXX/extend", Json("{}"));
+        using var relinkedBody = await ExpectProblem(relinked, 409, "Link");
+
+        // An entity that cannot be created directly answers 400 ProblemDetails too.
+        using var direct = await oracle.Client.PostAsync("/api/nodes", Json("""{"Code":"D1"}"""));
+        using var directBody = await ExpectProblem(direct, 400, "Bad Request");
+
+        // Stage: an action the current stage does not offer is 409 and names the stage.
+        using var ticket = await oracle.Client.PostAsync("/api/tickets", Json("""{"Code":"T1","Ok":false}"""));
+        await Assert.That((int)ticket.StatusCode).IsEqualTo(201);
+        using var cancelled = await oracle.Client.PostAsync("/api/tickets/T1/cancel", Json("{}"));
+        await Assert.That((int)cancelled.StatusCode).IsEqualTo(200);
+        using var cancelledAgain = await oracle.Client.PostAsync("/api/tickets/T1/cancel", Json("{}"));
+        using var stageBody = await ExpectProblem(cancelledAgain, 409, "Stage");
+
+        // Policy: a require guard that does not hold is 422 and names the policy.
+        using var open = await oracle.Client.PostAsync("/api/tickets", Json("""{"Code":"T2","Ok":false}"""));
+        await Assert.That((int)open.StatusCode).IsEqualTo(201);
+        using var blocked = await oracle.Client.PostAsync("/api/tickets/T2/go", Json("{}"));
+        using var policyBody = await ExpectProblem(blocked, 422, "Policy");
+        await Assert.That(policyBody.RootElement.GetProperty("guard").GetString()).IsEqualTo("IsOk");
+
+        // Unknown id: 404.
+        using var missing = await oracle.Client.GetAsync("/api/children/ZZZ");
+        using var missingBody = await ExpectProblem(missing, 404, "Not Found");
+    }
+
     /// <summary>#620 (slice P-03): an action that applies an effect and then fails must persist nothing.
     /// The rejected request has already bumped Capacity in memory; a save on the failure branch commits it.
     /// The second call is A3's pin on D2: a failed request must leave no pending change for the next

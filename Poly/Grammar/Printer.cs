@@ -48,14 +48,87 @@ public sealed class Printer<TToken, TTokenKind>
         IReadOnlyDictionary<string, string>? fills = null) =>
         Print(_grammar.GetPattern(ruleName, patternName), onContent, fills);
 
+    /// <summary>
+    /// Prints a pattern by name for a caller that supplies its content positionally and reports how
+    /// many values it supplied (<see cref="PrintTrace"/> records the count).
+    /// </summary>
+    internal string Print(
+        string ruleName,
+        string patternName,
+        Action<PrintContext<TToken, TTokenKind>> onContent,
+        IReadOnlyDictionary<string, string>? fills,
+        int suppliedContentCount) =>
+        PrintTop(_grammar.GetPattern(ruleName, patternName), onContent, fills, suppliedContentCount);
+
     /// <summary>Prints a pattern. Named holes use <paramref name="fills"/>; unnamed holes call <paramref name="onContent"/>.</summary>
     public string Print(
         Pattern<TToken, TTokenKind> pattern,
         Action<PrintContext<TToken, TTokenKind>>? onContent = null,
-        IReadOnlyDictionary<string, string>? fills = null) {
-        var writer = _writerFactory();
-        PrintInto(writer, pattern, onContent, fills);
-        return writer.ToText();
+        IReadOnlyDictionary<string, string>? fills = null) =>
+        PrintTop(pattern, onContent, fills, suppliedContentCount: null);
+
+    /// <summary>
+    /// A top-level print. Under an active <see cref="PrintTrace"/> scope it also records an
+    /// observation; nested prints (<see cref="PrintContext{TToken,TTokenKind}.PrintRule(string,string)"/>)
+    /// never do. The printed text is the same either way.
+    /// </summary>
+    private string PrintTop(
+        Pattern<TToken, TTokenKind> pattern,
+        Action<PrintContext<TToken, TTokenKind>>? onContent,
+        IReadOnlyDictionary<string, string>? fills,
+        int? suppliedContentCount) {
+        if (!PrintTrace.IsActive) {
+            var writer = _writerFactory();
+            PrintInto(writer, pattern, onContent, fills);
+            return writer.ToText();
+        }
+
+        var counting = new CountingTokenWriter(_writerFactory());
+        var emitted = new List<bool>();
+        PrintInto(counting, pattern, ctx => {
+            var before = counting.Writes;
+            onContent?.Invoke(ctx);
+            emitted.Add(counting.Writes > before);
+        }, fills);
+        var text = counting.ToText();
+        PrintTrace.Record(new PrintObservation(
+            _grammar,
+            RuleOf(pattern),
+            pattern.Name,
+            fills is null ? [] : [.. fills.Keys.Order(StringComparer.Ordinal)],
+            emitted,
+            suppliedContentCount,
+            text));
+        return text;
+    }
+
+    /// <summary>The rule that owns <paramref name="pattern"/> in this printer's table; null when none does.</summary>
+    private string? RuleOf(Pattern<TToken, TTokenKind> pattern) {
+        foreach (var (rule, patterns) in _grammar.Rules) {
+            foreach (var candidate in patterns) {
+                if (ReferenceEquals(candidate, pattern))
+                    return rule;
+            }
+        }
+        return null;
+    }
+
+    /// <summary>Passes every write through and counts the writes that carry text (observation only).</summary>
+    private sealed class CountingTokenWriter(ITokenWriter<TTokenKind> inner) : ITokenWriter<TTokenKind> {
+        public int Writes { get; private set; }
+
+        public void Write(TTokenKind kind) {
+            Writes++;
+            inner.Write(kind);
+        }
+
+        public void Write(TTokenKind kind, string text) {
+            if (!string.IsNullOrEmpty(text))
+                Writes++;
+            inner.Write(kind, text);
+        }
+
+        public string ToText() => inner.ToText();
     }
 
     /// <summary>

@@ -90,11 +90,20 @@ public interface ITypeDefinition {
 
     /// <summary>
     /// The conversion from <paramref name="source"/> to this type that the platform defines, or null.
-    /// Declared operators and built-in rules both answer here. The public
-    /// <see cref="TypeDefinitionExtensions.GetConversionFrom"/> door is unchanged.
+    /// Declared operators and built-in rules both answer here: a conversion that states a method is a declared
+    /// operator, one with no method is applied by the platform itself.
     /// </summary>
-    internal TypeConversion? ResolveConversionFrom(ITypeDefinition source) =>
-        this.GetConversionFrom(source) is { } conversion ? new TypeConversion(conversion.Kind, conversion.Method) : null;
+    internal TypeConversion? ResolveConversionFrom(ITypeDefinition source) => ModeledConversions.Find(source, this);
+
+    /// <summary>
+    /// True when a value of <paramref name="source"/> is a value of this type with no conversion applied:
+    /// the same type, a base type or an interface, or whatever the platform adds on top of that (for .NET variance,
+    /// array covariance, the lift from <c>T</c> to <c>T?</c> and the box into <c>object</c>). A declared conversion
+    /// operator is not in this set, and neither is a built-in numeric conversion: those are
+    /// <see cref="ResolveConversionFrom"/>. Assignment, casts, type tests and the emitter read this through
+    /// <see cref="TypeDefinitionExtensions.IsAssignableFrom"/>, which widening would loosen.
+    /// </summary>
+    internal bool IsAssignableWithoutConversion(ITypeDefinition source) => TypeDefinitionExtensions.IsAssignableByHierarchy(this, source);
 
     /// <summary>
     /// The operators of <paramref name="kind"/> this definition declares when it meets <paramref name="other"/>

@@ -295,47 +295,47 @@ public class TypeCompatibilityTests {
     [Test]
     public async Task IsAssignableFrom_ImplicitConversionOperator_ReturnsTrue() {
         var registry = new ClrTypeDefinitionRegistry();
-        var meters = registry.GetTypeDefinition(typeof(Meters));
-        var dbl = registry.GetTypeDefinition(typeof(double));
+        ITypeDefinition meters = registry.GetTypeDefinition(typeof(Meters));
+        ITypeDefinition dbl = registry.GetTypeDefinition(typeof(double));
         await Assert.That(meters.IsAssignableFrom(dbl)).IsTrue();
         await Assert.That(dbl.IsAssignableTo(meters)).IsTrue();
-        var implicitOp = meters.GetConversionFrom(dbl);
+        var implicitOp = meters.ResolveConversionFrom(dbl);
         await Assert.That(implicitOp?.Kind).IsEqualTo(ConversionOperatorKind.Implicit);
-        await Assert.That(implicitOp?.Method.Name).IsEqualTo("op_Implicit");
-        await Assert.That(implicitOp?.Method.IsStatic).IsTrue();
+        await Assert.That(implicitOp?.Method!.Name).IsEqualTo("op_Implicit");
+        await Assert.That(implicitOp?.Method!.IsStatic).IsTrue();
     }
 
     [Test]
     public async Task IsAssignableFrom_ExplicitConversionOperator_ReturnsFalse() {
         var registry = new ClrTypeDefinitionRegistry();
-        var meters = registry.GetTypeDefinition(typeof(Meters));
-        var dbl = registry.GetTypeDefinition(typeof(double));
+        ITypeDefinition meters = registry.GetTypeDefinition(typeof(Meters));
+        ITypeDefinition dbl = registry.GetTypeDefinition(typeof(double));
         await Assert.That(dbl.IsAssignableFrom(meters)).IsFalse();
         await Assert.That(meters.IsAssignableTo(dbl)).IsFalse();
-        var explicitOp = dbl.GetConversionFrom(meters);
+        var explicitOp = dbl.ResolveConversionFrom(meters);
         await Assert.That(explicitOp?.Kind).IsEqualTo(ConversionOperatorKind.Explicit);
-        await Assert.That(explicitOp?.Method.Name).IsEqualTo("op_Explicit");
+        await Assert.That(explicitOp?.Method!.Name).IsEqualTo("op_Explicit");
     }
 
     [Test]
     public async Task IsAssignableFrom_DateTime_ToDateTimeOffset_UsesImplicitOperator() {
         var registry = new ClrTypeDefinitionRegistry();
-        var dateTime = registry.GetTypeDefinition(typeof(DateTime));
-        var offset = registry.GetTypeDefinition(typeof(DateTimeOffset));
+        ITypeDefinition dateTime = registry.GetTypeDefinition(typeof(DateTime));
+        ITypeDefinition offset = registry.GetTypeDefinition(typeof(DateTimeOffset));
         await Assert.That(offset.IsAssignableFrom(dateTime)).IsTrue();
         await Assert.That(dateTime.IsAssignableFrom(offset)).IsFalse();
-        await Assert.That(offset.GetConversionFrom(dateTime)?.Kind).IsEqualTo(ConversionOperatorKind.Implicit);
-        await Assert.That(offset.GetConversionFrom(dateTime)?.Method.Name).IsEqualTo("op_Implicit");
-        await Assert.That(dateTime.GetConversionFrom(offset)).IsNull();
+        await Assert.That(offset.ResolveConversionFrom(dateTime)?.Kind).IsEqualTo(ConversionOperatorKind.Implicit);
+        await Assert.That(offset.ResolveConversionFrom(dateTime)?.Method!.Name).IsEqualTo("op_Implicit");
+        await Assert.That(dateTime.ResolveConversionFrom(offset)).IsNull();
     }
 
     [Test]
-    public async Task GetConversionFrom_UnrelatedTypes_ReturnsNull() {
+    public async Task ResolveConversionFrom_UnrelatedTypes_ReturnsNull() {
         var registry = new ClrTypeDefinitionRegistry();
-        var stringType = registry.GetTypeDefinition<string>();
-        var intType = registry.GetTypeDefinition<int>();
-        await Assert.That(stringType.GetConversionFrom(intType)).IsNull();
-        await Assert.That(intType.GetConversionFrom(stringType)).IsNull();
+        ITypeDefinition stringType = registry.GetTypeDefinition<string>();
+        ITypeDefinition intType = registry.GetTypeDefinition<int>();
+        await Assert.That(stringType.ResolveConversionFrom(intType)).IsNull();
+        await Assert.That(intType.ResolveConversionFrom(stringType)).IsNull();
     }
 
     public readonly struct Meters {

@@ -84,16 +84,40 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
     public override string ToString() => FullName;
 
     /// <summary>
-    /// The public conversion door first, so the two cannot disagree on a declared operator; then the
-    /// built-in rules, only between two CLR definitions.
+    /// The declared <c>op_Implicit</c> or <c>op_Explicit</c> first (implicit preferred), so a conversion that names a
+    /// method is never replaced by a built-in rule; then the built-in rules, only between two CLR definitions. A
+    /// modeled source is answered by the modeled convention.
     /// </summary>
     TypeConversion? ITypeDefinition.ResolveConversionFrom(ITypeDefinition source) {
         ArgumentNullException.ThrowIfNull(source);
-        if (this.GetConversionFrom(source) is { } declared)
-            return new TypeConversion(declared.Kind, declared.Method);
-        return source is ClrTypeDefinition clrSource
-            ? ClrBuiltInRules.Conversion(GetPrimitiveTypeId(clrSource.RuntimeType), GetPrimitiveTypeId(RuntimeType))
-            : null;
+        if (source is not ClrTypeDefinition clrSource)
+            return ModeledConversions.Find(source, this);
+        if (FindConversionFrom(clrSource, ConversionOperatorKind.Implicit) is { } declaredImplicit)
+            return new TypeConversion(ConversionOperatorKind.Implicit, declaredImplicit);
+        if (FindConversionFrom(clrSource, ConversionOperatorKind.Explicit) is { } declaredExplicit)
+            return new TypeConversion(ConversionOperatorKind.Explicit, declaredExplicit);
+        return ClrBuiltInRules.Conversion(GetPrimitiveTypeId(clrSource.RuntimeType), GetPrimitiveTypeId(RuntimeType));
+    }
+
+    /// <summary>
+    /// The CLR's own assignability: <see cref="Type.IsAssignableFrom"/> between two CLR definitions (inheritance,
+    /// interfaces, variance, array covariance), the lift from <c>T</c> to <c>T?</c> that C# applies and the CLR does
+    /// not, and <c>object</c> accepting every definition, modeled ones included: the VM boxes a module entity as
+    /// <c>object</c> (<c>DomainResult.Success</c>). That last rule is also stated by <see cref="ClrBuiltInRules"/> as
+    /// the implicit conversion into <c>object</c>, but only between two CLR definitions. It stays here as well because
+    /// it is what makes <c>object</c> a tier 1 parameter, and moving it to the conversion answer alone would score
+    /// <c>F(object)</c> against <c>F(long)</c> differently and change which overload wins; the two statements agree on
+    /// every CLR definition (<c>ObjectAcceptsEveryClrDefinition_IsAssignableFromAndResolveConversionFromAgree</c>).
+    /// </summary>
+    bool ITypeDefinition.IsAssignableWithoutConversion(ITypeDefinition source) {
+        ArgumentNullException.ThrowIfNull(source);
+        if (RuntimeType == typeof(object))
+            return true;
+        if (source is ClrTypeDefinition clrSource
+            && (RuntimeType.IsAssignableFrom(clrSource.RuntimeType)
+                || Nullable.GetUnderlyingType(RuntimeType) == clrSource.RuntimeType))
+            return true;
+        return TypeDefinitionExtensions.IsAssignableByHierarchy(this, source);
     }
 
     /// <summary>

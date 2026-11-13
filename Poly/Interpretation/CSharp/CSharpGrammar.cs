@@ -235,9 +235,11 @@ public static class CSharpGrammar {
         b.Define("type-body")
             .Pattern("body").Value(CSharpTokenKind.LBrace, "open").Repeat("member", min: 0).Value(CSharpTokenKind.RBrace, "close").Commit();
         b.Define("enum-body")
-            .Pattern("body").Value(CSharpTokenKind.LBrace, "open").Ref("enum-member").Repeat("enum-member-tail").Value(CSharpTokenKind.RBrace, "close").Commit();
+            .Pattern("body").Value(CSharpTokenKind.LBrace, "open").Optional(R("enum-members")).Value(CSharpTokenKind.RBrace, "close").Commit();
+        b.Define("enum-members")
+            .Pattern("list").Ref("enum-member").Repeat("enum-member-tail").Commit();
         b.Define("enum-member")
-            .Pattern("member").Value(CSharpTokenKind.Identifier, "name").Kind(CSharpTokenKind.Assign).Value(CSharpTokenKind.NumberLiteral, "value").Commit();
+            .Pattern("member").Value(CSharpTokenKind.Identifier, "name").Kind(CSharpTokenKind.Assign).Optional(CSharpTokenKind.Minus).Value(CSharpTokenKind.NumberLiteral, "value").Commit();
         b.Define("enum-member-tail")
             .Pattern("tail").Kind(CSharpTokenKind.Comma).Ref("enum-member").Commit();
 

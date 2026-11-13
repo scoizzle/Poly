@@ -285,6 +285,45 @@ public partial class AnalyzerClosingRoundPinTests {
         return string.Join('\n', lines);
     }
 
+    // ── sum over each property kind (plan M1-M3): a declared alias, an undeclared spelling, a non-numeric type ──
+
+    internal static readonly string[] SumPropertyTypes = [
+        "Number", "Decimal", "Cents", "Id64", "Int32", "Float", "long", "decimal", "Text", "Boolean", "Color", "Money", "Bin", "Nope",
+    ];
+
+    /// <summary><c>sum parts X</c> per property type of <c>X</c>, in a policy and assigned into Number and Decimal.</summary>
+    internal static string SumPropertyKindRows() {
+        var lines = new List<string> { "sum parts X, X: <type> | position = verdict" };
+        foreach (var type in SumPropertyTypes)
+            foreach (var position in new[] { "policy sum > 0", "assign Number", "assign Decimal" }) {
+                var sum = DomainExpression.Sum("parts", "X");
+                var item = new Entity("Item", [new Property("X", Ref(type), [])], [], [], []);
+                var host = new Entity("Host", [new Property("N", Ref("Number"), []), new Property("C", Ref("Decimal"), [])],
+                    position == "policy sum > 0" ? [] : [new DmAction("Set", InvocationResult.Void, [],
+                        [new AssignEffect(P(position == "assign Number" ? "N" : "C"), sum)], [])],
+                    position == "policy sum > 0" ? [new Policy("Big", DomainExpression.GreaterThan(sum, DomainExpression.Literal(0L)))] : [],
+                    []);
+                var domain = DomainTestFactory.Create("T", [
+                    new DmPrimitive("Number", PrimitiveSemantics.Number, []),
+                    new DmPrimitive("Decimal", PrimitiveSemantics.Decimal, []),
+                    new DmPrimitive("Text", PrimitiveSemantics.Text, []),
+                    new DmPrimitive("Boolean", PrimitiveSemantics.Boolean, []),
+                    new DmPrimitive("Cents", PrimitiveSemantics.Decimal, []),
+                    new DmPrimitive("Id64", PrimitiveSemantics.Number, []),
+                    new DmPrimitive("Bin", PrimitiveSemantics.Binary, []),
+                    new EnumType("Color", ["Red", "Blue"], []),
+                    new DmValueType("Money", [new Property("Amount", Ref("Number"), [])], []),
+                    item, host,
+                ], [new Relationship("parts", Ref("Host"), Ref("Item"), RelationshipCardinality.OneToMany, [])]);
+                lines.Add($"{type} | {position} = {Run(domain)}");
+            }
+        return string.Join('\n', lines);
+    }
+
+    [Test]
+    public async Task SumOverEachPropertyKind_IsFrozen() =>
+        await Assert.That(SumPropertyKindRows()).IsEqualTo(FormGridExpected.SumPropertyKinds);
+
     [Test]
     public async Task FormByPositionGrid_IsFrozen() =>
         await Assert.That(FormGridRows()).IsEqualTo(FormGridExpected.FormGrid);
@@ -1424,6 +1463,52 @@ policy (Due + A) + 5 Days < Due = DMSEM003
 assign Due to Stamp + 1 = ok
 assign Stamp to Due + 1 = ok
 assign A to part Due + 5 Days = DMSEM003
+""";
+
+        public const string SumPropertyKinds = """
+sum parts X, X: <type> | position = verdict
+Number | policy sum > 0 = ok
+Number | assign Number = ok
+Number | assign Decimal = ok
+Decimal | policy sum > 0 = ok
+Decimal | assign Number = ok
+Decimal | assign Decimal = ok
+Cents | policy sum > 0 = DMSEM005
+Cents | assign Number = ok
+Cents | assign Decimal = ok
+Id64 | policy sum > 0 = DMSEM005
+Id64 | assign Number = ok
+Id64 | assign Decimal = ok
+Int32 | policy sum > 0 = DMSEM005
+Int32 | assign Number = DMSEM005
+Int32 | assign Decimal = DMSEM005
+Float | policy sum > 0 = DMSEM005
+Float | assign Number = DMSEM005
+Float | assign Decimal = DMSEM005
+long | policy sum > 0 = DMSEM005
+long | assign Number = DMSEM005
+long | assign Decimal = DMSEM005
+decimal | policy sum > 0 = DMSEM005
+decimal | assign Number = DMSEM005
+decimal | assign Decimal = DMSEM005
+Text | policy sum > 0 = DMSEM005
+Text | assign Number = ok
+Text | assign Decimal = ok
+Boolean | policy sum > 0 = DMSEM005
+Boolean | assign Number = ok
+Boolean | assign Decimal = ok
+Color | policy sum > 0 = DMSEM005
+Color | assign Number = ok
+Color | assign Decimal = ok
+Money | policy sum > 0 = DMSEM005+DMSTR006
+Money | assign Number = DMSTR006
+Money | assign Decimal = DMSTR006
+Bin | policy sum > 0 = DMSEM005
+Bin | assign Number = ok
+Bin | assign Decimal = ok
+Nope | policy sum > 0 = DMSEM005
+Nope | assign Number = DMSEM005
+Nope | assign Decimal = DMSEM005
 """;
 
         public const string ImportedContractNameClash = """

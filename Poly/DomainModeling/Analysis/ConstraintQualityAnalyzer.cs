@@ -1,4 +1,5 @@
 using Poly.DomainModeling.Ontology;
+using Poly.DomainModeling.Ontology.Constraints;
 
 using PrimitiveType = Poly.DomainModeling.Ontology.PrimitiveType;
 
@@ -228,7 +229,8 @@ internal sealed class ConstraintQualityAnalyzer : INodeAnalyzer {
     private static void ValidateRangeSatisfiability(
         AnalysisContext context, Property property, IReadOnlyList<Constraint> constraints) {
         foreach (var range in constraints.OfType<RangeConstraint>()) {
-            if (range.Minimum is not null && range.Maximum is not null && Compare(range.Minimum, range.Maximum) > 0) {
+            if (range.Minimum is not null && range.Maximum is not null
+                && ConstraintMerge.TryCompare(range.Minimum, range.Maximum) is > 0) {
                 context.ReportError(
                     property,
                     $"Property '{property.Name}' has unsatisfiable RangeConstraint: minimum exceeds maximum.",
@@ -248,33 +250,6 @@ internal sealed class ConstraintQualityAnalyzer : INodeAnalyzer {
             }
         }
     }
-
-    private static int Compare(object left, object right) {
-        if (left is IComparable comparable && AreComparableTypes(left.GetType(), right.GetType())) {
-            return comparable.CompareTo(Convert.ChangeType(right, left.GetType()));
-        }
-        return 0;
-    }
-
-    private static bool AreComparableTypes(Type left, Type right) {
-        if (left == right) {
-            return true;
-        }
-        return IsNumericType(left) && IsNumericType(right);
-    }
-
-    private static bool IsNumericType(Type type) =>
-        Type.GetTypeCode(type) is TypeCode.Byte
-            or TypeCode.SByte
-            or TypeCode.Int16
-            or TypeCode.UInt16
-            or TypeCode.Int32
-            or TypeCode.UInt32
-            or TypeCode.Int64
-            or TypeCode.UInt64
-            or TypeCode.Single
-            or TypeCode.Double
-            or TypeCode.Decimal;
 
     private static void ValidateConstraintTypeCompatibility(
         AnalysisContext context, Property property, IReadOnlyList<Constraint> constraints) {

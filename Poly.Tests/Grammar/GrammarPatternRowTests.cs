@@ -385,6 +385,23 @@ public sealed class GrammarPatternRowTests {
         await Assert.That(On(stolen, PatternRowCheck.Example, "top", "enum")).Count().IsEqualTo(1);
     }
 
+    private static readonly PatternRowEntry LegacyActionReaderOnly =
+        PatternRowEntry.Row(DslKey, PatternRowEntryKind.ReaderOnly, "entity-body", "legacy-action", "self-test", Permanent);
+
+    [Test]
+    public async Task Check_ReaderOnlyRowWithoutAnExample_Fails() {
+        var violations = CheckDsl(Dsl, [], [LegacyActionReaderOnly], []);
+
+        await Assert.That(On(violations, PatternRowCheck.Example, "entity-body", "legacy-action")).Count().IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task Check_ReaderOnlyRowWithAnExampleTheMatcherSelects_Passes() {
+        var violations = CheckDsl(Dsl, [], [LegacyActionReaderOnly], [new(DslKey, "entity-body", "legacy-action", "Submit(")]);
+
+        await Assert.That(On(violations, PatternRowCheck.Example, "entity-body", "legacy-action")).IsEmpty();
+    }
+
     [Test]
     public async Task Check_ExampleForARowThatIsNotAReaderHead_Fails() {
         var violations = CheckDsl(Dsl, [], [], [new(DslKey, "document", "header", "domain Shop")]);

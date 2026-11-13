@@ -59,8 +59,8 @@ public sealed class PrintBaselineTests {
     /// <summary>
     /// The documents that do not print today, by key, with the exact recorded status (the failure under each catalog tried).
     /// None has an owner row: they are mission and probe documents that fail analysis, one by design
-    /// (<c>nested-invoke-type-mismatch</c>), one known (<c>library.poly</c>, #857), and <c>pack/Warehouse620</c>,
-    /// which does not parse. Stale-checked both ways: a document that starts to print fails until its entry is deleted
+    /// (<c>nested-invoke-type-mismatch</c>), one known (<c>library.poly</c>, #857), and <c>pack/Warehouse620</c>, which does not
+    /// parse in a <c>DomainSession.Create</c> session (<c>table(...)</c> is not registered there under <c>uses sqlite</c>; the pack oracle compiles it through <c>PolyCompiler</c>). Stale-checked both ways: a document that starts to print fails until its entry is deleted
     /// and its key re-recorded; a status that changes fails until re-recorded.
     /// </summary>
     internal static readonly (string Key, string Status)[] KnownUnprintable = [

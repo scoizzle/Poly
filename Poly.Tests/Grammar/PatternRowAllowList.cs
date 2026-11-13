@@ -146,9 +146,6 @@ internal static class PatternRowAllowList {
         PatternRowEntry.Row(CSharp, PatternRowEntryKind.ContextOnly, "statement", "label",
             "The writer prints `label:` through the row and the labelled statement after it (WriteStatement), so the row text alone does not re-read: the same bypass class as the fused declaration and block lambdas.",
             "G-23b"),
-        PatternRowEntry.AlwaysNull(CSharp, "enum-body", "body", 1,
-            "The writer prints every member into the first-member slot; the repeated tail slot is part of that text.",
-            "none: permanent — one member list string fills the body by design; read-back matches the tail rule inside that text"),
         PatternRowEntry.AlwaysNull(CSharp, "expr-shift", "shift", 1,
             "BinaryChain prints the whole chain into the operand slot; the repeated shift-tail slot is part of that text.",
             "none: permanent — one chain string fills the row by design, as for the LeftAssoc levels; read-back matches the tail rule inside that text"),
@@ -175,12 +172,6 @@ internal static class PatternRowAllowList {
         PatternRowEntry.Defect(CSharp, "type-decl", "interface", "interface ",
             "The interface path fills the type-body slot with raw member lines and no braces, so a printed interface does not re-read.",
             "G-23b (#848)"),
-        PatternRowEntry.Defect(CSharp, "type-decl", "enum", "enum Empty",
-            "An empty enum prints `{ }`; the reader's enum-body needs a first member.",
-            "G-23b (#849)"),
-        PatternRowEntry.Defect(CSharp, "enum-body", "body", "{ }",
-            "An empty enum prints `{ }`; the reader's enum-body needs a first member.",
-            "G-23b (#849)"),
     ];
 
     /// <summary>Every entry, both surfaces.</summary>

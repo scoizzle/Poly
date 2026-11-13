@@ -28,7 +28,7 @@ namespace Poly.Tests.DomainModeling.Parsing;
 ///
 /// <para><b>Per key, the session and the pipeline.</b> The header of each section names both. A
 /// <c>document</c> key is printed through the same pipeline as <c>DslRoundTripCorpusTests.Generate</c>:
-/// the session is <c>DomainSession.Create(uses of the document, ExtensionCatalog.Core + ProductCatalog.ImplicitIds)</c>;
+/// the session is <c>DomainSession.Create(uses of the document, ExtensionCatalog.Core + ProductCatalog.ImplicitIds)</c> (the <c>pack/</c> keys with <c>Authoring = true</c>, as <c>PolyCompiler</c> loads them, so the storage facets are registered);
 /// the document is parsed, applied and analysed (<c>ApplyAndAnalyze</c>), and the committed root is printed
 /// through <c>new DomainDslPrinter(session)</c>. A key whose document does not analyse is recorded as
 /// <c>analysis-failed</c> (or <c>parse-failed</c>) with the exception or diagnostic type: it is not skipped
@@ -59,9 +59,8 @@ public sealed class PrintBaselineTests {
     /// <summary>
     /// The documents that do not print today, by key, with the exact recorded status (the failure under each catalog tried).
     /// None has an owner row: they are mission and probe documents that fail analysis, one by design
-    /// (<c>nested-invoke-type-mismatch</c>), one known (<c>library.poly</c>, #857), and <c>pack/Warehouse620</c>, which does not
-    /// parse in a <c>DomainSession.Create</c> session (<c>table(...)</c> is not registered there under <c>uses sqlite</c>; the pack oracle compiles it through <c>PolyCompiler</c>). Stale-checked both ways: a document that starts to print fails until its entry is deleted
-    /// and its key re-recorded; a status that changes fails until re-recorded.
+    /// (<c>nested-invoke-type-mismatch</c>), one known (<c>library.poly</c>, #857). Stale-checked both ways: a document that
+    /// starts to print fails until its entry is deleted and its key re-recorded; a status that changes fails until re-recorded.
     /// </summary>
     internal static readonly (string Key, string Status)[] KnownUnprintable = [
         ("poly/docs/missions/evolve-2026-10-13/ambig-backref.poly", "Core:analysis-failed:DMREL005 | Product:analysis-failed:DMREL005"),
@@ -75,7 +74,6 @@ public sealed class PrintBaselineTests {
         ("poly/docs/missions/evolve-2026-10-14/sessions.poly", "Core:analysis-failed:DMLIB001 | Product:analysis-failed:DMLIB001"),
         ("poly/docs/probes/dogfood/nested-invoke-type-mismatch.poly", "Core:analysis-failed:DMSEM003 | Product:analysis-failed:DMSEM003"),
         ("poly/docs/probes/scratch-2026-10-14/restaurant.poly", "Core:analysis-failed:DMEFF011+DMSTR006 | Product:analysis-failed:DMEFF011+DMSTR006"),
-        ("pack/Warehouse620", "Core:session-failed:InvalidOperationException | Product:failed:GrammarException"),
     ];
 
     // ── entries ──────────────────────────────────────────────────────────────────────
@@ -232,15 +230,15 @@ public sealed class PrintBaselineTests {
     /// <see cref="ProductCatalog.Model"/> instead; the header records which catalog printed it. A document that prints under
     /// neither is recorded with the failure of each, so a failure is never silent.
     /// </summary>
-    internal static Entry PrintDocument(string key, string poly) {
+    internal static Entry PrintDocument(string key, string poly, bool authoring = false) {
         var tree = DslSyntaxTree.Parse(poly);
         var sessionText = "uses=[" + string.Join(",", tree.Uses) + "]+implicit";
         var failures = new List<string>();
         foreach (var (name, catalog) in new[] { ("Core", ExtensionCatalog.Core), ("Product", ProductCatalog.Model) }) {
-            var pipeline = PipelineDocument + "; catalog=" + name;
+            var pipeline = PipelineDocument + "; catalog=" + name + (authoring ? "; authoring=true (as PolyCompiler)" : "");
             DomainSession session;
             try {
-                session = DomainSession.Create(tree.Uses, new SessionOptions(catalog, ProductCatalog.ImplicitIds));
+                session = DomainSession.Create(tree.Uses, new SessionOptions(catalog, ProductCatalog.ImplicitIds) with { Authoring = authoring });
             }
             catch (InvalidOperationException ex) {
                 failures.Add(name + ":session-failed:" + ex.GetType().Name);
@@ -271,7 +269,7 @@ public sealed class PrintBaselineTests {
         foreach (var path in ShippedDocuments())
             entries.Add(PrintDocument("poly/" + path, File.ReadAllText(Path.Combine(root, path))));
         foreach (var domain in PackOracleDomains.All)
-            entries.Add(PrintDocument("pack/" + domain.Name, domain.Poly));
+            entries.Add(PrintDocument("pack/" + domain.Name, domain.Poly, authoring: true));
         foreach (var (key, text) in GuideDocuments())
             entries.Add(PrintDocument(key, text));
         entries.AddRange(PrintBaselineBuiltCases.All());

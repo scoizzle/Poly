@@ -180,6 +180,29 @@ public class PolycCliTests {
         await Assert.That(posix.Exit).IsEqualTo(0);
     }
 
+    /// <summary>C-07 pin: a known target is a host fact; it needs no loaded library to be accepted.</summary>
+    [Test]
+    public async Task Check_KnownTarget_NoLibraryLoaded_IsClean() {
+        var dir = PolycTestSupport.TempDir();
+        var path = Write(dir, "orders.poly", PolycTestSupport.Orders);
+
+        var control = Run(["check", path]);
+        var withTarget = Run(["check", path, "--target", "posix"]);
+
+        await Assert.That(control.Exit).IsEqualTo(0);
+        await Assert.That(withTarget.Exit).IsEqualTo(0);
+        await Assert.That(withTarget.Out).IsEqualTo(control.Out);
+    }
+
+    /// <summary>C-07 pin: a blank target at the CLI stays a usage error, not a compile diagnostic.</summary>
+    [Test]
+    public async Task Target_Blank_IsAUsageErrorWithExitOne() {
+        var blank = Run(["check", "--target", " "]);
+        await Assert.That(blank.Exit).IsEqualTo(1);
+        await Assert.That(blank.Err).Contains("--target needs a value");
+        await Assert.That(blank.Out).DoesNotContain("DSL");
+    }
+
     [Test]
     public async Task Target_NeedsANonBlankValue() {
         await Assert.That(Run(["check", "--target"]).Err).Contains("--target needs a value");

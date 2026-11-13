@@ -151,6 +151,20 @@ public class PolycCompileTests {
         await Assert.That(result.Domain!.Extensions).Contains("posix");
     }
 
+    /// <summary>C-07 pin: a known target needs no loaded library; a null target is not validated.</summary>
+    [Test]
+    public async Task Compile_KnownTarget_NoLibraryLoaded_AndNullTarget_Succeed() {
+        const string document = "domain Shop\n\nOrder: entity { Total: Number }\n";
+
+        var posix = Compiler().Compile(document, "shop.poly", target: "posix");
+        var none = Compiler().Compile(document, "shop.poly", target: null);
+
+        await Assert.That(posix.Succeeded).IsTrue();
+        await Assert.That(posix.Diagnostics.Where(d => d.IsError).Count()).IsEqualTo(0);
+        await Assert.That(none.Succeeded).IsTrue();
+        await Assert.That(none.Files.Count).IsEqualTo(posix.Files.Count);
+    }
+
     [Test]
     public async Task Compile_UsesPosix_NoHostTarget_ReportsDmcon004() {
         var result = Compiler().Compile(

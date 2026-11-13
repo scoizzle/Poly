@@ -607,6 +607,38 @@ public class PolicyGuardFactsTests {
         await Assert.That(exec.Invoke(Make(exec, "Order", ("Qty", 11L)), "Go").Succeeded).IsFalse();
     }
 
+    // ── DMCS001 for a negated guard no value passes (closing round item 4) ──
+
+    private const string UnsatisfiableMessage =
+        "DMCS001! Action 'Go' has unsatisfiable preconditions: its guard policies narrow property 'Qty' to an empty " +
+        "admissible set given the property's declared constraint.";
+
+    /// <summary>
+    /// <c>require not Any</c> where <c>Any</c> holds for every declared <c>Qty</c>, and <c>require Small</c> together
+    /// with <c>require not Small</c>: no value passes either guard, so both are DMCS001, as a positive guard no value
+    /// passes already was. Master 68816824 (measured on master's tree) reports nothing for either document; it loads,
+    /// <c>Touch</c> runs and <c>Go</c> is blocked for every instance (Qty 50; Qty 5 and 50). Here the document is
+    /// rejected, so it no longer lowers: a document that analysed clean on master now errors.
+    /// </summary>
+    [Test]
+    [Arguments("require not Any", "Any: policy { Qty <= 100 }")]
+    [Arguments("require Small require not Small", "Small: policy { Qty <= 10 }")]
+    public async Task NegatedGuard_NoValuePasses_IsUnsatisfiable(string requires, string policy) {
+        var dsl = $$"""
+            domain U
+            Order: entity {
+              Qty: Number range(0, 100)
+              Note: Text optional
+              {{policy}}
+              Go: action {{requires}} { assign Note to "x" }
+              Touch: action { assign Note to "t" }
+            }
+            """;
+        var (_, analysis) = Analyze(dsl);
+        await Assert.That(RangeFindings(analysis)).IsEqualTo(UnsatisfiableMessage);
+        await Assert.That(ErrorCodes(analysis)).IsEqualTo("DMCS001");
+    }
+
     // ── One stage-gate suppression rule (closing round item 1) ──
 
     /// <summary>Stage <c>Open</c> requires <c>Small</c> and <c>HasNote</c>; <c>Peek</c> lifts <c>Small</c>,

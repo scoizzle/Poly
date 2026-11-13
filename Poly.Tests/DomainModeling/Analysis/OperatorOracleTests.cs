@@ -470,13 +470,13 @@ public class OperatorOracleTests {
         new(OracleKind.LoweredAnalysisDisagrees, "*", "Add,Subtract", "*", "typed DateOnly", "T-10 (RewriteDateOffset)", 20, "7ba4ce6c196e991e"),
         new(OracleKind.LoweredAnalysisDisagrees, "*", "Add,Subtract", "*", "typed DateTime", "T-10 (RewriteDateOffset)", 20, "5b5cc5a3f2ece6cd"),
         // Text and Boolean ordering: the lowered analysis keeps accepting it (TextAndBooleanOrderingRule); the DSL and the interpreter order Text.
-        new(OracleKind.LoweredAnalysisDisagrees, "Text,Boolean", Ordering, "Text,Boolean", "typed Boolean", "T-07 (#631 ordering legality)", 8),
+        new(OracleKind.LoweredAnalysisDisagrees, "Text,Boolean", Ordering, "Text,Boolean", "typed Boolean", "T-07 (#631 ordering legality)", 8, "a2d892f80f998382"),
         // The node kinds the lowered-tree analysis has no case for (issue 812): it accepts every operand.
         new(OracleKind.LoweredAnalysisDisagrees, "*", BitwiseShiftAndUnaryMinus, "*", "analysis accepts an undefined cell", "T-22 (bitwise, shift and unary minus cases)", 1492, "f06be2a866cf6b37")
     ];
 
     private static readonly LedgerRule[] AbiRules = [
-        new(OracleKind.AbiDivergesFromTree, "*", "*", "*", "executes an undefined cell", "T-21 (the ABI must reject what the tree does not define)", 1059, "6d6bb6491fbe7a81"),
+        new(OracleKind.AbiDivergesFromTree, "*", "*", "*", "executes an undefined cell", "T-21 (the ABI must reject what the tree does not define)", 1059, "7fada48079f73965"),
         new(OracleKind.AbiDivergesFromTree, "*", "*", "*", "unstated conversion", "T-21 (T-04 and Lower state the conversion node; the emitter stops converting)", 1729, "6699a0d31e9728fb"),
         new(OracleKind.AbiDivergesFromTree, "*", "*", "*", "^type: VM [^;]*$", "T-21 (the emitter's own promotion: the VM keeps the operand type)", 363, "fdfd5dee091d1059"),
         // Wrong values (issue 832): the type and the value in one reason, then the value alone (-Decimal and -Duration give -1).

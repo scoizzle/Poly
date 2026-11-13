@@ -11,15 +11,8 @@ public sealed record KnownOperandGap(int Issue, string Owner, string Kind, strin
 /// <summary>Every known operand-agreement gap, sorted by <c>(Kind, Case)</c>.</summary>
 public static class KnownOperandGaps {
     public static IReadOnlyList<KnownOperandGap> All { get; } = [
-        new(812, "T-22", "Add", "EntityNumber", "analysis=unchanged;compile=ok"),
         new(812, "T-22", "Assignment", "IndexTextIntoNumberArray", "analysis=unchanged;compile=ok"),
         new(812, "T-22", "Await", "NumberOperand", "analysis=unchanged;compile=backstop"),
-        new(812, "T-22", "BitwiseAnd", "NumberDecimal", "analysis=unchanged;compile=backstop"),
-        new(812, "T-22", "BitwiseAnd", "NumberText", "analysis=unchanged;compile=ok"),
-        new(812, "T-22", "BitwiseNot", "Decimal", "analysis=unchanged;compile=ok"),
-        new(812, "T-22", "BitwiseNot", "Text", "analysis=unchanged;compile=ok"),
-        new(812, "T-22", "BitwiseOr", "NumberDecimal", "analysis=unchanged;compile=backstop"),
-        new(812, "T-22", "BitwiseXor", "NumberText", "analysis=unchanged;compile=ok"),
         new(813, "T-09", "Coalesce", "EntityDecimal", "analysis=unchanged;compile=ok"),
         new(605, "T-09", "Coalesce", "OptionalDecimalNumber", "analysis=unchanged;compile=backstop"),
         new(605, "T-09", "Coalesce", "OptionalNumberDecimal", "analysis=unchanged;compile=backstop"),
@@ -35,7 +28,6 @@ public static class KnownOperandGaps {
         new(605, "T-09", "Conditional", "ThreeArmsDecimalNumberDecimal", "analysis=unchanged;compile=backstop"),
         new(813, "T-09", "Conditional", "ThreeArmsTextInside", "analysis=unchanged;compile=backstop"),
         new(812, "T-22", "DoWhileLoop", "NumberCondition", "analysis=unchanged;compile=ok"),
-        new(812, "T-22", "Equal", "EntityNumber", "analysis=unchanged;compile=ok"),
         new(814, "T-21", "ForEachLoop", "DeclaredDecimalElementNumber", "analysis=unchanged;compile=backstop"),
         new(812, "T-22", "ForLoop", "NumberCondition", "analysis=unchanged;compile=ok"),
         new(812, "T-22", "IfStatement", "NumberCondition", "analysis=unchanged;compile=ok"),
@@ -49,9 +41,6 @@ public static class KnownOperandGaps {
         new(812, "T-22", "NewArray", "LengthText", "analysis=unchanged;compile=ok"),
         new(814, "T-21", "Return", "DecimalThenNumber", "analysis=unchanged;compile=ok"),
         new(812, "T-22", "Return", "DecimalThenText", "analysis=unchanged;compile=ok"),
-        new(812, "T-22", "ShiftLeft", "DecimalNumber", "analysis=unchanged;compile=ok"),
-        new(812, "T-22", "ShiftLeft", "NumberText", "analysis=unchanged;compile=ok"),
-        new(812, "T-22", "ShiftRight", "TextNumber", "analysis=unchanged;compile=ok"),
         new(812, "T-22", "StridedSetBits", "StepText", "analysis=unchanged;compile=ok"),
         new(814, "T-21", "SwitchStatement", "DecimalCaseNumberDefault", "analysis=unchanged;compile=ok"),
         new(805, "T-21", "SwitchStatement", "Issue805RawReadKey0", "analysis=unchanged;compile=wrong-value"),
@@ -63,9 +52,38 @@ public static class KnownOperandGaps {
         new(812, "T-22", "ThrowStatement", "NumberOperand", "analysis=unchanged;compile=ok"),
         new(812, "T-22", "TypeAs", "NumberToText", "analysis=unchanged;compile=ok"),
         new(812, "T-22", "TypeCast", "EntityToNumber", "analysis=unchanged;compile=ok"),
-        new(812, "T-22", "UnaryMinus", "Text", "analysis=unchanged;compile=ok"),
         new(812, "T-22", "UsingStatement", "NumberResource", "analysis=unchanged;compile=ok"),
         new(812, "T-22", "WhileLoop", "NumberCondition", "analysis=unchanged;compile=ok"),
+    ];
+}
+
+/// <summary>
+/// One cell of an interim rule of the lowered-tree analysis: the rule, the row that removes it, the interim row
+/// (<see cref="Kind"/>, <see cref="Case"/>) of <c>LoweredTreeOperandCoverageTests.InterimRows</c>, and what the cell does
+/// today: the row's observation, the node's stamp, and whether that agrees with C# (the row's expectation). Removing a rule
+/// changes its cells' observation and fails <c>InterimRules_EveryCellIsAsListed</c>; the removing row edits or deletes
+/// its entries.
+/// </summary>
+public sealed record KnownInterimCell(string Owner, string Rule, string Kind, string Case, string Observed);
+
+/// <summary>The interim rules of the lowered-tree analysis and every cell they decide, sorted by <c>(Kind, Case)</c>.</summary>
+public static class KnownInterimRules {
+    public static IReadOnlyList<KnownInterimCell> All { get; } = [
+        new("T-22b", "null and unresolved operand skip", "Add", "NullWithNumber", "analysis=unchanged;compile=backstop;type=none;csharp=differs"),
+        new("T-22b", "null and unresolved operand skip", "Add", "TextWithUnresolved", "analysis=unchanged;compile=backstop;type=none;csharp=differs"),
+        new("T-29", "EnumBitwiseRule", "BitwiseAnd", "EnumEnum", "analysis=unchanged;compile=ok;type=AttributeTargets;csharp=agrees"),
+        new("T-29", "EnumBitwiseRule", "BitwiseAnd", "EnumNumber", "analysis=rejected;compile=rejected-by-analysis;type=none;csharp=agrees"),
+        new("T-29", "EnumBitwiseRule", "BitwiseAnd", "OptionalEnumEnum", "analysis=unchanged;compile=backstop;type=Nullable`1;csharp=differs"),
+        new("T-26", "ConstantOperandRule (the provider has no constant conversion)", "BitwiseAnd", "UInt32WithIntConstant", "analysis=unchanged;compile=ok;type=Int64;csharp=agrees"),
+        new("T-29", "EnumBitwiseRule", "BitwiseNot", "Enum", "analysis=unchanged;compile=ok;type=AttributeTargets;csharp=agrees"),
+        new("T-29", "EnumBitwiseRule", "BitwiseOr", "EnumEnum", "analysis=unchanged;compile=ok;type=AttributeTargets;csharp=agrees"),
+        new("T-29", "EnumBitwiseRule", "BitwiseXor", "EnumEnum", "analysis=unchanged;compile=ok;type=AttributeTargets;csharp=agrees"),
+        new("T-07", "UndeclaredComparisonRule", "Equal", "ClrStructWithoutEquality", "analysis=unchanged;compile=ok;type=Boolean;csharp=differs"),
+        new("T-22b", "void operand skip", "Equal", "VoidCallWithNumber", "analysis=unchanged;compile=ok;type=Boolean;csharp=differs"),
+        new("T-07", "UndeclaredComparisonRule", "LessThan", "ModelledStruct", "analysis=unchanged;compile=ok;type=Boolean;csharp=differs"),
+        new("T-29", "EnumBitwiseRule", "ShiftLeft", "EnumNumber", "analysis=rejected;compile=rejected-by-analysis;type=none;csharp=agrees"),
+        new("T-29", "EnumBitwiseRule", "UnaryMinus", "Enum", "analysis=rejected;compile=rejected-by-analysis;type=none;csharp=agrees"),
+        new("T-22b", "null and unresolved operand skip", "UnaryMinus", "Null", "analysis=unchanged;compile=backstop;type=none;csharp=differs"),
     ];
 }
 

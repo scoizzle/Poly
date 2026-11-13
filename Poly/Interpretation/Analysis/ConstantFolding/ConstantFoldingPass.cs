@@ -566,11 +566,6 @@ public sealed class ConstantFoldingPass : INodeAnalyzer {
         if (!handled)
             return FoldResult.NotFoldable;
 
-        // T-17 removes this guard: until the resolver types operators through GetOperator, a node it types
-        // differently keeps its own type and does not fold.
-        if (context.GetResolvedType(node) is { } resolved && !TypeDefinitionExtensions.IsSameType(resolved, resolution.Result))
-            return FoldResult.NotFoldable;
-
         if (kind is OperatorKind.Divide or OperatorKind.Modulo && IsZeroValue(rightValue))
             return FoldResult.NotFoldable;
 

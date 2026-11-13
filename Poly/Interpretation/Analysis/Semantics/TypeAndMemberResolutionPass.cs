@@ -180,11 +180,11 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
             ThisReference @this => ResolveThisReferenceType(context, @this),
             Parameter p => ResolveParameterType(context, p),
             Variable v => ResolveVariableType(context, v),
-            Add add => ResolveAddType(context, add.LeftHandValue, add.RightHandValue),
-            Subtract sub => ResolveNumericArithmeticType(context, sub.LeftHandValue, sub.RightHandValue),
-            Multiply mul => ResolveNumericArithmeticType(context, mul.LeftHandValue, mul.RightHandValue),
-            Divide div => ResolveNumericArithmeticType(context, div.LeftHandValue, div.RightHandValue),
-            Modulo mod => ResolveNumericArithmeticType(context, mod.LeftHandValue, mod.RightHandValue),
+            Add add => ResolveOperatorResultType(context, OperatorKind.Add, add.LeftHandValue, add.RightHandValue),
+            Subtract sub => ResolveOperatorResultType(context, OperatorKind.Subtract, sub.LeftHandValue, sub.RightHandValue),
+            Multiply mul => ResolveOperatorResultType(context, OperatorKind.Multiply, mul.LeftHandValue, mul.RightHandValue),
+            Divide div => ResolveOperatorResultType(context, OperatorKind.Divide, div.LeftHandValue, div.RightHandValue),
+            Modulo mod => ResolveOperatorResultType(context, OperatorKind.Modulo, mod.LeftHandValue, mod.RightHandValue),
             UnaryMinus minus => ResolveNodeType(context, minus.Operand),
             And => context.TypeDefinitions.GetTypeDefinition(typeof(bool)),
             Or => context.TypeDefinitions.GetTypeDefinition(typeof(bool)),
@@ -221,11 +221,11 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
             Lambda lambda => ResolveLambdaType(context, lambda),
             NullForgiving nf => ResolveNodeType(context, nf.Operand),
             IfStatement => null,
-            BitwiseAnd ba => ResolveArithmeticType(context, ba.LeftHandValue, ba.RightHandValue),
-            BitwiseOr bor => ResolveArithmeticType(context, bor.LeftHandValue, bor.RightHandValue),
-            BitwiseXor bx => ResolveArithmeticType(context, bx.LeftHandValue, bx.RightHandValue),
-            ShiftLeft sl => ResolveArithmeticType(context, sl.LeftHandValue, sl.RightHandValue),
-            ShiftRight sr => ResolveArithmeticType(context, sr.LeftHandValue, sr.RightHandValue),
+            BitwiseAnd ba => ResolveArithmeticType(context, OperatorKind.BitwiseAnd, ba.LeftHandValue, ba.RightHandValue),
+            BitwiseOr bor => ResolveArithmeticType(context, OperatorKind.BitwiseOr, bor.LeftHandValue, bor.RightHandValue),
+            BitwiseXor bx => ResolveArithmeticType(context, OperatorKind.BitwiseXor, bx.LeftHandValue, bx.RightHandValue),
+            ShiftLeft sl => ResolveArithmeticType(context, OperatorKind.ShiftLeft, sl.LeftHandValue, sl.RightHandValue),
+            ShiftRight sr => ResolveArithmeticType(context, OperatorKind.ShiftRight, sr.LeftHandValue, sr.RightHandValue),
             BitwiseNot bn => ResolveNodeType(context, bn.Operand),
             PopCount => context.TypeDefinitions.GetTypeDefinition(typeof(int)),
             UsingStatement => null,
@@ -305,56 +305,47 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
     private static ITypeDefinition? ResolveThisReferenceType(AnalysisContext context, ThisReference thisReference) =>
         context.GetResolvedType(thisReference);
 
-    /// <summary>Add is string concatenation when either operand is a string, so its
-    /// resolved type is the real runtime action (the compat pass lowers it to
-    /// <c>String.Concat</c>).</summary>
-    private static ITypeDefinition? ResolveAddType(AnalysisContext context, Node left, Node right) {
-        var leftType = ResolveNodeType(context, left);
-        var rightType = ResolveNodeType(context, right);
-        if (leftType?.GetRuntimeType() == typeof(string)
-            || rightType?.GetRuntimeType() == typeof(string))
-            return context.TypeDefinitions.GetTypeDefinition(typeof(string));
-        return PromoteNumeric(context, leftType, rightType);
+    /// <summary>
+    /// The result type of an arithmetic operator (or the lifted result of a bitwise or shift one) is the type
+    /// provider's operator for the operands with their nullable unwrapped; a nullable operand lifts a value-type
+    /// result to <c>Nullable&lt;R&gt;</c>. A pair the provider defines no operator for has no type: the pass invents
+    /// none. The lifting stays here until T-06 states it in the provider. A non-negative signed constant beside a
+    /// <c>ulong</c> or <c>nuint</c> is judged by T-18's shared <see cref="ConstantOperandRule"/> (T-26 removes it).
+    /// </summary>
+    private static ITypeDefinition? ResolveOperatorResultType(
+        AnalysisContext context, OperatorKind kind, Node left, Node right) {
+        return LiftedOperatorResult(context, kind, left, right, ResolveNodeType(context, left), ResolveNodeType(context, right));
     }
 
-    private static ITypeDefinition? ResolveNumericArithmeticType(
-        AnalysisContext context,
-        Node left,
-        Node right) =>
-        PromoteNumeric(context, ResolveNodeType(context, left), ResolveNodeType(context, right));
-
-    /// <summary>Promote two already-resolved operand types (C#-style). Callers resolve
-    /// each operand once; a deep chain must not re-resolve its subtree per parent.</summary>
-    private static ITypeDefinition? PromoteNumeric(
-        AnalysisContext context, ITypeDefinition? leftType, ITypeDefinition? rightType) {
+    /// <summary>The operator's result for two already-resolved operand types; callers resolve each operand once, since
+    /// a deep chain must not re-resolve its subtree per parent.</summary>
+    private static ITypeDefinition? LiftedOperatorResult(
+        AnalysisContext context, OperatorKind kind, Node left, Node right,
+        ITypeDefinition? leftType, ITypeDefinition? rightType) {
         if (leftType == null || rightType == null)
             return null;
 
         bool lift = IsNullableType(leftType) || IsNullableType(rightType);
-        leftType = PeelNullable(context, leftType);
-        rightType = PeelNullable(context, rightType);
+        var leftUnderlying = PeelNullable(context, leftType);
+        var rightUnderlying = PeelNullable(context, rightType);
 
-        var leftRank = GetNumericRank(leftType);
-        var rightRank = GetNumericRank(rightType);
-
-        // Promote to the wider numeric type (C#-style); fall back to the
-        // left operand type when either side is not a numeric primitive.
-        ITypeDefinition? promoted;
-        if (leftRank is null || rightRank is null)
-            promoted = leftType;
-        else {
-            promoted = leftRank >= rightRank ? leftType : rightType;
-            // C# promotes char arithmetic to int (`'a' + 'b'` is 195, and `var x = 'a' + 1`
-            // must accept a later int write), so a char result becomes int.
-            if (promoted.GetRuntimeType() == typeof(char))
-                promoted = context.TypeDefinitions.GetTypeDefinition(typeof(int)) ?? promoted;
+        ITypeDefinition? result;
+        if (ConstantOperandRule.Applies(kind, context.GetEffectiveNode(left), leftType.GetRuntimeType(),
+                context.GetEffectiveNode(right), rightType.GetRuntimeType())) {
+            var native = leftUnderlying.GetRuntimeType() == typeof(nuint) || rightUnderlying.GetRuntimeType() == typeof(nuint)
+                || context.GetEffectiveNode(left) is Constant { Value: nuint } || context.GetEffectiveNode(right) is Constant { Value: nuint };
+            result = context.TypeDefinitions.GetTypeDefinition(native ? typeof(nuint) : typeof(ulong));
         }
+        else
+            result = leftUnderlying.GetOperator(kind, rightUnderlying)?.Result;
+        if (result is null)
+            return null;
 
-        if (!lift || promoted.GetRuntimeType() is not { IsValueType: true } runtime
+        if (!lift || result.GetRuntimeType() is not { IsValueType: true } runtime
             || Nullable.GetUnderlyingType(runtime) is not null)
-            return promoted;
+            return result;
         return context.TypeDefinitions.GetTypeDefinition(typeof(Nullable<>).MakeGenericType(runtime))
-            ?? promoted;
+            ?? result;
     }
 
     private static bool IsNullableType(ITypeDefinition type) =>
@@ -378,24 +369,9 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
         return context.TypeDefinitions.GetTypeDefinition(typeof(Nullable<>).MakeGenericType(runtime));
     }
 
-    private static int? GetNumericRank(ITypeDefinition type) => type.PrimitiveType switch {
-        PrimitiveType.Char => 1,
-        PrimitiveType.Int8 => 2,
-        PrimitiveType.Int16 => 3,
-        PrimitiveType.UInt8 => 4,
-        PrimitiveType.UInt16 => 5,
-        PrimitiveType.Int32 => 6,
-        PrimitiveType.UInt32 => 7,
-        PrimitiveType.Int64 => 8,
-        PrimitiveType.UInt64 => 9,
-        PrimitiveType.Float32 => 10,
-        PrimitiveType.Float64 => 11,
-        PrimitiveType.Decimal => 12,
-        _ => null
-    };
-
     private static ITypeDefinition? ResolveArithmeticType(
         AnalysisContext context,
+        OperatorKind kind,
         Node left,
         Node right) {
         var leftType = ResolveNodeType(context, left);
@@ -408,7 +384,7 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
         // required operands keeps the left type, which is the width those operators
         // already had.
         if (IsNullableType(leftType) || IsNullableType(rightType))
-            return PromoteNumeric(context, leftType, rightType);
+            return LiftedOperatorResult(context, kind, left, right, leftType, rightType);
         return leftType;
     }
 

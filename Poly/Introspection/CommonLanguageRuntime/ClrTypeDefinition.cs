@@ -16,7 +16,7 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
     private readonly Lazy<IReadOnlyList<ClrTypeMember>> _members;
 
     private readonly ClrTypeDefinitionRegistry _provider;
-    private readonly ConcurrentDictionary<OperatorKind, IReadOnlyList<DeclaredOperator>> _operators = new();
+    private readonly ConcurrentDictionary<(OperatorKind Kind, PrimitiveType? Other), IReadOnlyList<DeclaredOperator>> _operators = new();
 
     public ClrTypeDefinition(Type type, ClrTypeDefinitionRegistry provider) {
         ArgumentNullException.ThrowIfNull(type);
@@ -97,14 +97,18 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
     }
 
     /// <summary>
-    /// The operators C# applies itself, then the reflected static special-name <c>op_*</c> members. Where the CLR
-    /// also declares an intrinsic's exact signature (Double declares its comparisons), the intrinsic is the answer.
+    /// The operators C# applies itself beside <paramref name="other"/>, then the reflected static special-name <c>op_*</c>
+    /// members. Where the CLR also declares an intrinsic's exact signature (Double and Single declare their
+    /// comparisons), the intrinsic is the answer. The built-in rules read the other operand only through its
+    /// primitive, so that is the cache key with the kind: one pair cannot answer for another, and fresh synthetic
+    /// definitions do not grow the cache.
     /// </summary>
     IEnumerable<DeclaredOperator> ITypeDefinition.GetOperators(OperatorKind kind, ITypeDefinition? other) {
         OperatorShape.ArityOf(kind);
-        return _operators.GetOrAdd(kind, key => {
-            var intrinsic = ClrBuiltInRules.Operators(this, _provider, key);
-            var reflected = FindOperators(key)
+        var otherPrimitive = other is null ? GetPrimitiveTypeId(RuntimeType) : other.PrimitiveType;
+        return _operators.GetOrAdd((kind, otherPrimitive), key => {
+            var intrinsic = ClrBuiltInRules.Operators(this, key.Other, _provider, key.Kind);
+            var reflected = FindOperators(key.Kind)
                 .Where(method => !intrinsic.Any(declared => SameSignature(declared.Signature, method)))
                 .Select(static method => new DeclaredOperator(method, PlatformApplied: false));
             return [.. intrinsic, .. reflected];

@@ -155,6 +155,7 @@ guide fence Item: entity table("INVENTORY") { = ok
 guide fence Color: enum iri("https://example.com/Color") { = ok
 guide fence Orders: entity { = DSL0001
 guide fence Customer: entity { = DMSTR010
+guide fence Cabin: entity { = DMDEP002
 guide fence OrderLine: entity { = ok
 guide fence Department: entity { = ok
 guide fence Draft: stage { = ok

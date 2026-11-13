@@ -56,6 +56,23 @@ internal static class WriteVerification {
     }
 
     /// <summary>
+    /// Decides whether a write of <paramref name="value"/> can satisfy a Text <paramref name="target"/>
+    /// length. <see cref="ConstraintVerdict.Satisfied"/> only when the value's own length range is
+    /// inside the target's; otherwise <see cref="ConstraintVerdict.Undecided"/>, including a value
+    /// that carries no length. Never <see cref="ConstraintVerdict.Violated"/>: a length bound on a
+    /// computed value is a widening, so a disjoint one proves nothing (a literal is judged elsewhere).
+    /// </summary>
+    internal static ConstraintVerdict DecideLength(LengthConstraint target, AbstractValue value) {
+        ArgumentNullException.ThrowIfNull(target);
+        ArgumentNullException.ThrowIfNull(value);
+
+        var length = value.Constraints.OfType<LengthConstraint>().FirstOrDefault();
+        return length is not null && length.MinLength >= target.MinLength && length.MaxLength <= target.MaxLength
+            ? ConstraintVerdict.Satisfied
+            : ConstraintVerdict.Undecided;
+    }
+
+    /// <summary>
     /// A target bound no exact number can order. A numeric bound is always orderable (the compare
     /// falls back to master's double comparison); only a non-numeric bound is unorderable.
     /// Shared with the effect analyzer's range text so the two cannot disagree.

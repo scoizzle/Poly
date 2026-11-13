@@ -533,9 +533,9 @@ public class UnverifiedWriteTests {
     }
 
     [Test]
-    public async Task LengthTarget_BareTextCopy_IsNotYetVerified() {
-        // PIN (review H8): WriteRelevant is Range-only in this slice (A4), so a bare Text copy into a
-        // `length` target is silent and records nothing. That is a gap, not a proof: V-08 flips it.
+    public async Task AssignLongerTextProperty_IntoShorterTarget_IsUnverified() {
+        // #582, and the review H8 pin flipped by V-08: Length is write-relevant, so a Text copy whose
+        // own length range is not inside the target's is an unverified write, never a silent one.
         var result = Parse("""
             domain Test
             Box: entity {
@@ -545,11 +545,66 @@ public class UnverifiedWriteTests {
             }
             """);
 
-        await Assert.That(Findings(result.Analysis, "Short")).IsEmpty();
+        var findings = Findings(result.Analysis, "Short");
+
+        await Assert.That(findings.Count).IsEqualTo(1);
+        await Assert.That(findings[0].Code).IsEqualTo(DomainModelDiagnosticCodes.ConstraintUndecided);
+        await Assert.That(findings[0].Severity).IsEqualTo(DiagnosticSeverity.Warning);
+        await Assert.That(findings[0].Message).Contains("length(0, 5)");
         var facts = Facts(result);
-        await Assert.That(facts.Unverified).IsEmpty();
+        await Assert.That(facts.Unverified.Count).IsEqualTo(1);
+        await Assert.That(facts.Unverified[0].Constraint).IsEqualTo("length(0, 5)");
         await Assert.That(facts.Violations).IsEmpty();
         await Assert.That(facts.Verified).IsEqualTo(0);
+    }
+
+    [Test]
+    public async Task ConcatOntoBoundedText_IsUnverified() {
+        // #582: `S + "xx"` carries no length range, so the write cannot be proven inside length(1, 3).
+        var result = Parse("""
+            domain Test
+            Box: entity {
+              S: Text length(1, 3)
+              Run: action { assign S to S + "xx" }
+            }
+            """);
+
+        var findings = Findings(result.Analysis, "S");
+
+        await Assert.That(findings.Count).IsEqualTo(1);
+        await Assert.That(findings[0].Code).IsEqualTo(DomainModelDiagnosticCodes.ConstraintUndecided);
+        await Assert.That(Facts(result).Unverified.Count).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task ContainedTextLength_IsVerified() {
+        // No false positive: the value's own length(1, 3) is inside the target's length(1, 5).
+        var result = Parse("""
+            domain Test
+            Box: entity {
+              Wide: Text length(1, 5)
+              Narrow: Text length(1, 3)
+              Run: action { assign Wide to Narrow }
+            }
+            """);
+
+        await Assert.That(Findings(result.Analysis, "Wide")).IsEmpty();
+        var facts = Facts(result);
+        await Assert.That(facts.Unverified).IsEmpty();
+        await Assert.That(facts.Verified).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task LengthDecide_DisjointValueLength_IsUndecidedNotViolated() {
+        // A value's length range is a bound analysis cannot tighten, so even a disjoint one is not a
+        // proof of violation: Decide answers Satisfied or Undecided for Length, never Violated.
+        var target = new LengthConstraint(1, 3);
+        var disjoint = AbstractValue.From([new LengthConstraint(10, 20)]);
+
+        await Assert.That(ConstraintValidation.Decide(target, disjoint)).IsEqualTo(ConstraintVerdict.Undecided);
+        await Assert.That(ConstraintValidation.Decide(target, AbstractValue.From([new LengthConstraint(2, 3)])))
+            .IsEqualTo(ConstraintVerdict.Satisfied);
+        await Assert.That(ConstraintValidation.Decide(target, AbstractValue.Unknown)).IsEqualTo(ConstraintVerdict.Undecided);
     }
 
     /// <summary>The reported code for one write that is PossibleViolation in one stage and UnknownBound in the other.</summary>

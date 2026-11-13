@@ -78,7 +78,7 @@ internal sealed class ConstraintKind {
 
     /// <summary>
     /// True when a write of a non-literal value must be verified against this kind (the Q4
-    /// unverified-write channel consults <see cref="Decide"/> for it). Range only in V-03: a
+    /// unverified-write channel consults <see cref="Decide"/> for it). Range and Length: a
     /// widening kind sets this together with a real <see cref="Decide"/>.
     /// </summary>
     public bool WriteRelevant { get; }
@@ -145,7 +145,9 @@ internal static class ConstraintKinds {
                 describe: l => $"length({l.MinLength}, {l.MaxLength})",
                 print: (l, host) => l.MinLength == l.MaxLength
                     ? $"length({host.Number(l.MinLength)})"
-                    : $"length({host.Number(l.MinLength)}, {host.Number(l.MaxLength)})"),
+                    : $"length({host.Number(l.MinLength)}, {host.Number(l.MaxLength)})",
+                decide: WriteVerification.DecideLength,
+                writeRelevant: true),
             Row<RequiredConstraint>(
                 merge: (_, _) => ConstraintMergeResult.Of(new RequiredConstraint()),
                 join: (_, _) => new RequiredConstraint(),

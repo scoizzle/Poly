@@ -318,6 +318,31 @@ public class ArithmeticResultTypingTests {
         await Assert.That(Run(new BitwiseOr(Param("a", typeof(uint)), new Constant(-1)), 5u)).IsEqualTo("Int64; -1");
     }
 
+    public sealed class Target {
+        public void M() { }
+        public void N() { }
+        public int F() => 1;
+        public int G() => 2;
+    }
+
+    /// <summary>
+    /// C# 12.12.9: <c>==</c> and <c>!=</c> over two operands of one delegate type compare invocation lists. The analysis
+    /// accepts them and the VM computes C#'s value for the same instance, two distinct instances of the same target and
+    /// method, and two different delegates (the base ran all twelve cells right; T-22a's first head refused them).
+    /// </summary>
+    [Test]
+    public async Task DelegateEquality_RunsAsCSharp() {
+        var t = new Target();
+        Action same = t.M;
+        Func<int> sameF = t.F;
+        foreach (var (type, a, b) in new (Type, Delegate, Delegate)[] {
+                     (typeof(Action), same, same), (typeof(Action), new Action(t.M), new Action(t.M)), (typeof(Action), new Action(t.M), new Action(t.N)),
+                     (typeof(Func<int>), sameF, sameF), (typeof(Func<int>), new Func<int>(t.F), new Func<int>(t.F)), (typeof(Func<int>), new Func<int>(t.F), new Func<int>(t.G)) }) {
+            await Assert.That(Run(new Equal(Param("a", type), Param("b", type)), a, b)).IsEqualTo($"Boolean; {a == b}");
+            await Assert.That(Run(new NotEqual(Param("a", type), Param("b", type)), a, b)).IsEqualTo($"Boolean; {a != b}");
+        }
+    }
+
     public static class TypedCalls {
         public static int TakesInt(int value) => value;
         public static object TakesObject(object value) => value;

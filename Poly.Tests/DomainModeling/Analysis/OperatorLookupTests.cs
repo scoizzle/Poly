@@ -684,9 +684,9 @@ public class OperatorLookupTests {
     }
 
     [Test]
-    public async Task DeliberateNone_EnumLiftedAndDelegateOperators() {
+    public async Task DeliberateNone_EnumAndLiftedOperators() {
         // C# defines these; the rule set leaves them none on purpose. Enum operators are T-25b's and T-29's, lifted
-        // operators the caller's (T-06), delegate equality is not modelled.
+        // operators the caller's (T-06).
         var day = typeof(DayOfWeek);
         await Assert.That(ClrOp(day, OperatorKind.Add, typeof(int))).IsNull();
         await Assert.That(ClrOp(day, OperatorKind.Equal, day)).IsNull();
@@ -696,7 +696,6 @@ public class OperatorLookupTests {
         await Assert.That(ClrOp(typeof(int?), OperatorKind.Equal, typeof(int))).IsNull();
         // A value type has no reference equality: int == object is none (C# boxes nothing for ==).
         await Assert.That(ClrOp(typeof(int), OperatorKind.Equal, typeof(object))).IsNull();
-        await Assert.That(ClrOp(typeof(System.Action), OperatorKind.Equal, typeof(System.Action))).IsNull();
         // The siblings: the underlying value operators are defined.
         await AssertResult(ClrOp(typeof(int), OperatorKind.Add, typeof(int)), OperatorOperands.Clr(typeof(int)));
         await AssertResult(ClrOp(typeof(int), OperatorKind.Equal, typeof(int)), OperatorOperands.Clr(typeof(bool)));
@@ -712,6 +711,29 @@ public class OperatorLookupTests {
     private class Unrelated;
 
     private sealed class Sealed;
+
+    /// <summary>
+    /// C# 12.12.9, delegate equality, as Roslyn binds it: two operands of one delegate type <c>D</c> have
+    /// <c>D.operator ==(D, D)</c> (equal invocation lists); two different delegate types have none (CS0019); a delegate beside
+    /// <c>object</c> or <c>System.Delegate</c> is reference equality (CS0252, a warning); <c>Delegate == Delegate</c> is
+    /// <c>System.Delegate</c>'s own operator.
+    /// </summary>
+    [Test]
+    public async Task DelegateEquality_IsCSharps_12_12_9() {
+        var boolean = OperatorOperands.Clr(typeof(bool));
+        foreach (var kind in new[] { OperatorKind.Equal, OperatorKind.NotEqual }) {
+            foreach (var type in new[] { typeof(System.Action), typeof(Func<int>), typeof(EventHandler) }) {
+                var found = ClrOp(type, kind, type);
+                await AssertResult(found, boolean);
+                await AssertParameters(found, type, type);
+            }
+            await Assert.That(ClrOp(typeof(System.Action), kind, typeof(Func<int>))).IsNull();
+            await Assert.That(ClrOp(typeof(System.Action), kind, typeof(EventHandler))).IsNull();
+            await AssertParameters(ClrOp(typeof(System.Action), kind, typeof(object)), typeof(object), typeof(object));
+            await AssertParameters(ClrOp(typeof(System.Action), kind, typeof(Delegate)), typeof(object), typeof(object));
+            await AssertParameters(ClrOp(typeof(Delegate), kind, typeof(Delegate)), typeof(Delegate), typeof(Delegate));
+        }
+    }
 
     /// <summary>
     /// T-22a, C# 12.12.7 reference type equality: <c>bool ==(object, object)</c> and <c>!=</c> when both operands are

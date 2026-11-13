@@ -116,6 +116,57 @@ public class StrictGateCensusTests {
         await Assert.That(MasterDoors.Count(d => d.Refused == "none")).IsEqualTo(3);
     }
 
+    /// <summary>
+    /// B-entity in the DSL: every FlipsB B-entity row is API-built, so each rule shape is also written as a whole
+    /// document (<see cref="EntityShapes"/>) where the DSL can express it, and run through every door ON MASTER with a
+    /// create-and-invoke scenario: the doors that refused it there (an entity-typed parameter's simulate refusal is the
+    /// scenario passing no Part instance and is not counted), and the code the head gives. Not expressible in the DSL:
+    /// an entity- or value-typed stored property (a DSL entity reference is a relationship; a value type cannot be
+    /// stored, DMSTR006), so the FlipsB cells that assign into or read out of one are API-only.
+    /// </summary>
+    internal static readonly (string Shape, string RefusedOnMaster, string HeadCode)[] EntityShapeDoors = [
+        ("entity parameter into a Number property", "csharp", "DMSEM003"),
+        ("entity parameter compared with a Number", "csharp", "DMSEM003"),
+        ("entity parameter compared with an entity of another type", "csharp", "DMSEM003"),
+        ("to-one navigation read as a value, compared with a Number", "csharp", "DMSEM003"),
+        ("value-type parameter into a Number property", "csharp", "DMSEM003"),
+        ("value-type parameter compared with a Number", "csharp", "DMSEM003"),
+        ("Number into a Binary property", "simulate+csharp+polyc", "DMSEM003"),
+        ("Text literal into a Binary property", "simulate+csharp+polyc", "DMSEM003"),
+        ("entity parameter as a Number function argument", "none", "DMFUN003"),
+        ("entity-typed function parameter returned as Number (function never called)", "none", "DMFUN006"),
+        ("entity-typed function parameter returned as Number (called)", "csharp", "DMFUN006"),
+        ("to-one navigation as a Number function argument", "none", "DMFUN003"),
+        ("to-one navigation into a Number property", "analysis (already rejected on master)", "DMSEM003")
+    ];
+
+    [Test]
+    public async Task EntityShapes_InTheDsl_AreRejectedOnTheHead() {
+        var head = StrictGateCensus.Verdict;
+        var actual = EntityShapes.Shapes.Select(s => $"{s.Shape} = {head(EntityShapes.Document(s))}");
+        await Assert.That(string.Join('\n', actual))
+            .IsEqualTo(string.Join('\n', EntityShapeDoors.Select(d => $"{d.Shape} = {d.HeadCode}")));
+    }
+
+    /// <summary>
+    /// The census class "regression" (runs on every door on master, rejected here), derived from the two door tables;
+    /// the PR body's section "Runs on master, rejected here" is this list.
+    /// </summary>
+    internal static IEnumerable<string> RunsOnMasterRejectedHere() =>
+        MasterDoors.Where(d => d.Refused == "none").Select(d => $"residual: {d.Cell}")
+            .Concat(EntityShapeDoors.Where(d => d.RefusedOnMaster == "none").Select(d => $"B-entity DSL: {d.Shape} ({d.HeadCode})"));
+
+    [Test]
+    public async Task RunsOnMasterRejectedHere_IsTheRuledList() =>
+        await Assert.That(string.Join('\n', RunsOnMasterRejectedHere())).IsEqualTo(string.Join('\n', [
+            "residual: Bogus (unknown name) | call",
+            "residual: 5 == \"x\" (typeless pair) | call",
+            "residual: 5 == \"x\" (typeless pair) | return",
+            "B-entity DSL: entity parameter as a Number function argument (DMFUN003)",
+            "B-entity DSL: entity-typed function parameter returned as Number (function never called) (DMFUN006)",
+            "B-entity DSL: to-one navigation as a Number function argument (DMFUN003)",
+        ]));
+
     // ── A8: the invariant, on the final analysis result ────────────────────
 
     /// <summary>The residual forms no rule types: every position that consumes one has an error (A8, I1).</summary>

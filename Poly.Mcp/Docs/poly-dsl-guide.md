@@ -1242,13 +1242,20 @@ not Suspended
 Status is "active"
 ```
 
-Ordering (`<`, `>`, `<=`, `>=`) is defined for numbers, dates and durations only. Ordering `Text`,
-`Boolean`, an enum, an entity, a value type or `Binary` is DMSEM003 (`ordering is not defined for 'Text'`);
-compare with `==` or `!=` instead. A value type has value equality, so `==` and `!=` are allowed on it.
+Ordering (`<`, `>`, `<=`, `>=`) is defined for `Number`, `Decimal`, `Date`, `Time`, `DateTime`, `Duration` and `Uuid`
+(an optional operand and a `match` result of those types included). Ordering `Text`, `Boolean`, an enum, an entity,
+a value type or `Binary` is DMSEM003 (`ordering is not defined for 'Text'`); compare with `==` or `!=` instead.
+A value type has value equality, so `==` and `!=` are allowed on it. Known wrong (row X-06): the generated C# compares
+two value types by value, but the simulator compares the JSON text of an argument payload, so two equal values written
+with their fields in another order, or `2` against `2.0` for a `Decimal` field, compare unequal there.
 
-Integer division truncates: `7 / 2` is 3. Storing an integral division into a `Decimal`, directly or
-inside `+ - * /` (`assign Total to 7 / 2`, `assign Total to N / 2 + 1`), is the warning DMNUM001, because
-the quotient is cut before it widens; write one operand as a `Decimal` (`7.5 / 2`, `Total / 2`) to divide exactly.
+Integer division truncates: `7 / 2` is 3. Storing an integral division into a `Decimal` (`assign Total to 7 / 2`,
+`assign Total to N / 2 + 1`) is the warning DMNUM001, because the quotient is cut before it widens. A literal with a
+zero fraction is a whole number, so `7.0 / 2` is also 3; divide by a `Decimal` property or a literal with a fraction
+(`7.5 / 2`, `Total / 2`) to divide exactly. The warning covers an `assign`, a `create` initializer, a `default(...)`, a
+function's return, a function argument and an invoke or fan-out argument, along the `+ - * /` spine of the value. It
+does not cover a division inside a `match` arm (row T-09a) and, like every analysis warning, it is not yet suppressible
+by an allowance (row T-08).
 
 #### Subject-First Related Reads (Q1′)
 

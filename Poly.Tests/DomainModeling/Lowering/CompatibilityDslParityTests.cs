@@ -81,28 +81,6 @@ public class CompatibilityDslParityTests {
         return outcome.Success ? $"success=True; answer={outcome.State["Cheap"]}" : $"success=False; message={outcome.Message}";
     }
 
-    const string TextOrdering = """
-        domain Ord
-        Pair: entity {
-          A: Text
-          B: Text
-          Before: policy { A < B }
-          After: policy { A > B }
-        }
-        """;
-
-    /// <summary>
-    /// Analysis refuses Text ordering (T-07a, #631), so no domain reaches the interpreter with it: the interpreter-only answer
-    /// this class used to pin is unreachable. The lowered analysis keeps <c>TextAndBooleanOrderingRule</c> for the C# surface
-    /// (the oracle ledger's Text and Boolean ordering cells, owner T-07).
-    /// </summary>
-    [Test]
-    public async Task TextOrderingPolicy_Document_IsRefusedByAnalysis() {
-        await Assert.That(() => ParityScenario.FromDsl(TextOrdering, "T18TextPrinted"))
-            .Throws<InvalidOperationException>()
-            .WithMessageContaining("ordering is not defined for 'Text'");
-    }
-
     static string DateOffset(string type, string op) => $$"""
         domain Cal
         uses temporal

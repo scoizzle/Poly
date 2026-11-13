@@ -133,6 +133,160 @@ public class AnalysisGateParityTests {
         await Assert.That(result.PolycCheck is true).IsTrue().Because($"{shape}: {result}");
     }
 
+    private const string OrderingDomain = """
+        domain T
+        uses temporal
+        Level: enum { Low, High }
+        Money: value {
+          Amount: Number
+        }
+        Other: entity {
+          X: Number
+        }
+        Item: entity {
+          A: Number
+          B: Number
+          S: Text
+          U: Text
+          F: Boolean
+          G: Boolean
+          L: Level
+          M: Level
+          Due: Date
+          Gap: Duration optional
+          Dc: Decimal
+          Tm: Time
+          Stamp: DateTime
+          Opt: Number optional
+          U1: Uuid
+          U2: Uuid
+          peer: Other
+          MEMBERS
+        }
+        """;
+
+    /// <summary>
+    /// T-07a (#631): ordering is defined for numbers, dates and durations, and for nothing else the provider declares
+    /// no ordering for. A document that orders Text, Boolean, an enum, an entity or a value type is refused with
+    /// DMSEM003, where it used to pass analysis and fail the generated C# (CS0019).
+    /// </summary>
+    [Test]
+    [Arguments("Text", "P: policy { S < U }", "Text")]
+    [Arguments("Boolean", "P: policy { F >= G }", "Boolean")]
+    [Arguments("Binary", "Blob: Binary\n  Blob2: Binary\n  P: policy { Blob > Blob2 }", "Binary")]
+    [Arguments("enum", "P: policy { L > M }", "enum Level")]
+    [Arguments("entity", "P: policy { peer <= peer }", "entity Other")]
+    [Arguments("value type", "Cmp: action (a: Money, b: Money) { if (a < b) { assign A to 1 } }", "value Money")]
+    public async Task Ordering_OfAFamilyWithNoOrdering_IsDmsem003(string shape, string members, string described) {
+        var result = GateParity.Check(OrderingDomain.Replace("MEMBERS", members, StringComparison.Ordinal));
+
+        await Assert.That(result.Analysis).IsFalse().Because($"{shape}: {result}");
+        await Assert.That(result.AnalysisSummary).Contains($"ordering is not defined for '{described}'").Because($"{shape}: {result}");
+    }
+
+    /// <summary>
+    /// The rule's regression rows: what the provider orders stays accepted and agrees on every door (numbers, Decimal
+    /// against Number, Date, Time, DateTime, Duration, Uuid, an optional operand, a <c>match</c> result, the clock
+    /// values). Every row is accepted and runs on every door.
+    /// </summary>
+    [Test]
+    [Arguments("Number", "P: policy { A < B and A >= B }", true)]
+    [Arguments("Decimal against Number", "P: policy { Dc > A }", true)]
+    [Arguments("Date", "P: policy { Due > Due }", true)]
+    [Arguments("Date against Today", "P: policy { Due < Today }", true)]
+    [Arguments("Time", "P: policy { Tm <= Tm }", true)]
+    [Arguments("DateTime against Now", "P: policy { Stamp < Now }", true)]
+    [Arguments("Duration", "P: policy { Gap <= Gap }", true)]
+    [Arguments("Uuid", "P: policy { U1 < U2 }", true)]
+    [Arguments("optional operand", "P: policy { Opt > A }", true)]
+    [Arguments("match result", "P: policy { (match { A > 1 -> 1, else -> 2 }) > B }", true)]
+    public async Task Ordering_WhatTheProviderOrders_StaysAcceptedByEveryDoor(string shape, string members, bool accepted) {
+        var result = GateParity.Check(OrderingDomain.Replace("MEMBERS", members, StringComparison.Ordinal),
+            SimStep.Create("Item", """{"A":1,"B":2,"S":"a","U":"b","F":true,"G":false,"L":"Low","M":"High","Due":"2026-01-01","Dc":1.5,"Tm":"10:00:00","Stamp":"2026-01-01T00:00:00Z","U1":"00000000-0000-0000-0000-000000000001","U2":"00000000-0000-0000-0000-000000000002"}""", "i"));
+
+        await Assert.That(result.Analysis).IsEqualTo(accepted).Because($"{shape}: {result}");
+        await Assert.That(result.Holds).IsTrue().Because($"{shape}: {result}");
+    }
+
+    private const string ValueEqualityDomain = """
+        domain T
+        Money: value {
+          Amount: Number
+        }
+        Pair: value {
+          X: Number
+          Y: Number
+        }
+        Dec: value {
+          D: Decimal
+        }
+        Acct: entity {
+          N: Number
+          Hit: policy { N == 1 }
+          EqM: action (a: Money, b: Money) { if (a == b) { assign N to 1 } }
+          NeM: action (a: Money, b: Money) { if (a != b) { assign N to 1 } }
+          EqP: action (a: Pair, b: Pair) { if (a == b) { assign N to 1 } }
+          EqD: action (a: Dec, b: Dec) { if (a == b) { assign N to 1 } }
+        }
+        """;
+
+    private static bool SimulatedHit(string action, string json) {
+        var surface = PolySurfaceHarness.New();
+        var workspace = surface.Open("ValueEquality");
+        var define = surface.Define(workspace, ValueEqualityDomain);
+        if (!define.Success)
+            throw new InvalidOperationException(define.Summary);
+        var run = surface.Simulate(workspace, [
+            SimStep.Create("Acct", """{"N":0}""", "a"), SimStep.Invoke("a", action, json), SimStep.Evaluate("Acct", "Hit", "a")]);
+        return run.Step(1).Ok ? Evaluated(run.Step(2)) : throw new InvalidOperationException(run.Step(1).Summary);
+    }
+
+    private static string PrintedN(string action, Dictionary<string, object?> a, Dictionary<string, object?> b) {
+        var (_, printed) = ParityScenario.FromDsl(ValueEqualityDomain, "ValueEquality").Run(side => {
+            side.Create("Acct", ("N", 0L));
+            side.Invoke(action, ("a", a), ("b", b));
+        });
+        return printed[^1].State["N"]!;
+    }
+
+    private static Dictionary<string, object?> Amount(long amount) => new() { ["Amount"] = amount };
+
+    /// <summary>
+    /// T-07a: a value type has value equality (the provider declares <c>==</c> and <c>!=</c> for it). The branch taken is
+    /// observed, not acceptance: an equal pair and an unequal pair, each way round, on the simulator (the
+    /// <c>poly_simulate</c> door) and on the generated C# (a record).
+    /// </summary>
+    [Test]
+    [Arguments("EqM", 2L, 2L, true)]
+    [Arguments("EqM", 2L, 3L, false)]
+    [Arguments("NeM", 2L, 2L, false)]
+    [Arguments("NeM", 2L, 3L, true)]
+    public async Task ValueType_Equality_TakesTheBranchByValueOnEveryDoor(string action, long left, long right, bool taken) {
+        await Assert.That(GateParity.Check(ValueEqualityDomain).Holds).IsTrue();
+        await Assert.That(SimulatedHit(action, "{\"a\":{\"Amount\":" + left + "},\"b\":{\"Amount\":" + right + "}}")).IsEqualTo(taken);
+        await Assert.That(PrintedN(action, Amount(left), Amount(right))).IsEqualTo(taken ? "1" : "0");
+    }
+
+    /// <summary>
+    /// Known wrong, owner X-06 (value-type payloads built through the lowered factory): the simulator carries a value-type
+    /// argument as the JSON text of the payload (<c>RuntimeTool.JsonElementToValue</c>, kept as is by
+    /// <c>ModuleInstanceExecutor.Coercion</c>) and compares it with <c>object.Equals</c> (<c>AbiEmitter.Expressions</c>), so
+    /// two equal values written with the fields in another order, or <c>2</c> against <c>2.0</c> for a Decimal field, are
+    /// unequal there and equal on the generated C#. Whitespace is not a difference (the surface re-serialises compactly).
+    /// </summary>
+    [Test]
+    [Arguments("EqP", """{"a":{"X":1,"Y":2},"b":{"X":1,"Y":2}}""", """{"a":{"X":1,"Y":2},"b":{"Y":2,"X":1}}""")]
+    [Arguments("EqD", """{"a":{"D":2},"b":{"D":2}}""", """{"a":{"D":2},"b":{"D":2.0}}""")]
+    public async Task ValueType_EqualityOfEqualValuesWrittenDifferently_DiffersOnTheSimulator_UntilX06(string action, string sameText, string differentText) {
+        await Assert.That(SimulatedHit(action, sameText)).IsTrue();
+        await Assert.That(SimulatedHit(action, differentText)).IsFalse();
+        static Dictionary<string, object?> Fields(params (string Name, object Value)[] fields) => fields.ToDictionary(f => f.Name, f => (object?)f.Value);
+        var (left, right) = action == "EqP"
+            ? (Fields(("X", 1L), ("Y", 2L)), Fields(("Y", 2L), ("X", 1L)))
+            : (Fields(("D", 2m)), Fields(("D", 2.0m)));
+        await Assert.That(PrintedN(action, left, right)).IsEqualTo("1");
+    }
+
     private static string DateDocument(string members) => $$"""
         domain T
         uses temporal

@@ -183,8 +183,9 @@ public sealed record Cut<TToken, TTokenKind> : IPatternElement<TToken, TTokenKin
 /// Zero-width, terminal refusal: a row that reaches it matches its tokens and yields a committed failure with
 /// <paramref name="Message"/> (placeholders <c>{got}</c> and a capture name of a required element before it),
 /// positioned at the last token the row matched. It counts as matching every token up to there, so a
-/// shorter sibling does not rescue it. It is the row's last element, after at least one required element,
-/// never inside an <see cref="Optional{TToken,TTokenKind}"/>; a refusal row is never printed (the printer throws).
+/// shorter sibling does not rescue it. It is the row's last element, after at least one required element or
+/// alone (a catch-all that matches no token: it stands on the head token, and any sibling that matches a token
+/// rescues it), never inside an <see cref="Optional{TToken,TTokenKind}"/>; a refusal row is never printed (the printer throws).
 /// </summary>
 public sealed record Refuse<TToken, TTokenKind>(string Message) : IPatternElement<TToken, TTokenKind>
     where TToken : struct, IToken<TTokenKind>

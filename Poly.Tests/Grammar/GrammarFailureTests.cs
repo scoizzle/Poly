@@ -454,9 +454,10 @@ public sealed class GrammarFailureTests {
     }
 
     [Test]
-    public async Task Builder_RejectsARefuseThatIsNotLast_OrFirst_OrOptional() {
+    public async Task Builder_RejectsARefuseThatIsNotLast_OrAfterOnlyOptionalElements_OrOptional() {
         await Assert.That(() => Table().Define("r").Pattern("p").Kind(TestKind.Entity).Refuse("no").Kind(TestKind.Colon).Commit()).Throws<InvalidOperationException>();
-        await Assert.That(() => Table().Define("r").Pattern("p").Refuse("no").Commit()).Throws<InvalidOperationException>();
+        // A Refuse after only optional elements has no position to stand on (a Refuse-only row is the catch-all: see below).
+        await Assert.That(() => Table().Define("r").Pattern("p").Optional(TestKind.Colon).Refuse("no").Commit()).Throws<InvalidOperationException>();
         await Assert.That(() => Table().Define("r").Pattern("p").Kind(TestKind.Entity).Optional(new Refuse<TestToken, TestKind>("no")).Commit())
             .Throws<InvalidOperationException>();
     }
@@ -545,5 +546,25 @@ public sealed class GrammarFailureTests {
         await Assert.That((committed!.Pattern, committed.CommittedPattern)).IsEqualTo(("p", "typed"));
         await Assert.That(plain!.CommittedPattern).IsNull();
         await Assert.That(refused!.CommittedPattern).IsEqualTo("no");
+    }
+
+    [Test]
+    public async Task Refuse_ACatchAllRowOfNoTokens_ReportsAtTheHeadToken_AndAnySiblingThatMatchesRescuesIt() {
+        var grammar = Table().Define("member")
+            .Pattern("property").Value(TestKind.Identifier, "name").Kind(TestKind.Colon).Cut().Value(TestKind.Identifier, "type").Expect("type name").Commit()
+            .Pattern("stage").Value(TestKind.Identifier, "name").Kind(TestKind.Stage).Commit()
+            .Pattern("catch-all").Refuse("Expected property, stage, action, or policy, got '{got}'").Commit()
+            .Build();
+
+        var noRow = Match(grammar, "member", "5 : x");
+        var deeper = Match(grammar, "member", "a : 5");
+        var matched = Match(grammar, "member", "a stage");
+
+        await Assert.That(noRow.Failure).IsNotNull();
+        await Assert.That((noRow.Failure!.Refused, noRow.Failure.Offset, noRow.Failure.CommittedPattern)).IsEqualTo((true, 0, "catch-all"));
+        await Assert.That(noRow.Failure.Expand("", t => t.Text)).IsEqualTo("Expected property, stage, action, or policy, got '5'");
+        // A committed row that got further outranks the catch-all, which matched nothing.
+        await Assert.That((deeper.Failure!.Refused, deeper.Failure.Offset, Expected(deeper.Failure))).IsEqualTo((false, 2, "type name"));
+        await Assert.That(matched.Result?.PatternName).IsEqualTo("stage");
     }
 }

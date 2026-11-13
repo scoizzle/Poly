@@ -198,8 +198,9 @@ public sealed class Matcher<TToken, TTokenKind>
                     cut = true;
                     continue;
                 case Refuse<TToken, TTokenKind>:
-                    // The row matched every token up to here and refuses at the last one.
-                    Commit.Add(ref committed, new Commit(pattern, pos, [new Entry(ruleName, pattern, index, element, pos - 1, null, captures)]));
+                    // The row matched every token up to here and refuses at the last one; a Refuse-only row (a catch-all)
+                    // matched none, so it stands on the head token and any sibling that matches a token rescues it.
+                    Commit.Add(ref committed, new Commit(pattern, pos, [new Entry(ruleName, pattern, index, element, pos > offset ? pos - 1 : pos, null, captures)]));
                     match = null!;
                     return false;
             }

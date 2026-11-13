@@ -84,8 +84,8 @@ public sealed class GrammarBuilder<TToken, TTokenKind>
     /// anywhere); a <see cref="Run{TToken,TTokenKind}"/> with no required element before it (it continues the
     /// token before it); a Slot or Run inside an <see cref="Optional{TToken,TTokenKind}"/>; a
     /// <see cref="Cut{TToken,TTokenKind}"/> with no required element before it, last, inside an Optional, or a
-    /// second one; a <see cref="Refuse{TToken,TTokenKind}"/> that is not last, has no required element before it, or
-    /// is inside an Optional; and a template placeholder that is not <c>{expected}</c>, <c>{got}</c> or the capture
+    /// second one; a <see cref="Refuse{TToken,TTokenKind}"/> that is not last, follows only optional elements (a
+    /// Refuse-only row is a catch-all that matches no token), or is inside an Optional; and a template placeholder that is not <c>{expected}</c>, <c>{got}</c> or the capture
     /// of a required element before it.
     /// </summary>
     private static void EnsurePlacement(string ruleName, Pattern<TToken, TTokenKind> pattern) {
@@ -119,8 +119,8 @@ public sealed class GrammarBuilder<TToken, TTokenKind>
                     throw new InvalidOperationException($"'{ruleName}/{pattern.Name}' holds more than one Cut; a row commits once.");
                 case Refuse<TToken, TTokenKind> when i != elements.Count - 1:
                     throw new InvalidOperationException($"The Refuse is {Where(i)} of {elements.Count}; a Refuse must be the last element.");
-                case Refuse<TToken, TTokenKind> when !required:
-                    throw new InvalidOperationException($"The Refuse is {Where(i)} with no required element before it; a refusal row must match something.");
+                case Refuse<TToken, TTokenKind> when !required && i != 0:
+                    throw new InvalidOperationException($"The Refuse is {Where(i)} after only optional elements; a refusal stands on a matched token, or is the whole row (a catch-all).");
                 case Optional<TToken, TTokenKind> { Inner: Cut<TToken, TTokenKind> or Refuse<TToken, TTokenKind> }:
                     throw new InvalidOperationException($"{Where(i)} is an Optional Cut or Refuse; neither is ever optional.");
             }

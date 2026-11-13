@@ -545,6 +545,11 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                 RejectEndpointCallsInBody(context, expr);
                 CheckQuantifierBody(context, expr, props, parameters, enumTypes);
                 return;
+            case SumExpr sum:
+                // #846: the sum's property is checked in every position, once (the policy pass skips a marked node).
+                if (QuantifiedEntity(context, sum, props) is { } summed)
+                    PolicyConstraintAnalyzer.CheckSumProperty(context, sum, summed);
+                return;
             default:
                 foreach (var child in expr.Children.OfType<DomainExpression>())
                     WalkExpression(context, child, props, parameters, enumTypes, walked);

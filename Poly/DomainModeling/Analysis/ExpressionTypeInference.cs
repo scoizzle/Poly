@@ -318,8 +318,8 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
     /// tests (<c>AnalysisGateParityTests.Sum_UnderClrOverride_AnalysisAndLoweringAgree</c> and
     /// <c>Sum_WithoutOverride_AnalysisAndLoweringAgreeOnDecimal</c>), which compare it with lowering's seed; no
     /// production pass reads it (lowering recomputes <c>SumResult</c>). A sum this cannot type (no entity scope, an
-    /// unknown relationship or property, a non-numeric property) is the Number family it was before T-05a;
-    /// <c>PolicyConstraintAnalyzer</c> reports the bad shapes.
+    /// unknown relationship or property, a non-numeric property) is Unresolved (T-05b, #846): the shared sum check
+    /// reports a non-numeric or unknown property in every position, and a consumer records the rest for DMSEM006.
     /// </summary>
     private static ExprType InferSum(AnalysisContext context, SumExpr sum, Dictionary<string, string>? props) {
         if (QuantifiedEntity(context, sum, props) is { } target
@@ -329,7 +329,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
             context.SetMetadata(sum, new TypedExpressionMetadata(result));
             return result;
         }
-        return NumberFamily;
+        return ExprType.Unresolved;
     }
 
     private static string? ResolvePropertyType(string name, Dictionary<string, string>? props, Dictionary<string, string>? parameters) {

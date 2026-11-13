@@ -170,6 +170,22 @@ internal sealed class PolicyConstraintAnalyzer : INodeAnalyzer {
             context, lookup, sum, entity, sum.RelationshipName);
         if (targetEntity is null) return;
 
+        if (context.GetMetadata<CheckedSumMetadata>(sum) is null)
+            CheckSumProperty(context, sum, targetEntity);
+    }
+
+    /// <summary>Marker: this <c>sum</c>'s property was checked in this run (#846; set first by the expression analyzer).</summary>
+    private sealed class CheckedSumMetadata : IAnalysisMetadata { }
+
+    /// <summary>
+    /// The shared <c>sum</c> property check (#846, A11): an unknown or non-numeric property on the relationship's target
+    /// is DMSEM005 in every position (assign, comparison, create, policy). The first caller in a run reports and marks
+    /// the node, so a policy the expression analyzer already walked is not reported twice. Relationship shape errors
+    /// stay the policy path's.
+    /// </summary>
+    internal static void CheckSumProperty(AnalysisContext context, SumExpr sum, Entity targetEntity) {
+        if (context.GetMetadata<CheckedSumMetadata>(sum) is not null) return;
+        context.SetMetadata(sum, new CheckedSumMetadata());
         var property = targetEntity.Properties.FirstOrDefault(p =>
             string.Equals(p.Name, sum.PropertyName, StringComparison.Ordinal));
         if (property is null) {
@@ -181,7 +197,8 @@ internal sealed class PolicyConstraintAnalyzer : INodeAnalyzer {
         }
 
         // Numeric by kind, through the type model (fork A: a declared alias of a numeric primitive is numeric).
-        var model = DomainTypeModel.Of(context, lookup!.Domain);
+        if (context.GetTypeLookup()?.Domain is not { } domain) return;
+        var model = DomainTypeModel.Of(context, domain);
         if (!model.SumResult(model.OfProperty(property)).IsResolved) {
             context.ReportError(sum,
                 $"Sum property '{sum.PropertyName}' on entity '{targetEntity.Name}' has type " +

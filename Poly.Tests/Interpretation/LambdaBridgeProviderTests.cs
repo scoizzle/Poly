@@ -31,6 +31,8 @@ public static class BridgeProbeTargets {
     public static ulong TakeUInt64(ulong value) => value;
 
     public static uint TakeUInt32(uint value) => value;
+
+    public static int? Echo(int? value) => value;
 }
 
 internal sealed record BridgeProbeRecord(System.Linq.Expressions.LambdaExpression Tree, object? Value, Exception? Error);
@@ -311,10 +313,107 @@ internal static class BridgeGrid {
         }
     }
 
+    /// <summary>
+    /// The coalesce <c>x ?? y</c> (closing round, F1): the left a nullable of each operand, the right each operand, and the
+    /// <c>int</c> constant <c>0</c>.
+    /// </summary>
+    public static IEnumerable<BridgeCase> CoalesceCases() {
+        foreach (var left in Operands) {
+            var l = N(left);
+            foreach (var right in Operands) {
+                var r = P(right);
+                yield return new("coalesce", $"{l.Name} ?? {r.Name}", null, l, r, typeof(object),
+                    static (x, y) => new Coalesce(x, y!), [new("N1", null, r.Operand.Plain), new("S1", l.Operand.Stress, r.Operand.Plain), new("S2", l.Operand.Plain, r.Operand.Stress)]);
+            }
+            yield return new("coalesce", $"{l.Name} ?? Int32(0)", null, l, null, typeof(object),
+                static (x, _) => new Coalesce(x, new Constant(0)), [new("N1", null, null), new("S1", l.Operand.Stress, null), new("S2", l.Operand.Plain, null)]);
+        }
+    }
+
     public static IReadOnlyList<BridgeCase> Cases { get; } = [
         .. OperatorCases(), .. NullableCases(), .. ConditionalCases(), .. ReturnCases(),
-        .. UInt64ConstantCases(), .. UInt32ConstantCases(), .. ConstantParameterCases()
+        .. UInt64ConstantCases(), .. UInt32ConstantCases(), .. ConstantParameterCases(), .. CoalesceCases()
     ];
+
+    /// <summary>
+    /// <c>nint</c> and <c>nuint</c> (closing round, F3): not ledger operands until T-18b, so they are declared here, with the
+    /// ledger's kind of values. <c>IsGoverned</c> covers them (<c>Type.IsPrimitive</c>), so the bridge asks the provider.
+    /// </summary>
+    public static readonly OracleOperand[] NativeOperands = [
+        new("NInt", null, typeof(nint), (nint)int.MaxValue, (nint)7, ClrOnly: true),
+        new("NUInt", null, typeof(nuint), (nuint)uint.MaxValue, (nuint)7, ClrOnly: true)
+    ];
+
+    private static readonly OperatorKind[] NativeKinds = [
+        OperatorKind.Add, OperatorKind.Subtract, OperatorKind.Multiply, OperatorKind.Divide, OperatorKind.Modulo,
+        OperatorKind.Equal, OperatorKind.LessThan, OperatorKind.BitwiseAnd, OperatorKind.BitwiseOr,
+        OperatorKind.ShiftLeft, OperatorKind.ShiftRight
+    ];
+
+    /// <summary>
+    /// The native-integer grid: unary minus and bitwise not over each native operand, and for every ordered pair of the
+    /// 13 operands and the two native ones with a native side, eleven binary kinds, the conditional and the return.
+    /// </summary>
+    public static IReadOnlyList<BridgeCase> NativeCases { get; } = BuildNativeCases();
+
+    private static BridgeCase[] BuildNativeCases() {
+        var cases = new List<BridgeCase>();
+        foreach (var native in NativeOperands) {
+            foreach (var kind in new[] { OperatorKind.UnaryMinus, OperatorKind.BitwiseNot })
+                cases.Add(OperatorCase("native", kind, P(native), null));
+        }
+        var all = Operands.Concat(NativeOperands).ToArray();
+        foreach (var left in all) {
+            foreach (var right in all) {
+                if (!NativeOperands.Contains(left) && !NativeOperands.Contains(right))
+                    continue;
+                var (l, r) = (P(left), P(right));
+                foreach (var kind in NativeKinds)
+                    cases.Add(OperatorCase("native", kind, l, r));
+                cases.Add(new("native", $"{l.Name} ? {r.Name}", null, l, r, typeof(object),
+                    static (x, y) => new Conditional(new Equal(x, x), x, y!), BinarySets(l, r)));
+                cases.Add(new("native", $"{l.Name} -> {r.Name}", null, l, null, r.Clr, static (x, _) => x, UnarySets(l)));
+            }
+        }
+        return [.. cases];
+    }
+
+    /// <summary>
+    /// The provider's answer for a native cell: the operator's result, the conditional's common type, or the return's target
+    /// when the conversion is the identity or implicit; null when it states none. Read from the provider whatever it knows,
+    /// so the answer holds before T-18b (no native definitions: none) and after.
+    /// </summary>
+    public static Type? NativeProviderAnswer(BridgeCase c) {
+        var registry = ClrTypeDefinitionRegistry.Shared;
+        ITypeDefinition? left = registry.GetTypeDefinition(c.Left.Underlying);
+        if (left is null)
+            return null;
+        if (c.Op is { } kind) {
+            var right = c.Right is null ? null : registry.GetTypeDefinition(c.Right.Underlying);
+            if (c.Right is not null && right is null)
+                return null;
+            return left.GetOperator(kind, right) is { } resolution && resolution.Result.TryGetRuntimeType(out var result) ? result : null;
+        }
+        if (c.Right is { } armType) {
+            if (armType.Clr == c.Left.Clr)
+                return c.Left.Clr;
+            return registry.GetTypeDefinition(armType.Underlying) is { } arm
+                && new[] { left, arm }.GetCommonType() is { } common && common.TryGetRuntimeType(out var commonType) ? commonType : null;
+        }
+        if (c.Return == c.Left.Clr)
+            return c.Return;
+        ITypeDefinition? target = registry.GetTypeDefinition(c.Return);
+        return target is not null
+            && target.ResolveConversionFrom(left) is { Kind: ConversionOperatorKind.Implicit } ? c.Return : null;
+    }
+
+    /// <summary>
+    /// The grids whose answers on master are persisted. The coalesce grid joined in the closing round; its master
+    /// behaviour is the probe the PR records (the right operand converted to the left's type), not a persisted answer.
+    /// </summary>
+    public static bool HasMasterAnswer(BridgeCase c) => c.Grid != "coalesce";
+
+    public static IEnumerable<BridgeCase> MasterCases => Cases.Where(HasMasterAnswer);
 
     /// <summary>Every cell's outcome, run once under the invariant culture (values are formatted as the ledger formats them).</summary>
     public static readonly Lazy<IReadOnlyDictionary<BridgeCase, BridgeOutcome>> Outcomes = new(() => {
@@ -409,9 +508,10 @@ internal static class BridgeGrid {
     }
 
     /// <summary>
-    /// Whether an emit exception came from the bridge quoting the body (<c>BuildExpressionArgument</c> is on its stack).
-    /// The emitter also compiles every lambda of the program into its function table with the main emitter, before the
-    /// call that quotes it (<c>AbiEmitter.Build</c>, <c>CollectLambdas</c>); an exception there means the bridge never decided.
+    /// Whether an emit exception came from the bridge quoting the body: the bridge marks every exception raised while it
+    /// quotes (<see cref="Poly.Interpretation.Vm.Abi.AbiEmitter.LambdaBridgeExceptionKey"/>). The emitter also compiles every
+    /// lambda of the program into its function table with the main emitter, before the call that quotes it
+    /// (<c>AbiEmitter.Build</c>, <c>CollectLambdas</c>); an unmarked exception there means the bridge never decided (T-19b).
     /// </summary>
     private static bool InTheBridge(Exception ex) =>
         ex.StackTrace?.Contains("AbiEmitter.BuildExpressionArgument", StringComparison.Ordinal) == true;
@@ -453,6 +553,7 @@ internal static class BridgeGrid {
         "uint64-constant" => ExpectUInt64Constant(c),
         "uint32-constant" => ExpectUInt32Constant(c, constantConversion: true),
         "constant-parameter" => ExpectConstantParameter(c, constantConversion: true),
+        "coalesce" => ExpectCoalesce(c, constantConversion: true),
         _ => throw new ArgumentOutOfRangeException(nameof(c), c.Grid, "unknown grid")
     };
 
@@ -681,6 +782,38 @@ internal static class BridgeGrid {
     }
 
     /// <summary>
+    /// C# 12.15 for <c>a ?? b</c> with <c>a</c> of the nullable type A over A0 and <c>b</c> of type B (or the <c>int</c>
+    /// constant 0): A0 when b converts implicitly to A0, else A when b converts to A, else B when A0 converts to B; no
+    /// type otherwise. The value is a's when it has one, converted to the result, else b's. With
+    /// <paramref name="constantConversion"/> false the constant 0 converts as an <c>int</c> does (the provider's answer, T-26).
+    /// </summary>
+    private static BridgeExpectation ExpectCoalesce(BridgeCase c, bool constantConversion) {
+        var a = c.Left;
+        var a0 = new BridgeOperand(a.Operand, false);
+        var int32 = P(OperandOf(typeof(int)));
+        var b = c.Right ?? int32;
+        bool BConverts(BridgeOperand to) =>
+            ImplicitlyConverts(b, to) || (c.Right is null && constantConversion && IntConstantTargets.Contains(to.Underlying));
+        Type result;
+        if (BConverts(a0))
+            result = a0.Clr;
+        else if (BConverts(a))
+            result = a.Clr;
+        else if (ImplicitlyConverts(a0, b))
+            result = b.Clr;
+        else
+            return BridgeExpectation.Undefined;
+        object? Converted(object? value, bool isConstant) =>
+            value is null ? null
+            : isConstant ? Convert.ChangeType(value, Nullable.GetUnderlyingType(result) ?? result, CultureInfo.InvariantCulture)
+            : Implicit(value, result);
+        var runs = c.Sets.Select(set => Run(set.Name, () => set.Left is not null
+            ? Converted(set.Left, false)
+            : Converted(c.Right is null ? 0 : set.Right, c.Right is null))).ToArray();
+        return new(true, TypeName(result), runs);
+    }
+
+    /// <summary>
     /// The provider's answer, which T-19's bridge gives: C#'s, except where only C#'s constant-expression conversion
     /// (spec 10.2.11) makes the answer, which the provider does not model (beside <c>uint</c>, into an unsigned or narrower
     /// parameter). Those cells are T-26's (lock amendment 4). The owner's <c>ulong</c> exception is modeled (T-18's helper).
@@ -694,6 +827,7 @@ internal static class BridgeGrid {
                 expectations[c] = c.Grid switch {
                     "uint32-constant" => ExpectUInt32Constant(c, constantConversion: false),
                     "constant-parameter" => ExpectConstantParameter(c, constantConversion: false),
+                    "coalesce" => ExpectCoalesce(c, constantConversion: false),
                     _ => Expectation(c)
                 };
             }
@@ -781,7 +915,7 @@ internal static class BridgeGrid {
 
     public static string MasterAnswersPath => Path.Combine(GoldenDomains.RepoRoot, "Poly.Tests", "Interpretation", "LambdaBridgeMasterAnswers.txt");
 
-    public static IEnumerable<string> Lines() => Cases.Select(static c => $"{c.Line} = {Outcome(c).Render}");
+    public static IEnumerable<string> Lines() => MasterCases.Select(static c => $"{c.Line} = {Outcome(c).Render}");
 
     public static readonly Lazy<IReadOnlyDictionary<string, string>> MasterAnswers = new(static () =>
         File.ReadAllLines(MasterAnswersPath).ToDictionary(
@@ -872,6 +1006,8 @@ public class LambdaBridgeProviderTests {
         await Assert.That(counts["uint64-constant"]).IsEqualTo(528);
         await Assert.That(counts["uint32-constant"]).IsEqualTo(64);
         await Assert.That(counts["constant-parameter"]).IsEqualTo(36);
+        // Closing round, F1: 13 nullable lefts × (13 rights + the constant 0).
+        await Assert.That(counts["coalesce"]).IsEqualTo(182);
         await Assert.That(BridgeGrid.Cases.Select(static c => c.Line).Distinct().Count()).IsEqualTo(BridgeGrid.Cases.Count);
     }
 
@@ -899,7 +1035,7 @@ public class LambdaBridgeProviderTests {
         if (Environment.GetEnvironmentVariable("POLY_BRIDGE_MASTER_WRITE") == "1")
             File.WriteAllLines(BridgeGrid.MasterAnswersPath, BridgeGrid.Lines());
         await Assert.That(BridgeGrid.MasterAnswers.Value.Keys.Order(StringComparer.Ordinal).ToArray())
-            .IsEquivalentTo(BridgeGrid.Cases.Select(static c => c.Line).Order(StringComparer.Ordinal).ToArray());
+            .IsEquivalentTo(BridgeGrid.MasterCases.Select(static c => c.Line).Order(StringComparer.Ordinal).ToArray());
     }
 
     /// <summary>
@@ -908,7 +1044,7 @@ public class LambdaBridgeProviderTests {
     /// </summary>
     [Test]
     public async Task Run_DiffersFromMasterAnswers_OnlyOnTheDeltaCells() {
-        var families = BridgeGrid.Cases
+        var families = BridgeGrid.MasterCases
             .Where(static c => BridgeGrid.Normalized(BridgeGrid.Outcome(c).Render) != BridgeGrid.Normalized(BridgeGrid.MasterAnswer(c)))
             .GroupBy(static c => BridgeGrid.Family(c, BridgeGrid.MasterAnswer(c), BridgeGrid.Outcome(c).Render))
             .OrderBy(static g => g.Key, StringComparer.Ordinal)
@@ -969,7 +1105,7 @@ public class LambdaBridgeProviderTests {
     /// </summary>
     [Test]
     public async Task Master_DisagreesWithTheProvider_OnThePredictedDeltaFamilies() {
-        var families = BridgeGrid.Cases
+        var families = BridgeGrid.MasterCases
             .Where(static c => BridgeGrid.BridgeDecidesOnMaster(c) && !BridgeGrid.MasterAgrees(c))
             .GroupBy(static c => BridgeGrid.Family(c, BridgeGrid.MasterAnswer(c), BridgeGrid.ProviderExpectation(c).Render))
             .OrderBy(static g => g.Key, StringComparer.Ordinal)
@@ -1020,6 +1156,71 @@ public class LambdaBridgeProviderTests {
                 static (x, _) => new Equal(x, new Constant(null)), sets);
             await Assert.That(BridgeGrid.Evaluate(cell).Observed).IsEqualTo(expected);
         }
+    }
+
+    private static BridgeOperand Operand(string name, bool nullable) =>
+        new(OperatorOracle.Operands.Single(o => o.Name == name), nullable);
+
+    /// <summary>
+    /// F1 (closing round): <c>x ?? 0</c> with <c>x: int?</c> is <c>int</c> (C# 12.15: the right converts to the left's
+    /// underlying type), so it returns from <c>Func&lt;int?, int&gt;</c>; <c>int? ?? long</c> is <c>long</c>. The bridge
+    /// converted the right operand to the left's type: the first was <c>int?</c> and refused there, the second refused.
+    /// </summary>
+    [Test]
+    public async Task Bridge_Coalesce_IsTypedAsCSharpTypesIt() {
+        var intToInt = new BridgeCase("named", "Int32? ?? 0 -> Int32", null, Operand("Int32", true), null, typeof(int),
+            static (x, _) => new Coalesce(x, new Constant(0)), [new("N1", null, null), new("S1", 5, null)]);
+        await Assert.That(BridgeGrid.Evaluate(intToInt).Observed).IsEqualTo("ran; Int32; N1=0; S1=5");
+        var widening = new BridgeCase("named", "Int32? ?? Number", null, Operand("Int32", true), Operand("Number", false), typeof(object),
+            static (x, y) => new Coalesce(x, y!), [new("N1", null, 7L), new("S1", 5, 7L)]);
+        await Assert.That(BridgeGrid.Evaluate(widening).Observed).IsEqualTo("ran; Int64; N1=7; S1=5");
+    }
+
+    /// <summary>
+    /// F2 (closing round): a null literal converts to a nullable value type (C# 10.2.7), as a return from
+    /// <c>Func&lt;int, int?&gt;</c>, a CLR argument of type <c>int?</c> and the right of <c>int? ?? null</c>; and a null arm
+    /// beside an <c>int?</c> arm makes the conditional <c>int?</c>, not <c>object</c>.
+    /// </summary>
+    [Test]
+    public async Task Bridge_NullLiteralIntoANullableValueType_IsTheTypedNull() {
+        var int32 = Operand("Int32", false);
+        var nullable = Operand("Int32", true);
+        var ret = new BridgeCase("named", "return null -> Int32?", null, int32, null, typeof(int?),
+            static (_, _) => new Constant(null), [new("S1", 5, null)]);
+        await Assert.That(BridgeGrid.Evaluate(ret).Observed).IsEqualTo("ran; Int32?; S1=null");
+        var argument = new BridgeCase("named", "Echo(null)", null, int32, null, typeof(object),
+            static (_, _) => new Invoke(new Member(new ClrTypeReference(typeof(BridgeProbeTargets)), nameof(BridgeProbeTargets.Echo)), new Constant(null)),
+            [new("S1", 5, null)]);
+        await Assert.That(BridgeGrid.Evaluate(argument).Observed).IsEqualTo("ran; Int32?; S1=null");
+        var coalesce = new BridgeCase("named", "Int32? ?? null", null, nullable, null, typeof(object),
+            static (x, _) => new Coalesce(x, new Constant(null)), [new("N1", null, null), new("S1", 5, null)]);
+        await Assert.That(BridgeGrid.Evaluate(coalesce).Observed).IsEqualTo("ran; Int32?; N1=null; S1=5");
+        var conditional = new BridgeCase("named", "x == x ? x : null", null, nullable, null, typeof(object),
+            static (x, _) => new Conditional(new Equal(x, x), x, new Constant(null)), [new("N1", null, null), new("S1", 5, null)]);
+        await Assert.That(BridgeGrid.Evaluate(conditional).Observed).IsEqualTo("ran; Int32?; N1=null; S1=5");
+    }
+
+    /// <summary>
+    /// F3 (closing round): over <c>nint</c> and <c>nuint</c> the bridge runs a cell as the provider states it (its type) or
+    /// refuses it with a position; it never throws a raw exception, never runs a cell the provider leaves undefined, and
+    /// never runs one with another type. The expected outcome is keyed on what the provider defines, so the test holds
+    /// before T-18b (the provider defines no native operator: positioned refusals) and after (defined cells run or refuse).
+    /// The main emitter's function-table refusals (T-19b) are counted, not judged.
+    /// </summary>
+    [Test]
+    public async Task Bridge_NativeIntegers_RunAsTheProviderStatesOrRefuseWithAPosition() {
+        var cells = BridgeGrid.NativeCases;
+        await Assert.That(cells.Count).IsEqualTo(732);
+        var outcomes = cells.Select(static c => (Cell: c, Outcome: BridgeGrid.Evaluate(c), Answer: BridgeGrid.NativeProviderAnswer(c))).ToArray();
+        var violations = outcomes.Where(static o =>
+                o.Outcome.Stage is "emit-throws" or "harness-error"
+                || (o.Outcome.Stage == "bridge-rejected" && o.Outcome.Message?.StartsWith("VM compile rejected: lambda bridge", StringComparison.Ordinal) != true)
+                || (o.Outcome.Stage == "ran" && (o.Answer is null || o.Outcome.Type != BridgeGrid.TypeName(o.Answer))))
+            .Select(static o => $"{o.Cell.Key}: {o.Outcome.Render}; provider {(o.Answer is null ? "none" : BridgeGrid.TypeName(o.Answer))}")
+            .ToArray();
+        await Assert.That(violations).IsEmpty();
+        // The identity cells run whatever the provider knows: nint -> nint, nuint -> nuint, and the same-type conditionals.
+        await Assert.That(outcomes.Count(static o => o.Outcome.Stage == "ran")).IsGreaterThanOrEqualTo(4);
     }
 
     private static BridgeCase Cell(string grid, string key) => BridgeGrid.Cases.Single(c => c.Grid == grid && c.Key == key);

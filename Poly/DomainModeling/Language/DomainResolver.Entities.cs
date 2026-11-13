@@ -187,7 +187,8 @@ public sealed partial class DomainResolver {
                             // known enum names, mirroring the legacy IsNavLine dispatch.
                             var name = ExpectIdentifier(TokenKind.Identifier, "property name");
                             Expect(TokenKind.Colon);
-                            var typeWord = DslTokenText.LegacyText(Current);
+                            // The typed-line row's third element is an Identifier value, so the type word is a name.
+                            var typeWord = Current.Name();
                             if (_enumTypeNames.Contains(typeWord)
                                 || _valueTypeNames.Contains(typeWord)
                                 || IsKnownPrimitiveName(typeWord)) {
@@ -200,7 +201,7 @@ public sealed partial class DomainResolver {
                                 ParseNavLine(name);
                             }
                             else {
-                                CheckUnsupportedKeyword(name, DslTokenText.LegacyText(Current));
+                                CheckUnsupportedKeyword(name, typeWord);
                                 throw Error($"Expected type, stage, action, policy, or navigation property after '{name}:'");
                             }
                             continue;
@@ -230,7 +231,9 @@ public sealed partial class DomainResolver {
                             var name = Current.Name();
                             Advance(); // consume type keyword (e.g. 'Number')
                             Expect(TokenKind.Colon);
-                            if (!DslGrammar.IsPrimitiveType(Current.Kind, DslTokenText.LegacyText(Current), IsKnownPrimitiveName))
+                            // DslGrammar.IsPrimitiveType's rule: the type word's text is read only when it is an identifier.
+                            if (!(DslGrammar.IsPrimitiveTypeKind(Current.Kind)
+                                || (Current.Kind == TokenKind.Identifier && IsKnownPrimitiveName(Current.Name()))))
                                 throw Error($"Expected type after '{name}:', got '{Shown(Current)}'");
                             if (IsPrimitiveType(Current.Kind)) {
                                 NoteMember(EntityMemberKind.Property, name);

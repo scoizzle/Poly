@@ -11,7 +11,7 @@ namespace Poly.Tests.DomainModeling.Parsing;
 /// </summary>
 public sealed class TokenTextReaderTests {
     private static readonly Dictionary<string, int> LegacyTextCallSites = new(StringComparer.Ordinal) {
-        ["Poly/DomainModeling/Language/DomainResolver.Entities.cs"] = 4,
+        ["Poly/DomainModeling/Language/DomainResolver.Entities.cs"] = 1,
         ["Poly/DomainModeling/Language/DomainResolver.TopLevel.cs"] = 1,
         ["Poly/DomainModeling/Language/DslOutline.cs"] = 6,
         ["Poly/DomainModeling/Language/PolyEdit.cs"] = 1,

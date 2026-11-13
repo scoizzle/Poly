@@ -44,21 +44,25 @@ public sealed class CompileReturnsCompiledDomainTests {
     }
 
     /// <summary>
-    /// The same split Emit prints: entity trees in catalog order, then scaffolding.
+    /// The same split Emit prints: entity trees in catalog order, then scaffolding, each as a
+    /// compilation unit in the domain's namespace (an empty scaffolding file is the nullable header alone).
     /// The domain has no entity named Program, so the writer output is the file text.
     /// </summary>
     private static List<(string FileName, string Source)> FilesFrom(DomainSession session, CompiledDomain compiled) {
         var writer = new CSharpWriter(compiled.VmAnalysis);
+        var ns = DomainSession.CSharpNamespace(compiled.Domain);
         var files = new List<(string FileName, string Source)>();
         foreach (var tree in session.ArtifactCatalog.Artifacts.Where(a => a.Descriptor.Id.Type == "entity")) {
             var entityName = tree.Descriptor.Id.Segments[^1];
             var types = (IReadOnlyList<TypeDefinitionNode>)tree.Payload!;
-            files.Add(($"{entityName}.cs", writer.Write(types)));
+            files.Add(($"{entityName}.cs", writer.Write(new CompilationUnitNode([], ns, types, null))));
         }
 
         var scaffolding = session.ArtifactCatalog.Find(ArtifactId.Create([compiled.Domain.Name], "scaffolding"))!;
         var scaffoldingTypes = (IReadOnlyList<TypeDefinitionNode>)scaffolding.Payload!;
-        files.Add(("Poly.Types.cs", writer.Write(scaffoldingTypes)));
+        files.Add(("Poly.Types.cs", scaffoldingTypes.Count == 0
+            ? writer.Write(scaffoldingTypes)
+            : writer.Write(new CompilationUnitNode([], ns, scaffoldingTypes, null))));
         return files;
     }
 }

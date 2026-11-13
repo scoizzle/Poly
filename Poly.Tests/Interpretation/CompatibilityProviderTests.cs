@@ -109,25 +109,29 @@ public class CompatibilityProviderTests {
 
     private static Parameter Param<T>(string name) => new(name, TypeReference.To<T>());
 
-    /// <summary>Count and key checksum per family, verdict and provider answer.</summary>
+    /// <summary>
+    /// Count and key checksum per family, verdict and provider answer. T-18 moved these from master (pinned in its
+    /// characterisation commit) only accepted to rejected, in four families: 408 nullable variants of the ledger
+    /// grid's 212 newly rejected cells, 40 Decimal cells beside an enum or DateTimeOffset, 2,184 IntPtr or UIntPtr
+    /// cells, and 144 comparisons of two different enum types. No cell moved from rejected to accepted.
+    /// </summary>
     private static readonly Dictionary<string, (int Count, string Checksum)> ExpectedBuckets = new(StringComparer.Ordinal) {
         ["DateTimeOffset|accepts|defined"] = (20, "b83fed908612bc49"),
         ["DateTimeOffset|accepts|none"] = (20, "26111cdc23f61d36"),
         ["DateTimeOffset|rejects|defined"] = (5, "074c70669ca06014"),
         ["DateTimeOffset|rejects|none"] = (374, "fb18a2c89867bd04"),
-        ["DecimalBesideEnumOrOffset|accepts|none"] = (40, "b8110cfcd0bace9b"),
-        ["DecimalBesideEnumOrOffset|rejects|none"] = (40, "7b2e833445247d81"),
+        ["DecimalBesideEnumOrOffset|rejects|none"] = (80, "d023b484873e8dfa"),
         ["Enum|accepts|defined"] = (12, "befeb42408f3821d"),
-        ["Enum|accepts|none"] = (432, "878449745db41406"),
-        ["Enum|rejects|none"] = (5040, "0cdfc19e1491fc5c"),
-        ["IntPtr|accepts|defined"] = (112, "5048c22c593d0e0f"),
-        ["IntPtr|accepts|none"] = (2120, "b2ebd23bef029736"),
-        ["IntPtr|rejects|defined"] = (8, "33104c425d7570c2"),
-        ["IntPtr|rejects|none"] = (1896, "ad5585575f2c05ec"),
+        ["Enum|accepts|none"] = (288, "6877c6037cfaa217"),
+        ["Enum|rejects|none"] = (5184, "7fad361dbea81895"),
+        ["IntPtr|accepts|defined"] = (24, "565846111ff03173"),
+        ["IntPtr|accepts|none"] = (24, "6c0426819d4a7d42"),
+        ["IntPtr|rejects|defined"] = (96, "1dc2ea92a3789937"),
+        ["IntPtr|rejects|none"] = (3992, "79538a64597e6b04"),
         ["Nullable|accepts|defined"] = (3949, "faeba0813049adf0"),
-        ["Nullable|accepts|none"] = (486, "42d466b5e189d6ea"),
+        ["Nullable|accepts|none"] = (78, "f788f25092bfd0cd"),
         ["Nullable|rejects|defined"] = (730, "3c9ac5bd83614c7d"),
-        ["Nullable|rejects|none"] = (7156, "fdefa4b1cb1a74fa"),
+        ["Nullable|rejects|none"] = (7564, "49cbcd4ee4e1228f"),
     };
 
     [Test]
@@ -211,5 +215,81 @@ public class CompatibilityProviderTests {
             await Assert.That(OperatorOperands.Clr(typeof(ulong)).GetOperator(OperatorKind.GreaterThan, OperatorOperands.Clr(signed))).IsNull();
             await Assert.That(OperatorOperands.Clr(signed).GetOperator(OperatorKind.Add, OperatorOperands.Clr(typeof(ulong)))).IsNull();
         }
+    }
+
+    // ---- fail closed (T-18): each cell is accepted on master and rejected after, beside an accepting sibling ----
+
+    private sealed record FailClosedCase(Func<(Node Node, Node Left)> Rejected, string Message, Func<Node> Accepted, object?[] Args, object Value);
+
+    private static (Node, Node) Pair(Func<Node, Node, Node> build, Node left, Node right) => (build(left, right), left);
+
+    private static readonly Dictionary<string, FailClosedCase> FailClosed = new(StringComparer.Ordinal) {
+        ["DecimalPlusDouble"] = new(() => Pair(static (l, r) => new Add(l, r), Param<decimal>("d"), Param<double>("f")),
+            "arithmetic operand is not numeric (got 'Decimal' and 'Double'): no Add operator for these types",
+            static () => new Add(Param<decimal>("d"), Param<long>("n")), [1.5m, 2L], 3.5m),
+        ["DecimalTimesDouble"] = new(() => Pair(static (l, r) => new Multiply(l, r), Param<decimal>("d"), Param<double>("f")),
+            "arithmetic operand is not numeric (got 'Decimal' and 'Double'): no Multiply operator for these types",
+            static () => new Multiply(Param<decimal>("d"), Param<long>("n")), [1.5m, 2L], 3.0m),
+        ["DecimalEqualDouble"] = new(() => Pair(static (l, r) => new Equal(l, r), Param<decimal>("d"), Param<double>("f")),
+            "comparison between incompatible types 'Decimal' and 'Double': no Equal operator for these types",
+            static () => new Equal(Param<decimal>("d"), Param<long>("n")), [2m, 2L], true),
+        ["DecimalLessThanDouble"] = new(() => Pair(static (l, r) => new LessThan(l, r), Param<decimal>("d"), Param<double>("f")),
+            "comparison between incompatible types 'Decimal' and 'Double': no LessThan operator for these types",
+            static () => new LessThan(Param<decimal>("d"), Param<long>("n")), [1.5m, 2L], true),
+        ["DecimalPlusBoolean"] = new(() => Pair(static (l, r) => new Add(l, r), Param<decimal>("d"), Param<bool>("b")),
+            "arithmetic operand is not numeric (got 'Decimal' and 'Boolean'): no Add operator for these types",
+            static () => new Add(Param<decimal>("d"), Param<decimal>("e")), [1.5m, 2m], 3.5m),
+        ["OptionalDecimalPlusDouble"] = new(() => Pair(static (l, r) => new Add(l, r), Param<decimal?>("d"), Param<double>("f")),
+            "arithmetic operand is not numeric (got 'Nullable`1' and 'Double'): no Add operator for these types",
+            static () => new Add(Param<decimal?>("d"), Param<long>("n")), [1.5m, 2L], 3.5m),
+        ["ULongPlusLong"] = new(() => Pair(static (l, r) => new Add(l, r), Param<ulong>("u"), Param<long>("n")),
+            "arithmetic operand is not numeric (got 'UInt64' and 'Int64'): no Add operator for these types",
+            static () => new Add(Param<ulong>("u"), Param<uint>("w")), [5UL, 2u], 7UL),
+        ["ULongEqualLong"] = new(() => Pair(static (l, r) => new Equal(l, r), Param<ulong>("u"), Param<long>("n")),
+            "comparison between incompatible types 'UInt64' and 'Int64': no Equal operator for these types",
+            static () => new Equal(Param<ulong>("u"), Param<uint>("w")), [5UL, 5u], true),
+        ["ULongPlusNegativeConstant"] = new(() => Pair(static (l, r) => new Add(l, r), Param<ulong>("u"), new Constant(-1L)),
+            "arithmetic operand is not numeric (got 'UInt64' and 'Int64'): no Add operator for these types",
+            static () => new Add(Param<ulong>("u"), new Constant(1L)), [5UL], 6UL),
+        ["TextEqualChar"] = new(() => Pair(static (l, r) => new Equal(l, r), Param<string>("s"), Param<char>("c")),
+            "comparison between incompatible types 'String' and 'Char': no Equal operator for these types",
+            static () => new Equal(Param<string>("s"), Param<string>("t")), ["a", "a"], true),
+        ["DatePlusDecimal"] = new(() => Pair(static (l, r) => new Add(l, r), Param<DateOnly>("day"), Param<decimal>("d")),
+            "arithmetic operand is not numeric (got 'DateOnly' and 'Decimal'): no Add operator for these types",
+            static () => new Add(Param<DateOnly>("day"), Param<long>("n")), [new DateOnly(2024, 2, 28), 2L], new DateOnly(2024, 3, 1)),
+        ["DifferentEnumsEqual"] = new(() => Pair(static (l, r) => new Equal(l, r), Param<ExtraOperandGrid.Shade>("a"), Param<ExtraOperandGrid.Other>("b")),
+            "comparison between incompatible types 'Shade' and 'Other': no Equal operator for these types",
+            static () => new Equal(Param<ExtraOperandGrid.Shade>("a"), Param<ExtraOperandGrid.Shade>("b")), [ExtraOperandGrid.Shade.Blue, ExtraOperandGrid.Shade.Blue], true),
+    };
+
+    public static IEnumerable<string> FailClosedNames() => FailClosed.Keys;
+
+    [Test]
+    [MethodDataSource(nameof(FailClosedNames))]
+    public async Task UndefinedOperator_IsAnErrorOnTheLeftOperand_AndCompileIsRefused(string name) {
+        var row = FailClosed[name];
+        var (node, left) = row.Rejected();
+        var errors = Interpreter.Analyze(node).Diagnostics.Where(static d => d.Severity == DiagnosticSeverity.Error).ToArray();
+        await Assert.That(errors.Length).IsEqualTo(1);
+        await Assert.That(errors[0].Code).IsEqualTo(Poly.Interpretation.Analysis.Semantics.SyntaxTypeCompatibilityAnalyzer.DiagnosticCode);
+        await Assert.That(errors[0].Message).IsEqualTo(row.Message);
+        await Assert.That(ReferenceEquals(errors[0].Node, left)).IsTrue();
+        await Assert.That(() => Interpreter.Compile(row.Rejected().Node))
+            .Throws<InvalidOperationException>()
+            .WithMessage("VM compile rejected: " + row.Message);
+    }
+
+    [Test]
+    [MethodDataSource(nameof(FailClosedNames))]
+    public async Task UndefinedOperator_AcceptingSibling_Runs(string name) {
+        var row = FailClosed[name];
+        using var exec = Interpreter.Execute(Interpreter.Compile(row.Accepted()), s => s.SetArgs(row.Args));
+        // The untyped result of a UInt64 is its 64-bit word as Int64, so a ulong is read typed.
+        object? actual = row.Value switch {
+            bool => exec.RawValue != 0,
+            ulong => exec.GetValue<ulong>(),
+            _ => exec.Result.Value
+        };
+        await Assert.That(actual).IsEqualTo(row.Value);
     }
 }

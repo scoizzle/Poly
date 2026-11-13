@@ -2,6 +2,7 @@ using System.Globalization;
 
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Compile;
+using Poly.DomainModeling.Ontology;
 using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.DomainModeling.Lowering;
@@ -43,6 +44,41 @@ public class CompatibilityDslParityTests {
         });
         await Assert.That(outcomes[1].Success).IsTrue();
         await Assert.That(outcomes[1].State[policy]).IsEqualTo(expected);
+    }
+
+    /// <summary>
+    /// The DSL literal 0.5 is a decimal, so <c>Price &lt; 0.5</c> is Decimal against Decimal (the sibling, accepted). An
+    /// API-built <c>Literal(0.5d)</c> is a double; the platform defines no Decimal &lt; Double, and the lowered analysis
+    /// rejects the policy's compile (T-18, issue 815).
+    /// </summary>
+    [Test]
+    public async Task DecimalProperty_AgainstApiBuiltDoubleLiteral_IsRejectedByTheLoweredAnalysis() {
+        const string dsl = """
+            domain LitApi
+            Item: entity {
+              Price: Decimal
+              Cheap: policy { Price < 0.5 }
+            }
+            """;
+        await Assert.That(Evaluate(EvolvedDomain.FromDsl(dsl).Domain)).IsEqualTo("success=True; answer=True");
+
+        var domain = EvolvedDomain.FromDsl(dsl).Domain;
+        var entity = domain.Types.OfType<Entity>().Single();
+        var policy = entity.Policies.Single();
+        var edited = policy with { Expression = new Comparison(DomainExpression.Property("Price"), DomainExpression.Literal(0.5d), ComparisonKind.LessThan) };
+        entity = entity with { Policies = [edited] };
+        domain = domain with { Types = [.. domain.Types.Select(t => t is Entity ? entity : t)] };
+        await Assert.That(Evaluate(domain)).IsEqualTo(
+            "success=False; message=VM compile rejected: comparison between incompatible types 'Decimal' and 'Double': no LessThan operator for these types");
+    }
+
+    static string Evaluate(Domain domain) {
+        RuntimeAnalysisCache.Bind(domain, ParitySessions.Create(domain.Extensions.Count > 0 ? domain.Extensions : ExtensionCatalog.ProductAuthoring));
+        var side = new SimulateSide(domain);
+        side.Create("Item", ("Price", 0.25m));
+        side.EvaluatePolicy("Cheap");
+        var outcome = side.Outcomes[1];
+        return outcome.Success ? $"success=True; answer={outcome.State["Cheap"]}" : $"success=False; message={outcome.Message}";
     }
 
     const string TextOrdering = """

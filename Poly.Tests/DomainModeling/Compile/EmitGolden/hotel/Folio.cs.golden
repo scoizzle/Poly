@@ -30,6 +30,7 @@ internal class Folio : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfPostRoomNight(amount);
             if (!__result.IsSuccess)
             {
@@ -71,6 +72,7 @@ internal class Folio : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfPostCharge(amount);
             if (!__result.IsSuccess)
             {
@@ -112,6 +114,7 @@ internal class Folio : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfSettle();
             if (!__result.IsSuccess)
             {
@@ -149,6 +152,7 @@ internal class Folio : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfCloseEmpty();
             if (!__result.IsSuccess)
             {
@@ -192,6 +196,7 @@ internal class Folio : Poly.Runtime.IActionScoped
             return DomainResult<Folio>.Failure(Poly.Runtime.DomainFailure.Range("'Balance' must be <= 1000000.", "Folio.Balance"));
         }
         var created = new Folio(reservation, balance);
+        Poly.Runtime.ActionScope.Create(created, "Folio");
         return DomainResult<Folio>.Success(created);
     }
     public object __Snapshot()

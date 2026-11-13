@@ -27,6 +27,7 @@ internal class Customer : Poly.Runtime.IActionScoped
     }
     internal void AttachOrders(Order child)
     {
+        Poly.Runtime.ActionScope.Touch(this);
         this._orders.Add(child);
     }
     internal DomainResult ShipAll()
@@ -35,6 +36,7 @@ internal class Customer : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfShipAll();
             if (!__result.IsSuccess)
             {
@@ -74,6 +76,7 @@ internal class Customer : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfCancelPending();
             if (!__result.IsSuccess)
             {
@@ -130,6 +133,7 @@ internal class Customer : Poly.Runtime.IActionScoped
             return DomainResult<Customer>.Failure(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'Email' value is already used on another 'Customer'.", "Customer.Email"));
         }
         var created = new Customer(email, name, orders, tier);
+        Poly.Runtime.ActionScope.Create(created, "Customer");
         db.Record("Customer", "Email", email);
         return DomainResult<Customer>.Success(created);
     }

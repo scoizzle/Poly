@@ -48,6 +48,7 @@ internal class PremiumPatron : Poly.Runtime.IActionScoped
             return DomainResult<PremiumPatron>.Failure(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'Email' value is already used on another 'PremiumPatron'.", "PremiumPatron.Email"));
         }
         var created = new PremiumPatron(name, email, rewardPoints, priorityAccess, tier);
+        Poly.Runtime.ActionScope.Create(created, "PremiumPatron");
         db.Record("PremiumPatron", "Email", email);
         return DomainResult<PremiumPatron>.Success(created);
     }

@@ -27,6 +27,7 @@ internal class Site : Poly.Runtime.IActionScoped
             return DomainResult<Site>.Failure(Poly.Runtime.DomainFailure.Required("'Region' is required.", "Site.Region"));
         }
         var created = new Site(city, region);
+        Poly.Runtime.ActionScope.Create(created, "Site");
         return DomainResult<Site>.Success(created);
     }
     public object __Snapshot()

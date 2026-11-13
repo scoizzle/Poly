@@ -23,6 +23,7 @@ internal class Patient : Poly.Runtime.IActionScoped
     }
     internal void AttachVisits(Visit child)
     {
+        Poly.Runtime.ActionScope.Touch(this);
         this._visits.Add(child);
     }
     internal DomainResult CheckInAll()
@@ -31,6 +32,7 @@ internal class Patient : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfCheckInAll();
             if (!__result.IsSuccess)
             {
@@ -71,6 +73,7 @@ internal class Patient : Poly.Runtime.IActionScoped
             return DomainResult<Patient>.Failure(Poly.Runtime.DomainFailure.Required("'Name' is required.", "Patient.Name"));
         }
         var created = new Patient(name, visits);
+        Poly.Runtime.ActionScope.Create(created, "Patient");
         return DomainResult<Patient>.Success(created);
     }
     public object __Snapshot()

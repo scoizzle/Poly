@@ -71,6 +71,7 @@ internal class Opportunity : Poly.Runtime.IActionScoped
     }
     internal void AttachActivities(Activity child)
     {
+        Poly.Runtime.ActionScope.Touch(this);
         this._activities.Add(child);
     }
     internal DomainResult<Line> CreateLines(long qty, decimal unitPrice, Product? product = null)
@@ -85,6 +86,7 @@ internal class Opportunity : Poly.Runtime.IActionScoped
     }
     internal void AttachLines(Line child)
     {
+        Poly.Runtime.ActionScope.Touch(this);
         this._lines.Add(child);
     }
     internal DomainResult<Quote> CreateQuotes(string title, decimal amount)
@@ -99,6 +101,7 @@ internal class Opportunity : Poly.Runtime.IActionScoped
     }
     internal void AttachQuotes(Quote child)
     {
+        Poly.Runtime.ActionScope.Touch(this);
         this._quotes.Add(child);
     }
     internal DomainResult CompleteOpenWork()
@@ -107,6 +110,7 @@ internal class Opportunity : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfCompleteOpenWork();
             if (!__result.IsSuccess)
             {
@@ -146,6 +150,7 @@ internal class Opportunity : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfPropose();
             if (!__result.IsSuccess)
             {
@@ -188,6 +193,7 @@ internal class Opportunity : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfLose();
             if (!__result.IsSuccess)
             {
@@ -226,6 +232,7 @@ internal class Opportunity : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfLog(subject);
             if (!__result.IsSuccess)
             {
@@ -263,6 +270,7 @@ internal class Opportunity : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfAddLine(sku, qty);
             if (!__result.IsSuccess)
             {
@@ -310,6 +318,7 @@ internal class Opportunity : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfQuoteDeal();
             if (!__result.IsSuccess)
             {
@@ -347,6 +356,7 @@ internal class Opportunity : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfCommit();
             if (!__result.IsSuccess)
             {
@@ -384,6 +394,7 @@ internal class Opportunity : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfWin();
             if (!__result.IsSuccess)
             {
@@ -422,6 +433,7 @@ internal class Opportunity : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfCapture(request);
             if (!__result.IsSuccess)
             {
@@ -461,6 +473,7 @@ internal class Opportunity : Poly.Runtime.IActionScoped
     public bool HasLines() => this.Lines.Count > 0;
     internal void RegisterAccountOpportunitiesWonSubscriber(Account subscriber)
     {
+        Poly.Runtime.ActionScope.Touch(this);
         if (this._accountOpportunitiesWonSubscribers == null)
         {
             this._accountOpportunitiesWonSubscribers = new List<Account>();
@@ -476,6 +489,7 @@ internal class Opportunity : Poly.Runtime.IActionScoped
     }
     internal void RegisterAccountOpportunitiesProposeSubscriber(Account subscriber)
     {
+        Poly.Runtime.ActionScope.Touch(this);
         if (this._accountOpportunitiesProposeSubscribers == null)
         {
             this._accountOpportunitiesProposeSubscribers = new List<Account>();
@@ -491,6 +505,7 @@ internal class Opportunity : Poly.Runtime.IActionScoped
     }
     internal void RegisterAccountOpportunitiesLostSubscriber(Account subscriber)
     {
+        Poly.Runtime.ActionScope.Touch(this);
         if (this._accountOpportunitiesLostSubscribers == null)
         {
             this._accountOpportunitiesLostSubscribers = new List<Account>();
@@ -506,7 +521,7 @@ internal class Opportunity : Poly.Runtime.IActionScoped
     }
     internal DomainResult NotifyWonSubscribers()
     {
-        this.EnterNotifyCascade("Won");
+        var __depth = this.EnterNotifyCascade("Won");
         try
         {
             if (this._accountOpportunitiesWonSubscribers != null)
@@ -528,13 +543,13 @@ internal class Opportunity : Poly.Runtime.IActionScoped
         }
         finally
         {
-            this.ExitNotifyCascade();
+            this.ExitNotifyCascade(__depth);
         }
         return DomainResult.Success();
     }
     internal DomainResult NotifyProposeSubscribers()
     {
-        this.EnterNotifyCascade("Propose");
+        var __depth = this.EnterNotifyCascade("Propose");
         try
         {
             if (this._accountOpportunitiesProposeSubscribers != null)
@@ -551,13 +566,13 @@ internal class Opportunity : Poly.Runtime.IActionScoped
         }
         finally
         {
-            this.ExitNotifyCascade();
+            this.ExitNotifyCascade(__depth);
         }
         return DomainResult.Success();
     }
     internal DomainResult NotifyLostSubscribers()
     {
-        this.EnterNotifyCascade("Lost");
+        var __depth = this.EnterNotifyCascade("Lost");
         try
         {
             if (this._accountOpportunitiesLostSubscribers != null)
@@ -574,7 +589,7 @@ internal class Opportunity : Poly.Runtime.IActionScoped
         }
         finally
         {
-            this.ExitNotifyCascade();
+            this.ExitNotifyCascade(__depth);
         }
         return DomainResult.Success();
     }
@@ -593,23 +608,25 @@ internal class Opportunity : Poly.Runtime.IActionScoped
             return DomainResult<Opportunity>.Failure(Poly.Runtime.DomainFailure.Range("'Amount' must be <= 100000000.", "Opportunity.Amount"));
         }
         var created = new Opportunity(title, amount, account, contact, activities, lines, quotes, closeBy);
+        Poly.Runtime.ActionScope.Create(created, "Opportunity");
         if (account != null)
         {
             account.AttachOpportunities(created);
         }
         return DomainResult<Opportunity>.Success(created);
     }
-    private void EnterNotifyCascade(string stageName)
+    private int EnterNotifyCascade(string stageName)
     {
         if (this._notifyDepth >= 16)
         {
             throw new System.InvalidOperationException(string.Concat("Subscription cascade on entity 'Opportunity' exceeded max depth (16) while notifying '", stageName, "'."));
         }
         this._notifyDepth = this._notifyDepth + 1;
+        return this._notifyDepth - 1;
     }
-    private void ExitNotifyCascade()
+    private void ExitNotifyCascade(int depth)
     {
-        this._notifyDepth = this._notifyDepth - 1;
+        this._notifyDepth = depth;
     }
     public object __Snapshot()
     {

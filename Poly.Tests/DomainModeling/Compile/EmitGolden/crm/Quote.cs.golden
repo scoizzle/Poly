@@ -47,6 +47,7 @@ internal class Quote : Poly.Runtime.IActionScoped
     }
     internal void AttachLines(QuoteLine child)
     {
+        Poly.Runtime.ActionScope.Touch(this);
         this._lines.Add(child);
     }
     internal DomainResult<QuoteLine> AddLine(Product sku, long qty)
@@ -55,6 +56,7 @@ internal class Quote : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfAddLine(sku, qty);
             if (!__result.IsSuccess)
             {
@@ -102,6 +104,7 @@ internal class Quote : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfPresent();
             if (!__result.IsSuccess)
             {
@@ -134,6 +137,7 @@ internal class Quote : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfAccept();
             if (!__result.IsSuccess)
             {
@@ -166,6 +170,7 @@ internal class Quote : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfReject();
             if (!__result.IsSuccess)
             {
@@ -207,6 +212,7 @@ internal class Quote : Poly.Runtime.IActionScoped
             return DomainResult<Quote>.Failure(Poly.Runtime.DomainFailure.Range("'Amount' must be <= 100000000.", "Quote.Amount"));
         }
         var created = new Quote(title, amount, opportunity, lines);
+        Poly.Runtime.ActionScope.Create(created, "Quote");
         if (opportunity != null)
         {
             opportunity.AttachQuotes(created);

@@ -33,7 +33,7 @@ public sealed partial class DomainResolver {
 
         // Bare identifier that isn't a primitive type, keyword, or reserved construct
         if (Current.Kind == TokenKind.Identifier && !IsPrimitiveType(Current.Kind)) {
-            var text = Current.Text;
+            var text = Current.Name();
             // Exclude known keywords that aren't primitives but shouldn't be nav targets
             return !_unsupportedKeywords.Contains(text)
                 && text != "entity" && text != "stage" && text != "action"
@@ -75,8 +75,8 @@ public sealed partial class DomainResolver {
         // Must be an identifier (not a primitive type keyword)
         if (Current.Kind != TokenKind.Identifier) {
             var hint = IsPrimitiveType(Current.Kind)
-                ? $" '{Current.Text}' is a primitive type, not an entity. Use a primitive property declaration instead."
-                : $" unexpected token '{Current.Text}'";
+                ? $" '{Shown(Current)}' is a primitive type, not an entity. Use a primitive property declaration instead."
+                : $" unexpected token '{Shown(Current)}'";
             throw Error($"Navigation property '{name}' requires an entity type as target:{hint}");
         }
         var targetToken = Current;
@@ -91,7 +91,7 @@ public sealed partial class DomainResolver {
             Advance();
             if (Current.Kind != TokenKind.Identifier || PeekIs(TokenKind.Colon))
                 throw GrammarError.Error("'via' requires the inverse navigation name", viaToken.Line, viaToken.Col);
-            inverseName = Current.Text;
+            inverseName = Current.Name();
             Advance();
             if (AtViaClause())
                 throw Error($"'via' is declared more than once on navigation property '{name}'");
@@ -111,7 +111,7 @@ public sealed partial class DomainResolver {
     /// </summary>
     private bool AtViaClause() =>
         Current.Kind == TokenKind.Identifier
-        && string.Equals(Current.Text, "via", StringComparison.Ordinal)
+        && Current.TextEquals("via")
         && Peek(1).Kind != TokenKind.Colon
         && Peek(1).Kind != TokenKind.LParen;
 

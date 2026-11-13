@@ -32,6 +32,7 @@ internal class Contact : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfRetire();
             if (!__result.IsSuccess)
             {
@@ -64,6 +65,7 @@ internal class Contact : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfReactivate();
             if (!__result.IsSuccess)
             {
@@ -109,6 +111,7 @@ internal class Contact : Poly.Runtime.IActionScoped
             return DomainResult<Contact>.Failure(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'Email' value is already used on another 'Contact'.", "Contact.Email"));
         }
         var created = new Contact(name, email, account);
+        Poly.Runtime.ActionScope.Create(created, "Contact");
         if (account != null)
         {
             account.AttachContacts(created);

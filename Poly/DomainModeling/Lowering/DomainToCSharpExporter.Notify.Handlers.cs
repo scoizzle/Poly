@@ -90,6 +90,10 @@ public sealed partial class DomainToCSharpExporter {
                         handlerBody = Prefixed(
                             [new Invoke(new Member(new ThisReference(), "ClearAutomaticStageChain"))],
                             handlerBody);
+                    // L-03c: the handler writes the subscriber, so it touches it first. The gates below are prefixed
+                    // over this, so the order is gates, Touch, chain clear, effects; the Touch is in the cached body
+                    // the simulator runs.
+                    handlerBody = Prefixed([TouchThis()], handlerBody);
                 }
                 else {
                     handlerBody = new Block([]);

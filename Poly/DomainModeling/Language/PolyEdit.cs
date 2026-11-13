@@ -408,9 +408,9 @@ public static class PolyEdit {
             var first = reader.Peek(marked ? 1 : 0);
             var second = reader.Peek(marked ? 2 : 1);
             if (marked)
-                return IsKindWord(first) && IsNameToken(second) ? second.Text : null;
+                return IsKindWord(first) && IsNameToken(second) ? second.Name() : null;
             return second.Kind == DslTokenKind.Colon && IsNameToken(first)
-                ? first.Text
+                ? first.Name()
                 : null;
         }
         catch (FormatException) {
@@ -436,7 +436,7 @@ public static class PolyEdit {
             if (marked)
                 return DslGrammar.IsValueWord(first) ? "value" : "entity";
             if (reader.Peek(1).Kind == DslTokenKind.Colon)
-                return reader.Peek(2).Text switch {
+                return DslTokenText.LegacyText(reader.Peek(2)) switch {
                     "enum" => "enum",
                     "value" => "value",
                     "contract" => "contract",

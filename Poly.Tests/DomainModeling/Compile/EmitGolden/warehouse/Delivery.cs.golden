@@ -26,6 +26,7 @@ internal class Delivery : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfConfirm(notes);
             if (!__result.IsSuccess)
             {
@@ -80,6 +81,7 @@ internal class Delivery : Poly.Runtime.IActionScoped
             return DomainResult<Delivery>.Failure(Poly.Runtime.DomainFailure.Required("'Notes' is required.", "Delivery.Notes"));
         }
         var created = new Delivery(reference, weight, notes, truck);
+        Poly.Runtime.ActionScope.Create(created, "Delivery");
         if (truck != null)
         {
             truck.AttachDeliveries(created);

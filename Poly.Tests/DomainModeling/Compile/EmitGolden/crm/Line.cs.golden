@@ -39,6 +39,7 @@ internal class Line : Poly.Runtime.IActionScoped
             return DomainResult<Line>.Failure(Poly.Runtime.DomainFailure.Range("'UnitPrice' must be <= 100000000.", "Line.UnitPrice"));
         }
         var created = new Line(qty, unitPrice, product, opportunity);
+        Poly.Runtime.ActionScope.Create(created, "Line");
         if (opportunity != null)
         {
             opportunity.AttachLines(created);

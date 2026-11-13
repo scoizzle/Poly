@@ -32,6 +32,7 @@ internal class Fine : Poly.Runtime.IActionScoped
             return DomainResult<Fine>.Failure(Poly.Runtime.DomainFailure.Required("'Reason' is required.", "Fine.Reason"));
         }
         var created = new Fine(amount, reason, patron);
+        Poly.Runtime.ActionScope.Create(created, "Fine");
         if (patron != null)
         {
             patron.AttachFines(created);

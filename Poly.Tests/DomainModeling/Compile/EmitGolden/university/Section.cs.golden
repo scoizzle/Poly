@@ -50,6 +50,7 @@ internal class Section : Poly.Runtime.IActionScoped
     public SectionStage CurrentStage { get; private set; }
     internal void AttachEnrollments(Enrollment child)
     {
+        Poly.Runtime.ActionScope.Touch(this);
         this._enrollments.Add(child);
         child.RegisterSectionEnrollmentsRegisteredSubscriber(this);
         child.RegisterSectionEnrollmentsDroppedSubscriber(this);
@@ -66,6 +67,7 @@ internal class Section : Poly.Runtime.IActionScoped
     }
     internal void AttachWaitlist(WaitOffer child)
     {
+        Poly.Runtime.ActionScope.Touch(this);
         this._waitlist.Add(child);
         child.RegisterSectionWaitlistOfferedSubscriber(this);
         child.RegisterSectionWaitlistCancelledSubscriber(this);
@@ -76,6 +78,7 @@ internal class Section : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfClose();
             if (!__result.IsSuccess)
             {
@@ -112,6 +115,7 @@ internal class Section : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfQueue(who);
             if (!__result.IsSuccess)
             {
@@ -149,6 +153,7 @@ internal class Section : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfStaffLeave();
             if (!__result.IsSuccess)
             {
@@ -193,6 +198,7 @@ internal class Section : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfReopen();
             if (!__result.IsSuccess)
             {
@@ -224,11 +230,13 @@ internal class Section : Poly.Runtime.IActionScoped
     public bool HasWaiters() => this.Waitlist.Count > 0;
     internal DomainResult WhenEachEnrollmentRegistered()
     {
+        Poly.Runtime.ActionScope.Touch(this);
         this.SeatsTaken = this.SeatsTaken + 1L;
         return DomainResult.Success();
     }
     internal DomainResult WhenEachEnrollmentDropped()
     {
+        Poly.Runtime.ActionScope.Touch(this);
         this.SeatsTaken = this.SeatsTaken - 1L;
         return DomainResult.Success();
     }
@@ -246,6 +254,7 @@ internal class Section : Poly.Runtime.IActionScoped
         {
             return DomainResult.Success();
         }
+        Poly.Runtime.ActionScope.Touch(this);
         this.OfferedSeats = this.OfferedSeats + 1L;
         return DomainResult.Success();
     }
@@ -268,6 +277,7 @@ internal class Section : Poly.Runtime.IActionScoped
         {
             return DomainResult.Success();
         }
+        Poly.Runtime.ActionScope.Touch(this);
         this.WaitCleared = 1L;
         return DomainResult.Success();
     }
@@ -290,6 +300,7 @@ internal class Section : Poly.Runtime.IActionScoped
             return DomainResult<Section>.Failure(Poly.Runtime.DomainFailure.Enum(string.Concat("'", offeringTerm, "' is not a valid member of Term for property 'OfferingTerm'."), "Section.OfferingTerm"));
         }
         var created = new Section(cap, offeringTerm, course, instructor, enrollments, waitlist, seatsTaken, offeredSeats, waitCleared);
+        Poly.Runtime.ActionScope.Create(created, "Section");
         return DomainResult<Section>.Success(created);
     }
     private void InitializeSubscriptions()

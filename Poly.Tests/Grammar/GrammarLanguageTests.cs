@@ -134,7 +134,7 @@ public sealed class GrammarLanguageTests {
         var forked = DslGrammar.Build(b =>
             b.Define("expr-primary")
                 .Pattern("magic")
-                .Predicate(t => t.Kind == DslTokenKind.Identifier && t.Text == "MAGIC", "magic")
+                .Predicate(t => t.Kind == DslTokenKind.Identifier && t.TextEquals("MAGIC"), "magic")
                 .Commit());
 
         await Assert.That(DslGrammar.Core.TryGetPattern("expr-primary", "magic", out _)).IsFalse();

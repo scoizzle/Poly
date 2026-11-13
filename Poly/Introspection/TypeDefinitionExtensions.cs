@@ -27,12 +27,24 @@ public static class TypeDefinitionExtensions {
     }
 
     /// <summary>
-    /// The one type-identity notion: reference identity, or two synthetic collections of one kind and element.
-    /// Each resolve of a synthetic collection builds a fresh instance, so reference equality alone never matches
-    /// an omitted collection argument. <see cref="IsAssignableFrom"/>, <c>GetOperator</c> and <c>GetCommonType</c> share it.
+    /// The one type-identity notion: reference identity, two synthetic collections of one kind and element, or two
+    /// resolutions of one generic parameter. Each resolve of a synthetic collection or a generic parameter builds a fresh
+    /// instance, so reference equality alone never matches an omitted collection argument.
+    /// <see cref="IsAssignableFrom"/>, <c>GetOperator</c>, <c>GetCommonType</c> and overload scoring share it.
     /// </summary>
     internal static bool IsSameType(ITypeDefinition a, ITypeDefinition b) =>
-        ReferenceEquals(a, b) || SyntheticCollectionsMatch(a, b);
+        ReferenceEquals(a, b) || SyntheticCollectionsMatch(a, b) || GenericParametersMatch(a, b);
+
+    /// <summary>
+    /// A generic parameter is its name on its declaring type. The definition holds no declaring member, so two
+    /// method-level parameters of one name on one type are the same type here: a stated limitation, and no DSL construct
+    /// declares a method-level type parameter.
+    /// </summary>
+    private static bool GenericParametersMatch(ITypeDefinition a, ITypeDefinition b) =>
+        a is AstGenericParameterTypeDefinition left
+        && b is AstGenericParameterTypeDefinition right
+        && string.Equals(left.Name, right.Name, StringComparison.Ordinal)
+        && IsSameType(left.DeclaringType, right.DeclaringType);
 
     /// <summary>The platform-neutral part of assignability: the same type, a base type, or an interface.</summary>
     internal static bool IsAssignableByHierarchy(ITypeDefinition destination, ITypeDefinition source) {
@@ -49,8 +61,12 @@ public static class TypeDefinitionExtensions {
         if (to is not AstCollectionTypeDefinition left
             || from is not AstCollectionTypeDefinition right)
             return false;
-        return left.Kind == right.Kind
-            && string.Equals(left.ElementType.Name, right.ElementType.Name, StringComparison.Ordinal)
+        if (left.Kind != right.Kind)
+            return false;
+        // A nested collection's name does not carry its element's namespace, so it compares by this notion again.
+        if (left.ElementType is AstCollectionTypeDefinition || right.ElementType is AstCollectionTypeDefinition)
+            return IsSameType(left.ElementType, right.ElementType);
+        return string.Equals(left.ElementType.Name, right.ElementType.Name, StringComparison.Ordinal)
             && string.Equals(left.ElementType.Namespace, right.ElementType.Namespace, StringComparison.Ordinal);
     }
 

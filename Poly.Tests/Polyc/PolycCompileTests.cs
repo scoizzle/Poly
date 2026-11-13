@@ -19,6 +19,15 @@ public class PolycCompileTests {
                 targets: ["windows"]);
     }
 
+    private sealed class CaseTargetsLibrary : IDomainLibrary {
+        public string Id => "casestub";
+
+        public void Register(SessionBuilder builder) =>
+            builder.AddContract(
+                new ImportedContract("CaseStub", ContractSourceKind.ExternalProvider, "casestub", "1", []),
+                targets: ["Win", "win"]);
+    }
+
     private static PolyCompiler CompilerOver(ExtensionCatalog catalog) =>
         new(catalog, new SessionOptions(catalog, ProductCatalog.ImplicitIds));
 
@@ -189,6 +198,30 @@ public class PolycCompileTests {
         await Assert.That(result.Files.Count).IsEqualTo(0);
         await Assert.That(result.Session).IsNull();
         await Assert.That(result.Domain).IsNull();
+    }
+
+    [Test]
+    public async Task Compile_UnknownTarget_WithUnknownUsesId_ReportsOnlyDsl0005() {
+        const string document = "domain Shop\nuses nope\n\nOrder: entity { Total: Number }\n";
+        var control = Compiler().Compile(document, "shop.poly");
+        var result = Compiler().Compile(document, "shop.poly", target: "bogus");
+
+        await Assert.That(control.Diagnostics.Select(d => d.Code)).Contains("DSL0002");
+        await Assert.That(result.Diagnostics.Single().Code).IsEqualTo("DSL0005");
+    }
+
+    [Test]
+    public async Task Compile_UnknownTarget_TwoKnownTargetsDifferingByCase_GivesNoHint() {
+        var catalog = ProductCatalog.Catalog.With(new CaseTargetsLibrary());
+
+        var near = CompilerOver(catalog).Compile(Valid, "shop.poly", target: "WIN");
+        var exact = CompilerOver(catalog).Compile(Valid, "shop.poly", target: "win");
+
+        await Assert.That(exact.Diagnostics.Where(d => d.Code == "DSL0005").Count()).IsEqualTo(0);
+        var error = near.Diagnostics.Single();
+        await Assert.That(error.Code).IsEqualTo("DSL0005");
+        await Assert.That(error.Message).DoesNotContain("did you mean");
+        await Assert.That(error.Message).Contains("Known targets: Win, posix, win.");
     }
 
     [Test]

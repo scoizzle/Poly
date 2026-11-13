@@ -194,8 +194,23 @@ public class PolycCliTests {
         await Assert.That(control.Exit).IsEqualTo(0);
         await Assert.That(bogus.Exit).IsEqualTo(1);
         await Assert.That(bogus.Out).Contains("error DSL0005: Unknown host target 'bogus'. Known targets: posix.");
-        await Assert.That(bogus.Out).Contains($"{path}:");
+        await Assert.That(bogus.Out).Contains($"{path}:1:1: error DSL0005");
         await Assert.That(bogus.Err).DoesNotContain("Usage:");
+    }
+
+    [Test]
+    public async Task Check_BogusTarget_TwoFiles_GivesOneRecordPerFile() {
+        var dir = PolycTestSupport.TempDir();
+        var a = Write(dir, "a.poly", PolycTestSupport.Orders);
+        var b = Write(dir, "b.poly", PolycTestSupport.Orders);
+
+        var records = JsonNode.Parse(Run(["check", a, b, "--target", "bogus", "--format", "json"]).Out)!.AsArray();
+
+        await Assert.That(records.Count).IsEqualTo(2);
+        var parsed = records.Select(r => DiagnosticFormat.FromJson(r!)).ToList();
+        await Assert.That(parsed.All(r => r.Code == "DSL0005")).IsTrue();
+        await Assert.That(parsed.Select(r => r.File).OrderBy(f => f, StringComparer.Ordinal))
+            .IsEquivalentTo(new[] { a, b }.OrderBy(f => f, StringComparer.Ordinal));
     }
 
     [Test]

@@ -59,23 +59,93 @@ public partial class StatementLimitsTests {
         return new DomainDslPrinter().Print(result.Root!);
     }
 
-    // ── characterisation: what the reader does today at 64, 65 and 200 ──────────────────
+    /// <summary>The 1-based line and column of a zero-based offset.</summary>
+    internal static (int Line, int Column) Position(string document, int offset) {
+        var lineStart = document.LastIndexOf('\n', Math.Max(0, offset - 1)) + 1;
+        return (document.AsSpan(0, offset).Count('\n') + 1, offset - lineStart + 1);
+    }
+
+    private const int Limit = DslLimits.MaxStatementDepth;
+
+    // ── the limit: depth 64 parses to exactly that depth ─────────────────────────────────
 
     [Test]
-    [Arguments("nestif", 64)]
-    [Arguments("elseif", 64)]
-    [Arguments("forif", 64)]
+    [Arguments("nestif")]
+    [Arguments("elseif")]
+    [Arguments("forif")]
+    [Arguments("combined")]
+    public async Task Shape_AtTheLimit_ParsesToANestingOfExactlyThatDepth(string shape) {
+        var effects = ActionEffects(new PolyDslParser(StatementDocument(shape, Limit)).Parse());
+
+        await Assert.That(effects.Count).IsEqualTo(1);
+        await Assert.That(Depth(effects[0])).IsEqualTo(Limit);
+    }
+
+    // ── one past it, and far past it: one positioned error on the 65th statement head ────
+
+    [Test]
     [Arguments("nestif", 65)]
     [Arguments("elseif", 65)]
     [Arguments("forif", 65)]
+    [Arguments("combined", 65)]
     [Arguments("nestif", 200)]
     [Arguments("elseif", 200)]
     [Arguments("forif", 200)]
-    public async Task Shape_AtDepth_ParsesToANestingOfThatDepth(string shape, int depth) {
-        var effects = ActionEffects(new PolyDslParser(StatementDocument(shape, depth)).Parse());
+    [Arguments("nestif", 1000)]
+    [Arguments("elseif", 1000)]
+    public async Task Shape_PastTheLimit_IsOnePositionedErrorOnThe65thStatementHead(string shape, int depth) {
+        var document = StatementDocument(shape, depth);
 
-        await Assert.That(effects.Count).IsEqualTo(1);
-        await Assert.That(Depth(effects[0])).IsEqualTo(depth);
+        GrammarException? caught = null;
+        List<DomainChange>? parsed = null;
+        try {
+            parsed = new PolyDslParser(document).Parse();
+        }
+        catch (GrammarException ex) {
+            caught = ex;
+        }
+
+        await Assert.That(parsed).IsNull();
+        await Assert.That(caught).IsNotNull();
+        await Assert.That(caught!.Detail).IsEqualTo(DslLimits.StatementDepthDetail);
+        var offset = HeadOffset(document, Limit + 1);
+        var (line, column) = Position(document, offset);
+        await Assert.That(caught.Offset).IsEqualTo(offset);
+        await Assert.That(caught.Line).IsEqualTo(line);
+        await Assert.That(caught.Column).IsEqualTo(column);
+        // The error sits on the statement's head keyword: an `if` (the 65th head is never the forif shape's `for`).
+        await Assert.That(document.Substring(caught.Offset, caught.Length)).IsEqualTo("if");
+    }
+
+    /// <summary>A fan-out <c>for</c> (no body) is a statement too: at depth 65 it is the head the error names.</summary>
+    [Test]
+    public async Task FanOutForAtDepth65_IsThePositionedErrorOnItsForHead() {
+        var document = "domain D\nL: entity { N: Text\n  Go: action { } }\nE: entity {\n  Flag: Boolean\n  Lines: many L\n  Go: action {\n    "
+            + string.Concat(Enumerable.Repeat("if (Flag) { ", Limit)) + "for Lines as l invoke l.Go\n"
+            + string.Concat(Enumerable.Repeat("} ", Limit)) + "\n  }\n}\n";
+
+        GrammarException? caught = null;
+        try {
+            new PolyDslParser(document).Parse();
+        }
+        catch (GrammarException ex) {
+            caught = ex;
+        }
+
+        await Assert.That(caught).IsNotNull();
+        await Assert.That(caught!.Detail).IsEqualTo(DslLimits.StatementDepthDetail);
+        await Assert.That(caught.Offset).IsEqualTo(document.IndexOf("for Lines", StringComparison.Ordinal));
+        await Assert.That(caught.Length).IsEqualTo(3);
+    }
+
+    /// <summary>The detail names the ruled value, in the same words as the expression limit's.</summary>
+    [Test]
+    public async Task StatementDepthDetail_NamesTheRuledLimit_InTheExpressionLimitsWords() {
+        static object? Constant(string name) => typeof(DslLimits).GetField(name)!.GetRawConstantValue();
+
+        await Assert.That(Constant(nameof(DslLimits.MaxStatementDepth))).IsEqualTo(64);
+        await Assert.That(Constant(nameof(DslLimits.StatementDepthDetail))).IsEqualTo("statement nesting exceeds the limit of 64");
+        await Assert.That(Constant(nameof(DslLimits.DepthDetail))).IsEqualTo("expression nesting exceeds the limit of 256");
     }
 
     // ── P2: the else-if ladder's shape, which the parse loop must keep ──────────────────

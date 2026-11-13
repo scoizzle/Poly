@@ -2,6 +2,7 @@ using Poly.Compile;
 using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
+using Poly.Grammar;
 using Poly.Interpretation;
 using Poly.Packs.Product;
 using Poly.Tests.DomainModeling.Parsing;
@@ -13,8 +14,9 @@ namespace Poly.Tests.Polyc;
 /// G-10 / OQ-4 and lock amendment 13: the ruled 256 nesting levels have to survive every pass that walks an expression
 /// tree, on the 1 MB stack a host or worker gives a thread. A stack overflow cannot be caught, so the measurement runs
 /// in a child process; the probe is payload only in the parent and acts when the child runner sets
-/// <c>POLY_CHILD_PROBE</c>. The parse stack hop (<c>DslLimits.RunOnParseStack</c>) is still in place for statements; see
-/// <see cref="ChildProbe_StatementAndExpressionShapes_OnFixedStack"/>.
+/// <c>POLY_CHILD_PROBE</c>. Row G-25 adds the statement limit (64) and path words to the stack grid; see
+/// <see cref="ChildProbe_StatementAndExpressionShapes_OnFixedStack"/>. The parse stack hop (<c>DslLimits.RunOnParseStack</c>)
+/// is still on <c>PolyCompiler</c> and <c>DomainResolver.Resolve</c>, so the analyze and compile doors run on its 16 MB thread.
 ///
 /// <para>There is no pass registry in the product, so the passes driven at 256 are a fixed list, each named by its
 /// facade: parse = <c>DslExpressionFragment.ParseOnThisThread</c>; analysis = <c>DomainSession.Analyze</c>; lowering =
@@ -124,33 +126,113 @@ public class RecursivePassDepthTests {
         }
     }
 
-    private static string StatementDocument(string shape, int n) {
+    private const int StatementLimit = DslLimits.MaxStatementDepth;
+
+    /// <summary>A path of <paramref name="words"/> words over a self-referential navigation, so every hop resolves.</summary>
+    internal static string PathDocument(int words) =>
+        "domain D\nE: entity {\n  Flag: Boolean\n  next: one E\n  Ok: policy { " + string.Concat(Enumerable.Repeat("next ", words - 1)) + "Flag }\n}\n";
+
+    private static string ExpressionDocument(string shape, int n) {
         const string head = "domain D\nL: entity { N: Text }\nE: entity {\n  Flag: Boolean\n  Note: Text\n  Lines: many L\n";
         return shape switch {
             "not" => head + "  Ok: policy { " + string.Concat(Enumerable.Repeat("not ", n)) + "Flag }\n}\n",
             "paren" => head + "  Ok: policy { " + new string('(', n) + "Flag" + new string(')', n) + " }\n}\n",
-            "elseif" => head + "  Go: action {\n    if (Flag) { assign Note to \"x\" }"
-                + string.Concat(Enumerable.Repeat(" else if (Flag) { assign Note to \"x\" }", n)) + "\n  }\n}\n",
-            "nestif" => head + "  Go: action {\n    " + string.Concat(Enumerable.Repeat("if (Flag) { ", n)) + "assign Note to \"x\"\n"
-                + string.Concat(Enumerable.Repeat("} ", n)) + "\n  }\n}\n",
-            "forif" => head + "  Go: action {\n    for l in Lines { " + string.Concat(Enumerable.Repeat("if (Flag) { ", n)) + "assign Note to \"x\"\n"
-                + string.Concat(Enumerable.Repeat("} ", n)) + "}\n  }\n}\n",
             _ => throw new InvalidOperationException(shape),
         };
     }
 
-    /// <summary>shape x depth cells the probe runs; statement nesting has no counted limit, so these are the regression guard row G-25 tightens.</summary>
-    private static readonly (string Shape, int Depth)[] StackCells = [
-        ("not", Limit), ("paren", Limit), ("elseif", Limit), ("elseif", 1000), ("nestif", Limit), ("nestif", 1000), ("forif", Limit),
-    ];
+    private static string CellDocument(string shape, int depth) => shape switch {
+        "not" or "paren" => ExpressionDocument(shape, depth),
+        "path" => PathDocument(depth),
+        _ => StatementLimitsTests.StatementDocument(shape, depth),
+    };
 
     /// <summary>
-    /// Fix round 1 (lock amendment 12), the stack probe: every shape in <see cref="StackCells"/> through parse
-    /// (<c>PolyDslParser</c>), <c>PolyCompiler.Analyze</c> and <c>PolyCompiler.Compile</c>, each on a fresh thread of a fixed
-    /// stack (the POLY_PROBE_STACK_KB variable). Statement shapes are the hazard: the large-stack hop in
-    /// <c>DslLimits.RunOnParseStack</c> is what keeps them alive. Measured WITHOUT the hop (scratch run), a 1 MB thread aborts at
-    /// 600 nested <c>if</c> or <c>else if</c> rungs through every door and a 512 KB thread aborts <c>Compile</c> at 256; master
-    /// (with the hop) survived all of these. The probe passes with the hop in place; G-25 removes the hop and bounds the nesting.
+    /// What a cell must give: success up to the limit, else one DSL0001 positioned on the first token past it (the
+    /// 65th statement head, or the 258th path word) with the limit's detail. Expression shapes stay at G-10's 256.
+    /// </summary>
+    private static string ExpectedOutcome(string shape, int depth) {
+        switch (shape) {
+            case "not" or "paren":
+                return "ok";
+            case "path": {
+                    if (depth - 1 <= Limit)
+                        return "ok";
+                    var document = PathDocument(depth);
+                    var offset = document.IndexOf("Ok: policy { ", StringComparison.Ordinal) + "Ok: policy { ".Length + 5 * (Limit + 1);
+                    var (line, column) = StatementLimitsTests.Position(document, offset);
+                    return $"DSL0001 {line}:{column} {DslLimits.DepthDetail}";
+                }
+            default: {
+                    if (depth <= StatementLimit)
+                        return "ok";
+                    var document = StatementLimitsTests.StatementDocument(shape, depth);
+                    var (line, column) = StatementLimitsTests.Position(document, StatementLimitsTests.HeadOffset(document, StatementLimit + 1));
+                    return $"DSL0001 {line}:{column} {DslLimits.StatementDepthDetail}";
+                }
+        }
+    }
+
+    private static readonly string[] StatementShapes = ["nestif", "elseif", "forif", "combined"];
+
+    /// <summary>
+    /// The probe grid, shape x depth: G-10's expression shapes at 256; every statement shape at the statement limit and
+    /// one past it (<c>combined</c> is the statement limit with G-10's 256 nested <c>not</c>s in the innermost
+    /// condition); paths at 256, 257 and 258 words; then the far cells, deep past both limits, which a reader without a
+    /// counted limit overflows. Far cells come last so a child that aborts still records everything before them.
+    /// </summary>
+    private static IEnumerable<(string Shape, int Depth)> StackCells() {
+        yield return ("not", Limit);
+        yield return ("paren", Limit);
+        foreach (var shape in StatementShapes) {
+            yield return (shape, StatementLimit);
+            yield return (shape, StatementLimit + 1);
+        }
+        foreach (var words in new[] { Limit, Limit + 1, Limit + 2 })
+            yield return ("path", words);
+        yield return ("path", 100_000);
+        foreach (var shape in new[] { "nestif", "elseif", "forif" })
+            yield return (shape, 20_000);
+    }
+
+    private static readonly string[] Doors = ["parse", "analyze", "compile", "print"];
+
+    /// <summary>Expression shapes keep G-10's three doors; the print door is new with G-25.</summary>
+    private static IEnumerable<string> DoorsOf(string shape) => shape is "not" or "paren" ? Doors[..3] : Doors;
+
+    private static string Outcome(CompileResult result) {
+        var errors = result.Diagnostics.Where(d => d.IsError).ToList();
+        return errors.Count == 1
+            ? $"{errors[0].Code} {errors[0].Line}:{errors[0].Column} {errors[0].Message}"
+            : "errors: " + string.Join(" | ", errors.Select(e => e.Code + " " + e.Message));
+    }
+
+    /// <summary>One door on one document, on the calling thread: "ok", or the one error it reported.</summary>
+    private static string RunDoor(string door, string document) {
+        try {
+            if (door == "parse") {
+                _ = new PolyDslParser(document).Parse();
+                return "ok";
+            }
+            var compiler = new PolyCompiler(ProductCatalog.Catalog, new SessionOptions(ProductCatalog.Catalog, ProductCatalog.ImplicitIds));
+            var result = door == "compile" ? compiler.Compile(document) : compiler.Analyze(document);
+            if (!result.Succeeded)
+                return Outcome(result);
+            if (door == "print")
+                _ = new DomainDslPrinter(result.Session!).Print(result.Domain!);
+            return "ok";
+        }
+        catch (GrammarException ex) {
+            return $"DSL0001 {ex.Line}:{ex.Column} {ex.Detail}";
+        }
+    }
+
+    private static string CellKey(string shape, int depth, string door) => $"{shape}\t{depth}\t{door}";
+
+    /// <summary>
+    /// Lock amendment 12 (G-10) and G-25's grid: every cell of <see cref="StackCells"/> through every door of
+    /// <see cref="DoorsOf"/>, each on a fresh thread of a fixed stack (POLY_PROBE_STACK_KB). Each outcome is appended to
+    /// POLY_PROBE_OUT as it lands, so the parent compares the whole table and an abort still shows which cell died.
     /// </summary>
     [Test]
     public async Task ChildProbe_StatementAndExpressionShapes_OnFixedStack() {
@@ -158,35 +240,52 @@ public class RecursivePassDepthTests {
             return;
 
         var stackKb = int.Parse(Environment.GetEnvironmentVariable("POLY_PROBE_STACK_KB")!, System.Globalization.CultureInfo.InvariantCulture);
-        foreach (var (shape, depth) in StackCells) {
-            var document = StatementDocument(shape, depth);
-            foreach (var door in new[] { "parse", "analyze", "compile" }) {
-                // Compile stops at 256: its cost grows steeply with statement depth (master's Compile of 2000 else-if rungs gives no
-                // result in 120 s, and CI reported both stack cases still running after 1 m at 1000). 256 still aborts a 512 KB
-                // stack without the hop, so the cell proves the hop. G-25 times these cells and tightens them.
-                if (door == "compile" && depth > Limit)
-                    continue;
-                var outcome = OnStack(stackKb * 1024, () => {
-                    if (door == "parse")
-                        return new PolyDslParser(document).Parse().Count > 0;
-                    var compiler = new PolyCompiler(ProductCatalog.Catalog, new SessionOptions(ProductCatalog.Catalog, ProductCatalog.ImplicitIds));
-                    return (door == "analyze" ? compiler.Analyze(document) : compiler.Compile(document)).Succeeded;
-                });
-                await Assert.That(outcome).IsTrue();
+        var output = Environment.GetEnvironmentVariable("POLY_PROBE_OUT")!;
+        foreach (var (shape, depth) in StackCells()) {
+            var document = CellDocument(shape, depth);
+            foreach (var door in DoorsOf(shape)) {
+                var outcome = OnStack(stackKb * 1024, () => RunDoor(door, document));
+                File.AppendAllText(output, CellKey(shape, depth, door) + "\t" + outcome + "\n");
             }
         }
+        await Assert.That(File.Exists(output)).IsTrue();
     }
 
     [Test]
     [Arguments(1024)]
     [Arguments(512)]
     public async Task StatementAndExpressionShapes_SurviveFixedStacks_ThroughEveryDoor(int stackKb) {
-        var result = await PolycProcess.RunTestInChildAsync(
-            $"/*/*/{nameof(RecursivePassDepthTests)}/{nameof(ChildProbe_StatementAndExpressionShapes_OnFixedStack)}",
-            new Dictionary<string, string?> { ["POLY_CHILD_PROBE"] = "g10-stack", ["POLY_PROBE_STACK_KB"] = stackKb.ToString(System.Globalization.CultureInfo.InvariantCulture) });
+        var output = Path.Combine(Path.GetTempPath(), $"poly-g25-grid-{Guid.NewGuid():N}.tsv");
+        try {
+            var result = await PolycProcess.RunTestInChildAsync(
+                $"/*/*/{nameof(RecursivePassDepthTests)}/{nameof(ChildProbe_StatementAndExpressionShapes_OnFixedStack)}",
+                new Dictionary<string, string?> {
+                    ["POLY_CHILD_PROBE"] = "g25-grid",
+                    ["POLY_PROBE_STACK_KB"] = stackKb.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    ["POLY_PROBE_OUT"] = output,
+                });
 
-        await Assert.That(result.IsAborted).IsFalse();
-        await Assert.That(result.ExitCode).IsEqualTo(0);
+            var actual = File.Exists(output)
+                ? File.ReadAllLines(output).Select(l => l.Split('\t')).ToDictionary(f => CellKey(f[0], int.Parse(f[1], System.Globalization.CultureInfo.InvariantCulture), f[2]), f => f[3])
+                : [];
+            var mismatches = new List<string>();
+            foreach (var (shape, depth) in StackCells()) {
+                foreach (var door in DoorsOf(shape)) {
+                    var expected = ExpectedOutcome(shape, depth);
+                    var key = CellKey(shape, depth, door);
+                    var got = actual.TryGetValue(key, out var value) ? value : "(no outcome: the child died before this cell)";
+                    if (got != expected)
+                        mismatches.Add($"{key.Replace('\t', ' ')}: expected '{expected}', got '{got}'");
+                }
+            }
+
+            await Assert.That(string.Join("\n", mismatches)).IsEqualTo("").Because($"{stackKb} KB, child exit {result.ExitCode}");
+            await Assert.That(result.IsAborted).IsFalse();
+            await Assert.That(result.ExitCode).IsEqualTo(0);
+        }
+        finally {
+            File.Delete(output);
+        }
     }
 
     /// <summary>

@@ -621,16 +621,14 @@ public class OperatorOracleTests {
     }
 
     /// <summary>
-    /// WRONG VALUES, pinned as they are today (issue 832, owner T-21). The VM returns -1 for unary minus on a Decimal
-    /// and on a Duration whatever the operand, and <c>UInt8 | UInt64</c> is not the bitwise or of its operands. These
-    /// are not the right answers; T-21's fix inverts them. The ledger's checksums are value-independent, so without
-    /// these a wrong value that moved to a different wrong value would be invisible. The operands are exactly
-    /// representable and the text is the oracle's invariant-culture rendering, so the pin is the same on arm64 and x64.
+    /// A WRONG VALUE, pinned as it is today (issue 832, owner T-21b): <c>UInt8 | UInt64</c> is not the bitwise or of its
+    /// operands. It is not the right answer; T-21b's fix inverts it (T-21a fixed unary minus on a Decimal and a
+    /// Duration). The ledger's checksums are value-independent, so without this a wrong value that moved to a different
+    /// wrong value would be invisible. The operands are exactly representable and the text is the oracle's
+    /// invariant-culture rendering, so the pin is the same on arm64 and x64.
     /// </summary>
     [Test]
     public async Task Probe_WrongVmValues_Issue832_PinnedAsTheyAreToday_T21InvertsThem() {
-        await Assert.That(Cell("Decimal", OperatorKind.UnaryMinus, null).Abi).IsEqualTo("Decimal; S1=-0.1; S2=-0.2");
-        await Assert.That(Cell("Duration", OperatorKind.UnaryMinus, null).Abi).IsEqualTo("TimeSpan; S1=-01:00:00; S2=-01:30:00");
         await Assert.That(Cell("UInt8", OperatorKind.BitwiseOr, "UInt64").Abi).IsEqualTo("Byte; S1=255; S2=-1");
     }
 

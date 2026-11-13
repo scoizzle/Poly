@@ -248,9 +248,19 @@ public sealed partial class EffectLoweringPass : EffectDispatch<Node?> {
     private string CallerPath =>
         _context.ActionName is { } action ? $"{_entity.Name}.{action}" : _entity.Name;
 
-    /// <summary>A callee's failure rewrapped as the caller's, prefixed with <see cref="CallerPath"/>.</summary>
+    /// <summary>
+    /// A callee's failure rewrapped as the caller's, prefixed with <see cref="CallerPath"/>. A subscription
+    /// handler is fan-out, not a caller of its own: it passes the failure through, like the notify dispatcher.
+    /// </summary>
     private Return ReturnCallerFailureFrom(Node resultVar) =>
-        FailureLowering.Propagate(CallerResultType, resultVar, CallerPath);
+        FailureLowering.Propagate(CallerResultType, resultVar, _context.ReturnsDomainResult ? null : CallerPath);
+
+    /// <summary>
+    /// Whether this body has a result channel for a nested failure. Read only at the notify site: the assign
+    /// and create guards key on <see cref="LoweringContext.ActionResultType"/> and a handler still throws there (L-04).
+    /// </summary>
+    private bool CanReturnFailure =>
+        _context.ActionResultType is not null || _context.ReturnsDomainResult;
 
     /// <summary>
     /// The entity's own guard method (<c>EnsureUnique</c>) is not a callee: its failure already

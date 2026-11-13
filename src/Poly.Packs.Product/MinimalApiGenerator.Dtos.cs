@@ -164,8 +164,8 @@ public sealed partial class MinimalApiGenerator {
 
     /// <summary>The <c>[EnumDataType(typeof(EnumName))]</c> attribute declaring an enum-typed
     /// member's allowed-value union on the transport contract.</summary>
-    private static AttributeNode EnumDataTypeAttribute(string enumName) =>
-        new("EnumDataType", [new TypeOf(new TypeReference(enumName))]);
+    private AttributeNode EnumDataTypeAttribute(string enumName) =>
+        new("EnumDataType", [new TypeOf(new TypeReference(VisibleType(enumName)))]);
 
     private bool IsEnumTypeName(string domainTypeName) =>
         _enumLookup.ContainsKey(domainTypeName);

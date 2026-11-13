@@ -18,6 +18,11 @@ public sealed partial class DomainToCSharpExporter {
         return new Block(prefix, locals ?? []);
     }
 
+    private static Block WithSuccessTail(Node body) =>
+        body is Block block
+            ? new Block([.. block.Nodes, DomainResultSuccess()], [.. block.Variables])
+            : new Block([body, DomainResultSuccess()]);
+
     /// <summary>
     /// Subscriber entity: one handler method per subscription. Each handler carries the
     /// peer parameter (<c>when … as name</c>), the <c>when all</c> previous-stage gate,
@@ -73,7 +78,8 @@ public sealed partial class DomainToCSharpExporter {
                         LifecyclePropertyName: esm.LifecyclePropertyName,
                         LifecycleEnumTypeName: esm.LifecycleEnumTypeName,
                         PostTransitionNotifyStages: postTransitionNotifyStages,
-                        PreviousStageNotifyStages: previousStageNotifyStages);
+                        PreviousStageNotifyStages: previousStageNotifyStages,
+                        ReturnsDomainResult: true);
                     var effectPass = new EffectLoweringPass(entity, context);
                     var composite = new CompositeEffect(subscriptionEffects);
                     handlerBody = effectPass.TryLowerVmNode(composite)
@@ -98,7 +104,7 @@ public sealed partial class DomainToCSharpExporter {
                         new NotEqual(
                             new Member(new ThisReference(), "CurrentStage"),
                             new Member(new NamedTypeReference(stageEnumTypeName!), info.SubscriberStageName)),
-                        new Block([new Return()]));
+                        new Block([DomainResultSuccess()]));
                     handlerBody = Prefixed([stageGate], handlerBody);
                 }
 
@@ -118,15 +124,15 @@ public sealed partial class DomainToCSharpExporter {
                             new IfStatement(
                                 NotInWatchedStages(
                                     currentStage, targetStageEnumName, info.Subscription.StageNames),
-                                new Block([new Return()]))
+                                new Block([DomainResultSuccess()]))
                         ]));
                     var emptyCheck = new IfStatement(
                         new Poly.Ast.Nodes.Not(matchedVar),
-                        new Block([new Return()]));
+                        new Block([DomainResultSuccess()]));
                     var alreadyWatched = new IfStatement(
                         InWatchedStages(
                             previousStageParam, targetStageEnumName, info.Subscription.StageNames),
-                        new Block([new Return()]));
+                        new Block([DomainResultSuccess()]));
                     handlerBody = Prefixed(
                         [
                             new Assignment(matchedVar, new Constant(false)),
@@ -161,12 +167,16 @@ public sealed partial class DomainToCSharpExporter {
                         ]));
                     var noneMatched = new IfStatement(
                         new Poly.Ast.Nodes.Not(matchedVar),
-                        new Block([new Return()]));
+                        new Block([DomainResultSuccess()]));
                     handlerBody = Prefixed(
                         [new Assignment(matchedVar, new Constant(false)), gateLoop, noneMatched],
                         handlerBody,
                         [matchedVar]);
                 }
+
+                // The handler returns a result: a failed invoke returns it and the tail is success. The tail goes
+                // on before the body is cached, so the simulator runs the same body.
+                handlerBody = WithSuccessTail(handlerBody);
 
                 if (subscriptionBodies is not null) {
                     if (!subscriptionBodies.TryGetValue(info.Subscription, out var byStage)) {
@@ -178,7 +188,7 @@ public sealed partial class DomainToCSharpExporter {
 
                 methods.Add(new MethodDefinitionNode(
                     handlerName,
-                    new TypeReference("void"),
+                    new NamedTypeReference("DomainResult"),
                     Parameters: handlerParams,
                     Body: handlerBody,
                     AccessModifier: AccessModifier.Internal

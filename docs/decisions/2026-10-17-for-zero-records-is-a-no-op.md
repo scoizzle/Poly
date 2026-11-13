@@ -55,7 +55,8 @@ iterations is never an error."*
 - Tests that asserted the failure flip to asserting success **and** that the effect after the loop
   runs; the university dogfood walk (`DropAllRegistered`, `CompletePassing` with nothing to do) is a
   real-domain confirmation.
-- A subscription body still cannot carry a *failure return*: a `for` **or** a plain `invoke` inside a
-  `when` emits `return DomainResult…` into a `void` handler (**CS0127**) — pre-existing, recorded in
-  `docs/reference/research/2026-10-17-failure-return-in-void-subscription-handler.md`.
+- A subscription body can carry a *failure return* since L-03h: a `when` handler returns `DomainResult`, so a
+  `for` or a plain `invoke` inside it returns the callee's failure (it printed `return DomainResult…` into a
+  `void` handler, **CS0127**, before; see
+  `docs/reference/research/2026-10-17-failure-return-in-void-subscription-handler.md`).
   The empty-set rule does not change that shape's status.

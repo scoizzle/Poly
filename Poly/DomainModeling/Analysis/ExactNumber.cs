@@ -37,7 +37,7 @@ internal readonly struct ExactNumber : IEquatable<ExactNumber> {
         byte b => new ExactNumber(b),
         ushort us => new ExactNumber(us),
         uint ui => new ExactNumber(ui),
-        ulong ul => ul <= long.MaxValue ? new ExactNumber((long)ul) : null,
+        ulong ul => new ExactNumber((decimal)ul),
         decimal m => new ExactNumber(m),
         double d => FromDouble(d),
         float f => FromDouble(f),

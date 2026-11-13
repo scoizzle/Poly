@@ -1120,12 +1120,24 @@ relationship name.
 
 ### Failure
 
-A `when` body is void. When a `create` or `create in` inside it fails a
-constraint, the handler throws `ConstraintFailureException` with that failure
-message and drops the failed create's value. The stage change that fired the
-subscription stays assigned. Interpreter and printed C# both surface that
-exception from the action that caused the transition. An action's own failed
-effect still returns `DomainResult.Failure`.
+A `when` handler returns a result. A failed `invoke` (or `for ... invoke`) in it
+stops the handler and returns that failure: its kind, message and guard are
+unchanged, and its path is the call chain (the handler adds no segment of its
+own). The notification stops at the first failing handler, in registration
+order, so no later handler runs. The action that caused the transition, or the
+`create in` that landed the child in a watched stage, returns that failure to
+its caller; it never reports success and never throws. The stage change that
+fired the subscription is undone by the simulator (it restores the failed
+action's changes) but stays assigned in the generated C# until action rollback
+lands there, so the two hosts differ on that state until then.
+For a failed `invoke` in the handler of `Run` that finishes an `Item`, the path
+reads `Owner.Run.Item.Finish.Owner.Y`.
+
+A failed `create`, `create in` (including a `create in` inside a handler whose
+new child's own handler fails) or constraint-violating `assign` inside a handler
+still throws `ConstraintFailureException` for now, from the action that caused
+the transition; those become returned failures later. Interpreter and printed
+C# agree.
 
 ## 8. Policies
 

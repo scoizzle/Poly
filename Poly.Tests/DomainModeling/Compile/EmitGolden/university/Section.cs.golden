@@ -241,15 +241,15 @@ internal class Section : Poly.Runtime.IActionScoped
     }
     internal DomainResult WhenAnyWaitOfferOffered()
     {
-        var linkedMatched = false;
-        foreach (var linkedTarget in this.Waitlist)
+        var __linkedMatched = false;
+        foreach (var __linkedTarget in this.Waitlist)
         {
-            if (linkedTarget.CurrentStage == WaitOfferStage.Offered)
+            if (__linkedTarget.CurrentStage == WaitOfferStage.Offered)
             {
-                linkedMatched = true;
+                __linkedMatched = true;
             }
         }
-        if (!linkedMatched)
+        if (!__linkedMatched)
         {
             return DomainResult.Success();
         }
@@ -257,22 +257,22 @@ internal class Section : Poly.Runtime.IActionScoped
         this.OfferedSeats = this.OfferedSeats + 1L;
         return DomainResult.Success();
     }
-    internal DomainResult WhenAllWaitOfferCancelled(WaitOfferStage? previousStage)
+    internal DomainResult WhenAllWaitOfferCancelled(WaitOfferStage? __previousStage)
     {
-        var linkedMatched = false;
-        foreach (var linkedTarget in this.Waitlist)
+        var __linkedMatched = false;
+        foreach (var __linkedTarget in this.Waitlist)
         {
-            linkedMatched = true;
-            if (linkedTarget.CurrentStage != WaitOfferStage.Cancelled)
+            __linkedMatched = true;
+            if (__linkedTarget.CurrentStage != WaitOfferStage.Cancelled)
             {
                 return DomainResult.Success();
             }
         }
-        if (!linkedMatched)
+        if (!__linkedMatched)
         {
             return DomainResult.Success();
         }
-        if (previousStage == WaitOfferStage.Cancelled)
+        if (__previousStage == WaitOfferStage.Cancelled)
         {
             return DomainResult.Success();
         }

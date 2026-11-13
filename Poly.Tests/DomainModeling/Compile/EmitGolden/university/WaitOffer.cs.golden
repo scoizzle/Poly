@@ -161,7 +161,7 @@ internal class WaitOffer : Poly.Runtime.IActionScoped
         }
         return DomainResult.Success();
     }
-    internal DomainResult NotifyCancelledSubscribers(WaitOfferStage? previousStage)
+    internal DomainResult NotifyCancelledSubscribers(WaitOfferStage? __previousStage)
     {
         var __depth = this.EnterNotifyCascade("Cancelled");
         try
@@ -170,7 +170,7 @@ internal class WaitOffer : Poly.Runtime.IActionScoped
             {
                 foreach (var sub in this._sectionWaitlistCancelledSubscribers)
                 {
-                    var handlerResult0 = sub.WhenAllWaitOfferCancelled(previousStage);
+                    var handlerResult0 = sub.WhenAllWaitOfferCancelled(__previousStage);
                     if (!handlerResult0.IsSuccess)
                     {
                         return handlerResult0;

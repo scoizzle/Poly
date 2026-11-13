@@ -8,7 +8,7 @@ namespace Poly.Tests.DomainModeling.Packs;
 /// <summary>
 /// pack-3a: temporal spellings (<c>Now - 12 Days</c>, <c>DueDate + 14 Days</c>,
 /// <c>ExpiryDate &lt; Now</c>) survive export_dsl. The temporal pack registers
-/// Grammar patterns on both primaries and print binders for <c>Now</c>/<c>Today</c>/
+/// Grammar patterns on <c>expr-primary</c> and print binders for <c>Now</c>/<c>Today</c>/
 /// <c>DateOperation</c>; a session without the pack fails closed on both sides
 /// (parse rejects, DateOperation print throws).
 /// </summary>
@@ -147,10 +147,10 @@ public sealed class TemporalPackPrintRoundTripTests {
     }
 
     [Test]
-    public async Task TemporalPack_GrammarPatterns_RegisterOnBothPrimaries() {
+    public async Task TemporalPack_GrammarPatterns_RegisterOnExprPrimary() {
         var g = DslGrammar.Core;
 
-        foreach (var rule in new[] { "expr-primary", "expr-primary-no-not" }) {
+        foreach (var rule in new[] { "expr-primary" }) {
             await Assert.That(g.GetPatterns(rule).Any(p => p.Name == "ident")).IsTrue();
             await Assert.That(g.GetPatterns(rule).Any(p => p.Name == "duration")).IsTrue();
 

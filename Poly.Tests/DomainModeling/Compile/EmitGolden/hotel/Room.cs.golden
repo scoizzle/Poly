@@ -48,6 +48,7 @@ internal class Room : Poly.Runtime.IActionScoped
     public RoomStage CurrentStage { get; private set; }
     internal void AttachStays(Reservation child)
     {
+        Poly.Runtime.ActionScope.Touch(this);
         this._stays.Add(child);
         child.RegisterRoomStaysInHouseSubscriber(this);
         child.RegisterRoomStaysDepartedSubscriber(this);
@@ -60,6 +61,7 @@ internal class Room : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfTakeOutOfService();
             if (!__result.IsSuccess)
             {
@@ -97,6 +99,7 @@ internal class Room : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfInspect();
             if (!__result.IsSuccess)
             {
@@ -129,6 +132,7 @@ internal class Room : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfReturnToService();
             if (!__result.IsSuccess)
             {
@@ -161,26 +165,31 @@ internal class Room : Poly.Runtime.IActionScoped
     public bool HasType() => this.RoomType != null;
     internal DomainResult WhenEachReservationInHouse()
     {
+        Poly.Runtime.ActionScope.Touch(this);
         this.Occupied = true;
         return DomainResult.Success();
     }
     internal DomainResult WhenEachReservationDeparted_SetOccupied()
     {
+        Poly.Runtime.ActionScope.Touch(this);
         this.Occupied = false;
         return DomainResult.Success();
     }
     internal DomainResult WhenEachReservationCancelled()
     {
+        Poly.Runtime.ActionScope.Touch(this);
         this.Occupied = false;
         return DomainResult.Success();
     }
     internal DomainResult WhenEachReservationNoShow()
     {
+        Poly.Runtime.ActionScope.Touch(this);
         this.Occupied = false;
         return DomainResult.Success();
     }
     internal DomainResult WhenEachReservationDeparted_SetDirty()
     {
+        Poly.Runtime.ActionScope.Touch(this);
         this.Dirty = true;
         return DomainResult.Success();
     }
@@ -227,6 +236,7 @@ internal class Room : Poly.Runtime.IActionScoped
             return DomainResult<Room>.Failure(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'Number' value is already used on another 'Room'.", "Room.Number"));
         }
         var created = new Room(number, floor, nightlyRate, maxOccupancy, property, roomType, stays, occupied, dirty, offline);
+        Poly.Runtime.ActionScope.Create(created, "Room");
         if (property != null)
         {
             property.AttachRooms(created);

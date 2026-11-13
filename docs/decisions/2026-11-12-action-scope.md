@@ -100,8 +100,22 @@ Recorded here and in `docs/CORE.md`; each consumer's plan lock must confirm them
   the module's `IStorageJournal`, or `null` in a host with no storage.
 - **Before each write.** `Poly.Runtime.ActionScope.Touch(target)`. In the simulator the receiver
   is the entity's `IDictionary<string, object?>` bag, and `Touch` accepts a bag directly, so no
-  `IActionScoped` is needed there.
-- **Created instances.** `Poly.Runtime.ActionScope.Create(instance, "EntityName")`.
+  `IActionScoped` is needed there. L-03c (#683, lock 6842369459, fork F1) places it at the **entry of
+  each mutator**, not before each write: the action wrapper (first inside its `try`), a subscription
+  handler (after its gates, before the automatic-chain clear, in the body the simulator caches),
+  `Attach{Nav}` and `Register…Subscriber`. One line per mutator covers every receiver without per-write
+  analysis: a callee's state through the callee's wrapper, a subscriber through its handler, a peer
+  through the `Attach`/`Register` that appends to it. A cross-entity `assign` does not exist (the DSL
+  cannot write another entity's state) and `link`/`unlink` fail closed until L-13, which must touch
+  both ends.
+- **Created instances.** `Poly.Runtime.ActionScope.Create(instance, "EntityName")`. L-03c emits it in
+  every factory after `new` and before any peer attach.
+- **Notify depth (L-03c, F2).** `EnterNotifyCascade` returns the depth it entered at and the exit
+  assigns it back. A nested rollback mid-cascade restores the depth the action started with; a
+  relative decrement in the unwinding `finally` would then leave it at -1. For an entity that existed
+  before the action, its first touch happens at depth 0 (every mutator that can start its cascade
+  touches it first); a child created in the action is notified before any touch, which is harmless
+  because the rollback leaves it unreachable.
 - **Epilogue (B3).**
   `DomainResult __r = default; bool __ok = false; try { __r = <body>; __ok = __r.IsSuccess; } finally { if (__ok) ActionScope.Commit(__scope); else ActionScope.Rollback(__scope); }`
   followed by `return __r;`. A `finally` cannot see a returned `DomainResult`, so the `__ok` flag
@@ -133,6 +147,14 @@ Recorded here and in `docs/CORE.md`; each consumer's plan lock must confirm them
   `__Snapshot`/`__Restore`. Intended.
 - **Shallow bag restore.** L-03 must emit `Touch` for every written target, not just the
   receiver; a mutated child object reached through a bag is restored only if it was touched.
+  L-03c meets it by touching at the entry of every mutator (§3).
+- **Cost (L-03c).** Every action pays `Begin`, one `Touch` per entity it reaches (a lock, an
+  `AsyncLocal` read, an `object?[]`, and a copy of every collection and registry field of that
+  entity, so the cost is proportional to collection size), and `Commit` or `Rollback`, even when a
+  guard fails at once. `TwoPhaseInvokeBenchmark` `dispatch()` (`--job short`, one machine, side by
+  side): 6,592 B and 2,252 ns at master `0d2cd4a8`, 7,168 B and 2,239 ns with L-03c; the 576 B is the
+  module wrapper's bag snapshot, on top of the executor's own `Capture` until X-04 removes it. The
+  mean is within the job's noise. No gate.
 - **Q2.** Parallel roots need distinct journals (T16, T21) or host serialisation; the lock covers
   scope bookkeeping only, never entity data.
 

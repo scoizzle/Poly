@@ -52,6 +52,23 @@ public class OverloadSweepTests {
          + "C# 10.2.11 allows it for a constant, Poly does not model constant-expression conversions, so no overload is left"),
     ];
 
+    /// <summary>
+    /// Identities a slice adds at new call sites, where nothing rebinds: each method has exactly one overload, so the
+    /// line can only appear, never change winner. The run drops these lines before comparing, so every baseline entry is
+    /// still compared on what it had; a changed winner anywhere still fails. Each row names its slice and is pinned below.
+    /// </summary>
+    private static readonly (string Identity, string Why)[] ExplainedAdditions = [
+        ("Poly.Runtime.ActionScope.Touch(System.Object)",
+         "L-03c: every generated mutator (action wrapper, handler, Attach*, Register*Subscriber) touches its receiver at entry"),
+        ("Poly.Runtime.ActionScope.Create(System.Object,System.String)",
+         "L-03c: every generated factory records the instance it created with the open action scope"),
+    ];
+
+    private static string WithoutExplainedAdditions(string body) =>
+        string.Concat(body.Split('\n')
+            .Where(line => !ExplainedAdditions.Any(a => line == "  " + a.Identity))
+            .Select(line => line + "\n"))[..^1];
+
     private const string GoldenPrefix = "Poly.Tests/DomainModeling/Compile/EmitGolden/";
 
     private static string BaselinePath() =>
@@ -112,6 +129,7 @@ public class OverloadSweepTests {
             await File.WriteAllTextAsync(output, Format(run));
             return;
         }
+        run = [.. run.Select(static e => (e.Key, WithoutExplainedAdditions(e.Body)))];
         var baseline = Parse((await File.ReadAllTextAsync(BaselinePath())).Replace("\r\n", "\n"));
         await Assert.That(baseline.Count).IsGreaterThan(0).Because("an empty baseline compares nothing");
         for (var i = 0; i < baseline.Count; i++) {
@@ -134,6 +152,24 @@ public class OverloadSweepTests {
         await Assert.That(comparison.Missing).IsEmpty();
         await Assert.That(comparison.Changed).IsEmpty();
         await Assert.That(comparison.Matched).IsEqualTo(baseline.Count);
+    }
+
+    // Each explained addition is a real identity of the run, absent from the baseline, of a method with one overload.
+    [Test]
+    public async Task ExplainedAdditions_AreNewSitesOfASingleOverloadMethod() {
+        var run = Run();
+        var baseline = await File.ReadAllTextAsync(BaselinePath());
+        foreach (var (identity, why) in ExplainedAdditions) {
+            await Assert.That(run.Any(e => e.Body.Split('\n').Contains("  " + identity))).IsTrue().Because(why);
+            await Assert.That(baseline).DoesNotContain(identity).Because(why);
+            var open = identity.IndexOf('(', StringComparison.Ordinal);
+            var dot = identity.LastIndexOf('.', open);
+            var type = typeof(Poly.Runtime.ActionScope).Assembly.GetType(identity[..dot])!;
+            var overloads = type.GetMethods().Count(m => m.Name == identity[(dot + 1)..open]);
+            await Assert.That(overloads).IsEqualTo(1).Because(why);
+        }
+        await Assert.That(WithoutExplainedAdditions("  errors: 0\n  " + ExplainedAdditions[0].Identity + "\n  X.M(Int32)\n"))
+            .IsEqualTo("  errors: 0\n  X.M(Int32)\n");
     }
 
     [Test]

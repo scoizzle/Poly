@@ -33,6 +33,7 @@ internal class Activity : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfSnooze();
             if (!__result.IsSuccess)
             {
@@ -65,6 +66,7 @@ internal class Activity : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfComplete();
             if (!__result.IsSuccess)
             {
@@ -98,6 +100,7 @@ internal class Activity : Poly.Runtime.IActionScoped
             return DomainResult<Activity>.Failure(Poly.Runtime.DomainFailure.Required("'Subject' is required.", "Activity.Subject"));
         }
         var created = new Activity(subject, opportunity, dueOn);
+        Poly.Runtime.ActionScope.Create(created, "Activity");
         if (opportunity != null)
         {
             opportunity.AttachActivities(created);

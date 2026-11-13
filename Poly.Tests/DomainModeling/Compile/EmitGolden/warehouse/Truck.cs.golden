@@ -40,6 +40,7 @@ internal class Truck : Poly.Runtime.IActionScoped
     public TruckStage CurrentStage { get; private set; }
     internal void AttachDeliveries(Delivery child)
     {
+        Poly.Runtime.ActionScope.Touch(this);
         this._deliveries.Add(child);
     }
     internal DomainResult Load(long weight)
@@ -48,6 +49,7 @@ internal class Truck : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfLoad(weight);
             if (!__result.IsSuccess)
             {
@@ -85,6 +87,7 @@ internal class Truck : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfDispatch();
             if (!__result.IsSuccess)
             {
@@ -152,6 +155,7 @@ internal class Truck : Poly.Runtime.IActionScoped
             return DomainResult<Truck>.Failure(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'Vin' value is already used on another 'Truck'.", "Truck.Vin"));
         }
         var created = new Truck(vin, maxLoad, warehouse, deliveries, currentLoad, status);
+        Poly.Runtime.ActionScope.Create(created, "Truck");
         if (warehouse != null)
         {
             warehouse.AttachTrucks(created);

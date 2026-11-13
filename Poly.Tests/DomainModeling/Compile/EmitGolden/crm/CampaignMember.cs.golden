@@ -19,6 +19,7 @@ internal class CampaignMember : Poly.Runtime.IActionScoped
     internal static DomainResult<CampaignMember> Create(Contact? contact = null, Campaign? campaign = null)
     {
         var created = new CampaignMember(contact, campaign);
+        Poly.Runtime.ActionScope.Create(created, "CampaignMember");
         if (campaign != null)
         {
             campaign.AttachMembers(created);

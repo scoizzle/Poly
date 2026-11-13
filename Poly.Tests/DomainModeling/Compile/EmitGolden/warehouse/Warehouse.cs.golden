@@ -43,6 +43,7 @@ internal class Warehouse : Poly.Runtime.IActionScoped
     }
     internal void AttachTrucks(Truck child)
     {
+        Poly.Runtime.ActionScope.Touch(this);
         this._trucks.Add(child);
     }
     internal DomainResult AdjustCapacity(long delta)
@@ -51,6 +52,7 @@ internal class Warehouse : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfAdjustCapacity(delta);
             if (!__result.IsSuccess)
             {
@@ -88,6 +90,7 @@ internal class Warehouse : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfSetStatus(status);
             if (!__result.IsSuccess)
             {
@@ -121,6 +124,7 @@ internal class Warehouse : Poly.Runtime.IActionScoped
         var __done = false;
         try
         {
+            Poly.Runtime.ActionScope.Touch(this);
             var __result = this.__BodyOfRegisterTruck(vin, maxLoad, db);
             if (!__result.IsSuccess)
             {
@@ -213,6 +217,7 @@ internal class Warehouse : Poly.Runtime.IActionScoped
             return DomainResult<Warehouse>.Failure(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'Code' value is already used on another 'Warehouse'.", "Warehouse.Code"));
         }
         var created = new Warehouse(code, name, zip, capacity, trucks, safetyStock, status);
+        Poly.Runtime.ActionScope.Create(created, "Warehouse");
         db.Record("Warehouse", "Code", code);
         return DomainResult<Warehouse>.Success(created);
     }

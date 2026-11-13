@@ -22,15 +22,20 @@ namespace Poly.Tests.TestHelpers;
 /// <see cref="FailureKind"/>, <see cref="FailurePath"/> and <see cref="FailureGuard"/> are the
 /// <c>Poly.Runtime.DomainFailure</c> of a step that failed through a result, on both sides.
 /// A step that threw, or that failed without a typed failure, leaves them null.
+/// The graph members are set only for a scenario that opts in with <c>recordGraph</c> (L-03c), and are
+/// <see cref="GraphState"/> renderings: <see cref="GraphBefore"/> and <see cref="GraphAfter"/> render the graph before
+/// and after the step against the table taken before it (an entity the step left behind is an orphan), on one host,
+/// and <see cref="GraphParity"/> renders the graph after the step against a fresh table, in the form both hosts compare.
 /// </summary>
 public sealed record ParityOutcome(
     string Step, bool Success, string? Message, string? ExceptionType, IReadOnlyDictionary<string, string?> State,
-    string? FailureKind = null, string? FailurePath = null, string? FailureGuard = null);
+    string? FailureKind = null, string? FailurePath = null, string? FailureGuard = null,
+    string? GraphBefore = null, string? GraphAfter = null, string? GraphParity = null);
 
 /// <summary>
 /// One field that differs between the sides. <see cref="Field"/> is the ledger vocabulary:
-/// <c>success</c>, <c>message</c>, <c>failureKind</c>, <c>failurePath</c>, <c>failureGuard</c>, <c>exceptionType</c>, <c>state:&lt;member&gt;</c>
-/// or <c>stepCount</c>. <see cref="ToString"/> keeps the wording the existing rows assert on.
+/// <c>success</c>, <c>message</c>, <c>failureKind</c>, <c>failurePath</c>, <c>failureGuard</c>, <c>exceptionType</c>, <c>state:&lt;member&gt;</c>,
+/// <c>graph</c> (a scenario that records the graph) or <c>stepCount</c>. <see cref="ToString"/> keeps the wording the existing rows assert on.
 /// </summary>
 public sealed record ParityDifference(int Index, string Step, string Field, string? Simulate, string? Printed) {
     public override string ToString() => Field switch {
@@ -41,6 +46,7 @@ public sealed record ParityDifference(int Index, string Step, string Field, stri
         "failurePath" => $"{Step}: failure path differs (simulate '{Simulate}', printed '{Printed}')",
         "failureGuard" => $"{Step}: failure guard differs (simulate '{Simulate}', printed '{Printed}')",
         "exceptionType" => $"{Step}: exception type differs (simulate '{Simulate}', printed '{Printed}')",
+        "graph" => $"{Step}: graph differs\n  simulate:\n{Simulate}  printed:\n{Printed}",
         _ => $"{Step}: '{Field.Replace("state:", "", StringComparison.Ordinal)}' differs (simulate '{Simulate}', printed '{Printed}')",
     };
 }
@@ -77,14 +83,16 @@ public sealed class ParityScenario {
     readonly Assembly _assembly;
     readonly IReadOnlySet<string> _recordedExceptions;
     readonly bool _recordPostThrowState;
+    readonly bool _recordGraph;
 
     ParityScenario(Domain domain, Domain printedDomain, Assembly assembly, IReadOnlySet<string> recordedExceptions,
-        bool recordPostThrowState) {
+        bool recordPostThrowState, bool recordGraph = false) {
         _domain = domain;
         _printedDomain = printedDomain;
         _assembly = assembly;
         _recordedExceptions = recordedExceptions;
         _recordPostThrowState = recordPostThrowState;
+        _recordGraph = recordGraph;
     }
 
     /// <summary>The names of the sides the last <see cref="Run"/> executed, in order.</summary>
@@ -110,10 +118,12 @@ public sealed class ParityScenario {
     /// state after a step throws. It is off by default because a row that used to compare two empty
     /// states would start comparing post-throw state, and every such flip is a finding for its own
     /// slice, not a harness change (see the loop-guard row in ExitBlockTransitionTests).
+    /// <paramref name="recordGraph"/> opts a scenario into the <see cref="GraphState"/> members of every outcome and the
+    /// <c>graph</c> difference field (L-03c). It is off by default, so no existing row compares graphs.
     /// </summary>
     public static ParityScenario FromDsls(
         string simulateDsl, string printedDsl, string assemblyName,
-        string[]? recordedExceptions = null, bool recordPostThrowState = false) {
+        string[]? recordedExceptions = null, bool recordPostThrowState = false, bool recordGraph = false) {
         var simulate = EvolvedDomain.FromDsl(simulateDsl).Domain;
         var ids = simulate.Extensions.Count > 0 ? simulate.Extensions : ExtensionCatalog.ProductAuthoring;
 
@@ -129,12 +139,13 @@ public sealed class ParityScenario {
                 .Select(d => d.Message)));
         var cs = new CSharpGenerator().Generate(printedSession.Lower(evolved.Root!, evolved.Analysis));
         return new(simulate, evolved.Root!, ExportedCSharp.CompileAndLoad(cs, assemblyName),
-            new HashSet<string>(recordedExceptions ?? [], StringComparer.Ordinal), recordPostThrowState);
+            new HashSet<string>(recordedExceptions ?? [], StringComparer.Ordinal), recordPostThrowState, recordGraph);
     }
 
     public static ParityScenario FromDsl(
-        string dsl, string assemblyName, string[]? recordedExceptions = null, bool recordPostThrowState = false) =>
-        FromDsls(dsl, dsl, assemblyName, recordedExceptions, recordPostThrowState);
+        string dsl, string assemblyName, string[]? recordedExceptions = null, bool recordPostThrowState = false,
+        bool recordGraph = false) =>
+        FromDsls(dsl, dsl, assemblyName, recordedExceptions, recordPostThrowState, recordGraph);
 
     /// <summary>For domains built or edited through the API, which the DSL cannot always express. No storage library: such a domain holds no unique key.</summary>
     public static ParityScenario FromDomain(Domain domain, string assemblyName) {
@@ -144,8 +155,8 @@ public sealed class ParityScenario {
     }
 
     public (IReadOnlyList<ParityOutcome> Simulate, IReadOnlyList<ParityOutcome> Printed) Run(Action<ParitySide> steps) {
-        var simulate = new SimulateSide(_domain, _recordedExceptions, _recordPostThrowState);
-        var printed = new PrintedSide(_domain, _assembly, _recordedExceptions, _recordPostThrowState);
+        var simulate = new SimulateSide(_domain, _recordedExceptions, _recordPostThrowState, _recordGraph);
+        var printed = new PrintedSide(_domain, _assembly, _recordedExceptions, _recordPostThrowState, _recordGraph);
         Sides = [simulate.Name, printed.Name];
         steps(simulate);
         steps(printed);
@@ -189,6 +200,8 @@ public sealed class ParityScenario {
             Compare("exceptionType", s.ExceptionType, p.ExceptionType);
             foreach (var member in s.State.Keys.Union(p.State.Keys))
                 Compare($"state:{member}", s.State.TryGetValue(member, out var a) ? a : "(absent)", p.State.TryGetValue(member, out var b) ? b : "(absent)");
+            if (s.GraphParity is not null || p.GraphParity is not null)
+                Compare("graph", s.GraphParity, p.GraphParity);
         }
         return differences;
     }
@@ -201,11 +214,13 @@ public sealed class ParityScenario {
 /// name; any other exception is a harness fault and fails the row.
 /// </summary>
 public abstract class ParitySide(
-    Domain domain, IReadOnlySet<string>? recordedExceptions = null, bool recordPostThrowState = false) {
+    Domain domain, IReadOnlySet<string>? recordedExceptions = null, bool recordPostThrowState = false,
+    bool recordGraph = false) {
     public List<ParityOutcome> Outcomes { get; } = [];
     protected Domain Domain { get; } = domain;
     Entity? _model;
     object? _current;
+    readonly List<object> _roots = [];
 
     /// <summary>The side's name, so a ledger entry validates against the sides that actually ran.</summary>
     public abstract string Name { get; }
@@ -217,7 +232,10 @@ public abstract class ParitySide(
         var model = Domain.Types.OfType<Entity>().FirstOrDefault(e => e.Name == type)
             ?? throw new ArgumentException($"No entity '{type}' in the domain.");
         var created = Record($"create {type}", () => CreateCore(model, values), model);
-        if (created is not null) (_current, _model) = (created, model);
+        if (created is not null) {
+            (_current, _model) = (created, model);
+            _roots.Add(GraphRoot(created));
+        }
         return created;
     }
 
@@ -250,12 +268,26 @@ public abstract class ParitySide(
     public void Invoke(string action, params (string Name, object? Value)[] args) =>
         Record($"invoke {action}", () => InvokeCore(action, args));
 
+    /// <summary>
+    /// Invokes an action with no host-side rollback: on the simulator the module's wrapper runs on the bag graph
+    /// without the executor's transaction (<see cref="ModuleScopeOnly"/>), so only the module's action scope can
+    /// restore what a failure touched. The printed host has no other mechanism, so it invokes as usual. Recorded under
+    /// the same step name as <see cref="Invoke"/>.
+    /// </summary>
+    public void InvokeScopeOnly(string action, params (string Name, object? Value)[] args) =>
+        Record($"invoke {action}", () => InvokeScopeOnlyCore(action, args));
+
     /// <summary>Evaluates a policy; its answer is recorded in the state under the policy's name.</summary>
     public void EvaluatePolicy(string policy) =>
         Record($"policy {policy}", () => (true, null, EvaluateCore(policy)), answerName: policy);
 
     protected abstract StepResult CreateCore(Entity model, (string Name, object? Value)[] values);
     protected abstract StepResult InvokeCore(string action, (string Name, object? Value)[] args);
+    protected virtual StepResult InvokeScopeOnlyCore(string action, (string Name, object? Value)[] args) => InvokeCore(action, args);
+    /// <summary>How this host's entities read for <see cref="GraphState"/>.</summary>
+    protected abstract GraphState.Reader GraphReader { get; }
+    /// <summary>The object <see cref="GraphState"/> walks for a <see cref="Create"/> result.</summary>
+    protected virtual object GraphRoot(object entity) => entity;
     protected abstract StepResult LinkCore(string relationship, object?[] targets);
     protected abstract object? EvaluateCore(string policy);
     protected abstract object LinkedTarget(string relationship, int index);
@@ -267,6 +299,8 @@ public abstract class ParitySide(
 
     object? Record(string step, Func<StepResult> act, Entity? created = null, string? answerName = null) {
         LastFailure = null;
+        var table = recordGraph ? GraphState.Table(GraphReader, _roots) : null;
+        var before = table is null ? null : GraphState.Render(GraphReader, table);
         try {
             var (success, message, value) = act();
             var failure = success ? null : LastFailure;
@@ -274,14 +308,27 @@ public abstract class ParitySide(
             var subject = created is null ? Current : value;
             var state = subject is null ? [] : StateOf(subject, created ?? _model!);
             if (answerName is not null) state[answerName] = value?.ToString();
-            Outcomes.Add(new(step, success, message, null, state, failure?.Kind.ToString(), failure?.ElementPath, failure?.Guard));
+            var (after, parity) = Graphs(table, created is not null && success ? value : null);
+            Outcomes.Add(new(step, success, message, null, state, failure?.Kind.ToString(), failure?.ElementPath, failure?.Guard,
+                before, after, parity));
             return success ? value : null;
         }
         catch (Exception ex) when (IsRecordedOutcome(Unwrap(ex))) {
             var thrown = Unwrap(ex);
-            Outcomes.Add(new(step, false, thrown.Message, thrown.GetType().Name, StateAfterThrow(created)));
+            var (after, parity) = Graphs(table, null);
+            Outcomes.Add(new(step, false, thrown.Message, thrown.GetType().Name, StateAfterThrow(created),
+                GraphBefore: before, GraphAfter: after, GraphParity: parity));
             return null;
         }
+    }
+
+    // The held rendering uses the table from before the step; the parity rendering walks a fresh table, which includes
+    // the entity a create step just made.
+    (string? After, string? Parity) Graphs(IReadOnlyList<object>? table, object? created) {
+        if (table is null)
+            return (null, null);
+        IEnumerable<object> roots = created is null ? _roots : [.. _roots, GraphRoot(created)];
+        return (GraphState.Render(GraphReader, table), GraphState.Of(GraphReader, roots, parity: true));
     }
 
     /// <summary>

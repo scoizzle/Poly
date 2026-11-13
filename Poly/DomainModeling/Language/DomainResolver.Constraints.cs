@@ -69,13 +69,13 @@ public sealed partial class DomainResolver {
                 int lenMin = 0;
                 int lenMax = int.MaxValue;
                 if (Current.Kind == TokenKind.Number) {
-                    lenMin = int.Parse(Current.Text, CultureInfo.InvariantCulture);
+                    lenMin = int.Parse(Current.Span, CultureInfo.InvariantCulture);
                     Advance();
                 }
                 if (Current.Kind == TokenKind.Comma) {
                     Advance();
                     if (Current.Kind == TokenKind.Number) {
-                        lenMax = int.Parse(Current.Text, CultureInfo.InvariantCulture);
+                        lenMax = int.Parse(Current.Span, CultureInfo.InvariantCulture);
                         Advance();
                     }
                 }
@@ -88,7 +88,7 @@ public sealed partial class DomainResolver {
             case TokenKind.Pattern:
                 Advance();
                 Expect(TokenKind.LParen);
-                var pattern = Expect(TokenKind.StringLiteral).Text;
+                var pattern = Expect(TokenKind.StringLiteral).Unescape();
                 Expect(TokenKind.RParen);
                 return new PatternConstraint(pattern);
 
@@ -108,8 +108,8 @@ public sealed partial class DomainResolver {
         var negative = Current.Kind == TokenKind.Minus;
         if (negative) Advance();
         if (Current.Kind != TokenKind.Number)
-            throw Error($"Expected a number in range bound, got '{Current.Text}'.");
-        var text = Current.Text;
+            throw Error($"Expected a number in range bound, got '{Shown(Current)}'.");
+        var text = Current.Span.ToString();
         var signed = negative ? "-" + text : text;
 
         if (IsIntegralRangeType(typeName)) {

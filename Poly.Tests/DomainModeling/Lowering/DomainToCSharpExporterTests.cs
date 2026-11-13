@@ -1095,6 +1095,7 @@ public class DomainToCSharpExporterTests {
         var (domain, analysis) = ParseAndAnalyze("""
             domain Test
             Payment: entity {
+              Amount: Text
               order: Order via payments
               Pending: stage {
                 Capture: action { transition to Captured }

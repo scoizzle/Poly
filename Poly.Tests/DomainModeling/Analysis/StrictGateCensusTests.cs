@@ -328,6 +328,13 @@ public class StrictGateCensusTests {
         await Assert.That(string.Join(",", errors.Select(e => e.Code).Distinct())).IsEqualTo("DMSEM006");
         await Assert.That(errors[0].Message).IsEqualTo(
             "cannot determine the type of 'parts Qty': the path does not reach a property through to-one relationships");
+        // C5 (closing round): placed, never 1:1 and never unplaced: on line 14, at the element that holds it (the `Go`
+        // action, column 3), as the compile layer places every analysis diagnostic (PolyCompiler.PlaceAnalysis resolves
+        // the node's element path to its outline node). A DMSEM003 in the same place sits at the same position.
+        var untyped = GuideBlocks.Analyze(With("assign N to parts Qty")).Diagnostics.Single(d => d.IsError);
+        await Assert.That($"{untyped.Code} {untyped.Line}:{untyped.Column}").IsEqualTo("DMSEM006 14:3");
+        var mismatch = GuideBlocks.Analyze(With("assign N to Name")).Diagnostics.Single(d => d.IsError);
+        await Assert.That($"{mismatch.Code} {mismatch.Line}:{mismatch.Column}").IsEqualTo("DMSEM003 14:3");
     }
 
     /// <summary>A1 precedence: a policy's unknown name is the policy pass's DMSEM005 alone, not doubled by DMSEM006.</summary>

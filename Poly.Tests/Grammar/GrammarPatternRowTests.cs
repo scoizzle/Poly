@@ -142,7 +142,7 @@ public sealed class GrammarPatternRowTests {
     public async Task Check_RenamedHole_ReportsTheSurplusFillAndTheMissingHole() {
         var renamed = Replace(Dsl, "uses", "id", row => WithElements(row, elements =>
             [elements[0], new Value<DslToken, DslTokenKind>(DslTokenKind.Identifier, "ident")]));
-        PrintObservation Uses(object grammar) => Observed(grammar, "uses", "id", "uses x", fills: ["id"]);
+        static PrintObservation Uses(object grammar) => Observed(grammar, "uses", "id", "uses x", fills: ["id"]);
 
         var control = On(CheckDsl(Dsl, [Uses(Dsl)]), PatternRowCheck.Holes, "uses", "id");
         var mutated = On(CheckDsl(renamed, [Uses(renamed)]), PatternRowCheck.Holes, "uses", "id");
@@ -156,7 +156,7 @@ public sealed class GrammarPatternRowTests {
     public async Task Check_ExtraOptionalSlot_FailsTheSlotCount() {
         var widened = Replace(CSharp, "statement", "while", row => WithElements(row, elements =>
             [.. elements, new Optional<CSharpToken, CSharpTokenKind>(new Ref<CSharpToken, CSharpTokenKind>("else"))]));
-        PrintObservation While(object grammar, int slots) =>
+        static PrintObservation While(object grammar, int slots) =>
             Observed(grammar, "statement", "while", "while (true)\n{\n}", emitted: [.. Enumerable.Repeat(true, slots)], supplied: 2);
 
         var control = On(CheckCSharp(CSharp, [While(CSharp, 2)]), PatternRowCheck.Arity, "statement", "while");
@@ -168,7 +168,7 @@ public sealed class GrammarPatternRowTests {
 
     [Test]
     public async Task Check_SpareContentValue_FailsTheSlotCount() {
-        PrintObservation Bare(int supplied) =>
+        static PrintObservation Bare(int supplied) =>
             Observed(CSharp, "attribute", "bare", "[Obsolete]", fills: ["close", "open"], emitted: [true], supplied: supplied);
 
         await Assert.That(On(CheckCSharp(CSharp, [Bare(1)]), PatternRowCheck.Arity, "attribute", "bare")).IsEmpty();
@@ -207,7 +207,7 @@ public sealed class GrammarPatternRowTests {
     public async Task Check_RemovedOperatorKind_FailsReadBack() {
         var narrowed = Replace(CSharp, "expr-additive", "additive", row => WithElements(row, _ =>
             [new LeftAssoc<CSharpToken, CSharpTokenKind>("expr-multiplicative", [CSharpTokenKind.Minus])]));
-        PrintObservation Sum(object grammar) =>
+        static PrintObservation Sum(object grammar) =>
             Observed(grammar, "expr-additive", "additive", "a + b", emitted: [true], supplied: 1);
 
         var control = On(CheckCSharp(CSharp, [Sum(CSharp)]), PatternRowCheck.ReadBack, "expr-additive", "additive");
@@ -295,7 +295,7 @@ public sealed class GrammarPatternRowTests {
     [Test]
     public async Task Check_DefectEntry_ExemptsOnlyObservationsCarryingItsWitness() {
         var entry = PatternRowEntry.Defect(CSharpKey, "type-decl", "interface", "interface IShape", "self-test", "G-23b (#848)");
-        PrintObservation Unbraced(string name) => Observed(CSharp, "type-decl", "interface",
+        static PrintObservation Unbraced(string name) => Observed(CSharp, "type-decl", "interface",
             $"interface {name}\n    int Sides {{ get; }}\n", fills: ["name"], emitted: [false, false, false, false, true], supplied: 5);
 
         var violations = CheckCSharp(CSharp, [Unbraced("IShape"), Unbraced("IOther")], [entry]);

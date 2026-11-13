@@ -27,8 +27,8 @@ internal enum PatternRowEntryKind {
 /// <see cref="PatternRowEntryKind.Defect"/> adds a witness (an asymmetry may): only read-back failures on an
 /// observation whose text contains it are exempt. Asymmetry and defect entries exempt read-back only.
 /// Every entry carries a reason and an owner: the row that removes it (<c>G-nn</c>, <c>E-nn</c>,
-/// <c>F-nn</c>, optionally with its issue, or <c>#nnn</c>), <c>none: permanent — &lt;why&gt;</c>, or
-/// <c>pending orchestrator</c> for a finding no row owns yet.
+/// <c>F-nn</c>, optionally with its issue, or <c>#nnn</c>), or <c>none: permanent — &lt;why no row can remove it&gt;</c>.
+/// A placeholder owner is not an owner: every finding names the row that fixes it.
 /// </summary>
 internal sealed record PatternRowEntry(
     string Surface,
@@ -77,54 +77,48 @@ internal static class PatternRowAllowList {
     public const string Dsl = "dsl";
     public const string CSharp = "csharp";
 
-    private const string HandPrinted =
-        "none: permanent — DomainDslPrinter spells this head by hand; the row is the reader's MatchRule dispatch head";
-
     private const string ComposedByHand =
-        "none: permanent — the writer composes this text by hand (TypeText, ParamText and the like); Write(Read(x)) guards it";
-
-    /// <summary>A finding no row owns yet: the PR lists it for the orchestrator to place.</summary>
-    private const string PendingOrchestrator = "pending orchestrator";
+        "none: permanent — the writer composes this sub-form inside a parent row's slot by design (TypeText, ParamText and the like); the parent's read-back matches this rule, so no print site needs to name it";
 
     private const string NonLiveChain =
         "The non-live expr chain: a recogniser only tests use; the driver's precedence table is the live expression grammar.";
 
+    /// <summary>A DSL head <c>DomainDslPrinter</c> spells by hand until the named table-driven family row (#856) moves it.</summary>
+    private static string HandPrintedUntil(string familyRow) =>
+        $"DomainDslPrinter spells this head by hand; the row is the reader's MatchRule dispatch head until {familyRow} (#856) prints it through the table.";
+
     private static readonly PatternRowEntry[] DslEntries = [
-        PatternRowEntry.WholeRule(Dsl, PatternRowEntryKind.ReaderHead, "top", 2,
-            "Top-level declaration heads; DomainDslPrinter prints declarations by hand.", HandPrinted),
+        PatternRowEntry.Row(Dsl, PatternRowEntryKind.ReaderHead, "top", "enum", HandPrintedUntil("G-29"), "G-29"),
+        PatternRowEntry.Row(Dsl, PatternRowEntryKind.ReaderHead, "top", "entity", HandPrintedUntil("G-30"), "G-30"),
+        PatternRowEntry.Row(Dsl, PatternRowEntryKind.ReaderHead, "visibility", "public", HandPrintedUntil("G-29"), "G-29"),
         .. Rows(Dsl, PatternRowEntryKind.ReaderHead, "entity-body",
-            ["entity-subscription", "stage", "marked-action", "action", "policy", "typed-line", "property",
-                "nav-many", "nav-one", "nav-owned", "primitive-name"],
-            "Entity member heads; DomainDslPrinter.Entities prints members by hand.", HandPrinted),
+            ["typed-line", "property", "nav-many", "nav-one", "nav-owned", "primitive-name"], HandPrintedUntil("G-30"), "G-30"),
+        .. Rows(Dsl, PatternRowEntryKind.ReaderHead, "entity-body", ["entity-subscription", "stage"], HandPrintedUntil("G-31"), "G-31"),
+        .. Rows(Dsl, PatternRowEntryKind.ReaderHead, "entity-body", ["marked-action", "action", "policy"], HandPrintedUntil("G-32"), "G-32"),
         PatternRowEntry.Row(Dsl, PatternRowEntryKind.ReaderOnly, "entity-body", "legacy-action",
             "The legacy `name(` action spelling: read, never printed.",
-            "none: permanent — the reader keeps the legacy spelling; the printer emits `name: action`"),
-        PatternRowEntry.WholeRule(Dsl, PatternRowEntryKind.ReaderHead, "stage-body", 5,
-            "Stage member heads; DomainDslPrinter prints stages by hand.", HandPrinted),
-        PatternRowEntry.WholeRule(Dsl, PatternRowEntryKind.ReaderHead, "effect", 9,
-            "Effect heads; DomainDslPrinter prints effects by hand.", HandPrinted),
-        PatternRowEntry.Row(Dsl, PatternRowEntryKind.ReaderHead, "annotation", "with-args",
-            "Annotation heads; DomainDslPrinter prints annotations by hand.", HandPrinted),
+            "none: permanent — a read-only legacy spelling: the printer emits `name: action` by design, so no row can make this one printed"),
+        .. Rows(Dsl, PatternRowEntryKind.ReaderHead, "stage-body", ["entry", "exit", "subscription"], HandPrintedUntil("G-31"), "G-31"),
+        .. Rows(Dsl, PatternRowEntryKind.ReaderHead, "stage-body", ["marked-stage-action", "stage-action"], HandPrintedUntil("G-32"), "G-32"),
+        PatternRowEntry.WholeRule(Dsl, PatternRowEntryKind.ReaderHead, "effect", 9, HandPrintedUntil("G-33"), "G-33"),
+        PatternRowEntry.Row(Dsl, PatternRowEntryKind.ReaderHead, "annotation", "with-args", HandPrintedUntil("G-35"), "G-35"),
         PatternRowEntry.Row(Dsl, PatternRowEntryKind.NonLive, "annotation", "no-args",
             "Shadowed: with-args with zero arguments matches the same tokens and sorts first, so the matcher never selects no-args (found by G-23's example check; the real fix deletes the row).",
-            PendingOrchestrator),
-        PatternRowEntry.WholeRule(Dsl, PatternRowEntryKind.ReaderHead, "annotation-args", 5,
-            "Annotation argument heads; DomainDslPrinter prints arguments by hand.", HandPrinted),
-        PatternRowEntry.WholeRule(Dsl, PatternRowEntryKind.ReaderHead, "visibility", 1,
-            "The `public` marker; DomainDslPrinter prints it by hand.", HandPrinted),
+            "G-23b"),
+        PatternRowEntry.WholeRule(Dsl, PatternRowEntryKind.ReaderHead, "annotation-args", 5, HandPrintedUntil("G-35"), "G-35"),
         PatternRowEntry.WholeRule(Dsl, PatternRowEntryKind.ReaderHead, "path-hop", 1,
-            "A path hop; ExpressionPrinter prints paths by hand.", HandPrinted),
+            "ExpressionPrinter prints paths by hand; the row is the reader's path hop until G-34 (#856) gives expression rows their print half.", "G-34"),
         .. Rows(Dsl, PatternRowEntryKind.ReaderHead, "expr-primary",
             ["group", "not", "duration", "match", "call", "quant-where", "count-bare", "sum-prop", "exists",
                 "where-nav", "path-is-not", "path-cmp", "path"],
-            "An expression head ExpressionPrinter dispatches by hand (the FallbackBinding list).", HandPrinted),
+            "ExpressionPrinter dispatches this head by hand (the FallbackBinding list) until G-34 (#856) gives expression rows their print half.", "G-34"),
         .. NonLive("expr", 1), .. NonLive("expr-or", 1), .. NonLive("expr-and", 1), .. NonLive("expr-not", 2),
         .. NonLive("expr-compare", 2), .. NonLive("expr-add-no-not", 1), .. NonLive("expr-mul-no-not", 1),
         .. NonLive("expr-primary-no-not", 18), .. NonLive("expr-add", 1), .. NonLive("expr-mul", 1),
         .. NonLive("expr-operand", 3),
         PatternRowEntry.Row(Dsl, PatternRowEntryKind.PrefixOnly, "uses", "pinned",
-            "The pin is a raw same-line token run (DslSyntaxTree.TryReadUse); the row's Identifier is only its print hole, so a dotted numeric pin does not re-read through the row.",
-            "none: permanent — the row is one Identifier; the pin is read outside the table by DslSyntaxTree.TryReadUse"),
+            "The pin is a raw same-line token run (DslSyntaxTree.TryReadUse); the row's Identifier is only its print hole, so a dotted numeric pin does not re-read through the row. G-27's same-line Run element gives the row a real pin slot, and G-29 moves `uses` onto it.",
+            "G-29"),
     ];
 
     private static readonly PatternRowEntry[] CSharpEntries = [
@@ -160,14 +154,14 @@ internal static class PatternRowAllowList {
         .. Rows(CSharp, PatternRowEntryKind.ReaderOnly, "accessor", ["init-semi"],
             "No Render site names this row; the writer prints the form by hand.", ComposedByHand),
         PatternRowEntry.Row(CSharp, PatternRowEntryKind.ContextOnly, "statement", "label",
-            "The writer prints `label:` through the row and the labelled statement after it (WriteStatement), so the row text alone does not re-read.",
-            "none: permanent — the labelled statement is written by the statement writer, not into the row's slot"),
+            "The writer prints `label:` through the row and the labelled statement after it (WriteStatement), so the row text alone does not re-read: the same bypass class as the fused declaration and block lambdas.",
+            "G-23b"),
         PatternRowEntry.AlwaysNull(CSharp, "enum-body", "body", 1,
             "The writer prints every member into the first-member slot; the repeated tail slot is part of that text.",
-            "none: permanent — one member list string fills the enum body"),
+            "none: permanent — one member list string fills the body by design; read-back matches the tail rule inside that text"),
         PatternRowEntry.AlwaysNull(CSharp, "expr-shift", "shift", 1,
             "BinaryChain prints the whole chain into the operand slot; the repeated shift-tail slot is part of that text.",
-            "none: permanent — one chain string fills the shift row, as for the LeftAssoc levels"),
+            "none: permanent — one chain string fills the row by design, as for the LeftAssoc levels; read-back matches the tail rule inside that text"),
         .. AttributesSlot("type-decl", "class"), .. AttributesSlot("type-decl", "record"),
         .. AttributesSlot("type-decl", "record-semi"), .. AttributesSlot("type-decl", "interface"),
         .. AttributesSlot("type-decl", "enum"), .. AttributesSlot("member", "field"),
@@ -175,13 +169,13 @@ internal static class PatternRowAllowList {
         .. AttributesSlot("member", "ctor"),
         PatternRowEntry.Row(CSharp, PatternRowEntryKind.RowOwnsText, "statement", "expr-stmt",
             "AssignmentText spells a fused declaration `var x = v` by hand and prints it through expr-stmt; the reader reads that text as statement/var-decl.",
-            PendingOrchestrator) with { Witness = "var " },
+            "G-23b") with { Witness = "var " },
         PatternRowEntry.Row(CSharp, PatternRowEntryKind.RowOwnsText, "expr-primary", "lambda-ident",
             "A block-bodied lambda prints its block into the expression slot; the reader reads that text as expr-primary/lambda-block-ident.",
-            PendingOrchestrator) with { Witness = "=> {" },
+            "G-23b") with { Witness = "=> {" },
         PatternRowEntry.Row(CSharp, PatternRowEntryKind.RowOwnsText, "expr-primary", "lambda-parens",
             "A block-bodied lambda prints its block into the expression slot; the reader reads that text as expr-primary/lambda-block-parens.",
-            PendingOrchestrator) with { Witness = "=> {" },
+            "G-23b") with { Witness = "=> {" },
         .. InitializerDefect("new int[] {", "statement", "foreach"),
         .. InitializerDefect("new List<int> {", "statement", "return"),
         .. InitializerDefect("new int[] {", "block", "block"), .. InitializerDefect("new List<int> {", "block", "block"),
@@ -234,10 +228,10 @@ internal static class PatternRowAllowList {
     private static IEnumerable<PatternRowEntry> InitializerDefect(string witness, string rule, string pattern) =>
         [PatternRowEntry.Defect(CSharp, rule, pattern, witness,
             "The writer prints an array or collection initializer by hand (ArrayLiteral, CollectionLiteral); no C# row reads `new T[] { … }` or `new List<T> { … }`, so Read(Write(x)) fails.",
-            PendingOrchestrator)];
+            "G-23c")];
 
     private static IEnumerable<PatternRowEntry> AttributesSlot(string rule, string pattern) =>
         [PatternRowEntry.AlwaysNull(CSharp, rule, pattern, 0,
             "Attributes print before the row (AttributesText); the row's attributes slot is always empty.",
-            "none: permanent — attribute lines are printed one per line before the declaration")];
+            "none: permanent — attributes print one per line before the declaration by design; the reader still reads them through this slot, which the parent's read-back covers whenever attributes print")];
 }

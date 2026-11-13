@@ -9,6 +9,7 @@ public sealed class GrammarBuilder<TToken, TTokenKind>
     where TToken : struct, IToken<TTokenKind>
     where TTokenKind : struct {
     private readonly Dictionary<string, List<Pattern<TToken, TTokenKind>>> _rules;
+    private int _nextOrder;
 
     public GrammarBuilder() {
         _rules = new Dictionary<string, List<Pattern<TToken, TTokenKind>>>(StringComparer.Ordinal);
@@ -21,9 +22,13 @@ public sealed class GrammarBuilder<TToken, TTokenKind>
     internal static GrammarBuilder<TToken, TTokenKind> From(Grammar<TToken, TTokenKind> grammar) {
         ArgumentNullException.ThrowIfNull(grammar);
         var rules = new Dictionary<string, List<Pattern<TToken, TTokenKind>>>(StringComparer.Ordinal);
-        foreach (var (rule, patterns) in grammar.Rules)
+        var nextOrder = 0;
+        foreach (var (rule, patterns) in grammar.Rules) {
             rules[rule] = [.. patterns];
-        return new GrammarBuilder<TToken, TTokenKind>(rules);
+            foreach (var pattern in patterns)
+                nextOrder = Math.Max(nextOrder, pattern.Order + 1);
+        }
+        return new GrammarBuilder<TToken, TTokenKind>(rules) { _nextOrder = nextOrder };
     }
 
     /// <summary>Begins defining patterns in a named rule group.</summary>
@@ -57,6 +62,9 @@ public sealed class GrammarBuilder<TToken, TTokenKind>
         }
         throw new InvalidOperationException($"Unknown pattern '{patternName}' in rule '{ruleName}'.");
     }
+
+    /// <summary>The next declaration order (<see cref="Pattern{TToken,TTokenKind}.Order"/>).</summary>
+    internal int NextOrder() => _nextOrder++;
 
     internal void AddPattern(string ruleName, Pattern<TToken, TTokenKind> pattern) {
         if (!_rules.TryGetValue(ruleName, out var list))
@@ -244,6 +252,41 @@ public sealed class PatternBuilder<TToken, TTokenKind>
         return this;
     }
 
+    /// <summary>
+    /// Names the element before it in a failure report: <paramref name="label"/> is what the report says was
+    /// expected, and <paramref name="template"/> (optional) is the row's own message when this element is the first
+    /// expected element (placeholders <c>{expected}</c>, <c>{got}</c> and a capture name of a required element
+    /// before it). Only a token element takes one: a Kind, Value, Predicate, Word or Run.
+    /// </summary>
+    public PatternBuilder<TToken, TTokenKind> Expect(string label, string? template = null) {
+        ArgumentException.ThrowIfNullOrEmpty(label);
+        if (_elements.Count == 0)
+            throw new InvalidOperationException($"Expect names the element before it; pattern '{_name}' in rule '{_ruleName}' has none.");
+        _elements[^1] = _elements[^1] switch {
+            MatchKind<TToken, TTokenKind> e => e with { Expect = label, ExpectTemplate = template },
+            Value<TToken, TTokenKind> e => e with { Expect = label, ExpectTemplate = template },
+            MatchPredicate<TToken, TTokenKind> e => e with { Expect = label, ExpectTemplate = template },
+            Word<TToken, TTokenKind> e => e with { Expect = label, ExpectTemplate = template },
+            Run<TToken, TTokenKind> e => e with { Expect = label, ExpectTemplate = template },
+            var other => throw new InvalidOperationException(
+                $"Expect names a token element (Kind, Value, Predicate, Word or Run); element {_elements.Count} of pattern '{_name}' in rule '{_ruleName}' is a {other.GetType().Name[..other.GetType().Name.IndexOf('`')]}."),
+        };
+        return this;
+    }
+
+    /// <summary>Commits the row once the elements before it have matched (<see cref="Cut{TToken,TTokenKind}"/>).</summary>
+    public PatternBuilder<TToken, TTokenKind> Cut() {
+        _elements.Add(new Cut<TToken, TTokenKind>());
+        return this;
+    }
+
+    /// <summary>Ends the row with a refusal: reaching it yields a committed failure with <paramref name="message"/> (<see cref="Refuse{TToken,TTokenKind}"/>).</summary>
+    public PatternBuilder<TToken, TTokenKind> Refuse(string message) {
+        ArgumentException.ThrowIfNullOrEmpty(message);
+        _elements.Add(new Refuse<TToken, TTokenKind>(message));
+        return this;
+    }
+
     /// <summary>Makes <paramref name="inner"/> optional — matches zero or one occurrence.</summary>
     public PatternBuilder<TToken, TTokenKind> Optional(IPatternElement<TToken, TTokenKind> inner) {
         _elements.Add(new Optional<TToken, TTokenKind>(inner));
@@ -299,7 +342,7 @@ public sealed class PatternBuilder<TToken, TTokenKind>
 
     /// <summary>Registers this pattern on the builder; ready for the next pattern in the same rule.</summary>
     public RuleBuilder<TToken, TTokenKind> Commit() {
-        _builder.AddPattern(_ruleName, new Pattern<TToken, TTokenKind>(_name, _elements, _priority, _payload));
+        _builder.AddPattern(_ruleName, new Pattern<TToken, TTokenKind>(_name, _elements, _priority, _payload) { Order = _builder.NextOrder() });
         return new RuleBuilder<TToken, TTokenKind>(_builder, _ruleName);
     }
 }

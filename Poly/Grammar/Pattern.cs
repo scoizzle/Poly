@@ -21,6 +21,13 @@ public sealed class Pattern<TToken, TTokenKind>
     /// </summary>
     public object? Payload { get; }
 
+    /// <summary>
+    /// Declaration order across the builder that registered it (continued by <c>ToBuilder</c> and <c>Extend</c>).
+    /// A failure report sorts its expected set by (<see cref="Order"/>, element index), never by the order the
+    /// matcher evaluated rows in, which follows the sorted pattern list and the memo.
+    /// </summary>
+    internal int Order { get; init; }
+
     public Pattern(
         string name,
         IReadOnlyList<IPatternElement<TToken, TTokenKind>> elements,
@@ -34,6 +41,6 @@ public sealed class Pattern<TToken, TTokenKind>
 
     public Pattern<TToken, TTokenKind> WithPayload(object payload) {
         ArgumentNullException.ThrowIfNull(payload);
-        return new Pattern<TToken, TTokenKind>(Name, Elements, Priority, payload);
+        return new Pattern<TToken, TTokenKind>(Name, Elements, Priority, payload) { Order = Order };
     }
 }

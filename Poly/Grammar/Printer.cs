@@ -218,6 +218,11 @@ public sealed class Printer<TToken, TTokenKind>
                 return;
 
             case NotFollowedBy<TToken, TTokenKind>:
+            case Cut<TToken, TTokenKind>:
+                return;
+
+            case Refuse<TToken, TTokenKind>:
+                // STUB (G-28 red phase).
                 return;
 
             case Balanced<TToken, TTokenKind> b:

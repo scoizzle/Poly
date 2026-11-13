@@ -79,6 +79,9 @@ public sealed class Matcher<TToken, TTokenKind>
 
     private Dictionary<(string Rule, int Offset), MatchResult<TToken, TTokenKind>?>? _memo;
 
+    /// <summary>STUB (G-28 red phase): matches like <see cref="TryMatch"/> and reports no failure.</summary>
+    public MatchOutcome<TToken, TTokenKind> Match(string ruleName) => new(TryMatch(ruleName), null);
+
     private void EnsureKnownRule(string ruleName) {
         if (!_grammar.HasRule(ruleName))
             throw new ArgumentException($"Unknown grammar rule '{ruleName}'", nameof(ruleName));
@@ -245,6 +248,12 @@ public sealed class Matcher<TToken, TTokenKind>
                 }
                 RecordCapture(captures, run.Name, runTokens);
                 piece = Piece.TokensOnly(runTokens);
+                return true;
+
+            case Cut<TToken, TTokenKind>:
+            case Refuse<TToken, TTokenKind>:
+                // STUB (G-28 red phase): zero width, no commit.
+                piece = Piece.Empty;
                 return true;
 
             default:

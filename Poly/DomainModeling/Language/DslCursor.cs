@@ -61,6 +61,10 @@ public class DslCursor : IDslParseCursor {
 
     public void Consume(MatchResult<DslToken, DslTokenKind> match) => _reader.Consume(match.Consumed);
 
+    /// <summary>STUB (G-28 red phase).</summary>
+    public MatchResult<DslToken, DslTokenKind> MatchOrThrow(string ruleName) =>
+        _matcher.Match(ruleName).Result ?? throw Error("stub");
+
     public Exception Error(string message) {
         var t = Current;
         return GrammarError.Error(message, t.Line, t.Col);

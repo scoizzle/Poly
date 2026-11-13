@@ -1478,8 +1478,8 @@ diverging:
   Neither applies to an assign that follows a `for`, a transition, a cross-entity or fan-out
   `invoke`, a `create` or a `create in` on its path: that assign is judged by the action's
   other `require` gates and every policy of its stage, as before `require not` narrowed.
-- **Silence means verified (Q4)** — with two exceptions: non-`range` kinds on `assign`
-  and initializer writes (V-08). A write analysis cannot
+- **Silence means verified (Q4)** — with one exception: a call-chain postcondition whose
+  value range is not known (below). A write analysis cannot
   decide — a bare property or parameter with no bound, an operator the
   interval flow does not model (`/`, a call, `match`), or a constraint kind with no flow
   decision — is a **`DMCS003` warning** naming the write, the property and the constraint.
@@ -1501,18 +1501,28 @@ diverging:
   body, or after an effect the analysis does not follow on that path (a `for`, a
   transition, a cross-entity or fan-out `invoke`, a `create` or a `create in`), is judged
   against the declared ranges, as is a create outside an action body.
-  `range(...)` and `length(...)` are the kinds decided against a computed
-  value on an `assign` or an initializer: a Text value is proven only when its own `length(...)`
-  lies inside the target's (a copy of a shorter-bounded Text property), never disproven, and
-  `S + "xx"` or any value with no length stays unverified. `pattern(...)` and
-  `equals(...)` are not flow-checked there. The **call chain** decides
+  `range(...)`, `length(...)`, `pattern(...)` and `equals(...)` are the kinds the runtime enforces
+  on a write, and the kinds decided against a computed value on an `assign` or an initializer.
+  A `length` is proven only when the value's own `length(...)` lies inside the target's
+  (a copy of a shorter-bounded Text property); a `pattern` or `equals` only when the value carries
+  the identical declared one. Anything else is unverified: `S + "xx"`, a Text with no
+  such bound, a different pattern. A literal assigned directly is still checked outright and is an
+  error when it fails. Excluded: `unique` (it depends on stored state, not the written value, so a
+  proof about one write cannot cover it), `required` (`DMEFF014` owns it) and enum membership
+  (the type check owns it). The **call chain** decides
   each postcondition through the same range decision and records a fact for every
   non-satisfied outcome (deduplicated per callee write node, so a satisfied write is not
   counted twice): an error is a violation fact and a warning an unverified fact. A
   call-chain postcondition whose value range is not known is still skipped silently.
   `poly_check` reports `unknown`, not `proven`, while any write could not be verified
   (a write finding, or a `DMCS003` from `default()` beside a `range` or `length`), and its
-  summary says how many; `proven` means every write was decided inside its constraint. A
+  summary and `data.unverifiedFindings` say how many findings were counted; `proven` means
+  every write was decided inside its constraint. To resolve an `unknown`, bound the source, widen the target
+  (drop or loosen the constraint), or guard a numeric write with a `require`/`if` that
+  narrows its range. A DSL action parameter cannot carry a `length` or `pattern`, so the common
+  case, an unbounded `Text` parameter written into a bounded property (`create Hall { Name: name }`
+  into `Name: Text length(1, 80)`), stays `unknown` until the source is a property with the same
+  bound or the target is widened; `poly_simulate` executes the write meanwhile. A
   call-chain finding is attributed to the **callee** element that assigns (the chain is
   named in its message), so a summary scoped to the caller reads `proven` while the whole
   domain reads `violated`.

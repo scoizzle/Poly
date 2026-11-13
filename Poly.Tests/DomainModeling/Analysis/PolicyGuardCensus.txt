@@ -7,12 +7,14 @@ documents scanned = 83
 documents with require not (source text) = 7
 documents with a create under require (analysed domain) = 5
 documents with no analysed domain = 22
-range findings = 56
+range findings = 59
 docs/missions/evolve-2026-10-13/billing.poly | 11:3 | DMCS003? | Cannot verify 'create Reading { Usage: usage }' against constraint range(0, +∞) on property 'Usage': the assigned value has no bound analysis can use.
 docs/missions/evolve-2026-10-13/claims.poly | 8:3 | DMCS003? | Cannot verify 'create Claim { Amount: amount }' against constraint range(0, +∞) on property 'Amount': the assigned value has no bound analysis can use.
 docs/missions/evolve-2026-10-13/smarthome.poly | 41:5 | DMCS003? | Cannot verify 'assign MaxLevel to level' against constraint range(0, 100) on property 'MaxLevel': the assigned value has no bound analysis can use.
 docs/missions/evolve-2026-10-14/cart.poly | 10:3 | DMCS003? | Cannot verify 'create Line { Price: price }' against constraint range(0, +∞) on property 'Price': the assigned value has no bound analysis can use.
 docs/missions/evolve-2026-10-14/cart.poly | 10:3 | DMCS003? | Cannot verify 'create Line { Qty: qty }' against constraint range(1, +∞) on property 'Qty': the assigned value has no bound analysis can use.
+docs/probes/dogfood/crm.poly | 62:5 | DMCS003? | Cannot verify 'create Contact { Email: email }' against constraint pattern(^[^@]+@[^@]+$) on property 'Email': the assigned value has no bound analysis can use.
+docs/probes/dogfood/crm.poly | 65:5 | DMCS003? | Cannot verify 'create Contact { Email: lead Email }' against constraint pattern(^[^@]+@[^@]+$) on property 'Email': the assigned value has no bound analysis can use.
 docs/probes/dogfood/crm.poly | 68:5 | DMCS003? | Cannot verify 'create Opportunity { Amount: amount }' against constraint range(0, 100000000) on property 'Amount': the assigned value has no bound analysis can use.
 docs/probes/dogfood/crm.poly | 131:5 | DMCS003? | Cannot verify 'assign Amount to (Amount + (qty * sku ListPrice))' against constraint range(0, 100000000) on property 'Amount': the assigned value has no bound analysis can use.
 docs/probes/dogfood/crm.poly | 131:5 | DMCS003? | Cannot verify 'create Line { Qty: qty }' against constraint range(1, 10000) on property 'Qty': the assigned value has no bound analysis can use.
@@ -54,6 +56,7 @@ docs/probes/scratch-2026-10-14/banking.poly | 22:5 | DMCS003? | Cannot verify 'a
 docs/probes/scratch-2026-10-14/fleet.poly | 18:5 | DMCS003? | Cannot verify 'assign Odometer to (Odometer + km)' against constraint range(0, 2000000) on property 'Odometer': the assigned value has no bound analysis can use.
 docs/probes/scratch-2026-10-14/insurance.poly | 22:5 | DMCS003? | Cannot verify 'create Claim { Amount: amount }' against constraint range(0, 1000000) on property 'Amount': the assigned value has no bound analysis can use.
 docs/probes/scratch-2026-10-14/logistics.poly | 34:5 | DMCS003? | Cannot verify 'create Order { Total: total }' against constraint range(0, 100000) on property 'Total': the assigned value has no bound analysis can use.
+docs/probes/scratch-2026-10-14/logistics.poly | 37:5 | DMCS003? | Cannot verify 'create Address { Zip: zip }' against constraint pattern(^\d{5}$) on property 'Zip': the assigned value has no bound analysis can use.
 docs/probes/scratch-2026-10-14/payroll.poly | 18:5 | DMCS003? | Cannot verify 'create Timesheet { Hours: hours }' against constraint range(0, 400) on property 'Hours': the assigned value has no bound analysis can use.
 docs/probes/scratch-2026-10-14/payroll.poly | 47:1 | DMEFF008? | Assigned expression value range [1, 10000001] can fall outside constraint range(0, 10000000) on property 'Total'.
 docs/probes/scratch-2026-10-14/payroll.poly | 54:5 | DMCS003? | Cannot verify 'create Payslip { Amount: amount }' against constraint range(0, 1000000) on property 'Amount': the assigned value has no bound analysis can use.

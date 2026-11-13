@@ -595,9 +595,134 @@ public class UnverifiedWriteTests {
     }
 
     [Test]
+    public async Task PatternTarget_UnboundedCopy_IsUnverified() {
+        var result = Parse("""
+            domain Test
+            Box: entity {
+              A: Text pattern("^a+$")
+              B: Text
+              Run: action { assign A to B }
+            }
+            """);
+
+        var findings = Findings(result.Analysis, "A");
+
+        await Assert.That(findings.Count).IsEqualTo(1);
+        await Assert.That(findings[0].Code).IsEqualTo(DomainModelDiagnosticCodes.ConstraintUndecided);
+        await Assert.That(findings[0].Message).Contains("pattern(^a+$)");
+        await Assert.That(Facts(result).Unverified.Count).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task EqualityTarget_UnboundedCopy_IsUnverified() {
+        var result = Parse("""
+            domain Test
+            Box: entity {
+              A: Text equals("x")
+              B: Text
+              Run: action { assign A to B }
+            }
+            """);
+
+        await Assert.That(Findings(result.Analysis, "A").Count).IsEqualTo(1);
+        await Assert.That(Facts(result).Unverified.Count).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task IdenticalPatternAndEqualityCopy_IsVerified() {
+        // The value carries the IDENTICAL declared constraint, so the write provably meets it.
+        var result = Parse("""
+            domain Test
+            Box: entity {
+              A: Text pattern("^a+$")
+              B: Text pattern("^a+$")
+              C: Text equals("x")
+              D: Text equals("x")
+              Run: action {
+                assign A to B
+                assign C to D
+              }
+            }
+            """);
+
+        await Assert.That(Findings(result.Analysis, "A")).IsEmpty();
+        await Assert.That(Findings(result.Analysis, "C")).IsEmpty();
+        var facts = Facts(result);
+        await Assert.That(facts.Unverified).IsEmpty();
+        await Assert.That(facts.Verified).IsEqualTo(2);
+    }
+
+    [Test]
+    public async Task DifferentPatternCopy_IsUnverified() {
+        var result = Parse("""
+            domain Test
+            Box: entity {
+              A: Text pattern("^a+$")
+              B: Text pattern("^b+$")
+              Run: action { assign A to B }
+            }
+            """);
+
+        await Assert.That(Findings(result.Analysis, "A").Count).IsEqualTo(1);
+        await Assert.That(Facts(result).Unverified.Count).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task BareParameterIntoPatternTarget_IsUnverified() {
+        // A parameter carries no pattern, so it can carry any text: the parameter arm records the write.
+        var result = Parse("""
+            domain Test
+            Box: entity {
+              A: Text pattern("^a+$")
+              Run: action (p: Text) { assign A to p }
+            }
+            """);
+
+        await Assert.That(Facts(result).Unverified.Count).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task NonMatchingLiteral_IsStillAnError() {
+        // A literal assigned directly goes through Evaluate, not the flow decision.
+        foreach (var (target, literal) in new[] { ("pattern(\"^a+$\")", "\"bb\""), ("equals(\"x\")", "\"y\""), ("length(1, 3)", "\"abcd\"") }) {
+            var result = Parse($$"""
+                domain Test
+                Box: entity {
+                  A: Text {{target}}
+                  Run: action { assign A to {{literal}} }
+                }
+                """);
+
+            var findings = Findings(result.Analysis, "A");
+            await Assert.That(findings.Count).IsEqualTo(1);
+            await Assert.That(findings[0].Severity).IsEqualTo(DiagnosticSeverity.Error);
+        }
+    }
+
+    [Test]
+    public async Task LengthTooLongCopy_WarningSaysTheValueCanFallOutside() {
+        // The value HAS a bound (length(10, 20)); the message must not say it has none.
+        var result = Parse("""
+            domain Test
+            Box: entity {
+              Short: Text length(1, 5)
+              Long: Text length(10, 20)
+              Run: action { assign Short to Long }
+            }
+            """);
+
+        var findings = Findings(result.Analysis, "Short");
+
+        await Assert.That(findings.Count).IsEqualTo(1);
+        await Assert.That(findings[0].Message).Contains("can fall outside");
+        await Assert.That(findings[0].Message).DoesNotContain("no bound");
+    }
+
+    [Test]
     public async Task LengthDecide_DisjointValueLength_IsUndecidedNotViolated() {
-        // A value's length range is a bound analysis cannot tighten, so even a disjoint one is not a
-        // proof of violation: Decide answers Satisfied or Undecided for Length, never Violated.
+        // PIN: a disjoint declared length (source length(10, 20) into length(1, 3)) is provable, because a
+        // declared length is enforced at run time. This slice keeps it a warning; row V-08 owns the error
+        // side and flips this assertion to Violated together with the DMEFF008 error.
         var target = new LengthConstraint(1, 3);
         var disjoint = AbstractValue.From([new LengthConstraint(10, 20)]);
 

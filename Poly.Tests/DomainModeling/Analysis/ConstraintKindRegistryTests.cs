@@ -51,9 +51,10 @@ public class ConstraintKindRegistryTests {
             await Assert.That(c.Join(c)).IsNotNull();
             await Assert.That(ConstraintValidation.Describe(c)).IsNotEqualTo(c.GetType().Name);
             _ = ConstraintValidation.Evaluate(c, "x");
-            // V-03/V-08 seam columns: only Range and Length are flow-decidable and write-relevant; every
-            // other kind is fail-closed (Undecided over an unknown value), never Satisfied.
-            await Assert.That(kind.WriteRelevant).IsEqualTo(c is RangeConstraint or LengthConstraint);
+            // V-03/V-08 seam columns: Range, Length, Pattern and Equality are flow-decidable and write-relevant
+            // (unique, required and enum membership are excluded: stored state, DMEFF014, the type check);
+            // every other kind is fail-closed (Undecided over an unknown value), never Satisfied.
+            await Assert.That(kind.WriteRelevant).IsEqualTo(c is RangeConstraint or LengthConstraint or PatternConstraint or EqualityConstraint);
             if (c is not RangeConstraint)
                 await Assert.That(kind.Decide(c, AbstractValue.Unknown)).IsEqualTo(ConstraintVerdict.Undecided);
             var text = printer.PrintConstraintText(c);
@@ -65,7 +66,7 @@ public class ConstraintKindRegistryTests {
     }
 
     [Test]
-    public async Task RangeKind_DecidesFlowValues_AndRangeAndLengthAreTheWriteRelevantKinds() {
+    public async Task RangeKind_DecidesFlowValues_AndRangeLengthPatternEqualityAreTheWriteRelevantKinds() {
         var range = ConstraintKinds.Of(new RangeConstraint(0, 10))!;
         var inside = AbstractValue.From([new RangeConstraint(2, 3)]);
         var outside = AbstractValue.From([new RangeConstraint(20, 30)]);
@@ -75,7 +76,7 @@ public class ConstraintKindRegistryTests {
         await Assert.That(range.Decide(new RangeConstraint(0, 10), outside)).IsEqualTo(ConstraintVerdict.Violated);
         await Assert.That(range.Decide(new RangeConstraint(0, 10), overlap)).IsEqualTo(ConstraintVerdict.Undecided);
         await Assert.That(ConstraintKinds.All.Where(k => k.WriteRelevant).Select(k => k.Type))
-            .IsEquivalentTo([typeof(RangeConstraint), typeof(LengthConstraint)]);
+            .IsEquivalentTo([typeof(RangeConstraint), typeof(LengthConstraint), typeof(PatternConstraint), typeof(EqualityConstraint)]);
     }
 
     [Test]

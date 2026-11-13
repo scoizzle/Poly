@@ -59,8 +59,10 @@ internal static class WriteVerification {
     /// Decides whether a write of <paramref name="value"/> can satisfy a Text <paramref name="target"/>
     /// length. <see cref="ConstraintVerdict.Satisfied"/> only when the value's own length range is
     /// inside the target's; otherwise <see cref="ConstraintVerdict.Undecided"/>, including a value
-    /// that carries no length. Never <see cref="ConstraintVerdict.Violated"/>: a length bound on a
-    /// computed value is a widening, so a disjoint one proves nothing (a literal is judged elsewhere).
+    /// that carries no length. Never <see cref="ConstraintVerdict.Violated"/> in this slice: a declared
+    /// length is enforced at run time, so a disjoint pair (source length(10, 20) into length(1, 5)) is
+    /// provable, but reporting it as an error is row V-08's remaining half. Until then it stays Undecided
+    /// (a warning). A literal assigned directly is judged elsewhere, by <c>Evaluate</c>.
     /// </summary>
     internal static ConstraintVerdict DecideLength(LengthConstraint target, AbstractValue value) {
         ArgumentNullException.ThrowIfNull(target);
@@ -68,6 +70,34 @@ internal static class WriteVerification {
 
         var length = value.Constraints.OfType<LengthConstraint>().FirstOrDefault();
         return length is not null && length.MinLength >= target.MinLength && length.MaxLength <= target.MaxLength
+            ? ConstraintVerdict.Satisfied
+            : ConstraintVerdict.Undecided;
+    }
+
+    /// <summary>
+    /// Decides a write against a Text <paramref name="target"/> pattern: <see cref="ConstraintVerdict.Satisfied"/>
+    /// only when the value carries the IDENTICAL declared pattern (it was already enforced when the value was
+    /// written), otherwise <see cref="ConstraintVerdict.Undecided"/>; never Violated.
+    /// </summary>
+    internal static ConstraintVerdict DecidePattern(PatternConstraint target, AbstractValue value) {
+        ArgumentNullException.ThrowIfNull(target);
+        ArgumentNullException.ThrowIfNull(value);
+
+        return value.Constraints.OfType<PatternConstraint>()
+            .Any(p => string.Equals(p.Pattern, target.Pattern, StringComparison.Ordinal))
+            ? ConstraintVerdict.Satisfied
+            : ConstraintVerdict.Undecided;
+    }
+
+    /// <summary>
+    /// Decides a write against an <c>equals</c> target: <see cref="ConstraintVerdict.Satisfied"/> only when the
+    /// value carries the identical expected value, otherwise <see cref="ConstraintVerdict.Undecided"/>; never Violated.
+    /// </summary>
+    internal static ConstraintVerdict DecideEquality(EqualityConstraint target, AbstractValue value) {
+        ArgumentNullException.ThrowIfNull(target);
+        ArgumentNullException.ThrowIfNull(value);
+
+        return value.Constraints.OfType<EqualityConstraint>().Any(e => Equals(e.ExpectedValue, target.ExpectedValue))
             ? ConstraintVerdict.Satisfied
             : ConstraintVerdict.Undecided;
     }

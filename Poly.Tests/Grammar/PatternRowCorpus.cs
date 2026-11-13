@@ -4,6 +4,7 @@ using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Ontology.Contract;
 using Poly.Grammar;
+using Poly.Interpretation;
 using Poly.Interpretation.CSharp;
 using Poly.Introspection;
 using Poly.Packs.Product;
@@ -100,6 +101,9 @@ internal static class PatternRowCorpus {
     /// <summary>Inputs the writer or parser refused, in drive order. <see cref="ExpectedRefusals"/> pins them.</summary>
     public static IReadOnlyList<PatternRowRefusal> Refusals => Driven.Value.Refusals;
 
+    private const string NoDelegateTypeOwner =
+        "none: permanent — an analysis-less writer cannot name the delegate type a lambda callee is cast to (the analysed print of the same unit is driven)";
+
     /// <summary>
     /// The refusals the drive expects, each with its owner. The protocol test fails on a refusal that is not
     /// listed (a writer that starts refusing more inputs would shrink coverage silently) and on a listed one
@@ -108,10 +112,10 @@ internal static class PatternRowCorpus {
     public static IReadOnlyList<PatternRowExpectedRefusal> ExpectedRefusals { get; } = [
         new("unit Poly.Tests/Interpretation/ShadowedVariableVmTests.cs: var s = \"hi\"; var n = ((long s) => s + 1)(4); n;",
             "CSharpWriter rejected Lambda (NodeId …): a lambda used as a callee needs a delegate type to cast to, and its result type did not resolve.",
-            "G-23b"),
+            NoDelegateTypeOwner),
         new("unit Poly.Tests/Interpretation/ShadowedVariableVmTests.cs: var s = 1000; var n = ((long s) => ((long s) => s + 1)(5) + …",
             "CSharpWriter rejected Lambda (NodeId …): a lambda used as a callee needs a delegate type to cast to, and its result type did not resolve.",
-            "G-23b"),
+            NoDelegateTypeOwner),
     ];
 
     private static readonly Lazy<(IReadOnlyList<PrintObservation> Observations, IReadOnlyList<PatternRowRefusal> Refusals)> Driven =
@@ -131,8 +135,14 @@ internal static class PatternRowCorpus {
             PrintDsl(name, poly);
         PrintPinnedUses();
 
-        foreach (var (source, unit) in units)
+        foreach (var (source, unit) in units) {
+            var refusedBefore = refusals.Count;
             Refusing(refusals, $"unit {source}", () => CSharpLanguage.Write(unit));
+            // An analysis-less writer cannot name a lambda callee's delegate type; the same unit is
+            // printed once through its analysis, so the refused input is checked, not just refused.
+            if (refusals.Count > refusedBefore)
+                Refusing(refusals, $"analysed unit {source}", () => new CSharpWriter(Interpreter.Analyze(unit)).Write(unit));
+        }
         foreach (var program in programs)
             Refusing(refusals, $"parity {program.Label}", () => AstParity.Print(program.Program));
         foreach (var (name, text) in CSharpSources)

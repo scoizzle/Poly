@@ -1,5 +1,6 @@
 using Poly.DomainModeling.Language;
 using Poly.Grammar;
+using Poly.Interpretation;
 using Poly.Interpretation.CSharp;
 using Poly.Introspection;
 
@@ -151,6 +152,23 @@ public class CSharpRowRoundTripTests {
     public async Task ForHeader_WithAStatementInTheConditionSlot_StaysRefused() {
         var loop = new ForLoop(null, new Block(new Constant(1L)), null, new Block(new Constant(0L)));
         await Assert.That(() => CSharpLanguage.Write(Unit(loop))).Throws<InvalidOperationException>();
+    }
+
+    // ── shadowed-parameter callee lambdas ────────────────────────────────────
+
+    /// <summary>
+    /// Green characterisation: an analysis-less writer refuses a lambda callee (no delegate type to cast to),
+    /// which is the fail-closed contract; the analysed print of the same unit prints and re-reads.
+    /// </summary>
+    [Test]
+    [Arguments("""var s = "hi"; var n = ((long s) => s + 1)(4); n;""")]
+    [Arguments("""var s = 1000; var n = ((long s) => ((long s) => s + 1)(5) + s)(10); n;""")]
+    public async Task ShadowedParameterCallee_AnalysedPrint_ReReads(string body) {
+        var unit = CSharpLanguage.Read($"class C {{ void M() {{ {body} }} }}");
+        await Assert.That(() => CSharpLanguage.Write(unit)).Throws<InvalidOperationException>();
+
+        var analysed = new CSharpWriter(Interpreter.Analyze(unit)).Write(unit);
+        await Assert.That(CSharpLanguage.Read(analysed).Types.Single().Methods!.Single().Name).IsEqualTo("M");
     }
 
     // ── statement/label ──────────────────────────────────────────────────────

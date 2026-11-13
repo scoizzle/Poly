@@ -709,6 +709,27 @@ public class MinimalApiGeneratorTests {
     }
 
     [Test]
+    public async Task EnumNamedLikeAnImportedBclType_HostQualifiesEveryReferenceAndCompiles() {
+        // typeof(DayOfWeek) in [EnumDataType] and the seed DayOfWeek.Mon must be qualified like the property type.
+        const string poly = """
+            domain Roster
+            DayOfWeek: enum { Mon, Tue }
+            Shift: entity {
+              Code: Text unique
+              Day: DayOfWeek
+            }
+            """;
+
+        var http = CompilerWithHttpHost().Compile(poly, CompileMode.All, DbmsPack.Sqlite);
+
+        await Assert.That(http.Success).IsTrue();
+        var host = http.Files!.Single(f => f.FileName == "Program.cs").Source;
+        await Assert.That(host).Contains("typeof(Roster.DayOfWeek)");
+        await Assert.That(host).Contains("Roster.DayOfWeek.Mon");
+        await Assert.That(CompileHost(http.Files!)).IsEmpty();
+    }
+
+    [Test]
     public async Task DomainFailure_BadRequestUnlessUniqueOrConflict() {
         var rendered = Render(ParseDomain("""
             domain T

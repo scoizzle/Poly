@@ -397,7 +397,7 @@ public class DslCompilerSqliteOracleTests {
         await Assert.That(result.Success).IsTrue();
 
         var prog = result.Files!.Single(f => f.FileName == "Program.cs").Source;
-        await Assert.That(prog).Contains("internal record CategorizeDto\n{\n    [EnumDataType(typeof(Genre))]\n    public Demo.Genre Genre { get; init; }");
+        await Assert.That(prog).Contains("internal record CategorizeDto\n{\n    [EnumDataType(typeof(Demo.Genre))]\n    public Demo.Genre Genre { get; init; }");
     }
 
     [Test]

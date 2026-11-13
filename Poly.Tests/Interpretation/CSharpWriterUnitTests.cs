@@ -450,18 +450,31 @@ public class CSharpWriterUnitTests {
             .Order(StringComparer.Ordinal);
     }
 
-    // Findings, not exemptions: each file below diverges today for the stated reason, and the test below pins
-    // that it still does, so fixing the reader or writer removes the row instead of leaving it stale.
+    // Findings, not exemptions (issue 822, row E-11, theme E): each file below diverges today for the stated
+    // reason, and the test below pins that it still does, so fixing the reader or writer removes the row.
+    private const string RoundTripRow = "issue 822, row E-11";
+
     private static readonly Dictionary<string, string> KnownRoundTripFindings = new(StringComparer.Ordinal) {
         ["Poly.Tests/DomainModeling/Compile/EmitGolden/university/Enrollment.cs.golden"] =
-            "DateTime.UtcNow re-prints as System.DateTime.UtcNow",
+            RoundTripRow + ": DateTime.UtcNow re-prints as System.DateTime.UtcNow",
         ["Poly.Tests/DomainModeling/Compile/EmitGolden/crm/Activity.cs.golden"] =
-            "DateTime.UtcNow re-prints as System.DateTime.UtcNow",
+            RoundTripRow + ": DateTime.UtcNow re-prints as System.DateTime.UtcNow",
         ["Poly.Tests/DomainModeling/Compile/EmitGolden/crm/Opportunity.cs.golden"] =
-            "DateTime.UtcNow re-prints as System.DateTime.UtcNow",
+            RoundTripRow + ": DateTime.UtcNow re-prints as System.DateTime.UtcNow",
         ["Poly.Tests/DomainModeling/Compile/EmitGolden/crm-dslcompiler/Program.cs.golden"] =
-            "the [Range(typeof(decimal), ...)] attribute (first difference, line 1366) does not round-trip",
+            RoundTripRow + ": the [Range(typeof(decimal), ...)] attribute (first difference, line 1366) does not round-trip",
     };
+
+    [Test]
+    public async Task KnownRoundTripFindings_EveryKeyNamesAnExistingGolden() {
+        var root = AppContext.BaseDirectory;
+        while (root is not null && !File.Exists(Path.Combine(root, "docs/CORE.md")))
+            root = Directory.GetParent(root)?.FullName;
+        foreach (var key in KnownRoundTripFindings.Keys)
+            await Assert.That(File.Exists(Path.Combine(root!, key))).IsTrue().Because($"{key} is not a golden file");
+        await Assert.That(UnitGoldenFiles().Select(p => p.Replace('\\', '/')).ToHashSet())
+            .IsSupersetOf(KnownRoundTripFindings.Keys);
+    }
 
     [Test]
     [MethodDataSource(nameof(UnitGoldenFiles))]

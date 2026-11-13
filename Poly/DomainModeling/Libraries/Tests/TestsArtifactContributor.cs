@@ -122,7 +122,7 @@ public sealed class TestsArtifactContributor : IArtifactContributor {
             Test(
                 "Create_WithNeutralArguments_StartsInInitialStage",
                 Check(new Member(fresh, "CurrentStage"), "IsEqualTo",
-                    new Member(new TypeReference(DomainSession.QualifyForHost(domain, $"{entity.Name}Stage")), initial.Name))),
+                    new Member(new TypeReference($"{entity.Name}Stage"), initial.Name))),
         };
         foreach (var action in RefusedActions(entity)) {
             var call = new Invoke(

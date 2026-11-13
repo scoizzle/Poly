@@ -424,8 +424,8 @@ Token: entity {
 **`null` and optional values.** `null` is written only into an `optional` property: `assign Note to null`, a
 `create` initializer, `default(null)`, or a `match` arm (`assign Q to match { Big -> null, else -> 7 }` stores
 absent or 7). Into a required property, an action or function parameter, or a function's return it is refused at
-the `null` (`DMSEM003`; `DMFUN003` for a call argument, `DMFUN006` for a return). Interim: an `optional` enum
-property takes no `null` yet. `==` and `!=` (`is`, `is not`) compare `null` with an optional property, a related
+the `null` (`DMSEM003`; `DMFUN003` for a call argument, `DMFUN006` for a return). An `optional` property's constraints
+(an enum's members, `equals`, `range`, `length`, `pattern`) apply to a present value only. `==` and `!=` (`is`, `is not`) compare `null` with an optional property, a related
 read (`part Qty`, `line Qty`), arithmetic over an optional property, a `match` with a `null` arm, or a Text, Uuid,
 entity or Binary value; a required Number, Boolean, Date, Time, Duration or enum property is never null, so
 `Qty == null` is `DMSEM003`, and an ordering against `null` (`Q < null`) is always `DMSEM003`. An optional Boolean

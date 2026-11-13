@@ -119,3 +119,16 @@ public sealed record Word<TToken, TTokenKind>(TTokenKind Kind, string Text, Func
 public sealed record Slot<TToken, TTokenKind>(string Name) : IPatternElement<TToken, TTokenKind>
     where TToken : struct, IToken<TTokenKind>
     where TTokenKind : struct;
+
+/// <summary>
+/// Matches one or more tokens that continue the token before them, captured as <paramref name="Name"/>
+/// (and printed from that fill). <paramref name="Continues"/> is <c>(previous, candidate, index)</c>: the
+/// host decides what continues (the DSL: the same line, and adjacent from index 1), so the engine stays
+/// position-free. The first candidate's previous token is the last token this row has matched, so a Run
+/// is never the first element, never preceded only by optional elements, and never optional (the builder
+/// rejects each); a Run that matches no token fails.
+/// </summary>
+public sealed record Run<TToken, TTokenKind>(Func<TToken, TToken, int, bool> Continues, string Name)
+    : IPatternElement<TToken, TTokenKind>
+    where TToken : struct, IToken<TTokenKind>
+    where TTokenKind : struct;

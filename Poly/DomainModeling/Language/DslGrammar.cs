@@ -37,6 +37,24 @@ public static class DslGrammar {
     public static bool IsCompareToken(DslToken t) => IsCompareOpKind(t.Kind);
 
     /// <summary>
+    /// The DSL's same-line run (a <see cref="Run{TToken,TTokenKind}"/> delegate): <paramref name="candidate"/>
+    /// is on <paramref name="previous"/>'s line and, from the run's second token (<paramref name="index"/> 1
+    /// on), starts where <paramref name="previous"/> ends.
+    /// </summary>
+    public static bool AdjacentSameLine(DslToken previous, DslToken candidate, int index) =>
+        candidate.Line == previous.Line
+        && (index == 0 || candidate.Start == previous.Start + previous.Length);
+
+    /// <summary>
+    /// One piece of a <c>uses</c> pin (<c>v1</c>, <c>1.2.3</c>, <c>"v1"</c>, <c>-2</c>): an identifier, number,
+    /// string literal, minus or dot, on the same line as the token before it and adjacent to it after the first.
+    /// </summary>
+    public static bool ContinuesUsePin(DslToken previous, DslToken candidate, int index) =>
+        candidate.Kind is (DslTokenKind.Identifier or DslTokenKind.Number or DslTokenKind.StringLiteral
+            or DslTokenKind.Minus or DslTokenKind.Dot)
+        && AdjacentSameLine(previous, candidate, index);
+
+    /// <summary>
     /// A contextual word (<c>via</c>, <c>initial</c>, <c>key</c>, <c>external</c>, <c>inbound</c>, <c>value</c>):
     /// an identifier spelled <paramref name="word"/>, never a keyword kind with the same text. It prints as
     /// that identifier.

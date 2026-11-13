@@ -189,6 +189,9 @@ public sealed class Matcher<TToken, TTokenKind>
                 piece = Piece.Empty;
                 return true;
 
+            case Run<TToken, TTokenKind>:
+                throw new NotImplementedException("G-27: Run is not matched yet.");
+
             case Optional<TToken, TTokenKind> o:
                 if (TryMatchElement(o.Inner, offset, captures, out piece))
                     return true;

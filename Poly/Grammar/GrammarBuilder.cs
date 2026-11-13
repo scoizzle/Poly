@@ -220,6 +220,17 @@ public sealed class PatternBuilder<TToken, TTokenKind>
         return this;
     }
 
+    /// <summary>
+    /// Matches one or more tokens, each accepted by <paramref name="continues"/> <c>(previous, candidate, index)</c>,
+    /// captured and printed as <paramref name="name"/>. Not the first element.
+    /// </summary>
+    public PatternBuilder<TToken, TTokenKind> Run(Func<TToken, TToken, int, bool> continues, string name) {
+        ArgumentNullException.ThrowIfNull(continues);
+        ArgumentException.ThrowIfNullOrEmpty(name);
+        _elements.Add(new Run<TToken, TTokenKind>(continues, name));
+        return this;
+    }
+
     /// <summary>Makes <paramref name="inner"/> optional — matches zero or one occurrence.</summary>
     public PatternBuilder<TToken, TTokenKind> Optional(IPatternElement<TToken, TTokenKind> inner) {
         _elements.Add(new Optional<TToken, TTokenKind>(inner));

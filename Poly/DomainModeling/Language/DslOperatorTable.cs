@@ -78,7 +78,32 @@ public sealed class DslOperatorTable {
     public IReadOnlyCollection<PrefixRow> PrefixRows => _prefix.Values;
 
     /// <summary>The product rows. <paramref name="forms"/> lets a library claim <c>+</c> and <c>-</c> (a date plus a duration).</summary>
-    public static DslOperatorTable Core(ExpressionFormRegistry? forms = null) => new([], []);
+    public static DslOperatorTable Core(ExpressionFormRegistry? forms = null) {
+        DomainExpression Plus(DomainExpression l, DomainExpression r) =>
+            forms?.TryFoldBinary(l, r, true) ?? DomainExpression.Add(l, r);
+        DomainExpression Minus(DomainExpression l, DomainExpression r) =>
+            forms?.TryFoldBinary(l, r, false) ?? DomainExpression.Subtract(l, r);
+
+        const int or = 10, and = 20, compare = 40, add = 50, mul = 60;
+        return new DslOperatorTable(
+            [
+                new(DslTokenKind.Or, or, Assoc.Left, DomainExpression.Or),
+                new(DslTokenKind.And, and, Assoc.Left, DomainExpression.And),
+                new(DslTokenKind.Is, compare, Assoc.None, DomainExpression.Equal),
+                new(DslTokenKind.Is, compare, Assoc.None, DomainExpression.NotEqual, DslTokenKind.Not),
+                new(DslTokenKind.Eq, compare, Assoc.None, DomainExpression.Equal),
+                new(DslTokenKind.Neq, compare, Assoc.None, DomainExpression.NotEqual),
+                new(DslTokenKind.Gt, compare, Assoc.None, DomainExpression.GreaterThan),
+                new(DslTokenKind.Gte, compare, Assoc.None, DomainExpression.GreaterThanOrEqual),
+                new(DslTokenKind.Lt, compare, Assoc.None, DomainExpression.LessThan),
+                new(DslTokenKind.Lte, compare, Assoc.None, DomainExpression.LessThanOrEqual),
+                new(DslTokenKind.Plus, add, Assoc.Left, Plus),
+                new(DslTokenKind.Minus, add, Assoc.Left, Minus),
+                new(DslTokenKind.Star, mul, Assoc.Left, DomainExpression.Multiply),
+                new(DslTokenKind.Slash, mul, Assoc.Left, DomainExpression.Divide),
+            ],
+            [new PrefixRow(DslTokenKind.Not, add, DomainExpression.Not)]);
+    }
 
     public DslOperatorTable With(BinaryRow row) => new([.. _binary.Values, row], _prefix.Values);
 

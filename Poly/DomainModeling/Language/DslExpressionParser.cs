@@ -7,8 +7,11 @@ using Poly.Grammar;
 namespace Poly.DomainModeling.Language;
 
 /// <summary>
-/// Grammar-guided expression parser layered over the cursor (which wraps the
-/// examine/consume reader + matcher).
+/// Table-driven expression parser over the cursor. One driver loop and an explicit frame stack (a local of
+/// each <see cref="ParseExpression"/> call, never a field) replace the old recursive fold, so nesting depth is a
+/// counted limit (<see cref="DslLimits.MaxExpressionDepth"/>) with a positioned error and never a stack or matcher
+/// budget. Precedence and associativity come from <see cref="DslOperatorTable"/>; the matcher recognizes one atom at
+/// a time (<c>expr-primary</c>) and the driver supplies every sub-expression.
 /// </summary>
 public sealed class DslExpressionParser {
     private readonly IDslParseCursor _c;
@@ -27,138 +30,28 @@ public sealed class DslExpressionParser {
         _operators = operators ?? DslOperatorTable.Core(_forms);
     }
 
-    public DomainExpression ParseExpression() => ParseExpressionAt(0);
+    public DomainExpression ParseExpression() => new Run(this).Parse();
 
-    /// <summary>
-    /// <paramref name="level"/> counts enclosing nesting levels: 0 at the top, one more per
-    /// paren group, <c>not</c>, comparison operand or <c>where</c> body.
-    /// </summary>
-    internal DomainExpression ParseExpressionAt(int level) {
-        var match = _c.MatchRule("expr-live");
-        if (match is null)
-            throw _c.Error($"Expected expression, got '{_c.Current.Text}'");
-        Consume(match);
-        var folded = FoldRule(match, inWhere: false, level);
-        RejectUnknownDurationUnit(match);
-        return folded;
-    }
+    // Every token-text read in the parser goes through these two, so a span-token tokenizer changes one place.
+    private static string NameOf(DslToken token) => token.Text;
 
-    /// <summary>
-    /// OQ-4 ruled the nesting limit at <see cref="DslLimits.MaxExpressionDepth"/>. Over the
-    /// limit is a positioned error on the token that crossed it, never an unbounded fold.
-    /// </summary>
-    private void GuardLevel(int level, DslToken at) {
-        if (level <= DslLimits.MaxExpressionDepth)
-            return;
-        throw new GrammarException(
-            DslLimits.DepthDetail, at.Line, at.Col, at.Offset, at.Length);
-    }
-
-    /// <summary>
-    /// A duration is <c>Number</c> + a known unit (<c>DslGrammar.IsDurationUnitToken</c>), so a
-    /// number followed on the same line by a word that is not a unit fails closed here with the
-    /// legal spellings. Two shapes are exempt: <c>Identifier :</c> (property initializers and
-    /// invoke bindings) and a same-line <c>function</c> declaration.
-    /// </summary>
-    private void RejectUnknownDurationUnit(MatchResult<DslToken, DslTokenKind> match) {
-        var last = match.Tokens[^1];
-        if (last.Kind != DslTokenKind.Number) return;
-        if (_c.Current.Kind != DslTokenKind.Identifier) return;
-        if (_c.Current.Line != last.Line) return;
-        if (_c.PeekIs(DslTokenKind.Colon)) return;
-        if (DslGrammar.IsFunctionDeclarationWord(_c.Current)) return;
-        if (DslGrammar.IsDurationUnitToken(_c.Current)) return;
-        throw _c.Error(
-            $"Unknown duration unit '{_c.Current.Text}'. Legal units: {DurationUnits.LegalUnits}.");
-    }
-
-    private DomainExpression FoldAddOp(DomainExpression left, DslTokenKind op, DomainExpression right) {
-        var isPlus = op == DslTokenKind.Plus;
-        return _forms.TryFoldBinary(left, right, isPlus) ?? (isPlus
-            ? DomainExpression.Add(left, right)
-            : DomainExpression.Subtract(left, right));
-    }
+    private static string Describe(DslToken token) =>
+        token.Kind == DslTokenKind.EndOfFile ? "end of input" : token.Text;
 
     private static string CaptureText(MatchResult<DslToken, DslTokenKind> match, string name) =>
         match.Captures.TryGetValue(name, out var tokens) && tokens.Count > 0
-            ? tokens[0].Text
+            ? NameOf(tokens[0])
             : throw new InvalidOperationException($"Match '{match.PatternName}' is missing capture '{name}'.");
 
-    private DomainExpression FoldRule(MatchResult<DslToken, DslTokenKind> match, bool inWhere, int level) =>
-        match.RuleName switch {
-            "expr" or "expr-live" => FoldRule(match.Children[0], inWhere, level),
-            "expr-or" or "expr-live-or" => FoldLeftAssoc(match, inWhere, level, DomainExpression.Or),
-            "expr-and" or "expr-live-and" => FoldLeftAssoc(match, inWhere, level, DomainExpression.And),
-            "expr-not" or "expr-live-not" => FoldNot(match, inWhere, level),
-            "expr-compare" or "expr-live-compare" => FoldCompare(match, inWhere, level),
-            "expr-add" or "expr-add-no-not" => FoldLeftAssoc(match, inWhere, level, FoldAddOp),
-            "expr-mul" or "expr-mul-no-not" => FoldLeftAssoc(match, inWhere, level, FoldMulOp),
-            "expr-primary" or "expr-primary-no-not" => FoldPrimary(match, inWhere, level),
-            _ => FoldPrimary(match, inWhere, level),
-        };
+    private DomainExpression RewriteIdent(DomainExpression expression) =>
+        expression is PropertyAccess pa && _forms.TryRewriteIdent(pa.Name, out var claimed)
+            ? claimed
+            : expression;
 
-    private DomainExpression FoldLeftAssoc(
-        MatchResult<DslToken, DslTokenKind> match,
-        bool inWhere,
-        int level,
-        Func<DomainExpression, DomainExpression, DomainExpression> combine) {
-        var operands = match.Children;
-        GuardChain(level, operands.Count, match);
-        var acc = FoldRule(operands[0], inWhere, level + operands.Count - 1);
-        for (var i = 1; i < operands.Count; i++)
-            acc = combine(acc, FoldRule(operands[i], inWhere, level + operands.Count - i));
-        return acc;
-    }
-
-    private DomainExpression FoldLeftAssoc(
-        MatchResult<DslToken, DslTokenKind> match,
-        bool inWhere,
-        int level,
-        Func<DomainExpression, DslTokenKind, DomainExpression, DomainExpression> combine) {
-        var operands = match.Children;
-        GuardChain(level, operands.Count, match);
-        var acc = FoldRule(operands[0], inWhere, level + operands.Count - 1);
-        for (var i = 1; i < operands.Count; i++)
-            acc = combine(acc, match.Operators[i - 1].Kind,
-                FoldRule(operands[i], inWhere, level + operands.Count - i));
-        return acc;
-    }
-
-    /// <summary>
-    /// A chain of N operands at <paramref name="level"/> reaches level + N - 1 at its deepest
-    /// operand, because the fold is left-associative. Rejecting the whole chain up front keeps
-    /// the deepest operand out of the fold, and the error names the operator that closes it.
-    /// </summary>
-    private void GuardChain(int level, int operands, MatchResult<DslToken, DslTokenKind> match) {
-        // A one-operand chain adds no level: every rule family wraps a single expression in one.
-        if (operands <= 1 || level + operands - 1 <= DslLimits.MaxExpressionDepth)
-            return;
-        var at = match.Operators.Count > 0 ? match.Operators[^1] : match.Tokens[^1];
-        throw new GrammarException(DslLimits.DepthDetail, at.Line, at.Col, at.Offset, at.Length);
-    }
-
-    private static DomainExpression FoldMulOp(DomainExpression left, DslTokenKind op, DomainExpression right) =>
-        op == DslTokenKind.Star
-            ? DomainExpression.Multiply(left, right)
-            : DomainExpression.Divide(left, right);
-
-    private DomainExpression FoldNot(MatchResult<DslToken, DslTokenKind> match, bool inWhere, int level) {
-        if (match.PatternName != "not")
-            return FoldRule(match.Children[0], inWhere, level);
-        GuardLevel(level + 1, match.Tokens[0]);
-        return DomainExpression.Not(FoldRule(match.Children[0], inWhere, level + 1));
-    }
-
-    private DomainExpression FoldCompare(MatchResult<DslToken, DslTokenKind> match, bool inWhere, int level) {
-        if (match.PatternName == "bare")
-            return FoldRule(match.Children[0], inWhere, level);
-        GuardLevel(level + 1, match.Tokens[0]);
-        var left = FoldRule(match.Children[0], inWhere, level + 1);
-        var right = FoldRule(match.Children[1], inWhere, level + 1);
-        if (match.PatternName == "is-not")
-            return DomainExpression.NotEqual(left, right);
-        var op = match.Captures["compare-op"][0].Kind;
-        return Compare(op, left, right);
+    private static DomainExpression WrapPath(List<string> names, DomainExpression inner) {
+        for (var i = names.Count - 2; i >= 0; i--)
+            inner = DomainExpression.RelationshipNav(names[i], inner);
+        return inner;
     }
 
     private static DomainExpression Compare(DslTokenKind op, DomainExpression left, DomainExpression right) =>
@@ -172,269 +65,588 @@ public sealed class DslExpressionParser {
             _ => throw new InvalidOperationException($"Unknown comparison operator '{op}'"),
         };
 
-    private DomainExpression FoldPrimary(MatchResult<DslToken, DslTokenKind> match, bool inWhere, int level) {
-        if (match.PatternName is not "group" and not "not") {
-            // Session folds override pattern payload (library Now vs core ident-shaped clock).
-            if (_folds.TryFold(match.RuleName, match, out var folded))
-                return RewriteIdent(folded);
-            if (match.TryFoldExpression(out var bound))
-                return RewriteIdent(bound);
-        }
+    private enum FrameKind { Top, Level, Prefix, Group, Call, Match, Where, PathCmp }
 
-        return match.PatternName switch {
-            "group" => FoldGroup(match, inWhere, level),
-            "not" => NotAt(match, inWhere, level),
-            "duration" => FoldUnresolvedDuration(match),
-            "match" => FoldMatch(match, level),
-            "call" => FoldCall(match, level),
-            "exists" => DomainExpression.Exists(DomainExpression.Property(CaptureText(match, "rel"))),
-            "where-nav" => FoldWhereNav(match, inWhere, level),
-            "quant-where" => FoldQuantWhere(match, inWhere, level),
-            "count-bare" => DomainExpression.Count(CaptureText(match, "rel"), null),
-            "sum-prop" => DomainExpression.Sum(CaptureText(match, "rel"), CaptureText(match, "prop")),
-            "path-is-not" => FoldPathCmp(match, notEqual: true, inWhere, level),
-            "path-cmp" => FoldPathCmp(match, notEqual: false, inWhere, level),
-            "path" => FoldPath(match),
-            _ => throw new InvalidOperationException(
-                $"Cannot fold primary '{match.RuleName}/{match.PatternName}'."),
-        };
+    private enum ArmPhase { Condition, Value }
+
+    private sealed class Frame(FrameKind kind) {
+        public FrameKind Kind { get; } = kind;
+        public bool SavedInWhere;
+        public DslToken Token;
+
+        // Level
+        public int Level;
+        public DomainExpression? Acc;
+        public int AccHeight;
+        public BinaryRow? Op;
+        public DslToken OpToken;
+        public bool Counted;
+
+        // Prefix
+        public PrefixRow? Prefix;
+
+        // Call / Match / Where / PathCmp
+        public int MaxHeight;
+        public string Name = "";
+        public string Quant = "";
+        public List<string>? Names;
+        public DslTokenKind CompareKind;
+        public bool NotEqual;
+        public List<DomainExpression>? Args;
+        public List<DslToken>? Tokens;
+        public List<(int Start, int End)>? Segments;
+        public int Index;
+        public int Arrow;
+        public bool IsElse;
+        public ArmPhase Phase;
+        public DomainExpression? Pending;
+        public List<MatchArm>? Arms;
+        public DomainExpression? ElseValue;
     }
 
-    /// <summary>
-    /// <c>match { cond -&gt; value, ..., else -&gt; value }</c>: the balanced braces are split at top-level
-    /// commas; each arm is split at its first top-level <c>-&gt;</c>. Exactly one <c>else</c> arm is
-    /// required and it must be last. Every malformation is a positioned error.
-    /// </summary>
-    private DomainExpression NotAt(MatchResult<DslToken, DslTokenKind> match, bool inWhere, int level) {
-        GuardLevel(level + 1, match.Tokens[0]);
-        return DomainExpression.Not(FoldRule(match.Children[0], inWhere, level + 1));
-    }
+    private sealed class Run(DslExpressionParser parser) {
+        private readonly DslExpressionParser _p = parser;
+        private readonly IDslParseCursor _c = parser._c;
+        private readonly DslOperatorTable _t = parser._operators;
+        private readonly List<Frame> _stack = [];
+        private int _hard;
+        private bool _inWhere;
+        private DslToken _last;
+        private DomainExpression _value = null!;
+        private int _height;
+        private bool _descend = true;
+        private int _target;
 
-    private DomainExpression FoldMatch(MatchResult<DslToken, DslTokenKind> match, int level) {
-        GuardLevel(level + 1, match.Tokens[0]);
-        var keyword = match.Tokens[0];
-        var closing = match.Tokens[^1];
-        var inner = match.Tokens.Skip(2).Take(match.Tokens.Count - 3).ToList();
-        static string At(DslToken t) => $" (line {t.Line}, col {t.Col})";
+        public DomainExpression Parse() {
+            _stack.Add(new Frame(FrameKind.Top));
+            while (true) {
+                if (_descend) {
+                    Descend();
+                    continue;
+                }
 
-        var segments = new List<List<DslToken>>();
-        var current = new List<DslToken>();
-        var depth = 0;
-        foreach (var token in inner) {
-            if (token.Kind is DslTokenKind.LParen or DslTokenKind.LBrace or DslTokenKind.LBracket) depth++;
-            else if (token.Kind is DslTokenKind.RParen or DslTokenKind.RBrace or DslTokenKind.RBracket) depth--;
-            if (depth == 0 && token.Kind == DslTokenKind.Comma) {
-                if (current.Count == 0)
-                    throw _c.Error($"Expected an arm in 'match' before '{token.Text}'{At(token)}");
-                segments.Add(current);
-                current = [];
+                var frame = _stack[^1];
+                switch (frame.Kind) {
+                    case FrameKind.Top:
+                        RejectUnknownDurationUnit();
+                        return _value;
+                    case FrameKind.Level: OnLevel(frame); break;
+                    case FrameKind.Prefix: OnPrefix(frame); break;
+                    case FrameKind.Group: OnGroup(frame); break;
+                    case FrameKind.Call: OnCall(frame); break;
+                    case FrameKind.Match: OnMatch(frame); break;
+                    case FrameKind.Where: OnWhere(frame); break;
+                    case FrameKind.PathCmp: OnPathCmp(frame); break;
+                }
             }
-            else current.Add(token);
         }
-        if (current.Count > 0) segments.Add(current);
-        else if (segments.Count > 0)
-            throw _c.Error($"Expected an arm in 'match' after the trailing ','{At(closing)}");
 
-        if (segments.Count == 0)
-            throw _c.Error($"'match' needs at least an 'else' arm (else -> value){At(keyword)}");
+        // ── depth ─────────────────────────────────────────────────────────────────────
 
-        var elseSegments = segments.Where(sg => sg[0].Kind == DslTokenKind.Else).ToList();
-        if (elseSegments.Count > 1)
-            throw _c.Error($"'match' has more than one 'else' arm{At(elseSegments[1][0])}");
+        private static GrammarException DepthError(DslToken at) =>
+            new(DslLimits.DepthDetail, at.Line, at.Col, at.Offset, at.Length);
 
-        var arms = new List<MatchArm>();
-        DomainExpression? elseValue = null;
-        for (var i = 0; i < segments.Count; i++) {
-            var segment = segments[i];
-            var first = segment[0];
-            var arrow = -1;
-            depth = 0;
-            for (var j = 0; j < segment.Count; j++) {
-                var k = segment[j].Kind;
-                if (k is DslTokenKind.LParen or DslTokenKind.LBrace or DslTokenKind.LBracket) depth++;
-                else if (k is DslTokenKind.RParen or DslTokenKind.RBrace or DslTokenKind.RBracket) depth--;
-                else if (depth == 0 && k == DslTokenKind.Arrow) { arrow = j; break; }
+        /// <summary>A node of relative height <paramref name="height"/> under the enclosing levels counted so far.</summary>
+        private void CheckNode(DslToken at, int height) {
+            if (_hard + height > DslLimits.MaxExpressionDepth)
+                throw DepthError(at);
+        }
+
+        private DslToken Take() {
+            var token = _c.Current;
+            _c.Advance();
+            _last = token;
+            return token;
+        }
+
+        private void Return(DomainExpression value, int height) {
+            _value = value;
+            _height = height;
+            _descend = false;
+        }
+
+        private void Push(Frame frame) {
+            _stack.Add(frame);
+        }
+
+        private Frame Pop() {
+            var frame = _stack[^1];
+            _stack.RemoveAt(_stack.Count - 1);
+            return frame;
+        }
+
+        private void DescendTo(int level) {
+            _target = level;
+            _descend = true;
+        }
+
+        // ── descending: one step at the current token ─────────────────────────────────
+
+        private void Descend() {
+            if (_target < _t.Levels.Count) {
+                if (_t.TryPrefix(_c.Current.Kind, out var row) && _t.HeadLevel(row) == _target) {
+                    StartPrefix(row, _c.Current);
+                    return;
+                }
+
+                Push(new Frame(FrameKind.Level) { Level = _target });
+                _target++;
+                return;
             }
-            if (arrow < 0)
-                throw _c.Error($"Expected '->' in 'match' arm starting at '{first.Text}'{At(first)}");
-            var condition = segment.Take(arrow).ToList();
-            var value = segment.Skip(arrow + 1).ToList();
-            var isElse = condition is [{ Kind: DslTokenKind.Else }];
-            if (condition.Count == 0)
-                throw _c.Error($"Expected a condition before '->' in 'match'{At(segment[arrow])}");
-            if (value.Count == 0)
-                throw _c.Error($"Expected a value after '->' in 'match'{At(segment[arrow])}");
-            if (isElse) {
-                if (elseValue is not null)
-                    throw _c.Error($"'match' has more than one 'else' arm{At(first)}");
-                if (i != segments.Count - 1)
-                    throw _c.Error($"'else' must be the last arm of a 'match'{At(first)}");
-                elseValue = ParseArm(value, "match value", level);
+
+            Primary();
+        }
+
+        private void StartPrefix(PrefixRow row, DslToken first) {
+            CheckNode(first, 1);
+            var token = Take();
+            Push(new Frame(FrameKind.Prefix) { Prefix = row, Token = token });
+            _hard++;
+            DescendTo(_t.LevelAtOrAbove(row.OperandPrecedence));
+        }
+
+        private void Primary() {
+            var match = _c.MatchRule("expr-primary")
+                ?? throw _c.Error($"Expected expression, got '{Describe(_c.Current)}'");
+            var pattern = match.PatternName;
+            if (pattern is not "group" and not "not") {
+                // Session folds override pattern payload (library Now vs core ident-shaped clock).
+                if (_p._folds.TryFold(match.RuleName, match, out var folded)) {
+                    Leaf(match, _p.RewriteIdent(folded));
+                    return;
+                }
+
+                if (match.TryFoldExpression(out var bound)) {
+                    Leaf(match, _p.RewriteIdent(bound));
+                    return;
+                }
+            }
+
+            switch (pattern) {
+                case "group": StartGroup(); break;
+                case "not":
+                    StartPrefix(
+                        _t.TryPrefix(match.Tokens[0].Kind, out var row)
+                            ? row
+                            : throw new InvalidOperationException($"No prefix row for '{match.Tokens[0].Kind}'."),
+                        match.Tokens[0]);
+                    break;
+                case "duration": Leaf(match, FoldUnresolvedDuration(match)); break;
+                case "match": StartMatch(match); break;
+                case "call": StartCall(match); break;
+                case "exists":
+                    Leaf(match, DomainExpression.Exists(DomainExpression.Property(CaptureText(match, "rel"))));
+                    break;
+                case "count-bare":
+                    Leaf(match, DomainExpression.Count(CaptureText(match, "rel"), null));
+                    break;
+                case "sum-prop":
+                    Leaf(match, DomainExpression.Sum(CaptureText(match, "rel"), CaptureText(match, "prop")));
+                    break;
+                case "where-nav":
+                case "quant-where": StartWhere(match); break;
+                case "path-is-not": StartPathCmp(match, notEqual: true); break;
+                case "path-cmp": StartPathCmp(match, notEqual: false); break;
+                case "path":
+                    var names = PathNames(match);
+                    Leaf(match, WrapPath(names, DomainExpression.Property(names[^1])));
+                    break;
+                default:
+                    throw new InvalidOperationException(
+                        $"Cannot fold primary '{match.RuleName}/{pattern}'.");
+            }
+        }
+
+        private void Leaf(MatchResult<DslToken, DslTokenKind> match, DomainExpression value) {
+            _c.Consume(match);
+            _last = match.Tokens[^1];
+            Return(value, 0);
+        }
+
+        private static List<string> PathNames(MatchResult<DslToken, DslTokenKind> match) {
+            var names = new List<string> { CaptureText(match, "rel"), CaptureText(match, "prop") };
+            foreach (var hop in match.Children)
+                names.Add(CaptureText(hop, "hop"));
+            return names;
+        }
+
+        private DomainExpression FoldUnresolvedDuration(MatchResult<DslToken, DslTokenKind> match) {
+            var amountText = CaptureText(match, "amount");
+            if (!long.TryParse(amountText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var amount))
+                throw _c.Error($"Duration amount '{amountText}' is not an integer.");
+            return new UnresolvedDuration(amount, CaptureText(match, "unit"));
+        }
+
+        /// <summary>
+        /// A duration is <c>Number</c> + a known unit, so a number followed on the same line by a word that is not a unit
+        /// fails closed here with the legal spellings. Runs at the end of the top-level expression and of every group,
+        /// argument and arm sub-expression. Exempt: <c>Identifier :</c> and a same-line <c>function</c> declaration.
+        /// </summary>
+        private void RejectUnknownDurationUnit() {
+            if (_last.Kind != DslTokenKind.Number) return;
+            var current = _c.Current;
+            if (current.Kind != DslTokenKind.Identifier) return;
+            if (current.Line != _last.Line) return;
+            if (_c.PeekIs(DslTokenKind.Colon)) return;
+            if (DslGrammar.IsFunctionDeclarationWord(current)) return;
+            if (DslGrammar.IsDurationUnitToken(current)) return;
+            throw _c.Error(
+                $"Unknown duration unit '{NameOf(current)}'. Legal units: {DurationUnits.LegalUnits}.");
+        }
+
+        // ── chain levels ──────────────────────────────────────────────────────────────
+
+        private void OnLevel(Frame f) {
+            if (f.Acc is null) {
+                f.Acc = _value;
+                f.AccHeight = _height;
             }
             else {
-                if (condition.Any(t => t.Kind == DslTokenKind.Else))
-                    throw _c.Error($"'else' cannot appear inside a 'match' condition{At(first)}");
-                arms.Add(new MatchArm(
-                    ParseArm(condition, "match condition", level),
-                    ParseArm(value, "match value", level)));
+                if (f.Counted) {
+                    _hard--;
+                    f.Counted = false;
+                }
+
+                f.Acc = f.Op!.Fold(f.Acc, _value);
+                f.AccHeight = Math.Max(f.AccHeight, _height) + 1;
+                CheckNode(f.OpToken, f.AccHeight);
+                if (f.Op.Assoc == Assoc.None) {
+                    FinishLevel(f);
+                    return;
+                }
             }
+
+            if (_t.TryBinary(f.Level, _c.Current, () => _c.Peek(1), out var row, out var tokens)) {
+                f.OpToken = _c.Current;
+                for (var i = 0; i < tokens; i++)
+                    Take();
+                f.Op = row;
+                CheckNode(f.OpToken, f.AccHeight + 1);
+                f.Counted = true;
+                _hard++;
+                DescendTo(f.Level + 1);
+                return;
+            }
+
+            FinishLevel(f);
         }
 
-        if (elseValue is null)
-            throw _c.Error($"'match' requires a final 'else' arm (else -> value){At(keyword)}");
-        return DomainExpression.Match(arms, elseValue, keyword.Line, keyword.Col);
-    }
+        private void FinishLevel(Frame f) {
+            Pop();
+            Return(f.Acc!, f.AccHeight);
+        }
 
-    private DomainExpression ParseArm(List<DslToken> tokens, string what, int level) {
-        var last = tokens[^1];
-        var withEof = new List<DslToken>(tokens) { new(DslTokenKind.EndOfFile, "", last.Line, last.Col) };
-        var reader = new ListTokenReader<DslToken, DslTokenKind>(withEof, static k => k == DslTokenKind.EndOfFile);
-        var nested = new DslCursor(reader, new Matcher<DslToken, DslTokenKind>(_c.Grammar, reader));
-        var parsed = new DslExpressionParser(nested, _forms, _folds).ParseExpressionAt(level + 1);
-        if (nested.Current.Kind != DslTokenKind.EndOfFile)
-            throw nested.Error($"Unexpected '{nested.Current.Text}' in {what}");
-        return parsed;
-    }
+        // ── prefix, group ─────────────────────────────────────────────────────────────
 
-    /// <summary>
-    /// <c>Name(arg, …)</c>: the balanced parentheses are split at top-level commas and each
-    /// segment is parsed as a full expression. Empty segments (a leading, doubled, or
-    /// trailing comma) are a positioned error.
-    /// </summary>
-    private DomainExpression FoldCall(MatchResult<DslToken, DslTokenKind> match, int level) {
-        // A zero-argument call has no arm to charge, so it pays its own level here.
-        GuardLevel(level + 1, match.Tokens[0]);
-        var nameToken = match.Tokens[0];
-        var name = nameToken.Text;
-        var inner = match.Tokens.Skip(2).Take(match.Tokens.Count - 3).ToList();
-        var arguments = new List<DomainExpression>();
-        if (inner.Count > 0) {
+        private void OnPrefix(Frame f) {
+            Pop();
+            _hard--;
+            var height = _height + 1;
+            CheckNode(f.Token, height);
+            Return(f.Prefix!.Fold(_value), height);
+        }
+
+        private void StartGroup() {
+            var open = _c.Current;
+            CheckNode(open, 1);
+            Take();
+            if (_c.Current.Kind == DslTokenKind.RParen)
+                throw _c.Error("Expected expression inside parentheses");
+            Push(new Frame(FrameKind.Group) { Token = open, SavedInWhere = _inWhere });
+            _inWhere = false;
+            _hard++;
+            DescendTo(0);
+        }
+
+        private void OnGroup(Frame f) {
+            RejectUnknownDurationUnit();
+            var current = _c.Current;
+            if (current.Kind != DslTokenKind.RParen)
+                throw current.Kind == DslTokenKind.EndOfFile
+                    ? _c.Error("Expected ')' to close the group")
+                    : _c.Error($"Unexpected '{Describe(current)}' in group");
+            Take();
+            Pop();
+            _hard--;
+            _inWhere = f.SavedInWhere;
+            var height = _height + 1;
+            CheckNode(f.Token, height);
+            Return(_value, height);
+        }
+
+        // ── where bodies and path comparisons ─────────────────────────────────────────
+
+        private void StartWhere(MatchResult<DslToken, DslTokenKind> match) {
+            if (_inWhere)
+                throw _c.Error("Nested 'where' is not allowed. Use parentheses for grouped conditions instead.");
+            var first = match.Tokens[0];
+            CheckNode(first, 1);
+            var frame = new Frame(FrameKind.Where) {
+                Token = first,
+                SavedInWhere = _inWhere,
+                Name = CaptureText(match, "rel"),
+                Quant = match.PatternName == "quant-where" ? CaptureText(match, "quant").ToLowerInvariant() : "",
+            };
+            for (var i = 0; i < match.Tokens.Count; i++)
+                Take();
+            Push(frame);
+            _inWhere = true;
+            _hard++;
+            DescendTo(_t.LevelOf(DslTokenKind.And));
+        }
+
+        private void OnWhere(Frame f) {
+            Pop();
+            _hard--;
+            _inWhere = f.SavedInWhere;
+            var height = _height + 1;
+            CheckNode(f.Token, height);
+            var body = _value;
+            DomainExpression result = f.Quant switch {
+                "" => DomainExpression.RelationshipNav(f.Name, body),
+                "any" => DomainExpression.Any(f.Name, body),
+                "all" => DomainExpression.All(f.Name, body),
+                "none" => DomainExpression.None(f.Name, body),
+                "count" => DomainExpression.Count(f.Name, body),
+                "sum" => throw _c.Error("sum does not take where; write sum Rel Prop"),
+                _ => throw _c.Error($"Unknown quantifier '{f.Quant}'"),
+            };
+            Return(result, height);
+        }
+
+        private void StartPathCmp(MatchResult<DslToken, DslTokenKind> match, bool notEqual) {
+            var first = match.Tokens[0];
+            CheckNode(first, 1);
+            var frame = new Frame(FrameKind.PathCmp) {
+                Token = first,
+                Names = PathNames(match),
+                NotEqual = notEqual,
+                CompareKind = notEqual ? DslTokenKind.Neq : match.Captures["op"][0].Kind,
+            };
+            for (var i = 0; i < match.Tokens.Count; i++)
+                Take();
+            Push(frame);
+            _hard++;
+            DescendTo(_t.Levels.Count);
+        }
+
+        private void OnPathCmp(Frame f) {
+            Pop();
+            _hard--;
+            var height = _height + 1;
+            CheckNode(f.Token, height);
+            var names = f.Names!;
+            DomainExpression inner = f.NotEqual
+                ? DomainExpression.NotEqual(DomainExpression.Property(names[^1]), _value)
+                : Compare(f.CompareKind, DomainExpression.Property(names[^1]), _value);
+            Return(WrapPath(names, inner), height);
+        }
+
+        // ── calls ─────────────────────────────────────────────────────────────────────
+
+        private void StartCall(MatchResult<DslToken, DslTokenKind> match) {
+            var name = match.Tokens[0];
+            CheckNode(name, 1);
+            Take();
+            Take();
+            Push(new Frame(FrameKind.Call) {
+                Token = name,
+                Name = NameOf(name),
+                Args = [],
+                SavedInWhere = _inWhere,
+            });
+            _inWhere = false;
+            _hard++;
+            StartArgument(_stack[^1], first: true);
+        }
+
+        private void StartArgument(Frame f, bool first) {
+            var current = _c.Current;
+            if (first && current.Kind == DslTokenKind.RParen) {
+                FinishCall(f);
+                return;
+            }
+
+            if (current.Kind is DslTokenKind.Comma or DslTokenKind.RParen)
+                throw _c.Error(
+                    $"Expected an argument in call to '{f.Name}' before '{Describe(current)}' (line {current.Line}, col {current.Col})");
+            DescendTo(0);
+        }
+
+        private void OnCall(Frame f) {
+            RejectUnknownDurationUnit();
+            f.MaxHeight = Math.Max(f.MaxHeight, _height);
+            f.Args!.Add(_value);
+            var current = _c.Current;
+            if (current.Kind == DslTokenKind.Comma) {
+                Take();
+                StartArgument(f, first: false);
+                return;
+            }
+
+            if (current.Kind == DslTokenKind.RParen) {
+                FinishCall(f);
+                return;
+            }
+
+            throw _c.Error($"Unexpected '{Describe(current)}' in call argument");
+        }
+
+        private void FinishCall(Frame f) {
+            Take();
+            Pop();
+            _hard--;
+            _inWhere = f.SavedInWhere;
+            var height = f.MaxHeight + 1;
+            CheckNode(f.Token, height);
+            Return(DomainExpression.Call(f.Name, f.Args!, f.Token.Line, f.Token.Col), height);
+        }
+
+        // ── match ─────────────────────────────────────────────────────────────────────
+
+        private static string At(DslToken t) => $" (line {t.Line}, col {t.Col})";
+
+        private static bool IsOpen(DslTokenKind k) => k is DslTokenKind.LParen or DslTokenKind.LBrace or DslTokenKind.LBracket;
+
+        private static bool IsClose(DslTokenKind k) => k is DslTokenKind.RParen or DslTokenKind.RBrace or DslTokenKind.RBracket;
+
+        /// <summary>
+        /// <c>match { cond -&gt; value, ..., else -&gt; value }</c>: the balanced braces are split at top-level commas; every
+        /// segment malformation is a positioned error before any arm is parsed. The arms themselves are parsed in the stream.
+        /// </summary>
+        private void StartMatch(MatchResult<DslToken, DslTokenKind> match) {
+            var keyword = match.Tokens[0];
+            CheckNode(keyword, 1);
+            var tokens = match.Tokens.ToList();
+            var closing = tokens[^1];
+            var segments = new List<(int Start, int End)>();
+            var start = 2;
             var depth = 0;
-            var segment = new List<DslToken>();
-            void Flush(DslToken at) {
-                if (segment.Count == 0)
-                    throw _c.Error($"Expected an argument in call to '{name}' before '{at.Text}' (line {at.Line}, col {at.Col})");
-                arguments.Add(ParseArgument(segment, level + 1));
-                segment = [];
+            for (var i = 2; i < tokens.Count - 1; i++) {
+                var token = tokens[i];
+                if (IsOpen(token.Kind)) depth++;
+                else if (IsClose(token.Kind)) depth--;
+                if (depth == 0 && token.Kind == DslTokenKind.Comma) {
+                    if (i == start)
+                        throw _c.Error($"Expected an arm in 'match' before '{NameOf(token)}'{At(token)}");
+                    segments.Add((start, i));
+                    start = i + 1;
+                }
             }
-            foreach (var token in inner) {
-                if (token.Kind == DslTokenKind.LParen) depth++;
-                else if (token.Kind == DslTokenKind.RParen) depth--;
-                if (depth == 0 && token.Kind == DslTokenKind.Comma) Flush(token);
-                else segment.Add(token);
-            }
-            Flush(match.Tokens[^1]);
+
+            if (start < tokens.Count - 1) segments.Add((start, tokens.Count - 1));
+            else if (segments.Count > 0)
+                throw _c.Error($"Expected an arm in 'match' after the trailing ','{At(closing)}");
+
+            if (segments.Count == 0)
+                throw _c.Error($"'match' needs at least an 'else' arm (else -> value){At(keyword)}");
+
+            var elseSegments = segments.Where(sg => tokens[sg.Start].Kind == DslTokenKind.Else).ToList();
+            if (elseSegments.Count > 1)
+                throw _c.Error($"'match' has more than one 'else' arm{At(tokens[elseSegments[1].Start])}");
+
+            Take();
+            Take();
+            var frame = new Frame(FrameKind.Match) {
+                Token = keyword,
+                Tokens = tokens,
+                Segments = segments,
+                Arms = [],
+                SavedInWhere = _inWhere,
+            };
+            Push(frame);
+            _inWhere = false;
+            _hard++;
+            StartArm(frame);
         }
-        return DomainExpression.Call(name, arguments, nameToken.Line, nameToken.Col);
+
+        private void StartArm(Frame f) {
+            var tokens = f.Tokens!;
+            var segments = f.Segments!;
+            if (f.Index == segments.Count) {
+                if (f.ElseValue is null)
+                    throw _c.Error($"'match' requires a final 'else' arm (else -> value){At(f.Token)}");
+                Take();
+                Pop();
+                _hard--;
+                _inWhere = f.SavedInWhere;
+                var height = f.MaxHeight + 1;
+                CheckNode(f.Token, height);
+                Return(DomainExpression.Match(f.Arms!, f.ElseValue, f.Token.Line, f.Token.Col), height);
+                return;
+            }
+
+            var (start, end) = segments[f.Index];
+            var first = tokens[start];
+            var arrow = -1;
+            var depth = 0;
+            for (var j = start; j < end; j++) {
+                var k = tokens[j].Kind;
+                if (IsOpen(k)) depth++;
+                else if (IsClose(k)) depth--;
+                else if (depth == 0 && k == DslTokenKind.Arrow) { arrow = j; break; }
+            }
+
+            if (arrow < 0)
+                throw _c.Error($"Expected '->' in 'match' arm starting at '{NameOf(first)}'{At(first)}");
+            var isElse = arrow - start == 1 && first.Kind == DslTokenKind.Else;
+            if (arrow == start)
+                throw _c.Error($"Expected a condition before '->' in 'match'{At(tokens[arrow])}");
+            if (arrow == end - 1)
+                throw _c.Error($"Expected a value after '->' in 'match'{At(tokens[arrow])}");
+            if (isElse) {
+                if (f.ElseValue is not null)
+                    throw _c.Error($"'match' has more than one 'else' arm{At(first)}");
+                if (f.Index != segments.Count - 1)
+                    throw _c.Error($"'else' must be the last arm of a 'match'{At(first)}");
+            }
+            else {
+                for (var j = start; j < arrow; j++) {
+                    if (tokens[j].Kind == DslTokenKind.Else)
+                        throw _c.Error($"'else' cannot appear inside a 'match' condition{At(first)}");
+                }
+            }
+
+            f.Arrow = arrow;
+            f.IsElse = isElse;
+            if (isElse) {
+                Take();
+                Take();
+                f.Phase = ArmPhase.Value;
+            }
+            else {
+                f.Phase = ArmPhase.Condition;
+            }
+
+            DescendTo(0);
+        }
+
+        private void OnMatch(Frame f) {
+            RejectUnknownDurationUnit();
+            f.MaxHeight = Math.Max(f.MaxHeight, _height);
+            var tokens = f.Tokens!;
+            var current = _c.Current;
+            if (f.Phase == ArmPhase.Condition) {
+                if (current.Offset != tokens[f.Arrow].Offset)
+                    throw _c.Error($"Unexpected '{Describe(current)}' in match condition");
+                f.Pending = _value;
+                Take();
+                f.Phase = ArmPhase.Value;
+                DescendTo(0);
+                return;
+            }
+
+            var end = f.Segments![f.Index].End;
+            if (current.Offset != tokens[end].Offset)
+                throw _c.Error($"Unexpected '{Describe(current)}' in match value");
+            if (f.IsElse)
+                f.ElseValue = _value;
+            else
+                f.Arms!.Add(new MatchArm(f.Pending!, _value));
+            if (tokens[end].Kind == DslTokenKind.Comma)
+                Take();
+            f.Index++;
+            StartArm(f);
+        }
     }
-
-    private DomainExpression ParseArgument(List<DslToken> tokens, int level) {
-        var last = tokens[^1];
-        var withEof = new List<DslToken>(tokens) { new(DslTokenKind.EndOfFile, "", last.Line, last.Col) };
-        var reader = new ListTokenReader<DslToken, DslTokenKind>(withEof, static k => k == DslTokenKind.EndOfFile);
-        var nested = new DslCursor(reader, new Matcher<DslToken, DslTokenKind>(_c.Grammar, reader));
-        var argument = new DslExpressionParser(nested, _forms, _folds).ParseExpressionAt(level);
-        if (nested.Current.Kind != DslTokenKind.EndOfFile)
-            throw nested.Error($"Unexpected '{nested.Current.Text}' in call argument");
-        return argument;
-    }
-
-    private DomainExpression FoldUnresolvedDuration(MatchResult<DslToken, DslTokenKind> match) {
-        var amountText = CaptureText(match, "amount");
-        if (!long.TryParse(amountText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var amount))
-            throw _c.Error($"Duration amount '{amountText}' is not an integer.");
-        return new UnresolvedDuration(amount, CaptureText(match, "unit"));
-    }
-
-    private DomainExpression RewriteIdent(DomainExpression expression) =>
-        expression is PropertyAccess pa && _forms.TryRewriteIdent(pa.Name, out var claimed)
-            ? claimed
-            : expression;
-
-    private DomainExpression FoldGroup(MatchResult<DslToken, DslTokenKind> match, bool inWhere, int level) {
-        GuardLevel(level + 1, match.Tokens[0]);
-        if (match.Children.Count > 0)
-            return FoldRule(match.Children[0], inWhere, level + 1);
-        if (match.Tokens.Count < 2)
-            throw _c.Error("Expected expression inside parentheses");
-        var inner = match.Tokens.Skip(1).Take(match.Tokens.Count - 2).ToList();
-        if (inner.Count == 0)
-            throw _c.Error("Expected expression inside parentheses");
-        var last = inner[^1];
-        var tokens = new List<DslToken>(inner) { new(DslTokenKind.EndOfFile, "", last.Line, last.Col) };
-        var reader = new ListTokenReader<DslToken, DslTokenKind>(tokens, static k => k == DslTokenKind.EndOfFile);
-        var nested = new DslCursor(reader, new Matcher<DslToken, DslTokenKind>(_c.Grammar, reader)) {
-            InWhereBody = inWhere,
-        };
-        var parsed = new DslExpressionParser(nested, _forms, _folds).ParseExpressionAt(level + 1);
-        if (nested.Current.Kind != DslTokenKind.EndOfFile)
-            throw nested.Error($"Unexpected '{nested.Current.Text}' in group");
-        return parsed;
-    }
-
-    private DomainExpression FoldWhereNav(MatchResult<DslToken, DslTokenKind> match, bool inWhere, int level) {
-        if (inWhere)
-            throw _c.Error("Nested 'where' is not allowed. Use parentheses for grouped conditions instead.");
-        GuardLevel(level + 1, match.Tokens[0]);
-        var body = FoldRule(match.Children[0], inWhere: true, level + 1);
-        return DomainExpression.RelationshipNav(CaptureText(match, "rel"), body);
-    }
-
-    private DomainExpression FoldQuantWhere(MatchResult<DslToken, DslTokenKind> match, bool inWhere, int level) {
-        if (inWhere)
-            throw _c.Error("Nested 'where' is not allowed. Use parentheses for grouped conditions instead.");
-        var q = CaptureText(match, "quant").ToLowerInvariant();
-        var rel = CaptureText(match, "rel");
-        GuardLevel(level + 1, match.Tokens[0]);
-        var body = FoldRule(match.Children[0], inWhere: true, level + 1);
-        return q switch {
-            "any" => DomainExpression.Any(rel, body),
-            "all" => DomainExpression.All(rel, body),
-            "none" => DomainExpression.None(rel, body),
-            "count" => DomainExpression.Count(rel, body),
-            "sum" => throw _c.Error("sum does not take where; write sum Rel Prop"),
-            _ => throw _c.Error($"Unknown quantifier '{q}'"),
-        };
-    }
-
-    private DomainExpression FoldPath(MatchResult<DslToken, DslTokenKind> match) {
-        var names = PathHopNames(match, includeTrailingPrimary: false);
-        return WrapPath(names, DomainExpression.Property(names[^1]));
-    }
-
-    private DomainExpression FoldPathCmp(
-        MatchResult<DslToken, DslTokenKind> match,
-        bool notEqual,
-        bool inWhere,
-        int level) {
-        var names = PathHopNames(match, includeTrailingPrimary: false);
-        GuardLevel(level + 1, match.Tokens[0]);
-        var rhs = FoldPrimary(match.Children[^1], inWhere, level + 1);
-        DomainExpression inner = notEqual
-            ? DomainExpression.NotEqual(DomainExpression.Property(names[^1]), rhs)
-            : Compare(match.Captures["op"][0].Kind, DomainExpression.Property(names[^1]), rhs);
-        return WrapPath(names, inner);
-    }
-
-    private static List<string> PathHopNames(
-        MatchResult<DslToken, DslTokenKind> match,
-        bool includeTrailingPrimary) {
-        var names = new List<string> { CaptureText(match, "rel"), CaptureText(match, "prop") };
-        var hops = includeTrailingPrimary
-            ? match.Children
-            : match.Children.Count > 0 && match.PatternName is "path-cmp" or "path-is-not"
-                ? match.Children.Take(match.Children.Count - 1)
-                : match.Children;
-        foreach (var hop in hops)
-            names.Add(CaptureText(hop, "hop"));
-        return names;
-    }
-
-    private static DomainExpression WrapPath(List<string> names, DomainExpression inner) {
-        for (var i = names.Count - 2; i >= 0; i--)
-            inner = DomainExpression.RelationshipNav(names[i], inner);
-        return inner;
-    }
-
-    private void Consume(MatchResult<DslToken, DslTokenKind> match) => _c.Consume(match);
 }

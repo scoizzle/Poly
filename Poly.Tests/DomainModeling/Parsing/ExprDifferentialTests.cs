@@ -535,9 +535,115 @@ public sealed class ExprDifferentialTests {
 
     /// <summary>
     /// Results that moved on purpose: <c>Key</c> (the input text or generator spec), the new result,
-    /// and why. Empty until the iterative driver lands.
+    /// and why. Categories: A the input now parses (match with commas in a call argument); B a malformed input the old fallback reported as trailing tokens or at a stale position is now reported where the piece is missing; C same message, error position moved to where it is found; D same depth message, position at the first crossing token.
     /// </summary>
-    private static readonly (string Key, string Result, string Reason)[] AcceptedDeltas = [];
+
+    private const string R_A = "a match inside a call argument now parses: arguments end at their own comma or parenthesis in the stream, no longer pre-split at parenthesis depth (the old pre-split cut the match at its first comma)";
+    private const string R_B = "a construct the old longest-match could not complete fell back (to a shorter atom, then trailing tokens or a stale position); the driver commits to the header and reports where the missing piece is";
+    private const string R_C = "same message; fold-time errors are positioned at the cursor when they are found (the offending construct) instead of after the whole expression";
+    private const string R_D = "same message; the depth error is raised at the first token whose level exceeds the limit (the 257th operator of a chain, the first crossing node) instead of at the chain's last operator or the left operand's first token";
+
+    private static readonly (string Key, string Result, string Reason)[] AcceptedDeltas = [
+        ("F(match { a -> 1, else -> 2 })", "OK FunctionCall(\"F\",[MatchExpr([Arm(PropertyAccess(\"a\"),Literal(Int64:1,null,Int32:1,Int32:16))],Literal(Int64:2,null,Int32:1,Int32:27),Int32:1,Int32:3)],Int32:1,Int32:1)", R_A),
+        ("F(match { a -> 1, b -> 2, else -> 3 }, 4)", "OK FunctionCall(\"F\",[MatchExpr([Arm(PropertyAccess(\"a\"),Literal(Int64:1,null,Int32:1,Int32:16)),Arm(PropertyAccess(\"b\"),Literal(Int64:2,null,Int32:1,Int32:24))],Literal(Int64:3,null,Int32:1,Int32:35),Int32:1,Int32:3),Literal(Int64:4,null,Int32:1,Int32:40)],Int32:1,Int32:1)", R_A),
+        ("Kids where", "ERR Expected expression, got 'end of input' @1:11", R_B),
+        ("count Kids where", "ERR Expected expression, got 'end of input' @1:17", R_B),
+        ("(", "ERR Expected expression, got 'end of input' @1:2", R_B),
+        ("()", "ERR Expected expression inside parentheses @1:2", R_C),
+        ("(a", "ERR Expected ')' to close the group @1:3", R_B),
+        ("((a)", "ERR Expected ')' to close the group @1:5", R_B),
+        ("(a +)", "ERR Expected expression, got ')' @1:5", R_B),
+        ("(a > )", "ERR Expected expression, got ')' @1:6", R_B),
+        ("(a and)", "ERR Expected expression, got ')' @1:7", R_B),
+        ("(Kids where)", "ERR Expected expression, got ')' @1:12", R_B),
+        ("(not)", "ERR Expected expression, got ')' @1:5", R_B),
+        ("F(a,)", "ERR Expected an argument in call to 'F' before ')' (line 1, col 5) @1:5", R_C),
+        ("F(,a)", "ERR Expected an argument in call to 'F' before ',' (line 1, col 3) @1:3", R_C),
+        ("F(a,,b)", "ERR Expected an argument in call to 'F' before ',' (line 1, col 5) @1:5", R_C),
+        ("F(,)", "ERR Expected an argument in call to 'F' before ',' (line 1, col 3) @1:3", R_C),
+        ("F(not)", "ERR Expected expression, got ')' @1:6", R_B),
+        ("F(a +)", "ERR Expected expression, got ')' @1:6", R_B),
+        ("F(a >)", "ERR Expected expression, got ')' @1:6", R_B),
+        ("F(Kids where)", "ERR Expected expression, got ')' @1:13", R_B),
+        ("F(Kids where) ", "ERR Expected expression, got ')' @1:13", R_B),
+        ("match { }", "ERR 'match' needs at least an 'else' arm (else -> value) (line 1, col 1) @1:1", R_C),
+        ("match { else }", "ERR Expected '->' in 'match' arm starting at 'else' (line 1, col 9) @1:9", R_C),
+        ("match { else -> }", "ERR Expected a value after '->' in 'match' (line 1, col 14) @1:9", R_C),
+        ("match { -> 1, else -> 2 }", "ERR Expected a condition before '->' in 'match' (line 1, col 9) @1:9", R_C),
+        ("match { a -> , else -> 2 }", "ERR Expected a value after '->' in 'match' (line 1, col 11) @1:9", R_C),
+        ("match { a 1, else -> 2 }", "ERR Expected '->' in 'match' arm starting at 'a' (line 1, col 9) @1:9", R_C),
+        ("match { a -> 1 }", "ERR 'match' requires a final 'else' arm (else -> value) (line 1, col 1) @1:16", R_C),
+        ("match { a -> 1, }", "ERR Expected an arm in 'match' after the trailing ',' (line 1, col 17) @1:1", R_C),
+        ("match { , a -> 1, else -> 2 }", "ERR Expected an arm in 'match' before ',' (line 1, col 9) @1:1", R_C),
+        ("match { a -> 1,, else -> 2 }", "ERR Expected an arm in 'match' before ',' (line 1, col 16) @1:1", R_C),
+        ("match { else -> 1, else -> 2 }", "ERR 'match' has more than one 'else' arm (line 1, col 20) @1:1", R_C),
+        ("match { else -> 1, a -> 2 }", "ERR 'else' must be the last arm of a 'match' (line 1, col 9) @1:9", R_C),
+        ("match { a else -> 1, else -> 2 }", "ERR 'else' cannot appear inside a 'match' condition (line 1, col 9) @1:9", R_C),
+        ("match { a -> 1, else -> 2, else -> 3 }", "ERR 'match' has more than one 'else' arm (line 1, col 28) @1:1", R_C),
+        ("match { (else) -> 1, else -> 2 }", "ERR 'else' cannot appear inside a 'match' condition (line 1, col 9) @1:9", R_C),
+        ("match { a -> (1, else -> 2 }", "ERR Unexpected ',' in group @1:16", R_B),
+        ("match { a - -> 1, else -> 2 }", "ERR Expected expression, got '->' @1:13", R_B),
+        ("match { a == -1 -> 1, else -> 2 }", "ERR Expected expression, got '-' @1:14", R_B),
+        ("any Kids where", "ERR Expected expression, got 'end of input' @1:15", R_B),
+        ("all Kids where", "ERR Expected expression, got 'end of input' @1:15", R_B),
+        ("none Kids where", "ERR Expected expression, got 'end of input' @1:16", R_B),
+        ("sum Kids where", "ERR Expected expression, got 'end of input' @1:15", R_B),
+        ("Kids where Kids where Flag", "ERR Nested 'where' is not allowed. Use parentheses for grouped conditions instead. @1:12", R_C),
+        ("any Kids where all Kids where Flag", "ERR Nested 'where' is not allowed. Use parentheses for grouped conditions instead. @1:16", R_C),
+        ("Kids where Flag and Kids where Ready", "ERR Nested 'where' is not allowed. Use parentheses for grouped conditions instead. @1:21", R_C),
+        ("Kids where any Kids where Flag", "ERR Nested 'where' is not allowed. Use parentheses for grouped conditions instead. @1:12", R_C),
+        ("Kids where )", "ERR Expected expression, got ')' @1:12", R_B),
+        ("Kids where (", "ERR Expected expression, got 'end of input' @1:13", R_B),
+        ("Kids where (Flag", "ERR Expected ')' to close the group @1:17", R_B),
+        ("any Kids where (Flag", "ERR Expected ')' to close the group @1:21", R_B),
+        ("a and", "ERR Expected expression, got 'end of input' @1:6", R_B),
+        ("a or", "ERR Expected expression, got 'end of input' @1:5", R_B),
+        ("a +", "ERR Expected expression, got 'end of input' @1:4", R_B),
+        ("a -", "ERR Expected expression, got 'end of input' @1:4", R_B),
+        ("a *", "ERR Expected expression, got 'end of input' @1:4", R_B),
+        ("a /", "ERR Expected expression, got 'end of input' @1:4", R_B),
+        ("a and and b", "ERR Expected expression, got 'and' @1:7", R_B),
+        ("a + + b", "ERR Expected expression, got '+' @1:5", R_B),
+        ("a * * b", "ERR Expected expression, got '*' @1:5", R_B),
+        ("a >", "ERR Expected expression, got 'end of input' @1:4", R_B),
+        ("a > >", "ERR Expected expression, got '>' @1:5", R_B),
+        ("a > > b", "ERR Expected expression, got '>' @1:5", R_B),
+        ("a is not", "ERR Expected expression, got 'end of input' @1:9", R_B),
+        ("a is", "ERR Expected expression, got 'end of input' @1:5", R_B),
+        ("a is not not", "ERR Expected expression, got 'end of input' @1:13", R_B),
+        ("not", "ERR Expected expression, got 'end of input' @1:4", R_B),
+        ("not not", "ERR Expected expression, got 'end of input' @1:8", R_B),
+        ("not >", "ERR Expected expression, got '>' @1:5", R_B),
+        ("Order Price >", "ERR Expected expression, got 'end of input' @1:14", R_B),
+        ("Order Price is not", "ERR Expected expression, got 'end of input' @1:19", R_B),
+        ("Order Price > )", "ERR Expected expression, got ')' @1:15", R_B),
+        ("Order Price is not )", "ERR Expected expression, got ')' @1:20", R_B),
+        ("Order Price > > 3", "ERR Expected expression, got '>' @1:15", R_B),
+        ("Order Price > (", "ERR Expected expression, got 'end of input' @1:16", R_B),
+        ("Order Price > (3", "ERR Expected ')' to close the group @1:17", R_B),
+        ("Order Price > not", "ERR Expected expression, got 'end of input' @1:18", R_B),
+        ("Order Price > Kids where", "ERR Expected expression, got 'end of input' @1:25", R_B),
+        ("Order Price is not Kids where", "ERR Expected expression, got 'end of input' @1:30", R_B),
+        ("Order Price > any Kids where", "ERR Expected expression, got 'end of input' @1:29", R_B),
+        ("a b >", "ERR Expected expression, got 'end of input' @1:6", R_B),
+        ("a b is not", "ERR Expected expression, got 'end of input' @1:11", R_B),
+        ("99999999999999999999 Days", "ERR Duration amount '99999999999999999999' is not an integer. @1:1", R_C),
+        ("chain:and:259", "ERR expression nesting exceeds the limit of 256 @1:2310", R_D),
+        ("chain:or:259", "ERR expression nesting exceeds the limit of 256 @1:2054", R_D),
+        ("chain:+:259", "ERR expression nesting exceeds the limit of 256 @1:1798", R_D),
+        ("chain:*:259", "ERR expression nesting exceeds the limit of 256 @1:1798", R_D),
+        ("cmp-left:257", "ERR expression nesting exceeds the limit of 256 @1:1798", R_D),
+        ("cmp-right:258", "ERR expression nesting exceeds the limit of 256 @1:1798", R_D),
+        ("cmp-nest:129", "ERR expression nesting exceeds the limit of 256 @1:1030", R_D),
+        ("isnot-nest:129", "ERR expression nesting exceeds the limit of 256 @1:1670", R_D),
+        ("cmp-nest:130", "ERR expression nesting exceeds the limit of 256 @1:1030", R_D),
+        ("isnot-nest:130", "ERR expression nesting exceeds the limit of 256 @1:1670", R_D),
+        ("mixed:257", "ERR expression nesting exceeds the limit of 256 @1:1284", R_D),
+        ("mixed:258", "ERR expression nesting exceeds the limit of 256 @1:1275", R_D),
+        ("not-add:258", "ERR expression nesting exceeds the limit of 256 @1:1795", R_D),
+        ("and-of-nots:257", "ERR expression nesting exceeds the limit of 256 @1:3325", R_D),
+        ("and-of-nots:258", "ERR expression nesting exceeds the limit of 256 @1:3325", R_D),
+    ];
 
     [Test]
     public async Task Baseline_IsLargeAndCoversEveryCorpusKind() {
@@ -564,6 +670,8 @@ public sealed class ExprDifferentialTests {
             }
         });
 
+        if (Environment.GetEnvironmentVariable("POLY_EXPR_DELTA_OUT") is { } dump)
+            File.WriteAllLines(dump, failures.Select(f => f.Replace("\n", " | ")));
         await Assert.That(failures).IsEmpty();
     }
 

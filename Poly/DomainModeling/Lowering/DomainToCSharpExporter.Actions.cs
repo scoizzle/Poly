@@ -107,12 +107,14 @@ public sealed partial class DomainToCSharpExporter {
     /// type, and an unresolved first write makes the analysis of the same body reject itself on re-entry.
     /// </summary>
     private static void AddScopedActionMethods(List<MethodDefinitionNode> methods, string name,
-        Node returnType, List<Parameter> parameters, Block body, AccessModifier access) {
+        Node returnType, List<Parameter> parameters, Block body, AccessModifier access,
+        Node? staticReceiver = null) {
         var bodyName = ActionBodyPrefix + name;
         var scope = new Variable("__scope");
         var done = new Variable("__done");
         var result = new Variable("__result");
-        var call = new Invoke(new Member(new ThisReference(), bodyName), [.. parameters]);
+        var isStatic = staticReceiver is not null;
+        var call = new Invoke(new Member(staticReceiver ?? new ThisReference(), bodyName), [.. parameters]);
         var wrapper = new Block([
             new Assignment(scope, new TypeCast(
                 ActionScopeCall("Begin", new Constant(null)),
@@ -120,7 +122,7 @@ public sealed partial class DomainToCSharpExporter {
             new Assignment(done, new Constant(false)),
             new TryCatchFinally(
                 new Block([
-                    TouchThis(),
+                    .. isStatic ? Array.Empty<Node>() : [TouchThis()],
                     new Assignment(result, call),
                     new IfStatement(
                         new Poly.Ast.Nodes.Not(new Member(result, "IsSuccess")),
@@ -138,6 +140,7 @@ public sealed partial class DomainToCSharpExporter {
             returnType,
             Parameters: parameters,
             Body: wrapper,
+            IsStatic: isStatic,
             AccessModifier: access));
 
         methods.Add(new MethodDefinitionNode(
@@ -147,6 +150,7 @@ public sealed partial class DomainToCSharpExporter {
                 .Select(p => new Parameter(p.Name, p.TypeReference))
                 .ToList(),
             Body: body,
+            IsStatic: isStatic,
             AccessModifier: AccessModifier.Private));
     }
 

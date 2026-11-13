@@ -59,6 +59,29 @@ internal class Fine : Poly.Runtime.IActionScoped
     }
     internal static DomainResult<Fine> Create(string reason, long amount = 0L)
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = Fine.__BodyOfCreate(reason, amount);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private static DomainResult<Fine> __BodyOfCreate(string reason, long amount)
+    {
         if (amount < 0L)
         {
             return DomainResult<Fine>.Failure(Poly.Runtime.DomainFailure.Range("'Amount' must be >= 0.", "Fine.Amount"));

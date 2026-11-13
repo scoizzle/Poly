@@ -52,6 +52,30 @@ internal class Reservation : Poly.Runtime.IActionScoped
     public ReservationStage CurrentStage { get; private set; }
     internal DomainResult<Folio> CreateFolio(decimal balance = 0m)
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            Poly.Runtime.ActionScope.Touch(this);
+            var __result = this.__BodyOfCreateFolio(balance);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult<Folio> __BodyOfCreateFolio(decimal balance)
+    {
         var folioResult = Folio.Create(this, balance);
         if (!folioResult.IsSuccess)
         {
@@ -532,6 +556,29 @@ internal class Reservation : Poly.Runtime.IActionScoped
         return DomainResult.Success();
     }
     internal static DomainResult<Reservation> Create(long partySize, long nights, decimal nightlyRate, long maxOccupancy, DateOnly checkInDate, DateOnly checkOutDate, Folio? folio = null, Guest? guest = null, Room? room = null)
+    {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = Reservation.__BodyOfCreate(partySize, nights, nightlyRate, maxOccupancy, checkInDate, checkOutDate, folio, guest, room);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private static DomainResult<Reservation> __BodyOfCreate(long partySize, long nights, decimal nightlyRate, long maxOccupancy, DateOnly checkInDate, DateOnly checkOutDate, Folio? folio, Guest? guest, Room? room)
     {
         if (partySize < 1L)
         {

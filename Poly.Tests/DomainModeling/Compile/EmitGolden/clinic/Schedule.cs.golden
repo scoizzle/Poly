@@ -47,6 +47,29 @@ internal class Schedule : Poly.Runtime.IActionScoped
     }
     internal static DomainResult<Schedule> Create(string day, string state = "")
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = Schedule.__BodyOfCreate(day, state);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private static DomainResult<Schedule> __BodyOfCreate(string day, string state)
+    {
         if (string.IsNullOrEmpty(day))
         {
             return DomainResult<Schedule>.Failure(Poly.Runtime.DomainFailure.Required("'Day' is required.", "Schedule.Day"));

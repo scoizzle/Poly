@@ -20,6 +20,29 @@ internal class OrderItem : Poly.Runtime.IActionScoped
     public Order? Order { get; private set; }
     internal static DomainResult<OrderItem> Create(string sku, long qty, Order? order = null)
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = OrderItem.__BodyOfCreate(sku, qty, order);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private static DomainResult<OrderItem> __BodyOfCreate(string sku, long qty, Order? order)
+    {
         if (string.IsNullOrEmpty(sku))
         {
             return DomainResult<OrderItem>.Failure(Poly.Runtime.DomainFailure.Required("'Sku' is required.", "OrderItem.Sku"));

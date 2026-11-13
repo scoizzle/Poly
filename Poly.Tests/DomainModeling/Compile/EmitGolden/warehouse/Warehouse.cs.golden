@@ -33,6 +33,30 @@ internal class Warehouse : Poly.Runtime.IActionScoped
     }
     internal DomainResult<Truck> CreateTrucks(string vin, long maxLoad, Poly.Runtime.IStoragePort db, long currentLoad = 0L, TruckStatus status = TruckStatus.Idle)
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            Poly.Runtime.ActionScope.Touch(this);
+            var __result = this.__BodyOfCreateTrucks(vin, maxLoad, currentLoad, status, db);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult<Truck> __BodyOfCreateTrucks(string vin, long maxLoad, long currentLoad, TruckStatus status, Poly.Runtime.IStoragePort db)
+    {
         var truckResult = Truck.Create(vin, maxLoad, db, this, new List<Delivery>(), currentLoad, status);
         if (!truckResult.IsSuccess)
         {
@@ -155,6 +179,29 @@ internal class Warehouse : Poly.Runtime.IActionScoped
     public bool IsOperational() => this.Capacity > 0L;
     public bool HasCapacity() => this.Capacity > 0L;
     internal static DomainResult<Warehouse> Create(string code, string name, string zip, long capacity, Poly.Runtime.IStoragePort db, IEnumerable<Truck>? trucks = null, long safetyStock = 100L, TruckStatus status = TruckStatus.Idle)
+    {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = Warehouse.__BodyOfCreate(code, name, zip, capacity, trucks, safetyStock, status, db);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private static DomainResult<Warehouse> __BodyOfCreate(string code, string name, string zip, long capacity, IEnumerable<Truck>? trucks, long safetyStock, TruckStatus status, Poly.Runtime.IStoragePort db)
     {
         if (string.IsNullOrEmpty(code))
         {

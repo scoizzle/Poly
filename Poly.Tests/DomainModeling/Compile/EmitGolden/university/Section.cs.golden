@@ -56,6 +56,30 @@ internal class Section : Poly.Runtime.IActionScoped
     }
     internal DomainResult<WaitOffer> CreateWaitlist(Student? student = null)
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            Poly.Runtime.ActionScope.Touch(this);
+            var __result = this.__BodyOfCreateWaitlist(student);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult<WaitOffer> __BodyOfCreateWaitlist(Student? student)
+    {
         var waitOfferResult = WaitOffer.Create(student, this);
         if (!waitOfferResult.IsSuccess)
         {
@@ -281,6 +305,29 @@ internal class Section : Poly.Runtime.IActionScoped
         return DomainResult.Success();
     }
     internal static DomainResult<Section> Create(long cap, Term offeringTerm, Course? course = null, Instructor? instructor = null, IEnumerable<Enrollment>? enrollments = null, IEnumerable<WaitOffer>? waitlist = null, long seatsTaken = 0L, long offeredSeats = 0L, long waitCleared = 0L)
+    {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = Section.__BodyOfCreate(cap, offeringTerm, course, instructor, enrollments, waitlist, seatsTaken, offeredSeats, waitCleared);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private static DomainResult<Section> __BodyOfCreate(long cap, Term offeringTerm, Course? course, Instructor? instructor, IEnumerable<Enrollment>? enrollments, IEnumerable<WaitOffer>? waitlist, long seatsTaken, long offeredSeats, long waitCleared)
     {
         if (cap < 1L)
         {

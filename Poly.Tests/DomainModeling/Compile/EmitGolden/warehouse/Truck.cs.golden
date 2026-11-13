@@ -114,6 +114,29 @@ internal class Truck : Poly.Runtime.IActionScoped
     public bool IsOverloaded() => this.CurrentLoad > this.MaxLoad;
     internal static DomainResult<Truck> Create(string vin, long maxLoad, Poly.Runtime.IStoragePort db, Warehouse? warehouse = null, IEnumerable<Delivery>? deliveries = null, long currentLoad = 0L, TruckStatus status = TruckStatus.Idle)
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = Truck.__BodyOfCreate(vin, maxLoad, warehouse, deliveries, currentLoad, status, db);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private static DomainResult<Truck> __BodyOfCreate(string vin, long maxLoad, Warehouse? warehouse, IEnumerable<Delivery>? deliveries, long currentLoad, TruckStatus status, Poly.Runtime.IStoragePort db)
+    {
         if (string.IsNullOrEmpty(vin))
         {
             return DomainResult<Truck>.Failure(Poly.Runtime.DomainFailure.Required("'Vin' is required.", "Truck.Vin"));

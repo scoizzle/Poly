@@ -1190,10 +1190,9 @@ that failure (kind, message and guard unchanged, no segment added by the entry) 
 the new instance is in no collection and no subscription registry. The path is the
 callee's own (`Kid.Fails` from a bare `Create`, `Holder.Make.Kid.Fails` from the
 holder's `create in`), and an action that ran the `create in` is rolled back.
-A bare generated `Create` (called with no action running) whose entry fails *after changing another
-entity* (a succeeded `invoke` of an action on a linked entity, a `create` attached to an existing
-peer) is not rolled back until L-04b: the generated C# keeps that change, while the interpreter
-restores it.
+A bare generated `Create` (called with no action running) whose entry fails after changing another
+entity (a succeeded `invoke` of an action on a linked entity, a `create` attached to an existing
+peer) rolls that change back too, as the interpreter does.
 
 ## 8. Policies
 

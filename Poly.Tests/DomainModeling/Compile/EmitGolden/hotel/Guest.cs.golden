@@ -48,6 +48,30 @@ internal class Guest : Poly.Runtime.IActionScoped
     public GuestStage CurrentStage { get; private set; }
     internal DomainResult<EventHold> CreateEvents(long headcount, long capacity, decimal dayRate, DateOnly startDate, DateOnly endDate, Hall? hall = null, Section? section = null)
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            Poly.Runtime.ActionScope.Touch(this);
+            var __result = this.__BodyOfCreateEvents(headcount, capacity, dayRate, startDate, endDate, hall, section);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult<EventHold> __BodyOfCreateEvents(long headcount, long capacity, decimal dayRate, DateOnly startDate, DateOnly endDate, Hall? hall, Section? section)
+    {
         var eventHoldResult = EventHold.Create(headcount, capacity, dayRate, startDate, endDate, this, hall, section);
         if (!eventHoldResult.IsSuccess)
         {
@@ -63,6 +87,30 @@ internal class Guest : Poly.Runtime.IActionScoped
         child.RegisterGuestEventsReleasedSubscriber(this);
     }
     internal DomainResult<Reservation> CreateReservations(long partySize, long nights, decimal nightlyRate, long maxOccupancy, DateOnly checkInDate, DateOnly checkOutDate, Folio? folio = null, Room? room = null)
+    {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            Poly.Runtime.ActionScope.Touch(this);
+            var __result = this.__BodyOfCreateReservations(partySize, nights, nightlyRate, maxOccupancy, checkInDate, checkOutDate, folio, room);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult<Reservation> __BodyOfCreateReservations(long partySize, long nights, decimal nightlyRate, long maxOccupancy, DateOnly checkInDate, DateOnly checkOutDate, Folio? folio, Room? room)
     {
         var reservationResult = Reservation.Create(partySize, nights, nightlyRate, maxOccupancy, checkInDate, checkOutDate, folio, this, room);
         if (!reservationResult.IsSuccess)
@@ -274,6 +322,29 @@ internal class Guest : Poly.Runtime.IActionScoped
         return DomainResult.Success();
     }
     internal static DomainResult<Guest> Create(string name, string email, string phone, Poly.Runtime.IStoragePort db, IEnumerable<EventHold>? events = null, IEnumerable<Reservation>? reservations = null, long stayCount = 0L, long nightCount = 0L, long eventCount = 0L)
+    {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = Guest.__BodyOfCreate(name, email, phone, events, reservations, stayCount, nightCount, eventCount, db);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private static DomainResult<Guest> __BodyOfCreate(string name, string email, string phone, IEnumerable<EventHold>? events, IEnumerable<Reservation>? reservations, long stayCount, long nightCount, long eventCount, Poly.Runtime.IStoragePort db)
     {
         if (string.IsNullOrEmpty(name))
         {

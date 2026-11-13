@@ -186,6 +186,29 @@ internal class WaitOffer : Poly.Runtime.IActionScoped
     }
     internal static DomainResult<WaitOffer> Create(Student? student = null, Section? section = null)
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = WaitOffer.__BodyOfCreate(student, section);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private static DomainResult<WaitOffer> __BodyOfCreate(Student? student, Section? section)
+    {
         var created = new WaitOffer(student, section);
         Poly.Runtime.ActionScope.Create(created, "WaitOffer");
         if (section != null)

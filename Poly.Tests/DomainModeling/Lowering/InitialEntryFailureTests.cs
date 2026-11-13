@@ -173,14 +173,51 @@ public class InitialEntryFailureTests {
         }
     }
 
-    // ── every entry form compiles with warnings as errors (CS0127 cannot come back) ──
+    // ── for … invoke ─────────────────────────────────────────────────
 
+    // The entry creates two ticks of its own, then pops each: the first pop succeeds and changes the first tick, the
+    // second fails. The ticks are reachable only from the Kid being created, so nothing of the failed create is visible
+    // from an existing entity and both doors are plain parity rows.
     private const string TickEntities = """
         Tick: entity {
-          Open: stage { Pop: action { transition to Spent } }
+          Ok: Boolean
+          Allowed: policy { Ok is true }
+          Open: stage { Pop: action require Allowed { transition to Spent } }
           Spent: stage { }
         }
         """;
+
+    private const string ForInvokeEntry = "create in ticks { Ok: true }\ncreate in ticks { Ok: false }\nfor ticks as t invoke t.Pop";
+
+    [Test]
+    public async Task BareCreate_WhenTheSecondForInvokeFails_ReturnsTheFailureOnBothHosts() {
+        var (simulate, printed) = RunBare(D.Dsl(ForInvokeEntry, "ticks: many Tick", entities: TickEntities),
+            "InitialEntryForInvokeBare", side => side.Create("Kid"));
+
+        await AssertFailedWithNothingLeft(simulate, printed);
+        foreach (var outcome in new[] { simulate[^1], printed[^1] }) {
+            await Assert.That(outcome.FailureKind).IsEqualTo("Policy");
+            await Assert.That(outcome.FailureGuard).IsEqualTo("Allowed");
+            await Assert.That(outcome.FailurePath).IsEqualTo("Tick.Pop");
+        }
+    }
+
+    [Test]
+    public async Task Make_WhenTheKidsSecondForInvokeFails_RollsBackAndReturnsTheFailure() {
+        var (simulate, printed) = await AtomicityParityTests.AssertRollsBack(
+            D.Dsl(ForInvokeEntry, "ticks: many Tick", entities: TickEntities), "InitialEntryForInvokeMake", (side, fail) => {
+                side.Create("Holder");
+                fail("Make", []);
+            });
+
+        foreach (var outcome in new[] { simulate[^1], printed[^1] }) {
+            await Assert.That(outcome.ExceptionType).IsNull();
+            await Assert.That(outcome.FailurePath).IsEqualTo("Holder.Make.Tick.Pop");
+            await Assert.That(outcome.State["kids"]).IsEqualTo("0");
+        }
+    }
+
+    // ── every entry form compiles with warnings as errors (CS0127 cannot come back) ──
 
     internal static readonly IReadOnlyDictionary<string, string> EntryForms = new Dictionary<string, string> {
         ["Assign"] = D.Dsl("assign Score to 5"),
@@ -188,7 +225,7 @@ public class InitialEntryFailureTests {
         ["InvokeSelf"] = D.Dsl(InvokeSelf),
         ["InvokeOther"] = D.Dsl(InvokeOther),
         ["Create"] = D.Dsl(CreateChild),
-        ["ForInvoke"] = D.Dsl("for ticks as t invoke t.Pop", "ticks: many Tick", entities: TickEntities),
+        ["ForInvoke"] = D.Dsl(ForInvokeEntry, "ticks: many Tick", entities: TickEntities),
     };
 
     public static IEnumerable<string> EntryFormNames() => EntryForms.Keys;

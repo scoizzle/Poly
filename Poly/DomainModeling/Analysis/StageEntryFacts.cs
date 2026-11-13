@@ -9,7 +9,7 @@ namespace Poly.DomainModeling.Analysis;
 /// The analysis-side answer to "which properties does a new instance's constructor assign beyond
 /// its parameters" (the create-time set, Q12 option (b)).
 /// <para>
-/// The walk mirrors the constructor's lowering of the initial stage's entry: an
+/// The walk mirrors the lowering of the initial stage's entry (<c>__EnterInitialStage</c>, run by <c>Create</c>): an
 /// <see cref="AssignEffect"/> whose target is a <see cref="PropertyAccess"/> contributes its
 /// authored name; a <see cref="StageTransitionEffect"/> to a resolvable stage T exits its source
 /// stage, moves the source cursor to T, walks T's entry unless T is already being entered, and
@@ -101,11 +101,11 @@ internal static class StageEntryFacts {
     }
 
     /// <summary>
-    /// Mirrors the constructor's lowering of the initial stage's entry (<c>EffectLoweringPass</c>
+    /// Mirrors the lowering of the initial stage's entry in <c>__EnterInitialStage</c> (<c>EffectLoweringPass</c>
     /// <c>StageTransition</c>). <see cref="_cursor"/> is the lowering's source-stage cursor: null
     /// is the dynamic per-stage exit switch, which takes every stage's exit. Each hop to T runs
     /// its source's exit, moves the cursor to T, then walks T's entry unless T is already being
-    /// entered. The initial entry is walked unpushed, as the constructor does.
+    /// entered. The initial entry is walked unpushed, as that method does.
     /// </summary>
     private sealed class CreateWalk(Entity entity, string? lifecycleProperty) {
         private HashSet<string> _entering = new(StringComparer.Ordinal);

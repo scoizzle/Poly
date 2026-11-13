@@ -296,7 +296,7 @@ public sealed partial class LanguageSurfaceTests {
         var cs = new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis));
 
         await Assert.That(cs).Contains("this.CurrentStage = OrderStage.Active;");
-        await Assert.That(cs).Contains("entered_active").Because("the designated stage's entry effects run in the constructor");
+        await Assert.That(cs).Contains("entered_active").Because("the designated stage's entry effects run (in __EnterInitialStage, which Create calls)");
     }
 
     [Test]

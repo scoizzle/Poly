@@ -250,7 +250,7 @@ public sealed partial class DomainToCSharpExporter {
 
     /// <summary>
     /// <c>InitializeSubscriptions</c> — for post-load subscription wiring. Called as
-    /// the last constructor step so all state is set before registration runs.
+    /// by <c>Create</c> after the initial entry, so all state is set and a failed entry registers nothing.
     /// </summary>
     private static void AddSubscriptionInitializer(
         List<SubscriptionInfo>? subscriberSubs, List<MethodDefinitionNode> methods) {

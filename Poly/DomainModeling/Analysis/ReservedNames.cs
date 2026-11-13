@@ -301,7 +301,7 @@ internal static class ReservedNames {
         // #528: CS0542 — a member cannot be named like its enclosing type.
         yield return new ReservedName(entity.Name, ReservedKind.Language, "the enclosing type's name");
 
-        // Stages.cs:16,102 with EntityStructureMetadata.cs:30. Create.cs:433 prints
+        // Stages.cs:16,102 with EntityStructureMetadata.cs:30. Create.cs prints
         // `this.CurrentStage = {Entity}Stage.<Initial>;` in the constructor's body for every
         // generated stage enum, which is expression position: a member of the enum's name
         // binds instead of the type (probed a).

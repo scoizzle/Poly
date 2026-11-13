@@ -115,8 +115,8 @@ public sealed class DomainResultErasureTests {
 
     private static Domain Lower(string poly) => LowerWithSession(poly).Domain;
 
-    /// <summary>The sample catalog's mcp-library domain: the only entity golden that
-    /// throws <c>ConstraintFailureException</c> from a void body.</summary>
+    /// <summary>The sample catalog's mcp-library domain: the only entity golden that threw
+    /// <c>ConstraintFailureException</c> from a void body, a handler's failed create, until L-04a returned it.</summary>
     private static string McpLibraryPoly() =>
         GoldenDomains.Compilable.Single(d => d.Name == "mcp-library").Poly;
 

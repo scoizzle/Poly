@@ -169,9 +169,6 @@ internal static class PatternRowAllowList {
         .. InitializerDefect("new int[] {", "member", "method"), .. InitializerDefect("new List<int> {", "member", "method"),
         .. InitializerDefect("new int[] {", "type-body", "body"), .. InitializerDefect("new List<int> {", "type-body", "body"),
         .. InitializerDefect("new int[] {", "type-decl", "class"), .. InitializerDefect("new List<int> {", "type-decl", "class"),
-        PatternRowEntry.Defect(CSharp, "type-decl", "interface", "interface ",
-            "The interface path fills the type-body slot with raw member lines and no braces, so a printed interface does not re-read.",
-            "G-23b (#848)"),
     ];
 
     /// <summary>Every entry, both surfaces.</summary>

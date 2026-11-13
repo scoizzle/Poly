@@ -38,6 +38,64 @@ public class CSharpRowRoundTripTests {
         await Assert.That(printed.ReplaceLineEndings("\n")).IsEqualTo("#nullable enable\npublic enum Empty\n{}");
     }
 
+    // ── #848: an interface body ──────────────────────────────────────────────
+
+    private const string ShapeInterface = "interface IShape { int Sides { get; } long Area(long scale); }";
+
+    [Test]
+    public async Task Interface_WithMembers_ReReads() {
+        var original = CSharpLanguage.Read(ShapeInterface).Types.Single();
+        var printed = CSharpLanguage.Write(CSharpLanguage.Read(ShapeInterface));
+        var reRead = CSharpLanguage.Read(printed).Types.Single();
+
+        await Assert.That(reRead.EffectiveKind).IsEqualTo(TypeKind.Interface);
+        await Assert.That(reRead.Properties!.Select(p => p.Name)).IsEquivalentTo(original.Properties!.Select(p => p.Name));
+        await Assert.That(reRead.Methods!.Select(m => m.Name)).IsEquivalentTo(original.Methods!.Select(m => m.Name));
+        await Assert.That(reRead.Properties![0].Getter is not null).IsTrue();
+        await Assert.That(reRead.Properties![0].Setter is null).IsTrue();
+        await Assert.That(reRead.Methods![0].Body is null).IsTrue();
+        await Assert.That(CSharpLanguage.Write(CSharpLanguage.Read(printed))).IsEqualTo(printed);
+        await Assert.That(printed).Contains("{").And.Contains("}");
+    }
+
+    [Test]
+    public async Task Interface_Empty_ReReads() {
+        var printed = CSharpLanguage.Write([new TypeDefinitionNode("IEmpty", Kind: TypeKind.Interface)]);
+        var reRead = CSharpLanguage.Read(printed).Types.Single();
+
+        await Assert.That(reRead.Name).IsEqualTo("IEmpty");
+        await Assert.That(reRead.EffectiveKind).IsEqualTo(TypeKind.Interface);
+        await Assert.That(CSharpLanguage.Write([reRead])).IsEqualTo(printed);
+    }
+
+    [Test]
+    public async Task Interface_MembersPrintThroughMemberRows() {
+        var unit = CSharpLanguage.Read(ShapeInterface);
+        using var scope = PrintTrace.Begin();
+        CSharpLanguage.Write(unit);
+
+        var rows = scope.Observations.Where(o => ReferenceEquals(o.Grammar, CSharpLanguage.Grammar)).ToArray();
+        await Assert.That(rows.Where(o => o.Rule == "member" && o.Pattern == "method").Select(o => o.Text))
+            .IsEquivalentTo(new[] { "public long Area(long scale);" });
+        await Assert.That(rows.Where(o => o.Rule == "member" && o.Pattern == "property").Select(o => o.Text))
+            .IsEquivalentTo(new[] { "public int Sides { get; }" });
+    }
+
+    /// <summary>The class convention: a property with no accessors prints <c>{ get; set; }</c>.</summary>
+    [Test]
+    public async Task Interface_PropertyWithNoAccessors_TakesTheClassConvention() {
+        var printed = CSharpLanguage.Write([new TypeDefinitionNode("I", Kind: TypeKind.Interface,
+            Properties: [new PropertyDefinitionNode("P", TypeReference.To<int>())])]);
+        await Assert.That(printed).Contains("System.Int32 P { get; set; }");
+        await Assert.That(CSharpLanguage.Read(printed).Types.Single().Properties!.Single().Setter is not null).IsTrue();
+    }
+
+    /// <summary>Fail closed: the brace-less text the writer used to print is still refused.</summary>
+    [Test]
+    public async Task Interface_WithoutBraces_StaysRejected() {
+        await Assert.That(() => CSharpLanguage.Read("interface IShape int Sides { get; }")).Throws<FormatException>();
+    }
+
     /// <summary>Green guard: the fold flattens the wrapper rule, so every member survives a re-read.</summary>
     [Test]
     public async Task EnumMembers_ReReadKeepsEveryMember() {

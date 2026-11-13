@@ -87,8 +87,10 @@ public sealed class DslOperatorTable {
 
     /// <summary>
     /// The product rows. <paramref name="forms"/> carries the library claims: a claim on an operator runs before the row's own
-    /// node (a date plus a duration), so each row is its claim first and its plain node as the one fallback.
-    /// A claim on an operator with no row throws.
+    /// node (a date plus a duration), so each plain row is its claim first and its plain node as the one fallback. A claim
+    /// wraps the plain row of an operator, not its follow-word variants (a claim on <c>is</c> does not affect <c>is not</c>).
+    /// The table snapshots the claims when it is built: a claim registered afterwards is ignored. Registration is the one
+    /// door that validates the operator (<see cref="ExpressionFormRegistry.RegisterBinaryClaim"/> throws for one with no row).
     /// </summary>
     public static DslOperatorTable Core(ExpressionFormRegistry? forms = null) {
         var claims = forms?.BinaryClaims() ?? NoClaims;
@@ -99,7 +101,7 @@ public sealed class DslOperatorTable {
                 : new BinaryRow(op, precedence, assoc, plain, follow);
 
         const int or = 10, and = 20, compare = 40, add = 50, mul = 60;
-        var table = new DslOperatorTable(
+        return new DslOperatorTable(
             [
                 Row(DslTokenKind.Or, or, Assoc.Left, DomainExpression.Or),
                 Row(DslTokenKind.And, and, Assoc.Left, DomainExpression.And),
@@ -118,12 +120,9 @@ public sealed class DslOperatorTable {
             ],
             [new PrefixRow(DslTokenKind.Not, add, DomainExpression.Not)],
             claims);
-        foreach (var op in claims.Keys)
-            table.RequireBinaryRow(op);
-        return table;
     }
 
-    /// <summary>The library claim on <paramref name="op"/> for this pair, or null when no claim takes it (the row then keeps its plain node). Throws when <paramref name="op"/> has no row.</summary>
+    /// <summary>The library claim on the plain row of <paramref name="op"/> (not a follow-word variant) for this pair, or null when no claim takes it (the row then keeps its plain node). Throws when <paramref name="op"/> has no row.</summary>
     public DomainExpression? Claim(DslTokenKind op, DomainExpression left, DomainExpression right) {
         ArgumentNullException.ThrowIfNull(left);
         ArgumentNullException.ThrowIfNull(right);

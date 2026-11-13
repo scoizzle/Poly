@@ -24,11 +24,13 @@ both ending in `ExpressionFormRegistry.TryFoldBinary` through `IBinaryExpression
    `TryFoldBinary` are gone. A library claims a binary operator through
    `ExpressionFormRegistry.RegisterBinaryClaim(DslTokenKind op, Func<…>)`, in registration order, first non-null wins.
    `TemporalLibrary` registers `DateOperationFold.Plus` and `DateOperationFold.Minus`.
-3. **One claim and one fallback.** `DslOperatorTable.Core(forms)` wraps every binary row as its claim first and its plain
-   node as the single fallback. The document parse and `DslExpressionFragment.Resolve` both fold through that row
-   (`DslOperatorTable.Fold`), so the unclaimed fallback lives only in `Core`. `Claim` and both `With` overloads carry the
-   claims. A claim on an operator with no row throws `InvalidOperationException` naming the operator, at registration and
-   when the table is built; it is a configuration error and has no source position.
+3. **One claim and one fallback.** `DslOperatorTable.Core(forms)` wraps every plain binary row (not its follow-word
+   variants: a claim on `is` does not affect `is not`) as its claim first and its plain node as the single fallback. The
+   document parse and `DslExpressionFragment.Resolve` both fold through that row (`DslOperatorTable.Fold`), so the
+   unclaimed fallback lives only in `Core`. `Claim` and both `With` overloads carry the claims, and a table snapshots them
+   when `Core` builds it, so a claim must be registered before the session builds. Registration is the single validating
+   door: `RegisterBinaryClaim` throws `InvalidOperationException` naming an operator with no row (a configuration error,
+   so it has no source position), and `Claim` and `Fold` throw the same for such an operator.
 4. **The fragment parse stays session-free.** `ParseExpressionFragment` applies no library meaning by contract, so
    `Resolve` rewrites after the parse. It stays a call site into the same table, not a second seam.
 5. **The fold is type-blind by design.** The parser has no types, so `Price + 3 Days` folds to a `DateOperation`; analysis

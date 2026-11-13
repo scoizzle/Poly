@@ -194,6 +194,28 @@ public sealed class DslOperatorTableTests {
         await Assert.That(Binary(table, DslTokenKind.Star).Fold(new Now(), TwoHours)).IsTypeOf<Poly.DomainModeling.Ontology.Multiply>();
     }
 
+    /// <summary>A claim wraps the plain row of an operator, not its follow-word variants: a claim on <c>is</c> leaves <c>is not</c> alone.</summary>
+    [Test]
+    public async Task ClaimOnIs_DoesNotAffectIsNot() {
+        var forms = new ExpressionFormRegistry();
+        forms.RegisterBinaryClaim(DslTokenKind.Is, (l, r) => DomainExpression.Literal(true));
+        var table = DslOperatorTable.Core(forms);
+
+        await Assert.That(Binary(table, DslTokenKind.Is).Fold(TwoHours, new Now())).IsTypeOf<Literal>();
+        await Assert.That(Binary(table, DslTokenKind.Is, DslTokenKind.Not).Fold(TwoHours, new Now())).IsTypeOf<Comparison>();
+    }
+
+    /// <summary>A table snapshots the claims when <c>Core</c> builds it: a claim registered afterwards is ignored.</summary>
+    [Test]
+    public async Task ClaimRegisteredAfterCore_IsIgnoredByThatTable() {
+        var forms = new ExpressionFormRegistry();
+        var table = DslOperatorTable.Core(forms);
+        forms.RegisterBinaryClaim(DslTokenKind.Plus, DateOperationFold.Plus);
+
+        await Assert.That(table.Claim(DslTokenKind.Plus, new Now(), TwoHours)).IsNull();
+        await Assert.That(DslOperatorTable.Core(forms).Claim(DslTokenKind.Plus, new Now(), TwoHours)).IsNotNull();
+    }
+
     [Test]
     public async Task Claim_ForOpWithoutRow_Throws() {
         var table = DslOperatorTable.Core(TemporalClaims());

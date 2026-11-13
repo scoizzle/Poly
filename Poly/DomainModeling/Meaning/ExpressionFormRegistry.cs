@@ -105,7 +105,9 @@ public sealed class ExpressionFormRegistry {
     /// Registers a library claim on a binary operator's row of the operator table: given the parsed operands it returns the
     /// replacement expression, or null to keep the row's plain node. Claims run in registration order and the first
     /// non-null result wins. A pack-owned specialization (temporal <c>Now - 12 days</c> → <c>DateOperation</c>) registers here
-    /// so the core parser never names pack IR. Throws when <paramref name="op"/> has no binary row.
+    /// so the core parser never names pack IR. Throws when <paramref name="op"/> has no binary row. Register before the session
+    /// builds: a table snapshots the claims when <see cref="DslOperatorTable.Core"/> builds it, and a later registration is ignored.
+    /// The claim applies to the plain row of <paramref name="op"/>, not to its follow-word variants (<c>is</c> versus <c>is not</c>).
     /// </summary>
     public void RegisterBinaryClaim(DslTokenKind op, Func<DomainExpression, DomainExpression, DomainExpression?> claim) {
         ArgumentNullException.ThrowIfNull(claim);

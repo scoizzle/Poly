@@ -243,6 +243,43 @@ public sealed class TemporalGoldenTests {
         await Assert.That(ex.Message).Contains("date left operand");
     }
 
+    /// <summary>A node as text, by its public properties, without ids, positions or the children list.</summary>
+    private static string Dump(object? node) {
+        switch (node) {
+            case null:
+                return "null";
+            case Node:
+                var parts = node.GetType().GetProperties()
+                    .Where(p => p.Name is not ("Id" or "Children" or "Line" or "Col" or "EqualityContract") && p.GetIndexParameters().Length == 0)
+                    .Select(p => $"{p.Name}={Dump(p.GetValue(node))}");
+                return $"{node.GetType().Name}({string.Join(", ", parts)})";
+            case string text:
+                return text;
+            case System.Collections.IEnumerable items:
+                return "[" + string.Join(", ", items.Cast<object?>().Select(Dump)) + "]";
+            default:
+                return node.ToString()!;
+        }
+    }
+
+    /// <summary>
+    /// Whole-tree pins, recorded on master before the bridge was retired and identical on both paths. <c>Now + 2 Days * 3</c>
+    /// stays <c>Add(Now, Multiply(2 Days, 3))</c>: the higher row groups first and nothing is claimed.
+    /// </summary>
+    [Test]
+    [Arguments("Now + 2 Days * 3", "Add(Left=Now(), Right=Multiply(Left=Duration(Amount=2, Unit=Days), Right=Literal(Value=3, TypeHint=null)))")]
+    [Arguments("Now - 1 Days + 2 Days", "DateOperation(Date=DateOperation(Date=Now(), Offset=Literal(Value=-1, TypeHint=DomainTypeReference(TypeName=Number)), Kind=AddDays), Offset=Literal(Value=2, TypeHint=DomainTypeReference(TypeName=Number)), Kind=AddDays)")]
+    [Arguments("Now + 1 Days > Today", "Comparison(Left=DateOperation(Date=Now(), Offset=Literal(Value=1, TypeHint=DomainTypeReference(TypeName=Number)), Kind=AddDays), Right=Today(), Kind=GreaterThan)")]
+    [Arguments("any Loans where Created + 1 Days > Now", "AnyExpr(RelationshipName=Loans, Body=Comparison(Left=DateOperation(Date=PropertyAccess(Name=Created), Offset=Literal(Value=1, TypeHint=DomainTypeReference(TypeName=Number)), Kind=AddDays), Right=Now(), Kind=GreaterThan))")]
+    [Arguments("(Start + 1 Days) + 2 Days", "DateOperation(Date=DateOperation(Date=PropertyAccess(Name=Start), Offset=Literal(Value=1, TypeHint=DomainTypeReference(TypeName=Number)), Kind=AddDays), Offset=Literal(Value=2, TypeHint=DomainTypeReference(TypeName=Number)), Kind=AddDays)")]
+    public async Task BothPaths_WholeTree_IsIdentical_AndPinned(string text, string expected) {
+        var document = Dump(DocumentPath(text));
+        var fragment = Dump(FragmentPath(text));
+
+        await Assert.That(fragment).IsEqualTo(document);
+        await Assert.That(document).IsEqualTo(expected);
+    }
+
     [Test]
     public async Task BothPaths_NowMinus12Fortnights_ThrowsFormatException() {
         await Assert.That(() => DocumentPath("Now - 12 Fortnights")).Throws<FormatException>();

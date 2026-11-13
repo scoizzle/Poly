@@ -34,10 +34,11 @@ public static class TemporalExpressionPrintBinders {
         if (!match.Captures.TryGetValue("amount", out var amounts) || amounts.Count == 0
             || !match.Captures.TryGetValue("unit", out var units) || units.Count == 0)
             throw new InvalidOperationException("Duration match is missing amount/unit captures.");
-        if (!long.TryParse(amounts[0].Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var amount))
-            throw new InvalidOperationException($"Duration amount '{amounts[0].Text}' is not an integer.");
-        if (!DurationUnits.TryGetUnit(units[0].Text, out var unit))
-            throw new FormatException($"Unknown duration unit '{units[0].Text}'.");
+        // The duration row captures 'amount' with a Number value and 'unit' with an identifier predicate.
+        if (!long.TryParse(amounts[0].Span, NumberStyles.Integer, CultureInfo.InvariantCulture, out var amount))
+            throw new InvalidOperationException($"Duration amount '{DslTokenText.Shown(amounts[0])}' is not an integer.");
+        if (!DurationUnits.TryGetUnit(units[0].Span, out var unit))
+            throw new FormatException($"Unknown duration unit '{DslTokenText.Shown(units[0])}'.");
         return new Duration(amount, unit);
     }
 

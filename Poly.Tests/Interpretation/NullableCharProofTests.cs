@@ -254,16 +254,10 @@ public class NullableCharProofTests {
     /// cells, whose non-nullable siblings (`byte + char`) the analysis accepts. 6 Duration cells stay rejected by
     /// `VmExecutesDeclaredOperator` with or without the rule. T-18b: the 88 cells of a <c>char?</c> beside a native integer
     /// are defined now (8 of them were IntPtr's declared members, rejected); Roslyn answers them (the binder has no
-    /// native-integer rules), 68 agree and 20 state <c>Char?</c> where C# says <c>nint?</c> or <c>nuint?</c> (T-17).
+    /// native-integer rules), 68 agreed and 20 stated <c>Char?</c> where C# says <c>nint?</c> or <c>nuint?</c>. T-17: the lowered typing reads the provider, so those 20 and the 80 cells that stated the narrower operand's nullable type where C# says <c>Int32?</c> now agree: the six "VM result type" classes (100 cells) are absorbed into "VM agrees with C#" (487 + 100 = 587).
     /// </summary>
     private static readonly Dictionary<string, (int Count, string Checksum)> ExpectedClasses = new(StringComparer.Ordinal) {
-        ["VM agrees with C#"] = (487, "895f966e8a39b48a"),
-        ["VM result type Char?, C# IntPtr?; values agree"] = (10, "2df87c5897b92ad9"),
-        ["VM result type Char?, C# UIntPtr?; values agree"] = (10, "a4f286f3a5c7e9ce"),
-        ["VM result type Byte?, C# Int32?; values agree"] = (20, "7a49cb56b4a77f07"),
-        ["VM result type Int16?, C# Int32?; values agree"] = (20, "f939a2362ca5604a"),
-        ["VM result type SByte?, C# Int32?; values agree"] = (20, "12cce72358c0b831"),
-        ["VM result type UInt16?, C# Int32?; values agree"] = (20, "56aa713b2e2de5c2"),
+        ["VM agrees with C#"] = (587, "c9cef33e2bb6f13f"),
         ["still rejected without the rule: VmExecutesDeclaredOperator"] = (6, "9c9dd8c3277c89fb"),
     };
 

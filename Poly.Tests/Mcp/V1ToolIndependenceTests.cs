@@ -74,6 +74,7 @@ public partial class V1ToolIndependenceTests {
         new("Mcp/OracleToolTests.cs", "McpTestTools.Evolve", 17, "M-13"),
         new("Mcp/OracleToolTests.cs", "McpTestTools.Query", 3, "M-13"),
         new("Mcp/OracleToolTests.cs", "McpTestTools.Session", 1, "M-13"),
+        new("Mcp/PolySurfaceHarnessTests.cs", "McpTestTools.Runtime", 1, "M-13"),
         new("Mcp/SurfaceExtensionDogfoodTests.cs", "McpTestTools.Evolve", 3, "M-13"),
         new("Mcp/SurfaceParityTests.cs", "DslTool", 2, "M-13"),
         new("Mcp/SurfaceParityTests.cs", "OracleTool", 2, "M-13"),

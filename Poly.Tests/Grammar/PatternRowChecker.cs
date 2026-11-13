@@ -80,7 +80,7 @@ internal static class PatternRowChecker {
     internal enum ElementRole {
         /// <summary>Emits fixed text (or nothing): <c>MatchKind</c>, <c>NotFollowedBy</c>, <c>Word</c>.</summary>
         Fixed,
-        /// <summary>A named value or a Slot: always a hole.</summary>
+        /// <summary>A named value, a Slot or a Run: always a hole.</summary>
         Hole,
         /// <summary>A labelled predicate: a hole when the caller supplies its label, else a slot.</summary>
         PredicateLabel,
@@ -103,6 +103,7 @@ internal static class PatternRowChecker {
             Word<TToken, TTokenKind> => ElementRole.Fixed,
             Value<TToken, TTokenKind> { Name: { Length: > 0 } } => ElementRole.Hole,
             Slot<TToken, TTokenKind> => ElementRole.Hole,
+            Poly.Grammar.Run<TToken, TTokenKind> => ElementRole.Hole,
             MatchPredicate<TToken, TTokenKind> { Label: { Length: > 0 } } => ElementRole.PredicateLabel,
             Value<TToken, TTokenKind> => ElementRole.Slot,
             MatchPredicate<TToken, TTokenKind> => ElementRole.Slot,
@@ -322,6 +323,7 @@ internal static class PatternRowChecker {
         private static string HoleName(IPatternElement<TToken, TTokenKind> element) => element switch {
             Value<TToken, TTokenKind> value => value.Name!,
             Slot<TToken, TTokenKind> slot => slot.Name,
+            Poly.Grammar.Run<TToken, TTokenKind> run => run.Name,
             _ => throw new InvalidOperationException($"'{element.GetType().Name}' is not a hole."),
         };
 

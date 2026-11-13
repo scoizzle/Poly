@@ -153,6 +153,25 @@ public sealed class GrammarPatternRowTests {
         await Assert.That(On(badHead, PatternRowCheck.ReadBack, "synthetic-effect", "assign")).Count().IsEqualTo(1);
     }
 
+    // ── G-27 elements: Run is a named hole ────────────────────────────────────
+
+    [Test]
+    public async Task Classify_Run_IsAHole() {
+        var run = new Run<DslToken, DslTokenKind>(DslGrammar.AdjacentSameLine, "version");
+
+        await Assert.That(PatternRowChecker.Classify(run)).IsEqualTo(PatternRowChecker.ElementRole.Hole);
+    }
+
+    [Test]
+    public async Task Check_UsesPinned_DottedPinReadsBack_AndNeedsTheVersionFill() {
+        var good = CheckDsl(Dsl, [Observed(Dsl, "uses", "pinned", "uses http 1.2.3", fills: ["id", "version"])]);
+        var noPin = CheckDsl(Dsl, [Observed(Dsl, "uses", "pinned", "uses http", fills: ["id"])]);
+
+        await Assert.That(good.Where(v => v.Rule == "uses" && v.Pattern == "pinned")).IsEmpty();
+        await Assert.That(On(noPin, PatternRowCheck.Holes, "uses", "pinned")).Count().IsEqualTo(1);
+        await Assert.That(On(noPin, PatternRowCheck.ReadBack, "uses", "pinned")).Count().IsEqualTo(1);
+    }
+
     // ── coverage (A3a) ────────────────────────────────────────────────────────
 
     [Test]

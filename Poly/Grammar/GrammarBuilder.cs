@@ -72,12 +72,20 @@ public sealed class GrammarBuilder<TToken, TTokenKind>
 
     /// <summary>
     /// Fails closed on an element where it cannot work: a <see cref="Slot{TToken,TTokenKind}"/> that is not
-    /// the row's last element, and a Slot inside an <see cref="Optional{TToken,TTokenKind}"/>.
+    /// the row's last element; a <see cref="Run{TToken,TTokenKind}"/> with no required element before it (it
+    /// continues the token before it); and a Slot or Run inside an <see cref="Optional{TToken,TTokenKind}"/>.
     /// </summary>
     private static void EnsurePlacement(string ruleName, Pattern<TToken, TTokenKind> pattern) {
         var elements = pattern.Elements;
+        var required = false;
         for (var i = 0; i < elements.Count; i++) {
             switch (elements[i]) {
+                case Run<TToken, TTokenKind> run when !required:
+                    throw new InvalidOperationException(
+                        $"Run '{run.Name}' on '{ruleName}/{pattern.Name}' is element {i + 1} with no required element before it; a Run continues the token before it.");
+                case Optional<TToken, TTokenKind> { Inner: Run<TToken, TTokenKind> inner }:
+                    throw new InvalidOperationException(
+                        $"Run '{inner.Name}' on '{ruleName}/{pattern.Name}' is inside an Optional; a Run is never optional.");
                 case Slot<TToken, TTokenKind> slot when i != elements.Count - 1:
                     throw new InvalidOperationException(
                         $"Slot '{slot.Name}' on '{ruleName}/{pattern.Name}' is element {i + 1} of {elements.Count}; a Slot must be the last element.");
@@ -85,6 +93,8 @@ public sealed class GrammarBuilder<TToken, TTokenKind>
                     throw new InvalidOperationException(
                         $"Slot '{inner.Name}' on '{ruleName}/{pattern.Name}' is inside an Optional; a Slot is never optional.");
             }
+            if (elements[i] is not (Optional<TToken, TTokenKind> or NotFollowedBy<TToken, TTokenKind>))
+                required = true;
         }
     }
 
@@ -107,6 +117,9 @@ public sealed class GrammarBuilder<TToken, TTokenKind>
                     break;
                 case MatchPredicate<TToken, TTokenKind> { Label: { Length: > 0 } label }:
                     yield return label;
+                    break;
+                case Run<TToken, TTokenKind> run:
+                    yield return run.Name;
                     break;
                 case Optional<TToken, TTokenKind> opt:
                     foreach (var inner in CaptureNames([opt.Inner]))

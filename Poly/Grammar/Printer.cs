@@ -187,8 +187,9 @@ public sealed class Printer<TToken, TTokenKind>
                 ctx.EmitFill(name);
                 return;
 
-            case Run<TToken, TTokenKind>:
-                throw new NotImplementedException("G-27: Run is not printed yet.");
+            case Run<TToken, TTokenKind> run:
+                ctx.EmitFill(run.Name);
+                return;
 
             case Slot<TToken, TTokenKind> slot:
                 ctx.EmitFill(slot.Name);

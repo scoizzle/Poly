@@ -718,16 +718,17 @@ public class NativeIntegerTests {
         await Assert.That(cells.Count(static c => c.Class == "defined: runs right")).IsEqualTo(RunsRight);
     }
 
-    private const int RunsRight = 2114;
+    private const int RunsRight = 2174;
 
     /// <summary>
-    /// The cells whose stated result type is not C#'s, with the right word (T-17: the lowered-tree result typing types a
-    /// native-integer pair as its left operand). Pinned by count and key checksum.
+    /// The cells whose stated result type is not C#'s, with the right word. T-17 typed the 60 arithmetic ones as C#'s; the 24 that
+    /// remain are bitwise cells of a small integer or char beside a native integer, typed as the left operand (T-22: required
+    /// bitwise operands keep the left type). Pinned by count and key checksum.
     /// </summary>
     [Test]
     public async Task Grid_StatedTypeDiffers_IsT17s_PinnedByCountAndChecksum() {
         var cells = NativeIntegerGrid.Cells.Value.Where(static c => c.Class == "defined: right word, stated type differs").ToArray();
-        await Assert.That((cells.Length, Poly.Tests.DomainModeling.Analysis.LedgerCheck.Checksum(cells.Select(static c => c.Key)))).IsEqualTo((84, "e80e8c401b1d4386"));
+        await Assert.That((cells.Length, Poly.Tests.DomainModeling.Analysis.LedgerCheck.Checksum(cells.Select(static c => c.Key)))).IsEqualTo((24, "361d663ed250c4c0"));
     }
 
     /// <summary>Amendment 7: every cell that ran right on 0d2cd4a8^1 runs right now.</summary>
@@ -865,14 +866,14 @@ public class NativeIntegerTests {
         await Assert.That(cells.Where(static c => c.Class is not ("runs right" or "right word, stated type differs" or "undefined: rejected")).Select(static c => c.Line).ToArray()).IsEmpty();
         await Assert.That(cells.Length).IsEqualTo(704);
         await Assert.That(cells.Count(static c => c.Class == "runs right")).IsEqualTo(DefinedConstantCells);
-        // T-17's: a constant narrower than the native operand on the left is typed as the constant.
+        // T-17 typed 78 of the 104 right-word cells as C#'s type. The 26 that remain are a `long` constant beside a native form: nuint beside it is judged by ConstantOperandRule as nuint where C# says ulong (T-26), and `x * 1L`, `x / 1L`, `x % 1L` fold to x typed as x (identity fold keeps the operand's type; found, not fixed).
         var stated = cells.Where(static c => c.Class == "right word, stated type differs").Select(static c => c.Key).ToArray();
         await Assert.That((stated.Length, Poly.Tests.DomainModeling.Analysis.LedgerCheck.Checksum(stated))).IsEqualTo(StatedTypeConstantCells);
     }
 
-    private const int DefinedConstantCells = 336;
+    private const int DefinedConstantCells = 414;
 
-    private static readonly (int, string) StatedTypeConstantCells = (104, "6bfb3e9eeb765c2b");
+    private static readonly (int, string) StatedTypeConstantCells = (26, "ec6c6896f8c181cd");
 
     // ---- F2, F3, F5 ----
 

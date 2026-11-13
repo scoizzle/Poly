@@ -49,7 +49,8 @@ public sealed class GrammarBuilder<TToken, TTokenKind>
     /// <summary>
     /// A template placeholder that is not the row's own capture names an enclosing row's: every row that reaches the rule
     /// (a top-level or optional Ref, Repeat or LeftAssoc operand) must capture it with a required element before that
-    /// reference, or be reached only by rows that do. A rule nothing reaches has no enclosing row, so the name fails.
+    /// reference, or be reached only by rows that do. A rule nothing reaches has no enclosing row, so the name fails; a rule
+    /// two rows reach fails too (<see cref="EnsureSingleReach"/>).
     /// </summary>
     private static void EnsureEnclosingCaptures(Dictionary<string, List<Pattern<TToken, TTokenKind>>> rules) {
         foreach (var (rule, patterns) in rules) {
@@ -63,14 +64,61 @@ public sealed class GrammarBuilder<TToken, TTokenKind>
                         _ => null,
                     };
                     foreach (var name in template is null ? [] : MatchFailure<TToken, TTokenKind>.PlaceholdersOf(template)) {
-                        if (name is not ("expected" or "got" or "token") && !own.Contains(name) && !Enclosed(rules, rule, name, [rule]))
+                        if (name is ("expected" or "got" or "token") || own.Contains(name))
+                            continue;
+                        if (!Enclosed(rules, rule, name, [rule]))
                             throw new InvalidOperationException(
                                 $"The template of '{rule}/{pattern.Name}' names '{{{name}}}', which neither the row nor every row that reaches '{rule}' captures before it.");
+                        EnsureSingleReach(rules, rule, name, $"{rule}/{pattern.Name}", [rule]);
                     }
                 }
             }
         }
     }
+
+    /// <summary>
+    /// A template that reads an enclosing capture needs a single parent: a memoised failure keeps the captures of the first
+    /// row that reached the rule, so two rows reaching it at the same offset would word the report by evaluation order. Each
+    /// rule from <paramref name="rule"/> up to the row that captures <paramref name="name"/> must be reached by exactly one row
+    /// (the reach relation of <see cref="Enclosed"/>); a row that reaches it more than once counts once (its references are
+    /// at different offsets, so they never share a memo entry).
+    /// </summary>
+    private static void EnsureSingleReach(
+        Dictionary<string, List<Pattern<TToken, TTokenKind>>> rules, string rule, string name, string templated, HashSet<string> visited) {
+        var reaching = new List<(string Rule, Pattern<TToken, TTokenKind> Pattern, bool Provides)>();
+        foreach (var (outer, patterns) in rules) {
+            foreach (var pattern in patterns) {
+                var before = new HashSet<string>(StringComparer.Ordinal);
+                var reaches = false;
+                var provides = true;
+                foreach (var element in pattern.Elements) {
+                    if (ReferencedRule(element) == rule) {
+                        reaches = true;
+                        provides &= before.Contains(name);
+                    }
+                    if (element is not (Optional<TToken, TTokenKind> or NotFollowedBy<TToken, TTokenKind>))
+                        before.UnionWith(CaptureNames([element]));
+                }
+                if (reaches)
+                    reaching.Add((outer, pattern, provides));
+            }
+        }
+        if (reaching.Count != 1)
+            throw new InvalidOperationException(
+                $"The template of '{templated}' reads the enclosing capture '{{{name}}}', so '{rule}' may be reached by one row only; it is reached by "
+                + $"{string.Join(", ", reaching.OrderBy(r => r.Pattern.Order).Select(r => $"'{r.Rule}/{r.Pattern.Name}'"))}. A memoised failure keeps the captures of the first row that reached it.");
+        var (parent, _, provided) = reaching[0];
+        if (!provided && visited.Add(parent))
+            EnsureSingleReach(rules, parent, name, templated, visited);
+    }
+
+    private static string? ReferencedRule(IPatternElement<TToken, TTokenKind> element) => element switch {
+        Ref<TToken, TTokenKind> r => r.RuleName,
+        Repeat<TToken, TTokenKind> r => r.RuleName,
+        LeftAssoc<TToken, TTokenKind> l => l.OperandRule,
+        Optional<TToken, TTokenKind> { Inner: Ref<TToken, TTokenKind> r } => r.RuleName,
+        _ => null,
+    };
 
     private static bool Enclosed(Dictionary<string, List<Pattern<TToken, TTokenKind>>> rules, string rule, string name, HashSet<string> visited) {
         var reached = false;
@@ -78,14 +126,7 @@ public sealed class GrammarBuilder<TToken, TTokenKind>
             foreach (var pattern in patterns) {
                 var before = new HashSet<string>(StringComparer.Ordinal);
                 foreach (var element in pattern.Elements) {
-                    var target = element switch {
-                        Ref<TToken, TTokenKind> r => r.RuleName,
-                        Repeat<TToken, TTokenKind> r => r.RuleName,
-                        LeftAssoc<TToken, TTokenKind> l => l.OperandRule,
-                        Optional<TToken, TTokenKind> { Inner: Ref<TToken, TTokenKind> r } => r.RuleName,
-                        _ => null,
-                    };
-                    if (target == rule) {
+                    if (ReferencedRule(element) == rule) {
                         reached = true;
                         if (!before.Contains(name) && (visited.Contains(outer) || !Enclosed(rules, outer, name, [.. visited, outer])))
                             return false;
@@ -353,7 +394,9 @@ public sealed class PatternBuilder<TToken, TTokenKind>
     /// Names the element before it in a failure report: <paramref name="label"/> is what the report says was
     /// expected, and <paramref name="template"/> (optional) is the row's own message when this element is the first
     /// expected element (placeholders <c>{expected}</c>, <c>{got}</c> and a capture name of a required element
-    /// before it). Only a token element takes one: a Kind, Value, Predicate, Word or Run.
+    /// before it). Only a token element takes one: a Kind, Value, Predicate, Word or Run. A capture the row does not take
+    /// itself is an enclosing row's, read innermost first; a rule whose template reads one is reached by one row only
+    /// (<c>Build</c> throws otherwise), because a memoised failure keeps the captures of the first row that reached it.
     /// </summary>
     public PatternBuilder<TToken, TTokenKind> Expect(string label, string? template = null) {
         ArgumentException.ThrowIfNullOrEmpty(label);
@@ -387,7 +430,10 @@ public sealed class PatternBuilder<TToken, TTokenKind>
     /// row matches, the catch-all commits and the whole match ends, so such loops stay host-driven (the host matches one
     /// item at a time and tests for the terminator itself). A Refuse-only catch-all also outranks a deeper plain failure of a
     /// sibling (committed failures only are reported), so a sibling whose own error must win needs a <c>Cut</c> after its
-    /// discriminating token, not after a prefix it shares with other rows.
+    /// discriminating token, not after a prefix it shares with other rows. The message is a template like an <c>Expect</c>
+    /// template: a capture the row does not take itself is an enclosing row's, read innermost first, and a rule whose
+    /// message reads one is reached by one row only (<c>Build</c> throws otherwise), because a memoised failure keeps the
+    /// captures of the first row that reached it.
     /// </remarks>
     public PatternBuilder<TToken, TTokenKind> Refuse(string message, string? at = null) {
         ArgumentException.ThrowIfNullOrEmpty(message);

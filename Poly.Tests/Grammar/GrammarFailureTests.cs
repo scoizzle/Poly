@@ -618,6 +618,75 @@ public sealed class GrammarFailureTests {
             .Build()).Throws<InvalidOperationException>();
     }
 
+    // A rule whose template reads an enclosing row's capture is reached by one row only: a memoised failure keeps the
+    // captures of the first row that reached it, so two parents at the same offset would report by evaluation order.
+    private static RuleBuilder<TestToken, TestKind> NamedNumber(GrammarBuilder<TestToken, TestKind> table) => table
+        .Define("p").Pattern("p").Kind(TestKind.Colon).Kind(TestKind.Number).Expect("a number", "Expected a number for '{name}', got '{got}'").Commit();
+
+    [Test]
+    public async Task Template_ReadingAnEnclosingCapture_InARuleTwoRowsReach_IsRejectedAtBuild() {
+        var ex = Assert.Throws<InvalidOperationException>(() => NamedNumber(Table())
+            .Define("top")
+                .Pattern("first").Any().Value(TestKind.Identifier, "name").Ref("p").Commit()
+                .Pattern("second").Value(TestKind.Identifier, "name").Any().Ref("p").Optional(TestKind.Comma).Commit()
+            .Build());
+
+        await Assert.That(ex.Message).Contains("'p/p'");
+        await Assert.That(ex.Message).Contains("{name}");
+        await Assert.That(ex.Message).Contains("'top/first'");
+        await Assert.That(ex.Message).Contains("'top/second'");
+    }
+
+    [Test]
+    public async Task Template_ReadingAnEnclosingCapture_InARuleOneRowReaches_BuildsAndReportsThatRowsName() {
+        var grammar = NamedNumber(Table())
+            .Define("top").Pattern("first").Any().Value(TestKind.Identifier, "name").Ref("p").Commit()
+            .Build();
+
+        var outcome = Match(grammar, "top", "x y : z");
+
+        await Assert.That(outcome.Failure!.Expand("a number", t => t.Text)).IsEqualTo("Expected a number for 'y', got 'z'");
+    }
+
+    [Test]
+    public async Task Template_ReadingAnEnclosingCapture_ThroughAnIntermediateRuleTwoRowsReach_IsRejectedAtBuild() {
+        // `p` is reached by one row (`mid/m`), which does not capture {name}; `mid` is reached by two rows that do.
+        var ex = Assert.Throws<InvalidOperationException>(() => NamedNumber(Table())
+            .Define("mid").Pattern("m").Kind(TestKind.Entity).Ref("p").Commit()
+            .Define("top")
+                .Pattern("a").Value(TestKind.Identifier, "name").Ref("mid").Commit()
+                .Pattern("b").Value(TestKind.Identifier, "name").Kind(TestKind.Comma).Ref("mid").Commit()
+            .Build());
+
+        await Assert.That(ex.Message).Contains("'mid'");
+        await Assert.That(ex.Message).Contains("'top/a'");
+        await Assert.That(ex.Message).Contains("'top/b'");
+    }
+
+    [Test]
+    public async Task Template_ReadingAnEnclosingCapture_FromOneRowThatReachesTheRuleTwice_Builds() {
+        // One row is one parent: its references are at different offsets, so they never share a memo entry.
+        var grammar = NamedNumber(Table())
+            .Define("top").Pattern("twice").Value(TestKind.Identifier, "name").Ref("p").Kind(TestKind.Comma).Ref("p").Commit()
+            .Build();
+
+        var outcome = Match(grammar, "top", "x : 1 , : z");
+
+        await Assert.That(outcome.Failure!.Expand("a number", t => t.Text)).IsEqualTo("Expected a number for 'x', got 'z'");
+    }
+
+    [Test]
+    public async Task Template_ReadingAnEnclosingCapture_ProvidedFurtherUpASingleChain_Builds() {
+        var grammar = NamedNumber(Table())
+            .Define("mid").Pattern("m").Kind(TestKind.Entity).Ref("p").Commit()
+            .Define("top").Pattern("t").Value(TestKind.Identifier, "name").Ref("mid").Commit()
+            .Build();
+
+        var outcome = Match(grammar, "top", "x entity : z");
+
+        await Assert.That(outcome.Failure!.Expand("a number", t => t.Text)).IsEqualTo("Expected a number for 'x', got 'z'");
+    }
+
     [Test]
     public async Task Refuse_TiedWithAPlainPostCutFailure_ReportsTheSamePositionAndMessage_InEitherDeclarationOrder() {
         static Grammar<TestToken, TestKind> Rows(bool refusalFirst) {

@@ -34,11 +34,20 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
         // A fractional literal against Number / Int / Int64 is rejected here. Both
         // sides are category Number, so Compatible would allow the pair.
         ReportFractionalLiteral(context, cmp.Left, left, cmp.Right, right);
-        if (MixedDateGranularity(left, right) || !Compatible(left, right))
+        if (MixedDateGranularity(left, right) || (!NullAgainstRead(cmp) && !Compatible(left, right)))
             Report(context, cmp,
                 $"comparison between incompatible types '{Describe(left)}' and '{Describe(right)}'");
 
         WalkExpression(context, cmp.Left, props, parameters, enumTypes);
         WalkExpression(context, cmp.Right, props, parameters, enumTypes);
     }
+
+    /// <summary>
+    /// Seam N2 (T-05a review F2; owner T-06): <c>null</c> compared with a path-prefix, binder or owned read keeps
+    /// master's answer, accepted. That read's type carries no optionality yet (an optional member, an unlinked hop),
+    /// so rejecting it here would flip back once T-06 types optionality.
+    /// </summary>
+    private static bool NullAgainstRead(Comparison cmp) =>
+        cmp.Left is Literal { Value: null } && cmp.Right is RelationshipNavigation or OwnedAccess
+        || cmp.Right is Literal { Value: null } && cmp.Left is RelationshipNavigation or OwnedAccess;
 }

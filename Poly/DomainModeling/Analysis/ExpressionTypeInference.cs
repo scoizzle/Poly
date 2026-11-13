@@ -311,8 +311,11 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
     }
 
     /// <summary>
-    /// <c>sum Rel P</c>: <see cref="DomainTypeModel.SumResult"/> of <c>P</c> on the relationship's target, stated on
-    /// the node so lowering's typed seed can be checked against it. A sum this cannot type (no entity scope, an
+    /// <c>sum Rel P</c>: <see cref="DomainTypeModel.SumResult"/> of <c>P</c> on the relationship's target. The type is
+    /// stated on the node as <see cref="TypedExpressionMetadata"/>; its readers are the analysis-and-lowering agreement
+    /// tests (<c>AnalysisGateParityTests.Sum_UnderClrOverride_AnalysisAndLoweringAgree</c> and
+    /// <c>Sum_WithoutOverride_AnalysisAndLoweringAgreeOnDecimal</c>), which compare it with lowering's seed; no
+    /// production pass reads it (lowering recomputes <c>SumResult</c>). A sum this cannot type (no entity scope, an
     /// unknown relationship or property, a non-numeric property) is the Number family it was before T-05a;
     /// <c>PolicyConstraintAnalyzer</c> reports the bad shapes.
     /// </summary>

@@ -22,12 +22,13 @@ namespace Poly.Tests.DomainModeling.Analysis;
 /// <item><c>A-sum</c>: <c>sum</c>'s numeric check by the property's numeric kind, not its spelling (plan M2).</item>
 /// <item><c>A-sum-override</c>: fork B; a pack override onto a CLR type the model has no primitive for leaves the
 /// property untyped, so the numeric check fires (master accepted it by name and lowering seeded <c>0L</c>).</item>
-/// <item><c>F1-date-difference</c>: review F1 (fix round 1); a date minus a date of the same granularity is decided
-/// on the operands' inferred types, so library-typed operands master rejected (<c>Now - Stamp</c>) are accepted.</item>
 /// </list>
 /// <para>
 /// Not a row (seam N2, owner T-06): <c>null</c> compared with a path-prefix, binder or owned read keeps master's
-/// answer, accepted, because that read's type carries no optionality yet. The rows are derived by the script quoted
+/// answer, accepted, because that read's type carries no optionality yet. Nor is a date minus a date of two properties:
+/// master's exemption for that one shape, the shape lowering rewrites to <c>Subtract</c>, stays (removing row T-10),
+/// so a typed date operand of any other shape meets the arithmetic rule (<c>A-arithmetic</c>; review F1, where
+/// GateParity shows the VM refuses those shapes). The rows are derived by the script quoted
 /// in PR #845's body from the master dumps; the hand rows at its end are the cells outside the form grids.
 /// </para>
 /// </summary>
@@ -800,10 +801,15 @@ public partial class AnalyzerClosingRoundPinTests {
         ("SumPropertyKinds", "Id64 | policy sum > 0", "DMSEM005", "ok", "A-sum"),
         ("SumPropertyKindsF3", "Double [Double -> float] | policy sum > 0", "DMSEM005", "DMSEM005 (not numeric)", "A-sum-override"),
         ("SumPropertyKindsF3", "Int [Int -> short] | policy sum > 0", "DMSEM005", "DMSEM005 (not numeric)", "A-sum-override"),
+        ("DateDifference", "(part Due - Due) == (Due - Due)", "ok", "DMSEM003", "A-arithmetic"),
+        ("DateDifference", "(Due - part Due) == (Due - Due)", "ok", "DMSEM003", "A-arithmetic"),
+        ("DateDifference", "(part Due - part Due) == (Due - Due)", "ok", "DMSEM003", "A-arithmetic"),
+        ("DateDifference", "((Due + A) - Due) == (Due - Due)", "ok", "DMSEM003", "A-arithmetic"),
+        ("DateDifference", "(Due - (Due + A)) == (Due - Due)", "ok", "DMSEM003", "A-arithmetic"),
+        ("DateDifference", "assign Gap to part Stamp - Stamp", "ok", "DMSEM003", "A-arithmetic"),
+        ("DateDifference", "assign Gap to (Stamp + A) - Stamp", "ok", "DMSEM003", "A-arithmetic"),
+        ("DateDifference", "for p in parts { assign Gap to p Stamp - Stamp }", "ok", "DMSEM003", "A-arithmetic"),
         ("DateDifference", "mixed assign Gap to part Stamp - Due", "ok", "DMSEM003", "A-arithmetic"),
-        ("DateDifference", "library assign Gap to Now - Stamp", "DMSEM003", "ok", "F1-date-difference"),
-        ("DateDifference", "library (Today - Due) == (Due - Due)", "DMSEM003", "ok", "F1-date-difference"),
-        ("DateDifference", "library assign Gap to (Stamp + 1 Days) - Stamp", "DMSEM003", "ok", "F1-date-difference"),
     ];
 
     /// <summary>
@@ -857,7 +863,7 @@ public partial class AnalyzerClosingRoundPinTests {
 
     /// <summary>The totals the PR body quotes; computed by <see cref="FlipTotals"/>, never hand-summed.</summary>
     private const string Totals = """
-total 771: 766 tighten, 5 loosen
+total 776: 774 tighten, 2 loosen
 grid FormGrid: 488
 grid FormGridF3: 270
 grid TypelessSources: 2
@@ -866,8 +872,8 @@ grid DateOperationOverTypelessDate: 1
 grid ImportedContractNameClash: 1
 grid SumPropertyKinds: 2
 grid SumPropertyKindsF3: 2
-grid DateDifference: 4
-rule A-arithmetic: 49
+grid DateDifference: 9
+rule A-arithmetic: 57
 rule A-assign: 258
 rule A-boolean: 87
 rule A-call: 66
@@ -876,9 +882,8 @@ rule A-match-arm: 74
 rule A-return: 17
 rule A-sum: 2
 rule A-sum-override: 2
-rule F1-date-difference: 3
-valid on master: 705
-already rejected on master: 66
+valid on master: 713
+already rejected on master: 63
 """;
 
     [Test]

@@ -495,6 +495,11 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                     var leftType = InferType(context, sub.Left, props, parameters, enumTypes);
                     var rightType = InferType(context, sub.Right, props, parameters, enumTypes);
                     // Same-family date minus date is a difference, not arithmetic; mixed families stay errors.
+                    // The exemption is the two-property shape lowering rewrites to `left.Subtract(right)`
+                    // (TemporalLowering.DateAddDaysLowering); any other date difference lowers to a raw subtraction
+                    // the VM refuses, so a typed date operand of another shape meets the arithmetic rule (T-05a
+                    // review F1, GateParity). Removing row: T-10 decides a date difference on the operands' types in
+                    // analysis and lowering together.
                     if (IsDate(leftType) && IsDate(rightType)
                         && !MixedDateGranularity(leftType, rightType)) {
                         WalkExpression(context, sub.Left, props, parameters, enumTypes, walked);

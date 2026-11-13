@@ -149,21 +149,41 @@ public class AnalysisGateParityTests {
         """;
 
     /// <summary>
-    /// Review F1 (fix round 1): a date minus a date of the same granularity is a difference, decided on the operands'
-    /// inferred types; master exempted only two bare properties, so once T-05a typed a path-prefix or arithmetic
-    /// operand the difference was rejected as non-numeric arithmetic. Each row must be accepted by every door.
+    /// Review F1 (fix round 1). A date minus a date is a difference only as two properties: that is the shape lowering
+    /// rewrites to <c>left.Subtract(right)</c> (<c>TemporalLowering.DateAddDaysLowering</c>). Any other shape lowers
+    /// to a raw subtraction, and the VM refuses it. With the analyzer's exemption widened to every date-typed operand
+    /// (this round, then reverted), GateParity recorded these rows: <c>part Stamp - Stamp</c> and
+    /// <c>(Stamp + A) - Stamp</c> failed <c>polyc check</c> ("arithmetic operand is not numeric (got 'DateTime' and
+    /// 'DateTime')"), and <c>part Due - Due</c> also failed the generated C# (CS0019 on <c>DateOnly - DateOnly</c>).
+    /// So analysis rejects them, and the two-property DateTime control passes every door. T-10 owns deciding a date
+    /// difference on types, in analysis and lowering together.
     /// </summary>
     [Test]
-    [Arguments("the review's repro", "Ok: policy { (part Due - Due) == (Due - Due) }")]
-    [Arguments("a path-prefixed operand", "Close: action { assign Gap to part Stamp - Stamp }")]
-    [Arguments("a parenthesised operand", "Close: action { assign Gap to (Stamp + A) - Stamp }")]
-    [Arguments("control: two properties", "Close: action { assign Gap to Stamp - Stamp }")]
-    public async Task DateDifference_OfTypedDateOperands_IsAcceptedByEveryDoor(string row, string members) {
+    [Arguments("the review's repro", "Ok: policy { (part Due - Due) == (Due - Due) }", false)]
+    [Arguments("a path-prefixed operand", "Close: action { assign Gap to part Stamp - Stamp }", false)]
+    [Arguments("a parenthesised operand", "Close: action { assign Gap to (Stamp + A) - Stamp }", false)]
+    [Arguments("control: two DateTime properties", "Close: action { assign Gap to Stamp - Stamp }", true)]
+    public async Task DateDifference_AnalysisAcceptsOnlyTheShapeLoweringLowers_UntilT10(string row, string members, bool accepted) {
         var result = GateParity.Check(DateDocument(members),
             SimStep.Create("Item", """{"A":1,"Due":"2026-01-01","Stamp":"2026-01-01T00:00:00Z"}""", "i"));
 
-        await Assert.That(result.Analysis).IsTrue().Because($"{row}: {result}");
+        await Assert.That(result.Analysis).IsEqualTo(accepted).Because($"{row}: {result}");
         await Assert.That(result.Holds).IsTrue().Because($"{row}: {result}");
+    }
+
+    /// <summary>
+    /// Found, not fixed (owner T-10): two Date (DateOnly) properties subtracted are accepted by analysis, lowered to
+    /// <c>Due.Subtract(Due)</c>, and refused by the other doors, because DateOnly has no subtraction. This is master's
+    /// gap, pinned so it cannot change unseen; T-10's temporal rule set removes it.
+    /// </summary>
+    [Test]
+    public async Task DateOnlyDifferenceOfTwoProperties_AnalysisAccepts_TheDoorsRefuse_GapOwnedByT10() {
+        var result = GateParity.Check(DateDocument("Ok: policy { (Due - Due) == (Due - Due) }"),
+            SimStep.Create("Item", """{"A":1,"Due":"2026-01-01","Stamp":"2026-01-01T00:00:00Z"}""", "i"));
+
+        await Assert.That(result.Analysis).IsTrue().Because(result.ToString());
+        await Assert.That(result.CSharp is false).IsTrue().Because(result.ToString());
+        await Assert.That(result.PolycCheck is false).IsTrue().Because(result.ToString());
     }
 
     private static (Domain Domain, SumExpr Sum) SumDomain() {

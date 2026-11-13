@@ -205,7 +205,7 @@ public class DomainTypeModelTests {
     [Test]
     public async Task Assign_NumberToDecimal_IsWidening() {
         var model = Model();
-        var door = Clr(typeof(decimal)).GetConversionFrom(Clr(typeof(long)));
+        var door = Clr(typeof(decimal)).ResolveConversionFrom(Clr(typeof(long)));
         await Assert.That(door?.Kind).IsEqualTo(ConversionOperatorKind.Implicit);
         await Assert.That(model.Assign(model.Resolve("Number"), model.Resolve("Decimal"))).IsEqualTo(Assignability.Widening);
     }
@@ -240,11 +240,15 @@ public class DomainTypeModelTests {
     }
 
     [Test]
-    public async Task Assign_DoubleToDecimal_IsNotWidening_EvenThoughIsNumericWideningFromSaysYes() {
+    public async Task Assign_DoubleToDecimal_IsNotWidening_ProviderAnswersExplicitWithADeclaredMethod() {
         var model = Model();
         var floatType = model.Resolve("Float");
         var decimalType = model.Resolve("Decimal");
-        await Assert.That(decimalType.Definition!.IsNumericWideningFrom(floatType.Definition!)).IsTrue();
+        // The first assertion used to pin the rank table's disagreement (it called Float64 -> Decimal widening). The
+        // member is gone; the provider's own answer is stronger: explicit, through the declared decimal.op_Explicit(double).
+        var conversion = decimalType.Definition!.ResolveConversionFrom(floatType.Definition!);
+        await Assert.That(conversion?.Kind).IsEqualTo(ConversionOperatorKind.Explicit);
+        await Assert.That(conversion?.Method?.Name).IsEqualTo("op_Explicit");
         await Assert.That(model.Assign(floatType, decimalType)).IsEqualTo(Assignability.RoundingNarrowing);
     }
 

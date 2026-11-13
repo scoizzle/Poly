@@ -354,6 +354,16 @@ public sealed class GrammarPatternRowTests {
         await Assert.That(PatternRowAllowList.For(CSharpKey)).IsNotEmpty();
     }
 
+    [Test]
+    public async Task Check_PendingOrchestratorOwner_FailsTheSchema() {
+        var entry = PatternRowEntry.Row(CSharpKey, PatternRowEntryKind.ReaderOnly, "name", "simple", "self-test", "pending orchestrator");
+
+        var schema = On(CheckCSharp(CSharp, [], [entry]), PatternRowCheck.Schema, "name", "simple");
+
+        await Assert.That(schema).Count().IsEqualTo(1);
+        await Assert.That(schema[0].Message).Contains("malformed owner");
+    }
+
     // ── examples (A3c) ────────────────────────────────────────────────────────
 
     private static readonly PatternRowEntry TopEnumHead =

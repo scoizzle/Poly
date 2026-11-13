@@ -18,11 +18,14 @@ public sealed class PrinterRenderTests {
     };
 
     // decl/typed: name ':' <type> ['*']  → two content positions (the type, the optional star).
+    // decl/pair: <a> ':' <b>  → two content positions and no named hole.
     private static Grammar<TestToken, TestKind> Table() => new GrammarBuilder<TestToken, TestKind>()
         .Define("decl")
             .Pattern("typed")
                 .Value(TestKind.Identifier, "name").Kind(TestKind.Colon).Value(TestKind.Identifier)
                 .Optional(TestKind.Star).Commit()
+            .Pattern("pair")
+                .Value(TestKind.Identifier).Kind(TestKind.Colon).Value(TestKind.Identifier).Commit()
         .Build();
 
     private static Printer<TestToken, TestKind> NewPrinter() => new(Table(), Canonical);
@@ -68,6 +71,19 @@ public sealed class PrinterRenderTests {
 
         await Assert.That(error.Message).Contains("'decl/typed'");
         await Assert.That(error.Message).Contains("has 2 content positions; the caller supplied 1");
+    }
+
+    [Test]
+    public async Task Render_NullContentArray_IsNoValues_AndThrowsNamingTheRow() {
+        var printer = NewPrinter();
+
+        var withFills = Assert.Throws<InvalidOperationException>(() =>
+            printer.Render("decl", "typed", Fills.Of(("name", "Count")), (string?[])null!));
+        var contentOnly = Assert.Throws<InvalidOperationException>(() =>
+            printer.Render("decl", "pair", (string?[])null!));
+
+        await Assert.That(withFills.Message).Contains("'decl/typed' has 2 content positions; the caller supplied 0");
+        await Assert.That(contentOnly.Message).Contains("'decl/pair' has 2 content positions; the caller supplied 0");
     }
 
     [Test]

@@ -177,29 +177,6 @@ public sealed class Matcher<TToken, TTokenKind>
                 piece = Piece.TokensOnly(predTokens);
                 return true;
 
-            case Word<TToken, TTokenKind> w:
-                var wt = _reader.Peek(offset);
-                if (_reader.EndOfStream(wt.Kind) || !w.Matches(wt)) {
-                    piece = default;
-                    return false;
-                }
-                piece = Piece.TokensOnly([wt]);
-                return true;
-
-            case Slot<TToken, TTokenKind>:
-                // Zero width: the row ends here and the host reads what follows.
-                piece = Piece.Empty;
-                return true;
-
-            case Run<TToken, TTokenKind> run:
-                if (!TryRun(run, offset, matched, out var runTokens)) {
-                    piece = default;
-                    return false;
-                }
-                RecordCapture(captures, run.Name, runTokens);
-                piece = Piece.TokensOnly(runTokens);
-                return true;
-
             case Optional<TToken, TTokenKind> o:
                 if (TryMatchElement(o.Inner, offset, captures, matched, out piece))
                     return true;
@@ -245,6 +222,29 @@ public sealed class Matcher<TToken, TTokenKind>
                     return false;
                 }
                 piece = Piece.Empty;
+                return true;
+
+            case Word<TToken, TTokenKind> w:
+                var wt = _reader.Peek(offset);
+                if (_reader.EndOfStream(wt.Kind) || !w.Matches(wt)) {
+                    piece = default;
+                    return false;
+                }
+                piece = Piece.TokensOnly([wt]);
+                return true;
+
+            case Slot<TToken, TTokenKind>:
+                // Zero width: the row ends here and the host reads what follows.
+                piece = Piece.Empty;
+                return true;
+
+            case Run<TToken, TTokenKind> run:
+                if (!TryRun(run, offset, matched, out var runTokens)) {
+                    piece = default;
+                    return false;
+                }
+                RecordCapture(captures, run.Name, runTokens);
+                piece = Piece.TokensOnly(runTokens);
                 return true;
 
             default:

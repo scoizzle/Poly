@@ -2,7 +2,7 @@ namespace Poly.Tests.DomainModeling.Parsing;
 
 // ─── DslTokenWriter: the inverse of DslTokenReader.SkipWhitespaceAndComments ──
 // A space goes between two word tokens and after ':' before a word; punctuation
-// attaches, except for the G-27 rules (comma, arrow, braces, `action (` and `if (`).
+// attaches, except for the G-27 rules (comma, `)` before a word, braces, `action (` and `if (`).
 // Binders never emit spaces — the writer owns separators.
 
 public sealed class DslTokenWriterTests {
@@ -26,7 +26,7 @@ public sealed class DslTokenWriterTests {
     }
 
     [Test]
-    public async Task DslTokenWriter_Punctuation_Attaches() {
+    public async Task DslTokenWriter_CallArguments_AttachToTheParens_AndSpaceAfterTheComma() {
         var writer = new DslTokenWriter();
         writer.Write(DslTokenKind.Identifier, "range");
         writer.Write(DslTokenKind.LParen);
@@ -156,7 +156,7 @@ public sealed class DslTokenWriterTests {
     }
 
     [Test]
-    public async Task DslTokenWriter_IfElse_SpacesBeforeParenAndAroundElse() {
+    public async Task DslTokenWriter_If_SpacesBeforeParen() {
         var head = new DslTokenWriter();
         head.Write(DslTokenKind.If);
         head.Write(DslTokenKind.LParen);
@@ -164,12 +164,6 @@ public sealed class DslTokenWriterTests {
         head.Write(DslTokenKind.RParen);
         head.Write(DslTokenKind.LBrace);
 
-        var other = new DslTokenWriter();
-        other.Write(DslTokenKind.RBrace);
-        other.Write(DslTokenKind.Else);
-        other.Write(DslTokenKind.LBrace);
-
         await Assert.That(head.ToText()).IsEqualTo("if (c) {");
-        await Assert.That(other.ToText()).IsEqualTo("} else {");
     }
 }

@@ -12,13 +12,13 @@ namespace Poly.DomainModeling.Language;
 /// <para>The rules (G-27) reproduce the hand printer's bytes from tokens:</para>
 /// <list type="bullet">
 /// <item>a space after <c>,</c> before a word (<c>key(A, B)</c>, <c>(p: T, q: U)</c>);</item>
-/// <item>a space after <c>)</c> before a word (<c>initial(S) key(A)</c>, <c>) -&gt; R</c>) and before <c>-&gt;</c>;</item>
+/// <item>a space after <c>)</c> before a word (<c>initial(S) key(A)</c>, <c>) -&gt; R</c>: <c>-&gt;</c> is a word kind);</item>
 /// <item>a space before <c>(</c> after <c>action</c> or <c>if</c>, or after a word that follows <c>action</c>
 /// (<c>action (p: T)</c>, <c>action Place (p: T)</c>, <c>if (c)</c>). A word followed by <c>(</c> is the one
 /// pair spaced two ways (<c>key(</c>, <c>initial(</c>, <c>function F(</c>, <c>invoke R.A(</c> and <c>range(</c>
 /// attach), so this rule is keyed on a token TRIPLE: the writer remembers the kind before the last;</item>
 /// <item>a space before <c>{</c> after a word or <c>)</c>; after <c>{</c> and before <c>}</c> next to a word
-/// (<c>policy { e }</c>), with <c>{}</c> attached when empty; after <c>}</c> before a word.</item>
+/// (<c>policy { e }</c>), with <c>{}</c> attached when empty.</item>
 /// </list>
 /// Raw text (<see cref="Write(DslTokenKind, string)"/> with the default kind: a fill) is a word and
 /// takes part in the look-back like any token.
@@ -58,10 +58,9 @@ public sealed class DslTokenWriter : ITokenWriter<DslTokenKind> {
 
     private bool NeedSpace(DslTokenKind next, bool nextIsWord) {
         if (nextIsWord && (_lastIsWord || _lastKind is DslTokenKind.Colon or DslTokenKind.Comma
-                or DslTokenKind.RParen or DslTokenKind.LBrace or DslTokenKind.RBrace))
+                or DslTokenKind.RParen or DslTokenKind.LBrace))
             return true;
         return next switch {
-            DslTokenKind.Arrow => true,
             DslTokenKind.LParen => _lastKind is DslTokenKind.Action or DslTokenKind.If
                 || (_lastIsWord && _beforeLastKind == DslTokenKind.Action),
             DslTokenKind.LBrace => _lastIsWord || _lastKind == DslTokenKind.RParen,

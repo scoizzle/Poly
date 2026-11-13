@@ -1222,7 +1222,22 @@ public class LambdaBridgeProviderTests {
         await Assert.That(violations).IsEmpty();
         // The identity cells run whatever the provider knows: nint -> nint, nuint -> nuint, and the same-type conditionals.
         await Assert.That(outcomes.Count(static o => o.Outcome.Stage == "ran")).IsGreaterThanOrEqualTo(4);
+        // T-18b defines the native operators: each (stage, provider answer) bucket is pinned by count. A positioned bridge
+        // refusal of a provider-defined cell is T-21's (the ABI executes what the provider states or refuses it); a refusal
+        // before the bridge (the function-table compile) is T-19b's.
+        var buckets = outcomes.GroupBy(static o => $"{o.Outcome.Stage}|{(o.Answer is null ? "undefined" : "defined")}")
+            .OrderBy(static g => g.Key, StringComparer.Ordinal).Select(static g => $"{g.Key}={g.Count()}");
+        await Assert.That(string.Join(", ", buckets)).IsEqualTo(NativeBuckets);
     }
+
+    /// <summary>
+    /// T-18b's provider over the 732 native cells: 76 run with the provider's type; 341 provider-defined cells are a
+    /// positioned bridge refusal (owner T-21: the bridge cannot state IntPtr/UIntPtr arithmetic, comparison and shift in
+    /// an expression tree); 4 defined and 36 undefined are refused before the bridge, in the function-table compile
+    /// (T-19b); 112 and 163 undefined cells are refused by the analysis and by the bridge.
+    /// </summary>
+    private const string NativeBuckets =
+        "analysis-rejected|undefined=112, bridge-rejected|defined=341, bridge-rejected|undefined=163, main-rejected|defined=4, main-rejected|undefined=36, ran|defined=76";
 
     private static BridgeCase Cell(string grid, string key) => BridgeGrid.Cases.Single(c => c.Grid == grid && c.Key == key);
 

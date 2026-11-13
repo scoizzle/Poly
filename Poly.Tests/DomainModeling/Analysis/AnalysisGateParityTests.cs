@@ -71,6 +71,66 @@ public class AnalysisGateParityTests {
         await Assert.That(Evaluated(run.Step(4))).IsTrue();
     }
 
+    /// <summary>#510 as filed: the issue's document and its simulate steps, through every door.</summary>
+    [Test]
+    public async Task Issue510_TheFiledDocument_EveryDoorAccepts() {
+        var result = GateParity.Check("""
+            domain T
+            Cust: entity {
+              accounts: many Acct
+              Big: policy { sum accounts Bal > 100 }
+              Open: action { create in accounts { Bal: 1.5 } }
+            }
+            Acct: entity {
+              Bal: Decimal
+            }
+            """,
+            SimStep.Create("Cust", alias: "c"), SimStep.Invoke("c", "Open"), SimStep.Evaluate("Cust", "Big", "c"));
+
+        await Assert.That(result.Analysis).IsTrue().Because(result.ToString());
+        await Assert.That(result.Holds).IsTrue().Because(result.ToString());
+    }
+
+    /// <summary>
+    /// Seam N1 (lock #679 6841065713, amendment 10): <c>null</c> compared with a value type is accepted by analysis
+    /// through T-05 (the leniency for entity, value type and Binary against <c>null</c>); T-06 owns removing that
+    /// allowance. Pinned here: the VM and the generated C# both accept it too, so no door disagrees today (no
+    /// CS0019: the generated value type compares with <c>null</c>). A value type cannot be a stored property
+    /// (DMSTR006), so the reachable shapes are an action parameter and a function parameter.
+    /// </summary>
+    [Test]
+    [Arguments("action parameter", """
+        domain T
+        Money: value {
+          Amount: Number
+        }
+        Acct: entity {
+          N: Number
+          Set: action (m: Money) { if (m == null) { assign N to 1 } }
+        }
+        """, true)]
+    [Arguments("function parameter", """
+        domain T
+        Money: value {
+          Amount: Number
+        }
+        Acct: entity {
+          N: Number
+        }
+        function IsNone(m: Money): Boolean = m == null
+        """, false)]
+    public async Task ValueTypeComparedToNull_N1_IsAcceptedByEveryDoor_UntilT06(string shape, string dsl, bool invoke) {
+        SimStep[] steps = invoke
+            ? [SimStep.Create("Acct", """{"N":0}""", "a"), SimStep.Invoke("a", "Set", """{"m":{"Amount":2}}""")]
+            : [SimStep.Create("Acct", """{"N":0}""", "a")];
+        var result = GateParity.Check(dsl, steps);
+
+        await Assert.That(result.Analysis).IsTrue().Because($"{shape}: {result}");
+        await Assert.That(result.Simulate is true).IsTrue().Because($"{shape}: {result}");
+        await Assert.That(result.CSharp is true).IsTrue().Because($"{shape}: {result}");
+        await Assert.That(result.PolycCheck is true).IsTrue().Because($"{shape}: {result}");
+    }
+
     private static (Domain Domain, SumExpr Sum) SumDomain() {
         var sum = (SumExpr)DomainExpression.Sum("items", "Amount");
         var item = new Entity("Item", [new Property("Amount", new DomainTypeReference("Decimal"), [])], [], [], []);

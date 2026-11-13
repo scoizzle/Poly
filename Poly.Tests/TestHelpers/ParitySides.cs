@@ -111,6 +111,9 @@ sealed class PrintedSide(Domain domain, Assembly assembly, IReadOnlySet<string>?
 
     internal RecordingStoragePort Port { get; } = new();
 
+    // E-03: Emit prints a domain's types in the namespace named after it; the legacy printer leaves them global.
+    Type? PrintedType(string name) => assembly.GetType(name) ?? assembly.GetType($"{Domain.Name}.{name}");
+
     public override string Name => "printed";
 
     protected override StepResult CreateCore(Entity model, (string Name, object? Value)[] values) {
@@ -118,13 +121,13 @@ sealed class PrintedSide(Domain domain, Assembly assembly, IReadOnlySet<string>?
             var value = v.Value is IEnumerable<object> list ? ToArray(list) : v.Value;
             var prop = model.Properties.FirstOrDefault(p =>
                 string.Equals(p.Name, v.Name, StringComparison.OrdinalIgnoreCase));
-            var printed = prop is not null ? assembly.GetType(prop.Type.TypeName) : null;
+            var printed = prop is not null ? PrintedType(prop.Type.TypeName) : null;
             if (printed is not null)
                 value = Materialize(value, printed);
             return (v.Name, value);
         }).Append(("db", (object?)Port));
         try {
-            return Unpack(ExportedCSharp.InvokeCreate(assembly.GetType(model.Name)!, [.. arguments]));
+            return Unpack(ExportedCSharp.InvokeCreate(PrintedType(model.Name)!, [.. arguments]));
         }
         catch (TargetInvocationException ex) when (
             ex.InnerException is { } inner

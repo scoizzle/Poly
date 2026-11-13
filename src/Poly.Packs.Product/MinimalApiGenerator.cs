@@ -2,6 +2,7 @@ using Poly.Analysis;
 using Poly.Ast;
 using Poly.Ast.Nodes;
 using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Runtime;
 using Poly.Interpretation.CSharp;
 using Poly.Runtime;
@@ -170,15 +171,10 @@ public sealed partial class MinimalApiGenerator {
     private static bool IsCollectionNavigation(StorageEntity parentStore, string pascalRel) =>
         parentStore.CollectionNavigations.Any(n =>
             string.Equals(n.PropertyName, pascalRel, StringComparison.Ordinal));
-    private const string GeneratedNamespace = "Poly.Generated";
-
-    /// <summary>Host top-level statements synthesize global <c>Program</c>. An entity
-    /// of that name is emitted in <see cref="GeneratedNamespace"/>, so host type
-    /// references must be qualified or they bind to the entry-point class.</summary>
-    private string VisibleType(string typeName) =>
-        typeName == "Program" && _entities.Exists(static e => e.Name == "Program")
-            ? GeneratedNamespace + ".Program"
-            : typeName;
+    /// <summary>Host top-level statements synthesize global <c>Program</c>, and the host's
+    /// <c>using &lt;ns&gt;;</c> does not outrank a namespace named like a domain type, so such an
+    /// entity is spelled <c>&lt;ns&gt;.&lt;name&gt;</c> (<see cref="DomainSession.QualifyForHost"/>).</summary>
+    private string VisibleType(string typeName) => DomainSession.QualifyForHost(_domain, typeName);
 
     private string GetClrTypeName(string domainType) =>
         VisibleType(RuntimeAnalysisCache.ClrTypeName(_domain, domainType));
@@ -295,7 +291,7 @@ public sealed partial class MinimalApiGenerator {
         topLevelStatements.Add(new Invoke(new Member(new TypeReference(AppVar), "Run")));
 
         var unit = new CompilationUnitNode(
-            Usings: ["System.Text.Json", "System.Text.Json.Serialization", "Microsoft.EntityFrameworkCore", "System.ComponentModel.DataAnnotations", "Poly.Generated"],
+            Usings: ["System.Text.Json", "System.Text.Json.Serialization", "Microsoft.EntityFrameworkCore", "System.ComponentModel.DataAnnotations", DomainSession.CSharpNamespace(_domain)],
             Namespace: null,
             Types: dtoTypes,
             TopLevelStatements: topLevelStatements

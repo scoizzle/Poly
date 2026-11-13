@@ -91,25 +91,16 @@ public class CompatibilityDslParityTests {
         }
         """;
 
-    /// <summary>Text ordering runs on the interpreter only: the printed C# has no <c>string &lt; string</c> (next test).</summary>
+    /// <summary>
+    /// Analysis refuses Text ordering (T-07a, #631), so no domain reaches the interpreter with it: the interpreter-only answer
+    /// this class used to pin is unreachable. The lowered analysis keeps <c>TextAndBooleanOrderingRule</c> for the C# surface
+    /// (the oracle ledger's Text and Boolean ordering cells, owner T-07).
+    /// </summary>
     [Test]
-    [Arguments("Before", "True")]
-    [Arguments("After", "False")]
-    public async Task TextOrderingPolicy_Interpreter_AnswersOrdinally(string policy, string expected) {
-        var domain = EvolvedDomain.FromDsl(TextOrdering).Domain;
-        RuntimeAnalysisCache.Bind(domain, ParitySessions.Create(domain.Extensions.Count > 0 ? domain.Extensions : ExtensionCatalog.ProductAuthoring));
-        var side = new SimulateSide(domain);
-        side.Create("Pair", ("A", "alpha"), ("B", "beta"));
-        side.EvaluatePolicy(policy);
-        await Assert.That(side.Outcomes[1].Success).IsTrue();
-        await Assert.That(side.Outcomes[1].State[policy]).IsEqualTo(expected);
-    }
-
-    [Test]
-    public async Task TextOrderingPolicy_PrintedHost_RefusesToCompile() {
+    public async Task TextOrderingPolicy_Document_IsRefusedByAnalysis() {
         await Assert.That(() => ParityScenario.FromDsl(TextOrdering, "T18TextPrinted"))
             .Throws<InvalidOperationException>()
-            .WithMessageContaining("error CS0019: Operator '<' cannot be applied to operands of type 'string' and 'string'");
+            .WithMessageContaining("ordering is not defined for 'Text'");
     }
 
     static string DateOffset(string type, string op) => $$"""

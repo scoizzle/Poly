@@ -208,10 +208,8 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         if (ConstantOperandRule.Applies(kind, context.GetEffectiveNode(leftNode), left, context.GetEffectiveNode(rightNode), right))
             return;
 
-        // Date-offset fence (T-10): a Date-category left and a number right add days. A non-nullable left beside a
-        // non-nullable decimal right is not fenced: the provider judges that pair.
-        if (kind is OperatorKind.Add or OperatorKind.Subtract && lc is Cat.Date && rc is Cat.Number
-            && !(Nullable.GetUnderlyingType(left) is null && right == typeof(decimal))) {
+        // Date-offset fence (T-10): the interim DateOffsetRule, which the resolver reads for the offset's stamp too.
+        if (DateOffsetRule.Applies(kind, left, right)) {
             if (!RewriteDateOffset(context, parent, leftNode, rightNode, negate: kind is OperatorKind.Subtract))
                 Report(context, leftNode,
                     $"temporal offset requires a date type with AddDays (got '{left.Name}')");
@@ -394,7 +392,7 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
             return true; // unknown receiver — allow emit late-bind
         var argTypes = new ITypeDefinition[invoke.Arguments.Length];
         for (var i = 0; i < invoke.Arguments.Length; i++) {
-            var argType = context.GetResolvedType(invoke.Arguments[i]);
+            var argType = UndefinedArithmeticMatch.ForNode(context, invoke.Arguments[i]);
             if (argType is null)
                 return true; // incomplete — allow late-bind
             argTypes[i] = argType;
@@ -1129,11 +1127,17 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
 
     private static Type? ClrTypeOf(AnalysisContext context, Node node) {
         var effective = context.GetNodeReplacement(node) ?? node;
-        return context.GetResolvedType(effective)?.GetRuntimeType()
+        return (context.GetResolvedType(effective) ?? UndefinedArithmeticMatch.ForNode(context, effective))?.GetRuntimeType()
             ?? (effective is Constant { Value: not null } constant
                 ? constant.Value.GetType()
                 : null);
     }
+
+    /// <summary>True for a CLR date, time or timestamp type (the Date category), nullable included.</summary>
+    internal static bool IsDateCategory(Type type) => CategoryOf(type) is Cat.Date;
+
+    /// <summary>True for a CLR numeric primitive or decimal (the Number category), nullable included.</summary>
+    internal static bool IsNumberCategory(Type type) => CategoryOf(type) is Cat.Number;
 
     private static Cat CategoryOf(Type type) {
         if (type == typeof(bool)) return Cat.Boolean;

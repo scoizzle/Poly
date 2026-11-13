@@ -26,50 +26,27 @@ public sealed class Matcher<TToken, TTokenKind>
 
     public Grammar<TToken, TTokenKind> Grammar => _grammar;
 
-    /// <summary>
-    /// Rule levels one match may recurse through, or 0 for no budget. Off by default: a
-    /// grammar that never sets it keeps the engine's behaviour, so this is not an engine limit.
-    /// <c>DslCursor</c> sets it from <see cref="DslLimits"/> for the product DSL, where the
-    /// recursion is deep enough to overflow a small stack. Overrunning it is a positionless
-    /// <see cref="GrammarException"/> that the cursor re-positions at its current token, never
-    /// a crash.
-    /// </summary>
-    public int MaxRuleDepth { get; set; }
-
-    private int _ruleDepth;
-
     private MatchResult<TToken, TTokenKind>? TryMatchRuleAt(string ruleName, int offset) {
-        if (MaxRuleDepth > 0 && _ruleDepth >= MaxRuleDepth)
-            throw DepthError();
         EnsureKnownRule(ruleName);
         var key = (ruleName, offset);
         if (_memo is not null && _memo.TryGetValue(key, out var cached))
             return cached;
 
-        _ruleDepth++;
-        try {
-            MatchResult<TToken, TTokenKind>? best = null;
-            var bestPriority = int.MinValue;
-            foreach (var pattern in _grammar.GetPatterns(ruleName)) {
-                if (!TryMatchPattern(ruleName, pattern, offset, out var match))
-                    continue;
-                if (best is null
-                    || match.Consumed > best.Consumed
-                    || (match.Consumed == best.Consumed && pattern.Priority > bestPriority)) {
-                    best = match;
-                    bestPriority = pattern.Priority;
-                }
+        MatchResult<TToken, TTokenKind>? best = null;
+        var bestPriority = int.MinValue;
+        foreach (var pattern in _grammar.GetPatterns(ruleName)) {
+            if (!TryMatchPattern(ruleName, pattern, offset, out var match))
+                continue;
+            if (best is null
+                || match.Consumed > best.Consumed
+                || (match.Consumed == best.Consumed && pattern.Priority > bestPriority)) {
+                best = match;
+                bestPriority = pattern.Priority;
             }
-            _memo?[key] = best;
-            return best;
         }
-        finally {
-            _ruleDepth--;
-        }
+        _memo?[key] = best;
+        return best;
     }
-
-    private static GrammarException DepthError() =>
-        new("expression nesting exceeds the grammar's matching limit");
 
     /// <summary>
     /// Attempts to match the named rule at the current position. The reader is only

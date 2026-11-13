@@ -98,7 +98,7 @@ public sealed class DslTokenStreamBaselineTests {
                 return lines;
             }
 
-            lines.Add($"{t.Kind}\t{t.Start}\t{t.Length}\t{t.Line}\t{t.Col}\t{Escape(t.Text)}");
+            lines.Add($"{t.Kind}\t{t.Start}\t{t.Length}\t{t.Line}\t{t.Col}\t{Escape(BaselineText(t))}");
             if (t.Kind == DslTokenKind.EndOfFile)
                 return lines;
             reader.Consume(1);
@@ -131,8 +131,14 @@ public sealed class DslTokenStreamBaselineTests {
             return $"ERR {Escape(ex.Detail)} @{ex.Line}:{ex.Column}";
         }
 
-        string Ok(DslToken t) => $"OK {t.Kind} [{Escape(t.Text)}] next={cursor.Current.Kind}";
+        string Ok(DslToken t) => $"OK {t.Kind} [{Escape(BaselineText(t))}] next={cursor.Current.Kind}";
     }
+
+    // The text column the file was frozen with: a string literal's decoded value, any other token its
+    // source slice (empty at end of input). The frozen file is the proof that the slice of every
+    // keyword and punctuation token is its canonical spelling.
+    private static string BaselineText(DslToken t) =>
+        t.Kind == DslTokenKind.StringLiteral ? t.Unescape() : t.Span.ToString();
 
     private static string Digest(List<string> dump) =>
         $"{dump.Count}\t{Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(string.Join("\n", dump))))[..16]}";

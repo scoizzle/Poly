@@ -165,6 +165,7 @@ public class DslTokenizerAllocationTests {
         await Assert.That(stringProperties).IsEquivalentTo(["Text"]);
         await Assert.That(stringFields).IsEmpty();
         await Assert.That(obsolete.DiagnosticId).IsEqualTo("POLYTOK001");
+        await Assert.That(obsolete.IsError).IsTrue();
         await Assert.That(typeof(DslToken).GetMethod(nameof(DslToken.Name), Type.EmptyTypes)!.ReturnType).IsEqualTo(typeof(string));
         await Assert.That(typeof(DslToken).GetMethod(nameof(DslToken.Unescape), Type.EmptyTypes)!.ReturnType).IsEqualTo(typeof(string));
         await Assert.That(typeof(DslToken).GetProperty("Offset")).IsNull();

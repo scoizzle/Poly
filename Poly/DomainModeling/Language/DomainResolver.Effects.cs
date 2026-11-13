@@ -16,9 +16,9 @@ public sealed partial class DomainResolver {
                 throw Error("Unexpected 'when' inside action body (subscriptions are stage-level)");
             }
 
-            if (Current.Kind == TokenKind.Identifier && _unsupportedKeywords.Contains(Current.Text)) {
+            if (Current.Kind == TokenKind.Identifier && _unsupportedKeywords.Contains(Current.Name())) {
                 throw new FormatException(
-                    $"'{Current.Text}' is not supported in Phase 1a");
+                    $"'{Shown(Current)}' is not supported in Phase 1a");
             }
 
             // N4 (DX only): the head keyword matched but its tail pattern
@@ -32,37 +32,38 @@ public sealed partial class DomainResolver {
                 TokenKind.Unlink => " — expected '<relationship> from <binder>'",
                 _ => "",
             };
-            throw Error($"Expected effect (transition, assign, create, link, unlink, invoke, for, if){tailHint}, got '{Current.Text}'");
+            throw Error($"Expected effect (transition, assign, create, link, unlink, invoke, for, if){tailHint}, got '{Shown(Current)}'");
         }
 
+        // Each row below holds an Identifier value at the index read (DslGrammar "effect").
         switch (match.PatternName) {
             case "transition": {
-                    var target = match.Tokens[2].Text;
+                    var target = match.Tokens[2].Name();
                     Consume(match);
                     return new StageTransitionEffect(new StageReference(target));
                 }
 
             case "assign": {
-                    var propName = match.Tokens[1].Text;
+                    var propName = match.Tokens[1].Name();
                     Consume(match);
                     var expr = ParseExpression();
                     return new AssignEffect(DomainExpression.Property(propName), expr);
                 }
 
             case "link": {
-                    var relationshipName = match.Tokens[1].Text;
+                    var relationshipName = match.Tokens[1].Name();
                     Consume(match);
                     return new LinkEffect(relationshipName, ParseExpression());
                 }
 
             case "unlink": {
-                    var relationshipName = match.Tokens[1].Text;
+                    var relationshipName = match.Tokens[1].Name();
                     Consume(match);
                     return new UnlinkEffect(relationshipName, ParseExpression());
                 }
 
             case "create-in": {
-                    var relationshipName = match.Tokens[2].Text;
+                    var relationshipName = match.Tokens[2].Name();
                     Consume(match);
                     Expect(TokenKind.LBrace);
                     var initializers = ParsePropertyInitializers();
@@ -70,7 +71,7 @@ public sealed partial class DomainResolver {
                 }
 
             case "create": {
-                    var entityTypeName = match.Tokens[1].Text;
+                    var entityTypeName = match.Tokens[1].Name();
                     Consume(match);
                     Expect(TokenKind.LBrace);
                     var initList = ParsePropertyInitializers();
@@ -187,19 +188,19 @@ public sealed partial class DomainResolver {
         var binderName = ExpectIdentifier(TokenKind.Identifier, "binder name");
         Expect(TokenKind.In);
         if (Current.Kind == TokenKind.Identifier &&
-            string.Equals(Current.Text, "where", StringComparison.OrdinalIgnoreCase))
+            Current.TextEquals("where", StringComparison.OrdinalIgnoreCase))
             throw Error($"Expected relationship name after 'for {binderName} in', got 'where'");
         var relName = ExpectIdentifier(TokenKind.Identifier, "relationship name");
 
         DomainExpression? where = null;
         if (Current.Kind == TokenKind.Identifier &&
-            string.Equals(Current.Text, "where", StringComparison.OrdinalIgnoreCase)) {
+            Current.TextEquals("where", StringComparison.OrdinalIgnoreCase)) {
             Advance(); // consume 'where'
             where = ParseExpression();
         }
 
         if (Current.Kind != TokenKind.LBrace)
-            throw Error($"Expected '{{' to open the 'for' body, got '{Current.Text}'");
+            throw Error($"Expected '{{' to open the 'for' body, got '{Shown(Current)}'");
         Advance();
 
         var body = new List<Effect>();
@@ -232,7 +233,7 @@ public sealed partial class DomainResolver {
                 Advance();
                 throw Error(
                     "Expected 'in' (for x in Rel { … }) or 'as' (for Rel as x invoke …) after the 'for' name, " +
-                    $"got '{Current.Text}'");
+                    $"got '{Shown(Current)}'");
             }
         }
 
@@ -242,7 +243,7 @@ public sealed partial class DomainResolver {
 
         ForEachPredicate? predicate = null;
         if (Current.Kind == TokenKind.Identifier &&
-            string.Equals(Current.Text, "where", StringComparison.OrdinalIgnoreCase)) {
+            Current.TextEquals("where", StringComparison.OrdinalIgnoreCase)) {
             Advance(); // consume 'where'
             var subject = ExpectIdentifier(TokenKind.Identifier, "binder name in predicate");
             if (!string.Equals(subject, binderName, StringComparison.Ordinal))
@@ -255,7 +256,7 @@ public sealed partial class DomainResolver {
                 predicate = new ForEachStageMembership(stageName);
             }
             else if (Current.Kind == TokenKind.Identifier) {
-                var policyName = Current.Text;
+                var policyName = Current.Name();
                 Advance();
                 predicate = new ForEachNamedPolicy(policyName);
             }

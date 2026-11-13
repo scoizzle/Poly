@@ -38,7 +38,7 @@ public static class DslExpressionFragment {
 
         if (cursor.Current.Kind != DslTokenKind.EndOfFile)
             throw GrammarError.Error(
-                $"Trailing tokens after expression: '{cursor.Current.Text}'",
+                $"Trailing tokens after expression: '{DslTokenText.Shown(cursor.Current)}'",
                 cursor.Current.Line,
                 cursor.Current.Col);
 

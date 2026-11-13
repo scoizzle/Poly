@@ -300,6 +300,24 @@ public class CSharpRowRoundTripTests {
     }
 
     [Test]
+    public async Task EnumNegativeExtremes_ReReadToTheSameTree_WithTheSameClrType() {
+        object[] values = [long.MinValue, long.MinValue + 1, int.MinValue, int.MinValue - 1L, -1, long.MaxValue];
+        var printed = CSharpLanguage.Write([EnumOf([.. values.Select((v, i) => ($"M{i}", v))])]);
+        var reRead = CSharpLanguage.Read(printed).Types.Single();
+
+        var reReadValues = reRead.Fields!.Select(f => ((Constant)f.DefaultValue!).Value!).ToArray();
+        await Assert.That(reReadValues).IsEquivalentTo(values);
+        await Assert.That(reReadValues.Select(v => v.GetType())).IsEquivalentTo(values.Select(v => v.GetType()));
+        await Assert.That(CSharpLanguage.Write([reRead])).IsEqualTo(printed);
+    }
+
+    [Test]
+    public async Task EnumValue_BelowLongMinValue_IsStillAPositionedError() {
+        await Assert.That(() => CSharpLanguage.Read("enum E { A = -9223372036854775809 }")).Throws<FormatException>()
+            .WithMessageContaining("outside the range of long").And.WithMessageContaining("(line 1, col 15)");
+    }
+
+    [Test]
     public async Task EnumNegativeValue_TextIsAFixpoint_AndIntMinValueFolds() {
         var printed = CSharpLanguage.Write(CSharpLanguage.Read("enum E { A = -1, B = 2, C = -2147483648 }"));
         await Assert.That(CSharpLanguage.Write(CSharpLanguage.Read(printed))).IsEqualTo(printed);

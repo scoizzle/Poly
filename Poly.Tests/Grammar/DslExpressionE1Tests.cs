@@ -64,11 +64,11 @@ public class DslExpressionE1Tests {
 
     private static DomainSession BuildMagicPackInputs() {
         var builder = SessionBuilder.CreateEmpty();
-        foreach (var rule in new[] { "expr-primary", "expr-primary-no-not" })
+        foreach (var rule in new[] { "expr-primary" })
             builder.ExpressionForms.RegisterFold(rule, "magic", _ => new MagicLiteral(42));
         builder.ExpressionForms.RegisterPrintMapping(new MagicBinder());
         builder.ExpressionForms.RegisterGrammarContributor(g => {
-            foreach (var rule in new[] { "expr-primary", "expr-primary-no-not" }) {
+            foreach (var rule in new[] { "expr-primary" }) {
                 g.Define(rule)
                     .Pattern("magic", priority: 1)
                     .Predicate(IsMagicIdentifier, "magic")
@@ -80,7 +80,7 @@ public class DslExpressionE1Tests {
 
     private static DomainSession BuildDurationPackInputs() {
         var builder = SessionBuilder.CreateEmpty();
-        foreach (var rule in new[] { "expr-primary", "expr-primary-no-not" }) {
+        foreach (var rule in new[] { "expr-primary" }) {
             builder.ExpressionForms.RegisterFold(rule, "duration", match => {
                 var amount = match.Captures["amount"][0].Text;
                 var unit = match.Captures["unit"][0].Text;
@@ -188,15 +188,15 @@ public class DslExpressionE1Tests {
     }
 
     /// <summary>
-    /// pack-1-4: pack patterns register on BOTH primary rules (with and without <c>not</c>),
+    /// pack-1-4: pack patterns register on <c>expr-primary</c>, the one expression rule,
     /// the matcher recognizes them, and the full expression still matches end to end.
     /// The <c>magic</c> pattern is predicate-led + an optional comma so it wins the
     /// longest-match tie against the core <c>ident</c> pattern deterministically.
     /// </summary>
     [Test]
-    public async Task PackPattern_MagicAndNumberUnit_RegisterOnBothPrimaries() {
+    public async Task PackPattern_MagicAndNumberUnit_RegisterOnExprPrimary() {
         var g = DslGrammar.Build(grammar => {
-            foreach (var rule in new[] { "expr-primary", "expr-primary-no-not" }) {
+            foreach (var rule in new[] { "expr-primary" }) {
                 grammar.Define(rule)
                     .Pattern("magic", priority: 1)
                     .Predicate(IsMagicIdentifier, "magic")
@@ -204,7 +204,7 @@ public class DslExpressionE1Tests {
             }
         });
 
-        foreach (var rule in new[] { "expr-primary", "expr-primary-no-not" }) {
+        foreach (var rule in new[] { "expr-primary" }) {
             await Assert.That(g.GetPatterns(rule).Any(p => p.Name == "magic")).IsTrue();
             await Assert.That(g.GetPatterns(rule).Any(p => p.Name == "duration")).IsTrue();
 

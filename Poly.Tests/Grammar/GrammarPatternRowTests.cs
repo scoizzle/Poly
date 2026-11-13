@@ -343,6 +343,17 @@ public sealed class GrammarPatternRowTests {
         await Assert.That(schema.Any(v => v.Rule == "type-tail" && v.Pattern == "tail")).IsTrue();
     }
 
+    [Test]
+    public async Task AllowListAndExamples_UnknownSurface_Throw() {
+        var entries = Assert.Throws<ArgumentException>(() => PatternRowAllowList.For("dls"));
+        var examples = Assert.Throws<ArgumentException>(() => PatternRowExamples.For("dls"));
+
+        await Assert.That(entries.Message).Contains("'dls'");
+        await Assert.That(examples.Message).Contains("'dls'");
+        await Assert.That(PatternRowAllowList.For(DslKey)).IsNotEmpty();
+        await Assert.That(PatternRowAllowList.For(CSharpKey)).IsNotEmpty();
+    }
+
     // ── examples (A3c) ────────────────────────────────────────────────────────
 
     private static readonly PatternRowEntry TopEnumHead =

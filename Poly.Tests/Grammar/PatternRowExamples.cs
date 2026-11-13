@@ -72,8 +72,9 @@ internal static class PatternRowExamples {
         new(Dsl, "expr-primary", "path", "Order Total"),
     ];
 
+    /// <summary>The examples of one surface (the C# surface has none). An unknown surface throws.</summary>
     public static IReadOnlyList<PatternRowExample> For(string surface) =>
-        [.. All.Where(example => string.Equals(example.Surface, surface, StringComparison.Ordinal))];
+        [.. All.Where(example => string.Equals(example.Surface, PatternRowAllowList.KnownSurface(surface), StringComparison.Ordinal))];
 }
 
 /// <summary>

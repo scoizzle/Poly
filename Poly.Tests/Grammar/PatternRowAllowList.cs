@@ -202,9 +202,18 @@ internal static class PatternRowAllowList {
     /// <summary>Every entry, both surfaces.</summary>
     public static IReadOnlyList<PatternRowEntry> All { get; } = [.. DslEntries, .. CSharpEntries];
 
-    /// <summary>The entries of one surface.</summary>
+    /// <summary>The surfaces the check runs over.</summary>
+    public static IReadOnlyList<string> Surfaces { get; } = [Dsl, CSharp];
+
+    /// <summary>The entries of one surface. An unknown surface throws rather than reading as an empty list.</summary>
     public static IReadOnlyList<PatternRowEntry> For(string surface) =>
-        [.. All.Where(entry => string.Equals(entry.Surface, surface, StringComparison.Ordinal))];
+        [.. All.Where(entry => string.Equals(entry.Surface, KnownSurface(surface), StringComparison.Ordinal))];
+
+    /// <summary><paramref name="surface"/>, when it is one the check runs over; otherwise throws.</summary>
+    public static string KnownSurface(string surface) =>
+        Surfaces.Contains(surface, StringComparer.Ordinal)
+            ? surface
+            : throw new ArgumentException($"'{surface}' is not a change-protocol surface ({string.Join(", ", Surfaces)}).", nameof(surface));
 
     private static IEnumerable<PatternRowEntry> Rows(
         string surface, PatternRowEntryKind kind, string rule, string[] patterns, string reason, string owner) =>

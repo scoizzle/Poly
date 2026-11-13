@@ -403,12 +403,18 @@ Item: entity {
 ### What makes a property optional at create
 
 Properties are **required at create by default**: every property without `optional`
-is a required parameter of the generated `Create` factory (and, for a root entity,
-of the create DTO), so a `create` / `create in` / `create_instance` must supply it.
+must be supplied by a `create` / `create in` / `create_instance` (and, for a root
+entity, is a member of the create DTO). Required means non-null for every type: an
+omitted required value fails `Required` on every host, a Number is never filled with
+`0`, and an empty string is a value (forbidding it is the job of `length(1, …)`, which
+fails `Length`). Every parameter of the generated `Create` is `T? x = default`, in
+member declaration order; the lowered body owns the `Required` failure and the defaults,
+so a host passes `null` for a value it does not have. An explicit `null` at the create
+door is the same as omitting the value.
 
-`optional` is the explicit opt-out: the property is omitted from the required create
-signature, prints as `T?`, and stores `null` when omitted. `default(...)` still supplies
-a value when the property is omitted; the default wins over the omitted `null`.
+`optional` is the explicit opt-out: the property prints as `T?` and stores `null` when
+omitted. `default(...)` supplies a value when the property is omitted (or passed `null`);
+an `optional default(x)` property therefore cannot be created unset.
 
 <!-- poly-verify: fragment:top wrapper:top-default -->
 ```poly

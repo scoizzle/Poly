@@ -514,7 +514,7 @@ internal static class BridgeGrid {
     /// (<c>AbiEmitter.Build</c>, <c>CollectLambdas</c>); an unmarked exception there means the bridge never decided (T-19b).
     /// </summary>
     private static bool InTheBridge(Exception ex) =>
-        ex.StackTrace?.Contains("AbiEmitter.BuildExpressionArgument", StringComparison.Ordinal) == true;
+        ex.Data.Contains(Poly.Interpretation.Vm.Abi.AbiEmitter.LambdaBridgeExceptionKey);
 
     private static Exception Unwrap(Exception ex) => ex is TargetInvocationException { InnerException: { } inner } ? Unwrap(inner) : ex;
 
@@ -897,12 +897,13 @@ internal static class BridgeGrid {
 
     /// <summary>
     /// The row that owns a cell the provider defines but the bridge never decides: the main emitter compiles every lambda of
-    /// the program into its function table before the call quotes it (<c>AbiEmitter.Build</c>) and refuses this body (T-21);
-    /// the lowered analysis rejects the lifted <c>!</c> on <c>bool?</c> (T-28); the analysis types the operator as its
+    /// the program into its function table before the call quotes it (<c>AbiEmitter.Build</c>) and refuses this body
+    /// (T-19b skips that compile for a lambda that is only quoted; 64 of these are coalesce cells whose operands the main
+    /// emitter calls different representations); the lowered analysis rejects the lifted <c>!</c> on <c>bool?</c> (T-28); the analysis types the operator as its
     /// operand, so constant folding replaces it with the operand or a cast (T-17 for arithmetic, T-22 for bitwise). Null: no owner.
     /// </summary>
     public static string? OwnerOfUndecided(BridgeCase c) => Outcome(c) switch {
-        { Stage: "main-rejected" } => "T-21 (the main emitter refuses the body while compiling the function table, before the bridge quotes it)",
+        { Stage: "main-rejected" } => "T-19b (the main emitter refuses the body while compiling the function table, before the bridge quotes it)",
         { Stage: "analysis-rejected" } when c.Op is OperatorKind.Not && c.Left.Nullable => "T-28 (the lowered analysis rejects the lifted ! on bool?)",
         { Replaced: true } outcome when outcome.ReplacedBy != nameof(Invoke) && Matches(outcome.Observed, Expectation(c)) =>
             "T-17, then T-26 (the lowered analysis types uint * int as UInt32, so constant folding simplifies x * 1 to x, typed uint; the provider says Int64, C#'s constant conversion says UInt32)",
@@ -1134,7 +1135,7 @@ public class LambdaBridgeProviderTests {
 
     private static readonly string[] UndecidedOwners = [
         "T-17, then T-26 (the lowered analysis types uint * int as UInt32, so constant folding simplifies x * 1 to x, typed uint; the provider says Int64, C#'s constant conversion says UInt32) = 4 1d2a3808d3eec1bf",
-        "T-21 (the main emitter refuses the body while compiling the function table, before the bridge quotes it) = 97 a63ff0548b6291dd",
+        "T-19b (the main emitter refuses the body while compiling the function table, before the bridge quotes it) = 161 6450ec29428f2167",
         "T-22 (the lowered analysis types uint & int and uint | int as UInt32, so constant folding simplifies x & -1 to x and x | -1 to a cast the bridge cannot resolve; C# says Int64) = 2 016756e39c6a4811",
         "T-28 (the lowered analysis rejects the lifted ! on bool?) = 1 add0d5c7271ecdf8"
     ];
@@ -1310,6 +1311,9 @@ public class LambdaBridgeProviderTests {
     }
 
     private static readonly string[] PredictedStages = [
+        "coalesce bridge-rejected = 18",
+        "coalesce main-rejected = 103",
+        "coalesce ran = 61",
         "conditional bridge-rejected = 265",
         "conditional main-rejected = 107",
         "conditional ran = 304",
@@ -1359,6 +1363,7 @@ public class LambdaBridgeProviderTests {
     }
 
     private static readonly string[] BridgeRefusalFamilies = [
+        "coalesce = 18",
         "conditional = 265",
         "constant-parameter = 25",
         "nullable bitwise not = 1",
@@ -1396,10 +1401,13 @@ public class LambdaBridgeProviderTests {
     [Test]
     public async Task Bridge_DisagreesWithCSharp_OnlyOnTheConstantConversionCells_OwnedByT26() {
         var disagreeing = BridgeGrid.Cases.Where(static c => BridgeGrid.BridgeDecides(c) && !BridgeGrid.Matches(BridgeGrid.Outcome(c).Observed, BridgeGrid.Expectation(c))).ToArray();
-        await Assert.That(disagreeing.All(static c => c.Grid is "uint32-constant" or "constant-parameter")).IsTrue();
+        await Assert.That(disagreeing.All(static c => c.Grid is "uint32-constant" or "constant-parameter"
+            || (c.Grid == "coalesce" && c.Key.EndsWith("?? Int32(0)", StringComparison.Ordinal)))).IsTrue();
         // The run, not the prediction (23): constant folding replaces uint x * 1, 1 * x, x / 1 and x % 1 before the bridge
         // sees them (typed uint, as C# types them; owned by T-17, then T-26, above), so the bridge decides 19 of these cells.
-        await Assert.That(ConstantFoldGrid.Pin([.. disagreeing.Select(static c => c.Line)])).IsEqualTo("19 8e16f2434cd878b6");
+        // Closing round: plus uint? ?? 0 and ulong? ?? 0, which C# types uint and ulong (the constant converts); the provider
+        // states no type for int beside uint or ulong, so the bridge refuses them.
+        await Assert.That(ConstantFoldGrid.Pin([.. disagreeing.Select(static c => c.Line)])).IsEqualTo("21 8c6c291dd187c72a");
     }
 
     /// <summary>

@@ -108,6 +108,11 @@ only moves the word into its own slot and never re-normalises it. The reverse di
 bridged lambda returning to a CLR delegate or `Expression<D>`, is the single decode
 `RingCodec.ToClr`.
 
+A literal lambda passed directly where the call's parameter is `Expression<D>` is not a VM function: the
+lambda bridge quotes it into a tree, and `AbiEmitter.Build` leaves its function-table entry a throwing stub
+(`CollectQuoteOnlyLambdas`, reading `CallParameterType`, the same answer the call site reads). Every other
+lambda, a delegate argument, a stored closure or one nested in a quoted lambda, is compiled into the table.
+
 Stored-closure heap layout: `object[]` at the handle, `[0] = lambda index (boxed long)`, `[1..] = `long[1]` cells. Function-table bodies read and write `cell[0]`. The enclosing frame stores a heap handle to the same cell in the captured variable's slot. Capture lists come from analysis (`LambdaCaptureMetadata`). `Invoke(Variable)` is typed as the lambda body's value, so result unwrap reads a scalar word by the body's CLR type (a `bool` is 0/non-zero) rather than treating ABI `1` as heap handle 1. `VariableLayout.IsUpvalueCell` tells `VmDebugger.GetLocals` to present `cell[0]`. Invoke fails closed if an upvalue slot is not a `long[1]`.
 
 ## Local pool

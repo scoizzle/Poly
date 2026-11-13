@@ -70,7 +70,7 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
 
         var assignOnlyPropertyNames = ComputeAssignOnlyPropertyNames(entity);
         var entryAssignedPropertyNames = ComputeEntryAssignedPropertyNames(entity);
-        var createSlots = ComputeCreateSlots(entity, lookup, assignOnlyPropertyNames, entryAssignedPropertyNames);
+        var createSlots = ComputeCreateSlots(entity, entryAssignedPropertyNames);
         var requiredPropertyNames = ComputeRequiredPropertyNames(entity);
 
         // ── Lifecycle detection ────────────────────────────────
@@ -200,26 +200,6 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
         return names;
     }
 
-    private static bool EmptyIsLegal(Property prop, DomainTypeLookupMetadata lookup) {
-        if (prop.Constraints.Any(c => c is RequiredConstraint or UniqueConstraint))
-            return false;
-        if (lookup.Types.TryGetValue(prop.Type.TypeName, out var type) && type is EnumType)
-            return false;
-        if (prop.Type.TypeName is not ("Text" or "String" or "Number" or "Int" or "Boolean"))
-            return false;
-        foreach (var range in prop.Constraints.OfType<RangeConstraint>()) {
-            if (range.Minimum is not null && Convert.ToDouble(range.Minimum) > 0)
-                return false;
-            if (range.Maximum is not null && Convert.ToDouble(range.Maximum) < 0)
-                return false;
-        }
-        foreach (var length in prop.Constraints.OfType<LengthConstraint>()) {
-            if (length.MinLength > 0)
-                return false;
-        }
-        return true;
-    }
-
     /// <summary>
     /// The generated stage enum's type name for <paramref name="entity"/> (<c>{Entity}Stage</c>, or a declared enum of
     /// that name), or null when the entity has no generated enum (no stages, or only an implicit stage). The one function
@@ -303,21 +283,15 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
     /// navigation.
     /// </summary>
     private static IReadOnlyList<CreateSlot> ComputeCreateSlots(
-        Entity entity, DomainTypeLookupMetadata lookup, IReadOnlySet<string> assignOnly,
-        IReadOnlySet<string> entryAssigned) {
+        Entity entity, IReadOnlySet<string> entryAssigned) {
         var slots = new List<CreateSlot>();
         foreach (var member in EntityDeclarationOrder.Members(entity)) {
             switch (member.Node) {
-                case Property prop when !entryAssigned.Contains(prop.Name): {
-                        var kind = SlotKindFor(prop);
-                        slots.Add(new CreateSlot(
-                            prop.Name, kind, prop.Type, CreateSlotShape.Scalar,
-                            prop.Constraints.OfType<DefaultValueConstraint>().FirstOrDefault(),
-                            InventsEmptyDefault: kind == CreateSlotKind.Required
-                                && assignOnly.Contains(prop.Name)
-                                && EmptyIsLegal(prop, lookup)));
-                        break;
-                    }
+                case Property prop when !entryAssigned.Contains(prop.Name):
+                    slots.Add(new CreateSlot(
+                        prop.Name, SlotKindFor(prop), prop.Type, CreateSlotShape.Scalar,
+                        prop.Constraints.OfType<DefaultValueConstraint>().FirstOrDefault()));
+                    break;
                 case Relationship rel: {
                         var isMany = rel.Cardinality is RelationshipCardinality.OneToMany
                             or RelationshipCardinality.ManyToMany;
@@ -341,8 +315,15 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
         : IsRequired(property) ? CreateSlotKind.Required
         : CreateSlotKind.Optional;
 
-    /// <summary>A navigation's create slot kind. The one place a navigation's kind is decided.</summary>
-    internal static CreateSlotKind SlotKindFor(Relationship navigation) => CreateSlotKind.Optional;
+    /// <summary>
+    /// A navigation's create slot kind: the one place it is decided. Every navigation is
+    /// Optional today; L-15a makes a bare to-one navigation Required here, and the create
+    /// guard (<c>ConstraintCheckWriter.RequiredSlotCheck</c>) already takes any shape.
+    /// </summary>
+    internal static CreateSlotKind SlotKindFor(Relationship navigation) {
+        ArgumentNullException.ThrowIfNull(navigation);
+        return CreateSlotKind.Optional;
+    }
 
     /// <summary>
     /// Determines if an entity has a required entity reference in its

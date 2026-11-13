@@ -637,25 +637,6 @@ public class AbsenceParityTests {
     }
 
     [Test]
-    public async Task Assign_EmptyToRequiredText_IsAccepted() {
-        var outcomes = await ParityScenario.FromDsl("""
-            domain Shop
-            Item: entity {
-              Name: Text
-              Rename: action (value: Text) { assign Name to value }
-            }
-            """, "ParityAssignEmptyRequiredText")
-            .AssertAgree(side => {
-                side.Create("Item", ("Name", "a"));
-                side.Invoke("Rename", ("value", ""));
-            });
-
-        await Assert.That(outcomes[1].Success).IsTrue()
-            .Because($"an empty string is a value: {outcomes[1].Message}");
-        await Assert.That(outcomes[1].State["Name"]).IsEqualTo("");
-    }
-
-    [Test]
     public async Task Assign_EmptyToRequiredTextWithMinimumLength_FailsLength() {
         var outcomes = await ParityScenario.FromDsl("""
             domain Shop

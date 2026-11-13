@@ -34,8 +34,12 @@ public sealed class UniqueConstraintCompiler : IConstraintCompiler {
         var entityName = storage.Name;
         var propertyName = request.Property.Name;
         var parameterName = DomainToCSharpExporter.ToCamelCase(propertyName);
-        Parameter value = request.ParameterOn("Create") ?? new Parameter(parameterName, text);
-        Node portValue = IsString(value) ? value : new Invoke(new Member(value, "ToString"));
+        // The value Create has settled on: the effective-value local of a Required or
+        // Defaulted property (its default applied), the parameter of an Optional one.
+        var created = request.ParameterOn("Create");
+        var parameter = created ?? new Parameter(parameterName, text);
+        var value = created is null ? parameter : DomainToCSharpExporter.CreateValueOf(request.Property, created);
+        Node portValue = IsString(parameter) ? value : new Invoke(new Member(value, "ToString"));
 
         var methodName = "ExistsWith" + propertyName;
         var existsDb = new Parameter("db", portType);
@@ -361,7 +365,10 @@ public sealed class UniqueConstraintCompiler : IConstraintCompiler {
     private readonly record struct AssignMatch(
         string Property, Node Value, Node Destination, Invoke Failure);
 
-    private static bool IsString(Parameter value) => value.TypeReference switch {
+    private static bool IsString(Parameter value) => IsString(value.TypeReference);
+
+    private static bool IsString(Node? type) => type switch {
+        OptionalTypeReference optional => IsString(optional.InnerType),
         ClrTypeReference clr => clr.RuntimeType == typeof(string),
         PrimitiveTypeReference primitive => primitive.PrimitiveId.GetClrType() == typeof(string),
         NamedTypeReference named => string.Equals(named.TypeName, "Text", StringComparison.Ordinal),

@@ -89,17 +89,13 @@ public sealed partial class DomainToCSharpExporter {
     }
 
     /// <summary>
-    /// Emits the scalar property definitions in declaration order and
-    /// collects the constructor parameters and assignments they imply.
-    /// The trailing defaulted block this builds is L-08's to remove.
+    /// Emits the scalar property definitions in declaration order. The constructor and
+    /// <c>Create</c> slots are built from <see cref="EntityStructureMetadata.CreateSlots"/>
+    /// in <c>AddCreateFactory</c>.
     /// </summary>
     private static void AddEntityProperties(
         Entity entity, Domain domain, INodeMetadataProvider metadata,
-        EntityStructureMetadata esm, IReadOnlySet<string> entryAssignedProps,
-        List<PropertyDefinitionNode> props,
-        List<Parameter> ctorParams, List<Node> ctorAssignments,
-        List<Parameter> defaultedCtorParams) {
-        // ── Entity properties (declaration order; L-08 removes the trailing split) ──
+        EntityStructureMetadata esm, List<PropertyDefinitionNode> props) {
         foreach (var prop in entity.Properties) {
             var propRef = MapDomainTypeRef(prop.Type, domain, metadata);
             // Requiredness is the published fact: required is the default, `optional`
@@ -131,110 +127,6 @@ public sealed partial class DomainToCSharpExporter {
                 Initializer: initializer,
                 Constraints: constraints
             ));
-
-            // Defaulted props become OPTIONAL ctor params (the DSL default is the C#
-            // default) so `create in { DefaultedProp: value }` overrides flow through
-            // construction — no setters, no post-create assignment.
-            var defaultValue = prop.Constraints.OfType<DefaultValueConstraint>().FirstOrDefault();
-            var paramName = ToCamelCase(prop.Name);
-            // Gym dogfood: Visits default(0) AND Active entry { assign Visits to 0 }
-            // made a dead ctor param (assign param, then overwrite with entry).
-            if (entryAssignedProps.Contains(prop.Name))
-                continue;
-            if (defaultValue is not null) {
-                var runtimeExpr = EffectLoweringPass.LowerDefaultExpression(
-                    defaultValue.Expression,
-                    new NamedTypeReference(prop.Type.TypeName),
-                    RuntimeAnalysisCache.MeaningFor(domain),
-                    RuntimeAnalysisCache.FormsFor(domain));
-                if (runtimeExpr is not null) {
-                    // Runtime default (now/today/guid) can't be a compile-time default —
-                    // T? = null sentinel; body applies the runtime default when null.
-                    defaultedCtorParams.Add(new Parameter(paramName,
-                        new OptionalTypeReference(propRef),
-                        DefaultValue: new Constant(null)));
-                    ctorAssignments.Add(new Assignment(
-                        new Member(new ThisReference(), prop.Name),
-                        new Syntactic.Coalesce(new Parameter(paramName), runtimeExpr)));
-                }
-                else {
-                    var defaultNode = LowerDefaultConstantNode(defaultValue, prop, domain, metadata);
-                    defaultedCtorParams.Add(new Parameter(paramName, propertyType, DefaultValue: defaultNode));
-                    ctorAssignments.Add(new Assignment(
-                        new Member(new ThisReference(), prop.Name),
-                        new Parameter(paramName)));
-                }
-                continue; // skip ctor param — handled as a trailing optional param
-            }
-
-            // Optional with no default: a trailing `T? = null` parameter assigned
-            // directly, so an omitted value stores null (not ""/0).
-            if (!isRequired) {
-                defaultedCtorParams.Add(new Parameter(paramName,
-                    new OptionalTypeReference(propRef),
-                    DefaultValue: new Constant(null)));
-                ctorAssignments.Add(new Assignment(
-                    new Member(new ThisReference(), prop.Name),
-                    new Parameter(paramName)));
-                continue;
-            }
-
-            // Required with no default — full constructor param + assignment.
-            ctorParams.Add(new Parameter(paramName, propRef));
-            ctorAssignments.Add(new Assignment(
-                new Member(new ThisReference(), prop.Name),
-                new Parameter(paramName)));
-        }
-    }
-
-    /// <summary>
-    /// Scalar constructor slots in the published ESM order: required scalars first,
-    /// then optional assign-only scalars, each in declaration order. Defaulted
-    /// properties are not in this list; they stay in the trailing defaulted params
-    /// (L-08 makes every Create parameter optional in declaration order, which
-    /// removes the required/trailing block split this ordering preserves).
-    /// </summary>
-    private static void OrderScalarCtorSlots(
-        EntityStructureMetadata esm, List<Parameter> ctorParams, List<Node> ctorAssignments) {
-        // ── Scalar constructor slots in the published ESM order ──
-        // Required scalars first, then optional assign-only scalars, each in
-        // declaration order. Defaulted properties are not in this list; they stay
-        // in defaultedCtorParams (L-08 removes that split).
-        var scalarOrder = LegacyConstructorOrder(esm).Where(p => !p.IsNavigation).ToList();
-        if (scalarOrder.Count > 0 && ctorParams.Count > 0) {
-            var paramsByName = ctorParams.ToDictionary(p => p.Name, StringComparer.Ordinal);
-            var scalarProps = scalarOrder.Select(o => o.Name).ToHashSet(StringComparer.Ordinal);
-            var assignmentsByProp = ctorAssignments
-                .OfType<Assignment>()
-                .Where(a => a.Destination is Member { MemberName: var name }
-                    && scalarProps.Contains(name))
-                .GroupBy(a => ((Member)a.Destination).MemberName, StringComparer.Ordinal)
-                .ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
-            var retainedAssignments = ctorAssignments
-                .Where(a => a is not Assignment {
-                    Destination: Member { MemberName: var name }
-                } || !scalarProps.Contains(name))
-                .ToList();
-            var reordered = new List<Parameter>();
-            var assignments = new List<Node>();
-            foreach (var order in scalarOrder) {
-                var name = ToCamelCase(order.Name);
-                if (!paramsByName.TryGetValue(name, out var parameter))
-                    continue;
-                if (order.IsOptional)
-                    parameter = parameter with { DefaultValue = EmptyDefault(order.Type) };
-                reordered.Add(parameter);
-                assignments.Add(assignmentsByProp.TryGetValue(order.Name, out var assignment)
-                    ? assignment
-                    : new Assignment(
-                        new Member(new ThisReference(), order.Name),
-                        new Parameter(name)));
-            }
-            ctorParams.Clear();
-            ctorParams.AddRange(reordered);
-            ctorAssignments.Clear();
-            ctorAssignments.AddRange(assignments);
-            ctorAssignments.AddRange(retainedAssignments);
         }
     }
 }

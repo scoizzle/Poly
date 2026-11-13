@@ -487,15 +487,14 @@ public class DomainToCSharpExporterTests {
 
         var createParams = createLoans!.Parameters?.Select(p => p.Name).ToArray() ?? [];
         var autoWireBackRef = DomainToCSharpExporter.FindAutoWireBackReference(loan, "Patron");
-        var expected = DomainToCSharpExporter.GetConstructorParameters(loan, analysis)
-            .Where(p => !p.IsBackReference)
-            .Where(p => autoWireBackRef is null
-                || !string.Equals(p.Name, autoWireBackRef.Name, StringComparison.Ordinal))
-            .Select(p => DomainToCSharpExporter.ToCamelCase(p.Name))
-            .Concat(DomainToCSharpExporter.TrailingOmittableProperties(loan, analysis)
-                .Select(p => DomainToCSharpExporter.ToCamelCase(p.Name)))
+        var expected = esm.CreateSlots
+            .Where(s => !(s.IsSelfNavigation && s.Shape != CreateSlotShape.Scalar))
+            .Where(s => s.Shape != CreateSlotShape.Collection)
+            .Where(s => autoWireBackRef is null
+                || !string.Equals(s.Name, autoWireBackRef.Name, StringComparison.Ordinal))
+            .Select(s => DomainToCSharpExporter.ToCamelCase(s.Name))
             .ToArray();
-        await Assert.That(createParams).IsEquivalentTo(expected);
+        await Assert.That(createParams).IsEquivalentTo(expected, TUnit.Assertions.Enums.CollectionOrdering.Matching);
     }
 
     [Test]
@@ -1582,7 +1581,8 @@ public class DomainToCSharpExporterTests {
         await Assert.That(csharp).Contains("DateOnly.FromDateTime(DateTime.UtcNow)");
         await Assert.That(csharp).Contains("DateTime.UtcNow");
         await Assert.That(csharp).DoesNotContain("DateTime.Today");
-        await Assert.That(csharp).Contains("??");
+        // L-08b: Create applies the runtime default to an omitted value, before the constructor.
+        await Assert.That(csharp).Contains("(openedAt == null ? DateTime.UtcNow : (DateTime)openedAt)");
     }
 
     [Test]
@@ -1958,8 +1958,9 @@ public class DomainToCSharpExporterTests {
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
-        // Severity is a trailing optional CreateDiagnostics param defaulting to the DSL default.
-        await Assert.That(cs).Contains("CreateDiagnostics(string code, Severity severity = Severity.Warning)");
+        // L-08b: Severity is a `T? x = default` CreateDiagnostics param; the target's Create applies the DSL default.
+        await Assert.That(cs).Contains("CreateDiagnostics(string? code = default, Severity? severity = default)");
+        await Assert.That(cs).Contains("(severity == null ? Severity.Warning : (Severity)severity)");
         await Assert.That(cs).Contains("this.CreateDiagnostics(");
         await Assert.That(cs).Contains("Severity.Hint");
         await Assert.That(cs).DoesNotContain("CreateIn(");
@@ -2173,7 +2174,7 @@ public class DomainToCSharpExporterTests {
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
-        await Assert.That(cs).Contains("Create(string name, IEnumerable<Pallet>? pallets = null)");
+        await Assert.That(cs).Contains("Create(string? name = default, IEnumerable<Pallet>? pallets = default)");
         await Assert.That(cs).Contains("pallets ?? new List<Pallet>()");
     }
 
@@ -2241,7 +2242,7 @@ public class DomainToCSharpExporterTests {
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
-        await Assert.That(cs).Contains("Create(string name, Advisor? advisor = null)");
+        await Assert.That(cs).Contains("Create(string? name = default, Advisor? advisor = default)");
     }
 
     [Test]
@@ -2290,8 +2291,8 @@ public class DomainToCSharpExporterTests {
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
-        await Assert.That(cs).Contains("Create(string email)");
-        await Assert.That(cs).DoesNotContain("long visits = 0L");
+        await Assert.That(cs).Contains("Create(string? email = default)");
+        await Assert.That(cs).DoesNotContain("visits");
         await Assert.That(cs).Contains("this.Visits = 0L");
     }
 
@@ -3226,10 +3227,6 @@ public class DomainToCSharpExporterTests {
                     callArgs[i] = args[i];
                 else if (parameters[i].HasDefaultValue)
                     callArgs[i] = parameters[i].DefaultValue;
-                else if (parameters[i].ParameterType == typeof(string))
-                    callArgs[i] = "";
-                else if (parameters[i].ParameterType == typeof(bool))
-                    callArgs[i] = false;
                 else
                     callArgs[i] = null;
             }
@@ -4167,8 +4164,8 @@ public class DomainToCSharpExporterTests {
         var (domain, analysis) = ParseAndAnalyze(dsl);
         var cs = new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis));
         var create = ExportedCSharp.ExtractMethod(cs, "DomainResult<Order> Create(");
-        var total = create.IndexOf("long total", StringComparison.Ordinal);
-        var reason = create.IndexOf("cancelReason", StringComparison.Ordinal);
+        var total = create.IndexOf("long? total = default", StringComparison.Ordinal);
+        var reason = create.IndexOf("string? cancelReason = default", StringComparison.Ordinal);
         await Assert.That(total).IsGreaterThanOrEqualTo(0);
         await Assert.That(reason).IsGreaterThan(total);
 
@@ -4210,14 +4207,18 @@ public class DomainToCSharpExporterTests {
             """;
         var (domain, analysis) = ParseAndAnalyze(dsl);
         var cs = new CSharpGenerator().Generate(DomainProgramProjection.ToSyntax(domain, analysis));
+        // L-08b: an action-written required property gets no invented value; omitting it fails Required.
         var create = ExportedCSharp.ExtractMethod(cs, "DomainResult<Visit> Create(");
-        await Assert.That(create).Contains("string reason");
-        await Assert.That(create).DoesNotContain("string reason = \"\"");
+        await Assert.That(create).Contains("string? reason = default");
+        await Assert.That(create).Contains("Poly.Runtime.DomainFailure.Required(\"'Reason' is required.\", \"Visit.Reason\")");
+        await Assert.That(create).DoesNotContain("= \"\"");
         var warehouse = ExportedCSharp.ExtractMethod(cs, "DomainResult<Warehouse> Create(");
-        await Assert.That(warehouse).Contains("long capacity");
-        await Assert.That(warehouse).DoesNotContain("long capacity = 0L");
+        await Assert.That(warehouse).Contains("long? capacity = default");
+        await Assert.That(warehouse).Contains("Poly.Runtime.DomainFailure.Required(\"'Capacity' is required.\", \"Warehouse.Capacity\")");
+        await Assert.That(warehouse).DoesNotContain("= 0L");
         var truck = ExportedCSharp.ExtractMethod(cs, "DomainResult<Truck> Create(");
-        await Assert.That(truck).Contains("TruckStatus status = TruckStatus.Idle");
+        await Assert.That(truck).Contains("TruckStatus? status = default");
+        await Assert.That(truck).Contains("(status == null ? TruckStatus.Idle : (TruckStatus)status)");
     }
 
     [Test]

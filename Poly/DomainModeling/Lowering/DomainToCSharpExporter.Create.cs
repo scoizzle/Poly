@@ -60,116 +60,59 @@ public sealed partial class DomainToCSharpExporter {
 
         var methodName = $"Create{pascalName}";
 
-        // Collect all target entity constructor-level parameters from the COMPLETE
-        // signature (EntityStructureMetadata now includes collection navs):
-        // regular entity properties (minus defaults) + navs (singular + collection)
-        // in relationship order. One source of truth — no per-consumer re-scan of
-        // domain.Relationships (the CS7036 class of bugs).
+        // One argument per target Create slot, in the target's slot order (the
+        // published CreateSlots). Every slot the caller supplies is a `T? x = default`
+        // parameter of this method, so omitting one passes null and the target's
+        // Create decides: Required fails, Defaulted takes its default.
         var methodParams = new List<Parameter>();
         var createArgs = new List<Node>();
-        var parameterMetadata = GetConstructorParameters(targetEntity, metadata);
 
         // Cross-entity auto-wire back-ref: exactly one singular nav on the target
         // pointing back to the source → wired with `this`, excluded from the factory
-        // signature. (Self-relationship back-refs are already excluded via IsBackReference.)
+        // signature. (Self-relationship slots are filled here too.)
         var autoWireBackRef = FindAutoWireBackReference(targetEntity, entity.Name);
-        var requiredProps = RequireStructure(targetEntity, metadata).RequiredPropertyNames;
         var selfPeerSingular = FindSelfRelPeerSingular(targetEntity, entity.Name);
         var isCollectionRel = rel.Cardinality is RelationshipCardinality.OneToMany
             or RelationshipCardinality.ManyToMany;
 
-        foreach (var parameter in parameterMetadata) {
-            if (parameter.IsNavigation && parameter.IsBackReference) {
+        foreach (var slot in CreateSlotsOf(targetEntity, metadata)) {
+            if (slot is { IsSelfNavigation: true, Shape: not CreateSlotShape.Scalar }) {
                 // Self-rel slot. A self collection (including `rel` when it is a
                 // collection) starts empty; a singular self-nav wires `this` only as
                 // the peer of a collection create-in; every other self singular is null.
-                if (parameter.IsCollection) {
+                if (slot.Shape == CreateSlotShape.Collection) {
                     createArgs.Add(new New(
                         new NamedTypeReference("List",
-                            TypeArguments: [new NamedTypeReference(parameter.Type.TypeName)])));
+                            TypeArguments: [new NamedTypeReference(slot.Type.TypeName)])));
                     continue;
                 }
                 createArgs.Add(isCollectionRel
                     && selfPeerSingular is not null
-                    && string.Equals(parameter.Name, selfPeerSingular.Name, StringComparison.Ordinal)
+                    && string.Equals(slot.Name, selfPeerSingular.Name, StringComparison.Ordinal)
                         ? (Node)new ThisReference()
-                        : TypedNull(parameter.Type.TypeName));
+                        : TypedNull(slot.Type.TypeName));
                 continue;
             }
 
             if (autoWireBackRef is not null
-                && string.Equals(parameter.Name, autoWireBackRef.Name, StringComparison.Ordinal)) {
+                && string.Equals(slot.Name, autoWireBackRef.Name, StringComparison.Ordinal)) {
                 createArgs.Add(new ThisReference());
                 continue;
             }
 
-            if (parameter.IsCollection) {
-                // Collection nav: ctor param is IEnumerable<T>; the CreateNav factory
-                // starts every child with an empty collection.
+            if (slot.Shape == CreateSlotShape.Collection) {
+                // Collection nav: the CreateNav factory starts every child with an empty collection.
                 createArgs.Add(new New(
                     new NamedTypeReference("List",
-                        TypeArguments: [new NamedTypeReference(parameter.Type.TypeName)])));
+                        TypeArguments: [new NamedTypeReference(slot.Type.TypeName)])));
                 continue;
             }
 
-            var paramName = ToCamelCase(parameter.Name);
-            var mapped = MapDomainTypeRef(parameter.Type, domain, metadata);
-            // Nav params are optional references (unbound initializers pass null) —
-            // emit nullable to match the property/ctor and avoid CS8625. Scalar ctor
-            // params are required by construction; optional scalars are trailing params.
-            var propRef = parameter.IsNavigation
-                ? (Node)new OptionalTypeReference(mapped)
-                : mapped;
             // Same node in the signature and the Create call. A second untyped
             // Parameter does not resolve, so the VM cannot tell scalar from reference.
-            // A navigation the caller did not write is omitted. It needs a default
-            // so that omission is a legal trailing argument.
-            var param = parameter.IsNavigation
-                ? new Parameter(paramName, propRef, DefaultValue: new Constant(null))
-                : parameter.IsOptional
-                    ? new Parameter(paramName, propRef, DefaultValue: EmptyDefault(parameter.Type))
-                    : new Parameter(paramName, propRef);
+            var param = CreateSlotParameter(slot, domain, metadata);
             methodParams.Add(param);
             createArgs.Add(param);
-        }
-
-        // NOTE: defaulted and optional properties are NOT included in
-        // the Target.Create() parameter list — they are trailing params
-        // from TrailingOmittableProperties below.
-
-        // Defaulted and optional props of the target become TRAILING optional method
-        // params (C# optional params must be last) and are forwarded to Target.Create —
-        // so a `create in { Prop: value }` override flows through construction.
-        foreach (var prop in TrailingOmittableProperties(targetEntity, metadata)) {
-            var paramName = ToCamelCase(prop.Name);
-            var mapped = MapDomainTypeRef(prop.Type, domain, metadata);
-            var defaultConstraint = prop.Constraints.OfType<DefaultValueConstraint>().FirstOrDefault();
-            Parameter trailing;
-            if (defaultConstraint is null) {
-                // Optional with no default: omitted passes null (never ""/0).
-                trailing = new Parameter(paramName,
-                    new OptionalTypeReference(mapped),
-                    DefaultValue: new Constant(null));
-            }
-            else {
-                var runtimeExpr = EffectLoweringPass.LowerDefaultExpression(
-                    defaultConstraint.Expression,
-                    new NamedTypeReference(prop.Type.TypeName),
-                    RuntimeAnalysisCache.MeaningFor(domain),
-                    RuntimeAnalysisCache.FormsFor(domain));
-                if (runtimeExpr is not null) {
-                    trailing = new Parameter(paramName,
-                        new OptionalTypeReference(mapped),
-                        DefaultValue: new Constant(null));
-                }
-                else {
-                    trailing = new Parameter(paramName,
-                        requiredProps.Contains(prop.Name) ? mapped : new OptionalTypeReference(mapped),
-                        DefaultValue: LowerDefaultConstantNode(defaultConstraint, prop, domain, metadata));
-                }
-            }
-            methodParams.Add(trailing);
-            createArgs.Add(trailing);
         }
 
         var bodyNodes = new List<Node>();
@@ -278,53 +221,33 @@ public sealed partial class DomainToCSharpExporter {
     }
 
     /// <summary>
-    /// Public parameters of <c>Create{Nav}</c>: constructor slots the method
-    /// asks the caller for. Back-references, the auto-wired peer, and
+    /// Public parameters of <c>Create{Nav}</c>: the target's create slots the method
+    /// asks the caller for, in slot order. Self-navigations, the auto-wired peer and
     /// collections are filled inside the method.
     /// </summary>
-    internal static List<ConstructorParameterOrder> CreateNavParameters(
+    internal static List<CreateSlot> CreateNavParameters(
         Entity source, Entity target, INodeMetadataProvider analysis) {
-        var slots = new List<ConstructorParameterOrder>();
+        var slots = new List<CreateSlot>();
         var autoWire = FindAutoWireBackReference(target, source.Name);
-        foreach (var parameter in GetConstructorParameters(target, analysis)) {
-            if (parameter.IsNavigation && parameter.IsBackReference)
+        foreach (var slot in CreateSlotsOf(target, analysis)) {
+            if (slot is { IsSelfNavigation: true, Shape: not CreateSlotShape.Scalar })
                 continue;
             if (autoWire is not null
-                && string.Equals(parameter.Name, autoWire.Name, StringComparison.Ordinal))
+                && string.Equals(slot.Name, autoWire.Name, StringComparison.Ordinal))
                 continue;
-            if (parameter.IsCollection)
+            if (slot.Shape == CreateSlotShape.Collection)
                 continue;
-            slots.Add(parameter);
+            slots.Add(slot);
         }
         return slots;
     }
 
-    internal static IReadOnlyList<ConstructorParameterOrder> GetConstructorParameters(
-        Entity targetEntity,
-        INodeMetadataProvider analysis) {
-        if (analysis.GetStructure(targetEntity) is EntityStructureMetadata esm)
-            return LegacyConstructorOrder(esm);
-
-        throw new InvalidOperationException(
-            $"EntityStructureMetadata is required for constructor ordering on entity '{targetEntity.Name}'.");
-    }
-
     /// <summary>
-    /// The constructor slots in today's block order, read from <see cref="EntityStructureMetadata.CreateSlots"/>:
-    /// required scalars, then required scalars that get an empty default, then navigations.
+    /// The entity's published <see cref="EntityStructureMetadata.CreateSlots"/>. A missing
+    /// bag is a lowering fault: it throws rather than recomputing the signature.
     /// </summary>
-    internal static IReadOnlyList<ConstructorParameterOrder> LegacyConstructorOrder(EntityStructureMetadata esm) {
-        var slots = esm.CreateSlots;
-        return [
-            .. slots.Where(s => s is { Shape: CreateSlotShape.Scalar, Kind: CreateSlotKind.Required, InventsEmptyDefault: false })
-                .Select(s => new ConstructorParameterOrder(s.Name, s.Type, IsNavigation: false, IsBackReference: false)),
-            .. slots.Where(s => s is { Shape: CreateSlotShape.Scalar, Kind: CreateSlotKind.Required, InventsEmptyDefault: true })
-                .Select(s => new ConstructorParameterOrder(s.Name, s.Type, IsNavigation: false, IsBackReference: false, IsOptional: true)),
-            .. slots.Where(s => s.Shape != CreateSlotShape.Scalar)
-                .Select(s => new ConstructorParameterOrder(s.Name, s.Type, IsNavigation: true,
-                    IsBackReference: s.IsSelfNavigation, IsCollection: s.Shape == CreateSlotShape.Collection)),
-        ];
-    }
+    internal static IReadOnlyList<CreateSlot> CreateSlotsOf(Entity entity, INodeMetadataProvider analysis) =>
+        RequireStructure(entity, analysis).CreateSlots;
 
     /// <summary>
     /// The published structure bag for <paramref name="entity"/>. A missing bag is a
@@ -338,23 +261,65 @@ public sealed partial class DomainToCSharpExporter {
             $"EntityStructureMetadata is required for lowering entity '{entity.Name}'; analysis published none.");
 
     /// <summary>
-    /// Trailing omittable Create/ctor parameters: defaulted or optional properties
-    /// that are not entry-assigned, in declaration order — the order the Create
-    /// factory appends them. The two producers of the trailing block (this list and
-    /// <c>AddEntityProperties</c>' defaultedCtorParams) must stay in that one order;
-    /// L-08 removes the block split entirely.
+    /// The value type a slot holds once its guard and default have run: the property's
+    /// mapped type, a navigation's target type, or <c>IEnumerable&lt;T&gt;</c> for a collection.
     /// </summary>
-    internal static List<Property> TrailingOmittableProperties(
-        Entity entity,
-        INodeMetadataProvider metadata) {
-        var structure = RequireStructure(entity, metadata);
-        var list = new List<Property>();
-        foreach (var slot in structure.CreateSlots) {
-            if (slot is { Shape: CreateSlotShape.Scalar, Kind: not CreateSlotKind.Required })
-                list.Add(entity.Properties.First(p => string.Equals(p.Name, slot.Name, StringComparison.Ordinal)));
-        }
-        return list;
-    }
+    private static Node SlotValueType(CreateSlot slot, Domain domain, INodeMetadataProvider metadata) =>
+        slot.Shape == CreateSlotShape.Collection
+            ? new NamedTypeReference("IEnumerable", TypeArguments: [new NamedTypeReference(slot.Type.TypeName)])
+            : MapDomainTypeRef(slot.Type, domain, metadata);
+
+    /// <summary>A <c>Create</c> (or <c>Create{Nav}</c>) parameter: <c>T? x = default</c>.</summary>
+    internal static Parameter CreateSlotParameter(CreateSlot slot, Domain domain, INodeMetadataProvider metadata) =>
+        new(ToCamelCase(slot.Name), new OptionalTypeReference(SlotValueType(slot, domain, metadata)),
+            DefaultValue: new Syntactic.Default());
+
+    /// <summary>
+    /// The reserved local a Required or Defaulted slot's value lives in once its guard
+    /// and default have run. <c>__</c> is a reserved prefix, so it cannot shadow a parameter.
+    /// </summary>
+    internal static string EffectiveLocalName(string slotName) => "__" + ToCamelCase(slotName);
+
+    /// <summary>
+    /// The node a create-time check reads for <paramref name="property"/> in the lowered
+    /// <c>Create</c>: the effective-value local for a Required or Defaulted property, the
+    /// nullable parameter itself for an Optional one.
+    /// </summary>
+    internal static Node CreateValueOf(Property property, Parameter parameter) =>
+        EntityStructureAnalyzer.SlotKindFor(property) is CreateSlotKind.Optional
+            ? parameter
+            : new Variable(EffectiveLocalName(property.Name));
+
+    /// <summary>
+    /// True when the slot's C# type is a value type (a number, Boolean, a temporal type,
+    /// a Guid or an enum), whose <c>T?</c> is <c>Nullable&lt;T&gt;</c> and hands off by cast.
+    /// </summary>
+    private static bool HoldsClrValueType(CreateSlot slot, Domain domain) =>
+        slot.Shape == CreateSlotShape.Scalar
+        && (domain.Types.OfType<EnumType>().Any(e => string.Equals(e.Name, slot.Type.TypeName, StringComparison.Ordinal))
+            || DomainTypeMapping.IsNonNullableClrValueType(RuntimeAnalysisCache.ClrTypeName(domain, slot.Type.TypeName)));
+
+    /// <summary>
+    /// The slot's value once it is known non-null: <c>(T)x</c> for a value type, <c>x</c>
+    /// itself for a reference (Text, a domain value type, a navigation, a collection).
+    /// No <c>??</c> on a value type: the VM's coalesce cannot produce a <c>bool</c>.
+    /// </summary>
+    private static Node HandOff(CreateSlot slot, Parameter parameter, Node valueType, Domain domain) =>
+        HoldsClrValueType(slot, domain) ? new TypeCast(parameter, valueType) : parameter;
+
+    /// <summary>
+    /// A Defaulted slot's authored default, lowered: a runtime value (<c>now</c>, <c>today</c>,
+    /// <c>guid</c>) or a constant (a literal or an enum member).
+    /// </summary>
+    private static Node LoweredDefault(CreateSlot slot, Property prop, Domain domain, INodeMetadataProvider metadata) =>
+        EffectLoweringPass.LowerDefaultExpression(
+            slot.Default!.Expression,
+            new NamedTypeReference(prop.Type.TypeName),
+            RuntimeAnalysisCache.MeaningFor(domain),
+            RuntimeAnalysisCache.FormsFor(domain))
+        ?? LowerDefaultConstantNode(slot.Default, prop, domain, metadata)
+        ?? throw new NotSupportedException(
+            $"default(...) on property '{prop.Name}' cannot be lowered.");
 
     /// <summary>
     /// Null <c>IEnumerable&lt;T&gt;?</c> for an omitted collection create argument.
@@ -370,64 +335,82 @@ public sealed partial class DomainToCSharpExporter {
                     TypeArguments: [new NamedTypeReference(elementTypeName)])));
 
     /// <summary>
-    /// Builds constraint-validation guard clauses for the <c>Create</c> factory method.
-    /// Each constraint on a constructor-parameter property produces an early-return
-    /// guard: <c>if (violation) return DomainResult&lt;T&gt;.Failure(DomainFailure.&lt;Kind&gt;("'Prop' ...", "Entity.Prop"));</c>
-    /// Enum-typed properties get a not-any-member guard from the same Member + NotEqual
-    /// nodes as assign.
-    ///
-    /// Only entity properties (not navigation properties) are validated — navs do not
-    /// carry constraints in the current domain model. Guards follow declaration order,
-    /// so the first declared violated constraint is the message the caller sees. Requiredness guards come from the
-    /// published fact; a defaulted property's own default supplies the value. Other
-    /// constraint guards still apply to defaulted params. Entry-assigned props are
-    /// body-initialized, never ctor params, so they are skipped.
+    /// One slot of the lowered <c>Create</c>, in declaration order: a Required slot's
+    /// null guard (<see cref="ConstraintCheckWriter.RequiredSlotCheck"/>), the effective
+    /// value local of a Required or Defaulted slot (<c>(T)x</c> or <c>x</c> for Required,
+    /// <c>x == null ? d : (T)x</c> or <c>x == null ? d : x</c> for Defaulted), then that slot's
+    /// constraint checks on the effective value. Per slot, so the first declared violation,
+    /// missing or invalid, is the one the caller sees. Returns the value the constructor takes.
     /// </summary>
-    private static List<Node> BuildCreateConstraintChecks(
-        Entity entity, Domain domain, IReadOnlySet<string> entryAssignedProps,
-        INodeMetadataProvider analysis, IReadOnlyList<Parameter> signature) {
-
-        var checks = new List<Node>();
-        var entityTypeRef = new NamedTypeReference(entity.Name);
+    private static Node AppendCreateSlot(
+        Entity entity, Domain domain, INodeMetadataProvider analysis,
+        CreateSlot slot, Parameter parameter, List<Node> checks, List<Node> locals) {
         var resultType = new NamedTypeReference("DomainResult",
-            TypeArguments: [entityTypeRef]);
+            TypeArguments: [new NamedTypeReference(entity.Name)]);
+        Node Guard(ConstraintCheckWriter.Check check) =>
+            BuiltinConstraintCompiler.Claims(check.Kind)
+                ? BuiltinConstraintCompiler.CreateGuard(entity.Name, slot.Name, check)
+                : new IfStatement(
+                    check.GuardedCondition,
+                    new Block([FailureLowering.Return(
+                        resultType, ConstraintCheckWriter.FailureSpec(check, entity.Name, slot.Name))]));
 
-        foreach (var prop in entity.Properties) {
-            // Entry-assigned props are body-initialized by the ctor's stage-entry effects
-            // — not constructor params, so no guard to attach.
-            if (entryAssignedProps.Contains(prop.Name)) continue;
-
-            var paramName = ToCamelCase(prop.Name);
-            // The signature parameter, not a same-named copy. A copy has no
-            // type, so name.Length does not resolve and the VM rejects Create.
-            var paramRef = signature.FirstOrDefault(p =>
-                string.Equals(p.Name, paramName, StringComparison.Ordinal));
-            if (paramRef is null)
-                continue;
-
-            // An optional parameter is nullable, so a value constraint only applies
-            // when the caller supplied a value. The printed `&&` lets flow analysis see
-            // a non-null value inside the comparison (and skips an omitted null).
-            var nullableParam = paramRef.TypeReference is OptionalTypeReference;
-            // Required-by-default: a defaulted prop's own default supplies the value,
-            // so the factory does not ask the caller for one (assign always does).
-            var includeRequired = !prop.Constraints.Any(c => c is DefaultValueConstraint);
-            var valueHasDefault = paramRef.DefaultValue is not null;
-
-            foreach (var check in BuiltinConstraintCompiler.Checks(
-                         entity, prop, domain, analysis,
-                         ConstraintCheckWriter.ConstraintCheckStyle.Create,
-                         paramRef, nullableParam, valueHasDefault, includeRequired)) {
-                checks.Add(BuiltinConstraintCompiler.Claims(check.Kind)
-                    ? BuiltinConstraintCompiler.CreateGuard(entity.Name, prop.Name, check)
-                    : new IfStatement(
-                        check.GuardedCondition,
-                        new Block([FailureLowering.Return(
-                            resultType, ConstraintCheckWriter.FailureSpec(check, entity.Name, prop.Name))])));
-            }
+        var prop = slot.Shape == CreateSlotShape.Scalar
+            ? entity.Properties.First(p => string.Equals(p.Name, slot.Name, StringComparison.Ordinal))
+            : null;
+        Node value = parameter;
+        if (slot.Kind == CreateSlotKind.Required)
+            checks.Add(Guard(ConstraintCheckWriter.RequiredSlotCheck(slot, parameter)));
+        if (slot.Kind is CreateSlotKind.Required or CreateSlotKind.Defaulted) {
+            var local = new Variable(EffectiveLocalName(slot.Name));
+            locals.Add(local);
+            var handOff = HandOff(slot, parameter, SlotValueType(slot, domain, analysis), domain);
+            checks.Add(new Assignment(local, slot.Kind == CreateSlotKind.Required
+                ? handOff
+                : new Conditional(
+                    new Equal(parameter, new Constant(null)),
+                    LoweredDefault(slot, prop!, domain, analysis),
+                    handOff)));
+            value = local;
         }
+        if (prop is null)
+            return value;
 
-        return checks;
+        foreach (var check in BuiltinConstraintCompiler.Checks(
+                     entity, prop, domain, analysis,
+                     ConstraintCheckWriter.ConstraintCheckStyle.Create,
+                     value, nullableValue: slot.Kind == CreateSlotKind.Optional, includeRequired: false))
+            checks.Add(Guard(check));
+        return value;
+    }
+
+    /// <summary>
+    /// The private constructor's parameter for a slot: the value type for a Required or
+    /// Defaulted slot, which <c>Create</c> has made non-null, and <c>T?</c> otherwise.
+    /// </summary>
+    private static Parameter ConstructorParameter(CreateSlot slot, Domain domain, INodeMetadataProvider metadata) {
+        var type = SlotValueType(slot, domain, metadata);
+        return new Parameter(ToCamelCase(slot.Name),
+            slot.Kind == CreateSlotKind.Optional || slot.Shape != CreateSlotShape.Scalar
+                ? new OptionalTypeReference(type)
+                : type);
+    }
+
+    /// <summary>The constructor's assignment of one slot: a property, a singular navigation, or a collection field.</summary>
+    private static Node ConstructorAssignment(CreateSlot slot, Parameter parameter) {
+        switch (slot.Shape) {
+            case CreateSlotShape.Collection: {
+                    var listType = new NamedTypeReference("List",
+                        TypeArguments: [new NamedTypeReference(slot.Type.TypeName)]);
+                    return new Assignment(
+                        new Member(new ThisReference(), $"_{parameter.Name}"),
+                        new New(listType, [new Syntactic.Coalesce(parameter, new New(listType))]));
+                }
+            case CreateSlotShape.Reference:
+                return new Assignment(new Member(new ThisReference(), ToPascalCase(slot.Name)), parameter);
+            default:
+                return new Assignment(new Member(new ThisReference(), slot.Name), parameter);
+        }
     }
 
     /// <summary>
@@ -447,17 +430,31 @@ public sealed partial class DomainToCSharpExporter {
         IReadOnlySet<string>? postTransitionNotifyStages,
         IReadOnlySet<string>? previousStageNotifyStages,
         List<SubscriptionInfo>? subscriberSubs,
-        List<Parameter> ctorParams, List<Node> ctorAssignments,
         List<MethodDefinitionNode> methods) {
         // ── Private constructor + public static Create factory ─────
         // Every entity publishes Create, including one with no slots, so
         // a type-name call resolves. No slots and no stages still emit a
         // single private parameterless constructor (CS0111).
         List<ConstructorDefinitionNode>? ctors = null;
+        // One loop over the published slots, in declaration order: the Create
+        // parameter (`T? x = default`), the constructor parameter and assignment,
+        // and the slot's guard, effective value and checks.
+        var createParams = new List<Parameter>();
+        var ctorParams = new List<Parameter>();
+        var ctorArgs = new List<Node>();
+        var constraintChecks = new List<Node>();
+        var slotLocals = new List<Node>();
         // The constructor is pure assignment: the parameters and the initial stage. The initial stage's entry effects
         // can fail, so they run in the result-returning __EnterInitialStage, which Create calls (L-04a, #825).
         var bodyNodes = new List<Node>();
-        bodyNodes.AddRange(ctorAssignments);
+        foreach (var slot in esm.CreateSlots) {
+            var parameter = CreateSlotParameter(slot, domain, metadata);
+            createParams.Add(parameter);
+            var ctorParam = ConstructorParameter(slot, domain, metadata);
+            ctorParams.Add(ctorParam);
+            bodyNodes.Add(ConstructorAssignment(slot, ctorParam));
+            ctorArgs.Add(AppendCreateSlot(entity, domain, metadata, slot, parameter, constraintChecks, slotLocals));
+        }
 
         MethodDefinitionNode? entryMethod = null;
         if (esm.HasStages) {
@@ -521,12 +518,6 @@ public sealed partial class DomainToCSharpExporter {
         var createResultType = new NamedTypeReference("DomainResult",
             TypeArguments: [new NamedTypeReference(entity.Name)]);
 
-        // Build constraint validation checks before the constructor call.
-        // Only entity properties (not navigations) are validated — navs
-        // don't carry constraints in the current model.
-        var constraintChecks = BuildCreateConstraintChecks(
-            entity, domain, esm.EntryAssignedPropertyNames, metadata, ctorParams);
-
         // Construct, then Success. Create is the unique-inverse attach source
         // (Attach* when count==1); CreateNav/BindCreate defer Add/Register when
         // that attach ran. Ambiguous peer collections (count>1) skip Attach —
@@ -536,12 +527,12 @@ public sealed partial class DomainToCSharpExporter {
         var createSuccessNodes = new List<Node>();
         createSuccessNodes.AddRange(constraintChecks);
         var createdLocal = new Variable("created");
-        var createLocals = new List<Node> { createdLocal };
+        var createLocals = new List<Node>(slotLocals) { createdLocal };
         createSuccessNodes.Add(new Assignment(
             createdLocal,
             new New(
                 new NamedTypeReference(entity.Name),
-                ctorParams.ToArray())));
+                ctorArgs.ToArray())));
         // The open action scope records what it created, after `new` and before any peer attach (L-03c F3; L-04's
         // initial-stage entry follows this line). A no-op with no scope open.
         createSuccessNodes.Add(ActionScopeCall("Create", createdLocal, new Constant(entity.Name)));
@@ -565,12 +556,11 @@ public sealed partial class DomainToCSharpExporter {
             createSuccessNodes.Add(new Invoke(new Member(createdLocal, "InitializeSubscriptions")));
         }
         var lookup = metadata.GetTypeLookup(domain);
-        foreach (var navParam in LegacyConstructorOrder(esm)
-            .Where(p => p.IsNavigation && !p.IsCollection)) {
+        foreach (var navParam in esm.CreateSlots.Where(s => s.Shape == CreateSlotShape.Reference)) {
             var paramName = ToCamelCase(navParam.Name);
             // The signature parameter, not a same-named copy. A copy has no
             // type, so the VM reads an empty slot and skips Attach.
-            var paramRef = ctorParams.FirstOrDefault(p =>
+            var paramRef = createParams.FirstOrDefault(p =>
                 string.Equals(p.Name, paramName, StringComparison.Ordinal));
             if (paramRef is null)
                 continue;
@@ -611,11 +601,11 @@ public sealed partial class DomainToCSharpExporter {
 
         // A bare `Create` (no action running) opens a root scope, so a failure after another entity changed rolls
         // everything back (L-04b); inside an action it joins that action's scope.
-        AddScopedActionMethods(methods, "Create", createResultType, ctorParams,
+        AddScopedActionMethods(methods, "Create", createResultType, createParams,
             new Block(createSuccessNodes, createLocals),
             DomainAccess.Demote(
                 AccessModifier.Public, domain,
-                [.. ctorParams.Select(p => p.TypeReference), createResultType]),
+                [.. createParams.Select(p => p.TypeReference), createResultType]),
             staticReceiver: new NamedTypeReference(entity.Name));
 
         return ctors;

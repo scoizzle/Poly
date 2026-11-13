@@ -337,7 +337,7 @@ public sealed partial class EffectLoweringPass {
         foreach (var check in BuiltinConstraintCompiler.Checks(
                      _entity, prop, _domain, _analysis,
                      ConstraintCheckWriter.ConstraintCheckStyle.Assign,
-                     valueRef, nullableValue: false, valueHasDefault: false, includeRequired: true)) {
+                     valueRef, nullableValue: false, includeRequired: true)) {
             if (check.Kind is ConstraintCheckWriter.Kind.LengthMinimum
                 or ConstraintCheckWriter.Kind.LengthMaximum) {
                 lengthChecks.Add(check);
@@ -351,8 +351,8 @@ public sealed partial class EffectLoweringPass {
     }
 
     /// <summary>
-    /// Requiredness is "no <c>optional</c>". Text rejects null or empty; other
-    /// reference-typed properties reject null. Value types have no null to reject.
+    /// Requiredness is "no <c>optional</c>": a reference-typed property, Text included,
+    /// rejects null. Value types have no null to reject.
     /// </summary>
     private bool NeedsRequiredValueCheck(Property prop) =>
         ConstraintCheckWriter.RequiredApplies(_entity, prop, _domain, _analysis);

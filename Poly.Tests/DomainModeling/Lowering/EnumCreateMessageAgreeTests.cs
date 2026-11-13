@@ -78,7 +78,7 @@ public class EnumCreateMessageAgreeTests {
         // for an omitted slot (and the value-naming message for a supplied non-member).
         var create = ExportedCSharp.ExtractMethod(
             PrintMember(), "internal static DomainResult<Member> Create(");
-        await Assert.That(create).Contains("if ((object)level == null)");
+        await Assert.That(create).Contains("if (level == null)");
         await Assert.That(create).Contains("\"'Level' is required.\"");
         await Assert.That(create).Contains("' is not a valid member of Tier for property 'Level'.");
     }

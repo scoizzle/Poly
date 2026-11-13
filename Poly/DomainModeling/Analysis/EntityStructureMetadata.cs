@@ -142,14 +142,4 @@ public sealed record CreateSlot(
     DomainTypeReference Type,
     CreateSlotShape Shape,
     DefaultValueConstraint? Default = null,
-    bool IsSelfNavigation = false,
-    bool InventsEmptyDefault = false);
-
-public sealed record ConstructorParameterOrder(
-    string Name,
-    DomainTypeReference Type,
-    bool IsNavigation,
-    bool IsBackReference,
-    bool IsCollection = false,
-    bool IsOptional = false
-);
+    bool IsSelfNavigation = false);

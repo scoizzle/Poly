@@ -2,7 +2,6 @@ using System.Text;
 
 using Poly.Analysis;
 using Poly.DomainModeling.Analysis;
-using Poly.DomainModeling.Lowering;
 
 namespace Poly.Packs.Product;
 
@@ -38,12 +37,12 @@ public sealed class HttpFileGenerator {
     }
 
     /// <summary>
-    /// The entity's CREATE-signature scalar params (the complete constructor
-    /// metadata, non-nav) — the DTO/JSON body mirrors what Entity.Create(...) takes.
+    /// The entity's Required scalar create slots — the members of the create DTO the
+    /// JSON body sends to Entity.Create(...).
     /// </summary>
-    private IReadOnlyList<ConstructorParameterOrder> GetCreateScalarParams(Entity entity) {
+    private IReadOnlyList<CreateSlot> GetCreateScalarParams(Entity entity) {
         if (_analysis.GetStructure(entity) is { } esm)
-            return DomainToCSharpExporter.LegacyConstructorOrder(esm).Where(p => !p.IsNavigation).ToList();
+            return [.. esm.CreateSlots.Where(s => s is { Shape: CreateSlotShape.Scalar, Kind: CreateSlotKind.Required })];
         return [];
     }
 

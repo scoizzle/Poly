@@ -19,7 +19,7 @@ public sealed partial class MinimalApiGenerator {
         var reserved = new HashSet<string>(StringComparer.Ordinal);
         foreach (var entity in _entities) {
             if (!GetStorageEntity(entity).IsRoot) continue;
-            if (GetConstructorOrder(entity).All(p => p.IsNavigation)) continue;
+            if (GetRequiredScalarSlots(entity).Count == 0) continue;
             reserved.Add($"{entity.Name}Dto");
         }
 
@@ -172,13 +172,10 @@ public sealed partial class MinimalApiGenerator {
 
     /// <summary>Builds Syntax IR for a DTO type definition.</summary>
     private void BuildDtoTypes(List<TypeDefinitionNode> dtoTypes, Entity entity) {
-        // The DTO mirrors the entity's CREATE signature (the POST endpoint passes
-        // the DTO members straight into Entity.Create(...)). Use the complete
-        // constructor metadata — the SAME source the endpoint reads — rather than
-        // re-deriving "scalar non-default props" here (drift = CS7036-class bug).
-        var scalarParams = GetConstructorOrder(entity)
-            .Where(p => !p.IsNavigation)
-            .ToList();
+        // The DTO carries the entity's Required scalar create slots (the POST endpoint
+        // passes them into Entity.Create(...); every other slot is null). The SAME
+        // published slots the endpoint reads, not a re-derived property set.
+        var scalarParams = GetRequiredScalarSlots(entity);
 
         if (scalarParams.Count == 0) return;
         if (!GetStorageEntity(entity).IsRoot) return;

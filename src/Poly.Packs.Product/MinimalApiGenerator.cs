@@ -3,7 +3,6 @@ using Poly.Ast;
 using Poly.Ast.Nodes;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Compile;
-using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Runtime;
 using Poly.Interpretation.CSharp;
 using Poly.Runtime;
@@ -75,44 +74,36 @@ public sealed partial class MinimalApiGenerator {
 
     private AggregateEntity GetAggregateEntity(Entity entity) => _aggregateLookup[entity.Name];
 
-    private IReadOnlyList<ConstructorParameterOrder> GetConstructorOrder(Entity entity) {
+    private IReadOnlyList<CreateSlot> GetCreateSlots(Entity entity) {
         if (!_entityStructureLookup.TryGetValue(entity.Name, out var metadata)) {
             throw new InvalidOperationException(
-                $"EntityStructureMetadata is required for constructor ordering on entity '{entity.Name}'.");
+                $"EntityStructureMetadata is required for the create slots of entity '{entity.Name}'.");
         }
 
-        return DomainToCSharpExporter.LegacyConstructorOrder(metadata);
+        return metadata.CreateSlots;
     }
 
+    /// <summary>The Required scalar create slots: the values a host must supply (the create DTO's members).</summary>
+    private IReadOnlyList<CreateSlot> GetRequiredScalarSlots(Entity entity) =>
+        [.. GetCreateSlots(entity).Where(s => s is { Shape: CreateSlotShape.Scalar, Kind: CreateSlotKind.Required })];
+
     /// <summary>
-    /// One argument per constructor parameter, in ESM order: a collection nav is empty, a
-    /// singular nav (including an auto-wired back-reference) is <c>null</c>, and a scalar comes
-    /// from <paramref name="scalar"/>. Emitting an argument for <em>every</em> parameter is what
-    /// keeps this positional call aligned with the printed <c>Create</c> signature — skipping a
-    /// back-reference (or filling a singular nav with an empty enumerable) shifts every later
-    /// argument and the emitted host fails to compile.
+    /// One argument per create slot, in slot order: a Required scalar slot comes from
+    /// <paramref name="scalar"/>, and every other slot is <c>null</c>, which the lowered
+    /// <c>Create</c> reads as "not supplied" (its default applies, or it stays unset).
     /// </summary>
-    private List<Node> BuildCreateArgs(
-        Entity entity,
-        IReadOnlyList<ConstructorParameterOrder> order,
-        Func<Property, Node> scalar) {
-        var args = new List<Node>(order.Count);
-        foreach (var parameter in order) {
-            if (parameter.IsCollection) {
-                args.Add(new Invoke(new Member(new TypeReference("Enumerable"), "Empty")) {
-                    TypeArguments = [new TypeReference(VisibleType(parameter.Type.TypeName))]
-                });
-                continue;
-            }
-            if (parameter.IsNavigation) {
-                args.Add(new Constant(null!));
+    private Dictionary<string, Node> BuildCreateArgs(Entity entity, Func<Property, Node> scalar) {
+        var args = new Dictionary<string, Node>(StringComparer.Ordinal);
+        foreach (var slot in GetCreateSlots(entity)) {
+            if (slot is not { Shape: CreateSlotShape.Scalar, Kind: CreateSlotKind.Required }) {
+                args[ToCamelCase(slot.Name)] = new Constant(null!);
                 continue;
             }
             var prop = entity.Properties.FirstOrDefault(p =>
-                string.Equals(p.Name, parameter.Name, StringComparison.Ordinal))
+                string.Equals(p.Name, slot.Name, StringComparison.Ordinal))
                 ?? throw new InvalidOperationException(
-                    $"Constructor parameter '{parameter.Name}' on entity '{entity.Name}' does not match a property.");
-            args.Add(scalar(prop));
+                    $"Create slot '{slot.Name}' on entity '{entity.Name}' does not match a property.");
+            args[ToCamelCase(slot.Name)] = scalar(prop);
         }
         return args;
     }
@@ -309,25 +300,17 @@ public sealed partial class MinimalApiGenerator {
     }
 
     /// <summary>
-    /// Builds the positional arguments for a static <c>Create</c> call. A
-    /// contributed dependency sits where the lowered signature puts it (before
-    /// the first optional parameter), so it is woven into the constructor
-    /// arguments rather than appended.
+    /// Builds the positional arguments for a static <c>Create</c> call, one per create
+    /// slot in slot order. A contributed dependency sits where the lowered signature
+    /// puts it, so it is woven into the slot arguments rather than appended.
     /// </summary>
-    private List<Node> BuildCreateCallArgs(
-        Entity entity,
-        IReadOnlyList<ConstructorParameterOrder> order,
-        Func<Property, Node> scalar) {
-        var args = BuildCreateArgs(entity, order, scalar);
-        if (RuntimeAnalysisCache.Session(_domain).ConstraintCompilers.Count == 0)
-            return args;
-        var method = ModuleMethod(entity, "Create");
+    private List<Node> BuildCreateCallArgs(Entity entity, Func<Property, Node> scalar) {
+        var declared = BuildCreateArgs(entity, scalar);
+        var method = RuntimeAnalysisCache.Session(_domain).ConstraintCompilers.Count == 0
+            ? null
+            : ModuleMethod(entity, "Create");
         if (method?.Parameters is not { Count: > 0 } parameters)
-            return args;
-
-        var declared = new Dictionary<string, Node>(StringComparer.Ordinal);
-        for (var i = 0; i < order.Count && i < args.Count; i++)
-            declared[ToCamelCase(order[i].Name)] = args[i];
+            return [.. declared.Values];
 
         var result = new List<Node>(parameters.Count);
         foreach (var parameter in parameters) {
@@ -335,8 +318,6 @@ public sealed partial class MinimalApiGenerator {
                 result.Add(argument);
                 continue;
             }
-            if (IsTrailingOmittable(entity, parameter.Name))
-                continue;
             if (!string.Equals(parameter.Name, "db", StringComparison.Ordinal))
                 throw new InvalidOperationException(
                     $"Create on '{entity.Name}' requires contributed parameter '{parameter.Name}', "
@@ -344,19 +325,6 @@ public sealed partial class MinimalApiGenerator {
             result.Add(new Variable("db"));
         }
         return result;
-    }
-
-    private bool IsTrailingOmittable(Entity entity, string parameterName) {
-        if (!_entityStructureLookup.TryGetValue(entity.Name, out var structure))
-            return false;
-        foreach (var property in entity.Properties) {
-            if (!string.Equals(ToCamelCase(property.Name), parameterName, StringComparison.Ordinal))
-                continue;
-            return !structure.EntryAssignedPropertyNames.Contains(property.Name)
-                && (!structure.RequiredPropertyNames.Contains(property.Name)
-                    || property.Constraints.OfType<DefaultValueConstraint>().Any());
-        }
-        return false;
     }
 
     private MethodDefinitionNode? ModuleMethod(Entity entity, string methodName) {

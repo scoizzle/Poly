@@ -129,9 +129,9 @@ public sealed class EditSpliceBaselineTests {
         await Assert.That(ReplaceStage(StageDocument, "S: stage { }")).IsEqualTo("domain A\nX: entity {\n  S: stage { }\n  N: Text\n}\n");
 
     [Test]
-    public async Task Reindent_ContinuationLinesAllDeeperThanTheNodesIndent_AreBroughtToIt() =>
+    public async Task Reindent_ContinuationLinesAllDeeperThanTheNodesIndent_AreKeptWhereTheyAre() =>
         await Assert.That(ReplaceStage(StageDocument, "S: stage {\n        Go: action { }\n        }"))
-            .IsEqualTo("domain A\nX: entity {\n  S: stage {\n  Go: action { }\n  }\n  N: Text\n}\n");
+            .IsEqualTo("domain A\nX: entity {\n  S: stage {\n        Go: action { }\n        }\n  N: Text\n}\n");
 
     [Test]
     public async Task Reindent_BlankLinesInTheSnippet_StayBlank() =>
@@ -153,6 +153,71 @@ public sealed class EditSpliceBaselineTests {
 
         await Assert.That(ReplaceStage(StageDocument, StageDocument[lineStart..node.EndOffset])).IsEqualTo(StageDocument);
     }
+
+    // ── closing round: the rule in doc coordinates (C1 hanging indent, C2 column-0 line) ──
+
+    private static string ReplaceAt(string document, string path, string dsl) =>
+        PolyEdit.Apply(document, JsonSerializer.Serialize(new[] { new { op = "replace", path, dsl } })).Text!;
+
+    private static string OwnText(string document, string path) {
+        var node = DslOutline.Build(document).All().First(n => n.Path == path);
+        return document[node.StartOffset..node.EndOffset];
+    }
+
+    private static async Task AssertIdentical(string document, string path) {
+        var once = ReplaceAt(document, path, OwnText(document, path));
+        await Assert.That(once).IsEqualTo(document);
+        await Assert.That(ReplaceAt(once, path, OwnText(once, path))).IsEqualTo(document).Because("a second replace must not grow it");
+    }
+
+    /// <summary>Every addressable node of every valid document, replaced with its own text from the node start, comes back byte-identical.</summary>
+    [Test]
+    public async Task ReplaceWithOwnText_IsByteIdenticalForEveryNodeOfEveryShippedDocument() {
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        var nodes = 0;
+        var failures = new List<string>();
+        foreach (var (doc, text) in ParityDocuments.All) {
+            var outline = DslOutline.Build(text);
+            foreach (var node in outline.All()) {
+                if (node.Path.Length == 0 || outline.Find(node.Path, out _, out _) is not { } found || !ReferenceEquals(found, node))
+                    continue;
+                nodes++;
+                var result = PolyEdit.Apply(text, JsonSerializer.Serialize(new[] { new { op = "replace", path = node.Path, dsl = text[node.StartOffset..node.EndOffset] } }));
+                if (!result.Ok || result.Text != text)
+                    failures.Add($"{doc}|{node.Kind}|{node.Path}");
+            }
+        }
+
+        Console.WriteLine($"every-node sweep: {nodes} nodes in {clock.ElapsedMilliseconds} ms, {failures.Count} not identical");
+        await Assert.That(nodes).IsGreaterThan(1000);
+        await Assert.That(failures).IsEmpty();
+    }
+
+    [Test]
+    public async Task Reindent_AHangingIndentFunctionAtTheTopLevel_IsIdentical() =>
+        await AssertIdentical("domain A\nfunction Sq(a: Number): Number =\n    a * a\n", "Sq");
+
+    [Test]
+    public async Task Reindent_AHangingIndentMemberNestedInAnEntity_IsIdentical() =>
+        await AssertIdentical("domain A\nX: entity {\n  N: Number\n      range(1, 5)\n  M: Text\n}\n", "X.N");
+
+    [Test]
+    public async Task Reindent_AColumnZeroCommentInsideANestedNode_IsIdenticalAndDoesNotGrow() =>
+        await AssertIdentical("domain A\nX: entity {\n  S: stage {\n    Go: action { }\n// note\n    Done: action { }\n  }\n}\n", "X.S");
+
+    /// <summary>The DSL allows a newline inside a string literal. Its content is not code: replace must not re-indent it.</summary>
+    [Test]
+    public async Task Reindent_ALineInsideAMultiLineStringLiteral_IsNotReindented() =>
+        await AssertIdentical("domain A\nX: entity {\n  N: Text pattern(\"a\nb\")\n  M: Text\n}\n", "X.N");
+
+    [Test]
+    public async Task Reindent_TabIndentedNodes_AreIdentical() =>
+        await AssertIdentical("domain A\nX: entity {\n\tS: stage {\n\t\tGo: action { }\n\t}\n}\n", "X.S");
+
+    [Test]
+    public async Task Reindent_ASnippetAuthoredFromColumnZeroForANestedNode_LandsBodyAtTwiceTheIndentAndTheBraceAtIt() =>
+        await Assert.That(ReplaceAt(StageDocument, "X.S", "S: stage {\n  entry { }\n}"))
+            .IsEqualTo("domain A\nX: entity {\n  S: stage {\n    entry { }\n  }\n  N: Text\n}\n");
 
     [Test]
     public async Task SelfTest_OneEditResultChanged_FailsTheBaseline() {

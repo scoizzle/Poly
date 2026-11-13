@@ -449,8 +449,8 @@ public sealed class DomainDslPrinterTests {
 
 
 /// <summary>
-/// G-03 characterisation: what the printer writes today for a number, per site. <see cref="Stable"/> rows must NOT move when
-/// <c>DslNumberText</c> lands; <see cref="Moving"/> rows record today's text for the inputs this slice changes.
+/// G-03: what the printer writes for a number, per site. <see cref="Stable"/> rows did not move when <c>DslNumberText</c> landed;
+/// <see cref="Moving"/> rows are the inputs it changed (commit 1 of the slice recorded their old text: <c>1E+21</c>, <c>1E-07</c>, <c>5E-324</c>, <c>-0</c>, <c>NaN</c>, ...).
 /// </summary>
 public sealed class DslNumberPrintPinTests {
     private static readonly DomainDslPrinter Printer = new();
@@ -476,21 +476,19 @@ public sealed class DslNumberPrintPinTests {
         yield return ("double 2.5", 2.5d, "2.5", "range(2.5, 2.5)", "equals(2.5)");
         yield return ("double 3 (integral)", 3d, "3.0", "range(3, 3)", "equals(3.0)");
         yield return ("double 0.1", 0.1d, "0.1", "range(0.1, 0.1)", "equals(0.1)");
-        yield return ("double 1e-7", 1e-7d, "0.0000001", "range(1E-07, 1E-07)", "equals(0.0000001)");
         yield return ("double 1e15", 1e15d, "1000000000000000.0", "range(1000000000000000, 1000000000000000)", "equals(1000000000000000.0)");
-        yield return ("double 1e21", 1e21d, "1000000000000000000000.0", "range(1E+21, 1E+21)", "equals(1000000000000000000000.0)");
     }
 
-    /// <summary>Inputs this slice moves, with today's text. <c>null</c> in a column means that site is not pinned for the input.</summary>
+    /// <summary>Inputs G-03 moves, with the text they print after it (were: see the commit that added this class).</summary>
     internal static IEnumerable<(string, object, string, string, string)> Moving() {
-        yield return ("double 5e-324", 5e-324d, "0.0", "range(5E-324, 5E-324)", "equals(0.0)");
-        yield return ("double -0.0", -0.0d, "-0.0", "range(-0, -0)", "equals(-0.0)");
-        yield return ("double 0.1+0.2", 0.1d + 0.2d, "0.3", "range(0.30000000000000004, 0.30000000000000004)", "equals(0.3)");
-        yield return ("double 123456789.123456789", 123456789.123456789d, "123456789.123457", "range(123456789.12345679, 123456789.12345679)", "equals(123456789.123457)");
-        yield return ("float 1e15", 1e15f, "1E+15", "range(1E+15, 1E+15)", "equals(1E+15)");
-        yield return ("double NaN", double.NaN, "NaN", "range(NaN, NaN)", "equals(NaN)");
-        yield return ("double +Infinity", double.PositiveInfinity, "Infinity", "range(Infinity, Infinity)", "equals(Infinity)");
-        yield return ("double -Infinity", double.NegativeInfinity, "-Infinity", "range(-Infinity, -Infinity)", "equals(-Infinity)");
+        var tiny = "0." + new string('0', 323) + "5";
+        yield return ("double 5e-324", 5e-324d, tiny, $"range({tiny}, {tiny})", $"equals({tiny})");
+        yield return ("double -0.0", -0.0d, "0.0", "range(0, 0)", "equals(0.0)");
+        yield return ("double 0.1+0.2", 0.1d + 0.2d, "0.30000000000000004", "range(0.30000000000000004, 0.30000000000000004)", "equals(0.30000000000000004)");
+        yield return ("double 123456789.123456789", 123456789.123456789d, "123456789.12345679", "range(123456789.12345679, 123456789.12345679)", "equals(123456789.12345679)");
+        yield return ("float 1e15", 1e15f, "1000000000000000", "range(1000000000000000, 1000000000000000)", "equals(1000000000000000)");
+        yield return ("double 1e-7", 1e-7d, "0.0000001", "range(0.0000001, 0.0000001)", "equals(0.0000001)");
+        yield return ("double 1e21", 1e21d, "1000000000000000000000.0", "range(1000000000000000000000, 1000000000000000000000)", "equals(1000000000000000000000.0)");
     }
 
     [Test]
@@ -502,11 +500,11 @@ public sealed class DslNumberPrintPinTests {
             await Assert.That($"{label}: {Equality(value)}").IsEqualTo($"{label}: {equality}");
             seen++;
         }
-        await Assert.That(seen).IsEqualTo(16);
+        await Assert.That(seen).IsEqualTo(14);
     }
 
     [Test]
-    public async Task MovingRows_TodayText() {
+    public async Task MovingRows_PrintPlainDigits() {
         var seen = 0;
         foreach (var (label, value, literal, bound, equality) in Moving()) {
             await Assert.That($"{label}: {Literal(value)}").IsEqualTo($"{label}: {literal}");
@@ -514,15 +512,16 @@ public sealed class DslNumberPrintPinTests {
             await Assert.That($"{label}: {Equality(value)}").IsEqualTo($"{label}: {equality}");
             seen++;
         }
-        await Assert.That(seen).IsEqualTo(8);
+        await Assert.That(seen).IsEqualTo(7);
     }
 
     [Test]
-    public async Task Double_MaxValue_TodayPrintsApproximateDigits() {
-        // Today: 15 significant digits then zeros (the value is lost), and the reader cannot hold 309 digits.
-        var text = Literal(double.MaxValue);
-        await Assert.That(text.StartsWith("17976931348623", StringComparison.Ordinal) && text.EndsWith(".0", StringComparison.Ordinal)).IsTrue();
-        await Assert.That(Bound(double.MaxValue)).IsEqualTo("range(1.7976931348623157E+308, 1.7976931348623157E+308)");
+    public async Task ValuesTheReaderCannotHold_FailClosedAtEverySite() {
+        foreach (var value in new object[] { double.NaN, double.PositiveInfinity, double.NegativeInfinity, double.MaxValue, float.NaN }) {
+            await Assert.That(() => Literal(value)).Throws<InvalidOperationException>();
+            await Assert.That(() => Bound(value)).Throws<InvalidOperationException>();
+            await Assert.That(() => Equality(value)).Throws<InvalidOperationException>();
+        }
     }
 
     [Test]

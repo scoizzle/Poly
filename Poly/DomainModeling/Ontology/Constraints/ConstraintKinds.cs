@@ -1,5 +1,3 @@
-using System.Globalization;
-
 using Poly.DomainModeling.Analysis;
 
 namespace Poly.DomainModeling.Ontology.Constraints;
@@ -12,6 +10,12 @@ internal interface IConstraintPrintHost {
     string Expression(DomainExpression expression);
 
     string Literal(object? value);
+
+    /// <summary>A number as plain DSL digits (never an exponent).</summary>
+    string Number(object value);
+
+    /// <summary>A range bound: empty when absent, plain digits when numeric.</summary>
+    string Bound(object? bound);
 
     string EscapeString(string value);
 }
@@ -128,7 +132,7 @@ internal static class ConstraintKinds {
                 evaluate: (r, v) => ConstraintValidation.RangeVerdict(r, v),
                 describe: ConstraintValidation.FormatRange,
                 // A union has no DSL word; it prints as its hull, a sound widening.
-                print: (r, _) => $"range({Convert.ToString(r.Minimum, CultureInfo.InvariantCulture)}, {Convert.ToString(r.Maximum, CultureInfo.InvariantCulture)})",
+                print: (r, host) => $"range({host.Bound(r.Minimum)}, {host.Bound(r.Maximum)})",
                 decide: WriteVerification.DecideRange,
                 writeRelevant: true),
             Row<LengthConstraint>(
@@ -139,9 +143,9 @@ internal static class ConstraintKinds {
                 identical: (x, y) => x.MinLength == y.MinLength && x.MaxLength == y.MaxLength,
                 evaluate: (l, v) => ConstraintValidation.Of(ConstraintValidation.IsValidLength(v, l.MinLength, l.MaxLength)),
                 describe: l => $"length({l.MinLength}, {l.MaxLength})",
-                print: (l, _) => l.MinLength == l.MaxLength
-                    ? $"length({l.MinLength})"
-                    : $"length({l.MinLength}, {l.MaxLength})"),
+                print: (l, host) => l.MinLength == l.MaxLength
+                    ? $"length({host.Number(l.MinLength)})"
+                    : $"length({host.Number(l.MinLength)}, {host.Number(l.MaxLength)})"),
             Row<RequiredConstraint>(
                 merge: (_, _) => ConstraintMergeResult.Of(new RequiredConstraint()),
                 join: (_, _) => new RequiredConstraint(),

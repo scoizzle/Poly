@@ -112,7 +112,7 @@ public static class TemporalExpressionPrintBinders {
                 pattern,
                 Fill: ctx => EmitDate(ctx, dOp.Date),
                 NamedFills: new Dictionary<string, string>(StringComparer.Ordinal) {
-                    ["amount"] = amount.ToString(CultureInfo.InvariantCulture),
+                    ["amount"] = DslNumberText.Format(amount),
                     ["unit"] = unit,
                 });
             return true;

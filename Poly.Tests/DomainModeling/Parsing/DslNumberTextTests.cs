@@ -166,20 +166,26 @@ public sealed class DslNumberTextTests {
             "Poly/DomainModeling/Ontology/Constraints/ConstraintKinds.cs",
             "Poly/DomainModeling/Libraries/Temporal/TemporalExpressionPrintBinders.cs",
         };
+        var forbidden = new Regex(@"\.ToString\(\s*(CultureInfo|""[^""]*"")|\{l\.M(in|ax)Length\}", RegexOptions.CultureInvariant);
         var offenders = new List<string>();
+        var otherConversions = new List<string>();
         foreach (var file in files) {
             var lines = File.ReadAllLines(Path.Combine(root, file));
             for (var i = 0; i < lines.Length; i++) {
-                var line = lines[i];
-                if (line.Contains("InvariantCulture", StringComparison.Ordinal)
-                    || line.Contains("Convert.ToString(", StringComparison.Ordinal)
-                    || line.Contains("{l.MinLength}", StringComparison.Ordinal)
-                    || line.Contains("{l.MaxLength}", StringComparison.Ordinal))
-                    offenders.Add($"{file}:{i + 1}: {line.Trim()}");
+                // `describe:` rows build diagnostic text from integer lengths; they are not DSL printing.
+                if (forbidden.IsMatch(lines[i]) && !lines[i].Contains("describe:", StringComparison.Ordinal))
+                    offenders.Add($"{file}:{i + 1}: {lines[i].Trim()}");
+                if (lines[i].Contains("Convert.ToString(", StringComparison.Ordinal))
+                    otherConversions.Add($"{Path.GetFileName(file)}: {lines[i].Trim()}");
             }
         }
         await Assert.That(string.Join("\n", offenders)).IsEqualTo("");
+        // The survivors: the fallback for a value that is NOT a number (a date bound, an enum, ...), each one after an IsNumber branch.
+        await Assert.That(string.Join("\n", otherConversions)).IsEqualTo(string.Join("\n",
+            "DomainDslPrinter.cs: return Convert.ToString(literal.Value, CultureInfo.InvariantCulture) ?? \"null\";",
+            "DomainDslPrinter.cs: _ => Convert.ToString(value, CultureInfo.InvariantCulture) ?? \"null\",",
+            "DomainDslPrinter.Constraints.cs: _ => Convert.ToString(bound, CultureInfo.InvariantCulture) ?? \"\","));
         // Presence control: the scan reads real files that still hold the number sites.
-        await Assert.That(File.ReadAllText(Path.Combine(root, files[4]))).Contains("DslNumberText");
+        await Assert.That(File.ReadAllText(Path.Combine(root, files[2]))).Contains("DslNumberText.Format");
     }
 }

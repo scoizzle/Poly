@@ -5,7 +5,7 @@
 # steps after it (naming the hung test, uploading the log) still run:
 #   * deadline: still running after <seconds>: print the process tree, SIGKILL the whole group, exit 1.
 #   * memory:   sampled every 2 s from /proc/meminfo; SIGKILL the whole group, exit 1, when
-#       - SwapFree < POLY_SWAP_FLOOR_MB (default 1000; off when the machine has no swap), or
+#       - SwapFree < POLY_SWAP_FLOOR_MB (default 1000; active only when SwapTotal exceeds it), or
 #       - MemAvailable < POLY_MEM_THRESHOLD_MB (default 200) on TWO consecutive samples.
 #     A one-time ::warning:: (with the process snapshot) when MemAvailable first drops below 600 MB.
 #     These numbers come from ONE measurement (a green 4-core, 16 GB hosted run, PR #892: available
@@ -19,7 +19,8 @@
 # The memory loop therefore uses shell builtins only (no ps, no pipes, no forks except sleep); the
 # kill path reads /proc directly. POLY_MEMINFO and POLY_PROC override /proc/meminfo and /proc (tests);
 # without a meminfo file the memory watchdog is off, the summary says "memory: unavailable" and the
-# deadline still works. The snapshot assumes 4 KB pages (statm is in pages).
+# deadline still works. The snapshot converts statm pages with the page size read once at start
+# (getconf PAGESIZE, fallback 4 KB).
 # Always prints: cores and MemTotal at the start, a heartbeat every 30 s (memory, load, memory
 # pressure, and the snapshot: sum of RSS, the command's group, the three largest processes), and one
 # `memory:` line at the end.
@@ -31,6 +32,8 @@ proc=${POLY_PROC:-/proc}
 threshold_mb=${POLY_MEM_THRESHOLD_MB:-200}
 swap_floor_mb=${POLY_SWAP_FLOOR_MB:-1000}
 warn_mb=600
+page_kb=$(( $(getconf PAGESIZE 2> /dev/null || echo 4096) / 1024 ))
+[ "$page_kb" -gt 0 ] || page_kb=4
 flag=$(mktemp)
 state=$(mktemp)
 rm -f "$flag"
@@ -52,15 +55,15 @@ read_mem() {
 }
 
 # Builtins only (no fork). Sets $snapshot from $proc: statm field 2 = resident pages; in stat, after
-# the ")" that ends the command name, field 3 of the rest is the process group.
+# the ")" that ends the command name, field 3 of the rest is the process group. Resident PAGES are
+# summed first and converted to MB once, so truncation does not undercount the total.
 take_snapshot() {
   local d p r c s tot=0 gm=0 gn=0 v1=0 v2=0 v3=0 l1= l2= l3=
   for d in "$proc"/[0-9]*; do
     p=${d##*/}
     read -r _ r _ 2> /dev/null < "$d/statm" || continue
     read -r c 2> /dev/null < "$d/comm" || c=?
-    r=$((r * 4 / 1024))
-    tot=$((tot + r))
+    tot=$((tot + r)) # pages; converted to MB once below
     if [ "$r" -gt "$v1" ]; then
       v3=$v2 l3=$l2 v2=$v1 l2=$l1 v1=$r l1="$c($p)"
     elif [ "$r" -gt "$v2" ]; then
@@ -75,7 +78,8 @@ take_snapshot() {
       gn=$((gn + 1))
     fi
   done
-  snapshot="rss_sum=${tot}MB group=${gn}procs/${gm}MB top=${l1}/${v1}MB,${l2}/${v2}MB,${l3}/${v3}MB"
+  local m=$((page_kb))
+  snapshot="rss_sum=$((tot * m / 1024))MB group=${gn}procs/$((gm * m / 1024))MB top=${l1}/$((v1 * m / 1024))MB,${l2}/$((v2 * m / 1024))MB,${l3}/$((v3 * m / 1024))MB"
 }
 
 summary() {
@@ -134,7 +138,7 @@ if read_mem; then
       fi
       if [ "$mem_avail" -lt "$threshold_mb" ]; then low=$((low + 1)); else low=0; fi
       reason=
-      if [ "$swap_total" -gt 0 ] && [ "$swap_free" -lt "$swap_floor_mb" ]; then
+      if [ "$swap_total" -gt "$swap_floor_mb" ] && [ "$swap_free" -lt "$swap_floor_mb" ]; then
         reason="SwapFree ${swap_free}MB is below ${swap_floor_mb}MB (more than $((swap_total - swap_floor_mb))MB swapped out)"
       elif [ "$low" -ge 2 ]; then
         reason="MemAvailable ${mem_avail}MB is below ${threshold_mb}MB on two consecutive samples"
@@ -145,6 +149,8 @@ if read_mem; then
         take_snapshot
         echo "snapshot: $snapshot"
         kill -KILL -- "-$pid" 2> /dev/null
+        # best effort: the parent may stop this helper before it prints, and the kernel may not have
+        # freed the memory yet when it is read
         read_mem
         echo "memory-after-kill: avail=${mem_avail}MB swapfree=${swap_free}MB"
         exit 0

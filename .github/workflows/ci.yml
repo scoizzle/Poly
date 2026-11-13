@@ -42,9 +42,9 @@ jobs:
       # failed step, so the next steps run) in three ways, earliest first:
       #   - --timeout 10m in the test host ends an async hang cleanly, with a summary (exit 3);
       #   - the script's memory watchdog SIGKILLs the whole process group when SwapFree falls below
-      #     1000 MB or MemAvailable stays below 200 MB on two samples; the thresholds are judgement
-      #     from ONE green run (PR #892: 4 cores, 15982 MB, lowest sampled MemAvailable 560 MB, swap
-      #     first used near 900 MB). The hypothesis (#870) is that a starved runner stops enforcing the
+      #     1000 MB (when swap is larger than that) or MemAvailable stays below 200 MB on two samples; the thresholds are judgement
+      #     from TWO green runs (PR #892: 4 cores, 15982 MB; lowest sampled MemAvailable 560 MB and
+      #     1275 MB, a spread of about 700 MB between runs; swap first used near 900 MB). The hypothesis (#870) is that a starved runner stops enforcing the
       #     step timeout and any watchdog that must fork, so only the server's 20-minute job limit ends
       #     the job and no log survives. A heartbeat every 30 s and one `memory:` summary line measure it;
       #   - the script's 630 s deadline SIGKILLs the group: a host blocked on a synchronous wait ignores

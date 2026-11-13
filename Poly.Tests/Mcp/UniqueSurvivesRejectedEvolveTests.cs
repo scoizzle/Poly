@@ -22,53 +22,53 @@ public class UniqueSurvivesRejectedEvolveTests {
     [Test]
     public async Task Create_DuplicateUnique_AfterRejectedAdd_StillFails() {
         var (sessionId, _) = McpTestTools.Store.Create("EvolveUnique");
-        await Assert.That(McpTestTools.Dsl.ApplyDsl(sessionId, Dsl).Success).IsTrue();
+        await Assert.That(McpTestTools.Surface.Define(sessionId, Dsl).Success).IsTrue();
 
-        await Assert.That(McpTestTools.Runtime.CreateInstance(sessionId, "Agent", """{"Handle":"sam"}""").Success).IsTrue();
+        await Assert.That(McpTestTools.Surface.Create(sessionId, "Agent", """{"Handle":"sam"}""").Ok).IsTrue();
 
         var rejected = McpTestTools.Evolve.Add(
             sessionId, "property", """{"entityName":"Agent","name":"Bad","typeName":"Ghost"}""");
         await Assert.That(rejected.Success).IsFalse().Because("the property references an unknown type");
 
-        var duplicate = McpTestTools.Runtime.CreateInstance(sessionId, "Agent", """{"Handle":"sam"}""");
-        await Assert.That(duplicate.Success).IsFalse()
+        var duplicate = McpTestTools.Surface.Create(sessionId, "Agent", """{"Handle":"sam"}""");
+        await Assert.That(duplicate.Ok).IsFalse()
             .Because("a rejected evolve must leave the running module exactly as it was");
-        await Assert.That(duplicate.Message).Contains("Unique constraint");
+        await Assert.That(duplicate.Summary).Contains("Unique constraint");
     }
 
     /// <summary>A rejected mutation against a missing entity is the second shape of the same path.</summary>
     [Test]
     public async Task Create_DuplicateUnique_AfterRejectedAddToMissingEntity_StillFails() {
         var (sessionId, _) = McpTestTools.Store.Create("EvolveUnique");
-        await Assert.That(McpTestTools.Dsl.ApplyDsl(sessionId, Dsl).Success).IsTrue();
+        await Assert.That(McpTestTools.Surface.Define(sessionId, Dsl).Success).IsTrue();
 
-        await Assert.That(McpTestTools.Runtime.CreateInstance(sessionId, "Agent", """{"Handle":"sam"}""").Success).IsTrue();
+        await Assert.That(McpTestTools.Surface.Create(sessionId, "Agent", """{"Handle":"sam"}""").Ok).IsTrue();
 
         var rejected = McpTestTools.Evolve.Add(
             sessionId, "property", """{"entityName":"Nope","name":"Bad","typeName":"Text"}""");
         await Assert.That(rejected.Success).IsFalse();
 
-        var duplicate = McpTestTools.Runtime.CreateInstance(sessionId, "Agent", """{"Handle":"sam"}""");
-        await Assert.That(duplicate.Success).IsFalse()
+        var duplicate = McpTestTools.Surface.Create(sessionId, "Agent", """{"Handle":"sam"}""");
+        await Assert.That(duplicate.Ok).IsFalse()
             .Because("a rejected evolve must leave the running module exactly as it was");
-        await Assert.That(duplicate.Message).Contains("Unique constraint");
+        await Assert.That(duplicate.Summary).Contains("Unique constraint");
     }
 
     /// <summary>A rejected removal is the same gate by the other half of the same tool family.</summary>
     [Test]
     public async Task Create_DuplicateUnique_AfterRejectedRemove_StillFails() {
         var (sessionId, _) = McpTestTools.Store.Create("EvolveUnique");
-        await Assert.That(McpTestTools.Dsl.ApplyDsl(sessionId, Dsl).Success).IsTrue();
+        await Assert.That(McpTestTools.Surface.Define(sessionId, Dsl).Success).IsTrue();
 
-        await Assert.That(McpTestTools.Runtime.CreateInstance(sessionId, "Agent", """{"Handle":"sam"}""").Success).IsTrue();
+        await Assert.That(McpTestTools.Surface.Create(sessionId, "Agent", """{"Handle":"sam"}""").Ok).IsTrue();
 
         var rejected = McpTestTools.Evolve.Remove(sessionId, "entity", """{"name":"Nope"}""");
         await Assert.That(rejected.Success).IsFalse().Because("the entity does not exist");
 
-        var duplicate = McpTestTools.Runtime.CreateInstance(sessionId, "Agent", """{"Handle":"sam"}""");
-        await Assert.That(duplicate.Success).IsFalse()
+        var duplicate = McpTestTools.Surface.Create(sessionId, "Agent", """{"Handle":"sam"}""");
+        await Assert.That(duplicate.Ok).IsFalse()
             .Because("a rejected removal must leave the running module exactly as it was");
-        await Assert.That(duplicate.Message).Contains("Unique constraint");
+        await Assert.That(duplicate.Summary).Contains("Unique constraint");
     }
 
     /// <summary>
@@ -79,18 +79,18 @@ public class UniqueSurvivesRejectedEvolveTests {
     [Test]
     public async Task Create_DuplicateUnique_AfterAcceptedAdd_StillFails() {
         var (sessionId, _) = McpTestTools.Store.Create("EvolveUnique");
-        await Assert.That(McpTestTools.Dsl.ApplyDsl(sessionId, Dsl).Success).IsTrue();
+        await Assert.That(McpTestTools.Surface.Define(sessionId, Dsl).Success).IsTrue();
 
         var accepted = McpTestTools.Evolve.Add(
             sessionId, "property", """{"entityName":"Agent","name":"Memo","typeName":"Text"}""");
         await Assert.That(accepted.Success).IsTrue();
 
-        var first = McpTestTools.Runtime.CreateInstance(sessionId, "Agent", """{"Handle":"sam","Memo":"x"}""");
-        await Assert.That(first.Success).IsTrue();
+        var first = McpTestTools.Surface.Create(sessionId, "Agent", """{"Handle":"sam","Memo":"x"}""");
+        await Assert.That(first.Ok).IsTrue();
 
-        var duplicate = McpTestTools.Runtime.CreateInstance(sessionId, "Agent", """{"Handle":"sam","Memo":"y"}""");
-        await Assert.That(duplicate.Success).IsFalse()
+        var duplicate = McpTestTools.Surface.Create(sessionId, "Agent", """{"Handle":"sam","Memo":"y"}""");
+        await Assert.That(duplicate.Ok).IsFalse()
             .Because("the executor an accepted evolve installs still enforces unique");
-        await Assert.That(duplicate.Message).Contains("Unique constraint");
+        await Assert.That(duplicate.Summary).Contains("Unique constraint");
     }
 }

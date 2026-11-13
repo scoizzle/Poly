@@ -87,20 +87,6 @@ public partial class V1ToolIndependenceTests {
         new("Mcp/UniqueSurvivesRejectedEvolveTests.cs", "McpTestTools.Evolve", 4, "M-13"),
         new("Mcp/ValidateDslTests.cs", "McpTestTools.Query", 3, "M-13"),
         // Q-05 (a "Q-05x+M-nn" label: one entry per (file, key); the Q-05x PR lowers the count and rewrites the label to M-nn)
-        // Q-05d2
-        new("Mcp/CacheSessionOwnershipTests.cs", "McpTestTools.Dsl", 4, "Q-05d2"),
-        new("Mcp/CacheSessionOwnershipTests.cs", "McpTestTools.Oracle", 1, "Q-05d2"),
-        new("Mcp/CacheSessionOwnershipTests.cs", "McpTestTools.Runtime", 1, "Q-05d2"),
-        new("Mcp/McpModuleRuntimeTests.cs", "McpTestTools.Dsl", 1, "Q-05d2"),
-        new("Mcp/McpModuleRuntimeTests.cs", "McpTestTools.Runtime", 1, "Q-05d2"),
-        new("Mcp/McpSqliteHttpHarnessTests.cs", "McpTestTools.Dsl", 3, "Q-05d2"),
-        new("Mcp/McpSqliteHttpHarnessTests.cs", "McpTestTools.Runtime", 2, "Q-05d2"),
-        new("Mcp/UniqueSurvivesExportTests.cs", "DomainToolResponse", 2, "Q-05d2"),
-        new("Mcp/UniqueSurvivesExportTests.cs", "McpTestTools.Dsl", 6, "Q-05d2"),
-        new("Mcp/UniqueSurvivesExportTests.cs", "McpTestTools.Oracle", 7, "Q-05d2"),
-        new("Mcp/UniqueSurvivesExportTests.cs", "McpTestTools.Runtime", 9, "Q-05d2"),
-        new("Mcp/UniqueSurvivesRejectedEvolveTests.cs", "McpTestTools.Dsl", 4, "Q-05d2"),
-        new("Mcp/UniqueSurvivesRejectedEvolveTests.cs", "McpTestTools.Runtime", 8, "Q-05d2"),
         // Q-05e
         new("Mcp/SurfaceExtensionDogfoodTests.cs", "DomainToolResponse", 2, "Q-05e"),
         new("Mcp/SurfaceExtensionDogfoodTests.cs", "McpTestTools.Dsl", 27, "Q-05e"),

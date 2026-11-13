@@ -38,16 +38,18 @@ jobs:
       - name: Build
         run: dotnet build Poly.slnx --no-restore --nologo
 
-      # Four deadlines, each a little after the one before, so the earliest that can act does:
-      #   1. --timeout 10m in the test host ends an async hang cleanly, with a summary (exit 3).
-      #   2. scripts/run-with-deadline.sh 630 SIGKILLs the whole process group at 10m30s: a host
-      #      blocked on a synchronous wait ignores a polite stop (PR #878: the step timeout did
-      #      not end it and the job was cancelled, so nothing below ever ran). The step then
-      #      FAILS, which is what lets the next two steps run.
-      #   3. the same script SIGKILLs the group when MemAvailable falls below 400 MB (a starved
-      #      runner enforces neither the step timeout nor a watchdog: four hangs, #870), and prints a
-      #      heartbeat every 30 s and one `memory:` summary line.
-      #   4. the step's timeout-minutes: 12 and the job's 20 are backstops for the script itself.
+      # The test command runs under scripts/run-with-deadline.sh, which ends the step ITSELF (a
+      # failed step, so the next steps run) in three ways, earliest first:
+      #   - --timeout 10m in the test host ends an async hang cleanly, with a summary (exit 3);
+      #   - the script's memory watchdog SIGKILLs the whole process group when SwapFree falls below
+      #     1000 MB or MemAvailable stays below 200 MB on two samples; the thresholds are judgement
+      #     from ONE green run (PR #892: 4 cores, 15982 MB, lowest sampled MemAvailable 560 MB, swap
+      #     first used near 900 MB). The hypothesis (#870) is that a starved runner stops enforcing the
+      #     step timeout and any watchdog that must fork, so only the server's 20-minute job limit ends
+      #     the job and no log survives. A heartbeat every 30 s and one `memory:` summary line measure it;
+      #   - the script's 630 s deadline SIGKILLs the group: a host blocked on a synchronous wait ignores
+      #     a polite stop (PR #878).
+      # The step's timeout-minutes: 12 and the job's 20 are backstops for the script itself.
       # The diagnostic log records a start and an end event per test (the console prints only
       # the end), so the next step can name a test that started and never finished.
       - name: Run tests
@@ -65,7 +67,7 @@ jobs:
         if: always()
         run: |
           sudo dmesg -T 2>/dev/null | grep -i -E 'out of memory|oom-kill|killed process' | tail -20 || true
-          journalctl -k --no-pager 2>/dev/null | grep -i -E 'oom|out of memory' | tail -20 || true
+          journalctl -k --no-pager 2>/dev/null | grep -i -E 'oom-kill|out of memory|killed process' | tail -20 || true
 
       # Runs on every build, so each green run proves the parser still matches the log: it fails
       # (::error::) when there is no diagnostic file or no start record, and prints the counts.

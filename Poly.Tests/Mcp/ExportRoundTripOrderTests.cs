@@ -29,27 +29,20 @@ public sealed class ExportRoundTripOrderTests {
 
     public static IEnumerable<GoldenDomain> CompilableDomains() => GoldenDomains.Compilable;
 
+    private static readonly PolySurfaceHarness Surface = PolySurfaceHarness.Over(McpTestTools.Store);
+
     private static string Apply(string poly) {
-        var (sessionId, _) = McpTestTools.Store.Create("RoundTrip");
-        var applied = McpTestTools.Dsl.ApplyDsl(sessionId, poly);
+        var workspace = Surface.Open("RoundTrip");
+        var applied = Surface.Define(workspace, poly);
         if (!applied.Success)
-            throw new InvalidOperationException(applied.Message + " " + string.Join("; ", applied.Diagnostics ?? []));
-        return sessionId;
+            throw new InvalidOperationException(applied.Summary + " " + string.Join("; ", applied.Findings.Select(f => f.Message)));
+        return workspace;
     }
 
-    private static string ExportDsl(string sessionId) {
-        var exported = McpTestTools.Dsl.ExportDsl(sessionId);
-        if (!exported.Success)
-            throw new InvalidOperationException(exported.Message);
-        return (string)exported.Data!.GetType().GetProperty("poly")!.GetValue(exported.Data)!;
-    }
+    // Content throws, with the envelope's code and summary, unless the export succeeded with non-empty text.
+    private static string ExportDsl(string workspace) => Surface.Export(workspace, "dsl").Content;
 
-    private static string ExportCSharp(string sessionId) {
-        var exported = McpTestTools.Oracle.ExportDomainToCSharp(sessionId);
-        if (!exported.Success)
-            throw new InvalidOperationException(exported.Message);
-        return (string)exported.Data!.GetType().GetProperty("csharp")!.GetValue(exported.Data)!;
-    }
+    private static string ExportCSharp(string workspace) => Surface.Export(workspace, "csharp").Content;
 
     [Test]
     public async Task Export_ZedAlpha_KeepsOrder_AddsNoUses_AndIsAFixedPointThroughMcp() {
@@ -74,8 +67,8 @@ public sealed class ExportRoundTripOrderTests {
 
     [Test]
     public async Task Export_AuthoredUses_SurvivesALaterApplyThatListsNone() {
-        var (sessionId, _) = McpTestTools.Store.Create("UsesHttp");
-        var first = McpTestTools.Dsl.ApplyDsl(sessionId, """
+        var sessionId = Surface.Open("UsesHttp");
+        var first = Surface.Define(sessionId, """
             domain D
             uses http
             E: entity {
@@ -85,7 +78,7 @@ public sealed class ExportRoundTripOrderTests {
         await Assert.That(first.Success).IsTrue();
         await Assert.That(ExportDsl(sessionId)).Contains("uses http");
 
-        var second = McpTestTools.Dsl.ApplyDsl(sessionId, """
+        var second = Surface.Define(sessionId, """
             domain D
             E: entity {
               N: Number

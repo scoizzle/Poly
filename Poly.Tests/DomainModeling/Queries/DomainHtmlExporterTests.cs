@@ -37,6 +37,23 @@ public class DomainHtmlExporterTests {
         }
         """;
 
+    private const string Shop = """
+        domain Shop
+        Order: entity {
+          Total: Number range(0, 500) default(0)
+          Big: policy { Total > 100 }
+          Small: policy { Total < 20 }
+          Draft: stage {
+            Submit: action
+              require Big {
+              transition to Active
+            }
+          }
+          Active: stage {
+          }
+        }
+        """;
+
     private static string Export(string poly) =>
         DomainHtmlExporter.Export(EvolvedDomain.FromDsl(poly).Domain);
 
@@ -120,5 +137,22 @@ public class DomainHtmlExporterTests {
         var second = Export(Catalog);
 
         await Assert.That(second).IsEqualTo(first);
+    }
+
+    [Test]
+    public async Task Export_GuardsColumn_StaysNamesOnly() {
+        var html = Export(Shop);
+
+        await Assert.That(html).Contains("<tr><td>Submit</td><td>Draft</td><td>—</td><td>Big</td></tr>")
+            .Because("the Guards column lists policy names only; conditions live in the Policies table");
+    }
+
+    [Test]
+    public async Task Export_WithoutPolicies_HasNoPoliciesSection() {
+        var html = Export(Catalog);
+
+        await Assert.That(html).Contains("<h3>Stages</h3>")
+            .Because("the same output still renders its other sections");
+        await Assert.That(html).DoesNotContain("<h3>Policies</h3>");
     }
 }

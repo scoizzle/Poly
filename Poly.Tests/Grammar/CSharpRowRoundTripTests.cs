@@ -218,6 +218,30 @@ public class CSharpRowRoundTripTests {
         await Assert.That(scope.Observations.Any(o => o.Rule == "expr-primary" && o.Pattern == "lambda-ident")).IsTrue();
     }
 
+    // ── enum values ──────────────────────────────────────────────────────────
+
+    [Test]
+    public async Task EnumValues_SurviveAReRead() {
+        var printed = CSharpLanguage.Write(CSharpLanguage.Read("enum E { A = 5, B = 7 }"));
+        var text = printed.ReplaceLineEndings("\n");
+
+        await Assert.That(text).Contains("A = 5,").And.Contains("B = 7\n");
+        var fields = CSharpLanguage.Read(printed).Types.Single().Fields!;
+        await Assert.That(fields.Select(f => Convert.ToInt64(((Constant)f.DefaultValue!).Value)))
+            .IsEquivalentTo(new long[] { 5, 7 });
+        await Assert.That(CSharpLanguage.Write(CSharpLanguage.Read(printed))).IsEqualTo(printed);
+    }
+
+    /// <summary>The domain exporter stores member-name strings as defaults; they print as ordinals, as before.</summary>
+    [Test]
+    public async Task EnumMember_WithANonIntegralDefault_PrintsItsOrdinal() {
+        var text = CSharpLanguage.Write([new TypeDefinitionNode("E", Kind: TypeKind.Enum, Fields: [
+            new FieldDefinitionNode("A", TypeReference.To<int>(), new Constant("A"), IsStatic: true, IsConst: true),
+            new FieldDefinitionNode("B", TypeReference.To<int>(), null, IsStatic: true, IsConst: true),
+        ])]).ReplaceLineEndings("\n");
+        await Assert.That(text).Contains("A = 0,").And.Contains("B = 1\n");
+    }
+
     /// <summary>Green guard: the fold flattens the wrapper rule, so every member survives a re-read.</summary>
     [Test]
     public async Task EnumMembers_ReReadKeepsEveryMember() {

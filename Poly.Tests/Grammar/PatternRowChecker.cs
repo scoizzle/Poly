@@ -12,7 +12,7 @@ namespace Poly.Tests.Grammar;
 /// <param name="Grammar">The table the rows are checked against.</param>
 /// <param name="Tokenize">The reader's tokenizer over a printed text.</param>
 /// <param name="ReportsSuppliedContent">True when every print on this surface reports how many
-/// positional content values it supplied (the C# writer's <c>RenderFills</c>); the slot-count rule
+/// positional content values it supplied (<c>Printer.Render</c>, which the C# writer prints through); the slot-count rule
 /// (A1) then compares that count with the row's slots.</param>
 internal sealed record PatternRowSurface<TToken, TTokenKind>(
     string Name,

@@ -57,24 +57,27 @@ public sealed class Printer<TToken, TTokenKind>
 
     /// <summary>
     /// Prints a row: named holes from <paramref name="fills"/>, content positions in element order from
-    /// <paramref name="content"/> (a null or empty value is an empty slot).
+    /// <paramref name="content"/> (a null or empty value is an empty slot). The count is strict: when the
+    /// row has more or fewer content positions than values were supplied, the print is first reported to
+    /// <see cref="PrintTrace"/> (supplied and consumed), then this throws naming the row (fail closed).
     /// </summary>
     public string Render(string rule, string pattern, IReadOnlyDictionary<string, string> fills, params string?[] content) {
         ArgumentNullException.ThrowIfNull(fills);
         content ??= [];
-        var index = 0;
-        return PrintTop(
+        var consumed = 0;
+        var text = PrintTop(
             _grammar.GetPattern(rule, pattern),
             ctx => {
-                var i = index++;
-                if (i >= content.Length)
-                    throw new InvalidOperationException(
-                        $"Pattern '{rule}/{pattern}' has more content positions than the writer supplied.");
-                if (content[i] is { Length: > 0 } text)
-                    ctx.Emit(text);
+                var i = consumed++;
+                if (i < content.Length && content[i] is { Length: > 0 } piece)
+                    ctx.Emit(piece);
             },
             fills,
             content.Length);
+        if (consumed != content.Length)
+            throw new InvalidOperationException(
+                $"Pattern '{rule}/{pattern}' has {consumed} content positions; the caller supplied {content.Length}.");
+        return text;
     }
 
     /// <summary>Prints a pattern. Named holes use <paramref name="fills"/>; unnamed holes call <paramref name="onContent"/>.</summary>

@@ -1,5 +1,6 @@
 using System.Globalization;
 
+using Poly.Grammar;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Introspection;
 
@@ -288,17 +289,7 @@ public sealed class CSharpWriter {
     private static string Render(string rule, string pattern, IReadOnlyDictionary<string, string> fills, params string?[] content) =>
         CSharpLanguage.Printer.Render(rule, pattern, fills, content);
 
-    private static string RenderFills(string rule, string pattern, IReadOnlyDictionary<string, string> fills, params string?[] content) =>
-        Render(rule, pattern, fills, content);
-
-    private static Dictionary<string, string> Names(params (string Name, string Value)[] entries) {
-        var fills = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var (name, value) in entries)
-            fills[name] = value;
-        return fills;
-    }
-
-    private static Dictionary<string, string> Braces() => Names(("open", "{"), ("close", "}"));
+    private static IReadOnlyDictionary<string, string> Braces() => Fills.Of(("open", "{"), ("close", "}"));
 
     /// <summary>The text a comment statement prints: <c>// body</c> or <c>/* body */</c>.</summary>
     private static string CommentText(Comment comment) =>
@@ -386,12 +377,12 @@ public sealed class CSharpWriter {
                 return;
             case GotoStatement gotoStmt:
                 sb.Append(Pad(indent));
-                sb.AppendLine(RenderFills("statement", "goto", Names(("target", gotoStmt.Target))));
+                sb.AppendLine(Render("statement", "goto", Fills.Of(("target", gotoStmt.Target))));
                 return;
             case LabelDeclaration label:
                 sb.Append(Pad(indent));
-                sb.AppendLine(RenderFills("statement", "label",
-                    Names(("label", label.Name), ("colon", ":")), "\n" + StatementText(label.Statement, indent)));
+                sb.AppendLine(Render("statement", "label",
+                    Fills.Of(("label", label.Name), ("colon", ":")), "\n" + StatementText(label.Statement, indent)));
                 return;
             case Return ret:
                 sb.Append(Pad(indent));
@@ -437,8 +428,8 @@ public sealed class CSharpWriter {
 
     private string BlockText(Block block, int indent) {
         if (block.Nodes.Count == 0 && block.Variables.Count == 0)
-            return Pad(indent) + RenderFills("block", "block", Braces(), " ");
-        return Pad(indent) + RenderFills("block", "block", Braces(),
+            return Pad(indent) + Render("block", "block", Braces(), " ");
+        return Pad(indent) + Render("block", "block", Braces(),
             "\n" + BlockInner(block, indent) + Pad(indent));
     }
 
@@ -473,7 +464,7 @@ public sealed class CSharpWriter {
                 && fused.Remove(dest, out var printed)
                 && !MentionsVariableBefore(block, dest, i)) {
                 inner.Append(Pad(indent + 1));
-                inner.Append(RenderFills("statement", "var-decl", Names(("name", EscapeIdent(printed))), Expr(a.Value)));
+                inner.Append(Render("statement", "var-decl", Fills.Of(("name", EscapeIdent(printed))), Expr(a.Value)));
                 inner.AppendLine();
                 continue;
             }
@@ -621,7 +612,7 @@ public sealed class CSharpWriter {
     private string IfText(IfStatement ifStmt, int indent) {
         var body = _analysisResult is null || !_analysisResult.CanElide(ifStmt.ThenBranch)
             ? BodyText(ifStmt.ThenBranch, indent)
-            : "\n" + Pad(indent) + RenderFills("block", "block", Braces(), " ");
+            : "\n" + Pad(indent) + Render("block", "block", Braces(), " ");
         var elseText = ifStmt.ElseBranch is null ? null : ElseText(ifStmt.ElseBranch, indent);
         return Render("statement", "if", Expr(ifStmt.Condition), body, elseText);
     }
@@ -637,7 +628,7 @@ public sealed class CSharpWriter {
             return "\n" + BlockText(block, indent);
         var inner = new StringBuilder();
         WriteStatement(inner, body, indent + 1);
-        return "\n" + Pad(indent) + RenderFills("block", "block", Braces(), "\n" + inner + Pad(indent));
+        return "\n" + Pad(indent) + Render("block", "block", Braces(), "\n" + inner + Pad(indent));
     }
 
     private string WhileText(WhileLoop whileLoop, int indent) =>
@@ -658,8 +649,8 @@ public sealed class CSharpWriter {
             if (forLoop.DeclaredVariables is { Count: > 0 } declared
                 && forLoop.Initializer is Assignment { Destination: Variable v } declaration
                 && declared.Any(d => ReferenceEquals(d, v))) {
-                init = RenderFills("for-init", "var-decl",
-                    Names(("name", EscapeIdent(DeclareLocal(v.Name)))), Expr(declaration.Value));
+                init = Render("for-init", "var-decl",
+                    Fills.Of(("name", EscapeIdent(DeclareLocal(v.Name)))), Expr(declaration.Value));
             }
             else {
                 init = forLoop.Initializer != null && (_analysisResult is null || !_analysisResult.CanElide(forLoop.Initializer))
@@ -668,7 +659,7 @@ public sealed class CSharpWriter {
             var condition = ForHeaderExpression(forLoop.Condition);
             var increment = forLoop.Increment != null && (_analysisResult is null || !_analysisResult.CanElide(forLoop.Increment))
                 ? ForHeaderExpression(forLoop.Increment) : null;
-            return RenderFills("statement", "for", Names(("semi1", "; "), ("semi2", "; ")),
+            return Render("statement", "for", Fills.Of(("semi1", "; "), ("semi2", "; ")),
                 init, condition, increment, BodyText(forLoop.Body, indent));
         }
         finally {
@@ -689,8 +680,8 @@ public sealed class CSharpWriter {
     private string ForEachText(ForEachLoop forEach, int indent) {
         _declScopes.Push(new LocalScope());
         try {
-            return RenderFills("statement", "foreach",
-                Names(("name", EscapeIdent(DeclareLocal(forEach.LoopVariable.Name)))),
+            return Render("statement", "foreach",
+                Fills.Of(("name", EscapeIdent(DeclareLocal(forEach.LoopVariable.Name)))),
                 forEach.DeclaredType is null
                     ? Render("foreach-decl", "var")
                     : Render("foreach-decl", "typed", TypeText(forEach.DeclaredType)),
@@ -713,8 +704,8 @@ public sealed class CSharpWriter {
             cases.Append(Pad(indent + 1));
             cases.Append(CaseText("default", "default-break", null, switchStmt.DefaultCase, indent));
         }
-        return RenderFills("statement", "switch",
-            Names(("open", "\n" + Pad(indent) + "{"), ("close", "}")),
+        return Render("statement", "switch",
+            Fills.Of(("open", "\n" + Pad(indent) + "{"), ("close", "}")),
             Expr(switchStmt.Value), cases.Length == 0 ? null : cases + "\n" + Pad(indent));
     }
 
@@ -725,8 +716,8 @@ public sealed class CSharpWriter {
         var rule = terminates ? pattern : terminatingPattern;
         var bodyText = "\n" + StatementText(body, indent + 1) + (terminates ? "" : "\n" + Pad(indent + 1));
         return patternText is null
-            ? RenderFills("switch-case", rule, Names(("colon", ":")), bodyText)
-            : RenderFills("switch-case", rule, Names(("colon", ":")), patternText, bodyText);
+            ? Render("switch-case", rule, Fills.Of(("colon", ":")), bodyText)
+            : Render("switch-case", rule, Fills.Of(("colon", ":")), patternText, bodyText);
     }
 
     private static bool Terminates(Node body) => body switch {
@@ -743,7 +734,7 @@ public sealed class CSharpWriter {
                 catches.Append(Pad(indent));
                 var decl = clause.ExceptionType != null
                     ? clause.VariableName != null
-                        ? RenderFills("catch-decl", "typed", Names(("name", EscapeIdent(clause.VariableName))), TypeText(clause.ExceptionType))
+                        ? Render("catch-decl", "typed", Fills.Of(("name", EscapeIdent(clause.VariableName))), TypeText(clause.ExceptionType))
                         : Render("catch-decl", "typed-bare", TypeText(clause.ExceptionType))
                     : clause.VariableName != null ? "Exception " + EscapeIdent(clause.VariableName) : "";
                 catches.Append(Render("catch", "catch", decl, "\n" + BlockOrWrappedText(clause.Body, indent)));
@@ -759,12 +750,12 @@ public sealed class CSharpWriter {
     private string BlockOrWrappedText(Node body, int indent) =>
         body is Block block
             ? BlockText(block, indent)
-            : Pad(indent) + RenderFills("block", "block", Braces(),
+            : Pad(indent) + Render("block", "block", Braces(),
                 "\n" + StatementText(body, indent + 1) + "\n" + Pad(indent));
 
     private string UsingText(UsingStatement usingStmt, int indent) {
         if (usingStmt.Resource is Assignment { Destination: Variable v } a) {
-            var resource = RenderFills("using-resource", "declare", Names(("name", EscapeIdent(v.Name))), Expr(a.Value));
+            var resource = Render("using-resource", "declare", Fills.Of(("name", EscapeIdent(v.Name))), Expr(a.Value));
             return Render("statement", "using", resource, BodyText(usingStmt.Body, indent));
         }
         return Render("statement", "using", Expr(usingStmt.Resource), BodyText(usingStmt.Body, indent));
@@ -790,7 +781,7 @@ public sealed class CSharpWriter {
                     list.Append(Pad(indent + 1));
                     var value = EnumMemberValueText(fields[i], i);
                     var negative = value.StartsWith('-');
-                    list.Append(RenderFills("enum-member", "member", Names(
+                    list.Append(Render("enum-member", "member", Fills.Of(
                         ("name", EscapeIdent(fields[i].Name)),
                         ("value", negative ? value[1..] : value)), negative ? "-" : null));
                     if (i < fields.Count - 1)
@@ -800,9 +791,9 @@ public sealed class CSharpWriter {
                 list.Append(Pad(indent));
                 members = list.ToString();
             }
-            var body = Pad(indent) + RenderFills("enum-body", "body", Braces(), members);
+            var body = Pad(indent) + Render("enum-body", "body", Braces(), members);
             sb.Append(Pad(indent));
-            sb.AppendLine(RenderFills("type-decl", "enum", TypeNameFill(typeDef.Name), null, mods,
+            sb.AppendLine(Render("type-decl", "enum", TypeNameFill(typeDef.Name), null, mods,
                 "\n" + body));
             return;
         }
@@ -814,7 +805,7 @@ public sealed class CSharpWriter {
             foreach (var method in typeDef.Methods ?? [])
                 interfaceMembers.Add((method, null));
             sb.Append(Pad(indent));
-            sb.AppendLine(RenderFills("type-decl", "interface", TypeNameFill(typeDef.Name), null, mods,
+            sb.AppendLine(Render("type-decl", "interface", TypeNameFill(typeDef.Name), null, mods,
                 GenericParamsText(typeDef.GenericParameters), LineageText(typeDef), TypeBodyText(interfaceMembers, indent)));
             return;
         }
@@ -822,7 +813,7 @@ public sealed class CSharpWriter {
         var isRecord = typeDef.EffectiveSemantics.HasValueEquality;
         if (isRecord && !TypeDefinitionHasBody(typeDef)) {
             sb.Append(Pad(indent));
-            sb.AppendLine(RenderFills("type-decl", "record-semi", TypeNameFill(typeDef.Name), null, mods,
+            sb.AppendLine(Render("type-decl", "record-semi", TypeNameFill(typeDef.Name), null, mods,
                 GenericParamsText(typeDef.GenericParameters), PrimaryParamsText(typeDef.PrimaryConstructorParameters),
                 LineageText(typeDef)));
             return;
@@ -841,15 +832,15 @@ public sealed class CSharpWriter {
 
         sb.Append(Pad(indent));
         sb.AppendLine(isRecord
-            ? RenderFills("type-decl", "record", TypeNameFill(typeDef.Name),
+            ? Render("type-decl", "record", TypeNameFill(typeDef.Name),
                 null, mods, GenericParamsText(typeDef.GenericParameters),
                 PrimaryParamsText(typeDef.PrimaryConstructorParameters), LineageText(typeDef), bodyText)
-            : RenderFills("type-decl", "class", TypeNameFill(typeDef.Name),
+            : Render("type-decl", "class", TypeNameFill(typeDef.Name),
                 null, mods, GenericParamsText(typeDef.GenericParameters),
                 LineageText(typeDef), bodyText));
     }
 
-    private static Dictionary<string, string> TypeNameFill(string name) => Names(("name", EscapeIdent(name)));
+    private static IReadOnlyDictionary<string, string> TypeNameFill(string name) => Fills.Of(("name", EscapeIdent(name)));
 
     /// <summary>An enum member's value: its integral constant default, else its ordinal (the domain
     /// exporter stores member-name strings as defaults, so those print as ordinals).</summary>
@@ -866,7 +857,7 @@ public sealed class CSharpWriter {
             block.Append('\n');
             block.Append(MemberText(member, indent + 1, ctorName));
         }
-        return "\n" + Pad(indent) + RenderFills("type-body", "body", Braces(), block + "\n" + Pad(indent));
+        return "\n" + Pad(indent) + Render("type-body", "body", Braces(), block + "\n" + Pad(indent));
     }
 
     private static bool TypeDefinitionHasBody(TypeDefinitionNode typeDef) =>
@@ -916,7 +907,7 @@ public sealed class CSharpWriter {
             + (field.IsStatic ? "static " : "")
             + (mut.HasFlag(Mutability.CompileTimeConst) ? "const " : mut.HasFlag(Mutability.ReadOnlyAfterInit) ? "readonly " : "")
             + (mut.HasFlag(Mutability.VolatileAccess) ? "volatile " : "");
-        return attrs + Pad(indent) + RenderFills("member", "field", Names(("name", EscapeIdent(field.Name))),
+        return attrs + Pad(indent) + Render("member", "field", Fills.Of(("name", EscapeIdent(field.Name))),
             null, mods.Trim(),
             TypeText(field.FieldType),
             field.DefaultValue != null ? " = " + Expr(field.DefaultValue) : null);
@@ -935,7 +926,7 @@ public sealed class CSharpWriter {
             null => Render("method-body", "semi"),
             _ => "\n" + BodyText(method.Body!, indent),
         };
-        return attrs + Pad(indent) + RenderFills("member", "method", Names(("name", EscapeIdent(method.Name))),
+        return attrs + Pad(indent) + Render("member", "method", Fills.Of(("name", EscapeIdent(method.Name))),
             null, mods.Trim(),
             TypeText(method.ReturnType),
             GenericParamsText(method.GenericParameters),
@@ -950,7 +941,7 @@ public sealed class CSharpWriter {
             null => Render("method-body", "semi"),
             _ => "\n" + BodyText(method.Body, 0),
         };
-        sb.Append(RenderFills("member", "method", Names(("name", EscapeIdent(method.Name))),
+        sb.Append(Render("member", "method", Fills.Of(("name", EscapeIdent(method.Name))),
             null, mods, TypeText(method.ReturnType), GenericParamsText(method.GenericParameters),
             ParamsText(method.Parameters), body));
         sb.AppendLine();
@@ -963,10 +954,10 @@ public sealed class CSharpWriter {
             : ctor.BaseCall is { Count: > 0 } ? " " + Render("ctor-base", "base", ArgsText(ctor.BaseCall)) : null;
         var body = ctor.Body switch {
             Block block => "\n" + BlockText(block, indent),
-            null => " " + RenderFills("ctor-body", "empty", Names(("open", "{ "), ("close", "}"))),
+            null => " " + Render("ctor-body", "empty", Fills.Of(("open", "{ "), ("close", "}"))),
             _ => "\n" + BodyText(ctor.Body, indent),
         };
-        return Pad(indent) + RenderFills("member", "ctor", Names(("name", EscapeIdent(className))),
+        return Pad(indent) + Render("member", "ctor", Fills.Of(("name", EscapeIdent(className))),
             null, AccessModifierText(ctor.AccessModifier).Trim(),
             ParamsText(ctor.Parameters), baseText, body);
     }
@@ -990,7 +981,7 @@ public sealed class CSharpWriter {
                 else if (prop.Initializer != null) {
                     inline.Append("init; ");
                 }
-                accessorsBody = " " + RenderFills("property-body", "body", Braces(), " " + inline.ToString().TrimEnd() + " ");
+                accessorsBody = " " + Render("property-body", "body", Braces(), " " + inline.ToString().TrimEnd() + " ");
             }
             else {
                 var block = new StringBuilder();
@@ -1017,19 +1008,19 @@ public sealed class CSharpWriter {
                 }
                 block.Append('\n');
                 block.Append(Pad(indent));
-                accessorsBody = "\n" + Pad(indent) + RenderFills("property-body", "body", Braces(), block.ToString());
+                accessorsBody = "\n" + Pad(indent) + Render("property-body", "body", Braces(), block.ToString());
             }
-            return attrs + Pad(indent) + RenderFills("member", "property", Names(("name", EscapeIdent(prop.Name))),
+            return attrs + Pad(indent) + Render("member", "property", Fills.Of(("name", EscapeIdent(prop.Name))),
                 null, mods.Trim(), TypeText(prop.MemberType), accessorsBody, init);
         }
 
         if (init != null) {
             // No accessors, initializer only: syntactically a field.
-            return attrs + Pad(indent) + RenderFills("member", "field", Names(("name", EscapeIdent(prop.Name))),
+            return attrs + Pad(indent) + Render("member", "field", Fills.Of(("name", EscapeIdent(prop.Name))),
                 null, mods.Trim(), TypeText(prop.MemberType), init);
         }
-        var body = " " + RenderFills("property-body", "body", Braces(), " get; set; ");
-        return attrs + Pad(indent) + RenderFills("member", "property", Names(("name", EscapeIdent(prop.Name))),
+        var body = " " + Render("property-body", "body", Braces(), " get; set; ");
+        return attrs + Pad(indent) + Render("member", "property", Fills.Of(("name", EscapeIdent(prop.Name))),
             null, mods.Trim(), TypeText(prop.MemberType), body, null);
     }
 
@@ -1145,13 +1136,13 @@ public sealed class CSharpWriter {
             case Member member:
                 return MemberAccessText(member);
             case IndexAccess index:
-                return Expr(index.Value) + RenderFills("postfix-tail", "index",
-                    Names(("open", "["), ("close", "]")), ArgListText(index.Arguments));
+                return Expr(index.Value) + Render("postfix-tail", "index",
+                    Fills.Of(("open", "["), ("close", "]")), ArgListText(index.Arguments));
             case Await awaitNode:
                 return Render("expr-unary", "await", Expr(awaitNode.Operand));
             case Invoke invoke:
                 var typeArgs = invoke.TypeArguments is { Count: > 0 }
-                    ? RenderFills("type-args", "list", Names(("open", "<"), ("close", ">")),
+                    ? Render("type-args", "list", Fills.Of(("open", "<"), ("close", ">")),
                         string.Join(", ", invoke.TypeArguments.Select(TypeText)))
                     : "";
                 return InvokeCalleeText(invoke) + typeArgs + Render("postfix-tail", "invoke", ArgsText(invoke.Arguments));
@@ -1190,7 +1181,7 @@ public sealed class CSharpWriter {
                     new Member(new NamedTypeReference("BitOperations", "System.Numerics"), "PopCount"),
                     new TypeCast(popCount.Operand, new PrimitiveTypeReference(PrimitiveType.UInt64))));
             case NewArray newArray:
-                return RenderFills("expr-primary", "new-array", Names(("open", "["), ("close", "]")),
+                return Render("expr-primary", "new-array", Fills.Of(("open", "["), ("close", "]")),
                     TypeText(newArray.ElementType), Expr(newArray.Length));
             case SuspendNode suspend:
                 return Expr(suspend.Inner);
@@ -1210,14 +1201,14 @@ public sealed class CSharpWriter {
             $"CSharpWriter rejected {node.GetType().Name} (NodeId {node.Id}): {reason ?? "no C# surface form"}.");
 
     private static string IdentText(string name) =>
-        RenderFills("expr-primary", "ident", Names(("name", EscapeIdent(name))));
+        Render("expr-primary", "ident", Fills.Of(("name", EscapeIdent(name))));
 
     /// <summary>An assignment in statement position. At the top level an undeclared name's first
     /// assignment is its declaration (<c>var x = v;</c>); anywhere else it is the assignment it is.</summary>
     private string AssignmentStatementText(Assignment assign) {
         if (assign.Destination is Variable dest && _fuseUndeclaredName && !DeclaredHere(dest.Name)) {
             MarkDeclared(dest.Name);
-            return RenderFills("statement", "var-decl", Names(("name", EscapeIdent(dest.Name))), Expr(assign.Value));
+            return Render("statement", "var-decl", Fills.Of(("name", EscapeIdent(dest.Name))), Expr(assign.Value));
         }
         return Render("statement", "expr-stmt", Expr(assign));
     }
@@ -1231,7 +1222,7 @@ public sealed class CSharpWriter {
         var value = Expr(member.Value);
         if (member.Value is TypeCast or TypeAs or Conditional or Coalesce)
             value = "(" + value + ")";
-        return value + RenderFills("postfix-tail", "member", Names(("name", EscapeIdent(member.MemberName))));
+        return value + Render("postfix-tail", "member", Fills.Of(("name", EscapeIdent(member.MemberName))));
     }
 
     private string LambdaText(Lambda lambda) {
@@ -1243,8 +1234,8 @@ public sealed class CSharpWriter {
             var block = lambda.Body as Block;
             var body = Expr(lambda.Body);
             if (lambda.Parameters.Count == 1 && lambda.Parameters[0].TypeReference is null)
-                return RenderFills("expr-primary", block is null ? "lambda-ident" : "lambda-block-ident",
-                    Names(("param", EscapeIdent(LocalText(lambda.Parameters[0].Name)))),
+                return Render("expr-primary", block is null ? "lambda-ident" : "lambda-block-ident",
+                    Fills.Of(("param", EscapeIdent(LocalText(lambda.Parameters[0].Name)))),
                     async, body);
             return Render("expr-primary", block is null ? "lambda-parens" : "lambda-block-parens",
                 async, string.Join(", ", lambda.Parameters.Select(ParamText)), body);
@@ -1494,9 +1485,9 @@ public sealed class CSharpWriter {
         if (constant.Value is bool b)
             return Render("expr-primary", b ? "true" : "false");
         if (constant.Value is string s)
-            return RenderFills("expr-primary", "string", Names(("value", StringLiteral(s))));
+            return Render("expr-primary", "string", Fills.Of(("value", StringLiteral(s))));
         if (constant.Value is char c)
-            return RenderFills("expr-primary", "char", Names(("value", CharLiteral(c))));
+            return Render("expr-primary", "char", Fills.Of(("value", CharLiteral(c))));
         return LiteralText(constant.Value)
             ?? Unprintable(constant, $"a {constant.Value.GetType().Name} constant has no faithful C# literal");
     }
@@ -1614,7 +1605,7 @@ public sealed class CSharpWriter {
                 sb.Append('{').Append(Expr(node.Holes[i])).Append('}');
         }
         sb.Append('"');
-        return RenderFills("expr-primary", "interpolated", Names(("value", sb.ToString())));
+        return Render("expr-primary", "interpolated", Fills.Of(("value", sb.ToString())));
     }
 
     /// <summary>Encodes one literal segment: braces for the interpolation syntax and
@@ -1690,7 +1681,7 @@ public sealed class CSharpWriter {
 
     private string GenericParamsText(IReadOnlyList<Parameter>? parameters) =>
         parameters is { Count: > 0 }
-            ? RenderFills("generic-params", "list", Names(("open", "<"), ("close", ">")),
+            ? Render("generic-params", "list", Fills.Of(("open", "<"), ("close", ">")),
                 string.Join(", ", parameters.Select(p => EscapeIdent(p.Name))))
             : "";
 
@@ -1713,9 +1704,9 @@ public sealed class CSharpWriter {
 
     private string AttributeText(AttributeNode attr, int indent) =>
         Pad(indent) + (attr.Arguments.Count > 0
-            ? RenderFills("attribute", "args", Names(("open", "["), ("close", "]")),
+            ? Render("attribute", "args", Fills.Of(("open", "["), ("close", "]")),
                 attr.Name, Render("args", "list", string.Join(", ", attr.Arguments.Select(Expr))))
-            : RenderFills("attribute", "bare", Names(("open", "["), ("close", "]")), attr.Name));
+            : Render("attribute", "bare", Fills.Of(("open", "["), ("close", "]")), attr.Name));
 
     private void WriteAttributes(StringBuilder sb, IReadOnlyList<AttributeNode> attributes, int indent) {
         foreach (var attr in attributes)

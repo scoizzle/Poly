@@ -28,6 +28,8 @@ public class DateOffsetNestingTests {
     private static string Format(object? value) => value switch {
         DateTime dateTime => dateTime.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture),
         DateOnly dateOnly => dateOnly.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+        DateTimeOffset offset => offset.ToString("yyyy-MM-dd HH:mm zzz", CultureInfo.InvariantCulture),
+        TimeSpan span => span.ToString("c", CultureInfo.InvariantCulture),
         bool flag => flag ? "true" : "false",
         _ => Convert.ToString(value, CultureInfo.InvariantCulture) ?? "null"
     };
@@ -44,6 +46,9 @@ public class DateOffsetNestingTests {
             object? value = type == typeof(bool) ? execution.GetValue<bool>()
                 : type == typeof(DateTime) ? execution.GetValue<DateTime>()
                 : type == typeof(DateOnly) ? execution.GetValue<DateOnly>()
+                : type == typeof(DateTimeOffset) ? execution.GetValue<DateTimeOffset>()
+                : type == typeof(TimeSpan) ? execution.GetValue<TimeSpan>()
+                : type == typeof(DateTime?) ? execution.GetValue<DateTime?>()
                 : type == typeof(int) ? execution.GetValue<int>() : execution.GetValue<object>();
             return $"OK {type?.Name} {Format(value)}";
         }
@@ -54,7 +59,9 @@ public class DateOffsetNestingTests {
 
     public static IEnumerable<(string Name, Func<string> Run)> Cases() {
         foreach (var (name, type, value) in new (string, Type, object)[] {
-            ("DateTime", typeof(DateTime), new DateTime(2026, 1, 1)), ("DateOnly", typeof(DateOnly), new DateOnly(2026, 1, 1)), ("TimeOnly", typeof(TimeOnly), new TimeOnly(10, 0)) }) {
+            ("DateTime", typeof(DateTime), new DateTime(2026, 1, 1)), ("DateOnly", typeof(DateOnly), new DateOnly(2026, 1, 1)), ("TimeOnly", typeof(TimeOnly), new TimeOnly(10, 0)),
+            ("DateTimeOffset", typeof(DateTimeOffset), new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero)), ("TimeSpan", typeof(TimeSpan), TimeSpan.FromDays(1)),
+            ("DateTime?", typeof(DateTime?), new DateTime(2026, 1, 1)) }) {
             Node d() => P("d", type);
             yield return ($"{name} (d+1)+2", () => Run(new Add(new Add(d(), K(1)), K(2)), [value]));
             yield return ($"{name} (d+1)>5", () => Run(new GreaterThan(new Add(d(), K(1)), K(5)), [value]));
@@ -71,6 +78,10 @@ public class DateOffsetNestingTests {
             yield return ($"{name} (d+1)+2m", () => Run(new Add(new Add(d(), K(1)), K(2m)), [value]));
             yield return ($"{name} (d+1)-2m", () => Run(new Subtract(new Add(d(), K(1)), K(2m)), [value]));
         }
+        var day = new DateTime(2026, 1, 1);
+        yield return ("DateTime (d+n)+2, n: int?", () => Run(new Add(new Add(P("d", typeof(DateTime)), P("n", typeof(int?))), K(2)), [day, 1]));
+        yield return ("DateTime (d+n)>5, n: int?", () => Run(new GreaterThan(new Add(P("d", typeof(DateTime)), P("n", typeof(int?))), K(5)), [day, 1]));
+        yield return ("DateTime d+n, n: int?", () => Run(new Add(P("d", typeof(DateTime)), P("n", typeof(int?))), [day, 1]));
     }
 
     [Test]
@@ -126,6 +137,51 @@ public class DateOffsetNestingTests {
         "TimeOnly d+1m\tERROR: arithmetic operand is not numeric (got 'TimeOnly' and 'Decimal'): no Add operator for these types",
         "TimeOnly d-1m\tERROR: arithmetic operand is not numeric (got 'TimeOnly' and 'Decimal'): no Subtract operator for these types",
         "TimeOnly (d+1)+2m\tERROR: arithmetic operand is not numeric (got 'TimeOnly' and 'Decimal'): no Add operator for these types / temporal offset requires a date type with AddDays (got 'TimeOnly')",
-        "TimeOnly (d+1)-2m\tERROR: arithmetic operand is not numeric (got 'TimeOnly' and 'Decimal'): no Subtract operator for these types / temporal offset requires a date type with AddDays (got 'TimeOnly')"
+        "TimeOnly (d+1)-2m\tERROR: arithmetic operand is not numeric (got 'TimeOnly' and 'Decimal'): no Subtract operator for these types / temporal offset requires a date type with AddDays (got 'TimeOnly')",
+        "DateTimeOffset (d+1)+2\tOK DateTimeOffset 2026-01-04 00:00 +00:00",
+        "DateTimeOffset (d+1)>5\tERROR: comparison between incompatible types 'DateTimeOffset' and 'Int32': no GreaterThan operator for these types",
+        "DateTimeOffset (d-1)-2\tOK DateTimeOffset 2025-12-29 00:00 +00:00",
+        "DateTimeOffset (d+1)-2\tOK DateTimeOffset 2025-12-31 00:00 +00:00",
+        "DateTimeOffset 2+(d+1)\tERROR: arithmetic operand is not numeric (got 'Int32' and 'DateTimeOffset'): no Add operator for these types",
+        "DateTimeOffset (d+1)==d2\tOK Boolean false",
+        "DateTimeOffset d+1\tOK DateTimeOffset 2026-01-02 00:00 +00:00",
+        "DateTimeOffset c?d+1:d\tOK DateTimeOffset 2026-01-02 00:00 +00:00",
+        "DateTimeOffset TakesDate(d+1)\tERROR: no matching member 'TakesDate' on 'Calls' for invoke with 1 argument(s)",
+        "DateTimeOffset TakesInt(d+1)\tERROR: no matching member 'TakesInt' on 'Calls' for invoke with 1 argument(s)",
+        "DateTimeOffset d+1m\tERROR: arithmetic operand is not numeric (got 'DateTimeOffset' and 'Decimal'): no Add operator for these types",
+        "DateTimeOffset d-1m\tERROR: arithmetic operand is not numeric (got 'DateTimeOffset' and 'Decimal'): no Subtract operator for these types",
+        "DateTimeOffset (d+1)+2m\tERROR: arithmetic operand is not numeric (got 'DateTimeOffset' and 'Decimal'): no Add operator for these types",
+        "DateTimeOffset (d+1)-2m\tERROR: arithmetic operand is not numeric (got 'DateTimeOffset' and 'Decimal'): no Subtract operator for these types",
+        "TimeSpan (d+1)+2\tERROR: temporal offset requires a date type with AddDays (got 'TimeSpan') / temporal offset requires a date type with AddDays (got 'TimeSpan')",
+        "TimeSpan (d+1)>5\tERROR: comparison between incompatible types 'TimeSpan' and 'Int32': no GreaterThan operator for these types / temporal offset requires a date type with AddDays (got 'TimeSpan')",
+        "TimeSpan (d-1)-2\tERROR: temporal offset requires a date type with AddDays (got 'TimeSpan') / temporal offset requires a date type with AddDays (got 'TimeSpan')",
+        "TimeSpan (d+1)-2\tERROR: temporal offset requires a date type with AddDays (got 'TimeSpan') / temporal offset requires a date type with AddDays (got 'TimeSpan')",
+        "TimeSpan 2+(d+1)\tERROR: arithmetic operand is not numeric (got 'Int32' and 'TimeSpan'): no Add operator for these types / temporal offset requires a date type with AddDays (got 'TimeSpan')",
+        "TimeSpan (d+1)==d2\tERROR: temporal offset requires a date type with AddDays (got 'TimeSpan')",
+        "TimeSpan d+1\tERROR: temporal offset requires a date type with AddDays (got 'TimeSpan')",
+        "TimeSpan c?d+1:d\tERROR: temporal offset requires a date type with AddDays (got 'TimeSpan')",
+        "TimeSpan TakesDate(d+1)\tERROR: no matching member 'TakesDate' on 'Calls' for invoke with 1 argument(s) / temporal offset requires a date type with AddDays (got 'TimeSpan')",
+        "TimeSpan TakesInt(d+1)\tERROR: no matching member 'TakesInt' on 'Calls' for invoke with 1 argument(s) / temporal offset requires a date type with AddDays (got 'TimeSpan')",
+        "TimeSpan d+1m\tERROR: arithmetic operand is not numeric (got 'TimeSpan' and 'Decimal'): no Add operator for these types",
+        "TimeSpan d-1m\tERROR: arithmetic operand is not numeric (got 'TimeSpan' and 'Decimal'): no Subtract operator for these types",
+        "TimeSpan (d+1)+2m\tERROR: arithmetic operand is not numeric (got 'TimeSpan' and 'Decimal'): no Add operator for these types / temporal offset requires a date type with AddDays (got 'TimeSpan')",
+        "TimeSpan (d+1)-2m\tERROR: arithmetic operand is not numeric (got 'TimeSpan' and 'Decimal'): no Subtract operator for these types / temporal offset requires a date type with AddDays (got 'TimeSpan')",
+        "DateTime? (d+1)+2\tERROR: temporal offset requires a date type with AddDays (got 'Nullable`1') / temporal offset requires a date type with AddDays (got 'Nullable`1')",
+        "DateTime? (d+1)>5\tERROR: comparison between incompatible types 'Nullable`1' and 'Int32' / temporal offset requires a date type with AddDays (got 'Nullable`1')",
+        "DateTime? (d-1)-2\tERROR: temporal offset requires a date type with AddDays (got 'Nullable`1') / temporal offset requires a date type with AddDays (got 'Nullable`1')",
+        "DateTime? (d+1)-2\tERROR: temporal offset requires a date type with AddDays (got 'Nullable`1') / temporal offset requires a date type with AddDays (got 'Nullable`1')",
+        "DateTime? 2+(d+1)\tERROR: arithmetic operand is not numeric (got 'Int32' and 'Nullable`1'): no Add operator for these types / temporal offset requires a date type with AddDays (got 'Nullable`1')",
+        "DateTime? (d+1)==d2\tERROR: temporal offset requires a date type with AddDays (got 'Nullable`1')",
+        "DateTime? d+1\tERROR: temporal offset requires a date type with AddDays (got 'Nullable`1')",
+        "DateTime? c?d+1:d\tERROR: temporal offset requires a date type with AddDays (got 'Nullable`1')",
+        "DateTime? TakesDate(d+1)\tERROR: no matching member 'TakesDate' on 'Calls' for invoke with 1 argument(s) / temporal offset requires a date type with AddDays (got 'Nullable`1')",
+        "DateTime? TakesInt(d+1)\tERROR: no matching member 'TakesInt' on 'Calls' for invoke with 1 argument(s) / temporal offset requires a date type with AddDays (got 'Nullable`1')",
+        "DateTime? d+1m\tERROR: temporal offset requires a date type with AddDays (got 'Nullable`1')",
+        "DateTime? d-1m\tERROR: temporal offset requires a date type with AddDays (got 'Nullable`1')",
+        "DateTime? (d+1)+2m\tERROR: temporal offset requires a date type with AddDays (got 'Nullable`1') / temporal offset requires a date type with AddDays (got 'Nullable`1')",
+        "DateTime? (d+1)-2m\tERROR: temporal offset requires a date type with AddDays (got 'Nullable`1') / temporal offset requires a date type with AddDays (got 'Nullable`1')",
+        "DateTime (d+n)+2, n: int?\tERROR: temporal offset requires a date type with AddDays (got 'Nullable`1')",
+        "DateTime (d+n)>5, n: int?\tERROR: comparison between incompatible types 'Nullable`1' and 'Int32'",
+        "DateTime d+n, n: int?\tOK DateTime 2026-01-02 00:00"
     ];
 }

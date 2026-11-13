@@ -253,17 +253,15 @@ public class ArithmeticResultTypingTests {
         await Assert.That(Stamp(kind, Param("d", left), Param("n", right))).IsEqualTo(expected);
 
     /// <summary>
-    /// What a user gets for <c>object + int</c> passed to a call. Master refused it at analysis (the object stamp matched no
-    /// overload); the provider defines no operator, so the sum has no type, the call accepts it and the VM adds the boxed
-    /// values. An accepted-undefined cell is T-22's (the scalar gate lets an <c>object</c> operand through); T-17 invents no
-    /// type to refuse it.
+    /// <c>object + int</c> passed to a call is refused, as on master (the lowered tree carries no stamp for the sum, and
+    /// <c>UndefinedArithmeticMatch</c> lets the call judge it by the type master stamped, the left operand's).
+    /// This test first asserted the wrong result (the call accepted and the VM added to 2): the closing round flips it.
     /// </summary>
     [Test]
-    public async Task ObjectPlusInt_PassedToACall_IsAcceptedByTheAnalysis_T22() {
+    public async Task ObjectPlusInt_PassedToACall_IsRefusedAsOnMaster() {
         var node = new Invoke(new Member(new ClrTypeReference(typeof(DateOffsetNestingTests.Calls)), "TakesInt"), new Add(Param("o", typeof(object)), new Constant(1)));
         var analysis = Interpreter.Analyze(node, ClrTypeDefinitionRegistry.Shared);
-        await Assert.That(analysis.Diagnostics.Where(static d => d.Severity == Poly.Analysis.DiagnosticSeverity.Error).Select(static d => d.Message).ToArray()).IsEmpty();
-        using var exec = Interpreter.Execute(Interpreter.Compile(node, analysis), 1);
-        await Assert.That(exec.GetValue<int>()).IsEqualTo(2);
+        await Assert.That(analysis.Diagnostics.Where(static d => d.Severity == Poly.Analysis.DiagnosticSeverity.Error).Select(static d => d.Message).ToArray())
+            .IsEquivalentTo(["no matching member 'TakesInt' on 'Calls' for invoke with 1 argument(s)"]);
     }
 }

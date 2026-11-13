@@ -504,4 +504,173 @@ public class AbsenceParityTests {
         await Assert.That(((SN.NamedTypeReference)member.FieldType).TypeName).IsEqualTo("PatronStatus");
         await Assert.That((member.DefaultValue as SN.Constant)?.Value).IsEqualTo("Active");
     }
+
+    // ── L-08b (#683 row L-08): the lowered Create owns Required and defaults; no host invents a value ──
+
+    [Test]
+    public async Task Create_WhenRequiredNumberOmitted_FailsRequiredEverywhere() {
+        var outcomes = await ParityScenario.FromDsl("""
+            domain Shop
+            Item: entity {
+              Name: Text
+              Qty: Number
+            }
+            """, "ParityRequiredNumberOmitted")
+            .AssertAgree(side => side.Create("Item", ("Name", "a")));
+
+        await Assert.That(outcomes[0].Success).IsFalse()
+            .Because("an omitted required Number is a Required failure, not 0");
+        await Assert.That(outcomes[0].FailureKind).IsEqualTo("Required");
+        await Assert.That(outcomes[0].FailurePath).IsEqualTo("Item.Qty");
+    }
+
+    [Test]
+    [Arguments("Date")]
+    [Arguments("DateTime")]
+    [Arguments("Duration")]
+    [Arguments("Decimal")]
+    [Arguments("Boolean")]
+    public async Task Create_WhenRequiredDateDurationDecimalBooleanOmitted_FailsRequired(string type) {
+        var outcomes = await ParityScenario.FromDsl($$"""
+            domain Shop
+            uses temporal
+            Item: entity {
+              Name: Text
+              V: {{type}}
+            }
+            """, "ParityRequiredOmitted" + type)
+            .AssertAgree(side => side.Create("Item", ("Name", "a")));
+
+        await Assert.That(outcomes[0].Success).IsFalse()
+            .Because($"an omitted required {type} is a Required failure, not its zero value");
+        await Assert.That(outcomes[0].FailureKind).IsEqualTo("Required");
+        await Assert.That(outcomes[0].FailurePath).IsEqualTo("Item.V");
+    }
+
+    [Test]
+    public async Task Create_WhenActionAssignedRequiredNumberOmitted_HasNoInventedZero() {
+        var outcomes = await ParityScenario.FromDsl("""
+            domain Shop
+            Fine: entity {
+              Reason: Text
+              Amount: Number
+              Set: action (value: Number) { assign Amount to value }
+            }
+            """, "ParityActionAssignedRequiredOmitted")
+            .AssertAgree(side => side.Create("Fine", ("Reason", "late")));
+
+        await Assert.That(outcomes[0].Success).IsFalse()
+            .Because("a required property an action writes is still required at create");
+        await Assert.That(outcomes[0].FailureKind).IsEqualTo("Required");
+        await Assert.That(outcomes[0].FailurePath).IsEqualTo("Fine.Amount");
+    }
+
+    [Test]
+    public async Task Create_WhenUniquePropertyDefaulted_SecondCreateFailsUnique() {
+        var outcomes = await ParityScenario.FromDsl("""
+            domain Shop
+            uses persistence
+            Tag: entity {
+              Code: Text unique default("x")
+              Label: Text
+            }
+            """, "ParityUniqueDefaulted")
+            .AssertAgree(side => {
+                side.Create("Tag", ("Label", "a"));
+                side.Create("Tag", ("Label", "b"));
+            });
+
+        await Assert.That(outcomes[0].Success).IsTrue()
+            .Because($"step failed: {outcomes[0].ExceptionType} {outcomes[0].Message}");
+        await Assert.That(outcomes[0].State["Code"]).IsEqualTo("x");
+        await Assert.That(outcomes[1].Success).IsFalse()
+            .Because("the unique check reads the defaulted value, not the omitted argument");
+        await Assert.That(outcomes[1].FailureKind).IsEqualTo("Unique");
+    }
+
+    [Test]
+    public async Task Create_WhenOptionalTextOmitted_IsNullOnBothHosts() {
+        var outcomes = await ParityScenario.FromDsl("""
+            domain Shop
+            Item: entity {
+              Name: Text
+              Note: Text optional
+            }
+            """, "ParityOptionalTextOmitted")
+            .AssertAgree(side => side.Create("Item", ("Name", "a")));
+
+        await Assert.That(outcomes[0].Success).IsTrue();
+        await Assert.That(outcomes[0].State["Note"]).IsNull()
+            .Because("null is the absence of a value; no host turns it into \"\"");
+    }
+
+    [Test]
+    public async Task Create_RequiredTextLengthZeroToN_AcceptsEmpty() {
+        var outcomes = await ParityScenario.FromDsl("""
+            domain Shop
+            Item: entity {
+              Name: Text length(0, 10)
+              Code: Text
+            }
+            """, "ParityRequiredTextAcceptsEmpty")
+            .AssertAgree(side => side.Create("Item", ("Name", ""), ("Code", "")));
+
+        await Assert.That(outcomes[0].Success).IsTrue()
+            .Because($"an empty string is a value: {outcomes[0].Message}");
+        await Assert.That(outcomes[0].State["Name"]).IsEqualTo("");
+        await Assert.That(outcomes[0].State["Code"]).IsEqualTo("");
+    }
+
+    [Test]
+    public async Task Create_RequiredTextWithMinimumLength_RefusesEmptyAsLength() {
+        var outcomes = await ParityScenario.FromDsl("""
+            domain Shop
+            Item: entity {
+              Name: Text length(1, 10)
+            }
+            """, "ParityRequiredTextMinLength")
+            .AssertAgree(side => side.Create("Item", ("Name", "")));
+
+        await Assert.That(outcomes[0].Success).IsFalse();
+        await Assert.That(outcomes[0].FailureKind).IsEqualTo("Length")
+            .Because("emptiness is a matter for length, not for required");
+    }
+
+    [Test]
+    public async Task Assign_EmptyToRequiredText_IsAccepted() {
+        var outcomes = await ParityScenario.FromDsl("""
+            domain Shop
+            Item: entity {
+              Name: Text
+              Rename: action (value: Text) { assign Name to value }
+            }
+            """, "ParityAssignEmptyRequiredText")
+            .AssertAgree(side => {
+                side.Create("Item", ("Name", "a"));
+                side.Invoke("Rename", ("value", ""));
+            });
+
+        await Assert.That(outcomes[1].Success).IsTrue()
+            .Because($"an empty string is a value: {outcomes[1].Message}");
+        await Assert.That(outcomes[1].State["Name"]).IsEqualTo("");
+    }
+
+    [Test]
+    public async Task Assign_EmptyToRequiredTextWithMinimumLength_FailsLength() {
+        var outcomes = await ParityScenario.FromDsl("""
+            domain Shop
+            Item: entity {
+              Name: Text length(1, 10)
+              Rename: action (value: Text) { assign Name to value }
+            }
+            """, "ParityAssignEmptyRequiredTextMinLength")
+            .AssertAgree(side => {
+                side.Create("Item", ("Name", "a"));
+                side.Invoke("Rename", ("value", ""));
+            });
+
+        await Assert.That(outcomes[1].Success).IsFalse();
+        await Assert.That(outcomes[1].FailureKind).IsEqualTo("Length")
+            .Because("emptiness is a matter for length, not for required");
+    }
 }

@@ -185,6 +185,63 @@ public sealed class CreateDeclarationOrderTests {
         await Assert.That(outcome.Instance.Bag["Reserved"]).IsEqualTo(3L);
     }
 
+    // ── L-08b: every Create parameter is `T? x = default`, in declaration order ──
+
+    [Test]
+    public async Task Create_SignatureIsDeclarationOrderAllOptional() {
+        var (domain, analysis) = EvolvedDomain.FromDsl("""
+            domain Shop
+            Owner: entity { Name: Text }
+            Pet: entity {
+              Name: Text
+              owner: Owner
+              Age: Number
+              Nick: Text optional
+              Legs: Number default(4)
+            }
+            """);
+
+        var asm = ExportedCSharp.CompileAndLoad(Print(domain, analysis));
+        var parameters = CreateMethodInfo(asm.GetType("Pet")!).GetParameters()
+            .Where(p => p.ParameterType != typeof(Poly.Runtime.IStoragePort))
+            .ToArray();
+        var nullability = new NullabilityInfoContext();
+
+        await Assert.That(parameters.Select(p => p.Name!)).IsEquivalentTo(["name", "owner", "age", "nick", "legs"], CollectionOrdering.Matching);
+        foreach (var parameter in parameters) {
+            await Assert.That(parameter.HasDefaultValue && parameter.DefaultValue is null).IsTrue()
+                .Because($"'{parameter.Name}' defaults to default");
+            var nullable = Nullable.GetUnderlyingType(parameter.ParameterType) is not null
+                || (!parameter.ParameterType.IsValueType && nullability.Create(parameter).WriteState == NullabilityState.Nullable);
+            await Assert.That(nullable).IsTrue().Because($"'{parameter.Name}' is T?");
+        }
+    }
+
+    /// <summary>
+    /// Amendment 5: the lowered Create's own parameters (the storage port aside) are the published
+    /// <c>CreateSlots</c>, in order, for every golden domain, so a caller built from the fact lines up.
+    /// </summary>
+    [Test]
+    public async Task Create_LoweredParametersEqualCreateSlots_ForEveryGoldenDomain() {
+        var mismatches = new List<string>();
+        foreach (var golden in GoldenDomains.Lowerable) {
+            var result = Poly.Tests.Docs.GuideBlocks.Analyze(golden.Poly);
+            if (result.Domain is null || result.Analysis is null || result.Session is null)
+                throw new InvalidOperationException($"{golden.Name} did not analyze.");
+            var module = result.Session.Lower(result.Domain, result.Analysis);
+            foreach (var entity in result.Domain.Types.OfType<Entity>()) {
+                var create = module.Single(t => t.Name == entity.Name).Methods!.Single(m => m.Name == "Create");
+                var lowered = (create.Parameters ?? [])
+                    .Where(p => p.TypeReference is not ClrTypeReference { RuntimeType: var t } || t != typeof(Poly.Runtime.IStoragePort))
+                    .Select(p => p.Name);
+                var slots = result.Analysis.GetStructure(entity)!.CreateSlots.Select(s => DomainToCSharpExporter.ToCamelCase(s.Name));
+                if (!lowered.SequenceEqual(slots))
+                    mismatches.Add($"{golden.Name}.{entity.Name}: [{string.Join(", ", lowered)}] vs slots [{string.Join(", ", slots)}]");
+            }
+        }
+        await Assert.That(mismatches).IsEmpty();
+    }
+
     // ── helpers ─────────────────────────────────────────────────────────────────
 
     private static string Print(Domain domain, AnalysisResult analysis) =>

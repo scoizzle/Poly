@@ -178,6 +178,17 @@ public sealed class PatternBuilder<TToken, TTokenKind>
         return this;
     }
 
+    /// <summary>
+    /// Matches one token <paramref name="matches"/> accepts (a contextual word); prints <paramref name="text"/>
+    /// as a token of <paramref name="kind"/>. Captures nothing.
+    /// </summary>
+    public PatternBuilder<TToken, TTokenKind> Word(TTokenKind kind, string text, Func<TToken, bool> matches) {
+        ArgumentException.ThrowIfNullOrEmpty(text);
+        ArgumentNullException.ThrowIfNull(matches);
+        _elements.Add(new Word<TToken, TTokenKind>(kind, text, matches));
+        return this;
+    }
+
     /// <summary>Makes <paramref name="inner"/> optional — matches zero or one occurrence.</summary>
     public PatternBuilder<TToken, TTokenKind> Optional(IPatternElement<TToken, TTokenKind> inner) {
         _elements.Add(new Optional<TToken, TTokenKind>(inner));

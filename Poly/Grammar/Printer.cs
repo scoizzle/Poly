@@ -187,6 +187,9 @@ public sealed class Printer<TToken, TTokenKind>
                 ctx.EmitFill(name);
                 return;
 
+            case Word<TToken, TTokenKind>:
+                throw new NotImplementedException("G-27: Word is not printed yet.");
+
             case MatchPredicate<TToken, TTokenKind> { Label: { Length: > 0 } label } when ctx.HasFill(label):
                 ctx.EmitFill(label);
                 return;

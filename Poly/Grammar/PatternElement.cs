@@ -98,3 +98,14 @@ public sealed record NotFollowedBy<TToken, TTokenKind>(TTokenKind Kind)
     : IPatternElement<TToken, TTokenKind>
     where TToken : struct, IToken<TTokenKind>
     where TTokenKind : struct;
+
+/// <summary>
+/// Matches one token that <paramref name="Matches"/> accepts: a contextual word, such as an identifier
+/// spelled <c>via</c>. The host supplies the test (the engine knows only token kinds); it captures nothing,
+/// and the printer writes <paramref name="Text"/> as a token of <paramref name="Kind"/>, so the row owns
+/// the spelling.
+/// </summary>
+public sealed record Word<TToken, TTokenKind>(TTokenKind Kind, string Text, Func<TToken, bool> Matches)
+    : IPatternElement<TToken, TTokenKind>
+    where TToken : struct, IToken<TTokenKind>
+    where TTokenKind : struct;

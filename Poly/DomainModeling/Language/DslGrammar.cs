@@ -37,6 +37,17 @@ public static class DslGrammar {
     public static bool IsCompareToken(DslToken t) => IsCompareOpKind(t.Kind);
 
     /// <summary>
+    /// A contextual word (<c>via</c>, <c>initial</c>, <c>key</c>, <c>external</c>, <c>inbound</c>, <c>value</c>):
+    /// an identifier spelled <paramref name="word"/>, never a keyword kind with the same text. It prints as
+    /// that identifier.
+    /// </summary>
+    public static PatternBuilder<DslToken, DslTokenKind> Word(this PatternBuilder<DslToken, DslTokenKind> builder, string word) {
+        ArgumentNullException.ThrowIfNull(builder);
+        ArgumentException.ThrowIfNullOrEmpty(word);
+        return builder.Word(DslTokenKind.Identifier, word, t => t.Kind == DslTokenKind.Identifier && t.TextEquals(word));
+    }
+
+    /// <summary>
     /// Canonical text for a fixed DSL token kind — the tokenizer's inverse. Used by
     /// the grammar <see cref="Printer{TToken,TTokenKind}"/> emit surface; value-bearing
     /// kinds (Identifier, Number, StringLiteral) are content positions and have no

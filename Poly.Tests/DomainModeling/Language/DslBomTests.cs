@@ -33,7 +33,7 @@ public class DslBomTests {
             var expected = plain.Tokens[i];
             var actual = withBom.Tokens[i];
             await Assert.That(actual.Kind).IsEqualTo(expected.Kind);
-            await Assert.That(actual.Text).IsEqualTo(expected.Text);
+            await Assert.That(actual.Span.ToString()).IsEqualTo(expected.Span.ToString());
             await Assert.That(actual.Line).IsEqualTo(expected.Line);
             await Assert.That(actual.Col).IsEqualTo(expected.Col);
             await Assert.That(actual.Length).IsEqualTo(expected.Length);

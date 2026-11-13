@@ -127,6 +127,32 @@ public sealed class GrammarPatternRowTests {
         await Assert.That(On(bad, PatternRowCheck.ReadBack, "synthetic-nav", "via")).Count().IsEqualTo(1);
     }
 
+    // ── G-27 elements: Slot is a named hole that ends the row ─────────────────
+
+    [Test]
+    public async Task Classify_Slot_IsAHole() {
+        await Assert.That(PatternRowChecker.Classify(new Slot<DslToken, DslTokenKind>("expr")))
+            .IsEqualTo(PatternRowChecker.ElementRole.Hole);
+    }
+
+    [Test]
+    public async Task Check_RowEndingInASlot_NeedsItsFill_AndReadsBackItsHead() {
+        var grammar = Dsl.ToBuilder()
+            .Define("synthetic-effect")
+                .Pattern("assign")
+                    .Kind(DslTokenKind.Assign).Value(DslTokenKind.Identifier, "property").Kind(DslTokenKind.To)
+                    .Slot("expr").Commit()
+            .Build();
+
+        var good = CheckDsl(grammar, [Observed(grammar, "synthetic-effect", "assign", "assign Total to Price * 2", fills: ["expr", "property"])]);
+        var noFill = CheckDsl(grammar, [Observed(grammar, "synthetic-effect", "assign", "assign Total to Price", fills: ["property"])]);
+        var badHead = CheckDsl(grammar, [Observed(grammar, "synthetic-effect", "assign", "assign Total Price", fills: ["expr", "property"])]);
+
+        await Assert.That(good.Where(v => v.Rule == "synthetic-effect")).IsEmpty();
+        await Assert.That(On(noFill, PatternRowCheck.Holes, "synthetic-effect", "assign")).Count().IsEqualTo(1);
+        await Assert.That(On(badHead, PatternRowCheck.ReadBack, "synthetic-effect", "assign")).Count().IsEqualTo(1);
+    }
+
     // ── coverage (A3a) ────────────────────────────────────────────────────────
 
     [Test]

@@ -36,6 +36,7 @@ public static class DomainModelAnalyzer {
         new RuntimeContractAnalyzer(),
         new CapabilityAnalyzer(),
         new SubscriptionAnalyzer(),
+        new UntypedExpressionPass(),
         new EffectTopologyPass(),
         new OwnershipAggregatePass(),
         new RuleCoverageAnalyzer(),

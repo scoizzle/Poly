@@ -1092,9 +1092,12 @@ public class DomainToCSharpExporterTests {
         // to one generated handler name (CS0111/CS0121). Handler names must be
         // quantifier-aware; the notify calls EVERY handler; registration happens once
         // (the three share one registry list).
+        // T-05b: Payment declares Amount because the peer subscription reads it (`assign Status to p Amount`); the fixture
+        // read an undeclared peer property, a true error analysis now reports (DMSEM006) and lowering could not bind.
         var (domain, analysis) = ParseAndAnalyze("""
             domain Test
             Payment: entity {
+              Amount: Text
               order: Order via payments
               Pending: stage {
                 Capture: action { transition to Captured }

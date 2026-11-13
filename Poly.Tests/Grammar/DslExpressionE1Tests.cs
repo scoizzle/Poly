@@ -26,6 +26,19 @@ public class DslExpressionE1Tests {
     /// <summary>Pack IR for <c>N unit</c>: a tiny test-only node (no product temporal IR).</summary>
     private sealed record DurationLiteral(string Text) : DomainExpression;
 
+    /// <summary>
+    /// T-05b: a pack that adds an expression form states its type, as the temporal library does for its forms; an
+    /// expression the analyzer cannot type is DMSEM006. The pack's session analyzes what it parsed.
+    /// </summary>
+    private sealed class NumberTyped<T> : Poly.DomainModeling.Meaning.IExpressionDispatchHandler<string> where T : DomainExpression {
+        public Type ExpressionType => typeof(T);
+
+        public bool TryHandle(DomainExpression expression, Func<DomainExpression, string> route, out string result) {
+            result = "Number";
+            return true;
+        }
+    }
+
     private sealed class MagicBinder : IExpressionPrintMapping {
         public Type ExpressionType => typeof(MagicLiteral);
 
@@ -63,7 +76,8 @@ public class DslExpressionE1Tests {
     }
 
     private static DomainSession BuildMagicPackInputs() {
-        var builder = SessionBuilder.CreateEmpty();
+        var builder = SessionBuilder.CreateEmpty().LoadCore();
+        builder.Meaning.Inference.Register(new NumberTyped<MagicLiteral>());
         foreach (var rule in new[] { "expr-primary" })
             builder.ExpressionForms.RegisterFold(rule, "magic", _ => new MagicLiteral(42));
         builder.ExpressionForms.RegisterPrintMapping(new MagicBinder());
@@ -79,7 +93,8 @@ public class DslExpressionE1Tests {
     }
 
     private static DomainSession BuildDurationPackInputs() {
-        var builder = SessionBuilder.CreateEmpty();
+        var builder = SessionBuilder.CreateEmpty().LoadCore();
+        builder.Meaning.Inference.Register(new NumberTyped<DurationLiteral>());
         foreach (var rule in new[] { "expr-primary" }) {
             builder.ExpressionForms.RegisterFold(rule, "duration", match => {
                 var amount = match.Captures["amount"][0].Span.ToString();
@@ -103,7 +118,7 @@ public class DslExpressionE1Tests {
             """;
 
         var changes = new PolyDslParser(poly, inputs).Parse();
-        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes);
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes, session: inputs);
         await Assert.That(result.Succeeded).IsTrue();
 
         var cmp = (Comparison)result.Root!.Types.OfType<Entity>().Single().Policies.Single().Expression;
@@ -114,7 +129,7 @@ public class DslExpressionE1Tests {
         await Assert.That(printed.Contains("MAGIC is 42", StringComparison.Ordinal)).IsTrue();
 
         var reparsed = new DomainEvolution(DomainTestFactory.Create("_", [], []))
-            .ApplyAndAnalyze(new PolyDslParser(printed, inputs).Parse());
+            .ApplyAndAnalyze(new PolyDslParser(printed, inputs).Parse(), session: inputs);
         await Assert.That(reparsed.Succeeded).IsTrue();
         var cmp2 = (Comparison)reparsed.Root!.Types.OfType<Entity>().Single().Policies.Single().Expression;
         await Assert.That(cmp2.Left).IsTypeOf<MagicLiteral>();
@@ -133,7 +148,7 @@ public class DslExpressionE1Tests {
             """;
 
         var changes = new PolyDslParser(poly, inputs).Parse();
-        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes);
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes, session: inputs);
         await Assert.That(result.Succeeded).IsTrue();
 
         var cmp = (Comparison)result.Root!.Types.OfType<Entity>().Single().Policies.Single().Expression;
@@ -145,7 +160,7 @@ public class DslExpressionE1Tests {
         await Assert.That(printed.Contains("12 Days is 12 Days", StringComparison.Ordinal)).IsTrue();
 
         var reparsed = new DomainEvolution(DomainTestFactory.Create("_", [], []))
-            .ApplyAndAnalyze(new PolyDslParser(printed, inputs).Parse());
+            .ApplyAndAnalyze(new PolyDslParser(printed, inputs).Parse(), session: inputs);
         await Assert.That(reparsed.Succeeded).IsTrue();
         var cmp2 = (Comparison)reparsed.Root!.Types.OfType<Entity>().Single().Policies.Single().Expression;
         await Assert.That(cmp2.Left).IsTypeOf<DurationLiteral>();

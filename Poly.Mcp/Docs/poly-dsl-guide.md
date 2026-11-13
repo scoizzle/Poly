@@ -1258,10 +1258,23 @@ and a property of the related entity binds to the **parameter**.
 
 `count` produces a numeric value for use in comparisons. `sum Rel Prop` produces the sum of `Prop`, a
 numeric property (`Number` or `Decimal`) on the related entity, over the related set, in `Prop`'s own type:
-a `Decimal` sum is an exact decimal (`sum accounts Balance == 3.0`). A non-numeric `Prop` in a policy is
-`DMSEM005`. `sum Rel where …` and `sum Rel (expression)` are **not** forms — only a bare property name
+a `Decimal` sum is an exact decimal (`sum accounts Balance == 3.0`). A non-numeric `Prop` is `DMSEM005`
+wherever the `sum` appears: a policy, an assign, a comparison, a create initializer. `sum Rel where …` and `sum Rel (expression)` are **not** forms — only a bare property name
 follows the relationship.
-`any`/`all`/`none` produce booleans.
+`any`/`all`/`none` produce booleans. A body after `where` is checked against the related entity: its names
+are that entity's properties (and the action's parameters), and it must be Boolean, so
+`any lines where Qty == "x"` is `DMSEM003`.
+
+**Every expression has a type.** An expression the analyzer cannot type, where its type is needed (assigned,
+compared, passed, returned, a condition or an arithmetic operand), is `DMSEM006`
+(`cannot determine the type of '…': <why>`), unless a more specific error already names it: a name that is no
+property, parameter or enum member is `DMSEM005` wherever it appears, an unknown function `DMFUN001`. Typical causes: a path through a `many` relationship
+(`parts Qty`: use `any`/`count`/`sum`), a name that is no property, parameter or enum member, a relationship
+read in a function body (a function has only its parameters). Operands of different kinds do not compare:
+`5 == "x"` and `count lines == true` are `DMSEM003`. A `default(...)` value is checked the same way, against the
+property's type, and cannot read the entity's properties (it is evaluated before the instance exists).
+A pack that adds its own expression form must register the form's type (`SessionBuilder.Meaning.Inference.Register`)
+and analyze with the session that parsed it; a form with no registered type is `DMSEM006` wherever it is used.
 
 **Empty collection semantics:**
 

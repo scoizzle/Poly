@@ -100,6 +100,8 @@ public class UnknownNameAnalysisTests {
             """));
 
         await Assert.That(HasError(analysis, DomainModelDiagnosticCodes.SemanticTypeCompatibility)).IsFalse();
+        // A12 (T-05b): the absence above is not satisfied by an earlier error; the document is valid.
+        await Assert.That(analysis.HasErrors).IsFalse();
     }
 
     // ── (c) unknown name in an `is` comparison ─────────────────
@@ -138,6 +140,8 @@ public class UnknownNameAnalysisTests {
             """));
 
         await Assert.That(HasError(analysis, DomainModelDiagnosticCodes.SemanticTypeCompatibility)).IsFalse();
+        // A12 (T-05b): the absence above is not satisfied by an earlier error; the document is valid.
+        await Assert.That(analysis.HasErrors).IsFalse();
     }
 
     // ── (d) unknown bare identifier in an assign value ─────────
@@ -154,7 +158,8 @@ public class UnknownNameAnalysisTests {
             }
             """));
 
-        await Assert.That(HasError(analysis, DomainModelDiagnosticCodes.SemanticTypeCompatibility)).IsTrue();
+        // T-05b closing round C3: one cause, one id: an unknown bare name is the reference error, DMSEM005, in every position.
+        await Assert.That(HasError(analysis, DomainModelDiagnosticCodes.SemanticReferenceResolution)).IsTrue();
         await Assert.That(analysis.Diagnostics.Any(d =>
             d.Severity == DiagnosticSeverity.Error
             && d.Message.Contains("'now'", StringComparison.Ordinal))).IsTrue();
@@ -170,7 +175,8 @@ public class UnknownNameAnalysisTests {
             }
             """));
 
-        await Assert.That(HasError(analysis, DomainModelDiagnosticCodes.SemanticTypeCompatibility)).IsTrue();
+        // T-05b closing round C3: one cause, one id: an unknown bare name is the reference error, DMSEM005, in every position.
+        await Assert.That(HasError(analysis, DomainModelDiagnosticCodes.SemanticReferenceResolution)).IsTrue();
         await Assert.That(analysis.Diagnostics.Any(d =>
             d.Severity == DiagnosticSeverity.Error
             && d.Message.Contains("'Bogus'", StringComparison.Ordinal))).IsTrue();
@@ -188,6 +194,8 @@ public class UnknownNameAnalysisTests {
             """));
 
         await Assert.That(HasError(analysis, DomainModelDiagnosticCodes.SemanticTypeCompatibility)).IsFalse();
+        // A12 (T-05b): the absence above is not satisfied by an earlier error; the document is valid.
+        await Assert.That(analysis.HasErrors).IsFalse();
     }
 
     [Test]
@@ -201,6 +209,8 @@ public class UnknownNameAnalysisTests {
             """));
 
         await Assert.That(HasError(analysis, DomainModelDiagnosticCodes.SemanticTypeCompatibility)).IsFalse();
+        // A12 (T-05b): the absence above is not satisfied by an earlier error; the document is valid.
+        await Assert.That(analysis.HasErrors).IsFalse();
     }
 
     [Test]
@@ -215,6 +225,8 @@ public class UnknownNameAnalysisTests {
             """));
 
         await Assert.That(HasError(analysis, DomainModelDiagnosticCodes.SemanticTypeCompatibility)).IsFalse();
+        // A12 (T-05b): the absence above is not satisfied by an earlier error; the document is valid.
+        await Assert.That(analysis.HasErrors).IsFalse();
     }
 
     [Test]
@@ -229,5 +241,7 @@ public class UnknownNameAnalysisTests {
             """));
 
         await Assert.That(HasError(analysis, DomainModelDiagnosticCodes.SemanticTypeCompatibility)).IsFalse();
+        // A12 (T-05b): the absence above is not satisfied by an earlier error; the document is valid.
+        await Assert.That(analysis.HasErrors).IsFalse();
     }
 }

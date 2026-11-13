@@ -607,6 +607,56 @@ public class PolicyGuardFactsTests {
         await Assert.That(exec.Invoke(Make(exec, "Order", ("Qty", 11L)), "Go").Succeeded).IsFalse();
     }
 
+    // ── One stage-gate suppression rule (closing round item 1) ──
+
+    /// <summary>Stage <c>Open</c> requires <c>Small</c> and <c>HasNote</c>; <c>Peek</c> lifts <c>Small</c>,
+    /// <c>Lift</c> lifts <c>HasNote</c>, <c>Keep</c> lifts neither.</summary>
+    private const string StageGateDocument = """
+        domain S
+        Order: entity {
+          Qty: Number range(0, 100)
+          Note: Text optional
+          Small: policy { Qty <= 10 }
+          HasNote: policy { Note is not null }
+          Open: stage require Small, HasNote {
+            Peek: action require not Small { assign Qty to 50 }
+            Lift: action require not HasNote { assign Qty to 5 }
+            Keep: action { assign Qty to 5 }
+          }
+        }
+        """;
+
+    /// <summary>
+    /// <c>PolicyGuardFacts.SuppressesStageGate</c> is the one rule; each consumer reports which of the stage's gates
+    /// hold for each action: the analysis guards (<c>PolicyGuardFacts.Guards</c>), the generated C# body (a stage gate
+    /// prints as <c>if (!this.P())</c>; none of these actions has a positive <c>require</c>), and the stage-presence
+    /// facts (<c>ProvableGuards.StagePresence</c>: <c>HasNote</c> proves <c>Note</c> present).
+    /// </summary>
+    [Test]
+    public async Task StageGateSuppression_OneRule_AllThreeConsumersAgree() {
+        var (domain, analysis) = EvolvedDomain.FromDsl(StageGateDocument);
+        var order = EntityNamed(domain, "Order");
+        var open = order.Stages.Single();
+        var cs = new Poly.Interpretation.CSharp.CSharpGenerator().Generate(
+            Poly.DomainModeling.Lowering.DomainProgramProjection.ToSyntax(domain, analysis));
+        var rows = new List<string>();
+        foreach (var name in new[] { "Peek", "Lift", "Keep" }) {
+            var action = ActionNamed(order, name);
+            var rule = open.Policies.Where(p => !PolicyGuardFacts.SuppressesStageGate(action, p)).Select(p => p.Name);
+            var guards = PolicyGuardFacts.Guards(action, open).Where(g => open.Policies.Contains(g.Policy)).Select(g => g.Policy.Name);
+            var start = cs.IndexOf($"private DomainResult __BodyOf{name}()", StringComparison.Ordinal);
+            var body = cs[start..cs.IndexOf("return DomainResult.Success();", start, StringComparison.Ordinal)];
+            var emitted = System.Text.RegularExpressions.Regex.Matches(body, @"if \(!this\.(\w+)\(\)\)").Select(m => m.Groups[1].Value);
+            var presence = ProvableGuards.StagePresence(action, open).Order(StringComparer.Ordinal);
+            rows.Add($"{name}: rule=[{string.Join(",", rule)}] guards=[{string.Join(",", guards)}] " +
+                     $"csharp=[{string.Join(",", emitted)}] presence=[{string.Join(",", presence)}]");
+        }
+        await Assert.That(string.Join(" | ", rows)).IsEqualTo(
+            "Peek: rule=[HasNote] guards=[HasNote] csharp=[HasNote] presence=[Note] | " +
+            "Lift: rule=[Small] guards=[Small] csharp=[Small] presence=[] | " +
+            "Keep: rule=[Small,HasNote] guards=[Small,HasNote] csharp=[Small,HasNote] presence=[Note]");
+    }
+
     // ── Census (plan §4, lock amendment 8) ──────────────────────
 
     private static readonly string[] CensusCodes = [

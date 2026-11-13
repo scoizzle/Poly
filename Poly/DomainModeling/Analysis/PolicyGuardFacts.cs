@@ -29,10 +29,17 @@ internal static class PolicyGuardFacts {
     /// </summary>
     public static IReadOnlyList<GuardedPolicy> Guards(Action action, Stage? stage) =>
         action.Policies
-            .Concat((stage?.Policies ?? []).Where(p => !action.Policies.Any(a =>
-                string.Equals(a.Name, NegatedPrefix + p.Name, StringComparison.Ordinal))))
+            .Concat((stage?.Policies ?? []).Where(p => !SuppressesStageGate(action, p)))
             .Select(p => new GuardedPolicy(p, p.Name.StartsWith(NegatedPrefix, StringComparison.Ordinal)))
             .ToList();
+
+    /// <summary>
+    /// True when <paramref name="action"/>'s <c>require not P</c> lifts its stage's gate <paramref name="stagePolicy"/>
+    /// (<c>P</c>): the one rule the lowered body (<c>DomainToCSharpExporter.EmitStagePolicyGuards</c>), the
+    /// stage-presence facts (<c>ProvableGuards.StagePresence</c>) and <see cref="Guards"/> all read.
+    /// </summary>
+    public static bool SuppressesStageGate(Action action, Policy stagePolicy) =>
+        action.Policies.Any(p => string.Equals(p.Name, NegatedPrefix + stagePolicy.Name, StringComparison.Ordinal));
 
     /// <summary>The guards analysis narrowed by before V-18, the public precondition set
     /// (<c>EffectInvariantAnalyzer.CollectPreconditions</c>): the action's policies except its <c>require not</c>

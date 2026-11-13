@@ -147,10 +147,10 @@ public sealed partial class DomainExpressionLoweringPass : DomainExpressionDispa
     /// <paramref name="entityName"/> as the entity whose members the subject exposes
     /// (that entity's SourceEntityName and enum map). Path-prefix hops and quantifier
     /// bodies share this so nested resolution sees the target. Shares this pass's
-    /// local-name generator.
+    /// local-name generator. A quantifier body is a <paramref name="condition"/>.
     /// </summary>
     private LoweredExpression LowerAgainstEntity(
-        string? entityName, DomainExpression expression, Node subject) {
+        string? entityName, DomainExpression expression, Node subject, bool condition = false) {
         IReadOnlyDictionary<string, string>? enums = _context.EnumPropertyNames;
         if (entityName is not null) {
             var targetEntity = _domain.Types.OfType<Entity>().FirstOrDefault(e =>
@@ -163,7 +163,7 @@ public sealed partial class DomainExpressionLoweringPass : DomainExpressionDispa
             EnumPropertyNames = enums,
             SourceEntityName = entityName ?? _context.SourceEntityName
         });
-        return nested.LowerExpression(expression, subject);
+        return condition ? nested.LowerCondition(expression, subject) : nested.LowerExpression(expression, subject);
     }
 
     /// <summary>
@@ -185,6 +185,8 @@ public sealed partial class DomainExpressionLoweringPass : DomainExpressionDispa
     private LoweredExpression Adapt(DomainExpression value, DomainTypeReference target) {
         if (value is MatchExpr match)
             return LowerMatch(match, target);
+        if (value is Literal { Value: null })
+            return LoweredExpression.Of(TargetTypeAdapter.Adapt(new Constant(null), target, _context));
 
         if (EffectLoweringPass.LowerDefaultExpression(
                 value, new NamedTypeReference(target.TypeName), EffectiveMeaning, EffectiveForms) is { } runtime)

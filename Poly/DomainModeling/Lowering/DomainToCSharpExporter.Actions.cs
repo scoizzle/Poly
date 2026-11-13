@@ -361,7 +361,7 @@ public sealed partial class DomainToCSharpExporter {
             PropertyTypeResolver: EffectLoweringPass.BuildPropertyTypeResolver(entity),
             SourceEntityName: entity.Name);
         var pass = new DomainExpressionLoweringPass(context);
-        var lowered = pass.LowerExpression(expr, new ThisReference());
+        var lowered = pass.LowerCondition(expr, new ThisReference());
         var body = lowered.Before(new Return(lowered.Value));
         return body is Block ? body : new Block([body]);
     }

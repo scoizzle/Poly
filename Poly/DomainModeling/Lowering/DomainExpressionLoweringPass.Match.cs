@@ -22,9 +22,22 @@ public sealed partial class DomainExpressionLoweringPass {
     /// </summary>
     internal LoweredExpression LowerMatch(MatchExpr m, DomainTypeReference? target) {
         var arms = m.Arms
-            .Select(a => (Condition: Route(a.Condition), Value: Arm(a.Value, target)))
+            .Select(a => (Condition: RouteCondition(a.Condition), Value: Arm(a.Value, target)))
             .ToList();
         var otherwise = Arm(m.Else, target);
+        // A `null` arm fills an optional slot (analysis refuses it into a required one, #606). In a value-type slot
+        // its absent value is `(T?)null`, which a conditional cannot share one word with a present arm: the arms
+        // fill a local of the slot's optional type instead, so both hosts store absent or the arm's value.
+        if (target is not null && HasNullArm(m) && TargetTypeAdapter.OptionalValueSlot(target, _context) is { } slot) {
+            var result = _names.Next("match");
+            Node chain = new Assignment(result, otherwise.Value);
+            for (var i = arms.Count - 1; i >= 0; i--)
+                chain = new IfStatement(arms[i].Condition.Value,
+                    new Block([new Assignment(result, arms[i].Value.Value)]), new Block([chain]));
+            var parts = LoweredExpression.Combine([.. arms.SelectMany(a => new[] { a.Condition, a.Value }), otherwise], result);
+            return new LoweredExpression(
+                [.. parts.Statements, new Assignment(result, new SN.TypeCast(new Constant(null), slot)), chain], [.. parts.Variables, result], result);
+        }
         var value = otherwise.Value;
         for (var i = arms.Count - 1; i >= 0; i--)
             value = new SN.Conditional(arms[i].Condition.Value, arms[i].Value.Value, value);
@@ -44,4 +57,8 @@ public sealed partial class DomainExpressionLoweringPass {
         var lowered = AdaptTo(value, target, _currentSubject);
         return lowered with { Value = TargetTypeAdapter.Adapt(lowered.Value, target, _context) };
     }
+
+    private static bool HasNullArm(MatchExpr m) =>
+        m.Arms.Select(a => a.Value).Append(m.Else)
+            .Any(value => value is Literal { Value: null } || value is MatchExpr inner && HasNullArm(inner));
 }

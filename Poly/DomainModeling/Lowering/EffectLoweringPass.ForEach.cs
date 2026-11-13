@@ -47,7 +47,7 @@ public sealed partial class EffectLoweringPass {
         var loopBody = new List<Node>();
         var loopLocals = new List<Node>();
         if (e.Where is not null) {
-            var where = new DomainExpressionLoweringPass(bodyContext).LowerExpression(e.Where, Subject);
+            var where = new DomainExpressionLoweringPass(bodyContext).LowerCondition(e.Where, Subject);
             loopBody.AddRange(where.Statements);
             loopLocals.AddRange(where.Variables);
             loopBody.Add(new IfStatement(

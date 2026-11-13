@@ -309,13 +309,6 @@ public class LoweredTreeOperandCoverageTests {
         [typeof(GotoStatement)] = Jump,
     };
 
-    /// <summary>The kinds <c>SyntaxTypeCompatibilityAnalyzer.Analyze</c> has a case for: each must have rows.</summary>
-    static readonly Type[] CompatibilityKinds = [
-        typeof(Equal), typeof(NotEqual), typeof(LessThan), typeof(LessThanOrEqual), typeof(GreaterThan), typeof(GreaterThanOrEqual),
-        typeof(Add), typeof(Subtract), typeof(Multiply), typeof(Divide), typeof(Modulo), typeof(TypeAs), typeof(New),
-        typeof(Not), typeof(And), typeof(Or), typeof(Assignment), typeof(Invoke), typeof(TypeCast), typeof(ForEachLoop),
-    ];
-
     static readonly Lazy<IReadOnlyDictionary<string, OperandObservation>> Observations = new(
         () => Rows.ToDictionary(row => Key(row), row => Observe(row), StringComparer.Ordinal),
         LazyThreadSafetyMode.ExecutionAndPublication);
@@ -416,8 +409,11 @@ public class LoweredTreeOperandCoverageTests {
         }
         foreach (var kind in combining.Concat(NotCombining.Keys).Where(kind => !NodeFacts.All.ContainsKey(kind)))
             problems.Add($"{kind.Name}: not in NodeFacts.All (stale)");
-        foreach (var kind in CompatibilityKinds.Where(kind => NotCombining.ContainsKey(kind) || !combining.Contains(kind)))
+        // The kinds the compatibility analyzer has a check for, read from its dispatch table (T-22 lock amendment 11).
+        foreach (var kind in SyntaxTypeCompatibilityAnalyzer.CheckedKinds.Where(kind => NotCombining.ContainsKey(kind) || !combining.Contains(kind)))
             problems.Add($"{kind.Name}: the compatibility analyzer has a case for it, so it needs rows");
+        if (SyntaxTypeCompatibilityAnalyzer.CheckedKinds.Count == 0)
+            problems.Add("the compatibility analyzer's dispatch table is empty");
         foreach (var group in NotCombining.GroupBy(pair => pair.Value).Where(group => group.Count() > 1))
             if (group.Key is not (Declaration or TypeReferenceReason or Jump))
                 problems.Add($"'{group.Key}' is shared by {group.Count()} kinds; only declaration, type-reference and jump kinds may group a reason");

@@ -519,13 +519,58 @@ public class OwnershipAggregateAnalysisTests {
     }
 
     [Test]
-    public async Task MutuallyOwnedEntities_AnalysisTerminates_AndReportsTheCycle() {
-        // Master pinned the aggregate built on the repro (it terminates: the ResolvesTo guard
-        // stops the two-node loop). A failed evolve keeps no aggregate to read back, so the
-        // proof now is that the whole pipeline, which runs OwnershipAggregatePass, returns
-        // and carries the cycle error: no pass loops on the cycle.
+    public async Task MutuallyOwnedEntities_AggregateStillTerminates_AndTheCycleIsReported() {
+        // Master pinned the aggregate built on the repro (3f9d12c4): it terminates (the
+        // ResolvesTo guard stops the two-node loop), holds both entities and keeps the
+        // parent invariant. A failed evolve keeps no aggregate, so build it from the applied
+        // (unanalysed) domain, as other tests do; BuildAggregate is untouched by V-14.
+        var applied = new DomainEvolution(DomainTestFactory.Create("_", [], []))
+            .Apply(new PolyDslParser(MutuallyOwnedRepro).Parse());
+        await Assert.That(applied.Succeeded).IsTrue();
+        var aggregate = OwnershipAggregatePass.BuildAggregate(applied.Root, null);
+        await Assert.That(aggregate.Entities.Count).IsEqualTo(2);
+        await AssertParentInvariant(aggregate);
+
         var (_, analysis) = Run(MutuallyOwnedRepro);
         await Assert.That(Errors(analysis, Cycle).Count).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task MutuallyOwnedEntities_CycleIsPositionedOnTheClosingNavigation() {
+        // The compile door resolves a diagnostic's node to a source position: B.a, line 8.
+        var diagnostic = Poly.Tests.Docs.GuideBlocks.Analyze(MutuallyOwnedRepro)
+            .Diagnostics.Single(d => d.Code == "DMDEP002");
+        await Assert.That(diagnostic.Placed).IsTrue();
+        await Assert.That(diagnostic.Line).IsEqualTo(8);
+        await Assert.That(diagnostic.Column).IsEqualTo(3);
+    }
+
+    [Test]
+    public async Task CycleClosedThroughAFinishedEntity_IsReportedOnlyAfterTheFirstIsFixed() {
+        // Pins what the walk reports: one error per cycle the WALK closes (a back edge). A
+        // -> B -> C -> A is the back edge; A -> C -> A reaches C through the finished B, so it
+        // is silent until B.c is removed. Fail closed either way: the document is rejected.
+        var (_, both) = Run("""
+            domain P
+            A: entity { b: owned B
+              c: owned C }
+            B: entity { c: owned C }
+            C: entity { a: owned A }
+            """);
+        var first = Errors(both, Cycle);
+        await Assert.That(first.Count).IsEqualTo(1);
+        await Assert.That(first[0].Message).Contains("A -> B -> C -> A");
+
+        var (_, fixedFirst) = Run("""
+            domain P
+            A: entity { b: owned B
+              c: owned C }
+            B: entity { Name: Text }
+            C: entity { a: owned A }
+            """);
+        var second = Errors(fixedFirst, Cycle);
+        await Assert.That(second.Count).IsEqualTo(1);
+        await Assert.That(second[0].Message).Contains("A -> C -> A");
     }
 
     [Test]

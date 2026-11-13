@@ -42,8 +42,13 @@ public sealed class DslOperatorTable {
     private readonly Dictionary<(DslTokenKind Op, DslTokenKind? Follow), BinaryRow> _binary;
     private readonly Dictionary<DslTokenKind, PrefixRow> _prefix;
     private readonly HashSet<DslTokenKind> _hasFollow;
+    private readonly IReadOnlyDictionary<DslTokenKind, Func<DomainExpression, DomainExpression, DomainExpression?>> _claims;
 
-    private DslOperatorTable(IEnumerable<BinaryRow> binary, IEnumerable<PrefixRow> prefix) {
+    private DslOperatorTable(
+        IEnumerable<BinaryRow> binary,
+        IEnumerable<PrefixRow> prefix,
+        IReadOnlyDictionary<DslTokenKind, Func<DomainExpression, DomainExpression, DomainExpression?>> claims) {
+        _claims = claims;
         _binary = [];
         _prefix = [];
         foreach (var row in binary) {
@@ -77,32 +82,68 @@ public sealed class DslOperatorTable {
 
     public IReadOnlyCollection<PrefixRow> PrefixRows => _prefix.Values;
 
-    /// <summary>The product rows. <paramref name="forms"/> lets a library claim <c>+</c> and <c>-</c> (a date plus a duration).</summary>
+    private static readonly IReadOnlyDictionary<DslTokenKind, Func<DomainExpression, DomainExpression, DomainExpression?>> NoClaims =
+        new Dictionary<DslTokenKind, Func<DomainExpression, DomainExpression, DomainExpression?>>();
+
+    /// <summary>
+    /// The product rows. <paramref name="forms"/> carries the library claims: a claim on an operator runs before the row's own
+    /// node (a date plus a duration), so each plain row is its claim first and its plain node as the one fallback. A claim
+    /// wraps the plain row of an operator, not its follow-word variants (a claim on <c>is</c> does not affect <c>is not</c>).
+    /// The table snapshots the claims when it is built: a claim registered afterwards is ignored. Registration is the one
+    /// door that validates the operator (<see cref="ExpressionFormRegistry.RegisterBinaryClaim"/> throws for one with no row).
+    /// </summary>
     public static DslOperatorTable Core(ExpressionFormRegistry? forms = null) {
-        DomainExpression Plus(DomainExpression l, DomainExpression r) =>
-            forms?.TryFoldBinary(l, r, true) ?? DomainExpression.Add(l, r);
-        DomainExpression Minus(DomainExpression l, DomainExpression r) =>
-            forms?.TryFoldBinary(l, r, false) ?? DomainExpression.Subtract(l, r);
+        var claims = forms?.BinaryClaims() ?? NoClaims;
+
+        BinaryRow Row(DslTokenKind op, int precedence, Assoc assoc, Func<DomainExpression, DomainExpression, DomainExpression> plain, DslTokenKind? follow = null) =>
+            follow is null && claims.TryGetValue(op, out var claim)
+                ? new BinaryRow(op, precedence, assoc, (l, r) => claim(l, r) ?? plain(l, r))
+                : new BinaryRow(op, precedence, assoc, plain, follow);
 
         const int or = 10, and = 20, compare = 40, add = 50, mul = 60;
         return new DslOperatorTable(
             [
-                new(DslTokenKind.Or, or, Assoc.Left, DomainExpression.Or),
-                new(DslTokenKind.And, and, Assoc.Left, DomainExpression.And),
-                new(DslTokenKind.Is, compare, Assoc.None, DomainExpression.Equal),
-                new(DslTokenKind.Is, compare, Assoc.None, DomainExpression.NotEqual, DslTokenKind.Not),
-                new(DslTokenKind.Eq, compare, Assoc.None, DomainExpression.Equal),
-                new(DslTokenKind.Neq, compare, Assoc.None, DomainExpression.NotEqual),
-                new(DslTokenKind.Gt, compare, Assoc.None, DomainExpression.GreaterThan),
-                new(DslTokenKind.Gte, compare, Assoc.None, DomainExpression.GreaterThanOrEqual),
-                new(DslTokenKind.Lt, compare, Assoc.None, DomainExpression.LessThan),
-                new(DslTokenKind.Lte, compare, Assoc.None, DomainExpression.LessThanOrEqual),
-                new(DslTokenKind.Plus, add, Assoc.Left, Plus),
-                new(DslTokenKind.Minus, add, Assoc.Left, Minus),
-                new(DslTokenKind.Star, mul, Assoc.Left, DomainExpression.Multiply),
-                new(DslTokenKind.Slash, mul, Assoc.Left, DomainExpression.Divide),
+                Row(DslTokenKind.Or, or, Assoc.Left, DomainExpression.Or),
+                Row(DslTokenKind.And, and, Assoc.Left, DomainExpression.And),
+                Row(DslTokenKind.Is, compare, Assoc.None, DomainExpression.Equal),
+                Row(DslTokenKind.Is, compare, Assoc.None, DomainExpression.NotEqual, DslTokenKind.Not),
+                Row(DslTokenKind.Eq, compare, Assoc.None, DomainExpression.Equal),
+                Row(DslTokenKind.Neq, compare, Assoc.None, DomainExpression.NotEqual),
+                Row(DslTokenKind.Gt, compare, Assoc.None, DomainExpression.GreaterThan),
+                Row(DslTokenKind.Gte, compare, Assoc.None, DomainExpression.GreaterThanOrEqual),
+                Row(DslTokenKind.Lt, compare, Assoc.None, DomainExpression.LessThan),
+                Row(DslTokenKind.Lte, compare, Assoc.None, DomainExpression.LessThanOrEqual),
+                Row(DslTokenKind.Plus, add, Assoc.Left, DomainExpression.Add),
+                Row(DslTokenKind.Minus, add, Assoc.Left, DomainExpression.Subtract),
+                Row(DslTokenKind.Star, mul, Assoc.Left, DomainExpression.Multiply),
+                Row(DslTokenKind.Slash, mul, Assoc.Left, DomainExpression.Divide),
             ],
-            [new PrefixRow(DslTokenKind.Not, add, DomainExpression.Not)]);
+            [new PrefixRow(DslTokenKind.Not, add, DomainExpression.Not)],
+            claims);
+    }
+
+    /// <summary>The library claim on the plain row of <paramref name="op"/> (not a follow-word variant) for this pair, or null when no claim takes it (the row then keeps its plain node). Throws when <paramref name="op"/> has no row.</summary>
+    public DomainExpression? Claim(DslTokenKind op, DomainExpression left, DomainExpression right) {
+        ArgumentNullException.ThrowIfNull(left);
+        ArgumentNullException.ThrowIfNull(right);
+        RequireBinaryRow(op);
+        return _claims.TryGetValue(op, out var claim) ? claim(left, right) : null;
+    }
+
+    /// <summary>The fold of the <paramref name="op"/> row: its library claim, else its plain node. Throws when <paramref name="op"/> has no row.</summary>
+    public DomainExpression Fold(DslTokenKind op, DomainExpression left, DomainExpression right) {
+        ArgumentNullException.ThrowIfNull(left);
+        ArgumentNullException.ThrowIfNull(right);
+        RequireBinaryRow(op);
+        return _binary[(op, null)].Fold(left, right);
+    }
+
+    /// <summary>Throws unless <paramref name="op"/> has a binary row of the core table; the registry asks this when a claim registers.</summary>
+    internal static void RequireCoreBinaryRow(DslTokenKind op) => Core().RequireBinaryRow(op);
+
+    private void RequireBinaryRow(DslTokenKind op) {
+        if (!_binary.ContainsKey((op, null)))
+            throw new InvalidOperationException($"No binary operator row for '{op}': a library claim needs an operator the table has.");
     }
 
     /// <summary>
@@ -112,7 +153,7 @@ public sealed class DslOperatorTable {
     /// <see cref="With(PrefixRow)"/> is not guarded.
     /// </summary>
     public DslOperatorTable With(BinaryRow row) {
-        var next = new DslOperatorTable([.. _binary.Values, row], _prefix.Values);
+        var next = new DslOperatorTable([.. _binary.Values, row], _prefix.Values, _claims);
         foreach (var prefix in _prefix.Values) {
             if (HeadPrecedence(prefix) != next.HeadPrecedence(prefix))
                 throw new InvalidOperationException(
@@ -127,7 +168,7 @@ public sealed class DslOperatorTable {
         return head < 0 ? int.MinValue : Levels[head].Precedence;
     }
 
-    public DslOperatorTable With(PrefixRow row) => new(_binary.Values, [.. _prefix.Values, row]);
+    public DslOperatorTable With(PrefixRow row) => new(_binary.Values, [.. _prefix.Values, row], _claims);
 
     /// <summary>The binary row at <paramref name="level"/> that <paramref name="current"/> starts, and how many tokens it spans.</summary>
     public bool TryBinary(

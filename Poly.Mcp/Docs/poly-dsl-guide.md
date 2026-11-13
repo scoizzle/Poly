@@ -1084,6 +1084,11 @@ entity-level `when`.
   assign target.
 - Multi-stage lists use the same binder for every listed stage:
   `when Tracks Active, Completed as order { … }`.
+- **Reserved binder names:** the binder becomes the generated handler's parameter, and the
+  handler body calls `Poly.Runtime…`, `System.…` and `DomainResult.Success()`, so a binder
+  named `Poly`, `System` or `DomainResult`, or one starting with `__`, is rejected with
+  `DMSTR009`, the rule action parameters follow. `for Rel as name` and `for name in Rel`
+  binders are not affected: they lower to a generated local.
 - **C# export:** the export consumes the analysis-published subscription dispatch plan
   (the same metadata the runtime uses) and emits a handler per subscription, named by
   quantifier: `WhenAny`/`WhenAll`/`WhenEach{Target}{Stage}`. Peer-dependent

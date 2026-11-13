@@ -8,13 +8,15 @@ namespace Poly.DomainModeling.Language;
 internal static class DslTokenText {
     /// <summary>
     /// The token as a message or a read identifier shows it: a string literal's decoded value, an
-    /// identifier's interned name, anything else its source slice (a keyword or punctuation is its canonical
-    /// spelling; end of input is empty). Never throws.
+    /// identifier's interned name, a number's slice, a keyword or punctuation its canonical spelling (which is
+    /// its slice, so nothing is copied), and end of input empty. Never throws.
     /// </summary>
     public static string Shown(DslToken token) => token.Kind switch {
         DslTokenKind.StringLiteral => token.Unescape(),
         DslTokenKind.Identifier => token.Name(),
-        _ => token.Span.ToString(),
+        DslTokenKind.Number => token.Span.ToString(),
+        DslTokenKind.EndOfFile => "",
+        _ => DslGrammar.CanonicalText(token.Kind),
     };
 
     /// <summary>

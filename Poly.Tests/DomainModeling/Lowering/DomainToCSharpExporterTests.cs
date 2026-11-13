@@ -1997,7 +1997,7 @@ public class DomainToCSharpExporterTests {
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
-        await Assert.That(cs).Contains("internal void WhenEachOrderLineComplete(OrderLine line)\n    {\n        this.Total = line.Price + this.Total;");
+        await Assert.That(cs).Contains("internal DomainResult WhenEachOrderLineComplete(OrderLine line)\n    {\n        this.Total = line.Price + this.Total;");
         await Assert.That(cs).DoesNotContain("WhenEachOrderLineComplete(OrderLine line)\n    {\n        if (this.CurrentStage");
     }
 
@@ -3798,8 +3798,8 @@ public class DomainToCSharpExporterTests {
         var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var cs = new CSharpGenerator().Generate(types);
 
-        await Assert.That(cs).Contains("void NotifyBSubscribers()");
-        await Assert.That(cs).DoesNotContain("void NotifyBSubscribers(PaperStage?");
+        await Assert.That(cs).Contains("DomainResult NotifyBSubscribers()");
+        await Assert.That(cs).DoesNotContain("DomainResult NotifyBSubscribers(PaperStage?");
     }
 
     [Test]
@@ -3822,7 +3822,7 @@ public class DomainToCSharpExporterTests {
         var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var cs = new CSharpGenerator().Generate(types);
 
-        await Assert.That(cs).Contains("void NotifyBSubscribers(ItemStage? previousStage)");
+        await Assert.That(cs).Contains("DomainResult NotifyBSubscribers(ItemStage? previousStage)");
     }
 
     [Test]

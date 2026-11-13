@@ -1,7 +1,9 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.RegularExpressions;
 
 using Poly.Analysis;
 using Poly.Ast.Nodes;
@@ -21,8 +23,11 @@ internal enum OracleKind {
     AbiRejectsDefined
 }
 
-/// <summary>One operand definition and the values the VM column feeds it. <c>Stress</c> exposes 32-bit wrap, 2^53+1, decimal exactness.</summary>
-internal sealed record OracleOperand(string Name, string? DslType, Type? Clr, object? Stress, object? Plain);
+/// <summary>
+/// One operand definition and the values the VM column feeds it. <c>Stress</c> exposes 32-bit wrap, 2^53+1, decimal exactness.
+/// <c>ClrOnly</c> operands have no domain name: their definition is the CLR type's (T-24's small, unsigned, char and Float32).
+/// </summary>
+internal sealed record OracleOperand(string Name, string? DslType, Type? Clr, object? Stress, object? Plain, bool ClrOnly = false);
 
 internal sealed record OracleDivergence(OracleKind Kind, string Reason);
 
@@ -43,6 +48,15 @@ internal static class OperatorOracle {
         new("Int32", null, typeof(int), int.MaxValue, 7),
         new("Decimal", "Decimal", typeof(decimal), 0.1m, 0.2m),
         new("Float", null, typeof(double), 0.1d, 2.5d),
+        // 2^24 + 1.5 is not a Float32; every stress value converts to Float32 the same way on every architecture.
+        new("Float32", null, typeof(float), 16777216f, 1.5f, ClrOnly: true),
+        new("Int8", null, typeof(sbyte), sbyte.MaxValue, (sbyte)7, ClrOnly: true),
+        new("Int16", null, typeof(short), short.MaxValue, (short)7, ClrOnly: true),
+        new("UInt8", null, typeof(byte), byte.MaxValue, (byte)7, ClrOnly: true),
+        new("UInt16", null, typeof(ushort), ushort.MaxValue, (ushort)7, ClrOnly: true),
+        new("UInt32", null, typeof(uint), uint.MaxValue, 7u, ClrOnly: true),
+        new("UInt64", null, typeof(ulong), ulong.MaxValue, 7UL, ClrOnly: true),
+        new("Char", null, typeof(char), 'a', 'b', ClrOnly: true),
         new("Text", "Text", typeof(string), "ab", "cd"),
         new("Boolean", "Boolean", typeof(bool), true, false),
         new("Date", "Date", typeof(DateOnly), new DateOnly(2024, 2, 28), new DateOnly(2024, 3, 1)),
@@ -57,24 +71,33 @@ internal static class OperatorOracle {
 
     private static readonly Poly.DomainModeling.Meaning.DomainTypeModel Model = OperatorOperands.Model();
 
+    /// <summary>The grid, under the invariant culture: the checksums hash reason strings, and concatenation formats values.</summary>
     public static readonly Lazy<(IReadOnlyList<OracleCell> Cells, TimeSpan Elapsed)> Run = new(() => {
-        var watch = Stopwatch.StartNew();
-        var cells = new List<OracleCell>();
-        foreach (var kind in Enum.GetValues<OperatorKind>()) {
-            foreach (var left in Operands) {
-                if (OperatorShape.ArityOf(kind) == 1) {
-                    cells.Add(Evaluate(left, kind, null));
-                    continue;
+        var culture = CultureInfo.CurrentCulture;
+        CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
+        try {
+            var watch = Stopwatch.StartNew();
+            var cells = new List<OracleCell>();
+            foreach (var kind in Enum.GetValues<OperatorKind>()) {
+                foreach (var left in Operands) {
+                    if (OperatorShape.ArityOf(kind) == 1) {
+                        cells.Add(Evaluate(left, kind, null));
+                        continue;
+                    }
+                    foreach (var right in Operands)
+                        cells.Add(Evaluate(left, kind, right));
                 }
-                foreach (var right in Operands)
-                    cells.Add(Evaluate(left, kind, right));
             }
+            watch.Stop();
+            return (cells, watch.Elapsed);
         }
-        watch.Stop();
-        return (cells, watch.Elapsed);
+        finally {
+            CultureInfo.CurrentCulture = culture;
+        }
     });
 
-    private static ITypeDefinition Def(OracleOperand operand) => Model.Resolve(operand.Name).Definition!;
+    private static ITypeDefinition Def(OracleOperand operand) =>
+        operand.ClrOnly ? OperatorOperands.Clr(operand.Clr!) : Model.Resolve(operand.Name).Definition!;
 
     private static OracleCell Evaluate(OracleOperand left, OperatorKind kind, OracleOperand? right) {
         var divergences = new List<OracleDivergence>();
@@ -87,7 +110,9 @@ internal static class OperatorOracle {
 
         var lowered = "n/a";
         var abi = "n/a";
-        if (left.Clr is not null && (right is null || right.Clr is not null))
+        if (kind is OperatorKind.UnaryPlus)
+            (lowered, abi) = ("n/a: no UnaryPlus node", "n/a: no UnaryPlus node");
+        else if (left.Clr is not null && (right is null || right.Clr is not null))
             (lowered, abi) = RunVm(left, kind, right, resolution, divergences);
 
         return new OracleCell(left.Name, kind, right?.Name, tree, analyzer ?? "n/a", lowered, abi, divergences);
@@ -109,7 +134,8 @@ internal static class OperatorOracle {
         return $"{found.Result.Name}{(found.PlatformApplied ? " [platform]" : " [declared]")} conv({string.Join(",", conversions)})";
     }
 
-    private static string DslOp(OperatorKind kind) => kind switch {
+    /// <summary>The DSL spelling, or null for a kind the platform defines and the DSL has no syntax for.</summary>
+    private static string? DslOp(OperatorKind kind) => kind switch {
         OperatorKind.Add => "+",
         OperatorKind.Subtract => "-",
         OperatorKind.Multiply => "*",
@@ -122,14 +148,18 @@ internal static class OperatorOracle {
         OperatorKind.GreaterThanOrEqual => ">=",
         OperatorKind.And => "and",
         OperatorKind.Or => "or",
+        OperatorKind.Not => "not",
+        OperatorKind.Modulo or OperatorKind.UnaryMinus or OperatorKind.UnaryPlus
+            or OperatorKind.BitwiseAnd or OperatorKind.BitwiseOr or OperatorKind.BitwiseXor or OperatorKind.BitwiseNot
+            or OperatorKind.ShiftLeft or OperatorKind.ShiftRight => null,
         _ => throw new ArgumentOutOfRangeException(nameof(kind))
     };
 
-    /// <summary>"accepts" or "rejects" from the domain analyzer, or null when the domain cannot express an operand (no Int32 or Float type).</summary>
+    /// <summary>"accepts" or "rejects" from the domain analyzer, or null when the domain cannot express an operand (no Int32 or Float type) or the operator.</summary>
     private static string? AnalyzerVerdict(OracleOperand left, OperatorKind kind, OracleOperand? right) {
-        if (left.DslType is null || (right is not null && right.DslType is null))
+        if (left.DslType is null || (right is not null && right.DslType is null) || DslOp(kind) is not { } op)
             return null;
-        var expression = right is null ? "not L" : $"L {DslOp(kind)} R";
+        var expression = right is null ? $"{op} L" : $"L {op} R";
         var properties = right is null ? $"L: {left.DslType}" : $"L: {left.DslType}\n  R: {right.DslType}";
         var dsl = $$"""
             domain Test
@@ -165,6 +195,14 @@ internal static class OperatorOracle {
         OperatorKind.And => new And(left, right!),
         OperatorKind.Or => new Or(left, right!),
         OperatorKind.Not => new Not(left),
+        OperatorKind.Modulo => new Modulo(left, right!),
+        OperatorKind.BitwiseAnd => new BitwiseAnd(left, right!),
+        OperatorKind.BitwiseOr => new BitwiseOr(left, right!),
+        OperatorKind.BitwiseXor => new BitwiseXor(left, right!),
+        OperatorKind.ShiftLeft => new ShiftLeft(left, right!),
+        OperatorKind.ShiftRight => new ShiftRight(left, right!),
+        OperatorKind.UnaryMinus => new UnaryMinus(left),
+        OperatorKind.BitwiseNot => new BitwiseNot(left),
         _ => throw new ArgumentOutOfRangeException(nameof(kind))
     };
 
@@ -289,10 +327,11 @@ internal static class OperatorOracle {
     private static object? Expected(OperatorKind kind, OperatorResolution resolution, object? leftValue, object? rightValue) {
         try {
             var parameters = resolution.Signature.Parameters.Select(static p => p.ParameterTypeDefinition).ToArray();
+            // Into Object is boxing. Char goes through Int32: ChangeType has no char to float, double or decimal.
             static object? Convert(object? value, ITypeDefinition target) =>
-                value is null || !target.TryGetRuntimeType(out var type) || value.GetType() == type
+                value is null || !target.TryGetRuntimeType(out var type) || value.GetType() == type || type == typeof(object)
                     ? value
-                    : System.Convert.ChangeType(value, type, CultureInfo.InvariantCulture);
+                    : System.Convert.ChangeType(value is char c ? (int)c : value, type, CultureInfo.InvariantCulture);
             dynamic x = Convert(leftValue, parameters[0])!;
             dynamic? y = parameters.Length > 1 ? Convert(rightValue, parameters[1]) : null;
             return kind switch {
@@ -300,6 +339,7 @@ internal static class OperatorOracle {
                 OperatorKind.Subtract => x - y,
                 OperatorKind.Multiply => x * y,
                 OperatorKind.Divide => x / y,
+                OperatorKind.Modulo => x % y,
                 OperatorKind.Equal => x == y,
                 OperatorKind.NotEqual => x != y,
                 OperatorKind.LessThan => x < y,
@@ -309,6 +349,13 @@ internal static class OperatorOracle {
                 OperatorKind.And => (bool)x && (bool)y!,
                 OperatorKind.Or => (bool)x || (bool)y!,
                 OperatorKind.Not => !(bool)x,
+                OperatorKind.BitwiseAnd => x & y,
+                OperatorKind.BitwiseOr => x | y,
+                OperatorKind.BitwiseXor => x ^ y,
+                OperatorKind.ShiftLeft => x << y,
+                OperatorKind.ShiftRight => x >> y,
+                OperatorKind.UnaryMinus => -x,
+                OperatorKind.BitwiseNot => ~x,
                 _ => null
             };
         }
@@ -319,23 +366,32 @@ internal static class OperatorOracle {
 }
 
 /// <summary>
-/// An owner row for a divergence, matched by kind, operand names, operator and a fragment of the reason.
+/// An owner row for a divergence, matched by kind, operand names, operator and the reason: <see cref="ReasonPattern"/>
+/// is a regular expression found in the reason (a plain fragment matches as text; <c>^</c> and <c>$</c> anchor it).
 /// <c>*</c> matches anything. <see cref="ExpectedCount"/> is the number of divergences the row owns: a fixing slice
 /// edits the number or deletes the row, and growth fails as surely as shrinkage.
 /// </summary>
-internal sealed record LedgerRule(OracleKind Kind, string Lefts, string Ops, string Rights, string ReasonContains, string Owner, int ExpectedCount, string Checksum = "") {
+internal sealed record LedgerRule(OracleKind Kind, string Lefts, string Ops, string Rights, string ReasonPattern, string Owner, int ExpectedCount, string Checksum = "") {
+    private static readonly ConcurrentDictionary<string, Regex> Patterns = new(StringComparer.Ordinal);
+
     public bool Matches(OracleCell cell, OracleDivergence divergence) =>
         divergence.Kind == Kind
         && In(Lefts, cell.Left) && In(Ops, cell.Op.ToString()) && In(Rights, cell.Right ?? "-")
-        && divergence.Reason.Contains(ReasonContains, StringComparison.Ordinal);
+        && Patterns.GetOrAdd(ReasonPattern, static pattern => new Regex(pattern, RegexOptions.CultureInvariant)).IsMatch(divergence.Reason);
 
-    public string Describe() => $"{Kind} [{Lefts}] [{Ops}] [{Rights}] \"{ReasonContains}\" -> {Owner}";
+    /// <summary>
+    /// What the checksum hashes for one owned divergence: the cell and this rule's kind and fragment, never the reason
+    /// text, so the values the VM computed (which may differ by architecture) stay out of the cell identity.
+    /// </summary>
+    public string KeyOf(OracleCell cell) => $"{cell.Key}|{Kind}|{ReasonPattern}";
+
+    public string Describe() => $"{Kind} [{Lefts}] [{Ops}] [{Rights}] \"{ReasonPattern}\" -> {Owner}";
 
     private static bool In(string set, string value) => set == "*" || set.Split(',').Contains(value);
 }
 
 internal static class LedgerCheck {
-    /// <summary>Order-independent, machine-independent fingerprint of the cells a rule owns: SHA-256 over the sorted keys, 16 hex characters.</summary>
+    /// <summary>Order-independent, machine-independent fingerprint of the cells a rule owns: SHA-256 over the sorted <see cref="LedgerRule.KeyOf"/> keys, 16 hex characters.</summary>
     public static string Checksum(IEnumerable<string> keys) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(string.Join("\n", keys.Order(StringComparer.Ordinal))))).ToLowerInvariant()[..16];
 
@@ -357,7 +413,7 @@ internal static class LedgerCheck {
                 problems.Add($"claimed by {owners.Length} rules: {cell.Key}: {divergence.Reason}");
             foreach (var owner in owners) {
                 counts[owner]++;
-                keys[owner].Add($"{cell.Key}|{divergence.Reason}");
+                keys[owner].Add(owner.KeyOf(cell));
             }
         }
         foreach (var rule in rules) {
@@ -381,39 +437,51 @@ internal static class LedgerCheck {
 public class OperatorOracleTests {
     private const string Comparisons = "Equal,NotEqual,LessThan,LessThanOrEqual,GreaterThan,GreaterThanOrEqual";
     private const string Ordering = "LessThan,LessThanOrEqual,GreaterThan,GreaterThanOrEqual";
-    private const string Arithmetic = "Add,Subtract,Multiply,Divide";
+    private const string Arithmetic = "Add,Subtract,Multiply,Divide,Modulo";
+    private const string BitwiseShiftAndUnaryMinus = "BitwiseAnd,BitwiseOr,BitwiseXor,BitwiseNot,ShiftLeft,ShiftRight,UnaryMinus";
 
     private const string AllButOrder = "Number,Int32,Decimal,Float,Text,Boolean,Date,Time,DateTime,Duration,Uuid,Status,Money";
 
     private static readonly LedgerRule[] AnalyzerRules = [
         // The domain analyzer types an entity operand as Unknown and so accepts everything beside it.
-        new(OracleKind.AnalyzerDisagrees, "Order", "*", "*", "analyzer accepts", "T-06 (Unknown operands: R1)", 107, "b0d496ca8a8249e4"),
-        new(OracleKind.AnalyzerDisagrees, AllButOrder, "*", "Order", "analyzer accepts", "T-06 (Unknown operands: R1)", 96, "062dbd948638e7d4"),
+        new(OracleKind.AnalyzerDisagrees, "Order", "*", "*", "analyzer accepts", "T-06 (Unknown operands: R1)", 107, "7284367a02f5ff13"),
+        new(OracleKind.AnalyzerDisagrees, AllButOrder, "*", "Order", "analyzer accepts", "T-06 (Unknown operands: R1)", 96, "e18f5f561a8a8e60"),
         // Enum member literals compared as Text, and enum ordering.
-        new(OracleKind.AnalyzerDisagrees, "Status", Comparisons, "Text", "analyzer accepts", "T-06 (enum member literals)", 6, "07623f4b9c636bc9"),
-        new(OracleKind.AnalyzerDisagrees, "Text", Comparisons, "Status", "analyzer accepts", "T-06 (enum member literals)", 6, "7ed848eea23806f2"),
-        new(OracleKind.AnalyzerDisagrees, "Status", Ordering, "Status", "analyzer accepts", "T-07 (ordering legality)", 4, "b83ca30815274930"),
+        new(OracleKind.AnalyzerDisagrees, "Status", Comparisons, "Text", "analyzer accepts", "T-06 (enum member literals)", 6, "82d668327422d63d"),
+        new(OracleKind.AnalyzerDisagrees, "Text", Comparisons, "Status", "analyzer accepts", "T-06 (enum member literals)", 6, "79e5d5c94c300ad5"),
+        new(OracleKind.AnalyzerDisagrees, "Status", Ordering, "Status", "analyzer accepts", "T-07 (ordering legality)", 4, "cd41fe5cc653aa1f"),
         // Same-category pairs the analyzer accepts and no platform defines.
-        new(OracleKind.AnalyzerDisagrees, "Text,Boolean", Ordering, "Text,Boolean", "analyzer accepts", "T-07 (#631 ordering legality)", 8, "8ea030c0d8f2ea50"),
+        new(OracleKind.AnalyzerDisagrees, "Text,Boolean", Ordering, "Text,Boolean", "analyzer accepts", "T-07 (#631 ordering legality)", 8, "91cd7271c7004160"),
         // Temporal cells: the analyzer's offset permission and its rejection of CLR-defined duration arithmetic.
-        new(OracleKind.AnalyzerDisagrees, "Date,DateTime", "Add,Subtract", "Date,DateTime,Decimal,Number,Duration", "analyzer accepts", "T-10 (temporal offset permission)", 11, "6a8a5c891edeb92e"),
-        new(OracleKind.AnalyzerDisagrees, "Duration,Time,Number", "*", "Duration,Time,Number", "analyzer rejects", "T-10 (temporal operands the CLR defines)", 7, "7e7c7cf1f38d3237")
+        new(OracleKind.AnalyzerDisagrees, "Date,DateTime", "Add,Subtract", "Date,DateTime,Decimal,Number,Duration", "analyzer accepts", "T-10 (temporal offset permission)", 11, "edbb26e174a06a9f"),
+        new(OracleKind.AnalyzerDisagrees, "Duration,Time,Number", "*", "Duration,Time,Number", "analyzer rejects", "T-10 (temporal operands the CLR defines)", 7, "0409473254198adb"),
+        // Permanent: C# defines string + object, and Poly allows only Text + Text. A named language policy, not a gap.
+        new(OracleKind.AnalyzerDisagrees, "*", "Add", "*", "analyzer rejects, tree String", "T-07 (language policy: only Text + Text concatenates)", 16, "a66331455543d1e9")
     ];
 
     // Float64 x Decimal and every Decimal-with-X cell the lowered analysis types: the domain DSL has no Float, so
-    // the analyzer column is n/a for those; the owners are the lowered analysis (T-17, T-18) and the ABI (T-21).
+    // the analyzer column is n/a for those; the owners are the lowered analysis (T-10, T-17, T-18, T-22) and the ABI (T-21).
     private static readonly LedgerRule[] LoweredRules = [
-        new(OracleKind.LoweredAnalysisDisagrees, "*", "*", "*", "analysis error on a defined cell", "T-18 (SyntaxTypeCompatibilityAnalyzer arithmetic rules; temporal operands with T-10)", 16, "a5e2a93e2074fb1c"),
-        new(OracleKind.LoweredAnalysisDisagrees, "*", "*", "*", "typed Decimal", "T-17 (PromoteNumeric / ResolveAddType)", 62, "6365dee6a207e45a"),
-        new(OracleKind.LoweredAnalysisDisagrees, "*", "Add", "*", "typed String", "T-17 (ResolveAddType: any string operand makes Add a string)", 20, "20c644f58d9bdcc1"),
-        new(OracleKind.LoweredAnalysisDisagrees, "*", "Add,Subtract", "*", "typed DateOnly", "T-10 (RewriteDateOffset)", 6, "67ddd6e443b61139"),
-        new(OracleKind.LoweredAnalysisDisagrees, "*", "Add,Subtract", "*", "typed DateTime", "T-10 (RewriteDateOffset)", 6, "de2a2fb0b866b225"),
-        new(OracleKind.LoweredAnalysisDisagrees, "*", Comparisons, "*", "typed Boolean", "T-18 (Compatible accepts same-category and Float-with-Decimal pairs)", 20, "d4268c300cd7d982")
+        new(OracleKind.LoweredAnalysisDisagrees, "*", "*", "*", "analysis error on a defined cell", "T-18 (SyntaxTypeCompatibilityAnalyzer arithmetic rules; temporal operands with T-10)", 40, "8f48a0defcb327e9"),
+        new(OracleKind.LoweredAnalysisDisagrees, "*", Arithmetic, "*", "type: analysis", "T-17 (result typing: small integers, char and uint with a signed operand keep the operand type)", 150, "ff6f45d8a9c3a166"),
+        // The same wrong type on the node kinds the lowered analysis has no case for (issue 812): it passes the operand type through.
+        new(OracleKind.LoweredAnalysisDisagrees, "*", BitwiseShiftAndUnaryMinus, "*", "type: analysis", "T-22 (bitwise, shift and unary minus cases: the operand type passes through)", 221, "1a89fb5312f00f92"),
+        new(OracleKind.LoweredAnalysisDisagrees, "*", Arithmetic, "*", "typed Decimal", "T-17 (PromoteNumeric / ResolveAddType)", 88, "b1f45630c1054ca7"),
+        new(OracleKind.LoweredAnalysisDisagrees, "*", Arithmetic, "*", "typed UInt64", "T-17 (promotion: ulong with a signed operand)", 40, "718e56090af03352"),
+        new(OracleKind.LoweredAnalysisDisagrees, "*", "Add,Subtract", "*", "typed DateOnly", "T-10 (RewriteDateOffset)", 20, "7ba4ce6c196e991e"),
+        new(OracleKind.LoweredAnalysisDisagrees, "*", "Add,Subtract", "*", "typed DateTime", "T-10 (RewriteDateOffset)", 20, "5b5cc5a3f2ece6cd"),
+        new(OracleKind.LoweredAnalysisDisagrees, "*", Comparisons, "*", "typed Boolean", "T-18 (Compatible accepts same-category and Float-with-Decimal pairs)", 92, "d99266997f9099df"),
+        // The node kinds the lowered-tree analysis has no case for (issue 812): it accepts every operand.
+        new(OracleKind.LoweredAnalysisDisagrees, "*", BitwiseShiftAndUnaryMinus, "*", "analysis accepts an undefined cell", "T-22 (bitwise, shift and unary minus cases)", 1492, "f06be2a866cf6b37")
     ];
 
     private static readonly LedgerRule[] AbiRules = [
-        new(OracleKind.AbiDivergesFromTree, "*", "*", "*", "executes an undefined cell", "T-21 (the ABI must reject what the tree does not define)", 110, "3b2144722f34faf2"),
-        new(OracleKind.AbiDivergesFromTree, "*", "*", "*", "unstated conversion", "T-21 (T-04 and Lower state the conversion node; the emitter stops converting)", 100, "bab370fb22c12a8c")
+        new(OracleKind.AbiDivergesFromTree, "*", "*", "*", "executes an undefined cell", "T-21 (the ABI must reject what the tree does not define)", 1271, "6d6bb6491fbe7a81"),
+        new(OracleKind.AbiDivergesFromTree, "*", "*", "*", "unstated conversion", "T-21 (T-04 and Lower state the conversion node; the emitter stops converting)", 1729, "6699a0d31e9728fb"),
+        new(OracleKind.AbiDivergesFromTree, "*", "*", "*", "^type: VM [^;]*$", "T-21 (the emitter's own promotion: the VM keeps the operand type)", 363, "fdfd5dee091d1059"),
+        // Wrong values (issue 832): the type and the value in one reason, then the value alone (-Decimal and -Duration give -1).
+        new(OracleKind.AbiDivergesFromTree, "*", "*", "*", "^type: VM .*; value S", "T-21 (issue 832: wrong type and value)", 8, "2e73ee06e20095c0"),
+        new(OracleKind.AbiDivergesFromTree, "*", "*", "*", "^value S", "T-21 (issue 832: wrong values)", 115, "ae35f7db5640776e")
     ];
 
     private static readonly LedgerRule[] RejectedDefinedRules = [];
@@ -429,15 +497,15 @@ public class OperatorOracleTests {
 
     [Test]
     public async Task AnalyzerDisagrees_EveryDivergenceIsOwned_AndNoEntryIsStale() =>
-        await AssertOwned(OracleKind.AnalyzerDisagrees, AnalyzerRules, 245);
+        await AssertOwned(OracleKind.AnalyzerDisagrees, AnalyzerRules, 261);
 
     [Test]
     public async Task LoweredAnalysisDisagrees_EveryDivergenceIsOwned_AndNoEntryIsStale() =>
-        await AssertOwned(OracleKind.LoweredAnalysisDisagrees, LoweredRules, 130);
+        await AssertOwned(OracleKind.LoweredAnalysisDisagrees, LoweredRules, 2163);
 
     [Test]
     public async Task AbiDivergesFromTree_EveryDivergenceIsOwned_AndNoEntryIsStale() =>
-        await AssertOwned(OracleKind.AbiDivergesFromTree, AbiRules, 210);
+        await AssertOwned(OracleKind.AbiDivergesFromTree, AbiRules, 3486);
 
     [Test]
     public async Task AbiRejectsDefined_EveryDivergenceIsOwned_AndNoEntryIsStale() =>
@@ -447,7 +515,9 @@ public class OperatorOracleTests {
     public async Task Ledger_CoversTheWholeGrid_WithinBudget_AndChecksEveryDefinedValue() {
         var (cells, elapsed) = OperatorOracle.Run.Value;
         var binary = Enum.GetValues<OperatorKind>().Count(static k => OperatorShape.ArityOf(k) == 2);
-        await Assert.That(cells.Count).IsEqualTo((binary * OperatorOracle.Operands.Length * OperatorOracle.Operands.Length) + OperatorOracle.Operands.Length);
+        var unary = Enum.GetValues<OperatorKind>().Length - binary;
+        await Assert.That(cells.Count).IsEqualTo((binary * OperatorOracle.Operands.Length * OperatorOracle.Operands.Length) + (unary * OperatorOracle.Operands.Length));
+        await Assert.That(cells.Count).IsEqualTo(8800);
         await Assert.That(elapsed).IsLessThan(TimeSpan.FromMinutes(2));
         // A defined cell the VM ran must have had its value compared with what the tree states.
         var unchecked_ = cells.Where(static c => c.Abi.Contains("(value unchecked)", StringComparison.Ordinal)).Select(static c => c.Key).ToArray();
@@ -491,6 +561,20 @@ public class OperatorOracleTests {
         await Assert.That(cell.Abi).StartsWith("Decimal;");
     }
 
+    /// <summary>
+    /// WRONG VALUES, pinned as they are today (issue 832, owner T-21). The VM returns -1 for unary minus on a Decimal
+    /// and on a Duration whatever the operand, and <c>UInt8 | UInt64</c> is not the bitwise or of its operands. These
+    /// are not the right answers; T-21's fix inverts them. The ledger's checksums are value-independent, so without
+    /// these a wrong value that moved to a different wrong value would be invisible. The operands are exactly
+    /// representable and the text is the oracle's invariant-culture rendering, so the pin is the same on arm64 and x64.
+    /// </summary>
+    [Test]
+    public async Task Probe_WrongVmValues_Issue832_PinnedAsTheyAreToday_T21InvertsThem() {
+        await Assert.That(Cell("Decimal", OperatorKind.UnaryMinus, null).Abi).IsEqualTo("Decimal; S1=-1; S2=-1");
+        await Assert.That(Cell("Duration", OperatorKind.UnaryMinus, null).Abi).IsEqualTo("TimeSpan; S1=-1; S2=-1");
+        await Assert.That(Cell("UInt8", OperatorKind.BitwiseOr, "UInt64").Abi).IsEqualTo("Byte; S1=255; S2=-1");
+    }
+
     [Test]
     public async Task AnalyzerColumn_NeverSwallowsAnException() {
         // An exception in the analyzer column is a finding, not a blank cell.
@@ -511,7 +595,29 @@ public class OperatorOracleTests {
         new(OracleKind.AbiDivergesFromTree, lefts, "*", "*", reason, "T-99", count);
 
     private static LedgerRule Pinned(LedgerRule rule, IEnumerable<(OracleCell Cell, OracleDivergence Divergence)> items) =>
-        rule with { Checksum = LedgerCheck.Checksum(items.Where(i => rule.Matches(i.Cell, i.Divergence)).Select(static i => $"{i.Cell.Key}|{i.Divergence.Reason}")) };
+        rule with { Checksum = LedgerCheck.Checksum(items.Where(i => rule.Matches(i.Cell, i.Divergence)).Select(i => rule.KeyOf(i.Cell))) };
+
+    [Test]
+    public async Task VmReasonRules_B3B4B5_ClaimEachReasonShapeExactlyOnce() {
+        // The three VM rules must partition the reasons RunVm writes: a type only, a type and a value, a value only, two values.
+        LedgerRule[] rules = [
+            new(OracleKind.AbiDivergesFromTree, "*", "*", "*", "^type: VM [^;]*$", "B3", 1),
+            new(OracleKind.AbiDivergesFromTree, "*", "*", "*", "^type: VM .*; value S", "B4", 1),
+            new(OracleKind.AbiDivergesFromTree, "*", "*", "*", "^value S", "B5", 1)
+        ];
+        var cell = SyntheticCell("A", OperatorKind.Add, "B");
+        var shapes = new Dictionary<string, string> {
+            ["type only"] = "type: VM Int32, tree Int64",
+            ["type and value"] = "type: VM Int32, tree Int64; value S1: VM -1, tree 5",
+            ["value only"] = "value S1: VM -1, tree 5",
+            ["two values"] = "value S1: VM -1, tree 5; value S2: VM -1, tree 6"
+        };
+        var expectedOwner = new Dictionary<string, string> { ["type only"] = "B3", ["type and value"] = "B4", ["value only"] = "B5", ["two values"] = "B5" };
+        foreach (var (shape, reason) in shapes) {
+            var owners = rules.Where(rule => rule.Matches(cell, new OracleDivergence(OracleKind.AbiDivergesFromTree, reason))).Select(static rule => rule.Owner).ToArray();
+            await Assert.That(owners).IsEquivalentTo([expectedOwner[shape]]);
+        }
+    }
 
     [Test]
     public async Task Ratchet_ExactCountsAndCells_HaveNoProblem() {

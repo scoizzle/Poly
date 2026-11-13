@@ -1,5 +1,3 @@
-using Poly.Mcp.Tools;
-
 namespace Poly.Tests.Mcp;
 
 /// <summary>
@@ -24,97 +22,74 @@ public class CreateInstanceCoercionTests {
         }
         """;
 
-    private static string Property(DomainToolResponse response, string name) {
-        var json = System.Text.Json.JsonSerializer.Serialize(response.Data);
-        using var doc = System.Text.Json.JsonDocument.Parse(json);
-        foreach (var property in doc.RootElement.GetProperty("instance").GetProperty("properties").EnumerateArray()) {
-            if (property.GetProperty("name").GetString() == name)
-                return property.GetProperty("value").GetString()
-                    ?? throw new InvalidOperationException($"null {name}");
-        }
-        throw new InvalidOperationException($"missing property {name}");
-    }
-
-    private static string InstanceId(DomainToolResponse response) {
-        var json = System.Text.Json.JsonSerializer.Serialize(response.Data);
-        using var doc = System.Text.Json.JsonDocument.Parse(json);
-        return doc.RootElement.GetProperty("instance").GetProperty("instanceId").GetString()
-            ?? throw new InvalidOperationException("missing instanceId");
-    }
-
     private static string CreateAndId(string sessionId, string entity, string props) {
-        var create = McpTestTools.Runtime.CreateInstance(sessionId, entity, props);
-        if (!create.Success)
-            throw new InvalidOperationException($"create_instance {entity}: {create.Message}");
-        var json = System.Text.Json.JsonSerializer.Serialize(create.Data);
-        using var doc = System.Text.Json.JsonDocument.Parse(json);
-        if (doc.RootElement.TryGetProperty("instance", out var instance)
-            && instance.TryGetProperty("instanceId", out var id))
-            return id.GetString() ?? throw new InvalidOperationException("missing instanceId");
-        throw new InvalidOperationException("missing instance payload");
+        var create = McpTestTools.Surface.Create(sessionId, entity, props);
+        if (!create.Ok)
+            throw new InvalidOperationException($"create_instance {entity}: {create.Summary}");
+        return create.InstanceId;
     }
 
     [Test]
     public async Task IsoStrings_CoerceToDeclaredTemporalTypes_PolicyComparesAsTyped() {
-        var (sessionId, _) = McpTestTools.Store.Create("CoerceTemporal");
-        await Assert.That(McpTestTools.Dsl.ApplyDsl(sessionId, CoercionDomain).Success).IsTrue();
+        var sessionId = McpTestTools.Surface.Open("CoerceTemporal");
+        await Assert.That(McpTestTools.Surface.Define(sessionId, CoercionDomain).Success).IsTrue();
 
-        var create = McpTestTools.Runtime.CreateInstance(sessionId, "Job",
+        var create = McpTestTools.Surface.Create(sessionId, "Job",
             """{"Name":"J","ExpiresAt":"2026-01-01T00:00:00Z","Due":"2026-01-01","Window":"00:30:00","OpensAt":"09:00:00"}""");
-        await Assert.That(create.Success).IsTrue();
+        await Assert.That(create.Ok).IsTrue();
         var jobId = CreateAndId(sessionId, "Job", """{"Name":"J2","ExpiresAt":"2026-01-01T00:00:00Z"}""");
         _ = jobId;
 
         // The F32 repro: an un-coerced string ExpiresAt made IsExpired throw
         // "Cannot compare values of different runtime types: 'String' vs 'DateTime'".
-        var policy = McpTestTools.Policy.EvaluatePolicy(sessionId, "Job", "IsExpired", jobId);
-        await Assert.That(policy.Success).IsTrue();
-        await Assert.That(policy.Message).Contains("true");
+        var policy = McpTestTools.Surface.Evaluate(sessionId, "Job", "IsExpired", jobId);
+        await Assert.That(policy.Ok).IsTrue();
+        await Assert.That(policy.Summary).Contains("true");
     }
 
     [Test]
     public async Task DateTimeOffset_AndZulu_StoreTheSameUtcInstant() {
-        var (sessionId, _) = McpTestTools.Store.Create("CoerceOffset");
-        await Assert.That(McpTestTools.Dsl.ApplyDsl(sessionId, CoercionDomain).Success).IsTrue();
+        var sessionId = McpTestTools.Surface.Open("CoerceOffset");
+        await Assert.That(McpTestTools.Surface.Define(sessionId, CoercionDomain).Success).IsTrue();
 
-        var zulu = McpTestTools.Runtime.CreateInstance(sessionId, "Job",
+        var zulu = McpTestTools.Surface.Create(sessionId, "Job",
             """{"Name":"Z","ExpiresAt":"2026-01-01T00:00:00Z"}""");
-        var offset = McpTestTools.Runtime.CreateInstance(sessionId, "Job",
+        var offset = McpTestTools.Surface.Create(sessionId, "Job",
             """{"Name":"O","ExpiresAt":"2026-01-01T00:00:00+00:00"}""");
-        await Assert.That(zulu.Success).IsTrue();
-        await Assert.That(offset.Success).IsTrue();
-        await Assert.That(Property(offset, "ExpiresAt")).IsEqualTo(Property(zulu, "ExpiresAt"));
+        await Assert.That(zulu.Ok).IsTrue();
+        await Assert.That(offset.Ok).IsTrue();
+        await Assert.That(offset.Property("ExpiresAt")).IsEqualTo(zulu.Property("ExpiresAt"));
 
-        var zuluPolicy = McpTestTools.Policy.EvaluatePolicy(
-            sessionId, "Job", "IsExpired", InstanceId(zulu));
-        var offsetPolicy = McpTestTools.Policy.EvaluatePolicy(
-            sessionId, "Job", "IsExpired", InstanceId(offset));
-        await Assert.That(zuluPolicy.Success).IsTrue();
-        await Assert.That(offsetPolicy.Success).IsTrue();
-        await Assert.That(offsetPolicy.Message).IsEqualTo(zuluPolicy.Message);
+        var zuluPolicy = McpTestTools.Surface.Evaluate(
+            sessionId, "Job", "IsExpired", zulu.InstanceId);
+        var offsetPolicy = McpTestTools.Surface.Evaluate(
+            sessionId, "Job", "IsExpired", offset.InstanceId);
+        await Assert.That(zuluPolicy.Ok).IsTrue();
+        await Assert.That(offsetPolicy.Ok).IsTrue();
+        await Assert.That(offsetPolicy.Summary).IsEqualTo(zuluPolicy.Summary);
     }
 
     [Test]
     public async Task WrongTypedValue_FailsToolCall_NamingPropertyAndExpectedType() {
-        var (sessionId, _) = McpTestTools.Store.Create("CoerceWrong");
-        await Assert.That(McpTestTools.Dsl.ApplyDsl(sessionId, CoercionDomain).Success).IsTrue();
+        var sessionId = McpTestTools.Surface.Open("CoerceWrong");
+        await Assert.That(McpTestTools.Surface.Define(sessionId, CoercionDomain).Success).IsTrue();
 
-        var numberForDateTime = McpTestTools.Runtime.CreateInstance(sessionId, "Job",
+        var numberForDateTime = McpTestTools.Surface.Create(sessionId, "Job",
             """{"Name":"J","ExpiresAt":12345}""");
-        await Assert.That(numberForDateTime.Success).IsFalse();
-        await Assert.That(numberForDateTime.Message).Contains("ExpiresAt");
-        await Assert.That(numberForDateTime.Message).Contains("DateTime");
+        await Assert.That(numberForDateTime.Ok).IsFalse();
+        await Assert.That(numberForDateTime.Summary).Contains("ExpiresAt");
+        await Assert.That(numberForDateTime.Summary).Contains("DateTime");
 
-        var badDate = McpTestTools.Runtime.CreateInstance(sessionId, "Job",
+        var badDate = McpTestTools.Surface.Create(sessionId, "Job",
             """{"Name":"J","Due":"not-a-date"}""");
-        await Assert.That(badDate.Success).IsFalse();
-        await Assert.That(badDate.Message).Contains("Due");
-        await Assert.That(badDate.Message).Contains("Date");
+        await Assert.That(badDate.Ok).IsFalse();
+        await Assert.That(badDate.Summary).Contains("Due");
+        await Assert.That(badDate.Summary).Contains("Date");
     }
 
     [Test]
     public async Task WrongTypedNumberAndBoolean_FailLoud() {
-        var (sessionId, _) = McpTestTools.Store.Create("CoerceScalar");
+        var sessionId = McpTestTools.Surface.Open("CoerceScalar");
         var dsl = """
             domain ScalarProbe
             uses temporal
@@ -124,16 +99,16 @@ public class CreateInstanceCoercionTests {
               On: Boolean
             }
             """;
-        await Assert.That(McpTestTools.Dsl.ApplyDsl(sessionId, dsl).Success).IsTrue();
+        await Assert.That(McpTestTools.Surface.Define(sessionId, dsl).Success).IsTrue();
 
-        var stringNumber = McpTestTools.Runtime.CreateInstance(sessionId, "Thing", """{"Count":"5"}""");
-        await Assert.That(stringNumber.Success).IsFalse();
-        await Assert.That(stringNumber.Message).Contains("Count");
-        await Assert.That(stringNumber.Message).Contains("Number");
+        var stringNumber = McpTestTools.Surface.Create(sessionId, "Thing", """{"Count":"5"}""");
+        await Assert.That(stringNumber.Ok).IsFalse();
+        await Assert.That(stringNumber.Summary).Contains("Count");
+        await Assert.That(stringNumber.Summary).Contains("Number");
 
-        var textBoolean = McpTestTools.Runtime.CreateInstance(sessionId, "Thing", """{"On":"yes"}""");
-        await Assert.That(textBoolean.Success).IsFalse();
-        await Assert.That(textBoolean.Message).Contains("On");
-        await Assert.That(textBoolean.Message).Contains("Boolean");
+        var textBoolean = McpTestTools.Surface.Create(sessionId, "Thing", """{"On":"yes"}""");
+        await Assert.That(textBoolean.Ok).IsFalse();
+        await Assert.That(textBoolean.Summary).Contains("On");
+        await Assert.That(textBoolean.Summary).Contains("Boolean");
     }
 }

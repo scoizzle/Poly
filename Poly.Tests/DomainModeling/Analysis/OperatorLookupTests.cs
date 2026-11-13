@@ -1,3 +1,5 @@
+using System.Globalization;
+
 using Poly.Ast.Nodes;
 using Poly.DomainModeling;
 using Poly.DomainModeling.Libraries.Temporal;
@@ -163,16 +165,16 @@ public class OperatorLookupTests {
     }
 
     [Test]
-    public async Task Float32_Add_IsNone() {
+    public async Task Float32_Add_IsFloat32_AndItsComparisonIsPlatformApplied() {
+        // T-24 flipped this pin: Float32 arithmetic is built in, and the CLR-declared comparison is subsumed.
         var single = OperatorOperands.Clr(typeof(float));
-        await Assert.That(single.GetOperator(OperatorKind.Add, single)).IsNull();
-        await Assert.That(single.GetOperator(OperatorKind.Multiply, single)).IsNull();
-        // The CLR declares Single's comparisons itself; they are a declared member, never a built-in rule.
+        await AssertResult(single.GetOperator(OperatorKind.Add, single), single);
+        await AssertResult(single.GetOperator(OperatorKind.Multiply, single), single);
         var comparison = single.GetOperator(OperatorKind.LessThan, single);
         await AssertResult(comparison, OperatorOperands.Clr(typeof(bool)));
-        await Assert.That(comparison!.Value.PlatformApplied).IsFalse();
-        // The sibling: the closed set still answers for Float64.
-        await AssertResult(Op("Float", OperatorKind.Add, "Float"), OperatorOperands.Clr(typeof(double)));
+        await Assert.That(comparison!.Value.PlatformApplied).IsTrue();
+        // The sibling: Float32 with Float64 is Float64.
+        await AssertResult(single.GetOperator(OperatorKind.Add, OperatorOperands.Clr(typeof(double))), OperatorOperands.Clr(typeof(double)));
     }
 
     // ---- text and boolean ----
@@ -217,9 +219,10 @@ public class OperatorLookupTests {
     public async Task And_Or_OnNonBoolean_AreNone() {
         await Assert.That(Op("Number", OperatorKind.And, "Number")).IsNull();
         await Assert.That(Op("Decimal", OperatorKind.Or, "Decimal")).IsNull();
-        // BigInteger declares op_BitwiseAnd, which is not logical-and: And has no reflected name.
+        // BigInteger declares op_BitwiseAnd, which is BitwiseAnd, not logical-and: And has no reflected name.
         var big = OperatorOperands.Clr(typeof(System.Numerics.BigInteger));
         await Assert.That(big.GetOperator(OperatorKind.And, big)).IsNull();
+        await AssertResult(big.GetOperator(OperatorKind.BitwiseAnd, big), big);
         await AssertResult(Op("Boolean", OperatorKind.And, "Boolean"), OperatorOperands.Clr(typeof(bool)));
     }
 
@@ -363,12 +366,14 @@ public class OperatorLookupTests {
         await AssertResult(Op("Boolean", OperatorKind.Not, null), OperatorOperands.Clr(typeof(bool)));
     }
 
+    private static readonly OperatorKind[] UnaryKinds = [OperatorKind.Not, OperatorKind.UnaryMinus, OperatorKind.UnaryPlus, OperatorKind.BitwiseNot];
+
     [Test]
     public async Task EveryOperatorKind_IsClassifiedForArity() {
-        // F-04 (unary minus) and F-05 (modulo) will add kinds; an unclassified kind must fail loudly here.
+        // An unclassified kind must fail loudly here. The unary set is literal, not read from the code under test.
         var boolean = Def("Boolean");
         foreach (var kind in Enum.GetValues<OperatorKind>()) {
-            var unary = kind is OperatorKind.Not;
+            var unary = UnaryKinds.Contains(kind);
             var call = () => boolean.GetOperator(kind, unary ? null : boolean);
             await Assert.That(call).ThrowsNothing();
         }
@@ -388,6 +393,15 @@ public class OperatorLookupTests {
             [OperatorKind.GreaterThan] = "op_GreaterThan",
             [OperatorKind.GreaterThanOrEqual] = "op_GreaterThanOrEqual",
             [OperatorKind.Not] = "op_LogicalNot",
+            [OperatorKind.Modulo] = "op_Modulus",
+            [OperatorKind.UnaryMinus] = "op_UnaryNegation",
+            [OperatorKind.UnaryPlus] = "op_UnaryPlus",
+            [OperatorKind.BitwiseAnd] = "op_BitwiseAnd",
+            [OperatorKind.BitwiseOr] = "op_BitwiseOr",
+            [OperatorKind.BitwiseXor] = "op_ExclusiveOr",
+            [OperatorKind.BitwiseNot] = "op_OnesComplement",
+            [OperatorKind.ShiftLeft] = "op_LeftShift",
+            [OperatorKind.ShiftRight] = "op_RightShift",
             // No reflected or modeled name: intrinsic only.
             [OperatorKind.And] = null,
             [OperatorKind.Or] = null
@@ -396,5 +410,268 @@ public class OperatorLookupTests {
         foreach (var (kind, name) in expected)
             await Assert.That(ModeledOperators.NameOf(kind)).IsEqualTo(name);
         await Assert.That(() => ModeledOperators.NameOf((OperatorKind)99)).ThrowsExactly<ArgumentOutOfRangeException>();
+    }
+
+    // ---- T-24: every operator C# defines for the built-in types, with the C# binder as the oracle ----
+
+    private static readonly Type[] BinderOperands = [
+        typeof(bool), typeof(sbyte), typeof(byte), typeof(short), typeof(ushort), typeof(int), typeof(uint),
+        typeof(long), typeof(ulong), typeof(char), typeof(float), typeof(double), typeof(decimal), typeof(string)
+    ];
+
+    private static string NameOf(Type type) => type.GetPrimitiveType()?.GetDisplayName() ?? type.Name;
+
+    /// <summary>A boxed value of <paramref name="type"/>. Boolean is false for Or and true otherwise, so neither conditional operator short-circuits.</summary>
+    private static object One(Type type, OperatorKind kind) =>
+        type == typeof(bool) ? kind is not OperatorKind.Or
+        : type == typeof(string) ? "1"
+        : Convert.ChangeType(1, type, CultureInfo.InvariantCulture);
+
+    /// <summary>The type of the result the C# runtime binder gives for runtime-typed (non-constant) operands, or null when C# defines no operator.</summary>
+    private static Type? Binder(OperatorKind kind, object left, object? right) {
+        dynamic l = left;
+        dynamic? r = right;
+        try {
+            object result = kind switch {
+                OperatorKind.Add => l + r,
+                OperatorKind.Subtract => l - r,
+                OperatorKind.Multiply => l * r,
+                OperatorKind.Divide => l / r,
+                OperatorKind.Modulo => l % r,
+                OperatorKind.Equal => l == r,
+                OperatorKind.NotEqual => l != r,
+                OperatorKind.LessThan => l < r,
+                OperatorKind.LessThanOrEqual => l <= r,
+                OperatorKind.GreaterThan => l > r,
+                OperatorKind.GreaterThanOrEqual => l >= r,
+                OperatorKind.And => l && r,
+                OperatorKind.Or => l || r,
+                OperatorKind.BitwiseAnd => l & r,
+                OperatorKind.BitwiseOr => l | r,
+                OperatorKind.BitwiseXor => l ^ r,
+                OperatorKind.ShiftLeft => l << r,
+                OperatorKind.ShiftRight => l >> r,
+                OperatorKind.Not => !l,
+                OperatorKind.UnaryMinus => -l,
+                OperatorKind.UnaryPlus => +l,
+                OperatorKind.BitwiseNot => ~l,
+                _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null)
+            };
+            return result.GetType();
+        }
+        catch (Microsoft.CSharp.RuntimeBinder.RuntimeBinderException) {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// The parameter types C# binds a defined cell to. A comparison's Boolean result hides the promoted type, so a
+    /// numeric pair reads it from the arithmetic twin (<c>l + r</c>), a shift from <c>l &lt;&lt; 1</c>, a unary operator from itself.
+    /// </summary>
+    private static Type?[] BinderParameters(OperatorKind kind, Type left, Type? right) {
+        if (right is null)
+            return [kind is OperatorKind.Not ? typeof(bool) : Binder(kind, One(left, kind), null)];
+        if (kind is OperatorKind.ShiftLeft or OperatorKind.ShiftRight)
+            return [Binder(OperatorKind.ShiftLeft, One(left, kind), 1), typeof(int)];
+        if (left == typeof(string) || right == typeof(string))
+            return left == right ? [left, right] : [left == typeof(string) ? left : typeof(object), right == typeof(string) ? right : typeof(object)];
+        if (left == typeof(bool))
+            return [left, right];
+        var promoted = Binder(OperatorKind.Add, One(left, kind), One(right, kind));
+        return [promoted, promoted];
+    }
+
+    [Test]
+    public async Task GetOperator_AgreesWithTheCSharpBinder() {
+        var mismatches = new List<string>();
+        var defined = 0;
+        var undefined = 0;
+        foreach (var kind in Enum.GetValues<OperatorKind>()) {
+            var rights = UnaryKinds.Contains(kind) ? [null] : BinderOperands.Select(static t => (Type?)t).ToArray();
+            foreach (var left in BinderOperands) {
+                foreach (var right in rights) {
+                    var cell = right is null ? $"{kind} {NameOf(left)}" : $"{NameOf(left)} {kind} {NameOf(right)}";
+                    var expected = Binder(kind, One(left, kind), right is null ? null : One(right, kind));
+                    var operands = right is null ? new[] { OperatorOperands.Clr(left) } : [OperatorOperands.Clr(left), OperatorOperands.Clr(right)];
+                    var resolution = operands[0].GetOperator(kind, right is null ? null : operands[1]);
+                    if (expected is null) {
+                        undefined++;
+                        if (resolution is { } extra)
+                            mismatches.Add($"{cell}: C# none, provider {extra.Result.Name}");
+                        continue;
+                    }
+                    defined++;
+                    if (resolution is not { } found) {
+                        mismatches.Add($"{cell}: C# {NameOf(expected)}, provider none");
+                        continue;
+                    }
+                    if (!found.Result.TryGetRuntimeType(out var result) || result != expected)
+                        mismatches.Add($"{cell}: C# {NameOf(expected)}, provider {found.Result.Name}");
+                    var parameters = found.Signature.Parameters.Select(static p => p.ParameterTypeDefinition).ToArray();
+                    var bound = BinderParameters(kind, left, right);
+                    for (var i = 0; i < operands.Length; i++) {
+                        if (!parameters[i].TryGetRuntimeType(out var parameter) || parameter != bound[i])
+                            mismatches.Add($"{cell}: parameter {i} C# {(bound[i] is { } b ? NameOf(b) : "?")}, provider {parameters[i].Name}");
+                        else if (!ReferenceEquals(parameters[i], operands[i])
+                            && parameters[i].ResolveConversionFrom(operands[i]) is not { Kind: ConversionOperatorKind.Implicit })
+                            mismatches.Add($"{cell}: operand {i} does not convert implicitly to {parameters[i].Name}");
+                    }
+                }
+            }
+        }
+        await Assert.That(mismatches).IsEmpty();
+        // Both counts are pinned, so a family that answers none on both sides moves a number and fails here.
+        await Assert.That(defined).IsEqualTo(1848);
+        await Assert.That(undefined).IsEqualTo(1736);
+    }
+
+    private static OperatorResolution? ClrOp(Type left, OperatorKind kind, Type? right) =>
+        OperatorOperands.Clr(left).GetOperator(kind, right is null ? null : OperatorOperands.Clr(right));
+
+    private static async Task AssertParameters(OperatorResolution? resolution, params Type[] expected) {
+        await Assert.That(resolution).IsNotNull();
+        var parameters = ParametersOf(resolution!.Value);
+        await Assert.That(parameters.Length).IsEqualTo(expected.Length);
+        for (var i = 0; i < expected.Length; i++)
+            await Assert.That(parameters[i]).IsSameReferenceAs(OperatorOperands.Clr(expected[i]));
+    }
+
+    [Test]
+    public async Task UInt64_WithASignedIntegral_IsNone_WithAnUnsignedOne_IsUInt64() {
+        // §12.4.7.3: ulong with sbyte, short, int or long is a binding-time error.
+        foreach (var signed in new[] { typeof(int), typeof(long), typeof(sbyte), typeof(short) }) {
+            await Assert.That(ClrOp(typeof(ulong), OperatorKind.Add, signed)).IsNull();
+            await Assert.That(ClrOp(signed, OperatorKind.Add, typeof(ulong))).IsNull();
+        }
+        foreach (var unsigned in new[] { typeof(byte), typeof(uint) }) {
+            await AssertResult(ClrOp(typeof(ulong), OperatorKind.Add, unsigned), OperatorOperands.Clr(typeof(ulong)));
+            await AssertResult(ClrOp(unsigned, OperatorKind.Add, typeof(ulong)), OperatorOperands.Clr(typeof(ulong)));
+        }
+    }
+
+    [Test]
+    public async Task Decimal_WithFloat32OrFloat64_IsNone_WithInt32_IsDecimal() {
+        foreach (var kind in new[] { OperatorKind.Add, OperatorKind.Subtract }) {
+            foreach (var real in new[] { typeof(float), typeof(double) }) {
+                await Assert.That(ClrOp(typeof(decimal), kind, real)).IsNull();
+                await Assert.That(ClrOp(real, kind, typeof(decimal))).IsNull();
+            }
+        }
+        await AssertResult(ClrOp(typeof(decimal), OperatorKind.Add, typeof(int)), OperatorOperands.Clr(typeof(decimal)));
+        await AssertResult(ClrOp(typeof(int), OperatorKind.Modulo, typeof(decimal)), OperatorOperands.Clr(typeof(decimal)));
+    }
+
+    [Test]
+    public async Task MixedPromotions_FollowTheSpec() {
+        // The float rule precedes the ulong rule; char and the small integers promote to int.
+        await AssertResult(ClrOp(typeof(float), OperatorKind.Add, typeof(ulong)), OperatorOperands.Clr(typeof(float)));
+        await AssertResult(ClrOp(typeof(uint), OperatorKind.Add, typeof(char)), OperatorOperands.Clr(typeof(uint)));
+        await AssertResult(ClrOp(typeof(char), OperatorKind.Add, typeof(char)), OperatorOperands.Clr(typeof(int)));
+        var mixed = ClrOp(typeof(uint), OperatorKind.Add, typeof(int));
+        await AssertResult(mixed, OperatorOperands.Clr(typeof(long)));
+        await AssertParameters(mixed, typeof(long), typeof(long));
+        // A comparison carries the promoted parameters too.
+        await AssertParameters(ClrOp(typeof(byte), OperatorKind.LessThan, typeof(sbyte)), typeof(int), typeof(int));
+    }
+
+    [Test]
+    public async Task UnaryPromotion_FollowsTheSpec() {
+        await Assert.That(ClrOp(typeof(ulong), OperatorKind.UnaryMinus, null)).IsNull();
+        var negated = ClrOp(typeof(uint), OperatorKind.UnaryMinus, null);
+        await AssertResult(negated, OperatorOperands.Clr(typeof(long)));
+        await AssertParameters(negated, typeof(long));
+        await AssertResult(ClrOp(typeof(uint), OperatorKind.UnaryPlus, null), OperatorOperands.Clr(typeof(uint)));
+        await AssertResult(ClrOp(typeof(byte), OperatorKind.BitwiseNot, null), OperatorOperands.Clr(typeof(int)));
+        await AssertResult(ClrOp(typeof(char), OperatorKind.UnaryMinus, null), OperatorOperands.Clr(typeof(int)));
+        await Assert.That(ClrOp(typeof(double), OperatorKind.BitwiseNot, null)).IsNull();
+        // The siblings: +ulong is defined, and so is -long.
+        await AssertResult(ClrOp(typeof(ulong), OperatorKind.UnaryPlus, null), OperatorOperands.Clr(typeof(ulong)));
+        await AssertResult(ClrOp(typeof(long), OperatorKind.UnaryMinus, null), OperatorOperands.Clr(typeof(long)));
+    }
+
+    [Test]
+    public async Task Shift_CountMustConvertToInt32() {
+        foreach (var count in new[] { typeof(long), typeof(uint), typeof(ulong) }) {
+            await Assert.That(ClrOp(typeof(int), OperatorKind.ShiftLeft, count)).IsNull();
+            await Assert.That(ClrOp(typeof(int), OperatorKind.ShiftRight, count)).IsNull();
+        }
+        foreach (var count in new[] { typeof(short), typeof(char) })
+            await AssertResult(ClrOp(typeof(int), OperatorKind.ShiftLeft, count), OperatorOperands.Clr(typeof(int)));
+        var wide = ClrOp(typeof(long), OperatorKind.ShiftLeft, typeof(short));
+        await AssertResult(wide, OperatorOperands.Clr(typeof(long)));
+        await AssertParameters(wide, typeof(long), typeof(int));
+        await Assert.That(ClrOp(typeof(short), OperatorKind.ShiftLeft, typeof(long))).IsNull();
+        var bytes = ClrOp(typeof(byte), OperatorKind.ShiftLeft, typeof(byte));
+        await AssertResult(bytes, OperatorOperands.Clr(typeof(int)));
+        await AssertParameters(bytes, typeof(int), typeof(int));
+    }
+
+    [Test]
+    public async Task Modulo_And_Bitwise_FollowTheOperandFamily() {
+        await AssertResult(Op("Number", OperatorKind.Modulo, "Number"), OperatorOperands.Clr(typeof(long)));
+        await AssertResult(Op("Float", OperatorKind.Modulo, "Float"), OperatorOperands.Clr(typeof(double)));
+        await Assert.That(Op("Float", OperatorKind.BitwiseAnd, "Float")).IsNull();
+        await AssertResult(Op("Number", OperatorKind.BitwiseAnd, "Number"), OperatorOperands.Clr(typeof(long)));
+        await AssertResult(Op("Boolean", OperatorKind.BitwiseXor, "Boolean"), OperatorOperands.Clr(typeof(bool)));
+    }
+
+    [Test]
+    public async Task Text_Plus_Int32_IsStringObjectConcatenation_WithAnImplicitBoxing() {
+        var text = OperatorOperands.Clr(typeof(string));
+        var resolution = ClrOp(typeof(string), OperatorKind.Add, typeof(int));
+        await AssertResult(resolution, text);
+        await Assert.That(resolution!.Value.PlatformApplied).IsTrue();
+        await AssertParameters(resolution, typeof(string), typeof(object));
+        var boxing = OperatorOperands.Clr(typeof(object)).ResolveConversionFrom(OperatorOperands.Clr(typeof(int)));
+        await Assert.That(boxing?.Kind).IsEqualTo(ConversionOperatorKind.Implicit);
+        await Assert.That(boxing!.Value.Method).IsNull();
+        // The mirror, and the sibling: Text + Text stays (String, String).
+        await AssertParameters(ClrOp(typeof(int), OperatorKind.Add, typeof(string)), typeof(object), typeof(string));
+        await AssertParameters(Op("Text", OperatorKind.Add, "Text"), typeof(string), typeof(string));
+        // A modeled operand does not box, so modeled concatenation stays none.
+        await Assert.That(Op("Text", OperatorKind.Add, "Money")).IsNull();
+    }
+
+    [Test]
+    public async Task NumericBesideANonNumericOperand_OffersItsOwnOperator_SoAModeledImplicitConversionReachesIt() {
+        // Beside an operand that is not one of the simple numeric types, Int64 offers its own (Int64, Int64) addition.
+        // A modeled type that converts implicitly to Int64 relies on that: the operand converts and the operator applies, as in C#.
+        var set = new ModeledTypeSet();
+        ITypeDefinition cents = set.Add("Cents", new MethodDefinitionNode("op_Implicit", new ClrTypeReference(typeof(long)),
+            [new Parameter("p0", new NamedTypeReference("Cents"))], IsStatic: true));
+        var number = OperatorOperands.Clr(typeof(long));
+        var offered = number.GetOperators(OperatorKind.Add, cents).Single();
+        await Assert.That(offered.PlatformApplied).IsTrue();
+        await Assert.That(offered.Signature.Parameters.All(p => ReferenceEquals(p.ParameterTypeDefinition, number))).IsTrue();
+        await Assert.That(number.ResolveConversionFrom(cents)?.Kind).IsEqualTo(ConversionOperatorKind.Implicit);
+        var resolution = number.GetOperator(OperatorKind.Add, cents);
+        await AssertResult(resolution, number);
+        await AssertParameters(resolution, typeof(long), typeof(long));
+        await AssertResult(cents.GetOperator(OperatorKind.Add, number), number);
+        // The sibling: without the conversion the same operator is offered and does not apply.
+        ITypeDefinition plain = set.Add("Plain");
+        await Assert.That(number.GetOperators(OperatorKind.Add, plain).Count()).IsEqualTo(1);
+        await Assert.That(number.GetOperator(OperatorKind.Add, plain)).IsNull();
+    }
+
+    [Test]
+    public async Task DeliberateNone_EnumLiftedReferenceDelegateAndObjectOperators() {
+        // C# defines these; the rule set leaves them none on purpose. Enum and lifted operators are the caller's
+        // (T-06); reference, delegate and object equality are not value operators.
+        var day = typeof(DayOfWeek);
+        await Assert.That(ClrOp(day, OperatorKind.Add, typeof(int))).IsNull();
+        await Assert.That(ClrOp(day, OperatorKind.Equal, day)).IsNull();
+        await Assert.That(ClrOp(day, OperatorKind.LessThan, day)).IsNull();
+        await Assert.That(ClrOp(day, OperatorKind.BitwiseOr, day)).IsNull();
+        await Assert.That(ClrOp(typeof(int?), OperatorKind.Add, typeof(int?))).IsNull();
+        await Assert.That(ClrOp(typeof(int?), OperatorKind.Equal, typeof(int))).IsNull();
+        await Assert.That(ClrOp(typeof(object), OperatorKind.Equal, typeof(string))).IsNull();
+        await Assert.That(ClrOp(typeof(int), OperatorKind.Equal, typeof(object))).IsNull();
+        await Assert.That(ClrOp(typeof(object), OperatorKind.Equal, typeof(object))).IsNull();
+        await Assert.That(ClrOp(typeof(System.Action), OperatorKind.Equal, typeof(System.Action))).IsNull();
+        // The siblings: the underlying value operators are defined.
+        await AssertResult(ClrOp(typeof(int), OperatorKind.Add, typeof(int)), OperatorOperands.Clr(typeof(int)));
+        await AssertResult(ClrOp(typeof(int), OperatorKind.Equal, typeof(int)), OperatorOperands.Clr(typeof(bool)));
+        await AssertResult(ClrOp(typeof(string), OperatorKind.Equal, typeof(string)), OperatorOperands.Clr(typeof(bool)));
     }
 }

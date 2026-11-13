@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -755,5 +756,73 @@ public class PolySurfaceHarnessTests {
 
         await Assert.That(thrown).IsNotNull();
         await Assert.That(thrown!.GetType()).IsEqualTo(typeof(InvalidOperationException));
+    }
+
+    private const string NumberText = """
+        domain NumberText
+        Thing: entity {
+          Whole: Number optional
+          Money: Decimal optional
+          Label: Text optional
+          Flag: Boolean optional
+        }
+        """;
+
+    private static string NumberTextWorkspace(string tag) =>
+        OpenWith(McpTestTools.Surface, "NumText" + tag + Guid.NewGuid().ToString("N"), NumberText);
+
+    // The v1 tool is the reference on purpose: this parity pin is freed by M-13 (SurfaceParityTests' row).
+    [Test]
+    [Arguments("Whole", "1.0")]
+    [Arguments("Whole", "199.50")]
+    [Arguments("Whole", "1")]
+    [Arguments("Whole", "1.5")]
+    [Arguments("Whole", "1e2")]
+    [Arguments("Whole", "1234567890123456789")]
+    [Arguments("Whole", "1234567890123456789.0123456789")]
+    [Arguments("Whole", "\"1.0\"")]
+    [Arguments("Whole", "null")]
+    [Arguments("Money", "1.0")]
+    [Arguments("Money", "199.50")]
+    [Arguments("Money", "1")]
+    [Arguments("Money", "1.5")]
+    [Arguments("Money", "1e2")]
+    [Arguments("Money", "1234567890123456789")]
+    [Arguments("Money", "1234567890123456789.0123456789")]
+    [Arguments("Money", "\"1.0\"")]
+    [Arguments("Money", "null")]
+    [Arguments("Label", "\"1.0\"")]
+    [Arguments("Label", "null")]
+    [Arguments("Flag", "true")]
+    [Arguments("Flag", "null")]
+    [Arguments("Flag", "\"true\"")]
+    public async Task Create_NumberText_ReachesTheRuntimeAsV1DirectCallGivesIt(string property, string literal) {
+        var json = "{\"" + property + "\":" + literal + "}";
+        var v1Ws = NumberTextWorkspace("A");
+        var v2Ws = NumberTextWorkspace("B");
+
+        var v1 = McpTestTools.Runtime.CreateInstance(v1Ws, "Thing", json);
+        var v2 = McpTestTools.Surface.Create(v2Ws, "Thing", json);
+
+        await Assert.That(v2.Ok).IsEqualTo(v1.Success).Because($"{json}: v1 '{v1.Message}' vs harness '{v2.Summary}'");
+        if (!v1.Success) {
+            await Assert.That(v2.Summary).IsEqualTo(v1.Message);
+            return;
+        }
+
+        var v1Instance = JsonSerializer.SerializeToNode(v1.Data)!["instance"]!;
+        var v1Id = v1Instance["instanceId"]!.GetValue<string>();
+        await Assert.That(v2.Summary.Replace(v2.InstanceId, "<id>")).IsEqualTo(v1.Message.Replace(v1Id, "<id>"));
+        var v1Properties = v1Instance["properties"]!.ToJsonString();
+        var v2Properties = v2.Data!["instance"]!["properties"]!.ToJsonString();
+        await Assert.That(v2Properties).IsEqualTo(v1Properties);
+
+        McpTestTools.Store.TryGet(v1Ws, out var v1State);
+        McpTestTools.Store.TryGet(v2Ws, out var v2State);
+        var stored1 = v1State!.InstanceMap[v1Id].TryGetValue(property, out var a) ? a : null;
+        var stored2 = v2State!.InstanceMap[v2.InstanceId].TryGetValue(property, out var b) ? b : null;
+        await Assert.That(stored2?.GetType()).IsEqualTo(stored1?.GetType());
+        await Assert.That(Convert.ToString(stored2, CultureInfo.InvariantCulture))
+            .IsEqualTo(Convert.ToString(stored1, CultureInfo.InvariantCulture));
     }
 }

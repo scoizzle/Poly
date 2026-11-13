@@ -54,20 +54,26 @@ Resolves type definitions:
 - `GetTypeDefinition(PrimitiveType primitiveTypeId)`
 - `GetDeferredTypeDefinitionResolver(string name)`
 
-## Conversions and operators (T-03b)
+## Conversions and operators (T-03b, T-24)
 
 A definition answers what its platform defines, through two internal members of `ITypeDefinition`:
 `ResolveConversionFrom(source)` (a `TypeConversion`: the kind, and the declared method or null when the platform
-applies it itself) and `GetOperators(kind)` (`DeclaredOperator`: a signature and whether the platform applies it).
+applies it itself) and `GetOperators(kind, other)` (`DeclaredOperator`: a signature and whether the platform applies
+it). `other` is the other operand (null: the same type): a platform's answer depends on the pair, since C#'s
+`UInt32 + Int32` is `Int64`, which neither operand owns.
 `GetOperator(kind, right)` (`TypeDefinitionOperatorExtensions`) is the consumer door: candidates are the operators
-either operand declares; a candidate applies when each operand is identical to its parameter or converts
+either operand declares beside the other; a candidate applies when each operand is identical to its parameter or converts
 implicitly; all-identity wins, otherwise exactly one applicable candidate, otherwise none. `GetCommonType(types)`
 is the unique type the others identically or implicitly convert to. Optionality is the caller's (T-06).
 
 - **.NET rules** live in `CommonLanguageRuntime/`: `ClrTypeDefinition` reflects `op_Implicit`/`op_Explicit` and
-  static special-name `op_*` members, then `ClrBuiltInRules` supplies what C# leaves to the compiler (the closed
-  {Int32, Int64, Float64} conversions, and the intrinsic operators of those, Boolean and String). A closed set
-  answers none, not unknown. `ClrBuiltInRules` is the only source of the built-in answers. To answer a conversion, four things still name .NET: `GetConversionFrom`'s CLR branch (`FindConversionFrom`), `IsAssignableFrom`'s `ClrTypeDefinition` branch, `IsNumericWideningFrom`'s `TypeCode` table, and the second conversion door (the internal `ResolveConversionFrom` beside the public `GetConversionFrom`); T-16 removes all four. `IsCollectionShape` and `GetElementType` also name CLR types in the Introspection root but do not answer a conversion.
+  static special-name `op_*` members, then `ClrBuiltInRules` supplies what C# leaves to the compiler: every
+  conversion and operator C# defines for built-in types (the implicit and explicit numeric conversions,
+  conversion into `object` from any other CLR type, numeric promotion through one `Promote` function, arithmetic,
+  modulo, comparison, bitwise, shift, unary minus and plus, the Boolean operators, and string concatenation with
+  any CLR operand). Decimal's conversions and operators are the CLR's declared members. Deliberately none: enum,
+  lifted, reference-equality, delegate and object operators. `PlatformApplied` is true for every operator of the
+  simple types except decimal's, and for concatenation. `ClrBuiltInRules` is the only source of the built-in answers. To answer a conversion, four things still name .NET: `GetConversionFrom`'s CLR branch (`FindConversionFrom`), `IsAssignableFrom`'s `ClrTypeDefinition` branch, `IsNumericWideningFrom`'s `TypeCode` table, and the second conversion door (the internal `ResolveConversionFrom` beside the public `GetConversionFrom`); T-16 removes all four. `IsCollectionShape` and `GetElementType` also name CLR types in the Introspection root but do not answer a conversion.
 - **Modeled definitions** answer from declared static `op_*` members: Poly's modeled convention, shared with
   `op_Implicit`, not a platform fact. `And` and `Or` have no declared form.
 - **Introspection-internal today.** The members are `internal` and neutral at signature level only

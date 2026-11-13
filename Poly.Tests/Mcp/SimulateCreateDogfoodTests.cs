@@ -1,8 +1,5 @@
-using System.Text.Json;
-
 using Poly.DomainModeling.Runtime;
 using Poly.Mcp.Sessions;
-using Poly.Mcp.Tools;
 
 namespace Poly.Tests.Mcp;
 
@@ -30,42 +27,17 @@ public class SimulateCreateDogfoodTests {
     }
 
     private static string CreateAndId(string sessionId, string entity, string? props = null) {
-        var create = McpTestTools.Runtime.CreateInstance(sessionId, entity, props);
-        if (!create.Success)
-            throw new InvalidOperationException($"create_instance {entity}: {create.Message}");
-        var id = ExtractInstanceId(JsonSerializer.Serialize(create.Data));
-        return id ?? throw new InvalidOperationException("missing instanceId");
-    }
-
-    private static string? ExtractInstanceId(string json) {
-        using var doc = JsonDocument.Parse(json);
-        if (doc.RootElement.TryGetProperty("instance", out var instance)
-            && instance.TryGetProperty("instanceId", out var id))
-            return id.GetString();
-        if (doc.RootElement.TryGetProperty("instanceId", out var topId))
-            return topId.GetString();
-        return null;
-    }
-
-    private static string? ExtractReturnInstanceId(DomainToolResponse invoke) {
-        if (invoke.Data is null) return null;
-        var json = JsonSerializer.Serialize(invoke.Data);
-        using var doc = JsonDocument.Parse(json);
-        if (doc.RootElement.TryGetProperty("invokeActionResult", out var result)
-            && result.TryGetProperty("returnInstanceId", out var id))
-            return id.GetString();
-        if (doc.RootElement.TryGetProperty("returnInstanceId", out var top))
-            return top.GetString();
-        return null;
+        var create = McpTestTools.Surface.Create(sessionId, entity, props);
+        if (!create.Ok)
+            throw new InvalidOperationException($"create_instance {entity}: {create.Summary}");
+        return create.InstanceId;
     }
 
     private static int ListFineCount(string sessionId) {
-        var list = McpTestTools.Runtime.ListInstances(sessionId, entityName: "Fine");
-        if (!list.Success)
-            throw new InvalidOperationException(list.Message);
-        var json = JsonSerializer.Serialize(list.Data);
-        using var doc = JsonDocument.Parse(json);
-        return doc.RootElement.GetProperty("count").GetInt32();
+        var list = McpTestTools.Surface.List(sessionId, "Fine");
+        if (!list.Ok)
+            throw new InvalidOperationException(list.Summary);
+        return list.Data!["count"]!.GetValue<int>();
     }
 
     /// <summary>Links either direction by relationship name, read from the executor's bags.</summary>
@@ -88,30 +60,30 @@ public class SimulateCreateDogfoodTests {
 
     private static async Task AssertPolicies(
         string sessionId, string patronId, bool hasFines, bool noFines) {
-        var has = McpTestTools.Policy.EvaluatePolicy(sessionId, "Patron", "HasFines", patronId);
-        await Assert.That(has.Success).IsTrue();
-        await Assert.That(has.Message).Contains(hasFines ? "true" : "false");
+        var has = McpTestTools.Surface.Evaluate(sessionId, "Patron", "HasFines", patronId);
+        await Assert.That(has.Ok).IsTrue();
+        await Assert.That(has.Summary).Contains(hasFines ? "true" : "false");
 
-        var count = McpTestTools.Policy.EvaluatePolicy(sessionId, "Patron", "HasFineCount", patronId);
-        await Assert.That(count.Success).IsTrue();
-        await Assert.That(count.Message).Contains(hasFines ? "true" : "false");
+        var count = McpTestTools.Surface.Evaluate(sessionId, "Patron", "HasFineCount", patronId);
+        await Assert.That(count.Ok).IsTrue();
+        await Assert.That(count.Summary).Contains(hasFines ? "true" : "false");
 
-        var none = McpTestTools.Policy.EvaluatePolicy(sessionId, "Patron", "NoFines", patronId);
-        await Assert.That(none.Success).IsTrue();
-        await Assert.That(none.Message).Contains(noFines ? "true" : "false");
+        var none = McpTestTools.Surface.Evaluate(sessionId, "Patron", "NoFines", patronId);
+        await Assert.That(none.Ok).IsTrue();
+        await Assert.That(none.Summary).Contains(noFines ? "true" : "false");
     }
 
     [Test]
     public async Task TypeOnly_UnambiguousManyRel_ListsAndLinks() {
         // Bare create Type lists Fine; Patron.fines and Fine.patron stay unlinked.
-        var (sessionId, _) = McpTestTools.Store.Create("SimulateCreateType");
-        await Assert.That(McpTestTools.Dsl.ApplyDsl(sessionId, ReadProbe("simulate-create-type.poly")).Success)
+        var sessionId = McpTestTools.Surface.Open("SimulateCreateType");
+        await Assert.That(McpTestTools.Surface.Define(sessionId, ReadProbe("simulate-create-type.poly")).Success)
             .IsTrue();
 
         var patronId = CreateAndId(sessionId, "Patron", """{"Name":"Ada"}""");
-        var invoke = McpTestTools.Runtime.InvokeAction(sessionId, patronId, "AssessByType");
-        await Assert.That(invoke.Success).IsTrue();
-        var fineId = ExtractReturnInstanceId(invoke);
+        var invoke = McpTestTools.Surface.Invoke(sessionId, patronId, "AssessByType");
+        await Assert.That(invoke.Ok).IsTrue();
+        var fineId = invoke.Result.ReturnInstanceId;
         await Assert.That(fineId).IsNotNull();
 
         await Assert.That(ListFineCount(sessionId)).IsEqualTo(1);
@@ -124,14 +96,14 @@ public class SimulateCreateDogfoodTests {
 
     [Test]
     public async Task RelOnly_CreateIn_ListsAndLinksBothDirections() {
-        var (sessionId, _) = McpTestTools.Store.Create("SimulateCreateIn");
-        await Assert.That(McpTestTools.Dsl.ApplyDsl(sessionId, ReadProbe("simulate-create-in.poly")).Success)
+        var sessionId = McpTestTools.Surface.Open("SimulateCreateIn");
+        await Assert.That(McpTestTools.Surface.Define(sessionId, ReadProbe("simulate-create-in.poly")).Success)
             .IsTrue();
 
         var patronId = CreateAndId(sessionId, "Patron", """{"Name":"Bea"}""");
-        var invoke = McpTestTools.Runtime.InvokeAction(sessionId, patronId, "AssessByRel");
-        await Assert.That(invoke.Success).IsTrue();
-        var fineId = ExtractReturnInstanceId(invoke);
+        var invoke = McpTestTools.Surface.Invoke(sessionId, patronId, "AssessByRel");
+        await Assert.That(invoke.Ok).IsTrue();
+        var fineId = invoke.Result.ReturnInstanceId;
         await Assert.That(fineId).IsNotNull();
 
         await Assert.That(ListFineCount(sessionId)).IsEqualTo(1);
@@ -145,15 +117,15 @@ public class SimulateCreateDogfoodTests {
     [Test]
     public async Task Combined_TypeThenRel_OnOnePatron_BothLinked() {
         // Type Fine unlinked; Rel Fine linked both ways. list=2, fines links=1.
-        var (sessionId, _) = McpTestTools.Store.Create("SimulateCreateCreateIn");
-        await Assert.That(McpTestTools.Dsl.ApplyDsl(sessionId, ReadProbe("simulate-create-create-in.poly")).Success)
+        var sessionId = McpTestTools.Surface.Open("SimulateCreateCreateIn");
+        await Assert.That(McpTestTools.Surface.Define(sessionId, ReadProbe("simulate-create-create-in.poly")).Success)
             .IsTrue();
 
         var patronId = CreateAndId(sessionId, "Patron", """{"Name":"Cara"}""");
 
-        var typeInvoke = McpTestTools.Runtime.InvokeAction(sessionId, patronId, "AssessByType");
-        await Assert.That(typeInvoke.Success).IsTrue();
-        var fineTypeId = ExtractReturnInstanceId(typeInvoke);
+        var typeInvoke = McpTestTools.Surface.Invoke(sessionId, patronId, "AssessByType");
+        await Assert.That(typeInvoke.Ok).IsTrue();
+        var fineTypeId = typeInvoke.Result.ReturnInstanceId;
         await Assert.That(fineTypeId).IsNotNull();
 
         await Assert.That(ListFineCount(sessionId)).IsEqualTo(1);
@@ -164,9 +136,9 @@ public class SimulateCreateDogfoodTests {
         await Assert.That(afterType.Store.GetRelatedInstances("patron", afterType.Fine!).Count)
             .IsEqualTo(0);
 
-        var relInvoke = McpTestTools.Runtime.InvokeAction(sessionId, patronId, "AssessByRel");
-        await Assert.That(relInvoke.Success).IsTrue();
-        var fineRelId = ExtractReturnInstanceId(relInvoke);
+        var relInvoke = McpTestTools.Surface.Invoke(sessionId, patronId, "AssessByRel");
+        await Assert.That(relInvoke.Ok).IsTrue();
+        var fineRelId = relInvoke.Result.ReturnInstanceId;
         await Assert.That(fineRelId).IsNotNull();
         await Assert.That(fineRelId).IsNotEqualTo(fineTypeId);
 
@@ -192,7 +164,7 @@ public class SimulateCreateDogfoodTests {
         // Flip (Q10, #659): S-11 makes the undeclared ambiguous pairing an error, so
         // apply_dsl refuses the document. The old assertion applied it and ran the
         // create: the Fine was listed under neither collection ("lists but does not link").
-        var (sessionId, _) = McpTestTools.Store.Create("SimulateCreateAmbiguous");
+        var sessionId = McpTestTools.Surface.Open("SimulateCreateAmbiguous");
         var dsl = """
             domain SimulateCreateAmbiguous
             uses temporal
@@ -219,18 +191,18 @@ public class SimulateCreateDogfoodTests {
               patron: Patron
             }
             """;
-        var applied = McpTestTools.Dsl.ApplyDsl(sessionId, dsl);
+        var applied = McpTestTools.Surface.Define(sessionId, dsl);
         await Assert.That(applied.Success).IsFalse();
-        var findings = applied.Diagnostics ?? [];
-        await Assert.That(findings.Count(static d => d.Contains("DMREL005"))).IsEqualTo(1);
-        var finding = findings.First(static d => d.Contains("DMREL005"));
+        var findings = applied.Findings;
+        await Assert.That(findings.Count(static d => d.Code == "DMREL005")).IsEqualTo(1);
+        var finding = findings.First(static d => d.Code == "DMREL005").Message;
         await Assert.That(finding).Contains("'fines'");
         await Assert.That(finding).Contains("'waived'");
     }
 
     [Test]
     public async Task ActionResultCreate_OmittedCollection_WithActionParameter_Succeeds() {
-        var (sessionId, _) = McpTestTools.Store.Create("SimulateCreateOmittedCollection");
+        var sessionId = McpTestTools.Surface.Open("SimulateCreateOmittedCollection");
         var dsl = """
             domain SimulateCreateOmittedCollection
             uses storage
@@ -254,11 +226,11 @@ public class SimulateCreateDogfoodTests {
               Reason: Text
             }
             """;
-        await Assert.That(McpTestTools.Dsl.ApplyDsl(sessionId, dsl).Success).IsTrue();
+        await Assert.That(McpTestTools.Surface.Define(sessionId, dsl).Success).IsTrue();
         var clerkId = CreateAndId(sessionId, "Clerk", """{"Name":"Ada"}""");
-        var invoke = McpTestTools.Runtime.InvokeAction(sessionId, clerkId, "Hire", """{"name":"Ada"}""");
-        await Assert.That(invoke.Success).IsTrue();
-        var patronId = ExtractReturnInstanceId(invoke);
+        var invoke = McpTestTools.Surface.Invoke(sessionId, clerkId, "Hire", """{"name":"Ada"}""");
+        await Assert.That(invoke.Ok).IsTrue();
+        var patronId = invoke.Result.ReturnInstanceId;
         await Assert.That(patronId).IsNotNull();
         if (!McpTestTools.Store.TryGet(sessionId, out var state) || state is null)
             throw new InvalidOperationException("session missing");
@@ -269,7 +241,7 @@ public class SimulateCreateDogfoodTests {
 
     [Test]
     public async Task ActionResultCreate_OmittedSingularNav_WithActionParameter_Succeeds() {
-        var (sessionId, _) = McpTestTools.Store.Create("SimulateCreateOmittedNav");
+        var sessionId = McpTestTools.Surface.Open("SimulateCreateOmittedNav");
         var dsl = """
             domain SimulateCreateOmittedNav
             uses storage
@@ -293,11 +265,11 @@ public class SimulateCreateDogfoodTests {
               Name: Text
             }
             """;
-        await Assert.That(McpTestTools.Dsl.ApplyDsl(sessionId, dsl).Success).IsTrue();
+        await Assert.That(McpTestTools.Surface.Define(sessionId, dsl).Success).IsTrue();
         var deskId = CreateAndId(sessionId, "Desk", """{"Name":"Front"}""");
-        var invoke = McpTestTools.Runtime.InvokeAction(sessionId, deskId, "CheckOut", """{"reason":"Overdue"}""");
-        await Assert.That(invoke.Success).IsTrue();
-        var fineId = ExtractReturnInstanceId(invoke);
+        var invoke = McpTestTools.Surface.Invoke(sessionId, deskId, "CheckOut", """{"reason":"Overdue"}""");
+        await Assert.That(invoke.Ok).IsTrue();
+        var fineId = invoke.Result.ReturnInstanceId;
         await Assert.That(fineId).IsNotNull();
         if (!McpTestTools.Store.TryGet(sessionId, out var state) || state is null)
             throw new InvalidOperationException("session missing");
@@ -308,7 +280,7 @@ public class SimulateCreateDogfoodTests {
 
     [Test]
     public async Task ActionResultCreate_OmittedRuntimeDefault_StoresClock() {
-        var (sessionId, _) = McpTestTools.Store.Create("SimulateCreateOmittedClock");
+        var sessionId = McpTestTools.Surface.Open("SimulateCreateOmittedClock");
         var dsl = """
             domain SimulateCreateOmittedClock
             uses temporal
@@ -328,11 +300,11 @@ public class SimulateCreateDogfoodTests {
               Opened: Date default(Today)
             }
             """;
-        await Assert.That(McpTestTools.Dsl.ApplyDsl(sessionId, dsl).Success).IsTrue();
+        await Assert.That(McpTestTools.Surface.Define(sessionId, dsl).Success).IsTrue();
         var clerkId = CreateAndId(sessionId, "Clerk", """{"Name":"Ada"}""");
-        var invoke = McpTestTools.Runtime.InvokeAction(sessionId, clerkId, "Open", """{"name":"Ada"}""");
-        await Assert.That(invoke.Success).IsTrue();
-        var accountId = ExtractReturnInstanceId(invoke);
+        var invoke = McpTestTools.Surface.Invoke(sessionId, clerkId, "Open", """{"name":"Ada"}""");
+        await Assert.That(invoke.Ok).IsTrue();
+        var accountId = invoke.Result.ReturnInstanceId;
         await Assert.That(accountId).IsNotNull();
         if (!McpTestTools.Store.TryGet(sessionId, out var state) || state is null)
             throw new InvalidOperationException("session missing");

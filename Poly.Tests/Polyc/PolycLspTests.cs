@@ -1,6 +1,7 @@
 using System.IO.Pipes;
 using System.Text;
 using System.Text.Json.Nodes;
+using System.Threading.Channels;
 
 using Poly.Compile;
 using Poly.Packs.Product;
@@ -16,15 +17,46 @@ public class PolycLspTests {
         private readonly AnonymousPipeClientStream _serverIn;
         private readonly AnonymousPipeClientStream _serverOut;
         private readonly LspTransport _transport;
-        private readonly Task<int> _server;
+        private readonly Thread _serverThread;
+        private readonly Thread _readerThread;
+        private readonly TaskCompletionSource<int> _exit = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly Channel<JsonNode> _messages = Channel.CreateUnbounded<JsonNode>(
+            new UnboundedChannelOptions { SingleReader = true, SingleWriter = true, AllowSynchronousContinuations = true });
+        private readonly TimeSpan _readLimit;
+        private readonly TimeSpan _stopLimit;
         private int _id;
 
-        public Client() {
+        /// <summary>The server and the reader each own a dedicated thread, so the client holds no thread-pool
+        /// thread and a starved pool cannot delay a message. Every wait is a timed OS wait, not a pool callback.</summary>
+        public Client(TimeSpan? readLimit = null, TimeSpan? stopLimit = null) {
+            _readLimit = readLimit ?? TimeSpan.FromSeconds(30);
+            _stopLimit = stopLimit ?? TimeSpan.FromSeconds(10);
             _serverIn = new AnonymousPipeClientStream(PipeDirection.In, _toServer.ClientSafePipeHandle);
             _serverOut = new AnonymousPipeClientStream(PipeDirection.Out, _fromServer.ClientSafePipeHandle);
             _transport = new LspTransport(_fromServer, _toServer);
             var server = new LspServer(_serverIn, _serverOut);
-            _server = Task.Run(server.Run);
+            _serverThread = new Thread(() => {
+                try {
+                    _exit.TrySetResult(server.Run());
+                }
+                catch (Exception ex) {
+                    _exit.TrySetException(ex);
+                }
+            }) { IsBackground = true, Name = "polyc-lsp-test-server" };
+            _readerThread = new Thread(ReadMessages) { IsBackground = true, Name = "polyc-lsp-test-reader" };
+            _serverThread.Start();
+            _readerThread.Start();
+        }
+
+        private void ReadMessages() {
+            try {
+                while (_transport.Read() is { } message)
+                    _messages.Writer.TryWrite(message);
+                _messages.Writer.TryComplete();
+            }
+            catch (Exception ex) {
+                _messages.Writer.TryComplete(ex);
+            }
         }
 
         public JsonNode Request(string method, JsonObject parameters) {
@@ -49,24 +81,104 @@ public class PolycLspTests {
         }
 
         private JsonNode Next() {
-            var read = Task.Run(_transport.Read);
-            if (!read.Wait(TimeSpan.FromSeconds(30)))
-                throw new TimeoutException("No LSP message within 30s.");
-            return read.Result ?? throw new EndOfStreamException();
+            var reader = _messages.Reader;
+            JsonNode? message;
+            while (!reader.TryRead(out message)) {
+                var ready = reader.WaitToReadAsync().AsTask();
+                if (!ready.Wait(_readLimit))
+                    throw new TimeoutException($"No LSP message within {_readLimit.TotalSeconds:0.###}s.");
+                if (!ready.Result)
+                    throw new EndOfStreamException();
+            }
+            return message!;
         }
 
         public int Stop() {
             Request("shutdown", []);
             Notify("exit", []);
-            return _server.Result;
+            return WaitForExit();
         }
 
+        public int WaitForExit() =>
+            _exit.Task.Wait(_stopLimit)
+                ? _exit.Task.GetAwaiter().GetResult()
+                : throw new TimeoutException($"The server did not exit within {_stopLimit.TotalSeconds:0.###}s.");
+
+        public bool ThreadsExited(TimeSpan bound) => _serverThread.Join(bound) && _readerThread.Join(bound);
+
+        /// <summary>A blocked read returns only when its peer closes: disposing the read end blocks behind it
+        /// (and does not interrupt it on Linux). So the write ends close first, both threads see end-of-stream and
+        /// exit, and a read end is disposed only once its thread is gone.</summary>
         public void Dispose() {
-            _toServer.Dispose();
-            _fromServer.Dispose();
-            _serverIn.Dispose();
             _serverOut.Dispose();
+            _toServer.Dispose();
+            if (_readerThread.Join(TimeSpan.FromSeconds(5)))
+                _fromServer.Dispose();
+            if (_serverThread.Join(TimeSpan.FromSeconds(5)))
+                _serverIn.Dispose();
         }
+    }
+
+    /// <summary>Starves the pool (max threads = processor count, flooded with blocked items) and asks a started
+    /// client to answer <c>initialize</c>. The client must not need a pool thread.</summary>
+    [Test]
+    [NotInParallel]
+    public async Task Client_AnswersInitialize_WhileThePoolIsStarved() {
+        ThreadPool.GetMaxThreads(out var maxWorkers, out var maxIo);
+        var gate = new ManualResetEventSlim(); // never disposed: a queued blocker may still touch it after the test
+        JsonNode? init;
+        Client? client = null;
+        var disposeBlocked = false;
+        try {
+            if (!ThreadPool.SetMaxThreads(Environment.ProcessorCount, maxIo))
+                throw new InvalidOperationException("The pool could not be capped, so this test would prove nothing.");
+            for (var i = 0; i < Environment.ProcessorCount * 4; i++)
+                ThreadPool.UnsafeQueueUserWorkItem(static g => g.Wait(), gate, preferLocal: false);
+            client = new Client();
+            init = client.Request("initialize", new JsonObject());
+        }
+        finally {
+            gate.Set();
+            ThreadPool.SetMaxThreads(maxWorkers, maxIo);
+            // Off the test thread and bounded: a Dispose that blocks must fail a test, not hang the run.
+            if (client is not null) {
+                var dispose = Task.Factory.StartNew(client.Dispose, TaskCreationOptions.LongRunning);
+                disposeBlocked = await Task.WhenAny(dispose, Task.Delay(TimeSpan.FromSeconds(10))) != dispose;
+            }
+        }
+        if (disposeBlocked)
+            throw new InvalidOperationException("Client.Dispose was still blocked 10s after the pool was released.");
+        await Assert.That(init["result"]!["capabilities"]!["hoverProvider"]!.GetValue<bool>()).IsTrue();
+    }
+
+    [Test]
+    public async Task Stop_ServerNeverSentExit_FailsWithinTheBound() {
+        using var client = new Client(stopLimit: TimeSpan.FromMilliseconds(500));
+        client.Request("initialize", new JsonObject());
+        var wait = Task.Factory.StartNew(() => client.WaitForExit(), TaskCreationOptions.LongRunning);
+        var first = await Task.WhenAny(wait, Task.Delay(TimeSpan.FromSeconds(10)));
+        await Assert.That(first == wait).IsTrue().Because("WaitForExit is still blocked 10s after a 500ms bound");
+        await Assert.That(async () => await wait).Throws<TimeoutException>();
+    }
+
+    [Test]
+    public async Task Dispose_AfterATimedOutRead_ReturnsAndLeavesNoBlockedThread() {
+        var client = new Client(readLimit: TimeSpan.FromMilliseconds(300));
+        var timedOut = false;
+        try {
+            client.Request("initialize", new JsonObject());
+            client.NextPublish(); // no document is open, so no message ever arrives
+        }
+        catch (TimeoutException) {
+            timedOut = true;
+        }
+        await Assert.That(timedOut).IsTrue();
+
+        var dispose = Task.Factory.StartNew(client.Dispose, TaskCreationOptions.LongRunning);
+        var first = await Task.WhenAny(dispose, Task.Delay(TimeSpan.FromSeconds(10)));
+        await Assert.That(first == dispose).IsTrue().Because("Dispose is still blocked 10s after a timed-out read");
+        await Assert.That(client.ThreadsExited(TimeSpan.FromSeconds(5))).IsTrue()
+            .Because("the server or the reader is still blocked 5s after Dispose");
     }
 
     private const string Uri = "file:///tmp/polyc-lsp/orders.poly";

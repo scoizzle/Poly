@@ -38,6 +38,9 @@ jobs:
       - name: Build
         run: dotnet build Poly.slnx --no-restore --nologo
 
+      - name: Stop build servers
+        run: dotnet build-server shutdown
+
       # The test command runs under scripts/run-with-deadline.sh, which ends the step ITSELF (a
       # failed step, so the next steps run) in three ways, earliest first:
       #   - --timeout 10m in the test host ends an async hang cleanly, with a summary (exit 3);
@@ -55,6 +58,8 @@ jobs:
       - name: Run tests
         id: tests
         timeout-minutes: 12
+        env:
+          MALLOC_ARENA_MAX: '2'
         run: >
           scripts/run-with-deadline.sh 630
           dotnet run --project Poly.Tests/Poly.Tests.csproj --no-restore --

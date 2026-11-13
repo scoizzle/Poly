@@ -41,8 +41,7 @@ internal sealed class DomainTypeModel {
         if (ReferenceEquals(source, target))
             return Assignability.Identity;
 
-        // ResolveConversionFrom is the door. IsNumericWideningFrom is never used: it ranks
-        // Float64 as widening to Decimal, which the explicit-only operator contradicts.
+        // ResolveConversionFrom is the door: Float64 to Decimal is explicit there, as the C# specification has it.
         if (target.ResolveConversionFrom(source) is { } conversion) {
             return conversion.Kind is ConversionOperatorKind.Implicit
                 ? Assignability.Widening

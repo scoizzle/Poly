@@ -176,7 +176,8 @@ Recorded by T-03b from [#679 comment 6837489066](https://github.com/scoizzle/Pol
   duplicates `IsAssignableFrom`'s CLR branch since T-24; `IsCollectionShape` and
   `GetElementType` also name CLR types but do not answer a conversion), T-17 (`PromoteNumeric`/`GetNumericRank`/`ResolveAddType`),
   T-18 (`SyntaxTypeCompatibilityAnalyzer`), T-19 (`LambdaBridge.PromoteNumeric`), T-20
-  (`ConstantFoldingPass.Promote`), T-21 (the emitter's promotion).
+  (`ConstantFoldingPass.Promote`: converged, folding asks `GetOperator` and applies the chosen signature; it leaves
+  the resolved-type guard for T-17 and the declared-operator fence for T-10), T-21 (the emitter's promotion).
 
 Landed shape (T-03b): `TypeConversion(Kind, Method?)` (null `Method` means the platform applies it),
 `DeclaredOperator(Signature, PlatformApplied)`, `OperatorResolution(Signature, PlatformApplied)` with `Result`,

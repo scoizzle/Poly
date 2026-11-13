@@ -29,6 +29,18 @@ public class OverloadSweepTests {
 
     private static readonly string[] SkippedDirectories = ["bin", "obj", ".git", ".t3", "node_modules", ".vs", "artifacts"];
 
+    /// <summary>
+    /// Every difference from the baseline T-16 causes, as the baseline text it replaces and what stands there now.
+    /// The baseline file is never rewritten. Each row is explained in the PR and pinned in
+    /// <c>OverloadScoringTests</c>; a row here that does not match the baseline exactly once fails the test.
+    /// </summary>
+    private static readonly (string Before, string After, string Why)[] ExplainedDeltas = [
+        ("  errors: 1\n  System.Numerics.BitOperations.PopCount(System.UInt32)\n## csharp 244",
+         "  errors: 2\n## csharp 244",
+         "C# reader corpus, not the DSL: PopCount(1) bound PopCount(uint) through the removed Int32 -> UInt32 widening; "
+         + "C# 10.2.11 allows it for a constant, Poly does not model constant-expression conversions, so no overload is left"),
+    ];
+
     private static string BaselinePath() =>
         Path.Combine(GoldenDomains.RepoRoot, "Poly.Tests", "Introspection", "OverloadSweepBaseline.txt");
 
@@ -40,6 +52,12 @@ public class OverloadSweepTests {
             return;
         }
         var baseline = (await File.ReadAllTextAsync(BaselinePath())).Replace("\r\n", "\n");
+        foreach (var (before, after, why) in ExplainedDeltas) {
+            var first = baseline.IndexOf(before, StringComparison.Ordinal);
+            await Assert.That(first).IsGreaterThanOrEqualTo(0).Because(why);
+            await Assert.That(baseline.IndexOf(before, first + 1, StringComparison.Ordinal)).IsEqualTo(-1);
+            baseline = baseline.Replace(before, after, StringComparison.Ordinal);
+        }
         await Assert.That(sweep).IsEqualTo(baseline);
     }
 

@@ -18,7 +18,8 @@ public class TypeRulesTests {
     /// B7: the public conversion door as it stood on master before T-03b, over every CLR primitive pair.
     /// One row per destination, one cell per source in <see cref="Prim"/> order. A cell is three letters:
     /// GetConversionFrom (N none, I implicit, E explicit), IsAssignableFrom (T/F), IsNumericWideningFrom (T/F).
-    /// Captured from origin/master 51b9453e; never regenerate it from the code under test.
+    /// Both of those members are gone (T-16); <see cref="ConversionDoor_ProviderReproducesTheMasterMatrix_ExceptTheRemovedWidenings"/>
+    /// reads this text through the provider. Captured from origin/master 51b9453e; never regenerate it from the code under test.
     /// </summary>
     private static readonly Dictionary<Prim, string> MasterDoorMatrix = new() {
         [Poly.Introspection.PrimitiveType.Boolean] = "NTF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF",
@@ -43,27 +44,6 @@ public class TypeRulesTests {
         [Poly.Introspection.PrimitiveType.ByteArray] = "NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NFF NTF NFF",
         [Poly.Introspection.PrimitiveType.Structure] = "NTF NTF NTF NTF NTF NTF NTF NTF NTF NTF NTF NTF NTF NTF NTF NTF NTF NTF NTF NTF NTF",
     };
-
-    [Test]
-    public async Task PublicConversionDoor_IsUnchanged() {
-        var prims = Enum.GetValues<Prim>();
-        var mismatches = new List<string>();
-        foreach (var to in prims) {
-            var cells = MasterDoorMatrix[to].Split(' ');
-            var target = ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(to.GetClrType()!);
-            for (var i = 0; i < prims.Length; i++) {
-                var source = ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(prims[i].GetClrType()!);
-                var conversion = target.GetConversionFrom(source);
-                var actual = string.Concat(
-                    conversion is null ? 'N' : conversion.Value.Kind == ConversionOperatorKind.Implicit ? 'I' : 'E',
-                    target.IsAssignableFrom(source) ? 'T' : 'F',
-                    target.IsNumericWideningFrom(source) ? 'T' : 'F');
-                if (actual != cells[i])
-                    mismatches.Add($"{prims[i]} -> {to}: expected {cells[i]}, was {actual}");
-            }
-        }
-        await Assert.That(mismatches).IsEmpty();
-    }
 
     /// <summary>
     /// T-16: the 21 pairs the private rank table called widening and the C# specification (10.2.3) does not:

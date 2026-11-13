@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Text;
 
 using Poly.Interpretation;
+using Poly.Interpretation.CSharp;
 using Poly.Interpretation.Analysis.Semantics;
 using Poly.Introspection;
 using Poly.Introspection.CommonLanguageRuntime;
@@ -669,5 +670,64 @@ public class OverloadScoringTests {
         var bagOnly = (ITypeDefinition)set.Add("BagHost",
             new MethodDefinitionNode("Take", new NamedTypeReference("Bag"), [new Parameter("a", new NamedTypeReference("Bag"))]));
         await Assert.That(bagOnly.FindMatchingMethodOverloads("Take", [fresh]).Count()).IsEqualTo(1);
+    }
+
+    // ---- the one C# reader delta the sweep found ----
+
+    [Test]
+    public async Task CSharpIntLiteralIntoAnUnsignedParameter_HasNoOverload_ConstantConversionIsNotModeled() {
+        // C# 10.2.11 converts the constant 1 to uint, so PopCount(1) binds PopCount(uint) in C#. Poly does not model
+        // constant-expression conversions: master reached the same overload through its invented Int32 -> UInt32
+        // widening, which also accepted a non-constant int (an error in C#). Found, not fixed (see the PR).
+        var run = CSharpScript.Run("System.Numerics.BitOperations.PopCount(1)");
+        await Assert.That(run.Success).IsFalse();
+        await Assert.That(run.Diagnostics).Contains(static d => d.Contains("no matching member 'PopCount'", StringComparison.Ordinal));
+        // The sibling that C# also accepts and that never used a removed pair: an exact argument binds.
+        var exact = CSharpScript.Run("System.Numerics.BitOperations.PopCount((ulong)7)");
+        await Assert.That(exact.Success).IsTrue();
+        await Assert.That(exact.Value).IsEqualTo("3");
+    }
+
+    // ---- IsAssignableWithoutConversion: assignability minus every conversion ----
+
+    [Test]
+    public async Task IsAssignableWithoutConversion_ExcludesDeclaredOperators_AndBuiltInConversions() {
+        // A declared operator is assignment (IsAssignableFrom) but not "without conversion".
+        await Assert.That(Clr(typeof(Meters)).IsAssignableFrom(Clr(typeof(double)))).IsTrue();
+        await Assert.That(Clr(typeof(Meters)).IsAssignableWithoutConversion(Clr(typeof(double)))).IsFalse();
+        await Assert.That(Clr(typeof(decimal)).IsAssignableFrom(Clr(typeof(long)))).IsTrue();
+        await Assert.That(Clr(typeof(decimal)).IsAssignableWithoutConversion(Clr(typeof(long)))).IsFalse();
+        // A built-in numeric conversion is neither.
+        await Assert.That(Clr(typeof(long)).IsAssignableFrom(Clr(typeof(int)))).IsFalse();
+        await Assert.That(Clr(typeof(long)).IsAssignableWithoutConversion(Clr(typeof(int)))).IsFalse();
+        // The siblings: identity, inheritance, interfaces, the T -> T? lift and the box into object need none.
+        await Assert.That(Clr(typeof(long)).IsAssignableWithoutConversion(Clr(typeof(long)))).IsTrue();
+        await Assert.That(Clr(typeof(IEnumerable<int>)).IsAssignableWithoutConversion(Clr(typeof(List<int>)))).IsTrue();
+        await Assert.That(Clr(typeof(int?)).IsAssignableWithoutConversion(Clr(typeof(int)))).IsTrue();
+        await Assert.That(Clr(typeof(int)).IsAssignableWithoutConversion(Clr(typeof(int?)))).IsFalse();
+        await Assert.That(Clr(typeof(object)).IsAssignableWithoutConversion(Clr(typeof(decimal)))).IsTrue();
+    }
+
+    [Test]
+    public async Task IsAssignableWithoutConversion_IsAlwaysInsideIsAssignableFrom_OnEveryPrimitivePair() {
+        var escapes = new List<string>();
+        foreach (var to in Primitives)
+            foreach (var from in Primitives)
+                if (Clr(to).IsAssignableWithoutConversion(Clr(from)) && !Clr(to).IsAssignableFrom(Clr(from)))
+                    escapes.Add($"{from.Name} -> {to.Name}");
+        await Assert.That(escapes).IsEmpty();
+    }
+
+    [Test]
+    public async Task IsAssignableWithoutConversion_ModeledDefinitions_UseTheHierarchyAndIdentity() {
+        var set = new ModeledTypeSet();
+        ITypeDefinition bag = set.Add("Bag");
+        ITypeDefinition crate = set.Add("Crate");
+        ITypeDefinition bags = new AstCollectionTypeDefinition(bag, CollectionKind.List);
+        ITypeDefinition freshBags = new AstCollectionTypeDefinition(bag, CollectionKind.List);
+        await Assert.That(bag.IsAssignableWithoutConversion(bag)).IsTrue();
+        await Assert.That(bag.IsAssignableWithoutConversion(crate)).IsFalse();
+        await Assert.That(bags.IsAssignableWithoutConversion(freshBags)).IsTrue();
+        await Assert.That(Clr(typeof(object)).IsAssignableWithoutConversion(bag)).IsTrue();
     }
 }

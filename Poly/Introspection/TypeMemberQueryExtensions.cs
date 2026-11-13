@@ -72,13 +72,13 @@ public static class TypeMemberQueryExtensions {
                         return null; // Missing required argument
                     case (_, null):
                         continue; // Skip optional parameters when no argument provided
-                    case (_, _) when parameter.ParameterTypeDefinition == argument:
+                    case (_, _) when TypeDefinitionExtensions.IsSameType(parameter.ParameterTypeDefinition, argument):
                         continue;
                     case (_, _) when parameter.ParameterTypeDefinition.IsAssignableFrom(argument):
                         score++; // Assignable but not exact match
                         continue;
-                    case (_, _) when parameter.ParameterTypeDefinition.IsNumericWideningFrom(argument):
-                        score += 2; // Widening is legal but ranks below assignable
+                    case (_, _) when parameter.ParameterTypeDefinition.ResolveConversionFrom(argument) is { Kind: ConversionOperatorKind.Implicit }:
+                        score += 2; // A conversion the platform applies itself ranks below assignable (a declared one is assignable)
                         continue;
                     default:
                         return null; // Incompatible types

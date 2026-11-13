@@ -87,6 +87,9 @@ public class PolicyGuardFactsTests {
         return created.Instance!;
     }
 
+    private static List<ModuleInstance> Items(ModuleInstanceExecutor exec) =>
+        exec.Instances.Where(i => i.EntityName == "Item").ToList();
+
     private static string Outcome(ModuleOutcome outcome) =>
         outcome.Succeeded ? "ok" : "fail: " + outcome.Error;
 
@@ -214,6 +217,24 @@ public class PolicyGuardFactsTests {
         }
         """;
 
+    /// <summary>Creating the line enters its initial stage, which fires the creator's subscription; the subscription
+    /// rewrites <c>Qty</c> before the second create.</summary>
+    private const string CreateAfterCreateInSubscription = """
+        domain W
+        Item: entity { Qty: Number range(0, 10) }
+        Line: entity {
+          N: Number optional
+          Open: stage { }
+        }
+        Order: entity {
+          Qty: Number range(0, 100)
+          lines: many Line
+          Small: policy { Qty <= 10 }
+          when lines Open { assign Qty to 50 }
+          Go: action require Small { create in lines { N: 1 }  create Item { Qty: Qty } }
+        }
+        """;
+
     /// <summary>A many hop: the analyzer cannot type <c>parts Qty</c> on master (T-05b makes it DMSEM006).</summary>
     private const string UntypedInitializer = """
         domain U
@@ -265,6 +286,7 @@ public class PolicyGuardFactsTests {
         ["create-after-loop"] = (CreateAfterLoop, "Order", "Go"),
         ["create-after-transition"] = (CreateAfterTransition, "Order", "Go"),
         ["create-after-cross-invoke"] = (CreateAfterCrossEntityInvoke, "Order", "Go"),
+        ["create-after-create-in-subscription"] = (CreateAfterCreateInSubscription, "Order", "Go"),
         ["untyped-initializer"] = (UntypedInitializer, "Order", "Make"),
         ["self-invoke-require-not"] = (SelfInvokeRequireNot, "Order", "Keep"),
     };
@@ -275,16 +297,17 @@ public class PolicyGuardFactsTests {
     /// <c>A</c>), the error codes, and the range findings. A row V-18 moves on purpose carries master's value.</summary>
     [Test]
     [Arguments("assign-require", "Qty=[0,10] errors=none clean")]
-    [Arguments("create-require", "Qty=[0,10] errors=none DMEFF008? Assigned expression value range [0, 100] can fall outside constraint range(0, 10) on property 'Qty'.")]
-    [Arguments("create-in-require", "Qty=[0,10] errors=none DMEFF008? Assigned expression value range [0, 100] can fall outside constraint range(0, 10) on property 'Qty'.")]
-    [Arguments("create-require-not-0-10", "Qty=[11,100] errors=none DMEFF008? Assigned expression value range [0, 100] can fall outside constraint range(0, 10) on property 'Qty'.")] // V-18 C: require not narrows; master "Qty=[0,100] errors=none DMEFF008? Assigned expression value range [0, 100] can fall outside constraint range(0, 10) on property 'Qty'."
-    [Arguments("create-require-not-11-100", "Qty=[11,100] errors=none DMEFF008? Assigned expression value range [0, 100] can fall outside constraint range(11, 100) on property 'Qty'.")] // V-18 C: require not narrows; master "Qty=[0,100] errors=none DMEFF008? Assigned expression value range [0, 100] can fall outside constraint range(11, 100) on property 'Qty'."
+    [Arguments("create-require", "Qty=[0,10] errors=none clean")] // V-18 D (#809): the initializer reads the guard; master "Qty=[0,10] errors=none DMEFF008? Assigned expression value range [0, 100] can fall outside constraint range(0, 10) on property 'Qty'."
+    [Arguments("create-in-require", "Qty=[0,10] errors=none clean")] // V-18 D (#809): the initializer reads the guard; master "Qty=[0,10] errors=none DMEFF008? Assigned expression value range [0, 100] can fall outside constraint range(0, 10) on property 'Qty'."
+    [Arguments("create-require-not-0-10", "Qty=[11,100] errors=DMEFF008 DMEFF008! Assigned expression value range [11, 100] is entirely outside constraint range(0, 10) on property 'Qty'.")] // V-18 C+D: require not narrows and the create reads it (every guard-passing Qty is >= 11); master "Qty=[0,100] errors=none DMEFF008? Assigned expression value range [0, 100] can fall outside constraint range(0, 10) on property 'Qty'."
+    [Arguments("create-require-not-11-100", "Qty=[11,100] errors=none clean")] // V-18 C+D: require not narrows and the create reads it; master "Qty=[0,100] errors=none DMEFF008? Assigned expression value range [0, 100] can fall outside constraint range(11, 100) on property 'Qty'."
     [Arguments("create-require-not-and", "A=[0,10] errors=none DMEFF008? Assigned expression value range [0, 10] can fall outside constraint range(0, 5) on property 'Qty'.")]
     [Arguments("stage-p-action-not-p", "Qty=[11,100] errors=none DMEFF008? Assigned expression value range [11, 100] can fall outside constraint range(0, 60) on property 'Seen'.")] // V-18 C: the stage gate the action negates is suppressed; master "Qty=[0,10] errors=none clean" was WRONG (Qty=70 passes both guards and fails the assign)
     [Arguments("create-inside-loop", "Qty=[0,10] errors=none DMEFF008? Assigned expression value range [0, 100] can fall outside constraint range(0, 10) on property 'Qty'.")]
     [Arguments("create-after-loop", "Qty=[0,10] errors=none DMEFF008? Assigned expression value range [0, 100] can fall outside constraint range(5, 15) on property 'Qty'.")]
     [Arguments("create-after-transition", "Qty=[0,10] errors=none DMEFF008? Assigned expression value range [0, 100] can fall outside constraint range(0, 10) on property 'Qty'.")]
     [Arguments("create-after-cross-invoke", "Qty=[0,10] errors=none DMEFF008? Assigned expression value range [0, 100] can fall outside constraint range(0, 10) on property 'Qty'.")]
+    [Arguments("create-after-create-in-subscription", "Qty=[0,10] errors=none DMEFF008? Assigned expression value range [0, 100] can fall outside constraint range(0, 10) on property 'Qty'.")] // added after the characterisation commit: master judges every initializer on the declared path, so this is master's verdict too
     [Arguments("untyped-initializer", "Qty=[0,10] errors=none DMCS003? Cannot verify 'create Item { Qty: parts Qty }' against constraint range(0, 10) on property 'Qty': the assigned value has no bound analysis can use. | DMCS003? Cannot verify 'assign Local to parts Qty' against constraint range(0, 10) on property 'Local': the assigned value has no bound analysis can use.")]
     [Arguments("self-invoke-require-not", "Qty=[11,100] errors=none clean")] // V-18 C: the callee's require not narrows its entry; master "Qty=[0,100] errors=none DMEFF008? Assigned expression value range [0, 100] can fall outside constraint range(11, 100) on property 'Local'. | DMEFF008? Call-chain postcondition (Go → Keep): assigned value range [0, 100] can fall outside constraint range(11, 100) on property 'Local'."
     public async Task Shape_Verdict_IsPinned(string shape, string expected) {
@@ -330,6 +353,11 @@ public class PolicyGuardFactsTests {
         var transition = Simulator(CreateAfterTransition, out _);
         await Assert.That(transition.Invoke(Make(transition, "Order", ("Qty", 5L)), "Go").Succeeded).IsFalse();
 
+        var subscribed = Simulator(CreateAfterCreateInSubscription, out _);
+        var notified = subscribed.Invoke(Make(subscribed, "Order", ("Qty", 5L)), "Go");
+        await Assert.That(notified.Succeeded).IsFalse();
+        await Assert.That(notified.Error ?? "").Contains("Qty");
+
         var cross = Simulator(CreateAfterCrossEntityInvoke, out _);
         var caller = Make(cross, "Order", ("Qty", 5L));
         var line = Make(cross, "Line");
@@ -352,9 +380,11 @@ public class PolicyGuardFactsTests {
     [Test]
     public async Task NotPolicy_SkippedToday_PinsCurrentVerdict() {
         var (domain, analysis) = Analyze(CreateUnderRequireNot("range(0, 10)"));
-        // V-18 C: `require not Small` narrows Qty (master: skipped, "[0,100]"). Step D makes the create read it.
+        // V-18 C+D: `require not Small` narrows Qty and the create reads it; master skipped the guard ("[0,100]") and
+        // the create was the PossibleOutside0To10 warning.
         await Assert.That(Narrowed(Context(domain, analysis, "Order", "Make"), "Qty")).IsEqualTo("[11,100]");
-        await Assert.That(RangeFindings(analysis)).IsEqualTo(PossibleOutside0To10);
+        await Assert.That(RangeFindings(analysis)).IsEqualTo(
+            "DMEFF008! Assigned expression value range [11, 100] is entirely outside constraint range(0, 10) on property 'Qty'.");
     }
 
     [Test]
@@ -396,9 +426,10 @@ public class PolicyGuardFactsTests {
         var (_, control) = Analyze(AssignUnderRequire);
         var (_, create) = Analyze(CreateUnderRequire);
         var (_, createIn) = Analyze(CreateInUnderRequire);
-        // master: the assignment is narrowed, the create and create-in initializers are not (#809).
+        // V-18 D (#809): the create and create-in initializers read the narrowing the assignment reads; master
+        // narrowed only the assignment ("create=" and "createIn=" were the PossibleOutside0To10 warning).
         await Assert.That($"control={RangeFindings(control)} create={RangeFindings(create)} createIn={RangeFindings(createIn)}")
-            .IsEqualTo($"control=clean create={PossibleOutside0To10} createIn={PossibleOutside0To10}");
+            .IsEqualTo("control=clean create=clean createIn=clean");
     }
 
     // ── Census (plan §4, lock amendment 8) ──────────────────────
@@ -572,13 +603,13 @@ public class PolicyGuardFactsTests {
         await Assert.That(Narrowed(Context(domain, analysis, "Order", "Make"), "Qty")).IsEqualTo("[11,100]");
         await Assert.That(RangeFindings(analysis)).IsEqualTo("clean");
 
-        var exec = Simulator(dsl, out _);
+        // The simulator twin returns the created Item, so the executor tracks it (a bare create is linked nowhere).
+        var exec = Simulator(dsl.Replace("Make: action require", "Make: action -> Item require", StringComparison.Ordinal), out _);
         await Assert.That(Outcome(exec.Invoke(Make(exec, "Order", ("Qty", 10L)), "Make")))
             .IsEqualTo("fail: 'Make' blocked by policy 'Small'.");
         foreach (var qty in new[] { 11L, 100L }) {
-            var made = exec.Invoke(Make(exec, "Order", ("Qty", qty)), "Make");
-            await Assert.That(Outcome(made)).IsEqualTo("ok");
-            await Assert.That(made.CreatedChildren.Single().Bag["Qty"]).IsEqualTo(qty);
+            await Assert.That(Outcome(exec.Invoke(Make(exec, "Order", ("Qty", qty)), "Make"))).IsEqualTo("ok");
+            await Assert.That(Items(exec).Last().Bag["Qty"]).IsEqualTo(qty);
         }
     }
 
@@ -720,11 +751,12 @@ public class PolicyGuardFactsTests {
         await Assert.That(InitializerOf(Context(domain, analysis, "Order", "Make"), "Qty")).IsEqualTo("[50,50]");
         await Assert.That(RangeFindings(analysis)).IsEqualTo(
             "DMEFF008! Assigned expression value range [50, 50] is entirely outside constraint range(0, 10) on property 'Qty'.");
+        // The simulator twin widens Item's range (so the create can run) and returns the created Item.
         var twin = dsl.Replace("Item: entity { Qty: Number range(0, 10) }", "Item: entity { Qty: Number range(0, 100) }",
-            StringComparison.Ordinal);
+            StringComparison.Ordinal).Replace("Make: action require", "Make: action -> Item require", StringComparison.Ordinal);
         var exec = Simulator(twin, out _);
-        var made = exec.Invoke(Make(exec, "Order", ("Qty", 5L)), "Make");
-        await Assert.That(made.CreatedChildren.Single().Bag["Qty"]).IsEqualTo(50L);
+        await Assert.That(Outcome(exec.Invoke(Make(exec, "Order", ("Qty", 5L)), "Make"))).IsEqualTo("ok");
+        await Assert.That(Items(exec).Single().Bag["Qty"]).IsEqualTo(50L);
     }
 
     /// <summary>Amendment 2: a create in a loop body keeps the declared-range path (the body is walked once on the
@@ -758,6 +790,15 @@ public class PolicyGuardFactsTests {
     [Test]
     public async Task CreateAfterCrossEntityInvoke_WriteBack() {
         var (domain, analysis) = Analyze(CreateAfterCrossEntityInvoke);
+        await Assert.That(InitializerOf(Context(domain, analysis, "Order", "Go"), "Qty")).IsEqualTo("absent");
+        await Assert.That(RangeFindings(analysis)).IsEqualTo(PossibleOutside0To10);
+    }
+
+    /// <summary>A create after a create-in keeps the declared path: the create-in can notify a subscription on the
+    /// creator, which the walk does not model.</summary>
+    [Test]
+    public async Task CreateAfterCreateIn_Subscription_NotNarrowed() {
+        var (domain, analysis) = Analyze(CreateAfterCreateInSubscription);
         await Assert.That(InitializerOf(Context(domain, analysis, "Order", "Go"), "Qty")).IsEqualTo("absent");
         await Assert.That(RangeFindings(analysis)).IsEqualTo(PossibleOutside0To10);
     }

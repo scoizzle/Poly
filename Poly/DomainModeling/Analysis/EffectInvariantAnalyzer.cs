@@ -133,8 +133,11 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
             var postconditions = new List<EffectPostcondition>();
             // Call-stack scoped: an action is in the set only while its walk is on the stack.
             var visited = new HashSet<Action>(ReferenceEqualityComparer.Instance) { action };
-            ApplyEffects(action.Effects, entity, action, env, paramEnv: null, visited, postconditions, domain, stageName, axes);
-            contexts.Add(new ActionStageInvariant(stageName, preconditions, narrowed, merged, postconditions));
+            var flow = new InitializerFlow(action);
+            ApplyEffects(action.Effects, entity, action, env, paramEnv: null, visited, postconditions, flow, domain, stageName, axes);
+            contexts.Add(new ActionStageInvariant(stageName, preconditions, narrowed, merged, postconditions) {
+                InitializerValues = flow.Values,
+            });
         }
         context.SetMetadata(action, new ActionInvariantMetadata(contexts));
     }
@@ -537,7 +540,7 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
         IReadOnlyList<Effect> effects, Entity entity, Action action,
         Dictionary<string, AbstractValue> env,
         IReadOnlyDictionary<string, AbstractValue>? paramEnv,
-        HashSet<Action> visited, List<EffectPostcondition> result, Domain domain,
+        HashSet<Action> visited, List<EffectPostcondition> result, InitializerFlow flow, Domain domain,
         string? currentStage, DomainGuardAxes axes) {
         foreach (var effect in effects) {
             switch (effect) {
@@ -564,35 +567,89 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
                     var thenEnv = CloneEnv(env);
                     Refine(thenEnv, cond.Condition, axes.For(entity));
                     var thenDead = ArmIsDead(env, thenEnv);
-                    ApplyEffects(cond.ThenEffects, entity, action, thenEnv, paramEnv, visited, result, domain, currentStage, axes);
+                    var trustedBefore = flow.Trusted;
+                    ApplyEffects(cond.ThenEffects, entity, action, thenEnv, paramEnv, visited, result, flow, domain, currentStage, axes);
+                    var thenTrusted = flow.Trusted;
+                    flow.Trusted = trustedBefore;
                     Dictionary<string, AbstractValue>? elseEnv = null;
                     var elseDead = false;
                     if (cond.ElseEffects is not null) {
                         elseEnv = CloneEnv(env);
                         RefineNegated(elseEnv, cond.Condition, axes.For(entity));
                         elseDead = ArmIsDead(env, elseEnv);
-                        ApplyEffects(cond.ElseEffects, entity, action, elseEnv, paramEnv, visited, result, domain, currentStage, axes);
+                        ApplyEffects(cond.ElseEffects, entity, action, elseEnv, paramEnv, visited, result, flow, domain, currentStage, axes);
                     }
+                    // Each arm is its own path: an effect the walk does not model in one arm leaves the other arm
+                    // trusted, and the join is trusted only when both arms are.
+                    flow.Trusted = thenTrusted && flow.Trusted;
                     JoinBranches(env, thenEnv, thenDead, elseEnv, elseDead, entity);
                     break;
                 case CompositeEffect composite:
-                    ApplyEffects(composite.Effects, entity, action, env, paramEnv, visited, result, domain, currentStage, axes);
+                    ApplyEffects(composite.Effects, entity, action, env, paramEnv, visited, result, flow, domain, currentStage, axes);
                     break;
                 case InvokeActionEffect invoke:
-                    ApplyInvoke(invoke, entity, action, env, paramEnv, visited, result, domain, currentStage, axes);
+                    // A cross-entity callee can invoke back into this instance, and a callee the walk does not
+                    // enter still runs: either way the environment no longer describes this instance.
+                    if (!ApplyInvoke(invoke, entity, action, env, paramEnv, visited, result, flow, domain, currentStage, axes))
+                        flow.Untrust();
                     DropAllRelations(env);
                     break;
                 case ForEachEffect fe:
                     // Zero or more iterations: assigns join into the env (Merge), so the
-                    // pre-loop value still holds for zero iterations.
-                    ApplyEffects(fe.Body, entity, action, env, paramEnv, visited, result, domain, currentStage, axes);
+                    // pre-loop value still holds for zero iterations. The body is walked once on the pre-loop
+                    // environment, so neither the body nor what follows the loop is a sound place to read it from (#863).
+                    flow.Untrust();
+                    ApplyEffects(fe.Body, entity, action, env, paramEnv, visited, result, flow, domain, currentStage, axes);
                     break;
                 case ForEachInvokeEffect efe:
-                    ApplyForEachInvoke(efe, entity, action, env, paramEnv, visited, result, domain, axes);
+                    flow.Untrust();
+                    ApplyForEachInvoke(efe, entity, action, env, paramEnv, visited, result, flow, domain, axes);
                     DropAllRelations(env);
+                    break;
+                case CreateEntityInstance create:
+                    RecordInitializers(create.Initializers, entity, action, env, paramEnv, flow);
+                    flow.Untrust();
+                    break;
+                case CreateEntityInRelationshipEffect createIn:
+                    RecordInitializers(createIn.Initializers, entity, action, env, paramEnv, flow);
+                    flow.Untrust();
+                    break;
+                default:
+                    // A transition runs the target stage's entry block; a link, an unlink or any effect without an
+                    // arm here may notify a subscriber on this instance. The walk models none of them.
+                    flow.Untrust();
                     break;
             }
         }
+    }
+
+    /// <summary>
+    /// The create initializers one stage context records for its action (#809): each one's value in the walk's
+    /// environment at the create, so an initializer reads the guard, branch and assign facts an assignment reads.
+    /// Only the context's own action's creates are recorded; a callee's creates are judged in the callee's context.
+    /// The environment is trusted for an initializer only while every effect walked so far is one the walk models
+    /// exactly (an assign, an <c>if</c>, a composite, a self-invoke it entered): after anything else, in the
+    /// branch it was in and every effect after it, nothing more is recorded, and those creates are judged against
+    /// declared ranges as before (lock amendments 1 and 3). Each arm of an <c>if</c> is its own path; after the
+    /// <c>if</c> the flag is the conjunction of the arms, and it never turns true again further along a path.
+    /// </summary>
+    private sealed class InitializerFlow(Action root) {
+        public Action Root { get; } = root;
+        public List<InitializerValue> Values { get; } = [];
+        public bool Trusted { get; set; } = true;
+        public void Untrust() => Trusted = false;
+    }
+
+    /// <summary>Records each initializer's value, evaluated in the creator's scope as
+    /// <see cref="InferValue"/> evaluates it (no domain, so a navigation stays Unknown), under the walk's
+    /// environment.</summary>
+    private static void RecordInitializers(
+        IReadOnlyList<PropertyBinding> initializers, Entity entity, Action action,
+        Dictionary<string, AbstractValue> env, IReadOnlyDictionary<string, AbstractValue>? paramEnv,
+        InitializerFlow flow) {
+        if (!flow.Trusted || !ReferenceEquals(action, flow.Root)) return;
+        foreach (var initializer in initializers)
+            flow.Values.Add(new InitializerValue(initializer, Eval(initializer.Expression, entity, action, env, paramEnv), action));
     }
 
     /// <summary>A callee runs on a copy of the environment and may reassign any property, so after
@@ -605,20 +662,21 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
     /// <summary>Call-chain propagation. Self-invoke threads the current environment into the
     /// callee (refined by its own preconditions) with argument bindings mapped to its params.
     /// Cross-entity invoke (Rel.Action) builds the related entity's environment and steps
-    /// the callee on it.</summary>
-    private static void ApplyInvoke(
+    /// the callee on it. True when the callee's effects were stepped on this instance's environment (a self-invoke
+    /// the walk entered), so the environment after it still describes this instance.</summary>
+    private static bool ApplyInvoke(
         InvokeActionEffect invoke, Entity entity, Action action,
         Dictionary<string, AbstractValue> env,
         IReadOnlyDictionary<string, AbstractValue>? paramEnv,
-        HashSet<Action> visited, List<EffectPostcondition> result, Domain domain,
+        HashSet<Action> visited, List<EffectPostcondition> result, InitializerFlow flow, Domain domain,
         string? currentStage, DomainGuardAxes axes) {
         if (invoke.TargetRelationship is not null) {
-            ApplyCrossEntityInvoke(invoke, entity, action, env, paramEnv, visited, result, domain, axes);
-            return;
+            ApplyCrossEntityInvoke(invoke, entity, action, env, paramEnv, visited, result, flow, domain, axes);
+            return false;
         }
 
         var target = DomainAnalysis.FindAction(entity, invoke.ActionName, currentStage);
-        if (target is null || !visited.Add(target)) return;
+        if (target is null || !visited.Add(target)) return false;
 
         var targetEnv = CloneEnv(env);
         foreach (var guard in PolicyGuardFacts.Guards(target, stage: null))
@@ -636,13 +694,14 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
         var atEntry = CloneEnv(targetEnv);
 
         try {
-            ApplyEffects(target.Effects, entity, target, targetEnv, targetParams, visited, result, domain, currentStage, axes);
+            ApplyEffects(target.Effects, entity, target, targetEnv, targetParams, visited, result, flow, domain, currentStage, axes);
         }
         finally {
             visited.Remove(target);
         }
 
         MergeCalleePostState(env, targetEnv, atEntry, entity);
+        return true;
     }
 
     /// <summary>#367 B-3: a self-invoke runs on the SAME entity (the callee env is keyed by this
@@ -669,7 +728,7 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
         InvokeActionEffect invoke, Entity entity, Action action,
         Dictionary<string, AbstractValue> env,
         IReadOnlyDictionary<string, AbstractValue>? paramEnv,
-        HashSet<Action> visited, List<EffectPostcondition> result, Domain domain, DomainGuardAxes axes) {
+        HashSet<Action> visited, List<EffectPostcondition> result, InitializerFlow flow, Domain domain, DomainGuardAxes axes) {
         var relationship = entity.Navigations.FirstOrDefault(r =>
             string.Equals(r.Name, invoke.TargetRelationship, StringComparison.Ordinal));
         if (relationship is null) return;
@@ -696,7 +755,7 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
         }
 
         try {
-            ApplyEffects(targetAction.Effects, targetEntity, targetAction, targetEnv, targetParams, visited, result, domain, currentStage: null, axes);
+            ApplyEffects(targetAction.Effects, targetEntity, targetAction, targetEnv, targetParams, visited, result, flow, domain, currentStage: null, axes);
         }
         finally {
             visited.Remove(targetAction);
@@ -710,7 +769,7 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
         ForEachInvokeEffect efe, Entity entity, Action action,
         Dictionary<string, AbstractValue> env,
         IReadOnlyDictionary<string, AbstractValue>? paramEnv,
-        HashSet<Action> visited, List<EffectPostcondition> result, Domain domain, DomainGuardAxes axes) {
+        HashSet<Action> visited, List<EffectPostcondition> result, InitializerFlow flow, Domain domain, DomainGuardAxes axes) {
         var relationship = entity.Navigations.FirstOrDefault(r =>
             string.Equals(r.Name, efe.RelationshipName, StringComparison.Ordinal));
         if (relationship is null) return;
@@ -745,7 +804,7 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
         }
 
         try {
-            ApplyEffects(targetAction.Effects, targetEntity, targetAction, targetEnv, targetParams, visited, result, domain, currentStage: null, axes);
+            ApplyEffects(targetAction.Effects, targetEntity, targetAction, targetEnv, targetParams, visited, result, flow, domain, currentStage: null, axes);
         }
         finally {
             visited.Remove(targetAction);

@@ -48,9 +48,8 @@ internal sealed partial class EffectAnalyzer {
     /// <summary>
     /// The create-initializer arm of the same channel (S4): one verdict, one finding and one fact for
     /// the initializer. The expression is inferred in the CREATOR's scope (the entity whose action
-    /// creates) with the creating action's parameters in scope, exactly as master's
-    /// <c>InferNumericRange</c> call did — never in the created entity's scope, where a same-named
-    /// property would answer with the wrong constraints (A1).
+    /// creates) with the creating action's parameters in scope — never in the created entity's scope,
+    /// where a same-named property would answer with the wrong constraints (A1).
     /// </summary>
     private static void ValidateInitializerValue(
         AnalysisContext context,
@@ -65,11 +64,26 @@ internal sealed partial class EffectAnalyzer {
             return;
         }
 
-        var value = EffectInvariantAnalyzer.InferValue(initializer.Expression, creatorEntity, action);
         ValidateWrittenValue(
             context, domain, initializer, initializer.Expression,
             $"create {targetEntity.Name} {{ {targetProp.Name}: {WritePrinter.PrintExpressionText(initializer.Expression)} }}",
-            targetProp, [value]);
+            targetProp, InitializerValues(context, initializer, creatorEntity, action));
+    }
+
+    /// <summary>
+    /// The initializer's value in each stage context (V-18, #809): the value the invariant walk recorded at the
+    /// create (<see cref="ActionStageInvariant.InitializerValues"/>), so it reads the guard, branch and assign facts
+    /// an assignment reads. A context with no record (a create in a loop body or after an effect the walk does not
+    /// model), and a create outside an action body, are judged against declared ranges, never left unverified.
+    /// </summary>
+    private static IReadOnlyList<AbstractValue?> InitializerValues(
+        AnalysisContext context, PropertyBinding initializer, Entity creatorEntity, Action? action) {
+        var declared = EffectInvariantAnalyzer.InferValue(initializer.Expression, creatorEntity, action);
+        if (action is null || context.GetMetadata<ActionInvariantMetadata>(action) is not { StageContexts.Count: > 0 } meta)
+            return [declared];
+        return meta.StageContexts
+            .Select(ctx => ctx.InitializerValues.FirstOrDefault(v => ReferenceEquals(v.Initializer, initializer))?.Value ?? declared)
+            .ToList();
     }
 
     /// <summary>The shared decision: every write-relevant constraint against every value, worst wins.</summary>

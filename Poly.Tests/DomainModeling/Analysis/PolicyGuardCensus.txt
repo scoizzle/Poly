@@ -92,3 +92,20 @@ docs/probes/scratch-2026-10-14/roastery.poly | 44:5 | DMCS003? | Cannot verify '
 # ModuleInstanceExecutor, PathPrefixRequireFailure, CorpusVerdictSweep, GuideExamples): no assertion moves. None of them
 # pins a create initializer under a guard or a require not narrowing (read: they pin assigns, literal creates and
 # preconditions lists; Preconditions and the export set are unchanged).
+
+## Actual (after production, f75e9d6b): every prediction above held
+#
+# Shipped corpus: the measured block is unchanged (Census_MatchesGolden green without POLY_UPDATE_GOLDEN);
+# CorpusVerdictSweepTests and GuideExamplesTests green. Appear 0, disappear 0, change 0, so no row needs a simulator test.
+# Shape rows: each moved exactly as predicted. The simulator test behind each moved verdict:
+#   create-require, create-in-require        no runtime claim moved to an error (warning -> clean; the guard admits [0,10] only)
+#   create-require-not-0-10 (warning->error) NotPolicy_AcceptDirection_IsClean: Qty 10 blocked, 11 and 100 run (every guard-passing Qty >= 11)
+#   create-require-not-11-100 (-> clean)     NotPolicy_AcceptDirection_IsClean (same runs)
+#   stage-p-action-not-p (clean -> warning)  StagePAndActionNotP_Simulator_AssignFailsAboveSeenRange: Qty 70 passes both guards, the assign fails
+#   self-invoke-require-not (-> clean)       SelfInvoke_CalleeRequireNot_NarrowsCalleeEnv: Qty 10 blocked by the callee guard, 11 writes
+# One row was added after the characterisation commit: create-after-create-in-subscription (declared path; its simulator run
+# is in FlaggedCreates_Simulator_FailWithGuardHeld: the create-in notifies the creator's subscription, which rewrites Qty).
+# Not predicted, found while implementing D: the naive create arm (fork A with no fallback) turned the loop, after-loop,
+# after-transition and after-cross-entity-invoke pins clean ([0,10], [5,15], [0,10], [0,10]); the trust rule restores
+# the declared path there, and the create-in subscription case was found the same way (guide section 7: a created child
+# entering its initial stage notifies the creator).

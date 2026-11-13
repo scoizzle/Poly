@@ -59,27 +59,31 @@ public sealed record DslSyntaxTree(string Name, IReadOnlyList<string> Uses, IRea
         if (idToken.Kind != DslTokenKind.Identifier)
             return false;
 
-        id = idToken.Text;
+        id = idToken.Name();
         var i = usesIndex + 2;
         nextIndex = i;
         if (i >= tokens.Count || tokens[i].Line != idToken.Line || !IsVersionToken(tokens[i].Kind))
             return true;
 
-        var text = new StringBuilder(tokens[i].Text);
-        var end = tokens[i].Offset + tokens[i].Length;
+        var text = new StringBuilder(VersionPiece(tokens[i]));
+        var end = tokens[i].Start + tokens[i].Length;
         i++;
         while (i < tokens.Count
             && tokens[i].Line == idToken.Line
-            && tokens[i].Offset == end
+            && tokens[i].Start == end
             && IsVersionToken(tokens[i].Kind)) {
-            text.Append(tokens[i].Text);
-            end = tokens[i].Offset + tokens[i].Length;
+            text.Append(VersionPiece(tokens[i]));
+            end = tokens[i].Start + tokens[i].Length;
             i++;
         }
         version = text.ToString();
         nextIndex = i;
         return true;
     }
+
+    // A quoted piece reads as its decoded value (uses http "v1" pins v1), any other piece as its source text.
+    private static string VersionPiece(DslToken token) =>
+        token.Kind == DslTokenKind.StringLiteral ? token.Unescape() : token.Span.ToString();
 
     private static bool IsVersionToken(DslTokenKind kind) => kind is
         DslTokenKind.Identifier or DslTokenKind.Number or DslTokenKind.StringLiteral
@@ -101,6 +105,6 @@ public sealed record DslSyntaxTree(string Name, IReadOnlyList<string> Uses, IRea
             versions.Add(version);
             i = next;
         }
-        return (tokens[1].Text, uses, versions, i);
+        return (tokens[1].Name(), uses, versions, i);
     }
 }

@@ -144,7 +144,7 @@ public sealed class DslExpressionParser {
         // ── depth ─────────────────────────────────────────────────────────────────────
 
         private static GrammarException DepthError(DslToken at) =>
-            new(DslLimits.DepthDetail, at.Line, at.Col, at.Offset, at.Length);
+            new(DslLimits.DepthDetail, at.Line, at.Col, at.Start, at.Length);
 
         /// <summary>A node of relative height <paramref name="height"/> under the enclosing levels counted so far.</summary>
         private void CheckNode(DslToken at, int height) {
@@ -630,7 +630,7 @@ public sealed class DslExpressionParser {
             var tokens = f.Tokens!;
             var current = _c.Current;
             if (f.Phase == ArmPhase.Condition) {
-                if (current.Offset != tokens[f.Arrow].Offset)
+                if (current.Start != tokens[f.Arrow].Start)
                     throw _c.Error($"Unexpected '{Describe(current)}' in match condition");
                 f.Pending = _value;
                 Take();
@@ -640,7 +640,7 @@ public sealed class DslExpressionParser {
             }
 
             var end = f.Segments![f.Index].End;
-            if (current.Offset != tokens[end].Offset)
+            if (current.Start != tokens[end].Start)
                 throw _c.Error($"Unexpected '{Describe(current)}' in match value");
             if (f.IsElse)
                 f.ElseValue = _value;

@@ -37,7 +37,7 @@ public class DslCursor : IDslParseCursor {
     public DslToken Expect(DslTokenKind kind) {
         var t = Current;
         if (t.Kind != kind)
-            throw Error($"Expected {kind}, got '{t.Text}' ({t.Kind})");
+            throw Error($"Expected {kind}, got '{Shown(t)}' ({t.Kind})");
         Advance();
         return t;
     }
@@ -45,10 +45,18 @@ public class DslCursor : IDslParseCursor {
     public string ExpectIdentifier(DslTokenKind kind, string context) {
         var t = Current;
         if (t.Kind != kind)
-            throw Error($"Expected {context}, got '{t.Text}'");
+            throw Error($"Expected {context}, got '{Shown(t)}'");
         Advance();
-        return t.Text;
+        return Shown(t);
     }
+
+    // The token's decoded text, as messages and identifier reads show it: a string literal unescaped, an
+    // identifier interned, anything else its source slice (the canonical text of a fixed kind; empty at EOF).
+    private static string Shown(DslToken t) => t.Kind switch {
+        DslTokenKind.StringLiteral => t.Unescape(),
+        DslTokenKind.Identifier => t.Name(),
+        _ => t.Span.ToString(),
+    };
 
     public bool PeekIs(DslTokenKind kind) => Peek(1).Kind == kind;
 

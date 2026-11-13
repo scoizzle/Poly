@@ -321,7 +321,7 @@ public sealed class PolyCompiler {
                 continue;
             if (++count == occurrence) {
                 var token = tree.Tokens[i + 1];
-                return build.Span(token.Offset, token.Length, severity, code, message, "");
+                return build.Span(token.Start, token.Length, severity, code, message, "");
             }
         }
         return build.Unplaced(severity, code, message, "");
@@ -353,7 +353,7 @@ public sealed class PolyCompiler {
         for (var i = 2; DslSyntaxTree.TryReadUse(tokens, i, out var id, out _, out var next); i = next) {
             if (!seen.Add(id)) {
                 var token = tokens[i + 1];
-                return build.Span(token.Offset, token.Length, Severities.Error,
+                return build.Span(token.Start, token.Length, Severities.Error,
                     DiagnosticCodes.DuplicateExtension, ex.Message, "");
             }
         }

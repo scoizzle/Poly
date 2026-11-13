@@ -1,10 +1,12 @@
 namespace Poly.Grammar;
 
 /// <summary>
-/// Immutable source buffer with its position surface: line/column from an offset and span slicing.
+/// Source buffer with its position surface: line/column from an offset and span slicing. The text never
+/// changes; <see cref="Names"/> is a mutable per-document intern table and is NOT thread-safe, so a
+/// <see cref="SourceText"/> whose names are being interned is used from one thread at a time.
 /// Line/column is the DSL scanner's rule, not a new one: only <c>'\n'</c> ends a line (<c>'\r'</c> is a
 /// column character), both are 1-based, and <c>GetLineColumn(Length)</c> is the end-of-input position.
-/// A leading <c>'﻿'</c> is not a document character: offsets in <c>[0, origin)</c> return (1,1), the
+/// A leading <c>'\uFEFF'</c> (byte-order mark) is not a document character: offsets in <c>[0, origin)</c> return (1,1), the
 /// single documented clamp. Offsets stay absolute into the caller's string. Everything outside
 /// <c>[0, Length]</c> throws. The line table is built lazily in one O(n) pass; two threads may both build
 /// the identical table (reference assignment is atomic) - that benign race is the only concurrency promise.
@@ -16,7 +18,7 @@ public sealed class SourceText {
     public SourceText(string text) {
         ArgumentNullException.ThrowIfNull(text);
         Text = text.AsMemory();
-        _origin = text.Length > 0 && text[0] == '﻿' ? 1 : 0;
+        _origin = text.Length > 0 && text[0] == '\uFEFF' ? 1 : 0;
     }
 
     public ReadOnlyMemory<char> Text { get; }
@@ -44,13 +46,22 @@ public sealed class SourceText {
         return (before + 1, offset - lineStart + 1);
     }
 
+    /// <summary>
+    /// The token's slice <c>[Start, Start + Length)</c>. A zero-length span at <see cref="Length"/> (end of
+    /// input) is allowed; nothing is clamped, and any range outside <c>[0, Length]</c> throws
+    /// <see cref="ArgumentOutOfRangeException"/>.
+    /// </summary>
     public ReadOnlySpan<char> Span<TKind>(SpanToken<TKind> token) where TKind : struct {
         if ((uint)token.Start > (uint)Length || (uint)token.Length > (uint)(Length - token.Start))
             throw new ArgumentOutOfRangeException(nameof(token), token, $"Span [{token.Start}, +{token.Length}) is outside 0..{Length}.");
         return Text.Span.Slice(token.Start, token.Length);
     }
 
-    /// <summary>The token's raw slice (string literals keep their quotes and escapes), interned per document.</summary>
+    /// <summary>
+    /// The token's raw slice, interned per document. For name-bearing (word) tokens only: any span is accepted
+    /// and counted in <see cref="Names"/>, so interning a number or a string literal (whose slice keeps its
+    /// quotes and escapes) pollutes the name count. <c>DslToken.Name()</c> is the scoped DSL form.
+    /// </summary>
     public string Name<TKind>(SpanToken<TKind> token) where TKind : struct => Names.Intern(Span(token));
 
     private int[] BuildLineStarts() {

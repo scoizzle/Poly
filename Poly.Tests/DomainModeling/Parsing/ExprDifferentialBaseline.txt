@@ -106,8 +106,8 @@ T	F(not a)	OK FunctionCall("F",[Not(PropertyAccess("a"))],Int32:1,Int32:1)
 T	F(a > b)	OK FunctionCall("F",[Comparison(PropertyAccess("a"),PropertyAccess("b"),ComparisonKind:GreaterThan)],Int32:1,Int32:1)
 T	F(Kids where Flag)	OK FunctionCall("F",[RelationshipNavigation("Kids",PropertyAccess("Flag"))],Int32:1,Int32:1)
 T	F(any Kids where Flag, 2)	OK FunctionCall("F",[AnyExpr("Kids",PropertyAccess("Flag")),Literal(Int64:2,null,Int32:1,Int32:24)],Int32:1,Int32:1)
-T	F(match { a -> 1, else -> 2 })	ERR Unexpected '{' in call argument @1:9
-T	F(match { a -> 1, b -> 2, else -> 3 }, 4)	ERR Unexpected '{' in call argument @1:9
+T	F(match { a -> 1, else -> 2 })	OK FunctionCall("F",[MatchExpr([Arm(PropertyAccess("a"),Literal(Int64:1,null,Int32:1,Int32:16))],Literal(Int64:2,null,Int32:1,Int32:27),Int32:1,Int32:3)],Int32:1,Int32:1)
+T	F(match { a -> 1, b -> 2, else -> 3 }, 4)	OK FunctionCall("F",[MatchExpr([Arm(PropertyAccess("a"),Literal(Int64:1,null,Int32:1,Int32:16)),Arm(PropertyAccess("b"),Literal(Int64:2,null,Int32:1,Int32:24))],Literal(Int64:3,null,Int32:1,Int32:35),Int32:1,Int32:3),Literal(Int64:4,null,Int32:1,Int32:40)],Int32:1,Int32:1)
 T	F(a) + G(b)	OK Add(FunctionCall("F",[PropertyAccess("a")],Int32:1,Int32:1),FunctionCall("G",[PropertyAccess("b")],Int32:1,Int32:8))
 T	F(a) > G(b)	OK Comparison(FunctionCall("F",[PropertyAccess("a")],Int32:1,Int32:1),FunctionCall("G",[PropertyAccess("b")],Int32:1,Int32:8),ComparisonKind:GreaterThan)
 T	not F(a)	OK Not(FunctionCall("F",[PropertyAccess("a")],Int32:1,Int32:5))
@@ -137,8 +137,8 @@ T	sum	OK PropertyAccess("sum")
 T	any	OK PropertyAccess("any")
 T	function	OK PropertyAccess("function")
 T	value	OK PropertyAccess("value")
-T	Kids where	ERR Trailing tokens after expression: 'where' @1:6
-T	count Kids where	ERR Trailing tokens after expression: 'where' @1:12
+T	Kids where	ERR Expected expression, got 'end of input' @1:11
+T	count Kids where	ERR Expected expression, got 'end of input' @1:17
 T	3 Days > 2 Days	OK Comparison(UnresolvedDuration(Int64:3,"Days"),UnresolvedDuration(Int64:2,"Days"),ComparisonKind:GreaterThan)
 T	Now + 3 Days	OK Add(PropertyAccess("Now"),UnresolvedDuration(Int64:3,"Days"))
 T	a + 3 Days	OK Add(PropertyAccess("a"),UnresolvedDuration(Int64:3,"Days"))
@@ -157,19 +157,19 @@ T	""	OK Literal("",null,Int32:0,Int32:0)
 T	null is null	OK Comparison(Literal(null,null,Int32:0,Int32:0),Literal(null,null,Int32:0,Int32:0),ComparisonKind:Equal)
 T	true and false	OK And(Literal(True,null,Int32:0,Int32:0),Literal(False,null,Int32:0,Int32:0))
 T	true is not false	OK Comparison(Literal(True,null,Int32:0,Int32:0),Literal(False,null,Int32:0,Int32:0),ComparisonKind:NotEqual)
-T	(	ERR Expected expression, got '(' @1:1
+T	(	ERR Expected expression, got 'end of input' @1:2
 T	)	ERR Expected expression, got ')' @1:1
-T	()	ERR Expected expression inside parentheses @1:3
+T	()	ERR Expected expression inside parentheses @1:2
 T	(())	ERR Expected expression inside parentheses @1:3
-T	(a	ERR Expected expression, got '(' @1:1
+T	(a	ERR Expected ')' to close the group @1:3
 T	a)	ERR Trailing tokens after expression: ')' @1:2
-T	((a)	ERR Expected expression, got '(' @1:1
+T	((a)	ERR Expected ')' to close the group @1:5
 T	(a))	ERR Trailing tokens after expression: ')' @1:4
 T	(a b)	OK RelationshipNavigation("a",PropertyAccess("b"))
-T	(a +)	ERR Expected expression, got 'a' @1:2
+T	(a +)	ERR Expected expression, got ')' @1:5
 T	(+ a)	ERR Expected expression, got '+' @1:2
-T	(a > )	ERR Unexpected '>' in group @1:4
-T	(a and)	ERR Expected expression, got 'a' @1:2
+T	(a > )	ERR Expected expression, got ')' @1:6
+T	(a and)	ERR Expected expression, got ')' @1:7
 T	(Price > 3 4)	ERR Unexpected '4' in group @1:12
 T	(Price > 3 function)	ERR Unexpected 'function' in group @1:12
 T	(Flag function)	ERR Unexpected 'function' in group @1:7
@@ -178,18 +178,18 @@ T	(3 function)	ERR Unexpected 'function' in group @1:4
 T	(3 Foo)	ERR Unknown duration unit 'Foo'. Legal units: Milliseconds, Seconds, Minutes, Hours, Days, Weeks, Months, Years (milliseconds also as 'ms'; singular and plural accepted, exact PascalCase). @1:4
 T	(3 Foo Bar)	ERR Unknown duration unit 'Foo'. Legal units: Milliseconds, Seconds, Minutes, Hours, Days, Weeks, Months, Years (milliseconds also as 'ms'; singular and plural accepted, exact PascalCase). @1:4
 T	(a b c)	OK RelationshipNavigation("a",RelationshipNavigation("b",PropertyAccess("c")))
-T	(Kids where)	ERR Unexpected 'where' in group @1:7
-T	(not)	ERR Expected expression, got 'not' @1:2
+T	(Kids where)	ERR Expected expression, got ')' @1:12
+T	(not)	ERR Expected expression, got ')' @1:5
 T	(a,)	ERR Unexpected ',' in group @1:3
 T	(a, b)	ERR Unexpected ',' in group @1:3
 T	(a;)	ERR Unexpected character ';' @1:3
 T	F(	ERR Trailing tokens after expression: '(' @1:2
 T	F(a	ERR Trailing tokens after expression: '(' @1:2
 T	F(a,	ERR Trailing tokens after expression: '(' @1:2
-T	F(a,)	ERR Expected an argument in call to 'F' before ')' (line 1, col 5) @1:6
-T	F(,a)	ERR Expected an argument in call to 'F' before ',' (line 1, col 3) @1:6
-T	F(a,,b)	ERR Expected an argument in call to 'F' before ',' (line 1, col 5) @1:8
-T	F(,)	ERR Expected an argument in call to 'F' before ',' (line 1, col 3) @1:5
+T	F(a,)	ERR Expected an argument in call to 'F' before ')' (line 1, col 5) @1:5
+T	F(,a)	ERR Expected an argument in call to 'F' before ',' (line 1, col 3) @1:3
+T	F(a,,b)	ERR Expected an argument in call to 'F' before ',' (line 1, col 5) @1:5
+T	F(,)	ERR Expected an argument in call to 'F' before ',' (line 1, col 3) @1:3
 T	F(a b)	OK FunctionCall("F",[RelationshipNavigation("a",PropertyAccess("b"))],Int32:1,Int32:1)
 T	F(1 x)	ERR Unknown duration unit 'x'. Legal units: Milliseconds, Seconds, Minutes, Hours, Days, Weeks, Months, Years (milliseconds also as 'ms'; singular and plural accepted, exact PascalCase). @1:5
 T	F(3 function)	ERR Unexpected 'function' in call argument @1:5
@@ -199,59 +199,59 @@ T	F(a] )	ERR Unexpected ']' in call argument @1:4
 T	F(()	ERR Trailing tokens after expression: '(' @1:2
 T	F((a)	ERR Trailing tokens after expression: '(' @1:2
 T	F(a, (b)	ERR Trailing tokens after expression: '(' @1:2
-T	F(not)	ERR Expected expression, got 'not' @1:3
-T	F(a +)	ERR Expected expression, got 'a' @1:3
-T	F(a >)	ERR Unexpected '>' in call argument @1:5
+T	F(not)	ERR Expected expression, got ')' @1:6
+T	F(a +)	ERR Expected expression, got ')' @1:6
+T	F(a >)	ERR Expected expression, got ')' @1:6
 T	F(1 Days x)	ERR Unexpected 'x' in call argument @1:10
 T	F(match { a -> 1, else -> 2 }	ERR Trailing tokens after expression: '(' @1:2
 T	F(match { a -> 1 )	ERR Unexpected '{' in call argument @1:9
-T	F(Kids where)	ERR Unexpected 'where' in call argument @1:8
-T	F(Kids where) 	ERR Unexpected 'where' in call argument @1:8
+T	F(Kids where)	ERR Expected expression, got ')' @1:13
+T	F(Kids where) 	ERR Expected expression, got ')' @1:13
 T	f ( a )	OK FunctionCall("f",[PropertyAccess("a")],Int32:1,Int32:1)
 T	match {	ERR Trailing tokens after expression: '{' @1:7
-T	match { }	ERR 'match' needs at least an 'else' arm (else -> value) (line 1, col 1) @1:10
+T	match { }	ERR 'match' needs at least an 'else' arm (else -> value) (line 1, col 1) @1:1
 T	match { a	ERR Trailing tokens after expression: '{' @1:7
 T	match { a -> 1	ERR Trailing tokens after expression: '{' @1:7
 T	match { a -> 1, else -> 2	ERR Trailing tokens after expression: '{' @1:7
-T	match { else }	ERR Expected '->' in 'match' arm starting at 'else' (line 1, col 9) @1:15
-T	match { else -> }	ERR Expected a value after '->' in 'match' (line 1, col 14) @1:18
-T	match { -> 1, else -> 2 }	ERR Expected a condition before '->' in 'match' (line 1, col 9) @1:26
-T	match { a -> , else -> 2 }	ERR Expected a value after '->' in 'match' (line 1, col 11) @1:27
-T	match { a 1, else -> 2 }	ERR Expected '->' in 'match' arm starting at 'a' (line 1, col 9) @1:25
-T	match { a -> 1 }	ERR 'match' requires a final 'else' arm (else -> value) (line 1, col 1) @1:17
-T	match { a -> 1, }	ERR Expected an arm in 'match' after the trailing ',' (line 1, col 17) @1:18
-T	match { , a -> 1, else -> 2 }	ERR Expected an arm in 'match' before ',' (line 1, col 9) @1:30
-T	match { a -> 1,, else -> 2 }	ERR Expected an arm in 'match' before ',' (line 1, col 16) @1:29
-T	match { else -> 1, else -> 2 }	ERR 'match' has more than one 'else' arm (line 1, col 20) @1:31
-T	match { else -> 1, a -> 2 }	ERR 'else' must be the last arm of a 'match' (line 1, col 9) @1:28
-T	match { a else -> 1, else -> 2 }	ERR 'else' cannot appear inside a 'match' condition (line 1, col 9) @1:33
+T	match { else }	ERR Expected '->' in 'match' arm starting at 'else' (line 1, col 9) @1:9
+T	match { else -> }	ERR Expected a value after '->' in 'match' (line 1, col 14) @1:14
+T	match { -> 1, else -> 2 }	ERR Expected a condition before '->' in 'match' (line 1, col 9) @1:9
+T	match { a -> , else -> 2 }	ERR Expected a value after '->' in 'match' (line 1, col 11) @1:11
+T	match { a 1, else -> 2 }	ERR Expected '->' in 'match' arm starting at 'a' (line 1, col 9) @1:9
+T	match { a -> 1 }	ERR 'match' requires a final 'else' arm (else -> value) (line 1, col 1) @1:1
+T	match { a -> 1, }	ERR Expected an arm in 'match' after the trailing ',' (line 1, col 17) @1:17
+T	match { , a -> 1, else -> 2 }	ERR Expected an arm in 'match' before ',' (line 1, col 9) @1:9
+T	match { a -> 1,, else -> 2 }	ERR Expected an arm in 'match' before ',' (line 1, col 16) @1:16
+T	match { else -> 1, else -> 2 }	ERR 'match' has more than one 'else' arm (line 1, col 20) @1:20
+T	match { else -> 1, a -> 2 }	ERR 'else' must be the last arm of a 'match' (line 1, col 9) @1:9
+T	match { a else -> 1, else -> 2 }	ERR 'else' cannot appear inside a 'match' condition (line 1, col 9) @1:9
 T	match { a -> 1 2, else -> 3 }	ERR Unexpected '2' in match value @1:16
 T	match { a b -> 1, else -> 2 }	OK MatchExpr([Arm(RelationshipNavigation("a",PropertyAccess("b")),Literal(Int64:1,null,Int32:1,Int32:16))],Literal(Int64:2,null,Int32:1,Int32:27),Int32:1,Int32:1)
 T	match { a -> 1, else -> 2 3 }	ERR Unexpected '3' in match value @1:27
-T	match { a -> 1, else -> 2, else -> 3 }	ERR 'match' has more than one 'else' arm (line 1, col 28) @1:39
+T	match { a -> 1, else -> 2, else -> 3 }	ERR 'match' has more than one 'else' arm (line 1, col 28) @1:28
 T	match { a -> else, else -> 2 }	ERR Expected expression, got 'else' @1:14
-T	match { (else) -> 1, else -> 2 }	ERR 'else' cannot appear inside a 'match' condition (line 1, col 9) @1:33
+T	match { (else) -> 1, else -> 2 }	ERR 'else' cannot appear inside a 'match' condition (line 1, col 9) @1:9
 T	match { a -> 1, else -> 2 } 3	ERR Trailing tokens after expression: '3' @1:29
 T	match { a -> 1, else -> 2 } }	ERR Trailing tokens after expression: '}' @1:29
-T	match { a -> (1, else -> 2 }	ERR Expected expression, got '(' @1:14
+T	match { a -> (1, else -> 2 }	ERR Unexpected ',' in group @1:16
 T	match { a -> 1 Days x, else -> 2 }	ERR Unexpected 'x' in match value @1:21
 T	match { 3 Foo -> 1, else -> 2 }	ERR Unknown duration unit 'Foo'. Legal units: Milliseconds, Seconds, Minutes, Hours, Days, Weeks, Months, Years (milliseconds also as 'ms'; singular and plural accepted, exact PascalCase). @1:11
 T	match { a -> 3 Foo, else -> 2 }	ERR Unknown duration unit 'Foo'. Legal units: Milliseconds, Seconds, Minutes, Hours, Days, Weeks, Months, Years (milliseconds also as 'ms'; singular and plural accepted, exact PascalCase). @1:16
 T	match { a -> 3 function, else -> 2 }	ERR Unexpected 'function' in match value @1:16
-T	match { a - -> 1, else -> 2 }	ERR Expected expression, got 'a' @1:9
+T	match { a - -> 1, else -> 2 }	ERR Expected expression, got '->' @1:13
 T	match { a -> -, else -> 2 }	ERR Expected expression, got '-' @1:14
 T	match { a -> -1, else -> 2 }	ERR Expected expression, got '-' @1:14
 T	match { -1 -> 1, else -> 2 }	ERR Expected expression, got '-' @1:9
-T	match { a == -1 -> 1, else -> 2 }	ERR Unexpected '==' in match condition @1:11
-T	any Kids where	ERR Trailing tokens after expression: 'Kids' @1:5
-T	all Kids where	ERR Trailing tokens after expression: 'Kids' @1:5
-T	none Kids where	ERR Trailing tokens after expression: 'Kids' @1:6
+T	match { a == -1 -> 1, else -> 2 }	ERR Expected expression, got '-' @1:14
+T	any Kids where	ERR Expected expression, got 'end of input' @1:15
+T	all Kids where	ERR Expected expression, got 'end of input' @1:15
+T	none Kids where	ERR Expected expression, got 'end of input' @1:16
 T	sum Kids where Flag	ERR sum does not take where; write sum Rel Prop @1:20
-T	sum Kids where	ERR Trailing tokens after expression: 'Kids' @1:5
-T	Kids where Kids where Flag	ERR Nested 'where' is not allowed. Use parentheses for grouped conditions instead. @1:27
-T	any Kids where all Kids where Flag	ERR Nested 'where' is not allowed. Use parentheses for grouped conditions instead. @1:35
-T	Kids where Flag and Kids where Ready	ERR Nested 'where' is not allowed. Use parentheses for grouped conditions instead. @1:37
-T	Kids where any Kids where Flag	ERR Nested 'where' is not allowed. Use parentheses for grouped conditions instead. @1:31
+T	sum Kids where	ERR Expected expression, got 'end of input' @1:15
+T	Kids where Kids where Flag	ERR Nested 'where' is not allowed. Use parentheses for grouped conditions instead. @1:12
+T	any Kids where all Kids where Flag	ERR Nested 'where' is not allowed. Use parentheses for grouped conditions instead. @1:16
+T	Kids where Flag and Kids where Ready	ERR Nested 'where' is not allowed. Use parentheses for grouped conditions instead. @1:21
+T	Kids where any Kids where Flag	ERR Nested 'where' is not allowed. Use parentheses for grouped conditions instead. @1:12
 T	Kids where (any Kids where Flag)	OK RelationshipNavigation("Kids",AnyExpr("Kids",PropertyAccess("Flag")))
 T	Kids where (Kids where (Kids where Flag))	OK RelationshipNavigation("Kids",RelationshipNavigation("Kids",RelationshipNavigation("Kids",PropertyAccess("Flag"))))
 T	Kids where Flag Ready	OK RelationshipNavigation("Kids",RelationshipNavigation("Flag",PropertyAccess("Ready")))
@@ -260,39 +260,39 @@ T	all	OK PropertyAccess("all")
 T	none	OK PropertyAccess("none")
 T	sum Kids	ERR Trailing tokens after expression: 'Kids' @1:5
 T	count Kids Price	ERR Trailing tokens after expression: 'Price' @1:12
-T	Kids where )	ERR Trailing tokens after expression: 'where' @1:6
-T	Kids where (	ERR Trailing tokens after expression: 'where' @1:6
-T	Kids where (Flag	ERR Trailing tokens after expression: 'where' @1:6
-T	any Kids where (Flag	ERR Trailing tokens after expression: 'Kids' @1:5
+T	Kids where )	ERR Expected expression, got ')' @1:12
+T	Kids where (	ERR Expected expression, got 'end of input' @1:13
+T	Kids where (Flag	ERR Expected ')' to close the group @1:17
+T	any Kids where (Flag	ERR Expected ')' to close the group @1:21
 T	Kids where Flag)	ERR Trailing tokens after expression: ')' @1:16
 T	Kids where 3 Foo	ERR Unknown duration unit 'Foo'. Legal units: Milliseconds, Seconds, Minutes, Hours, Days, Weeks, Months, Years (milliseconds also as 'ms'; singular and plural accepted, exact PascalCase). @1:14
-T	a and	ERR Expected expression, got 'a' @1:1
-T	a or	ERR Expected expression, got 'a' @1:1
-T	a +	ERR Expected expression, got 'a' @1:1
-T	a -	ERR Expected expression, got 'a' @1:1
-T	a *	ERR Expected expression, got 'a' @1:1
-T	a /	ERR Expected expression, got 'a' @1:1
+T	a and	ERR Expected expression, got 'end of input' @1:6
+T	a or	ERR Expected expression, got 'end of input' @1:5
+T	a +	ERR Expected expression, got 'end of input' @1:4
+T	a -	ERR Expected expression, got 'end of input' @1:4
+T	a *	ERR Expected expression, got 'end of input' @1:4
+T	a /	ERR Expected expression, got 'end of input' @1:4
 T	+ a	ERR Expected expression, got '+' @1:1
 T	* a	ERR Expected expression, got '*' @1:1
 T	and a	ERR Expected expression, got 'and' @1:1
 T	or a	ERR Expected expression, got 'or' @1:1
-T	a and and b	ERR Expected expression, got 'a' @1:1
-T	a + + b	ERR Expected expression, got 'a' @1:1
-T	a * * b	ERR Expected expression, got 'a' @1:1
-T	a >	ERR Trailing tokens after expression: '>' @1:3
+T	a and and b	ERR Expected expression, got 'and' @1:7
+T	a + + b	ERR Expected expression, got '+' @1:5
+T	a * * b	ERR Expected expression, got '*' @1:5
+T	a >	ERR Expected expression, got 'end of input' @1:4
 T	> a	ERR Expected expression, got '>' @1:1
-T	a > >	ERR Trailing tokens after expression: '>' @1:3
-T	a > > b	ERR Trailing tokens after expression: '>' @1:3
+T	a > >	ERR Expected expression, got '>' @1:5
+T	a > > b	ERR Expected expression, got '>' @1:5
 T	a < b < c	ERR Trailing tokens after expression: '<' @1:7
 T	a > b > c	ERR Trailing tokens after expression: '>' @1:7
 T	a is b is c	ERR Trailing tokens after expression: 'is' @1:8
 T	a == b != c	ERR Trailing tokens after expression: '!=' @1:8
-T	a is not	ERR Trailing tokens after expression: 'is' @1:3
-T	a is	ERR Trailing tokens after expression: 'is' @1:3
-T	a is not not	ERR Trailing tokens after expression: 'is' @1:3
-T	not	ERR Expected expression, got 'not' @1:1
-T	not not	ERR Expected expression, got 'not' @1:1
-T	not >	ERR Expected expression, got 'not' @1:1
+T	a is not	ERR Expected expression, got 'end of input' @1:9
+T	a is	ERR Expected expression, got 'end of input' @1:5
+T	a is not not	ERR Expected expression, got 'end of input' @1:13
+T	not	ERR Expected expression, got 'end of input' @1:4
+T	not not	ERR Expected expression, got 'end of input' @1:8
+T	not >	ERR Expected expression, got '>' @1:5
 T	not a >	ERR Trailing tokens after expression: '>' @1:7
 T	not a >= b >= c	ERR Trailing tokens after expression: '>=' @1:7
 T	a not b	ERR Trailing tokens after expression: 'not' @1:3
@@ -313,23 +313,23 @@ T	a : b	ERR Trailing tokens after expression: ':' @1:3
 T	a -> b	ERR Trailing tokens after expression: '->' @1:3
 T	a = b	ERR Trailing tokens after expression: '=' @1:3
 T	a => b	ERR Trailing tokens after expression: '=' @1:3
-T	Order Price >	ERR Trailing tokens after expression: '>' @1:13
-T	Order Price is not	ERR Trailing tokens after expression: 'is' @1:13
-T	Order Price > )	ERR Trailing tokens after expression: '>' @1:13
-T	Order Price is not )	ERR Trailing tokens after expression: 'is' @1:13
-T	Order Price > > 3	ERR Trailing tokens after expression: '>' @1:13
+T	Order Price >	ERR Expected expression, got 'end of input' @1:14
+T	Order Price is not	ERR Expected expression, got 'end of input' @1:19
+T	Order Price > )	ERR Expected expression, got ')' @1:15
+T	Order Price is not )	ERR Expected expression, got ')' @1:20
+T	Order Price > > 3	ERR Expected expression, got '>' @1:15
 T	Order Price > 3 > 4	OK Comparison(RelationshipNavigation("Order",Comparison(PropertyAccess("Price"),Literal(Int64:3,null,Int32:1,Int32:15),ComparisonKind:GreaterThan)),Literal(Int64:4,null,Int32:1,Int32:19),ComparisonKind:GreaterThan)
 T	Order Price is not 3 4	ERR Trailing tokens after expression: '4' @1:22
-T	Order Price > (	ERR Trailing tokens after expression: '>' @1:13
-T	Order Price > (3	ERR Trailing tokens after expression: '>' @1:13
+T	Order Price > (	ERR Expected expression, got 'end of input' @1:16
+T	Order Price > (3	ERR Expected ')' to close the group @1:17
 T	Order Price > match { else -> 1	ERR Trailing tokens after expression: '{' @1:21
 T	Order Price > F(	ERR Trailing tokens after expression: '(' @1:16
-T	Order Price > not	ERR Trailing tokens after expression: '>' @1:13
-T	Order Price > Kids where	ERR Trailing tokens after expression: 'where' @1:20
-T	Order Price is not Kids where	ERR Trailing tokens after expression: 'where' @1:25
-T	Order Price > any Kids where	ERR Trailing tokens after expression: 'Kids' @1:19
-T	a b >	ERR Trailing tokens after expression: '>' @1:5
-T	a b is not	ERR Trailing tokens after expression: 'is' @1:5
+T	Order Price > not	ERR Expected expression, got 'end of input' @1:18
+T	Order Price > Kids where	ERR Expected expression, got 'end of input' @1:25
+T	Order Price is not Kids where	ERR Expected expression, got 'end of input' @1:30
+T	Order Price > any Kids where	ERR Expected expression, got 'end of input' @1:29
+T	a b >	ERR Expected expression, got 'end of input' @1:6
+T	a b is not	ERR Expected expression, got 'end of input' @1:11
 T	a b > 3 4	ERR Trailing tokens after expression: '4' @1:9
 T	a b > 3 Foo	ERR Unknown duration unit 'Foo'. Legal units: Milliseconds, Seconds, Minutes, Hours, Days, Weeks, Months, Years (milliseconds also as 'ms'; singular and plural accepted, exact PascalCase). @1:9
 T	a b is not 3 Foo	ERR Unknown duration unit 'Foo'. Legal units: Milliseconds, Seconds, Minutes, Hours, Days, Weeks, Months, Years (milliseconds also as 'ms'; singular and plural accepted, exact PascalCase). @1:14
@@ -355,7 +355,7 @@ T	count Kids where Price > 3 Foo	ERR Unknown duration unit 'Foo'. Legal units: M
 T	3 Days x	ERR Trailing tokens after expression: 'x' @1:8
 T	3 Days Days	ERR Trailing tokens after expression: 'Days' @1:8
 T	3 Days 4 Days	ERR Trailing tokens after expression: '4' @1:8
-T	99999999999999999999 Days	ERR Duration amount '99999999999999999999' is not an integer. @1:26
+T	99999999999999999999 Days	ERR Duration amount '99999999999999999999' is not an integer. @1:1
 T	99999999999999999999	OK Literal(Decimal:99999999999999999999,null,Int32:1,Int32:1)
 T	Flag Flag	OK RelationshipNavigation("Flag",PropertyAccess("Flag"))
 T	Flag 1	ERR Trailing tokens after expression: '1' @1:6
@@ -1729,7 +1729,7 @@ G	chain:and:255	OK len=7134 sha=1ADC280B3FCA
 G	chain:and:256	OK len=7162 sha=EBF43D0C6CF3
 G	chain:and:257	OK len=7190 sha=1053FBF8725D
 G	chain:and:258	ERR expression nesting exceeds the limit of 256 @1:2310
-G	chain:and:259	ERR expression nesting exceeds the limit of 256 @1:2319
+G	chain:and:259	ERR expression nesting exceeds the limit of 256 @1:2310
 G	right:and:126	OK len=3550 sha=5B449A7C9DCD
 G	right:and:127	OK len=3578 sha=511A55BC6061
 G	right:and:128	OK len=3606 sha=4CAB3F06FAA9
@@ -1739,7 +1739,7 @@ G	chain:or:255	OK len=6880 sha=3D2242AA9E6A
 G	chain:or:256	OK len=6907 sha=07E9C6E8D2EC
 G	chain:or:257	OK len=6934 sha=627181493CF7
 G	chain:or:258	ERR expression nesting exceeds the limit of 256 @1:2054
-G	chain:or:259	ERR expression nesting exceeds the limit of 256 @1:2062
+G	chain:or:259	ERR expression nesting exceeds the limit of 256 @1:2054
 G	right:or:126	OK len=3424 sha=14DAABA726D2
 G	right:or:127	OK len=3451 sha=3AFF623C9633
 G	right:or:128	OK len=3478 sha=31B80714BA0A
@@ -1749,7 +1749,7 @@ G	chain:+:255	OK len=7134 sha=15E90C56D85C
 G	chain:+:256	OK len=7162 sha=5D39E6216966
 G	chain:+:257	OK len=7190 sha=67052861C74E
 G	chain:+:258	ERR expression nesting exceeds the limit of 256 @1:1798
-G	chain:+:259	ERR expression nesting exceeds the limit of 256 @1:1805
+G	chain:+:259	ERR expression nesting exceeds the limit of 256 @1:1798
 G	right:+:126	OK len=3550 sha=99C3601F9E6B
 G	right:+:127	OK len=3578 sha=09379DAC5F9E
 G	right:+:128	OK len=3606 sha=F78A2E1FC75B
@@ -1759,7 +1759,7 @@ G	chain:*:255	OK len=8404 sha=657B7FBC578E
 G	chain:*:256	OK len=8437 sha=BB34CA249A31
 G	chain:*:257	OK len=8470 sha=626B2E969101
 G	chain:*:258	ERR expression nesting exceeds the limit of 256 @1:1798
-G	chain:*:259	ERR expression nesting exceeds the limit of 256 @1:1805
+G	chain:*:259	ERR expression nesting exceeds the limit of 256 @1:1798
 G	right:*:126	OK len=4180 sha=2537E20A2238
 G	right:*:127	OK len=4213 sha=C7422A62D6D1
 G	right:*:128	OK len=4246 sha=D38AC1B792BB
@@ -1781,10 +1781,10 @@ G	cmp-left:255	OK len=7196 sha=953E0B36525C
 G	cmp-right:255	OK len=7196 sha=FA6F48C11106
 G	cmp-left:256	OK len=7224 sha=7F29604778C2
 G	cmp-right:256	OK len=7224 sha=61CE6DF87079
-G	cmp-left:257	ERR expression nesting exceeds the limit of 256 @1:1791
+G	cmp-left:257	ERR expression nesting exceeds the limit of 256 @1:1798
 G	cmp-right:257	ERR expression nesting exceeds the limit of 256 @1:1798
 G	cmp-left:258	ERR expression nesting exceeds the limit of 256 @1:1798
-G	cmp-right:258	ERR expression nesting exceeds the limit of 256 @1:1805
+G	cmp-right:258	ERR expression nesting exceeds the limit of 256 @1:1798
 G	cmp-both:128	OK len=7196 sha=40E1A07D9F5A
 G	cmp-both:129	OK len=7252 sha=3147B7E6AE5F
 G	cmp-both:130	OK len=7308 sha=17B2545D8889
@@ -1794,10 +1794,10 @@ G	cmp-nest:127	OK len=7896 sha=0B43C36C82B1
 G	isnot-nest:127	OK len=7515 sha=8697A398EC8A
 G	cmp-nest:128	OK len=7958 sha=D174F3AB7881
 G	isnot-nest:128	OK len=7574 sha=7966AE7F1FEF
-G	cmp-nest:129	ERR expression nesting exceeds the limit of 256 @1:1025
-G	isnot-nest:129	ERR expression nesting exceeds the limit of 256 @1:1665
-G	cmp-nest:130	ERR expression nesting exceeds the limit of 256 @1:1025
-G	isnot-nest:130	ERR expression nesting exceeds the limit of 256 @1:1665
+G	cmp-nest:129	ERR expression nesting exceeds the limit of 256 @1:1030
+G	isnot-nest:129	ERR expression nesting exceeds the limit of 256 @1:1670
+G	cmp-nest:130	ERR expression nesting exceeds the limit of 256 @1:1030
+G	isnot-nest:130	ERR expression nesting exceeds the limit of 256 @1:1670
 G	parens:255	OK len=22 sha=602B60DD3E84
 G	nots:255	OK len=1297 sha=0DCAA360495F
 G	calls:255	OK len=9657 sha=B97D2F423166
@@ -1814,14 +1814,14 @@ G	parens:257	ERR expression nesting exceeds the limit of 256 @1:257
 G	nots:257	ERR expression nesting exceeds the limit of 256 @1:1025
 G	calls:257	ERR expression nesting exceeds the limit of 256 @1:513
 G	matches:257	ERR expression nesting exceeds the limit of 256 @1:4097
-G	mixed:257	ERR expression nesting exceeds the limit of 256 @1:437
+G	mixed:257	ERR expression nesting exceeds the limit of 256 @1:1284
 G	not-add:257	ERR expression nesting exceeds the limit of 256 @1:1795
 G	parens:258	ERR expression nesting exceeds the limit of 256 @1:257
 G	nots:258	ERR expression nesting exceeds the limit of 256 @1:1025
 G	calls:258	ERR expression nesting exceeds the limit of 256 @1:513
 G	matches:258	ERR expression nesting exceeds the limit of 256 @1:4097
-G	mixed:258	ERR expression nesting exceeds the limit of 256 @1:434
-G	not-add:258	ERR expression nesting exceeds the limit of 256 @1:1802
+G	mixed:258	ERR expression nesting exceeds the limit of 256 @1:1275
+G	not-add:258	ERR expression nesting exceeds the limit of 256 @1:1795
 G	where-nest:84	OK len=4978 sha=04BEFD914A0E
 G	where-nest:85	OK len=5037 sha=48FD716AB78A
 G	where-nest:86	ERR expression nesting exceeds the limit of 256 @1:1797
@@ -1829,6 +1829,6 @@ G	where-nest:127	ERR expression nesting exceeds the limit of 256 @1:1797
 G	where-nest:128	ERR expression nesting exceeds the limit of 256 @1:1797
 G	where-nest:129	ERR expression nesting exceeds the limit of 256 @1:1797
 G	and-of-nots:256	OK len=8442 sha=8C88ADBA8966
-G	and-of-nots:257	ERR expression nesting exceeds the limit of 256 @1:1
-G	and-of-nots:258	ERR expression nesting exceeds the limit of 256 @1:3338
+G	and-of-nots:257	ERR expression nesting exceeds the limit of 256 @1:3325
+G	and-of-nots:258	ERR expression nesting exceeds the limit of 256 @1:3325
 T	match { a -> F(match { b -> 1, else -> 2 }, 3), else -> 4 }	OK MatchExpr([Arm(PropertyAccess("a"),FunctionCall("F",[MatchExpr([Arm(PropertyAccess("b"),Literal(Int64:1,null,Int32:1,Int32:29))],Literal(Int64:2,null,Int32:1,Int32:40),Int32:1,Int32:16),Literal(Int64:3,null,Int32:1,Int32:45)],Int32:1,Int32:14))],Literal(Int64:4,null,Int32:1,Int32:57),Int32:1,Int32:1)

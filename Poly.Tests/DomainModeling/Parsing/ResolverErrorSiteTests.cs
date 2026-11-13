@@ -349,6 +349,17 @@ public sealed class ResolverErrorSiteTests {
     }
 
     [Test]
+    public async Task SelfTest_ATagWhoseMessageGainedASuffix_IsStale() {
+        // A fix that only appends to the message (G-28 added the token kind) must make the tag stale, not leave it current.
+        var results = new Dictionary<string, string> {
+            ["E:pub:1"] = "GrammarException @2:8 off=-1 len=0 :: Expected 'entity' or 'value' after 'public', got 'value' (StringLiteral) @2:8",
+        };
+        var problems = ResolverErrorBaseline.TagProblems(results, [("E:pub:1", "G-28", "after 'public', got 'value'")]);
+
+        await Assert.That(problems.Any(p => p.Contains("stale tag", StringComparison.Ordinal))).IsTrue();
+    }
+
+    [Test]
     public async Task SelfTest_AnUntaggedUnpositionedResult_IsReported() {
         var results = new Dictionary<string, string> {
             ["E:made-up"] = "FormatException @0:0 off=-1 len=0 :: no position",

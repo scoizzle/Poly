@@ -50,15 +50,15 @@ internal static class ResolverErrorBaseline {
 
     /// <summary>
     /// A result that is known wrong, by the row that will fix it. <c>Key</c> is <c>S:site/case</c> or <c>X:doc#token/filler/door</c>
-    /// (G-13a rows, read from <c>ResolverBaseline.txt</c>) or <c>E:key</c>; <c>Fragment</c> is what the wrong result shows.
-    /// A tag whose row no longer shows its fragment is stale and fails until it is deleted.
+    /// (G-13a rows, read from <c>ResolverBaseline.txt</c>) or <c>E:key</c>; <c>Fragment</c> is the end of what the wrong result shows
+    /// (before its <c> @line:col</c>). A tag whose row's message no longer ends with its fragment is stale and fails until it is deleted.
     /// </summary>
     public static readonly (string Key, string Fixer, string Fragment)[] KnownWrong = [
         // T-15: number and duration text surfaces as a raw .NET exception message.
-        ("S:Constraints.length.min/overflow", "T-15", "OverflowException: Value was either too large"),
+        ("S:Constraints.length.min/overflow", "T-15", "OverflowException: Value was either too large or too small for an Int32."),
         ("S:Constraints.length.min/fraction", "T-15", "ERR FormatException: The input string '1.5' was not in a correct format."),
         ("S:Constraints.length.min/arabic-indic", "T-15", "ERR FormatException: The input string '٣' was not in a correct format."),
-        ("S:Constraints.length.max/overflow", "T-15", "OverflowException: Value was either too large"),
+        ("S:Constraints.length.max/overflow", "T-15", "OverflowException: Value was either too large or too small for an Int32."),
         ("S:Entities.annotation.number/arabic-indic", "T-15", "ERR FormatException: The input string '٣' was not in a correct format."),
         ("S:Temporal.amount.message/fraction", "T-15", "InvalidOperationException: Duration amount '1.5' is not an integer."),
         ("S:Temporal.amount.message/overflow", "T-15", "InvalidOperationException: Duration amount '99999999999999999999' is not an integer."),
@@ -73,20 +73,20 @@ internal static class ResolverErrorBaseline {
         ("S:Entities.fallback.unsupported/mis-keyword", "G-29", "ERR FormatException: 'for' is not supported in Phase 1a (used as type for 'Go')"),
         ("S:Relationships.navline.text/unsupported", "G-29", "ERR FormatException: 'actor' is not supported in Phase 1a (used as type for 'Owner')"),
         ("S:Relationships.navline.text/case", "G-29", "ERR FormatException: 'PARALLEL' is not supported in Phase 1a (used as type for 'Owner')"),
-        ("X:entities#3/ident/R", "G-29", "InvalidOperationException: Unknown domain extension 'zz'"),
-        ("X:expressions#3/ident/R", "G-29", "InvalidOperationException: Unknown domain extension 'zz'"),
+        ("X:entities#3/ident/R", "G-29", "InvalidOperationException: Unknown domain extension 'zz'. Record only ids this catalog can resolve."),
+        ("X:expressions#3/ident/R", "G-29", "InvalidOperationException: Unknown domain extension 'zz'. Record only ids this catalog can resolve."),
         // G-05 keeps `actor` (S-09 owns the rest of TopLevelRejection's unpositioned refusals: `Function`, `schedule`); G-29 owns the inheritance error.
         ("S:TopLevel.rejection.unsupported/ok", "G-05", "ERR FormatException: 'actor' is not supported in Phase 1a (use 'entity' instead)"),
         ("S:TopLevel.rejection.unsupported/case", "S-09", "ERR FormatException: 'Function' is not supported in Phase 1a (use 'entity' instead)"),
         ("S:TopLevel.rejection.unsupported-message/ok", "S-09", "ERR FormatException: 'schedule' is not supported in Phase 1a (use 'entity' instead)"),
-        ("S:TopLevel.rejection.inheritance/ok", "G-29", "ERR FormatException: Entity inheritance ('X: Base entity') is no longer supported."),
-        ("S:TopLevel.rejection.inheritance-define/unicode", "G-29", "ERR FormatException: Entity inheritance ('X: Größe entity') is no longer supported."),
+        ("S:TopLevel.rejection.inheritance/ok", "G-29", "ERR FormatException: Entity inheritance ('X: Base entity') is no longer supported. Define 'Base' properties directly on 'X'."),
+        ("S:TopLevel.rejection.inheritance-define/unicode", "G-29", "ERR FormatException: Entity inheritance ('X: Größe entity') is no longer supported. Define 'Größe' properties directly on 'X'."),
         // G-32 (#871): a `require` of a missing policy is reported at the end of the entity body, not at the `require` (frozen @33:1 for a require on line 23).
-        ("E:site:Entities:ResolvePendingRequires#1", "G-32", "@33:1 off=-1 len=0 :: Action 'Act' requires policy 'Q'"),
-        ("E:site:Entities:ResolvePendingRequires#2", "G-32", "@33:1 off=-1 len=0 :: Action 'Run' requires policy 'P'"),
-        ("E:ladder:Entities:ResolvePendingRequires#1/Entities:ResolvePendingRequires#2", "G-32", "@5:2 off=-1 len=0 :: Action 'Go' requires policy 'M1'"),
-        ("E:ladder:Entities:ResolvePendingRequires#2/Entities:ResolvePendingRequires#3", "G-32", "@5:2 off=-1 len=0 :: Action 'Go' requires policy 'M1'"),
-        ("E:defer:order:requires-before-navs", "G-32", "@7:2 off=-1 len=0 :: Action 'Go' requires policy 'M'"),
+        ("E:site:Entities:ResolvePendingRequires#1", "G-32", "@33:1 off=-1 len=0 :: Action 'Act' requires policy 'Q' which is not defined on entity 'X'."),
+        ("E:site:Entities:ResolvePendingRequires#2", "G-32", "@33:1 off=-1 len=0 :: Action 'Run' requires policy 'P' which is not defined on entity 'X'."),
+        ("E:ladder:Entities:ResolvePendingRequires#1/Entities:ResolvePendingRequires#2", "G-32", "@5:2 off=-1 len=0 :: Action 'Go' requires policy 'M1' which is not defined on entity 'X'."),
+        ("E:ladder:Entities:ResolvePendingRequires#2/Entities:ResolvePendingRequires#3", "G-32", "@5:2 off=-1 len=0 :: Action 'Go' requires policy 'M1' which is not defined on entity 'X'."),
+        ("E:defer:order:requires-before-navs", "G-32", "@7:2 off=-1 len=0 :: Action 'Go' requires policy 'M' which is not defined on entity 'Z'."),
     ];
 
     /// <summary>Where a tag's fixing row lives when that is not obvious from the fixer: a site in G-30 or G-33 code is fixed by whichever row converts it.</summary>
@@ -406,8 +406,8 @@ internal static class ResolverErrorBaseline {
                 problems.Add($"{key}: fixer '{fixer}' is not in the closed set");
             if (!results.TryGetValue(key, out var result))
                 problems.Add($"{key}: tag names no row");
-            else if (!result.Contains(fragment, StringComparison.Ordinal))
-                problems.Add($"{key}: stale tag for {fixer}: the row no longer shows '{fragment}' (now: {result})");
+            else if (!MessageHead(result).EndsWith(fragment, StringComparison.Ordinal))
+                problems.Add($"{key}: stale tag for {fixer}: the row's message no longer ends with '{fragment}' (now: {result})");
             tagged.Add(key);
         }
 
@@ -418,6 +418,12 @@ internal static class ResolverErrorBaseline {
 
         return problems;
     }
+
+    /// <summary>
+    /// A result without its trailing <c> @line:col</c> (G-13a rows end with one): a tag's fragment must END the message there, so a
+    /// fix that only appends to the message (a suffix such as <c>(StringLiteral)</c>) makes the tag stale.
+    /// </summary>
+    public static string MessageHead(string result) => Regex.Replace(result, @" @\d+:\d+$", "");
 
     private static bool IsUnpositioned(string key, string result) => key.StartsWith("E:", StringComparison.Ordinal) || key.StartsWith("P:", StringComparison.Ordinal)
         ? result != "OK" && (!result.StartsWith("GrammarException @", StringComparison.Ordinal) || result.StartsWith("GrammarException @0:0 ", StringComparison.Ordinal))

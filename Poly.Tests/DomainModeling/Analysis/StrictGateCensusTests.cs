@@ -148,12 +148,23 @@ public class StrictGateCensusTests {
         ("5 == \"x\" (typeless pair) | action require", "simulate+csharp+polyc"),
         ("5 == \"x\" (typeless pair) | stage require", "simulate+csharp+polyc"),
         ("5 == \"x\" (typeless pair) | action never invoked", "csharp+polyc"),
-        ("5 == \"x\" (typeless pair) | function called from an uncalled function", "none")
+        ("5 == \"x\" (typeless pair) | function called from an uncalled function", "none"),
+        ("Stamp - Stamp (DateTime) | default", "csharp"),
+        ("Day - Day (Date) | default", "csharp"),
+        ("parts Qty (to-many hop) | default", "csharp"),
+        ("part book Qty (to-one hops, control) | default", "csharp"),
+        ("sum parts Label (#846) | default", "csharp"),
+        ("sum parts Qty (control) | default", "csharp"),
+        ("count parts where Label == 1 | default", "csharp"),
+        ("any parts where Label == 1 | default", "csharp"),
+        ("match with an untyped arm | default", "csharp"),
+        ("5 == \"x\" (typeless pair) | default", "csharp"),
+        ("count parts (function body) | default", "csharp")
     ];
 
     [Test]
     public async Task DeadCensus_EveryValidCellItRejects_HasItsMasterDoors() {
-        var rejected = AnalyzerClosingRoundPinTests.FlipsDead.Concat(AnalyzerClosingRoundPinTests.FlipsA4)
+        var rejected = AnalyzerClosingRoundPinTests.FlipsDead.Concat(AnalyzerClosingRoundPinTests.FlipsA4).Concat(AnalyzerClosingRoundPinTests.FlipsDefault)
             .Where(f => f.Grid == "Dead" && f.Before == "ok").Select(f => f.Cell).Order(StringComparer.Ordinal);
         await Assert.That(string.Join('\n', rejected))
             .IsEqualTo(string.Join('\n', DeadMasterDoors.Select(d => d.Cell).Order(StringComparer.Ordinal)));
@@ -352,7 +363,8 @@ public class StrictGateCensusTests {
     [Test]
     public async Task Default_IsTypeChecked_LikeEveryOtherConsumer() {
         await Assert.That(Codes(WithDefault("Number", "parts Qty"))).IsEqualTo("DMSEM006");
-        await Assert.That(Codes(WithDefault("Number", "Nope(1)"))).IsEqualTo("DMFUN001");
+        // A call in a default is DMFUN008 (master already says so, on the property): not doubled by DMSEM006.
+        await Assert.That(Codes(WithDefault("Number", "Nope(1)"))).IsEqualTo("DMFUN008");
         await Assert.That(Codes(WithDefault("Boolean", "5 == \"x\""))).IsEqualTo("DMSEM003");
         await Assert.That(Codes(WithDefault("Number", "5 == 5"))).IsEqualTo("DMSEM003");
         await Assert.That(Codes(WithDefault("Text", "1 + 2"))).IsEqualTo("DMSEM003");

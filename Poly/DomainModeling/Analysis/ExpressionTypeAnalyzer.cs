@@ -151,7 +151,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
         // default(...) on properties
         foreach (var prop in entity.Properties) {
             foreach (var dv in prop.Constraints.OfType<DefaultValueConstraint>()) {
-                CheckDefault(context, dv.Expression, prop.Type.TypeName, enumTypes, consumer: dv);
+                CheckDefault(context, dv.Expression, prop.Type.TypeName, enumTypes, consumer: prop);
             }
         }
 
@@ -702,6 +702,18 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                     $"default({pa.Name}) on property '{propTypeName}' is not an enum member of that property's type");
                 return;
             default:
+                // Any other default is a consumer like every other (T-05b C2): walked, typed, and checked against the
+                // property's type. A default has no entity scope: it is evaluated before the instance exists.
+                var noProps = new Dictionary<string, string>(StringComparer.Ordinal);
+                WalkExpression(context, expr, noProps, null, enumTypes);
+                var value = InferLiteralAware(context, expr, propTypeName, enumTypes, noProps);
+                if (!IsTyped(value)) {
+                    if (consumer is not null) RequireTyped(context, expr, value, consumer, noProps, null, enumTypes);
+                    return;
+                }
+                if (!Compatible(value, target, assigning: true))
+                    Report(context, expr,
+                        $"default value of type '{Describe(value)}' is not compatible with property type '{propTypeName}'");
                 return;
         }
     }

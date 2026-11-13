@@ -1258,6 +1258,34 @@ public partial class AnalyzerClosingRoundPinTests {
     ];
 
     /// <summary>
+    /// Lock amendment A4, kept apart from <see cref="FlipsB"/> so the one commit that makes it can be reverted alone
+    /// (owner ruling pending): two typed operands of different families no longer compare equal because neither has a
+    /// domain name (<c>5 == "x"</c>, <c>Count == true</c>): DMSEM003. Two residual cells of this rule run on every
+    /// door on master (<see cref="StrictGateCensusTests.MasterDoors"/>, refused "none").
+    /// </summary>
+    internal static readonly (string Grid, string Cell, string Before, string After, string Rule)[] FlipsA4 = [
+("Residual", "5 == \"x\" (typeless pair) | assign", "ok", "DMSEM003", "A4"),
+        ("Residual", "5 == \"x\" (typeless pair) | create", "ok", "DMSEM003", "A4"),
+        ("Residual", "5 == \"x\" (typeless pair) | invoke", "ok", "DMSEM003", "A4"),
+        ("Residual", "5 == \"x\" (typeless pair) | call", "ok", "DMSEM003", "A4"),
+        ("Residual", "5 == \"x\" (typeless pair) | return", "ok", "DMSEM003", "A4"),
+        ("Residual", "5 == \"x\" (typeless pair) | match arm", "ok", "DMSEM003", "A4"),
+        ("Residual", "5 == \"x\" (typeless pair) | entry", "ok", "DMSEM003", "A4"),
+        ("Residual", "5 == \"x\" (typeless pair) | exit", "ok", "DMSEM003", "A4"),
+        ("Residual", "5 == \"x\" (typeless pair) | subscription", "ok", "DMSEM003", "A4"),
+        ("Residual", "5 == \"x\" (typeless pair) | if form", "ok", "DMSEM003", "A4"),
+        ("Residual", "5 == \"x\" (typeless pair) | not form", "ok", "DMSEM003", "A4"),
+        ("Residual", "5 == \"x\" (typeless pair) | form and Flag", "ok", "DMSEM003", "A4"),
+        ("Residual", "5 == \"x\" (typeless pair) | for where form", "ok", "DMSEM003", "A4"),
+        ("Residual", "5 == \"x\" (typeless pair) | match { form -> 1 }", "ok", "DMSEM003", "A4"),
+        ("TypelessComparisons", "5 == \"x\"", "ok", "DMSEM003", "A4"),
+        ("TypelessComparisons", "true == 5", "ok", "DMSEM003", "A4"),
+        ("TypelessComparisons", "5 < \"x\"", "ok", "DMSEM003", "A4"),
+        ("TypelessComparisons", "Count == \"x\"", "ok", "DMSEM003", "A4"),
+        ("TypelessComparisons", "Count == true", "ok", "DMSEM003", "A4")
+    ];
+
+    /// <summary>
     /// <paramref name="master"/> with every <see cref="FlipsA"/> row, then every <see cref="FlipsB"/> row, of <paramref name="grid"/> applied. A row whose
     /// cell is missing, or whose <c>Before</c> is not the master verdict, throws: the table must describe master.
     /// A line is <c>cell = verdict</c>; the verdict follows the last <c> = </c>.
@@ -1267,7 +1295,7 @@ public partial class AnalyzerClosingRoundPinTests {
         var index = new Dictionary<string, int>(StringComparer.Ordinal);
         for (var i = 1; i < lines.Length; i++)
             index.Add(CellOf(lines[i]), i);
-        foreach (var flip in FlipsA.Where(f => f.Grid == grid).Concat(FlipsB.Where(f => f.Grid == grid))) {
+        foreach (var flip in FlipsA.Concat(FlipsB).Concat(FlipsA4).Where(f => f.Grid == grid)) {
             if (!index.TryGetValue(flip.Cell, out var at))
                 throw new InvalidOperationException($"Flip row '{grid}/{flip.Cell}' names no cell of the grid.");
             var verdict = VerdictOf(lines[at]);

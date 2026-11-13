@@ -115,8 +115,8 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
             return true;
         }
 
-        return leftFamily == rightFamily
-            || string.Equals(CanonicalName(left.DomainName), CanonicalName(right.DomainName), StringComparison.Ordinal);
+        // A4: two typed operands compare within one family; equal (or absent) names across families are not enough.
+        return leftFamily == rightFamily;
     }
 
     /// <summary>

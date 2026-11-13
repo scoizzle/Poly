@@ -142,7 +142,7 @@ public sealed partial class MinimalApiGenerator {
             "double" or "float" => new Constant(1.0),
             "Guid" => new Invoke(new Member(new TypeReference("Guid"), "NewGuid")),
             _ when _enumLookup.TryGetValue(typeName, out var enumType) && enumType.MemberNames.Count > 0
-                => new Member(new TypeReference(typeName), enumType.MemberNames[0]),
+                => new Member(new TypeReference(VisibleType(typeName)), enumType.MemberNames[0]),
             _ => new Constant("Sample"),
         };
     }

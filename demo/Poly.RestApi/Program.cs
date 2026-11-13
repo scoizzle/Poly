@@ -5,8 +5,8 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Library;
 using Microsoft.EntityFrameworkCore;
-using Poly.Generated;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -30,10 +30,10 @@ using (var scope = app.Services.CreateScope())
 
 app.MapGet("/api/books", async (LibraryDbContext db) => await db.Books.ToListAsync());
 
-app.MapGet("/api/books/{isbn}", async (string isbn, LibraryDbContext db) => (await db.Books.FirstOrDefaultAsync(e => e.ISBN == isbn) is Book book ? Results.Ok(book) : Results.NotFound()));
+app.MapGet("/api/books/{isbn}", async (string isbn, LibraryDbContext db) => (await db.Books.FirstOrDefaultAsync(e => e.ISBN == isbn) is Library.Book book ? Results.Ok(book) : Results.NotFound()));
 
 app.MapPost("/api/books", async (BookDto dto, LibraryDbContext db) => {
-    var bookResult = Book.Create(dto.Title, dto.Author, dto.ISBN, dto.Pages, dto.Genre, db);
+    var bookResult = Library.Book.Create(dto.Title, dto.Author, dto.ISBN, dto.Pages, dto.Genre, db);
     if (!bookResult.IsSuccess)
     {
         return FailureStatus(bookResult.ErrorMessage);
@@ -45,10 +45,10 @@ app.MapPost("/api/books", async (BookDto dto, LibraryDbContext db) => {
 
 app.MapGet("/api/patrons", async (LibraryDbContext db) => await db.Patrons.ToListAsync());
 
-app.MapGet("/api/patrons/{email}", async (string email, LibraryDbContext db) => (await db.Patrons.FirstOrDefaultAsync(e => e.Email == email) is Patron patron ? Results.Ok(patron) : Results.NotFound()));
+app.MapGet("/api/patrons/{email}", async (string email, LibraryDbContext db) => (await db.Patrons.FirstOrDefaultAsync(e => e.Email == email) is Library.Patron patron ? Results.Ok(patron) : Results.NotFound()));
 
 app.MapPost("/api/patrons", async (PatronDto dto, LibraryDbContext db) => {
-    var patronResult = Patron.Create(dto.Name, dto.Email, db, dto.MaxItems, Enumerable.Empty<Loan>(), Enumerable.Empty<Fine>());
+    var patronResult = Library.Patron.Create(dto.Name, dto.Email, db, dto.MaxItems, Enumerable.Empty<Library.Loan>(), Enumerable.Empty<Library.Fine>());
     if (!patronResult.IsSuccess)
     {
         return FailureStatus(patronResult.ErrorMessage);
@@ -60,10 +60,10 @@ app.MapPost("/api/patrons", async (PatronDto dto, LibraryDbContext db) => {
 
 app.MapGet("/api/premiumpatrons", async (LibraryDbContext db) => await db.PremiumPatrons.ToListAsync());
 
-app.MapGet("/api/premiumpatrons/{email}", async (string email, LibraryDbContext db) => (await db.PremiumPatrons.FirstOrDefaultAsync(e => e.Email == email) is PremiumPatron premiumPatron ? Results.Ok(premiumPatron) : Results.NotFound()));
+app.MapGet("/api/premiumpatrons/{email}", async (string email, LibraryDbContext db) => (await db.PremiumPatrons.FirstOrDefaultAsync(e => e.Email == email) is Library.PremiumPatron premiumPatron ? Results.Ok(premiumPatron) : Results.NotFound()));
 
 app.MapPost("/api/premiumpatrons", async (PremiumPatronDto dto, LibraryDbContext db) => {
-    var premiumPatronResult = PremiumPatron.Create(dto.Name, dto.Email, dto.RewardPoints, dto.PriorityAccess, db);
+    var premiumPatronResult = Library.PremiumPatron.Create(dto.Name, dto.Email, dto.RewardPoints, dto.PriorityAccess, db);
     if (!premiumPatronResult.IsSuccess)
     {
         return FailureStatus(premiumPatronResult.ErrorMessage);
@@ -392,17 +392,17 @@ static async System.Threading.Tasks.Task SeedAsync(LibraryDbContext db)
     {
         return;
     }
-    var bookResult = Book.Create("Sample", "Sample", "XXXXXXXXXX", 1, Genre.Fiction, db);
+    var bookResult = Library.Book.Create("Sample", "Sample", "XXXXXXXXXX", 1, Library.Genre.Fiction, db);
     if (bookResult.IsSuccess)
     {
         db.Add(bookResult.Value);
     }
-    var patronResult = Patron.Create("Sample", "user@test.com", db, 10, Enumerable.Empty<Loan>(), Enumerable.Empty<Fine>());
+    var patronResult = Library.Patron.Create("Sample", "user@test.com", db, 10, Enumerable.Empty<Library.Loan>(), Enumerable.Empty<Library.Fine>());
     if (patronResult.IsSuccess)
     {
         db.Add(patronResult.Value);
     }
-    var premiumPatronResult = PremiumPatron.Create("Sample", "user@test.com", 1, false, db);
+    var premiumPatronResult = Library.PremiumPatron.Create("Sample", "user@test.com", 1, false, db);
     if (premiumPatronResult.IsSuccess)
     {
         db.Add(premiumPatronResult.Value);
@@ -426,8 +426,8 @@ internal record BookDto
     public string ISBN { get; init; } = default!;
     [Range(1, 10000)]
     public long Pages { get; init; }
-    [EnumDataType(typeof(Genre))]
-    public Genre Genre { get; init; }
+    [EnumDataType(typeof(Library.Genre))]
+    public Library.Genre Genre { get; init; }
 }
 
 internal record PatronDto

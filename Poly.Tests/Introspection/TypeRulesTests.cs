@@ -102,13 +102,117 @@ public class TypeRulesTests {
     }
 
     [Test]
-    public async Task ResolveConversionFrom_Float32Pairs_AreNone() {
-        // The closed set answers none, not unknown, for Float32: C# defines float to double, the CLR declares nothing.
+    public async Task ResolveConversionFrom_Float32Pairs_AreIntrinsic() {
+        // T-24 flipped this pin: C# defines every Float32 conversion, and the CLR declares none of them.
         var single = Clr(typeof(float));
-        foreach (var other in new[] { typeof(int), typeof(long), typeof(double) }) {
-            await Assert.That(single.ResolveConversionFrom(Clr(other))).IsNull();
-            await Assert.That(Clr(other).ResolveConversionFrom(single)).IsNull();
+        foreach (var (from, to, kind) in new[] {
+            (typeof(int), typeof(float), ConversionOperatorKind.Implicit),
+            (typeof(long), typeof(float), ConversionOperatorKind.Implicit),
+            (typeof(float), typeof(double), ConversionOperatorKind.Implicit),
+            (typeof(float), typeof(int), ConversionOperatorKind.Explicit),
+            (typeof(float), typeof(long), ConversionOperatorKind.Explicit),
+            (typeof(double), typeof(float), ConversionOperatorKind.Explicit) }) {
+            var conversion = Clr(to).ResolveConversionFrom(Clr(from));
+            await Assert.That(conversion?.Kind).IsEqualTo(kind);
+            await Assert.That(conversion!.Value.Method).IsNull();
         }
+        await Assert.That(single.ResolveConversionFrom(single)).IsNull();
+    }
+
+    // ---- T-24: the numeric conversion table, with the C# binder as the oracle ----
+
+    private static readonly Type[] NumericTypes = [
+        typeof(sbyte), typeof(byte), typeof(short), typeof(ushort), typeof(int), typeof(uint),
+        typeof(long), typeof(ulong), typeof(char), typeof(float), typeof(double), typeof(decimal)
+    ];
+
+    private static string NameOf(Type type) => type.GetPrimitiveType()?.GetDisplayName() ?? type.Name;
+
+    private static T ImplicitTo<T>(object value) {
+        dynamic operand = value;
+        T converted = operand;
+        return converted;
+    }
+
+    private static T ExplicitTo<T>(object value) {
+        dynamic operand = value;
+        return (T)operand;
+    }
+
+    /// <summary>The conversion the C# runtime binder applies to a boxed (non-constant) value of <paramref name="from"/>.</summary>
+    private static ConversionOperatorKind? BinderConversion(Type from, Type to) {
+        var value = Convert.ChangeType(1, from, System.Globalization.CultureInfo.InvariantCulture);
+        if (Binds(nameof(ImplicitTo)))
+            return ConversionOperatorKind.Implicit;
+        return Binds(nameof(ExplicitTo)) ? ConversionOperatorKind.Explicit : null;
+
+        bool Binds(string name) {
+            var method = typeof(TypeRulesTests).GetMethod(name, BindingFlags.Static | BindingFlags.NonPublic)!.MakeGenericMethod(to);
+            try {
+                method.Invoke(null, [value]);
+                return true;
+            }
+            catch (TargetInvocationException ex) when (ex.InnerException is Microsoft.CSharp.RuntimeBinder.RuntimeBinderException) {
+                return false;
+            }
+        }
+    }
+
+    [Test]
+    public async Task ResolveConversionFrom_NumericTable_MatchesTheCSharpBinder() {
+        var mismatches = new List<string>();
+        var (implicitCount, explicitCount) = (0, 0);
+        foreach (var from in NumericTypes) {
+            foreach (var to in NumericTypes) {
+                var conversion = Clr(to).ResolveConversionFrom(Clr(from));
+                if (from == to) {
+                    if (conversion is not null)
+                        mismatches.Add($"{NameOf(from)} -> {NameOf(to)}: identity is not a conversion, provider {conversion.Value.Kind}");
+                    continue;
+                }
+                var expected = BinderConversion(from, to);
+                implicitCount += expected is ConversionOperatorKind.Implicit ? 1 : 0;
+                explicitCount += expected is ConversionOperatorKind.Explicit ? 1 : 0;
+                if (conversion?.Kind != expected) {
+                    mismatches.Add($"{NameOf(from)} -> {NameOf(to)}: C# {expected?.ToString() ?? "none"}, provider {conversion?.Kind.ToString() ?? "none"}");
+                    continue;
+                }
+                // Decimal's conversions are CLR-declared members; every other numeric conversion is built in.
+                var declared = from == typeof(decimal) || to == typeof(decimal);
+                if (conversion is { } found && (found.Method is not null) != declared)
+                    mismatches.Add($"{NameOf(from)} -> {NameOf(to)}: method {(found.Method is null ? "none" : "declared")}, expected {(declared ? "declared" : "none")}");
+            }
+        }
+        await Assert.That(mismatches).IsEmpty();
+        // The oracle itself: §10.2.3's 42 implicit pairs plus decimal's 9; every other ordered pair is explicit (§10.3.2).
+        await Assert.That(implicitCount).IsEqualTo(51);
+        await Assert.That(explicitCount).IsEqualTo(81);
+    }
+
+    [Test]
+    public async Task ResolveConversionFrom_NothingConvertsImplicitlyIntoChar_AndInt32ToCharIsExplicit() {
+        var character = Clr(typeof(char));
+        foreach (var from in NumericTypes.Where(static t => t != typeof(char)))
+            await Assert.That(character.ResolveConversionFrom(Clr(from))?.Kind).IsNotEqualTo(ConversionOperatorKind.Implicit);
+        var narrowing = character.ResolveConversionFrom(Clr(typeof(int)));
+        await Assert.That(narrowing?.Kind).IsEqualTo(ConversionOperatorKind.Explicit);
+        await Assert.That(narrowing!.Value.Method).IsNull();
+        // The sibling: Char widens to Int32.
+        await Assert.That(Clr(typeof(int)).ResolveConversionFrom(character)?.Kind).IsEqualTo(ConversionOperatorKind.Implicit);
+    }
+
+    [Test]
+    public async Task ResolveConversionFrom_ClrToObject_IsImplicit() {
+        var objectType = Clr(typeof(object));
+        foreach (var source in new[] { typeof(int), typeof(string), typeof(Guid), typeof(DayOfWeek), typeof(List<int>) }) {
+            var conversion = objectType.ResolveConversionFrom(Clr(source));
+            await Assert.That(conversion?.Kind).IsEqualTo(ConversionOperatorKind.Implicit);
+            await Assert.That(conversion!.Value.Method).IsNull();
+        }
+        // Identity is not a conversion, a modeled definition does not box, and nothing leaves Object implicitly.
+        await Assert.That(objectType.ResolveConversionFrom(objectType)).IsNull();
+        await Assert.That(objectType.ResolveConversionFrom(new ModeledTypeSet().Add("Money"))).IsNull();
+        await Assert.That(Clr(typeof(int)).ResolveConversionFrom(objectType)).IsNull();
     }
 
     [Test]
@@ -164,15 +268,17 @@ public class TypeRulesTests {
     }
 
     [Test]
-    public async Task GetOperators_Float32_ArithmeticIsNone_ComparisonsAreClrDeclaredNeverIntrinsic() {
-        // The closed set gives Float32 no intrinsic operator. The CLR itself declares Single's six comparisons,
-        // which is a declared member, not a built-in rule (A9 expected none for these; reflection says otherwise).
+    public async Task GetOperators_Float32_ArithmeticAndComparisonsAreIntrinsic_TheClrDeclaredComparisonIsSubsumed() {
+        // T-24 flipped this pin: Float32 joins the built-in set. The CLR also declares Single's six comparisons with
+        // the intrinsic's exact signature, so the intrinsic is the one answer, as for Double.
         var single = Clr(typeof(float));
-        foreach (var kind in new[] { OperatorKind.Add, OperatorKind.Subtract, OperatorKind.Multiply, OperatorKind.Divide, OperatorKind.And, OperatorKind.Or, OperatorKind.Not })
+        foreach (var kind in new[] { OperatorKind.And, OperatorKind.Or, OperatorKind.Not, OperatorKind.BitwiseAnd, OperatorKind.BitwiseNot, OperatorKind.ShiftLeft })
             await Assert.That(single.GetOperators(kind)).IsEmpty();
-        foreach (var kind in Enum.GetValues<OperatorKind>())
-            await Assert.That(single.GetOperators(kind).Any(static declared => declared.PlatformApplied)).IsFalse();
-        await Assert.That(single.GetOperators(OperatorKind.LessThan).Count()).IsEqualTo(1);
+        foreach (var kind in new[] { OperatorKind.Add, OperatorKind.Subtract, OperatorKind.Multiply, OperatorKind.Divide, OperatorKind.Modulo, OperatorKind.LessThan, OperatorKind.Equal }) {
+            var declared = single.GetOperators(kind).Single();
+            await Assert.That(declared.PlatformApplied).IsTrue();
+            await Assert.That(ParametersOf(declared).All(p => ReferenceEquals(p, single))).IsTrue();
+        }
         // The sibling: Float64 does have intrinsic arithmetic, and its comparison is one intrinsic, not two.
         await Assert.That(Clr(typeof(double)).GetOperators(OperatorKind.Add).Single().PlatformApplied).IsTrue();
         await Assert.That(Clr(typeof(double)).GetOperators(OperatorKind.LessThan).Single().PlatformApplied).IsTrue();
@@ -309,12 +415,13 @@ public class TypeRulesTests {
         await Assert.That(resolution!.Value.Result).IsSameReferenceAs(bag);
     }
 
-    // ---- PlatformApplied is a fact about the built-in set, not the result (T-24 widens the set) ----
+    // ---- PlatformApplied: true for every simple type but decimal, whose operators the CLR declares ----
 
     [Test]
-    public async Task Comparisons_Float32AreDeclared_Float64AndInt32ArePlatformApplied_WithIdenticalResults() {
+    public async Task Comparisons_Float32Float64AndInt32_ArePlatformApplied_WithIdenticalResults_DecimalIsDeclared() {
+        // T-24 flipped this pin: Float32's comparisons were the CLR-declared members; the built-in set now answers them.
         var boolean = Clr(typeof(bool));
-        foreach (var (type, platform) in new[] { (typeof(float), false), (typeof(double), true), (typeof(int), true) }) {
+        foreach (var (type, platform) in new[] { (typeof(float), true), (typeof(double), true), (typeof(int), true), (typeof(decimal), false) }) {
             var definition = Clr(type);
             var operators = definition.GetOperators(OperatorKind.LessThan).ToArray();
             await Assert.That(operators.Length).IsEqualTo(1);

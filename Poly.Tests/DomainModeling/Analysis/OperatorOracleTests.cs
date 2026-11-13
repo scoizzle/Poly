@@ -21,8 +21,11 @@ internal enum OracleKind {
     AbiRejectsDefined
 }
 
-/// <summary>One operand definition and the values the VM column feeds it. <c>Stress</c> exposes 32-bit wrap, 2^53+1, decimal exactness.</summary>
-internal sealed record OracleOperand(string Name, string? DslType, Type? Clr, object? Stress, object? Plain);
+/// <summary>
+/// One operand definition and the values the VM column feeds it. <c>Stress</c> exposes 32-bit wrap, 2^53+1, decimal exactness.
+/// <c>ClrOnly</c> operands have no domain name: their definition is the CLR type's (T-24's small, unsigned, char and Float32).
+/// </summary>
+internal sealed record OracleOperand(string Name, string? DslType, Type? Clr, object? Stress, object? Plain, bool ClrOnly = false);
 
 internal sealed record OracleDivergence(OracleKind Kind, string Reason);
 
@@ -43,6 +46,15 @@ internal static class OperatorOracle {
         new("Int32", null, typeof(int), int.MaxValue, 7),
         new("Decimal", "Decimal", typeof(decimal), 0.1m, 0.2m),
         new("Float", null, typeof(double), 0.1d, 2.5d),
+        // 2^24 + 1.5 is not a Float32; every stress value converts to Float32 the same way on every architecture.
+        new("Float32", null, typeof(float), 16777216f, 1.5f, ClrOnly: true),
+        new("Int8", null, typeof(sbyte), sbyte.MaxValue, (sbyte)7, ClrOnly: true),
+        new("Int16", null, typeof(short), short.MaxValue, (short)7, ClrOnly: true),
+        new("UInt8", null, typeof(byte), byte.MaxValue, (byte)7, ClrOnly: true),
+        new("UInt16", null, typeof(ushort), ushort.MaxValue, (ushort)7, ClrOnly: true),
+        new("UInt32", null, typeof(uint), uint.MaxValue, 7u, ClrOnly: true),
+        new("UInt64", null, typeof(ulong), ulong.MaxValue, 7UL, ClrOnly: true),
+        new("Char", null, typeof(char), 'a', 'b', ClrOnly: true),
         new("Text", "Text", typeof(string), "ab", "cd"),
         new("Boolean", "Boolean", typeof(bool), true, false),
         new("Date", "Date", typeof(DateOnly), new DateOnly(2024, 2, 28), new DateOnly(2024, 3, 1)),
@@ -57,24 +69,33 @@ internal static class OperatorOracle {
 
     private static readonly Poly.DomainModeling.Meaning.DomainTypeModel Model = OperatorOperands.Model();
 
+    /// <summary>The grid, under the invariant culture: the checksums hash reason strings, and concatenation formats values.</summary>
     public static readonly Lazy<(IReadOnlyList<OracleCell> Cells, TimeSpan Elapsed)> Run = new(() => {
-        var watch = Stopwatch.StartNew();
-        var cells = new List<OracleCell>();
-        foreach (var kind in Enum.GetValues<OperatorKind>()) {
-            foreach (var left in Operands) {
-                if (OperatorShape.ArityOf(kind) == 1) {
-                    cells.Add(Evaluate(left, kind, null));
-                    continue;
+        var culture = CultureInfo.CurrentCulture;
+        CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
+        try {
+            var watch = Stopwatch.StartNew();
+            var cells = new List<OracleCell>();
+            foreach (var kind in Enum.GetValues<OperatorKind>()) {
+                foreach (var left in Operands) {
+                    if (OperatorShape.ArityOf(kind) == 1) {
+                        cells.Add(Evaluate(left, kind, null));
+                        continue;
+                    }
+                    foreach (var right in Operands)
+                        cells.Add(Evaluate(left, kind, right));
                 }
-                foreach (var right in Operands)
-                    cells.Add(Evaluate(left, kind, right));
             }
+            watch.Stop();
+            return (cells, watch.Elapsed);
         }
-        watch.Stop();
-        return (cells, watch.Elapsed);
+        finally {
+            CultureInfo.CurrentCulture = culture;
+        }
     });
 
-    private static ITypeDefinition Def(OracleOperand operand) => Model.Resolve(operand.Name).Definition!;
+    private static ITypeDefinition Def(OracleOperand operand) =>
+        operand.ClrOnly ? OperatorOperands.Clr(operand.Clr!) : Model.Resolve(operand.Name).Definition!;
 
     private static OracleCell Evaluate(OracleOperand left, OperatorKind kind, OracleOperand? right) {
         var divergences = new List<OracleDivergence>();
@@ -87,7 +108,9 @@ internal static class OperatorOracle {
 
         var lowered = "n/a";
         var abi = "n/a";
-        if (left.Clr is not null && (right is null || right.Clr is not null))
+        if (kind is OperatorKind.UnaryPlus)
+            (lowered, abi) = ("n/a: no UnaryPlus node", "n/a: no UnaryPlus node");
+        else if (left.Clr is not null && (right is null || right.Clr is not null))
             (lowered, abi) = RunVm(left, kind, right, resolution, divergences);
 
         return new OracleCell(left.Name, kind, right?.Name, tree, analyzer ?? "n/a", lowered, abi, divergences);
@@ -109,7 +132,8 @@ internal static class OperatorOracle {
         return $"{found.Result.Name}{(found.PlatformApplied ? " [platform]" : " [declared]")} conv({string.Join(",", conversions)})";
     }
 
-    private static string DslOp(OperatorKind kind) => kind switch {
+    /// <summary>The DSL spelling, or null for a kind the platform defines and the DSL has no syntax for.</summary>
+    private static string? DslOp(OperatorKind kind) => kind switch {
         OperatorKind.Add => "+",
         OperatorKind.Subtract => "-",
         OperatorKind.Multiply => "*",
@@ -122,14 +146,18 @@ internal static class OperatorOracle {
         OperatorKind.GreaterThanOrEqual => ">=",
         OperatorKind.And => "and",
         OperatorKind.Or => "or",
+        OperatorKind.Not => "not",
+        OperatorKind.Modulo or OperatorKind.UnaryMinus or OperatorKind.UnaryPlus
+            or OperatorKind.BitwiseAnd or OperatorKind.BitwiseOr or OperatorKind.BitwiseXor or OperatorKind.BitwiseNot
+            or OperatorKind.ShiftLeft or OperatorKind.ShiftRight => null,
         _ => throw new ArgumentOutOfRangeException(nameof(kind))
     };
 
-    /// <summary>"accepts" or "rejects" from the domain analyzer, or null when the domain cannot express an operand (no Int32 or Float type).</summary>
+    /// <summary>"accepts" or "rejects" from the domain analyzer, or null when the domain cannot express an operand (no Int32 or Float type) or the operator.</summary>
     private static string? AnalyzerVerdict(OracleOperand left, OperatorKind kind, OracleOperand? right) {
-        if (left.DslType is null || (right is not null && right.DslType is null))
+        if (left.DslType is null || (right is not null && right.DslType is null) || DslOp(kind) is not { } op)
             return null;
-        var expression = right is null ? "not L" : $"L {DslOp(kind)} R";
+        var expression = right is null ? $"{op} L" : $"L {op} R";
         var properties = right is null ? $"L: {left.DslType}" : $"L: {left.DslType}\n  R: {right.DslType}";
         var dsl = $$"""
             domain Test
@@ -165,6 +193,14 @@ internal static class OperatorOracle {
         OperatorKind.And => new And(left, right!),
         OperatorKind.Or => new Or(left, right!),
         OperatorKind.Not => new Not(left),
+        OperatorKind.Modulo => new Modulo(left, right!),
+        OperatorKind.BitwiseAnd => new BitwiseAnd(left, right!),
+        OperatorKind.BitwiseOr => new BitwiseOr(left, right!),
+        OperatorKind.BitwiseXor => new BitwiseXor(left, right!),
+        OperatorKind.ShiftLeft => new ShiftLeft(left, right!),
+        OperatorKind.ShiftRight => new ShiftRight(left, right!),
+        OperatorKind.UnaryMinus => new UnaryMinus(left),
+        OperatorKind.BitwiseNot => new BitwiseNot(left),
         _ => throw new ArgumentOutOfRangeException(nameof(kind))
     };
 
@@ -289,10 +325,11 @@ internal static class OperatorOracle {
     private static object? Expected(OperatorKind kind, OperatorResolution resolution, object? leftValue, object? rightValue) {
         try {
             var parameters = resolution.Signature.Parameters.Select(static p => p.ParameterTypeDefinition).ToArray();
+            // Into Object is boxing. Char goes through Int32: ChangeType has no char to float, double or decimal.
             static object? Convert(object? value, ITypeDefinition target) =>
-                value is null || !target.TryGetRuntimeType(out var type) || value.GetType() == type
+                value is null || !target.TryGetRuntimeType(out var type) || value.GetType() == type || type == typeof(object)
                     ? value
-                    : System.Convert.ChangeType(value, type, CultureInfo.InvariantCulture);
+                    : System.Convert.ChangeType(value is char c ? (int)c : value, type, CultureInfo.InvariantCulture);
             dynamic x = Convert(leftValue, parameters[0])!;
             dynamic? y = parameters.Length > 1 ? Convert(rightValue, parameters[1]) : null;
             return kind switch {
@@ -300,6 +337,7 @@ internal static class OperatorOracle {
                 OperatorKind.Subtract => x - y,
                 OperatorKind.Multiply => x * y,
                 OperatorKind.Divide => x / y,
+                OperatorKind.Modulo => x % y,
                 OperatorKind.Equal => x == y,
                 OperatorKind.NotEqual => x != y,
                 OperatorKind.LessThan => x < y,
@@ -309,6 +347,13 @@ internal static class OperatorOracle {
                 OperatorKind.And => (bool)x && (bool)y!,
                 OperatorKind.Or => (bool)x || (bool)y!,
                 OperatorKind.Not => !(bool)x,
+                OperatorKind.BitwiseAnd => x & y,
+                OperatorKind.BitwiseOr => x | y,
+                OperatorKind.BitwiseXor => x ^ y,
+                OperatorKind.ShiftLeft => x << y,
+                OperatorKind.ShiftRight => x >> y,
+                OperatorKind.UnaryMinus => -x,
+                OperatorKind.BitwiseNot => ~x,
                 _ => null
             };
         }
@@ -447,7 +492,9 @@ public class OperatorOracleTests {
     public async Task Ledger_CoversTheWholeGrid_WithinBudget_AndChecksEveryDefinedValue() {
         var (cells, elapsed) = OperatorOracle.Run.Value;
         var binary = Enum.GetValues<OperatorKind>().Count(static k => OperatorShape.ArityOf(k) == 2);
-        await Assert.That(cells.Count).IsEqualTo((binary * OperatorOracle.Operands.Length * OperatorOracle.Operands.Length) + OperatorOracle.Operands.Length);
+        var unary = Enum.GetValues<OperatorKind>().Length - binary;
+        await Assert.That(cells.Count).IsEqualTo((binary * OperatorOracle.Operands.Length * OperatorOracle.Operands.Length) + (unary * OperatorOracle.Operands.Length));
+        await Assert.That(cells.Count).IsEqualTo(8800);
         await Assert.That(elapsed).IsLessThan(TimeSpan.FromMinutes(2));
         // A defined cell the VM ran must have had its value compared with what the tree states.
         var unchecked_ = cells.Where(static c => c.Abi.Contains("(value unchecked)", StringComparison.Ordinal)).Select(static c => c.Key).ToArray();

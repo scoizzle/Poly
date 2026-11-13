@@ -100,7 +100,7 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
     /// The operators C# applies itself, then the reflected static special-name <c>op_*</c> members. Where the CLR
     /// also declares an intrinsic's exact signature (Double declares its comparisons), the intrinsic is the answer.
     /// </summary>
-    IEnumerable<DeclaredOperator> ITypeDefinition.GetOperators(OperatorKind kind) {
+    IEnumerable<DeclaredOperator> ITypeDefinition.GetOperators(OperatorKind kind, ITypeDefinition? other) {
         OperatorShape.ArityOf(kind);
         return _operators.GetOrAdd(kind, key => {
             var intrinsic = ClrBuiltInRules.Operators(this, _provider, key);

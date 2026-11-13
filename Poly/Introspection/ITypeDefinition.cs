@@ -97,8 +97,9 @@ public interface ITypeDefinition {
         this.GetConversionFrom(source) is { } conversion ? new TypeConversion(conversion.Kind, conversion.Method) : null;
 
     /// <summary>
-    /// The operators of <paramref name="kind"/> this definition declares. Modeled definitions
-    /// declare static <c>op_*</c> members; a platform adds the operators it leaves to its compiler.
+    /// The operators of <paramref name="kind"/> this definition declares when it meets <paramref name="other"/>
+    /// (null: the other operand is this type). Modeled definitions declare static <c>op_*</c> members and ignore
+    /// <paramref name="other"/>; a platform adds the operators it leaves to its compiler, which depend on the pair.
     /// </summary>
-    internal IEnumerable<DeclaredOperator> GetOperators(OperatorKind kind) => ModeledOperators.Find(this, kind);
+    internal IEnumerable<DeclaredOperator> GetOperators(OperatorKind kind, ITypeDefinition? other = null) => ModeledOperators.Find(this, kind);
 }

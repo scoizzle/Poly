@@ -87,11 +87,11 @@ internal static class TypeDefinitionOperatorExtensions {
     }
 
     private static IEnumerable<DeclaredOperator> Declared(ITypeDefinition left, ITypeDefinition? right, OperatorKind kind) {
-        foreach (var declared in left.GetOperators(kind))
+        foreach (var declared in left.GetOperators(kind, right))
             yield return declared;
         if (right is null || TypeDefinitionExtensions.IsSameType(left, right))
             yield break;
-        foreach (var declared in right.GetOperators(kind))
+        foreach (var declared in right.GetOperators(kind, left))
             yield return declared;
     }
 

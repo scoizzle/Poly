@@ -406,8 +406,7 @@ public sealed class CSharpWriter {
             case LabelDeclaration label:
                 sb.Append(Pad(indent));
                 sb.AppendLine(RenderFills("statement", "label",
-                    Names(("label", label.Name), ("colon", ":")), new string?[] { null }));
-                WriteStatement(sb, label.Statement, indent);
+                    Names(("label", label.Name), ("colon", ":")), "\n" + StatementText(label.Statement, indent)));
                 return;
             case Return ret:
                 sb.Append(Pad(indent));
@@ -1247,12 +1246,14 @@ public sealed class CSharpWriter {
             foreach (var parameter in lambda.Parameters)
                 DeclareLocal(parameter.Name);
             var async = BodyContainsAwait(lambda.Body) ? Render("async-kw", "async") + " " : null;
+            var block = lambda.Body as Block;
+            var body = Expr(lambda.Body);
             if (lambda.Parameters.Count == 1 && lambda.Parameters[0].TypeReference is null)
-                return RenderFills("expr-primary", "lambda-ident",
+                return RenderFills("expr-primary", block is null ? "lambda-ident" : "lambda-block-ident",
                     Names(("param", EscapeIdent(LocalText(lambda.Parameters[0].Name)))),
-                    async, Expr(lambda.Body));
-            return Render("expr-primary", "lambda-parens",
-                async, string.Join(", ", lambda.Parameters.Select(ParamText)), Expr(lambda.Body));
+                    async, body);
+            return Render("expr-primary", block is null ? "lambda-parens" : "lambda-block-parens",
+                async, string.Join(", ", lambda.Parameters.Select(ParamText)), body);
         }
         finally {
             _declScopes.Pop();

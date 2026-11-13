@@ -75,9 +75,33 @@ internal static class CSharpOperatorOracle {
         where source != target && (Native.Contains(source) || Native.Contains(target))
         select (source, target);
 
+    /// <summary>The arithmetic and comparison kinds a constant operand meets (C# 10.2.11 applies to them).</summary>
+    public static readonly OperatorKind[] ConstantKinds = [
+        OperatorKind.Add, OperatorKind.Subtract, OperatorKind.Multiply, OperatorKind.Divide, OperatorKind.Modulo,
+        OperatorKind.Equal, OperatorKind.NotEqual, OperatorKind.LessThan, OperatorKind.LessThanOrEqual,
+        OperatorKind.GreaterThan, OperatorKind.GreaterThanOrEqual
+    ];
+
+    /// <summary>The signed integral constants a native operand may meet: 1 and -1 of sbyte, short, int and long.</summary>
+    public static readonly object[] Constants = [(sbyte)1, (sbyte)(-1), (short)1, (short)(-1), 1, -1, 1L, -1L];
+
+    /// <summary>Every constant cell: a native form beside a signed integral constant, the constant on either side.</summary>
+    public static IEnumerable<(OperatorKind Kind, Type Operand, object Constant, bool ConstantLeft)> ConstantUniverse() =>
+        from kind in ConstantKinds
+        from operand in Forms.Where(IsNativeForm)
+        from constant in Constants
+        from constantLeft in new[] { false, true }
+        select (kind, operand, constant, constantLeft);
+
+    public static string ConstantKey(OperatorKind kind, Type operand, object constant, bool constantLeft) =>
+        constantLeft ? $"({Keyword(constant.GetType())}){constant} {kind} {Keyword(operand)}" : $"{Keyword(operand)} {kind} ({Keyword(constant.GetType())}){constant}";
+
+    private static string Literal(object constant) => $"(({Keyword(constant.GetType())})({constant}))";
+
     private sealed record Oracle(
         Dictionary<(OperatorKind, Type, Type?), CellAnswer> Operators,
-        Dictionary<(Type, Type), ConversionOperatorKind?> Conversions);
+        Dictionary<(Type, Type), (ConversionOperatorKind? Kind, MethodInfo? Implicit, MethodInfo? Cast)> Conversions,
+        Dictionary<(OperatorKind, Type, object, bool), CellAnswer> ConstantCells);
 
     private static readonly Lazy<Oracle> Compiled = new(Compile);
 
@@ -91,9 +115,34 @@ internal static class CSharpOperatorOracle {
 
     /// <summary>C#'s conversion from <paramref name="from"/> to <paramref name="to"/> (null: none); a pair outside <see cref="ConversionUniverse"/> is an error.</summary>
     public static ConversionOperatorKind? Conversion(Type from, Type to) =>
-        Compiled.Value.Conversions.TryGetValue((from, to), out var kind)
-            ? kind
+        Compiled.Value.Conversions.TryGetValue((from, to), out var answer)
+            ? answer.Kind
             : throw new ArgumentOutOfRangeException(nameof(from), $"{Keyword(from)} to {Keyword(to)} is not an oracle conversion");
+
+    /// <summary>The value of <c>(to)a</c>, or of <c>to r = a</c> when <paramref name="implicitOnly"/>; the conversion must exist in that form.</summary>
+    public static ValueAnswer ConversionValue(Type from, Type to, object? value, bool implicitOnly) {
+        var answer = Compiled.Value.Conversions.TryGetValue((from, to), out var found)
+            ? found
+            : throw new ArgumentOutOfRangeException(nameof(from), $"{Keyword(from)} to {Keyword(to)} is not an oracle conversion");
+        var method = (implicitOnly ? answer.Implicit : answer.Cast)
+            ?? throw new InvalidOperationException($"C# has no {(implicitOnly ? "implicit" : "explicit")} conversion from {Keyword(from)} to {Keyword(to)}");
+        return Invoke(method, [value]);
+    }
+
+    /// <summary>The answer for a constant cell; a cell outside <see cref="ConstantUniverse"/> is an error.</summary>
+    public static CellAnswer ConstantAnswer(OperatorKind kind, Type operand, object constant, bool constantLeft) =>
+        Compiled.Value.ConstantCells.TryGetValue((kind, operand, constant, constantLeft), out var answer)
+            ? answer
+            : throw new ArgumentOutOfRangeException(nameof(operand), $"{ConstantKey(kind, operand, constant, constantLeft)} is not an oracle cell");
+
+    private static ValueAnswer Invoke(MethodInfo method, object?[] arguments) {
+        try {
+            return new(method.Invoke(null, arguments), null);
+        }
+        catch (TargetInvocationException ex) when (ex.InnerException is { } inner) {
+            return new(null, inner.GetType().Name);
+        }
+    }
 
     /// <summary>The value C# computes for the cell on <paramref name="left"/> and <paramref name="right"/>.</summary>
     public static ValueAnswer Value(OperatorKind kind, Type leftType, Type? rightType, object? left, object? right) {
@@ -173,17 +222,29 @@ internal static class CSharpOperatorOracle {
         var watch = System.Diagnostics.Stopwatch.StartNew();
         var cells = Universe().ToArray();
         var pairs = ConversionUniverse().ToArray();
-        // One method per line: the operator cells, then an implicit and an explicit conversion method per pair.
+        var constants = ConstantUniverse().ToArray();
+        // One method per line: the operator cells, an implicit and an explicit conversion method per pair, then the
+        // constant cells (a parameter beside a literal constant: 10.2.11 is the point of those).
         const int header = 2;
+        var conversionStart = cells.Length;
+        var constantStart = conversionStart + (2 * pairs.Length);
+        var lines = constantStart + constants.Length;
         string Source(Func<int, bool> fails) {
             var text = new StringBuilder("#nullable disable\npublic static class Cells {\n");
             for (var i = 0; i < cells.Length; i++)
                 text.Append(Method(i, cells[i].Kind, cells[i].Left, cells[i].Right, fails(i))).Append('\n');
             for (var j = 0; j < pairs.Length; j++) {
                 var (from, to) = pairs[j];
-                var line = cells.Length + (2 * j);
+                var line = conversionStart + (2 * j);
                 text.Append($"public static object I{j}({Keyword(from)} a) {(fails(line) ? "=> throw null;" : $"{{ {Keyword(to)} r = a; return r; }}")}\n");
                 text.Append($"public static object E{j}({Keyword(from)} a) => {(fails(line + 1) ? "throw null" : $"({Keyword(to)})a")};\n");
+            }
+            for (var k = 0; k < constants.Length; k++) {
+                var (kind, operand, constant, constantLeft) = constants[k];
+                var expression = Expression(kind).Replace("a", "\u0001", StringComparison.Ordinal).Replace("b", "\u0002", StringComparison.Ordinal)
+                    .Replace("\u0001", constantLeft ? Literal(constant) : "x", StringComparison.Ordinal)
+                    .Replace("\u0002", constantLeft ? "x" : Literal(constant), StringComparison.Ordinal);
+                text.Append($"public static object K{k}({Keyword(operand)} x) => {(fails(constantStart + k) ? "throw null" : expression)};\n");
             }
             return text.Append("}\n").ToString();
         }
@@ -198,7 +259,6 @@ internal static class CSharpOperatorOracle {
         var tree = CSharpSyntaxTree.ParseText(Source(static _ => false), parse);
         var compilation = CSharpCompilation.Create("NativeIntegerOracle", [tree], references, options);
         var errors = new Dictionary<int, List<string>>();
-        var lines = cells.Length + (2 * pairs.Length);
         foreach (var diagnostic in compilation.GetDiagnostics().Where(static d => d.Severity == RoslynSeverity.Error)) {
             var index = diagnostic.Location.GetLineSpan().StartLinePosition.Line - header;
             if (index < 0 || index >= lines)
@@ -218,28 +278,32 @@ internal static class CSharpOperatorOracle {
         pe.Position = 0;
         var type = new AssemblyLoadContext("NativeIntegerOracleRun", isCollectible: true).LoadFromStream(pe).GetType("Cells")!;
 
+        CellAnswer AnswerAt(int line, string name, string key) {
+            if (errors.TryGetValue(line, out var ids))
+                return new(false, null, string.Join(",", ids.Distinct()), null);
+            var symbol = model.GetTypeInfo(bodies[line].ExpressionBody!.Expression).Type
+                ?? throw new InvalidOperationException($"oracle has no type for {key}");
+            return new(true, ToClr(symbol), "", type.GetMethod(name)!);
+        }
         var answers = new Dictionary<(OperatorKind, Type, Type?), CellAnswer>();
-        for (var i = 0; i < cells.Length; i++) {
-            var (kind, left, right) = cells[i];
-            if (errors.TryGetValue(i, out var ids)) {
-                answers[(kind, left, right)] = new(false, null, string.Join(",", ids.Distinct()), null);
-                continue;
-            }
-            var expression = bodies[i].ExpressionBody!.Expression;
-            var symbol = model.GetTypeInfo(expression).Type
-                ?? throw new InvalidOperationException($"oracle has no type for {Key(kind, left, right)}");
-            answers[(kind, left, right)] = new(true, ToClr(symbol), "", type.GetMethod($"M{i}")!);
-        }
-        var conversions = new Dictionary<(Type, Type), ConversionOperatorKind?>();
+        for (var i = 0; i < cells.Length; i++)
+            answers[cells[i]] = AnswerAt(i, $"M{i}", Key(cells[i].Kind, cells[i].Left, cells[i].Right));
+        var conversions = new Dictionary<(Type, Type), (ConversionOperatorKind?, MethodInfo?, MethodInfo?)>();
         for (var j = 0; j < pairs.Length; j++) {
-            var implicitLine = cells.Length + (2 * j);
-            conversions[pairs[j]] = !errors.ContainsKey(implicitLine) ? ConversionOperatorKind.Implicit
-                : !errors.ContainsKey(implicitLine + 1) ? ConversionOperatorKind.Explicit
-                : null;
+            var implicitLine = conversionStart + (2 * j);
+            var implicitOk = !errors.ContainsKey(implicitLine);
+            var castOk = !errors.ContainsKey(implicitLine + 1);
+            conversions[pairs[j]] = (
+                implicitOk ? ConversionOperatorKind.Implicit : castOk ? ConversionOperatorKind.Explicit : null,
+                implicitOk ? type.GetMethod($"I{j}") : null,
+                castOk ? type.GetMethod($"E{j}") : null);
         }
+        var constantCells = new Dictionary<(OperatorKind, Type, object, bool), CellAnswer>();
+        for (var k = 0; k < constants.Length; k++)
+            constantCells[constants[k]] = AnswerAt(constantStart + k, $"K{k}", ConstantKey(constants[k].Kind, constants[k].Operand, constants[k].Constant, constants[k].ConstantLeft));
         watch.Stop();
         CompileTime = watch.Elapsed;
-        return new(answers, conversions);
+        return new(answers, conversions, constantCells);
     }
 
     private static Type ToClr(ITypeSymbol symbol) {
@@ -685,15 +749,31 @@ public class NativeIntegerTests {
 
     // ---- constants (amendment 2) and the writer ----
 
-    /// <summary>Constant folding's cell table excludes IntPtr and UIntPtr: native constants are not folded, and the VM computes them.</summary>
+    /// <summary>
+    /// Constant folding's cell table excludes IntPtr and UIntPtr: native constants are not folded, and the VM computes
+    /// them, for every one of the grid's 16 binary kinds (a shift's count is an int constant) and for both native types.
+    /// </summary>
     [Test]
     public async Task NativeConstants_DeclineToFold_AndRun() {
-        var node = new Add(new Constant((nint)3), new Constant((nint)4));
-        var analysis = Interpreter.Analyze(node);
-        await Assert.That(analysis.Diagnostics.Where(static d => d.Severity == Poly.Analysis.DiagnosticSeverity.Error).Select(static d => d.Message).ToArray()).IsEmpty();
-        await Assert.That(analysis.GetNodeReplacement(node)).IsNull();
-        using var exec = Interpreter.Execute(Interpreter.Compile(node, analysis));
-        await Assert.That(NativeIntegerGrid.Format(NativeIntegerGrid.Read(exec, typeof(nint)))).IsEqualTo("7");
+        await Assert.That(IntPtr.Size).IsEqualTo(8);
+        var swept = 0;
+        foreach (var native in CSharpOperatorOracle.Native) {
+            foreach (var kind in NativeIntegerGrid.Kinds) {
+                var shift = kind is OperatorKind.ShiftLeft or OperatorKind.ShiftRight;
+                object left = native == typeof(nint) ? (nint)13 : (nuint)13;
+                object right = shift ? 2 : native == typeof(nint) ? (nint)4 : (nuint)4;
+                var node = NativeIntegerGrid.Build(kind, new Constant(left), new Constant(right));
+                var analysis = Interpreter.Analyze(node);
+                await Assert.That(analysis.Diagnostics.Where(static d => d.Severity == Poly.Analysis.DiagnosticSeverity.Error).Select(static d => d.Message).ToArray()).IsEmpty().Because(kind.ToString());
+                await Assert.That(analysis.GetNodeReplacement(node)).IsNull().Because($"{native.Name} {kind} is not folded");
+                var program = Interpreter.Compile(node, analysis);
+                using var exec = Interpreter.Execute(program);
+                var expected = CSharpOperatorOracle.Value(kind, native, shift ? typeof(int) : native, left, right).Value;
+                await Assert.That(NativeIntegerGrid.Format(NativeIntegerGrid.Read(exec, program.RootClrType))).IsEqualTo(NativeIntegerGrid.Format(expected)).Because($"{native.Name} {kind}");
+                swept++;
+            }
+        }
+        await Assert.That(swept).IsEqualTo(32);
     }
 
     /// <summary>The writer prints the C# keyword for a native-integer type reference, never the enum member name.</summary>
@@ -705,5 +785,250 @@ public class NativeIntegerTests {
         await Assert.That(printed).Contains("(nint)");
         await Assert.That(printed).DoesNotContain("NInt");
         await Assert.That(typeof(nuint).GetPrimitiveType()?.GetCSharpKeyword()).IsEqualTo("nuint");
+    }
+
+    // ---- fix round 1: casts, assignments and constants outside operators (review F1, F4) ----
+
+    /// <summary>
+    /// The probe the review asked for, on three trees (0d2cd4a8^1 = 77704337, master bea9bb3a, and the head before this
+    /// fix): <c>(nint)int</c>, <c>(nuint)uint</c> and <c>nuint x; x + 1</c> ran right on 77704337 and were rejected on the
+    /// head; <c>(long)nint</c> and <c>(ulong)nuint</c> ran right on all three. These cells are the bar: each runs right.
+    /// </summary>
+    [Test]
+    [Arguments(typeof(int), typeof(nint))]
+    [Arguments(typeof(uint), typeof(nuint))]
+    [Arguments(typeof(nint), typeof(long))]
+    [Arguments(typeof(nuint), typeof(ulong))]
+    public async Task CastThatRanBeforeT18a_RunsRightNow(Type from, Type to) {
+        var cell = NativeConversionGrid.EvaluateCast(from, to);
+        await Assert.That(cell.Line).IsEqualTo($"{cell.Key} | runs right | {cell.Detail}");
+    }
+
+    /// <summary>Every explicit cast between a native integer and a numeric type (50 pairs), against C#'s <c>(to)a</c>, unchecked.</summary>
+    [Test]
+    public async Task Casts_EveryNativeCast_AgreesWithCSharp() {
+        await Assert.That(IntPtr.Size).IsEqualTo(8);
+        var cells = CSharpOperatorOracle.ConversionUniverse().Select(static p => NativeConversionGrid.EvaluateCast(p.From, p.To)).ToArray();
+        await Assert.That(cells.Where(static c => c.Class != "runs right").Select(static c => c.Line).ToArray()).IsEmpty();
+        await Assert.That(cells.Length).IsEqualTo(50);
+    }
+
+    /// <summary>
+    /// An assignment converts implicitly or not at all: each of C#'s 18 implicit native conversions assigns into a
+    /// variable whose prior type is the target and runs with C#'s value; each of the 32 explicit-only pairs is rejected.
+    /// </summary>
+    [Test]
+    public async Task Assignments_ImplicitNativeConversions_Run_ExplicitOnesAreRejected() {
+        await Assert.That(IntPtr.Size).IsEqualTo(8);
+        var cells = CSharpOperatorOracle.ConversionUniverse().Select(static p => NativeConversionGrid.EvaluateAssign(p.From, p.To)).ToArray();
+        var wrong = cells.Where(c => c.Class != (CSharpOperatorOracle.Conversion(c.From, c.To) is ConversionOperatorKind.Implicit ? "runs right" : "rejected"))
+            .Select(static c => c.Line).ToArray();
+        await Assert.That(wrong).IsEmpty();
+        await Assert.That(cells.Count(static c => c.Class == "runs right")).IsEqualTo(18);
+    }
+
+    /// <summary>An <c>int</c> (and a <c>uint</c>) assigned to a native-integer lambda parameter, as C# assigns it.</summary>
+    [Test]
+    [Arguments(typeof(int), typeof(nint))]
+    [Arguments(typeof(uint), typeof(nuint))]
+    [Arguments(typeof(nint), typeof(long))]
+    public async Task AssignToANativeParameter_RunsAsCSharp(Type from, Type to) {
+        var body = new Block([new Assignment(new Variable("p"), Param("i", from)), new Variable("p")], []);
+        var seed = Activator.CreateInstance(to)!;
+        var node = new Invoke(new Lambda([Param("p", to)], body), new Constant(seed));
+        var analysis = Interpreter.Analyze(node);
+        await Assert.That(analysis.Diagnostics.Where(static d => d.Severity == Poly.Analysis.DiagnosticSeverity.Error).Select(static d => d.Message).ToArray()).IsEmpty();
+        var program = Interpreter.Compile(node, analysis);
+        foreach (var value in new[] { NativeIntegerGrid.Values[from].Stress, NativeIntegerGrid.Values[from].Plain }) {
+            using var exec = Interpreter.Execute(program, value);
+            await Assert.That(NativeIntegerGrid.Format(NativeIntegerGrid.Read(exec, program.RootClrType)))
+                .IsEqualTo(NativeIntegerGrid.Format(CSharpOperatorOracle.ConversionValue(from, to, value, implicitOnly: true).Value));
+        }
+    }
+
+    /// <summary>
+    /// A signed integral constant beside a native form (704 cells: 11 kinds, 4 native forms, 1 and -1 of sbyte, short,
+    /// int and long, either side): the verdict is C#'s (10.2.11 lets a non-negative constant meet <c>nuint</c>, as it meets
+    /// <c>ulong</c>), and a cell C# defines runs with its value.
+    /// </summary>
+    [Test]
+    public async Task Constants_BesideANativeForm_AreJudgedAndRunAsCSharp() {
+        await Assert.That(IntPtr.Size).IsEqualTo(8);
+        var cells = CSharpOperatorOracle.ConstantUniverse().Select(static c => NativeConversionGrid.EvaluateConstant(c.Kind, c.Operand, c.Constant, c.ConstantLeft)).ToArray();
+        await Assert.That(cells.Where(static c => c.Class is not ("runs right" or "right word, stated type differs" or "undefined: rejected")).Select(static c => c.Line).ToArray()).IsEmpty();
+        await Assert.That(cells.Length).IsEqualTo(704);
+        await Assert.That(cells.Count(static c => c.Class == "runs right")).IsEqualTo(DefinedConstantCells);
+        // T-17's: a constant narrower than the native operand on the left is typed as the constant.
+        var stated = cells.Where(static c => c.Class == "right word, stated type differs").Select(static c => c.Key).ToArray();
+        await Assert.That((stated.Length, Poly.Tests.DomainModeling.Analysis.LedgerCheck.Checksum(stated))).IsEqualTo(StatedTypeConstantCells);
+    }
+
+    private const int DefinedConstantCells = 0;
+
+    private static readonly (int, string) StatedTypeConstantCells = (0, "");
+
+    // ---- F2, F3, F5 ----
+
+    /// <summary>A type-definition node's native-integer property resolves to the native type, not object.</summary>
+    [Test]
+    public async Task TypeDefinitionNode_NativeIntegerProperty_ResolvesToTheNativeType() {
+        var holder = new TypeDefinitionNode("NativeHolder",
+            Properties: [
+                new PropertyDefinitionNode("Signed", new PrimitiveTypeReference(typeof(nint).GetPrimitiveType()!.Value), Getter: new PropertyGetterDefinitionNode()),
+                new PropertyDefinitionNode("Unsigned", new PrimitiveTypeReference(typeof(nuint).GetPrimitiveType()!.Value), Getter: new PropertyGetterDefinitionNode())
+            ]);
+        var context = Poly.Analysis.AnalysisContext.CreateDefault();
+        new Poly.Interpretation.Analysis.Semantics.TypeDefinitionNodeAnalyzer().Analyze(context, holder);
+        var properties = context.TypeDefinitions.GetTypeDefinition("NativeHolder")!.Properties.ToDictionary(static p => p.Name, static p => p.MemberTypeDefinition.GetRuntimeType());
+        await Assert.That(properties["Signed"]).IsEqualTo(typeof(nint));
+        await Assert.That(properties["Unsigned"]).IsEqualTo(typeof(nuint));
+    }
+
+    /// <summary>A native-integer result reads through GetValue as the native type.</summary>
+    [Test]
+    public async Task GetValue_OfANativeResult_IsTheNativeValue() {
+        using (var signed = Interpreter.Execute(Interpreter.Compile(new Add(Param("a", typeof(nint)), Param("b", typeof(nint)))), (nint)(-7), (nint)2))
+            await Assert.That(signed.GetValue<nint>()).IsEqualTo((nint)(-5));
+        var high = unchecked((nuint)0x8000_0000_0000_0005UL);
+        using (var unsigned = Interpreter.Execute(Interpreter.Compile(new Add(Param("a", typeof(nuint)), Param("b", typeof(nuint)))), high, (nuint)2))
+            await Assert.That(unsigned.GetValue<nuint>()).IsEqualTo(high + 2);
+    }
+
+    /// <summary>
+    /// The edge cases C# throws on, with the exception C# throws: <c>MinValue / -1</c> and <c>MinValue % -1</c>, a zero
+    /// divisor, and the unchecked <c>-MinValue</c>, for <c>nint</c>, <c>nint?</c> and (a zero divisor) <c>nuint</c>.
+    /// </summary>
+    [Test]
+    [Arguments(OperatorKind.Divide, typeof(nint), typeof(nint), "min", "-1")]
+    [Arguments(OperatorKind.Modulo, typeof(nint), typeof(nint), "min", "-1")]
+    [Arguments(OperatorKind.Divide, typeof(nint), typeof(nint), "min", "0")]
+    [Arguments(OperatorKind.Modulo, typeof(nint), typeof(nint), "min", "0")]
+    [Arguments(OperatorKind.Divide, typeof(nint?), typeof(nint), "min", "-1")]
+    [Arguments(OperatorKind.Modulo, typeof(nint), typeof(nint?), "min", "-1")]
+    [Arguments(OperatorKind.Divide, typeof(nuint), typeof(nuint), "min", "0")]
+    [Arguments(OperatorKind.Modulo, typeof(nuint), typeof(nuint), "min", "0")]
+    [Arguments(OperatorKind.Divide, typeof(nint), typeof(int), "min", "-1")]
+    [Arguments(OperatorKind.UnaryMinus, typeof(nint), null, "min", null)]
+    [Arguments(OperatorKind.UnaryMinus, typeof(nint?), null, "min", null)]
+    public async Task EdgeValues_ThrowOrWrapAsCSharpDoes(OperatorKind kind, Type left, Type? right, string leftValue, string? rightValue) {
+        await Assert.That(IntPtr.Size).IsEqualTo(8);
+        static object? Value(Type type, string text) {
+            var underlying = Nullable.GetUnderlyingType(type) ?? type;
+            return text == "min"
+                ? underlying == typeof(nint) ? nint.MinValue : unchecked((nuint)0x8000_0000_0000_0000UL)
+                : underlying == typeof(nint) ? (nint)long.Parse(text, CultureInfo.InvariantCulture)
+                : underlying == typeof(nuint) ? (nuint)ulong.Parse(text, CultureInfo.InvariantCulture)
+                : int.Parse(text, CultureInfo.InvariantCulture);
+        }
+        var l = Value(left, leftValue);
+        var r = right is null ? null : Value(right, rightValue!);
+        var expected = CSharpOperatorOracle.Value(kind, left, right, l, r);
+        var node = NativeIntegerGrid.Build(kind, Param("a", left), right is null ? null : Param("b", right));
+        var program = Interpreter.Compile(node);
+        string actual;
+        try {
+            using var exec = Interpreter.Execute(program, right is null ? new object?[] { l } : new object?[] { l, r });
+            actual = NativeIntegerGrid.Format(NativeIntegerGrid.Read(exec, program.RootClrType));
+        }
+        catch (Exception ex) {
+            actual = $"throws {ex.GetType().Name}";
+        }
+        await Assert.That(actual).IsEqualTo(expected.Throws is { } thrown ? $"throws {thrown}" : NativeIntegerGrid.Format(expected.Value));
+    }
+}
+
+/// <summary>Casts, assignments and constant operands over native integers, each against <see cref="CSharpOperatorOracle"/>.</summary>
+internal static class NativeConversionGrid {
+    public sealed record Cell(string Key, Type From, Type To, string Class, string Detail) {
+        public string Line => $"{Key} | {Class} | {Detail}";
+    }
+
+    private static Parameter Param(string name, Type type) => new(name, new ClrTypeReference(type));
+
+    private static string Errors(AnalysisResult analysis) =>
+        string.Join("; ", analysis.Diagnostics.Where(static d => d.Severity == Poly.Analysis.DiagnosticSeverity.Error).Select(static d => d.Message));
+
+    /// <summary>Runs <paramref name="node"/> on each argument set and compares with C#'s answer for it.</summary>
+    private static (string Class, string Detail) Run(Node node, IEnumerable<(object?[] Args, string Expected)> runs, Type? statedType) {
+        AnalysisResult analysis;
+        VmProgram program;
+        try {
+            analysis = Interpreter.Analyze(node, ClrTypeDefinitionRegistry.Shared);
+            if (Errors(analysis) is { Length: > 0 } errors)
+                return ("rejected", errors);
+            program = Interpreter.Compile(node, analysis);
+        }
+        catch (Exception ex) {
+            return ("throws", $"{ex.GetType().Name}: {ex.Message}");
+        }
+        var detail = new List<string>();
+        var typeDiffers = statedType is not null && program.RootClrType != statedType;
+        var (right, word) = (true, true);
+        foreach (var (args, expected) in runs) {
+            string actual;
+            string? asStated = null;
+            try {
+                using var exec = Interpreter.Execute(program, args);
+                actual = NativeIntegerGrid.Format(NativeIntegerGrid.Read(exec, program.RootClrType));
+                if (typeDiffers)
+                    asStated = NativeIntegerGrid.Format(NativeIntegerGrid.Read(exec, statedType));
+            }
+            catch (Exception ex) {
+                actual = $"throws {ex.GetType().Name}";
+            }
+            right &= actual == expected;
+            word &= actual == expected || asStated == expected;
+            detail.Add(actual == expected ? actual : $"VM {actual}, C# {expected}");
+        }
+        // As in the operator grid: the word is C#'s value under C#'s type, and the stated type is the lowered analysis's (T-17).
+        var cls = !word ? "wrong" : typeDiffers ? "right word, stated type differs" : right ? "runs right" : "wrong";
+        return (cls, $"type {program.RootClrType?.Name}; {string.Join("; ", detail)}");
+    }
+
+    private static string Expected(CSharpOperatorOracle.ValueAnswer answer) =>
+        answer.Throws is { } thrown ? $"throws {thrown}" : NativeIntegerGrid.Format(answer.Value);
+
+    private static object[] ValuesOf(Type type) => [NativeIntegerGrid.Values[type].Stress, NativeIntegerGrid.Values[type].Plain];
+
+    public static Cell EvaluateCast(Type from, Type to) {
+        var node = new TypeCast(Param("a", from), new ClrTypeReference(to));
+        var (cls, detail) = Run(node, ValuesOf(from).Select(v => (new object?[] { v }, Expected(CSharpOperatorOracle.ConversionValue(from, to, v, implicitOnly: false)))), to);
+        return new($"({CSharpOperatorOracle.Keyword(to)}){CSharpOperatorOracle.Keyword(from)}", from, to, cls, detail);
+    }
+
+    /// <summary><c>v = seed; v = a; v</c>: the first write gives <c>v</c> the target type, the second converts.</summary>
+    public static Cell EvaluateAssign(Type from, Type to) {
+        var v = new Variable("v");
+        var node = new Block([new Assignment(v, Param("seed", to)), new Assignment(v, Param("a", from)), v], [v]);
+        var seed = NativeIntegerGrid.Values[to].Plain;
+        var implicitly = CSharpOperatorOracle.Conversion(from, to) is ConversionOperatorKind.Implicit;
+        var (cls, detail) = Run(node, ValuesOf(from).Select(a => (new object?[] { seed, a },
+            implicitly ? Expected(CSharpOperatorOracle.ConversionValue(from, to, a, implicitOnly: true)) : "C# rejects")), to);
+        return new($"{CSharpOperatorOracle.Keyword(to)} v = {CSharpOperatorOracle.Keyword(from)}", from, to, cls, detail);
+    }
+
+    public static Cell EvaluateConstant(OperatorKind kind, Type operand, object constant, bool constantLeft) {
+        var answer = CSharpOperatorOracle.ConstantAnswer(kind, operand, constant, constantLeft);
+        var node = constantLeft
+            ? NativeIntegerGrid.Build(kind, new Constant(constant), Param("x", operand))
+            : NativeIntegerGrid.Build(kind, Param("x", operand), new Constant(constant));
+        var underlying = Nullable.GetUnderlyingType(operand) ?? operand;
+        var values = ValuesOf(underlying).Cast<object?>().Concat(Nullable.GetUnderlyingType(operand) is null ? [] : new object?[] { null });
+        var key = CSharpOperatorOracle.ConstantKey(kind, operand, constant, constantLeft);
+        if (!answer.Defined) {
+            var (verdict, why) = Run(node, [], null);
+            return new(key, operand, operand, verdict == "rejected" ? "undefined: rejected" : $"undefined: {verdict}", why);
+        }
+        var (cls, detail) = Run(node, values.Select(x => (new object?[] { x }, Expected(Invoke(answer.Method!, x)))), answer.Type);
+        return new(key, operand, operand, cls, detail);
+    }
+
+    private static CSharpOperatorOracle.ValueAnswer Invoke(MethodInfo method, object? argument) {
+        try {
+            return new(method.Invoke(null, [argument]), null);
+        }
+        catch (TargetInvocationException ex) when (ex.InnerException is { } inner) {
+            return new(null, inner.GetType().Name);
+        }
     }
 }

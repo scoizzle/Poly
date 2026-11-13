@@ -881,6 +881,12 @@ Submit: action {
 
 `else if` is sugar for a nested `if` in the `else` branch (round-trips as `else if`).
 
+Statements may nest at most 64 levels: the level of an `if` or `for` is the number of enclosing
+`if` and `for` statements, itself included, so a top-level `if` is level 1, and each `else if` rung
+is one level below the rung before it (it is a nested `if`). A statement at level 65 is a positioned
+parse error (`DSL0001`, "statement nesting exceeds the limit of 64") on its `if` or `for` keyword,
+not a crash, however deep the input goes.
+
 ### Invoke
 
 `invoke` chains another action on the same instance by default.
@@ -1182,8 +1188,9 @@ The DSL accepts boolean and scalar expressions through the following precedence 
 
 An expression may nest at most 256 levels: the top level is 0, and each paren group, `not`,
 comparison operand, `where` body or call/match argument adds 1, while a chain of N operands
-adds N - 1. Deeper input is a positioned parse error, not a crash, and the limit does not depend on the
-host's stack size.
+adds N - 1, and so does a path of N words (`a b c` is one navigation per word after the first).
+Deeper input is a positioned parse error, not a crash, and the limit does not depend on the
+host's stack size. Statements have their own limit of 64 levels (§6).
 
 Valid expressions:
 <!-- poly-verify: skip:illustration owner:M-02 -->

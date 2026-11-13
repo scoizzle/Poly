@@ -1,6 +1,8 @@
 using Poly.DomainModeling.Meaning;
 using Poly.DomainModeling.Ontology;
 
+using OperatorKind = Poly.Introspection.OperatorKind;
+
 using Action = Poly.DomainModeling.Ontology.Action;
 using Add = Poly.DomainModeling.Ontology.Add;
 using And = Poly.DomainModeling.Ontology.And;
@@ -480,6 +482,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                 CheckComparison(context, cmp, props, parameters, enumTypes);
                 return; // operands already checked
             case Add add:
+                StampBinary(context, add, OperatorKind.Add, add.Left, add.Right, props, parameters, enumTypes);
                 CheckArithmetic(context, add.Left, add.Right, props, parameters, enumTypes, allowTextConcat: true);
                 return;
             case Subtract sub:
@@ -494,12 +497,15 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                         return;
                     }
                 }
+                StampBinary(context, sub, OperatorKind.Subtract, sub.Left, sub.Right, props, parameters, enumTypes);
                 CheckArithmetic(context, sub.Left, sub.Right, props, parameters, enumTypes);
                 return;
             case Multiply mul:
+                StampBinary(context, mul, OperatorKind.Multiply, mul.Left, mul.Right, props, parameters, enumTypes);
                 CheckNumericArithmetic(context, mul.Left, mul.Right, props, parameters, enumTypes);
                 return;
             case Divide div:
+                StampBinary(context, div, OperatorKind.Divide, div.Left, div.Right, props, parameters, enumTypes);
                 CheckNumericArithmetic(context, div.Left, div.Right, props, parameters, enumTypes);
                 return;
             case Not not:

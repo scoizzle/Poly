@@ -137,6 +137,12 @@ public sealed class ResolverErrorSiteTests {
     }
 
     [Test]
+    public async Task PrecedenceRows_ProveTheirShadowWithTheWinnerRepaired() {
+        var file = File_;
+        await Assert.That(ResolverErrorBaseline.ShadowProblems(file.Rows, file.Repairs, ResolverErrorBaseline.Observe)).IsEmpty();
+    }
+
+    [Test]
     public async Task SubtractedRows_AreStillSuppliedByTheExistingRows() {
         var supplied = ResolverErrorBaseline.ExistingRuns.Where(r => r.Origin.IsSite)
             .Select(r => (r.Origin.SiteId!, ResolverErrorBaseline.Sha(ResolverErrorBaseline.DetailOf(r.Exception)))).ToHashSet();
@@ -224,9 +230,19 @@ public sealed class ResolverErrorSiteTests {
             return;
 
         var file = File_;
+        for (var i = 0; i < file.Rows.Count; i++) {
+            if (file.Rows[i].Result.Length == 0)
+                file.Rows[i] = file.Rows[i] with { Result = ResolverErrorBaseline.Observe(file.Rows[i].Input).Result };
+        }
+        for (var i = 0; i < file.Repairs.Count; i++) {
+            if (file.Repairs[i].Result.Length == 0)
+                file.Repairs[i] = file.Repairs[i] with { Result = ResolverErrorBaseline.Observe(file.Repairs[i].Input).Result };
+        }
         var named = ResolverErrorBaseline.KnownWrong.Where(t => t.Fixer == selection).Select(t => t.Key).ToHashSet(StringComparer.Ordinal);
         for (var i = 0; i < file.Rows.Count; i++) {
             var row = file.Rows[i];
+            if (selection == "new")
+                continue;
             if (selection == "all" || named.Contains("E:" + row.Key))
                 file.Rows[i] = row with { Result = ResolverErrorBaseline.Observe(row.Input).Result };
         }
@@ -268,6 +284,17 @@ public sealed class ResolverErrorSiteTests {
         var failures = ResolverErrorBaseline.Diagnose(swapped, ResolverErrorBaseline.Observe);
 
         await Assert.That(failures.Count(f => f.Contains("result", StringComparison.Ordinal))).IsEqualTo(2);
+    }
+
+    [Test]
+    public async Task SelfTest_ARepairedInputThatFiresADifferentSite_IsAWrongRow() {
+        var file = File_;
+        var row = file.Rows.First(r => r.Shadow.Length > 0);
+        var other = file.Rows.First(r => r.Site != row.Shadow && r.Shadow.Length == 0);
+        var repairs = file.Repairs.Select(r => r.Key == row.Key ? r with { Input = other.Input, Result = other.Result } : r).ToList();
+        var failures = ResolverErrorBaseline.ShadowProblems(file.Rows, repairs, ResolverErrorBaseline.Observe);
+
+        await Assert.That(failures.Any(f => f.Contains("not the shadow", StringComparison.Ordinal))).IsTrue();
     }
 
     [Test]

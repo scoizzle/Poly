@@ -18,7 +18,12 @@ internal sealed record SubtractedRow(string Key, string Site, string DetailSha);
 /// <summary>A required key that has no input, with the reason.</summary>
 internal sealed record SkippedRow(string Key, string Reason);
 
-internal sealed record ErrorFile(List<string> Header, List<ErrorRow> Rows, List<SubtractedRow> Subtracted, List<SkippedRow> Skipped);
+/// <summary>A precedence row's companion: the same input with the winning fault repaired, so the shadowed site fires.</summary>
+internal sealed record RepairRow(string Key, string Input, string Result);
+
+internal sealed record ErrorFile(List<string> Header, List<ErrorRow> Rows, List<SubtractedRow> Subtracted, List<SkippedRow> Skipped) {
+    public List<RepairRow> Repairs { get; } = [];
+}
 
 /// <summary>What the resolver did with one input: the result line, the site it was thrown from, and the structured error.</summary>
 internal sealed record Observation(string Result, string? SiteId, string OriginClass, string? Detail, int Offset, int Length);
@@ -187,6 +192,9 @@ internal static class ResolverErrorBaseline {
                 case "U" when f.Length == 4:
                     file.Subtracted.Add(new SubtractedRow(f[1], f[2], f[3]));
                     break;
+                case "R" when f.Length == 4:
+                    file.Repairs.Add(new RepairRow(f[1], Unescape(f[2]), Unescape(f[3])));
+                    break;
                 case "X" when f.Length == 3:
                     file.Skipped.Add(new SkippedRow(f[1], Unescape(f[2])));
                     break;
@@ -204,6 +212,8 @@ internal static class ResolverErrorBaseline {
             sb.Append(h).Append('\n');
         foreach (var r in file.Rows)
             sb.Append($"E\t{r.Key}\t{r.Site}\t{(r.Shadow.Length == 0 ? "-" : r.Shadow)}\t{Escape(r.Input)}\t{Escape(r.Result)}\n");
+        foreach (var r in file.Repairs)
+            sb.Append($"R\t{r.Key}\t{Escape(r.Input)}\t{Escape(r.Result)}\n");
         foreach (var u in file.Subtracted)
             sb.Append($"U\t{u.Key}\t{u.Site}\t{u.DetailSha}\n");
         foreach (var s in file.Skipped)
@@ -318,6 +328,29 @@ internal static class ResolverErrorBaseline {
                 failures.Add($"{row.Key}: declared site {row.Site}, observed {seen.SiteId ?? seen.OriginClass}");
         }
 
+        return failures;
+    }
+
+    /// <summary>
+    /// Every precedence row (one with a Shadow) has a repaired companion whose recorded result is current and whose firing site IS the
+    /// Shadow: the second fault really was in the winner's input. Pure.
+    /// </summary>
+    public static List<string> ShadowProblems(IEnumerable<ErrorRow> rows, IReadOnlyCollection<RepairRow> repairs, Func<string, Observation> observe) {
+        var failures = new List<string>();
+        var byKey = repairs.ToDictionary(r => r.Key, StringComparer.Ordinal);
+        foreach (var row in rows.Where(r => r.Shadow.Length > 0)) {
+            if (!byKey.TryGetValue(row.Key, out var repair)) {
+                failures.Add($"{row.Key}: names a shadow and has no repaired input");
+                continue;
+            }
+            var seen = observe(repair.Input);
+            if (seen.Result != repair.Result)
+                failures.Add($"{row.Key}: repaired result\n    expected {repair.Result}\n    actual   {seen.Result}");
+            if (seen.SiteId != row.Shadow)
+                failures.Add($"{row.Key}: with the winner repaired {seen.SiteId ?? seen.OriginClass} fires, not the shadow {row.Shadow}");
+        }
+        foreach (var key in byKey.Keys.Except(rows.Where(r => r.Shadow.Length > 0).Select(r => r.Key)))
+            failures.Add($"{key}: a repaired input for a row with no shadow");
         return failures;
     }
 
@@ -567,6 +600,7 @@ internal static class ResolverErrorBaseline {
             yield return key;
         foreach (var site in DeferredSites())
             yield return $"defer:{site.Id}";
+        yield return "defer:order:requires-before-navs";
         foreach (var (key, _, _) in LadderPairs())
             yield return key;
         foreach (var (rule, depth, na) in DispatchDepths.Where(d => d.NotApplicable is null))

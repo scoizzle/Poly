@@ -1460,7 +1460,12 @@ diverging:
   `X: Number range(0, 10)`) makes the action's preconditions unsatisfiable (`DMCS001`).
   An optional property's range describes its present values: a guard that also holds when
   it is null (`not (W >= 10)`, `W != 5`) narrows those values but never rejects the guard.
-  `require not P` is not used for narrowing.
+  `require not P` narrows by the negation of the entity's policy `P` (`require not Small`
+  with `Small: policy { Qty <= 10 }` gives Qty ≥ 11). An action's `require not P` lifts its
+  stage's `require P` gate at runtime, so that stage policy does not narrow the action.
+  Neither applies to an assign that follows a `for`, a transition, a cross-entity or fan-out
+  `invoke`, a `create` or a `create in` on its path: that assign is judged by the action's
+  other `require` gates and every policy of its stage, as before `require not` narrowed.
 - **Silence means verified (Q4)** — with two exceptions: non-`range` kinds on `assign`
   and initializer writes (V-08). A write analysis cannot
   decide — a bare property or parameter with no bound, an operator the
@@ -1477,10 +1482,14 @@ diverging:
   flow whose source carries no same-kind constraint is a `DMCS003` warning naming the flow
   plus an unverified fact on the target, a source whose value range sits inside the target
   is verified, and a wider source keeps its `DMEFF008` with a "can fall outside" fact
-  beside it (an allowance still downgrades that finding). An initializer is judged against
-  the declared ranges
-  only: unlike an assign, it gets no `require` narrowing and no stage invariants, because
-  a `create` has no stage context. `range(...)` is the only kind decided against a computed
+  beside it (an allowance still downgrades that finding). A `create` or `create in`
+  initializer reads the same narrowed values as an assign at that point of the creating
+  action: its `require` gates and stage policies, an enclosing `if`, and an earlier assign
+  (`require Small { create Item { Qty: Qty } }` reads Qty ≤ 10). A create inside a `for`
+  body, or after an effect the analysis does not follow on that path (a `for`, a
+  transition, a cross-entity or fan-out `invoke`, a `create` or a `create in`), is judged
+  against the declared ranges, as is a create outside an action body.
+  `range(...)` is the only kind decided against a computed
   value on an `assign` or an initializer in this slice, so `length(...)`, `pattern(...)` and
   `equals(...)` are not flow-checked there — but `length` **is** decided on an observed flow
   and in the parameter arm, which compare declared bounds. The **call chain** decides

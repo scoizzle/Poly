@@ -1,0 +1,113 @@
+# V-18 census (#680 row V-18, plan section 4, lock amendment 8)
+# Range findings (DMEFF008, DMCS003, DMCS001; errors "!" and warnings "?") over the corpus CorpusVerdictSweepTests reads:
+# every tracked *.poly, every non-illustration guide fence, the demo IDE samples and the poly_guide quickstart.
+# PolicyGuardFactsTests.Census_MatchesGolden compares the measured block; POLY_UPDATE_GOLDEN=1 rewrites it.
+# measured
+documents scanned = 83
+documents with require not (source text) = 7
+documents with a create under require (analysed domain) = 5
+documents with no analysed domain = 22
+range findings = 53
+docs/missions/evolve-2026-10-13/billing.poly | 11:3 | DMCS003? | Cannot verify 'create Reading { Usage: usage }' against constraint range(0, +∞) on property 'Usage': the assigned value has no bound analysis can use.
+docs/missions/evolve-2026-10-13/claims.poly | 8:3 | DMCS003? | Cannot verify 'create Claim { Amount: amount }' against constraint range(0, +∞) on property 'Amount': the assigned value has no bound analysis can use.
+docs/missions/evolve-2026-10-13/smarthome.poly | 41:5 | DMCS003? | Cannot verify 'assign MaxLevel to level' against constraint range(0, 100) on property 'MaxLevel': the assigned value has no bound analysis can use.
+docs/missions/evolve-2026-10-14/cart.poly | 10:3 | DMCS003? | Cannot verify 'create Line { Price: price }' against constraint range(0, +∞) on property 'Price': the assigned value has no bound analysis can use.
+docs/missions/evolve-2026-10-14/cart.poly | 10:3 | DMCS003? | Cannot verify 'create Line { Qty: qty }' against constraint range(1, +∞) on property 'Qty': the assigned value has no bound analysis can use.
+docs/probes/dogfood/crm.poly | 68:5 | DMCS003? | Cannot verify 'create Opportunity { Amount: amount }' against constraint range(0, 100000000) on property 'Amount': the assigned value has no bound analysis can use.
+docs/probes/dogfood/crm.poly | 131:5 | DMCS003? | Cannot verify 'assign Amount to (Amount + (qty * sku ListPrice))' against constraint range(0, 100000000) on property 'Amount': the assigned value has no bound analysis can use.
+docs/probes/dogfood/crm.poly | 131:5 | DMCS003? | Cannot verify 'create Line { Qty: qty }' against constraint range(1, 10000) on property 'Qty': the assigned value has no bound analysis can use.
+docs/probes/dogfood/crm.poly | 131:5 | DMCS003? | Cannot verify 'create Line { UnitPrice: sku ListPrice }' against constraint range(0, 100000000) on property 'UnitPrice': the assigned value has no bound analysis can use.
+docs/probes/dogfood/crm.poly | 150:5 | DMCS003? | Cannot verify 'assign Amount to (Amount + (qty * sku ListPrice))' against constraint range(0, 100000000) on property 'Amount': the assigned value has no bound analysis can use.
+docs/probes/dogfood/crm.poly | 150:5 | DMCS003? | Cannot verify 'create Line { Qty: qty }' against constraint range(1, 10000) on property 'Qty': the assigned value has no bound analysis can use.
+docs/probes/dogfood/crm.poly | 150:5 | DMCS003? | Cannot verify 'create Line { UnitPrice: sku ListPrice }' against constraint range(0, 100000000) on property 'UnitPrice': the assigned value has no bound analysis can use.
+docs/probes/dogfood/crm.poly | 165:5 | DMCS003? | Cannot verify 'assign Amount to (Amount + (qty * sku ListPrice))' against constraint range(0, 100000000) on property 'Amount': the assigned value has no bound analysis can use.
+docs/probes/dogfood/crm.poly | 165:5 | DMCS003? | Cannot verify 'create Line { Qty: qty }' against constraint range(1, 10000) on property 'Qty': the assigned value has no bound analysis can use.
+docs/probes/dogfood/crm.poly | 165:5 | DMCS003? | Cannot verify 'create Line { UnitPrice: sku ListPrice }' against constraint range(0, 100000000) on property 'UnitPrice': the assigned value has no bound analysis can use.
+docs/probes/dogfood/crm.poly | 201:5 | DMCS003? | Cannot verify 'assign Amount to (Amount + (qty * sku ListPrice))' against constraint range(0, 100000000) on property 'Amount': the assigned value has no bound analysis can use.
+docs/probes/dogfood/crm.poly | 201:5 | DMCS003? | Cannot verify 'create QuoteLine { Qty: qty }' against constraint range(1, 10000) on property 'Qty': the assigned value has no bound analysis can use.
+docs/probes/dogfood/crm.poly | 201:5 | DMCS003? | Cannot verify 'create QuoteLine { UnitPrice: sku ListPrice }' against constraint range(0, 100000000) on property 'UnitPrice': the assigned value has no bound analysis can use.
+docs/probes/dogfood/hotel.poly | 18:5 | DMCS003? | Cannot verify 'create Hall { Capacity: seats }' against constraint range(1, 5000) on property 'Capacity': the assigned value has no bound analysis can use.
+docs/probes/dogfood/hotel.poly | 18:5 | DMCS003? | Cannot verify 'create Hall { DayRate: rate }' against constraint range(0, 100000) on property 'DayRate': the assigned value has no bound analysis can use.
+docs/probes/dogfood/hotel.poly | 162:5 | DMCS003? | Cannot verify 'create Reservation { PartySize: party }' against constraint range(1, 8) on property 'PartySize': the assigned value has no bound analysis can use.
+docs/probes/dogfood/hotel.poly | 162:5 | DMCS003? | Cannot verify 'create Reservation { Nights: nights }' against constraint range(1, 60) on property 'Nights': the assigned value has no bound analysis can use.
+docs/probes/dogfood/hotel.poly | 162:5 | DMCS003? | Cannot verify 'create Reservation { NightlyRate: room NightlyRate }' against constraint range(0, 10000) on property 'NightlyRate': the assigned value has no bound analysis can use.
+docs/probes/dogfood/hotel.poly | 162:5 | DMCS003? | Cannot verify 'create Reservation { MaxOccupancy: room MaxOccupancy }' against constraint range(1, 8) on property 'MaxOccupancy': the assigned value has no bound analysis can use.
+docs/probes/dogfood/hotel.poly | 173:5 | DMCS003? | Cannot verify 'create EventHold { Headcount: party }' against constraint range(1, 5000) on property 'Headcount': the assigned value has no bound analysis can use.
+docs/probes/dogfood/hotel.poly | 173:5 | DMCS003? | Cannot verify 'create EventHold { Capacity: hall Capacity }' against constraint range(1, 5000) on property 'Capacity': the assigned value has no bound analysis can use.
+docs/probes/dogfood/hotel.poly | 173:5 | DMCS003? | Cannot verify 'create EventHold { DayRate: hall DayRate }' against constraint range(0, 100000) on property 'DayRate': the assigned value has no bound analysis can use.
+docs/probes/dogfood/hotel.poly | 183:5 | DMCS003? | Cannot verify 'create EventHold { Headcount: party }' against constraint range(1, 5000) on property 'Headcount': the assigned value has no bound analysis can use.
+docs/probes/dogfood/hotel.poly | 183:5 | DMCS003? | Cannot verify 'create EventHold { Capacity: section Capacity }' against constraint range(1, 5000) on property 'Capacity': the assigned value has no bound analysis can use.
+docs/probes/dogfood/hotel.poly | 183:5 | DMCS003? | Cannot verify 'create EventHold { DayRate: section DayRate }' against constraint range(0, 100000) on property 'DayRate': the assigned value has no bound analysis can use.
+docs/probes/dogfood/hotel.poly | 263:5 | DMCS003? | Cannot verify 'assign Balance to (Balance + amount)' against constraint range(0, 1000000) on property 'Balance': the assigned value has no bound analysis can use.
+docs/probes/dogfood/hotel.poly | 266:5 | DMCS003? | Cannot verify 'assign Balance to (Balance + amount)' against constraint range(0, 1000000) on property 'Balance': the assigned value has no bound analysis can use.
+docs/probes/dogfood/university.poly | 147:5 | DMCS003? | Cannot verify 'assign Grade to score' against constraint range(0, 100) on property 'Grade': the assigned value has no bound analysis can use.
+docs/probes/fleet-eval/09-transport/orders.poly | 45:3 | DMCS003? | Cannot verify 'assign Discount to amount' against constraint range(0, 100) on property 'Discount': the assigned value has no bound analysis can use.
+docs/probes/fleet-eval/09-transport/warehouse.poly | 32:3 | DMCS003? | Cannot verify 'assign Capacity to (Capacity + delta)' against constraint range(1, 10000) on property 'Capacity': the assigned value has no bound analysis can use.
+docs/probes/fleet-eval/09-transport/warehouse.poly | 42:3 | DMCS003? | Cannot verify 'create Truck { MaxLoad: maxLoad }' against constraint range(1, 40000) on property 'MaxLoad': the assigned value has no bound analysis can use.
+docs/probes/fleet-eval/09-transport/warehouse.poly | 59:3 | DMCS003? | Cannot verify 'assign CurrentLoad to (CurrentLoad + weight)' against constraint range(0, 40000) on property 'CurrentLoad': the assigned value has no bound analysis can use.
+docs/probes/fleet-eval/12-mcp/mcp-library.poly | 3:1 | DMCS003? | Cannot verify 'create Fine { Amount: loan Amount }' against constraint range(0, 500) on property 'Amount': the assigned value has no bound analysis can use.
+docs/probes/scratch-2026-10-14/banking.poly | 19:5 | DMCS003? | Cannot verify 'assign Balance to (Balance + amount)' against constraint range(0, 100000000) on property 'Balance': the assigned value has no bound analysis can use.
+docs/probes/scratch-2026-10-14/banking.poly | 22:5 | DMCS003? | Cannot verify 'assign Balance to (Balance - amount)' against constraint range(0, 100000000) on property 'Balance': the assigned value has no bound analysis can use.
+docs/probes/scratch-2026-10-14/fleet.poly | 18:5 | DMCS003? | Cannot verify 'assign Odometer to (Odometer + km)' against constraint range(0, 2000000) on property 'Odometer': the assigned value has no bound analysis can use.
+docs/probes/scratch-2026-10-14/insurance.poly | 22:5 | DMCS003? | Cannot verify 'create Claim { Amount: amount }' against constraint range(0, 1000000) on property 'Amount': the assigned value has no bound analysis can use.
+docs/probes/scratch-2026-10-14/logistics.poly | 34:5 | DMCS003? | Cannot verify 'create Order { Total: total }' against constraint range(0, 100000) on property 'Total': the assigned value has no bound analysis can use.
+docs/probes/scratch-2026-10-14/payroll.poly | 18:5 | DMCS003? | Cannot verify 'create Timesheet { Hours: hours }' against constraint range(0, 400) on property 'Hours': the assigned value has no bound analysis can use.
+docs/probes/scratch-2026-10-14/payroll.poly | 47:1 | DMEFF008? | Assigned expression value range [1, 10000001] can fall outside constraint range(0, 10000000) on property 'Total'.
+docs/probes/scratch-2026-10-14/payroll.poly | 54:5 | DMCS003? | Cannot verify 'create Payslip { Amount: amount }' against constraint range(0, 1000000) on property 'Amount': the assigned value has no bound analysis can use.
+docs/probes/scratch-2026-10-14/restaurant.poly | 33:5 | DMCS003? | Cannot verify 'create Reservation { PartySize: size }' against constraint range(1, 20) on property 'PartySize': the assigned value has no bound analysis can use.
+docs/probes/scratch-2026-10-14/restaurant.poly | 76:1 | DMEFF008? | Assigned expression value range [1, 100001] can fall outside constraint range(0, 100000) on property 'Total'.
+docs/probes/scratch-2026-10-14/restaurant.poly | 83:5 | DMCS003? | Cannot verify 'create OrderLine { Qty: qty }' against constraint range(1, 20) on property 'Qty': the assigned value has no bound analysis can use.
+docs/probes/scratch-2026-10-14/restaurant.poly | 83:5 | DMCS003? | Cannot verify 'create OrderLine { UnitPrice: item Price }' against constraint range(0, 500) on property 'UnitPrice': the assigned value has no bound analysis can use.
+docs/probes/scratch-2026-10-14/roastery.poly | 8:1 | DMCS003? | Cannot verify 'assign Stock to (Stock + batch Kg)' against constraint range(0, 100000) on property 'Stock': the assigned value has no bound analysis can use.
+docs/probes/scratch-2026-10-14/roastery.poly | 14:5 | DMCS003? | Cannot verify 'create Batch { Kg: kg }' against constraint range(1, 100) on property 'Kg': the assigned value has no bound analysis can use.
+docs/probes/scratch-2026-10-14/roastery.poly | 44:5 | DMCS003? | Cannot verify 'create Line { Kg: kg }' against constraint range(1, 1000) on property 'Kg': the assigned value has no bound analysis can use.
+# end measured
+
+## Predicted (committed before production, at the red-tests commit; the run wins, and each difference is explained below)
+#
+# Shipped corpus: the measured block does not move (0 rows appear, 0 disappear, 0 change; denominators unchanged).
+#   - The 5 documents with a create under require initialise from parameters, Today/Now, navigations or literals:
+#     no policy narrows a parameter, Eval answers a navigation from declared constraints only when given the domain
+#     (the initializer arm does not pass it, as InferValue did not), and a literal keeps the literal path.
+#   - The 7 documents with require not: AtLimit/HasFines/Overloaded/OverLimit/SectionFull/HasSection are relations
+#     to an unranged property, counts, navigations or exists tests, so negating them narrows no range a finding reads.
+#
+# PolicyGuardFactsTests.Shape_Verdict_IsPinned rows (master -> predicted):
+#   assign-require              unchanged
+#   create-require              DMEFF008? [0, 100]                         -> clean (initializer reads [0,10])
+#   create-in-require           DMEFF008? [0, 100]                         -> clean
+#   create-require-not-0-10     Qty=[0,100] DMEFF008? [0, 100]             -> Qty=[11,100] errors=DMEFF008 DMEFF008! [11, 100] entirely outside
+#   create-require-not-11-100   Qty=[0,100] DMEFF008? [0, 100]             -> Qty=[11,100] clean
+#   create-require-not-and      unchanged (the hull of the negated arms is A's declared range)
+#   stage-p-action-not-p        Qty=[0,10] clean (WRONG)                   -> Qty=[11,100] DMEFF008? [11, 100] can fall outside range(0, 60) on 'Seen'
+#   create-inside-loop          unchanged (amendment 1: declared path)
+#   create-after-loop           unchanged (loop environment, #863)
+#   create-after-transition     unchanged (amendment 3)
+#   create-after-cross-invoke   unchanged (amendment 3)
+#   untyped-initializer         unchanged (DMCS003 x2: fails closed)
+#   self-invoke-require-not     Qty=[0,100] DMEFF008? x2 (own + Go -> Keep) -> Qty=[11,100] clean
+#
+# Other changed-area classes (GuardNarrowing, ProvableGuard, WriteVerification, AssignConstraintAnalysis, UnverifiedWrite,
+# VerificationSummary, ConstraintValidationFailClosed, InternalDomainProducer, ContractSurfaceFingerprint, DomainFacts,
+# ModuleInstanceExecutor, PathPrefixRequireFailure, CorpusVerdictSweep, GuideExamples): no assertion moves. None of them
+# pins a create initializer under a guard or a require not narrowing (read: they pin assigns, literal creates and
+# preconditions lists; Preconditions and the export set are unchanged).
+
+## Actual (after production, f75e9d6b): every prediction above held
+#
+# Shipped corpus: the measured block is unchanged (Census_MatchesGolden green without POLY_UPDATE_GOLDEN);
+# CorpusVerdictSweepTests and GuideExamplesTests green. Appear 0, disappear 0, change 0, so no row needs a simulator test.
+# Shape rows: each moved exactly as predicted. The simulator test behind each moved verdict:
+#   create-require, create-in-require        Item23c_CreateInitializerNarrowedByRequire_IsNotFlagged, CreateIn_NarrowedByRequire_IsNotFlagged: Qty 10 creates, 11 is blocked
+#   create-require-not-0-10 (warning->error) NotPolicy_NarrowsByNegatedPolicy: Qty 10 blocked, 11 and 100 fail the create into range(0, 10)
+#                                            (its runtime-identical twin `Qty + Zero`, Zero = 0, since the document no longer lowers)
+#   create-require-not-11-100 (-> clean)     NotPolicy_AcceptDirection_IsClean (same runs)
+#   stage-p-action-not-p (clean -> warning)  StagePAndActionNotP_Simulator_AssignFailsAboveSeenRange: Qty 70 passes both guards, the assign fails
+#   self-invoke-require-not (-> clean)       SelfInvoke_CalleeRequireNot_NarrowsCalleeEnv: Qty 10 blocked by the callee guard, 11 writes
+# One row was added after the characterisation commit: create-after-create-in-subscription (declared path, the same verdict
+# measured on master 68816824 in the closing round; its simulator run
+# is in FlaggedCreates_Simulator_FailWithGuardHeld: the create-in notifies the creator's subscription, which rewrites Qty).
+# Not predicted, found while implementing D: the naive create arm (fork A with no fallback) turned the loop, after-loop,
+# after-transition and after-cross-entity-invoke pins clean ([0,10], [5,15], [0,10], [0,10]); the trust rule restores
+# the declared path there, and the create-in subscription case was found the same way (guide section 7: a created child
+# entering its initial stage notifies the creator).

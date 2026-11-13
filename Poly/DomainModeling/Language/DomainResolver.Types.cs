@@ -19,7 +19,7 @@ public sealed partial class DomainResolver {
         if (Current.Kind == TokenKind.Identifier) {
             return ExpectIdentifier(TokenKind.Identifier, "type name");
         }
-        throw Error($"Expected a type name, got '{Current.Text}'");
+        throw Error($"Expected a type name, got '{Shown(Current)}'");
     }
 
     private static bool IsPrimitiveType(TokenKind kind) => kind switch {

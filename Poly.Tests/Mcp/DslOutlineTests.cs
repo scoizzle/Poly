@@ -152,7 +152,7 @@ public class DslOutlineTests {
 
         await Assert.That(tokens.Select(t => text.Substring(t.Start, t.Length)).ToArray())
             .IsEquivalentTo(new[] { "A", ":", "\"x\\\"y\"", "B", "12", "\"open" });
-        await Assert.That(tokens[2].Text).IsEqualTo("x\"y");
+        await Assert.That(tokens[2].Unescape()).IsEqualTo("x\"y");
         await Assert.That(tokens.Select(t => (t.Line, t.Col)).ToArray())
             .IsEquivalentTo(new[] { (1, 1), (1, 2), (1, 4), (2, 3), (2, 5), (2, 8) });
     }

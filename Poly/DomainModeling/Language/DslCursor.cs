@@ -50,13 +50,8 @@ public class DslCursor : IDslParseCursor {
         return Shown(t);
     }
 
-    // The token's decoded text, as messages and identifier reads show it: a string literal unescaped, an
-    // identifier interned, anything else its source slice (the canonical text of a fixed kind; empty at EOF).
-    private static string Shown(DslToken t) => t.Kind switch {
-        DslTokenKind.StringLiteral => t.Unescape(),
-        DslTokenKind.Identifier => t.Name(),
-        _ => t.Span.ToString(),
-    };
+    /// <summary>The token's text as a message shows it (<see cref="DslTokenText.Shown"/>).</summary>
+    private protected static string Shown(DslToken t) => DslTokenText.Shown(t);
 
     public bool PeekIs(DslTokenKind kind) => Peek(1).Kind == kind;
 

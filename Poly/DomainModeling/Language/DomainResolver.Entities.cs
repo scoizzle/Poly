@@ -34,7 +34,7 @@ public sealed partial class DomainResolver {
     /// is unaffected.
     /// </summary>
     private bool IsInitialStageClause() =>
-        Current.Kind == TokenKind.Identifier && Current.Text == InitialKeyword && PeekIs(TokenKind.LParen);
+        Current.Kind == TokenKind.Identifier && Current.TextEquals(InitialKeyword) && PeekIs(TokenKind.LParen);
 
     /// <summary>
     /// Parses <c>initial(Stage)</c> after the header annotations and before <c>key(...)</c>. The stage
@@ -70,7 +70,7 @@ public sealed partial class DomainResolver {
                 continue;
             }
             if (Current.Kind != TokenKind.RParen)
-                throw Error($"Expected ',' or ')' in 'key(...)', got '{Current.Text}'");
+                throw Error($"Expected ',' or ')' in 'key(...)', got '{Shown(Current)}'");
             break;
         }
         Expect(TokenKind.RParen);
@@ -101,7 +101,7 @@ public sealed partial class DomainResolver {
         if (initialStage is not null)
             changes.Add(new SetEntityInitialStageChange(entityName, initialStage));
         // #405 key clause: the last header element, immediately before '{'.
-        if (Current.Kind == TokenKind.Identifier && Current.Text == KeyKeyword && PeekIs(TokenKind.LParen)) {
+        if (Current.Kind == TokenKind.Identifier && Current.TextEquals(KeyKeyword) && PeekIs(TokenKind.LParen)) {
             changes.Add(new SetEntityKeyChange(entityName, ParseKeyClause()));
         }
         if (IsInitialStageClause()) {
@@ -113,10 +113,10 @@ public sealed partial class DomainResolver {
         }
         if (LooksLikeAnnotationCall()) {
             throw Error(
-                $"Unknown or unregistered annotation '{Current.Text}'. " +
+                $"Unknown or unregistered annotation '{Shown(Current)}'. " +
                 "Enable a pack that registers this keyword, or remove the annotation.");
         }
-        if (Current.Kind == TokenKind.Identifier && Current.Text == KeyKeyword && PeekIs(TokenKind.LParen)) {
+        if (Current.Kind == TokenKind.Identifier && Current.TextEquals(KeyKeyword) && PeekIs(TokenKind.LParen)) {
             throw Error($"Entity '{entityName}' declares more than one 'key(...)' clause.");
         }
 
@@ -175,7 +175,7 @@ public sealed partial class DomainResolver {
                             var actionParams = ParseActionParameterList();
                             Expect(TokenKind.Colon);
                             if (Current.Kind is not (TokenKind.Action or TokenKind.LBrace or TokenKind.When or TokenKind.Require)) {
-                                throw Error($"Expected action after '{name}(...)', got '{Current.Text}'");
+                                throw Error($"Expected action after '{name}(...)', got '{Shown(Current)}'");
                             }
                             NoteMember(EntityMemberKind.Action, name);
                             ParseActionBody(name, changes, stageName: null, actionParams);
@@ -187,9 +187,11 @@ public sealed partial class DomainResolver {
                             // known enum names, mirroring the legacy IsNavLine dispatch.
                             var name = ExpectIdentifier(TokenKind.Identifier, "property name");
                             Expect(TokenKind.Colon);
-                            if (_enumTypeNames.Contains(Current.Text)
-                                || _valueTypeNames.Contains(Current.Text)
-                                || IsKnownPrimitiveName(Current.Text)) {
+                            // The typed-line row's third element is an Identifier value, so the type word is a name.
+                            var typeWord = Current.Name();
+                            if (_enumTypeNames.Contains(typeWord)
+                                || _valueTypeNames.Contains(typeWord)
+                                || IsKnownPrimitiveName(typeWord)) {
                                 var typeName = ExpectIdentifier(TokenKind.Identifier, "type name");
                                 NoteMember(EntityMemberKind.Property, name);
                                 ParseNamedTypeProperty(name, typeName, changes);
@@ -199,7 +201,7 @@ public sealed partial class DomainResolver {
                                 ParseNavLine(name);
                             }
                             else {
-                                CheckUnsupportedKeyword(name, Current.Text);
+                                CheckUnsupportedKeyword(name, typeWord);
                                 throw Error($"Expected type, stage, action, policy, or navigation property after '{name}:'");
                             }
                             continue;
@@ -226,17 +228,19 @@ public sealed partial class DomainResolver {
                     case "primitive-name": {
                             // Primitive keyword used as property name (e.g. "Number: Text"): the type
                             // must be a primitive too (DslTokenReader.IsPropertyName gives MCP the same rule).
-                            var name = Current.Text;
+                            var name = Current.Name();
                             Advance(); // consume type keyword (e.g. 'Number')
                             Expect(TokenKind.Colon);
-                            if (!DslGrammar.IsPrimitiveType(Current.Kind, Current.Text, IsKnownPrimitiveName))
-                                throw Error($"Expected type after '{name}:', got '{Current.Text}'");
+                            // DslGrammar.IsPrimitiveType's rule: the type word's text is read only when it is an identifier.
+                            if (!(DslGrammar.IsPrimitiveTypeKind(Current.Kind)
+                                || (Current.Kind == TokenKind.Identifier && IsKnownPrimitiveName(Current.Name()))))
+                                throw Error($"Expected type after '{name}:', got '{Shown(Current)}'");
                             if (IsPrimitiveType(Current.Kind)) {
                                 NoteMember(EntityMemberKind.Property, name);
                                 ParseProperty(name, Current.Kind, changes);
                             }
                             else {
-                                var typeName = Current.Text;
+                                var typeName = Current.Name();
                                 Advance();
                                 NoteMember(EntityMemberKind.Property, name);
                                 ParseNamedTypeProperty(name, typeName, changes);
@@ -250,7 +254,7 @@ public sealed partial class DomainResolver {
             // 'Name: { … }', 'Name: when …', 'Name: require …' (the printer no
             // longer emits these; kept for backward parse compatibility).
             if (Current.Kind == TokenKind.Identifier && PeekIs(TokenKind.Colon)) {
-                var name = Current.Text;
+                var name = Current.Name();
                 Advance(); // consume identifier
                 Expect(TokenKind.Colon);
                 if (Current.Kind is TokenKind.LBrace or TokenKind.When or TokenKind.Require) {
@@ -258,13 +262,13 @@ public sealed partial class DomainResolver {
                     ParseStandaloneAction(name, changes);
                 }
                 else {
-                    CheckUnsupportedKeyword(name, Current.Text);
+                    CheckUnsupportedKeyword(name, DslTokenText.LegacyText(Current));
                     throw Error($"Expected type, stage, action, policy, or navigation property after '{name}:'");
                 }
                 continue;
             }
 
-            throw Error($"Expected property, stage, action, or policy, got '{Current.Text}'");
+            throw Error($"Expected property, stage, action, or policy, got '{Shown(Current)}'");
         }
 
         Expect(TokenKind.RBrace);
@@ -380,7 +384,7 @@ public sealed partial class DomainResolver {
             // not legacy action heads like Checkout(days: Number): action { … }.
             if (LooksLikeAnnotationCall()) {
                 throw Error(
-                    $"Unknown or unregistered annotation '{Current.Text}'. " +
+                    $"Unknown or unregistered annotation '{Shown(Current)}'. " +
                     "Enable a pack that registers this keyword, or remove the annotation.");
             }
 
@@ -414,7 +418,7 @@ public sealed partial class DomainResolver {
         if (Current.Kind != TokenKind.Identifier)
             return false;
 
-        var keyword = Current.Text;
+        var keyword = Current.Name();
         if (_annotations?.CanAccept(keyword) != true)
             return false;
 
@@ -460,12 +464,12 @@ public sealed partial class DomainResolver {
 
         while (Current.Kind != TokenKind.RParen) {
             if (Current.Kind == TokenKind.StringLiteral) {
-                args[positionalIndex.ToString()] = new AnnotationString(Current.Text);
+                args[positionalIndex.ToString()] = new AnnotationString(Current.Unescape());
                 Advance();
             }
             else if (Current.Kind == TokenKind.Number) {
                 args[positionalIndex.ToString()] = new AnnotationNumber(
-                    double.Parse(Current.Text, CultureInfo.InvariantCulture));
+                    double.Parse(Current.Span, CultureInfo.InvariantCulture));
                 Advance();
             }
             else if (Current.Kind == TokenKind.True) {
@@ -481,7 +485,7 @@ public sealed partial class DomainResolver {
                 Advance();
             }
             else {
-                throw Error($"Expected annotation argument (string, number, bool, null), got '{Current.Text}'");
+                throw Error($"Expected annotation argument (string, number, bool, null), got '{Shown(Current)}'");
             }
 
             positionalIndex++;
@@ -494,7 +498,7 @@ public sealed partial class DomainResolver {
             }
             else if (Current.Kind != TokenKind.RParen) {
                 throw Error(
-                    $"Expected ',' or ')' in annotation '{keyword}(...)', got '{Current.Text}'");
+                    $"Expected ',' or ')' in annotation '{keyword}(...)', got '{Shown(Current)}'");
             }
         }
 

@@ -28,7 +28,8 @@ namespace Poly.Tests.DomainModeling.Parsing;
 /// <c>F()</c>).</para>
 ///
 /// <para>Regeneration (<c>POLY_REGEN_EXPR_BASELINE=1</c>) rewrites the oracle from the CURRENT
-/// parser. Never regenerate on a changed parser: that would move the oracle with the code.</para>
+/// parser. Never regenerate on a changed parser: that would move the oracle with the code. New
+/// rows are appended (<c>POLY_APPEND_EXPR_ROW</c>), never written by a regeneration.</para>
 /// </summary>
 public sealed class ExprDifferentialTests {
     private const string BaselinePath = "Poly.Tests/DomainModeling/Parsing/ExprDifferentialBaseline.txt";
@@ -482,8 +483,11 @@ public sealed class ExprDifferentialTests {
     }
 
     /// <summary>
-    /// Writes the frozen baseline from the CURRENT parser. Inert unless
-    /// <c>POLY_REGEN_EXPR_BASELINE</c> is set. Run it on master's parser only.
+    /// Rewrites the whole frozen baseline from the CURRENT parser. Inert unless
+    /// <c>POLY_REGEN_EXPR_BASELINE</c> is set. It re-freezes the oracle to the checked-out parser and
+    /// reorders the file, so it starts a new oracle epoch and needs an orchestrator ruling; to add
+    /// rows, use <see cref="Append_AddsOneRowFromCurrentParser"/>. Its candidate scan also reads the
+    /// string literals of the parser test classes, so a new test file there adds candidates.
     /// </summary>
     [Test]
     public async Task Regenerate_WritesBaselineFromCurrentParser() {

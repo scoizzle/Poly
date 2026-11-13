@@ -44,7 +44,7 @@ public sealed partial class DomainResolver {
             FinishValueType(changes, name, visibility);
             return;
         }
-        throw Error($"Expected 'entity' or 'value' after '{visibility.ToString().ToLowerInvariant()}', got '{Current.Text}'");
+        throw Error($"Expected 'entity' or 'value' after '{visibility.ToString().ToLowerInvariant()}', got '{Shown(Current)}'");
     }
 
     /// <summary>
@@ -55,20 +55,20 @@ public sealed partial class DomainResolver {
     /// </summary>
     private Exception TopLevelRejection() {
         if (PeekIs(TokenKind.Colon)) {
-            var name = Current.Text;
+            var name = Shown(Current);
             var typeWord = Peek(2);
-            if (typeWord.Kind == TokenKind.Identifier && _unsupportedKeywords.Contains(typeWord.Text)) {
+            if (typeWord.Kind == TokenKind.Identifier && _unsupportedKeywords.Contains(typeWord.Name())) {
                 return new FormatException(
-                    $"'{typeWord.Text}' is not supported in Phase 1a (use 'entity' instead)");
+                    $"'{Shown(typeWord)}' is not supported in Phase 1a (use 'entity' instead)");
             }
             if (typeWord.Kind == TokenKind.Identifier
                 && Peek(3).Kind == TokenKind.Entity) {
                 return new FormatException(
-                    $"Entity inheritance ('{name}: {typeWord.Text} entity') is no longer supported. " +
-                    $"Define '{typeWord.Text}' properties directly on '{name}'.");
+                    $"Entity inheritance ('{name}: {Shown(typeWord)} entity') is no longer supported. " +
+                    $"Define '{Shown(typeWord)}' properties directly on '{name}'.");
             }
         }
-        return Error($"Expected 'entity', 'enum', 'value', 'contract', 'function', or 'bind' definition, got '{Current.Text}'");
+        return Error($"Expected 'entity', 'enum', 'value', 'contract', 'function', or 'bind' definition, got '{Shown(Current)}'");
     }
 
     /// <summary>
@@ -81,7 +81,7 @@ public sealed partial class DomainResolver {
         var kindTok = Peek(2);
         if (kindTok.Kind != TokenKind.Identifier)
             return false;
-        switch (kindTok.Text) {
+        switch (kindTok.Name()) {
             case "value":
                 ParseValueType(changes);
                 return true;
@@ -117,7 +117,7 @@ public sealed partial class DomainResolver {
         var members = new List<string>();
         var memberFacets = new Dictionary<string, IReadOnlyList<Facet>>(StringComparer.Ordinal);
         while (Current.Kind == TokenKind.Identifier) {
-            var member = Current.Text;
+            var member = Current.Name();
             members.Add(member);
             Advance();
 
@@ -125,7 +125,7 @@ public sealed partial class DomainResolver {
             var facets = new List<Facet>();
             var memberTermKeywords = new HashSet<string>(StringComparer.Ordinal);
             while (Current.Kind == TokenKind.Identifier && PeekIs(TokenKind.LParen)) {
-                var keyword = Current.Text;
+                var keyword = Current.Name();
                 if (!TryParseRegisteredAnnotation(out var facet)) {
                     throw Error(
                         $"Unknown or unregistered annotation '{keyword}' on enum member '{member}'. " +
@@ -153,9 +153,8 @@ public sealed partial class DomainResolver {
         // necessarily a reserved word (symbols like `,`/`:` fall through to the
         // normal RBrace error; EndOfFile has no text).
         if (Current.Kind is not (TokenKind.RBrace or TokenKind.Comma or TokenKind.EndOfFile)
-            && Current.Text.Length > 0
-            && char.IsLetter(Current.Text[0])) {
-            var word = Current.Text;
+            && DslTokenText.LegacyText(Current) is { Length: > 0 } word
+            && char.IsLetter(word[0])) {
             throw Error(
                 $"Enum member '{word}' is a reserved keyword and cannot be used as an enum member. " +
                 "Rename it (e.g. 'Number' → 'Numeric').");
@@ -189,7 +188,7 @@ public sealed partial class DomainResolver {
     /// </summary>
     private bool IsFunctionDeclarationStart() =>
         Current.Kind == TokenKind.Identifier
-        && string.Equals(Current.Text, "function", StringComparison.Ordinal)
+        && Current.TextEquals("function")
         && !PeekIs(TokenKind.Colon);
 
     /// <summary>
@@ -200,8 +199,8 @@ public sealed partial class DomainResolver {
     private void ParseFunction(List<DomainChange> changes) {
         Advance(); // 'function'
         if (Current.Kind != TokenKind.Identifier)
-            throw Error($"Expected function name after 'function', got '{Current.Text}'");
-        var name = Current.Text;
+            throw Error($"Expected function name after 'function', got '{Shown(Current)}'");
+        var name = Current.Name();
         Advance();
 
         Expect(TokenKind.LParen);
@@ -217,14 +216,14 @@ public sealed partial class DomainResolver {
                     throw Error($"Trailing comma in function '{name}' parameter list");
             }
             else if (Current.Kind != TokenKind.RParen) {
-                throw Error($"Expected ',' or ')' in function '{name}' parameter list, got '{Current.Text}'");
+                throw Error($"Expected ',' or ')' in function '{name}' parameter list, got '{Shown(Current)}'");
             }
         }
         Expect(TokenKind.RParen);
         Expect(TokenKind.Colon);
         var returnType = new DomainTypeReference(ParseTypeName());
         if (Current.Kind != TokenKind.SingleEq)
-            throw Error($"Expected '=' after function '{name}' return type, got '{Current.Text}'");
+            throw Error($"Expected '=' after function '{name}' return type, got '{Shown(Current)}'");
         Advance();
 
         var parameterNames = parameters.Select(p => p.Name).ToHashSet(StringComparer.Ordinal);
@@ -252,7 +251,7 @@ public sealed partial class DomainResolver {
             Expect(TokenKind.Colon);
             string typeName;
             if (IsPrimitiveType(Current.Kind)) {
-                typeName = Current.Text;
+                typeName = Current.Name();
                 Advance();
             }
             else {
@@ -294,11 +293,11 @@ public sealed partial class DomainResolver {
         ExpectWord("contract");
 
         ContractSourceKind sourceKind;
-        if (Current.Kind == TokenKind.Identifier && Current.Text == "external") {
+        if (Current.Kind == TokenKind.Identifier && Current.TextEquals("external")) {
             Advance();
             sourceKind = ContractSourceKind.ExternalProvider;
         }
-        else if (Current.Kind == TokenKind.Identifier && Current.Text == "internal") {
+        else if (Current.Kind == TokenKind.Identifier && Current.TextEquals("internal")) {
             Advance();
             sourceKind = ContractSourceKind.InternalDomain;
         }
@@ -308,7 +307,7 @@ public sealed partial class DomainResolver {
 
         string sourceId;
         if (Current.Kind == TokenKind.StringLiteral) {
-            sourceId = Current.Text;
+            sourceId = Current.Unescape();
             Advance();
         }
         else {
@@ -317,7 +316,7 @@ public sealed partial class DomainResolver {
 
         string version;
         if (Current.Kind == TokenKind.StringLiteral) {
-            version = Current.Text;
+            version = Current.Unescape();
             Advance();
         }
         else {
@@ -331,7 +330,7 @@ public sealed partial class DomainResolver {
             if (Current.Kind == TokenKind.Identifier
                 && PeekIs(TokenKind.Colon)
                 && Peek(2).Kind == TokenKind.Identifier
-                && string.Equals(Peek(2).Text, "value", StringComparison.Ordinal)) {
+                && Peek(2).TextEquals("value")) {
                 var vtName = ExpectIdentifier(TokenKind.Identifier, "value type name");
                 Expect(TokenKind.Colon);
                 ExpectWord("value");
@@ -345,11 +344,11 @@ public sealed partial class DomainResolver {
             Expect(TokenKind.Colon);
 
             ContractEndpointDirection direction;
-            if (Current.Kind == TokenKind.Identifier && Current.Text == "inbound") {
+            if (Current.Kind == TokenKind.Identifier && Current.TextEquals("inbound")) {
                 Advance();
                 direction = ContractEndpointDirection.Inbound;
             }
-            else if (Current.Kind == TokenKind.Identifier && Current.Text == "outbound") {
+            else if (Current.Kind == TokenKind.Identifier && Current.TextEquals("outbound")) {
                 Advance();
                 direction = ContractEndpointDirection.Outbound;
             }
@@ -358,11 +357,11 @@ public sealed partial class DomainResolver {
             }
 
             ContractEndpointKind kind;
-            if (Current.Kind == TokenKind.Identifier && Current.Text == "operation") {
+            if (Current.Kind == TokenKind.Identifier && Current.TextEquals("operation")) {
                 Advance();
                 kind = ContractEndpointKind.Operation;
             }
-            else if (Current.Kind == TokenKind.Identifier && Current.Text == "event") {
+            else if (Current.Kind == TokenKind.Identifier && Current.TextEquals("event")) {
                 Advance();
                 kind = ContractEndpointKind.Event;
             }
@@ -372,7 +371,7 @@ public sealed partial class DomainResolver {
 
             string payloadType;
             if (IsPrimitiveType(Current.Kind)) {
-                payloadType = Current.Text;
+                payloadType = Current.Name();
                 Advance();
             }
             else {
@@ -403,8 +402,8 @@ public sealed partial class DomainResolver {
 
     private void ExpectWord(string word) {
         if (Current.Kind != TokenKind.Identifier
-            || !string.Equals(Current.Text, word, StringComparison.Ordinal))
-            throw Error($"Expected '{word}', got '{Current.Text}'");
+            || !Current.TextEquals(word))
+            throw Error($"Expected '{word}', got '{Shown(Current)}'");
         Advance();
     }
 }

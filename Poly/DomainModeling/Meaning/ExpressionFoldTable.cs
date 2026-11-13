@@ -27,11 +27,11 @@ public sealed class ExpressionFoldTable {
     }
 
     public static DomainExpression Number(MatchResult<DslToken, DslTokenKind> match) => FoldNumber(match);
-    public static DomainExpression String(MatchResult<DslToken, DslTokenKind> match) => DomainExpression.Literal(Text(match));
+    public static DomainExpression String(MatchResult<DslToken, DslTokenKind> match) => DomainExpression.Literal(First(match).Unescape());
     public static DomainExpression True(MatchResult<DslToken, DslTokenKind> match) => DomainExpression.Literal(true);
     public static DomainExpression False(MatchResult<DslToken, DslTokenKind> match) => DomainExpression.Literal(false);
     public static DomainExpression Null(MatchResult<DslToken, DslTokenKind> match) => DomainExpression.Literal(null);
-    public static DomainExpression Ident(MatchResult<DslToken, DslTokenKind> match) => DomainExpression.Property(Text(match));
+    public static DomainExpression Ident(MatchResult<DslToken, DslTokenKind> match) => DomainExpression.Property(First(match).Name());
 
     public void Register(string pattern, Func<MatchResult<DslToken, DslTokenKind>, DomainExpression> fold) {
         ArgumentException.ThrowIfNullOrWhiteSpace(pattern);
@@ -61,16 +61,18 @@ public sealed class ExpressionFoldTable {
         return false;
     }
 
-    private static string Text(MatchResult<DslToken, DslTokenKind> match) =>
+    // The token a fold reads: the 'string' rows match a StringLiteral, the 'ident' rows an Identifier.
+    private static DslToken First(MatchResult<DslToken, DslTokenKind> match) =>
         match.Tokens.Count > 0
-            ? match.Tokens[0].Text
+            ? match.Tokens[0]
             : throw new InvalidOperationException($"Fold '{match.PatternName}' matched no tokens.");
 
     private static DomainExpression FoldNumber(MatchResult<DslToken, DslTokenKind> match) {
         if (match.Tokens.Count == 0)
             throw new InvalidOperationException($"Fold '{match.PatternName}' matched no tokens.");
+        // The 'number' rows match a Number token.
         var token = match.Tokens[0];
-        var numText = token.Text;
+        var numText = token.Span;
         if (long.TryParse(numText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var longVal))
             return DomainExpression.Literal(longVal, line: token.Line, col: token.Col);
         if (decimal.TryParse(numText, NumberStyles.Float, CultureInfo.InvariantCulture, out var dec)) {
@@ -79,6 +81,6 @@ public sealed class ExpressionFoldTable {
                 return DomainExpression.Literal((long)dec, line: token.Line, col: token.Col);
             return DomainExpression.Literal(dec, line: token.Line, col: token.Col);
         }
-        return DomainExpression.Literal(numText, line: token.Line, col: token.Col);
+        return DomainExpression.Literal(numText.ToString(), line: token.Line, col: token.Col);
     }
 }

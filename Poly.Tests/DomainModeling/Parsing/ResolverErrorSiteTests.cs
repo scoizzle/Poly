@@ -5,7 +5,7 @@ using Poly.Grammar;
 namespace Poly.Tests.DomainModeling.Parsing;
 
 /// <summary>
-/// G-26b's diagnostics oracle for the hand-written resolver (the 91 <c>Expect</c>, 57 <c>ExpectIdentifier</c> and 80 <c>throw</c> sites
+/// G-26b's diagnostics oracle for the hand-written resolver (the 91 <c>Expect</c>, 57 <c>ExpectIdentifier</c> and 81 <c>throw</c> sites
 /// that G-28 to G-33 delete). Sites come from a Roslyn scan of <c>DomainResolver*.cs</c> and are named
 /// <c>partial:method#ordinal</c>, never by line. REACH is proved by a stack walk on the thrown exception (the first frame above
 /// <c>DslCursor</c>'s helpers is the call site) that fails closed. G-13a's S rows and sweep are the first source of reach;
@@ -21,7 +21,7 @@ public sealed class ResolverErrorSiteTests {
         ("Actions", 7, 1, 0),
         ("Constraints", 11, 0, 6),
         ("Core", 2, 3, 5),
-        ("Effects", 18, 12, 11),
+        ("Effects", 18, 12, 12),
         ("Entities", 21, 12, 26),
         ("Relationships", 0, 1, 8),
         ("Stages", 13, 10, 6),
@@ -33,6 +33,8 @@ public sealed class ResolverErrorSiteTests {
         "Core:ResolveOnParseStack#3",
         "Core:ResolveOnParseStack#4",
         "Core:ResolveOnParseStack#5",
+        // G-25: the message is DslLimits.StatementDepthDetail, a constant the scanner cannot read as a literal; its E row pins it.
+        "Effects:EnterStatement#1",
         "Entities:ParseEntityAfterKind#6",
     ];
 
@@ -41,7 +43,7 @@ public sealed class ResolverErrorSiteTests {
     // ── the scan ─────────────────────────────────────────────────────────────────────
 
     [Test]
-    public async Task Scanner_PinsTheTotalsPerPartial_91_57_80() {
+    public async Task Scanner_PinsTheTotalsPerPartial_91_57_81() {
         var sites = ResolverErrorSiteScanner.Sites;
         foreach (var (partial, expect, identifier, @throw) in PinnedTotals) {
             var mine = sites.Where(s => s.Partial == partial).ToList();
@@ -52,7 +54,7 @@ public sealed class ResolverErrorSiteTests {
 
         await Assert.That(sites.Count(s => s.Kind == ErrorSiteKind.Expect)).IsEqualTo(91);
         await Assert.That(sites.Count(s => s.Kind == ErrorSiteKind.ExpectIdentifier)).IsEqualTo(57);
-        await Assert.That(sites.Count(s => s.Kind == ErrorSiteKind.Throw)).IsEqualTo(80);
+        await Assert.That(sites.Count(s => s.Kind == ErrorSiteKind.Throw)).IsEqualTo(81);
         await Assert.That(sites.Select(s => s.Id).Distinct().Count()).IsEqualTo(sites.Count);
         await Assert.That(sites.Where(s => s.ExemptReason is not null).Select(s => s.Id)).IsEquivalentTo(ExemptFromLiteralCheck);
     }
@@ -187,11 +189,11 @@ public sealed class ResolverErrorSiteTests {
         var unreachable = ResolverErrorBaseline.Unreachable.Length;
 
         // Pinned so a change in what the oracle reaches is a reviewed change, not a silent one.
-        await Assert.That(all.Count).IsEqualTo(228);
+        await Assert.That(all.Count).IsEqualTo(229);
         await Assert.That(bySite.Count).IsEqualTo(73);
         await Assert.That(byN.Count).IsEqualTo(102);
         await Assert.That(existing.Count).IsEqualTo(127);
-        await Assert.That(byE.Count(s => !existing.Contains(s))).IsEqualTo(32);
+        await Assert.That(byE.Count(s => !existing.Contains(s))).IsEqualTo(33);
         await Assert.That(unreachable).IsEqualTo(69);
         await Assert.That(existing.Union(byE).Count() + unreachable).IsEqualTo(all.Count);
     }
@@ -208,17 +210,29 @@ public sealed class ResolverErrorSiteTests {
         await Assert.That(problems).IsEmpty();
     }
 
+    /// <summary>
+    /// G-25 (lock amendment 10): the statement depth error is built the way the expression parser builds its depth error,
+    /// so it carries the head keyword's offset and length. It is the one resolver site that does; every other site
+    /// keeps -1 and 0 until G-17.
+    /// </summary>
+    private static readonly string[] PositionedSites = ["Effects:EnterStatement#1"];
+
     [Test]
     public async Task EveryResolverGrammarException_HasOffsetMinusOneAndLengthZero() {
         var errors = ResolverErrorBaseline.ExistingRuns.Select(r => (r.Key, r.Exception)).ToList();
         var violations = ResolverErrorBaseline.OffsetLengthViolations(errors);
         foreach (var row in File_.Rows) {
             var seen = ResolverErrorBaseline.Observe(row.Input);
-            if (seen.Offset != -1 || seen.Length != 0)
+            if (PositionedSites.Contains(row.Site)) {
+                if (seen.Offset < 0 || seen.Length <= 0)
+                    violations.Add($"E:{row.Key}: a positioned site reported offset {seen.Offset}, length {seen.Length}");
+            }
+            else if (seen.Offset != -1 || seen.Length != 0)
                 violations.Add($"E:{row.Key}: offset {seen.Offset}, length {seen.Length}");
         }
 
         await Assert.That(violations).IsEmpty();
+        await Assert.That(File_.Rows.Count(r => PositionedSites.Contains(r.Site))).IsEqualTo(PositionedSites.Length);
     }
 
     // ── regeneration (re-record by fixer; never on changed consumers) ────────────────

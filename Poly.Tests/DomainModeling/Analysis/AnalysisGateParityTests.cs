@@ -341,6 +341,30 @@ public class AnalysisGateParityTests {
         await Assert.That(outcomes[^1].State["Elapsed"]).IsEqualTo(TimeSpan.FromDays(4).ToString());
     }
 
+    /// <summary>R1: a bare duration assigned to a Duration property and compared with one answers the same value on both hosts.</summary>
+    [Test]
+    public async Task BareDuration_AssignedAndCompared_BothHostsAnswerTheValue() {
+        const string dsl = """
+            domain Sla
+            uses temporal
+            Job: entity {
+              Budget: Duration
+              Fast: policy { Budget < 1 Hours }
+              Set: action { assign Budget to 30 Minutes }
+            }
+            """;
+        var outcomes = await ParityScenario.FromDsl(dsl, "T10aDuration").AssertAgree(side => {
+            side.Create("Job", ("Budget", TimeSpan.FromHours(2)));
+            side.EvaluatePolicy("Fast");
+            side.Invoke("Set");
+            side.EvaluatePolicy("Fast");
+        });
+
+        await Assert.That(outcomes[1].State["Fast"]).IsEqualTo("False");
+        await Assert.That(outcomes[3].State["Fast"]).IsEqualTo("True");
+        await Assert.That(outcomes[3].State["Budget"]).IsEqualTo(TimeSpan.FromMinutes(30).ToString());
+    }
+
     /// <summary>
     /// Probed on the base: <c>default(Now + 7 Days)</c> analysed clean and the simulator ran it, but the generated C#
     /// did not compile (CS1737, a default the printed factory cannot carry). No default lowering exists for a date

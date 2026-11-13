@@ -167,6 +167,31 @@ public class TemporalFailClosedAnalysisTests {
         await Assert.That(result.Succeeded).IsTrue().Because(row);
     }
 
+    /// <summary>The create initializer is the third stamp site: a bare duration for a Duration property of the created entity.</summary>
+    [Test]
+    [Arguments("5 Minutes", "")]
+    [Arguments("2 Months", "no fixed length")]
+    public async Task DurationCreateInitializer_BareDuration_IsAcceptedOrRefusedAsAnAssignIs(string value, string refusal) {
+        var result = Evolve($$"""
+            domain T
+            uses temporal
+            Job: entity {
+              runs: many Run
+              Spawn: action { create in runs { Budget: {{value}} } }
+            }
+            Run: entity {
+              Budget: Duration
+            }
+            """, ExtensionCatalog.Core.Language);
+
+        if (refusal.Length == 0) {
+            await Assert.That(Errors(result)).IsEmpty();
+            return;
+        }
+        await Assert.That(Errors(result).Any(e => e.Contains(refusal, StringComparison.Ordinal))).IsTrue()
+            .Because(string.Join(" | ", Errors(result)));
+    }
+
     /// <summary>Months and years have no fixed length: refused at the new sites as they are for a default.</summary>
     [Test]
     [Arguments("Go: action { assign Len to 2 Months }")]

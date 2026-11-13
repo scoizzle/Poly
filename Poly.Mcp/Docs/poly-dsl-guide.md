@@ -1242,6 +1242,14 @@ not Suspended
 Status is "active"
 ```
 
+Ordering (`<`, `>`, `<=`, `>=`) is defined for numbers, dates and durations only. Ordering `Text`,
+`Boolean`, an enum, an entity, a value type or `Binary` is DMSEM003 (`ordering is not defined for 'Text'`);
+compare with `==` or `!=` instead. A value type has value equality, so `==` and `!=` are allowed on it.
+
+Integer division truncates: `7 / 2` is 3. Storing an integral division into a `Decimal`, directly or
+inside `+ - * /` (`assign Total to 7 / 2`, `assign Total to N / 2 + 1`), is the warning DMNUM001, because
+the quotient is cut before it widens; write one operand as a `Decimal` (`7.5 / 2`, `Total / 2`) to divide exactly.
+
 #### Subject-First Related Reads (Q1′)
 
 Policies and assign RHS can **read** data from related entities using subject-first syntax.

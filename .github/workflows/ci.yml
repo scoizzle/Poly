@@ -17,6 +17,10 @@ jobs:
   ci:
     name: Build & test
     runs-on: ubuntu-latest
+    # A normal job is about 6 minutes (build, then a 3-4 minute test run). The test run's own
+    # --timeout below (10m) ends a hang first; this is the backstop for everything else
+    # (restore, build, a stuck host), not a budget: it replaces GitHub's 360-minute default.
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -34,8 +38,37 @@ jobs:
       - name: Build
         run: dotnet build Poly.slnx --no-restore --nologo
 
+      # --timeout ends a hung run by itself (exit 3) after 10 minutes; a normal run is 3-4.
+      # The diagnostic log records a start and an end event per test (the console prints only
+      # the end), so the next step can name a test that started and never finished.
       - name: Run tests
-        run: dotnet run --project Poly.Tests/Poly.Tests.csproj --no-restore
+        run: >
+          dotnet run --project Poly.Tests/Poly.Tests.csproj --no-restore --
+          --timeout 10m
+          --diagnostic --diagnostic-output-directory "$RUNNER_TEMP/test-diag" --diagnostic-synchronous-write
+
+      - name: Name tests that started and never finished
+        if: ${{ !success() }}
+        run: |
+          shopt -s nullglob
+          for f in "$RUNNER_TEMP"/test-diag/*.diag; do
+            records=$(awk '/^20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]T/ { if (r != "") print r; r = ""; next } /^TestNodeUpdateMessage \{/ { r = $0; next } r != "" { r = r " " $0 } END { if (r != "") print r }' "$f")
+            uid() { sed -n 's/.*TestNode { Uid = TestNodeUid { Value = \([^ ]*\) }.*/\1/p' | sort -u; }
+            started=$(printf '%s\n' "$records" | grep 'InProgressTestNodeStateProperty' | uid)
+            finished=$(printf '%s\n' "$records" | grep -E '(Passed|Failed|Error|Timeout|Cancelled|Skipped)TestNodeStateProperty' | uid)
+            echo "started: $(printf '%s\n' "$started" | grep -c .), finished: $(printf '%s\n' "$finished" | grep -c .)"
+            echo "started and never finished:"
+            comm -23 <(printf '%s\n' "$started") <(printf '%s\n' "$finished") | sed 's/^/  /'
+          done
+
+      - name: Upload test diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-diagnostics
+          path: ${{ runner.temp }}/test-diag
+          if-no-files-found: ignore
+          retention-days: 3
 
   audit:
     name: Vulnerability audit

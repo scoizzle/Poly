@@ -392,7 +392,7 @@ static async System.Threading.Tasks.Task SeedAsync(LibraryDbContext db)
     {
         return;
     }
-    var bookResult = Library.Book.Create("Sample", "Sample", "XXXXXXXXXX", 1, Genre.Fiction, db);
+    var bookResult = Library.Book.Create("Sample", "Sample", "XXXXXXXXXX", 1, Library.Genre.Fiction, db);
     if (bookResult.IsSuccess)
     {
         db.Add(bookResult.Value);
@@ -426,7 +426,7 @@ internal record BookDto
     public string ISBN { get; init; } = default!;
     [Range(1, 10000)]
     public long Pages { get; init; }
-    [EnumDataType(typeof(Genre))]
+    [EnumDataType(typeof(Library.Genre))]
     public Library.Genre Genre { get; init; }
 }
 

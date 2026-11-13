@@ -1338,7 +1338,7 @@ static async System.Threading.Tasks.Task SeedAsync(CrmDbContext db)
     {
         db.Add(leadResult.Value);
     }
-    var accountResult = Crm.Account.Create("Sample", Industry.Technology, null, null, Enumerable.Empty<Crm.Contact>(), Enumerable.Empty<Crm.Opportunity>(), Enumerable.Empty<Crm.Ticket>());
+    var accountResult = Crm.Account.Create("Sample", Crm.Industry.Technology, null, null, Enumerable.Empty<Crm.Contact>(), Enumerable.Empty<Crm.Opportunity>(), Enumerable.Empty<Crm.Ticket>());
     if (accountResult.IsSuccess)
     {
         db.Add(accountResult.Value);
@@ -1382,7 +1382,7 @@ internal record AccountDto
 {
     [Required]
     public string Name { get; init; } = default!;
-    [EnumDataType(typeof(Industry))]
+    [EnumDataType(typeof(Crm.Industry))]
     public Crm.Industry Industry { get; init; }
 }
 

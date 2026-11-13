@@ -131,6 +131,41 @@ public class AnalysisGateParityTests {
         await Assert.That(result.PolycCheck is true).IsTrue().Because($"{shape}: {result}");
     }
 
+    private static string DateDocument(string members) => $$"""
+        domain T
+        uses temporal
+        Part: entity {
+          Due: Date
+          Stamp: DateTime
+        }
+        Item: entity {
+          A: Number
+          Due: Date
+          Stamp: DateTime
+          Gap: Duration optional
+          part: Part
+          {{members}}
+        }
+        """;
+
+    /// <summary>
+    /// Review F1 (fix round 1): a date minus a date of the same granularity is a difference, decided on the operands'
+    /// inferred types; master exempted only two bare properties, so once T-05a typed a path-prefix or arithmetic
+    /// operand the difference was rejected as non-numeric arithmetic. Each row must be accepted by every door.
+    /// </summary>
+    [Test]
+    [Arguments("the review's repro", "Ok: policy { (part Due - Due) == (Due - Due) }")]
+    [Arguments("a path-prefixed operand", "Close: action { assign Gap to part Stamp - Stamp }")]
+    [Arguments("a parenthesised operand", "Close: action { assign Gap to (Stamp + A) - Stamp }")]
+    [Arguments("control: two properties", "Close: action { assign Gap to Stamp - Stamp }")]
+    public async Task DateDifference_OfTypedDateOperands_IsAcceptedByEveryDoor(string row, string members) {
+        var result = GateParity.Check(DateDocument(members),
+            SimStep.Create("Item", """{"A":1,"Due":"2026-01-01","Stamp":"2026-01-01T00:00:00Z"}""", "i"));
+
+        await Assert.That(result.Analysis).IsTrue().Because($"{row}: {result}");
+        await Assert.That(result.Holds).IsTrue().Because($"{row}: {result}");
+    }
+
     private static (Domain Domain, SumExpr Sum) SumDomain() {
         var sum = (SumExpr)DomainExpression.Sum("items", "Amount");
         var item = new Entity("Item", [new Property("Amount", new DomainTypeReference("Decimal"), [])], [], [], []);

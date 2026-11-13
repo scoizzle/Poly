@@ -32,6 +32,7 @@ public class SubscriptionSingleFireTests {
           Title: Text
           Retries: Number default(0)
           MaxRetries: Number default(3)
+          queue: Queue via jobs
 
           CanRetry: policy { Retries < MaxRetries }
 

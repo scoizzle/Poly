@@ -77,9 +77,11 @@ public sealed class ParityScenario {
     readonly Assembly _assembly;
     readonly IReadOnlySet<string> _recordedExceptions;
     readonly bool _recordPostThrowState;
+    readonly IReadOnlySet<string> _simulateDoesNotMaintain;
 
     ParityScenario(Domain domain, Domain printedDomain, Assembly assembly, IReadOnlySet<string> recordedExceptions,
-        bool recordPostThrowState) {
+        bool recordPostThrowState, IReadOnlySet<string>? simulateDoesNotMaintain = null) {
+        _simulateDoesNotMaintain = simulateDoesNotMaintain ?? new HashSet<string>(StringComparer.Ordinal);
         _domain = domain;
         _printedDomain = printedDomain;
         _assembly = assembly;
@@ -111,9 +113,18 @@ public sealed class ParityScenario {
     /// states would start comparing post-throw state, and every such flip is a finding for its own
     /// slice, not a harness change (see the loop-guard row in ExitBlockTransitionTests).
     /// </summary>
+    /// <summary>
+    /// <paramref name="simulateDoesNotMaintain"/> names state fields (<c>state:Nav</c>) that the printed
+    /// module maintains and the simulated one does not: the collection side of an explicit inverse, when a
+    /// child is created holding its singular navigation (S-13a; see
+    /// <c>ExplicitInversePinsTests.InverseCollection_CreatedFromTheSingularSide_IsNotMaintainedBySimulate</c>,
+    /// which pins the exact divergence so this opt-out cannot outlive the fix). <see cref="AssertAgree"/> skips
+    /// exactly those fields; every other field of every step is still compared.
+    /// </summary>
     public static ParityScenario FromDsls(
         string simulateDsl, string printedDsl, string assemblyName,
-        string[]? recordedExceptions = null, bool recordPostThrowState = false) {
+        string[]? recordedExceptions = null, bool recordPostThrowState = false,
+        string[]? simulateDoesNotMaintain = null) {
         var simulate = EvolvedDomain.FromDsl(simulateDsl).Domain;
         var ids = simulate.Extensions.Count > 0 ? simulate.Extensions : ExtensionCatalog.ProductAuthoring;
 
@@ -129,12 +140,14 @@ public sealed class ParityScenario {
                 .Select(d => d.Message)));
         var cs = new CSharpGenerator().Generate(printedSession.Lower(evolved.Root!, evolved.Analysis));
         return new(simulate, evolved.Root!, ExportedCSharp.CompileAndLoad(cs, assemblyName),
-            new HashSet<string>(recordedExceptions ?? [], StringComparer.Ordinal), recordPostThrowState);
+            new HashSet<string>(recordedExceptions ?? [], StringComparer.Ordinal), recordPostThrowState,
+            new HashSet<string>(simulateDoesNotMaintain ?? [], StringComparer.Ordinal));
     }
 
     public static ParityScenario FromDsl(
-        string dsl, string assemblyName, string[]? recordedExceptions = null, bool recordPostThrowState = false) =>
-        FromDsls(dsl, dsl, assemblyName, recordedExceptions, recordPostThrowState);
+        string dsl, string assemblyName, string[]? recordedExceptions = null, bool recordPostThrowState = false,
+        string[]? simulateDoesNotMaintain = null) =>
+        FromDsls(dsl, dsl, assemblyName, recordedExceptions, recordPostThrowState, simulateDoesNotMaintain);
 
     /// <summary>For domains built or edited through the API, which the DSL cannot always express. No storage library: such a domain holds no unique key.</summary>
     public static ParityScenario FromDomain(Domain domain, string assemblyName) {
@@ -158,7 +171,9 @@ public sealed class ParityScenario {
     /// </summary>
     public async Task<IReadOnlyList<ParityOutcome>> AssertAgree(Action<ParitySide> steps) {
         var (simulate, printed) = Run(steps);
-        await Assert.That(Differences(simulate, printed)).IsEmpty();
+        await Assert.That([.. DifferenceSet(simulate, printed)
+            .Where(difference => !_simulateDoesNotMaintain.Contains(difference.Field))
+            .Select(difference => difference.ToString())]).IsEmpty();
         return simulate;
     }
 

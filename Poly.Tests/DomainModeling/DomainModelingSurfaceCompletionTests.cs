@@ -227,6 +227,7 @@ public class DomainModelingSurfaceCompletionTests {
               }
             }
             Item: entity {
+              board: Board via items
               Draft: stage {
                 Prep: action { transition to Ready }
                 Finish: action { transition to Done }

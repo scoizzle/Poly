@@ -166,7 +166,7 @@ public static class DomainParityScenarios {
             Left: entity {
               Name: Text
               Hops: Number default(0)
-              rights: many Right
+              rights: many Right via lefts
               A: stage { when rights X, Y { assign Hops to Hops + 1 transition to B } }
               B: stage { when rights X, Y { assign Hops to Hops + 1 transition to A } }
             }
@@ -187,7 +187,7 @@ public static class DomainParityScenarios {
             Left: entity {
               Name: Text
               Hops: Number default(0)
-              rights: many Right
+              rights: many Right via lefts
               A: stage { when rights X, Y { assign Hops to Hops + 1 transition to B } }
               B: stage { when rights X, Y { assign Hops to Hops + 1 transition to A } }
             }
@@ -247,6 +247,7 @@ public static class DomainParityScenarios {
 
             Emp: entity {
               Name: Text length(1, 20)
+              dept: Dept via emps
               Live: stage {
                 Leave: action { transition to Gone }
               }
@@ -263,6 +264,7 @@ public static class DomainParityScenarios {
 
             Emp: entity {
               Name: Text length(1, 20)
+              dept: Dept via emps
               Live: stage {
                 Leave: action { transition to Gone }
               }

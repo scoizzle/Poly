@@ -67,6 +67,7 @@ public class InfrastructureAnalyzerTests {
             }
             Job: entity {
               Title: Text
+              user: User via jobs
               Open: stage { }
             }
             """;

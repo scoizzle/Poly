@@ -1413,6 +1413,7 @@ public class ActionEntityReturnTests {
             }
             Loan: entity {
               Code: Text
+              patron: Patron via loans
               Draft: stage {
                 Overdue: action { transition to Overdue }
               }

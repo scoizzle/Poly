@@ -839,7 +839,11 @@ public class DomainToCSharpExporterTests {
         var domain = ValidDomain.Create("Test", [tracker, order], [
             new Relationship("Tracks",
                 new DomainTypeReference("Tracker"), new DomainTypeReference("Order"),
-                RelationshipCardinality.OneToOne, [])
+                RelationshipCardinality.OneToOne, []),
+            // S-13a: the subscription's relationship states its explicit inverse (via) on the other end.
+            new Relationship("TrackedBy",
+                new DomainTypeReference("Order"), new DomainTypeReference("Tracker"),
+                RelationshipCardinality.OneToOne, []) { Inverse = "Tracks" }
         ]);
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -895,7 +899,11 @@ public class DomainToCSharpExporterTests {
         var domain = ValidDomain.Create("Test", [tracker, order], [
             new Relationship("Tracks",
                 new DomainTypeReference("Tracker"), new DomainTypeReference("Order"),
-                RelationshipCardinality.OneToOne, [])
+                RelationshipCardinality.OneToOne, []),
+            // S-13a: the subscription's relationship states its explicit inverse (via) on the other end.
+            new Relationship("TrackedBy",
+                new DomainTypeReference("Order"), new DomainTypeReference("Tracker"),
+                RelationshipCardinality.OneToOne, []) { Inverse = "Tracks" }
         ]);
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -941,6 +949,7 @@ public class DomainToCSharpExporterTests {
 
             Order: entity {
               Code: Text
+              trackers: many Tracker via Tracks
               Draft: stage { }
               Active: stage { }
             }
@@ -1014,7 +1023,11 @@ public class DomainToCSharpExporterTests {
         var domain = ValidDomain.Create("Test", [tracker, order], [
             new Relationship("Tracks",
                 new DomainTypeReference("Tracker"), new DomainTypeReference("Order"),
-                RelationshipCardinality.OneToOne, [])
+                RelationshipCardinality.OneToOne, []),
+            // S-13a: the subscription's relationship states its explicit inverse (via) on the other end.
+            new Relationship("TrackedBy",
+                new DomainTypeReference("Order"), new DomainTypeReference("Tracker"),
+                RelationshipCardinality.OneToOne, []) { Inverse = "Tracks" }
         ]);
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -1051,7 +1064,11 @@ public class DomainToCSharpExporterTests {
         var domain = ValidDomain.Create("Test", [tracker, order], [
             new Relationship("Tracks",
                 new DomainTypeReference("Tracker"), new DomainTypeReference("Order"),
-                RelationshipCardinality.OneToOne, [])
+                RelationshipCardinality.OneToOne, []),
+            // S-13a: the subscription's relationship states its explicit inverse (via) on the other end.
+            new Relationship("TrackedBy",
+                new DomainTypeReference("Order"), new DomainTypeReference("Tracker"),
+                RelationshipCardinality.OneToOne, []) { Inverse = "Tracks" }
         ]);
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -1078,6 +1095,7 @@ public class DomainToCSharpExporterTests {
         var (domain, analysis) = ParseAndAnalyze("""
             domain Test
             Payment: entity {
+              order: Order via payments
               Pending: stage {
                 Capture: action { transition to Captured }
               }
@@ -1120,6 +1138,8 @@ public class DomainToCSharpExporterTests {
         var (domain, analysis) = ParseAndAnalyze("""
             domain Test
             Ticket: entity {
+              queue: Queue via tickets
+              desk: Desk via tickets
               Open: stage { Close: action { transition to Closed } }
               Closed: stage { }
             }
@@ -1306,6 +1326,7 @@ public class DomainToCSharpExporterTests {
         var (domain, analysis) = ParseAndAnalyze("""
             domain Test
             Task: entity {
+              project: Project via tasks
               Open: stage { }
               Done: stage { }
             }
@@ -1571,6 +1592,7 @@ public class DomainToCSharpExporterTests {
 
             WorkItem: entity {
               Code: Text
+              project: Project via items
               Open: stage { }
               Done: stage { }
             }
@@ -2623,6 +2645,7 @@ public class DomainToCSharpExporterTests {
         var (domain, analysis) = ParseAndAnalyze("""
             domain Test
             Payment: entity {
+              order: Order via payments
               Captured: stage { }
             }
             Order: entity {
@@ -3416,6 +3439,7 @@ public class DomainToCSharpExporterTests {
     private const string SingularSubscriptionDsl = """
         domain Watch
         Paper: entity {
+          trs: many Tr via Tracks
           A: stage {
             Advance: action { transition to B }
           }
@@ -3469,6 +3493,7 @@ public class DomainToCSharpExporterTests {
             domain Watch
             Paper: entity {
               Title: Text
+              trs: many Tr via Tracks
               A: stage { Advance: action { transition to B } }
               B: stage { }
             }
@@ -3783,6 +3808,7 @@ public class DomainToCSharpExporterTests {
             domain Watch
             Paper: entity {
               Title: Text
+              trs: many Tr via Tracks
               A: stage { Advance: action { transition to B } }
               B: stage { }
             }
@@ -3807,6 +3833,7 @@ public class DomainToCSharpExporterTests {
         const string dsl = """
             domain Watch
             Item: entity {
+              board: Board via items
               A: stage { Done: action { transition to B } }
               B: stage { }
             }
@@ -3831,6 +3858,7 @@ public class DomainToCSharpExporterTests {
             domain Watch
             Child: entity {
               Name: Text
+              parent: Parent via children
               A: stage {
                 entry { assign Name to "x" }
               }
@@ -3860,6 +3888,8 @@ public class DomainToCSharpExporterTests {
             domain Watch
             Child: entity {
               Name: Text
+              board: Board via items
+              parent: Parent via children
               A: stage {
                 Next: action { transition to B }
               }
@@ -3990,6 +4020,7 @@ public class DomainToCSharpExporterTests {
             domain Watch
             Child: entity {
               Name: Text
+              parent: Parent via children
               A: stage {
                 Next: action { transition to B }
               }
@@ -4090,6 +4121,7 @@ public class DomainToCSharpExporterTests {
         const string dsl = """
             domain Hotel
             Stay: entity {
+              room: Room via stays
               Departed: stage { }
             }
             Room: entity {

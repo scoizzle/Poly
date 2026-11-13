@@ -42,7 +42,8 @@ public class EntryExitTransitionEmitTests {
         await Assert.That(simulate.Outcomes[1].State["Stage"]).IsEqualTo("C");
     }
 
-    const string WatchedDsl = EntryDsl + """
+    // S-13a: Door states the explicit inverse of Watcher.Tracks; EntryDsl itself stays as the other tests use it.
+    static readonly string WatchedDsl = EntryDsl.Replace("  Tag: Text\n", "  Tag: Text\n  watchers: many Watcher via Tracks\n") + """
 
         Watcher: entity {
           Seen: Text
@@ -64,7 +65,10 @@ public class EntryExitTransitionEmitTests {
             side.Invoke("Go");
             side.Use(watcher);
         }
-        await Assert.That(ParityScenario.Differences(simulate.Outcomes, printed.Outcomes)).IsEmpty();
+        // S-13a: the only skipped field is the inverse collection the simulated module does not maintain
+        // (pinned in ExplicitInversePinsTests.InverseCollection_CreatedFromTheSingularSide_IsNotMaintainedBySimulate).
+        await Assert.That(ParityScenario.DifferenceSet(simulate.Outcomes, printed.Outcomes)
+            .Where(d => d.Field != "state:watchers").Select(d => d.ToString()).ToList()).IsEmpty();
         await Assert.That(simulate.Outcomes[4].State["Seen"]).IsEqualTo("yes");
     }
 

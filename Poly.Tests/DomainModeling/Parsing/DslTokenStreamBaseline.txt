@@ -496,7 +496,7 @@ C	ExpectIdentifier:Identifier:an entity name	1.5	ERR Expected an entity name, go
 D	docs/probes/fleet-eval/09-transport/warehouse.poly	314	05F81FE3600419B4
 D	docs/probes/fleet-eval/09-transport/orders.poly	232	0665D5195C35A0A7
 D	docs/probes/fleet-eval/09-transport/clinic.poly	182	4FD4138B093BAF22
-D	docs/probes/fleet-eval/12-mcp/mcp-library.poly	197	FBD871826112E7B8
+D	docs/probes/fleet-eval/12-mcp/mcp-library.poly	202	FFEF4FE6DA60D48D
 D	docs/probes/dogfood/university.poly	687	33D5D64B1927BE0F
 D	docs/probes/dogfood/crm.poly	1219	F09458E089E999D6
 D	docs/probes/dogfood/hotel.poly	1458	3235A9B4F7D447AA

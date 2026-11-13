@@ -24,6 +24,7 @@ public class GuideClaimsTests {
         uses storage
         Shipment: entity {
           Code: Text
+          order: Order via shipments
           Packed: stage { Ship: action { transition to Delivered } }
           Delivered: stage { }
         }
@@ -44,6 +45,7 @@ public class GuideClaimsTests {
         uses storage
         Shipment: entity {
           Code: Text
+          order: Order via shipments
           Packed: stage { Ship: action { transition to Delivered } }
           Delivered: stage { }
         }

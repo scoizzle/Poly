@@ -146,6 +146,43 @@ public sealed class ExplicitInversePinsTests {
         await Assert.That(created.GetType().GetProperty("Borrower", PrintedMembers.Any)!.GetValue(created)).IsNull();
     }
 
+    // The five parity fixtures that opt out of `state:trs` / `state:ws` (ParityScenario simulateDoesNotMaintain)
+    // do so because of exactly this divergence. The pin keeps the opt-out honest: when the simulated module
+    // maintains the inverse collection, this goes red and the opt-outs are deleted with it.
+    [Test]
+    public async Task InverseCollection_CreatedFromTheSingularSide_IsNotMaintainedBySimulate() {
+        const string Dsl = """
+            domain Watch
+            Paper: entity {
+              Title: Text
+              trs: many Tr via Tracks
+              A: stage {
+                Advance: action { transition to B }
+              }
+              B: stage { }
+            }
+            Tr: entity {
+              Tracks: Paper
+              P: stage {
+                when Tracks B {
+                  transition to Q
+                }
+              }
+              Q: stage { }
+            }
+            """;
+        var (simulate, printed) = ParityScenario.FromDsl(Dsl, "InverseCollectionPin").Run(side => {
+            var paper = side.Create("Paper", ("Title", "p"));
+            _ = side.Create("Tr", ("Tracks", paper));
+            side.Use(paper);
+            side.Invoke("Advance");
+        });
+        var differences = ParityScenario.DifferenceSet(simulate, printed)
+            .Select(d => $"{d.Step}|{d.Field}|{d.Simulate}|{d.Printed}")
+            .ToArray();
+        await Assert.That(differences).IsEquivalentTo(["use Paper|state:trs|0|1", "invoke Advance|state:trs|0|1"]);
+    }
+
     private static (string Printed, string Simulated) PrintedAndSimulated(string dsl) {
         var (domain, analysis, session) = Evolve(dsl);
         var files = session.Emit(domain, analysis);

@@ -158,6 +158,7 @@ public class UnwrittenRelationshipAnalysisTests {
             domain Test
             Plan: entity {
               Code: Text
+              members: many Member via plan
               Active: stage { }
             }
             Member: entity {

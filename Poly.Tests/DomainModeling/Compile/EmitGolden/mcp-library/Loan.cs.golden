@@ -19,14 +19,16 @@ internal class Loan : Poly.Runtime.IActionScoped
     private List<Patron>? _patronLoansOverdueSubscribers;
     private int _notifyDepth;
     private Loan() { }
-    private Loan(Book? book = null, long amount = 0L)
+    private Loan(Book? book = null, Patron? patron = null, long amount = 0L)
     {
         this.Amount = amount;
         this.Book = book;
+        this.Patron = patron;
         this.CurrentStage = LoanStage.Active;
     }
     public long Amount { get; private set; }
     public Book? Book { get; private set; }
+    public Patron? Patron { get; private set; }
     public LoanStage CurrentStage { get; private set; }
     internal DomainResult MarkOverdue()
     {
@@ -136,7 +138,7 @@ internal class Loan : Poly.Runtime.IActionScoped
         }
         return DomainResult.Success();
     }
-    internal static DomainResult<Loan> Create(Book? book = null, long amount = 0L)
+    internal static DomainResult<Loan> Create(Book? book = null, Patron? patron = null, long amount = 0L)
     {
         if (amount < 0L)
         {
@@ -146,7 +148,11 @@ internal class Loan : Poly.Runtime.IActionScoped
         {
             return DomainResult<Loan>.Failure(Poly.Runtime.DomainFailure.Range("'Amount' must be <= 500.", "Loan.Amount"));
         }
-        var created = new Loan(book, amount);
+        var created = new Loan(book, patron, amount);
+        if (patron != null)
+        {
+            patron.AttachLoans(created);
+        }
         return DomainResult<Loan>.Success(created);
     }
     private void EnterNotifyCascade(string stageName)
@@ -163,12 +169,13 @@ internal class Loan : Poly.Runtime.IActionScoped
     }
     public object __Snapshot()
     {
-        var __state = new object?[5];
+        var __state = new object?[6];
         __state[0] = this.Amount;
         __state[1] = this.Book;
-        __state[2] = this.CurrentStage;
-        __state[3] = (this._patronLoansOverdueSubscribers == null ? null : new List<Patron>(this._patronLoansOverdueSubscribers));
-        __state[4] = this._notifyDepth;
+        __state[2] = this.Patron;
+        __state[3] = this.CurrentStage;
+        __state[4] = (this._patronLoansOverdueSubscribers == null ? null : new List<Patron>(this._patronLoansOverdueSubscribers));
+        __state[5] = this._notifyDepth;
         return __state;
     }
     public void __Restore(object state)
@@ -176,8 +183,9 @@ internal class Loan : Poly.Runtime.IActionScoped
         var __saved = (object?[])state;
         this.Amount = (long)__saved[0]!;
         this.Book = (Book?)__saved[1]!;
-        this.CurrentStage = (LoanStage)__saved[2]!;
-        if (__saved[3] == null)
+        this.Patron = (Patron?)__saved[2]!;
+        this.CurrentStage = (LoanStage)__saved[3]!;
+        if (__saved[4] == null)
         {
             this._patronLoansOverdueSubscribers = null;
         }
@@ -188,11 +196,11 @@ internal class Loan : Poly.Runtime.IActionScoped
                 this._patronLoansOverdueSubscribers = new List<Patron>();
             }
             ((System.Collections.IList)this._patronLoansOverdueSubscribers).Clear();
-            foreach (var __item3 in(List<Patron>)__saved[3]!)
+            foreach (var __item4 in(List<Patron>)__saved[4]!)
             {
-                this._patronLoansOverdueSubscribers.Add(__item3);
+                this._patronLoansOverdueSubscribers.Add(__item4);
             }
         }
-        this._notifyDepth = (int)__saved[4]!;
+        this._notifyDepth = (int)__saved[5]!;
     }
 }

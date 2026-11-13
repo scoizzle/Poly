@@ -17,5 +17,14 @@ public enum OperatorKind {
     GreaterThanOrEqual,
     And,
     Or,
-    Not
+    Not,
+    Modulo,
+    UnaryMinus,
+    UnaryPlus,
+    BitwiseAnd,
+    BitwiseOr,
+    BitwiseXor,
+    BitwiseNot,
+    ShiftLeft,
+    ShiftRight
 }

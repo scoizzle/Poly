@@ -22,12 +22,11 @@ public static class DslExpressionFragment {
     /// </summary>
     public static DomainExpression ParseExpressionFragment(string expression) {
         ArgumentNullException.ThrowIfNull(expression);
-        // OQ-4: the ruled 256 nesting levels overflow a 1 MB caller thread, so the parse
-        // runs on the shared large stack here too — every caller, not just the compiler's.
-        return DslLimits.RunOnParseStack(() => ParseOnThisThread(expression));
+        return ParseOnThisThread(expression);
     }
 
-    private static DomainExpression ParseOnThisThread(string expression) {
+    /// <summary>The parse itself; the stack tests run it on a 64 KB thread to prove nothing recurses over expression depth.</summary>
+    internal static DomainExpression ParseOnThisThread(string expression) {
         if (string.IsNullOrWhiteSpace(expression))
             throw GrammarError.Error("Expression must not be empty");
 

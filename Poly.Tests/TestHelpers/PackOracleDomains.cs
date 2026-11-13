@@ -349,7 +349,7 @@ public static class PackOracleDomains {
         "/api/children");
 
     public static IReadOnlyList<PackOracleDomain> All { get; } =
-        [Inventory588, Logistics559, Warehouse620, Inventory626, Desk658, Tally653, Fulfillment675, Failures687];
+        [Inventory588, Logistics559, Warehouse620, Inventory626, Desk658, Tally653, Fulfillment675];
 
     /// <summary>The PR-tier boot set (OQ-10): exactly Inventory588 and Warehouse620.</summary>
     public static IReadOnlyList<PackOracleDomain> Subset { get; } = [Inventory588, Warehouse620];

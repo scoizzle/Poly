@@ -111,7 +111,7 @@ public class MinimalApiGeneratorTests {
         var d = ParseDomain("domain T\nItem: entity { Sku: Text unique }");
         var rendered = Render(d);
         await Assert.That(rendered.Contains("Results.Ok")).IsTrue();
-        await Assert.That(rendered.Contains("Results.NotFound")).IsTrue();
+        await Assert.That(rendered.Contains("StatusProblem(404")).IsTrue();
     }
 
     [Test]
@@ -215,8 +215,7 @@ public class MinimalApiGeneratorTests {
     public async Task ActionEndpoint_HasStatusCode() {
         var d = ParseDomain("domain T\nItem: entity {\n  Name: Text\n  Freeze: action { }\n}");
         var rendered = Render(d);
-        await Assert.That(rendered.Contains("StatusCode")).IsTrue();
-        await Assert.That(rendered.Contains("500")).IsTrue();
+        await Assert.That(rendered.Contains("StatusProblem(500")).IsTrue();
     }
 
     [Test]
@@ -224,7 +223,7 @@ public class MinimalApiGeneratorTests {
         var d = ParseDomain("domain T\nItem: entity {\n  Name: Text\n  Freeze: action { }\n}");
         var rendered = Render(d);
         await Assert.That(rendered.Contains("IsSuccess")).IsTrue();
-        await Assert.That(rendered.Contains("Conflict")).IsTrue();
+        await Assert.That(rendered.Contains("Problem(result.Error!)")).IsTrue();
     }
 
     /// <summary>P-03 (A4): every action handler saves inside its <c>if (result.IsSuccess)</c> true-branch

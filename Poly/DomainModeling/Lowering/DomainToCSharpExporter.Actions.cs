@@ -90,8 +90,16 @@ public sealed partial class DomainToCSharpExporter {
         new Invoke(new Member(new ClrTypeReference(typeof(ActionScope)), member), arguments);
 
     /// <summary>
+    /// <c>ActionScope.Touch(this)</c>, the first statement of every mutator (L-03c): the action wrapper, a subscription
+    /// handler, <c>Attach*</c> and <c>Register*Subscriber</c>. A no-op outside a scope; inside one it snapshots the
+    /// receiver once, so a rollback restores it.
+    /// </summary>
+    private static Node TouchThis() => ActionScopeCall("Touch", new ThisReference());
+
+    /// <summary>
     /// An action is atomic: the action's method (at the action's own access) is a wrapper that opens an <see cref="ActionScope"/>,
-    /// calls the private body method that holds the lowered action, and commits on success.
+    /// touches <c>this</c> (L-03c: every mutator touches its receiver at entry, so the scope snapshots it before the
+    /// body writes it), calls the private body method that holds the lowered action, and commits on success.
     /// A failed result, an exception, or a throwing commit leaves <c>__done</c> false, so the
     /// <c>finally</c> rolls the still-open frame back. The wrapper's locals begin with <c>__</c>,
     /// which the DSL reserves, and the body is a separate method, so no authored name can collide.
@@ -112,6 +120,7 @@ public sealed partial class DomainToCSharpExporter {
             new Assignment(done, new Constant(false)),
             new TryCatchFinally(
                 new Block([
+                    TouchThis(),
                     new Assignment(result, call),
                     new IfStatement(
                         new Poly.Ast.Nodes.Not(new Member(result, "IsSuccess")),

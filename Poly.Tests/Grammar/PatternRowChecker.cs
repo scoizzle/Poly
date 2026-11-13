@@ -163,8 +163,23 @@ internal static class PatternRowChecker {
         IReadOnlyList<PatternRowExpectedRefusal> expected) {
         ArgumentNullException.ThrowIfNull(refusals);
         ArgumentNullException.ThrowIfNull(expected);
-        return [];
+        var violations = new List<string>();
+        foreach (var entry in expected.Where(e => !OwnerFormat.IsMatch(e.Owner)))
+            violations.Add($"expected refusal '{entry.Input}' has a malformed owner '{entry.Owner}'");
+
+        var met = refusals.Select(r => (r.Input, FirstLine: RefusalFirstLine(r.Message))).ToList();
+        foreach (var (input, firstLine) in met.Where(m => !expected.Any(e => e.Input == m.Input && e.FirstLine == m.FirstLine)))
+            violations.Add($"the drive refused '{input}' ('{firstLine}'), which ExpectedRefusals does not list");
+        foreach (var entry in expected.Where(e => !met.Any(m => m.Input == e.Input && m.FirstLine == e.FirstLine)))
+            violations.Add($"expected refusal '{entry.Input}' ('{entry.FirstLine}') no longer occurs: the entry is stale");
+        return violations;
     }
+
+    /// <summary>The first line of a refusal message with node ids shown as <c>…</c>, so the text is stable across runs.</summary>
+    private static string RefusalFirstLine(string message) =>
+        NodeIdText.Replace(message.Split('\n')[0].TrimEnd('\r'), "(NodeId …)");
+
+    private static readonly Regex NodeIdText = new(@"\(NodeId [0-9a-f]+\)", RegexOptions.CultureInvariant);
 
     /// <summary>An owner is a removing row (optionally with its issue), an issue, or a permanent justification.</summary>
     private static readonly Regex OwnerFormat = new(

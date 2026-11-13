@@ -194,8 +194,9 @@ public sealed class EditSpliceBaselineTests {
     }
 
     [Test]
-    public async Task Reindent_AHangingIndentFunctionAtTheTopLevel_IsIdentical() =>
-        await AssertIdentical("domain A\nfunction Sq(a: Number): Number =\n    a * a\n", "Sq");
+    public async Task Reindent_AHangingIndentDeclarationAtTheTopLevel_IsIdentical() =>
+        // A top-level `function` has no outline node yet (OutlineParityTests, class top-level-function, G-29), so the hanging top-level node is a bind.
+        await AssertIdentical("domain A\nB: bind C E to Go\n    p\n", "B");
 
     [Test]
     public async Task Reindent_AHangingIndentMemberNestedInAnEntity_IsIdentical() =>

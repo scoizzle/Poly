@@ -817,6 +817,19 @@ public class PolicyGuardFactsTests {
         await Assert.That(Narrowed(Context(domain, analysis, "Order", "Make"), "Qty")).IsEqualTo("[11,100]");
         await Assert.That(RangeFindings(analysis)).IsEqualTo(
             "DMEFF008! Assigned expression value range [11, 100] is entirely outside constraint range(0, 10) on property 'Qty'.");
+
+        // The new error's runtime evidence. The document itself no longer lowers (analysis rejects it), so its
+        // simulator twin writes `Qty + Zero` with Zero = 0: the same value at runtime, opaque to analysis (an
+        // unbounded Zero), so the twin is a DMCS003 warning and runs. Every Qty the guard admits fails the create.
+        var twin = CreateUnderRequireNot("range(0, 10)")
+            .Replace("Qty: Number range(0, 100)", "Qty: Number range(0, 100)\n  Zero: Number", StringComparison.Ordinal)
+            .Replace("create Item { Qty: Qty }", "create Item { Qty: Qty + Zero }", StringComparison.Ordinal);
+        var exec = Simulator(twin, out _);
+        await Assert.That(Outcome(exec.Invoke(Make(exec, "Order", ("Qty", 10L), ("Zero", 0L)), "Make")))
+            .IsEqualTo("fail: 'Make' blocked by policy 'Small'.");
+        foreach (var qty in new[] { 11L, 100L })
+            await Assert.That(Outcome(exec.Invoke(Make(exec, "Order", ("Qty", qty), ("Zero", 0L)), "Make")))
+                .IsEqualTo("fail: 'Qty' must be <= 10.");
     }
 
     /// <summary>The accept direction (amendment 6): wrong polarity would give <c>[0,10]</c> and an error. The

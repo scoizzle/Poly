@@ -103,6 +103,11 @@ Open or newly decided, named by the contract (an open item names the slice that 
   implicit and 81 explicit of the 132 ordered numeric pairs, and 3,584 operator cells. Decimal's conversions and
   operators stay the CLR's declared members. Deliberately none: enum, lifted, reference-equality, delegate and
   object operators.
+- **`nint` and `nuint` are built-in numeric types** — decided by T-18b: C# 11 gives them the operators and
+  conversions of a simple type and does not consult IntPtr's members, so neither does the provider (`nint + int` is
+  the built-in `(nint, nint)` operator, not `IntPtr.op_Addition`; `nint` to `long` is implicit). The oracle is
+  Roslyn at C# 11, one compilation with the operands as parameters: the runtime binder binds IntPtr's members. The
+  VM computes them at their word's width and signedness (`LocalType.WordTypeOf`).
 - **`GetOperators(kind, other)` is pair-aware** — decided by T-24, not a tie-break. `UInt32 + Int32` is `Int64`,
   which neither operand owns, and a "most specific" tie-break over per-operand sets cannot rank `Byte + Byte`
   between `int` and `uint` without §12.6.4.7's C#-only rule in neutral code. `other` is neutral (`ITypeDefinition?`;

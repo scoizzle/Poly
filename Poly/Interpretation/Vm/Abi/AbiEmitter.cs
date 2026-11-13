@@ -771,7 +771,8 @@ public static partial class AbiEmitter {
         type == typeof(byte) || type == typeof(ushort) || type == typeof(char)
         || type == typeof(uint) || type == typeof(ulong);
 
-    /// <summary>The operand's CLR type with <c>Nullable&lt;T&gt;</c> removed.
+    /// <summary>The operand's CLR type with <c>Nullable&lt;T&gt;</c> removed, at its word type
+    /// (<see cref="LocalType.WordTypeOf"/>: <c>nint</c> is <c>long</c>, <c>nuint</c> is <c>ulong</c>).
     /// A null constant has no numeric type. A parameter use is a different node
     /// from its declaration: the use has no type reference, and the word is the
     /// handle. The declaration's CLR type is what the word means.</summary>
@@ -783,7 +784,7 @@ public static partial class AbiEmitter {
             ?? BoundParameterClr(node, ctx)
             ?? (node is Constant constant ? constant.Value?.GetType() : null)
             ?? value.Type;
-        return Nullable.GetUnderlyingType(clr) ?? clr;
+        return LocalType.WordTypeOf(Nullable.GetUnderlyingType(clr) ?? clr);
     }
 
     /// <summary>CLR type of the declaration a parameter use is bound to.
@@ -803,7 +804,7 @@ public static partial class AbiEmitter {
 
     /// <summary>A shift's left operand promotes like the non-nullable shift, then
     /// lifts. The count stays an <c>int</c>. Expression trees have no lifted shift,
-    /// so an absent left answers <c>default</c> without shifting.</summary>
+    /// so an absent left, or an absent count, answers <c>default</c> without shifting.</summary>
     private static Expression EmitLiftedShift(
         Node left, Node right, Expression leftVal, Expression rightVal,
         Func<Expression, Expression, BinaryExpression> factory,
@@ -812,15 +813,20 @@ public static partial class AbiEmitter {
             PromoteUnderlying(left, right, leftVal, rightVal, ctx, shift: true));
         using var shift = ctx.LeaseHelper(nullable, "_shift");
         var local = shift.Local;
-        var shifted = factory(
-            Property(local, "Value"),
-            RingCodec.AsRepresentation(rightVal, typeof(int)));
-        return Block(
+        Expression present = Property(local, "HasValue");
+        var countValue = RingCodec.AsRepresentation(rightVal, typeof(int));
+        var counted = new List<Expression>();
+        using var count = ctx.LeaseHelper(typeof(int?), "_count");
+        if (Nullable.GetUnderlyingType(rightVal.Type) is not null) {
+            counted.Add(Assign(count.Local, AsNullableOperand(right, rightVal, typeof(int?), ctx)));
+            present = AndAlso(present, Property(count.Local, "HasValue"));
+            countValue = Property(count.Local, "Value");
+        }
+        var shifted = factory(Property(local, "Value"), countValue);
+        return Block([
             Assign(local, AsNullableOperand(left, leftVal, nullable, ctx)),
-            Condition(
-                Property(local, "HasValue"),
-                Convert(shifted, nullable),
-                Default(nullable)));
+            .. counted,
+            Condition(present, Convert(shifted, nullable), Default(nullable))]);
     }
 
     private static Expression AsNullableOperand(
@@ -831,7 +837,7 @@ public static partial class AbiEmitter {
             return value;
         var underlying = Nullable.GetUnderlyingType(nullable)!;
         if (Nullable.GetUnderlyingType(value.Type) is not null || value.Type == underlying)
-            return Convert(value, nullable);
+            return Convert(LocalType.AsWordType(value), nullable);
         value = RingCodec.FromFrame(value, UnderlyingOf(node, value, ctx) ?? value.Type, underlying, ctx.HeapLocal);
         return value.Type == nullable ? value : Convert(value, nullable);
     }

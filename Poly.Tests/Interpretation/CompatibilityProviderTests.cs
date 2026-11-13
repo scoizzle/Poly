@@ -116,7 +116,10 @@ public class CompatibilityProviderTests {
     /// grid's 212 newly rejected cells, 40 Decimal cells beside an enum or DateTimeOffset, 2,184 IntPtr or UIntPtr
     /// cells, and 144 comparisons of two different enum types. One family moved from rejected to accepted, on
     /// purpose (review F2): 499 cells with a <c>char?</c> beside a number, once the VM was shown to execute them as C#
-    /// does (<c>NullableCharProofTests</c>).
+    /// does (<c>NullableCharProofTests</c>). T-18b defines the native integers: the IntPtr family's 4,136 cells are 1,768
+    /// accepted and defined (it was 24, IntPtr's declared members), 24 rejected and defined (Duration times or divided by
+    /// a native integer: <c>VmExecutesDeclaredOperator</c>, T-21; it was 96), the 24 date-offset cells T-10 fences, and
+    /// 2,320 rejected and undefined (it was 3,992).
     /// </summary>
     private static readonly Dictionary<string, (int Count, string Checksum)> ExpectedBuckets = new(StringComparer.Ordinal) {
         ["DateTimeOffset|accepts|defined"] = (20, "b83fed908612bc49"),
@@ -127,9 +130,10 @@ public class CompatibilityProviderTests {
         ["Enum|accepts|defined"] = (12, "befeb42408f3821d"),
         ["Enum|accepts|none"] = (288, "6877c6037cfaa217"),
         ["Enum|rejects|none"] = (5184, "7fad361dbea81895"),
-        ["IntPtr|accepts|defined"] = (1768, ""),
+        ["IntPtr|accepts|defined"] = (1768, "cfce18bd83719974"),
         ["IntPtr|accepts|none"] = (24, "6c0426819d4a7d42"),
-        ["IntPtr|rejects|none"] = (2344, ""),
+        ["IntPtr|rejects|defined"] = (24, "36842c99eaa50dc8"),
+        ["IntPtr|rejects|none"] = (2320, "4d1107bf57bceb0c"),
         ["Nullable|accepts|defined"] = (4448, "2de1f3caa17904d4"),
         ["Nullable|accepts|none"] = (78, "f788f25092bfd0cd"),
         ["Nullable|rejects|defined"] = (231, "cb4b463a4d1108f3"),

@@ -267,16 +267,23 @@ internal static class OperatorOracle {
         var vmType = program.Program.RootClrType;
         var valueMismatches = new List<string>();
         var unchecked_ = false;
+        // T-18b: a native-integer cell's word is read as the type the program states (a nuint at or above 2^63 is not a
+        // negative long); when that type is not the tree's, a word that is the tree's value under the tree's type is a
+        // type divergence only. The 8,800 cells without a native operand keep the raw read they were pinned with.
+        var native = Poly.Tests.Introspection.CSharpOperatorOracle.IsNativeForm(left.Clr!)
+            || (right?.Clr is { } rightClr && Poly.Tests.Introspection.CSharpOperatorOracle.IsNativeForm(rightClr));
         foreach (var (name, leftValue, rightValue) in ArgumentSets(left, right)) {
             try {
                 var args = right is null ? new[] { leftValue } : [leftValue, rightValue];
                 using var exec = Interpreter.Execute(program.Program, args);
-                var actual = vmType == typeof(bool) ? (object?)exec.GetValue<bool>() : exec.Result.Value;
+                var actual = native ? Poly.Tests.Introspection.NativeIntegerGrid.Read(exec, vmType)
+                    : vmType == typeof(bool) ? (object?)exec.GetValue<bool>() : exec.Result.Value;
                 runs.Add($"{name}={Format(actual)}");
                 if (resolution is { } r) {
                     if (Expected(kind, r, left.Clr!, right?.Clr, leftValue, rightValue) is not { } expected)
                         unchecked_ = true;
-                    else if (Format(expected) != Format(actual))
+                    else if (Format(expected) != Format(actual)
+                        && !(native && vmType != expectedType && Format(Poly.Tests.Introspection.NativeIntegerGrid.Read(exec, expectedType)) == Format(expected)))
                         valueMismatches.Add($"{name}: VM {Format(actual)}, tree {Format(expected)}");
                 }
             }
@@ -473,22 +480,22 @@ public class OperatorOracleTests {
     // with a signed operand or Decimal-with-Float cell is rejected there. The domain DSL has no Float, so the analyzer
     // column is n/a for those; the remaining owners are the lowered analysis (T-07, T-10, T-17, T-22) and the ABI (T-21).
     private static readonly LedgerRule[] LoweredRules = [
-        new(OracleKind.LoweredAnalysisDisagrees, "*", "*", "*", "analysis error on a defined cell", "T-21 (the ABI cannot execute declared temporal and Duration-scalar arithmetic: VmExecutesDeclaredOperator); 7 temporal cells with T-10", 46, ""),
-        new(OracleKind.LoweredAnalysisDisagrees, "*", Arithmetic, "*", "type: analysis", "T-17 (result typing: small integers, char and uint with a signed operand keep the operand type)", 250, ""),
+        new(OracleKind.LoweredAnalysisDisagrees, "*", "*", "*", "analysis error on a defined cell", "T-21 (the ABI cannot execute declared temporal and Duration-scalar arithmetic: VmExecutesDeclaredOperator); 7 temporal cells with T-10; T-18b adds 6, Duration with nint or nuint (T-21: 'the rule analysis error on a defined cell is about 46 (Duration × native integers)')", 46, "ec7a9e70d97b4629"),
+        new(OracleKind.LoweredAnalysisDisagrees, "*", Arithmetic, "*", "type: analysis", "T-17 (result typing: small integers, char and uint with a signed operand keep the operand type); T-18b adds 90 native-integer pairs typed as the left operand (T-17: 'its common-type pass must give the right result for native-integer pairs')", 240, "16e9cabd50914419"),
         // The same wrong type on the node kinds the lowered analysis has no case for (issue 812): it passes the operand type through.
-        new(OracleKind.LoweredAnalysisDisagrees, "*", BitwiseShiftAndUnaryMinus, "*", "type: analysis", "T-22 (bitwise, shift and unary minus cases: the operand type passes through)", 263, ""),
-        new(OracleKind.LoweredAnalysisDisagrees, "*", "Add,Subtract", "*", "typed DateOnly", "T-10 (RewriteDateOffset)", 24, ""),
-        new(OracleKind.LoweredAnalysisDisagrees, "*", "Add,Subtract", "*", "typed DateTime", "T-10 (RewriteDateOffset)", 24, ""),
+        new(OracleKind.LoweredAnalysisDisagrees, "*", BitwiseShiftAndUnaryMinus, "*", "type: analysis", "T-22 (bitwise, shift and unary minus cases: the operand type passes through); T-18b adds 42 native-integer cells (T-17's lock: 'its bitwise type line 263')", 263, "c722cc646ed78cc9"),
+        new(OracleKind.LoweredAnalysisDisagrees, "*", "Add,Subtract", "*", "typed DateOnly", "T-10 (RewriteDateOffset); T-18b adds Date ± nint or nuint, 4 (T-10: 'T-18b adds 8 Date/DateTime ± nint/nuint cells to the date fence's accepted-undefined line')", 24, "6782a41016a1baec"),
+        new(OracleKind.LoweredAnalysisDisagrees, "*", "Add,Subtract", "*", "typed DateTime", "T-10 (RewriteDateOffset); T-18b adds DateTime ± nint or nuint, 4 (T-10: 'T-18b adds 8 Date/DateTime ± nint/nuint cells to the date fence's accepted-undefined line')", 24, "1ba415e2415d00aa"),
         // Text and Boolean ordering: the lowered analysis keeps accepting it (TextAndBooleanOrderingRule); the DSL and the interpreter order Text.
         new(OracleKind.LoweredAnalysisDisagrees, "Text,Boolean", Ordering, "Text,Boolean", "typed Boolean", "T-07 (#631 ordering legality)", 8, "a2d892f80f998382"),
         // The node kinds the lowered-tree analysis has no case for (issue 812): it accepts every operand.
-        new(OracleKind.LoweredAnalysisDisagrees, "*", BitwiseShiftAndUnaryMinus, "*", "analysis accepts an undefined cell", "T-22 (bitwise, shift and unary minus cases)", 1845, "")
+        new(OracleKind.LoweredAnalysisDisagrees, "*", BitwiseShiftAndUnaryMinus, "*", "analysis accepts an undefined cell", "T-22 (bitwise, shift and unary minus cases); T-18b adds 293 native-integer cells (T-22: 'every undefined bitwise, shift and unary-minus cell the lowered-tree analysis accepts')", 1785, "f154ab5338c85219")
     ];
 
     private static readonly LedgerRule[] AbiRules = [
-        new(OracleKind.AbiDivergesFromTree, "*", "*", "*", "executes an undefined cell", "T-21 (the ABI must reject what the tree does not define)", 1059, "7fada48079f73965"),
-        new(OracleKind.AbiDivergesFromTree, "*", "*", "*", "unstated conversion", "T-21 (T-04 and Lower state the conversion node; the emitter stops converting)", 1729, "6699a0d31e9728fb"),
-        new(OracleKind.AbiDivergesFromTree, "*", "*", "*", "^type: VM [^;]*$", "T-21 (the emitter's own promotion: the VM keeps the operand type)", 363, "fdfd5dee091d1059"),
+        new(OracleKind.AbiDivergesFromTree, "*", "*", "*", "executes an undefined cell", "T-21 (the ABI must reject what the tree does not define); T-18b adds 231 native-integer cells: the accepted-undefined bitwise, shift and date cells above that the VM runs", 1290, "cf1253256569c5f2"),
+        new(OracleKind.AbiDivergesFromTree, "*", "*", "*", "unstated conversion", "T-21 (T-04 and Lower state the conversion node; the emitter stops converting); T-18b adds 520 native-integer cells (T-18b lock amendment 7: 'its unstated conversion is then T-21's ledger line')", 2249, "0018c569d72f44e5"),
+        new(OracleKind.AbiDivergesFromTree, "*", "*", "*", "^type: VM [^;]*$", "T-21 (the emitter's own promotion: the VM keeps the operand type); T-18b adds 132 native-integer cells: the stated type is the lowered analysis's and the word is the tree's value (T-18b lock residuals: 'result types for the 142 diverging cells (T-17')", 495, "17d47740f68f3f09"),
         // Wrong values (issue 832): the type and the value in one reason, then the value alone (-Decimal and -Duration give -1).
         new(OracleKind.AbiDivergesFromTree, "*", "*", "*", "^type: VM .*; value S", "T-21 (issue 832: wrong type and value)", 8, "2e73ee06e20095c0"),
         new(OracleKind.AbiDivergesFromTree, "*", "*", "*", "^value S", "T-21 (issue 832: wrong values)", 115, "ae35f7db5640776e")
@@ -511,11 +518,11 @@ public class OperatorOracleTests {
 
     [Test]
     public async Task LoweredAnalysisDisagrees_EveryDivergenceIsOwned_AndNoEntryIsStale() =>
-        await AssertOwned(OracleKind.LoweredAnalysisDisagrees, LoweredRules, 2460);
+        await AssertOwned(OracleKind.LoweredAnalysisDisagrees, LoweredRules, 2390);
 
     [Test]
     public async Task AbiDivergesFromTree_EveryDivergenceIsOwned_AndNoEntryIsStale() =>
-        await AssertOwned(OracleKind.AbiDivergesFromTree, AbiRules, 3274);
+        await AssertOwned(OracleKind.AbiDivergesFromTree, AbiRules, 4157);
 
     [Test]
     public async Task AbiRejectsDefined_EveryDivergenceIsOwned_AndNoEntryIsStale() =>
@@ -535,6 +542,16 @@ public class OperatorOracleTests {
     ];
 
     private static bool IsNative(string? operand) => operand is "NInt" or "NUInt";
+
+    /// <summary>Set <c>POLY_LEDGER_OUT</c> to a path to write every cell's columns and divergences there.</summary>
+    [Test]
+    public async Task Ledger_WritesItsCells_WhenAsked() {
+        if (Environment.GetEnvironmentVariable("POLY_LEDGER_OUT") is not { Length: > 0 } output)
+            return;
+        var (cells, _) = OperatorOracle.Run.Value;
+        await File.WriteAllLinesAsync(output, cells.Select(static c =>
+            $"{c.Key} | {c.Tree} | {c.Lowered} | {c.Abi} | {string.Join(" || ", c.Divergences.Select(static d => $"{d.Kind}: {d.Reason}"))}"));
+    }
 
     [Test]
     public async Task Ledger_TheMasterGridCells_AreOwnedAsBeforeT18b() {

@@ -326,7 +326,7 @@ public static partial class AbiEmitter {
         var ring = ctx.OpenRing();
         var compiled = CompileNode(unaryMinus.Operand, ctx);
         if (NullableValue(compiled, ctx) is { } nullable)
-            return SpillToRing(Negate(nullable), ctx);
+            return SpillToRing(Negate(LocalType.AsWordType(nullable)), ctx);
         var slot = ring.AddValue(compiled);
         Expression result;
         if (RingCodec.IsIeee(unaryMinus.Operand, ctx.Analysis)) {
@@ -351,7 +351,7 @@ public static partial class AbiEmitter {
         var ring = ctx.OpenRing();
         var compiled = CompileNode(n.Operand, ctx);
         if (NullableValue(compiled, ctx) is { } nullable)
-            return SpillToRing(Not(nullable), ctx);
+            return SpillToRing(Not(LocalType.AsWordType(nullable)), ctx);
         var slot = ring.AddValue(compiled);
         return ring.Then(Assign(slot.Read, Not(slot.Read)));
     }

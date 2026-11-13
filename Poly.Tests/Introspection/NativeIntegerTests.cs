@@ -367,10 +367,15 @@ internal static class NativeIntegerGrid {
     /// <summary>The VM's result read as the type the program states: a scalar root is a 64-bit word.</summary>
     public static object? Read(ExecutionResult exec, Type? root) {
         var value = exec.Result.Value;
+        // The interpreter answers a float root as the double its word holds.
+        if (value is double widened && root == typeof(float))
+            return (float)widened;
         if (value is not long word || root is null)
             return value;
         return root switch {
             _ when root == typeof(bool) => word != 0,
+            _ when root == typeof(double) => BitConverter.Int64BitsToDouble(word),
+            _ when root == typeof(float) => (float)BitConverter.Int64BitsToDouble(word),
             _ when root == typeof(nint) => (nint)word,
             _ when root == typeof(nuint) => unchecked((nuint)(ulong)word),
             _ when root == typeof(ulong) => unchecked((ulong)word),
@@ -616,7 +621,7 @@ public class NativeIntegerTests {
     }
 
     /// <summary>The oracle's own count, so an empty mismatch list cannot pass by finding no cell.</summary>
-    private const int DefinedNonLiftedCells = 0;
+    private const int DefinedNonLiftedCells = 553;
 
     // ---- the grid (amendment 8) ----
 
@@ -642,7 +647,7 @@ public class NativeIntegerTests {
         await Assert.That(cells.Count(static c => c.Class == "defined: runs right")).IsEqualTo(RunsRight);
     }
 
-    private const int RunsRight = 0;
+    private const int RunsRight = 2114;
 
     /// <summary>
     /// The cells whose stated result type is not C#'s, with the right word (T-17: the lowered-tree result typing types a
@@ -651,7 +656,7 @@ public class NativeIntegerTests {
     [Test]
     public async Task Grid_StatedTypeDiffers_IsT17s_PinnedByCountAndChecksum() {
         var cells = NativeIntegerGrid.Cells.Value.Where(static c => c.Class == "defined: right word, stated type differs").ToArray();
-        await Assert.That((cells.Length, Poly.Tests.DomainModeling.Analysis.LedgerCheck.Checksum(cells.Select(static c => c.Key)))).IsEqualTo((0, ""));
+        await Assert.That((cells.Length, Poly.Tests.DomainModeling.Analysis.LedgerCheck.Checksum(cells.Select(static c => c.Key)))).IsEqualTo((84, "e80e8c401b1d4386"));
     }
 
     /// <summary>Amendment 7: every cell that ran right on 0d2cd4a8^1 runs right now.</summary>

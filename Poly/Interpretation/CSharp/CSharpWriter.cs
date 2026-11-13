@@ -283,28 +283,13 @@ public sealed class CSharpWriter {
     /// pattern's content positions (unnamed values, refs, repeats, optionals) in
     /// element order; named holes come from <paramref name="fills"/>.</summary>
     private static string Render(string rule, string pattern, params string?[] content) =>
-        RenderFills(rule, pattern, fills: null, content);
+        CSharpLanguage.Printer.Render(rule, pattern, content);
 
-    private static string RenderFills(
-        string rule,
-        string pattern,
-        IReadOnlyDictionary<string, string>? fills,
-        params string?[] content) {
-        var index = 0;
-        return CSharpLanguage.Printer.Print(
-            rule,
-            pattern,
-            ctx => {
-                var i = index++;
-                if (i >= content.Length)
-                    throw new InvalidOperationException(
-                        $"Pattern '{rule}/{pattern}' has more content positions than the writer supplied.");
-                if (content[i] is { Length: > 0 } text)
-                    ctx.Emit(text);
-            },
-            fills,
-            suppliedContentCount: content.Length);
-    }
+    private static string Render(string rule, string pattern, IReadOnlyDictionary<string, string> fills, params string?[] content) =>
+        CSharpLanguage.Printer.Render(rule, pattern, fills, content);
+
+    private static string RenderFills(string rule, string pattern, IReadOnlyDictionary<string, string> fills, params string?[] content) =>
+        Render(rule, pattern, fills, content);
 
     private static Dictionary<string, string> Names(params (string Name, string Value)[] entries) {
         var fills = new Dictionary<string, string>(StringComparer.Ordinal);

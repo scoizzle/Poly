@@ -49,16 +49,33 @@ public sealed class Printer<TToken, TTokenKind>
         Print(_grammar.GetPattern(ruleName, patternName), onContent, fills);
 
     /// <summary>
-    /// Prints a pattern by name for a caller that supplies its content positionally and reports how
-    /// many values it supplied (<see cref="PrintTrace"/> records the count).
+    /// Prints a row whose content positions are filled, in element order, from <paramref name="content"/>
+    /// (a null or empty value is an empty slot). Named holes take no value here.
     /// </summary>
-    internal string Print(
-        string ruleName,
-        string patternName,
-        Action<PrintContext<TToken, TTokenKind>> onContent,
-        IReadOnlyDictionary<string, string>? fills,
-        int suppliedContentCount) =>
-        PrintTop(_grammar.GetPattern(ruleName, patternName), onContent, fills, suppliedContentCount);
+    public string Render(string rule, string pattern, params string?[] content) =>
+        Render(rule, pattern, Fills.None, content);
+
+    /// <summary>
+    /// Prints a row: named holes from <paramref name="fills"/>, content positions in element order from
+    /// <paramref name="content"/> (a null or empty value is an empty slot).
+    /// </summary>
+    public string Render(string rule, string pattern, IReadOnlyDictionary<string, string> fills, params string?[] content) {
+        ArgumentNullException.ThrowIfNull(fills);
+        content ??= [];
+        var index = 0;
+        return PrintTop(
+            _grammar.GetPattern(rule, pattern),
+            ctx => {
+                var i = index++;
+                if (i >= content.Length)
+                    throw new InvalidOperationException(
+                        $"Pattern '{rule}/{pattern}' has more content positions than the writer supplied.");
+                if (content[i] is { Length: > 0 } text)
+                    ctx.Emit(text);
+            },
+            fills,
+            content.Length);
+    }
 
     /// <summary>Prints a pattern. Named holes use <paramref name="fills"/>; unnamed holes call <paramref name="onContent"/>.</summary>
     public string Print(
@@ -245,4 +262,21 @@ public sealed class PrintContext<TToken, TTokenKind>
     /// <summary>Prints a named pattern with a content callback (nested value positions).</summary>
     public void PrintRule(string ruleName, string patternName, Action<PrintContext<TToken, TTokenKind>> onContent) =>
         _printer.PrintInto(_writer, ruleName, patternName, onContent);
+}
+
+/// <summary>Named print fills for <see cref="Printer{TToken,TTokenKind}.Render(string, string, IReadOnlyDictionary{string, string}, string?[])"/>.</summary>
+public static class Fills {
+    /// <summary>No named fills.</summary>
+    public static IReadOnlyDictionary<string, string> None { get; } = new Dictionary<string, string>(StringComparer.Ordinal);
+
+    /// <summary>The fills named by <paramref name="entries"/>. A name given twice throws (fail closed).</summary>
+    public static IReadOnlyDictionary<string, string> Of(params (string Name, string Value)[] entries) {
+        ArgumentNullException.ThrowIfNull(entries);
+        var fills = new Dictionary<string, string>(entries.Length, StringComparer.Ordinal);
+        foreach (var (name, value) in entries) {
+            if (!fills.TryAdd(name, value))
+                throw new ArgumentException($"The fill '{name}' is named twice.", nameof(entries));
+        }
+        return fills;
+    }
 }

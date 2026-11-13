@@ -201,7 +201,7 @@ public class PolyDefineEditTests {
         var handWritten = Defined(surface, MarkedDoc + "\n\npublic entity Customer {\n  Name: Text\n}");
 
         static string Exported(string workspace) =>
-            JsonSerializer.SerializeToNode(McpTestTools.Dsl.ExportDsl(workspace).Data)!["poly"]!.GetValue<string>();
+            PolySurfaceHarness.Over(McpTestTools.Store).Export(workspace, "dsl").Content;
 
         await Assert.That(Exported(workspace)).IsEqualTo(Exported(handWritten));
     }
@@ -428,7 +428,7 @@ public class PolyDefineEditTests {
             .Replace("  Active: stage {}\n}", "  Active: stage {}\n  Amount: Decimal\n}"));
 
         static string Exported(string workspace) =>
-            JsonSerializer.SerializeToNode(McpTestTools.Dsl.ExportDsl(workspace).Data)!["poly"]!.GetValue<string>();
+            PolySurfaceHarness.Over(McpTestTools.Store).Export(workspace, "dsl").Content;
 
         await Assert.That(Exported(edited)).IsEqualTo(Exported(handWritten));
         await Assert.That(State(edited).SourceText).IsEqualTo(State(handWritten).SourceText);

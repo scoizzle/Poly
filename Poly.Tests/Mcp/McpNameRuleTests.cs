@@ -24,9 +24,11 @@ public class McpNameRuleTests {
     // Text, Number and Boolean are keywords the parser still accepts as a property name of a primitive type.
     private static readonly string[] PrimitiveKeywords = ["Text", "Number", "Boolean"];
 
+    private static readonly PolySurfaceHarness Surface = PolySurfaceHarness.Over(McpTestTools.Store);
+
     private static bool Parses(string template, string name) {
-        var sessionId = McpTestTools.Session.CreateDomainSession("Probe").SessionId!;
-        return McpTestTools.Dsl.ApplyDsl(sessionId, template.Replace("NAME", name)).Success;
+        var sessionId = Surface.Open("Probe");
+        return Surface.Define(sessionId, template.Replace("NAME", name)).Success;
     }
 
     [Test]
@@ -45,11 +47,11 @@ public class McpNameRuleTests {
     [Test]
     [MethodDataSource(nameof(PropertyNameCases))]
     public async Task IsPropertyName_AgreesWithTheDslParser(string name, string typeName) {
-        var sessionId = McpTestTools.Session.CreateDomainSession("Probe").SessionId!;
+        var sessionId = Surface.Open("Probe");
         McpTestTools.Store.TryGet(sessionId, out var state);
         var primitives = state.Domain.Types.OfType<PrimitiveType>().Select(t => t.Name).ToHashSet();
 
-        var parsed = McpTestTools.Dsl.ApplyDsl(sessionId, PropertyTemplate.Replace("NAME", name).Replace("TYPE", typeName)).Success;
+        var parsed = Surface.Define(sessionId, PropertyTemplate.Replace("NAME", name).Replace("TYPE", typeName)).Success;
 
         await Assert.That(DslTokenReader.IsPropertyName(name, typeName, primitives.Contains)).IsEqualTo(parsed);
     }
@@ -66,11 +68,11 @@ public class McpNameRuleTests {
     [Arguments("My-Domain")]
     [Arguments("stage")]
     public async Task CreateDomainSession_WithNameTheDslRefuses_CreatesNoSession(string name) {
-        var response = McpTestTools.Session.CreateDomainSession(name);
+        var response = Surface.Workspace(name: name);
 
         await Assert.That(response.Success).IsFalse();
-        await Assert.That(response.Message).Contains("is not a valid name");
-        await Assert.That(response.SessionId).IsNull();
+        await Assert.That(response.Summary).Contains("is not a valid name");
+        await Assert.That(response.Workspace).IsNull();
         // Other tests create sessions in parallel, so look for this name rather than count sessions.
         var created = McpTestTools.Store.ListSessions()
             .Any(id => McpTestTools.Store.TryGet(id, out var state) && state.Domain.Name == name);
@@ -132,9 +134,8 @@ public class McpNameRuleTests {
         var response = McpTestTools.Evolve.Add(sessionId, "property", $$"""{"entityName":"Order","name":"{{name}}","typeName":"{{typeName}}"}""");
 
         await Assert.That(response.Success).IsTrue();
-        var exported = McpTestTools.Dsl.ExportDsl(sessionId).Data!;
-        var poly = (string)exported.GetType().GetProperty("poly")!.GetValue(exported)!;
-        var reapplied = McpTestTools.Dsl.ApplyDsl(McpTestTools.Session.CreateDomainSession("Reapply").SessionId!, poly);
+        var poly = Surface.Export(sessionId, "dsl").Content;
+        var reapplied = Surface.Define(Surface.Open("Reapply"), poly);
         await Assert.That(reapplied.Success).IsTrue();
     }
 

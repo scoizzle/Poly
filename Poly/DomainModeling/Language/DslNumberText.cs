@@ -30,6 +30,9 @@ internal enum NumberLiteralKind {
 /// closed: NaN, the infinities, and a magnitude beyond <see cref="decimal.MaxValue"/> (the reader stores a
 /// fraction as <see cref="decimal"/>). The reader still rounds or refuses a digit text finer than decimal's scale
 /// (a double like <c>5e-324</c>); that is the reader's rule and is pinned in the tests, not changed here.
+/// <para>A <see cref="float"/> prints its shortest FLOAT digits (<c>1e15f</c> is <c>1000000000000000</c>, not the widened double's <c>999999986991104</c>).</para>
+/// <para>Negative zero prints <c>0</c>.</para>
+/// <para>An integral double literal keeps <c>.0</c> and an integral double bound does not, as on master (the reader folds <c>3.0</c> to the integer 3 either way).</para>
 /// </remarks>
 internal static class DslNumberText {
     private const string LongMaxDigits = "9223372036854775807";
@@ -39,7 +42,11 @@ internal static class DslNumberText {
     public static bool IsNumber(object? value) => value is
         sbyte or byte or short or ushort or int or uint or long or ulong or decimal or double or float;
 
-    /// <summary>Plain-digit DSL text for a numeric value, or a thrown exception: it never returns text the reader cannot take.</summary>
+    /// <summary>
+    /// Plain-digit DSL text for a numeric value: never an exponent. Fails closed on NaN, the infinities and a magnitude
+    /// beyond <see cref="decimal.MaxValue"/>. Text finer than Decimal's scale is exact digits that the reader refuses today
+    /// (T-15 makes that a positioned error).
+    /// </summary>
     public static string Format(object? value) => value switch {
         null => throw new ArgumentNullException(nameof(value)),
         sbyte or byte or short or ushort or int or uint or long or ulong or decimal =>

@@ -108,7 +108,8 @@ public sealed class DslOperatorTable {
     /// <summary>
     /// A copy with one more binary row. A row whose precedence falls between a prefix row's head level and its operand
     /// precedence would silently change how that prefix binds (<c>not a &gt; b</c> would become <c>(not a) &gt; b</c>), so it
-    /// is refused: give the row a precedence outside that gap, or change the prefix row deliberately.
+    /// is refused: give the row a precedence outside that gap, or change the prefix row deliberately. Binary rows with a precedence between the <c>not</c> head level and its operand precedence (41 to 49 in the core table) are refused;
+    /// <see cref="With(PrefixRow)"/> is not guarded.
     /// </summary>
     public DslOperatorTable With(BinaryRow row) {
         var next = new DslOperatorTable([.. _binary.Values, row], _prefix.Values);

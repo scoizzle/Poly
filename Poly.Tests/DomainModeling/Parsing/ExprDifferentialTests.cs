@@ -261,7 +261,7 @@ public sealed class ExprDifferentialTests {
         // calls and matches
         "F()", "F(1)", "F(1, 2)", "F(a + b, c and d)", "F(F(1), G(2, 3))", "F(a, (b, c))",
         "F(not a)", "F(a > b)", "F(Kids where Flag)", "F(any Kids where Flag, 2)", "F(match { a -> 1, else -> 2 })",
-        "F(match { a -> 1, b -> 2, else -> 3 }, 4)", "F(a) + G(b)", "F(a) > G(b)", "not F(a)", "F(a) and G(b)",
+        "F(match { a -> 1, b -> 2, else -> 3 }, 4)", "match { a -> F(match { b -> 1, else -> 2 }, 3), else -> 4 }", "F(a) + G(b)", "F(a) > G(b)", "not F(a)", "F(a) and G(b)",
         "match { else -> 1 }", "match { a -> 1, else -> 2 }", "match { a -> 1, b -> 2, else -> 3 }",
         "match { a > 1 and b -> x + 1, else -> y * 2 }", "match { F(a, b) -> G(c), else -> H(d) }",
         "match { a -> match { b -> 1, else -> 2 }, else -> 3 }", "match { (a) -> (1), else -> (2) }",
@@ -529,6 +529,24 @@ public sealed class ExprDifferentialTests {
 
         File.WriteAllLines(Path.Combine(GuideBlocks.RepoRoot(), BaselinePath), lines);
         await Assert.That(lines.Count).IsGreaterThan(100);
+    }
+
+    /// <summary>
+    /// Adds ONE row to the frozen baseline from the CURRENT parser: inert unless <c>POLY_APPEND_EXPR_ROW</c> holds the expression
+    /// text. An addition to the corpus, never a re-freeze: existing lines are not rewritten, and a text already present is refused.
+    /// </summary>
+    [Test]
+    public async Task Append_AddsOneRowFromCurrentParser() {
+        if (Environment.GetEnvironmentVariable("POLY_APPEND_EXPR_ROW") is not { } text)
+            return;
+
+        var path = Path.Combine(GuideBlocks.RepoRoot(), BaselinePath);
+        if (ReadBaseline().Any(e => e.Key == text))
+            throw new InvalidOperationException("The row is already in the baseline.");
+        var result = "";
+        OnBigStack(() => result = Result(text, digest: false));
+        File.AppendAllText(path, $"T\t{Escape(text)}\t{Escape(result)}\n");
+        await Assert.That(result).IsNotEmpty();
     }
 
     // ── the oracle ────────────────────────────────────────────────────────────────────

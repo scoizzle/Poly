@@ -100,8 +100,11 @@ public sealed class DslOperatorTableTests {
     /// </summary>
     [Test]
     public async Task With_RowBetweenNotHeadAndOperand_IsRefused_AndOutsideRowKeepsNotClosedToCompare() {
-        await Assert.That(() => DslOperatorTable.Core().With(new BinaryRow(
-            DslTokenKind.In, 45, Assoc.Left, DomainExpression.Equal))).Throws<InvalidOperationException>();
+        var refused = Assert.Throws<InvalidOperationException>(() => DslOperatorTable.Core().With(new BinaryRow(
+            DslTokenKind.In, 45, Assoc.Left, DomainExpression.Equal)));
+        // The message names the refused precedence band's row (precedence 45, the 41 to 49 gap) and why: it would change how `not` binds.
+        await Assert.That(refused.Message).Contains("precedence 45");
+        await Assert.That(refused.Message).Contains("would change how prefix 'Not' binds");
 
         var table = DslOperatorTable.Core().With(new BinaryRow(DslTokenKind.In, 55, Assoc.Left, DomainExpression.Equal));
         var reader = new DslTokenReader("not a > b");

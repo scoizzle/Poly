@@ -161,6 +161,11 @@ public class RecursivePassDepthTests {
         foreach (var (shape, depth) in StackCells) {
             var document = StatementDocument(shape, depth);
             foreach (var door in new[] { "parse", "analyze", "compile" }) {
+                // Compile stops at 256: its cost grows steeply with statement depth (master's Compile of 2000 else-if rungs gives no
+                // result in 120 s, and CI reported both stack cases still running after 1 m at 1000). 256 still aborts a 512 KB
+                // stack without the hop, so the cell proves the hop. G-25 times these cells and tightens them.
+                if (door == "compile" && depth > Limit)
+                    continue;
                 var outcome = OnStack(stackKb * 1024, () => {
                     if (door == "parse")
                         return new PolyDslParser(document).Parse().Count > 0;

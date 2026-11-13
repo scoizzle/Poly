@@ -1831,3 +1831,4 @@ G	where-nest:129	ERR expression nesting exceeds the limit of 256 @1:1797
 G	and-of-nots:256	OK len=8442 sha=8C88ADBA8966
 G	and-of-nots:257	ERR expression nesting exceeds the limit of 256 @1:1
 G	and-of-nots:258	ERR expression nesting exceeds the limit of 256 @1:3338
+T	match { a -> F(match { b -> 1, else -> 2 }, 3), else -> 4 }	OK MatchExpr([Arm(PropertyAccess("a"),FunctionCall("F",[MatchExpr([Arm(PropertyAccess("b"),Literal(Int64:1,null,Int32:1,Int32:29))],Literal(Int64:2,null,Int32:1,Int32:40),Int32:1,Int32:16),Literal(Int64:3,null,Int32:1,Int32:45)],Int32:1,Int32:14))],Literal(Int64:4,null,Int32:1,Int32:57),Int32:1,Int32:1)

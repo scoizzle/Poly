@@ -87,7 +87,11 @@ internal class Reservation : Poly.Runtime.IActionScoped
         if (this.CurrentStage == ReservationStage.Requested || this.CurrentStage == ReservationStage.Confirmed)
         {
             this.CurrentStage = ReservationStage.Cancelled;
-            this.NotifyCancelledSubscribers();
+            var notify0 = this.NotifyCancelledSubscribers();
+            if (!notify0.IsSuccess)
+            {
+                return DomainResult.Failure(notify0.Error!.At("Reservation.Cancel"));
+            }
             return DomainResult.Success();
         }
         return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Cancel' is not valid for the current stage on entity 'Reservation'.", "Reservation.Cancel"));
@@ -120,7 +124,11 @@ internal class Reservation : Poly.Runtime.IActionScoped
             return DomainResult.Failure(create0.Error!.At("Reservation.CheckIn"));
         }
         this.CurrentStage = ReservationStage.InHouse;
-        this.NotifyInHouseSubscribers();
+        var notify1 = this.NotifyInHouseSubscribers();
+        if (!notify1.IsSuccess)
+        {
+            return DomainResult.Failure(notify1.Error!.At("Reservation.CheckIn"));
+        }
         return DomainResult.Success();
     }
     internal DomainResult MarkNoShow()
@@ -130,7 +138,11 @@ internal class Reservation : Poly.Runtime.IActionScoped
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'MarkNoShow' requires stage 'Confirmed' on entity 'Reservation'.", "Reservation.MarkNoShow", "Confirmed"));
         }
         this.CurrentStage = ReservationStage.NoShow;
-        this.NotifyNoShowSubscribers();
+        var notify0 = this.NotifyNoShowSubscribers();
+        if (!notify0.IsSuccess)
+        {
+            return DomainResult.Failure(notify0.Error!.At("Reservation.MarkNoShow"));
+        }
         return DomainResult.Success();
     }
     internal DomainResult PostStayCharge()
@@ -173,7 +185,11 @@ internal class Reservation : Poly.Runtime.IActionScoped
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Policy("'CheckOut' blocked by policy 'BillSettled'.", "Reservation.CheckOut", "BillSettled"));
         }
         this.CurrentStage = ReservationStage.Departed;
-        this.NotifyDepartedSubscribers();
+        var notify0 = this.NotifyDepartedSubscribers();
+        if (!notify0.IsSuccess)
+        {
+            return DomainResult.Failure(notify0.Error!.At("Reservation.CheckOut"));
+        }
         return DomainResult.Success();
     }
     public bool DatesValid() => this.CheckOutDate > this.CheckInDate;
@@ -258,7 +274,7 @@ internal class Reservation : Poly.Runtime.IActionScoped
         }
         this._guestReservationsDepartedSubscribers.Add(subscriber);
     }
-    internal void NotifyInHouseSubscribers()
+    internal DomainResult NotifyInHouseSubscribers()
     {
         this.EnterNotifyCascade("InHouse");
         try
@@ -267,7 +283,11 @@ internal class Reservation : Poly.Runtime.IActionScoped
             {
                 foreach (var sub in this._roomStaysInHouseSubscribers)
                 {
-                    sub.WhenEachReservationInHouse();
+                    var handlerResult0 = sub.WhenEachReservationInHouse();
+                    if (!handlerResult0.IsSuccess)
+                    {
+                        return handlerResult0;
+                    }
                 }
             }
         }
@@ -275,8 +295,9 @@ internal class Reservation : Poly.Runtime.IActionScoped
         {
             this.ExitNotifyCascade();
         }
+        return DomainResult.Success();
     }
-    internal void NotifyDepartedSubscribers()
+    internal DomainResult NotifyDepartedSubscribers()
     {
         this.EnterNotifyCascade("Departed");
         try
@@ -285,15 +306,27 @@ internal class Reservation : Poly.Runtime.IActionScoped
             {
                 foreach (var sub in this._roomStaysDepartedSubscribers)
                 {
-                    sub.WhenEachReservationDeparted_SetOccupied();
-                    sub.WhenEachReservationDeparted_SetDirty();
+                    var handlerResult0 = sub.WhenEachReservationDeparted_SetOccupied();
+                    if (!handlerResult0.IsSuccess)
+                    {
+                        return handlerResult0;
+                    }
+                    var handlerResult1 = sub.WhenEachReservationDeparted_SetDirty();
+                    if (!handlerResult1.IsSuccess)
+                    {
+                        return handlerResult1;
+                    }
                 }
             }
             if (this._guestReservationsDepartedSubscribers != null)
             {
                 foreach (var sub in this._guestReservationsDepartedSubscribers)
                 {
-                    sub.WhenEachReservationDeparted(this);
+                    var handlerResult2 = sub.WhenEachReservationDeparted(this);
+                    if (!handlerResult2.IsSuccess)
+                    {
+                        return handlerResult2;
+                    }
                 }
             }
         }
@@ -301,8 +334,9 @@ internal class Reservation : Poly.Runtime.IActionScoped
         {
             this.ExitNotifyCascade();
         }
+        return DomainResult.Success();
     }
-    internal void NotifyCancelledSubscribers()
+    internal DomainResult NotifyCancelledSubscribers()
     {
         this.EnterNotifyCascade("Cancelled");
         try
@@ -311,7 +345,11 @@ internal class Reservation : Poly.Runtime.IActionScoped
             {
                 foreach (var sub in this._roomStaysCancelledSubscribers)
                 {
-                    sub.WhenEachReservationCancelled();
+                    var handlerResult0 = sub.WhenEachReservationCancelled();
+                    if (!handlerResult0.IsSuccess)
+                    {
+                        return handlerResult0;
+                    }
                 }
             }
         }
@@ -319,8 +357,9 @@ internal class Reservation : Poly.Runtime.IActionScoped
         {
             this.ExitNotifyCascade();
         }
+        return DomainResult.Success();
     }
-    internal void NotifyNoShowSubscribers()
+    internal DomainResult NotifyNoShowSubscribers()
     {
         this.EnterNotifyCascade("NoShow");
         try
@@ -329,7 +368,11 @@ internal class Reservation : Poly.Runtime.IActionScoped
             {
                 foreach (var sub in this._roomStaysNoShowSubscribers)
                 {
-                    sub.WhenEachReservationNoShow();
+                    var handlerResult0 = sub.WhenEachReservationNoShow();
+                    if (!handlerResult0.IsSuccess)
+                    {
+                        return handlerResult0;
+                    }
                 }
             }
         }
@@ -337,6 +380,7 @@ internal class Reservation : Poly.Runtime.IActionScoped
         {
             this.ExitNotifyCascade();
         }
+        return DomainResult.Success();
     }
     internal static DomainResult<Reservation> Create(long partySize, long nights, decimal nightlyRate, long maxOccupancy, DateOnly checkInDate, DateOnly checkOutDate, Folio? folio = null, Guest? guest = null, Room? room = null)
     {

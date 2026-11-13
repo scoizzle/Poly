@@ -96,7 +96,7 @@ public class C1bConstraintFailureTests {
         var module = session.Lower(domain, analysis);
         var handler = module.First(t => t.Name == "Patron").Methods!
             .First(m => m.Name.StartsWith("WhenEach", StringComparison.Ordinal));
-        await Assert.That(handler.ReturnType is TypeReference { TypeName: "void" }).IsTrue();
+        await Assert.That(handler.ReturnType is NamedTypeReference { TypeName: "DomainResult" }).IsTrue();
         await Assert.That(HasConstraintFailureThrow(handler.Body!)).IsTrue();
         await Assert.That(HasCreatedLocal(handler.Body!)).IsFalse();
         await Assert.That(HasDomainResultFailureReturn(handler.Body!)).IsFalse();

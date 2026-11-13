@@ -257,6 +257,40 @@ public class CompatibilityDslParityTests {
         }
     }
 
+    const string OptionalFlag = """
+        domain Opt
+        Task: entity {
+          Done: Boolean
+          Flag: Boolean optional
+          Out: Boolean optional
+          Ok: policy { Done and Flag }
+          Copy: action { assign Out to Done and Flag }
+          Check: action require Ok { assign Out to true }
+        }
+        """;
+
+    /// <summary>
+    /// Issue 862: an optional Boolean beside <c>and</c> is read as <c>Flag == true</c> (the owner's ruling), so a stored false
+    /// blocks the guard and absent is not true. Before T-21a the interpreter read the optional's presence and a stored false
+    /// let <c>Check</c> through. The printed C# does not compile (<c>&amp;&amp;</c> on bool and bool?, CS0019) until row T-06
+    /// lowers the explicit <c>== true</c>, so this runs on the interpreter only.
+    /// </summary>
+    [Test]
+    [Arguments(true, "Copy: success=True; Out=True | Check: success=True; guard=")]
+    [Arguments(false, "Copy: success=True; Out=False | Check: success=False; guard=Ok")]
+    [Arguments(null, "Copy: success=True; Out=False | Check: success=False; guard=Ok")]
+    public async Task OptionalBooleanBesideAnd_IsReadAsEqualsTrue_Interpreter(bool? flag, string expected) {
+        var domain = EvolvedDomain.FromDsl(OptionalFlag).Domain;
+        RuntimeAnalysisCache.Bind(domain, ParitySessions.Create(domain.Extensions.Count > 0 ? domain.Extensions : ExtensionCatalog.ProductAuthoring));
+        var side = new SimulateSide(domain);
+        side.Create("Task", flag is null ? [("Done", true)] : [("Done", true), ("Flag", flag)]);
+        side.Invoke("Copy");
+        side.Invoke("Check");
+        var (copy, check) = (side.Outcomes[1], side.Outcomes[2]);
+        await Assert.That($"Copy: success={copy.Success}; Out={copy.State["Out"]} | Check: success={check.Success}; guard={check.FailureGuard}")
+            .IsEqualTo(expected);
+    }
+
     /// <summary>A step that threw reports no state (the harness default), so its Due is named as not read.</summary>
     static string Describe(ParityOutcome outcome) =>
         $"success={outcome.Success}; exception={outcome.ExceptionType ?? "none"}; message={outcome.Message}; Due={(outcome.ExceptionType is null ? outcome.State["Due"] : "<state not read>")}";

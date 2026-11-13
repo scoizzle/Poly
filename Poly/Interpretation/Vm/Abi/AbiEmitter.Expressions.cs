@@ -282,18 +282,16 @@ public static partial class AbiEmitter {
     /// operand's ring slot — an in-place shape, not a spill of a value form.</summary>
     private static Expression EmitLogicalAnd(And and, Context ctx) {
         var ring = ctx.OpenRing();
-        var left = ring.AddValue(CompileNode(and.LeftHandValue, ctx));
+        var left = ctx.RingVar(ring.AddValue(TruthWord(and.LeftHandValue, CompileNode(and.LeftHandValue, ctx), ctx)));
 
-        var right = CompileNode(and.RightHandValue, ctx);
+        var right = TruthWord(and.RightHandValue, CompileNode(and.RightHandValue, ctx), ctx);
 
         var result = Assign(ctx.RingVar(ring.Base),
             ring.Then(
                 Condition(
-                    Equal(left.Read, Constant(0L)),
+                    Equal(left, Constant(0L)),
                     Constant(0L),
-                    Block(
-                        right.Code,
-                        ctx.Word(right)))));
+                    right)));
         ctx.RingDepth = ring.Base + 1;
         return result;
     }
@@ -302,20 +300,31 @@ public static partial class AbiEmitter {
     /// operand's ring slot — an in-place shape, not a spill of a value form.</summary>
     private static Expression EmitLogicalOr(Or or, Context ctx) {
         var ring = ctx.OpenRing();
-        var left = ring.AddValue(CompileNode(or.LeftHandValue, ctx));
+        var left = ctx.RingVar(ring.AddValue(TruthWord(or.LeftHandValue, CompileNode(or.LeftHandValue, ctx), ctx)));
 
-        var right = CompileNode(or.RightHandValue, ctx);
+        var right = TruthWord(or.RightHandValue, CompileNode(or.RightHandValue, ctx), ctx);
 
         var result = Assign(ctx.RingVar(ring.Base),
             ring.Then(
                 Condition(
-                    NotEqual(left.Read, Constant(0L)),
+                    NotEqual(left, Constant(0L)),
                     Constant(1L),
-                    Block(
-                        right.Code,
-                        ctx.Word(right)))));
+                    right)));
         ctx.RingDepth = ring.Base + 1;
         return result;
+    }
+
+    /// <summary>A logical operand's code, then its truth as a 0/1 word. A <c>bool?</c> operand (its static type, however
+    /// it arrives: a typed nullable local or a handle word) is true only when it holds true: the owner's reading of an
+    /// optional Boolean condition, <c>X == true</c> (#862). Any other operand is its own word.</summary>
+    private static Expression TruthWord(Node operand, Value compiled, Context ctx) {
+        if (ctx.ClrTypeOf(operand) != typeof(bool?))
+            return Block(compiled.Code, ctx.Word(compiled));
+        Expression flag = compiled.Place?.Representation == typeof(bool?)
+            ? compiled.Read
+            : LocalType.Decode(ctx.Word(compiled), typeof(bool?), typeof(bool?), ctx.HeapLocal);
+        return Block(compiled.Code,
+            Condition(Equal(flag, Constant(true, typeof(bool?))), Constant(1L), Constant(0L)));
     }
 
     /// <summary>Logical NOT: 0→1, anything else→0, in the operand's own ring slot — an

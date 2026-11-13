@@ -817,6 +817,35 @@ public class PolicyGuardFactsTests {
         await Assert.That(RangeFindings(analysis)).IsEqualTo(PossibleOutside0To10);
     }
 
+    /// <summary>A create in an <c>if</c> arm the guard makes unreachable (<c>Qty &gt; 50</c> under
+    /// <c>Qty &lt;= 10</c>) is never reported as a violation: no execution reaches it. The dead environment's empty
+    /// <c>Qty</c> keeps its stale <c>[0,10]</c>, so reading it (directly or through <c>Qty + 5</c>) would claim
+    /// "entirely outside"; nothing is recorded there and the creates keep master's declared-range warning. The assign
+    /// in the same shape (<c>Copy</c>) is WRONG on master and here alike (a definite error on unreachable code; the
+    /// assign path is not this slice's): pinned as it is, reported as found, not fixed.</summary>
+    [Test]
+    public async Task CreateInDeadBranch_IsNotReportedViolated() {
+        var (domain, analysis) = Analyze("""
+            domain C
+            Item: entity {
+              Qty: Number range(60, 100)
+              Big: Number range(70, 200)
+            }
+            Order: entity {
+              Qty: Number range(0, 100)
+              Local: Number range(60, 100) optional
+              Small: policy { Qty <= 10 }
+              Make: action require Small { if (Qty > 50) { create Item { Qty: Qty  Big: Qty + 5 } } }
+              Copy: action require Small { if (Qty > 50) { assign Local to Qty } }
+            }
+            """);
+        await Assert.That(InitializerOf(Context(domain, analysis, "Order", "Make"), "Qty")).IsEqualTo("absent");
+        await Assert.That(RangeFindings(analysis)).IsEqualTo(
+            "DMEFF008? Assigned expression value range [0, 100] can fall outside constraint range(60, 100) on property 'Qty'. | " +
+            "DMEFF008? Assigned expression value range [5, 105] can fall outside constraint range(70, 200) on property 'Big'. | " +
+            "DMEFF008! Assigned expression value range [0, 10] is entirely outside constraint range(60, 100) on property 'Local'.");
+    }
+
     /// <summary>No guard: the create stays a warning, and its initializer is recorded at the declared range (the
     /// presence control that shows the arm ran).</summary>
     [Test]

@@ -642,12 +642,14 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
 
     /// <summary>Records each initializer's value, evaluated in the creator's scope as
     /// <see cref="InferValue"/> evaluates it (no domain, so a navigation stays Unknown), under the walk's
-    /// environment.</summary>
+    /// environment. Nothing is recorded where a symbol is <see cref="AbstractValue.Unsatisfiable"/>: no execution
+    /// reaches that point (a dead <c>if</c> arm, unsatisfiable guards, or an assign that always fails), and an empty
+    /// value keeps its stale range, which would read as a definite violation; the create keeps the declared path.</summary>
     private static void RecordInitializers(
         IReadOnlyList<PropertyBinding> initializers, Entity entity, Action action,
         Dictionary<string, AbstractValue> env, IReadOnlyDictionary<string, AbstractValue>? paramEnv,
         InitializerFlow flow) {
-        if (!flow.Trusted || !ReferenceEquals(action, flow.Root)) return;
+        if (!flow.Trusted || !ReferenceEquals(action, flow.Root) || env.Values.Any(v => v.Unsatisfiable)) return;
         foreach (var initializer in initializers)
             flow.Values.Add(new InitializerValue(initializer, Eval(initializer.Expression, entity, action, env, paramEnv), action));
     }

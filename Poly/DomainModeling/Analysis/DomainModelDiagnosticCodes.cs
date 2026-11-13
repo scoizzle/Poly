@@ -431,6 +431,16 @@ internal static class DomainModelDiagnosticCodes {
     /// Cross-entity dependency cycle detected (relationships + subscriptions).
     public const string DependencyCycle = "DMDEP001";
 
+    /// <summary>
+    /// Two or more different entity types own each other in a cycle through <c>owned</c>
+    /// navigations (V-14, #586): <c>A.b: owned B</c> with <c>B.a: owned A</c>, or a longer
+    /// ring. Nothing in the ring is the root, so no member can ever be disposed of. A single
+    /// entity owning itself (<c>Node.children: many owned Node</c>) is a tree and is legal
+    /// (OQ-14). One error per cycle, on the navigation that closes it. Allocated to the V
+    /// block of the g.6 table.
+    /// </summary>
+    public const string OwnershipCycle = "DMDEP002";
+
     // ── Behavior / action diagnostics (APM Phase B) ────────────
 
     /// Action has no require gates and no parameters — unconditionally invocable.

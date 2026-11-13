@@ -588,4 +588,231 @@ public class OwnershipAggregateAnalysisTests {
             """);
         await Assert.That(AllErrors(analysis)).IsEmpty();
     }
+
+    // ── V-14 (#586, OQ-14): a multi-entity ownership cycle is an analysis error ───────────────
+
+    private const string Cycle = DomainModelDiagnosticCodes.OwnershipCycle;
+
+    private static Relationship CycleNav(Diagnostic diagnostic) => (Relationship)diagnostic.Node;
+
+    [Test]
+    public async Task MutuallyOwnedEntities_ReportOwnershipCycle() {
+        var (_, analysis) = Run(MutuallyOwnedRepro);
+
+        var errors = Errors(analysis, Cycle);
+        await Assert.That(errors.Count).IsEqualTo(1);
+        await Assert.That(AllErrors(analysis).Count).IsEqualTo(1);
+        // Positioned on the navigation that closes the cycle: the walk starts at the
+        // earliest-declared member (A) and B.a is the owned edge that returns to it.
+        var nav = CycleNav(errors[0]);
+        await Assert.That(nav.Source.TypeName).IsEqualTo("B");
+        await Assert.That(nav.Name).IsEqualTo("a");
+        await Assert.That(errors[0].Message).Contains("A -> B -> A");
+        await Assert.That(errors[0].Code).IsEqualTo("DMDEP002");
+    }
+
+    [Test]
+    public async Task ThreeEntityOwnershipCycle_Reported() {
+        var (_, analysis) = Run("""
+            domain Ring
+            A: entity { Name: Text
+              b: owned B }
+            B: entity { Name: Text
+              c: owned C }
+            C: entity { Name: Text
+              a: owned A }
+            """);
+
+        var errors = Errors(analysis, Cycle);
+        await Assert.That(errors.Count).IsEqualTo(1);
+        await Assert.That(AllErrors(analysis).Count).IsEqualTo(1);
+        await Assert.That(errors[0].Message).Contains("A -> B -> C -> A");
+        await Assert.That(CycleNav(errors[0]).Source.TypeName).IsEqualTo("C");
+        await Assert.That(CycleNav(errors[0]).Name).IsEqualTo("a");
+    }
+
+    [Test]
+    public async Task MultiEntityCycle_AOwnsBOwnsA_StillError() {
+        // Collections close the cycle just the same, and A owning itself (legal on its
+        // own, OQ-14) does not excuse the A -> B -> A ring.
+        var (_, analysis) = Run("""
+            domain TreeInACycle
+            A: entity {
+              Name: Text
+              children: many owned A
+              bs: many owned B
+            }
+            B: entity {
+              Name: Text
+              owners: many owned A
+            }
+            """);
+
+        var errors = Errors(analysis, Cycle);
+        await Assert.That(errors.Count).IsEqualTo(1);
+        await Assert.That(errors[0].Message).Contains("A -> B -> A");
+        await Assert.That(errors[0].Message).DoesNotContain("A -> A");
+    }
+
+    [Test]
+    public async Task OwnedChain_IsAccepted() {
+        var (_, analysis) = Run("""
+            domain Chain
+            A: entity { b: owned B }
+            B: entity { c: owned C }
+            C: entity { Name: Text }
+            """);
+        await Assert.That(Errors(analysis, Cycle)).IsEmpty();
+        await Assert.That(AllErrors(analysis)).IsEmpty();
+
+        // Presence control: the same chain with C owning A closes the ring and reports.
+        var (_, closed) = Run("""
+            domain Chain
+            A: entity { b: owned B }
+            B: entity { c: owned C }
+            C: entity { a: owned A }
+            """);
+        await Assert.That(Errors(closed, Cycle).Count).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task SelfOwnedEntity_SingleTypeTree_IsAccepted() {
+        var (_, analysis) = Run("""
+            domain Tree
+            A: entity {
+              Name: Text
+              children: many owned A
+            }
+            """);
+        await Assert.That(Errors(analysis, Cycle)).IsEmpty();
+        await Assert.That(AllErrors(analysis)).IsEmpty();
+
+        // Presence control: the same tree whose node also owns B, which owns A back, reports.
+        var (_, closed) = Run("""
+            domain Tree
+            A: entity {
+              Name: Text
+              children: many owned A
+              b: owned B
+            }
+            B: entity { a: owned A }
+            """);
+        await Assert.That(Errors(closed, Cycle).Count).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task OwnedNavigationWithPlainInverse_IsAccepted() {
+        var (_, analysis) = Run("""
+            domain PlainInverse
+            A: entity {
+              Name: Text
+              b: owned B
+            }
+            B: entity {
+              Name: Text
+              a: A
+            }
+            """);
+        await Assert.That(Errors(analysis, Cycle)).IsEmpty();
+        await Assert.That(AllErrors(analysis)).IsEmpty();
+
+        // Presence control: making the inverse owned too reports the cycle.
+        var (_, closed) = Run(MutuallyOwnedRepro);
+        await Assert.That(Errors(closed, Cycle).Count).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task SelfEdgeInsideARealCycle_GivesOneError() {
+        var (_, analysis) = Run("""
+            domain SelfEdgeInCycle
+            A: entity {
+              Name: Text
+              children: many owned A
+              b: owned B
+            }
+            B: entity { a: owned A }
+            """);
+
+        var errors = Errors(analysis, Cycle);
+        await Assert.That(errors.Count).IsEqualTo(1);
+        await Assert.That(errors[0].Message).Contains("A -> B -> A");
+    }
+
+    [Test]
+    public async Task TwoDisjointCycles_TwoErrors() {
+        var (_, analysis) = Run("""
+            domain TwoRings
+            A: entity { b: owned B }
+            B: entity { a: owned A }
+            C: entity { d: owned D }
+            D: entity { c: owned C }
+            """);
+
+        var errors = Errors(analysis, Cycle);
+        await Assert.That(errors.Count).IsEqualTo(2);
+        await Assert.That(errors.Any(e => e.Message.Contains("A -> B -> A"))).IsTrue();
+        await Assert.That(errors.Any(e => e.Message.Contains("C -> D -> C"))).IsTrue();
+    }
+
+    [Test]
+    public async Task Cycle_IsReportedFromItsEarliestDeclaredMember() {
+        // A reaches the B <-> C ring through C. The ring is reported starting at B (the
+        // earliest-declared member of the ring), closed by C.b — not as C -> B -> C.
+        var (_, analysis) = Run("""
+            domain RingBehindARoot
+            A: entity { c: owned C }
+            B: entity { c: owned C }
+            C: entity { b: owned B }
+            """);
+
+        var errors = Errors(analysis, Cycle);
+        await Assert.That(errors.Count).IsEqualTo(1);
+        await Assert.That(errors[0].Message).Contains("B -> C -> B");
+        await Assert.That(CycleNav(errors[0]).Source.TypeName).IsEqualTo("C");
+        await Assert.That(CycleNav(errors[0]).Name).IsEqualTo("b");
+    }
+
+    [Test]
+    public async Task CycleDeclaredInReverseOrder_StartsAtTheFirstDeclaredEntity() {
+        var (_, analysis) = Run("""
+            domain Reversed
+            B: entity { a: owned A }
+            A: entity { b: owned B }
+            """);
+
+        var errors = Errors(analysis, Cycle);
+        await Assert.That(errors.Count).IsEqualTo(1);
+        await Assert.That(errors[0].Message).Contains("B -> A -> B");
+        await Assert.That(CycleNav(errors[0]).Source.TypeName).IsEqualTo("A");
+    }
+
+    [Test]
+    public async Task ParallelOwnedNavsOnTheCycle_AreOneCycle() {
+        // Two navigations from A to B are also DMSTR010; the entity ring is still one cycle.
+        var (_, analysis) = Run("""
+            domain Parallel
+            A: entity {
+              b1: owned B
+              b2: owned B
+            }
+            B: entity { a: owned A }
+            """);
+
+        await Assert.That(Errors(analysis, Cycle).Count).IsEqualTo(1);
+        await Assert.That(Errors(analysis, Dmstr010).Count).IsEqualTo(1);
+    }
+
+    [Test]
+    public async Task ViaPairedBothOwned_ReportsTheInversePairingAndTheCycle() {
+        // Pinned, not endorsed: a `via` pairing owned on both ends is DMREL004 (S-11/S-12)
+        // and, being a mutual ownership ring, also DMDEP002 — one definition of ownership.
+        var (_, analysis) = Run("""
+            domain ViaBothOwned
+            A: entity { b: owned B via a }
+            B: entity { a: owned A via b }
+            """);
+
+        await Assert.That(Errors(analysis, DomainModelDiagnosticCodes.InverseContradictory).Count).IsEqualTo(1);
+        await Assert.That(Errors(analysis, Cycle).Count).IsEqualTo(1);
+    }
 }

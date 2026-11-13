@@ -1156,7 +1156,8 @@ The DSL accepts boolean and scalar expressions through the following precedence 
 
 An expression may nest at most 256 levels: the top level is 0, and each paren group, `not`,
 comparison operand, `where` body or call/match argument adds 1, while a chain of N operands
-adds N - 1. Deeper input is a positioned parse error, not a crash.
+adds N - 1. Deeper input is a positioned parse error, not a crash, and the limit does not depend on the
+host's stack size.
 
 Valid expressions:
 <!-- poly-verify: skip:illustration owner:M-02 -->

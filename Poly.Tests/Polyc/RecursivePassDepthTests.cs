@@ -123,6 +123,48 @@ public class RecursivePassDepthTests {
         }
     }
 
+    private static string NestedStatements(string open, string close, int levels, string outerOpen = "", string outerClose = "") =>
+        "domain D\nE: entity {\n  Flag: Boolean\n  Note: Text\n  Lines: many L\n  Go: action {\n" + outerOpen
+        + string.Concat(Enumerable.Repeat(open, levels)) + "assign Note to \"x\"\n" + string.Concat(Enumerable.Repeat(close, levels)) + outerClose
+        + "  }\n}\nL: entity { N: Text }\n";
+
+    /// <summary>
+    /// Lock amendment 12/13(d), the hop probe: with the 16 MB parse-stack hop gone, the analysis path
+    /// (<c>PolyCompiler.Analyze</c>: parse, resolve, evolve, analyze) and the structure parser run on a plain 1 MB
+    /// thread at the limit, including 256 nested <c>if</c> statements and 256 <c>if</c>s inside a <c>for</c> (a <c>for</c> inside a <c>for</c> is rejected, so that nesting is bounded at one). Statement nesting has no counted
+    /// limit, so this is the evidence the hop could go; the crash threshold for unbounded statement nesting is lower now.
+    /// </summary>
+    [Test]
+    public async Task ChildProbe_AnalysisPathAndStatementNesting_On1MbStack_NoHop() {
+        if (Environment.GetEnvironmentVariable("POLY_CHILD_PROBE") is null)
+            return;
+
+        var outcome = OnStack(SmallStackBytes, () => {
+            var compiler = new PolyCompiler(ProductCatalog.Catalog, new SessionOptions(ProductCatalog.Catalog, ProductCatalog.ImplicitIds));
+            foreach (var (_, body) in Cases()) {
+                var compiled = compiler.Analyze(Document(body));
+                if (!compiled.Succeeded)
+                    throw new InvalidOperationException("analysis path: " + string.Join("; ", compiled.Diagnostics.Select(d => d.Message)));
+            }
+
+            var ifs = new PolyDslParser(NestedStatements("if (Flag) { ", "} ", Limit)).Parse().Count;
+            var fors = new PolyDslParser(NestedStatements("if (Flag) { ", "} ", Limit, "for l in Lines { ", "} ")).Parse().Count;
+            return ifs + fors;
+        });
+
+        await Assert.That(outcome).IsGreaterThan(0);
+    }
+
+    [Test]
+    public async Task AnalysisPathAndStatementNesting_On1MbStack_NeedNoHop() {
+        var result = await PolycProcess.RunTestInChildAsync(
+            $"/*/*/{nameof(RecursivePassDepthTests)}/{nameof(ChildProbe_AnalysisPathAndStatementNesting_On1MbStack_NoHop)}",
+            new Dictionary<string, string?> { ["POLY_CHILD_PROBE"] = "g10-hop" });
+
+        await Assert.That(result.IsAborted).IsFalse();
+        await Assert.That(result.ExitCode).IsEqualTo(0);
+    }
+
     /// <summary>
     /// NAMED KNOWN GAP (lock amendment 13): <c>Interpreter.Compile</c> is exponential in the length of a left-nested
     /// <c>and</c> chain on master (about 2x per operand), so the VM legs, <c>PolyCompiler.Produce</c> and policy

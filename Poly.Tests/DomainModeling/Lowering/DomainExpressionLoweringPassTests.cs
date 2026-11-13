@@ -456,14 +456,14 @@ public class DomainExpressionLoweringPassTests {
 
     private const string OptionalBooleanDsl = """
         domain T06a
-        L: entity {
+        T06Line: entity {
           Flag: Boolean optional
         }
-        E: entity {
+        T06Item: entity {
           Done: Boolean
           Flag: Boolean optional
           Out: Boolean optional
-          lines: many L
+          lines: many T06Line
           Ok: policy { Flag }
           OkAnd: policy { Done and Flag is true }
           PAnd: action { assign Out to Done and Flag }
@@ -508,8 +508,8 @@ public class DomainExpressionLoweringPassTests {
         lock (OptionalBooleanGate) {
             var (simulate, printed) = OptionalBoolean.Value.Run(side => {
                 (string, object?)[] flagValue = flag is { } stored ? [("Flag", stored)] : [];
-                var line = side.Create("L", flagValue);
-                side.Create("E", [("Done", true), .. flagValue, ("lines", new List<object> { line! })]);
+                var line = side.Create("T06Line", flagValue);
+                side.Create("T06Item", [("Done", true), .. flagValue, ("lines", new List<object> { line! })]);
                 step(side);
             });
             var differences = ParityScenario.Differences(simulate, printed);
@@ -573,13 +573,13 @@ public class DomainExpressionLoweringPassTests {
 
     private const string NullTargetDsl = """
         domain T06aNull
-        Kind: enum { Low, High }
-        E: entity {
+        T06Level: enum { Low, High }
+        T06Slot: entity {
           Big: Boolean
           Q: Number optional
           Flag: Boolean optional
           Note: Text optional
-          Level: Kind optional
+          Level: T06Level optional
           ArmQ: action { assign Q to match { Big -> null, else -> 7 } }
           ArmFlag: action { assign Flag to match { Big -> null, else -> true } }
           ArmNote: action { assign Note to match { Big -> null, else -> "x" } }
@@ -618,7 +618,7 @@ public class DomainExpressionLoweringPassTests {
         List<string> differences;
         lock (NullTargetGate) {
             (simulate, var printed) = NullTarget.Value.Run(side => {
-                side.Create("E", ("Big", big), ("Q", 5L), ("Flag", false), ("Note", "n"), ("Level", "Low"));
+                side.Create("T06Slot", ("Big", big), ("Q", 5L), ("Flag", false), ("Note", "n"), ("Level", "Low"));
                 side.Invoke(action);
             });
             differences = ParityScenario.Differences(simulate, printed);

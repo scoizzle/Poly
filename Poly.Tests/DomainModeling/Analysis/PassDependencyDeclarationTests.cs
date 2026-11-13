@@ -63,6 +63,11 @@ public class PassDependencyDeclarationTests {
         await Assert.That(Index(EffectInvariantAnalyzer.Id)).IsLessThan(Index(EffectAnalyzer.Id));
         await Assert.That(Index(EffectInvariantAnalyzer.Id)).IsLessThan(Index(StoragePass.Id));
         await Assert.That(Index(CapabilityAnalyzer.Id)).IsLessThan(Index(SubscriptionAnalyzer.Id));
+        // T-05b (A1): DMSEM006 is reported after every pass that explains an expression with a more specific error.
+        await Assert.That(Index(SubscriptionAnalyzer.Id)).IsLessThan(Index("UntypedExpression"));
+        await Assert.That(Index(PolicyConstraintAnalyzer.Id)).IsLessThan(Index("UntypedExpression"));
+        await Assert.That(Index(EffectAnalyzer.Id)).IsLessThan(Index("UntypedExpression"));
+        await Assert.That(Index(ContractIntegrationAnalyzer.Id)).IsLessThan(Index("UntypedExpression"));
     }
 
     [Test]

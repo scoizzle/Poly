@@ -260,4 +260,33 @@ public class AnalysisGateParityTests {
         await Assert.That(typed!.Type.Definition?.PrimitiveType).IsEqualTo(PrimType.Decimal);
         await Assert.That(LoweredSeed(domain, analysis, sum)).IsEqualTo(0m);
     }
+
+    /// <summary>
+    /// T-05b (row T-05's red test): an expression the analyzer cannot type is an analysis error, DMSEM006, not silently
+    /// accepted; on master this document passes analysis and the VM refuses it. The typed control passes every door.
+    /// </summary>
+    [Test]
+    public async Task UnresolvableExpression_IsAnalysisError() {
+        const string dsl = """
+            domain T
+            Book: entity {
+              Qty: Number default(2)
+            }
+            Order: entity {
+              N: Number default(0)
+              books: many Book
+              book: Book
+              Go: action { assign N to READ }
+            }
+            """;
+        var untyped = GateParity.Check(dsl.Replace("READ", "books Qty", StringComparison.Ordinal),
+            SimStep.Create("Order", alias: "o"), SimStep.Invoke("o", "Go"));
+        await Assert.That(untyped.Analysis).IsFalse().Because(untyped.ToString());
+        await Assert.That(untyped.AnalysisSummary).Contains("DMSEM006");
+        await Assert.That(untyped.AnalysisSummary).Contains("cannot determine the type of 'books Qty'");
+
+        var typed = GateParity.Check(dsl.Replace("READ", "book Qty", StringComparison.Ordinal), SimStep.Create("Order", alias: "o"));
+        await Assert.That(typed.Analysis).IsTrue().Because(typed.ToString());
+        await Assert.That(typed.Holds).IsTrue().Because(typed.ToString());
+    }
 }

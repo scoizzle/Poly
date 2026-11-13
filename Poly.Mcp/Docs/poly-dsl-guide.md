@@ -1853,6 +1853,25 @@ Author a closed set as an **enum**, not a property constraint.
 - **Known gap:** a parameter passed through `invoke Rel.Action(param: expr)` does **not**
   yet inherit the callee's transitive envelopes (the callee's own DTO does).
 
+### HTTP failures (`uses http`)
+
+The generated host reads a failure's **kind** to pick the status; it never reads the message text. Every error
+response is `application/problem+json` (ProblemDetails): `status`, `title` and `detail`, where `title` is the kind
+name and `detail` is the failure's message, plus `elementPath` (for example `Item.Qty`) and `guard` (the stage or
+policy name) when the failure has them. An unknown id is `404` with title `Not Found`; an unexpected exception in an
+action is `500` with title `Internal Server Error` and no exception text.
+
+| Status | Kinds |
+|--------|-------|
+| 409 | `Unique`, `Link`, `Conflict`, `Stage` |
+| 422 | `Policy` |
+| 400 | `Required`, `Range`, `Length`, `Pattern`, `Enum`, `Arithmetic`, `Argument`, `Constraint` |
+| 500 | `Cascade` |
+
+A stage failure (an action the current stage does not offer) conflicts with the resource's state, so it is `409`. A
+policy failure (a `require` guard that does not hold) is `422`: the request is well-formed and a rule refused it. It
+is not authorisation, so it is not `403`.
+
 ## 12. Dual Authoring Path
 
 **Batch** (`apply_dsl`): Write the full domain in `.poly` and apply in one shot.

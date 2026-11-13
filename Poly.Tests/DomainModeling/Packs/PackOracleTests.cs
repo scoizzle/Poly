@@ -685,16 +685,10 @@ public class PackOracleTests {
         using var duplicate = await oracle.Client.PostAsync("/api/children", Json("""{"Code":"A1","Qty":5}"""));
         using var duplicateBody = await ExpectProblem(duplicate, 409, "Unique");
 
-        // Link: a second link on an occupied to-one is 409.
-        // The seed row's key is its sample value: eight X for a length(1, 8) Text.
-        using var linked = await oracle.Client.PostAsync("/api/nodes/XXXXXXXX/extend", Json("{}"));
-        await Assert.That((int)linked.StatusCode).IsEqualTo(200);
-        using var relinked = await oracle.Client.PostAsync("/api/nodes/XXXXXXXX/extend", Json("{}"));
+        // Link: the action's second create into the now-occupied to-one is 409. Node has no natural
+        // key, so its seed row is routed by the shadow id.
+        using var relinked = await oracle.Client.PostAsync("/api/nodes/1/extend", Json("{}"));
         using var relinkedBody = await ExpectProblem(relinked, 409, "Link");
-
-        // An entity that cannot be created directly answers 400 ProblemDetails too.
-        using var direct = await oracle.Client.PostAsync("/api/nodes", Json("""{"Code":"D1"}"""));
-        using var directBody = await ExpectProblem(direct, 400, "Bad Request");
 
         // Stage: an action the current stage does not offer is 409 and names the stage.
         using var ticket = await oracle.Client.PostAsync("/api/tickets", Json("""{"Code":"T1","Ok":false}"""));

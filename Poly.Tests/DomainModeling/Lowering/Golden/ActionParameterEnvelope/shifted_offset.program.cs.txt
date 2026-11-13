@@ -2,6 +2,7 @@
 
 #nullable enable
 
+using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -27,13 +28,13 @@ using (var scope = app.Services.CreateScope())
 
 app.MapGet("/api/books", async (TDbCtx db) => await db.Books.ToListAsync());
 
-app.MapGet("/api/books/{id}", async (int id, TDbCtx db) => (await db.Books.FindAsync(id) is T.Book book ? Results.Ok(book) : Results.NotFound()));
+app.MapGet("/api/books/{id}", async (int id, TDbCtx db) => (await db.Books.FindAsync(id) is T.Book book ? Results.Ok(book) : StatusProblem(404, "Not Found")));
 
 app.MapPost("/api/books", async (BookDto dto, TDbCtx db) => {
     var bookResult = T.Book.Create(dto.Stock);
     if (!bookResult.IsSuccess)
     {
-        return FailureStatus(bookResult.ErrorMessage);
+        return Problem(bookResult.Error!);
     }
     db.Books.Add(bookResult.Value);
     await db.SaveChangesAsync();
@@ -44,7 +45,7 @@ app.MapPost("/api/books/{id}/shift", async (int id, ShiftDto dto, TDbCtx db) => 
     var entity = await db.Books.FindAsync(id);
     if (entity == null)
     {
-        return Results.NotFound("Book not found");
+        return StatusProblem(404, "Not Found", "Book not found");
     }
     try
     {
@@ -56,18 +57,33 @@ app.MapPost("/api/books/{id}/shift", async (int id, ShiftDto dto, TDbCtx db) => 
         }
         else
         {
-            return FailureStatus(result.ErrorMessage);
+            return Problem(result.Error!);
         }
     }
     catch (Exception)
     {
-        return Results.StatusCode(500);
+        return StatusProblem(500, "Internal Server Error");
     }
 });
 
-static IResult FailureStatus(string? message)
+static IResult Problem(Poly.Runtime.DomainFailure failure)
 {
-    return (message != null && (message.Contains("Unique constraint") || message.Contains("already has a target")) ? Results.Conflict(message) : Results.BadRequest(message));
+    var extensions = new Dictionary<string, object?>();
+    if (failure.ElementPath != null)
+    {
+        extensions["elementPath"] = failure.ElementPath;
+    }
+    if (failure.Guard != null)
+    {
+        extensions["guard"] = failure.Guard;
+    }
+    return Results.Problem(failure.Message, null, Poly.Runtime.DomainFailureStatus.Http(failure.Kind), failure.Kind.ToString(), null, extensions);
+}
+
+
+static IResult StatusProblem(int status, string title, string? detail = null)
+{
+    return Results.Problem(detail, null, status, title);
 }
 
 

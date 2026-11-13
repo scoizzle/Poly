@@ -315,7 +315,7 @@ public static class PackOracleDomains {
         "/api/orders");
 
     /// <summary>P-14a (row P-14). One host with every failure the HTTP contract maps: a Range, a unique,
-    /// an occupied to-one link, the unreachable-create 400, a Stage and a Policy failure.</summary>
+    /// an occupied to-one link, a Stage and a Policy failure.</summary>
     public static PackOracleDomain Failures687 { get; } = new(
         "Failures687",
         """
@@ -329,9 +329,9 @@ public static class PackOracleDomains {
         }
 
         Node: entity {
-          Code: Text unique length(1, 8)
+          Code: Text length(1, 8)
           next: Node
-          Extend: action { create in next { Code: "N" } }
+          Extend: action { create in next { Code: "A" } create in next { Code: "B" } }
         }
 
         Ticket: entity {

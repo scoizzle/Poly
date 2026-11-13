@@ -42,7 +42,7 @@ public sealed partial class MinimalApiGenerator {
                     },
                     new Invoke(new Member(new TypeReference("Results"), "Ok"),
                         new Variable(camelName)),
-                    new Invoke(new Member(new TypeReference("Results"), "NotFound"))))));
+                    ProblemResponse(404, "Not Found")))));
 
         // POST endpoint for root entities (S3: proper Entity.Create + result handling)
         if (store.IsRoot) {
@@ -62,9 +62,8 @@ public sealed partial class MinimalApiGenerator {
                 new Constant(route),
                 new Lambda([dtoParam, dbParam],
                     new Block(new Return(
-                        new Invoke(
-                            new Member(new TypeReference("Results"), "BadRequest"),
-                            new Constant($"{entity.Name} requires related entities and cannot be created directly.")))))));
+                        ProblemResponse(400, "Bad Request",
+                            $"{entity.Name} requires related entities and cannot be created directly."))))));
             return;
         }
 
@@ -78,10 +77,10 @@ public sealed partial class MinimalApiGenerator {
         bodyNodes.Add(Init(resultVarName,
             new Invoke(new Member(new TypeReference(VisibleType(entity.Name)), "Create"), [.. createArgs])));
 
-        // Constraint and stage failures are 400. Unique and link conflicts are 409.
+        // The failure's typed kind picks the status (DomainFailureStatus.Http).
         bodyNodes.Add(new IfStatement(
             new Ast.Nodes.Not(new Member(new Variable(resultVarName), "IsSuccess")),
-            new Block(DomainFailureReturn(new Member(new Variable(resultVarName), "ErrorMessage")))));
+            new Block(DomainFailureReturn(new Variable(resultVarName)))));
 
         // db.Set.Add(result.Value)
         bodyNodes.Add(new Invoke(
@@ -163,7 +162,7 @@ public sealed partial class MinimalApiGenerator {
                         LoadByRouteKey(pluralParent, parentStore, new Variable(parentKey))),
                     new IfStatement(new Equal(new Variable("parent"), new Constant(null!)),
                         new Block(new Return(
-                            new Invoke(new Member(new TypeReference("Results"), "NotFound"))))),
+                            ProblemResponse(404, "Not Found")))),
                     new Await(new Invoke(new Member(collCall, "LoadAsync"))),
                     new Return(new Invoke(new Member(new TypeReference("Results"), "Ok"),
                         new Member(new Variable("parent"), pascalRel)))
@@ -202,13 +201,13 @@ public sealed partial class MinimalApiGenerator {
                                 new Member(eParam2, childKeyPropName),
                                 new Variable(childKeyParam)))))));
             detailBody.Add(new IfStatement(new Equal(new Variable("child"), new Constant(null!)),
-                new Block(new Return(new Invoke(new Member(new TypeReference("Results"), "NotFound"))))));
+                new Block(new Return(ProblemResponse(404, "Not Found")))));
         }
         else {
             detailBody.Add(Init("parent",
                 LoadByRouteKey(pluralParent, parentStore, new Variable(parentKey))));
             detailBody.Add(new IfStatement(new Equal(new Variable("parent"), new Constant(null!)),
-                new Block(new Return(new Invoke(new Member(new TypeReference("Results"), "NotFound"))))));
+                new Block(new Return(ProblemResponse(404, "Not Found")))));
             var colParam = new Parameter("e");
             var detailCollCall = new Invoke(
                 new Member(
@@ -226,7 +225,7 @@ public sealed partial class MinimalApiGenerator {
                                 new Member(match, childKeyPropName),
                                 new Variable(childKeyParam))))));
                 detailBody.Add(new IfStatement(new Equal(new Variable("child"), new Constant(null!)),
-                    new Block(new Return(new Invoke(new Member(new TypeReference("Results"), "NotFound"))))));
+                    new Block(new Return(ProblemResponse(404, "Not Found")))));
             }
             else {
                 // Shadow key: no CLR property to compare. The route id is that key.
@@ -242,7 +241,7 @@ public sealed partial class MinimalApiGenerator {
                                 new Lambda([match],
                                     new Equal(new Variable("e"), new Variable("child")))))),
                     new Block(new Return(
-                        new Invoke(new Member(new TypeReference("Results"), "NotFound"))))));
+                        ProblemResponse(404, "Not Found")))));
             }
         }
         detailBody.Add(new Return(new Invoke(new Member(new TypeReference("Results"), "Ok"),

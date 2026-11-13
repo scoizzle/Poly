@@ -47,12 +47,12 @@ public sealed partial class MinimalApiGenerator {
                 preActionNodes.Add(Init("parentEntity",
                     LoadByRouteKey(Pluralize(pEntity.Name), pStore, new Variable(pKeyName))));
                 preActionNodes.Add(new IfStatement(new Equal(new Variable("parentEntity"), new Constant(null!)),
-                    new Block(new Return(new Invoke(new Member(new TypeReference("Results"), "NotFound"), new Constant($"{pEntity.Name} not found"))))));
+                    new Block(new Return(ProblemResponse(404, "Not Found", $"{pEntity.Name} not found")))));
                 if (isCollection) {
                     preActionNodes.Add(Init("entity",
                         LoadByRouteKey(pluralName, store, new Variable(childKeyParam))));
                     preActionNodes.Add(new IfStatement(new Equal(new Variable("entity"), new Constant(null!)),
-                        new Block(new Return(new Invoke(new Member(new TypeReference("Results"), "NotFound"), new Constant($"{entity.Name} not found"))))));
+                        new Block(new Return(ProblemResponse(404, "Not Found", $"{entity.Name} not found")))));
                     var parEntry = new Invoke(new Member(new TypeReference("db"), "Entry"), new Variable("parentEntity"));
                     var parColl = new Invoke(new Member(parEntry, "Collection"), new Lambda([new Parameter("e")], new Member(new Variable("e"), pascalRel)));
                     preActionNodes.Add(new Await(new Invoke(new Member(parColl, "LoadAsync"))));
@@ -61,7 +61,7 @@ public sealed partial class MinimalApiGenerator {
                             new Invoke(
                                 new Member(new Member(new Variable("parentEntity"), pascalRel), "Any"),
                                 new Lambda([new Parameter("e")], new Equal(new Variable("e"), new Variable("entity"))))),
-                        new Block(new Return(new Invoke(new Member(new TypeReference("Results"), "NotFound"), new Constant($"{entity.Name} not found for this {pEntity.Name}"))))));
+                        new Block(new Return(ProblemResponse(404, "Not Found", $"{entity.Name} not found for this {pEntity.Name}")))));
                 }
                 else {
                     var parEntry = new Invoke(new Member(new TypeReference("db"), "Entry"), new Variable("parentEntity"));
@@ -69,7 +69,7 @@ public sealed partial class MinimalApiGenerator {
                     preActionNodes.Add(new Await(new Invoke(new Member(parRef, "LoadAsync"))));
                     preActionNodes.Add(Init("entity", new Member(new Variable("parentEntity"), pascalRel)));
                     preActionNodes.Add(new IfStatement(new Equal(new Variable("entity"), new Constant(null!)),
-                        new Block(new Return(new Invoke(new Member(new TypeReference("Results"), "NotFound"), new Constant($"{entity.Name} not found"))))));
+                        new Block(new Return(ProblemResponse(404, "Not Found", $"{entity.Name} not found")))));
                 }
             }
             else {
@@ -83,7 +83,7 @@ public sealed partial class MinimalApiGenerator {
                 preActionNodes.Add(Init("entity",
                     LoadByRouteKey(pluralName, store, new Variable(keyName))));
                 preActionNodes.Add(new IfStatement(new Equal(new Variable("entity"), new Constant(null!)),
-                    new Block(new Return(new Invoke(new Member(new TypeReference("Results"), "NotFound"), new Constant($"{entity.Name} not found"))))));
+                    new Block(new Return(ProblemResponse(404, "Not Found", $"{entity.Name} not found")))));
             }
 
             // Load collection navigations
@@ -104,7 +104,7 @@ public sealed partial class MinimalApiGenerator {
                         _storageLookup[param.DomainType],
                         new Member(new Variable("dto"), ActionDtoPropertyName(param)))));
                     tryBody.Add(new IfStatement(new Equal(new Variable(lv), new Constant(null!)),
-                        new Block(new Return(new Invoke(new Member(new TypeReference("Results"), "NotFound"), new Constant($"{param.DomainType} not found"))))));
+                        new Block(new Return(ProblemResponse(404, "Not Found", $"{param.DomainType} not found")))));
                     invokeArgs.Add(new Variable(lv));
                 }
                 else invokeArgs.Add(new Member(new Variable("dto"), ActionDtoPropertyName(param)));
@@ -117,7 +117,7 @@ public sealed partial class MinimalApiGenerator {
 
             // Success commits; a failure returns before any save, so the context discards its pending changes.
             var commit = new Await(new Invoke(new Member(new TypeReference("db"), "SaveChangesAsync")));
-            var failure = new Block(DomainFailureReturn(new Member(new Variable("result"), "ErrorMessage")));
+            var failure = new Block(DomainFailureReturn(new Variable("result")));
             if (ia.IsVoid) {
                 tryBody.Add(new IfStatement(
                     new Member(new Variable("result"), "IsSuccess"),
@@ -131,10 +131,9 @@ public sealed partial class MinimalApiGenerator {
                     failure));
             }
 
-            // Catch: returns Results.StatusCode(500). No variable — the exception is
+            // Catch: a ProblemDetails 500 with no exception text. No variable — the exception is
             // swallowed (avoids CS0168 unused-variable warnings).
-            var catchBody = new Return(
-                new Invoke(new Member(new TypeReference("Results"), "StatusCode"), new Constant(500)));
+            var catchBody = new Return(ProblemResponse(500, "Internal Server Error"));
 
             var bodyNodes = new List<Node>(preActionNodes);
             bodyNodes.Add(new TryCatchFinally(

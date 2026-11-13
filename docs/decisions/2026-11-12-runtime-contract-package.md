@@ -34,8 +34,8 @@ until **P-14** deletes it.
 | `Conflict` | 409 | Q2: a conflicting save returns 409. Reached through P-09's `DbUpdateConcurrencyException` → `Conflict`. **No producer exists today.** |
 | `Cascade` | 500 | Today's behaviour: a subscription-cascade depth overflow is an `InvalidOperationException` (`DomainToCSharpExporter.Notify.Dispatch.cs:87-97`), so it surfaces as 500 - through the action's `catch (Exception)`, or unhandled on create. Orchestrator ruling O-4; the owner may veto. |
 | `Required` | 400 | Q7: an omitted required value is a bad request. |
-| `Stage` | 400 | **Provisional, unruled.** 409, 403 and 422 are open owner alternatives ([#687](https://github.com/scoizzle/Poly/issues/687) risk 3). |
-| `Policy` | 400 | **Provisional, unruled.** Same alternatives as `Stage`. |
+| `Stage` | 409 | **Ruled (owner, #677):** a stage failure conflicts with the resource's current state. |
+| `Policy` | 422 | **Ruled (owner, #677):** a `require` guard refused a well-formed request; not authorisation, so not 403. |
 | `Range`, `Length`, `Pattern`, `Enum`, `Arithmetic`, `Argument`, `Constraint` | 400 | Today's behaviour: every kind outside the two text markers is 400. |
 
 Q3 is why the mapping lives on the kind at all: a host maps kind→status, and the kind is the
@@ -43,9 +43,9 @@ contract, not the message.
 
 **Honest "today".** Only `Unique`, `Link` and the ten 400 rows have a producer that reproduces
 today's observable status. `Conflict` is decided by Q2 ahead of its producer. `Cascade`'s 500 is
-today's *incidental* status, ratified rather than derived. `Stage` and `Policy` are placeholders
-that keep the table total; they are the two rows the owner is most likely to change, and changing
-them is one arm plus one test row - exactly the property this table buys.
+today's *incidental* status, ratified rather than derived. `Stage` and `Policy` were placeholders
+until the owner ruled them (409, 422); changing a row is one arm plus one test row - exactly the
+property this table buys.
 
 **Narrow `Link`.** `Link` → 409 means an **occupied to-one link** and nothing else: today the only
 such text is `"already has a target"` (`Relationship.cs:41`, `LinkViolationMessage`). R-04 must
@@ -58,7 +58,7 @@ naming the kind and its numeric value. It never falls back to 400.
 The `_` arm is **required**, not optional: a `switch` expression over an enum without a default
 arm is `CS8509`, and `Poly.Runtime` builds with `TreatWarningsAsErrors`. So the compiler does *not*
 report a missing kind; a default arm would silently absorb a new one. The guard is the throw plus
-`DomainFailureStatusTests.EveryKind_HasStatus_AndTheSplitIsExactlyThreeTenOne`, which pins the
+`DomainFailureStatusTests.EveryKind_HasStatus_AndTheSplitIsExactlyFourEightOneOne`, which pins the
 member count at 14 and compares every kind against an expected row written out as an independent
 literal - never derived from `Http`.
 
@@ -73,7 +73,7 @@ R-07 deletes it rather than a host keeping a dead token.
 ### 3. What this file does not decide
 
 - **422 vs 400.** O-R3 stayed with today's 400; a move to 422 for any row is a separate ruling.
-- **`Stage` and `Policy` conflict-ness.** Above: provisional.
+- **`Stage` and `Policy` conflict-ness.** Ruled by the owner (#677): `Stage` 409, `Policy` 422 (P-14a).
 - **`NotFound`.** Not a kind and not a row. R-02's lock made `NotFound` a host-level status for an
   unknown id; P-14 owns that 404 branch.
 - **The generated host.** R-06 pins the contract; P-14 is what makes the emitted host honour it.

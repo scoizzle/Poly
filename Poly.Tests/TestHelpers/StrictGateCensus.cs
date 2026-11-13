@@ -1,5 +1,5 @@
-using Poly.Tests.DomainModeling.Analysis;
 using Poly.Tests.Docs;
+using Poly.Tests.DomainModeling.Analysis;
 
 namespace Poly.Tests.TestHelpers;
 

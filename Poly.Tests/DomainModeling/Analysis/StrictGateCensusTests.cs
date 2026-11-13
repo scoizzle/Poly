@@ -373,6 +373,30 @@ public class StrictGateCensusTests {
         await Assert.That(Codes(WithDefault("Boolean", "5 == 5"))).IsEqualTo("ok");
     }
 
+    /// <summary>
+    /// C3 (closing round), one cause one id: a bare name that is no property, parameter or enum member is DMSEM005
+    /// (the reference error the guide names for an unknown property) wherever it is consumed; DMSEM006 stays for an
+    /// expression that is known but cannot be typed.
+    /// </summary>
+    [Test]
+    public async Task UnknownBareName_IsDMSEM005_InEveryPosition() {
+        foreach (var body in new[] {
+            "if (Bogus == 1) { assign N to 2 }",
+            "assign N to Bogus + 1",
+            "if (F(Bogus) == 1) { assign N to 2 }",
+        }) {
+            var dsl = With(body).Replace("  Go:", "  Take: action (x: Number) { assign N to x }\n  Go:", StringComparison.Ordinal)
+                + "\nfunction F(v: Number): Number = v";
+            var errors = Errors(dsl);
+            await Assert.That(string.Join(",", errors.Select(e => e.Code).Distinct())).IsEqualTo("DMSEM005");
+            await Assert.That(errors[0].Message).Contains("'Bogus' is not a property, parameter or enum member");
+        }
+        var invoke = Order.Replace("Go: action { BODY }", "Take: action (x: Number) { assign N to x }\n  Go: action { invoke Take(x: Bogus) }", StringComparison.Ordinal);
+        await Assert.That(Codes(invoke)).IsEqualTo("DMSEM005");
+        // Positive companion: a known expression with no type stays DMSEM006.
+        await Assert.That(Codes(With("assign N to parts Qty"))).IsEqualTo("DMSEM006");
+    }
+
     [Test]
     public async Task UndeclaredFunction_IsDMFUN001Alone() =>
         await Assert.That(Codes(With("assign N to Nope(N)"))).IsEqualTo("DMFUN001");

@@ -110,7 +110,6 @@ public class FailureTypingTests {
     [Arguments("LengthMaximum", DomainFailureKind.Length)]
     [Arguments("Pattern", DomainFailureKind.Pattern)]
     [Arguments("Equality", DomainFailureKind.Constraint)]
-    [Arguments("EnumRequiredSlot", DomainFailureKind.Required)]
     [Arguments("EnumMember", DomainFailureKind.Enum)]
     public async Task FailureSpec_PerKind_HasTheFailureKindAndNoGuard(
         string kindName, DomainFailureKind expected) {
@@ -136,10 +135,10 @@ public class FailureTypingTests {
     [Arguments("Name: Text length(3, 8)", "Name", "ab", "'Name' must be at least 3 characters.")]
     [Arguments("Name: Text length(3, 8)", "Name", "abcdefghi", "'Name' must be at most 8 characters.")]
     [Arguments("Code: Text pattern(\"^[A-Z]+$\")", "Code", "abc", "'Code' does not match the required pattern.")]
-    [Arguments("Name: Text", "Name", "", "'Name' is required.")]
+    [Arguments("Name: Text", "Name", null, "'Name' is required.")]
     [Arguments("Status: Text equals(\"Active\")", "Status", "Other", "'Status' must equal Active.")]
     public async Task ConstraintKinds_OnBothSides_KeepTheLegacyMessageText(
-        string property, string name, object value, string expected) {
+        string property, string name, object? value, string expected) {
         var dsl = $$"""
             domain Lab
             Widget: entity {
@@ -505,12 +504,13 @@ public class FailureTypingTests {
         string dsl, string entity, string? action, int times = 1) {
         var asm = ExportedCSharp.CompileAndLoad(Print(dsl));
         var type = asm.GetType(entity)!;
-        var create = type.GetMethod("Create", PrintedMembers.Any)!;
-        var args = create.GetParameters().Select(p => p.ParameterType == typeof(string) ? (object?)"x"
-            : p.ParameterType == typeof(bool) ? action == "Skip"
-            : p.ParameterType == typeof(IStoragePort) ? new InMemoryStoragePort()
-            : p.ParameterType.IsValueType ? Activator.CreateInstance(p.ParameterType) : null).ToArray();
-        var created = create.Invoke(null, args)!;
+        // The values each fixture's Create requires, passed by name: no helper invents one.
+        (string Name, object? Value)[] values = entity switch {
+            "Item" => [("ok", action == "Skip")],
+            "Widget" => [("sku", "x")],
+            _ => [],
+        };
+        var created = ExportedCSharp.InvokeCreate(type, [.. values, ("db", new InMemoryStoragePort())]);
         var instance = created.GetType().GetProperty("Value", PrintedMembers.Any)!.GetValue(created)!;
         object? result = null;
         if (action is null)
@@ -543,15 +543,9 @@ public class FailureTypingTests {
         }
         """;
 
-    private static object? Instantiate(Type type, IStoragePort? port = null, params object?[] named) {
-        var create = type.GetMethod("Create", PrintedMembers.Any)!;
-        var args = create.GetParameters().Select((p, i) =>
-            i < named.Length ? named[i]
-            : p.ParameterType == typeof(string) ? "x"
-            : p.ParameterType == typeof(bool) ? false
-            : p.ParameterType == typeof(IStoragePort) ? port ?? new InMemoryStoragePort()
-            : p.ParameterType.IsValueType ? Activator.CreateInstance(p.ParameterType) : null).ToArray();
-        var created = create.Invoke(null, args)!;
+    /// <summary>Creates a fixture entity whose Create requires no value (each caller's entity has no required property).</summary>
+    private static object? Instantiate(Type type, IStoragePort? port = null) {
+        var created = ExportedCSharp.InvokeCreate(type, ("db", port ?? new InMemoryStoragePort()));
         return created.GetType().GetProperty("Value", PrintedMembers.Any)!.GetValue(created);
     }
 

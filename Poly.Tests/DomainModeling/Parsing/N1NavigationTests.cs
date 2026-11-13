@@ -595,6 +595,7 @@ public class N1NavigationTests {
             }
 
             Order: entity {
+              trackers: many Tracker via Tracks
               Draft: stage {
                 Activate: action {
                   transition to Active
@@ -609,7 +610,8 @@ public class N1NavigationTests {
         var emptyDomain = DomainTestFactory.Create("_", [], []);
         var result = new DomainEvolution(emptyDomain).ApplyAndAnalyze(changes);
         await Assert.That(result.Succeeded).IsTrue();
-        await Assert.That(result.Relationships().Count).IsEqualTo(1);
+        // S-13a: the subscription now has its explicit inverse (Order.trackers via Tracks), so the pair is two relationships.
+        await Assert.That(result.Relationships().Count).IsEqualTo(2);
 
         var printer = new DomainDslPrinter();
         var printed = printer.Print(result.Root);
@@ -622,7 +624,8 @@ public class N1NavigationTests {
         var emptyDomain2 = DomainTestFactory.Create("_", [], []);
         var result2 = new DomainEvolution(emptyDomain2).ApplyAndAnalyze(changes2);
         await Assert.That(result2.Succeeded).IsTrue();
-        await Assert.That(result2.Relationships().Count).IsEqualTo(1);
+        // S-13a: the subscription now has its explicit inverse (Order.trackers via Tracks), so the pair is two relationships.
+        await Assert.That(result2.Relationships().Count).IsEqualTo(2);
 
         var tracker = result2.Root.Types.OfType<Entity>().Single(e => e.Name == "Tracker");
         var pending = tracker.Stages.Single(s => s.Name == "Pending");
@@ -650,6 +653,7 @@ public class N1NavigationTests {
             }
 
             Order: entity {
+              trackers: many Tracker via Tracks
               Draft: stage {
                 Activate: action {
                   transition to Active
@@ -664,7 +668,8 @@ public class N1NavigationTests {
         var emptyDomain = DomainTestFactory.Create("_", [], []);
         var result = new DomainEvolution(emptyDomain).ApplyAndAnalyze(changes);
         await Assert.That(result.Succeeded).IsTrue();
-        await Assert.That(result.Relationships().Count).IsEqualTo(1);
+        // S-13a: the subscription now has its explicit inverse (Order.trackers via Tracks), so the pair is two relationships.
+        await Assert.That(result.Relationships().Count).IsEqualTo(2);
         var rel = result.Relationships()[0];
         await Assert.That(rel.Name).IsEqualTo("Tracks");
         await Assert.That(rel.Source.TypeName).IsEqualTo("Tracker");
@@ -678,7 +683,8 @@ public class N1NavigationTests {
         var emptyDomain2 = DomainTestFactory.Create("_", [], []);
         var result2 = new DomainEvolution(emptyDomain2).ApplyAndAnalyze(changes2);
         await Assert.That(result2.Succeeded).IsTrue();
-        await Assert.That(result2.Relationships().Count).IsEqualTo(1);
+        // S-13a: the subscription now has its explicit inverse (Order.trackers via Tracks), so the pair is two relationships.
+        await Assert.That(result2.Relationships().Count).IsEqualTo(2);
         await Assert.That(result2.Relationships()[0].Name).IsEqualTo("Tracks");
 
         var tracker = result2.Root.Types.OfType<Entity>().Single(e => e.Name == "Tracker");

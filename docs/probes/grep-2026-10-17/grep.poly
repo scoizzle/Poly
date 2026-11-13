@@ -44,6 +44,7 @@ Query: entity {
 Source: entity {
   Path: Text
   HitCount: Number default(0)
+  query: Query via sources
   lines: many owned Line
   hits: many owned Hit
 
@@ -72,6 +73,7 @@ Source: entity {
 Line: entity {
   LineNo: Number
   Content: Text
+  source: Source via lines
 
   Unmarked: stage {
     Check: action (needle: Text) {

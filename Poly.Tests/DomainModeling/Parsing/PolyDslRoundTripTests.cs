@@ -119,6 +119,7 @@ public class PolyDslRoundTripTests {
 
             Order: entity {
               Code: Text
+              trackers: many Tracker via Tracks
               Draft: stage { }
               Active: stage { }
             }
@@ -167,6 +168,7 @@ public class PolyDslRoundTripTests {
             }
 
             Order: entity {
+              trackers: many Tracker via Tracks
               Draft: stage { }
               Active: stage { }
               Done: stage {}
@@ -222,6 +224,7 @@ public class PolyDslRoundTripTests {
 
             Order: entity {
               Code: Text
+              tracker: Tracker via Tracks
               Draft: stage { }
               Active: stage { }
             }
@@ -268,6 +271,7 @@ public class PolyDslRoundTripTests {
             }
 
             Order: entity {
+              tracker: Tracker via Tracks
               Draft: stage { }
               Active: stage { }
               Done: stage {}
@@ -315,6 +319,7 @@ public class PolyDslRoundTripTests {
             }
 
             Order: entity {
+              trackers: many Tracker via Tracks
               Draft: stage { }
               Active: stage { }
             }
@@ -358,6 +363,7 @@ public class PolyDslRoundTripTests {
             }
 
             Loan: entity {
+              patron: Patron via loans
               Draft: stage { }
               Overdue: stage { }
             }
@@ -533,6 +539,7 @@ public class PolyDslRoundTripTests {
             }
 
             Order: entity {
+              trackers: many Tracker via Tracks
               Draft: stage {
                 Activate: action {
                   transition to Active
@@ -548,7 +555,8 @@ public class PolyDslRoundTripTests {
         var result = new DomainEvolution(emptyDomain).ApplyAndAnalyze(changes);
         await Assert.That(result.Succeeded).IsTrue();
 
-        await Assert.That(result.Relationships().Count).IsEqualTo(1);
+        // S-13a: Order.trackers (via Tracks) is the subscription's explicit inverse, so the pair is two relationships.
+        await Assert.That(result.Relationships().Count).IsEqualTo(2);
         await Assert.That(result.Relationships()[0].Name).IsEqualTo("Tracks");
 
         var tracker = result.Root.Types.OfType<Entity>().Single(e => e.Name == "Tracker");
@@ -566,7 +574,8 @@ public class PolyDslRoundTripTests {
         var emptyDomain2 = DomainTestFactory.Create("_", [], []);
         var result2 = new DomainEvolution(emptyDomain2).ApplyAndAnalyze(changes2);
         await Assert.That(result2.Succeeded).IsTrue();
-        await Assert.That(result2.Relationships().Count).IsEqualTo(1);
+        // S-13a: the printed form keeps the pair, so it still re-parses to two relationships.
+        await Assert.That(result2.Relationships().Count).IsEqualTo(2);
     }
 
     [Test]

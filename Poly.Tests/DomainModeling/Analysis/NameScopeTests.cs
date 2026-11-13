@@ -396,7 +396,7 @@ public sealed class NameScopeTests {
                 }
                 Owner: entity {
                   Label: Text
-                  groups: many Group
+                  groups: many Group via owner
                   when groups Live {
                     assign Label to "watched"
                   }

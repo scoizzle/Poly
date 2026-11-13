@@ -159,7 +159,7 @@ public class DomainModelingSurfaceCompletionTests {
             domain T
             Parent: entity {
               Name: Text
-              kids: many Child
+              kids: many Child via parent
               when kids Active {
                 create Child { Name: "spawned" }
               }
@@ -227,6 +227,7 @@ public class DomainModelingSurfaceCompletionTests {
               }
             }
             Item: entity {
+              board: Board via items
               Draft: stage {
                 Prep: action { transition to Ready }
                 Finish: action { transition to Done }

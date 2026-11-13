@@ -69,6 +69,7 @@ public class ForeignRootedHopAgreeTests {
             domain Shop
             Order: entity {
               Total: Number
+              customer: Customer via orders
               Draft: stage {
                 Activate: action { transition to Active }
               }

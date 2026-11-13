@@ -50,6 +50,7 @@ public class C1bConstraintFailureTests {
             domain Lib
             Loan: entity {
               Amount: Number
+              patron: Patron via loans
               Active: stage { Overdue: action { transition to Overdue } }
               Overdue: stage { }
             }
@@ -78,6 +79,7 @@ public class C1bConstraintFailureTests {
             domain Lib
             Loan: entity {
               Amount: Number
+              patron: Patron via loans
               Active: stage { Overdue: action { transition to Overdue } }
               Overdue: stage { }
             }

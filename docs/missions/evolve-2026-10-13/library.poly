@@ -62,6 +62,7 @@ Patron: entity {
 
 Loan: entity {
   book: Book
+  patron: Patron via loans
   DueDate: Date
   ReturnedOn: Date
   Status: Text default("active")

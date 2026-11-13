@@ -87,6 +87,7 @@ public sealed class ModuleWithoutDeiSpikeTests {
             domain Watch
             Item: entity {
               Code: Text
+              watcher: Watcher via items
               Draft: stage {
                 Activate: action { transition to Active }
               }

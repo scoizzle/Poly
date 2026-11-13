@@ -50,6 +50,7 @@ public class SurfaceExtensionDogfoodTests {
 
         Order: entity {
           Code: Text
+          customer: Customer via orders
           Draft: stage {
             Activate: action {
               transition to Active
@@ -154,6 +155,7 @@ public class SurfaceExtensionDogfoodTests {
             }
             Order: entity {
               Code: Text
+              customer: Customer via orders
               Draft: stage {
                 Activate: action { transition to Active }
               }
@@ -195,6 +197,7 @@ public class SurfaceExtensionDogfoodTests {
             }
             Order: entity {
               Code: Text
+              trackers: many Tracker via Tracks
               Draft: stage {
                 Activate: action { transition to Active }
               }
@@ -342,6 +345,7 @@ public class SurfaceExtensionDogfoodTests {
             }
             Order: entity {
               Code: Text
+              trackers: many Tracker via Tracks
               Draft: stage {}
               Active: stage {}
             }
@@ -429,6 +433,7 @@ public class SurfaceExtensionDogfoodTests {
             }
             Order: entity {
               Code: Text
+              trackers: many Tracker via Tracks
               Draft: stage {}
               Active: stage {}
             }
@@ -467,6 +472,7 @@ public class SurfaceExtensionDogfoodTests {
             }
             Order: entity {
               Code: Text
+              customer: Customer via orders
               Draft: stage {
                 Activate: action { transition to Active }
               }
@@ -505,6 +511,7 @@ public class SurfaceExtensionDogfoodTests {
             }
             Order: entity {
               Code: Text
+              trackers: many Tracker via Tracks
               Draft: stage {
                 Activate: action { transition to Active }
                 Reset: action { transition to Draft }
@@ -563,6 +570,7 @@ public class SurfaceExtensionDogfoodTests {
             }
             Order: entity {
               Code: Text
+              trackers: many Tracker via Tracks
               Draft: stage {
                 Activate: action { transition to Active }
               }
@@ -796,6 +804,7 @@ public class SurfaceExtensionDogfoodTests {
             }
             Order: entity {
               Code: Text
+              trackers: many Tracker via Tracks
               Draft: stage {
                 Activate: action { transition to Active }
               }
@@ -842,6 +851,7 @@ public class SurfaceExtensionDogfoodTests {
             }
             Order: entity {
               Code: Text
+              trackers: many Tracker via Tracks
               Draft: stage {}
               Active: stage {}
             }

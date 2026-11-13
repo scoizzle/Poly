@@ -9,7 +9,7 @@ Bean: entity {
   Name: Text unique length(2, 40)
   Roast: RoastLevel default(Medium)
   Stock: Number range(0, 100000) default(0)
-  batches: many Batch
+  batches: many Batch via bean
   Open: stage {
     Plan: action (kg: Number, code: Text) -> Batch {
       create in batches {

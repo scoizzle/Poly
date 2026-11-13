@@ -203,34 +203,81 @@ public class ActionScopeNestedFailureTests {
         await Assert.That(StrictDiagnostics(cs, "NestedFailureNotifyName")).IsEqualTo("");
     }
 
-    // R6 / amendment 7: inside a handler a create-in whose child's handler fails used to be dropped. The handler
-    // has no result channel for create failures yet (L-04), so the returned failure reaches FailCreate and throws.
+    // Amendment 7: inside a handler a create-in whose child's handler fails used to be dropped. A handler has no
+    // result channel for create failures yet (L-04), so the returned failure reaches FailCreate and throws.
     [Test]
-    public async Task HandlerCreateIn_WhenTheChildsHandlerFails_ThrowsUntilL04() {
+    public async Task HandlerCreateIn_WhenTheChildsHandlerFails_ThrowsOnBothHostsUntilL04() {
         const string dsl = """
             domain P
-            Owner: entity {
+            S: entity {
               Count: Number default(0)
-              items: many Item
+              jobs: many Job
+              kids: many Kid
               Never: policy { Count > 100 }
               Y: action require Never { assign Count to Count + 1 }
-              Add: action { create in items { } }
-              Fire: action { assign Count to Count + 1 }
-              when items Open { invoke Y }
+              when jobs Done { create in kids { } }
+              when kids Open { invoke Y }
             }
-            Item: entity {
+            Job: entity {
+              Open: stage { Finish: action { transition to Done } }
+              Done: stage { }
+            }
+            Kid: entity {
               Open: stage { }
-            }
-            Holder: entity {
-              owners: many Owner
-              Seed: action { create in owners { } }
-              when owners Open { create in owners { } }
             }
             """;
 
-        var cs = PrintOnly(dsl);
+        var outcomes = await ParityScenario.FromDsl(dsl, "NestedFailureHandlerCreate")
+            .AssertAgree(side => {
+                var job = side.Create("Job");
+                side.Create("S", ("jobs", new[] { job! }));
+                side.Use(job);
+                side.Invoke("Finish");
+            });
 
-        await Assert.That(StrictDiagnostics(cs, "NestedFailureHandlerCreate")).IsEqualTo("");
+        await Assert.That(outcomes[3].Success).IsFalse();
+        await Assert.That(outcomes[3].ExceptionType).IsEqualTo("ConstraintFailureException");
+        await Assert.That(outcomes[3].Message).Contains("Never");
+    }
+
+    // R6: every handler form returns a result and compiles with warnings as errors: each / any / all (previousStage),
+    // peer `as`, stage-scoped and entity-level handlers; invoke, for-invoke, general for, a transition cascade.
+    private const string EveryFormDsl = """
+        domain W
+        Owner: entity {
+          Hits: Number default(0)
+          Tag: Text default("t")
+          items: many Item
+          Never: policy { Hits > 100 }
+          Y: action require Never { assign Hits to Hits + 1 }
+          Add: action { create in items { } }
+          Run: action { for i in items { invoke i.Finish } }
+          when items Done { invoke Y }
+          when any items Done { assign Tag to "any" }
+          when all items Done { assign Hits to Hits + 2 }
+          when items Done as peer { for x in items { invoke x.Reset } }
+          when items Open { transition to Busy }
+          Idle: stage {
+            when items Done { invoke Y }
+          }
+          Busy: stage { }
+        }
+        Item: entity {
+          Open: stage { Finish: action { transition to Done } }
+          Done: stage { Reset: action { transition to Open } }
+        }
+        """;
+
+    [Test]
+    public async Task EveryHandlerForm_ReturnsAResultAndCompilesWithWarningsAsErrors() {
+        var cs = PrintOnly(EveryFormDsl);
+
+        await Assert.That(StrictDiagnostics(cs, "NestedFailureEveryForm")).IsEqualTo("");
+        await Assert.That(cs).DoesNotContain("void WhenEach");
+        await Assert.That(cs).DoesNotContain("void WhenAny");
+        await Assert.That(cs).DoesNotContain("void WhenAll");
+        await Assert.That(cs).Contains("DomainResult WhenAnyItemDone");
+        await Assert.That(cs).Contains("DomainResult WhenAllItemDone");
     }
 
     // R7: shape. Handlers and dispatchers return DomainResult; each absence is paired with a positive.
@@ -238,8 +285,8 @@ public class ActionScopeNestedFailureTests {
     public async Task Shape_HandlersAndDispatchersReturnDomainResult() {
         var cs = PrintOnly(Dsl);
 
-        await Assert.That(cs).Contains("internal DomainResult WhenEachItemDone(");
-        await Assert.That(cs).DoesNotContain("void WhenEachItemDone(");
+        await Assert.That(cs).Contains("internal DomainResult WhenEachItemDone_CallY(");
+        await Assert.That(cs).DoesNotContain("void WhenEachItemDone_CallY(");
         await Assert.That(cs).Contains("DomainResult NotifyDoneSubscribers(");
         await Assert.That(cs).DoesNotContain("void NotifyDoneSubscribers(");
     }

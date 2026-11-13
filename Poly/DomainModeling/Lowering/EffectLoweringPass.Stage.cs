@@ -163,9 +163,19 @@ public sealed partial class EffectLoweringPass {
         }
 
         if (notifyTarget) {
-            tryNodes.Add(new Invoke(
-                new Member(Subject, $"Notify{t.TargetStage.StageName}Subscribers"),
-                needsPrevious ? [previousStage!] : []));
+            // The dispatcher returns the first handler failure; this hop returns it to its own caller. A body
+            // with no result channel (constructor, OnEntry in a constructor) throws it instead (L-04 removes that arm).
+            var notifyResult = _names.Next("notify");
+            tryNodes.Add(new Block([
+                new Assignment(notifyResult, new Invoke(
+                    new Member(Subject, $"Notify{t.TargetStage.StageName}Subscribers"),
+                    needsPrevious ? [previousStage!] : [])),
+                new IfStatement(
+                    new Syntactic.Not(new Member(notifyResult, "IsSuccess")),
+                    new Block([CanReturnFailure
+                        ? ReturnCallerFailureFrom(notifyResult)
+                        : FailureLowering.ThrowFrom(notifyResult)]))
+            ], [notifyResult]));
         }
 
         // Splice a lowered entry Block into this transition body (D13) while

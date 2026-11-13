@@ -152,7 +152,7 @@ public class WhenAllSimulatePrintAgreeTests {
         var files = session.Emit(domain, analysis);
         var itemCs = files.First(f => f.FileName == "WorkItem.cs").Source;
         await Assert.That(itemCs.Contains("previousStage0", StringComparison.Ordinal)).IsTrue();
-        await Assert.That(itemCs.Contains("previousStage1", StringComparison.Ordinal)).IsTrue();
+        await Assert.That(itemCs.Contains("previousStage2", StringComparison.Ordinal)).IsTrue();
         await Assert.That(itemCs.Contains("var previousStage =", StringComparison.Ordinal)).IsFalse();
 
         var itemE = domain.Types.OfType<Entity>().First(e => e.Name == "WorkItem");

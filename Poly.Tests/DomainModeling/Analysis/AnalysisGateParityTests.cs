@@ -1,6 +1,8 @@
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Compile;
+using Poly.DomainModeling.Evolution;
+using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Lowering;
 using Poly.DomainModeling.Ontology;
 using Poly.Introspection;
@@ -169,6 +171,27 @@ public class AnalysisGateParityTests {
 
         await Assert.That(result.Analysis).IsEqualTo(accepted).Because($"{row}: {result}");
         await Assert.That(result.Holds).IsTrue().Because($"{row}: {result}");
+    }
+
+    private static IReadOnlyList<string> Errors(string members) =>
+        [.. new DomainEvolution(DomainTestFactory.Create("_", [], []))
+            .ApplyAndAnalyze(new PolyDslParser(DateDocument(members)).Parse()).Analysis.Diagnostics
+            .Where(d => d.Severity == Poly.Analysis.DiagnosticSeverity.Error)
+            .Select(d => $"{d.Code}: {d.Message}")];
+
+    /// <summary>
+    /// Closing round, item 1: a same-family date difference of another shape is rejected with the reason, the shape
+    /// lowering supports, naming the two operands the user wrote, not "arithmetic operand is not numeric".
+    /// </summary>
+    [Test]
+    public async Task DateDifference_OfAnotherShape_SaysOnlyTwoPropertiesAreSupported() {
+        await Assert.That(string.Join(" | ", Errors("Close: action { assign Gap to part Stamp - Stamp }"))).IsEqualTo(
+            "DMSEM003: a date difference is supported only between two properties of the same entity " +
+            "(got 'part Stamp' - 'Stamp')");
+        await Assert.That(string.Join(" | ", Errors("Close: action { assign Gap to (Stamp + A) - Stamp }"))).IsEqualTo(
+            "DMSEM003: a date difference is supported only between two properties of the same entity " +
+            "(got 'Stamp + A' - 'Stamp')");
+        await Assert.That(Errors("Close: action { assign Gap to Stamp - Stamp }").Count).IsEqualTo(0);
     }
 
     /// <summary>

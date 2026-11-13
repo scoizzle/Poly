@@ -376,6 +376,10 @@ public partial class AnalyzerClosingRoundPinTests {
         ("part Qty == null", "Ok: policy { part Qty == null }"),
         ("null == part Qty", "Ok: policy { null == part Qty }"),
         ("for p in parts where p Qty is not null", "Close: action { for p in parts where p Qty is not null { assign A to 1 } }"),
+        ("(Qty + 1) == null", "Ok: policy { (Qty + 1) == null }"),
+        ("null == (Qty + 1)", "Ok: policy { null == (Qty + 1) }"),
+        ("(Qty + A) != null", "Ok: policy { (Qty + A) != null }"),
+        ("required (A + 1) == null", "Ok: policy { (A + 1) == null }"),
     ];
 
     internal static string OptionalNullRows() {
@@ -2708,6 +2712,10 @@ part Qty is null = ok
 part Qty == null = ok
 null == part Qty = ok
 for p in parts where p Qty is not null = ok
+(Qty + 1) == null = ok
+null == (Qty + 1) = ok
+(Qty + A) != null = ok
+required (A + 1) == null = ok
 """;
 
         public const string SumPropertyKindsF3 = """

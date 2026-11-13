@@ -30,9 +30,9 @@ public class DomainFactsTests {
 
     private static AnalysisData Analyze(string name) {
         var (sessionId, _) = McpTestTools.Store.Create(name);
-        var dsl = McpTestTools.Dsl.ApplyDsl(sessionId, Source);
+        var dsl = McpTestTools.Surface.Define(sessionId, Source);
         if (!dsl.Success)
-            throw new InvalidOperationException(string.Join("; ", (dsl.Diagnostics ?? []).Concat([dsl.Message])));
+            throw new InvalidOperationException(string.Join("; ", dsl.Findings.Select(f => f.Message).Concat([dsl.Summary])));
         var response = McpTestTools.Query.GetDomainAnalysis(sessionId);
         return (AnalysisData)response.Data!;
     }
@@ -87,7 +87,7 @@ public class DomainFactsTests {
     [Test]
     public async Task ReadingFacts_LeavesAnalysisRevisionAndDiagnosticsByteIdentical() {
         var (sessionId, _) = McpTestTools.Store.Create("ReadOnly");
-        await Assert.That(McpTestTools.Dsl.ApplyDsl(sessionId, Source).Success).IsTrue();
+        await Assert.That(McpTestTools.Surface.Define(sessionId, Source).Success).IsTrue();
         McpTestTools.Store.TryGet(sessionId, out var before);
         var diagnosticsBefore = JsonSerializer.Serialize(before.LatestAnalysis!.Diagnostics.Select(d => new { d.Severity, d.Code, d.Message }));
         var analysisBefore = before.LatestAnalysis;
@@ -105,7 +105,7 @@ public class DomainFactsTests {
     [Test]
     public async Task EntitiesWithoutActions_ProduceNoInvariantFacts() {
         var (sessionId, _) = McpTestTools.Store.Create("NoActions");
-        var dsl = McpTestTools.Dsl.ApplyDsl(sessionId, """
+        var dsl = McpTestTools.Surface.Define(sessionId, """
             domain Plain
 
             Item: entity {

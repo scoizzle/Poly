@@ -262,7 +262,7 @@ public sealed partial class DomainResolver {
                     ParseStandaloneAction(name, changes);
                 }
                 else {
-                    CheckUnsupportedKeyword(name, DslTokenText.LegacyText(Current));
+                    CheckUnsupportedKeyword(name, DslTokenText.Word(Current));
                     throw Error($"Expected type, stage, action, policy, or navigation property after '{name}:'");
                 }
                 continue;

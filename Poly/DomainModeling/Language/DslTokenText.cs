@@ -1,9 +1,9 @@
 namespace Poly.DomainModeling.Language;
 
 /// <summary>
-/// The two total text views of a <see cref="DslToken"/> of any kind. Everything else reads a token through
+/// The two text views of a <see cref="DslToken"/> of any kind. Everything else reads a token through
 /// its span API: <see cref="DslToken.TextEquals"/>, <see cref="DslToken.Name"/>, <see cref="DslToken.Unescape"/>
-/// and <see cref="DslToken.Span"/>, each under a kind the code has checked.
+/// and <see cref="DslToken.Span"/>, each under a kind the code has checked. <see cref="Word"/> is the one read for a decision on a token of unknown kind.
 /// </summary>
 internal static class DslTokenText {
     /// <summary>
@@ -20,10 +20,13 @@ internal static class DslTokenText {
     };
 
     /// <summary>
-    /// The text a DECISION reads from a token whose kind the code does not check: the same value as
-    /// <see cref="Shown"/>, so a string literal still reads as its decoded value (<c>X: "enum"</c> classifies
-    /// as an enum, <c>Red "abc"</c> in an enum body is a reserved word). Kept by name so every such site stays
-    /// greppable for the fix; <c>TokenTextReaderTests</c> pins the call sites.
+    /// The text a DECISION reads from a token that may or may not be a word: an identifier's name or a keyword's
+    /// canonical spelling, and <c>""</c> for every other kind. A string literal is not a word, so
+    /// <c>X: "enum"</c> is not an enum and <c>Red "abc"</c> in an enum body is not a reserved word.
     /// </summary>
-    public static string LegacyText(DslToken token) => Shown(token);
+    public static string Word(DslToken token) => token.Kind switch {
+        DslTokenKind.Identifier => token.Name(),
+        DslTokenKind.StringLiteral or DslTokenKind.Number or DslTokenKind.EndOfFile => "",
+        _ => DslGrammar.CanonicalText(token.Kind) is { Length: > 0 } text && char.IsLetter(text[0]) ? text : "",
+    };
 }

@@ -19,7 +19,7 @@ public class JsonLdToolTests {
 
     [Test]
     public async Task ExportDomainToJsonLd_ReturnsGraphWithoutMutatingTheSession() {
-        var surface = PolySurfaceHarness.Over(McpTestTools.Store);
+        var surface = McpTestTools.Surface;
         var sessionId = surface.Open("Inventory");
         await Assert.That(surface.Define(sessionId, Dsl).Success).IsTrue();
         await Assert.That(McpTestTools.Store.TryGet(sessionId, out var afterApply)).IsTrue();

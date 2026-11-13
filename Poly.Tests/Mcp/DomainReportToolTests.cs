@@ -23,7 +23,7 @@ public class DomainReportToolTests {
 
     [Test]
     public async Task GetDomainReport_ReturnsMarkdownWithoutMutatingTheSession() {
-        var surface = PolySurfaceHarness.Over(McpTestTools.Store);
+        var surface = McpTestTools.Surface;
         var sessionId = surface.Open("Catalog");
         await Assert.That(surface.Define(sessionId, Dsl).Success).IsTrue();
         await Assert.That(McpTestTools.Store.TryGet(sessionId, out var afterApply)).IsTrue();

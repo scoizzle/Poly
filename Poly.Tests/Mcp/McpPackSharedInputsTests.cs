@@ -10,7 +10,7 @@ namespace Poly.Tests.Mcp;
 public sealed class McpPackSharedInputsTests {
     [Test]
     public async Task ApplyAndExportDsl_OmitsImplicitTemporal() {
-        var surface = PolySurfaceHarness.Over(McpTestTools.Store);
+        var surface = McpTestTools.Surface;
         var sessionId = surface.Open("PackShared");
 
         var applied = surface.Define(sessionId, """

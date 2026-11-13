@@ -17,6 +17,9 @@ internal static class McpTestTools {
         Options.Create(new McpSessionOptions()),
         NullLogger<McpSessionStore>.Instance);
 
+    /// <summary>The v2 surface over <see cref="Store"/>. The harness holds only the store and its stateless tools, so one shared instance is safe.</summary>
+    public static readonly PolySurfaceHarness Surface = PolySurfaceHarness.Over(Store);
+
     public static readonly SessionTool Session = new(Store, NullLogger<SessionTool>.Instance);
     public static readonly QueryTool Query = new(Store, NullLogger<QueryTool>.Instance);
     public static readonly EvolveTool Evolve = new(Store, NullLogger<EvolveTool>.Instance);

@@ -24,7 +24,7 @@ public class McpNameRuleTests {
     // Text, Number and Boolean are keywords the parser still accepts as a property name of a primitive type.
     private static readonly string[] PrimitiveKeywords = ["Text", "Number", "Boolean"];
 
-    private static readonly PolySurfaceHarness Surface = PolySurfaceHarness.Over(McpTestTools.Store);
+    private static readonly PolySurfaceHarness Surface = McpTestTools.Surface;
 
     private static bool Parses(string template, string name) {
         var sessionId = Surface.Open("Probe");

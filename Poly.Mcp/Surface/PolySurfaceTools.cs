@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -55,9 +56,24 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
             Ok: response.Success,
             Summary: response.Message,
             Findings: [],
-            Data: response.Data,
+            Data: WithoutVerifyMarkers(response.Data),
             Next: response.Success ? ["poly_define", "poly_check"] : ["poly_guide"],
             State: null);
+    }
+
+    // The guide file carries test-harness markers (<!-- poly-verify: ... -->) above its fences.
+    // Every topic this tool serves passes here once; the markers stay in the file for the tests.
+    private static readonly Regex VerifyMarkerLine = new(@"^[ \t]*<!--\s*poly-verify:.*?-->[ \t]*\r?\n", RegexOptions.Multiline | RegexOptions.Compiled);
+
+    internal static string StripVerifyMarkers(string guide) => VerifyMarkerLine.Replace(guide, "");
+
+    private static object? WithoutVerifyMarkers(object? data) {
+        if (data is null)
+            return null;
+        var node = JsonSerializer.SerializeToNode(data)!.AsObject();
+        if (node["guide"]?.GetValue<string>() is { } guide)
+            node["guide"] = StripVerifyMarkers(guide);
+        return node;
     }
 
     // ── 2. open ─────────────────────────────────────────────────

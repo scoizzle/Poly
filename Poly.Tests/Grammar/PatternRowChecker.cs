@@ -78,7 +78,7 @@ internal sealed record PatternRowViolation(PatternRowCheck Check, string Rule, s
 internal static class PatternRowChecker {
     /// <summary>What a top-level pattern element is to the printer.</summary>
     internal enum ElementRole {
-        /// <summary>Emits fixed text (or nothing): <c>MatchKind</c>, <c>NotFollowedBy</c>, <c>Word</c>.</summary>
+        /// <summary>Emits fixed text (or nothing): <c>MatchKind</c>, <c>NotFollowedBy</c>, <c>Cut</c>, <c>Word</c>; a <c>Refuse</c> row never prints.</summary>
         Fixed,
         /// <summary>A named value, a Slot or a Run: always a hole.</summary>
         Hole,
@@ -100,6 +100,8 @@ internal static class PatternRowChecker {
         where TTokenKind : struct => element switch {
             MatchKind<TToken, TTokenKind> => ElementRole.Fixed,
             NotFollowedBy<TToken, TTokenKind> => ElementRole.Fixed,
+            Cut<TToken, TTokenKind> => ElementRole.Fixed,
+            Refuse<TToken, TTokenKind> => ElementRole.Fixed,
             Word<TToken, TTokenKind> => ElementRole.Fixed,
             Value<TToken, TTokenKind> { Name: { Length: > 0 } } => ElementRole.Hole,
             Slot<TToken, TTokenKind> => ElementRole.Hole,
@@ -350,7 +352,8 @@ internal static class PatternRowChecker {
             catch (FormatException ex) {
                 return $"does not tokenize: {ex.Message}";
             }
-            var match = new Matcher<TToken, TTokenKind>(_grammar, reader).TryMatch(rule);
+            // Match, not TryMatch: a rule that can commit (a Cut or a Refuse) is matched with the report (G-28).
+            var match = new Matcher<TToken, TTokenKind>(_grammar, reader).Match(rule).Result;
             if (match is null)
                 return $"does not re-read as rule '{rule}'";
             if (!string.Equals(match.PatternName, pattern, StringComparison.Ordinal))

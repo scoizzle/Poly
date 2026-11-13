@@ -26,7 +26,10 @@ internal sealed record ErrorFile(List<string> Header, List<ErrorRow> Rows, List<
 }
 
 /// <summary>What the resolver did with one input: the result line, the site it was thrown from, and the structured error.</summary>
-internal sealed record Observation(string Result, string? SiteId, string OriginClass, string? Detail, int Offset, int Length);
+internal sealed record Observation(string Result, string? SiteId, string OriginClass, string? Detail, int Offset, int Length) {
+    /// <summary>For a table-reported error, every row element it named (label reach).</summary>
+    public IReadOnlyList<string> Labels { get; init; } = [];
+}
 
 /// <summary>One S row or sweep mutation that threw: the source of the input and the site it reached.</summary>
 internal sealed record ExistingRun(string Key, Exception Exception, ErrorOrigin Origin);
@@ -171,7 +174,8 @@ internal static class ResolverErrorBaseline {
         ("Stages:ParseStage#17", "LoopExit", "the stage-body loop exits only on `}`"),
         ("Stages:ParseSubscription#6", "LoopExit", "the effect loop exits only on `}`"),
         ("Stages:ParseEntitySubscription#6", "LoopExit", "the effect loop exits only on `}`"),
-        ("TopLevel:TryTakeVisibility#1", "DefaultArm", "the visibility rule has one pattern, `public`"),
+        ("TopLevel:VisibilityOf#1", "DefaultArm", "the visibility rule has one pattern, `public`"),
+        ("TopLevel:FoldMarkedTop#1", "DefaultArm", "the marked-top rule has two patterns, `entity` and `value`, and each has an arm"),
         ("TopLevel:ParseEnumType#1", "RowGuard", "top/enum matched `Identifier Colon Enum`"),
         ("TopLevel:ParseEnumType#2", "RowGuard", "top/enum matched `Identifier Colon Enum`"),
         ("TopLevel:ParseEnumType#3", "RowGuard", "top/enum matched `Identifier Colon Enum`"),
@@ -266,7 +270,7 @@ internal static class ResolverErrorBaseline {
             return new Observation("OK", null, "none", null, -1, 0);
         var origin = ResolverErrorSiteScanner.OriginOf(ex);
         var (offset, length) = ex is GrammarException g ? (g.Offset, g.Length) : (-1, 0);
-        return new Observation(ResultOf(ex), origin.SiteId, origin.Class, DetailOf(ex), offset, length);
+        return new Observation(ResultOf(ex), origin.SiteId, origin.Class, DetailOf(ex), offset, length) { Labels = origin.Labels };
     }
 
     // ── what G-13a already runs ──────────────────────────────────────────────────────
@@ -530,7 +534,7 @@ internal static class ResolverErrorBaseline {
         ("stage-body", "domain A\nX: entity {\n  S: stage {\n    ¤"),
         ("effect", "domain A\nX: entity {\n  Go: action {\n    ¤"),
         ("annotation", "domain A\nX: entity {\n  N: Text ¤"),
-        ("visibility", "domain A\n¤"),
+        ("marked-top", "domain A\n¤"),
     ];
 
     private static bool SameElement(IPatternElement<DslToken, DslTokenKind> a, IPatternElement<DslToken, DslTokenKind> b) => (a, b) switch {
@@ -605,9 +609,8 @@ internal static class ResolverErrorBaseline {
     /// <summary>The dispatch sites, each tried matching 1, 2 and 3 tokens deep and then failing; a depth with no row that long is listed with its reason.</summary>
     public static readonly (string Rule, int Depth, string? NotApplicable)[] DispatchDepths = [
         ("top", 1, null), ("top", 2, null), ("top", 3, null),
-        ("visibility", 1, null),
-        ("visibility", 2, "the only visibility row, `public`, is one element long"),
-        ("visibility", 3, "the only visibility row, `public`, is one element long"),
+        ("marked-top", 1, null), ("marked-top", 2, null),
+        ("marked-top", 3, "both marked-top rows are three tokens long: a failure after the third token is the entity or value body's"),
         ("entity-body", 1, null), ("entity-body", 2, null), ("entity-body", 3, null),
         ("annotation", 1, null), ("annotation", 2, null), ("annotation", 3, null),
         ("stage-body", 1, null), ("stage-body", 2, null), ("stage-body", 3, null),
@@ -616,10 +619,21 @@ internal static class ResolverErrorBaseline {
 
     public static readonly string[] PublicPins = ["pub:1", "pub:2", "pub:3", "pub:4", "pub:5", "pub:6", "pub:7", "pub:8"];
 
+    /// <summary>Every table row element (<see cref="ResolverErrorSiteScanner.TableLabels"/>) that an S row or a sweep mutation names in its failure.</summary>
+    public static HashSet<string> LabelsReachedByExisting() =>
+        ExistingRuns.SelectMany(r => r.Origin.Labels).ToHashSet(StringComparer.Ordinal);
+
+    /// <summary>The table row elements no run names: label reach replaces site reach for a form the table reports (G-28).</summary>
+    public static List<string> LabelReachProblems(IReadOnlySet<string> reached, IEnumerable<string> labels) =>
+        [.. labels.Where(l => !reached.Contains(l)).Select(l => $"{l}: no S row, sweep mutation or E row names this row element in its failure")];
+
     /// <summary>Every key the file must hold as an E row, a U row (an existing run supplies it) or an X row (with the reason it has no input).</summary>
     public static IEnumerable<string> RequiredKeys(IReadOnlyDictionary<string, int> reachedByExisting) {
         foreach (var site in ResolverErrorSiteScanner.Sites.Where(s => !IsUnreachable(s) && !reachedByExisting.ContainsKey(s.Id)))
             yield return $"site:{site.Id}";
+        var labelsReached = LabelsReachedByExisting();
+        foreach (var label in ResolverErrorSiteScanner.TableLabels.Where(l => !labelsReached.Contains(l)))
+            yield return $"label:{label}";
         foreach (var key in RequiredOffenderKeys())
             yield return key;
         foreach (var (key, _) in KindInputs())

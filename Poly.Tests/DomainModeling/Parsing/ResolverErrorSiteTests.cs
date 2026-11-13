@@ -5,8 +5,9 @@ using Poly.Grammar;
 namespace Poly.Tests.DomainModeling.Parsing;
 
 /// <summary>
-/// G-26b's diagnostics oracle for the hand-written resolver (the 91 <c>Expect</c>, 57 <c>ExpectIdentifier</c> and 80 <c>throw</c> sites
-/// that G-28 to G-33 delete). Sites come from a Roslyn scan of <c>DomainResolver*.cs</c> and are named
+/// G-26b's diagnostics oracle for the hand-written resolver (the 91 <c>Expect</c>, 55 <c>ExpectIdentifier</c> and 80 <c>throw</c> sites
+/// that G-29 to G-33 delete; G-28 deleted the `public entity|value` head's) and, for a form the table reports, its row elements
+/// (label reach: every labelled element and refusal in a rule the resolver matches through <c>MatchOrThrow</c> is named by a failure). Sites come from a Roslyn scan of <c>DomainResolver*.cs</c> and are named
 /// <c>partial:method#ordinal</c>, never by line. REACH is proved by a stack walk on the thrown exception (the first frame above
 /// <c>DslCursor</c>'s helpers is the call site) that fails closed. G-13a's S rows and sweep are the first source of reach;
 /// <c>ResolverErrorSites.txt</c> holds NEW inputs only: <c>E</c> rows (key, declared site, the site a precedence input shadows,
@@ -15,7 +16,7 @@ namespace Poly.Tests.DomainModeling.Parsing;
 /// Excluded: <c>DslExpressionParser</c>'s own sites (29, owned by G-34 and G-17) and diagnostics from later passes.
 /// </summary>
 public sealed class ResolverErrorSiteTests {
-    private static readonly string[] DerivedPrefixes = ["site:", "off:", "kind:", "pair:", "ladder:", "defer:", "match:", "pub:"];
+    private static readonly string[] DerivedPrefixes = ["site:", "label:", "off:", "kind:", "pair:", "ladder:", "defer:", "match:", "pub:"];
 
     private static readonly (string Partial, int Expect, int ExpectIdentifier, int Throw)[] PinnedTotals = [
         ("Actions", 7, 1, 0),
@@ -25,7 +26,7 @@ public sealed class ResolverErrorSiteTests {
         ("Entities", 21, 12, 26),
         ("Relationships", 0, 1, 8),
         ("Stages", 13, 10, 6),
-        ("TopLevel", 19, 17, 16),
+        ("TopLevel", 19, 15, 16),
         ("Types", 0, 1, 2),
     ];
 
@@ -41,7 +42,7 @@ public sealed class ResolverErrorSiteTests {
     // ── the scan ─────────────────────────────────────────────────────────────────────
 
     [Test]
-    public async Task Scanner_PinsTheTotalsPerPartial_91_57_80() {
+    public async Task Scanner_PinsTheTotalsPerPartial_91_55_80() {
         var sites = ResolverErrorSiteScanner.Sites;
         foreach (var (partial, expect, identifier, @throw) in PinnedTotals) {
             var mine = sites.Where(s => s.Partial == partial).ToList();
@@ -51,7 +52,7 @@ public sealed class ResolverErrorSiteTests {
         }
 
         await Assert.That(sites.Count(s => s.Kind == ErrorSiteKind.Expect)).IsEqualTo(91);
-        await Assert.That(sites.Count(s => s.Kind == ErrorSiteKind.ExpectIdentifier)).IsEqualTo(57);
+        await Assert.That(sites.Count(s => s.Kind == ErrorSiteKind.ExpectIdentifier)).IsEqualTo(55);
         await Assert.That(sites.Count(s => s.Kind == ErrorSiteKind.Throw)).IsEqualTo(80);
         await Assert.That(sites.Select(s => s.Id).Distinct().Count()).IsEqualTo(sites.Count);
         await Assert.That(sites.Where(s => s.ExemptReason is not null).Select(s => s.Id)).IsEquivalentTo(ExemptFromLiteralCheck);
@@ -91,7 +92,7 @@ public sealed class ResolverErrorSiteTests {
 
     [Test]
     public async Task Rows_ReferToRealSitesAndEveryRowIsAnError() {
-        var ids = ResolverErrorSiteScanner.Sites.Select(s => s.Id).ToHashSet(StringComparer.Ordinal);
+        var ids = ResolverErrorSiteScanner.Sites.Select(s => s.Id).Concat(ResolverErrorSiteScanner.TableLabels).ToHashSet(StringComparer.Ordinal);
         var failures = new List<string>();
         foreach (var row in File_.Rows) {
             if (!ids.Contains(row.Site))
@@ -118,7 +119,7 @@ public sealed class ResolverErrorSiteTests {
     [Test]
     public async Task Rows_ShowMessagesTheirSourceLiteralsAllow() {
         var failures = ResolverErrorBaseline.LiteralMismatches(File_.Rows, ResolverErrorBaseline.Observe);
-        foreach (var run in ResolverErrorBaseline.ExistingRuns.Where(r => r.Origin.IsSite)) {
+        foreach (var run in ResolverErrorBaseline.ExistingRuns.Where(r => r.Origin.Class == "site")) {
             var site = ResolverErrorSiteScanner.Sites.Single(s => s.Id == run.Origin.SiteId);
             if (site.MessagePattern is not null && !Regex.IsMatch(ResolverErrorBaseline.DetailOf(run.Exception), site.MessagePattern, RegexOptions.Singleline))
                 failures.Add($"{run.Key}: '{ResolverErrorBaseline.DetailOf(run.Exception)}' is not what {site.Id} allows");
@@ -169,6 +170,16 @@ public sealed class ResolverErrorSiteTests {
     }
 
     [Test]
+    public async Task EveryTableLabel_IsNamedByAFailure() {
+        var reached = ResolverErrorBaseline.LabelsReachedByExisting();
+        foreach (var row in File_.Rows)
+            reached.UnionWith(ResolverErrorBaseline.Observe(row.Input).Labels);
+
+        await Assert.That(ResolverErrorSiteScanner.TableLabels).IsNotEmpty();
+        await Assert.That(ResolverErrorBaseline.LabelReachProblems(reached, ResolverErrorSiteScanner.TableLabels)).IsEmpty();
+    }
+
+    [Test]
     public async Task ESiteRows_AddOnlySitesTheExistingRowsDoNotReach() {
         var existing = ResolverErrorBaseline.ReachBy("").Keys.ToHashSet();
         var redundant = File_.Rows.Where(r => r.Key.StartsWith("site:", StringComparison.Ordinal) && existing.Contains(r.Site))
@@ -179,20 +190,24 @@ public sealed class ResolverErrorSiteTests {
 
     [Test]
     public async Task ReachCounts_AreReported() {
-        var bySite = ResolverErrorBaseline.ReachBy("S:");
-        var byN = ResolverErrorBaseline.ReachBy("N:");
+        static bool Scanned(string id) => !id.StartsWith("table:", StringComparison.Ordinal);
+        var bySite = ResolverErrorBaseline.ReachBy("S:").Where(p => Scanned(p.Key)).ToDictionary();
+        var byN = ResolverErrorBaseline.ReachBy("N:").Where(p => Scanned(p.Key)).ToDictionary();
         var existing = bySite.Keys.Union(byN.Keys).ToHashSet();
-        var byE = File_.Rows.Select(r => r.Site).ToHashSet();
+        var byE = File_.Rows.Select(r => r.Site).Where(Scanned).ToHashSet();
         var all = ResolverErrorSiteScanner.Sites;
         var unreachable = ResolverErrorBaseline.Unreachable.Length;
 
-        // Pinned so a change in what the oracle reaches is a reviewed change, not a silent one.
-        await Assert.That(all.Count).IsEqualTo(228);
-        await Assert.That(bySite.Count).IsEqualTo(73);
-        await Assert.That(byN.Count).IsEqualTo(102);
-        await Assert.That(existing.Count).IsEqualTo(127);
+        // Pinned so a change in what the oracle reaches is a reviewed change, not a silent one. G-28 moved the `public entity|value`
+        // head onto the marked-top row: its three sites went (reach moved to the row's 4 labels), TryTakeVisibility#1 became
+        // VisibilityOf#1 and FoldMarkedTop#1 is new (both DefaultArm).
+        await Assert.That(all.Count).IsEqualTo(226);
+        await Assert.That(bySite.Count).IsEqualTo(72);
+        await Assert.That(byN.Count).IsEqualTo(99);
+        await Assert.That(existing.Count).IsEqualTo(124);
         await Assert.That(byE.Count(s => !existing.Contains(s))).IsEqualTo(32);
-        await Assert.That(unreachable).IsEqualTo(69);
+        await Assert.That(unreachable).IsEqualTo(70);
+        await Assert.That(ResolverErrorSiteScanner.TableLabels.Count).IsEqualTo(4);
         await Assert.That(existing.Union(byE).Count() + unreachable).IsEqualTo(all.Count);
     }
 
@@ -368,6 +383,15 @@ public sealed class ResolverErrorSiteTests {
 
         await Assert.That(staleEntry.Any(p => p.Contains("is reached", StringComparison.Ordinal))).IsTrue();
         await Assert.That(missingReason.Count).IsEqualTo(sites.Count);
+    }
+
+    [Test]
+    public async Task SelfTest_ATableLabelNoFailureNames_IsReported() {
+        var labels = ResolverErrorSiteScanner.TableLabels;
+        var problems = ResolverErrorBaseline.LabelReachProblems(labels.Skip(1).ToHashSet(StringComparer.Ordinal), labels);
+
+        await Assert.That(problems.Count).IsEqualTo(1);
+        await Assert.That(problems[0]).StartsWith(labels[0] + ":");
     }
 
     [Test]

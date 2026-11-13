@@ -50,14 +50,21 @@ internal sealed record ErrorSite(
     public string? ExpectedKind { get; init; }
 }
 
-/// <summary>Where an exception came from: a scanned resolver site, or something that is not one.</summary>
+/// <summary>
+/// Where an exception came from: a scanned resolver site, a table row element (<c>table:rule/pattern#element</c>, the
+/// first expected element of a failure <see cref="DslCursor.MatchOrThrow"/> reported, with every expected element and
+/// refusal in <see cref="Labels"/>), or something that is neither.
+/// </summary>
 internal sealed record ErrorOrigin(string? SiteId, string Class, int Line) {
     public bool IsSite => SiteId is not null;
+
+    /// <summary>For a table origin, every row element the failure named (label reach); empty otherwise.</summary>
+    public IReadOnlyList<string> Labels { get; init; } = [];
 }
 
 /// <summary>
 /// G-26b's site scanner and reach probe. The scanner reads the resolver partials with Roslyn (the test
-/// project already references it) and lists the 91 <c>Expect</c>, 57 <c>ExpectIdentifier</c> and 80 <c>throw</c>
+/// project already references it) and lists the 91 <c>Expect</c>, 55 <c>ExpectIdentifier</c> and 80 <c>throw</c>
 /// sites; the probe resolves a document, catches the exception and walks its stack: the first frame above
 /// <see cref="DslCursor"/>'s helpers is the call site. The walk fails closed (see <see cref="AssertProbeIsSound"/>).
 /// </summary>
@@ -243,28 +250,103 @@ internal static class ResolverErrorSiteScanner {
 
     // ── reach: the stack walk ─────────────────────────────────────────────────────────
 
-    /// <summary>Resolves <paramref name="text"/> through the same session door as <c>ResolverBaselineTests.Changes</c> and returns what it threw.</summary>
+    /// <summary>
+    /// Resolves <paramref name="text"/> through the same session door as <c>ResolverBaselineTests.Changes</c> and returns what it threw.
+    /// A failure the table reported (through <see cref="DslCursor.MatchOrThrow"/>) carries the row elements it named, read from a
+    /// <see cref="Poly.Grammar.MatchTrace"/> scope, in <see cref="Exception.Data"/>.
+    /// </summary>
     public static Exception? Capture(string text) {
+        using var trace = Poly.Grammar.MatchTrace.Begin();
         try {
             var session = DomainSession.ForSource(text, ExtensionCatalog.ProductAuthoring, ProductCatalog.Catalog);
             new DomainResolver(DslSyntaxTree.Parse(text), session).Resolve();
             return null;
         }
         catch (Exception ex) {
+            if (trace.Observations is [.., { Failure: Poly.Grammar.MatchFailure<DslToken, DslTokenKind> failure }])
+                ex.Data[TableLabelsKey] = LabelsOf(failure);
             return ex;
         }
     }
 
+    private const string TableLabelsKey = "G-26b table labels";
+
+    /// <summary>The row elements a reported failure names: its reported element first, then every expected element.</summary>
+    private static List<string> LabelsOf(Poly.Grammar.MatchFailure<DslToken, DslTokenKind> failure) {
+        var labels = new List<string> { TableId(failure.Rule, failure.Pattern, failure.Element) };
+        foreach (var expected in failure.Expected) {
+            var id = TableId(expected.Rule, expected.Pattern, expected.Element);
+            if (!labels.Contains(id))
+                labels.Add(id);
+        }
+        return labels;
+    }
+
+    /// <summary>A table row element as a site id: <c>table:rule/pattern#n</c>, n the element's 1-based position in its row.</summary>
+    public static string TableId(string rule, string pattern, int element) => $"table:{rule}/{pattern}#{element + 1}";
+
+    private static List<string>? _tableLabels;
+
     /// <summary>
-    /// The origin of <paramref name="ex"/>: the first frame that is not a <see cref="DslCursor"/> helper. A frame in a
-    /// <c>DomainResolver</c> partial is a scanned site when its line maps to one; anything else (the BCL, the
-    /// expression parser, the syntax tree) is classified <c>external:Type.Method</c>.
+    /// Every element that names itself in a failure report (an <c>Expect</c> label, a Word, a Run) or refuses (a <c>Refuse</c>),
+    /// in the rules the resolver matches through <see cref="DslCursor.MatchOrThrow"/> (found by a scan of the partials for
+    /// <c>MatchOrThrow("rule")</c>) and the rules their rows reference. Label reach requires each to be exercised.
+    /// </summary>
+    public static IReadOnlyList<string> TableLabels => _tableLabels ??= ScanTableLabels();
+
+    private static List<string> ScanTableLabels() {
+        var folder = Path.Combine(GuideBlocks.RepoRoot(), Directory);
+        var rules = new List<string>();
+        foreach (var path in System.IO.Directory.GetFiles(folder, "DomainResolver*.cs").OrderBy(p => p, StringComparer.Ordinal)) {
+            foreach (Match m in Regex.Matches(File.ReadAllText(path), @"\bMatchOrThrow\(""([^""]+)""\)"))
+                rules.Add(m.Groups[1].Value);
+        }
+        var grammar = DslGrammar.Core;
+        for (var i = 0; i < rules.Count; i++) {
+            foreach (var pattern in grammar.GetPatterns(rules[i])) {
+                foreach (var element in pattern.Elements) {
+                    var target = element switch {
+                        Poly.Grammar.Ref<DslToken, DslTokenKind> r => r.RuleName,
+                        Poly.Grammar.Repeat<DslToken, DslTokenKind> r => r.RuleName,
+                        Poly.Grammar.LeftAssoc<DslToken, DslTokenKind> l => l.OperandRule,
+                        Poly.Grammar.Optional<DslToken, DslTokenKind> { Inner: Poly.Grammar.Ref<DslToken, DslTokenKind> r } => r.RuleName,
+                        _ => null,
+                    };
+                    if (target is not null && !rules.Contains(target))
+                        rules.Add(target);
+                }
+            }
+        }
+        var labels = new List<string>();
+        foreach (var rule in rules) {
+            foreach (var pattern in grammar.GetPatterns(rule).OrderBy(p => p.Order)) {
+                for (var e = 0; e < pattern.Elements.Count; e++) {
+                    var element = pattern.Elements[e] is Poly.Grammar.Optional<DslToken, DslTokenKind> o ? o.Inner : pattern.Elements[e];
+                    if (element is Poly.Grammar.IExpectedElement { Expect: not null } or Poly.Grammar.Word<DslToken, DslTokenKind>
+                        or Poly.Grammar.Run<DslToken, DslTokenKind> or Poly.Grammar.Refuse<DslToken, DslTokenKind>)
+                        labels.Add(TableId(rule, pattern.Name, e));
+                }
+            }
+        }
+        return labels;
+    }
+
+    /// <summary>
+    /// The origin of <paramref name="ex"/>: a table row element when <see cref="DslCursor.MatchOrThrow"/> threw it, else the first
+    /// frame that is not a <see cref="DslCursor"/> helper. A frame in a <c>DomainResolver</c> partial is a scanned site when its line
+    /// maps to one; anything else (the BCL, the expression parser, the syntax tree) is classified <c>external:Type.Method</c>.
     /// </summary>
     public static ErrorOrigin OriginOf(Exception ex) {
         var frames = new StackTrace(ex, true).GetFrames();
         foreach (var frame in frames) {
             var method = frame.GetMethod();
             var type = method?.DeclaringType;
+            if (type == typeof(DslCursor) && method?.Name == nameof(DslCursor.MatchOrThrow)) {
+                // The table reported it: the origin is the row element, not the resolver line that asked.
+                if (ex.Data[TableLabelsKey] is not List<string> { Count: > 0 } labels)
+                    throw new InvalidOperationException($"MatchOrThrow threw with no traced failure: the table origin cannot be named. {ex.Message}");
+                return new ErrorOrigin(labels[0], "table", 0) { Labels = labels };
+            }
             if (type == typeof(DslCursor))
                 continue;
             var file = frame.GetFileName();

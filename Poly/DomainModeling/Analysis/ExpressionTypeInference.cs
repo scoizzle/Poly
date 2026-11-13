@@ -72,7 +72,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
         expr = RewriteLibraryIdent(expr);
         if (context.GetMetadata<TypedExpressionMetadata>(expr) is { Binary: null } stamped
             && stamped.Type.DomainName is not null)
-            return ResolveName(context, stamped.Type.DomainName, enumTypes);
+            return ResolveName(context, stamped.Type.DomainName, enumTypes).AsOptional(stamped.Type.Optional);
 
         if (_meaning.Inference.TryDispatch(
                 expr,
@@ -94,7 +94,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
 
         return expr switch {
             PropertyAccess pa => ResolvePropertyType(pa.Name, props, parameters) is { } pt
-                ? ResolveName(context, pt, enumTypes)
+                ? ResolveName(context, pt, enumTypes).AsOptional(IsOptionalProperty(pa.Name, props))
                 : pa.Name is "Guid" ? ResolveName(context, "Guid", enumTypes)
                 : ReferencedEntity(context, pa.Name, props) is { } entityName ? ResolveName(context, entityName, enumTypes)
                 : ExprType.Unresolved,
@@ -111,8 +111,9 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
             AnyExpr or AllExpr or NoneExpr => QuantifiedEntity(context, expr, props) is not null ? BooleanFamily : ExprType.Unresolved,
             CountExpr => QuantifiedEntity(context, expr, props) is not null ? NumberFamily : ExprType.Unresolved,
             SumExpr sum => InferSum(context, sum, props),
-            RelationshipNavigation navigation => InferNavigation(context, navigation, props, parameters, enumTypes),
-            OwnedAccess owned => InferOwned(context, owned, props, enumTypes),
+            // A read through a navigation or an owned member may find nothing (an unlinked hop, an optional member).
+            RelationshipNavigation navigation => InferNavigation(context, navigation, props, parameters, enumTypes).AsOptional(),
+            OwnedAccess owned => InferOwned(context, owned, props, enumTypes).AsOptional(),
             MatchExpr match => InferMatch(context, match, props, parameters, enumTypes, hint: null),
             FunctionCall call => FunctionAnalysis.Find(context, call.Name) is { } function
                 ? ResolveName(context, function.ReturnType.TypeName, enumTypes)
@@ -133,16 +134,22 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
             : base(entity.Properties.ToDictionary(p => p.Name, p => p.Type.TypeName, StringComparer.Ordinal), StringComparer.Ordinal) {
             EntityName = entity.Name;
             Binders = new Dictionary<string, string>(StringComparer.Ordinal);
+            Optional = entity.Properties.Where(p => !EntityStructureAnalyzer.IsRequired(p))
+                .Select(p => p.Name).ToHashSet(StringComparer.Ordinal);
         }
 
         private EntityScope(EntityScope outer, string binder, string entityTypeName) : base(outer, StringComparer.Ordinal) {
             EntityName = outer.EntityName;
             Binders = new Dictionary<string, string>(outer.Binders, StringComparer.Ordinal) { [binder] = entityTypeName };
+            Optional = outer.Optional;
         }
 
         public string EntityName { get; }
 
         public IReadOnlyDictionary<string, string> Binders { get; }
+
+        /// <summary>The entity's properties declared <c>optional</c>.</summary>
+        public IReadOnlySet<string> Optional { get; }
 
         public EntityScope WithBinder(string binder, string entityTypeName) => new(this, binder, entityTypeName);
     }
@@ -175,6 +182,8 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
         var operands = expr.Children.OfType<DomainExpression>().ToList();
         var left = InferType(context, operands[0], props, parameters, enumTypes);
         var right = InferType(context, operands[1], props, parameters, enumTypes);
+        // Arithmetic over an operand that may be absent may be absent (the lifted operator).
+        var absent = left.Optional || right.Optional;
         if (IsNumeric(left) && IsNumeric(right)) {
             var kind = expr switch {
                 Add => Introspection.OperatorKind.Add,
@@ -183,14 +192,14 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                 _ => Introspection.OperatorKind.Divide,
             };
             return left.Definition!.GetOperator(kind, right.Definition) is { } resolution
-                ? new ExprType(resolution.Result, Optional: false, DomainName: null)
+                ? new ExprType(resolution.Result, Optional: false, DomainName: null).AsOptional(absent)
                 : ExprType.Unresolved;
         }
         if (expr is Add or Subtract && IsDate(left) && IsNumeric(right))
-            return left with { DomainName = null, Optional = false };
+            return left with { DomainName = null, Optional = absent };
         // A date difference of one granularity is a duration (the shape rule stays in WalkExpression: T-10).
         if (expr is Subtract && IsDate(left) && IsDate(right) && !MixedDateGranularity(left, right))
-            return Typeless(typeof(TimeSpan));
+            return Typeless(typeof(TimeSpan)).AsOptional(absent);
         return ExprType.Unresolved;
     }
 
@@ -331,6 +340,13 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
         }
         return ExprType.Unresolved;
     }
+
+    /// <summary>
+    /// True when <paramref name="name"/> is a property <paramref name="props"/> declares <c>optional</c>. A parameter is
+    /// never optional: an action or function parameter has no <c>optional</c> form.
+    /// </summary>
+    private static bool IsOptionalProperty(string name, Dictionary<string, string>? props) =>
+        props is EntityScope scope && scope.Optional.Contains(name);
 
     private static string? ResolvePropertyType(string name, Dictionary<string, string>? props, Dictionary<string, string>? parameters) {
         if (props?.TryGetValue(name, out var pt) == true) return pt;

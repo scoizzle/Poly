@@ -101,7 +101,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                 .ToDictionary(p => p.Name, p => p.Type.TypeName, StringComparer.Ordinal);
             CheckCompatible(
                 context, new PropertyAccess(source.Value.Property.Name), target.Value.Property.Type.TypeName,
-                enumTypes, $"observed flow '{flow.SourcePath}' -> '{flow.TargetPath}'", props, parameters: null,
+                !EntityStructureAnalyzer.IsRequired(target.Value.Property), enumTypes, $"observed flow '{flow.SourcePath}' -> '{flow.TargetPath}'", props, parameters: null,
                 report: message => context.ReportDiagnostic(
                     target.Value.Property,
                     ObservedFlowChecks.SeverityFor(
@@ -135,9 +135,10 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                 RequireTyped(context, function.Body, bodyType, function, noProps, parameters, enumTypes);
                 continue;
             }
-            if (!Compatible(bodyType, returnType, assigning: true))
-                context.ReportError(function,
-                    $"Function '{function.Name}' body is '{Describe(bodyType)}' but it is declared to return '{returnName}'.",
+            // A function's return type is never optional: a `null` body or arm is refused (#606).
+            if (AssignMismatch(function.Body, bodyType, returnType) is { } mismatch)
+                context.ReportError(ReferenceEquals(mismatch.Where, function.Body) ? function : mismatch.Where,
+                    $"Function '{function.Name}' body is '{Describe(mismatch.Source)}' but it is declared to return '{returnName}'.",
                     DomainModelDiagnosticCodes.FunctionReturnType);
         }
     }
@@ -151,7 +152,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
         // default(...) on properties
         foreach (var prop in entity.Properties) {
             foreach (var dv in prop.Constraints.OfType<DefaultValueConstraint>()) {
-                CheckDefault(context, dv.Expression, prop.Type.TypeName, enumTypes, consumer: prop);
+                CheckDefault(context, dv.Expression, prop.Type.TypeName, !EntityStructureAnalyzer.IsRequired(prop), enumTypes, consumer: prop);
             }
         }
 
@@ -161,18 +162,18 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
         // on the parameter scope, because an action's parameters change what a name infers to.
         var walked = new WalkedExpressions();
         foreach (var policy in entity.Policies)
-            WalkExpression(context, policy.Expression, props, null, enumTypes, walked);
+            WalkPolicy(context, policy, props, null, enumTypes, walked);
         foreach (var stage in entity.Stages) {
             foreach (var policy in stage.Policies)
-                WalkExpression(context, policy.Expression, props, null, enumTypes, walked);
+                WalkPolicy(context, policy, props, null, enumTypes, walked);
         }
         foreach (var action in entity.Actions)
             foreach (var policy in action.Policies)
-                WalkExpression(context, policy.Expression, props, ParamsOf(action), enumTypes, walked);
+                WalkPolicy(context, policy, props, ParamsOf(action), enumTypes, walked);
         foreach (var stage in entity.Stages)
             foreach (var action in stage.Actions)
                 foreach (var policy in action.Policies)
-                    WalkExpression(context, policy.Expression, props, ParamsOf(action), enumTypes, walked);
+                    WalkPolicy(context, policy, props, ParamsOf(action), enumTypes, walked);
 
         // effects (actions, entry/exit, subscriptions)
         foreach (var action in entity.Actions)
@@ -187,6 +188,17 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
         }
         foreach (var sub in entity.Subscriptions)
             CheckEffectTree(context, sub.Effects, entity.Name, PeerScope(context, entity.Name, props, sub), null, enumTypes);
+    }
+
+    /// <summary>
+    /// A policy body is walked, and its root is a condition: an optional Boolean there is stamped for lowering
+    /// (<see cref="StampOptionalBoolean"/>). Every <c>require</c> copy shares the policy's expression, so it is one root.
+    /// </summary>
+    private void WalkPolicy(
+        AnalysisContext context, Policy policy, Dictionary<string, string> props, Dictionary<string, string>? parameters,
+        Dictionary<string, EnumType> enumTypes, WalkedExpressions walked) {
+        WalkExpression(context, policy.Expression, props, parameters, enumTypes, walked);
+        StampOptionalBoolean(context, policy.Expression, InferType(context, policy.Expression, props, parameters, enumTypes));
     }
 
     /// <summary>A subscription's effects read its peer binder (<c>when Rel Stage as o</c>) as the relationship's target.</summary>
@@ -279,7 +291,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                 if (assign.Target is PropertyAccess target) {
                     var targetType = ResolvePropertyType(target.Name, props, parameters);
                     if (targetType is not null)
-                        CheckCompatible(context, assign.Value, targetType, enumTypes,
+                        CheckCompatible(context, assign.Value, targetType, IsOptionalProperty(target.Name, props), enumTypes,
                             $"assign to property '{target.Name}'", props, parameters, consumer: assign);
                 }
                 WalkExpression(context, assign.Value, props, parameters, enumTypes);
@@ -294,6 +306,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                 else if (Family(condType) is not TypeFamily.Boolean)
                     Report(context, cond.Condition,
                         $"if-condition must be Boolean (got '{Describe(condType)}')");
+                StampOptionalBoolean(context, cond.Condition, condType);
                 CheckEffectTree(context, cond.ThenEffects, callerEntityName, props, parameters, enumTypes);
                 if (cond.ElseEffects is { } elseEffects)
                     CheckEffectTree(context, elseEffects, callerEntityName, props, parameters, enumTypes);
@@ -328,6 +341,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                     else if (Family(whereType) is not TypeFamily.Boolean)
                         Report(context, where,
                             $"'for' where condition must be Boolean (got '{Describe(whereType)}')");
+                    StampOptionalBoolean(context, where, whereType);
                 }
                 CheckEffectTree(context, fe.Body, callerEntityName, loopScope, parameters, enumTypes);
                 break;
@@ -370,10 +384,11 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                     RequireTypedTarget(context, binding, paramType);
                 else if (!IsTyped(inferred))
                     RequireTyped(context, binding.Expression, inferred, binding, scope, parameters, enumTypes);
-                else if (!Compatible(inferred, target, assigning: true)) {
-                    Report(context, binding.Expression,
+                // A parameter is never optional: a `null` argument or arm is refused (#606).
+                else if (AssignMismatch(binding.Expression, inferred, target) is { } mismatch) {
+                    Report(context, mismatch.Where,
                         $"type mismatch in argument '{binding.PropertyName}' of invoke '{actionName}': " +
-                        $"cannot assign '{Describe(inferred)}' to '{paramType}'");
+                        $"cannot assign '{Describe(mismatch.Source)}' to '{paramType}'");
                 }
             }
             WalkExpression(context, binding.Expression, scope, parameters, enumTypes);
@@ -434,7 +449,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
         foreach (var init in initializers) {
             if (targetProps is not null
                 && targetProps.TryGetValue(init.PropertyName, out var targetType)) {
-                CheckCompatible(context, init.Expression, targetType, enumTypes,
+                CheckCompatible(context, init.Expression, targetType, IsOptionalProperty(init.PropertyName, targetProps), enumTypes,
                     $"create initializer for property '{init.PropertyName}'", callerProps, parameters, consumer: init);
             }
             WalkExpression(context, init.Expression, callerProps, parameters, enumTypes);
@@ -455,8 +470,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
         var lookup = context.GetTypeLookup();
         if (lookup is null || !lookup.Types.TryGetValue(entityTypeName, out var type) || type is not Entity entity)
             return null;
-        return entity.Properties
-            .ToDictionary(p => p.Name, p => p.Type.TypeName, StringComparer.Ordinal);
+        return new EntityScope(entity);
     }
 
     // ── Expressions ─────────────────────────────────────────────
@@ -521,6 +535,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                     RequireTyped(context, not.Operand, operand, not, props, parameters, enumTypes);
                 else if (Family(operand) is not TypeFamily.Boolean)
                     Report(context, expr, $"'not' requires a Boolean operand (got '{Describe(operand)}')");
+                StampOptionalBoolean(context, not.Operand, operand);
                 WalkExpression(context, not.Operand, props, parameters, enumTypes, walked);
                 return;
             case And and:
@@ -587,14 +602,33 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
             && (Family(leftType) is not TypeFamily.Boolean || Family(rightType) is not TypeFamily.Boolean))
             Report(context, left,
                 $"'and'/'or' requires Boolean operands (got '{Describe(leftType)}' and '{Describe(rightType)}')");
+        StampOptionalBoolean(context, left, leftType);
+        StampOptionalBoolean(context, right, rightType);
         WalkExpression(context, left, props, parameters, enumTypes, walked);
         WalkExpression(context, right, props, parameters, enumTypes, walked);
+    }
+
+    /// <summary>
+    /// An optional Boolean in a condition position (an <c>and</c>/<c>or</c>/<c>not</c> operand, an <c>if</c>, a
+    /// <c>for … where</c>, a <c>match</c> arm condition, a quantifier body, a policy root) means <c>X == true</c>: absent
+    /// is false (T-06, #862). The operand left of <c>== true</c>/<c>== false</c> is stamped too, so lowering keeps that
+    /// comparison lifted instead of folding it to the bare operand. The stamp is the operand's
+    /// <see cref="TypedExpressionMetadata"/> with <see cref="ExprType.Optional"/> set; lowering reads it
+    /// (<c>DomainExpressionLoweringPass.RouteCondition</c>), and these are the only positions that set it.
+    /// </summary>
+    private static void StampOptionalBoolean(AnalysisContext context, DomainExpression expr, ExprType type) {
+        if (!type.Optional || Family(type) is not TypeFamily.Boolean) return;
+        var stamped = context.GetMetadata<TypedExpressionMetadata>(expr);
+        context.SetMetadata(expr, stamped is null
+            ? new TypedExpressionMetadata(type)
+            : stamped with { Type = stamped.Type.AsOptional() });
     }
 
     private void CheckCompatible(
         AnalysisContext context,
         DomainExpression value,
         string targetTypeName,
+        bool targetOptional,
         Dictionary<string, EnumType> enumTypes,
         string what,
         Dictionary<string, string>? props = null,
@@ -616,7 +650,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
             return;
         // A5: the Guid keyword is typed Guid; the default check owns which targets take it (Guid and Text).
         if (value is PropertyAccess { Name: "Guid" } kw && ResolvePropertyType("Guid", props, parameters) is null) {
-            CheckDefault(context, kw, targetTypeName, enumTypes);
+            CheckDefault(context, kw, targetTypeName, targetOptional, enumTypes);
             return;
         }
 
@@ -625,7 +659,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
             return;
         }
         var inferred = InferLiteralAware(context, value, targetTypeName, enumTypes, props, parameters);
-        var target = ResolveName(context, targetTypeName, enumTypes);
+        var target = ResolveName(context, targetTypeName, enumTypes).AsOptional(targetOptional);
         // Unresolved bare identifier (`assign CheckIn to now`, `assign Name to Bogus` →
         // `this.Bogus`). Enum targets keep the member diagnostic.
         if (!IsTyped(inferred)
@@ -648,15 +682,28 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
         // enum member validity for the RHS
         if (Family(target) is TypeFamily.Enum && value is Literal { Value: string s })
             CheckEnumMember(context, value, targetTypeName, s, enumTypes);
-        if (!Compatible(inferred, target, assigning: true))
-            Report(context, value,
-                $"type mismatch in {what}: cannot assign '{Describe(inferred)}' to '{targetTypeName}'");
+        if (AssignMismatch(value, inferred, target) is { } mismatch)
+            Report(context, mismatch.Where,
+                $"type mismatch in {what}: cannot assign '{Describe(mismatch.Source)}' to '{targetTypeName}'");
     }
+
+    /// <summary>
+    /// Where an assignment of <paramref name="value"/> (typed <paramref name="inferred"/>) into <paramref name="target"/>
+    /// is refused, with the source type the message names; null when it is accepted. A <c>match</c> with a <c>null</c>
+    /// arm into a required target is refused at that arm (#606), read from the syntax rather than from the match's
+    /// optionality: an optional value copied into a required target is DMEFF014's, not this rule's.
+    /// </summary>
+    private static (DomainExpression Where, ExprType Source)? AssignMismatch(
+        DomainExpression value, ExprType inferred, ExprType target) =>
+        !target.Optional && NullArm(value) is { } arm ? (arm, ExprType.NullLiteral)
+        : Compatible(inferred, target, assigning: true) ? null
+        : (value, inferred);
 
     private void CheckDefault(
         AnalysisContext context,
         DomainExpression expr,
         string propTypeName,
+        bool optional,
         Dictionary<string, EnumType> enumTypes,
         Node? consumer = null) {
         expr = RewriteLibraryIdent(expr);
@@ -666,7 +713,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                     null, enumTypes, propTypeName)))
             return;
 
-        var target = ResolveName(context, propTypeName, enumTypes);
+        var target = ResolveName(context, propTypeName, enumTypes).AsOptional(optional);
         if (!IsTyped(target)) {
             if (consumer is not null) RequireTypedTarget(context, consumer, propTypeName);
             return;
@@ -711,9 +758,9 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                     if (consumer is not null) RequireTyped(context, expr, value, consumer, noProps, null, enumTypes);
                     return;
                 }
-                if (!Compatible(value, target, assigning: true))
-                    Report(context, expr,
-                        $"default value of type '{Describe(value)}' is not compatible with property type '{propTypeName}'");
+                if (AssignMismatch(expr, value, target) is { } mismatch)
+                    Report(context, mismatch.Where,
+                        $"default value of type '{Describe(mismatch.Source)}' is not compatible with property type '{propTypeName}'");
                 return;
         }
     }

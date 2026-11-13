@@ -86,11 +86,20 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
     private static bool Compatible(ExprType left, ExprType right, bool assigning = false) {
         if (Family(left) is not { } leftFamily || Family(right) is not { } rightFamily)
             return false;
-        // N1 (removing row T-06): null against an entity, a value type or Binary stays accepted.
-        if (leftFamily is TypeFamily.Null)
-            return rightFamily is TypeFamily.Text or TypeFamily.Guid or TypeFamily.Entity or TypeFamily.Value or TypeFamily.Binary;
-        if (rightFamily is TypeFamily.Null)
-            return leftFamily is TypeFamily.Text or TypeFamily.Guid or TypeFamily.Entity or TypeFamily.Value or TypeFamily.Binary;
+        // The null rule (T-06): `null` assigns only into an optional target (#606). It compares with an optional
+        // operand, or with a Text, Guid, entity, value-type or Binary operand, as C# compares them; a required
+        // Number, Boolean, Date, Time, Duration or enum operand is never null, so the comparison is refused.
+        // Interim: an optional enum still takes no `null`, because the assign-time member guard reads an absent value
+        // as a non-member on both hosts (ConstraintCheckWriter's assign style has no presence check for it).
+        if (leftFamily is TypeFamily.Null || rightFamily is TypeFamily.Null) {
+            if (leftFamily == rightFamily)
+                return false;
+            if (assigning)
+                return leftFamily is TypeFamily.Null && right.Optional && rightFamily is not TypeFamily.Enum;
+            var (other, otherFamily) = leftFamily is TypeFamily.Null ? (right, rightFamily) : (left, leftFamily);
+            return other.Optional
+                || otherFamily is TypeFamily.Text or TypeFamily.Guid or TypeFamily.Entity or TypeFamily.Value or TypeFamily.Binary;
+        }
         if (leftFamily is TypeFamily.Entity or TypeFamily.Value && leftFamily == rightFamily)
             return string.Equals(left.DomainName, right.DomainName, StringComparison.Ordinal);
         if (leftFamily is TypeFamily.Enum && rightFamily is TypeFamily.Enum)

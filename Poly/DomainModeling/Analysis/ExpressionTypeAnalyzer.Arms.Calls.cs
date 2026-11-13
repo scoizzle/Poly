@@ -39,11 +39,12 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                 RequireTyped(context, call.Arguments[i], argument, call, props, parameters, enumTypes);
                 continue;
             }
-            if (!Compatible(argument, target, assigning: true)) {
+            // A parameter is never optional: a `null` argument or arm is refused (#606).
+            if (AssignMismatch(call.Arguments[i], argument, target) is { } mismatch) {
                 var where = call.Line > 0 ? $" (line {call.Line}, col {call.Col})" : "";
-                context.ReportError(call,
+                context.ReportError(ReferenceEquals(mismatch.Where, call.Arguments[i]) ? call : mismatch.Where,
                     $"Argument '{function.Parameters[i].Name}' of '{call.Name}' expects '{parameterType}', " +
-                    $"got '{Describe(argument)}'{where}.",
+                    $"got '{Describe(mismatch.Source)}'{where}.",
                     DomainModelDiagnosticCodes.FunctionArgumentType);
             }
         }

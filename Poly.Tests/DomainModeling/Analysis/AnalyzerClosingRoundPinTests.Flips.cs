@@ -25,9 +25,9 @@ namespace Poly.Tests.DomainModeling.Analysis;
 /// rejects (the undeclared legacy name's DMSEM005).</item>
 /// </list>
 /// <para>
-/// Not a row (seam N2, owner T-06): <c>null</c> compared with a path-prefix, binder or owned read, with a
-/// <c>match</c> that has a <c>null</c> arm, or with arithmetic over an optional property keeps master's answer,
-/// accepted, because those types carry no optionality yet. The two <c>A-sum</c> loosenings are API-only (a DSL
+/// Not a row: <c>null</c> compared with a path-prefix, binder or owned read, with a <c>match</c> that has a
+/// <c>null</c> arm, or with arithmetic over an optional property keeps master's answer, accepted (since T-06 because
+/// those types carry optionality; <see cref="FlipsT06"/>). The two <c>A-sum</c> loosenings are API-only (a DSL
 /// document cannot declare an alias) and are not run through GateParity. Nor is a date minus a date of two properties:
 /// master's exemption for that one shape, the shape lowering rewrites to <c>Subtract</c>, stays (removing row T-10),
 /// so a typed date operand of any other shape meets the arithmetic rule (<c>A-arithmetic</c>; review F1, where
@@ -1547,6 +1547,30 @@ public partial class AnalyzerClosingRoundPinTests {
     ];
 
     /// <summary>
+    /// T-06 (#606, the null rule): <c>T06-null-arm</c>, a <c>match</c> with a <c>null</c> arm into a required target is
+    /// refused at that arm at every assignment site (class c2); <c>T06-null-compare</c>, <c>null</c> compares with an
+    /// optional operand (class e). Updated by hand, one row per cell that flips.
+    /// </summary>
+    internal static readonly (string Grid, string Cell, string Before, string After, string Rule)[] FlipsT06 = [
+        ("FormGridF3", "match { Flag -> null, else -> N + M } | assign Number", "ok", "DMSEM003", "T06-null-arm"),
+        ("FormGridF3", "match { Flag -> null, else -> N + M } | assign Decimal", "ok", "DMSEM003", "T06-null-arm"),
+        ("FormGridF3", "match { Flag -> null, else -> N + M } | create Number", "ok", "DMSEM003", "T06-null-arm"),
+        ("FormGridF3", "match { Flag -> null, else -> N + M } | create Decimal", "ok", "DMSEM003", "T06-null-arm"),
+        ("FormGridF3", "match { Flag -> null, else -> N + M } | invoke Number", "ok", "DMSEM003", "T06-null-arm"),
+        ("FormGridF3", "match { Flag -> null, else -> N + M } | invoke Decimal", "ok", "DMSEM003", "T06-null-arm"),
+        ("FormGridF3", "match { Flag -> null, else -> N + M } | call Number", "ok", "DMFUN003", "T06-null-arm"),
+        ("FormGridF3", "match { Flag -> null, else -> N + M } | call Decimal", "ok", "DMFUN003", "T06-null-arm"),
+        ("FormGridF3", "match { Flag -> null, else -> N + M } | return Number", "DMFUN005", "DMFUN005+DMFUN006", "T06-null-arm"),
+        ("FormGridF3", "match { Flag -> null, else -> N + M } | return Decimal", "DMFUN005", "DMFUN005+DMFUN006", "T06-null-arm"),
+        ("FormGridF3", "match { Flag -> null, else -> N + M } | match arm into Number", "ok", "DMSEM003", "T06-null-arm"),
+        ("FormGridF3", "match { Flag -> null, else -> N + M } | match arm into Decimal", "ok", "DMSEM003", "T06-null-arm"),
+        ("FormGridF3", "match { Flag -> null, else -> N + M } | onEntry assign Number", "ok", "DMSEM003", "T06-null-arm"),
+        ("OptionalNull", "Qty is not null", "DMSEM003", "ok", "T06-null-compare"),
+        ("OptionalNull", "Qty is null", "DMSEM003", "ok", "T06-null-compare"),
+        ("OptionalNull", "Qty == null", "DMSEM003", "ok", "T06-null-compare")
+    ];
+
+    /// <summary>
     /// <paramref name="master"/> with every <see cref="FlipsA"/> row, then every <see cref="FlipsB"/> row, of <paramref name="grid"/> applied. A row whose
     /// cell is missing, or whose <c>Before</c> is not the master verdict, throws: the table must describe master.
     /// A line is <c>cell = verdict</c>; the verdict follows the last <c> = </c>.
@@ -1556,7 +1580,7 @@ public partial class AnalyzerClosingRoundPinTests {
         var index = new Dictionary<string, int>(StringComparer.Ordinal);
         for (var i = 1; i < lines.Length; i++)
             index.Add(CellOf(lines[i]), i);
-        foreach (var flip in FlipsA.Concat(FlipsB).Concat(FlipsA4).Concat(FlipsDead).Concat(FlipsDefault).Concat(FlipsC3).Where(f => f.Grid == grid)) {
+        foreach (var flip in FlipsA.Concat(FlipsB).Concat(FlipsA4).Concat(FlipsDead).Concat(FlipsDefault).Concat(FlipsC3).Concat(FlipsT06).Where(f => f.Grid == grid)) {
             if (!index.TryGetValue(flip.Cell, out var at))
                 throw new InvalidOperationException($"Flip row '{grid}/{flip.Cell}' names no cell of the grid.");
             var verdict = VerdictOf(lines[at]);

@@ -771,6 +771,19 @@ public class ConstantFoldingProviderTests {
         await AssertFolds(new NotEqual(new Constant(Shade.Light), new Constant(Shade.Dark)), true);
     }
 
+    /// <summary>
+    /// With no operator from the provider, only an enum keeps <c>object.Equals</c>. C# <c>==</c> on a
+    /// <c>Tuple&lt;,&gt;</c> is reference equality, a <c>KeyValuePair&lt;,&gt;</c> has none (CS0019), and tuple
+    /// equality on a <c>ValueTuple</c> is the compiler's, not an operator; master folded all three to true.
+    /// </summary>
+    [Test]
+    public async Task SameTypeEqualityWithoutAnOperator_FoldsOnlyForAnEnum() {
+        await AssertDoesNotFold(new Equal(new Constant(Tuple.Create(1, 2)), new Constant(Tuple.Create(1, 2))));
+        await AssertDoesNotFold(new Equal(new Constant(new KeyValuePair<int, int>(1, 2)), new Constant(new KeyValuePair<int, int>(1, 2))));
+        await AssertDoesNotFold(new NotEqual(new Constant((1, 2)), new Constant((1, 2))));
+        await AssertFolds(new Equal(new Constant(Shade.Dark), new Constant(Shade.Dark)), true);
+    }
+
     [Test]
     public async Task EqualityAcrossMismatchedTypes_Declines_ProviderUndefined_AndSameTypeEqualityFolds() {
         await Assert.That(Operator<string, long>(OperatorKind.Equal)).IsNull();

@@ -1548,8 +1548,10 @@ public partial class AnalyzerClosingRoundPinTests {
 
     /// <summary>
     /// T-06 (#606, the null rule): <c>T06-null-arm</c>, a <c>match</c> with a <c>null</c> arm into a required target is
-    /// refused at that arm at every assignment site (class c2); <c>T06-null-compare</c>, <c>null</c> compares with an
-    /// optional operand (class e). Updated by hand, one row per cell that flips.
+    /// refused at that arm at every assignment site (class c2); <c>T06-null-into-required</c>, <c>null</c> assigned to a
+    /// required Text, Uuid, entity or Binary property (class c); <c>T06-null-id</c>, a <c>null</c> cell already refused
+    /// whose code changes to the type mismatch; <c>T06-null-compare</c>, <c>null</c> compares with an optional operand
+    /// (class e). Updated by hand, one row per cell that flips.
     /// </summary>
     internal static readonly (string Grid, string Cell, string Before, string After, string Rule)[] FlipsT06 = [
         ("FormGridF3", "match { Flag -> null, else -> N + M } | assign Number", "ok", "DMSEM003", "T06-null-arm"),
@@ -1567,7 +1569,23 @@ public partial class AnalyzerClosingRoundPinTests {
         ("FormGridF3", "match { Flag -> null, else -> N + M } | onEntry assign Number", "ok", "DMSEM003", "T06-null-arm"),
         ("OptionalNull", "Qty is not null", "DMSEM003", "ok", "T06-null-compare"),
         ("OptionalNull", "Qty is null", "DMSEM003", "ok", "T06-null-compare"),
-        ("OptionalNull", "Qty == null", "DMSEM003", "ok", "T06-null-compare")
+        ("OptionalNull", "Qty == null", "DMSEM003", "ok", "T06-null-compare"),
+        ("NameByLiteralBare", "Text", "Text     SS5S5", "Text     SS5SS", "T06-null-id"),
+        ("NameByLiteralBare", "String", "String   SS5S5", "String   SS5SS", "T06-null-id"),
+        ("NameByLiteralBare", "Uuid", "Uuid     SSSS5", "Uuid     SSSSS", "T06-null-id"),
+        ("NameByLiteralBare", "Guid", "Guid     SSSS5", "Guid     SSSSS", "T06-null-id"),
+        ("NameByLiteralBare", "Widget", "Widget   RRRR.", "Widget   RRRRR", "T06-null-into-required"),
+        ("NameByLiteralBare", "Money", "Money    XXXXV", "Money    XXXXX", "T06-null-id"),
+        ("NameByLiteralBare", "Bin", "Bin      RRRR.", "Bin      RRRRR", "T06-null-into-required"),
+        ("NameByLiteralBare", "string", "string   SS5S5", "string   SS5SS", "T06-null-id"),
+        ("NameByLiteralDeclared", "Text", "Text     RR.R.", "Text     RR.RR", "T06-null-into-required"),
+        ("NameByLiteralDeclared", "String", "String   SS5S5", "String   SS5SS", "T06-null-id"),
+        ("NameByLiteralDeclared", "Uuid", "Uuid     RRRR.", "Uuid     RRRRR", "T06-null-into-required"),
+        ("NameByLiteralDeclared", "Guid", "Guid     SSSS5", "Guid     SSSSS", "T06-null-id"),
+        ("NameByLiteralDeclared", "Widget", "Widget   RRRR.", "Widget   RRRRR", "T06-null-into-required"),
+        ("NameByLiteralDeclared", "Money", "Money    XXXXV", "Money    XXXXX", "T06-null-id"),
+        ("NameByLiteralDeclared", "Bin", "Bin      RRRR.", "Bin      RRRRR", "T06-null-into-required"),
+        ("NameByLiteralDeclared", "string", "string   SS5S5", "string   SS5SS", "T06-null-id")
     ];
 
     /// <summary>

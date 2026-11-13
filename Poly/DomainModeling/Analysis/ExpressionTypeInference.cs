@@ -111,8 +111,10 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
             AnyExpr or AllExpr or NoneExpr => QuantifiedEntity(context, expr, props) is not null ? BooleanFamily : ExprType.Unresolved,
             CountExpr => QuantifiedEntity(context, expr, props) is not null ? NumberFamily : ExprType.Unresolved,
             SumExpr sum => InferSum(context, sum, props),
-            // A read through a navigation or an owned member may find nothing (an unlinked hop, an optional member).
-            RelationshipNavigation navigation => InferNavigation(context, navigation, props, parameters, enumTypes).AsOptional(),
+            // A read through a navigation or an owned member may find nothing (an unlinked hop, an optional member). A
+            // navigation to a condition (`advisor where Age < 30`) is never absent: an unlinked hop makes it false.
+            RelationshipNavigation navigation => InferNavigation(context, navigation, props, parameters, enumTypes)
+                .AsOptional(!IsNavigationToCondition(navigation)),
             OwnedAccess owned => InferOwned(context, owned, props, enumTypes).AsOptional(),
             MatchExpr match => InferMatch(context, match, props, parameters, enumTypes, hint: null),
             FunctionCall call => FunctionAnalysis.Find(context, call.Name) is { } function
@@ -202,6 +204,13 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
             return Typeless(typeof(TimeSpan)).AsOptional(absent);
         return ExprType.Unresolved;
     }
+
+    /// <summary>A navigation whose final hop is a condition, which lowering reads as <c>rel != null &amp;&amp; condition</c>.</summary>
+    private static bool IsNavigationToCondition(RelationshipNavigation navigation) => navigation.TargetProperty switch {
+        Comparison or And or Or or Not or Exists or NotExists or AnyExpr or AllExpr or NoneExpr => true,
+        RelationshipNavigation inner => IsNavigationToCondition(inner),
+        _ => false,
+    };
 
     /// <summary>The entity declared under <paramref name="name"/>, first declaration first (the provider's order).</summary>
     private static Entity? EntityNamed(AnalysisContext context, string? name) =>

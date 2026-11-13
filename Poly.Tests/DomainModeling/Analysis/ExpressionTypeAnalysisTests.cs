@@ -1,6 +1,8 @@
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Compile;
 using Poly.DomainModeling.Evolution;
+using Poly.DomainModeling.Ontology;
 
 namespace Poly.Tests.DomainModeling.Analysis;
 
@@ -519,5 +521,149 @@ public class ExpressionTypeAnalysisTests {
 
         await Assert.That(analysis.Diagnostics.Any(d =>
             d.Severity == Poly.Analysis.DiagnosticSeverity.Error)).IsFalse();
+    }
+
+    // ── T-06: optional values and the null rule ─────────────────
+
+    private static string Optionals(string body, string members = "", string top = "") => $$"""
+        domain Test
+        Kind: enum { A, B }
+        Addr: value { Street: Text }
+        {{top}}
+        Line: entity {
+          Qty: Number
+          Flag: Boolean optional
+        }
+        Item: entity {
+          Done: Boolean
+          Flag: Boolean optional
+          Qty: Number
+          Q: Number optional
+          Name: Text
+          Note: Text optional
+          Code: Uuid
+          Due: Date
+          Level: Kind
+          lines: many Line
+          {{members}}
+          Take: action (n: Number) { assign Qty to n }
+          Go: action (home: Addr) { {{body}} }
+        }
+        """;
+
+    /// <summary>#606: `null` assigns only into an optional target, at every assignment-like site.</summary>
+    [Test]
+    [Arguments("assign Qty to null", "", "", "type mismatch in assign to property 'Qty': cannot assign 'null' to 'Number'")]
+    [Arguments("assign Name to null", "", "", "type mismatch in assign to property 'Name': cannot assign 'null' to 'Text'")]
+    [Arguments("invoke Send(dest: null)", "Send: action (dest: Addr) { assign Qty to 1 }", "",
+        "argument 'dest' of invoke 'Send': cannot assign 'null' to 'Addr'")]
+    [Arguments("assign Done to null", "", "", "cannot assign 'null' to 'Boolean'")]
+    [Arguments("assign Hue to null", "Hue: Kind optional", "", "cannot assign 'null' to 'Kind'")]
+    [Arguments("create in lines { Qty: null }", "", "", "create initializer for property 'Qty': cannot assign 'null' to 'Number'")]
+    [Arguments("invoke Take(n: null)", "", "", "argument 'n' of invoke 'Take': cannot assign 'null' to 'Number'")]
+    [Arguments("assign Q to 1", "Z: Text default(null)", "",
+        "default value of type 'null' is not compatible with property type 'Text'")]
+    [Arguments("assign Name to Nothing()", "", "function Nothing(): Text = null",
+        "Function 'Nothing' body is 'null' but it is declared to return 'Text'")]
+    [Arguments("assign Name to Echo(null)", "", "function Echo(a: Text): Text = a",
+        "Argument 'a' of 'Echo' expects 'Text', got 'null'")]
+    public async Task Assign_NullIntoRequiredTarget_IsRefused(string body, string members, string top, string message) {
+        var result = Parse(Optionals(body, members, top));
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(HasError(result, message)).IsTrue();
+    }
+
+    /// <summary>#606: a `match` with a `null` arm into a required target is refused at that arm, at every assignment site.</summary>
+    [Test]
+    [Arguments("assign Qty to match { Done -> null, else -> 7 }", "", "cannot assign 'null' to 'Number'")]
+    [Arguments("assign Qty to match { Done -> 7, Q > 1 -> match { Done -> 1, else -> null }, else -> 8 }", "",
+        "cannot assign 'null' to 'Number'")]
+    [Arguments("create in lines { Qty: match { Done -> null, else -> 7 } }", "", "cannot assign 'null' to 'Number'")]
+    [Arguments("invoke Take(n: match { Done -> null, else -> 7 })", "", "cannot assign 'null' to 'Number'")]
+    [Arguments("assign Qty to Pick(true)", "function Pick(b: Boolean): Number = match { b -> null, else -> 7 }",
+        "body is 'null' but it is declared to return 'Number'")]
+    public async Task Assign_MatchWithNullArm_IntoRequiredTarget_IsRefusedAtTheArm(string body, string top, string message) {
+        var result = Parse(Optionals(body, top: top));
+        var diagnostic = result.Analysis.Diagnostics.FirstOrDefault(d => d.Message.Contains(message, StringComparison.Ordinal));
+        await Assert.That(diagnostic).IsNotNull();
+        await Assert.That(diagnostic!.Node is Literal { Value: null }).IsTrue();
+    }
+
+    /// <summary>`null` into an optional target is accepted: a plain assign, a `match` arm, a create initializer, a default.</summary>
+    [Test]
+    [Arguments("assign Q to null", "")]
+    [Arguments("assign Flag to null", "")]
+    [Arguments("assign Note to null", "")]
+    [Arguments("assign Q to match { Done -> null, else -> 7 }", "")]
+    [Arguments("assign Note to match { Done -> null, else -> \"x\" }", "")]
+    [Arguments("assign Flag to match { Done -> null, else -> true }", "")]
+    [Arguments("create in lines { Qty: 1 Flag: null }", "")]
+    [Arguments("assign Q to 1", "Z: Text optional default(null)")]
+    public async Task Assign_NullIntoOptionalTarget_IsAccepted(string body, string members) {
+        var result = Parse(Optionals(body, members));
+        await Assert.That(result.Succeeded).IsTrue();
+    }
+
+    /// <summary>
+    /// The final `null` comparison rule (T-06, owner option B): `null` compares with an optional operand, or with a
+    /// Text, Guid, entity, value-type or Binary operand; a required Number, Boolean, Date or enum operand is refused.
+    /// </summary>
+    [Test]
+    [Arguments("Q == null", true)]
+    [Arguments("Q is not null", true)]
+    [Arguments("null != Q", true)]
+    [Arguments("Flag == null", true)]
+    [Arguments("Note == null", true)]
+    [Arguments("(Q + 1) == null", true)]
+    [Arguments("match { Done -> null, else -> 1 } == null", true)]
+    [Arguments("Name == null", true)]
+    [Arguments("Code == null", true)]
+    [Arguments("home == null", true)]
+    [Arguments("Qty == null", false)]
+    [Arguments("(Qty + 1) == null", false)]
+    [Arguments("Done == null", false)]
+    [Arguments("Due == null", false)]
+    [Arguments("Level == null", false)]
+    [Arguments("Q < null", false)]
+    [Arguments("null >= Q", false)]
+    [Arguments("Name > null", false)]
+    public async Task NullComparison_FollowsTheFinalRule(string comparison, bool accepted) {
+        var result = Parse(Optionals($"if ({comparison}) {{ assign Qty to 1 }}"));
+        await Assert.That(result.Succeeded).IsEqualTo(accepted);
+        if (!accepted)
+            await Assert.That(HasError(result, "comparison between incompatible types")).IsTrue();
+    }
+
+    /// <summary>A binder or path read may find nothing, so it compares with `null` whatever the member's own optionality.</summary>
+    [Test]
+    public async Task NullComparison_BinderReadOfRequiredMember_IsAccepted() {
+        var result = Parse(Optionals("for line in lines where null == line Qty { assign Qty to 1 }"));
+        await Assert.That(result.Succeeded).IsTrue();
+    }
+
+    /// <summary>
+    /// An optional property of a type the model cannot resolve stays untyped: optionality never turns an unresolved
+    /// type into the `null` literal, which compares with Text and assigns into an optional target (T-05b: an unresolved
+    /// type is never compatible). A pack maps Number onto a CLR type the model has no primitive for.
+    /// </summary>
+    [Test]
+    public async Task OptionalPropertyOfUnmodelledType_IsNeverCompatible() {
+        var builder = SessionBuilder.CreateEmpty().LoadCore();
+        builder.TypeMaps.OverrideClrTypeName("Number", "short");
+        var session = builder.Build();
+        var changes = new PolyDslParser("""
+            domain Test
+            Item: entity {
+              W: Number optional
+              Note: Text optional
+              Same: policy { W == "x" }
+              Go: action { assign Note to W }
+            }
+            """, session).Parse();
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes, session: session);
+        var untyped = result.Analysis.Diagnostics
+            .Where(d => d.Message.StartsWith("cannot determine the type of 'W'", StringComparison.Ordinal))
+            .Select(d => d.Code ?? "");
+        await Assert.That(string.Join(",", untyped)).IsEqualTo("DMSEM006,DMSEM006");
     }
 }

@@ -449,4 +449,182 @@ public class DomainExpressionLoweringPassTests {
         var ex = Assert.Throws<ArgumentNullException>(() => pass.Lower(DomainExpression.Literal(1), null!));
         await Assert.That(ex).IsNotNull();
     }
+
+    // ── T-06: an optional Boolean in a condition means `X == true`, on both hosts ──
+    // Each row runs one document on the simulator and on the generated C# compiled by Roslyn (an independent
+    // authority), for Flag stored true, stored false and absent. A position lowering misses fails its row.
+
+    private const string OptionalBooleanDsl = """
+        domain T06a
+        L: entity {
+          Flag: Boolean optional
+        }
+        E: entity {
+          Done: Boolean
+          Flag: Boolean optional
+          Out: Boolean optional
+          lines: many L
+          Ok: policy { Flag }
+          OkAnd: policy { Done and Flag is true }
+          PAnd: action { assign Out to Done and Flag }
+          POr: action { assign Out to Flag or not Done }
+          PNot: action { assign Out to not Flag }
+          PIf: action { if (Flag) { assign Out to true } else { assign Out to false } }
+          PForWhere: action {
+            assign Out to false
+            for line in lines where Flag { assign Out to true }
+          }
+          PForWhereBinder: action {
+            assign Out to false
+            for line in lines where line Flag { assign Out to true }
+          }
+          PMatchArm: action { assign Out to match { Flag -> true, else -> false } }
+          PAny: action { assign Out to any lines where Flag }
+          PAll: action { assign Out to all lines where Flag }
+          PNone: action { assign Out to none lines where Flag }
+          PCount: action { assign Out to (count lines where Flag) > 0 }
+          PRequire: action require Ok { assign Out to true }
+          PRequireNot: action require not Ok { assign Out to true }
+          PRequireAnd: action require OkAnd { assign Out to true }
+          PIsTrue: action { assign Out to Flag is true }
+          PIsFalse: action { assign Out to Flag is false }
+          PNotEqualTrue: action { assign Out to Flag != true }
+          PNotEqualFalse: action { assign Out to Flag != false }
+          PIfIsTrue: action { if (Flag is true) { assign Out to true } else { assign Out to false } }
+          PIfNotEqualTrue: action { if (Flag != true) { assign Out to true } else { assign Out to false } }
+          PAndIsTrue: action { assign Out to Done and Flag is true }
+          PNotIsTrue: action { assign Out to not (Flag is true) }
+          PAnyIsFalse: action { assign Out to any lines where Flag is false }
+        }
+        """;
+
+    private static readonly Lazy<ParityScenario> OptionalBoolean =
+        new(() => ParityScenario.FromDsl(OptionalBooleanDsl, "T06aOptionalBooleanPositions"));
+
+    // The module a domain lowers to is bound to that Domain once: one row drives the scenario at a time.
+    private static readonly Lock OptionalBooleanGate = new();
+
+    private static IReadOnlyList<ParityOutcome> RunOptionalBoolean(bool? flag, Action<ParitySide> step) {
+        lock (OptionalBooleanGate) {
+            var (simulate, printed) = OptionalBoolean.Value.Run(side => {
+                (string, object?)[] flagValue = flag is { } stored ? [("Flag", stored)] : [];
+                var line = side.Create("L", flagValue);
+                side.Create("E", [("Done", true), .. flagValue, ("lines", new List<object> { line! })]);
+                step(side);
+            });
+            var differences = ParityScenario.Differences(simulate, printed);
+            if (differences.Count > 0)
+                throw new InvalidOperationException($"Flag={flag?.ToString() ?? "absent"}: " + string.Join("; ", differences));
+            return simulate;
+        }
+    }
+
+    /// <summary>
+    /// Out after the action, for Flag stored true, stored false and absent. `== true` is (True, False, False); its
+    /// negation (True when absent) is (False, True, True). A blocked `require` leaves Out absent (null).
+    /// </summary>
+    [Test]
+    [Arguments("PAnd", "True", "False", "False")]
+    [Arguments("POr", "True", "False", "False")]
+    [Arguments("PNot", "False", "True", "True")]
+    [Arguments("PIf", "True", "False", "False")]
+    [Arguments("PForWhere", "True", "False", "False")]
+    [Arguments("PForWhereBinder", "True", "False", "False")]
+    [Arguments("PMatchArm", "True", "False", "False")]
+    [Arguments("PAny", "True", "False", "False")]
+    [Arguments("PAll", "True", "False", "False")]
+    [Arguments("PNone", "False", "True", "True")]
+    [Arguments("PCount", "True", "False", "False")]
+    [Arguments("PRequire", "True", null, null)]
+    [Arguments("PRequireNot", null, "True", "True")]
+    [Arguments("PRequireAnd", "True", null, null)]
+    [Arguments("PIsTrue", "True", "False", "False")]
+    [Arguments("PIsFalse", "False", "True", "False")]
+    [Arguments("PNotEqualTrue", "False", "True", "True")]
+    [Arguments("PNotEqualFalse", "True", "False", "True")]
+    [Arguments("PIfIsTrue", "True", "False", "False")]
+    [Arguments("PIfNotEqualTrue", "False", "True", "True")]
+    [Arguments("PAndIsTrue", "True", "False", "False")]
+    [Arguments("PNotIsTrue", "False", "True", "True")]
+    [Arguments("PAnyIsFalse", "False", "True", "False")]
+    public async Task OptionalBoolean_InEveryConditionPosition_MeansEqualsTrue_OnBothHosts(
+        string action, string? whenTrue, string? whenFalse, string? whenAbsent) {
+        bool?[] flags = [true, false, null];
+        string?[] expected = [whenTrue, whenFalse, whenAbsent];
+        for (var i = 0; i < flags.Length; i++) {
+            var outcome = RunOptionalBoolean(flags[i], side => side.Invoke(action))[^1];
+            await Assert.That(outcome.ExceptionType).IsNull();
+            await Assert.That(outcome.Success).IsEqualTo(expected[i] is not null || !action.StartsWith("PRequire", StringComparison.Ordinal));
+            await Assert.That(outcome.State["Out"]).IsEqualTo(expected[i]);
+        }
+    }
+
+    /// <summary>A policy whose root is an optional Boolean answers `Flag == true` when evaluated, on both hosts.</summary>
+    [Test]
+    [Arguments(true, "True")]
+    [Arguments(false, "False")]
+    [Arguments(null, "False")]
+    public async Task OptionalBoolean_PolicyRoot_EvaluatesEqualsTrue_OnBothHosts(bool? flag, string answer) {
+        var outcome = RunOptionalBoolean(flag, side => side.EvaluatePolicy("Ok"))[^1];
+        await Assert.That(outcome.State["Ok"]).IsEqualTo(answer);
+    }
+
+    // ── T-06: `null` into an optional target, including a `match` null arm (#606) ──
+
+    private const string NullTargetDsl = """
+        domain T06aNull
+        Kind: enum { Low, High }
+        E: entity {
+          Big: Boolean
+          Q: Number optional
+          Flag: Boolean optional
+          Note: Text optional
+          Level: Kind optional
+          ArmQ: action { assign Q to match { Big -> null, else -> 7 } }
+          ArmFlag: action { assign Flag to match { Big -> null, else -> true } }
+          ArmNote: action { assign Note to match { Big -> null, else -> "x" } }
+          NestedQ: action { assign Q to match { Big -> match { Big -> null, else -> 1 }, else -> 7 } }
+          NullQ: action { assign Q to null }
+          NullFlag: action { assign Flag to null }
+          QIsNull: action { assign Flag to Q == null }
+          LevelIsNull: action { assign Flag to Level == null }
+        }
+        """;
+
+    private static readonly Lazy<ParityScenario> NullTarget =
+        new(() => ParityScenario.FromDsl(NullTargetDsl, "T06aNullIntoOptional"));
+
+    private static readonly Lock NullTargetGate = new();
+
+    /// <summary>
+    /// The stored value after the action, starting from Q 5, Flag false, Note "n". A `null` arm stores absent and the
+    /// other arm its value; `null` stores absent; `Q == null` reads absence. Both hosts agree.
+    /// </summary>
+    [Test]
+    [Arguments("ArmQ", true, "Q", null)]
+    [Arguments("ArmQ", false, "Q", "7")]
+    [Arguments("ArmFlag", true, "Flag", null)]
+    [Arguments("ArmFlag", false, "Flag", "True")]
+    [Arguments("ArmNote", true, "Note", null)]
+    [Arguments("ArmNote", false, "Note", "x")]
+    [Arguments("NestedQ", true, "Q", null)]
+    [Arguments("NestedQ", false, "Q", "7")]
+    [Arguments("NullQ", false, "Q", null)]
+    [Arguments("NullFlag", false, "Flag", null)]
+    [Arguments("QIsNull", false, "Flag", "False")]
+    [Arguments("LevelIsNull", false, "Flag", "False")]
+    public async Task NullIntoOptionalTarget_StoresAbsent_OnBothHosts(string action, bool big, string member, string? stored) {
+        IReadOnlyList<ParityOutcome> simulate;
+        List<string> differences;
+        lock (NullTargetGate) {
+            (simulate, var printed) = NullTarget.Value.Run(side => {
+                side.Create("E", ("Big", big), ("Q", 5L), ("Flag", false), ("Note", "n"), ("Level", "Low"));
+                side.Invoke(action);
+            });
+            differences = ParityScenario.Differences(simulate, printed);
+        }
+        await Assert.That(differences).IsEmpty();
+        await Assert.That(simulate[^1].Success).IsTrue();
+        await Assert.That(simulate[^1].State[member]).IsEqualTo(stored);
+    }
 }

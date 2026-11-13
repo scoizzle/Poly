@@ -331,6 +331,29 @@ public class ValueRepresentationEmitTests {
             "VM compile rejected: no unary '~' operator for 'Guid'.",
         }, TUnit.Assertions.Enums.CollectionOrdering.Matching);
     }
+
+    private static string Constructed<T>(Node argument, params object?[] args) =>
+        Answer(new Member(new New(new ClrTypeReference(typeof(T)), argument), nameof(CtorProbe.ObjectBox.Text)), args);
+
+    /// <summary>A CLR constructor argument is the value its parameter's type reads from the word, as a call argument is:
+    /// a scalar for an <c>object</c> parameter is the boxed value, an IEEE word is the double, a decimal or optional handle
+    /// is the value it holds.</summary>
+    [Test]
+    public async Task ConstructorArgument_IsTheValueForTheParameterType() {
+        var answers = new[] {
+            Constructed<CtorProbe.ObjectBox>(new Constant(7)),
+            Constructed<CtorProbe.ObjectBox>(new Constant("x")),
+            Constructed<CtorProbe.DoubleBox>(new Constant(1.5)),
+            Constructed<CtorProbe.DoubleBox>(P<double>("d"), 1.5),
+            Constructed<CtorProbe.DecimalBox>(new Constant(1.5m)),
+            Constructed<CtorProbe.NullableIntBox>(P<int?>("n"), 5),
+            Constructed<CtorProbe.NullableIntBox>(P<int?>("n"), (object?)null),
+            Constructed<CtorProbe.BoolBox>(new Constant(true)),
+        };
+        await Assert.That(answers).IsEquivalentTo(new[] {
+            "String Int32:7", "String String:x", "String 1.5", "String 1.5", "String 1.5", "String 5", "String <null>", "String True",
+        }, TUnit.Assertions.Enums.CollectionOrdering.Matching);
+    }
 }
 
 public static class RepresentationProbe {
@@ -353,4 +376,26 @@ public static class NullableProbe {
     public static int? FiveOrNull(bool present) => present ? 5 : null;
 
     public static decimal? FiveDecimalOrNull(bool present) => present ? 5m : null;
+}
+
+public static class CtorProbe {
+    public sealed class ObjectBox(object? value) {
+        public string Text { get; } = value is null ? "<null>" : $"{value.GetType().Name}:{value}";
+    }
+
+    public sealed class DoubleBox(double value) {
+        public string Text { get; } = value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    public sealed class DecimalBox(decimal value) {
+        public string Text { get; } = value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    public sealed class NullableIntBox(int? value) {
+        public string Text { get; } = value?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "<null>";
+    }
+
+    public sealed class BoolBox(bool value) {
+        public string Text { get; } = value.ToString();
+    }
 }

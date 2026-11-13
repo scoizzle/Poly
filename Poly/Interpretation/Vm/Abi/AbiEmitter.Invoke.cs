@@ -92,16 +92,7 @@ public static partial class AbiEmitter {
                                 methodArgs[i] = bridgeArgument;
                                 continue;
                             }
-                            var ringVal = ctx.RingVar(argSlots[i]);
-                            var parameterType = methodParams[i].ParameterType;
-                            var sourceClr = ctx.ClrTypeOf(invoke.Arguments[i]);
-                            methodArgs[i] = Nullable.GetUnderlyingType(parameterType) is not null
-                                && sourceClr is not null
-                                && Nullable.GetUnderlyingType(sourceClr) is not null
-                                ? new SlotLocation.Ring(argSlots[i]).ReadAs(ctx, parameterType)
-                                : RingCodec.ToClr(
-                                    ringVal, parameterType, invoke.Arguments[i],
-                                    ctx.Analysis, ctx.HeapLocal);
+                            methodArgs[i] = ClrArgument(argSlots[i], invoke.Arguments[i], methodParams[i].ParameterType, ctx);
                         }
                     }
 
@@ -1341,6 +1332,17 @@ public static partial class AbiEmitter {
         return IfThen(
             Equal(handle, Constant(0L)),
             Throw(New(ctor, Constant($"'{member.MemberName}' is not set"))));
+    }
+
+    /// <summary>A CLR call or constructor argument: the word in <paramref name="slot"/>, read as
+    /// <paramref name="parameterType"/> by the meaning of the argument's own type.</summary>
+    private static Expression ClrArgument(int slot, Node argument, Type parameterType, Context ctx) {
+        var sourceClr = ctx.ClrTypeOf(argument);
+        return Nullable.GetUnderlyingType(parameterType) is not null
+            && sourceClr is not null
+            && Nullable.GetUnderlyingType(sourceClr) is not null
+            ? new SlotLocation.Ring(slot).ReadAs(ctx, parameterType)
+            : RingCodec.ToClr(ctx.RingVar(slot), parameterType, argument, ctx.Analysis, ctx.HeapLocal);
     }
 
     /// <summary>The receiver of a resolved instance call. A temporal word is the

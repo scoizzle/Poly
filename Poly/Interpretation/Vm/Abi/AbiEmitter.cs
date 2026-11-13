@@ -429,18 +429,7 @@ public static partial class AbiEmitter {
             for (int i = 0; i < ctorParams.Length; i++) {
                 var paramType = ctorParams[i].ParameterType;
                 if (i < n.Arguments.Length) {
-                    var ringVal = ctx.RingVar(argSlots[i]);
-                    if (paramType.IsValueType) {
-                        ctorArgs[i] = LocalType.Of(paramType) is LocalType.TemporalLocal { IsWord: true }
-                            ? LocalType.Decode(ringVal, paramType, paramType, ctx.HeapLocal)
-                            : Convert(ringVal, paramType);
-                    }
-                    else {
-                        ctorArgs[i] = Convert(
-                            Call(ctx.HeapLocal, HeapUnsafeGet,
-                                Convert(ringVal, typeof(int))),
-                            paramType);
-                    }
+                    ctorArgs[i] = ClrArgument(argSlots[i], n.Arguments[i], paramType, ctx);
                 }
                 else if (ctorParams[i].HasDefaultValue) {
                     ctorArgs[i] = Constant(ctorParams[i].DefaultValue, paramType);

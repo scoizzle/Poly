@@ -2,6 +2,7 @@ using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Ontology;
+using Poly.DomainModeling.Ontology.Constraints;
 
 namespace Poly.Tests.DomainModeling.Evolution;
 
@@ -698,6 +699,8 @@ public class DomainEvolutionApplicatorTests {
             .AddPropertyToEntity("Person", new Property("SurName", new DomainTypeReference("Text"), []))
             .AddPropertyToEntity("Person", new Property("GivenName", new DomainTypeReference("Text"), []))
             .AddPropertyToEntity("Person", new Property("TimeOfBirth", new DomainTypeReference("Timestamp"), []))
+            .AddPropertyToEntity("Person", new Property("TimeOfDeath", new DomainTypeReference("Timestamp"), [new OptionalConstraint()]))
+            .AddPropertyToEntity("Person", new Property("RecordedTime", new DomainTypeReference("Timestamp"), []))
             .Apply();
 
         await Assert.That(step1.Succeeded).IsTrue();
@@ -721,15 +724,18 @@ public class DomainEvolutionApplicatorTests {
                 DomainExpression.Exists(
                     DomainExpression.Owned("DeathCertificate", DomainExpression.Property("Time"))))
             // OnEntry for Alive: stage transition IS the observable — no PublishEvent needed.
+            // T-05b: the entry effects read a property the person declares. On master they read
+            // `BirthCertificate Time` / `DeathCertificate Time` as owned access with no such member on Person,
+            // which the generated C# refused (CS1061); a value type cannot be a stored property (DMSTR006).
             .AddOnEntryEffect("Person", "Alive",
                 new AssignEffect(
                     DomainExpression.Property("TimeOfBirth"),
-                    DomainExpression.Owned("BirthCertificate", DomainExpression.Property("Time"))))
+                    DomainExpression.Property("RecordedTime")))
             // OnEntry for Dead: stage transition IS the observable — no PublishEvent needed.
             .AddOnEntryEffect("Person", "Dead",
                 new AssignEffect(
-                    DomainExpression.Property("TimeOfBirth"),
-                    DomainExpression.Owned("DeathCertificate", DomainExpression.Property("Time"))))
+                    DomainExpression.Property("TimeOfDeath"),
+                    DomainExpression.Property("RecordedTime")))
             .Apply();
 
         await Assert.That(step2.Succeeded).IsTrue();
@@ -1144,8 +1150,10 @@ public class DomainEvolutionApplicatorTests {
                 new Property("DueDate", new DomainTypeReference("Int"), [])
             ], [], [], [])
         ], [
+            // T-05b: a path-prefix read crosses a to-one relationship; over a to-many one it reads a collection as a
+            // scalar (the C# door refused it on master: "Path-prefix ... requires exactly one linked target").
             new Relationship("ProjectTasks", new DomainTypeReference("Project"), new DomainTypeReference("Task"),
-                RelationshipCardinality.OneToMany, [])
+                RelationshipCardinality.OneToOne, [])
         ]);
         var result = new DomainEvolution(start)
             .Evolve()
@@ -1290,8 +1298,10 @@ public class DomainEvolutionApplicatorTests {
 
     [Test]
     public async Task ConditionalEffect_WithoutElse_CanBeStored() {
-        var entity = new Entity("Task", [], [], [], []);
-        var start = DomainTestFactory.Create("Test", [entity], []);
+        // T-05b: the condition reads a declared Boolean (an undeclared IsReady was CS1061 in the generated C# on master).
+        var entity = new Entity("Task", [new Property("IsReady", new DomainTypeReference("Boolean"), [])], [], [], []);
+        var start = DomainTestFactory.Create("Test",
+            [new Poly.DomainModeling.Ontology.PrimitiveType("Boolean", PrimitiveSemantics.Boolean, []), entity], []);
         var result = new DomainEvolution(start)
             .Evolve()
             .AddStage("Task", "Completed")

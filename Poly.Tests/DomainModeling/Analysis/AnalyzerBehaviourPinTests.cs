@@ -336,19 +336,27 @@ public class AnalyzerBehaviourPinTests {
 
     [Test]
     public async Task NameByNameAssign_BareNames_IsFrozen() =>
-        await Assert.That(NameByNameGrid(declared: false)).IsEqualTo(Expected.NameByNameBare);
+        // T-05b: master plus the FlipsB rows of grid "NameByNameBare".
+        await Assert.That(AnalyzerClosingRoundPinTests.GridDifferences(NameByNameGrid(declared: false),
+            AnalyzerClosingRoundPinTests.MasterPlusFlips("NameByNameBare", Expected.NameByNameBare))).IsEqualTo("");
 
     [Test]
     public async Task NameByNameAssign_DeclaredPrimitives_IsFrozen() =>
-        await Assert.That(NameByNameGrid(declared: true)).IsEqualTo(Expected.NameByNameDeclared);
+        // T-05b: master plus the FlipsB rows of grid "NameByNameDeclared".
+        await Assert.That(AnalyzerClosingRoundPinTests.GridDifferences(NameByNameGrid(declared: true),
+            AnalyzerClosingRoundPinTests.MasterPlusFlips("NameByNameDeclared", Expected.NameByNameDeclared))).IsEqualTo("");
 
     [Test]
     public async Task NameByLiteralAssign_BareNames_IsFrozen() =>
-        await Assert.That(NameByLiteralGrid(declared: false)).IsEqualTo(Expected.NameByLiteralBare);
+        // T-05b: master plus the FlipsB rows of grid "NameByLiteralBare".
+        await Assert.That(AnalyzerClosingRoundPinTests.GridDifferences(NameByLiteralGrid(declared: false),
+            AnalyzerClosingRoundPinTests.MasterPlusFlips("NameByLiteralBare", Expected.NameByLiteralBare))).IsEqualTo("");
 
     [Test]
     public async Task NameByLiteralAssign_DeclaredPrimitives_IsFrozen() =>
-        await Assert.That(NameByLiteralGrid(declared: true)).IsEqualTo(Expected.NameByLiteralDeclared);
+        // T-05b: master plus the FlipsB rows of grid "NameByLiteralDeclared".
+        await Assert.That(AnalyzerClosingRoundPinTests.GridDifferences(NameByLiteralGrid(declared: true),
+            AnalyzerClosingRoundPinTests.MasterPlusFlips("NameByLiteralDeclared", Expected.NameByLiteralDeclared))).IsEqualTo("");
 
     [Test]
     public async Task EachTypeBuildingSite_Discriminators_AreFrozen() =>
@@ -356,7 +364,9 @@ public class AnalyzerBehaviourPinTests {
 
     [Test]
     public async Task InvokeArgumentNameMismatches_AreFrozen() =>
-        await Assert.That(InvokeArgumentRows()).IsEqualTo(Expected.InvokeArguments);
+        // T-05b: master plus the FlipsB rows of grid "InvokeArguments".
+        await Assert.That(AnalyzerClosingRoundPinTests.GridDifferences(InvokeArgumentRows(),
+            AnalyzerClosingRoundPinTests.MasterPlusFlips("InvokeArguments", Expected.InvokeArguments))).IsEqualTo("");
 
     [Test]
     public async Task TemporalPrimitivesWithoutTheTemporalMap_AreFrozen() =>

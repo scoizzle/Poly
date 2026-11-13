@@ -37,11 +37,12 @@ internal sealed class DomainTypeDefinitionProvider : ITypeDefinitionProvider {
         if (FromClrName(name) is { } clr)
             return clr;
 
-        // A declared primitive with its own name (Cents: decimal) maps through its semantics.
+        // A declared primitive with its own name (Cents: decimal) maps through its semantics. A temporal one keeps its
+        // meaning without the temporal library's map (T-05b, A3): a hand-built Date is a date.
         if (declared is Ontology.PrimitiveType primitive) {
             if (primitive.Semantics is PrimitiveSemantics.Binary)
                 return Clr(typeof(byte[]));
-            return FromClrName(CanonicalName(primitive.Semantics));
+            return FromClrName(CanonicalName(primitive.Semantics)) ?? TemporalMeaning(primitive.Semantics);
         }
         return null;
     }
@@ -79,6 +80,14 @@ internal sealed class DomainTypeDefinitionProvider : ITypeDefinitionProvider {
             new PrimitiveTypeReference(Introspection.PrimitiveType.Boolean),
             [new Parameter("left", new NamedTypeReference(typeName)), new Parameter("right", new NamedTypeReference(typeName))],
             IsStatic: true);
+
+    private static ITypeDefinition? TemporalMeaning(PrimitiveSemantics semantics) => semantics switch {
+        PrimitiveSemantics.Date => Clr(typeof(DateOnly)),
+        PrimitiveSemantics.Time => Clr(typeof(TimeOnly)),
+        PrimitiveSemantics.DateTime => Clr(typeof(DateTime)),
+        PrimitiveSemantics.Duration => Clr(typeof(TimeSpan)),
+        _ => null,
+    };
 
     private static string CanonicalName(PrimitiveSemantics semantics) => semantics switch {
         PrimitiveSemantics.Boolean => "Boolean",

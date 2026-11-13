@@ -43,7 +43,9 @@ public class DomainTypeModelMetadataTests {
     }
 
     [Test]
-    public async Task AWalkWithNoDomainRoot_HasNoModelStamp_AndStillChecksNamesThroughTheLegacyTable() {
+    public async Task AWalkWithNoDomainRoot_HasNoModelStamp_AndReportsWhatItCannotType() {
+        // T-05b: the analyzer's own name table is gone (one resolver: the model). With no domain there is no model,
+        // so no name types and the walk fails closed with DMSEM006 instead of checking names through a second table.
         var item = Item();
         var analysis = new Poly.Analysis.AnalyzerBuilder()
             .AddAnalyzer(new DomainCatalogPass())
@@ -52,6 +54,7 @@ public class DomainTypeModelMetadataTests {
             .Analyze(item);
 
         await Assert.That(analysis.GetMetadata<DomainTypeModelMetadata>(item)).IsNull();
-        await Assert.That(analysis.Diagnostics.Any(d => d.Code == DomainModelDiagnosticCodes.SemanticTypeCompatibility)).IsTrue();
+        await Assert.That(analysis.Diagnostics.Any(d => d.Code == "DMSEM006")).IsTrue();
+        await Assert.That(analysis.Diagnostics.Any(d => d.Code == DomainModelDiagnosticCodes.SemanticTypeCompatibility)).IsFalse();
     }
 }

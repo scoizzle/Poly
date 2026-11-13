@@ -220,6 +220,52 @@ public sealed class EditSpliceBaselineTests {
         await Assert.That(ReplaceAt(StageDocument, "X.S", "S: stage {\n  entry { }\n}"))
             .IsEqualTo("domain A\nX: entity {\n  S: stage {\n    entry { }\n  }\n  N: Text\n}\n");
 
+    // ── uniformly indented snippets: the first line's own indent is evidence (Reindent cases 1 to 3) ──
+
+    private const string EntityDocument = "domain A\nE: entity {\n  N: Text\n}\n";
+
+    [Test]
+    public async Task Reindent_ATopLevelSnippetPastedWithAUniformIndent_IsNormalised() =>
+        await Assert.That(ReplaceAt(EntityDocument, "E", "    E: entity {\n      N: Text\n    }")).IsEqualTo(EntityDocument);
+
+    [Test]
+    public async Task Reindent_ANestedSnippetPastedWithAUniformDeeperIndent_IsNormalised() =>
+        await Assert.That(ReplaceStage(StageDocument, "      S: stage {\n        Go: action { }\n      }")).IsEqualTo(StageDocument);
+
+    [Test]
+    public async Task Reindent_ANestedSnippetIndentedLessThanTheTargetButNotFromColumnZero_IsNormalised() =>
+        await Assert.That(ReplaceStage(StageDocument, " S: stage {\n   Go: action { }\n }")).IsEqualTo(StageDocument);
+
+    [Test]
+    public async Task Reindent_AUniformlyIndentedSnippetWithAHangingIndent_KeepsTheHang() =>
+        await Assert.That(ReplaceAt("domain A\nX: entity {\n  N: Number\n      range(1, 5)\n  M: Text\n}\n", "X.N", "        N: Number\n            range(1, 5)"))
+            .IsEqualTo("domain A\nX: entity {\n  N: Number\n      range(1, 5)\n  M: Text\n}\n");
+
+    /// <summary>
+    /// Two readings: the column-0 comment is the snippet's own base (master: common indent 0, so the header keeps its pasted indent and
+    /// lands at column 8, which is wrong) or a stray line the uniform indent ignores. Chosen: a snippet that states its own base
+    /// (a first line indented differently from the target) is stripped by the indent of its other lines; column-0 lines do not vote.
+    /// </summary>
+    [Test]
+    public async Task Reindent_AUniformlyIndentedSnippetWithAColumnZeroComment_IgnoresTheCommentWhenStrippingTheBase() =>
+        await Assert.That(ReplaceStage(StageDocument, "      S: stage {\n        Go: action { }\n// note\n      }"))
+            .IsEqualTo("domain A\nX: entity {\n  S: stage {\n    Go: action { }\n  // note\n  }\n  N: Text\n}\n");
+
+    [Test]
+    public async Task Reindent_ATabIndentedFirstLine_IsNormalised() =>
+        await Assert.That(ReplaceAt(EntityDocument, "E", "\tE: entity {\n\t\tN: Text\n\t}")).IsEqualTo("domain A\nE: entity {\n\tN: Text\n}\n");
+
+    [Test]
+    public async Task Reindent_ASnippetTakenFromTheLineStartWithAColumnZeroComment_IsIdenticalAndDoesNotGrow() {
+        var document = "domain A\nX: entity {\n  S: stage {\n    Go: action { }\n// note\n  }\n  N: Text\n}\n";
+        var node = DslOutline.Build(document).All().First(n => n.Path == "X.S");
+        var lineStart = document.LastIndexOf('\n', node.StartOffset - 1) + 1;
+        var once = ReplaceAt(document, "X.S", document[lineStart..node.EndOffset]);
+
+        await Assert.That(once).IsEqualTo(document);
+        await Assert.That(ReplaceAt(once, "X.S", document[lineStart..node.EndOffset])).IsEqualTo(document);
+    }
+
     [Test]
     public async Task SelfTest_OneEditResultChanged_FailsTheBaseline() {
         var frozen = ReadRows();

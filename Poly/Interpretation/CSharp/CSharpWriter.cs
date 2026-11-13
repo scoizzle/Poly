@@ -261,7 +261,7 @@ public sealed class CSharpWriter {
 
     private bool Visible(string name) {
         foreach (var scope in _declScopes) {
-            if (scope.Names.ContainsKey(name))
+            if (scope.Names.ContainsKey(name) || scope.Names.ContainsValue(name))
                 return true;
         }
         return false;

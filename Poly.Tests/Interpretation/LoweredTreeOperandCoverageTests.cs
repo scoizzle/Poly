@@ -260,6 +260,50 @@ public class LoweredTreeOperandCoverageTests {
         Row(typeof(Lambda), "ArgumentTextForNumberParameter", Rejects, () => Wrap(new Invoke(new Lambda([Num("a")], Num("a")), Txt())), ["a"]), // operand common type: none, text does not convert to long
     ];
 
+    /// <summary>A modelled struct with no declared operator, as a lowered value type is.</summary>
+    static readonly Lazy<ITypeDefinition> ModelledStruct = new(static () =>
+        new AstTypeDefinition(new TypeDefinitionNode("InterimMoney", Kind: Poly.Introspection.TypeKind.Struct), Poly.Introspection.CommonLanguageRuntime.ClrTypeDefinitionRegistry.Shared));
+
+    public sealed class Holder {
+        public static List<long> Items { get; } = [];
+    }
+
+    static void DelegateTarget() { }
+
+    // Two distinct delegates with the same target and method. C# binds `Action == Delegate` to reference equality
+    // (the (object, object) operator), so these are C#'s own answers, bound by Roslyn here.
+    static readonly Action DelegateLeft = DelegateTarget;
+    static readonly Delegate DelegateRight = new Action(DelegateTarget);
+#pragma warning disable CS0252, CS0253
+    static readonly bool DelegateEqualAsCSharp = DelegateLeft == DelegateRight;
+    static readonly bool DelegateNotEqualAsCSharp = DelegateLeft != DelegateRight;
+#pragma warning restore CS0252, CS0253
+
+    /// <summary>
+    /// The cells of the lowered analysis's interim rules (<see cref="KnownInterimRules"/>), each with C#'s expectation. They are
+    /// not operand-agreement rows: the gap ledger does not see them, the interim list does.
+    /// </summary>
+    /// An enum cell's value is read as its underlying <c>int</c> (the VM's word); its stamp is asserted by the list.
+    static readonly OperandCase[] InterimRows = [
+        Row(typeof(BitwiseAnd), "EnumEnum", Accepts, () => Wrap(new BitwiseAnd(P<AttributeTargets>("a"), P<AttributeTargets>("b"))), [AttributeTargets.Class | AttributeTargets.Method, AttributeTargets.Method], typeof(int), (int)AttributeTargets.Method),
+        Row(typeof(BitwiseOr), "EnumEnum", Accepts, () => Wrap(new BitwiseOr(P<AttributeTargets>("a"), P<AttributeTargets>("b"))), [AttributeTargets.Class, AttributeTargets.Method], typeof(int), (int)(AttributeTargets.Class | AttributeTargets.Method)),
+        Row(typeof(BitwiseXor), "EnumEnum", Accepts, () => Wrap(new BitwiseXor(P<AttributeTargets>("a"), P<AttributeTargets>("b"))), [AttributeTargets.Class, AttributeTargets.Method], typeof(int), (int)(AttributeTargets.Class ^ AttributeTargets.Method)),
+        Row(typeof(BitwiseNot), "Enum", Accepts, () => Wrap(new BitwiseNot(P<AttributeTargets>("a"))), [AttributeTargets.Class], typeof(int), (int)~AttributeTargets.Class),
+        Row(typeof(BitwiseAnd), "OptionalEnumEnum", Accepts, () => Wrap(new BitwiseAnd(P<AttributeTargets?>("a"), P<AttributeTargets>("b"))), [AttributeTargets.Class, AttributeTargets.Class], typeof(AttributeTargets?), AttributeTargets.Class),
+        Row(typeof(BitwiseAnd), "EnumNumber", Rejects, () => Wrap(new BitwiseAnd(P<AttributeTargets>("a"), P<int>("b"))), [AttributeTargets.Class, 4]),
+        Row(typeof(ShiftLeft), "EnumNumber", Rejects, () => Wrap(new ShiftLeft(P<AttributeTargets>("a"), new Constant(1))), [AttributeTargets.Class]),
+        Row(typeof(UnaryMinus), "Enum", Rejects, () => Wrap(new UnaryMinus(P<DayOfWeek>("a"))), [DayOfWeek.Monday]),
+        Row(typeof(Equal), "ClrStructWithoutEquality", Rejects, () => Wrap(new Equal(P<KeyValuePair<int, int>>("a"), P<KeyValuePair<int, int>>("b"))), [new KeyValuePair<int, int>(1, 2), new KeyValuePair<int, int>(1, 2)]),
+        Row(typeof(LessThan), "ModelledStruct", Rejects, () => Wrap(new LessThan(new Parameter("a", new TypeDefinitionReference(ModelledStruct.Value)), new Parameter("b", new TypeDefinitionReference(ModelledStruct.Value)))), [null, null]),
+        Row(typeof(Equal), "VoidCallWithNumber", Rejects, () => Wrap(new Equal(new Invoke(new Member(new Member(new ClrTypeReference(typeof(Holder)), nameof(Holder.Items)), "Clear")), new Constant(0L))), []),
+        Row(typeof(Add), "NullWithNumber", Rejects, () => Wrap(new Add(new Constant(null), new Constant(1))), []),
+        Row(typeof(UnaryMinus), "Null", Rejects, () => Wrap(new UnaryMinus(new Constant(null))), []),
+        Row(typeof(Add), "TextWithUnresolved", Rejects, () => Wrap(new Add(new Constant("a"), new Default(null))), []),
+        Row(typeof(Equal), "DelegateBesideDelegateSameMethod", Accepts, () => Wrap(new Equal(P<Action>("a"), P<Delegate>("b"))), [DelegateLeft, DelegateRight], typeof(bool), DelegateEqualAsCSharp),
+        Row(typeof(NotEqual), "DelegateBesideDelegateSameMethod", Accepts, () => Wrap(new NotEqual(P<Action>("a"), P<Delegate>("b"))), [DelegateLeft, DelegateRight], typeof(bool), DelegateNotEqualAsCSharp),
+        Row(typeof(BitwiseAnd), "UInt32WithIntConstant", Accepts, () => Wrap(new BitwiseAnd(P<uint>("a"), new Constant(1))), [uint.MaxValue], typeof(long), 1L),
+    ];
+
     const string Declaration = "declaration: carries a name, a type and a body, not an operand pair";
     const string TypeReferenceReason = "type reference: names a type, carries no value";
     const string Jump = "jump: moves control, carries no value";
@@ -308,13 +352,6 @@ public class LoweredTreeOperandCoverageTests {
         [typeof(ContinueStatement)] = Jump,
         [typeof(GotoStatement)] = Jump,
     };
-
-    /// <summary>The kinds <c>SyntaxTypeCompatibilityAnalyzer.Analyze</c> has a case for: each must have rows.</summary>
-    static readonly Type[] CompatibilityKinds = [
-        typeof(Equal), typeof(NotEqual), typeof(LessThan), typeof(LessThanOrEqual), typeof(GreaterThan), typeof(GreaterThanOrEqual),
-        typeof(Add), typeof(Subtract), typeof(Multiply), typeof(Divide), typeof(Modulo), typeof(TypeAs), typeof(New),
-        typeof(Not), typeof(And), typeof(Or), typeof(Assignment), typeof(Invoke), typeof(TypeCast), typeof(ForEachLoop),
-    ];
 
     static readonly Lazy<IReadOnlyDictionary<string, OperandObservation>> Observations = new(
         () => Rows.ToDictionary(row => Key(row), row => Observe(row), StringComparer.Ordinal),
@@ -416,8 +453,11 @@ public class LoweredTreeOperandCoverageTests {
         }
         foreach (var kind in combining.Concat(NotCombining.Keys).Where(kind => !NodeFacts.All.ContainsKey(kind)))
             problems.Add($"{kind.Name}: not in NodeFacts.All (stale)");
-        foreach (var kind in CompatibilityKinds.Where(kind => NotCombining.ContainsKey(kind) || !combining.Contains(kind)))
+        // The kinds the compatibility analyzer has a check for, read from its dispatch table (T-22 lock amendment 11).
+        foreach (var kind in SyntaxTypeCompatibilityAnalyzer.CheckedKinds.Where(kind => NotCombining.ContainsKey(kind) || !combining.Contains(kind)))
             problems.Add($"{kind.Name}: the compatibility analyzer has a case for it, so it needs rows");
+        if (SyntaxTypeCompatibilityAnalyzer.CheckedKinds.Count == 0)
+            problems.Add("the compatibility analyzer's dispatch table is empty");
         foreach (var group in NotCombining.GroupBy(pair => pair.Value).Where(group => group.Count() > 1))
             if (group.Key is not (Declaration or TypeReferenceReason or Jump))
                 problems.Add($"'{group.Key}' is shared by {group.Count()} kinds; only declaration, type-reference and jump kinds may group a reason");
@@ -489,6 +529,34 @@ public class LoweredTreeOperandCoverageTests {
                 + string.Join("\n", problems.Where(problem => !problem.StartsWith("Widened", StringComparison.Ordinal))));
         }
         await Assert.That(problems).IsEmpty();
+    }
+
+    /// <summary>
+    /// Every cell of an interim rule does what <see cref="KnownInterimRules"/> lists: its observation, the stamp on its node,
+    /// and whether that is what C# does. Removing a rule, or a rule starting to decide another cell, fails here naming the
+    /// cell and the row that owns it.
+    /// </summary>
+    [Test]
+    public async Task InterimRules_EveryCellIsAsListed() {
+        var listed = KnownInterimRules.All.ToDictionary(static c => $"{c.Kind}.{c.Case}", StringComparer.Ordinal);
+        var problems = new List<string>();
+        foreach (var row in InterimRows) {
+            var seen = Observe(row);
+            var root = row.Build();
+            var analysis = Interpreter.Analyze(root);
+            var node = Walk(root).First(candidate => candidate.GetType() == row.Kind);
+            var stamp = analysis.GetResolvedType(node)?.GetRuntimeType()?.Name ?? "none";
+            var observed = $"{seen.Observed};type={stamp};csharp={(Met(row, seen) ? "agrees" : "differs")}";
+            if (!listed.Remove(row.ToString(), out var cell))
+                problems.Add($"unlisted interim cell: {row}: {observed}");
+            else if (cell.Observed != observed)
+                problems.Add($"{row} ({cell.Rule}, removed by {cell.Owner}): listed {cell.Observed}, observed {observed} ({seen.Detail})");
+        }
+        problems.AddRange(listed.Keys.Select(static key => $"listed but no interim row: {key}"));
+        await Assert.That(problems).IsEmpty();
+        var keys = KnownInterimRules.All.Select(static c => (c.Kind, c.Case)).ToList();
+        await Assert.That(keys.SequenceEqual(keys.OrderBy(static k => k.Kind, StringComparer.Ordinal).ThenBy(static k => k.Case, StringComparer.Ordinal))).IsTrue();
+        await Assert.That(KnownInterimRules.All.All(static c => System.Text.RegularExpressions.Regex.IsMatch(c.Owner, "^T-[0-9]+[a-z]?$"))).IsTrue();
     }
 
     [Test]

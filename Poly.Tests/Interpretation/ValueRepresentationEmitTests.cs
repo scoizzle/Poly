@@ -290,7 +290,7 @@ public class ValueRepresentationEmitTests {
     /// <summary>
     /// Unary minus and <c>~</c> on a value held behind a handle (issue 832): a struct wider than a word, and a nullable
     /// that arrives as a word (a call result). The type's own operator runs; the handle is never the operand. A struct
-    /// with no such operator is refused at compile, naming the type, where the VM used to negate the handle.
+    /// with no such operator is refused by the analysis at the node (T-22a), where the VM used to negate the handle.
     /// </summary>
     [Test]
     public async Task UnaryOnAHandleHeldValue_IsTheTypesOperator_OrRefused() {
@@ -326,9 +326,9 @@ public class ValueRepresentationEmitTests {
             Shown(-NullableProbe.FiveOrNull(false)),
             Shown(~NullableProbe.FiveOrNull(true)),
             Shown(-NullableProbe.FiveDecimalOrNull(true)),
-            "VM compile rejected: no unary '-' operator for 'Guid'.",
-            "VM compile rejected: no unary '-' operator for 'DateTimeOffset'.",
-            "VM compile rejected: no unary '~' operator for 'Guid'.",
+            "VM compile rejected: operator UnaryMinus is not defined for 'Guid': no UnaryMinus operator for this type",
+            "VM compile rejected: operator UnaryMinus is not defined for 'DateTimeOffset': no UnaryMinus operator for this type",
+            "VM compile rejected: operator BitwiseNot is not defined for 'Guid': no BitwiseNot operator for this type",
         }, TUnit.Assertions.Enums.CollectionOrdering.Matching);
     }
 

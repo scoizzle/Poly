@@ -18,13 +18,12 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
         if (node is ForLoop loop)
             ApplyForLoopStoredLambdas(context, loop);
 
-        var resolvedType = ResolveNodeType(context, node, forStamp: true);
+        var resolvedType = ResolveNodeType(context, node);
 
         if (resolvedType != null) {
             context.SetResolvedType(node, resolvedType!);
         }
 
-        StampUndefinedArithmeticOperands(context, node);
         this.AnalyzeChildren(context, node);
 
         // A block's or lambda's yield can only be typed once its children are: the
@@ -171,27 +170,26 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
     }
 
     /// <summary>
-    /// The type of a node. <paramref name="forStamp"/> is true only for the node's own stamp: an arithmetic node the provider
-    /// defines no operator for gets none. A parent reading the node as an operand, arm or value (<c>forStamp</c> false) sees
-    /// the type <see cref="UndefinedArithmeticMatch"/> gives, as before the provider typed arithmetic.
+    /// The type of a node. An operator node the provider defines no operator for gets none, and neither does a parent that
+    /// reads it.
     /// </summary>
-    private static ITypeDefinition? ResolveNodeType(AnalysisContext context, Node node, bool forStamp = false) {
+    private static ITypeDefinition? ResolveNodeType(AnalysisContext context, Node node) {
         // A node may have been rewritten to a type reference (a dotted CLR type name folded
         // as a member chain); resolve through the replacement, as the emitter does.
         if (context.GetNodeReplacement(node) is { } replaced && replaced != node)
-            return ResolveNodeType(context, replaced, forStamp);
+            return ResolveNodeType(context, replaced);
         return node switch {
             Constant c => context.TypeDefinitions.GetTypeDefinition(c.Value?.GetType() ?? typeof(object)),
             InterpolatedString => context.TypeDefinitions.GetTypeDefinition(typeof(string)),
             ThisReference @this => ResolveThisReferenceType(context, @this),
             Parameter p => ResolveParameterType(context, p),
             Variable v => ResolveVariableType(context, v),
-            Add add => ResolveOperatorResultType(context, OperatorKind.Add, add.LeftHandValue, add.RightHandValue, forStamp),
-            Subtract sub => ResolveOperatorResultType(context, OperatorKind.Subtract, sub.LeftHandValue, sub.RightHandValue, forStamp),
-            Multiply mul => ResolveOperatorResultType(context, OperatorKind.Multiply, mul.LeftHandValue, mul.RightHandValue, forStamp),
-            Divide div => ResolveOperatorResultType(context, OperatorKind.Divide, div.LeftHandValue, div.RightHandValue, forStamp),
-            Modulo mod => ResolveOperatorResultType(context, OperatorKind.Modulo, mod.LeftHandValue, mod.RightHandValue, forStamp),
-            UnaryMinus minus => ResolveNodeType(context, minus.Operand),
+            Add add => ResolveOperatorResultType(context, OperatorKind.Add, add.LeftHandValue, add.RightHandValue),
+            Subtract sub => ResolveOperatorResultType(context, OperatorKind.Subtract, sub.LeftHandValue, sub.RightHandValue),
+            Multiply mul => ResolveOperatorResultType(context, OperatorKind.Multiply, mul.LeftHandValue, mul.RightHandValue),
+            Divide div => ResolveOperatorResultType(context, OperatorKind.Divide, div.LeftHandValue, div.RightHandValue),
+            Modulo mod => ResolveOperatorResultType(context, OperatorKind.Modulo, mod.LeftHandValue, mod.RightHandValue),
+            UnaryMinus minus => ResolveUnaryResultType(context, OperatorKind.UnaryMinus, minus.Operand),
             And => context.TypeDefinitions.GetTypeDefinition(typeof(bool)),
             Or => context.TypeDefinitions.GetTypeDefinition(typeof(bool)),
             Not => context.TypeDefinitions.GetTypeDefinition(typeof(bool)),
@@ -227,12 +225,12 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
             Lambda lambda => ResolveLambdaType(context, lambda),
             NullForgiving nf => ResolveNodeType(context, nf.Operand),
             IfStatement => null,
-            BitwiseAnd ba => ResolveArithmeticType(context, OperatorKind.BitwiseAnd, ba.LeftHandValue, ba.RightHandValue, forStamp),
-            BitwiseOr bor => ResolveArithmeticType(context, OperatorKind.BitwiseOr, bor.LeftHandValue, bor.RightHandValue, forStamp),
-            BitwiseXor bx => ResolveArithmeticType(context, OperatorKind.BitwiseXor, bx.LeftHandValue, bx.RightHandValue, forStamp),
-            ShiftLeft sl => ResolveArithmeticType(context, OperatorKind.ShiftLeft, sl.LeftHandValue, sl.RightHandValue, forStamp),
-            ShiftRight sr => ResolveArithmeticType(context, OperatorKind.ShiftRight, sr.LeftHandValue, sr.RightHandValue, forStamp),
-            BitwiseNot bn => ResolveNodeType(context, bn.Operand),
+            BitwiseAnd ba => ResolveOperatorResultType(context, OperatorKind.BitwiseAnd, ba.LeftHandValue, ba.RightHandValue),
+            BitwiseOr bor => ResolveOperatorResultType(context, OperatorKind.BitwiseOr, bor.LeftHandValue, bor.RightHandValue),
+            BitwiseXor bx => ResolveOperatorResultType(context, OperatorKind.BitwiseXor, bx.LeftHandValue, bx.RightHandValue),
+            ShiftLeft sl => ResolveOperatorResultType(context, OperatorKind.ShiftLeft, sl.LeftHandValue, sl.RightHandValue),
+            ShiftRight sr => ResolveOperatorResultType(context, OperatorKind.ShiftRight, sr.LeftHandValue, sr.RightHandValue),
+            BitwiseNot bn => ResolveUnaryResultType(context, OperatorKind.BitwiseNot, bn.Operand),
             PopCount => context.TypeDefinitions.GetTypeDefinition(typeof(int)),
             UsingStatement => null,
             TryCatchFinally tcf => ResolveNodeType(context, tcf.TryBlock),
@@ -243,23 +241,6 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
             Return r => r.Value is null ? null : ResolveNodeType(context, r.Value),
             _ => null
         };
-    }
-
-    /// <summary>
-    /// An arithmetic node the provider defines no operator for has no stamp, but the VM emitter reads an operand's stamp to
-    /// resolve the operator's width, and master executed <c>(object + 1) * 2</c>. So an undefined arithmetic node that is
-    /// itself an operand of an arithmetic, bitwise or shift node takes the type <see cref="UndefinedArithmeticMatch"/> gives
-    /// (interim, T-22 removes it). A root, an argument, an arm or a value stays unstamped.
-    /// </summary>
-    private static void StampUndefinedArithmeticOperands(AnalysisContext context, Node node) {
-        if (!UndefinedArithmeticMatch.TryGetKind(node, out _, out var left, out var right))
-            return;
-        foreach (var operand in new[] { left, right }) {
-            if (UndefinedArithmeticMatch.TryGetKind(operand, out _, out _, out _)
-                && ResolveNodeType(context, operand, forStamp: true) is null
-                && ResolveNodeType(context, operand) is { } matching)
-                context.SetResolvedType(operand, matching);
-        }
     }
 
     private static ITypeDefinition? ResolveAsType(AnalysisContext context, Node targetTypeReference) {
@@ -329,24 +310,33 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
         context.GetResolvedType(thisReference);
 
     /// <summary>
-    /// The result type of an arithmetic operator (or the lifted result of a bitwise or shift one) is the type
-    /// provider's operator for the operands with their nullable unwrapped; a nullable operand lifts a value-type
-    /// result to <c>Nullable&lt;R&gt;</c>. A pair the provider defines no operator for has no type: the pass invents
-    /// none. The lifting stays here until T-06 states it in the provider. A non-negative signed constant beside a
-    /// <c>ulong</c> or <c>nuint</c> is judged by T-18's shared <see cref="ConstantOperandRule"/> (T-26 removes it).
+    /// The result type of an arithmetic, bitwise or shift operator is the type provider's operator for the operands with
+    /// their nullable unwrapped; a nullable operand lifts a value-type result to <c>Nullable&lt;R&gt;</c>. A pair the
+    /// provider defines no operator for has no type: the pass invents none. The lifting stays here until T-06 states it in
+    /// the provider. A non-negative signed constant beside a <c>ulong</c> or <c>nuint</c> is judged by T-18's shared
+    /// <see cref="ConstantOperandRule"/> (T-26 removes it), and enum bitwise by <see cref="EnumBitwiseRule"/> (T-29).
     /// </summary>
     private static ITypeDefinition? ResolveOperatorResultType(
-        AnalysisContext context, OperatorKind kind, Node left, Node right, bool forStamp) {
-        return LiftedOperatorResult(context, kind, left, right, ResolveNodeType(context, left), ResolveNodeType(context, right), forStamp);
+        AnalysisContext context, OperatorKind kind, Node left, Node right) {
+        return LiftedOperatorResult(context, kind, left, right, ResolveNodeType(context, left), ResolveNodeType(context, right));
+    }
+
+    /// <summary>The result type of a unary minus or complement: the provider's operator for the operand, lifted as above.</summary>
+    private static ITypeDefinition? ResolveUnaryResultType(AnalysisContext context, OperatorKind kind, Node operand) {
+        if (ResolveNodeType(context, operand) is not { } operandType)
+            return null;
+        var underlying = PeelNullable(context, operandType);
+        var result = underlying.GetOperator(kind, null)?.Result ?? EnumBitwiseRule.Of(kind, underlying, null);
+        return result is null ? null : Lift(context, result, IsNullableType(operandType));
     }
 
     /// <summary>The operator's result for two already-resolved operand types; callers resolve each operand once, since
     /// a deep chain must not re-resolve its subtree per parent.</summary>
     private static ITypeDefinition? LiftedOperatorResult(
         AnalysisContext context, OperatorKind kind, Node left, Node right,
-        ITypeDefinition? leftType, ITypeDefinition? rightType, bool forStamp) {
+        ITypeDefinition? leftType, ITypeDefinition? rightType) {
         if (leftType == null || rightType == null)
-            return forStamp ? null : UndefinedArithmeticMatch.Of(context, kind, leftType, rightType);
+            return null;
 
         bool lift = IsNullableType(leftType) || IsNullableType(rightType);
         var leftUnderlying = PeelNullable(context, leftType);
@@ -363,10 +353,11 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
             && DateOffsetRule.Applies(kind, leftRuntime, rightRuntime))
             result = leftUnderlying;
         else
-            result = leftUnderlying.GetOperator(kind, rightUnderlying)?.Result;
-        if (result is null)
-            return forStamp ? null : UndefinedArithmeticMatch.Of(context, kind, leftType, rightType);
+            result = leftUnderlying.GetOperator(kind, rightUnderlying)?.Result ?? EnumBitwiseRule.Of(kind, leftUnderlying, rightUnderlying);
+        return result is null ? null : Lift(context, result, lift);
+    }
 
+    private static ITypeDefinition Lift(AnalysisContext context, ITypeDefinition result, bool lift) {
         if (!lift || result.GetRuntimeType() is not { IsValueType: true } runtime
             || Nullable.GetUnderlyingType(runtime) is not null)
             return result;
@@ -393,26 +384,6 @@ internal sealed class TypeAndMemberResolver : INodeAnalyzer {
             || Nullable.GetUnderlyingType(runtime) is not null)
             return inner;
         return context.TypeDefinitions.GetTypeDefinition(typeof(Nullable<>).MakeGenericType(runtime));
-    }
-
-    private static ITypeDefinition? ResolveArithmeticType(
-        AnalysisContext context,
-        OperatorKind kind,
-        Node left,
-        Node right,
-        bool forStamp) {
-        var leftType = ResolveNodeType(context, left);
-        var rightType = ResolveNodeType(context, right);
-
-        if (leftType == null || rightType == null)
-            return null;
-
-        // A nullable operand lifts the result (`1L | age` is `long?`). A pair of
-        // required operands keeps the left type, which is the width those operators
-        // already had.
-        if (IsNullableType(leftType) || IsNullableType(rightType))
-            return LiftedOperatorResult(context, kind, left, right, leftType, rightType, forStamp);
-        return leftType;
     }
 
     private static ITypeDefinition? ResolveMemberAccessType(
@@ -1162,7 +1133,7 @@ internal static class ConstructorInvocationSemanticResolver {
                 continue;
             }
 
-            argumentTypes[i] = context.GetResolvedType(@new.Arguments[i]) ?? UndefinedArithmeticMatch.ForNode(context, @new.Arguments[i]);
+            argumentTypes[i] = context.GetResolvedType(@new.Arguments[i]);
             if (argumentTypes[i] is null)
                 incomplete = true;
         }

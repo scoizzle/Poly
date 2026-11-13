@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using System.Globalization;
 
 using Poly.Introspection.CommonLanguageRuntime;
@@ -23,11 +24,11 @@ public static class SyntaxTypeCompatibilityAnalyzerExtensions {
 /// runtime fails loud even for programmatically-constructed or MCP-driven expressions
 /// that bypass the DSL authoring analyzer.
 ///
-/// An arithmetic or comparison verdict is the type provider's operator for the operands
-/// (<c>GetOperator</c>, nullable unwrapped), after a short list of named rules the provider
-/// cannot answer yet, each naming the row that removes it. Assignment, casts and Boolean
-/// operands are still checked at the CLR-type-category level. Unknown and null operands
-/// are skipped (the property bag is loosely typed; null comparisons are supported).
+/// An arithmetic, comparison, bitwise, shift or unary-minus verdict is the type provider's operator for the
+/// operands' type definitions (<c>GetOperator</c>, nullable unwrapped), after a short list of named rules the
+/// provider cannot answer yet, each naming the row that removes it. Assignment, casts and Boolean
+/// operands are still checked at the CLR-type-category level. Only a bare null literal and an operand
+/// with no resolved type are skipped.
 /// </summary>
 internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
     public const string Id = "SyntaxTypeCompatibility";
@@ -37,76 +38,60 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
     public const string DiagnosticCode = "VmTypeCompatibility";
 
 
-    public void Analyze(AnalysisContext context, Node node) {
-        switch (node) {
-            case Equal eq:
-                CheckOperator(context, eq, eq.LeftHandValue, eq.RightHandValue, OperatorKind.Equal);
-                break;
-            case NotEqual ne:
-                CheckOperator(context, ne, ne.LeftHandValue, ne.RightHandValue, OperatorKind.NotEqual);
-                break;
-            case LessThan lt:
-                CheckOperator(context, lt, lt.LeftHandValue, lt.RightHandValue, OperatorKind.LessThan);
-                break;
-            case LessThanOrEqual lte:
-                CheckOperator(context, lte, lte.LeftHandValue, lte.RightHandValue, OperatorKind.LessThanOrEqual);
-                break;
-            case GreaterThan gt:
-                CheckOperator(context, gt, gt.LeftHandValue, gt.RightHandValue, OperatorKind.GreaterThan);
-                break;
-            case GreaterThanOrEqual gte:
-                CheckOperator(context, gte, gte.LeftHandValue, gte.RightHandValue, OperatorKind.GreaterThanOrEqual);
-                break;
-            case Add add:
-                CheckOperator(context, add, add.LeftHandValue, add.RightHandValue, OperatorKind.Add);
-                break;
-            case Subtract sub:
-                CheckOperator(context, sub, sub.LeftHandValue, sub.RightHandValue, OperatorKind.Subtract);
-                break;
-            case Multiply mul:
-                CheckOperator(context, mul, mul.LeftHandValue, mul.RightHandValue, OperatorKind.Multiply);
-                break;
-            case Divide div:
-                CheckOperator(context, div, div.LeftHandValue, div.RightHandValue, OperatorKind.Divide);
-                break;
-            case Modulo mod:
-                CheckOperator(context, mod, mod.LeftHandValue, mod.RightHandValue, OperatorKind.Modulo);
-                break;
-            case TypeAs typeAs:
-                CheckTypeAs(context, typeAs);
-                break;
-            case New created:
-                CheckNew(context, created);
-                break;
-            case Not not:
-                var operand = ClrTypeOf(context, not.Value);
+    /// <summary>
+    /// One check per node kind, keyed by the sealed node type. The keys are the kinds this analyzer judges; the operand
+    /// coverage test reads them (lock amendment 11), so a kind cannot gain or lose a check without its rows.
+    /// </summary>
+    private static readonly FrozenDictionary<Type, Action<SyntaxTypeCompatibilityAnalyzer, AnalysisContext, Node>> Checks =
+        new Dictionary<Type, Action<SyntaxTypeCompatibilityAnalyzer, AnalysisContext, Node>> {
+            [typeof(Equal)] = static (a, c, n) => { var x = (Equal)n; a.CheckOperator(c, x, x.LeftHandValue, x.RightHandValue, OperatorKind.Equal); },
+            [typeof(NotEqual)] = static (a, c, n) => { var x = (NotEqual)n; a.CheckOperator(c, x, x.LeftHandValue, x.RightHandValue, OperatorKind.NotEqual); },
+            [typeof(LessThan)] = static (a, c, n) => { var x = (LessThan)n; a.CheckOperator(c, x, x.LeftHandValue, x.RightHandValue, OperatorKind.LessThan); },
+            [typeof(LessThanOrEqual)] = static (a, c, n) => { var x = (LessThanOrEqual)n; a.CheckOperator(c, x, x.LeftHandValue, x.RightHandValue, OperatorKind.LessThanOrEqual); },
+            [typeof(GreaterThan)] = static (a, c, n) => { var x = (GreaterThan)n; a.CheckOperator(c, x, x.LeftHandValue, x.RightHandValue, OperatorKind.GreaterThan); },
+            [typeof(GreaterThanOrEqual)] = static (a, c, n) => { var x = (GreaterThanOrEqual)n; a.CheckOperator(c, x, x.LeftHandValue, x.RightHandValue, OperatorKind.GreaterThanOrEqual); },
+            [typeof(Add)] = static (a, c, n) => { var x = (Add)n; a.CheckOperator(c, x, x.LeftHandValue, x.RightHandValue, OperatorKind.Add); },
+            [typeof(Subtract)] = static (a, c, n) => { var x = (Subtract)n; a.CheckOperator(c, x, x.LeftHandValue, x.RightHandValue, OperatorKind.Subtract); },
+            [typeof(Multiply)] = static (a, c, n) => { var x = (Multiply)n; a.CheckOperator(c, x, x.LeftHandValue, x.RightHandValue, OperatorKind.Multiply); },
+            [typeof(Divide)] = static (a, c, n) => { var x = (Divide)n; a.CheckOperator(c, x, x.LeftHandValue, x.RightHandValue, OperatorKind.Divide); },
+            [typeof(Modulo)] = static (a, c, n) => { var x = (Modulo)n; a.CheckOperator(c, x, x.LeftHandValue, x.RightHandValue, OperatorKind.Modulo); },
+            [typeof(BitwiseAnd)] = static (a, c, n) => { var x = (BitwiseAnd)n; a.CheckOperator(c, x, x.LeftHandValue, x.RightHandValue, OperatorKind.BitwiseAnd); },
+            [typeof(BitwiseOr)] = static (a, c, n) => { var x = (BitwiseOr)n; a.CheckOperator(c, x, x.LeftHandValue, x.RightHandValue, OperatorKind.BitwiseOr); },
+            [typeof(BitwiseXor)] = static (a, c, n) => { var x = (BitwiseXor)n; a.CheckOperator(c, x, x.LeftHandValue, x.RightHandValue, OperatorKind.BitwiseXor); },
+            [typeof(ShiftLeft)] = static (a, c, n) => { var x = (ShiftLeft)n; a.CheckOperator(c, x, x.LeftHandValue, x.RightHandValue, OperatorKind.ShiftLeft); },
+            [typeof(ShiftRight)] = static (a, c, n) => { var x = (ShiftRight)n; a.CheckOperator(c, x, x.LeftHandValue, x.RightHandValue, OperatorKind.ShiftRight); },
+            [typeof(UnaryMinus)] = static (a, c, n) => a.CheckUnaryOperator(c, ((UnaryMinus)n).Operand, OperatorKind.UnaryMinus),
+            [typeof(BitwiseNot)] = static (a, c, n) => a.CheckUnaryOperator(c, ((BitwiseNot)n).Operand, OperatorKind.BitwiseNot),
+            [typeof(TypeAs)] = static (a, c, n) => a.CheckTypeAs(c, (TypeAs)n),
+            [typeof(New)] = static (a, c, n) => a.CheckNew(c, (New)n),
+            [typeof(Not)] = static (a, c, n) => {
+                var operand = ClrTypeOf(c, ((Not)n).Value);
                 if (operand is not null && operand != typeof(bool) && CategoryOf(operand) is not (Cat.Unknown or Cat.Null))
-                    Report(context, node, $"'not' requires a Boolean operand (got '{operand.Name}')");
-                break;
-            case And and:
-                CheckBooleanOperands(context, and.LeftHandValue, and.RightHandValue);
-                break;
-            case Or or:
-                CheckBooleanOperands(context, or.LeftHandValue, or.RightHandValue);
-                break;
-            case Assignment a:
-                if (a.Destination is Member dest)
-                    CheckAssign(context, a, dest);
-                if (a.Destination is Variable v)
-                    CheckVariableAssign(context, v, a);
-                break;
-            case Invoke inv:
-                CheckInvokeTarget(context, inv);
-                RewriteInvokeArgumentConversions(context, inv);
-                break;
-            case TypeCast tc:
-                CheckTypeCast(context, tc);
-                break;
-            case ForEachLoop loop:
-                CheckForEachLoop(context, loop);
-                break;
-        }
+                    a.Report(c, n, $"'not' requires a Boolean operand (got '{operand.Name}')");
+            },
+            [typeof(And)] = static (a, c, n) => { var x = (And)n; a.CheckBooleanOperands(c, x.LeftHandValue, x.RightHandValue); },
+            [typeof(Or)] = static (a, c, n) => { var x = (Or)n; a.CheckBooleanOperands(c, x.LeftHandValue, x.RightHandValue); },
+            [typeof(Assignment)] = static (a, c, n) => {
+                var assignment = (Assignment)n;
+                if (assignment.Destination is Member destination)
+                    a.CheckAssign(c, assignment, destination);
+                if (assignment.Destination is Variable variable)
+                    a.CheckVariableAssign(c, variable, assignment);
+            },
+            [typeof(Invoke)] = static (a, c, n) => {
+                a.CheckInvokeTarget(c, (Invoke)n);
+                a.RewriteInvokeArgumentConversions(c, (Invoke)n);
+            },
+            [typeof(TypeCast)] = static (a, c, n) => a.CheckTypeCast(c, (TypeCast)n),
+            [typeof(ForEachLoop)] = static (a, c, n) => a.CheckForEachLoop(c, (ForEachLoop)n),
+        }.ToFrozenDictionary();
 
+    /// <summary>The node kinds this analyzer has a check for.</summary>
+    internal static IReadOnlyCollection<Type> CheckedKinds => Checks.Keys;
+
+    public void Analyze(AnalysisContext context, Node node) {
+        if (Checks.TryGetValue(node.GetType(), out var check))
+            check(this, context, node);
         this.AnalyzeChildren(context, node);
     }
 
@@ -182,20 +167,20 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
 
 
     /// <summary>
-    /// An arithmetic or comparison node. The verdict is the type provider's operator for the operands with their
-    /// nullable unwrapped; a nullable operand is lifted by the VM. The steps before the provider keep verdicts it
-    /// cannot give yet, each named with the row that removes it. The order is part of the verdict.
+    /// An arithmetic, comparison, bitwise or shift node. The verdict is the type provider's operator for the operands'
+    /// type definitions with their nullable unwrapped; a nullable operand is lifted by the VM. Only a bare null literal
+    /// and an operand with no resolved type are not checked. The steps before the provider keep verdicts it cannot give
+    /// yet, each named with the row that removes it; the order is part of the verdict.
     /// </summary>
     private void CheckOperator(AnalysisContext context, Node parent, Node leftNode, Node rightNode, OperatorKind kind) {
-        var left = ClrTypeOf(context, leftNode);
-        var right = ClrTypeOf(context, rightNode);
-        if (left is null || right is null) return;
-        var lc = CategoryOf(left);
-        var rc = CategoryOf(right);
-        // Scalar gate: unknown and null operands are not checked (T-22).
-        if (lc is Cat.Unknown or Cat.Null || rc is Cat.Unknown or Cat.Null) return;
+        if (OperandDefinition(context, leftNode) is not { } leftDefinition || OperandDefinition(context, rightNode) is not { } rightDefinition)
+            return;
+        var left = leftDefinition.GetRuntimeType();
+        var right = rightDefinition.GetRuntimeType();
         var arithmetic = kind is OperatorKind.Add or OperatorKind.Subtract or OperatorKind.Multiply
             or OperatorKind.Divide or OperatorKind.Modulo;
+        var comparison = kind is OperatorKind.Equal or OperatorKind.NotEqual or OperatorKind.LessThan
+            or OperatorKind.LessThanOrEqual or OperatorKind.GreaterThan or OperatorKind.GreaterThanOrEqual;
 
         // Add is string concatenation when an operand is exactly a string (`"a" + 1`, `'a' + "b"`); `char + char` is
         // numeric. The Text + X policy is T-07's, the boxing conversion T-21's.
@@ -209,41 +194,44 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
             return;
 
         // Date-offset fence (T-10): the interim DateOffsetRule, which the resolver reads for the offset's stamp too.
-        if (DateOffsetRule.Applies(kind, left, right)) {
+        if (left is not null && right is not null && DateOffsetRule.Applies(kind, left, right)) {
             if (!RewriteDateOffset(context, parent, leftNode, rightNode, negate: kind is OperatorKind.Subtract))
                 Report(context, leftNode,
                     $"temporal offset requires a date type with AddDays (got '{left.Name}')");
             return;
         }
 
-        var incompatible = arithmetic
-            ? $"arithmetic operand is not numeric (got '{left.Name}' and '{right.Name}')"
-            : $"comparison between incompatible types '{left.Name}' and '{right.Name}'";
+        var (leftName, rightName) = (NameOf(leftDefinition), NameOf(rightDefinition));
+        var incompatible = arithmetic ? $"arithmetic operand is not numeric (got '{leftName}' and '{rightName}')"
+            : comparison ? $"comparison between incompatible types '{leftName}' and '{rightName}'"
+            : $"operator {kind} is not defined for '{leftName}' and '{rightName}'";
         var noOperator = $"{incompatible}: no {kind} operator for these types";
+        var leftUnderlying = Underlying(context, leftDefinition);
+        var rightUnderlying = Underlying(context, rightDefinition);
 
-        if (!arithmetic) {
-            if (EnumOperandRule(left, right) is { } sameEnum) {
+        if (comparison) {
+            if (EnumOperandRule(leftUnderlying, rightUnderlying) is { } sameEnum) {
                 if (!sameEnum)
                     Report(context, leftNode, noOperator);
                 return;
             }
-            if (NullableDateRule(left, right)) {
+            if (left is not null && right is not null && NullableDateRule(left, right)) {
                 Report(context, leftNode, incompatible);
                 return;
             }
-            if (TextAndBooleanOrderingRule(kind, left, right))
+            if (left is not null && right is not null && TextAndBooleanOrderingRule(kind, left, right))
                 return;
         }
 
-        // Fail closed: a provider that cannot define an operand type cannot answer the operator either.
-        var leftDef = context.TypeDefinitions.GetTypeDefinition(Nullable.GetUnderlyingType(left) ?? left);
-        var rightDef = context.TypeDefinitions.GetTypeDefinition(Nullable.GetUnderlyingType(right) ?? right);
-        if (leftDef is null || rightDef is null) {
-            Report(context, leftNode, $"{incompatible}: the type provider has no definition for '{(leftDef is null ? left : right).Name}'");
+        if (leftUnderlying.GetOperator(kind, rightUnderlying) is not { } resolution) {
+            if ((comparison && UndeclaredComparisonRule(kind, leftUnderlying, rightUnderlying))
+                || EnumBitwiseRule.Of(kind, leftUnderlying, rightUnderlying) is not null)
+                return;
+            Report(context, leftNode, noOperator);
             return;
         }
-        if (leftDef.GetOperator(kind, rightDef) is not { } resolution) {
-            Report(context, leftNode, noOperator);
+        if (kind is OperatorKind.ShiftLeft or OperatorKind.ShiftRight) {
+            StatePolicyShiftCount(context, parent, rightNode, rightDefinition, resolution);
             return;
         }
         if (!arithmetic)
@@ -255,23 +243,105 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
         // Decimal's operators are declared members, invoked by name. Decimal.Add does not lift: rewriting
         // `decimal? + 1m` would turn null into 0, so a nullable operand keeps the operator for the VM to lift.
         if (!resolution.PlatformApplied
-            && Nullable.GetUnderlyingType(left) is null && Nullable.GetUnderlyingType(right) is null
+            && Nullable.GetUnderlyingType(left!) is null && Nullable.GetUnderlyingType(right!) is null
             && !RewriteDecimalOperator(context, parent, leftNode, rightNode, kind, resolution))
             Report(context, leftNode, $"decimal arithmetic could not be resolved ({kind})");
     }
 
     /// <summary>
-    /// Enum comparisons, which the provider leaves undefined (T-24's deliberate none): two enums compare when they are
-    /// the same type, and an enum compares with Text (its member name). Null when neither applies. Removed by T-25;
-    /// the Text allowance by T-07.
+    /// A unary minus or complement: the provider's operator for the operand's definition, nullable unwrapped (lock
+    /// amendment 6: <c>GetOperator</c> only; whether the VM computes a declared one is T-21's). Only a bare null literal and
+    /// an operand with no resolved type are not checked.
     /// </summary>
-    private static bool? EnumOperandRule(Type left, Type right) {
-        var (l, r) = (Nullable.GetUnderlyingType(left) ?? left, Nullable.GetUnderlyingType(right) ?? right);
-        if (l.IsEnum && r.IsEnum)
-            return l == r;
-        if ((l.IsEnum && CategoryOf(r) is Cat.Text) || (r.IsEnum && CategoryOf(l) is Cat.Text))
+    private void CheckUnaryOperator(AnalysisContext context, Node operandNode, OperatorKind kind) {
+        if (OperandDefinition(context, operandNode) is not { } definition)
+            return;
+        var underlying = Underlying(context, definition);
+        if (underlying.GetOperator(kind, null) is not null || EnumBitwiseRule.Of(kind, underlying, null) is not null)
+            return;
+        Report(context, operandNode, $"operator {kind} is not defined for '{NameOf(definition)}': no {kind} operator for this type");
+    }
+
+    /// <summary>
+    /// Poly's shift-count policy (<see cref="ClrBuiltInRules.IsPolicyShiftCount"/>): a count of a wider integer type is
+    /// converted to <c>int</c> unchecked, and the tree states it. The shift node is replaced by one whose count is that cast
+    /// (lifted to <c>int?</c> for a nullable count), so the emitter shifts by an <c>int</c> and decides nothing.
+    /// </summary>
+    private static void StatePolicyShiftCount(
+        AnalysisContext context, Node shift, Node count, ITypeDefinition countDefinition, OperatorResolution resolution) {
+        var parameters = resolution.Signature.Parameters.ToArray();
+        if (parameters.Length != 2 || parameters[1].ParameterTypeDefinition.PrimitiveType is not { } countType
+            || !ClrBuiltInRules.IsPolicyShiftCount(countType))
+            return;
+        var target = countDefinition.GetRuntimeType() is { } runtime && Nullable.GetUnderlyingType(runtime) is not null ? typeof(int?) : typeof(int);
+        var cast = new TypeCast(count, new ClrTypeReference(target));
+        context.SetResolvedType(cast, context.TypeDefinitions.GetTypeDefinition(target)
+            ?? throw new InvalidOperationException($"the type provider has no definition for '{target}'"));
+        Node stated = shift switch {
+            ShiftLeft left => left with { RightHandValue = cast },
+            ShiftRight right => right with { RightHandValue = cast },
+            _ => throw new InvalidOperationException($"'{shift.GetType().Name}' is not a shift")
+        };
+        if (context.GetResolvedType(shift) is { } shiftType)
+            context.SetResolvedType(stated, shiftType);
+        Replace(context, shift, stated);
+    }
+
+    /// <summary>
+    /// The type definition an operand is judged by: its resolved type, or a constant's own. Null for a bare null literal or
+    /// an unresolved operand. Interim (T-22b removes it, with the owner's ruling T-22a's PR asks for): a <c>void</c> operand
+    /// (a void call) is not judged either; C# rejects it, and master computed it with the ring's zero.
+    /// </summary>
+    private static ITypeDefinition? OperandDefinition(AnalysisContext context, Node node) {
+        var effective = context.GetEffectiveNode(node);
+        if (effective is Constant { Value: null })
+            return null;
+        var definition = context.GetResolvedType(effective)
+            ?? (effective is Constant { Value: { } value } ? context.TypeDefinitions.GetTypeDefinition(value.GetType()) : null);
+        return definition?.GetRuntimeType() == typeof(void) ? null : definition;
+    }
+
+    /// <summary>The definition with a <c>Nullable&lt;T&gt;</c> peeled to <c>T</c>.</summary>
+    private static ITypeDefinition Underlying(AnalysisContext context, ITypeDefinition definition) =>
+        definition.GetRuntimeType() is { } runtime && Nullable.GetUnderlyingType(runtime) is { } underlying
+            ? context.TypeDefinitions.GetTypeDefinition(underlying) ?? definition
+            : definition;
+
+    private static string NameOf(ITypeDefinition definition) => definition.GetRuntimeType()?.Name ?? definition.Name;
+
+    private static bool IsEnum(ITypeDefinition definition) => definition.Kind is TypeKind.Enum;
+
+    private static bool IsText(ITypeDefinition definition) =>
+        definition.GetRuntimeType() is { } runtime && (runtime == typeof(string) || runtime == typeof(char));
+
+    /// <summary>
+    /// Enum comparisons, which the provider leaves undefined (T-24's deliberate none): two enums compare when they are
+    /// the same type, and an enum compares with Text (its member name). A modeled enum counts as an enum. Null when
+    /// neither applies. Removed by T-25; the Text allowance by T-07.
+    /// </summary>
+    private static bool? EnumOperandRule(ITypeDefinition left, ITypeDefinition right) {
+        if (IsEnum(left) && IsEnum(right))
+            return TypeDefinitionExtensions.IsSameType(left, right);
+        if ((IsEnum(left) && IsText(right)) || (IsEnum(right) && IsText(left)))
             return true;
         return null;
+    }
+
+    /// <summary>
+    /// Interim rule (T-07 removes it: the provider declares equality for every value type and the lowered module's modeled
+    /// definitions declare their operators; owner ruling of 2026-11-13, value types have value equality). A comparison the
+    /// provider answers none for, which master accepted because its scalar gate skipped the operands:
+    /// <c>==</c> and <c>!=</c> between two operands of one CLR struct type that declares no equality operator; between two
+    /// modeled definitions (a lowered entity or value type, whose generated C# type defines the equality but whose definition
+    /// declares no <c>op_Equality</c>) of one type or of types related by inheritance; and ordering of two operands of one
+    /// modeled type, which the domain analyzer accepts under T-07's ordering-legality rule.
+    /// </summary>
+    private static bool UndeclaredComparisonRule(OperatorKind kind, ITypeDefinition left, ITypeDefinition right) {
+        var equality = kind is OperatorKind.Equal or OperatorKind.NotEqual;
+        var same = TypeDefinitionExtensions.IsSameType(left, right);
+        if (left is ClrTypeDefinition || right is ClrTypeDefinition)
+            return equality && left.Kind is TypeKind.Struct && same;
+        return equality ? same || left.IsAssignableFrom(right) || right.IsAssignableFrom(left) : same;
     }
 
     /// <summary>
@@ -392,7 +462,7 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
             return true; // unknown receiver — allow emit late-bind
         var argTypes = new ITypeDefinition[invoke.Arguments.Length];
         for (var i = 0; i < invoke.Arguments.Length; i++) {
-            var argType = UndefinedArithmeticMatch.ForNode(context, invoke.Arguments[i]);
+            var argType = context.GetResolvedType(context.GetEffectiveNode(invoke.Arguments[i]));
             if (argType is null)
                 return true; // incomplete — allow late-bind
             argTypes[i] = argType;
@@ -1127,7 +1197,7 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
 
     private static Type? ClrTypeOf(AnalysisContext context, Node node) {
         var effective = context.GetNodeReplacement(node) ?? node;
-        return (context.GetResolvedType(effective) ?? UndefinedArithmeticMatch.ForNode(context, effective))?.GetRuntimeType()
+        return context.GetResolvedType(effective)?.GetRuntimeType()
             ?? (effective is Constant { Value: not null } constant
                 ? constant.Value.GetType()
                 : null);
@@ -1165,6 +1235,27 @@ internal sealed class SyntaxTypeCompatibilityAnalyzer : INodeAnalyzer {
 
     private static bool IsClrTimestamp(Type type) =>
         type == typeof(DateTime) || type == typeof(DateTimeOffset);
+}
+
+/// <summary>
+/// Interim rule (T-29 removes it when the provider defines the enum operators): C# defines <c>E &amp; E</c>,
+/// <c>E | E</c>, <c>E ^ E</c> and <c>~E</c> for a CLR enum type <c>E</c>, with result <c>E</c> (§12.13.3, §12.9.5), and
+/// master executed them, but the provider has none yet (T-24's deliberate none). The compatibility analysis accepts those
+/// cells and the resolver types them <c>E</c>. Any other enum operand (an enum beside an integer or another enum, a shift,
+/// a negation) is undefined, as in C#.
+/// </summary>
+internal static class EnumBitwiseRule {
+    /// <summary>The enum definition a cell of this rule is typed by, or null. <paramref name="right"/> is null for <c>~E</c>.</summary>
+    public static ITypeDefinition? Of(OperatorKind kind, ITypeDefinition left, ITypeDefinition? right) {
+        if (left.GetRuntimeType() is not { IsEnum: true })
+            return null;
+        var applies = kind switch {
+            OperatorKind.BitwiseAnd or OperatorKind.BitwiseOr or OperatorKind.BitwiseXor => right is not null && TypeDefinitionExtensions.IsSameType(left, right),
+            OperatorKind.BitwiseNot => right is null,
+            _ => false
+        };
+        return applies ? left : null;
+    }
 }
 
 /// <summary>First assignment's representation for a <see cref="Variable"/> in this analysis.

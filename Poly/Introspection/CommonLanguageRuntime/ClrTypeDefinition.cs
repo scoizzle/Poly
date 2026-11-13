@@ -132,18 +132,20 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
     /// exact signature (Double and Single declare their comparisons), the intrinsic is the answer. The built-in rules read the other operand only through its
     /// primitive, so the cache is keyed by the kind and that primitive: keyed by the kind alone, the first pair would
     /// answer for every other; keyed by the other definition, it would grow without bound on fresh synthetic
-    /// collection types, which are a new instance per resolve.
+    /// collection types, which are a new instance per resolve. Reference equality depends on the other definition itself,
+    /// so it is answered beside the cache (<see cref="ClrBuiltInRules.ReferenceEquality"/>).
     /// </summary>
     IEnumerable<DeclaredOperator> ITypeDefinition.GetOperators(OperatorKind kind, ITypeDefinition? other) {
         OperatorShape.ArityOf(kind);
         var otherPrimitive = other is null ? GetPrimitiveTypeId(RuntimeType) : other.PrimitiveType;
-        return _operators.GetOrAdd((kind, otherPrimitive), key => {
+        var declared = _operators.GetOrAdd((kind, otherPrimitive), key => {
             var intrinsic = ClrBuiltInRules.Operators(this, key.Other, _provider, key.Kind);
             var reflected = (ClrBuiltInRules.IsNativeInteger(RuntimeType) ? [] : FindOperators(key.Kind))
                 .Where(method => !intrinsic.Any(declared => SameSignature(declared.Signature, method)))
                 .Select(static method => new DeclaredOperator(method, PlatformApplied: false));
             return [.. intrinsic, .. reflected];
         });
+        return ClrBuiltInRules.ReferenceEquality(this, other, _provider, kind) is { } reference ? [.. declared, reference] : declared;
     }
 
     private static bool SameSignature(ITypeMethod a, ITypeMethod b) {

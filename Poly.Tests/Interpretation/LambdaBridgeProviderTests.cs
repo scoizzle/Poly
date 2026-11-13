@@ -742,14 +742,17 @@ internal static class BridgeGrid {
         object operand = constantConversion && constant >= 0 && kind is not (OperatorKind.ShiftLeft or OperatorKind.ShiftRight)
             ? (uint)constant
             : constant;
+        // The provider's answer for `k << x` with x a uint is Poly's shift-count policy: the count converted to int unchecked.
+        var policyCount = !constantConversion && constantOnLeft && kind is OperatorKind.ShiftLeft or OperatorKind.ShiftRight;
+        object? Count(object? x) => policyCount ? unchecked((int)(uint)x!) : x;
         object? probe;
         try {
-            probe = constantOnLeft ? Binder(kind, operand, 7u) : Binder(kind, 7u, operand);
+            probe = constantOnLeft ? Binder(kind, operand, Count(7u)) : Binder(kind, 7u, operand);
         }
         catch (RuntimeBinderException) {
             return BridgeExpectation.Undefined;
         }
-        var runs = c.Sets.Select(set => Run(set.Name, () => constantOnLeft ? Binder(kind, operand, set.Left) : Binder(kind, set.Left, operand))).ToArray();
+        var runs = c.Sets.Select(set => Run(set.Name, () => constantOnLeft ? Binder(kind, operand, Count(set.Left)) : Binder(kind, set.Left, operand))).ToArray();
         return new(true, TypeName(probe!.GetType()), runs);
     }
 
@@ -832,6 +835,7 @@ internal static class BridgeGrid {
             var expectations = new Dictionary<BridgeCase, BridgeExpectation>(System.Collections.Generic.ReferenceEqualityComparer.Instance);
             foreach (var c in Cases) {
                 expectations[c] = c.Grid switch {
+                    "operator" or "nullable" when IsPolicyShift(c) => ExpectPolicyShift(c),
                     "uint32-constant" => ExpectUInt32Constant(c, constantConversion: false),
                     "constant-parameter" => ExpectConstantParameter(c, constantConversion: false),
                     "coalesce" => ExpectCoalesce(c, constantConversion: false),
@@ -846,6 +850,43 @@ internal static class BridgeGrid {
     });
 
     public static BridgeExpectation ProviderExpectation(BridgeCase c) => ProviderExpectations.Value[c];
+
+    /// <summary>A shift whose count is a wider integer type: Poly's shift-count policy (C# rejects it, Poly defines it).</summary>
+    public static bool IsPolicyShift(BridgeCase c) =>
+        c.Op is OperatorKind.ShiftLeft or OperatorKind.ShiftRight
+        && c.Right?.Underlying.GetPrimitiveType() is { } count && ClrBuiltInRules.IsPolicyShiftCount(count);
+
+    /// <summary>Every cell of the shift-count policy: a policy shift, or an int constant shifted by a uint <c>x</c>.</summary>
+    public static bool IsPolicyCell(BridgeCase c) =>
+        IsPolicyShift(c) || (c.Grid == "uint32-constant" && c.Op is OperatorKind.ShiftLeft or OperatorKind.ShiftRight
+            && !c.Key.StartsWith("x", StringComparison.Ordinal));
+
+    /// <summary>
+    /// The policy's answer: C#'s shift by the count converted to <c>int</c> unchecked (the binder over an <c>int</c> count),
+    /// lifted as C# lifts the shift when an operand is nullable.
+    /// </summary>
+    private static BridgeExpectation ExpectPolicyShift(BridgeCase c) {
+        var kind = c.Op!.Value;
+        object? probe;
+        try {
+            probe = Binder(kind, c.Left.Operand.Plain, 1);
+        }
+        catch (RuntimeBinderException) {
+            return BridgeExpectation.Undefined;
+        }
+        var result = probe!.GetType();
+        var type = c.Left.Nullable || c.Right!.Nullable ? typeof(Nullable<>).MakeGenericType(result) : result;
+        static int Count(object value) => value switch {
+            long v => unchecked((int)v),
+            uint v => unchecked((int)v),
+            ulong v => unchecked((int)v),
+            _ => throw new ArgumentOutOfRangeException(nameof(value), value, "not a policy shift count")
+        };
+        var runs = c.Sets.Select(set => set.Left is null || set.Right is null
+            ? Run(set.Name, () => null)
+            : Run(set.Name, () => Binder(kind, set.Left, Count(set.Right)))).ToArray();
+        return new(true, TypeName(type), runs);
+    }
 
     /// <summary>The provider's operator for a plain operator cell: its result type, or null when it states none.</summary>
     public static Type? ProviderResult(BridgeCase c) {
@@ -906,23 +947,25 @@ internal static class BridgeGrid {
     /// <summary>
     /// Whether the bridge decides the cell's operator now: the analysis did not refuse it first, and did not replace the
     /// operator with a fold or a simplification (constant folding's <c>x * 1</c> to <c>x</c>); its Decimal rewrite to
-    /// <c>Decimal.Add</c> is an invoke whose conversions the bridge still decides. A quoted lambda has no function-table
+    /// <c>Decimal.Add</c> is an invoke whose conversions the bridge still decides, and so is a shift whose count the
+    /// shift-count policy states as a cast to <c>int</c> (T-22a). A quoted lambda has no function-table
     /// entry (T-19b), so a <c>main-rejected</c> cell is not excused here: it is a cell the bridge failed to decide.
     /// </summary>
     public static bool BridgeDecides(BridgeCase c) =>
-        Outcome(c) is { Stage: not "analysis-rejected" } outcome && (!outcome.Replaced || outcome.ReplacedBy == nameof(Invoke));
+        Outcome(c) is { Stage: not "analysis-rejected" } outcome
+        && (!outcome.Replaced || outcome.ReplacedBy is nameof(Invoke) or nameof(ShiftLeft) or nameof(ShiftRight));
 
     /// <summary>
     /// The row that owns a cell the provider defines but the bridge never decides: the lowered analysis rejects the lifted
-    /// <c>!</c> on <c>bool?</c> (T-28); the analysis types the operator as its operand, so constant folding replaces it with
-    /// the operand or a cast (T-26 for arithmetic, T-22 for bitwise). Null: no owner.
+    /// <c>!</c> on <c>bool?</c> (T-28); constant folding replaces the operator with its operand, typed as the operand where
+    /// the provider says Int64: the identity folds (T-26). Null: no owner.
     /// </summary>
     public static string? OwnerOfUndecided(BridgeCase c) => Outcome(c) switch {
         { Stage: "analysis-rejected" } when c.Op is OperatorKind.Not && c.Left.Nullable => "T-28 (the lowered analysis rejects the lifted ! on bool?)",
         { Replaced: true } outcome when outcome.ReplacedBy != nameof(Invoke) && Matches(outcome.Observed, Expectation(c)) =>
             "T-26 (constant folding simplifies uint x * 1, 1 * x, x / 1 and x % 1 to x, typed uint, as C#'s constant conversion types them; the provider and, since T-17, the lowered analysis say Int64)",
         { Replaced: true } outcome when outcome.ReplacedBy != nameof(Invoke) =>
-            "T-22 (the lowered analysis types uint & int and uint | int as UInt32, so constant folding simplifies x & -1 to x and x | -1 to a cast the bridge cannot resolve; C# says Int64)",
+            "T-26 (constant folding's identity fold simplifies uint x & -1 to x, typed uint; the provider, C# and since T-22a the lowered analysis say Int64, and the value is equal)",
         _ => null
     };
 
@@ -1049,7 +1092,8 @@ public class LambdaBridgeProviderTests {
     [Test]
     public async Task Oracle_ProviderAgreesWithTheBinder_OnEveryPlainOperatorCell() {
         var disagreements = InGrid("operator").Where(static c => {
-            var expected = BridgeGrid.Expectation(c);
+            // A policy shift is judged against the binder's shift by an int count (C# itself rejects the cell).
+            var expected = BridgeGrid.IsPolicyShift(c) ? BridgeGrid.ProviderExpectation(c) : BridgeGrid.Expectation(c);
             var provider = BridgeGrid.ProviderResult(c);
             return c.Op is OperatorKind.And or OperatorKind.Or or OperatorKind.Not
                 ? expected.Defined != (provider is not null)
@@ -1101,8 +1145,8 @@ public class LambdaBridgeProviderTests {
         "nullable bitwise: type = 12 4f05b7132a6286ac",
         "nullable bitwise: type and value = 246 01c6136a79c85d75",
         "nullable comparison: value = 864 83d47e721bc9cc34",
-        "nullable shift: runs becomes refused = 258 f657670ef8f09975",
-        "nullable shift: type and value = 132 0f7ac8bb237bc36c",
+        "nullable shift: runs becomes refused = 192 5f0cbc7e6982d573",
+        "nullable shift: type and value = 198 a28ec3b2e70a4f9a",
         "nullable unary minus: refused becomes works = 5 6d19ac93a6bb9932",
         "nullable unary minus: type = 1 570450c6c0ea1a48",
         "operator arithmetic: refused becomes works = 15 b4c34b31b0adc22a",
@@ -1117,14 +1161,14 @@ public class LambdaBridgeProviderTests {
         "operator bitwise: refused becomes works = 3 a67bb393dfc9a792",
         "operator bitwise: runs becomes refused = 78 98c82e8ba2ad09a4",
         "operator bitwise: type = 30 7e64603254e54daa",
-        "operator shift: runs becomes refused = 134 3f558e65b48ba156",
+        "operator shift: runs becomes refused = 80 fa356964e33d5d68",
         "operator unary minus: message only = 2 74e2293bd02cf24b",
         "operator unary minus: refused becomes works = 5 f33c6acf21a1a017",
         "operator unary minus: type = 1 7bd03e71bbf7b6c9",
         "return: message only = 2 3d8ce1a5cdf9641f",
         "return: refused becomes works = 106 65ef8d87d823d381",
         "return: runs becomes refused = 105 db9b7aa20e9c22b4",
-        "uint32-constant: runs becomes refused = 4 4e60f7fc222b77eb",
+        "uint32-constant: refused becomes works = 1 38045c880a5b88a8",
         "uint32-constant: type = 12 5c02db5781dc40bd",
         "uint32-constant: type and value = 14 1ff0dc34846800c7",
         "uint32-constant: value = 12 4d5d04ebb876e2c0",
@@ -1166,8 +1210,10 @@ public class LambdaBridgeProviderTests {
     }
 
     private static readonly string[] UndecidedOwners = [
-        "T-22 (the lowered analysis types uint & int and uint | int as UInt32, so constant folding simplifies x & -1 to x and x | -1 to a cast the bridge cannot resolve; C# says Int64) = 2 016756e39c6a4811",
         "T-26 (constant folding simplifies uint x * 1, 1 * x, x / 1 and x % 1 to x, typed uint, as C#'s constant conversion types them; the provider and, since T-17, the lowered analysis say Int64) = 4 1d2a3808d3eec1bf",
+        // T-22a states uint & int and uint | int as Int64: x | -1 is no longer folded to a cast the bridge cannot resolve
+        // (it runs, -1 as C# says, lock amendment 12); x & -1 is still folded to x by the identity fold.
+        "T-26 (constant folding's identity fold simplifies uint x & -1 to x, typed uint; the provider, C# and since T-22a the lowered analysis say Int64, and the value is equal) = 1 9a9788b7eea6a361",
         "T-28 (the lowered analysis rejects the lifted ! on bool?) = 1 add0d5c7271ecdf8"
     ];
 
@@ -1268,23 +1314,26 @@ public class LambdaBridgeProviderTests {
     /// positioned bridge refusal (owner T-21: the bridge cannot state IntPtr/UIntPtr arithmetic, comparison, shift and
     /// the conversion to Decimal in an expression tree; 4 of them, the conditionals beside Decimal, were refused by the
     /// function-table compile before T-19b); 112 and 199 undefined cells are refused by the analysis and by the bridge
-    /// (36 of the 199 were refused by the function-table compile before T-19b).
+    /// (36 of the 199 were refused by the function-table compile before T-19b). T-22a: the lowered analysis refuses the
+    /// undefined bitwise, shift and unary-minus cells first (112 to 201 analysis refusals, 199 to 54 bridge refusals), and the
+    /// shift-count policy defines the native shifts by a wider count: 18 more run, 38 more are the bridge's refusal (T-21).
     /// </summary>
     private const string NativeBuckets =
-        "analysis-rejected|undefined=112, bridge-rejected|defined=345, bridge-rejected|undefined=199, ran|defined=76";
+        "analysis-rejected|undefined=201, bridge-rejected|defined=383, bridge-rejected|undefined=54, ran|defined=94";
 
     private static BridgeCase Cell(string grid, string key) => BridgeGrid.Cases.Single(c => c.Grid == grid && c.Key == key);
 
     /// <summary>
-    /// Issue 832's wrong VM value (owner T-21): the main emitter answers a wrong value and type for <c>UInt8 | UInt64</c>.
-    /// Inside a bridged lambda the same expression is right, on master already; T-21 fixes the main emitter and inverts
-    /// the ledger's pin (<c>Probe_WrongVmValues_Issue832_PinnedAsTheyAreToday_T21InvertsThem</c>).
+    /// Issue 832's wrong VM value (owner T-21b): the main emitter reads the UInt64 word of <c>UInt8 | UInt64</c> as a
+    /// signed one. Inside a bridged lambda the same expression is right, on master already; T-21b fixes the main emitter
+    /// and inverts the ledger's pin (<c>Probe_WrongVmValues_Issue832_PinnedAsTheyAreToday_T21InvertsThem</c>).
     /// </summary>
     [Test]
     public async Task Bridge_RightWhereMainIsWrong_UInt8OrUInt64_PinnedForT21() {
         var or = Cell("operator", "UInt8 BitwiseOr UInt64");
         await Assert.That(BridgeGrid.Outcome(or).Observed).IsEqualTo("ran; UInt64; S1=255; S2=18446744073709551615");
-        await Assert.That(BridgeGrid.LedgerCell(or).Abi).IsEqualTo("Byte; S1=255; S2=-1");
+        // T-22a typed it UInt64 (the provider's type; it was Byte); the VM still reads the word as signed.
+        await Assert.That(BridgeGrid.LedgerCell(or).Abi).IsEqualTo("UInt64; S1=255; S2=-1");
     }
 
     private static string FamiliesOf(IEnumerable<BridgeCase> cells, Func<BridgeCase, string> family) =>
@@ -1366,7 +1415,9 @@ public class LambdaBridgeProviderTests {
         var control = BridgeGrid.Evaluate(Cell("conditional", "Decimal ? Int32"), asDelegate: true);
         await Assert.That(control.Stage).IsEqualTo("main-rejected");
         await Assert.That(control.Message).Contains("conditional arms differ in representation");
-        var moved = master.Where(static c => BridgeGrid.Outcome(c).Stage is not ("ran" or "bridge-rejected"))
+        // T-22a: an undefined bitwise, shift or unary-minus cell is refused by the lowered analysis, before the bridge.
+        var moved = master.Where(static c => BridgeGrid.Outcome(c).Stage is not ("ran" or "bridge-rejected")
+                && !(BridgeGrid.Outcome(c).Stage == "analysis-rejected" && !BridgeGrid.ProviderExpectation(c).Defined))
             .Select(static c => $"{c.Line}: {BridgeGrid.Outcome(c).Render}").ToArray();
         await Assert.That(moved).IsEmpty();
     }
@@ -1398,7 +1449,7 @@ public class LambdaBridgeProviderTests {
     public async Task Grid_CellsNotRefusedOnMaster_KeepTheirAnswers() {
         var lines = BridgeGrid.Cases.Where(static c => !BridgeGrid.MainRejectedOnMaster(c))
             .Select(static c => $"{c.Line} = {BridgeGrid.Outcome(c).Render}").ToArray();
-        await Assert.That(ConstantFoldGrid.Pin(lines)).IsEqualTo("7918 5461f32ee59cf18a");
+        await Assert.That(ConstantFoldGrid.Pin(lines)).IsEqualTo("7918 80826179b0f6a482");
     }
 
     /// <summary>
@@ -1428,6 +1479,8 @@ public class LambdaBridgeProviderTests {
     private static readonly string[] PredictedStages = [
         // T-19b: every cell the function-table compile refused reaches the bridge: the provider-defined ones run, the
         // undefined ones are the bridge's refusal (MainRejectedSplit above, per grid).
+        // T-22a: an undefined bitwise, shift or unary-minus cell is refused by the lowered analysis, not the bridge; the
+        // shift-count policy cells run; uint x | -1 runs (-1, as C# says: lock amendment 12).
         "coalesce bridge-rejected = 57",
         "coalesce ran = 125",
         "conditional bridge-rejected = 318",
@@ -1435,18 +1488,15 @@ public class LambdaBridgeProviderTests {
         "constant-parameter analysis-rejected = 8",
         "constant-parameter bridge-rejected = 25",
         "constant-parameter ran = 3",
-        "nullable analysis-rejected = 808",
-        "nullable bridge-rejected = 585",
-        "nullable ran = 2156",
-        "operator analysis-rejected = 749",
-        "operator bridge-rejected = 525",
-        "operator ran = 1807",
+        "nullable analysis-rejected = 1309",
+        "nullable bridge-rejected = 18",
+        "nullable ran = 2222",
+        "operator analysis-rejected = 1216",
+        "operator bridge-rejected = 4",
+        "operator ran = 1861",
         "return bridge-rejected = 484",
         "return ran = 192",
-        // The run, not the prediction (4 and 60): constant folding replaces uint x | -1 with a cast the bridge cannot
-        // resolve, on master too, so that cell never ran (owned by T-22 above).
-        "uint32-constant bridge-rejected = 5",
-        "uint32-constant ran = 59",
+        "uint32-constant ran = 64",
         "uint64-constant analysis-rejected = 264",
         "uint64-constant ran = 264"
     ];
@@ -1482,29 +1532,29 @@ public class LambdaBridgeProviderTests {
         "coalesce = 57",
         "conditional = 318",
         "constant-parameter = 25",
-        "nullable bitwise = 303",
-        "nullable bitwise not = 4",
         "nullable comparison = 12",
         "nullable logical = 6",
-        "nullable shift = 258",
-        "nullable unary minus = 2",
-        "operator bitwise = 285",
-        "operator bitwise not = 4",
         "operator comparison = 4",
-        "operator shift = 230",
-        "operator unary minus = 2",
-        "return = 484",
-        "uint32-constant = 4"
+        "return = 484"
     ];
 
     /// <summary>
-    /// The refusal families whose undefined cells never reach the bridge: the lowered analysis (T-18) refuses each first, so
-    /// the bridge's refusal there is not exercised by this grid.
+    /// The refusal families whose undefined cells never reach the bridge: the lowered analysis refuses each first (T-18 for
+    /// arithmetic and logical, T-22a for bitwise, shift and unary minus), so the bridge's refusal there is not exercised by
+    /// this grid.
     /// </summary>
     private static readonly string[] UntestedBackstops = [
         "nullable arithmetic",
+        "nullable bitwise",
+        "nullable bitwise not",
+        "nullable shift",
+        "nullable unary minus",
         "operator arithmetic",
+        "operator bitwise",
+        "operator bitwise not",
         "operator logical",
+        "operator shift",
+        "operator unary minus",
         "uint64-constant"
     ];
 
@@ -1516,7 +1566,12 @@ public class LambdaBridgeProviderTests {
     /// </summary>
     [Test]
     public async Task Bridge_DisagreesWithCSharp_OnlyOnTheConstantConversionCells_OwnedByT26() {
-        var disagreeing = BridgeGrid.Cases.Where(static c => BridgeGrid.BridgeDecides(c) && !BridgeGrid.Matches(BridgeGrid.Outcome(c).Observed, BridgeGrid.Expectation(c))).ToArray();
+        // The shift-count policy's cells disagree with C# by design (C# rejects them); the provider's answer for them is
+        // checked by Bridge_AgreesWithTheProvider_OnEveryCellItDecides.
+        var policy = BridgeGrid.Cases.Where(static c => BridgeGrid.IsPolicyCell(c) && BridgeGrid.BridgeDecides(c)).ToArray();
+        await Assert.That(policy.All(static c => !BridgeGrid.Expectation(c).Defined && BridgeGrid.Agrees(c))).IsTrue();
+        var disagreeing = BridgeGrid.Cases.Where(static c => !BridgeGrid.IsPolicyCell(c) && BridgeGrid.BridgeDecides(c)
+            && !BridgeGrid.Matches(BridgeGrid.Outcome(c).Observed, BridgeGrid.Expectation(c))).ToArray();
         await Assert.That(disagreeing.All(static c => c.Grid is "uint32-constant" or "constant-parameter"
             || (c.Grid == "coalesce" && c.Key.EndsWith("?? Int32(0)", StringComparison.Ordinal)))).IsTrue();
         // 25 cells, each where only C#'s constant conversion makes the answer:
@@ -1558,8 +1613,8 @@ public class LambdaBridgeProviderTests {
             .Select(static c => $"{c.Key}: bridge {BridgeGrid.BridgeAnswer(BridgeGrid.Outcome(c).Observed)}, main {BridgeGrid.MainAnswer(c)}").ToArray();
         await Assert.That(outside).IsEmpty();
         await Assert.That(set2.All(c => set1.Contains(c))).IsTrue();
-        await Assert.That(ConstantFoldGrid.Pin([.. set1.Select(static c => c.Line)])).IsEqualTo("557 2e1cf4891ce292e8");
-        await Assert.That(ConstantFoldGrid.Pin([.. set2.Select(static c => c.Line)])).IsEqualTo("290 ba91a97a067ddc0d");
+        await Assert.That(ConstantFoldGrid.Pin([.. set1.Select(static c => c.Line)])).IsEqualTo("127 0d53c15792b886a4");
+        await Assert.That(ConstantFoldGrid.Pin([.. set2.Select(static c => c.Line)])).IsEqualTo("127 0d53c15792b886a4");
     }
 
     private static readonly string[] PredictedDelta = [
@@ -1579,8 +1634,8 @@ public class LambdaBridgeProviderTests {
         "nullable bitwise: type = 12 4f05b7132a6286ac",
         "nullable bitwise: type and value = 246 01c6136a79c85d75",
         "nullable comparison: value = 864 83d47e721bc9cc34",
-        "nullable shift: runs becomes refused = 258 f657670ef8f09975",
-        "nullable shift: type and value = 132 0f7ac8bb237bc36c",
+        "nullable shift: runs becomes refused = 192 5f0cbc7e6982d573",
+        "nullable shift: type and value = 198 a28ec3b2e70a4f9a",
         "nullable unary minus: type = 1 570450c6c0ea1a48",
         "operator arithmetic: refused becomes works = 15 b4c34b31b0adc22a",
         "operator arithmetic: type = 17 16d10786f3e2942c",
@@ -1594,7 +1649,7 @@ public class LambdaBridgeProviderTests {
         "operator bitwise: refused becomes works = 3 a67bb393dfc9a792",
         "operator bitwise: runs becomes refused = 78 98c82e8ba2ad09a4",
         "operator bitwise: type = 30 7e64603254e54daa",
-        "operator shift: runs becomes refused = 134 3f558e65b48ba156",
+        "operator shift: runs becomes refused = 80 fa356964e33d5d68",
         "operator unary minus: message only = 2 74e2293bd02cf24b",
         "operator unary minus: refused becomes works = 5 f33c6acf21a1a017",
         "operator unary minus: type = 1 7bd03e71bbf7b6c9",
@@ -1602,7 +1657,6 @@ public class LambdaBridgeProviderTests {
         "return: refused becomes works = 106 65ef8d87d823d381",
         "return: runs becomes refused = 105 db9b7aa20e9c22b4",
         "uint32-constant: refused becomes works = 1 38045c880a5b88a8",
-        "uint32-constant: runs becomes refused = 4 4e60f7fc222b77eb",
         "uint32-constant: type = 17 4db844325a33697b",
         "uint32-constant: type and value = 14 1ff0dc34846800c7",
         "uint32-constant: value = 12 4d5d04ebb876e2c0",

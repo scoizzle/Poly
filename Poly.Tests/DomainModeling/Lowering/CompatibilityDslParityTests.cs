@@ -81,37 +81,6 @@ public class CompatibilityDslParityTests {
         return outcome.Success ? $"success=True; answer={outcome.State["Cheap"]}" : $"success=False; message={outcome.Message}";
     }
 
-    const string TextOrdering = """
-        domain Ord
-        Pair: entity {
-          A: Text
-          B: Text
-          Before: policy { A < B }
-          After: policy { A > B }
-        }
-        """;
-
-    /// <summary>Text ordering runs on the interpreter only: the printed C# has no <c>string &lt; string</c> (next test).</summary>
-    [Test]
-    [Arguments("Before", "True")]
-    [Arguments("After", "False")]
-    public async Task TextOrderingPolicy_Interpreter_AnswersOrdinally(string policy, string expected) {
-        var domain = EvolvedDomain.FromDsl(TextOrdering).Domain;
-        RuntimeAnalysisCache.Bind(domain, ParitySessions.Create(domain.Extensions.Count > 0 ? domain.Extensions : ExtensionCatalog.ProductAuthoring));
-        var side = new SimulateSide(domain);
-        side.Create("Pair", ("A", "alpha"), ("B", "beta"));
-        side.EvaluatePolicy(policy);
-        await Assert.That(side.Outcomes[1].Success).IsTrue();
-        await Assert.That(side.Outcomes[1].State[policy]).IsEqualTo(expected);
-    }
-
-    [Test]
-    public async Task TextOrderingPolicy_PrintedHost_RefusesToCompile() {
-        await Assert.That(() => ParityScenario.FromDsl(TextOrdering, "T18TextPrinted"))
-            .Throws<InvalidOperationException>()
-            .WithMessageContaining("error CS0019: Operator '<' cannot be applied to operands of type 'string' and 'string'");
-    }
-
     static string DateOffset(string type, string op) => $$"""
         domain Cal
         uses temporal
@@ -127,21 +96,18 @@ public class CompatibilityDslParityTests {
     /// Date ± Decimal passes the domain analyzer (its temporal offset permission, T-10), and the domain lowering emits
     /// <c>Start.AddDays((Int32)Days)</c>: no Date-with-Decimal operator node reaches the lowered compatibility analysis.
     /// Pinned as each host behaves today, so T-18 is shown not to change it. Subtraction lowers to
-    /// <c>AddDays((Int32)-Days)</c>: the interpreter throws on it while the printed C# runs. That is a known-wrong
-    /// result, pinned as it is and not as it should be: the VM's decimal negation (issue 832, row T-21) gives -1 for
-    /// <c>-2m</c> and throws on <c>(int)-2m</c>.
+    /// <c>AddDays((Int32)-Days)</c>; both hosts run it (until T-21a the VM negated the decimal's handle, not the decimal).
     /// </summary>
     [Test]
     [Arguments("Date", "+", "simulate: success=True; exception=none; message=; Due=03/01/2024 | printed: success=True; exception=none; message=; Due=03/01/2024")]
-    [Arguments("Date", "-", "simulate: success=False; exception=IndexOutOfRangeException; message=Index was outside the bounds of the array.; Due=<state not read> | printed: success=True; exception=none; message=; Due=02/26/2024")]
+    [Arguments("Date", "-", "simulate: success=True; exception=none; message=; Due=02/26/2024 | printed: success=True; exception=none; message=; Due=02/26/2024")]
     public async Task DateOffsetByDecimal_BothHosts_AsToday(string type, string op, string expected) {
         var culture = CultureInfo.CurrentCulture;
         CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
         try {
             object start = type == "Date" ? new DateOnly(2024, 2, 28) : new DateTime(2024, 2, 28, 10, 0, 0);
             object due = type == "Date" ? new DateOnly(2000, 1, 1) : new DateTime(2000, 1, 1);
-            var scenario = ParityScenario.FromDsl(DateOffset(type, op), $"T18Offset{type}{(op == "+" ? "Add" : "Sub")}",
-                recordedExceptions: ["IndexOutOfRangeException"]);
+            var scenario = ParityScenario.FromDsl(DateOffset(type, op), $"T18Offset{type}{(op == "+" ? "Add" : "Sub")}");
             var (simulate, printed) = scenario.Run(side => {
                 side.Create("Plan", ("Start", start), ("Days", 2m), ("Due", due));
                 side.Invoke("Shift");

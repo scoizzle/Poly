@@ -12,9 +12,7 @@ namespace Poly.Tests.DomainModeling.Parsing;
 /// <c>add</c> of the node's own text under its parent. Each row records the result: the edited text's SHA and its length change, whether
 /// the replace was byte-identical, or the error code.
 ///
-/// <para>No invariant is asserted. "Replace with its own text is byte-identical" was run over every sampled node and does NOT hold:
-/// 71 of the sampled stage and action nodes grow (first counter-example: <c>demo/Poly.RestApi/library.poly</c>, stage
-/// <c>Patron.Active</c>, +36 characters: a multi-line node's continuation lines are indented again). The rows freeze that result.</para>
+/// <para>The replace rows carry <c>identical=Y</c> or <c>N</c>; the invariant test asserts none is <c>N</c>.</para>
 /// </summary>
 public sealed class EditSpliceBaselineTests {
     private const string FilePath = "Poly.Tests/DomainModeling/Parsing/EditSpliceBaseline.txt";
@@ -102,11 +100,17 @@ public sealed class EditSpliceBaselineTests {
             await Assert.That(rows.Count(r => r.Key.EndsWith("|" + op, StringComparison.Ordinal))).IsGreaterThan(100);
     }
 
+    /// <summary>
+    /// The invariant the baseline first showed false: replacing a node with its own text, taken from the node start, is byte-identical.
+    /// (Probe: <c>Patron.Active</c> in <c>demo/Poly.RestApi/library.poly</c> taken from the LINE start was identical; taken from the node
+    /// start it grew by 36 characters, because <c>Reindent</c> took the common indent over the first line too.)
+    /// </summary>
     [Test]
-    public async Task ReplaceWithOwnText_IsNotByteIdenticalForEveryNode_SoNoInvariantIsAsserted() {
-        var counterExample = ReadRows().FirstOrDefault(r => r.Key.EndsWith("|replace", StringComparison.Ordinal) && r.Result.Contains("identical=N", StringComparison.Ordinal));
+    public async Task ReplaceWithOwnText_FromTheNodeStart_IsByteIdenticalForEverySampledNode() {
+        var failures = ComputeRows().Where(r => r.Key.EndsWith("|replace", StringComparison.Ordinal) && r.Result.Contains("identical=N", StringComparison.Ordinal))
+            .Select(r => r.Key).ToList();
 
-        await Assert.That(counterExample.Key).IsEqualTo("demo/Poly.RestApi/library.poly|stage|Patron.Active|replace");
+        await Assert.That(failures).IsEmpty();
     }
 
     [Test]

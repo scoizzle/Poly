@@ -147,7 +147,9 @@ public partial class AnalyzerClosingRoundPinTests {
 
     [Test]
     public async Task TypelessSourcesIntoNamedTargets_AndFunctionReturns_AreFrozen() =>
-        await Assert.That(TypelessSourceRows()).IsEqualTo(Expected.TypelessSources);
+        // T-05a: master plus the FlipsA rows of grid "TypelessSources" (N + M is typed; A-assign).
+        await Assert.That(GridDifferences(TypelessSourceRows(), MasterPlusFlips("TypelessSources", Expected.TypelessSources)))
+            .IsEqualTo("");
 
     [Test]
     public async Task TypelessComparisonsOfDifferentFamilies_AreFrozen() =>

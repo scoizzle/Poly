@@ -321,20 +321,23 @@ public partial class AnalyzerClosingRoundPinTests {
     }
 
     [Test]
-    public async Task SumOverEachPropertyKind_IsFrozen() =>
-        await Assert.That(SumPropertyKindRows()).IsEqualTo(FormGridExpected.SumPropertyKinds);
+    public async Task SumOverEachPropertyKind_IsMasterPlusTheFlips() =>
+        await Assert.That(GridDifferences(SumPropertyKindRows(),
+            MasterPlusFlips("SumPropertyKinds", FormGridExpected.SumPropertyKinds))).IsEqualTo("");
 
     [Test]
-    public async Task FormByPositionGrid_IsFrozen() =>
-        await Assert.That(FormGridRows()).IsEqualTo(FormGridExpected.FormGrid);
+    public async Task FormByPositionGrid_IsMasterPlusTheFlips() =>
+        await Assert.That(GridDifferences(FormGridRows(), MasterPlusFlips("FormGrid", FormGridExpected.FormGrid))).IsEqualTo("");
 
     [Test]
-    public async Task DateOperationOverATypelessDateForm_IsFrozen() =>
-        await Assert.That(DateOperationOverTypelessDateRows()).IsEqualTo(FormGridExpected.DateOperationOverTypelessDate);
+    public async Task DateOperationOverATypelessDateForm_IsMasterPlusTheFlips() =>
+        await Assert.That(GridDifferences(DateOperationOverTypelessDateRows(),
+            MasterPlusFlips("DateOperationOverTypelessDate", FormGridExpected.DateOperationOverTypelessDate))).IsEqualTo("");
 
     [Test]
-    public async Task ImportedContractTypeSharingALocalName_IsFrozen() =>
-        await Assert.That(ImportedContractNameClashRows()).IsEqualTo(FormGridExpected.ImportedContractNameClash);
+    public async Task ImportedContractTypeSharingALocalName_IsMasterPlusTheFlips() =>
+        await Assert.That(GridDifferences(ImportedContractNameClashRows(),
+            MasterPlusFlips("ImportedContractNameClash", FormGridExpected.ImportedContractNameClash))).IsEqualTo("");
 
     private static class FormGridExpected {
         public const string FormGrid = """

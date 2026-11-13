@@ -764,15 +764,16 @@ internal static class BridgeGrid {
     /// <summary>
     /// The row that owns a cell the provider defines but the bridge never decides: the main emitter compiles every lambda of
     /// the program into its function table before the call quotes it (<c>AbiEmitter.Build</c>) and refuses this body (T-21);
-    /// the lowered analysis rejects the lifted <c>!</c> on <c>bool?</c> (T-28). Null: no owner.
+    /// the lowered analysis rejects the lifted <c>!</c> on <c>bool?</c> (T-28); the analysis types the operator as its
+    /// operand, so constant folding replaces it with the operand or a cast (T-17 for arithmetic, T-22 for bitwise). Null: no owner.
     /// </summary>
     public static string? OwnerOfUndecided(BridgeCase c) => Outcome(c) switch {
         { Stage: "main-rejected" } => "T-21 (the main emitter refuses the body while compiling the function table, before the bridge quotes it)",
         { Stage: "analysis-rejected" } when c.Op is OperatorKind.Not && c.Left.Nullable => "T-28 (the lowered analysis rejects the lifted ! on bool?)",
         { Replaced: true } outcome when outcome.ReplacedBy != nameof(Invoke) && Matches(outcome.Observed, Expectation(c)) =>
-            "T-26 (constant folding simplifies uint x * 1 to x, typed uint as C#'s constant conversion says; the provider says Int64)",
+            "T-17, then T-26 (the lowered analysis types uint * int as UInt32, so constant folding simplifies x * 1 to x, typed uint; the provider says Int64, C#'s constant conversion says UInt32)",
         { Replaced: true } outcome when outcome.ReplacedBy != nameof(Invoke) =>
-            "T-17 (constant folding simplifies uint x & -1 to x and x | -1 to an unresolved cast; C# says Int64)",
+            "T-22 (the lowered analysis types uint & int and uint | int as UInt32, so constant folding simplifies x & -1 to x and x | -1 to a cast the bridge cannot resolve; C# says Int64)",
         _ => null
     };
 
@@ -996,9 +997,9 @@ public class LambdaBridgeProviderTests {
     }
 
     private static readonly string[] UndecidedOwners = [
-        "T-17 (constant folding simplifies uint x & -1 to x and x | -1 to an unresolved cast; C# says Int64) = 2 016756e39c6a4811",
+        "T-17, then T-26 (the lowered analysis types uint * int as UInt32, so constant folding simplifies x * 1 to x, typed uint; the provider says Int64, C#'s constant conversion says UInt32) = 4 1d2a3808d3eec1bf",
         "T-21 (the main emitter refuses the body while compiling the function table, before the bridge quotes it) = 97 a63ff0548b6291dd",
-        "T-26 (constant folding simplifies uint x * 1 to x, typed uint as C#'s constant conversion says; the provider says Int64) = 4 1d2a3808d3eec1bf",
+        "T-22 (the lowered analysis types uint & int and uint | int as UInt32, so constant folding simplifies x & -1 to x and x | -1 to a cast the bridge cannot resolve; C# says Int64) = 2 016756e39c6a4811",
         "T-28 (the lowered analysis rejects the lifted ! on bool?) = 1 add0d5c7271ecdf8"
     ];
 
@@ -1125,7 +1126,7 @@ public class LambdaBridgeProviderTests {
         "return bridge-rejected = 484",
         "return ran = 192",
         // The run, not the prediction (4 and 60): constant folding replaces uint x | -1 with a cast the bridge cannot
-        // resolve, on master too, so that cell never ran (owned by T-17 above).
+        // resolve, on master too, so that cell never ran (owned by T-22 above).
         "uint32-constant bridge-rejected = 5",
         "uint32-constant ran = 59",
         "uint64-constant analysis-rejected = 264",
@@ -1196,7 +1197,7 @@ public class LambdaBridgeProviderTests {
         var disagreeing = BridgeGrid.Cases.Where(static c => BridgeGrid.BridgeDecides(c) && !BridgeGrid.Matches(BridgeGrid.Outcome(c).Observed, BridgeGrid.Expectation(c))).ToArray();
         await Assert.That(disagreeing.All(static c => c.Grid is "uint32-constant" or "constant-parameter")).IsTrue();
         // The run, not the prediction (23): constant folding replaces uint x * 1, 1 * x, x / 1 and x % 1 before the bridge
-        // sees them (typed uint, as C# types them; owned by T-26 above), so the bridge decides 19 of these cells.
+        // sees them (typed uint, as C# types them; owned by T-17, then T-26, above), so the bridge decides 19 of these cells.
         await Assert.That(ConstantFoldGrid.Pin([.. disagreeing.Select(static c => c.Line)])).IsEqualTo("19 8e16f2434cd878b6");
     }
 

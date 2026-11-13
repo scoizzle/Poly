@@ -330,4 +330,29 @@ public class CompatibilityProviderTests {
         await Assert.That(AssignErrors("Label", 'a')).IsEmpty();
         await Assert.That(AssignErrors("Count", true)).IsEquivalentTo(["cannot assign 'Boolean' to 'Count' (type 'Int64')"]);
     }
+
+    // ---- And over a bool and a bool? (T-20 re-review N1): pinned as it is today ----
+
+    /// <summary>
+    /// C# defines no <c>bool &amp;&amp; bool?</c> (CS0019), but <c>CheckBooleanOperands</c> judges by category, so the lowered
+    /// analysis accepts it and the VM runs it; constant folding no longer simplifies it (T-20). A KNOWN-WRONG result,
+    /// pinned as it is and not as it should be: with the right operand present and false, the VM answers true (it reads
+    /// the optional's presence, raw word 2). Row T-28 moves the Boolean operand checks onto the provider, which rejects
+    /// the pair as C# does.
+    /// </summary>
+    [Test]
+    public async Task And_TrueWithNullableBool_IsAccepted_AsToday_FalseOperandReadsTrue_T28() {
+        var node = new And(new Constant(true), new Parameter("f", TypeReference.To<bool?>()));
+        await Assert.That(Interpreter.Analyze(node).Diagnostics.Where(static d => d.Severity == DiagnosticSeverity.Error).Select(static d => d.Message).ToArray()).IsEmpty();
+        var program = Interpreter.Compile(node);
+        await Assert.That(program.RootClrType).IsEqualTo(typeof(bool));
+        using (var present = Interpreter.Execute(program, s => s.SetArgs(true)))
+            await Assert.That(present.GetValue<bool>()).IsTrue();
+        using (var absent = Interpreter.Execute(program, s => s.SetArgs((object?)null)))
+            await Assert.That(absent.GetValue<bool>()).IsFalse();
+        using (var falseOperand = Interpreter.Execute(program, s => s.SetArgs(false))) {
+            await Assert.That(falseOperand.RawValue).IsEqualTo(2L);
+            await Assert.That(falseOperand.GetValue<bool>()).IsTrue();
+        }
+    }
 }

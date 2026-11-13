@@ -17,10 +17,10 @@ P	demo/Poly.RestApi/library.poly|navigation|Patron.loans|add	err EDIT_NAME_COLLI
 P	demo/Poly.RestApi/library.poly|policy|Patron.GoodStanding|replace	ok identical=Y delta=0 sha=C73C59B90E0A
 P	demo/Poly.RestApi/library.poly|policy|Patron.GoodStanding|remove	ok identical=- delta=-46 sha=E6EAA66511F0
 P	demo/Poly.RestApi/library.poly|policy|Patron.GoodStanding|add	err EDIT_NAME_COLLISION
-P	demo/Poly.RestApi/library.poly|stage|Patron.Active|replace	ok identical=N delta=36 sha=8B86D224A304
+P	demo/Poly.RestApi/library.poly|stage|Patron.Active|replace	ok identical=Y delta=0 sha=C73C59B90E0A
 P	demo/Poly.RestApi/library.poly|stage|Patron.Active|remove	ok identical=- delta=-642 sha=447A56290AF4
 P	demo/Poly.RestApi/library.poly|stage|Patron.Active|add	err EDIT_NAME_COLLISION
-P	demo/Poly.RestApi/library.poly|action|Patron.Active.CheckOut|replace	ok identical=N delta=40 sha=745315AB0C7D
+P	demo/Poly.RestApi/library.poly|action|Patron.Active.CheckOut|replace	ok identical=Y delta=0 sha=C73C59B90E0A
 P	demo/Poly.RestApi/library.poly|action|Patron.Active.CheckOut|remove	ok identical=- delta=-440 sha=6D35BE6A519D
 P	demo/Poly.RestApi/library.poly|action|Patron.Active.CheckOut|add	err EDIT_NAME_COLLISION
 P	demo/live/checkout.poly|entity|Order|replace	ok identical=Y delta=0 sha=8E92DFA3FABA
@@ -29,7 +29,7 @@ P	demo/live/checkout.poly|entity|Order|add	err EDIT_NAME_COLLISION
 P	demo/live/checkout.poly|property|Order.Total|replace	ok identical=Y delta=0 sha=8E92DFA3FABA
 P	demo/live/checkout.poly|property|Order.Total|remove	ok identical=- delta=-16 sha=FB8EAC04E807
 P	demo/live/checkout.poly|property|Order.Total|add	err EDIT_NAME_COLLISION
-P	demo/live/checkout.poly|action|Order.Pay|replace	ok identical=N delta=4 sha=BECDC13EC85F
+P	demo/live/checkout.poly|action|Order.Pay|replace	ok identical=Y delta=0 sha=8E92DFA3FABA
 P	demo/live/checkout.poly|action|Order.Pay|remove	ok identical=- delta=-71 sha=3F3C5ED6BF6F
 P	demo/live/checkout.poly|action|Order.Pay|add	err EDIT_NAME_COLLISION
 P	demo/live/checkout.poly|contract|Stripe|replace	ok identical=Y delta=0 sha=8E92DFA3FABA
@@ -53,7 +53,7 @@ P	docs/missions/evolve-2026-10-13/ambig-backref.poly|property|User.Name|add	err 
 P	docs/missions/evolve-2026-10-13/ambig-backref.poly|navigation|User.tasks|replace	ok identical=Y delta=0 sha=3B78C3F4DAD2
 P	docs/missions/evolve-2026-10-13/ambig-backref.poly|navigation|User.tasks|remove	ok identical=- delta=-19 sha=F7261A40926E
 P	docs/missions/evolve-2026-10-13/ambig-backref.poly|navigation|User.tasks|add	err EDIT_NAME_COLLISION
-P	docs/missions/evolve-2026-10-13/ambig-backref.poly|action|User.MakeTask|replace	ok identical=N delta=4 sha=80FB25ADF948
+P	docs/missions/evolve-2026-10-13/ambig-backref.poly|action|User.MakeTask|replace	ok identical=Y delta=0 sha=3B78C3F4DAD2
 P	docs/missions/evolve-2026-10-13/ambig-backref.poly|action|User.MakeTask|remove	ok identical=- delta=-60 sha=E0867107C095
 P	docs/missions/evolve-2026-10-13/ambig-backref.poly|action|User.MakeTask|add	err EDIT_NAME_COLLISION
 P	docs/missions/evolve-2026-10-13/ambig-backref.poly|stage|Task.New|replace	ok identical=Y delta=0 sha=3B78C3F4DAD2
@@ -71,13 +71,13 @@ P	docs/missions/evolve-2026-10-13/billing.poly|property|Meter.Serial|add	err EDI
 P	docs/missions/evolve-2026-10-13/billing.poly|navigation|Meter.readings|replace	ok identical=Y delta=0 sha=AF8708D8C9E3
 P	docs/missions/evolve-2026-10-13/billing.poly|navigation|Meter.readings|remove	ok identical=- delta=-25 sha=A27104FBE849
 P	docs/missions/evolve-2026-10-13/billing.poly|navigation|Meter.readings|add	err EDIT_NAME_COLLISION
-P	docs/missions/evolve-2026-10-13/billing.poly|action|Meter.AddReading|replace	ok identical=N delta=4 sha=EBDDF15B2A73
+P	docs/missions/evolve-2026-10-13/billing.poly|action|Meter.AddReading|replace	ok identical=Y delta=0 sha=AF8708D8C9E3
 P	docs/missions/evolve-2026-10-13/billing.poly|action|Meter.AddReading|remove	ok identical=- delta=-111 sha=DD3129F59FA8
 P	docs/missions/evolve-2026-10-13/billing.poly|action|Meter.AddReading|add	err EDIT_NAME_COLLISION
 P	docs/missions/evolve-2026-10-13/billing.poly|policy|Reading.Unbilled|replace	ok identical=Y delta=0 sha=AF8708D8C9E3
 P	docs/missions/evolve-2026-10-13/billing.poly|policy|Reading.Unbilled|remove	ok identical=- delta=-40 sha=6557D0727C44
 P	docs/missions/evolve-2026-10-13/billing.poly|policy|Reading.Unbilled|add	err EDIT_NAME_COLLISION
-P	docs/missions/evolve-2026-10-13/billing.poly|stage|Reading.New|replace	ok identical=N delta=26 sha=224540B10731
+P	docs/missions/evolve-2026-10-13/billing.poly|stage|Reading.New|replace	ok identical=Y delta=0 sha=AF8708D8C9E3
 P	docs/missions/evolve-2026-10-13/billing.poly|stage|Reading.New|remove	ok identical=- delta=-313 sha=5599FA6CCC07
 P	docs/missions/evolve-2026-10-13/billing.poly|stage|Reading.New|add	err EDIT_NAME_COLLISION
 P	docs/missions/evolve-2026-10-13/claims.poly|uses|uses:temporal|replace	ok identical=Y delta=0 sha=CF1A13897E62
@@ -92,13 +92,13 @@ P	docs/missions/evolve-2026-10-13/claims.poly|property|Claimant.Name|add	err EDI
 P	docs/missions/evolve-2026-10-13/claims.poly|navigation|Claimant.claims|replace	ok identical=Y delta=0 sha=CF1A13897E62
 P	docs/missions/evolve-2026-10-13/claims.poly|navigation|Claimant.claims|remove	ok identical=- delta=-21 sha=7D75CFC47B2F
 P	docs/missions/evolve-2026-10-13/claims.poly|navigation|Claimant.claims|add	err EDIT_NAME_COLLISION
-P	docs/missions/evolve-2026-10-13/claims.poly|action|Claimant.FileClaim|replace	ok identical=N delta=4 sha=919842ED2B39
+P	docs/missions/evolve-2026-10-13/claims.poly|action|Claimant.FileClaim|replace	ok identical=Y delta=0 sha=CF1A13897E62
 P	docs/missions/evolve-2026-10-13/claims.poly|action|Claimant.FileClaim|remove	ok identical=- delta=-92 sha=427A977E2CDE
 P	docs/missions/evolve-2026-10-13/claims.poly|action|Claimant.FileClaim|add	err EDIT_NAME_COLLISION
 P	docs/missions/evolve-2026-10-13/claims.poly|policy|Claim.TooLarge|replace	ok identical=Y delta=0 sha=CF1A13897E62
 P	docs/missions/evolve-2026-10-13/claims.poly|policy|Claim.TooLarge|remove	ok identical=- delta=-39 sha=76BCFBC35514
 P	docs/missions/evolve-2026-10-13/claims.poly|policy|Claim.TooLarge|add	err EDIT_NAME_COLLISION
-P	docs/missions/evolve-2026-10-13/claims.poly|stage|Claim.Submitted|replace	ok identical=N delta=10 sha=451EB6F07AA1
+P	docs/missions/evolve-2026-10-13/claims.poly|stage|Claim.Submitted|replace	ok identical=Y delta=0 sha=CF1A13897E62
 P	docs/missions/evolve-2026-10-13/claims.poly|stage|Claim.Submitted|remove	ok identical=- delta=-127 sha=075558AAB41D
 P	docs/missions/evolve-2026-10-13/claims.poly|stage|Claim.Submitted|add	err EDIT_NAME_COLLISION
 P	docs/missions/evolve-2026-10-13/disputes.poly|uses|uses:temporal|replace	ok identical=Y delta=0 sha=A8B25C8BCDAA
@@ -122,10 +122,10 @@ P	docs/missions/evolve-2026-10-13/disputes.poly|navigation|Customer.disputes|add
 P	docs/missions/evolve-2026-10-13/disputes.poly|policy|Customer.NoLost|replace	ok identical=Y delta=0 sha=A8B25C8BCDAA
 P	docs/missions/evolve-2026-10-13/disputes.poly|policy|Customer.NoLost|remove	ok identical=- delta=-59 sha=AAFC7271A06E
 P	docs/missions/evolve-2026-10-13/disputes.poly|policy|Customer.NoLost|add	err EDIT_NAME_COLLISION
-P	docs/missions/evolve-2026-10-13/disputes.poly|action|Customer.OpenDispute|replace	ok identical=N delta=4 sha=A67C4DE2E0E3
+P	docs/missions/evolve-2026-10-13/disputes.poly|action|Customer.OpenDispute|replace	ok identical=Y delta=0 sha=A8B25C8BCDAA
 P	docs/missions/evolve-2026-10-13/disputes.poly|action|Customer.OpenDispute|remove	ok identical=- delta=-149 sha=465C8BCA47B5
 P	docs/missions/evolve-2026-10-13/disputes.poly|action|Customer.OpenDispute|add	err EDIT_NAME_COLLISION
-P	docs/missions/evolve-2026-10-13/disputes.poly|stage|Dispute.Open|replace	ok identical=N delta=18 sha=2FE5BE639BB4
+P	docs/missions/evolve-2026-10-13/disputes.poly|stage|Dispute.Open|replace	ok identical=Y delta=0 sha=A8B25C8BCDAA
 P	docs/missions/evolve-2026-10-13/disputes.poly|stage|Dispute.Open|remove	ok identical=- delta=-199 sha=9D05ED9ABF2B
 P	docs/missions/evolve-2026-10-13/disputes.poly|stage|Dispute.Open|add	err EDIT_NAME_COLLISION
 P	docs/missions/evolve-2026-10-13/library.poly|uses|uses:temporal|replace	ok identical=Y delta=0 sha=A37F590872D8
@@ -146,10 +146,10 @@ P	docs/missions/evolve-2026-10-13/library.poly|navigation|Patron.loans|add	err E
 P	docs/missions/evolve-2026-10-13/library.poly|policy|Patron.AtLimit|replace	ok identical=Y delta=0 sha=A37F590872D8
 P	docs/missions/evolve-2026-10-13/library.poly|policy|Patron.AtLimit|remove	ok identical=- delta=-39 sha=2C7613806B48
 P	docs/missions/evolve-2026-10-13/library.poly|policy|Patron.AtLimit|add	err EDIT_NAME_COLLISION
-P	docs/missions/evolve-2026-10-13/library.poly|action|Patron.CheckOut|replace	ok identical=N delta=8 sha=C3BEDA9E3583
+P	docs/missions/evolve-2026-10-13/library.poly|action|Patron.CheckOut|replace	ok identical=Y delta=0 sha=A37F590872D8
 P	docs/missions/evolve-2026-10-13/library.poly|action|Patron.CheckOut|remove	ok identical=- delta=-125 sha=3249F258ACB6
 P	docs/missions/evolve-2026-10-13/library.poly|action|Patron.CheckOut|add	err EDIT_NAME_COLLISION
-P	docs/missions/evolve-2026-10-13/library.poly|stage|Loan.Active|replace	ok identical=N delta=16 sha=1B6A8FBA84CA
+P	docs/missions/evolve-2026-10-13/library.poly|stage|Loan.Active|replace	ok identical=Y delta=0 sha=A37F590872D8
 P	docs/missions/evolve-2026-10-13/library.poly|stage|Loan.Active|remove	ok identical=- delta=-258 sha=EFDB5D47477F
 P	docs/missions/evolve-2026-10-13/library.poly|stage|Loan.Active|add	err EDIT_NAME_COLLISION
 P	docs/missions/evolve-2026-10-13/library.poly|bind|SendNotice|replace	ok identical=Y delta=0 sha=A37F590872D8
@@ -167,10 +167,10 @@ P	docs/missions/evolve-2026-10-13/saas.poly|property|Plan.Name|add	err EDIT_NAME
 P	docs/missions/evolve-2026-10-13/saas.poly|policy|Subscription.IsExpired|replace	ok identical=Y delta=0 sha=4F48474B68F1
 P	docs/missions/evolve-2026-10-13/saas.poly|policy|Subscription.IsExpired|remove	ok identical=- delta=-40 sha=FB60CE3D1B32
 P	docs/missions/evolve-2026-10-13/saas.poly|policy|Subscription.IsExpired|add	err EDIT_NAME_COLLISION
-P	docs/missions/evolve-2026-10-13/saas.poly|stage|Subscription.Trial|replace	ok identical=N delta=14 sha=DBC510D8E905
+P	docs/missions/evolve-2026-10-13/saas.poly|stage|Subscription.Trial|replace	ok identical=Y delta=0 sha=4F48474B68F1
 P	docs/missions/evolve-2026-10-13/saas.poly|stage|Subscription.Trial|remove	ok identical=- delta=-206 sha=8C0D4888453D
 P	docs/missions/evolve-2026-10-13/saas.poly|stage|Subscription.Trial|add	err EDIT_NAME_COLLISION
-P	docs/missions/evolve-2026-10-13/saas.poly|action|Subscription.Trial.Activate|replace	ok identical=N delta=12 sha=F9F53BA834F9
+P	docs/missions/evolve-2026-10-13/saas.poly|action|Subscription.Trial.Activate|replace	ok identical=Y delta=0 sha=4F48474B68F1
 P	docs/missions/evolve-2026-10-13/saas.poly|action|Subscription.Trial.Activate|remove	ok identical=- delta=-99 sha=DCAB06F1F104
 P	docs/missions/evolve-2026-10-13/saas.poly|action|Subscription.Trial.Activate|add	err EDIT_NAME_COLLISION
 P	docs/missions/evolve-2026-10-13/smarthome.poly|uses|uses:temporal|replace	ok identical=Y delta=0 sha=65A4BAE0F611
@@ -185,10 +185,10 @@ P	docs/missions/evolve-2026-10-13/smarthome.poly|property|Scene.Name|add	err EDI
 P	docs/missions/evolve-2026-10-13/smarthome.poly|navigation|Scene.devices|replace	ok identical=Y delta=0 sha=65A4BAE0F611
 P	docs/missions/evolve-2026-10-13/smarthome.poly|navigation|Scene.devices|remove	ok identical=- delta=-23 sha=0E814F0C445D
 P	docs/missions/evolve-2026-10-13/smarthome.poly|navigation|Scene.devices|add	err EDIT_NAME_COLLISION
-P	docs/missions/evolve-2026-10-13/smarthome.poly|action|Scene.Activate|replace	ok identical=N delta=4 sha=C06793C34690
+P	docs/missions/evolve-2026-10-13/smarthome.poly|action|Scene.Activate|replace	ok identical=Y delta=0 sha=65A4BAE0F611
 P	docs/missions/evolve-2026-10-13/smarthome.poly|action|Scene.Activate|remove	ok identical=- delta=-75 sha=4DEC6314A2C5
 P	docs/missions/evolve-2026-10-13/smarthome.poly|action|Scene.Activate|add	err EDIT_NAME_COLLISION
-P	docs/missions/evolve-2026-10-13/smarthome.poly|stage|Device.Off|replace	ok identical=N delta=18 sha=BFC5AD3743EE
+P	docs/missions/evolve-2026-10-13/smarthome.poly|stage|Device.Off|replace	ok identical=Y delta=0 sha=65A4BAE0F611
 P	docs/missions/evolve-2026-10-13/smarthome.poly|stage|Device.Off|remove	ok identical=- delta=-203 sha=A50C04B1060E
 P	docs/missions/evolve-2026-10-13/smarthome.poly|stage|Device.Off|add	err EDIT_NAME_COLLISION
 P	docs/missions/evolve-2026-10-13/university-http.poly|uses|uses:temporal|replace	ok identical=Y delta=0 sha=7DE7D1A8BB6D
@@ -206,10 +206,10 @@ P	docs/missions/evolve-2026-10-13/university-http.poly|navigation|Student.enroll
 P	docs/missions/evolve-2026-10-13/university-http.poly|policy|Student.Overloaded|replace	ok identical=Y delta=0 sha=7DE7D1A8BB6D
 P	docs/missions/evolve-2026-10-13/university-http.poly|policy|Student.Overloaded|remove	ok identical=- delta=-49 sha=222ABBDC2F46
 P	docs/missions/evolve-2026-10-13/university-http.poly|policy|Student.Overloaded|add	err EDIT_NAME_COLLISION
-P	docs/missions/evolve-2026-10-13/university-http.poly|action|Student.Enroll|replace	ok identical=N delta=8 sha=9CD9A85B0083
+P	docs/missions/evolve-2026-10-13/university-http.poly|action|Student.Enroll|replace	ok identical=Y delta=0 sha=7DE7D1A8BB6D
 P	docs/missions/evolve-2026-10-13/university-http.poly|action|Student.Enroll|remove	ok identical=- delta=-132 sha=1B6014AF9BC1
 P	docs/missions/evolve-2026-10-13/university-http.poly|action|Student.Enroll|add	err EDIT_NAME_COLLISION
-P	docs/missions/evolve-2026-10-13/university-http.poly|stage|Enrollment.Enrolled|replace	ok identical=N delta=12 sha=87B9A16483D0
+P	docs/missions/evolve-2026-10-13/university-http.poly|stage|Enrollment.Enrolled|replace	ok identical=Y delta=0 sha=7DE7D1A8BB6D
 P	docs/missions/evolve-2026-10-13/university-http.poly|stage|Enrollment.Enrolled|remove	ok identical=- delta=-168 sha=F35171E3DD31
 P	docs/missions/evolve-2026-10-13/university-http.poly|stage|Enrollment.Enrolled|add	err EDIT_NAME_COLLISION
 P	docs/missions/evolve-2026-10-13/university.poly|uses|uses:temporal|replace	ok identical=Y delta=0 sha=D4B9478F5A23
@@ -227,10 +227,10 @@ P	docs/missions/evolve-2026-10-13/university.poly|navigation|Student.enrollments
 P	docs/missions/evolve-2026-10-13/university.poly|policy|Student.Overloaded|replace	ok identical=Y delta=0 sha=D4B9478F5A23
 P	docs/missions/evolve-2026-10-13/university.poly|policy|Student.Overloaded|remove	ok identical=- delta=-49 sha=4B667736CC51
 P	docs/missions/evolve-2026-10-13/university.poly|policy|Student.Overloaded|add	err EDIT_NAME_COLLISION
-P	docs/missions/evolve-2026-10-13/university.poly|action|Student.Enroll|replace	ok identical=N delta=8 sha=E66E2C9474BF
+P	docs/missions/evolve-2026-10-13/university.poly|action|Student.Enroll|replace	ok identical=Y delta=0 sha=D4B9478F5A23
 P	docs/missions/evolve-2026-10-13/university.poly|action|Student.Enroll|remove	ok identical=- delta=-132 sha=AD75D74942C2
 P	docs/missions/evolve-2026-10-13/university.poly|action|Student.Enroll|add	err EDIT_NAME_COLLISION
-P	docs/missions/evolve-2026-10-13/university.poly|stage|Enrollment.Enrolled|replace	ok identical=N delta=12 sha=EDBB4751D13D
+P	docs/missions/evolve-2026-10-13/university.poly|stage|Enrollment.Enrolled|replace	ok identical=Y delta=0 sha=D4B9478F5A23
 P	docs/missions/evolve-2026-10-13/university.poly|stage|Enrollment.Enrolled|remove	ok identical=- delta=-168 sha=8D40AD554FD4
 P	docs/missions/evolve-2026-10-13/university.poly|stage|Enrollment.Enrolled|add	err EDIT_NAME_COLLISION
 P	docs/missions/evolve-2026-10-14/cart.poly|uses|uses:temporal|replace	ok identical=Y delta=0 sha=6E8A9B7178EE
@@ -245,10 +245,10 @@ P	docs/missions/evolve-2026-10-14/cart.poly|property|Cart.Name|add	err EDIT_NAME
 P	docs/missions/evolve-2026-10-14/cart.poly|navigation|Cart.lines|replace	ok identical=Y delta=0 sha=6E8A9B7178EE
 P	docs/missions/evolve-2026-10-14/cart.poly|navigation|Cart.lines|remove	ok identical=- delta=-25 sha=22021AD13F2E
 P	docs/missions/evolve-2026-10-14/cart.poly|navigation|Cart.lines|add	err EDIT_NAME_COLLISION
-P	docs/missions/evolve-2026-10-14/cart.poly|action|Cart.AddItem|replace	ok identical=N delta=8 sha=B64B7894299C
+P	docs/missions/evolve-2026-10-14/cart.poly|action|Cart.AddItem|replace	ok identical=Y delta=0 sha=6E8A9B7178EE
 P	docs/missions/evolve-2026-10-14/cart.poly|action|Cart.AddItem|remove	ok identical=- delta=-198 sha=1BB1F2D954CB
 P	docs/missions/evolve-2026-10-14/cart.poly|action|Cart.AddItem|add	err EDIT_NAME_COLLISION
-P	docs/missions/evolve-2026-10-14/cart.poly|stage|Cart.Active|replace	ok identical=N delta=4 sha=E6749D6B0E06
+P	docs/missions/evolve-2026-10-14/cart.poly|stage|Cart.Active|replace	ok identical=Y delta=0 sha=6E8A9B7178EE
 P	docs/missions/evolve-2026-10-14/cart.poly|stage|Cart.Active|remove	ok identical=- delta=-72 sha=B0F9833CCCC5
 P	docs/missions/evolve-2026-10-14/cart.poly|stage|Cart.Active|add	err EDIT_NAME_COLLISION
 P	docs/missions/evolve-2026-10-14/durtype.poly|uses|uses:temporal|replace	ok identical=Y delta=0 sha=79F6882D2590
@@ -272,13 +272,13 @@ P	docs/missions/evolve-2026-10-14/jobqueue.poly|property|Queue.Name|add	err EDIT
 P	docs/missions/evolve-2026-10-14/jobqueue.poly|navigation|Queue.jobs|replace	ok identical=Y delta=0 sha=31DE5DB9B95D
 P	docs/missions/evolve-2026-10-14/jobqueue.poly|navigation|Queue.jobs|remove	ok identical=- delta=-17 sha=D28E14F0683E
 P	docs/missions/evolve-2026-10-14/jobqueue.poly|navigation|Queue.jobs|add	err EDIT_NAME_COLLISION
-P	docs/missions/evolve-2026-10-14/jobqueue.poly|action|Queue.Enqueue|replace	ok identical=N delta=4 sha=22DEFAA08777
+P	docs/missions/evolve-2026-10-14/jobqueue.poly|action|Queue.Enqueue|replace	ok identical=Y delta=0 sha=31DE5DB9B95D
 P	docs/missions/evolve-2026-10-14/jobqueue.poly|action|Queue.Enqueue|remove	ok identical=- delta=-74 sha=CE2FCD082E64
 P	docs/missions/evolve-2026-10-14/jobqueue.poly|action|Queue.Enqueue|add	err EDIT_NAME_COLLISION
 P	docs/missions/evolve-2026-10-14/jobqueue.poly|policy|Job.CanRetry|replace	ok identical=Y delta=0 sha=31DE5DB9B95D
 P	docs/missions/evolve-2026-10-14/jobqueue.poly|policy|Job.CanRetry|remove	ok identical=- delta=-45 sha=3037EA5B71CC
 P	docs/missions/evolve-2026-10-14/jobqueue.poly|policy|Job.CanRetry|add	err EDIT_NAME_COLLISION
-P	docs/missions/evolve-2026-10-14/jobqueue.poly|stage|Job.Queued|replace	ok identical=N delta=4 sha=BBCD354AA62B
+P	docs/missions/evolve-2026-10-14/jobqueue.poly|stage|Job.Queued|replace	ok identical=Y delta=0 sha=31DE5DB9B95D
 P	docs/missions/evolve-2026-10-14/jobqueue.poly|stage|Job.Queued|remove	ok identical=- delta=-66 sha=C534B619C45F
 P	docs/missions/evolve-2026-10-14/jobqueue.poly|stage|Job.Queued|add	err EDIT_NAME_COLLISION
 P	docs/missions/evolve-2026-10-14/notifications.poly|uses|uses:temporal|replace	ok identical=Y delta=0 sha=24F64C3BA03B
@@ -293,7 +293,7 @@ P	docs/missions/evolve-2026-10-14/notifications.poly|property|User.Name|add	err 
 P	docs/missions/evolve-2026-10-14/notifications.poly|navigation|User.notifications|replace	ok identical=Y delta=0 sha=24F64C3BA03B
 P	docs/missions/evolve-2026-10-14/notifications.poly|navigation|User.notifications|remove	ok identical=- delta=-35 sha=D8D40BBC51FA
 P	docs/missions/evolve-2026-10-14/notifications.poly|navigation|User.notifications|add	err EDIT_NAME_COLLISION
-P	docs/missions/evolve-2026-10-14/notifications.poly|stage|User.Active|replace	ok identical=N delta=16 sha=FD47AE8239DC
+P	docs/missions/evolve-2026-10-14/notifications.poly|stage|User.Active|replace	ok identical=Y delta=0 sha=24F64C3BA03B
 P	docs/missions/evolve-2026-10-14/notifications.poly|stage|User.Active|remove	ok identical=- delta=-221 sha=96EED92512A3
 P	docs/missions/evolve-2026-10-14/notifications.poly|stage|User.Active|add	err EDIT_NAME_COLLISION
 P	docs/missions/evolve-2026-10-14/notifications.poly|action|User.Active.GoAway|replace	ok identical=Y delta=0 sha=24F64C3BA03B
@@ -311,7 +311,7 @@ P	docs/missions/evolve-2026-10-14/ownedunlink.poly|property|Cart.Name|add	err ED
 P	docs/missions/evolve-2026-10-14/ownedunlink.poly|navigation|Cart.lines|replace	ok identical=Y delta=0 sha=9EE97FD83986
 P	docs/missions/evolve-2026-10-14/ownedunlink.poly|navigation|Cart.lines|remove	ok identical=- delta=-25 sha=818815D5E7B8
 P	docs/missions/evolve-2026-10-14/ownedunlink.poly|navigation|Cart.lines|add	err EDIT_NAME_COLLISION
-P	docs/missions/evolve-2026-10-14/ownedunlink.poly|action|Cart.AddLine|replace	ok identical=N delta=4 sha=E56F85A4C7AE
+P	docs/missions/evolve-2026-10-14/ownedunlink.poly|action|Cart.AddLine|replace	ok identical=Y delta=0 sha=9EE97FD83986
 P	docs/missions/evolve-2026-10-14/ownedunlink.poly|action|Cart.AddLine|remove	ok identical=- delta=-69 sha=25C23C058299
 P	docs/missions/evolve-2026-10-14/ownedunlink.poly|action|Cart.AddLine|add	err EDIT_NAME_COLLISION
 P	docs/missions/evolve-2026-10-14/ownedunlink.poly|stage|Line.New|replace	ok identical=Y delta=0 sha=9EE97FD83986
@@ -332,7 +332,7 @@ P	docs/missions/evolve-2026-10-14/ratelimit.poly|navigation|ApiKey.requests|add	
 P	docs/missions/evolve-2026-10-14/ratelimit.poly|policy|ApiKey.EnabledPolicy|replace	ok identical=Y delta=0 sha=859ECE86C42F
 P	docs/missions/evolve-2026-10-14/ratelimit.poly|policy|ApiKey.EnabledPolicy|remove	ok identical=- delta=-44 sha=5127DBCC208D
 P	docs/missions/evolve-2026-10-14/ratelimit.poly|policy|ApiKey.EnabledPolicy|add	err EDIT_NAME_COLLISION
-P	docs/missions/evolve-2026-10-14/ratelimit.poly|action|ApiKey.Allow|replace	ok identical=N delta=10 sha=4C72E5325B2E
+P	docs/missions/evolve-2026-10-14/ratelimit.poly|action|ApiKey.Allow|replace	ok identical=Y delta=0 sha=859ECE86C42F
 P	docs/missions/evolve-2026-10-14/ratelimit.poly|action|ApiKey.Allow|remove	ok identical=- delta=-115 sha=CA4647AF80E7
 P	docs/missions/evolve-2026-10-14/ratelimit.poly|action|ApiKey.Allow|add	err EDIT_NAME_COLLISION
 P	docs/missions/evolve-2026-10-14/sessions.poly|uses|uses:temporal|replace	ok identical=Y delta=0 sha=3FA1667B441D
@@ -347,13 +347,13 @@ P	docs/missions/evolve-2026-10-14/sessions.poly|property|User.Name|add	err EDIT_
 P	docs/missions/evolve-2026-10-14/sessions.poly|navigation|User.sessions|replace	ok identical=Y delta=0 sha=3FA1667B441D
 P	docs/missions/evolve-2026-10-14/sessions.poly|navigation|User.sessions|remove	ok identical=- delta=-25 sha=5CECCF7C5C8C
 P	docs/missions/evolve-2026-10-14/sessions.poly|navigation|User.sessions|add	err EDIT_NAME_COLLISION
-P	docs/missions/evolve-2026-10-14/sessions.poly|action|User.Login|replace	ok identical=N delta=4 sha=845369C837BC
+P	docs/missions/evolve-2026-10-14/sessions.poly|action|User.Login|replace	ok identical=Y delta=0 sha=3FA1667B441D
 P	docs/missions/evolve-2026-10-14/sessions.poly|action|User.Login|remove	ok identical=- delta=-100 sha=750593BC7661
 P	docs/missions/evolve-2026-10-14/sessions.poly|action|User.Login|add	err EDIT_NAME_COLLISION
 P	docs/missions/evolve-2026-10-14/sessions.poly|policy|Session.IsExpired|replace	ok identical=Y delta=0 sha=3FA1667B441D
 P	docs/missions/evolve-2026-10-14/sessions.poly|policy|Session.IsExpired|remove	ok identical=- delta=-41 sha=68F54C8ED348
 P	docs/missions/evolve-2026-10-14/sessions.poly|policy|Session.IsExpired|add	err EDIT_NAME_COLLISION
-P	docs/missions/evolve-2026-10-14/sessions.poly|stage|Session.Active|replace	ok identical=N delta=12 sha=E78C5E7DBF0A
+P	docs/missions/evolve-2026-10-14/sessions.poly|stage|Session.Active|replace	ok identical=Y delta=0 sha=3FA1667B441D
 P	docs/missions/evolve-2026-10-14/sessions.poly|stage|Session.Active|remove	ok identical=- delta=-168 sha=0DF9A31D07F1
 P	docs/missions/evolve-2026-10-14/sessions.poly|stage|Session.Active|add	err EDIT_NAME_COLLISION
 P	docs/probes/dogfood/crm.poly|uses|uses:temporal|replace	ok identical=Y delta=0 sha=F1F015A10B03
@@ -374,10 +374,10 @@ P	docs/probes/dogfood/crm.poly|property|Site.City|add	err EDIT_NAME_COLLISION
 P	docs/probes/dogfood/crm.poly|policy|Lead.HasAccount|replace	ok identical=Y delta=0 sha=F1F015A10B03
 P	docs/probes/dogfood/crm.poly|policy|Lead.HasAccount|remove	ok identical=- delta=-40 sha=1BE643444980
 P	docs/probes/dogfood/crm.poly|policy|Lead.HasAccount|add	err EDIT_NAME_COLLISION
-P	docs/probes/dogfood/crm.poly|stage|Lead.New|replace	ok identical=N delta=14 sha=9A30D7D57A5F
+P	docs/probes/dogfood/crm.poly|stage|Lead.New|replace	ok identical=Y delta=0 sha=F1F015A10B03
 P	docs/probes/dogfood/crm.poly|stage|Lead.New|remove	ok identical=- delta=-152 sha=54E6887ABBB4
 P	docs/probes/dogfood/crm.poly|stage|Lead.New|add	err EDIT_NAME_COLLISION
-P	docs/probes/dogfood/crm.poly|action|Lead.New.Convert|replace	ok identical=N delta=16 sha=DBF8B453DAD9
+P	docs/probes/dogfood/crm.poly|action|Lead.New.Convert|replace	ok identical=Y delta=0 sha=F1F015A10B03
 P	docs/probes/dogfood/crm.poly|action|Lead.New.Convert|remove	ok identical=- delta=-87 sha=C13949051BEC
 P	docs/probes/dogfood/crm.poly|action|Lead.New.Convert|add	err EDIT_NAME_COLLISION
 P	docs/probes/dogfood/crm.poly|navigation|Account.hq|replace	ok identical=Y delta=0 sha=F1F015A10B03
@@ -392,7 +392,7 @@ P	docs/probes/dogfood/entry-transition-in-first-stage.poly|entity|Z|add	err EDIT
 P	docs/probes/dogfood/entry-transition-in-first-stage.poly|property|Z.Tag|replace	ok identical=Y delta=0 sha=7351AB8A70AB
 P	docs/probes/dogfood/entry-transition-in-first-stage.poly|property|Z.Tag|remove	ok identical=- delta=-12 sha=B57BF0D2BE0E
 P	docs/probes/dogfood/entry-transition-in-first-stage.poly|property|Z.Tag|add	err EDIT_NAME_COLLISION
-P	docs/probes/dogfood/entry-transition-in-first-stage.poly|stage|Z.A|replace	ok identical=N delta=4 sha=D3E891D89107
+P	docs/probes/dogfood/entry-transition-in-first-stage.poly|stage|Z.A|replace	ok identical=Y delta=0 sha=7351AB8A70AB
 P	docs/probes/dogfood/entry-transition-in-first-stage.poly|stage|Z.A|remove	ok identical=- delta=-47 sha=7A4B3522EC68
 P	docs/probes/dogfood/entry-transition-in-first-stage.poly|stage|Z.A|add	err EDIT_NAME_COLLISION
 P	docs/probes/dogfood/hotel.poly|uses|uses:temporal|replace	ok identical=Y delta=0 sha=60653169C4CB
@@ -410,10 +410,10 @@ P	docs/probes/dogfood/hotel.poly|navigation|Property.halls|add	err EDIT_NAME_COL
 P	docs/probes/dogfood/hotel.poly|policy|Property.HasHalls|replace	ok identical=Y delta=0 sha=60653169C4CB
 P	docs/probes/dogfood/hotel.poly|policy|Property.HasHalls|remove	ok identical=- delta=-39 sha=C7F9864A27E3
 P	docs/probes/dogfood/hotel.poly|policy|Property.HasHalls|add	err EDIT_NAME_COLLISION
-P	docs/probes/dogfood/hotel.poly|stage|Property.Open|replace	ok identical=N delta=10 sha=07078FCBFE72
+P	docs/probes/dogfood/hotel.poly|stage|Property.Open|replace	ok identical=Y delta=0 sha=60653169C4CB
 P	docs/probes/dogfood/hotel.poly|stage|Property.Open|remove	ok identical=- delta=-208 sha=E09809432597
 P	docs/probes/dogfood/hotel.poly|stage|Property.Open|add	err EDIT_NAME_COLLISION
-P	docs/probes/dogfood/hotel.poly|action|Property.Open.AddHall|replace	ok identical=N delta=8 sha=82EC262DB3E0
+P	docs/probes/dogfood/hotel.poly|action|Property.Open.AddHall|replace	ok identical=Y delta=0 sha=60653169C4CB
 P	docs/probes/dogfood/hotel.poly|action|Property.Open.AddHall|remove	ok identical=- delta=-145 sha=FE7E3A3F8C0D
 P	docs/probes/dogfood/hotel.poly|action|Property.Open.AddHall|add	err EDIT_NAME_COLLISION
 P	docs/probes/dogfood/nested-invoke-type-mismatch.poly|uses|uses:temporal|replace	ok identical=Y delta=0 sha=B79B643862AB
@@ -425,10 +425,10 @@ P	docs/probes/dogfood/nested-invoke-type-mismatch.poly|entity|Widget|add	err EDI
 P	docs/probes/dogfood/nested-invoke-type-mismatch.poly|property|Widget.Used|replace	ok identical=Y delta=0 sha=B79B643862AB
 P	docs/probes/dogfood/nested-invoke-type-mismatch.poly|property|Widget.Used|remove	ok identical=- delta=-26 sha=C089E37B7764
 P	docs/probes/dogfood/nested-invoke-type-mismatch.poly|property|Widget.Used|add	err EDIT_NAME_COLLISION
-P	docs/probes/dogfood/nested-invoke-type-mismatch.poly|stage|Widget.Ready|replace	ok identical=N delta=8 sha=16F4DFEECA61
+P	docs/probes/dogfood/nested-invoke-type-mismatch.poly|stage|Widget.Ready|replace	ok identical=Y delta=0 sha=B79B643862AB
 P	docs/probes/dogfood/nested-invoke-type-mismatch.poly|stage|Widget.Ready|remove	ok identical=- delta=-90 sha=823F31C3F353
 P	docs/probes/dogfood/nested-invoke-type-mismatch.poly|stage|Widget.Ready|add	err EDIT_NAME_COLLISION
-P	docs/probes/dogfood/nested-invoke-type-mismatch.poly|action|Widget.Ready.Use|replace	ok identical=N delta=8 sha=99B57E26C3D3
+P	docs/probes/dogfood/nested-invoke-type-mismatch.poly|action|Widget.Ready.Use|replace	ok identical=Y delta=0 sha=B79B643862AB
 P	docs/probes/dogfood/nested-invoke-type-mismatch.poly|action|Widget.Ready.Use|remove	ok identical=- delta=-69 sha=BCAE38752F4D
 P	docs/probes/dogfood/nested-invoke-type-mismatch.poly|action|Widget.Ready.Use|add	err EDIT_NAME_COLLISION
 P	docs/probes/dogfood/peer-tracking-transition.poly|entity|Paper|replace	ok identical=Y delta=0 sha=1EECB2078567
@@ -440,7 +440,7 @@ P	docs/probes/dogfood/peer-tracking-transition.poly|property|Paper.Title|add	err
 P	docs/probes/dogfood/peer-tracking-transition.poly|navigation|Paper.trackers|replace	ok identical=Y delta=0 sha=1EECB2078567
 P	docs/probes/dogfood/peer-tracking-transition.poly|navigation|Paper.trackers|remove	ok identical=- delta=-31 sha=516A468A89F0
 P	docs/probes/dogfood/peer-tracking-transition.poly|navigation|Paper.trackers|add	err EDIT_NAME_COLLISION
-P	docs/probes/dogfood/peer-tracking-transition.poly|stage|Paper.A|replace	ok identical=N delta=4 sha=A20265E079D9
+P	docs/probes/dogfood/peer-tracking-transition.poly|stage|Paper.A|replace	ok identical=Y delta=0 sha=1EECB2078567
 P	docs/probes/dogfood/peer-tracking-transition.poly|stage|Paper.A|remove	ok identical=- delta=-57 sha=6DBE7AD572C8
 P	docs/probes/dogfood/peer-tracking-transition.poly|stage|Paper.A|add	err EDIT_NAME_COLLISION
 P	docs/probes/dogfood/peer-tracking-transition.poly|action|Paper.A.Advance|replace	ok identical=Y delta=0 sha=1EECB2078567
@@ -461,10 +461,10 @@ P	docs/probes/dogfood/simulate-create-create-in.poly|navigation|Patron.fines|add
 P	docs/probes/dogfood/simulate-create-create-in.poly|policy|Patron.HasFines|replace	ok identical=Y delta=0 sha=59A9A86DA4DC
 P	docs/probes/dogfood/simulate-create-create-in.poly|policy|Patron.HasFines|remove	ok identical=- delta=-36 sha=F744546EA4F3
 P	docs/probes/dogfood/simulate-create-create-in.poly|policy|Patron.HasFines|add	err EDIT_NAME_COLLISION
-P	docs/probes/dogfood/simulate-create-create-in.poly|stage|Patron.Active|replace	ok identical=N delta=14 sha=29794B0C7305
+P	docs/probes/dogfood/simulate-create-create-in.poly|stage|Patron.Active|replace	ok identical=Y delta=0 sha=59A9A86DA4DC
 P	docs/probes/dogfood/simulate-create-create-in.poly|stage|Patron.Active|remove	ok identical=- delta=-211 sha=1DCEE6892BB0
 P	docs/probes/dogfood/simulate-create-create-in.poly|stage|Patron.Active|add	err EDIT_NAME_COLLISION
-P	docs/probes/dogfood/simulate-create-create-in.poly|action|Patron.Active.AssessByType|replace	ok identical=N delta=8 sha=54D4C5365199
+P	docs/probes/dogfood/simulate-create-create-in.poly|action|Patron.Active.AssessByType|replace	ok identical=Y delta=0 sha=59A9A86DA4DC
 P	docs/probes/dogfood/simulate-create-create-in.poly|action|Patron.Active.AssessByType|remove	ok identical=- delta=-94 sha=6F227C9E7693
 P	docs/probes/dogfood/simulate-create-create-in.poly|action|Patron.Active.AssessByType|add	err EDIT_NAME_COLLISION
 P	docs/probes/dogfood/simulate-create-in.poly|uses|uses:temporal|replace	ok identical=Y delta=0 sha=18A472A6E7F6
@@ -482,10 +482,10 @@ P	docs/probes/dogfood/simulate-create-in.poly|navigation|Patron.fines|add	err ED
 P	docs/probes/dogfood/simulate-create-in.poly|policy|Patron.HasFines|replace	ok identical=Y delta=0 sha=18A472A6E7F6
 P	docs/probes/dogfood/simulate-create-in.poly|policy|Patron.HasFines|remove	ok identical=- delta=-36 sha=9048BBF9E846
 P	docs/probes/dogfood/simulate-create-in.poly|policy|Patron.HasFines|add	err EDIT_NAME_COLLISION
-P	docs/probes/dogfood/simulate-create-in.poly|stage|Patron.Active|replace	ok identical=N delta=8 sha=C2AB22B0CF3F
+P	docs/probes/dogfood/simulate-create-in.poly|stage|Patron.Active|replace	ok identical=Y delta=0 sha=18A472A6E7F6
 P	docs/probes/dogfood/simulate-create-in.poly|stage|Patron.Active|remove	ok identical=- delta=-117 sha=556604E03BC4
 P	docs/probes/dogfood/simulate-create-in.poly|stage|Patron.Active|add	err EDIT_NAME_COLLISION
-P	docs/probes/dogfood/simulate-create-in.poly|action|Patron.Active.AssessByRel|replace	ok identical=N delta=8 sha=8FF2E74F00B2
+P	docs/probes/dogfood/simulate-create-in.poly|action|Patron.Active.AssessByRel|replace	ok identical=Y delta=0 sha=18A472A6E7F6
 P	docs/probes/dogfood/simulate-create-in.poly|action|Patron.Active.AssessByRel|remove	ok identical=- delta=-95 sha=E9029A082192
 P	docs/probes/dogfood/simulate-create-in.poly|action|Patron.Active.AssessByRel|add	err EDIT_NAME_COLLISION
 P	docs/probes/dogfood/simulate-create-type.poly|uses|uses:temporal|replace	ok identical=Y delta=0 sha=DBD68C14EB31
@@ -503,10 +503,10 @@ P	docs/probes/dogfood/simulate-create-type.poly|navigation|Patron.fines|add	err 
 P	docs/probes/dogfood/simulate-create-type.poly|policy|Patron.HasFines|replace	ok identical=Y delta=0 sha=DBD68C14EB31
 P	docs/probes/dogfood/simulate-create-type.poly|policy|Patron.HasFines|remove	ok identical=- delta=-36 sha=F2F83CB0EC0F
 P	docs/probes/dogfood/simulate-create-type.poly|policy|Patron.HasFines|add	err EDIT_NAME_COLLISION
-P	docs/probes/dogfood/simulate-create-type.poly|stage|Patron.Active|replace	ok identical=N delta=8 sha=1DECEFEA322C
+P	docs/probes/dogfood/simulate-create-type.poly|stage|Patron.Active|replace	ok identical=Y delta=0 sha=DBD68C14EB31
 P	docs/probes/dogfood/simulate-create-type.poly|stage|Patron.Active|remove	ok identical=- delta=-116 sha=1A3696DD35F1
 P	docs/probes/dogfood/simulate-create-type.poly|stage|Patron.Active|add	err EDIT_NAME_COLLISION
-P	docs/probes/dogfood/simulate-create-type.poly|action|Patron.Active.AssessByType|replace	ok identical=N delta=8 sha=B7583FE200B0
+P	docs/probes/dogfood/simulate-create-type.poly|action|Patron.Active.AssessByType|replace	ok identical=Y delta=0 sha=DBD68C14EB31
 P	docs/probes/dogfood/simulate-create-type.poly|action|Patron.Active.AssessByType|remove	ok identical=- delta=-94 sha=06352D2DD590
 P	docs/probes/dogfood/simulate-create-type.poly|action|Patron.Active.AssessByType|add	err EDIT_NAME_COLLISION
 P	docs/probes/dogfood/university.poly|uses|uses:temporal|replace	ok identical=Y delta=0 sha=01E3D63144C1
@@ -521,7 +521,7 @@ P	docs/probes/dogfood/university.poly|entity|Instructor|add	err EDIT_NAME_COLLIS
 P	docs/probes/dogfood/university.poly|property|Instructor.Name|replace	ok identical=Y delta=0 sha=01E3D63144C1
 P	docs/probes/dogfood/university.poly|property|Instructor.Name|remove	ok identical=- delta=-13 sha=14B0DF60D84C
 P	docs/probes/dogfood/university.poly|property|Instructor.Name|add	err EDIT_NAME_COLLISION
-P	docs/probes/dogfood/university.poly|stage|Instructor.Ready|replace	ok identical=N delta=4 sha=BC8E1720F07D
+P	docs/probes/dogfood/university.poly|stage|Instructor.Ready|replace	ok identical=Y delta=0 sha=01E3D63144C1
 P	docs/probes/dogfood/university.poly|stage|Instructor.Ready|remove	ok identical=- delta=-67 sha=7047CE8D09E4
 P	docs/probes/dogfood/university.poly|stage|Instructor.Ready|add	err EDIT_NAME_COLLISION
 P	docs/probes/dogfood/university.poly|action|Instructor.Ready.GoOnLeave|replace	ok identical=Y delta=0 sha=01E3D63144C1
@@ -545,10 +545,10 @@ P	docs/probes/fleet-eval/09-transport/clinic.poly|property|Doctor.Name|add	err E
 P	docs/probes/fleet-eval/09-transport/clinic.poly|navigation|Doctor.schedule|replace	ok identical=Y delta=0 sha=5693DAA8F3CA
 P	docs/probes/fleet-eval/09-transport/clinic.poly|navigation|Doctor.schedule|remove	ok identical=- delta=-25 sha=3FBE7F689735
 P	docs/probes/fleet-eval/09-transport/clinic.poly|navigation|Doctor.schedule|add	err EDIT_NAME_COLLISION
-P	docs/probes/fleet-eval/09-transport/clinic.poly|action|Doctor.StartShift|replace	ok identical=N delta=4 sha=7F49C2E85953
+P	docs/probes/fleet-eval/09-transport/clinic.poly|action|Doctor.StartShift|replace	ok identical=Y delta=0 sha=5693DAA8F3CA
 P	docs/probes/fleet-eval/09-transport/clinic.poly|action|Doctor.StartShift|remove	ok identical=- delta=-54 sha=6748E32D02FD
 P	docs/probes/fleet-eval/09-transport/clinic.poly|action|Doctor.StartShift|add	err EDIT_NAME_COLLISION
-P	docs/probes/fleet-eval/09-transport/clinic.poly|stage|Visit.Scheduled|replace	ok identical=N delta=8 sha=7D1D10BA8137
+P	docs/probes/fleet-eval/09-transport/clinic.poly|stage|Visit.Scheduled|replace	ok identical=Y delta=0 sha=5693DAA8F3CA
 P	docs/probes/fleet-eval/09-transport/clinic.poly|stage|Visit.Scheduled|remove	ok identical=- delta=-83 sha=CF8EF6E2951A
 P	docs/probes/fleet-eval/09-transport/clinic.poly|stage|Visit.Scheduled|add	err EDIT_NAME_COLLISION
 P	docs/probes/fleet-eval/09-transport/orders.poly|enum|OrderState|replace	ok identical=Y delta=0 sha=CEC786FC9E7A
@@ -563,13 +563,13 @@ P	docs/probes/fleet-eval/09-transport/orders.poly|property|Customer.Email|add	er
 P	docs/probes/fleet-eval/09-transport/orders.poly|navigation|Customer.orders|replace	ok identical=Y delta=0 sha=CEC786FC9E7A
 P	docs/probes/fleet-eval/09-transport/orders.poly|navigation|Customer.orders|remove	ok identical=- delta=-21 sha=CBC3C3E52729
 P	docs/probes/fleet-eval/09-transport/orders.poly|navigation|Customer.orders|add	err EDIT_NAME_COLLISION
-P	docs/probes/fleet-eval/09-transport/orders.poly|action|Customer.ShipAll|replace	ok identical=N delta=6 sha=E5EB5AD932B3
+P	docs/probes/fleet-eval/09-transport/orders.poly|action|Customer.ShipAll|replace	ok identical=Y delta=0 sha=CEC786FC9E7A
 P	docs/probes/fleet-eval/09-transport/orders.poly|action|Customer.ShipAll|remove	ok identical=- delta=-83 sha=AFA43334CB84
 P	docs/probes/fleet-eval/09-transport/orders.poly|action|Customer.ShipAll|add	err EDIT_NAME_COLLISION
 P	docs/probes/fleet-eval/09-transport/orders.poly|policy|Order.IsPaid|replace	ok identical=Y delta=0 sha=CEC786FC9E7A
 P	docs/probes/fleet-eval/09-transport/orders.poly|policy|Order.IsPaid|remove	ok identical=- delta=-38 sha=54940E28CE13
 P	docs/probes/fleet-eval/09-transport/orders.poly|policy|Order.IsPaid|add	err EDIT_NAME_COLLISION
-P	docs/probes/fleet-eval/09-transport/orders.poly|stage|Order.Pending|replace	ok identical=N delta=8 sha=692800BAEA5C
+P	docs/probes/fleet-eval/09-transport/orders.poly|stage|Order.Pending|replace	ok identical=Y delta=0 sha=CEC786FC9E7A
 P	docs/probes/fleet-eval/09-transport/orders.poly|stage|Order.Pending|remove	ok identical=- delta=-72 sha=8DF2C8639DA7
 P	docs/probes/fleet-eval/09-transport/orders.poly|stage|Order.Pending|add	err EDIT_NAME_COLLISION
 P	docs/probes/fleet-eval/09-transport/warehouse.poly|enum|TruckStatus|replace	ok identical=Y delta=0 sha=5FF0C41D6AA5
@@ -587,7 +587,7 @@ P	docs/probes/fleet-eval/09-transport/warehouse.poly|navigation|Warehouse.trucks
 P	docs/probes/fleet-eval/09-transport/warehouse.poly|policy|Warehouse.IsOperational|replace	ok identical=Y delta=0 sha=5FF0C41D6AA5
 P	docs/probes/fleet-eval/09-transport/warehouse.poly|policy|Warehouse.IsOperational|remove	ok identical=- delta=-41 sha=CA76092A5BFC
 P	docs/probes/fleet-eval/09-transport/warehouse.poly|policy|Warehouse.IsOperational|add	err EDIT_NAME_COLLISION
-P	docs/probes/fleet-eval/09-transport/warehouse.poly|action|Warehouse.AdjustCapacity|replace	ok identical=N delta=4 sha=20DBF24B20C6
+P	docs/probes/fleet-eval/09-transport/warehouse.poly|action|Warehouse.AdjustCapacity|replace	ok identical=Y delta=0 sha=5FF0C41D6AA5
 P	docs/probes/fleet-eval/09-transport/warehouse.poly|action|Warehouse.AdjustCapacity|remove	ok identical=- delta=-87 sha=3B0C27A3C5AD
 P	docs/probes/fleet-eval/09-transport/warehouse.poly|action|Warehouse.AdjustCapacity|add	err EDIT_NAME_COLLISION
 P	docs/probes/fleet-eval/09-transport/warehouse.poly|stage|Truck.Idle|replace	ok identical=Y delta=0 sha=5FF0C41D6AA5
@@ -605,10 +605,10 @@ P	docs/probes/fleet-eval/12-mcp/mcp-library.poly|policy|Patron.GoodStanding|add	
 P	docs/probes/fleet-eval/12-mcp/mcp-library.poly|navigation|Patron.loans|replace	ok identical=Y delta=0 sha=3EE3BE57549A
 P	docs/probes/fleet-eval/12-mcp/mcp-library.poly|navigation|Patron.loans|remove	ok identical=- delta=-19 sha=C23B980B801B
 P	docs/probes/fleet-eval/12-mcp/mcp-library.poly|navigation|Patron.loans|add	err EDIT_NAME_COLLISION
-P	docs/probes/fleet-eval/12-mcp/mcp-library.poly|action|Patron.CheckOut|replace	ok identical=N delta=8 sha=56651DD92139
+P	docs/probes/fleet-eval/12-mcp/mcp-library.poly|action|Patron.CheckOut|replace	ok identical=Y delta=0 sha=3EE3BE57549A
 P	docs/probes/fleet-eval/12-mcp/mcp-library.poly|action|Patron.CheckOut|remove	ok identical=- delta=-108 sha=FD09654D010C
 P	docs/probes/fleet-eval/12-mcp/mcp-library.poly|action|Patron.CheckOut|add	err EDIT_NAME_COLLISION
-P	docs/probes/fleet-eval/12-mcp/mcp-library.poly|stage|Loan.Active|replace	ok identical=N delta=4 sha=6B9C394A4C0C
+P	docs/probes/fleet-eval/12-mcp/mcp-library.poly|stage|Loan.Active|replace	ok identical=Y delta=0 sha=3EE3BE57549A
 P	docs/probes/fleet-eval/12-mcp/mcp-library.poly|stage|Loan.Active|remove	ok identical=- delta=-72 sha=CCC94343CB86
 P	docs/probes/fleet-eval/12-mcp/mcp-library.poly|stage|Loan.Active|add	err EDIT_NAME_COLLISION
 P	docs/probes/grep-2026-10-17/grep.poly|uses|uses:http|replace	ok identical=Y delta=0 sha=1CBAD6AD6375
@@ -626,10 +626,10 @@ P	docs/probes/grep-2026-10-17/grep.poly|property|Query.PatternText|add	err EDIT_
 P	docs/probes/grep-2026-10-17/grep.poly|navigation|Query.sources|replace	ok identical=Y delta=0 sha=1CBAD6AD6375
 P	docs/probes/grep-2026-10-17/grep.poly|navigation|Query.sources|remove	ok identical=- delta=-29 sha=71D363A52E09
 P	docs/probes/grep-2026-10-17/grep.poly|navigation|Query.sources|add	err EDIT_NAME_COLLISION
-P	docs/probes/grep-2026-10-17/grep.poly|stage|Query.Prepared|replace	ok identical=N delta=30 sha=65A34B505F52
+P	docs/probes/grep-2026-10-17/grep.poly|stage|Query.Prepared|replace	ok identical=Y delta=0 sha=1CBAD6AD6375
 P	docs/probes/grep-2026-10-17/grep.poly|stage|Query.Prepared|remove	ok identical=- delta=-432 sha=5E807AE25793
 P	docs/probes/grep-2026-10-17/grep.poly|stage|Query.Prepared|add	err EDIT_NAME_COLLISION
-P	docs/probes/grep-2026-10-17/grep.poly|action|Query.Prepared.AddSource|replace	ok identical=N delta=8 sha=58C1B0CE92AB
+P	docs/probes/grep-2026-10-17/grep.poly|action|Query.Prepared.AddSource|replace	ok identical=Y delta=0 sha=1CBAD6AD6375
 P	docs/probes/grep-2026-10-17/grep.poly|action|Query.Prepared.AddSource|remove	ok identical=- delta=-92 sha=BFC6C5A1956A
 P	docs/probes/grep-2026-10-17/grep.poly|action|Query.Prepared.AddSource|add	err EDIT_NAME_COLLISION
 P	docs/probes/scratch-2026-10-14/banking.poly|uses|uses:temporal|replace	ok identical=Y delta=0 sha=933DF16E3C61
@@ -650,10 +650,10 @@ P	docs/probes/scratch-2026-10-14/banking.poly|navigation|Account.txns|add	err ED
 P	docs/probes/scratch-2026-10-14/banking.poly|policy|Account.HasFunds|replace	ok identical=Y delta=0 sha=933DF16E3C61
 P	docs/probes/scratch-2026-10-14/banking.poly|policy|Account.HasFunds|remove	ok identical=- delta=-35 sha=F61B11FD665B
 P	docs/probes/scratch-2026-10-14/banking.poly|policy|Account.HasFunds|add	err EDIT_NAME_COLLISION
-P	docs/probes/scratch-2026-10-14/banking.poly|stage|Account.Open|replace	ok identical=N delta=20 sha=DD4B07770FFC
+P	docs/probes/scratch-2026-10-14/banking.poly|stage|Account.Open|replace	ok identical=Y delta=0 sha=933DF16E3C61
 P	docs/probes/scratch-2026-10-14/banking.poly|stage|Account.Open|remove	ok identical=- delta=-264 sha=FF0C056D4613
 P	docs/probes/scratch-2026-10-14/banking.poly|stage|Account.Open|add	err EDIT_NAME_COLLISION
-P	docs/probes/scratch-2026-10-14/banking.poly|action|Account.Open.Deposit|replace	ok identical=N delta=8 sha=CB326A940310
+P	docs/probes/scratch-2026-10-14/banking.poly|action|Account.Open.Deposit|replace	ok identical=Y delta=0 sha=933DF16E3C61
 P	docs/probes/scratch-2026-10-14/banking.poly|action|Account.Open.Deposit|remove	ok identical=- delta=-86 sha=082D5CB308DE
 P	docs/probes/scratch-2026-10-14/banking.poly|action|Account.Open.Deposit|add	err EDIT_NAME_COLLISION
 P	docs/probes/scratch-2026-10-14/fleet.poly|uses|uses:temporal|replace	ok identical=Y delta=0 sha=B21030C925A3
@@ -674,10 +674,10 @@ P	docs/probes/scratch-2026-10-14/fleet.poly|navigation|Vehicle.workOrders|add	er
 P	docs/probes/scratch-2026-10-14/fleet.poly|policy|Vehicle.DueForService|replace	ok identical=Y delta=0 sha=B21030C925A3
 P	docs/probes/scratch-2026-10-14/fleet.poly|policy|Vehicle.DueForService|remove	ok identical=- delta=-60 sha=2F06D1AD9926
 P	docs/probes/scratch-2026-10-14/fleet.poly|policy|Vehicle.DueForService|add	err EDIT_NAME_COLLISION
-P	docs/probes/scratch-2026-10-14/fleet.poly|stage|Vehicle.Active|replace	ok identical=N delta=20 sha=02F73A27C42E
+P	docs/probes/scratch-2026-10-14/fleet.poly|stage|Vehicle.Active|replace	ok identical=Y delta=0 sha=B21030C925A3
 P	docs/probes/scratch-2026-10-14/fleet.poly|stage|Vehicle.Active|remove	ok identical=- delta=-261 sha=29D33247F632
 P	docs/probes/scratch-2026-10-14/fleet.poly|stage|Vehicle.Active|add	err EDIT_NAME_COLLISION
-P	docs/probes/scratch-2026-10-14/fleet.poly|action|Vehicle.Active.Open|replace	ok identical=N delta=8 sha=B747D73EB059
+P	docs/probes/scratch-2026-10-14/fleet.poly|action|Vehicle.Active.Open|replace	ok identical=Y delta=0 sha=B21030C925A3
 P	docs/probes/scratch-2026-10-14/fleet.poly|action|Vehicle.Active.Open|remove	ok identical=- delta=-93 sha=6CAB4CC379F4
 P	docs/probes/scratch-2026-10-14/fleet.poly|action|Vehicle.Active.Open|add	err EDIT_NAME_COLLISION
 P	docs/probes/scratch-2026-10-14/gym.poly|uses|uses:temporal|replace	ok identical=Y delta=0 sha=CAB0420E4459
@@ -698,10 +698,10 @@ P	docs/probes/scratch-2026-10-14/gym.poly|navigation|Trainer.sessions|add	err ED
 P	docs/probes/scratch-2026-10-14/gym.poly|policy|Member.HasPlan|replace	ok identical=Y delta=0 sha=CAB0420E4459
 P	docs/probes/scratch-2026-10-14/gym.poly|policy|Member.HasPlan|remove	ok identical=- delta=-34 sha=8322D82A92C9
 P	docs/probes/scratch-2026-10-14/gym.poly|policy|Member.HasPlan|add	err EDIT_NAME_COLLISION
-P	docs/probes/scratch-2026-10-14/gym.poly|stage|Member.Active|replace	ok identical=N delta=26 sha=55BB46A4EBFE
+P	docs/probes/scratch-2026-10-14/gym.poly|stage|Member.Active|replace	ok identical=Y delta=0 sha=CAB0420E4459
 P	docs/probes/scratch-2026-10-14/gym.poly|stage|Member.Active|remove	ok identical=- delta=-353 sha=599CBC4CC637
 P	docs/probes/scratch-2026-10-14/gym.poly|stage|Member.Active|add	err EDIT_NAME_COLLISION
-P	docs/probes/scratch-2026-10-14/gym.poly|action|Member.Active.Enroll|replace	ok identical=N delta=8 sha=1D6C72C0ECD0
+P	docs/probes/scratch-2026-10-14/gym.poly|action|Member.Active.Enroll|replace	ok identical=Y delta=0 sha=CAB0420E4459
 P	docs/probes/scratch-2026-10-14/gym.poly|action|Member.Active.Enroll|remove	ok identical=- delta=-71 sha=B94F2D298DA3
 P	docs/probes/scratch-2026-10-14/gym.poly|action|Member.Active.Enroll|add	err EDIT_NAME_COLLISION
 P	docs/probes/scratch-2026-10-14/insurance.poly|uses|uses:temporal|replace	ok identical=Y delta=0 sha=5B4DB89F8D50
@@ -722,10 +722,10 @@ P	docs/probes/scratch-2026-10-14/insurance.poly|property|Policyholder.Name|add	e
 P	docs/probes/scratch-2026-10-14/insurance.poly|navigation|Policyholder.claims|replace	ok identical=Y delta=0 sha=5B4DB89F8D50
 P	docs/probes/scratch-2026-10-14/insurance.poly|navigation|Policyholder.claims|remove	ok identical=- delta=-32 sha=D4A56D06603F
 P	docs/probes/scratch-2026-10-14/insurance.poly|navigation|Policyholder.claims|add	err EDIT_NAME_COLLISION
-P	docs/probes/scratch-2026-10-14/insurance.poly|stage|Policyholder.Active|replace	ok identical=N delta=14 sha=182ABDC18327
+P	docs/probes/scratch-2026-10-14/insurance.poly|stage|Policyholder.Active|replace	ok identical=Y delta=0 sha=5B4DB89F8D50
 P	docs/probes/scratch-2026-10-14/insurance.poly|stage|Policyholder.Active|remove	ok identical=- delta=-171 sha=B54FA9ADADE5
 P	docs/probes/scratch-2026-10-14/insurance.poly|stage|Policyholder.Active|add	err EDIT_NAME_COLLISION
-P	docs/probes/scratch-2026-10-14/insurance.poly|action|Policyholder.Active.File|replace	ok identical=N delta=20 sha=CD6DA39A45B7
+P	docs/probes/scratch-2026-10-14/insurance.poly|action|Policyholder.Active.File|replace	ok identical=Y delta=0 sha=5B4DB89F8D50
 P	docs/probes/scratch-2026-10-14/insurance.poly|action|Policyholder.Active.File|remove	ok identical=- delta=-149 sha=0A409EE852B5
 P	docs/probes/scratch-2026-10-14/insurance.poly|action|Policyholder.Active.File|add	err EDIT_NAME_COLLISION
 P	docs/probes/scratch-2026-10-14/insurance.poly|policy|Claim.WithinCoverage|replace	ok identical=Y delta=0 sha=5B4DB89F8D50
@@ -746,10 +746,10 @@ P	docs/probes/scratch-2026-10-14/logistics.poly|property|Address.Line1|add	err E
 P	docs/probes/scratch-2026-10-14/logistics.poly|navigation|Courier.stops|replace	ok identical=Y delta=0 sha=EA6AF3074D4A
 P	docs/probes/scratch-2026-10-14/logistics.poly|navigation|Courier.stops|remove	ok identical=- delta=-19 sha=C8A0186C34D9
 P	docs/probes/scratch-2026-10-14/logistics.poly|navigation|Courier.stops|add	err EDIT_NAME_COLLISION
-P	docs/probes/scratch-2026-10-14/logistics.poly|stage|Courier.Available|replace	ok identical=N delta=10 sha=D583BB07F4FE
+P	docs/probes/scratch-2026-10-14/logistics.poly|stage|Courier.Available|replace	ok identical=Y delta=0 sha=EA6AF3074D4A
 P	docs/probes/scratch-2026-10-14/logistics.poly|stage|Courier.Available|remove	ok identical=- delta=-162 sha=806E2FF0AAAF
 P	docs/probes/scratch-2026-10-14/logistics.poly|stage|Courier.Available|add	err EDIT_NAME_COLLISION
-P	docs/probes/scratch-2026-10-14/logistics.poly|action|Courier.Available.Assign|replace	ok identical=N delta=8 sha=4B197519BB1F
+P	docs/probes/scratch-2026-10-14/logistics.poly|action|Courier.Available.Assign|replace	ok identical=Y delta=0 sha=EA6AF3074D4A
 P	docs/probes/scratch-2026-10-14/logistics.poly|action|Courier.Available.Assign|remove	ok identical=- delta=-89 sha=D521D9E0E512
 P	docs/probes/scratch-2026-10-14/logistics.poly|action|Courier.Available.Assign|add	err EDIT_NAME_COLLISION
 P	docs/probes/scratch-2026-10-14/payroll.poly|uses|uses:temporal|replace	ok identical=Y delta=0 sha=4705C9B8084E
@@ -767,10 +767,10 @@ P	docs/probes/scratch-2026-10-14/payroll.poly|property|Employee.Name|add	err EDI
 P	docs/probes/scratch-2026-10-14/payroll.poly|navigation|Employee.timesheets|replace	ok identical=Y delta=0 sha=4705C9B8084E
 P	docs/probes/scratch-2026-10-14/payroll.poly|navigation|Employee.timesheets|remove	ok identical=- delta=-42 sha=3D494444A6CE
 P	docs/probes/scratch-2026-10-14/payroll.poly|navigation|Employee.timesheets|add	err EDIT_NAME_COLLISION
-P	docs/probes/scratch-2026-10-14/payroll.poly|stage|Employee.Active|replace	ok identical=N delta=16 sha=F62FBB547EF8
+P	docs/probes/scratch-2026-10-14/payroll.poly|stage|Employee.Active|replace	ok identical=Y delta=0 sha=4705C9B8084E
 P	docs/probes/scratch-2026-10-14/payroll.poly|stage|Employee.Active|remove	ok identical=- delta=-212 sha=FAD9255107EE
 P	docs/probes/scratch-2026-10-14/payroll.poly|stage|Employee.Active|add	err EDIT_NAME_COLLISION
-P	docs/probes/scratch-2026-10-14/payroll.poly|action|Employee.Active.Log|replace	ok identical=N delta=20 sha=F481DFA790DA
+P	docs/probes/scratch-2026-10-14/payroll.poly|action|Employee.Active.Log|replace	ok identical=Y delta=0 sha=4705C9B8084E
 P	docs/probes/scratch-2026-10-14/payroll.poly|action|Employee.Active.Log|remove	ok identical=- delta=-139 sha=9D764CE33FB1
 P	docs/probes/scratch-2026-10-14/payroll.poly|action|Employee.Active.Log|add	err EDIT_NAME_COLLISION
 P	docs/probes/scratch-2026-10-14/restaurant.poly|uses|uses:temporal|replace	ok identical=Y delta=0 sha=5D356E44DC4E
@@ -791,10 +791,10 @@ P	docs/probes/scratch-2026-10-14/restaurant.poly|property|MenuItem.Code|add	err 
 P	docs/probes/scratch-2026-10-14/restaurant.poly|navigation|DiningTable.reservations|replace	ok identical=Y delta=0 sha=5D356E44DC4E
 P	docs/probes/scratch-2026-10-14/restaurant.poly|navigation|DiningTable.reservations|remove	ok identical=- delta=-33 sha=39197188F855
 P	docs/probes/scratch-2026-10-14/restaurant.poly|navigation|DiningTable.reservations|add	err EDIT_NAME_COLLISION
-P	docs/probes/scratch-2026-10-14/restaurant.poly|stage|Guest.Active|replace	ok identical=N delta=16 sha=62FE25871FE0
+P	docs/probes/scratch-2026-10-14/restaurant.poly|stage|Guest.Active|replace	ok identical=Y delta=0 sha=5D356E44DC4E
 P	docs/probes/scratch-2026-10-14/restaurant.poly|stage|Guest.Active|remove	ok identical=- delta=-209 sha=07A431E33759
 P	docs/probes/scratch-2026-10-14/restaurant.poly|stage|Guest.Active|add	err EDIT_NAME_COLLISION
-P	docs/probes/scratch-2026-10-14/restaurant.poly|action|Guest.Active.Book|replace	ok identical=N delta=24 sha=800850B347CE
+P	docs/probes/scratch-2026-10-14/restaurant.poly|action|Guest.Active.Book|replace	ok identical=Y delta=0 sha=5D356E44DC4E
 P	docs/probes/scratch-2026-10-14/restaurant.poly|action|Guest.Active.Book|remove	ok identical=- delta=-187 sha=34ECC805ED0D
 P	docs/probes/scratch-2026-10-14/restaurant.poly|action|Guest.Active.Book|add	err EDIT_NAME_COLLISION
 P	docs/probes/scratch-2026-10-14/restaurant.poly|policy|Reservation.FitsTable|replace	ok identical=Y delta=0 sha=5D356E44DC4E
@@ -815,10 +815,10 @@ P	docs/probes/scratch-2026-10-14/roastery.poly|property|Bean.Name|add	err EDIT_N
 P	docs/probes/scratch-2026-10-14/roastery.poly|navigation|Bean.batches|replace	ok identical=Y delta=0 sha=EDB51B635387
 P	docs/probes/scratch-2026-10-14/roastery.poly|navigation|Bean.batches|remove	ok identical=- delta=-31 sha=983D8C4ABEBC
 P	docs/probes/scratch-2026-10-14/roastery.poly|navigation|Bean.batches|add	err EDIT_NAME_COLLISION
-P	docs/probes/scratch-2026-10-14/roastery.poly|stage|Bean.Open|replace	ok identical=N delta=16 sha=7D27F59B4E20
+P	docs/probes/scratch-2026-10-14/roastery.poly|stage|Bean.Open|replace	ok identical=Y delta=0 sha=EDB51B635387
 P	docs/probes/scratch-2026-10-14/roastery.poly|stage|Bean.Open|remove	ok identical=- delta=-192 sha=59A90160398A
 P	docs/probes/scratch-2026-10-14/roastery.poly|stage|Bean.Open|add	err EDIT_NAME_COLLISION
-P	docs/probes/scratch-2026-10-14/roastery.poly|action|Bean.Open.Plan|replace	ok identical=N delta=20 sha=91FC6FBD4139
+P	docs/probes/scratch-2026-10-14/roastery.poly|action|Bean.Open.Plan|replace	ok identical=Y delta=0 sha=EDB51B635387
 P	docs/probes/scratch-2026-10-14/roastery.poly|action|Bean.Open.Plan|remove	ok identical=- delta=-127 sha=BFE9807C9BFD
 P	docs/probes/scratch-2026-10-14/roastery.poly|action|Bean.Open.Plan|add	err EDIT_NAME_COLLISION
 P	docs/probes/smoke/smoke.poly|entity|Placeholder|replace	ok identical=Y delta=0 sha=B2146230351C
@@ -848,7 +848,7 @@ P	sweep:stages|entity|X|add	err EDIT_NAME_COLLISION
 P	sweep:stages|navigation|X.Kids|replace	ok identical=Y delta=0 sha=74B972490426
 P	sweep:stages|navigation|X.Kids|remove	ok identical=- delta=-15 sha=B5271C210CF3
 P	sweep:stages|navigation|X.Kids|add	err EDIT_NAME_COLLISION
-P	sweep:stages|stage|X.Draft|replace	ok identical=N delta=8 sha=41DD4F109AA9
+P	sweep:stages|stage|X.Draft|replace	ok identical=Y delta=0 sha=74B972490426
 P	sweep:stages|stage|X.Draft|remove	ok identical=- delta=-143 sha=FCD5B7116A3F
 P	sweep:stages|stage|X.Draft|add	err EDIT_NAME_COLLISION
 P	sweep:stages|action|X.Draft.Go|replace	ok identical=Y delta=0 sha=74B972490426
@@ -869,7 +869,7 @@ P	sweep:effects|property|X.N|add	err EDIT_NAME_COLLISION
 P	sweep:effects|navigation|X.Kids|replace	ok identical=Y delta=0 sha=2F29736B996B
 P	sweep:effects|navigation|X.Kids|remove	ok identical=- delta=-15 sha=0293CE70C5FB
 P	sweep:effects|navigation|X.Kids|add	err EDIT_NAME_COLLISION
-P	sweep:effects|action|X.Go|replace	ok identical=N delta=12 sha=A2CFDD57EAAF
+P	sweep:effects|action|X.Go|replace	ok identical=Y delta=0 sha=2F29736B996B
 P	sweep:effects|action|X.Go|remove	ok identical=- delta=-237 sha=EC3EF1DE2CF1
 P	sweep:effects|action|X.Go|add	err EDIT_NAME_COLLISION
 P	sweep:effects|policy|Y.Ok|replace	ok identical=Y delta=0 sha=2F29736B996B

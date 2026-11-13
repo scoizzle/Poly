@@ -100,8 +100,9 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
     /// The operators C# applies itself beside <paramref name="other"/>, then the reflected static special-name <c>op_*</c>
     /// members. Where the CLR also declares an intrinsic's exact signature (Double and Single declare their
     /// comparisons), the intrinsic is the answer. The built-in rules read the other operand only through its
-    /// primitive, so that is the cache key with the kind: one pair cannot answer for another, and fresh synthetic
-    /// definitions do not grow the cache.
+    /// primitive, so the cache is keyed by the kind and that primitive: keyed by the kind alone, the first pair would
+    /// answer for every other; keyed by the other definition, it would grow without bound on fresh synthetic
+    /// collection types, which are a new instance per resolve.
     /// </summary>
     IEnumerable<DeclaredOperator> ITypeDefinition.GetOperators(OperatorKind kind, ITypeDefinition? other) {
         OperatorShape.ArityOf(kind);

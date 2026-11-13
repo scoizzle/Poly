@@ -629,6 +629,28 @@ public class OperatorLookupTests {
     }
 
     [Test]
+    public async Task NumericBesideANonNumericOperand_OffersItsOwnOperator_SoAModeledImplicitConversionReachesIt() {
+        // Beside an operand that is not one of the simple numeric types, Int64 offers its own (Int64, Int64) addition.
+        // A modeled type that converts implicitly to Int64 relies on that: the operand converts and the operator applies, as in C#.
+        var set = new ModeledTypeSet();
+        ITypeDefinition cents = set.Add("Cents", new MethodDefinitionNode("op_Implicit", new ClrTypeReference(typeof(long)),
+            [new Parameter("p0", new NamedTypeReference("Cents"))], IsStatic: true));
+        var number = OperatorOperands.Clr(typeof(long));
+        var offered = number.GetOperators(OperatorKind.Add, cents).Single();
+        await Assert.That(offered.PlatformApplied).IsTrue();
+        await Assert.That(offered.Signature.Parameters.All(p => ReferenceEquals(p.ParameterTypeDefinition, number))).IsTrue();
+        await Assert.That(number.ResolveConversionFrom(cents)?.Kind).IsEqualTo(ConversionOperatorKind.Implicit);
+        var resolution = number.GetOperator(OperatorKind.Add, cents);
+        await AssertResult(resolution, number);
+        await AssertParameters(resolution, typeof(long), typeof(long));
+        await AssertResult(cents.GetOperator(OperatorKind.Add, number), number);
+        // The sibling: without the conversion the same operator is offered and does not apply.
+        ITypeDefinition plain = set.Add("Plain");
+        await Assert.That(number.GetOperators(OperatorKind.Add, plain).Count()).IsEqualTo(1);
+        await Assert.That(number.GetOperator(OperatorKind.Add, plain)).IsNull();
+    }
+
+    [Test]
     public async Task DeliberateNone_EnumLiftedReferenceDelegateAndObjectOperators() {
         // C# defines these; the rule set leaves them none on purpose. Enum and lifted operators are the caller's
         // (T-06); reference, delegate and object equality are not value operators.

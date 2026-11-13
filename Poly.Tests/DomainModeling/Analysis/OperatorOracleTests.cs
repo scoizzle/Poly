@@ -1,7 +1,9 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.RegularExpressions;
 
 using Poly.Analysis;
 using Poly.Ast.Nodes;
@@ -364,15 +366,24 @@ internal static class OperatorOracle {
 }
 
 /// <summary>
-/// An owner row for a divergence, matched by kind, operand names, operator and a fragment of the reason.
+/// An owner row for a divergence, matched by kind, operand names, operator and the reason: <see cref="ReasonContains"/>
+/// is a regular expression found in the reason (a plain fragment matches as text; <c>^</c> and <c>$</c> anchor it).
 /// <c>*</c> matches anything. <see cref="ExpectedCount"/> is the number of divergences the row owns: a fixing slice
 /// edits the number or deletes the row, and growth fails as surely as shrinkage.
 /// </summary>
 internal sealed record LedgerRule(OracleKind Kind, string Lefts, string Ops, string Rights, string ReasonContains, string Owner, int ExpectedCount, string Checksum = "") {
+    private static readonly ConcurrentDictionary<string, Regex> Patterns = new(StringComparer.Ordinal);
+
     public bool Matches(OracleCell cell, OracleDivergence divergence) =>
         divergence.Kind == Kind
         && In(Lefts, cell.Left) && In(Ops, cell.Op.ToString()) && In(Rights, cell.Right ?? "-")
-        && divergence.Reason.Contains(ReasonContains, StringComparison.Ordinal);
+        && Patterns.GetOrAdd(ReasonContains, static pattern => new Regex(pattern, RegexOptions.CultureInvariant)).IsMatch(divergence.Reason);
+
+    /// <summary>
+    /// What the checksum hashes for one owned divergence: the cell and this rule's kind and fragment, never the reason
+    /// text, so the values the VM computed (which may differ by architecture) stay out of the cell identity.
+    /// </summary>
+    public string KeyOf(OracleCell cell) => $"{cell.Key}|{Kind}|{ReasonContains}";
 
     public string Describe() => $"{Kind} [{Lefts}] [{Ops}] [{Rights}] \"{ReasonContains}\" -> {Owner}";
 
@@ -380,7 +391,7 @@ internal sealed record LedgerRule(OracleKind Kind, string Lefts, string Ops, str
 }
 
 internal static class LedgerCheck {
-    /// <summary>Order-independent, machine-independent fingerprint of the cells a rule owns: SHA-256 over the sorted keys, 16 hex characters.</summary>
+    /// <summary>Order-independent, machine-independent fingerprint of the cells a rule owns: SHA-256 over the sorted <see cref="LedgerRule.KeyOf"/> keys, 16 hex characters.</summary>
     public static string Checksum(IEnumerable<string> keys) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(string.Join("\n", keys.Order(StringComparer.Ordinal))))).ToLowerInvariant()[..16];
 
@@ -402,7 +413,7 @@ internal static class LedgerCheck {
                 problems.Add($"claimed by {owners.Length} rules: {cell.Key}: {divergence.Reason}");
             foreach (var owner in owners) {
                 counts[owner]++;
-                keys[owner].Add($"{cell.Key}|{divergence.Reason}");
+                keys[owner].Add(owner.KeyOf(cell));
             }
         }
         foreach (var rule in rules) {
@@ -426,39 +437,49 @@ internal static class LedgerCheck {
 public class OperatorOracleTests {
     private const string Comparisons = "Equal,NotEqual,LessThan,LessThanOrEqual,GreaterThan,GreaterThanOrEqual";
     private const string Ordering = "LessThan,LessThanOrEqual,GreaterThan,GreaterThanOrEqual";
-    private const string Arithmetic = "Add,Subtract,Multiply,Divide";
+    private const string Arithmetic = "Add,Subtract,Multiply,Divide,Modulo";
+    private const string BitwiseShiftAndUnaryMinus = "BitwiseAnd,BitwiseOr,BitwiseXor,BitwiseNot,ShiftLeft,ShiftRight,UnaryMinus";
 
     private const string AllButOrder = "Number,Int32,Decimal,Float,Text,Boolean,Date,Time,DateTime,Duration,Uuid,Status,Money";
 
     private static readonly LedgerRule[] AnalyzerRules = [
         // The domain analyzer types an entity operand as Unknown and so accepts everything beside it.
-        new(OracleKind.AnalyzerDisagrees, "Order", "*", "*", "analyzer accepts", "T-06 (Unknown operands: R1)", 107, "b0d496ca8a8249e4"),
-        new(OracleKind.AnalyzerDisagrees, AllButOrder, "*", "Order", "analyzer accepts", "T-06 (Unknown operands: R1)", 96, "062dbd948638e7d4"),
+        new(OracleKind.AnalyzerDisagrees, "Order", "*", "*", "analyzer accepts", "T-06 (Unknown operands: R1)", 107, "7284367a02f5ff13"),
+        new(OracleKind.AnalyzerDisagrees, AllButOrder, "*", "Order", "analyzer accepts", "T-06 (Unknown operands: R1)", 96, "e18f5f561a8a8e60"),
         // Enum member literals compared as Text, and enum ordering.
-        new(OracleKind.AnalyzerDisagrees, "Status", Comparisons, "Text", "analyzer accepts", "T-06 (enum member literals)", 6, "07623f4b9c636bc9"),
-        new(OracleKind.AnalyzerDisagrees, "Text", Comparisons, "Status", "analyzer accepts", "T-06 (enum member literals)", 6, "7ed848eea23806f2"),
-        new(OracleKind.AnalyzerDisagrees, "Status", Ordering, "Status", "analyzer accepts", "T-07 (ordering legality)", 4, "b83ca30815274930"),
+        new(OracleKind.AnalyzerDisagrees, "Status", Comparisons, "Text", "analyzer accepts", "T-06 (enum member literals)", 6, "82d668327422d63d"),
+        new(OracleKind.AnalyzerDisagrees, "Text", Comparisons, "Status", "analyzer accepts", "T-06 (enum member literals)", 6, "79e5d5c94c300ad5"),
+        new(OracleKind.AnalyzerDisagrees, "Status", Ordering, "Status", "analyzer accepts", "T-07 (ordering legality)", 4, "cd41fe5cc653aa1f"),
         // Same-category pairs the analyzer accepts and no platform defines.
-        new(OracleKind.AnalyzerDisagrees, "Text,Boolean", Ordering, "Text,Boolean", "analyzer accepts", "T-07 (#631 ordering legality)", 8, "8ea030c0d8f2ea50"),
+        new(OracleKind.AnalyzerDisagrees, "Text,Boolean", Ordering, "Text,Boolean", "analyzer accepts", "T-07 (#631 ordering legality)", 8, "91cd7271c7004160"),
         // Temporal cells: the analyzer's offset permission and its rejection of CLR-defined duration arithmetic.
-        new(OracleKind.AnalyzerDisagrees, "Date,DateTime", "Add,Subtract", "Date,DateTime,Decimal,Number,Duration", "analyzer accepts", "T-10 (temporal offset permission)", 11, "6a8a5c891edeb92e"),
-        new(OracleKind.AnalyzerDisagrees, "Duration,Time,Number", "*", "Duration,Time,Number", "analyzer rejects", "T-10 (temporal operands the CLR defines)", 7, "7e7c7cf1f38d3237")
+        new(OracleKind.AnalyzerDisagrees, "Date,DateTime", "Add,Subtract", "Date,DateTime,Decimal,Number,Duration", "analyzer accepts", "T-10 (temporal offset permission)", 11, "edbb26e174a06a9f"),
+        new(OracleKind.AnalyzerDisagrees, "Duration,Time,Number", "*", "Duration,Time,Number", "analyzer rejects", "T-10 (temporal operands the CLR defines)", 7, "0409473254198adb"),
+        // Permanent: C# defines string + object, and Poly allows only Text + Text. A named language policy, not a gap.
+        new(OracleKind.AnalyzerDisagrees, "*", "Add", "*", "analyzer rejects, tree String", "T-07 (language policy: only Text + Text concatenates)", 16, "a66331455543d1e9")
     ];
 
     // Float64 x Decimal and every Decimal-with-X cell the lowered analysis types: the domain DSL has no Float, so
-    // the analyzer column is n/a for those; the owners are the lowered analysis (T-17, T-18) and the ABI (T-21).
+    // the analyzer column is n/a for those; the owners are the lowered analysis (T-10, T-17, T-18, T-22) and the ABI (T-21).
     private static readonly LedgerRule[] LoweredRules = [
-        new(OracleKind.LoweredAnalysisDisagrees, "*", "*", "*", "analysis error on a defined cell", "T-18 (SyntaxTypeCompatibilityAnalyzer arithmetic rules; temporal operands with T-10)", 16, "a5e2a93e2074fb1c"),
-        new(OracleKind.LoweredAnalysisDisagrees, "*", "*", "*", "typed Decimal", "T-17 (PromoteNumeric / ResolveAddType)", 62, "6365dee6a207e45a"),
-        new(OracleKind.LoweredAnalysisDisagrees, "*", "Add", "*", "typed String", "T-17 (ResolveAddType: any string operand makes Add a string)", 20, "20c644f58d9bdcc1"),
-        new(OracleKind.LoweredAnalysisDisagrees, "*", "Add,Subtract", "*", "typed DateOnly", "T-10 (RewriteDateOffset)", 6, "67ddd6e443b61139"),
-        new(OracleKind.LoweredAnalysisDisagrees, "*", "Add,Subtract", "*", "typed DateTime", "T-10 (RewriteDateOffset)", 6, "de2a2fb0b866b225"),
-        new(OracleKind.LoweredAnalysisDisagrees, "*", Comparisons, "*", "typed Boolean", "T-18 (Compatible accepts same-category and Float-with-Decimal pairs)", 20, "d4268c300cd7d982")
+        new(OracleKind.LoweredAnalysisDisagrees, "*", "*", "*", "analysis error on a defined cell", "T-18 (SyntaxTypeCompatibilityAnalyzer arithmetic rules; temporal operands with T-10)", 40, "8f48a0defcb327e9"),
+        new(OracleKind.LoweredAnalysisDisagrees, "*", "*", "*", "type: analysis", "T-17 (result typing: small integers, char and uint with a signed operand keep the operand type)", 371, "8c26ce5f451d4f11"),
+        new(OracleKind.LoweredAnalysisDisagrees, "*", Arithmetic, "*", "typed Decimal", "T-17 (PromoteNumeric / ResolveAddType)", 88, "b1f45630c1054ca7"),
+        new(OracleKind.LoweredAnalysisDisagrees, "*", Arithmetic, "*", "typed UInt64", "T-17 (promotion: ulong with a signed operand)", 40, "718e56090af03352"),
+        new(OracleKind.LoweredAnalysisDisagrees, "*", "Add,Subtract", "*", "typed DateOnly", "T-10 (RewriteDateOffset)", 20, "7ba4ce6c196e991e"),
+        new(OracleKind.LoweredAnalysisDisagrees, "*", "Add,Subtract", "*", "typed DateTime", "T-10 (RewriteDateOffset)", 20, "5b5cc5a3f2ece6cd"),
+        new(OracleKind.LoweredAnalysisDisagrees, "*", Comparisons, "*", "typed Boolean", "T-18 (Compatible accepts same-category and Float-with-Decimal pairs)", 92, "d99266997f9099df"),
+        // The node kinds the lowered-tree analysis has no case for (issue 812): it accepts every operand.
+        new(OracleKind.LoweredAnalysisDisagrees, "*", BitwiseShiftAndUnaryMinus, "*", "analysis accepts an undefined cell", "T-22 (bitwise, shift and unary minus cases)", 1492, "f06be2a866cf6b37")
     ];
 
     private static readonly LedgerRule[] AbiRules = [
-        new(OracleKind.AbiDivergesFromTree, "*", "*", "*", "executes an undefined cell", "T-21 (the ABI must reject what the tree does not define)", 110, "3b2144722f34faf2"),
-        new(OracleKind.AbiDivergesFromTree, "*", "*", "*", "unstated conversion", "T-21 (T-04 and Lower state the conversion node; the emitter stops converting)", 100, "bab370fb22c12a8c")
+        new(OracleKind.AbiDivergesFromTree, "*", "*", "*", "executes an undefined cell", "T-21 (the ABI must reject what the tree does not define)", 1271, "6d6bb6491fbe7a81"),
+        new(OracleKind.AbiDivergesFromTree, "*", "*", "*", "unstated conversion", "T-21 (T-04 and Lower state the conversion node; the emitter stops converting)", 1729, "6699a0d31e9728fb"),
+        new(OracleKind.AbiDivergesFromTree, "*", "*", "*", "^type: VM [^;]*$", "T-21 (the emitter's own promotion: the VM keeps the operand type)", 363, "fdfd5dee091d1059"),
+        // Wrong values (issue 832): the type and the value in one reason, then the value alone (-Decimal and -Duration give -1).
+        new(OracleKind.AbiDivergesFromTree, "*", "*", "*", "^type: VM .*; value S", "T-21 (issue 832: wrong type and value)", 8, "2e73ee06e20095c0"),
+        new(OracleKind.AbiDivergesFromTree, "*", "*", "*", "^value S", "T-21 (issue 832: wrong values)", 115, "ae35f7db5640776e")
     ];
 
     private static readonly LedgerRule[] RejectedDefinedRules = [];
@@ -474,15 +495,15 @@ public class OperatorOracleTests {
 
     [Test]
     public async Task AnalyzerDisagrees_EveryDivergenceIsOwned_AndNoEntryIsStale() =>
-        await AssertOwned(OracleKind.AnalyzerDisagrees, AnalyzerRules, 245);
+        await AssertOwned(OracleKind.AnalyzerDisagrees, AnalyzerRules, 261);
 
     [Test]
     public async Task LoweredAnalysisDisagrees_EveryDivergenceIsOwned_AndNoEntryIsStale() =>
-        await AssertOwned(OracleKind.LoweredAnalysisDisagrees, LoweredRules, 130);
+        await AssertOwned(OracleKind.LoweredAnalysisDisagrees, LoweredRules, 2163);
 
     [Test]
     public async Task AbiDivergesFromTree_EveryDivergenceIsOwned_AndNoEntryIsStale() =>
-        await AssertOwned(OracleKind.AbiDivergesFromTree, AbiRules, 210);
+        await AssertOwned(OracleKind.AbiDivergesFromTree, AbiRules, 3486);
 
     [Test]
     public async Task AbiRejectsDefined_EveryDivergenceIsOwned_AndNoEntryIsStale() =>
@@ -558,7 +579,7 @@ public class OperatorOracleTests {
         new(OracleKind.AbiDivergesFromTree, lefts, "*", "*", reason, "T-99", count);
 
     private static LedgerRule Pinned(LedgerRule rule, IEnumerable<(OracleCell Cell, OracleDivergence Divergence)> items) =>
-        rule with { Checksum = LedgerCheck.Checksum(items.Where(i => rule.Matches(i.Cell, i.Divergence)).Select(static i => $"{i.Cell.Key}|{i.Divergence.Reason}")) };
+        rule with { Checksum = LedgerCheck.Checksum(items.Where(i => rule.Matches(i.Cell, i.Divergence)).Select(i => rule.KeyOf(i.Cell))) };
 
     [Test]
     public async Task Ratchet_ExactCountsAndCells_HaveNoProblem() {

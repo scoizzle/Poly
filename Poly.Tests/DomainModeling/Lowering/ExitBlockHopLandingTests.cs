@@ -51,7 +51,7 @@ public class ExitBlockHopLandingTests {
               S: stage { when tracks B { assign Seen to Seen + 1 } }
             }
             """;
-        var outcomes = await ParityScenario.FromDsl(dsl, "ExitHopNotifiesOnce", simulateDoesNotMaintain: ["state:ws"])
+        var outcomes = await ParityScenario.FromDsl(dsl, "ExitHopNotifiesOnce")
             .AssertAgree(side => {
                 var z = side.Create("Z");
                 var w = side.Create("W", ("tracks", z));

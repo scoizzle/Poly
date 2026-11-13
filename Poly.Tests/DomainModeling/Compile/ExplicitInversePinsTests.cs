@@ -146,11 +146,10 @@ public sealed class ExplicitInversePinsTests {
         await Assert.That(created.GetType().GetProperty("Borrower", PrintedMembers.Any)!.GetValue(created)).IsNull();
     }
 
-    // The five parity fixtures that opt out of `state:trs` / `state:ws` (ParityScenario simulateDoesNotMaintain)
-    // do so because of exactly this divergence. The pin keeps the opt-out honest: when the simulated module
-    // maintains the inverse collection, this goes red and the opt-outs are deleted with it.
+    // A child created holding its singular navigation is in the parent's inverse collection on both hosts:
+    // the simulated side passes the navigation into Create, as the printed side does.
     [Test]
-    public async Task InverseCollection_CreatedFromTheSingularSide_IsNotMaintainedBySimulate() {
+    public async Task InverseCollection_CreatedFromTheSingularSide_IsMaintainedOnBothHosts() {
         const string Dsl = """
             domain Watch
             Paper: entity {
@@ -171,16 +170,13 @@ public sealed class ExplicitInversePinsTests {
               Q: stage { }
             }
             """;
-        var (simulate, printed) = ParityScenario.FromDsl(Dsl, "InverseCollectionPin").Run(side => {
+        var outcomes = await ParityScenario.FromDsl(Dsl, "InverseCollectionPin").AssertAgree(side => {
             var paper = side.Create("Paper", ("Title", "p"));
             _ = side.Create("Tr", ("Tracks", paper));
             side.Use(paper);
             side.Invoke("Advance");
         });
-        var differences = ParityScenario.DifferenceSet(simulate, printed)
-            .Select(d => $"{d.Step}|{d.Field}|{d.Simulate}|{d.Printed}")
-            .ToArray();
-        await Assert.That(differences).IsEquivalentTo(["use Paper|state:trs|0|1", "invoke Advance|state:trs|0|1"]);
+        await Assert.That(outcomes[2].State["trs"]).IsEqualTo("1");
     }
 
     private static (string Printed, string Simulated) PrintedAndSimulated(string dsl) {

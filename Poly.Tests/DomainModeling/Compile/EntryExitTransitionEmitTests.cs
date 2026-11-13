@@ -65,10 +65,7 @@ public class EntryExitTransitionEmitTests {
             side.Invoke("Go");
             side.Use(watcher);
         }
-        // S-13a: the only skipped field is the inverse collection the simulated module does not maintain
-        // (pinned in ExplicitInversePinsTests.InverseCollection_CreatedFromTheSingularSide_IsNotMaintainedBySimulate).
-        await Assert.That(ParityScenario.DifferenceSet(simulate.Outcomes, printed.Outcomes)
-            .Where(d => d.Field != "state:watchers").Select(d => d.ToString()).ToList()).IsEmpty();
+        await Assert.That(ParityScenario.Differences(simulate.Outcomes, printed.Outcomes)).IsEmpty();
         await Assert.That(simulate.Outcomes[4].State["Seen"]).IsEqualTo("yes");
     }
 

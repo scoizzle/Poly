@@ -805,7 +805,7 @@ public class ParityTests {
     // A stage-scoped subscription whose handler transitions the subscriber.
     [Test]
     public async Task Invoke_WhenTrackedPeerTransitions_SubscriberTransitionsToo() {
-        var outcomes = await ParityScenario.FromDsl(TrackingDsl, "ParityTracking", simulateDoesNotMaintain: ["state:trs"])
+        var outcomes = await ParityScenario.FromDsl(TrackingDsl, "ParityTracking")
             .AssertAgree(side => {
                 var paper = side.Create("Paper", ("Title", "p"));
                 var tr = side.Create("Tr", ("Tracks", paper));
@@ -819,7 +819,7 @@ public class ParityTests {
 
     [Test]
     public async Task Invoke_WhenTwoSubscribersTrackOnePeer_BothTransition() {
-        var outcomes = await ParityScenario.FromDsl(TrackingDsl, "ParityTrackingTwo", simulateDoesNotMaintain: ["state:trs"])
+        var outcomes = await ParityScenario.FromDsl(TrackingDsl, "ParityTrackingTwo")
             .AssertAgree(side => {
                 var paper = side.Create("Paper", ("Title", "p"));
                 var first = side.Create("Tr", ("Tracks", paper));
@@ -835,7 +835,7 @@ public class ParityTests {
 
     [Test]
     public async Task Invoke_WhenPeerHandlerReadsPeerProperty_Agrees() {
-        var outcomes = await ParityScenario.FromDsl(PeerReadDsl, "ParityPeerRead", simulateDoesNotMaintain: ["state:trs"])
+        var outcomes = await ParityScenario.FromDsl(PeerReadDsl, "ParityPeerRead")
             .AssertAgree(side => {
                 var paper = side.Create("Paper", ("Title", "hello"));
                 var tr = side.Create("Tr", ("Tracks", paper));
@@ -1133,7 +1133,7 @@ public class ParityTests {
         var outcomes = await ParityScenario.FromDsl(
                 // S-13a: Tr states the explicit inverse of W.Tracks; TrackingDsl itself stays as the other rows use it.
                 TrackingDsl.Replace("  Tracks: Paper\n", "  Tracks: Paper\n  ws: many W via Tracks\n") + cascade,
-                "ParityCascade", simulateDoesNotMaintain: ["state:trs", "state:ws"])
+                "ParityCascade")
             .AssertAgree(side => {
                 var paper = side.Create("Paper", ("Title", "p"));
                 var tr = side.Create("Tr", ("Tracks", paper));

@@ -177,3 +177,14 @@ Recorded here and in `docs/CORE.md`; each consumer's plan lock must confirm them
 - Tests: `Poly.Tests/Runtime/ActionScopeTests.cs` (31 tests, T1–T31).
 
 Part of #677, theme R (#682). No closing keyword: the row carries `closes —`.
+## Cost of `Touch` at scale (L-04a)
+
+`Touch` snapshots the entity it touches, and the snapshot copies the entity's collections and registries, once per entity per action. So the cost of an action on an owner grows with the size of the owner's collections. `ActionScopeTouchScaleBenchmark` (one cached successful assign action on an owner with N children; simulator, `--job short`, one machine, Release; BenchmarkDotNet 0.15.8):
+
+| Children | Mean | Allocated |
+|---|---|---|
+| 1 | 1,256 ns | 4,096 B |
+| 100 | 6,830 ns | 33,400 B |
+| 10,000 | 890,813 ns | 2,963,800 B |
+
+About 300 B and 90 ns per child per invoke. The simulator's number includes the executor's own capture until X-04 removes it; the generated C# copies the same lists in `__Snapshot`. `--job short` `Mean` is noisy: read `Allocated` as the stable column. This is a record, not a gate.

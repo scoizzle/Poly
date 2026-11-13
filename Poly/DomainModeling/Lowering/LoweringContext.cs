@@ -100,6 +100,12 @@ namespace Poly.DomainModeling.Lowering;
 /// enum map. Relationship targets resolve on this entity, then on each nested
 /// target. A missing name yields no target (no domain-wide scan).
 /// </param>
+/// <param name="ReturnsDomainResult">
+/// Interim (L-03h, removed by L-04): the body is a subscription handler, which returns an untyped
+/// <c>DomainResult</c> but has no <see cref="ActionResultType"/>, so its assign and create guards keep
+/// throwing. Only a notify site reads it (<see cref="EffectLoweringPass"/>), and a handler passes a
+/// callee's failure through with no path segment of its own.
+/// </param>
 public sealed record LoweringContext(
     Node Subject,
     INodeMetadataProvider Analysis,
@@ -121,5 +127,6 @@ public sealed record LoweringContext(
     ExpressionMeaning? Meaning = null,
     ExpressionFormRegistry? Forms = null,
     LocalNames? Names = null,
-    string? SourceEntityName = null
+    string? SourceEntityName = null,
+    bool ReturnsDomainResult = false
 );

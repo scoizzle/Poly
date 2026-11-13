@@ -18,6 +18,29 @@ internal class Course : Poly.Runtime.IActionScoped
     public string Title { get; private set; } = default!;
     internal static DomainResult<Course> Create(string code, string title, Poly.Runtime.IStoragePort db)
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = Course.__BodyOfCreate(code, title, db);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private static DomainResult<Course> __BodyOfCreate(string code, string title, Poly.Runtime.IStoragePort db)
+    {
         if (string.IsNullOrEmpty(code))
         {
             return DomainResult<Course>.Failure(Poly.Runtime.DomainFailure.Required("'Code' is required.", "Course.Code"));

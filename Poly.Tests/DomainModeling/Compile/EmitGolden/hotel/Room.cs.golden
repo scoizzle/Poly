@@ -194,6 +194,29 @@ internal class Room : Poly.Runtime.IActionScoped
     }
     internal static DomainResult<Room> Create(string number, long floor, decimal nightlyRate, long maxOccupancy, Poly.Runtime.IStoragePort db, Property? property = null, RoomType? roomType = null, IEnumerable<Reservation>? stays = null, bool occupied = false, bool dirty = false, bool offline = false)
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = Room.__BodyOfCreate(number, floor, nightlyRate, maxOccupancy, property, roomType, stays, occupied, dirty, offline, db);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private static DomainResult<Room> __BodyOfCreate(string number, long floor, decimal nightlyRate, long maxOccupancy, Property? property, RoomType? roomType, IEnumerable<Reservation>? stays, bool occupied, bool dirty, bool offline, Poly.Runtime.IStoragePort db)
+    {
         if (string.IsNullOrEmpty(number))
         {
             return DomainResult<Room>.Failure(Poly.Runtime.DomainFailure.Required("'Number' is required.", "Room.Number"));

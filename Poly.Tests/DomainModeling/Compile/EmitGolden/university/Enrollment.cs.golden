@@ -402,6 +402,29 @@ internal class Enrollment : Poly.Runtime.IActionScoped
     }
     internal static DomainResult<Enrollment> Create(Section? section = null, Student? student = null, DateOnly? enrolledOn = null, DateOnly? dueDate = null, long grade = 0L)
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = Enrollment.__BodyOfCreate(section, student, enrolledOn, dueDate, grade);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private static DomainResult<Enrollment> __BodyOfCreate(Section? section, Student? student, DateOnly? enrolledOn, DateOnly? dueDate, long grade)
+    {
         if (grade < 0L)
         {
             return DomainResult<Enrollment>.Failure(Poly.Runtime.DomainFailure.Range("'Grade' must be >= 0.", "Enrollment.Grade"));

@@ -18,6 +18,29 @@ internal class Site : Poly.Runtime.IActionScoped
     public string Region { get; private set; } = default!;
     internal static DomainResult<Site> Create(string city, string region)
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = Site.__BodyOfCreate(city, region);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private static DomainResult<Site> __BodyOfCreate(string city, string region)
+    {
         if (string.IsNullOrEmpty(city))
         {
             return DomainResult<Site>.Failure(Poly.Runtime.DomainFailure.Required("'City' is required.", "Site.City"));

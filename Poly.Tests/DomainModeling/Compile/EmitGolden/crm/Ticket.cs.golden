@@ -140,6 +140,29 @@ internal class Ticket : Poly.Runtime.IActionScoped
     }
     internal static DomainResult<Ticket> Create(string subject, Account? account = null)
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = Ticket.__BodyOfCreate(subject, account);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private static DomainResult<Ticket> __BodyOfCreate(string subject, Account? account)
+    {
         if (string.IsNullOrEmpty(subject))
         {
             return DomainResult<Ticket>.Failure(Poly.Runtime.DomainFailure.Required("'Subject' is required.", "Ticket.Subject"));

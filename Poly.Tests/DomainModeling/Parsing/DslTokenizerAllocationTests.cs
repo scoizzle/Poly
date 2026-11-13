@@ -154,18 +154,15 @@ public class DslTokenizerAllocationTests {
         await Assert.That(new DslTokenReader(source).Peek(0)).IsEqualTo(a);
     }
 
-    /// <summary>G-13's ratchet reads this shape: the obsolete shim is the only string-typed property or field.</summary>
+    /// <summary>The token has no string-typed property or field (<c>TokenShapeTests</c> is the ratchet); text is read through <c>Name()</c> and <c>Unescape()</c>.</summary>
     [Test]
-    public async Task DslToken_OnlyStringMemberIsTheObsoleteTextShim() {
+    public async Task DslToken_HasNoStringMemberAndReadsTextThroughMethods() {
         const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance;
         var stringProperties = typeof(DslToken).GetProperties(flags).Where(p => p.PropertyType == typeof(string)).Select(p => p.Name).ToList();
         var stringFields = typeof(DslToken).GetFields(flags).Where(f => f.FieldType == typeof(string)).ToList();
-        var obsolete = typeof(DslToken).GetProperty("Text")!.GetCustomAttributes(typeof(ObsoleteAttribute), false).Cast<ObsoleteAttribute>().Single();
 
-        await Assert.That(stringProperties).IsEquivalentTo(["Text"]);
+        await Assert.That(stringProperties).IsEmpty();
         await Assert.That(stringFields).IsEmpty();
-        await Assert.That(obsolete.DiagnosticId).IsEqualTo("POLYTOK001");
-        await Assert.That(obsolete.IsError).IsTrue();
         await Assert.That(typeof(DslToken).GetMethod(nameof(DslToken.Name), Type.EmptyTypes)!.ReturnType).IsEqualTo(typeof(string));
         await Assert.That(typeof(DslToken).GetMethod(nameof(DslToken.Unescape), Type.EmptyTypes)!.ReturnType).IsEqualTo(typeof(string));
         await Assert.That(typeof(DslToken).GetProperty("Offset")).IsNull();

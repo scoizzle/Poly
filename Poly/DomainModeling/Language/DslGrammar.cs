@@ -37,6 +37,35 @@ public static class DslGrammar {
     public static bool IsCompareToken(DslToken t) => IsCompareOpKind(t.Kind);
 
     /// <summary>
+    /// The DSL's same-line run (a <see cref="Run{TToken,TTokenKind}"/> delegate): <paramref name="candidate"/>
+    /// is on <paramref name="previous"/>'s line and, from the run's second token (<paramref name="index"/> 1
+    /// on), starts where <paramref name="previous"/> ends.
+    /// </summary>
+    public static bool AdjacentSameLine(DslToken previous, DslToken candidate, int index) =>
+        candidate.Line == previous.Line
+        && (index == 0 || candidate.Start == previous.Start + previous.Length);
+
+    /// <summary>
+    /// One piece of a <c>uses</c> pin (<c>v1</c>, <c>1.2.3</c>, <c>"v1"</c>, <c>-2</c>): an identifier, number,
+    /// string literal, minus or dot, on the same line as the token before it and adjacent to it after the first.
+    /// </summary>
+    public static bool ContinuesUsePin(DslToken previous, DslToken candidate, int index) =>
+        candidate.Kind is (DslTokenKind.Identifier or DslTokenKind.Number or DslTokenKind.StringLiteral
+            or DslTokenKind.Minus or DslTokenKind.Dot)
+        && AdjacentSameLine(previous, candidate, index);
+
+    /// <summary>
+    /// A contextual word (<c>via</c>, <c>initial</c>, <c>key</c>, <c>external</c>, <c>inbound</c>, <c>value</c>):
+    /// an identifier spelled <paramref name="word"/>, never a keyword kind with the same text. It prints as
+    /// that identifier.
+    /// </summary>
+    public static PatternBuilder<DslToken, DslTokenKind> Word(this PatternBuilder<DslToken, DslTokenKind> builder, string word) {
+        ArgumentNullException.ThrowIfNull(builder);
+        ArgumentException.ThrowIfNullOrEmpty(word);
+        return builder.Word(DslTokenKind.Identifier, word, t => t.Kind == DslTokenKind.Identifier && t.TextEquals(word));
+    }
+
+    /// <summary>
     /// Canonical text for a fixed DSL token kind — the tokenizer's inverse. Used by
     /// the grammar <see cref="Printer{TToken,TTokenKind}"/> emit surface; value-bearing
     /// kinds (Identifier, Number, StringLiteral) are content positions and have no
@@ -151,11 +180,11 @@ public static class DslGrammar {
             .Pattern("header").Kind(DslTokenKind.Domain).Value(DslTokenKind.Identifier, "name").Commit()
         .Define("uses")
             .Pattern("id").Kind(DslTokenKind.Uses).Value(DslTokenKind.Identifier, "id").Commit()
-            // The pin is a raw same-line token run (DslSyntaxTree.TryReadUse), not one token;
-            // the Identifier position is this table's print hole, filled with the run's text.
+            // The pin is the same-line token run DslSyntaxTree.TryReadUse reads (1.2.3, "v1", -2);
+            // it prints from the run's joined text.
             .Pattern("pinned")
                 .Kind(DslTokenKind.Uses).Value(DslTokenKind.Identifier, "id")
-                .Value(DslTokenKind.Identifier, "version").Commit()
+                .Run(ContinuesUsePin, "version").Commit()
         .Define("visibility")
             .Pattern("public").Kind(DslTokenKind.Public).Commit()
         .Define("top")

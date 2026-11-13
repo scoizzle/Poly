@@ -64,20 +64,6 @@ public readonly record struct DslToken(DslTokenKind Kind, int Start, int Length,
         return sb.ToString();
     }
 
-    /// <summary>
-    /// Transitional decoded text: a fixed kind's canonical text, an identifier's <see cref="Name"/>, a number's
-    /// slice, a string literal's <see cref="Unescape"/>, and <c>""</c> at end of input. G-13a moved every reader
-    /// onto the span members and made a read a compile error; G-13b deletes it.
-    /// </summary>
-    [Obsolete("Read Span, Name(), Unescape() or TextEquals instead; Text is the G-12 transitional shim that G-13 deletes.", error: true, DiagnosticId = "POLYTOK001")]
-    public string Text => Kind switch {
-        DslTokenKind.EndOfFile => "",
-        DslTokenKind.Identifier => Name(),
-        DslTokenKind.Number => Span.ToString(),
-        DslTokenKind.StringLiteral => Unescape(),
-        _ => DslGrammar.CanonicalText(Kind),
-    };
-
     private static bool IsWordKind(DslTokenKind kind) =>
         kind is not (DslTokenKind.EndOfFile or DslTokenKind.Identifier or DslTokenKind.Number or DslTokenKind.StringLiteral)
         && char.IsLetter(DslGrammar.CanonicalText(kind)[0]);

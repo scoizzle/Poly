@@ -13,7 +13,7 @@ namespace Poly.Grammar;
 /// <param name="ContentEmitted">One entry per content slot the printer visited, in element order:
 /// true when that slot wrote anything. Its count is the number of slots the printer consumed.</param>
 /// <param name="SuppliedContentCount">How many positional content values the caller supplied, when the
-/// caller knows (the C# writer's <c>RenderFills</c>); null when the caller fills slots by callback.</param>
+/// caller knows (<c>Printer.Render</c>); null when the caller fills slots by callback.</param>
 /// <param name="Text">The printed text.</param>
 internal sealed record PrintObservation(
     object Grammar,

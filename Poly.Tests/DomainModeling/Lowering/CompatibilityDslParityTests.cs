@@ -126,8 +126,10 @@ public class CompatibilityDslParityTests {
     /// <summary>
     /// Date ± Decimal passes the domain analyzer (its temporal offset permission, T-10), and the domain lowering emits
     /// <c>Start.AddDays((Int32)Days)</c>: no Date-with-Decimal operator node reaches the lowered compatibility analysis.
-    /// Pinned as each host behaves today. Subtraction lowers to <c>AddDays((Int32)-Days)</c>, and the interpreter
-    /// throws on it while the printed C# runs; that is pinned as it is, not as it should be.
+    /// Pinned as each host behaves today, so T-18 is shown not to change it. Subtraction lowers to
+    /// <c>AddDays((Int32)-Days)</c>: the interpreter throws on it while the printed C# runs. That is a known-wrong
+    /// result, pinned as it is and not as it should be: the VM's decimal negation (issue 832, row T-21) gives -1 for
+    /// <c>-2m</c> and throws on <c>(int)-2m</c>.
     /// </summary>
     [Test]
     [Arguments("Date", "+", "simulate: success=True; exception=none; message=; Due=03/01/2024 | printed: success=True; exception=none; message=; Due=03/01/2024")]
@@ -154,6 +156,7 @@ public class CompatibilityDslParityTests {
     /// <summary>
     /// DateTime ± Decimal: the lowering passes the decimal to <c>DateTime.AddDays(double)</c>. The printed C# does not
     /// compile, and the interpreter's compile is refused by the lowered analysis's invoke check (not an operator check).
+    /// A known-wrong result: the domain analyzer accepts a form neither host runs (temporal offsets, row T-10).
     /// </summary>
     [Test]
     [Arguments("+", "success=False; exception=InvalidOperationException; message=VM compile rejected: AST member body analysis reported errors: no matching member 'AddDays' on 'DateTime' for invoke with 1 argument(s); Due=<state not read>")]

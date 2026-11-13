@@ -12,7 +12,7 @@ namespace Poly.Tests.Grammar;
 /// <param name="Grammar">The table the rows are checked against.</param>
 /// <param name="Tokenize">The reader's tokenizer over a printed text.</param>
 /// <param name="ReportsSuppliedContent">True when every print on this surface reports how many
-/// positional content values it supplied (the C# writer's <c>RenderFills</c>); the slot-count rule
+/// positional content values it supplied (<c>Printer.Render</c>, which the C# writer prints through); the slot-count rule
 /// (A1) then compares that count with the row's slots.</param>
 internal sealed record PatternRowSurface<TToken, TTokenKind>(
     string Name,
@@ -64,7 +64,8 @@ internal sealed record PatternRowViolation(PatternRowCheck Check, string Rule, s
 /// content, the count supplied must equal it (strict: a spare value fails).</item>
 /// <item><b>A2, read-back.</b> The printed text is tokenized by the reader's own tokenizer and matched
 /// against rule <c>R</c> of the full grammar; the top match must be pattern <c>p</c> and consume every token
-/// before end of input.</item>
+/// before end of input, except that a row ending in a <see cref="Slot{TToken,TTokenKind}"/> stops at the
+/// Slot (the host reads the fill that follows).</item>
 /// <item><b>A3, coverage.</b> (a) every row is observed or carries an unobserved entry; (b) every
 /// optional or repeated slot of an observed row is non-empty in some observation, or carries an
 /// <see cref="PatternRowEntryKind.AlwaysNull"/> entry keyed by its slot index; (c) every reader-head and
@@ -77,9 +78,9 @@ internal sealed record PatternRowViolation(PatternRowCheck Check, string Rule, s
 internal static class PatternRowChecker {
     /// <summary>What a top-level pattern element is to the printer.</summary>
     internal enum ElementRole {
-        /// <summary>Emits fixed text (or nothing): <c>MatchKind</c>, <c>NotFollowedBy</c>.</summary>
+        /// <summary>Emits fixed text (or nothing): <c>MatchKind</c>, <c>NotFollowedBy</c>, <c>Word</c>.</summary>
         Fixed,
-        /// <summary>A named value: always a hole.</summary>
+        /// <summary>A named value, a Slot or a Run: always a hole.</summary>
         Hole,
         /// <summary>A labelled predicate: a hole when the caller supplies its label, else a slot.</summary>
         PredicateLabel,
@@ -99,7 +100,10 @@ internal static class PatternRowChecker {
         where TTokenKind : struct => element switch {
             MatchKind<TToken, TTokenKind> => ElementRole.Fixed,
             NotFollowedBy<TToken, TTokenKind> => ElementRole.Fixed,
+            Word<TToken, TTokenKind> => ElementRole.Fixed,
             Value<TToken, TTokenKind> { Name: { Length: > 0 } } => ElementRole.Hole,
+            Slot<TToken, TTokenKind> => ElementRole.Hole,
+            Poly.Grammar.Run<TToken, TTokenKind> => ElementRole.Hole,
             MatchPredicate<TToken, TTokenKind> { Label: { Length: > 0 } } => ElementRole.PredicateLabel,
             Value<TToken, TTokenKind> => ElementRole.Slot,
             MatchPredicate<TToken, TTokenKind> => ElementRole.Slot,
@@ -268,7 +272,7 @@ internal static class PatternRowChecker {
                     case ElementRole.Fixed:
                         break;
                     case ElementRole.Hole:
-                        requiredHoles.Add(((Value<TToken, TTokenKind>)element).Name!);
+                        requiredHoles.Add(HoleName(element));
                         break;
                     case ElementRole.PredicateLabel: {
                             var label = ((MatchPredicate<TToken, TTokenKind>)element).Label;
@@ -316,6 +320,13 @@ internal static class PatternRowChecker {
             return slots;
         }
 
+        private static string HoleName(IPatternElement<TToken, TTokenKind> element) => element switch {
+            Value<TToken, TTokenKind> value => value.Name!,
+            Slot<TToken, TTokenKind> slot => slot.Name,
+            Poly.Grammar.Run<TToken, TTokenKind> run => run.Name,
+            _ => throw new InvalidOperationException($"'{element.GetType().Name}' is not a hole."),
+        };
+
         /// <summary>The number of content callbacks the real printer makes for this row and these fills.</summary>
         private int ProbeSlotCount(string rule, string pattern, IReadOnlyDictionary<string, string> fills) {
             var count = 0;
@@ -344,7 +355,9 @@ internal static class PatternRowChecker {
                 return $"does not re-read as rule '{rule}'";
             if (!string.Equals(match.PatternName, pattern, StringComparison.Ordinal))
                 return $"re-reads as {rule}/{match.PatternName}";
-            if (match.Consumed != tokens)
+            // A row that ends in a Slot stops there: the host reads what follows (the slot's fill), so the
+            // row re-reads its head and the rest of the text is the fill's.
+            if (match.Consumed != tokens && match.Pattern?.Elements is not [.., Slot<TToken, TTokenKind>])
                 return $"re-reads {match.Consumed} of its {tokens} tokens as {rule}/{pattern}";
             return null;
         }

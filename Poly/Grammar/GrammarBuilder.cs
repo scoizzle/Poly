@@ -64,14 +64,45 @@ public sealed class GrammarBuilder<TToken, TTokenKind>
         if (list.Any(p => string.Equals(p.Name, pattern.Name, StringComparison.Ordinal)))
             throw new InvalidOperationException(
                 $"Pattern '{pattern.Name}' is already defined on rule '{ruleName}'.");
+        EnsurePlacement(ruleName, pattern);
         EnsureUniqueCaptureNames(ruleName, pattern);
         list.Add(pattern);
         SortPatterns(list);
     }
 
+    /// <summary>
+    /// Fails closed on an element where it cannot work: a <see cref="Slot{TToken,TTokenKind}"/> that is not
+    /// the row's last element; a <see cref="Run{TToken,TTokenKind}"/> with no required element before it (it
+    /// continues the token before it); and a Slot or Run inside an <see cref="Optional{TToken,TTokenKind}"/>.
+    /// </summary>
+    private static void EnsurePlacement(string ruleName, Pattern<TToken, TTokenKind> pattern) {
+        var elements = pattern.Elements;
+        var required = false;
+        for (var i = 0; i < elements.Count; i++) {
+            switch (elements[i]) {
+                case Run<TToken, TTokenKind> run when !required:
+                    throw new InvalidOperationException(
+                        $"Run '{run.Name}' on '{ruleName}/{pattern.Name}' is element {i + 1} with no required element before it; a Run continues the token before it.");
+                case Optional<TToken, TTokenKind> { Inner: Run<TToken, TTokenKind> inner }:
+                    throw new InvalidOperationException(
+                        $"Run '{inner.Name}' on '{ruleName}/{pattern.Name}' is inside an Optional; a Run is never optional.");
+                case Slot<TToken, TTokenKind> slot when i != elements.Count - 1:
+                    throw new InvalidOperationException(
+                        $"Slot '{slot.Name}' on '{ruleName}/{pattern.Name}' is element {i + 1} of {elements.Count}; a Slot must be the last element.");
+                case Optional<TToken, TTokenKind> { Inner: Slot<TToken, TTokenKind> inner }:
+                    throw new InvalidOperationException(
+                        $"Slot '{inner.Name}' on '{ruleName}/{pattern.Name}' is inside an Optional; a Slot is never optional.");
+            }
+            if (elements[i] is not (Optional<TToken, TTokenKind> or NotFollowedBy<TToken, TTokenKind>))
+                required = true;
+        }
+    }
+
     private static void EnsureUniqueCaptureNames(string ruleName, Pattern<TToken, TTokenKind> pattern) {
         var seen = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var name in CaptureNames(pattern.Elements)) {
+        // A Slot's name is a print fill key, so it shares the namespace of the captures.
+        var slots = pattern.Elements.OfType<Slot<TToken, TTokenKind>>().Select(slot => slot.Name);
+        foreach (var name in CaptureNames(pattern.Elements).Concat(slots)) {
             if (!seen.Add(name))
                 throw new InvalidOperationException(
                     $"Duplicate capture '{name}' on pattern '{pattern.Name}' in rule '{ruleName}'.");
@@ -86,6 +117,9 @@ public sealed class GrammarBuilder<TToken, TTokenKind>
                     break;
                 case MatchPredicate<TToken, TTokenKind> { Label: { Length: > 0 } label }:
                     yield return label;
+                    break;
+                case Run<TToken, TTokenKind> run:
+                    yield return run.Name;
                     break;
                 case Optional<TToken, TTokenKind> opt:
                     foreach (var inner in CaptureNames([opt.Inner]))
@@ -175,6 +209,38 @@ public sealed class PatternBuilder<TToken, TTokenKind>
     /// <summary>Matches a token satisfying <paramref name="predicate"/> and captures the result under <paramref name="label"/>.</summary>
     public PatternBuilder<TToken, TTokenKind> Predicate(Func<TToken, bool> predicate, string label) {
         _elements.Add(new MatchPredicate<TToken, TTokenKind>(predicate, label));
+        return this;
+    }
+
+    /// <summary>
+    /// Matches one token <paramref name="matches"/> accepts (a contextual word); prints <paramref name="text"/>
+    /// as a token of <paramref name="kind"/>. Captures nothing.
+    /// </summary>
+    public PatternBuilder<TToken, TTokenKind> Word(TTokenKind kind, string text, Func<TToken, bool> matches) {
+        ArgumentException.ThrowIfNullOrEmpty(text);
+        ArgumentNullException.ThrowIfNull(matches);
+        _elements.Add(new Word<TToken, TTokenKind>(kind, text, matches));
+        return this;
+    }
+
+    /// <summary>
+    /// Ends the row at a zero-width print hole named <paramref name="name"/>: the reader stops here, the
+    /// printer writes the fill. Must be the last element.
+    /// </summary>
+    public PatternBuilder<TToken, TTokenKind> Slot(string name) {
+        ArgumentException.ThrowIfNullOrEmpty(name);
+        _elements.Add(new Slot<TToken, TTokenKind>(name));
+        return this;
+    }
+
+    /// <summary>
+    /// Matches one or more tokens, each accepted by <paramref name="continues"/> <c>(previous, candidate, index)</c>,
+    /// captured and printed as <paramref name="name"/>. Not the first element.
+    /// </summary>
+    public PatternBuilder<TToken, TTokenKind> Run(Func<TToken, TToken, int, bool> continues, string name) {
+        ArgumentNullException.ThrowIfNull(continues);
+        ArgumentException.ThrowIfNullOrEmpty(name);
+        _elements.Add(new Run<TToken, TTokenKind>(continues, name));
         return this;
     }
 

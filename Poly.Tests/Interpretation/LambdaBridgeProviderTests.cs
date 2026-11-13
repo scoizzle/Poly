@@ -949,6 +949,19 @@ internal static class BridgeGrid {
 
     public static bool MasterAgrees(BridgeCase c) => Matches(MasterObserved(c), ProviderExpectation(c));
 
+    private static readonly Type[] CoalesceNarrowLefts = [typeof(sbyte), typeof(short), typeof(byte), typeof(ushort), typeof(char), typeof(bool)];
+
+    /// <summary>
+    /// The cells the main emitter refused on master while it compiled the function table, before the bridge quoted the
+    /// lambda (T-19b's cells): a persisted master answer that is <c>main-rejected</c>; for the coalesce grid, which has no
+    /// persisted answer, the main emitter's representation rule over the operands: a left narrower than a word or Boolean,
+    /// or exactly one Decimal side.
+    /// </summary>
+    public static bool MainRejectedOnMaster(BridgeCase c) => HasMasterAnswer(c)
+        ? MasterAnswer(c).StartsWith("main-rejected", StringComparison.Ordinal)
+        : c.Grid == "coalesce" && (CoalesceNarrowLefts.Contains(c.Left.Underlying)
+            || (c.Left.Underlying == typeof(decimal)) != ((c.Right?.Underlying ?? typeof(int)) == typeof(decimal)));
+
     /// <summary>
     /// The family of a change between two answers, keyed by kind group and how it changes, for the delta table:
     /// <c>refused becomes works</c>, <c>runs becomes refused</c>, <c>message only</c> (a raw exception becomes the
@@ -1324,6 +1337,55 @@ public class LambdaBridgeProviderTests {
         await Assert.That(string.Join("\n", stages)).IsEqualTo(string.Join("\n", PredictedStages));
         await Assert.That(BridgeGrid.Cases.Count(static c => BridgeGrid.Outcome(c) is { Stage: "ran", Replaced: true })).IsGreaterThanOrEqualTo(95);
     }
+
+    /// <summary>
+    /// T-19b, characterisation: the cells the main emitter refuses before the bridge are exactly
+    /// <see cref="BridgeGrid.MainRejectedOnMaster"/>, 874 of them.
+    /// </summary>
+    [Test]
+    public async Task Grid_MainRejectedCells_AreTheCellsRefusedOnMaster() {
+        var now = BridgeGrid.Cases.Where(static c => BridgeGrid.Outcome(c).Stage == "main-rejected").Select(static c => c.Line).ToArray();
+        var master = BridgeGrid.Cases.Where(BridgeGrid.MainRejectedOnMaster).Select(static c => c.Line).ToArray();
+        await Assert.That(ConstantFoldGrid.Pin(master)).IsEqualTo(MainRejectedOnMasterPin);
+        await Assert.That(ConstantFoldGrid.Pin(now)).IsEqualTo(MainRejectedOnMasterPin);
+    }
+
+    private const string MainRejectedOnMasterPin = "874 e44fd9e2f5ec93ff";
+
+    /// <summary>
+    /// T-19b moves only the cells the main emitter refused on master: every other cell's rendered answer is unchanged
+    /// (one checksum over <c>line = render</c>).
+    /// </summary>
+    [Test]
+    public async Task Grid_CellsNotRefusedOnMaster_KeepTheirAnswers() {
+        var lines = BridgeGrid.Cases.Where(static c => !BridgeGrid.MainRejectedOnMaster(c))
+            .Select(static c => $"{c.Line} = {BridgeGrid.Outcome(c).Render}").ToArray();
+        await Assert.That(ConstantFoldGrid.Pin(lines)).IsEqualTo("7918 5461f32ee59cf18a");
+    }
+
+    /// <summary>
+    /// T-19b, characterisation: the cells refused on master by the function-table compile, per grid, split by whether the
+    /// provider defines them. A defined one must run with the provider's type once the bridge decides it, an undefined one
+    /// must be the bridge's positioned refusal. Every uint64-constant cell is defined (lock amendment 6).
+    /// </summary>
+    [Test]
+    public async Task Grid_MainRejectedOnMaster_SplitByTheProvider() {
+        var split = BridgeGrid.Cases.Where(BridgeGrid.MainRejectedOnMaster).GroupBy(static c => c.Grid)
+            .OrderBy(static g => g.Key, StringComparer.Ordinal)
+            .Select(static g => $"{g.Key} defined={g.Count(static c => BridgeGrid.ProviderExpectation(c).Defined)} undefined={g.Count(static c => !BridgeGrid.ProviderExpectation(c).Defined)}");
+        await Assert.That(string.Join("\n", split)).IsEqualTo(string.Join("\n", MainRejectedSplit));
+        var uint64 = BridgeGrid.Cases.Where(static c => c.Grid == "uint64-constant" && BridgeGrid.MainRejectedOnMaster(c)).ToArray();
+        await Assert.That(uint64.Length).IsEqualTo(28);
+        await Assert.That(uint64.All(static c => BridgeGrid.ProviderExpectation(c).Defined)).IsTrue();
+    }
+
+    private static readonly string[] MainRejectedSplit = [
+        "coalesce defined=64 undefined=39",
+        "conditional defined=54 undefined=53",
+        "nullable defined=15 undefined=320",
+        "operator defined=0 undefined=301",
+        "uint64-constant defined=28 undefined=0"
+    ];
 
     private static readonly string[] PredictedStages = [
         "coalesce bridge-rejected = 18",

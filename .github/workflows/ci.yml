@@ -38,6 +38,10 @@ jobs:
       - name: Build
         run: dotnet build Poly.slnx --no-restore --nologo
 
+      # Frees the compiler server the Build step leaves alive (0.6 to 2.4 GB resident during the tests, #870).
+      - name: Stop build servers
+        run: dotnet build-server shutdown
+
       # The test command runs under scripts/run-with-deadline.sh, which ends the step ITSELF (a
       # failed step, so the next steps run) in three ways, earliest first:
       #   - --timeout 10m in the test host ends an async hang cleanly, with a summary (exit 3);
@@ -55,6 +59,12 @@ jobs:
       - name: Run tests
         id: tests
         timeout-minutes: 12
+        env:
+          # One measurement each (PR body): test-host peak 13.7 GB -> 8.5 GB with this alone (plus the
+          # build-server stop, which alone changed nothing); glibc's per-thread arenas kept freed native memory.
+          MALLOC_ARENA_MAX: '2'
+          # 8.5 GB -> 6.0 GB on top of the arena cap, at no measurable cost in duration (4m12s vs 4m29s, run-to-run noise).
+          DOTNET_GCConserveMemory: '7'
         run: >
           scripts/run-with-deadline.sh 630
           dotnet run --project Poly.Tests/Poly.Tests.csproj --no-restore --

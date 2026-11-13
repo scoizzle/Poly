@@ -450,32 +450,37 @@ public static class PolyEdit {
     }
 
     /// <summary>
-    /// Re-indents a snippet for <paramref name="indent"/>. <c>add</c> (<paramref name="skipFirst"/> false) and a snippet AUTHORED from
-    /// column 0 add the target's indent to every line after trimming the snippet's common indent. The rule for <c>replace</c>
-    /// (<paramref name="skipFirst"/>, the first line sits at the node): if the last non-blank continuation line is indented at least
-    /// as far as the target node, the snippet is read in DOCUMENT coordinates and its lines are kept exactly as written (so a node's own
-    /// text, hanging indents and column-0 comment lines included, comes back unchanged); otherwise (the closing line is left of the node,
-    /// the usual sign of a snippet written from column 0) every line gets the node's indent. Lines inside a multi-line string literal
-    /// are never re-indented by <c>replace</c>. A snippet with continuation lines that is written from column 0 and ends indented at
-    /// least as far as the node is read in document coordinates.
+    /// Re-indents a snippet for <paramref name="indent"/>. <c>add</c> (<paramref name="skipFirst"/> false) adds the target's indent to every
+    /// line after trimming the snippet's common indent. <c>replace</c> (<paramref name="skipFirst"/>, the first line sits at the node)
+    /// reads the first line's own indent w0 as evidence: (1) w0 above 0 and different from the target's indent: the snippet states its own
+    /// base (pasted uniformly indented): the common indent of its other lines is stripped (a column-0 line does not vote and keeps no
+    /// indent of its own) and the target's indent is added; (2) w0 equal to the target's indent and above 0: taken from the line start,
+    /// document coordinates: every line is kept as written; (3) w0 is 0 (taken from the node start, or authored from column 0): if the
+    /// last non-blank continuation line is indented at least as far as the target the snippet is in document coordinates and kept as
+    /// written, otherwise it is authored and every line gets the target's indent. Lines inside a multi-line string literal are never
+    /// re-indented by <c>replace</c>.
     /// </summary>
     private static string Reindent(string dsl, string indent, string nl, bool skipFirst) {
         var lines = dsl.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n').ToList();
         while (lines.Count > 0 && string.IsNullOrWhiteSpace(lines[0])) lines.RemoveAt(0);
         while (lines.Count > 0 && string.IsNullOrWhiteSpace(lines[^1])) lines.RemoveAt(lines.Count - 1);
+        static int Indent(string line) => line.Length - line.TrimStart().Length;
         var verbatim = skipFirst ? StringContentLines(lines) : [];
+        var first = skipFirst && lines.Count > 0 ? Indent(lines[0]) : 0;
         var last = Enumerable.Range(1, Math.Max(0, lines.Count - 1)).Where(i => !verbatim.Contains(i) && !string.IsNullOrWhiteSpace(lines[i])).Select(i => (int?)i).LastOrDefault();
-        if (skipFirst && (last is not { } l || lines[l].Length - lines[l].TrimStart().Length >= indent.Length))
-            return string.Join(nl, lines.Select((line, i) => i == 0 ? line.Trim() : line.TrimEnd('\r')));
+        var inDocument = first == 0 ? last is not { } l || Indent(lines[l]) >= indent.Length : first == indent.Length;
+        if (skipFirst && inDocument)
+            return string.Join(nl, lines.Select((line, i) => i == 0 ? line.Trim() : line));
+        var stated = skipFirst && first > 0;
         var common = lines
-            .Where((line, i) => !verbatim.Contains(i) && !string.IsNullOrWhiteSpace(line))
-            .Select(line => line.Length - line.TrimStart().Length)
+            .Where((line, i) => !verbatim.Contains(i) && !string.IsNullOrWhiteSpace(line) && !(stated && i > 0 && Indent(line) == 0))
+            .Select(Indent)
             .DefaultIfEmpty(0)
             .Min();
         var shifted = lines.Select((line, i) => {
             if (verbatim.Contains(i))
                 return line;
-            var trimmed = string.IsNullOrWhiteSpace(line) ? "" : line[common..].TrimEnd();
+            var trimmed = string.IsNullOrWhiteSpace(line) ? "" : line[Math.Min(common, Indent(line))..].TrimEnd();
             return trimmed.Length == 0 || (i == 0 && skipFirst) ? trimmed : indent + trimmed;
         });
         return string.Join(nl, shifted);

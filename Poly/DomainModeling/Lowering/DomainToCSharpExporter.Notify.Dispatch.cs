@@ -148,10 +148,12 @@ public sealed partial class DomainToCSharpExporter {
                 // the store under simulate, and printed hosts may attach twice.
                 // ReferenceEquals keeps distinct-but-equal records from deduping.
                 // The body must use this parameter, not a same-named copy: a copy
-                // has no type, so the VM cannot place the argument.
+                // has no type, so the VM cannot place the argument. The registry is the target's state, so it is
+                // touched first (L-03c): a subscriber created in the action registers on an existing target.
                 var existing = new Variable("existing");
                 var subscriber = new Parameter(paramName, srcType);
                 var registerBody = new Block([
+                    TouchThis(),
                     new IfStatement(
                         new Equal(fieldAcc, new Constant(null)),
                         new Block([

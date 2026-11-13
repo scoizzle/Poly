@@ -208,13 +208,33 @@ internal abstract record LocalType(Type Clr) {
             || underlying == typeof(sbyte) || underlying == typeof(char);
     }
 
-    /// <summary>A scalar word brought to <paramref name="target"/>.</summary>
+    /// <summary>
+    /// The CLR type a word of <paramref name="clr"/> is computed at: a <c>long</c> for <c>nint</c> and a <c>ulong</c> for
+    /// <c>nuint</c>, so a native integer has the signedness of its width; every other type is itself. Expression trees
+    /// have no arithmetic, comparison or numeric conversion on IntPtr or UIntPtr, only the explicit conversions to and
+    /// from that word.
+    /// </summary>
+    public static Type WordTypeOf(Type clr) =>
+        clr == typeof(nint) ? typeof(long) : clr == typeof(nuint) ? typeof(ulong) : clr;
+
+    /// <summary>A native-integer value, or its nullable, at its word type; any other value unchanged.</summary>
+    public static Expression AsWordType(Expression value) {
+        var underlying = Nullable.GetUnderlyingType(value.Type);
+        var word = WordTypeOf(underlying ?? value.Type);
+        if (word == (underlying ?? value.Type))
+            return value;
+        return Convert(value, underlying is null ? word : typeof(Nullable<>).MakeGenericType(word));
+    }
+
+    /// <summary>A scalar word brought to <paramref name="target"/>. A native integer converts through its word type.</summary>
     protected Expression Finish(Expression value, Type target) {
         if (value.Type == target)
             return value;
         if (target == typeof(bool))
             return NotEqual(RingCodec.ToWord(value), Constant(0L));
-        return Convert(value, target);
+        value = AsWordType(value);
+        var word = WordTypeOf(target);
+        return word == target ? Convert(value, target) : Convert(value.Type == word ? value : Convert(value, word), target);
     }
 
     /// <summary>An inline integer wider than 32 bits, a <c>uint</c>, an enum with
@@ -222,24 +242,17 @@ internal abstract record LocalType(Type Clr) {
     /// number. <c>ulong</c> and <c>nuint</c> are bitcasts. The 32-bit family is
     /// <see cref="Int32Local"/>.</summary>
     internal sealed record Int64Local(Type Clr) : LocalType(Clr) {
-        private static readonly MethodInfo UIntPtrToUInt64 =
-            typeof(nuint).GetMethod(nameof(nuint.ToUInt64), Type.EmptyTypes)!;
-        private static readonly ConstructorInfo UIntPtrFromULong =
-            typeof(nuint).GetConstructor([typeof(ulong)])!;
-
         public override ValueRepresentationKind Kind => ValueRepresentationKind.StackScalar;
 
         public override Expression ToFrame(Expression value, Expression heap) {
-            if (Clr == typeof(ulong) || value.Type == typeof(ulong))
+            value = AsWordType(value);
+            var word = WordTypeOf(Clr);
+            if (word == typeof(ulong) || value.Type == typeof(ulong))
                 return value.Type == typeof(long) ? value : Convert(value, typeof(long));
-            if (Clr == typeof(nuint) || value.Type == typeof(nuint))
-                return value.Type == typeof(long)
-                    ? value
-                    : Convert(Call(value, UIntPtrToUInt64), typeof(long));
             if (value.Type == typeof(long))
                 return value;
-            if (value.Type != Clr && (Clr.IsPrimitive || Clr == typeof(char) || Clr.IsEnum))
-                value = Convert(value, Clr);
+            if (value.Type != word && (word.IsPrimitive || word == typeof(char) || word.IsEnum))
+                value = Convert(value, word);
             return Convert(value, typeof(long));
         }
 
@@ -268,14 +281,11 @@ internal abstract record LocalType(Type Clr) {
             return under is ulong ul ? unchecked((long)ul) : System.Convert.ToInt64(under);
         }
 
+        /// <summary>The word at <see cref="WordTypeOf"/>: <c>ulong</c> and <c>nuint</c> are the unsigned bitcast.</summary>
         private Expression Materialize(Expression word) {
             if (word.Type == Clr)
                 return word;
-            if (Clr == typeof(ulong))
-                return Convert(RingCodec.ToWord(word), typeof(ulong));
-            if (Clr == typeof(nuint))
-                return New(UIntPtrFromULong, Convert(RingCodec.ToWord(word), typeof(ulong)));
-            return Convert(RingCodec.ToWord(word), Clr);
+            return Convert(RingCodec.ToWord(word), WordTypeOf(Clr));
         }
     }
 
@@ -284,16 +294,12 @@ internal abstract record LocalType(Type Clr) {
     /// is <c>int</c>. The frame holds the word. A store into a smaller member of
     /// the family narrows with the unchecked cast.</summary>
     internal sealed record Int32Local(Type Clr) : LocalType(Clr) {
-        private static readonly MethodInfo UIntPtrToUInt64 =
-            typeof(nuint).GetMethod(nameof(nuint.ToUInt64), Type.EmptyTypes)!;
-
         public override ValueRepresentationKind Kind => ValueRepresentationKind.StackScalar;
 
         public override Expression ToFrame(Expression value, Expression heap) {
+            value = AsWordType(value);
             if (value.Type == typeof(ulong))
                 return Convert(value, typeof(long));
-            if (value.Type == typeof(nuint))
-                return Convert(Call(value, UIntPtrToUInt64), typeof(long));
             if (value.Type == typeof(long))
                 return value;
             if (value.Type != Clr)

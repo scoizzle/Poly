@@ -107,7 +107,7 @@ internal static class NullableCharGrid {
             ? ""
             : $"VM result type {Display(program.RootClrType)}, C# {Display(expectedType)}; ";
         foreach (var (l, r) in Arguments(left, right)) {
-            var expected = Binder(kind, l, r);
+            var expected = Binder(kind, left, right, l, r);
             if (expected.StartsWith("binder rejects", StringComparison.Ordinal))
                 return expected;
             string actual;
@@ -116,7 +116,10 @@ internal static class NullableCharGrid {
                 actual = kind is OperatorKind.Equal or OperatorKind.NotEqual or OperatorKind.LessThan or OperatorKind.LessThanOrEqual
                     or OperatorKind.GreaterThan or OperatorKind.GreaterThanOrEqual
                     ? Format(exec.RawValue != 0)
-                    : exec.Result.Value is null ? "null" : Format(typeof(ExecutionResult).GetMethod(nameof(ExecutionResult.GetValue))!.MakeGenericMethod(resultType).Invoke(exec, null));
+                    : exec.Result.Value is null ? "null"
+                    // A native integer is not IConvertible: GetValue cannot convert to it, so the boxed result is read as it is.
+                    : Poly.Tests.Introspection.CSharpOperatorOracle.IsNativeForm(resultType) ? Format(exec.Result.Value)
+                    : Format(typeof(ExecutionResult).GetMethod(nameof(ExecutionResult.GetValue))!.MakeGenericMethod(resultType).Invoke(exec, null));
             }
             catch (Exception ex) {
                 return $"VM throws: {ex.GetType().Name}";
@@ -141,8 +144,18 @@ internal static class NullableCharGrid {
             yield return (lv.Plain, null);
     }
 
-    /// <summary>The C# binder on the operand values, lifted: an absent operand gives null arithmetic, equality only with absence, and false ordering.</summary>
-    private static string Binder(OperatorKind kind, object? l, object? r) {
+    /// <summary>
+    /// The C# binder on the operand values, lifted: an absent operand gives null arithmetic, equality only with absence,
+    /// and false ordering. A native-integer cell is answered by Roslyn instead (T-18b lock amendment 6): the runtime
+    /// binder applies IntPtr's declared members, not C# 11's native-integer operators.
+    /// </summary>
+    private static string Binder(OperatorKind kind, Type left, Type right, object? l, object? r) {
+        if (Poly.Tests.Introspection.CSharpOperatorOracle.IsNativeForm(left) || Poly.Tests.Introspection.CSharpOperatorOracle.IsNativeForm(right)) {
+            if (!Poly.Tests.Introspection.CSharpOperatorOracle.Answer(kind, left, right).Defined)
+                return "binder rejects the pair";
+            var answer = Poly.Tests.Introspection.CSharpOperatorOracle.Value(kind, left, right, l, r);
+            return answer.Throws is { } thrown ? $"binder throws {thrown}" : Format(answer.Value);
+        }
         if (l is null || r is null) {
             return kind switch {
                 OperatorKind.Equal => Format(l is null && r is null),
@@ -235,19 +248,23 @@ public class NullableCharProofTests {
 
     /// <summary>Count and key checksum per class over every cell the rule decides.</summary>
     /// <summary>
-    /// Count and key checksum per class over every cell the rule decides (513). Every cell that would run without the
+    /// Count and key checksum per class over every cell the rule decides (593). Every cell that would run without the
     /// rule matches the C# binder's verdict and value. 80 small-integer cells state the operand's type as the result
     /// (`Byte?` where C# says `Int32?`): the nullable variant of the ledger's T-17 `type: analysis` and T-21 `type: VM`
-    /// cells, whose non-nullable siblings (`byte + char`) the analysis accepts. 14 IntPtr cells stay rejected by
-    /// `VmExecutesDeclaredOperator` with or without the rule.
+    /// cells, whose non-nullable siblings (`byte + char`) the analysis accepts. 6 Duration cells stay rejected by
+    /// `VmExecutesDeclaredOperator` with or without the rule. T-18b: the 88 cells of a <c>char?</c> beside a native integer
+    /// are defined now (8 of them were IntPtr's declared members, rejected); Roslyn answers them (the binder has no
+    /// native-integer rules), 68 agree and 20 state <c>Char?</c> where C# says <c>nint?</c> or <c>nuint?</c> (T-17).
     /// </summary>
     private static readonly Dictionary<string, (int Count, string Checksum)> ExpectedClasses = new(StringComparer.Ordinal) {
-        ["VM agrees with C#"] = (419, "7e7f9f61fbdda971"),
+        ["VM agrees with C#"] = (487, "895f966e8a39b48a"),
+        ["VM result type Char?, C# IntPtr?; values agree"] = (10, "2df87c5897b92ad9"),
+        ["VM result type Char?, C# UIntPtr?; values agree"] = (10, "a4f286f3a5c7e9ce"),
         ["VM result type Byte?, C# Int32?; values agree"] = (20, "7a49cb56b4a77f07"),
         ["VM result type Int16?, C# Int32?; values agree"] = (20, "f939a2362ca5604a"),
         ["VM result type SByte?, C# Int32?; values agree"] = (20, "12cce72358c0b831"),
         ["VM result type UInt16?, C# Int32?; values agree"] = (20, "56aa713b2e2de5c2"),
-        ["still rejected without the rule: VmExecutesDeclaredOperator"] = (14, "9d401c19b653b1db"),
+        ["still rejected without the rule: VmExecutesDeclaredOperator"] = (6, "9c9dd8c3277c89fb"),
     };
 
     [Test]
@@ -265,6 +282,6 @@ public class NullableCharProofTests {
         foreach (var name in ExpectedClasses.Keys.Where(k => !actual.ContainsKey(k)))
             problems.Add($"class [\"{name}\"] expected but empty");
         await Assert.That(problems).IsEmpty();
-        await Assert.That(cells.Count).IsEqualTo(513);
+        await Assert.That(cells.Count).IsEqualTo(593);
     }
 }

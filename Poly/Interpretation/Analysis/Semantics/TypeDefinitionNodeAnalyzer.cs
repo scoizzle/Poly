@@ -816,7 +816,9 @@ internal static class AstTypeReferenceResolver {
             PrimitiveType.Guid => clr.GetTypeDefinition<Guid>(),
             PrimitiveType.ByteArray => clr.GetTypeDefinition<byte[]>(),
             PrimitiveType.Structure => clr.GetTypeDefinition<object>(),
-            _ => clr.GetTypeDefinition<object>()
+            PrimitiveType.NInt => clr.GetTypeDefinition<nint>(),
+            PrimitiveType.NUInt => clr.GetTypeDefinition<nuint>(),
+            _ => throw new ArgumentOutOfRangeException(nameof(id), id, "no CLR definition for this primitive")
         };
 
         if (isNullable && baseType.RuntimeType.IsValueType) {

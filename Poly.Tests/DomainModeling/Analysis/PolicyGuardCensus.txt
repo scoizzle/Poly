@@ -1,0 +1,64 @@
+# V-18 census (#680 row V-18, plan section 4, lock amendment 8)
+# Range findings (DMEFF008, DMCS003, DMCS001; errors "!" and warnings "?") over the corpus CorpusVerdictSweepTests reads:
+# every tracked *.poly, every non-illustration guide fence, the demo IDE samples and the poly_guide quickstart.
+# PolicyGuardFactsTests.Census_MatchesGolden compares the measured block; POLY_UPDATE_GOLDEN=1 rewrites it.
+# measured
+documents scanned = 82
+documents with require not (source text) = 7
+documents with a create under require (analysed domain) = 5
+documents with no analysed domain = 21
+range findings = 53
+docs/missions/evolve-2026-10-13/billing.poly | 11:3 | DMCS003? | Cannot verify 'create Reading { Usage: usage }' against constraint range(0, +∞) on property 'Usage': the assigned value has no bound analysis can use.
+docs/missions/evolve-2026-10-13/claims.poly | 8:3 | DMCS003? | Cannot verify 'create Claim { Amount: amount }' against constraint range(0, +∞) on property 'Amount': the assigned value has no bound analysis can use.
+docs/missions/evolve-2026-10-13/smarthome.poly | 41:5 | DMCS003? | Cannot verify 'assign MaxLevel to level' against constraint range(0, 100) on property 'MaxLevel': the assigned value has no bound analysis can use.
+docs/missions/evolve-2026-10-14/cart.poly | 10:3 | DMCS003? | Cannot verify 'create Line { Price: price }' against constraint range(0, +∞) on property 'Price': the assigned value has no bound analysis can use.
+docs/missions/evolve-2026-10-14/cart.poly | 10:3 | DMCS003? | Cannot verify 'create Line { Qty: qty }' against constraint range(1, +∞) on property 'Qty': the assigned value has no bound analysis can use.
+docs/probes/dogfood/crm.poly | 68:5 | DMCS003? | Cannot verify 'create Opportunity { Amount: amount }' against constraint range(0, 100000000) on property 'Amount': the assigned value has no bound analysis can use.
+docs/probes/dogfood/crm.poly | 131:5 | DMCS003? | Cannot verify 'assign Amount to (Amount + (qty * sku ListPrice))' against constraint range(0, 100000000) on property 'Amount': the assigned value has no bound analysis can use.
+docs/probes/dogfood/crm.poly | 131:5 | DMCS003? | Cannot verify 'create Line { Qty: qty }' against constraint range(1, 10000) on property 'Qty': the assigned value has no bound analysis can use.
+docs/probes/dogfood/crm.poly | 131:5 | DMCS003? | Cannot verify 'create Line { UnitPrice: sku ListPrice }' against constraint range(0, 100000000) on property 'UnitPrice': the assigned value has no bound analysis can use.
+docs/probes/dogfood/crm.poly | 150:5 | DMCS003? | Cannot verify 'assign Amount to (Amount + (qty * sku ListPrice))' against constraint range(0, 100000000) on property 'Amount': the assigned value has no bound analysis can use.
+docs/probes/dogfood/crm.poly | 150:5 | DMCS003? | Cannot verify 'create Line { Qty: qty }' against constraint range(1, 10000) on property 'Qty': the assigned value has no bound analysis can use.
+docs/probes/dogfood/crm.poly | 150:5 | DMCS003? | Cannot verify 'create Line { UnitPrice: sku ListPrice }' against constraint range(0, 100000000) on property 'UnitPrice': the assigned value has no bound analysis can use.
+docs/probes/dogfood/crm.poly | 165:5 | DMCS003? | Cannot verify 'assign Amount to (Amount + (qty * sku ListPrice))' against constraint range(0, 100000000) on property 'Amount': the assigned value has no bound analysis can use.
+docs/probes/dogfood/crm.poly | 165:5 | DMCS003? | Cannot verify 'create Line { Qty: qty }' against constraint range(1, 10000) on property 'Qty': the assigned value has no bound analysis can use.
+docs/probes/dogfood/crm.poly | 165:5 | DMCS003? | Cannot verify 'create Line { UnitPrice: sku ListPrice }' against constraint range(0, 100000000) on property 'UnitPrice': the assigned value has no bound analysis can use.
+docs/probes/dogfood/crm.poly | 201:5 | DMCS003? | Cannot verify 'assign Amount to (Amount + (qty * sku ListPrice))' against constraint range(0, 100000000) on property 'Amount': the assigned value has no bound analysis can use.
+docs/probes/dogfood/crm.poly | 201:5 | DMCS003? | Cannot verify 'create QuoteLine { Qty: qty }' against constraint range(1, 10000) on property 'Qty': the assigned value has no bound analysis can use.
+docs/probes/dogfood/crm.poly | 201:5 | DMCS003? | Cannot verify 'create QuoteLine { UnitPrice: sku ListPrice }' against constraint range(0, 100000000) on property 'UnitPrice': the assigned value has no bound analysis can use.
+docs/probes/dogfood/hotel.poly | 18:5 | DMCS003? | Cannot verify 'create Hall { Capacity: seats }' against constraint range(1, 5000) on property 'Capacity': the assigned value has no bound analysis can use.
+docs/probes/dogfood/hotel.poly | 18:5 | DMCS003? | Cannot verify 'create Hall { DayRate: rate }' against constraint range(0, 100000) on property 'DayRate': the assigned value has no bound analysis can use.
+docs/probes/dogfood/hotel.poly | 162:5 | DMCS003? | Cannot verify 'create Reservation { PartySize: party }' against constraint range(1, 8) on property 'PartySize': the assigned value has no bound analysis can use.
+docs/probes/dogfood/hotel.poly | 162:5 | DMCS003? | Cannot verify 'create Reservation { Nights: nights }' against constraint range(1, 60) on property 'Nights': the assigned value has no bound analysis can use.
+docs/probes/dogfood/hotel.poly | 162:5 | DMCS003? | Cannot verify 'create Reservation { NightlyRate: room NightlyRate }' against constraint range(0, 10000) on property 'NightlyRate': the assigned value has no bound analysis can use.
+docs/probes/dogfood/hotel.poly | 162:5 | DMCS003? | Cannot verify 'create Reservation { MaxOccupancy: room MaxOccupancy }' against constraint range(1, 8) on property 'MaxOccupancy': the assigned value has no bound analysis can use.
+docs/probes/dogfood/hotel.poly | 173:5 | DMCS003? | Cannot verify 'create EventHold { Headcount: party }' against constraint range(1, 5000) on property 'Headcount': the assigned value has no bound analysis can use.
+docs/probes/dogfood/hotel.poly | 173:5 | DMCS003? | Cannot verify 'create EventHold { Capacity: hall Capacity }' against constraint range(1, 5000) on property 'Capacity': the assigned value has no bound analysis can use.
+docs/probes/dogfood/hotel.poly | 173:5 | DMCS003? | Cannot verify 'create EventHold { DayRate: hall DayRate }' against constraint range(0, 100000) on property 'DayRate': the assigned value has no bound analysis can use.
+docs/probes/dogfood/hotel.poly | 183:5 | DMCS003? | Cannot verify 'create EventHold { Headcount: party }' against constraint range(1, 5000) on property 'Headcount': the assigned value has no bound analysis can use.
+docs/probes/dogfood/hotel.poly | 183:5 | DMCS003? | Cannot verify 'create EventHold { Capacity: section Capacity }' against constraint range(1, 5000) on property 'Capacity': the assigned value has no bound analysis can use.
+docs/probes/dogfood/hotel.poly | 183:5 | DMCS003? | Cannot verify 'create EventHold { DayRate: section DayRate }' against constraint range(0, 100000) on property 'DayRate': the assigned value has no bound analysis can use.
+docs/probes/dogfood/hotel.poly | 263:5 | DMCS003? | Cannot verify 'assign Balance to (Balance + amount)' against constraint range(0, 1000000) on property 'Balance': the assigned value has no bound analysis can use.
+docs/probes/dogfood/hotel.poly | 266:5 | DMCS003? | Cannot verify 'assign Balance to (Balance + amount)' against constraint range(0, 1000000) on property 'Balance': the assigned value has no bound analysis can use.
+docs/probes/dogfood/university.poly | 147:5 | DMCS003? | Cannot verify 'assign Grade to score' against constraint range(0, 100) on property 'Grade': the assigned value has no bound analysis can use.
+docs/probes/fleet-eval/09-transport/orders.poly | 45:3 | DMCS003? | Cannot verify 'assign Discount to amount' against constraint range(0, 100) on property 'Discount': the assigned value has no bound analysis can use.
+docs/probes/fleet-eval/09-transport/warehouse.poly | 32:3 | DMCS003? | Cannot verify 'assign Capacity to (Capacity + delta)' against constraint range(1, 10000) on property 'Capacity': the assigned value has no bound analysis can use.
+docs/probes/fleet-eval/09-transport/warehouse.poly | 42:3 | DMCS003? | Cannot verify 'create Truck { MaxLoad: maxLoad }' against constraint range(1, 40000) on property 'MaxLoad': the assigned value has no bound analysis can use.
+docs/probes/fleet-eval/09-transport/warehouse.poly | 59:3 | DMCS003? | Cannot verify 'assign CurrentLoad to (CurrentLoad + weight)' against constraint range(0, 40000) on property 'CurrentLoad': the assigned value has no bound analysis can use.
+docs/probes/fleet-eval/12-mcp/mcp-library.poly | 3:1 | DMCS003? | Cannot verify 'create Fine { Amount: loan Amount }' against constraint range(0, 500) on property 'Amount': the assigned value has no bound analysis can use.
+docs/probes/scratch-2026-10-14/banking.poly | 19:5 | DMCS003? | Cannot verify 'assign Balance to (Balance + amount)' against constraint range(0, 100000000) on property 'Balance': the assigned value has no bound analysis can use.
+docs/probes/scratch-2026-10-14/banking.poly | 22:5 | DMCS003? | Cannot verify 'assign Balance to (Balance - amount)' against constraint range(0, 100000000) on property 'Balance': the assigned value has no bound analysis can use.
+docs/probes/scratch-2026-10-14/fleet.poly | 18:5 | DMCS003? | Cannot verify 'assign Odometer to (Odometer + km)' against constraint range(0, 2000000) on property 'Odometer': the assigned value has no bound analysis can use.
+docs/probes/scratch-2026-10-14/insurance.poly | 22:5 | DMCS003? | Cannot verify 'create Claim { Amount: amount }' against constraint range(0, 1000000) on property 'Amount': the assigned value has no bound analysis can use.
+docs/probes/scratch-2026-10-14/logistics.poly | 34:5 | DMCS003? | Cannot verify 'create Order { Total: total }' against constraint range(0, 100000) on property 'Total': the assigned value has no bound analysis can use.
+docs/probes/scratch-2026-10-14/payroll.poly | 18:5 | DMCS003? | Cannot verify 'create Timesheet { Hours: hours }' against constraint range(0, 400) on property 'Hours': the assigned value has no bound analysis can use.
+docs/probes/scratch-2026-10-14/payroll.poly | 47:1 | DMEFF008? | Assigned expression value range [1, 10000001] can fall outside constraint range(0, 10000000) on property 'Total'.
+docs/probes/scratch-2026-10-14/payroll.poly | 54:5 | DMCS003? | Cannot verify 'create Payslip { Amount: amount }' against constraint range(0, 1000000) on property 'Amount': the assigned value has no bound analysis can use.
+docs/probes/scratch-2026-10-14/restaurant.poly | 33:5 | DMCS003? | Cannot verify 'create Reservation { PartySize: size }' against constraint range(1, 20) on property 'PartySize': the assigned value has no bound analysis can use.
+docs/probes/scratch-2026-10-14/restaurant.poly | 76:1 | DMEFF008? | Assigned expression value range [1, 100001] can fall outside constraint range(0, 100000) on property 'Total'.
+docs/probes/scratch-2026-10-14/restaurant.poly | 83:5 | DMCS003? | Cannot verify 'create OrderLine { Qty: qty }' against constraint range(1, 20) on property 'Qty': the assigned value has no bound analysis can use.
+docs/probes/scratch-2026-10-14/restaurant.poly | 83:5 | DMCS003? | Cannot verify 'create OrderLine { UnitPrice: item Price }' against constraint range(0, 500) on property 'UnitPrice': the assigned value has no bound analysis can use.
+docs/probes/scratch-2026-10-14/roastery.poly | 8:1 | DMCS003? | Cannot verify 'assign Stock to (Stock + batch Kg)' against constraint range(0, 100000) on property 'Stock': the assigned value has no bound analysis can use.
+docs/probes/scratch-2026-10-14/roastery.poly | 14:5 | DMCS003? | Cannot verify 'create Batch { Kg: kg }' against constraint range(1, 100) on property 'Kg': the assigned value has no bound analysis can use.
+docs/probes/scratch-2026-10-14/roastery.poly | 44:5 | DMCS003? | Cannot verify 'create Line { Kg: kg }' against constraint range(1, 1000) on property 'Kg': the assigned value has no bound analysis can use.
+# end measured

@@ -1,0 +1,516 @@
+using System.Globalization;
+
+using Poly.Analysis;
+using Poly.DomainModeling;
+using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Evolution;
+using Poly.DomainModeling.Ontology;
+using Poly.DomainModeling.Ontology.Effects;
+using Poly.DomainModeling.Runtime;
+using Poly.Tests.TestHelpers;
+
+using Action = Poly.DomainModeling.Ontology.Action;
+
+namespace Poly.Tests.DomainModeling.Analysis;
+
+/// <summary>
+/// V-18 (#680, #809): a <c>require</c>'d policy narrows the abstract environment through one seam,
+/// <c>PolicyGuardFacts</c>, and create and create-in initializers read the environment an assignment reads.
+/// Characterisation pins first (recorded on master 26c3cb53 before any production edit; a pin V-18 changes on
+/// purpose carries master's value and the reason), then the red tests of each plan step.
+/// </summary>
+public class PolicyGuardFactsTests {
+    /// <summary>Parses and applies <paramref name="dsl"/> without analysis, then analyzes the applied tree, so a
+    /// domain the analysis rejects is still the tree its facts are recorded on.</summary>
+    private static (Domain Domain, AnalysisResult Analysis) Analyze(string dsl, params DomainChange[] extra) {
+        var changes = new PolyDslParser(dsl).Parse().Concat(extra).ToList();
+        var applied = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(changes);
+        if (!applied.Succeeded)
+            throw new InvalidOperationException("mutation failed: " + applied.FailureSummary);
+        return (applied.Root, DomainModelAnalyzer.Analyze(applied.Root));
+    }
+
+    private static Entity EntityNamed(Domain domain, string name) =>
+        domain.Types.OfType<Entity>().SingleOrDefault(e => e.Name == name)
+        ?? throw new InvalidOperationException($"no entity '{name}'");
+
+    private static Action ActionNamed(Entity entity, string name) =>
+        entity.Actions.Concat(entity.Stages.SelectMany(s => s.Actions)).SingleOrDefault(a => a.Name == name)
+        ?? throw new InvalidOperationException($"no action '{entity.Name}.{name}'");
+
+    private static ActionStageInvariant Context(Domain domain, AnalysisResult analysis, string entity, string action) {
+        var act = ActionNamed(EntityNamed(domain, entity), action);
+        var invariants = analysis.GetActionInvariants(act)
+            ?? throw new InvalidOperationException($"no invariant metadata on '{entity}.{action}'");
+        return invariants.StageContexts().Single();
+    }
+
+    private static string Num(decimal? value) =>
+        value is { } v ? v.ToString(CultureInfo.InvariantCulture) : "";
+
+    private static string Range(ValueRange? range) => range is null ? "none" : $"[{Num(range.Min)},{Num(range.Max)}]";
+
+    private static string Narrowed(ActionStageInvariant context, string property) =>
+        context.NarrowedRanges.TryGetValue(property, out var range)
+            ? Range(range)
+            : throw new InvalidOperationException($"no narrowed entry for '{property}'");
+
+    /// <summary>The range findings (DMEFF008, DMCS003, DMCS001) as <c>CODE!</c> (error) or <c>CODE?</c> (warning)
+    /// with their message, in report order; <c>clean</c> when there are none.</summary>
+    private static string RangeFindings(AnalysisResult analysis) {
+        var findings = analysis.Diagnostics
+            .Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+            .Where(d => d.Code is DomainModelDiagnosticCodes.EffectConstraintViolation
+                or DomainModelDiagnosticCodes.ConstraintUndecided
+                or DomainModelDiagnosticCodes.ConstraintSatisfiability)
+            .Select(d => d.Code + (d.Severity == DiagnosticSeverity.Error ? "!" : "?") + " " + d.Message)
+            .ToList();
+        return findings.Count == 0 ? "clean" : string.Join(" | ", findings);
+    }
+
+    /// <summary>Every error code, sorted and distinct; <c>none</c> when there are none.</summary>
+    private static string ErrorCodes(AnalysisResult analysis) {
+        var codes = analysis.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error)
+            .Select(d => d.Code).Distinct().Order(StringComparer.Ordinal).ToList();
+        return codes.Count == 0 ? "none" : string.Join(",", codes);
+    }
+
+    private static ModuleInstanceExecutor Simulator(string dsl, out Domain domain) {
+        (domain, _) = EvolvedDomain.FromDsl(dsl);
+        return ModuleExec.For(domain);
+    }
+
+    private static ModuleInstance Make(ModuleInstanceExecutor exec, string entity, params (string Name, object? Value)[] values) {
+        var created = exec.Create(entity, values.ToDictionary(v => v.Name, v => v.Value));
+        if (!created.Succeeded)
+            throw new InvalidOperationException($"create {entity} failed: {created.Error}");
+        return created.Instance!;
+    }
+
+    private static string Outcome(ModuleOutcome outcome) =>
+        outcome.Succeeded ? "ok" : "fail: " + outcome.Error;
+
+    private const string PossibleOutside0To10 =
+        "DMEFF008? Assigned expression value range [0, 100] can fall outside constraint range(0, 10) on property 'Qty'.";
+
+    // ── Documents ───────────────────────────────────────────────
+
+    /// <summary>#809's assignment control: an assign under <c>require Small</c> reads the narrowed environment.</summary>
+    private const string AssignUnderRequire = """
+        domain C
+        Order: entity {
+          Qty: Number range(0, 100)
+          Local: Number range(0, 10) optional
+          Small: policy { Qty <= 10 }
+          Copy: action require Small { assign Local to Qty }
+        }
+        """;
+
+    /// <summary>#809: the same narrowing, read by a create initializer.</summary>
+    private const string CreateUnderRequire = """
+        domain C
+        Item: entity { Qty: Number range(0, 10) }
+        Order: entity {
+          Qty: Number range(0, 100)
+          Small: policy { Qty <= 10 }
+          Make: action require Small { create Item { Qty: Qty } }
+        }
+        """;
+
+    private const string CreateInUnderRequire = """
+        domain C
+        Item: entity { Qty: Number range(0, 10) }
+        Order: entity {
+          Qty: Number range(0, 100)
+          items: many Item
+          Small: policy { Qty <= 10 }
+          Make: action require Small { create in items { Qty: Qty } }
+        }
+        """;
+
+    private static string CreateUnderRequireNot(string itemRange) => $$"""
+        domain C
+        Item: entity { Qty: Number {{itemRange}} }
+        Order: entity {
+          Qty: Number range(0, 100)
+          Small: policy { Qty <= 10 }
+          Make: action require not Small { create Item { Qty: Qty } }
+        }
+        """;
+
+    /// <summary>A stage requires <c>Small</c> and its action requires <c>not Small</c>: the runtime suppresses the
+    /// stage gate (<c>EmitStagePolicyGuards</c>), so the action runs exactly when <c>Small</c> is false.</summary>
+    private static string StageSmallActionNotSmall(string seenRange) => $$"""
+        domain S
+        Order: entity {
+          Qty: Number range(0, 100)
+          Seen: Number {{seenRange}} optional
+          Small: policy { Qty <= 10 }
+          Open: stage require Small {
+            Peek: action require not Small { assign Seen to Qty }
+          }
+        }
+        """;
+
+    /// <summary>Amendment 2's document: the loop body creates from <c>Qty</c>, then raises it, so the second
+    /// iteration's create reads 15 although the guard held 10 at entry.</summary>
+    private const string CreateInsideLoop = """
+        domain L
+        Item: entity { Qty: Number range(0, 10) }
+        Line: entity { N: Number optional }
+        Order: entity {
+          Qty: Number range(0, 100)
+          Lines: many Line
+          Small: policy { Qty <= 10 }
+          Go: action require Small { for l in Lines { create Item { Qty: Qty }  assign Qty to Qty + 5 } }
+        }
+        """;
+
+    /// <summary>The loop raises <c>Qty</c> zero or more times, then the create reads it: with zero records it
+    /// is the entry value (0 is possible), with three it is 25.</summary>
+    private const string CreateAfterLoop = """
+        domain L
+        Item: entity { Qty: Number range(5, 15) }
+        Line: entity { N: Number optional }
+        Order: entity {
+          Qty: Number range(0, 100)
+          Lines: many Line
+          Small: policy { Qty <= 10 }
+          Go: action require Small { for l in Lines { assign Qty to Qty + 5 }  create Item { Qty: Qty } }
+        }
+        """;
+
+    /// <summary>The transition runs <c>Busy</c>'s entry block, which rewrites <c>Qty</c>, before the create.</summary>
+    private const string CreateAfterTransition = """
+        domain T
+        Item: entity { Qty: Number range(0, 10) }
+        Order: entity {
+          Qty: Number range(0, 100)
+          Small: policy { Qty <= 10 }
+          Open: stage {
+            Go: action require Small { transition to Busy  create Item { Qty: Qty } }
+          }
+          Busy: stage {
+            entry { assign Qty to 50 }
+          }
+        }
+        """;
+
+    /// <summary>The cross-entity callee invokes back into the caller, which rewrites <c>Qty</c> before the
+    /// create.</summary>
+    private const string CreateAfterCrossEntityInvoke = """
+        domain X
+        Item: entity { Qty: Number range(0, 10) }
+        Order: entity {
+          Qty: Number range(0, 100)
+          line: one Line
+          Small: policy { Qty <= 10 }
+          Go: action require Small { invoke line.Poke  create Item { Qty: Qty } }
+          Bump: action { assign Qty to 50 }
+        }
+        Line: entity {
+          order: one Order
+          Poke: action { invoke order.Bump }
+        }
+        """;
+
+    /// <summary>A many hop: the analyzer cannot type <c>parts Qty</c> on master (T-05b makes it DMSEM006).</summary>
+    private const string UntypedInitializer = """
+        domain U
+        Item: entity { Qty: Number range(0, 10) }
+        Part: entity { Qty: Number range(0, 5) }
+        Order: entity {
+          Qty: Number range(0, 100)
+          Local: Number range(0, 10) optional
+          parts: many Part
+          Small: policy { Qty <= 10 }
+          Make: action require Small { create Item { Qty: parts Qty } }
+          Copy: action require Small { assign Local to parts Qty }
+        }
+        """;
+
+    /// <summary><c>not (A &gt; 5 and B &gt; 5)</c> is <c>A &lt;= 5 or B &lt;= 5</c>: A alone is not narrowed.</summary>
+    private const string CreateUnderRequireNotAnd = """
+        domain N
+        Item: entity { Qty: Number range(0, 5) }
+        Order: entity {
+          A: Number range(0, 10)
+          B: Number range(0, 10)
+          Big: policy { A > 5 and B > 5 }
+          Make: action require not Big { create Item { Qty: A } }
+        }
+        """;
+
+    /// <summary>A self-invoked callee guarded by <c>require not Small</c>.</summary>
+    private const string SelfInvokeRequireNot = """
+        domain I
+        Order: entity {
+          Qty: Number range(0, 100)
+          Local: Number range(11, 100) optional
+          Small: policy { Qty <= 10 }
+          Keep: action require not Small { assign Local to Qty }
+          Go: action { invoke Keep }
+        }
+        """;
+
+    private static readonly Dictionary<string, (string Dsl, string Entity, string Action)> Shapes = new(StringComparer.Ordinal) {
+        ["assign-require"] = (AssignUnderRequire, "Order", "Copy"),
+        ["create-require"] = (CreateUnderRequire, "Order", "Make"),
+        ["create-in-require"] = (CreateInUnderRequire, "Order", "Make"),
+        ["create-require-not-0-10"] = (CreateUnderRequireNot("range(0, 10)"), "Order", "Make"),
+        ["create-require-not-11-100"] = (CreateUnderRequireNot("range(11, 100)"), "Order", "Make"),
+        ["create-require-not-and"] = (CreateUnderRequireNotAnd, "Order", "Make"),
+        ["stage-p-action-not-p"] = (StageSmallActionNotSmall("range(0, 60)"), "Order", "Peek"),
+        ["create-inside-loop"] = (CreateInsideLoop, "Order", "Go"),
+        ["create-after-loop"] = (CreateAfterLoop, "Order", "Go"),
+        ["create-after-transition"] = (CreateAfterTransition, "Order", "Go"),
+        ["create-after-cross-invoke"] = (CreateAfterCrossEntityInvoke, "Order", "Go"),
+        ["untyped-initializer"] = (UntypedInitializer, "Order", "Make"),
+        ["self-invoke-require-not"] = (SelfInvokeRequireNot, "Order", "Keep"),
+    };
+
+    // ── A. Characterisation pins ────────────────────────────────
+
+    /// <summary>Every shape the slice touches, as master analyses it: the probed action's narrowed <c>Qty</c> (or
+    /// <c>A</c>), the error codes, and the range findings. A row V-18 moves on purpose carries master's value.</summary>
+    [Test]
+    [Arguments("assign-require", "Qty=[0,10] errors=none clean")]
+    [Arguments("create-require", "Qty=[0,10] errors=none DMEFF008? Assigned expression value range [0, 100] can fall outside constraint range(0, 10) on property 'Qty'.")]
+    [Arguments("create-in-require", "Qty=[0,10] errors=none DMEFF008? Assigned expression value range [0, 100] can fall outside constraint range(0, 10) on property 'Qty'.")]
+    [Arguments("create-require-not-0-10", "Qty=[0,100] errors=none DMEFF008? Assigned expression value range [0, 100] can fall outside constraint range(0, 10) on property 'Qty'.")]
+    [Arguments("create-require-not-11-100", "Qty=[0,100] errors=none DMEFF008? Assigned expression value range [0, 100] can fall outside constraint range(11, 100) on property 'Qty'.")]
+    [Arguments("create-require-not-and", "A=[0,10] errors=none DMEFF008? Assigned expression value range [0, 10] can fall outside constraint range(0, 5) on property 'Qty'.")]
+    [Arguments("stage-p-action-not-p", "Qty=[0,10] errors=none clean")] // WRONG on master: refined by the suppressed stage gate; Qty=70 passes both guards and fails the assign
+    [Arguments("create-inside-loop", "Qty=[0,10] errors=none DMEFF008? Assigned expression value range [0, 100] can fall outside constraint range(0, 10) on property 'Qty'.")]
+    [Arguments("create-after-loop", "Qty=[0,10] errors=none DMEFF008? Assigned expression value range [0, 100] can fall outside constraint range(5, 15) on property 'Qty'.")]
+    [Arguments("create-after-transition", "Qty=[0,10] errors=none DMEFF008? Assigned expression value range [0, 100] can fall outside constraint range(0, 10) on property 'Qty'.")]
+    [Arguments("create-after-cross-invoke", "Qty=[0,10] errors=none DMEFF008? Assigned expression value range [0, 100] can fall outside constraint range(0, 10) on property 'Qty'.")]
+    [Arguments("untyped-initializer", "Qty=[0,10] errors=none DMCS003? Cannot verify 'create Item { Qty: parts Qty }' against constraint range(0, 10) on property 'Qty': the assigned value has no bound analysis can use. | DMCS003? Cannot verify 'assign Local to parts Qty' against constraint range(0, 10) on property 'Local': the assigned value has no bound analysis can use.")]
+    [Arguments("self-invoke-require-not", "Qty=[0,100] errors=none DMEFF008? Assigned expression value range [0, 100] can fall outside constraint range(11, 100) on property 'Local'. | DMEFF008? Call-chain postcondition (Go → Keep): assigned value range [0, 100] can fall outside constraint range(11, 100) on property 'Local'.")]
+    public async Task Shape_Verdict_IsPinned(string shape, string expected) {
+        var (dsl, entity, action) = Shapes[shape];
+        var (domain, analysis) = Analyze(dsl);
+        var probe = shape == "create-require-not-and" ? "A" : "Qty";
+        var verdict = $"{probe}={Narrowed(Context(domain, analysis, entity, action), probe)} " +
+                      $"errors={ErrorCodes(analysis)} {RangeFindings(analysis)}";
+        await Assert.That(verdict).IsEqualTo(expected);
+    }
+
+    /// <summary>The runtime half of the wrong-today row: the stage gate is suppressed, so <c>Qty</c> = 70 reaches
+    /// the assign, which fails <c>Seen</c>'s range; 50 succeeds. A write that relies on the stage's <c>Small</c> is
+    /// not safe.</summary>
+    [Test]
+    public async Task StagePAndActionNotP_Simulator_AssignFailsAboveSeenRange() {
+        var exec = Simulator(StageSmallActionNotSmall("range(0, 60)"), out _);
+        var fifty = Make(exec, "Order", ("Qty", 50L));
+        var seventy = Make(exec, "Order", ("Qty", 70L));
+        await Assert.That(Outcome(exec.Invoke(fifty, "Peek"))).IsEqualTo("ok");
+        await Assert.That(exec.Invoke(seventy, "Peek").Succeeded).IsFalse();
+    }
+
+    /// <summary>The flagged loop, transition and write-back creates can fail at runtime with the guard held at
+    /// entry: each runs with boundary input (<c>Qty</c> at the guard's edge, or the loop's zero-record case).</summary>
+    [Test]
+    public async Task FlaggedCreates_Simulator_FailWithGuardHeld() {
+        var loop = Simulator(CreateInsideLoop, out _);
+        var order = Make(loop, "Order", ("Qty", 10L));
+        foreach (var _ in Enumerable.Range(0, 2))
+            await Assert.That(loop.Link("Lines", order, Make(loop, "Line")).Succeeded).IsTrue();
+        var oneLine = Make(loop, "Order", ("Qty", 10L));
+        await Assert.That(loop.Link("Lines", oneLine, Make(loop, "Line")).Succeeded).IsTrue();
+        await Assert.That(Outcome(loop.Invoke(oneLine, "Go"))).IsEqualTo("ok");
+        await Assert.That(loop.Invoke(order, "Go").Succeeded).IsFalse();
+
+        var afterLoop = Simulator(CreateAfterLoop, out _);
+        var none = Make(afterLoop, "Order", ("Qty", 0L));
+        var five = Make(afterLoop, "Order", ("Qty", 5L));
+        await Assert.That(Outcome(afterLoop.Invoke(five, "Go"))).IsEqualTo("ok");
+        await Assert.That(afterLoop.Invoke(none, "Go").Succeeded).IsFalse();
+
+        var transition = Simulator(CreateAfterTransition, out _);
+        await Assert.That(transition.Invoke(Make(transition, "Order", ("Qty", 5L)), "Go").Succeeded).IsFalse();
+
+        var cross = Simulator(CreateAfterCrossEntityInvoke, out _);
+        var caller = Make(cross, "Order", ("Qty", 5L));
+        var line = Make(cross, "Line");
+        await Assert.That(cross.Link("line", caller, line).Succeeded).IsTrue();
+        await Assert.That(cross.Link("order", line, caller).Succeeded).IsTrue();
+        var outcome = cross.Invoke(caller, "Go");
+        await Assert.That(outcome.Succeeded).IsFalse();
+        await Assert.That(outcome.Error ?? "").Contains("Qty");
+    }
+
+    [Test]
+    public async Task RequiredPolicy_RefinesEnv_SameAsInlineToday() {
+        var (domain, analysis) = Analyze(AssignUnderRequire);
+        var context = Context(domain, analysis, "Order", "Copy");
+        await Assert.That(Narrowed(context, "Qty")).IsEqualTo("[0,10]");
+        await Assert.That(Range(context.Postconditions.Single().ValueRange)).IsEqualTo("[0,10]");
+        await Assert.That(RangeFindings(analysis)).IsEqualTo("clean");
+    }
+
+    [Test]
+    public async Task NotPolicy_SkippedToday_PinsCurrentVerdict() {
+        var (domain, analysis) = Analyze(CreateUnderRequireNot("range(0, 10)"));
+        // master: `require not Small` is skipped, so Qty keeps its declared range and the create is a warning.
+        await Assert.That(Narrowed(Context(domain, analysis, "Order", "Make"), "Qty")).IsEqualTo("[0,100]");
+        await Assert.That(RangeFindings(analysis)).IsEqualTo(PossibleOutside0To10);
+    }
+
+    [Test]
+    public async Task StagePolicyPlusActionNot_RunsOnSimulator_StageGateSuppressed() {
+        var exec = Simulator(StageSmallActionNotSmall("range(0, 100)"), out _);
+        var large = Make(exec, "Order", ("Qty", 50L));
+        var small = Make(exec, "Order", ("Qty", 5L));
+        await Assert.That(Outcome(exec.Invoke(large, "Peek"))).IsEqualTo("ok");
+        await Assert.That(large.Bag["Seen"]).IsEqualTo(50L);
+        await Assert.That(Outcome(exec.Invoke(small, "Peek"))).IsEqualTo("fail: 'Peek' blocked by policy 'Small'.");
+    }
+
+    [Test]
+    public async Task ContractExport_NotPolicyListedOnce() {
+        const string dsl = """
+            domain billing
+
+            public value Money {
+              Amount: Number
+            }
+
+            public entity Order {
+              Total: Number
+              Positive: policy { Total > 0 }
+              public action Charge (request: Money)
+                require not Positive
+              {
+              }
+            }
+            """;
+        var applied = new DomainEvolution(DomainTestFactory.Create("_", [], [])).Apply(new PolyDslParser(dsl).Parse());
+        var contract = new Poly.DomainModeling.ContractFill.InternalDomainProducer().Produce(applied.Root);
+        var names = contract.Endpoints.Single().Preconditions.Select(p => p.Name).ToList();
+        await Assert.That(string.Join(",", names)).IsEqualTo("not_Positive");
+    }
+
+    [Test]
+    public async Task Item23c_CreateInitializer_FlaggedToday() {
+        var (_, control) = Analyze(AssignUnderRequire);
+        var (_, create) = Analyze(CreateUnderRequire);
+        var (_, createIn) = Analyze(CreateInUnderRequire);
+        // master: the assignment is narrowed, the create and create-in initializers are not (#809).
+        await Assert.That($"control={RangeFindings(control)} create={RangeFindings(create)} createIn={RangeFindings(createIn)}")
+            .IsEqualTo($"control=clean create={PossibleOutside0To10} createIn={PossibleOutside0To10}");
+    }
+
+    // ── Census (plan §4, lock amendment 8) ──────────────────────
+
+    private static readonly string[] CensusCodes = [
+        DomainModelDiagnosticCodes.EffectConstraintViolation,
+        DomainModelDiagnosticCodes.ConstraintUndecided,
+        DomainModelDiagnosticCodes.ConstraintSatisfiability,
+    ];
+
+    private static IEnumerable<(string Label, string Text, Poly.Compile.CompileResult Result)> CensusDocuments() {
+        var root = Poly.Tests.Docs.GuideBlocks.RepoRoot();
+        foreach (var file in CorpusVerdictSweepTests.PolyFiles()) {
+            var text = File.ReadAllText(Path.Combine(root, file));
+            yield return (file, text, Poly.Tests.Docs.GuideBlocks.Analyze(text));
+        }
+        var guide = Poly.Tests.Docs.GuideBlocks.Load();
+        var seen = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (var block in guide.Blocks) {
+            var occurrence = seen[block.FirstLine] = seen.GetValueOrDefault(block.FirstLine) + 1;
+            if (block.Marker is { Kind: Poly.Tests.Docs.GuideMarkerKind.Skip, Code: null }) continue;
+            var label = occurrence == 1 ? $"guide fence {block.FirstLine}" : $"guide fence {block.FirstLine} ({occurrence})";
+            var composed = Poly.Tests.Docs.GuideBlocks.Compose(block, guide.Wrappers);
+            yield return (label, composed.Text, composed.Result);
+        }
+        foreach (var (name, text) in CorpusVerdictSweepTests.DemoSamples())
+            yield return ($"demo sample {name}", text, Poly.Tests.Docs.GuideBlocks.Analyze(text));
+        var quickstart = CorpusVerdictSweepTests.QuickstartDocument();
+        yield return ("poly_guide quickstart", quickstart, Poly.Tests.Docs.GuideBlocks.Analyze(quickstart));
+    }
+
+    private static IEnumerable<Effect> AllEffects(IEnumerable<Effect> effects) {
+        foreach (var effect in effects) {
+            yield return effect;
+            var nested = effect switch {
+                ConditionalEffect c => c.ThenEffects.Concat(c.ElseEffects ?? []),
+                CompositeEffect c => c.Effects,
+                ForEachEffect f => f.Body,
+                _ => [],
+            };
+            foreach (var inner in AllEffects(nested)) yield return inner;
+        }
+    }
+
+    private static bool HasCreateUnderRequire(Domain domain) =>
+        domain.Types.OfType<Entity>().Any(entity =>
+            entity.Actions.Select(a => (Action: a, Stage: (Stage?)null))
+                .Concat(entity.Stages.SelectMany(s => s.Actions.Select(a => (Action: a, Stage: (Stage?)s))))
+                .Any(o => (o.Action.Policies.Count > 0 || (o.Stage?.Policies.Count ?? 0) > 0)
+                    && AllEffects(o.Action.Effects).Any(e => e is CreateEntityInstance or CreateEntityInRelationshipEffect)));
+
+    private static readonly System.Text.RegularExpressions.Regex RequireNot = new(@"\brequire\s+not\b");
+
+    /// <summary>The measured census: its denominators, then one row per range finding (DMEFF008, DMCS003, DMCS001,
+    /// errors and warnings) over the corpus the verdict sweep reads.</summary>
+    internal static string CensusRows() {
+        var rows = new List<string>();
+        int scanned = 0, requireNot = 0, createUnderRequire = 0, noDomain = 0;
+        foreach (var (label, text, result) in CensusDocuments()) {
+            scanned++;
+            if (RequireNot.IsMatch(text)) requireNot++;
+            if (result.Domain is not { } domain) noDomain++;
+            else if (HasCreateUnderRequire(domain)) createUnderRequire++;
+            foreach (var d in result.Diagnostics.Where(d => (d.IsError || d.IsWarning) && CensusCodes.Contains(d.Code)))
+                rows.Add($"{label} | {d.Line}:{d.Column} | {d.Code}{(d.IsError ? "!" : "?")} | {d.Message}");
+        }
+        return string.Join('\n', [
+            $"documents scanned = {scanned}",
+            $"documents with require not (source text) = {requireNot}",
+            $"documents with a create under require (analysed domain) = {createUnderRequire}",
+            $"documents with no analysed domain = {noDomain}",
+            $"range findings = {rows.Count}",
+            .. rows]);
+    }
+
+    private const string MeasuredStart = "# measured";
+    private const string MeasuredEnd = "# end measured";
+
+    private static string CensusPath() =>
+        Path.Combine(Poly.Tests.Docs.GuideBlocks.RepoRoot(), "Poly.Tests", "DomainModeling", "Analysis", "PolicyGuardCensus.txt");
+
+    /// <summary>The census golden's measured block equals the corpus as analysed now. <c>POLY_UPDATE_GOLDEN=1</c>
+    /// rewrites the measured block and keeps the hand-written change table below it.</summary>
+    [Test]
+    public async Task Census_MatchesGolden() {
+        var lines = File.ReadAllText(CensusPath()).Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n').ToList();
+        var start = lines.IndexOf(MeasuredStart);
+        var end = lines.IndexOf(MeasuredEnd);
+        if (start < 0 || end < start) throw new InvalidOperationException("The census golden has no measured block.");
+        var measured = CensusRows();
+        if (Environment.GetEnvironmentVariable("POLY_UPDATE_GOLDEN") == "1") {
+            var rewritten = lines.Take(start + 1).Concat(measured.Split('\n')).Concat(lines.Skip(end));
+            await File.WriteAllTextAsync(CensusPath(), string.Join('\n', rewritten));
+            return;
+        }
+        await Assert.That(measured).IsEqualTo(string.Join('\n', lines.Skip(start + 1).Take(end - start - 1)));
+    }
+
+    [Test]
+    public async Task StageRequireNot_NarrowsAsToday() {
+        var (domain, analysis) = Analyze("""
+            domain S
+            Order: entity {
+              Qty: Number range(0, 100)
+              Seen: Number range(11, 100) optional
+              Small: policy { Qty <= 10 }
+              Open: stage require not Small {
+                Peek: action { assign Seen to Qty }
+              }
+            }
+            """);
+        await Assert.That(Narrowed(Context(domain, analysis, "Order", "Peek"), "Qty")).IsEqualTo("[11,100]");
+        await Assert.That(RangeFindings(analysis)).IsEqualTo("clean");
+    }
+}

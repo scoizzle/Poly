@@ -1551,7 +1551,8 @@ public partial class AnalyzerClosingRoundPinTests {
     /// refused at that arm at every assignment site (class c2); <c>T06-null-into-required</c>, <c>null</c> assigned to a
     /// required Text, Uuid, entity or Binary property (class c); <c>T06-null-id</c>, a <c>null</c> cell already refused
     /// whose code changes to the type mismatch; <c>T06-null-compare</c>, <c>null</c> compares with an optional operand
-    /// (class e). Updated by hand, one row per cell that flips.
+    /// (class e); <c>T06-nav-condition</c>, a navigation to a condition is typed in the target's scope, where the outer
+    /// name it compares with does not exist (both hosts failed on it). Updated by hand, one row per cell that flips.
     /// </summary>
     internal static readonly (string Grid, string Cell, string Before, string After, string Rule)[] FlipsT06 = [
         ("FormGridF3", "match { Flag -> null, else -> N + M } | assign Number", "ok", "DMSEM003", "T06-null-arm"),
@@ -1585,7 +1586,9 @@ public partial class AnalyzerClosingRoundPinTests {
         ("NameByLiteralDeclared", "Widget", "Widget   RRRR.", "Widget   RRRRR", "T06-null-into-required"),
         ("NameByLiteralDeclared", "Money", "Money    XXXXV", "Money    XXXXX", "T06-null-id"),
         ("NameByLiteralDeclared", "Bin", "Bin      RRRR.", "Bin      RRRRR", "T06-null-into-required"),
-        ("NameByLiteralDeclared", "string", "string   SS5S5", "string   SS5SS", "T06-null-id")
+        ("NameByLiteralDeclared", "string", "string   SS5S5", "string   SS5SS", "T06-null-id"),
+        ("Residual", "part book Qty (to-one hops, control) | form ==", "ok", "DMSEM005", "T06-nav-condition"),
+        ("Residual", "p book Qty (binder hops) | form ==", "ok", "DMSEM005", "T06-nav-condition")
     ];
 
     /// <summary>

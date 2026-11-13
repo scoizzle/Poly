@@ -114,13 +114,7 @@ public sealed partial class DomainExpressionLoweringPass : DomainExpressionDispa
         return resolved == name ? DomainToCSharpExporter.ToPascalCase(name) : resolved;
     }
 
-    private static bool IsPathPrefixPredicate(DomainExpression expr) => expr switch {
-        Ontology.Comparison or Ontology.And or Ontology.Or or Ontology.Not
-            or Ontology.Exists or Ontology.NotExists
-            or Ontology.AnyExpr or Ontology.AllExpr or Ontology.NoneExpr => true,
-        RelationshipNavigation inner => IsPathPrefixPredicate(inner.TargetProperty),
-        _ => false,
-    };
+    private static bool IsPathPrefixPredicate(DomainExpression expr) => ExpressionTypeAnalyzer.IsCondition(expr);
 
     private LoweredExpression Route(DomainExpression expr, Node subject) {
         var saved = _currentSubject;

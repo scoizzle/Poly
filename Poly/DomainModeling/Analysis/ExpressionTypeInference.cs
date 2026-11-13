@@ -132,11 +132,16 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
     /// can be typed. Every other caller passes a plain map, and those forms stay Unresolved there.
     /// </summary>
     private sealed class EntityScope : Dictionary<string, string> {
-        public EntityScope(Entity entity)
+        /// <param name="throughHop">
+        /// The entity is read through a navigation to a condition, so every property but a Boolean may find nothing: lowering
+        /// guards that hop (<c>rel != null &amp;&amp; …</c>), so a Boolean there keeps its own optionality.
+        /// </param>
+        public EntityScope(Entity entity, bool throughHop = false)
             : base(entity.Properties.ToDictionary(p => p.Name, p => p.Type.TypeName, StringComparer.Ordinal), StringComparer.Ordinal) {
             EntityName = entity.Name;
             Binders = new Dictionary<string, string>(StringComparer.Ordinal);
-            Optional = entity.Properties.Where(p => !EntityStructureAnalyzer.IsRequired(p))
+            Optional = entity.Properties
+                .Where(p => !EntityStructureAnalyzer.IsRequired(p) || throughHop && CanonicalName(p.Type.TypeName) is not "Boolean")
                 .Select(p => p.Name).ToHashSet(StringComparer.Ordinal);
         }
 
@@ -205,12 +210,38 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
         return ExprType.Unresolved;
     }
 
-    /// <summary>A navigation whose final hop is a condition, which lowering reads as <c>rel != null &amp;&amp; condition</c>.</summary>
-    private static bool IsNavigationToCondition(RelationshipNavigation navigation) => navigation.TargetProperty switch {
+    /// <summary>
+    /// A navigation whose final hop is a condition (<c>advisor where Age &lt; 30</c>), which lowering reads as
+    /// <c>rel != null &amp;&amp; condition</c>: never absent, since an unlinked hop makes it false. The one list of
+    /// condition shapes; lowering's path-prefix predicate reads it.
+    /// </summary>
+    internal static bool IsCondition(DomainExpression expr) => expr switch {
         Comparison or And or Or or Not or Exists or NotExists or AnyExpr or AllExpr or NoneExpr => true,
-        RelationshipNavigation inner => IsNavigationToCondition(inner),
+        RelationshipNavigation inner => IsCondition(inner.TargetProperty),
         _ => false,
     };
+
+    private static bool IsNavigationToCondition(RelationshipNavigation navigation) => IsCondition(navigation.TargetProperty);
+
+    /// <summary>
+    /// A navigation to a condition is a condition on the entity its hops reach: it is walked in that entity's scope, its
+    /// reads through the hop (so a value may find nothing). `line Qty == null` stays accepted; a Number against Text, an
+    /// ordering against `null` and a name the entity does not declare are refused as anywhere else (each failed on a host
+    /// unchecked).
+    /// </summary>
+    private void CheckNavigationCondition(
+        AnalysisContext context, RelationshipNavigation navigation,
+        Dictionary<string, string> props, Dictionary<string, string>? parameters, Dictionary<string, EnumType> enumTypes) {
+        if (!IsNavigationToCondition(navigation)) return;
+        var target = NavigationRoot(context, navigation.RelationshipName, props, parameters);
+        var hop = navigation.TargetProperty;
+        while (hop is RelationshipNavigation next && EntityNamed(context, target) is { } current) {
+            target = ToOneTarget(current, next.RelationshipName);
+            hop = next.TargetProperty;
+        }
+        if (EntityNamed(context, target) is { } entity)
+            WalkExpression(context, hop, new EntityScope(entity, throughHop: true), parameters, enumTypes);
+    }
 
     /// <summary>The entity declared under <paramref name="name"/>, first declaration first (the provider's order).</summary>
     private static Entity? EntityNamed(AnalysisContext context, string? name) =>

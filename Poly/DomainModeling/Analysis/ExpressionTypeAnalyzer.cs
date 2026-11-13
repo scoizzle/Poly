@@ -554,7 +554,10 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
             case FunctionCall call:
                 CheckCallArguments(context, call, props, parameters, enumTypes);
                 return;
-            case RelationshipNavigation:
+            case RelationshipNavigation navigation:
+                RejectEndpointCallsInBody(context, expr);
+                CheckNavigationCondition(context, navigation, props, parameters, enumTypes);
+                return;
             case Exists or NotExists:
                 // target-scoped (related-entity properties / store-aware) — no local type check,
                 // but an imported endpoint call in the body is still unlowerable (#426).

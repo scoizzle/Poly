@@ -580,8 +580,10 @@ This is a type-level check only: a second owner *instance* is not refused yet.
 
 **Ownership never closes a loop between different entities** (`DMDEP002`). Two or
 more different entity types that own each other through `owned` navigations are an
-analysis error, one per cycle, reported on the owned navigation that returns to the
-cycle's earliest-declared entity and naming the whole path (`Cabin -> Deck -> Cabin`).
+analysis error: one per cycle the analysis walk closes, reported on the owned
+navigation that returns to the cycle's earliest-declared entity and naming the whole
+path (`Cabin -> Deck -> Cabin`). Fixing the named navigation may reveal another cycle
+that the walk reached only through an entity it had already finished.
 An entity owning only itself is a tree and stays legal; a plain reference back to the
 owner is not ownership:
 

@@ -274,7 +274,8 @@ public sealed class InverseDeclarationTests {
     [Test]
     public async Task BothOwned_OneSidedVia_ReportsOnce() {
         // Guard row (rule 6b): only one end names the pairing; the pair is still both-owned
-        // and reports once, from the side that declares `via`.
+        // and DMREL004 reports it once, from the side that declares `via`; DMDEP002 adds the
+        // ring (V-14) as a separate error.
         var analysis = Analyze("""
             domain OneSidedBothOwned
             Line: entity {

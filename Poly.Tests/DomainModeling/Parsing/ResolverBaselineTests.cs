@@ -173,6 +173,80 @@ public sealed class ResolverBaselineTests {
         ["TopLevel.word.check"] = "every ExpectWord call follows a check of the same word on the same token",
     };
 
+    /// <summary>
+    /// For each guarded site, the row that shows its guard was REACHED and refused the other kind: the case
+    /// (<c>case</c>, or <c>site/case</c> when the refusal lands at another site), and the text its recorded result
+    /// must contain (<c>=</c> prefix: must equal). The text is the diagnostic or print of the path the other kind
+    /// took, so a case renamed to an input that never reaches the guard fails.
+    /// </summary>
+    internal static readonly Dictionary<string, (string Case, string Shows)> GuardEvidence = new(StringComparer.Ordinal) {
+        ["Core.PropertyName.name"] = ("str", "Expected property name, got 'A'"),
+        ["Core.RequiredWord"] = ("str", "Expected property, stage, action, or policy, got 'required'"),
+        ["Constraints.length.min"] = ("str", "Expected RParen, got '3' (StringLiteral)"),
+        ["Constraints.length.max"] = ("str", "Expected RParen, got '5' (StringLiteral)"),
+        ["Constraints.pattern"] = ("mis-ident", "Expected StringLiteral, got 'abc' (Identifier)"),
+        ["Constraints.bound.text"] = ("mis-ident", "Expected RParen, got 'x' (Identifier)"),
+        ["Effects.unsupported.check"] = ("str", "if), got 'actor'"),
+        ["Effects.unsupported.message"] = ("str", "if), got 'PARALLEL'"),
+        ["Effects.transition"] = ("str", "expected 'to <stage>', got 'transition'"),
+        ["Effects.assign"] = ("str", "expected '<property> to', got 'assign'"),
+        ["Effects.link"] = ("str", "expected '<relationship> to <binder>', got 'link'"),
+        ["Effects.unlink"] = ("mis-number", "expected '<relationship> from <binder>', got 'unlink'"),
+        ["Effects.create-in"] = ("str", "' or 'in <relationship> {"),
+        ["Effects.create"] = ("mis-keyword", "' or 'in <relationship> {"),
+        ["Effects.general-for.where-as-rel"] = ("str", "Expected relationship name, got 'where'"),
+        ["Effects.general-for.where"] = ("str", "Expected '{' to open the 'for' body, got 'where'"),
+        ["Effects.for.where"] = ("str", "Expected Invoke, got 'where' (StringLiteral)"),
+        ["Effects.for.policy"] = ("mis-string", "must be a named policy (name Policy) or stage membership"),
+        ["Entities.initial"] = ("str", "Expected LBrace, got 'initial' (StringLiteral)"),
+        ["Entities.key.first"] = ("str", "Expected LBrace, got 'key' (StringLiteral) @2:11"),
+        ["Entities.key.second"] = ("str", "Expected LBrace, got 'key' (StringLiteral) @2:18"),
+        ["Entities.primitive-name.name"] = ("str", "or policy, got 'Number'"),
+        ["Entities.primitive-name.named-type"] = ("mis-primitive", "Name=\"Text\",Type=DomainTypeReference(Children=[],TypeName=\"Text\")"),
+        ["Entities.fallback.name"] = ("str", "or policy, got 'Go'"),
+        ["Entities.annotation.keyword"] = ("str", "or policy, got 'label'"),
+        ["Entities.annotation.string"] = ("mis-bool", "Annotation 'label(...)' expects exactly one non-empty string argument"),
+        ["Entities.annotation.number"] = ("str", "AnnotationString(Value=\"1.5\")"),
+        ["Relationships.navline.text"] = ("str", "navigation property after 'Owner:'"),
+        ["Relationships.via.name"] = ("mis-string", "'via' requires the inverse navigation name"),
+        ["Relationships.via.word"] = ("str", "or policy, got 'via'"),
+        ["Stages.prev"] = ("str", "Expected LBrace, got 'prev' (StringLiteral)"),
+        ["Stages.quantifier.any"] = ("str", "Expected action name, got 'when'"),
+        ["Stages.quantifier.all"] = ("str", "Expected action name, got 'when'"),
+        ["TopLevel.rejection.unsupported"] = ("str", "or 'bind' definition, got 'X'"),
+        ["TopLevel.rejection.unsupported-message"] = ("str", "or 'bind' definition, got 'X'"),
+        ["TopLevel.rejection.inheritance"] = ("str", "or 'bind' definition, got 'X'"),
+        ["TopLevel.rejection.inheritance-define"] = ("mis-number", "or 'bind' definition, got 'X'"),
+        ["TopLevel.named.kind"] = ("str", "or 'bind' definition, got 'V'"),
+        ["TopLevel.enum.member"] = ("mis-number", "Expected RBrace, got '5' (Number)"),
+        ["TopLevel.enum.member-annotation"] = ("str", "Enum member 'label' is a reserved keyword"),
+        ["TopLevel.function.start"] = ("str", "Expected EndOfFile, got 'function' (StringLiteral)"),
+        ["TopLevel.function.name"] = ("mis-keyword", "Expected function name after 'function', got 'Text'"),
+        ["TopLevel.value.primitive"] = ("str", "Expected type name, got 'Text'"),
+        ["TopLevel.contract.external"] = ("str", "Expected 'external' or 'internal' after contract 'C'"),
+        ["TopLevel.contract.internal"] = ("mis-number", "Expected 'external' or 'internal' after contract 'C'"),
+        ["TopLevel.contract.source-string"] = ("mis-number", "Expected contract source, got '5'"),
+        ["TopLevel.contract.version-string"] = ("mis-number", "Expected contract version, got '1'"),
+        ["TopLevel.contract.value-word"] = ("str", "Expected 'inbound' or 'outbound' on endpoint 'P'"),
+        ["TopLevel.contract.inbound"] = ("str", "Expected 'inbound' or 'outbound' on endpoint 'E'"),
+        ["TopLevel.contract.outbound"] = ("str", "Expected 'inbound' or 'outbound' on endpoint 'E'"),
+        ["TopLevel.contract.operation"] = ("str", "Expected 'operation' or 'event' on endpoint 'E'"),
+        ["TopLevel.contract.event"] = ("str", "Expected 'operation' or 'event' on endpoint 'E'"),
+        ["TopLevel.contract.payload-primitive"] = ("mis-string", "Expected payload type, got 'Text'"),
+        ["Outline.function"] = ("str", "=OK <domain:\"A\" path=\"$domain\" off=0-8 lines=1-1 indent=\"\" braces=-1,-1 shared=0>"),
+        ["Outline.top.name"] = ("str", "<unknown:\"N\" path=\"N\""),
+        ["Outline.member.unnamed"] = ("str", "=OK <domain:\"A\" path=\"$domain\" off=0-8 lines=1-1 indent=\"\" braces=-1,-1 shared=0><entity:\"X\" path=\"X\" off=9-45 lines=2-4 indent=\"\" addr braces=19,44 shared=0>"),
+        ["Outline.member.name"] = ("str", "=OK <domain:\"A\" path=\"$domain\" off=0-8 lines=1-1 indent=\"\" braces=-1,-1 shared=0><entity:\"X\" path=\"X\" off=9-34 lines=2-4 indent=\"\" addr braces=19,33 shared=0>"),
+        ["Outline.member.legacy-action"] = ("str", "=OK <domain:\"A\" path=\"$domain\" off=0-8 lines=1-1 indent=\"\" braces=-1,-1 shared=0><entity:\"X\" path=\"X\" off=9-52 lines=2-4 indent=\"\" addr braces=19,51 shared=0>"),
+        ["Edit.marked-name"] = ("str-kind", "ErrorCode=\"EDIT_BAD_SNIPPET\""),
+        ["Edit.name"] = ("mis-string", "ErrorCode=\"EDIT_BAD_SNIPPET\""),
+        ["Temporal.amount.parse"] = ("str", "Expected RBrace, got 'Days' (Identifier)"),
+        ["Temporal.amount.message"] = ("mis-ident", "RelationshipName=\"Twelve\""),
+        ["Temporal.unit.lookup"] = ("str", "Expected RBrace, got 'Days' (StringLiteral)"),
+        ["Fold.text"] = ("Fold.number/long", "Value=Int64:42"),
+        ["Fold.number"] = ("str", "Value=\"42\""),
+    };
+
     // ── documents ─────────────────────────────────────────────────────────────────────
 
     private static string Doc(string body) => "domain A\n" + body + "\n";
@@ -1070,14 +1144,38 @@ public sealed class ResolverBaselineTests {
         await Assert.That(siteRows.Count(r => r.Fields[4].StartsWith("ERR", StringComparison.Ordinal))).IsGreaterThan(150);
         await Assert.That(siteRows.Count(r => r.Fields[4].StartsWith("OK", StringComparison.Ordinal))).IsGreaterThan(100);
 
-        // Every reader site has a row; every guarded site a kind-mismatch or string row unless no input can reach it.
+        // Every reader site has a row; every guarded site a row whose recorded result shows its guard refused
+        // another kind, unless no input can reach the site or no input can make the guard false.
+        var evidenceFailures = new List<string>();
         foreach (var (label, _, guarded, unreachable) in Sites) {
             var mine = siteRows.Where(r => r.Fields[0] == label).ToList();
             await Assert.That(mine).IsNotEmpty().Because(label);
-            if (guarded && unreachable is null && !GuardAlwaysHolds.ContainsKey(label))
-                await Assert.That(mine.Any(r => r.Fields[1].StartsWith("mis", StringComparison.Ordinal) || r.Fields[1].StartsWith("str", StringComparison.Ordinal)))
-                    .IsTrue().Because(label);
+            if (!guarded || unreachable is not null || GuardAlwaysHolds.ContainsKey(label))
+                continue;
+            if (!GuardEvidence.TryGetValue(label, out var evidence)) {
+                evidenceFailures.Add($"{label}: no GuardEvidence entry");
+                continue;
+            }
+            var (site, @case) = evidence.Case.Contains('/') ? (evidence.Case[..evidence.Case.IndexOf('/')], evidence.Case[(evidence.Case.IndexOf('/') + 1)..]) : (label, evidence.Case);
+            var row = siteRows.SingleOrDefault(r => r.Fields[0] == site && r.Fields[1] == @case);
+            if (row is null) {
+                evidenceFailures.Add($"{label}: no row {site}/{@case}");
+                continue;
+            }
+            var result = Unescape(row.Fields[4]);
+            var exact = evidence.Shows.StartsWith('=');
+            var shows = exact ? evidence.Shows[1..] : evidence.Shows;
+            if (exact ? result != shows : !result.Contains(shows, StringComparison.Ordinal))
+                evidenceFailures.Add($"{label}: {site}/{@case} does not show '{evidence.Shows}': {result}");
+            if (site == label && !@case.StartsWith("mis", StringComparison.Ordinal) && !@case.StartsWith("str", StringComparison.Ordinal))
+                evidenceFailures.Add($"{label}: evidence case '{@case}' is not a mis/str case");
+            // Specific to a few rows, so a generic prefix such as "ERR" or "OK" cannot pass.
+            if (!exact && siteRows.Count(r => Unescape(r.Fields[4]).Contains(shows, StringComparison.Ordinal)) > 12)
+                evidenceFailures.Add($"{label}: '{shows}' is in more than 12 rows");
         }
+
+        await Assert.That(evidenceFailures).IsEmpty();
+        await Assert.That(GuardEvidence.Keys.Except(Sites.Where(s => s.Guarded && s.Unreachable is null).Select(s => s.Label))).IsEmpty();
 
         await Assert.That(Sites.Length).IsEqualTo(114);
         await Assert.That(GuardAlwaysHolds.Keys.Except(Sites.Where(s => s.Guarded).Select(s => s.Label))).IsEmpty();

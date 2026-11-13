@@ -57,6 +57,9 @@ internal static class OperatorOracle {
         new("UInt32", null, typeof(uint), uint.MaxValue, 7u, ClrOnly: true),
         new("UInt64", null, typeof(ulong), ulong.MaxValue, 7UL, ClrOnly: true),
         new("Char", null, typeof(char), 'a', 'b', ClrOnly: true),
+        // T-18b: the native integers. A wrap at the top and a negative; a nuint at or above 2^63, which a signed word reads as negative.
+        new("NInt", null, typeof(nint), nint.MaxValue, (nint)(-7), ClrOnly: true),
+        new("NUInt", null, typeof(nuint), unchecked((nuint)0x8000_0000_0000_0005UL), (nuint)7, ClrOnly: true),
         new("Text", "Text", typeof(string), "ab", "cd"),
         new("Boolean", "Boolean", typeof(bool), true, false),
         new("Date", "Date", typeof(DateOnly), new DateOnly(2024, 2, 28), new DateOnly(2024, 3, 1)),
@@ -271,7 +274,7 @@ internal static class OperatorOracle {
                 var actual = vmType == typeof(bool) ? (object?)exec.GetValue<bool>() : exec.Result.Value;
                 runs.Add($"{name}={Format(actual)}");
                 if (resolution is { } r) {
-                    if (Expected(kind, r, leftValue, rightValue) is not { } expected)
+                    if (Expected(kind, r, left.Clr!, right?.Clr, leftValue, rightValue) is not { } expected)
                         unchecked_ = true;
                     else if (Format(expected) != Format(actual))
                         valueMismatches.Add($"{name}: VM {Format(actual)}, tree {Format(expected)}");
@@ -323,9 +326,16 @@ internal static class OperatorOracle {
         yield return ("S2", left.Plain, right?.Stress);
     }
 
-    /// <summary>The value the tree's statement denotes: each operand converted as the interface says, then the operator applied by C#.</summary>
-    private static object? Expected(OperatorKind kind, OperatorResolution resolution, object? leftValue, object? rightValue) {
+    /// <summary>
+    /// The value the tree's statement denotes: each operand converted as the interface says, then the operator applied by C#.
+    /// A native-integer cell is answered by Roslyn (T-18b lock amendment 6): the runtime binder has no native-integer rules.
+    /// </summary>
+    private static object? Expected(OperatorKind kind, OperatorResolution resolution, Type leftType, Type? rightType, object? leftValue, object? rightValue) {
         try {
+            if (Poly.Tests.Introspection.CSharpOperatorOracle.IsNativeForm(leftType) || (rightType is not null && Poly.Tests.Introspection.CSharpOperatorOracle.IsNativeForm(rightType))) {
+                var answer = Poly.Tests.Introspection.CSharpOperatorOracle.Value(kind, leftType, rightType, leftValue, rightValue);
+                return answer.Throws is null ? answer.Value : null;
+            }
             var parameters = resolution.Signature.Parameters.Select(static p => p.ParameterTypeDefinition).ToArray();
             // Into Object is boxing. Char goes through Int32: ChangeType has no char to float, double or decimal.
             static object? Convert(object? value, ITypeDefinition target) =>
@@ -463,16 +473,16 @@ public class OperatorOracleTests {
     // with a signed operand or Decimal-with-Float cell is rejected there. The domain DSL has no Float, so the analyzer
     // column is n/a for those; the remaining owners are the lowered analysis (T-07, T-10, T-17, T-22) and the ABI (T-21).
     private static readonly LedgerRule[] LoweredRules = [
-        new(OracleKind.LoweredAnalysisDisagrees, "*", "*", "*", "analysis error on a defined cell", "T-21 (the ABI cannot execute declared temporal and Duration-scalar arithmetic: VmExecutesDeclaredOperator); 7 temporal cells with T-10", 40, "8f48a0defcb327e9"),
-        new(OracleKind.LoweredAnalysisDisagrees, "*", Arithmetic, "*", "type: analysis", "T-17 (result typing: small integers, char and uint with a signed operand keep the operand type)", 150, "ff6f45d8a9c3a166"),
+        new(OracleKind.LoweredAnalysisDisagrees, "*", "*", "*", "analysis error on a defined cell", "T-21 (the ABI cannot execute declared temporal and Duration-scalar arithmetic: VmExecutesDeclaredOperator); 7 temporal cells with T-10", 46, ""),
+        new(OracleKind.LoweredAnalysisDisagrees, "*", Arithmetic, "*", "type: analysis", "T-17 (result typing: small integers, char and uint with a signed operand keep the operand type)", 250, ""),
         // The same wrong type on the node kinds the lowered analysis has no case for (issue 812): it passes the operand type through.
-        new(OracleKind.LoweredAnalysisDisagrees, "*", BitwiseShiftAndUnaryMinus, "*", "type: analysis", "T-22 (bitwise, shift and unary minus cases: the operand type passes through)", 221, "1a89fb5312f00f92"),
-        new(OracleKind.LoweredAnalysisDisagrees, "*", "Add,Subtract", "*", "typed DateOnly", "T-10 (RewriteDateOffset)", 20, "7ba4ce6c196e991e"),
-        new(OracleKind.LoweredAnalysisDisagrees, "*", "Add,Subtract", "*", "typed DateTime", "T-10 (RewriteDateOffset)", 20, "5b5cc5a3f2ece6cd"),
+        new(OracleKind.LoweredAnalysisDisagrees, "*", BitwiseShiftAndUnaryMinus, "*", "type: analysis", "T-22 (bitwise, shift and unary minus cases: the operand type passes through)", 263, ""),
+        new(OracleKind.LoweredAnalysisDisagrees, "*", "Add,Subtract", "*", "typed DateOnly", "T-10 (RewriteDateOffset)", 24, ""),
+        new(OracleKind.LoweredAnalysisDisagrees, "*", "Add,Subtract", "*", "typed DateTime", "T-10 (RewriteDateOffset)", 24, ""),
         // Text and Boolean ordering: the lowered analysis keeps accepting it (TextAndBooleanOrderingRule); the DSL and the interpreter order Text.
         new(OracleKind.LoweredAnalysisDisagrees, "Text,Boolean", Ordering, "Text,Boolean", "typed Boolean", "T-07 (#631 ordering legality)", 8, "a2d892f80f998382"),
         // The node kinds the lowered-tree analysis has no case for (issue 812): it accepts every operand.
-        new(OracleKind.LoweredAnalysisDisagrees, "*", BitwiseShiftAndUnaryMinus, "*", "analysis accepts an undefined cell", "T-22 (bitwise, shift and unary minus cases)", 1492, "f06be2a866cf6b37")
+        new(OracleKind.LoweredAnalysisDisagrees, "*", BitwiseShiftAndUnaryMinus, "*", "analysis accepts an undefined cell", "T-22 (bitwise, shift and unary minus cases)", 1845, "")
     ];
 
     private static readonly LedgerRule[] AbiRules = [
@@ -501,7 +511,7 @@ public class OperatorOracleTests {
 
     [Test]
     public async Task LoweredAnalysisDisagrees_EveryDivergenceIsOwned_AndNoEntryIsStale() =>
-        await AssertOwned(OracleKind.LoweredAnalysisDisagrees, LoweredRules, 1951);
+        await AssertOwned(OracleKind.LoweredAnalysisDisagrees, LoweredRules, 2460);
 
     [Test]
     public async Task AbiDivergesFromTree_EveryDivergenceIsOwned_AndNoEntryIsStale() =>
@@ -511,13 +521,45 @@ public class OperatorOracleTests {
     public async Task AbiRejectsDefined_EveryDivergenceIsOwned_AndNoEntryIsStale() =>
         await AssertOwned(OracleKind.AbiRejectsDefined, RejectedDefinedRules, 0);
 
+    /// <summary>
+    /// T-18b: the 8,800 cells of the 22-operand grid, the ledger before the native integers, each rule's (count,
+    /// checksum) on them, in rule order. A rule that grew grew only by cells with a native-integer operand.
+    /// </summary>
+    private static readonly (int Count, string Checksum)[] MasterLowered = [
+        (40, "8f48a0defcb327e9"), (150, "ff6f45d8a9c3a166"), (221, "1a89fb5312f00f92"), (20, "7ba4ce6c196e991e"),
+        (20, "5b5cc5a3f2ece6cd"), (8, "a2d892f80f998382"), (1492, "f06be2a866cf6b37")
+    ];
+
+    private static readonly (int Count, string Checksum)[] MasterAbi = [
+        (1059, "7fada48079f73965"), (1729, "6699a0d31e9728fb"), (363, "fdfd5dee091d1059"), (8, "2e73ee06e20095c0"), (115, "ae35f7db5640776e")
+    ];
+
+    private static bool IsNative(string? operand) => operand is "NInt" or "NUInt";
+
+    [Test]
+    public async Task Ledger_TheMasterGridCells_AreOwnedAsBeforeT18b() {
+        var (cells, _) = OperatorOracle.Run.Value;
+        var problems = new List<string>();
+        foreach (var (rules, master) in new[] { (LoweredRules, MasterLowered), (AbiRules, MasterAbi) }) {
+            for (var i = 0; i < rules.Length; i++) {
+                var keys = cells.Where(static c => !IsNative(c.Left) && !IsNative(c.Right))
+                    .SelectMany(c => c.Divergences.Where(d => rules[i].Matches(c, d)).Select(_ => rules[i].KeyOf(c)))
+                    .ToArray();
+                if ((keys.Length, LedgerCheck.Checksum(keys)) != master[i])
+                    problems.Add($"{rules[i].Describe()}: before T-18b {master[i]}, now ({keys.Length}, {LedgerCheck.Checksum(keys)})");
+            }
+        }
+        await Assert.That(problems).IsEmpty();
+        await Assert.That(cells.Count(static c => !IsNative(c.Left) && !IsNative(c.Right))).IsEqualTo(8800);
+    }
+
     [Test]
     public async Task Ledger_CoversTheWholeGrid_WithinBudget_AndChecksEveryDefinedValue() {
         var (cells, elapsed) = OperatorOracle.Run.Value;
         var binary = Enum.GetValues<OperatorKind>().Count(static k => OperatorShape.ArityOf(k) == 2);
         var unary = Enum.GetValues<OperatorKind>().Length - binary;
         await Assert.That(cells.Count).IsEqualTo((binary * OperatorOracle.Operands.Length * OperatorOracle.Operands.Length) + (unary * OperatorOracle.Operands.Length));
-        await Assert.That(cells.Count).IsEqualTo(8800);
+        await Assert.That(cells.Count).IsEqualTo(10464);
         await Assert.That(elapsed).IsLessThan(TimeSpan.FromMinutes(2));
         // A defined cell the VM ran must have had its value compared with what the tree states.
         var unchecked_ = cells.Where(static c => c.Abi.Contains("(value unchecked)", StringComparison.Ordinal)).Select(static c => c.Key).ToArray();

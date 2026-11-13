@@ -66,6 +66,8 @@ public class OverloadScoringTests {
         public static string NullableInt64(long? x) => "NullableInt64";
         public static string NullableDecimal(decimal? x) => "NullableDecimal";
         public static string Metres(Meters x) => "Metres";
+        public static string NInt(nint x) => "NInt";
+        public static string NUInt(nuint x) => "NUInt";
     }
 
     /// <summary>Overload sets whose winner depends on the tier sum.</summary>
@@ -82,7 +84,10 @@ public class OverloadScoringTests {
 
     private static ITypeDefinition Clr(Type type) => ClrTypeDefinitionRegistry.Shared.GetTypeDefinition(type);
 
-    private static readonly Type[] Primitives = [.. Enum.GetValues<Prim>().Select(static p => p.GetClrType()!)];
+    /// <summary>The 21 primitives the master matrices were captured over; T-18b's native integers are pinned apart (lock amendment 9).</summary>
+    private static readonly Type[] Primitives = [.. Enum.GetValues<Prim>().Where(static p => p <= Prim.Structure).Select(static p => p.GetClrType()!)];
+
+    private static readonly Type[] Natives = [typeof(nint), typeof(nuint)];
 
     private static readonly Type[] EnumsAndNumbers = [
         typeof(ColorEnum), typeof(ShapeEnum), typeof(ByteEnum), typeof(LongEnum),
@@ -131,10 +136,15 @@ public class OverloadScoringTests {
         _ when type == typeof(long?) => "NullableInt64",
         _ when type == typeof(decimal?) => "NullableDecimal",
         _ when type == typeof(Meters) => "Metres",
+        _ when type == typeof(nint) => "NInt",
+        _ when type == typeof(nuint) => "NUInt",
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, null),
     };
 
     internal static string PrimitiveMatrix() => Matrix(Primitives, Primitives);
+
+    /// <summary>T-18b: the native-integer rows over every primitive and native argument, then the 21 primitive rows over the native arguments.</summary>
+    internal static string NativeMatrix() => Matrix(Natives, [.. Primitives, .. Natives]) + Matrix(Primitives, Natives);
 
     internal static string EnumMatrix() => Matrix(EnumsAndNumbers.Where(static t => t.IsEnum), EnumsAndNumbers)
         + Matrix(EnumsAndNumbers.Where(static t => !t.IsEnum), EnumsAndNumbers);
@@ -464,6 +474,52 @@ public class OverloadScoringTests {
     public async Task Acceptance_EveryPrimitivePair_IsMasterMinusTheRemovedWidenings() =>
         await Assert.That(Trim(PrimitiveMatrix())).IsEqualTo(AfterT16(MasterPrimitiveMatrix));
 
+    /// <summary>
+    /// T-18b: a native-integer parameter accepts its implicit sources (C# 11: sbyte, byte, short, ushort, int and char
+    /// into nint; byte, ushort, char and uint into nuint) and itself; a native argument reaches long or ulong, float,
+    /// double, decimal and object. Written from the specification, and checked against Roslyn below.
+    /// </summary>
+    private const string NativeIntegerMatrix = """
+        args:Boolean,Int8,Int16,Int32,Int64,UInt8,UInt16,UInt32,UInt64,Float32,Float64,Decimal,String,Char,DateTime,DateOnly,TimeOnly,TimeSpan,Guid,ByteArray,Structure,NInt,NUInt
+        NInt .AAA.AA......A.......A.
+        NUInt .....AAA.....A........A
+        args:NInt,NUInt
+        Boolean ..
+        Int8 ..
+        Int16 ..
+        Int32 ..
+        Int64 A.
+        UInt8 ..
+        UInt16 ..
+        UInt32 ..
+        UInt64 .A
+        Float32 AA
+        Float64 AA
+        Decimal AA
+        String ..
+        Char ..
+        DateTime ..
+        DateOnly ..
+        TimeOnly ..
+        TimeSpan ..
+        Guid ..
+        ByteArray ..
+        Structure AA
+        """;
+
+    [Test]
+    public async Task Acceptance_NativeIntegerRowsAndColumns_ArePinnedApart_AndAgreeWithCSharp() {
+        await Assert.That(Trim(NativeMatrix())).IsEqualTo(NativeIntegerMatrix);
+        // The numeric cells against Roslyn: a parameter accepts an argument when C# converts it implicitly.
+        foreach (var (from, to) in CSharpOperatorOracle.ConversionUniverse()) {
+            if (!Primitives.Concat(Natives).Contains(from) || !Primitives.Concat(Natives).Contains(to))
+                continue;
+            var accepts = Accepts(ParameterName(to), from) == "A";
+            await Assert.That(accepts).IsEqualTo(CSharpOperatorOracle.Conversion(from, to) is ConversionOperatorKind.Implicit)
+                .Because($"{ParameterName(to)} <- {ParameterName(from)}");
+        }
+    }
+
     [Test]
     public async Task Acceptance_EnumAndNumericPairs_AreMasterMinusEveryEnumConversion() =>
         await Assert.That(Trim(EnumMatrix())).IsEqualTo(AfterT16(MasterEnumMatrix));
@@ -553,8 +609,8 @@ public class OverloadScoringTests {
     [Test]
     public async Task TierBoundary_EveryImplicitConversionWithAMethod_IsAssignable_AndEveryOneWithout_IsNot() {
         var mismatches = new List<string>();
-        foreach (var to in Primitives.Where(static t => t != typeof(object))) {
-            foreach (var from in Primitives) {
+        foreach (var to in Primitives.Concat(Natives).Where(static t => t != typeof(object))) {
+            foreach (var from in Primitives.Concat(Natives)) {
                 var conversion = Clr(to).ResolveConversionFrom(Clr(from));
                 if (conversion is not { Kind: ConversionOperatorKind.Implicit } implicitConversion)
                     continue;

@@ -68,15 +68,32 @@ internal static class CSharpOperatorOracle {
                 yield return (kind, operand, null);
     }
 
-    private static readonly Lazy<Dictionary<(OperatorKind, Type, Type?), CellAnswer>> Compiled = new(Compile);
+    /// <summary>Every ordered pair of distinct numeric types with a native integer on a side.</summary>
+    public static IEnumerable<(Type From, Type To)> ConversionUniverse() =>
+        from source in Numeric
+        from target in Numeric
+        where source != target && (Native.Contains(source) || Native.Contains(target))
+        select (source, target);
+
+    private sealed record Oracle(
+        Dictionary<(OperatorKind, Type, Type?), CellAnswer> Operators,
+        Dictionary<(Type, Type), ConversionOperatorKind?> Conversions);
+
+    private static readonly Lazy<Oracle> Compiled = new(Compile);
 
     public static TimeSpan CompileTime { get; private set; }
 
     /// <summary>The answer for one cell; a cell outside <see cref="Universe"/> is an error, never a default.</summary>
     public static CellAnswer Answer(OperatorKind kind, Type left, Type? right) =>
-        Compiled.Value.TryGetValue((kind, left, right), out var answer)
+        Compiled.Value.Operators.TryGetValue((kind, left, right), out var answer)
             ? answer
             : throw new ArgumentOutOfRangeException(nameof(left), $"{Key(kind, left, right)} is not an oracle cell");
+
+    /// <summary>C#'s conversion from <paramref name="from"/> to <paramref name="to"/> (null: none); a pair outside <see cref="ConversionUniverse"/> is an error.</summary>
+    public static ConversionOperatorKind? Conversion(Type from, Type to) =>
+        Compiled.Value.Conversions.TryGetValue((from, to), out var kind)
+            ? kind
+            : throw new ArgumentOutOfRangeException(nameof(from), $"{Keyword(from)} to {Keyword(to)} is not an oracle conversion");
 
     /// <summary>The value C# computes for the cell on <paramref name="left"/> and <paramref name="right"/>.</summary>
     public static ValueAnswer Value(OperatorKind kind, Type leftType, Type? rightType, object? left, object? right) {
@@ -150,16 +167,24 @@ internal static class CSharpOperatorOracle {
         return $"public static object M{index}({parameters}) => {body};";
     }
 
-    private static Dictionary<(OperatorKind, Type, Type?), CellAnswer> Compile() {
+    private static Oracle Compile() {
         if (IntPtr.Size != 8)
             throw new PlatformNotSupportedException("the native-integer oracle runs on a 64-bit host only");
         var watch = System.Diagnostics.Stopwatch.StartNew();
         var cells = Universe().ToArray();
+        var pairs = ConversionUniverse().ToArray();
+        // One method per line: the operator cells, then an implicit and an explicit conversion method per pair.
         const int header = 2;
         string Source(Func<int, bool> fails) {
             var text = new StringBuilder("#nullable disable\npublic static class Cells {\n");
             for (var i = 0; i < cells.Length; i++)
                 text.Append(Method(i, cells[i].Kind, cells[i].Left, cells[i].Right, fails(i))).Append('\n');
+            for (var j = 0; j < pairs.Length; j++) {
+                var (from, to) = pairs[j];
+                var line = cells.Length + (2 * j);
+                text.Append($"public static object I{j}({Keyword(from)} a) {(fails(line) ? "=> throw null;" : $"{{ {Keyword(to)} r = a; return r; }}")}\n");
+                text.Append($"public static object E{j}({Keyword(from)} a) => {(fails(line + 1) ? "throw null" : $"({Keyword(to)})a")};\n");
+            }
             return text.Append("}\n").ToString();
         }
         var references = ((string?)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES"))!
@@ -173,18 +198,19 @@ internal static class CSharpOperatorOracle {
         var tree = CSharpSyntaxTree.ParseText(Source(static _ => false), parse);
         var compilation = CSharpCompilation.Create("NativeIntegerOracle", [tree], references, options);
         var errors = new Dictionary<int, List<string>>();
+        var lines = cells.Length + (2 * pairs.Length);
         foreach (var diagnostic in compilation.GetDiagnostics().Where(static d => d.Severity == RoslynSeverity.Error)) {
             var index = diagnostic.Location.GetLineSpan().StartLinePosition.Line - header;
-            if (index < 0 || index >= cells.Length)
+            if (index < 0 || index >= lines)
                 throw new InvalidOperationException($"oracle diagnostic outside a cell: {diagnostic}");
             (errors.TryGetValue(index, out var list) ? list : errors[index] = []).Add(diagnostic.Id);
         }
         var model = compilation.GetSemanticModel(tree);
         var bodies = tree.GetRoot().DescendantNodes().OfType<MethodDeclarationSyntax>().ToArray();
-        if (bodies.Length != cells.Length)
-            throw new InvalidOperationException($"oracle parsed {bodies.Length} methods for {cells.Length} cells");
+        if (bodies.Length != lines)
+            throw new InvalidOperationException($"oracle parsed {bodies.Length} methods for {lines} lines");
 
-        var emitTree = CSharpSyntaxTree.ParseText(Source(errors.ContainsKey), parse);
+        var emitTree = CSharpSyntaxTree.ParseText(Source(i => errors.ContainsKey(i)), parse);
         using var pe = new MemoryStream();
         var emit = CSharpCompilation.Create("NativeIntegerOracleRun", [emitTree], references, options).Emit(pe);
         if (!emit.Success)
@@ -204,9 +230,16 @@ internal static class CSharpOperatorOracle {
                 ?? throw new InvalidOperationException($"oracle has no type for {Key(kind, left, right)}");
             answers[(kind, left, right)] = new(true, ToClr(symbol), "", type.GetMethod($"M{i}")!);
         }
+        var conversions = new Dictionary<(Type, Type), ConversionOperatorKind?>();
+        for (var j = 0; j < pairs.Length; j++) {
+            var implicitLine = cells.Length + (2 * j);
+            conversions[pairs[j]] = !errors.ContainsKey(implicitLine) ? ConversionOperatorKind.Implicit
+                : !errors.ContainsKey(implicitLine + 1) ? ConversionOperatorKind.Explicit
+                : null;
+        }
         watch.Stop();
         CompileTime = watch.Elapsed;
-        return answers;
+        return new(answers, conversions);
     }
 
     private static Type ToClr(ITypeSymbol symbol) {
@@ -479,31 +512,193 @@ public class NativeIntegerTests {
         ["undefined: runs"] = 497,
     };
 
+    // ---- the four T-18a regressions (row T-18's red test) ----
+
     /// <summary>
-    /// T-18a's four regressions, on master: each ran before T-18a and is rejected now, with this message. Before T-18a
-    /// <c>nuint &lt; nuint</c> ran but read a <c>nuint</c> at or above 2^63 as negative.
+    /// T-18a's four regressions: each ran before T-18a (<c>nuint &lt; nuint</c> read a value at or above 2^63 as
+    /// negative there) and was rejected since (the characterisation commit pinned the messages). Each compiles and
+    /// agrees with C# in verdict, static type and value, on every argument set of the grid.
     /// </summary>
     [Test]
-    [Arguments(OperatorKind.LessThan, typeof(nint), typeof(nint), "comparison between incompatible types 'IntPtr' and 'IntPtr': no LessThan operator for these types", "defined: runs right")]
-    [Arguments(OperatorKind.Add, typeof(nint), typeof(nint), "arithmetic operand is not numeric (got 'IntPtr' and 'IntPtr'): no Add operator for these types", "defined: runs right")]
-    [Arguments(OperatorKind.Add, typeof(nint), typeof(int), "arithmetic operand is not numeric (got 'IntPtr' and 'Int32')", "defined: runs right")]
-    [Arguments(OperatorKind.LessThan, typeof(nuint), typeof(nuint), "comparison between incompatible types 'UIntPtr' and 'UIntPtr': no LessThan operator for these types", "defined: wrong value")]
-    public async Task RegressedByT18a_IsRejectedOnMaster(OperatorKind kind, Type left, Type right, string message, string before) {
+    [Arguments(OperatorKind.LessThan, typeof(nint), typeof(nint))]
+    [Arguments(OperatorKind.Add, typeof(nint), typeof(nint))]
+    [Arguments(OperatorKind.Add, typeof(nint), typeof(int))]
+    [Arguments(OperatorKind.LessThan, typeof(nuint), typeof(nuint))]
+    public async Task RegressedByT18a_CompilesAndAgreesWithCSharp(OperatorKind kind, Type left, Type right) {
+        await Assert.That(IntPtr.Size).IsEqualTo(8);
+        var oracle = CSharpOperatorOracle.Answer(kind, left, right);
+        await Assert.That(oracle.Defined).IsTrue();
         var node = NativeIntegerGrid.Build(kind, Param("a", left), Param("b", right));
-        var errors = Interpreter.Analyze(node).Diagnostics.Where(static d => d.Severity == Poly.Analysis.DiagnosticSeverity.Error).Select(static d => d.Message).ToArray();
-        await Assert.That(errors).IsEquivalentTo([message]);
-        await Assert.That(PreT18a().Single(c => c.Key == CSharpOperatorOracle.Key(kind, left, right)).Class).IsEqualTo(before);
+        var analysis = Interpreter.Analyze(node);
+        await Assert.That(analysis.Diagnostics.Where(static d => d.Severity == Poly.Analysis.DiagnosticSeverity.Error).Select(static d => d.Message).ToArray()).IsEmpty();
+        var program = Interpreter.Compile(node, analysis);
+        await Assert.That(program.RootClrType).IsEqualTo(oracle.Type);
+        foreach (var (_, lv, rv) in NativeIntegerGrid.Arguments(left, right)) {
+            using var exec = Interpreter.Execute(program, lv, rv);
+            await Assert.That(NativeIntegerGrid.Format(NativeIntegerGrid.Read(exec, program.RootClrType)))
+                .IsEqualTo(NativeIntegerGrid.Format(CSharpOperatorOracle.Value(kind, left, right, lv, rv).Value));
+        }
     }
 
-    /// <summary>On master the provider reaches IntPtr through its reflected members only: nint + int is the declared op_Addition(IntPtr, Int32), and nint to long is IntPtr's explicit op_Explicit.</summary>
+    // ---- the provider (lock: design; amendments 4 and 5) ----
+
+    /// <summary>The built-in operator answers for native integers; IntPtr's reflected op_* members stand down.</summary>
     [Test]
-    public async Task Master_NintPlusInt_IsIntPtrsDeclaredOperator_AndNintToLongIsExplicit() {
-        var resolution = Clr(typeof(nint)).GetOperator(OperatorKind.Add, Clr(typeof(int)));
-        await Assert.That(resolution is { PlatformApplied: false }).IsTrue();
-        await Assert.That(resolution!.Value.Signature.Name).IsEqualTo("op_Addition");
+    public async Task Provider_NintPlusInt_IsTheBuiltInOperator_AndNintIsAPrimitive() {
+        var nint = Clr(typeof(nint));
+        var resolution = nint.GetOperator(OperatorKind.Add, Clr(typeof(int)));
+        await Assert.That(resolution is { PlatformApplied: true }).IsTrue();
+        await Assert.That(resolution!.Value.Result).IsSameReferenceAs(nint);
+        await Assert.That(resolution.Value.Signature.Parameters.All(p => ReferenceEquals(p.ParameterTypeDefinition, nint))).IsTrue();
+        await Assert.That(nint.PrimitiveType?.GetCSharpKeyword()).IsEqualTo("nint");
+        await Assert.That(Clr(typeof(nuint)).PrimitiveType?.GetCSharpKeyword()).IsEqualTo("nuint");
+        await Assert.That(nint.Kind).IsEqualTo(Poly.Introspection.TypeKind.Primitive);
+        foreach (var kind in Enum.GetValues<OperatorKind>())
+            await Assert.That(nint.GetOperators(kind).Any(static o => !o.PlatformApplied)).IsFalse().Because($"IntPtr's reflected {kind} stands down");
+    }
+
+    /// <summary>
+    /// Built in first when the built-in answer is implicit, else declared (amendment 4): nint to long is the implicit
+    /// built-in conversion C# 11 has, and (int)nint keeps IntPtr's declared op_Explicit method (T-16's Method form).
+    /// </summary>
+    [Test]
+    public async Task Provider_NintToLongIsImplicitBuiltIn_IntFromNintKeepsTheDeclaredExplicit() {
         var toLong = Clr(typeof(long)).ResolveConversionFrom(Clr(typeof(nint)));
-        await Assert.That(toLong?.Kind).IsEqualTo(ConversionOperatorKind.Explicit);
-        await Assert.That(toLong!.Value.Method).IsNotNull();
-        await Assert.That(((ITypeDefinition)Clr(typeof(nint))).PrimitiveType).IsNull();
+        await Assert.That(toLong?.Kind).IsEqualTo(ConversionOperatorKind.Implicit);
+        await Assert.That(toLong!.Value.Method).IsNull();
+        var toInt = Clr(typeof(int)).ResolveConversionFrom(Clr(typeof(nint)));
+        await Assert.That(toInt?.Kind).IsEqualTo(ConversionOperatorKind.Explicit);
+        await Assert.That(toInt!.Value.Method?.Name).IsEqualTo("op_Explicit");
+        var toDecimal = Clr(typeof(decimal)).ResolveConversionFrom(Clr(typeof(nuint)));
+        await Assert.That(toDecimal?.Kind).IsEqualTo(ConversionOperatorKind.Implicit);
+    }
+
+    /// <summary>Every conversion between a native integer and a numeric type, against C#.</summary>
+    [Test]
+    public async Task Provider_EveryNativeConversion_AgreesWithCSharp() {
+        await Assert.That(IntPtr.Size).IsEqualTo(8);
+        var mismatches = new List<string>();
+        var (implicitCount, explicitCount) = (0, 0);
+        foreach (var (from, to) in CSharpOperatorOracle.ConversionUniverse()) {
+            var expected = CSharpOperatorOracle.Conversion(from, to);
+            implicitCount += expected is ConversionOperatorKind.Implicit ? 1 : 0;
+            explicitCount += expected is ConversionOperatorKind.Explicit ? 1 : 0;
+            var actual = Clr(to).ResolveConversionFrom(Clr(from));
+            if (actual?.Kind != expected)
+                mismatches.Add($"{CSharpOperatorOracle.Keyword(from)} -> {CSharpOperatorOracle.Keyword(to)}: C# {expected?.ToString() ?? "none"}, provider {actual?.Kind.ToString() ?? "none"}");
+            else if (actual is { Kind: ConversionOperatorKind.Implicit, Method: not null })
+                mismatches.Add($"{CSharpOperatorOracle.Keyword(from)} -> {CSharpOperatorOracle.Keyword(to)}: an implicit native conversion is built in, provider states {actual.Value.Method.Name}");
+        }
+        await Assert.That(mismatches).IsEmpty();
+        // The oracle itself: 50 ordered pairs; C# 11 has 18 implicit native conversions, every other pair is explicit.
+        await Assert.That(implicitCount).IsEqualTo(18);
+        await Assert.That(explicitCount).IsEqualTo(32);
+    }
+
+    /// <summary>Every operator over two non-nullable numeric operands with a native integer, against C#: verdict and result type.</summary>
+    [Test]
+    public async Task Provider_EveryNonLiftedNativeCell_AgreesWithCSharp_InVerdictAndResultType() {
+        await Assert.That(IntPtr.Size).IsEqualTo(8);
+        var mismatches = new List<string>();
+        var defined = 0;
+        foreach (var (kind, left, right) in CSharpOperatorOracle.Universe()) {
+            if (!CSharpOperatorOracle.Numeric.Contains(left) || (right is not null && !CSharpOperatorOracle.Numeric.Contains(right)))
+                continue;
+            var oracle = CSharpOperatorOracle.Answer(kind, left, right);
+            defined += oracle.Defined ? 1 : 0;
+            var resolution = Clr(left).GetOperator(kind, right is null ? null : Clr(right));
+            var actual = resolution?.Result.GetRuntimeType();
+            if (actual != oracle.Type)
+                mismatches.Add($"{CSharpOperatorOracle.Key(kind, left, right)}: C# {(oracle.Defined ? CSharpOperatorOracle.Keyword(oracle.Type!) : oracle.Errors)}, provider {(actual is null ? "none" : CSharpOperatorOracle.Keyword(actual))}");
+        }
+        await Assert.That(mismatches).IsEmpty();
+        await Assert.That(defined).IsEqualTo(DefinedNonLiftedCells);
+    }
+
+    /// <summary>The oracle's own count, so an empty mismatch list cannot pass by finding no cell.</summary>
+    private const int DefinedNonLiftedCells = 0;
+
+    // ---- the grid (amendment 8) ----
+
+    /// <summary>
+    /// Cells refused under the fork's two conditions (wrong or throwing on 0d2cd4a8^1 too, and past the VM budget),
+    /// each with its positioned message. The PR lists them.
+    /// </summary>
+    internal static readonly Dictionary<string, string> Refused = new(StringComparer.Ordinal);
+
+    /// <summary>No defined native-integer cell computes a wrong value or throws: each runs right, keeps the right word under a stated type T-17 corrects, or is a listed refusal.</summary>
+    [Test]
+    public async Task Grid_EveryDefinedCell_RunsRight_OrIsAListedRefusal() {
+        await Assert.That(IntPtr.Size).IsEqualTo(8);
+        var cells = NativeIntegerGrid.Cells.Value;
+        var problems = cells
+            .Where(static c => c.Class.StartsWith("defined:", StringComparison.Ordinal))
+            .Where(static c => c.Class is not ("defined: runs right" or "defined: right word, stated type differs"))
+            .Where(c => !(c.Class == "defined: rejected" && Refused.TryGetValue(c.Key, out var message) && c.Detail == message))
+            .Select(static c => c.Line)
+            .ToArray();
+        await Assert.That(problems).IsEmpty();
+        await Assert.That(cells.Count).IsEqualTo(3336);
+        await Assert.That(cells.Count(static c => c.Class == "defined: runs right")).IsEqualTo(RunsRight);
+    }
+
+    private const int RunsRight = 0;
+
+    /// <summary>
+    /// The cells whose stated result type is not C#'s, with the right word (T-17: the lowered-tree result typing types a
+    /// native-integer pair as its left operand). Pinned by count and key checksum.
+    /// </summary>
+    [Test]
+    public async Task Grid_StatedTypeDiffers_IsT17s_PinnedByCountAndChecksum() {
+        var cells = NativeIntegerGrid.Cells.Value.Where(static c => c.Class == "defined: right word, stated type differs").ToArray();
+        await Assert.That((cells.Length, Poly.Tests.DomainModeling.Analysis.LedgerCheck.Checksum(cells.Select(static c => c.Key)))).IsEqualTo((0, ""));
+    }
+
+    /// <summary>Amendment 7: every cell that ran right on 0d2cd4a8^1 runs right now.</summary>
+    [Test]
+    public async Task Grid_EveryCellThatRanRightBeforeT18a_RunsRightNow() {
+        var now = NativeIntegerGrid.Cells.Value.ToDictionary(static c => c.Key, StringComparer.Ordinal);
+        var lost = PreT18a()
+            .Where(static c => c.Class == "defined: runs right")
+            .Where(c => now[c.Key].Class != "defined: runs right")
+            .Select(c => $"{now[c.Key].Line}  (before T-18a: {c.Detail})")
+            .ToArray();
+        await Assert.That(lost).IsEmpty();
+    }
+
+    /// <summary>An undefined arithmetic or comparison cell is rejected; only bitwise, shift and unary-minus cells may be accepted (T-22).</summary>
+    [Test]
+    public async Task Grid_UndefinedArithmeticAndComparison_AreRejected() {
+        var accepted = NativeIntegerGrid.Cells.Value
+            .Where(static c => c.Class.StartsWith("undefined:", StringComparison.Ordinal) && c.Class != "undefined: rejected")
+            .Where(static c => c.Kind is not (OperatorKind.BitwiseAnd or OperatorKind.BitwiseOr or OperatorKind.BitwiseXor
+                or OperatorKind.ShiftLeft or OperatorKind.ShiftRight or OperatorKind.UnaryMinus or OperatorKind.BitwiseNot))
+            .Select(static c => c.Line)
+            .ToArray();
+        await Assert.That(accepted).IsEmpty();
+    }
+
+    // ---- constants (amendment 2) and the writer ----
+
+    /// <summary>Constant folding's cell table excludes IntPtr and UIntPtr: native constants are not folded, and the VM computes them.</summary>
+    [Test]
+    public async Task NativeConstants_DeclineToFold_AndRun() {
+        var node = new Add(new Constant((nint)3), new Constant((nint)4));
+        var analysis = Interpreter.Analyze(node);
+        await Assert.That(analysis.Diagnostics.Where(static d => d.Severity == Poly.Analysis.DiagnosticSeverity.Error).Select(static d => d.Message).ToArray()).IsEmpty();
+        await Assert.That(analysis.GetNodeReplacement(node)).IsNull();
+        using var exec = Interpreter.Execute(Interpreter.Compile(node, analysis));
+        await Assert.That(NativeIntegerGrid.Format(NativeIntegerGrid.Read(exec, typeof(nint)))).IsEqualTo("7");
+    }
+
+    /// <summary>The writer prints the C# keyword for a native-integer type reference, never the enum member name.</summary>
+    [Test]
+    public async Task Writer_PrintsTheNativeKeyword() {
+        var primitive = typeof(nint).GetPrimitiveType();
+        await Assert.That(primitive).IsNotNull();
+        var printed = new Poly.Interpretation.CSharp.CSharpWriter().Write(new TypeCast(new Variable("x"), new PrimitiveTypeReference(primitive!.Value)));
+        await Assert.That(printed).Contains("(nint)");
+        await Assert.That(printed).DoesNotContain("NInt");
+        await Assert.That(typeof(nuint).GetPrimitiveType()?.GetCSharpKeyword()).IsEqualTo("nuint");
     }
 }

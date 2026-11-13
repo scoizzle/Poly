@@ -71,7 +71,10 @@ public class TypeRulesTests {
     /// </summary>
     [Test]
     public async Task ConversionDoor_ProviderReproducesTheMasterMatrix_ExceptTheRemovedWidenings() {
-        var prims = Enum.GetValues<Prim>();
+        // The 21 members the matrix was captured over, by ordinal; members appended later (T-18b's native integers) are not in it.
+        var prims = Enum.GetValues<Prim>().Where(MasterDoorMatrix.ContainsKey).ToArray();
+        await Assert.That(prims.Length).IsEqualTo(21);
+        await Assert.That(prims.Select(static p => (int)p).ToArray()).IsEquivalentTo(Enumerable.Range(0, 21).ToArray());
         var removed = RemovedWidenings.ToHashSet();
         await Assert.That(removed.Count).IsEqualTo(21);
         var mismatches = new List<string>();

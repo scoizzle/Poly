@@ -19,7 +19,8 @@ internal static class ExtraOperandGrid {
 
     internal enum Wide : ulong { None = 0, All = ulong.MaxValue }
 
-    private static readonly Type[] Base = [.. OperatorOracle.Operands.Where(static o => o.Clr is not null).Select(static o => o.Clr!)];
+    /// <summary>The ledger's CLR operands before T-18b: the native integers it gained stay in this grid's IntPtr family.</summary>
+    private static readonly Type[] Base = [.. OperatorOracle.Operands.Where(static o => o.Clr is not null && o.Clr != typeof(IntPtr) && o.Clr != typeof(UIntPtr)).Select(static o => o.Clr!)];
 
     private static readonly Type[] Extras = [typeof(DateTimeOffset), typeof(Shade), typeof(Other), typeof(Wide), typeof(IntPtr), typeof(UIntPtr)];
 
@@ -126,10 +127,9 @@ public class CompatibilityProviderTests {
         ["Enum|accepts|defined"] = (12, "befeb42408f3821d"),
         ["Enum|accepts|none"] = (288, "6877c6037cfaa217"),
         ["Enum|rejects|none"] = (5184, "7fad361dbea81895"),
-        ["IntPtr|accepts|defined"] = (24, "565846111ff03173"),
+        ["IntPtr|accepts|defined"] = (1768, ""),
         ["IntPtr|accepts|none"] = (24, "6c0426819d4a7d42"),
-        ["IntPtr|rejects|defined"] = (96, "1dc2ea92a3789937"),
-        ["IntPtr|rejects|none"] = (3992, "79538a64597e6b04"),
+        ["IntPtr|rejects|none"] = (2344, ""),
         ["Nullable|accepts|defined"] = (4448, "2de1f3caa17904d4"),
         ["Nullable|accepts|none"] = (78, "f788f25092bfd0cd"),
         ["Nullable|rejects|defined"] = (231, "cb4b463a4d1108f3"),

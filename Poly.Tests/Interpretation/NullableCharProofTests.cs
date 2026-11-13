@@ -107,7 +107,7 @@ internal static class NullableCharGrid {
             ? ""
             : $"VM result type {Display(program.RootClrType)}, C# {Display(expectedType)}; ";
         foreach (var (l, r) in Arguments(left, right)) {
-            var expected = Binder(kind, l, r);
+            var expected = Binder(kind, left, right, l, r);
             if (expected.StartsWith("binder rejects", StringComparison.Ordinal))
                 return expected;
             string actual;
@@ -141,8 +141,18 @@ internal static class NullableCharGrid {
             yield return (lv.Plain, null);
     }
 
-    /// <summary>The C# binder on the operand values, lifted: an absent operand gives null arithmetic, equality only with absence, and false ordering.</summary>
-    private static string Binder(OperatorKind kind, object? l, object? r) {
+    /// <summary>
+    /// The C# binder on the operand values, lifted: an absent operand gives null arithmetic, equality only with absence,
+    /// and false ordering. A native-integer cell is answered by Roslyn instead (T-18b lock amendment 6): the runtime
+    /// binder applies IntPtr's declared members, not C# 11's native-integer operators.
+    /// </summary>
+    private static string Binder(OperatorKind kind, Type left, Type right, object? l, object? r) {
+        if (Poly.Tests.Introspection.CSharpOperatorOracle.IsNativeForm(left) || Poly.Tests.Introspection.CSharpOperatorOracle.IsNativeForm(right)) {
+            if (!Poly.Tests.Introspection.CSharpOperatorOracle.Answer(kind, left, right).Defined)
+                return "binder rejects the pair";
+            var answer = Poly.Tests.Introspection.CSharpOperatorOracle.Value(kind, left, right, l, r);
+            return answer.Throws is { } thrown ? $"binder throws {thrown}" : Format(answer.Value);
+        }
         if (l is null || r is null) {
             return kind switch {
                 OperatorKind.Equal => Format(l is null && r is null),
@@ -242,12 +252,11 @@ public class NullableCharProofTests {
     /// `VmExecutesDeclaredOperator` with or without the rule.
     /// </summary>
     private static readonly Dictionary<string, (int Count, string Checksum)> ExpectedClasses = new(StringComparer.Ordinal) {
-        ["VM agrees with C#"] = (419, "7e7f9f61fbdda971"),
+        ["VM agrees with C#"] = (507, ""),
         ["VM result type Byte?, C# Int32?; values agree"] = (20, "7a49cb56b4a77f07"),
         ["VM result type Int16?, C# Int32?; values agree"] = (20, "f939a2362ca5604a"),
         ["VM result type SByte?, C# Int32?; values agree"] = (20, "12cce72358c0b831"),
         ["VM result type UInt16?, C# Int32?; values agree"] = (20, "56aa713b2e2de5c2"),
-        ["still rejected without the rule: VmExecutesDeclaredOperator"] = (14, "9d401c19b653b1db"),
     };
 
     [Test]
@@ -265,6 +274,6 @@ public class NullableCharProofTests {
         foreach (var name in ExpectedClasses.Keys.Where(k => !actual.ContainsKey(k)))
             problems.Add($"class [\"{name}\"] expected but empty");
         await Assert.That(problems).IsEmpty();
-        await Assert.That(cells.Count).IsEqualTo(513);
+        await Assert.That(cells.Count).IsEqualTo(587);
     }
 }

@@ -372,6 +372,80 @@ public partial class AnalyzerClosingRoundPinTests {
         ("FormGrid", "p Label | match arm into Decimal", "ok", "DMMAT002+DMSEM003", "A-match-arm"),
         ("FormGrid", "p Label | match arm into Boolean", "ok", "DMMAT002+DMSEM003", "A-match-arm"),
         ("FormGrid", "p Label | match arm into Date", "ok", "DMMAT002+DMSEM003", "A-match-arm"),
+        ("FormGrid", "o Qty | assign Text", "ok", "DMSEM003", "A-assign"),
+        ("FormGrid", "o Qty | assign Boolean", "ok", "DMSEM003", "A-assign"),
+        ("FormGrid", "o Qty | assign Date", "ok", "DMSEM003", "A-assign"),
+        ("FormGrid", "o Qty | assign Color", "ok", "DMSEM003", "A-assign"),
+        ("FormGrid", "o Qty | create Text", "ok", "DMSEM003", "A-assign"),
+        ("FormGrid", "o Qty | create Boolean", "ok", "DMSEM003", "A-assign"),
+        ("FormGrid", "o Qty | create Date", "ok", "DMSEM003", "A-assign"),
+        ("FormGrid", "o Qty | create Color", "ok", "DMSEM003", "A-assign"),
+        ("FormGrid", "o Qty | invoke Text", "ok", "DMSEM003", "A-assign"),
+        ("FormGrid", "o Qty | invoke Boolean", "ok", "DMSEM003", "A-assign"),
+        ("FormGrid", "o Qty | invoke Date", "ok", "DMSEM003", "A-assign"),
+        ("FormGrid", "o Qty | invoke Color", "ok", "DMSEM003", "A-assign"),
+        ("FormGrid", "o Qty | call Text", "ok", "DMFUN003", "A-call"),
+        ("FormGrid", "o Qty | call Boolean", "ok", "DMFUN003", "A-call"),
+        ("FormGrid", "o Qty | call Date", "ok", "DMFUN003", "A-call"),
+        ("FormGrid", "o Qty | call Color", "ok", "DMFUN003", "A-call"),
+        ("FormGrid", "o Qty | form == Text", "ok", "DMSEM003", "A-compare"),
+        ("FormGrid", "o Qty | form == Boolean", "ok", "DMSEM003", "A-compare"),
+        ("FormGrid", "o Qty | form == Date", "ok", "DMSEM003", "A-compare"),
+        ("FormGrid", "o Qty | form == Color", "ok", "DMSEM003", "A-compare"),
+        ("FormGrid", "o Qty | form == null", "ok", "DMSEM003", "A-compare"),
+        ("FormGrid", "o Qty | Text == form", "ok", "DMSEM003", "A-compare"),
+        ("FormGrid", "o Qty | Boolean == form", "ok", "DMSEM003", "A-compare"),
+        ("FormGrid", "o Qty | Date == form", "ok", "DMSEM003", "A-compare"),
+        ("FormGrid", "o Qty | Color == form", "ok", "DMSEM003", "A-compare"),
+        ("FormGrid", "o Qty | null == form", "ok", "DMSEM003", "A-compare"),
+        ("FormGrid", "o Qty | if form", "ok", "DMSEM003", "A-boolean"),
+        ("FormGrid", "o Qty | for where form", "ok", "DMSEM003", "A-boolean"),
+        ("FormGrid", "o Qty | not form", "ok", "DMSEM003", "A-boolean"),
+        ("FormGrid", "o Qty | form and Flag", "ok", "DMSEM003", "A-boolean"),
+        ("FormGrid", "o Qty | match { form -> 1 }", "ok", "DMMAT001", "A-boolean"),
+        ("FormGrid", "o Qty | form * Name", "ok", "DMSEM003", "A-arithmetic"),
+        ("FormGrid", "o Qty | Name * form", "ok", "DMSEM003", "A-arithmetic"),
+        ("FormGrid", "o Qty | match arm into Text", "ok", "DMMAT002+DMSEM003", "A-match-arm"),
+        ("FormGrid", "o Qty | match arm into Boolean", "ok", "DMMAT002+DMSEM003", "A-match-arm"),
+        ("FormGrid", "o Qty | match arm into Date", "ok", "DMMAT002+DMSEM003", "A-match-arm"),
+        ("FormGrid", "o Qty | match arm into Color", "ok", "DMMAT002+DMSEM003", "A-match-arm"),
+        ("FormGrid", "o Label | assign Number", "ok", "DMSEM003", "A-assign"),
+        ("FormGrid", "o Label | assign Decimal", "ok", "DMSEM003", "A-assign"),
+        ("FormGrid", "o Label | assign Boolean", "ok", "DMSEM003", "A-assign"),
+        ("FormGrid", "o Label | assign Date", "ok", "DMSEM003", "A-assign"),
+        ("FormGrid", "o Label | create Number", "ok", "DMSEM003", "A-assign"),
+        ("FormGrid", "o Label | create Decimal", "ok", "DMSEM003", "A-assign"),
+        ("FormGrid", "o Label | create Boolean", "ok", "DMSEM003", "A-assign"),
+        ("FormGrid", "o Label | create Date", "ok", "DMSEM003", "A-assign"),
+        ("FormGrid", "o Label | invoke Number", "ok", "DMSEM003", "A-assign"),
+        ("FormGrid", "o Label | invoke Decimal", "ok", "DMSEM003", "A-assign"),
+        ("FormGrid", "o Label | invoke Boolean", "ok", "DMSEM003", "A-assign"),
+        ("FormGrid", "o Label | invoke Date", "ok", "DMSEM003", "A-assign"),
+        ("FormGrid", "o Label | call Number", "ok", "DMFUN003", "A-call"),
+        ("FormGrid", "o Label | call Decimal", "ok", "DMFUN003", "A-call"),
+        ("FormGrid", "o Label | call Boolean", "ok", "DMFUN003", "A-call"),
+        ("FormGrid", "o Label | call Date", "ok", "DMFUN003", "A-call"),
+        ("FormGrid", "o Label | form == Number", "ok", "DMSEM003", "A-compare"),
+        ("FormGrid", "o Label | form == Decimal", "ok", "DMSEM003", "A-compare"),
+        ("FormGrid", "o Label | form == Boolean", "ok", "DMSEM003", "A-compare"),
+        ("FormGrid", "o Label | form == Date", "ok", "DMSEM003", "A-compare"),
+        ("FormGrid", "o Label | Number == form", "ok", "DMSEM003", "A-compare"),
+        ("FormGrid", "o Label | Decimal == form", "ok", "DMSEM003", "A-compare"),
+        ("FormGrid", "o Label | Boolean == form", "ok", "DMSEM003", "A-compare"),
+        ("FormGrid", "o Label | Date == form", "ok", "DMSEM003", "A-compare"),
+        ("FormGrid", "o Label | if form", "ok", "DMSEM003", "A-boolean"),
+        ("FormGrid", "o Label | for where form", "ok", "DMSEM003", "A-boolean"),
+        ("FormGrid", "o Label | not form", "ok", "DMSEM003", "A-boolean"),
+        ("FormGrid", "o Label | form and Flag", "ok", "DMSEM003", "A-boolean"),
+        ("FormGrid", "o Label | match { form -> 1 }", "ok", "DMMAT001", "A-boolean"),
+        ("FormGrid", "o Label | form * N", "ok", "DMSEM003", "A-arithmetic"),
+        ("FormGrid", "o Label | N * form", "ok", "DMSEM003", "A-arithmetic"),
+        ("FormGrid", "o Label | form * Name", "ok", "DMSEM003", "A-arithmetic"),
+        ("FormGrid", "o Label | Name * form", "ok", "DMSEM003", "A-arithmetic"),
+        ("FormGrid", "o Label | match arm into Number", "ok", "DMMAT002+DMSEM003", "A-match-arm"),
+        ("FormGrid", "o Label | match arm into Decimal", "ok", "DMMAT002+DMSEM003", "A-match-arm"),
+        ("FormGrid", "o Label | match arm into Boolean", "ok", "DMMAT002+DMSEM003", "A-match-arm"),
+        ("FormGrid", "o Label | match arm into Date", "ok", "DMMAT002+DMSEM003", "A-match-arm"),
         ("FormGrid", "Cost Amount | assign Text", "DMSTR006", "DMSEM003+DMSTR006", "A-assign"),
         ("FormGrid", "Cost Amount | assign Boolean", "DMSTR006", "DMSEM003+DMSTR006", "A-assign"),
         ("FormGrid", "Cost Amount | assign Date", "DMSTR006", "DMSEM003+DMSTR006", "A-assign"),
@@ -509,22 +583,22 @@ public partial class AnalyzerClosingRoundPinTests {
 
     /// <summary>The totals the PR body quotes; computed by <see cref="FlipTotals"/>, never hand-summed.</summary>
     private const string Totals = """
-total 433: 431 tighten, 2 loosen
-grid FormGrid: 426
+total 507: 505 tighten, 2 loosen
+grid FormGrid: 500
 grid TypelessSources: 2
 grid ArithmeticDateOperand: 1
 grid DateOperationOverTypelessDate: 1
 grid ImportedContractNameClash: 1
 grid SumPropertyKinds: 2
-rule A-arithmetic: 32
-rule A-assign: 143
-rule A-boolean: 53
-rule A-call: 38
-rule A-compare: 110
-rule A-match-arm: 46
+rule A-arithmetic: 38
+rule A-assign: 167
+rule A-boolean: 63
+rule A-call: 46
+rule A-compare: 128
+rule A-match-arm: 54
 rule A-return: 9
 rule A-sum: 2
-valid on master: 389
+valid on master: 463
 already rejected on master: 44
 """;
 

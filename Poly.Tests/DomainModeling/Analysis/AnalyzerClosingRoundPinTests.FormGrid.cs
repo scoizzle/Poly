@@ -16,7 +16,7 @@ namespace Poly.Tests.DomainModeling.Analysis;
 /// <summary>
 /// T-05a characterisation grids (lock #679 6841065713, amendments 1 and 2), recorded on MASTER before any
 /// production edit. The forms are the expression shapes the analyzer leaves Unresolved on master (arithmetic,
-/// path-prefix, binder, sum, owned access) plus the ones it already types (count, match, call), each placed in
+/// path-prefix, for-each and peer binder, sum, owned access) plus the ones it already types (count, match, call), each placed in
 /// every position that consumes a type. Every cell is the full set of error codes (<see cref="Verdict"/>), or
 /// <c>n/a</c> where the form cannot be written in that position (a function body has no entity, so no
 /// relationship, binder or owned read). The fixture is built through the model API, like the T-04 pins, so an
@@ -34,7 +34,8 @@ public partial class AnalyzerClosingRoundPinTests {
         Func<DomainExpression> InEntity,
         Func<DomainExpression>? InFunction = null,
         bool Binder = false,
-        bool Owned = false);
+        bool Owned = false,
+        bool Peer = false);
 
     private static DomainExpression A(string parameter) => DomainExpression.Parameter(parameter);
 
@@ -54,6 +55,8 @@ public partial class AnalyzerClosingRoundPinTests {
         new("part Tone", () => Nav("part", "Tone")),
         new("p Qty", () => Nav("p", "Qty"), Binder: true),
         new("p Label", () => Nav("p", "Label"), Binder: true),
+        new("o Qty", () => Nav("o", "Qty"), Peer: true),
+        new("o Label", () => Nav("o", "Label"), Peer: true),
         new("count parts", () => DomainExpression.Count("parts", null)),
         new("sum parts Qty", () => DomainExpression.Sum("parts", "Qty")),
         new("sum parts Price", () => DomainExpression.Sum("parts", "Price")),
@@ -110,7 +113,7 @@ public partial class AnalyzerClosingRoundPinTests {
     /// </summary>
     private static Domain GridDomain(
         IReadOnlyList<Effect> tick, IReadOnlyList<Property>? extra = null, IReadOnlyList<DomainFunction>? functions = null,
-        bool owned = false) {
+        bool owned = false, bool peer = false) {
         List<Property> props = [
             new("N", Ref("Number"), []), new("M", Ref("Number"), []), new("C", Ref("Decimal"), []),
             new("Name", Ref("Text"), []), new("Flag", Ref("Boolean"), []), new("Due", Ref("Date"), []),
@@ -123,7 +126,9 @@ public partial class AnalyzerClosingRoundPinTests {
             new("Tick", InvocationResult.Void, [], tick, []),
             .. GridTypes.Select(t => new DmAction($"Callee_{t}", InvocationResult.Void, [new Property("X", Ref(t), [])], [], [])),
         ];
-        var order = new Entity("Order", props, actions, [], []);
+        var order = new Entity("Order", props, peer ? [.. actions.Skip(1)] : actions, [], []);
+        if (peer)
+            order = order with { Subscriptions = [new StageSubscription("parts", "Done", tick, peerBinding: "o")] };
         var boxes = GridTypes.Select(t => (DomainType)new Entity($"Box_{t}", [new Property("W", Ref(t), [])], [], [], []));
         List<DomainFunction> fns = [
             new("G", [new Property("x", Ref("Number"), [])], Ref("Number"), A("x")),
@@ -131,7 +136,16 @@ public partial class AnalyzerClosingRoundPinTests {
                 DomainExpression.Literal(1L))),
         ];
         if (functions is not null) fns.AddRange(functions);
-        var domain = DomainTestFactory.Create("T", [.. GridTypesDeclared(), order, .. boxes], [
+        var types = GridTypesDeclared();
+        if (peer)
+            types = [.. types.Select(t => t is Entity { Name: "Part" } part ? part with {
+                Stages = [
+                    new Stage("Open", [new DmAction("Finish", InvocationResult.Void, [],
+                        [new StageTransitionEffect(new StageReference("Done"))], [])], [], [], []),
+                    new Stage("Done", [], [], [], []),
+                ],
+            } : t)];
+        var domain = DomainTestFactory.Create("T", [.. types, order, .. boxes], [
             new Relationship("part", Ref("Order"), Ref("Part"), RelationshipCardinality.OneToOne, []),
             new Relationship("parts", Ref("Order"), Ref("Part"), RelationshipCardinality.OneToMany, []),
         ]);
@@ -187,7 +201,7 @@ public partial class AnalyzerClosingRoundPinTests {
             return Run(GridDomain([], functions: [function]));
         }
         if (position.StartsWith("default ", StringComparison.Ordinal)) {
-            if (form.Binder) return "n/a";
+            if (form.Binder || form.Peer) return "n/a";
             var type = position["default ".Length..];
             return Run(GridDomain([], [new Property($"D_{type}", Ref(type), [new DefaultValueConstraint(form.InEntity())])],
                 owned: form.Owned));
@@ -198,7 +212,7 @@ public partial class AnalyzerClosingRoundPinTests {
             ? new ForEachEffect("q", "parts", form.InEntity(), [])
             : EffectAt(position, form.InEntity) ?? throw new InvalidOperationException(position);
         if (form.Binder) effect = new ForEachEffect("p", "parts", null, [effect]);
-        return Run(GridDomain([effect], owned: form.Owned));
+        return Run(GridDomain([effect], owned: form.Owned, peer: form.Peer));
     }
 
     /// <summary>One line per (form, position): <c>form | position = verdict</c>.</summary>
@@ -1008,6 +1022,154 @@ p Label | match arm into Boolean = ok
 p Label | match arm into Date = ok
 p Label | match arm into Color = ok
 p Label | match arm into Widget = ok
+o Qty | assign Number = ok
+o Qty | assign Decimal = ok
+o Qty | assign Text = ok
+o Qty | assign Boolean = ok
+o Qty | assign Date = ok
+o Qty | assign Color = ok
+o Qty | assign Widget = ok
+o Qty | create Number = ok
+o Qty | create Decimal = ok
+o Qty | create Text = ok
+o Qty | create Boolean = ok
+o Qty | create Date = ok
+o Qty | create Color = ok
+o Qty | create Widget = ok
+o Qty | invoke Number = ok
+o Qty | invoke Decimal = ok
+o Qty | invoke Text = ok
+o Qty | invoke Boolean = ok
+o Qty | invoke Date = ok
+o Qty | invoke Color = ok
+o Qty | invoke Widget = ok
+o Qty | call Number = ok
+o Qty | call Decimal = ok
+o Qty | call Text = ok
+o Qty | call Boolean = ok
+o Qty | call Date = ok
+o Qty | call Color = ok
+o Qty | call Widget = ok
+o Qty | return Number = n/a
+o Qty | return Decimal = n/a
+o Qty | return Text = n/a
+o Qty | return Boolean = n/a
+o Qty | return Date = n/a
+o Qty | return Color = n/a
+o Qty | return Widget = n/a
+o Qty | default Number = n/a
+o Qty | default Decimal = n/a
+o Qty | default Text = n/a
+o Qty | default Boolean = n/a
+o Qty | default Date = n/a
+o Qty | default Color = n/a
+o Qty | default Widget = n/a
+o Qty | form == Number = ok
+o Qty | form == Decimal = ok
+o Qty | form == Text = ok
+o Qty | form == Boolean = ok
+o Qty | form == Date = ok
+o Qty | form == Color = ok
+o Qty | form == Widget = ok
+o Qty | form == null = ok
+o Qty | Number == form = ok
+o Qty | Decimal == form = ok
+o Qty | Text == form = ok
+o Qty | Boolean == form = ok
+o Qty | Date == form = ok
+o Qty | Color == form = ok
+o Qty | Widget == form = ok
+o Qty | null == form = ok
+o Qty | if form = ok
+o Qty | for where form = ok
+o Qty | not form = ok
+o Qty | form and Flag = ok
+o Qty | match { form -> 1 } = ok
+o Qty | form * N = ok
+o Qty | N * form = ok
+o Qty | form * Name = ok
+o Qty | Name * form = ok
+o Qty | match arm into Number = ok
+o Qty | match arm into Decimal = ok
+o Qty | match arm into Text = ok
+o Qty | match arm into Boolean = ok
+o Qty | match arm into Date = ok
+o Qty | match arm into Color = ok
+o Qty | match arm into Widget = ok
+o Label | assign Number = ok
+o Label | assign Decimal = ok
+o Label | assign Text = ok
+o Label | assign Boolean = ok
+o Label | assign Date = ok
+o Label | assign Color = ok
+o Label | assign Widget = ok
+o Label | create Number = ok
+o Label | create Decimal = ok
+o Label | create Text = ok
+o Label | create Boolean = ok
+o Label | create Date = ok
+o Label | create Color = ok
+o Label | create Widget = ok
+o Label | invoke Number = ok
+o Label | invoke Decimal = ok
+o Label | invoke Text = ok
+o Label | invoke Boolean = ok
+o Label | invoke Date = ok
+o Label | invoke Color = ok
+o Label | invoke Widget = ok
+o Label | call Number = ok
+o Label | call Decimal = ok
+o Label | call Text = ok
+o Label | call Boolean = ok
+o Label | call Date = ok
+o Label | call Color = ok
+o Label | call Widget = ok
+o Label | return Number = n/a
+o Label | return Decimal = n/a
+o Label | return Text = n/a
+o Label | return Boolean = n/a
+o Label | return Date = n/a
+o Label | return Color = n/a
+o Label | return Widget = n/a
+o Label | default Number = n/a
+o Label | default Decimal = n/a
+o Label | default Text = n/a
+o Label | default Boolean = n/a
+o Label | default Date = n/a
+o Label | default Color = n/a
+o Label | default Widget = n/a
+o Label | form == Number = ok
+o Label | form == Decimal = ok
+o Label | form == Text = ok
+o Label | form == Boolean = ok
+o Label | form == Date = ok
+o Label | form == Color = ok
+o Label | form == Widget = ok
+o Label | form == null = ok
+o Label | Number == form = ok
+o Label | Decimal == form = ok
+o Label | Text == form = ok
+o Label | Boolean == form = ok
+o Label | Date == form = ok
+o Label | Color == form = ok
+o Label | Widget == form = ok
+o Label | null == form = ok
+o Label | if form = ok
+o Label | for where form = ok
+o Label | not form = ok
+o Label | form and Flag = ok
+o Label | match { form -> 1 } = ok
+o Label | form * N = ok
+o Label | N * form = ok
+o Label | form * Name = ok
+o Label | Name * form = ok
+o Label | match arm into Number = ok
+o Label | match arm into Decimal = ok
+o Label | match arm into Text = ok
+o Label | match arm into Boolean = ok
+o Label | match arm into Date = ok
+o Label | match arm into Color = ok
+o Label | match arm into Widget = ok
 count parts | assign Number = ok
 count parts | assign Decimal = ok
 count parts | assign Text = DMSEM003

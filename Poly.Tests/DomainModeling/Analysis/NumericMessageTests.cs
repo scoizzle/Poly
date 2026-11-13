@@ -77,4 +77,35 @@ public class NumericMessageTests {
         await Assert.That(errors.Count).IsEqualTo(1);
         await Assert.That(errors[0]).Contains("Fractional literal is not legal on Number. Use Decimal.");
     }
+
+    // The issue's own repro goes through the DSL with the bare Decimal and Number names (nothing declared).
+    [Test]
+    public async Task DecimalToNumberAssign_ThroughTheDsl_WithBareNames_MessageNamesDecimal() {
+        var dsl = """
+            domain Cat
+            Item: entity {
+              Amount: Decimal
+              Total: Number
+              Tick: action { assign Total to Amount }
+            }
+            """;
+        var result = new Poly.DomainModeling.Evolution.DomainEvolution(DomainTestFactory.Create("_", [], []))
+            .ApplyAndAnalyze(new PolyDslParser(dsl).Parse());
+        var errors = result.Analysis.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).Select(d => d.Message).ToList();
+
+        await Assert.That(errors).Contains("type mismatch in assign to property 'Total': cannot assign 'Decimal' to 'Number'");
+    }
+
+    [Test]
+    public async Task OutOfRangeIntegerDefault_ReportsOutOfRange_NotFractional() {
+        var host = new Entity("H",
+            [new Property("P", new DomainTypeReference("Number"), [new DefaultValueConstraint(DomainExpression.Literal(9223372036854775808m))])],
+            [], [], []);
+        var domain = new Domain("T", [new DmPrimitive("Number", PrimitiveSemantics.Number, []), host]);
+        var errors = DomainModelAnalyzer.Analyze(domain).Diagnostics
+            .Where(d => d.Severity == DiagnosticSeverity.Error).Select(d => d.Message).ToList();
+
+        await Assert.That(errors.Any(m => m.Contains("Integer literal 9223372036854775808 is out of range for Number (64-bit)"))).IsTrue();
+        await Assert.That(errors.Any(m => m.Contains("Fractional"))).IsFalse();
+    }
 }

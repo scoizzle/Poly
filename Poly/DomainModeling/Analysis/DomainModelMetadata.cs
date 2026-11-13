@@ -42,7 +42,8 @@ internal sealed record TypedExpressionMetadata(ExprType Type, BinaryTyping? Bina
 /// What the analyzer states about one arithmetic node: the result type and the numeric kind.
 /// Absent (<see cref="TypedExpressionMetadata.Binary"/> null) means the analyzer did not state an
 /// operator for this node: never "operator undefined" (acceptance does not read it; T-07 makes it the gate),
-/// never "unknown type".
+/// never "unknown type". The stamp is first-writer-wins per node; T-07, which makes it a gate, must key or
+/// recompute it per parameter scope (a shared <c>require</c> tree is walked once per scope).
 /// </summary>
 internal sealed record BinaryTyping(
     ExprType Result, NumericKind Kind, bool IsIntegerDivision, bool MayOverflow, bool Checked);

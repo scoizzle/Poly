@@ -128,7 +128,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
         // not fractional (#515). 5.0 and 1.5 stay fractional: the parser keeps no spelling.
         var message = literal.Value is decimal value && decimal.Truncate(value) == value
             && (value > long.MaxValue || value < long.MinValue)
-            ? $"Integer literal {value} is out of range for Number (64-bit)"
+            ? $"Integer literal {value.ToString(System.Globalization.CultureInfo.InvariantCulture)} is out of range for Number (64-bit)"
             : $"Fractional literal is not legal on {typeName}. Use Decimal.";
         if (literal.Line > 0)
             message += $" (line {literal.Line}, col {literal.Col})";

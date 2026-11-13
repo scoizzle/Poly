@@ -102,21 +102,23 @@ public class TypedExpressionMetadataTests {
 
     [Test]
     public async Task ArithmeticStamp_IsNotReadBackByInferType() {
-        var (analysis, add, _) = Analyze(() => DomainExpression.Add(P("N"), P("M")));
-
-        await Assert.That(analysis.GetMetadata<TypedExpressionMetadata>(add)?.Binary).IsNotNull();
-        // `(N + M) == "x"` is accepted today because arithmetic stays Unknown to inference; had the stamp
-        // been read back as a typed Number, comparing it with a Text literal would be rejected.
+        // CheckMatch walks the arms (stamping `N + M`) before it infers their types, so the stamp exists when
+        // InferType reads the node. Had it been read back as a typed Number, the Number arm and the Text `else`
+        // would not unify (DMMAT002); on master the arithmetic arm is Unknown and the match is accepted.
+        var add = DomainExpression.Add(P("N"), P("M"));
+        var match = DomainExpression.Match([new MatchArm(DomainExpression.Literal(true), add)], DomainExpression.Literal("x"));
         var host = new Entity("H",
             [new Property("N", new DomainTypeReference("Number"), []), new Property("M", new DomainTypeReference("Number"), [])],
             [],
-            [new Policy("Check", DomainExpression.Equal(DomainExpression.Add(P("N"), P("M")), DomainExpression.Literal("x")))],
+            [new Policy("Check", match)],
             []);
         var domain = new Domain("T", [new DmPrimitive("Number", PrimitiveSemantics.Number, []), host]);
-        var text = DomainModelAnalyzer.Analyze(domain);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
 
-        await Assert.That(AnalyzerBehaviourPinTests.Verdict(text)).IsEqualTo("ok");
-        await Assert.That(text.GetMetadata<TypedExpressionMetadata>(
-            ((Comparison)host.Policies.Single().Expression).Left)?.Binary).IsNotNull();
+        var stamp = analysis.GetMetadata<TypedExpressionMetadata>(add);
+        await Assert.That(stamp?.Binary).IsNotNull();
+        await Assert.That(stamp!.Type.DomainName).IsNull();
+        await Assert.That(stamp.Binary!.Result.DomainName).IsNull();
+        await Assert.That(AnalyzerBehaviourPinTests.Verdict(analysis)).IsEqualTo("ok");
     }
 }

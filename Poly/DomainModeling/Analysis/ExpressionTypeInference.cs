@@ -191,8 +191,17 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
     private static ExprType ResolveName(
         AnalysisContext context, string name, Dictionary<string, EnumType> enumTypes) {
         var model = ModelOf(context);
-        if (enumTypes.ContainsKey(name))
-            return model?.Resolve(name) is { IsResolved: true } enumType ? enumType : new ExprType(null, false, name);
+        if (enumTypes.TryGetValue(name, out var declaredEnum)) {
+            if (model?.Resolve(name) is { IsResolved: true } enumType && Family(enumType) is TypeFamily.Enum)
+                return enumType;
+            // The model resolves a name first-wins, so an entity declared before an enum of the same name
+            // hides it; the declared enum is still the enum (as it was before the move).
+            if (context.GetTypeLookup()?.Domain is { } domain
+                && new DomainTypeModel(new Domain(domain.Name, [declaredEnum]), RuntimeAnalysisCache.Session(domain).TypeMaps)
+                    .Resolve(name) is { IsResolved: true } own)
+                return own;
+            return new ExprType(null, false, name);
+        }
         var declared = context.GetTypeLookup()?.Domain.Types.FirstOrDefault(t => string.Equals(t.Name, name, StringComparison.Ordinal));
         if (declared is Ontology.PrimitiveType primitive)
             return Named(ClrTypeOf(primitive.Semantics), name);

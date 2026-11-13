@@ -122,6 +122,7 @@ internal static class PatternRowExamples {
         new(CSharp, "param-default", "default", "= 1"),
         new(CSharp, "arg-list", "list", "a, b"),
         new(CSharp, "arg-tail", "tail", ", b"),
+        new(CSharp, "enum-members", "list", "A = 0, B = 1"),
         new(CSharp, "enum-member-tail", "tail", ", B = 1"),
         new(CSharp, "type-keyword", "bool", "bool"),
         new(CSharp, "type-keyword", "byte", "byte"),

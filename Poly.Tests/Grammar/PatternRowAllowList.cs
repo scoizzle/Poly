@@ -116,7 +116,7 @@ internal static class PatternRowAllowList {
             ("name", 2), ("type", 1), ("type-core", 17), ("type-suffix", 2), ("type-list", 1), ("type-tail", 1),
             ("modifiers", 1), ("modifier", 10), ("lineage", 1), ("lineage-tail", 1), ("generic-param", 1),
             ("param-list", 1), ("param-tail", 1), ("param", 1), ("param-default", 1), ("arg-list", 1),
-            ("arg-tail", 1), ("enum-member-tail", 1), ("type-keyword", 15), ("lambda-param", 2),
+            ("arg-tail", 1), ("enum-members", 1), ("enum-member-tail", 1), ("type-keyword", 15), ("lambda-param", 2),
             ("lambda-param-list", 1), ("lambda-param-tail", 1), ("shift-tail", 2), ("expr-postfix", 1),
             ("attributes", 1), ("expr", 1), ("field-init", 1), ("property-init", 1), ("cond-tail", 1),
             ("assign-tail", 11), ("local-function", 1), ("for-cond", 1), ("for-incr", 1)),

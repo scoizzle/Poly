@@ -282,7 +282,7 @@ public static class CSharpReader {
 
         private static IReadOnlyList<FieldDefinitionNode> FoldEnumFields(MatchResult<CSharpToken, CSharpTokenKind> match) {
             var fields = new List<FieldDefinitionNode>();
-            foreach (var member in match.Children) {
+            foreach (var member in MaybeChild(match, "enum-members")?.Children ?? []) {
                 var target = string.Equals(member.RuleName, "enum-member", StringComparison.Ordinal)
                     ? member
                     : member.Children[0];

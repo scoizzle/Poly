@@ -808,22 +808,23 @@ public sealed class CSharpWriter {
         sb.Append(attrs);
 
         if (kind is TypeKind.Enum) {
-            var members = new StringBuilder();
-            if (typeDef.Fields != null) {
-                for (var i = 0; i < typeDef.Fields.Count; i++) {
-                    members.Append('\n');
-                    members.Append(Pad(indent + 1));
-                    members.Append(RenderFills("enum-member", "member", Names(
-                        ("name", EscapeIdent(typeDef.Fields[i].Name)),
+            string? members = null;
+            if (typeDef.Fields is { Count: > 0 } fields) {
+                var list = new StringBuilder();
+                for (var i = 0; i < fields.Count; i++) {
+                    list.Append('\n');
+                    list.Append(Pad(indent + 1));
+                    list.Append(RenderFills("enum-member", "member", Names(
+                        ("name", EscapeIdent(fields[i].Name)),
                         ("value", i.ToString(CultureInfo.InvariantCulture)))));
-                    if (i < typeDef.Fields.Count - 1)
-                        members.Append(',');
+                    if (i < fields.Count - 1)
+                        list.Append(',');
                 }
-                members.Append('\n');
-                members.Append(Pad(indent));
+                list.Append('\n');
+                list.Append(Pad(indent));
+                members = list.ToString();
             }
-            var body = Pad(indent) + RenderFills("enum-body", "body", Braces(),
-                members.Length == 0 ? " " : members.ToString(), null);
+            var body = Pad(indent) + RenderFills("enum-body", "body", Braces(), members);
             sb.Append(Pad(indent));
             sb.AppendLine(RenderFills("type-decl", "enum", TypeNameFill(typeDef.Name), null, mods,
                 "\n" + body));

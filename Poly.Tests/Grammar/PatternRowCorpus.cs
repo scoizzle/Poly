@@ -85,7 +85,7 @@ internal static class PatternRowCorpus {
         ("async-ident-lambda", "Func<Task, Task> f = async t => await t;"),
     ];
 
-    /// <summary>Code-built types the reader cannot read: an empty enum (#849) and a body-less method.</summary>
+    /// <summary>Code-built types no source text carries: an empty enum (a null <c>Fields</c>) and a body-less method.</summary>
     public static IReadOnlyList<(string Name, TypeDefinitionNode Type)> CSharpTypes { get; } = [
         ("empty-enum", new TypeDefinitionNode("Empty", Kind: TypeKind.Enum)),
         ("body-less-method", new TypeDefinitionNode("Shell", Methods: [

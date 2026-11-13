@@ -59,11 +59,11 @@ public class CSharpRowCharacterisationTests {
     }
 
     [Test]
-    public async Task EmptyEnum_PrintsTodaysUnreadableText() {
+    public async Task EmptyEnum_PrintsEmptyBraces() {
         await Assert.That(Lf(CSharpLanguage.Write([new TypeDefinitionNode("Empty", Kind: TypeKind.Enum)])))
-            .IsEqualTo("#nullable enable\npublic enum Empty\n{ }");
+            .IsEqualTo("#nullable enable\npublic enum Empty\n{}");
         await Assert.That(Lf(CSharpLanguage.Write([new TypeDefinitionNode("Empty", Fields: [], Kind: TypeKind.Enum)])))
-            .IsEqualTo("#nullable enable\npublic enum Empty\n{\n}");
+            .IsEqualTo("#nullable enable\npublic enum Empty\n{}");
     }
 
     [Test]

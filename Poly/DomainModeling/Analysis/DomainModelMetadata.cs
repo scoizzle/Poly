@@ -30,10 +30,29 @@ public sealed record AssignedMemberConversionMetadata(
 ) : IAnalysisMetadata;
 
 /// <summary>
-/// Expression type (catalog type name) stamped by core inference after consulting
-/// session <c>ExpressionMeaning</c>. Core does not name library IR in its switch.
+/// The type of an expression, stamped by core inference after consulting session <c>ExpressionMeaning</c>
+/// (core does not name library IR in its switch). <see cref="Binary"/> is the typing of an arithmetic
+/// node; absent means the analyzer did not state an operator, never "operator undefined" and never
+/// "unknown type". A stamp whose <see cref="Binary"/> is set is never read back as the expression's type
+/// by inference or by <c>TemporalMeaning</c>.
 /// </summary>
-public sealed record CatalogTypedExpressionMetadata(string TypeName) : IAnalysisMetadata;
+internal sealed record TypedExpressionMetadata(ExprType Type, BinaryTyping? Binary = null) : IAnalysisMetadata;
+
+/// <summary>
+/// What the analyzer states about one arithmetic node: the result type and the numeric kind.
+/// Absent (<see cref="TypedExpressionMetadata.Binary"/> null) means the analyzer did not state an
+/// operator for this node: never "operator undefined" (acceptance does not read it; T-07 makes it the gate),
+/// never "unknown type".
+/// </summary>
+internal sealed record BinaryTyping(
+    ExprType Result, NumericKind Kind, bool IsIntegerDivision, bool MayOverflow, bool Checked);
+
+/// <summary>
+/// The domain's type model for this analysis run, stamped on the <see cref="Domain"/> node by
+/// <c>ExpressionTypeAnalyzer</c>. Consumer contract: a reader runs after the <c>DomainExpressionType</c>
+/// pass and fails closed when the stamp is absent.
+/// </summary>
+internal sealed record DomainTypeModelMetadata(DomainTypeModel Model) : IAnalysisMetadata;
 
 public sealed record RelationshipLookupMetadata(
     IReadOnlyDictionary<string, IReadOnlyDictionary<string, Relationship>> BySourceEntity

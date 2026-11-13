@@ -64,6 +64,8 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
     public void Analyze(AnalysisContext context, Node node) {
 
         if (node is Domain domain) {
+            context.SetMetadata(domain, new DomainTypeModelMetadata(
+                new DomainTypeModel(domain, RuntimeAnalysisCache.Session(domain).TypeMaps)));
             AnalyzeObservedFlows(context, domain);
             FunctionAnalysis.CheckDeclarations(context, domain);
             AnalyzeFunctionBodies(context, domain);
@@ -123,10 +125,10 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
             WalkExpression(context, function.Body, noProps, parameters, enumTypes);
             var bodyType = InferValueType(context, function.Body, noProps, parameters, enumTypes);
             var returnName = function.ReturnType.TypeName;
-            var returnType = new TypeInfo(CategoryOf(context, returnName, enumTypes), returnName);
-            if (bodyType.Category is not TypeCategory.Unknown
-                && returnType.Category is not TypeCategory.Unknown
-                && !Compatible(context, bodyType, returnType, assigning: true))
+            var returnType = ResolveName(context, returnName, enumTypes);
+            if (!IsLenient(bodyType)
+                && !IsLenient(returnType)
+                && !Compatible(bodyType, returnType, assigning: true))
                 context.ReportError(function,
                     $"Function '{function.Name}' body is '{Describe(bodyType)}' but it is declared to return '{returnName}'.",
                     DomainModelDiagnosticCodes.FunctionReturnType);
@@ -275,7 +277,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
             case ConditionalEffect cond:
                 WalkExpression(context, cond.Condition, props, parameters, enumTypes);
                 var condType = InferType(context, cond.Condition, props, parameters, enumTypes);
-                if (condType.Category is not (TypeCategory.Boolean or TypeCategory.Unknown))
+                if (Family(condType) is not (TypeFamily.Boolean or TypeFamily.Unknown))
                     Report(context, cond.Condition,
                         $"if-condition must be Boolean (got '{Describe(condType)}')");
                 CheckEffectTree(context, cond.ThenEffects, callerEntityName, props, parameters, enumTypes);
@@ -309,7 +311,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                     var whereType = BindsToBinder(where, fe.BinderName)
                         ? InferBinderExpressionType(context, iteratedTypeName, fe.BinderName, where, enumTypes)
                         : InferType(context, where, props, parameters, enumTypes);
-                    if (whereType.Category is not (TypeCategory.Boolean or TypeCategory.Unknown))
+                    if (Family(whereType) is not (TypeFamily.Boolean or TypeFamily.Unknown))
                         Report(context, where,
                             $"'for' where condition must be Boolean (got '{Describe(whereType)}')");
                 }
@@ -350,20 +352,20 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                 var inferred = binderName is not null && BindsToBinder(binding.Expression, binderName)
                     ? InferBinderExpressionType(context, targetEntityName, binderName, binding.Expression, enumTypes)
                     : InferLiteralAware(context, binding.Expression, paramType, enumTypes, callerProps, parameters);
-                var targetCategory = CategoryOf(context, paramType, enumTypes);
-                if (inferred.Category is not TypeCategory.Unknown
-                    && targetCategory is not TypeCategory.Unknown
-                    && !Compatible(context, inferred, new TypeInfo(targetCategory, paramType), assigning: true)) {
+                var target = ResolveName(context, paramType, enumTypes);
+                if (!IsLenient(inferred)
+                    && !IsLenient(target)
+                    && !Compatible(inferred, target, assigning: true)) {
                     Report(context, binding.Expression,
                         $"type mismatch in argument '{binding.PropertyName}' of invoke '{actionName}': " +
                         $"cannot assign '{Describe(inferred)}' to '{paramType}'");
                 }
-                // Entity type names (Widget, Gadget, …) resolve to Unknown CategoryOf, so
-                // the primitive-category check above misses entity-type mismatches.
-                // Reject when the inferred type is an entity (Unknown category with a known
+                // Entity type names (Widget, Gadget, …) are lenient to the family rules, so
+                // the primitive-family check above misses entity-type mismatches.
+                // Reject when the inferred type is an entity (lenient with a known
                 // name) and it differs from the target parameter type.
-                if (inferred.Category is TypeCategory.Unknown
-                    && inferred.TypeName is { } argTypeName
+                if (IsLenient(inferred)
+                    && inferred.DomainName is { } argTypeName
                     && !string.Equals(argTypeName, paramType, StringComparison.Ordinal)) {
                     Report(context, binding.Expression,
                         $"type mismatch in argument '{binding.PropertyName}' of invoke '{actionName}': " +
@@ -485,8 +487,8 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                     var leftType = InferType(context, sub.Left, props, parameters, enumTypes);
                     var rightType = InferType(context, sub.Right, props, parameters, enumTypes);
                     // Same-family date minus date is a difference, not arithmetic; mixed families stay errors.
-                    if (leftType.Category is TypeCategory.Date && rightType.Category is TypeCategory.Date
-                        && !MixedDateGranularity(context, leftType, rightType)) {
+                    if (IsDate(leftType) && IsDate(rightType)
+                        && !MixedDateGranularity(leftType, rightType)) {
                         WalkExpression(context, sub.Left, props, parameters, enumTypes, walked);
                         WalkExpression(context, sub.Right, props, parameters, enumTypes, walked);
                         return;
@@ -502,7 +504,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                 return;
             case Not not:
                 var operand = InferType(context, not.Operand, props, parameters, enumTypes);
-                if (operand.Category is not (TypeCategory.Boolean or TypeCategory.Unknown))
+                if (Family(operand) is not (TypeFamily.Boolean or TypeFamily.Unknown))
                     Report(context, expr, $"'not' requires a Boolean operand (got '{Describe(operand)}')");
                 WalkExpression(context, not.Operand, props, parameters, enumTypes, walked);
                 return;
@@ -539,8 +541,8 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
         Dictionary<string, EnumType> enumTypes, WalkedExpressions? walked = null) {
         var leftType = InferType(context, left, props, parameters, enumTypes);
         var rightType = InferType(context, right, props, parameters, enumTypes);
-        if (leftType.Category is not (TypeCategory.Boolean or TypeCategory.Unknown)
-            || rightType.Category is not (TypeCategory.Boolean or TypeCategory.Unknown))
+        if (Family(leftType) is not (TypeFamily.Boolean or TypeFamily.Unknown)
+            || Family(rightType) is not (TypeFamily.Boolean or TypeFamily.Unknown))
             Report(context, left,
                 $"'and'/'or' requires Boolean operands (got '{Describe(leftType)}' and '{Describe(rightType)}')");
         WalkExpression(context, left, props, parameters, enumTypes, walked);
@@ -577,26 +579,26 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
             return;
         }
         var inferred = InferLiteralAware(context, value, targetTypeName, enumTypes, props, parameters);
-        var targetCategory = CategoryOf(context, targetTypeName, enumTypes);
+        var target = ResolveName(context, targetTypeName, enumTypes);
         // Unresolved bare identifier (`assign CheckIn to now`, `assign Name to Bogus` →
         // `this.Bogus`). Enum targets keep the member diagnostic. `Guid` lowers to
         // Guid.NewGuid, not a member access, and CheckDefault owns that keyword.
-        if (inferred.Category is TypeCategory.Unknown
+        if (IsLenient(inferred)
             && value is PropertyAccess { Name: var bare }
             && ResolvePropertyType(bare, props, parameters) is null
             && !string.Equals(bare, "Guid", StringComparison.Ordinal)) {
-            if (targetCategory is TypeCategory.Enum)
+            if (Family(target) is TypeFamily.Enum)
                 Report(context, value, $"'{bare}' is not a member of enum '{targetTypeName}'");
             else
                 Report(context, value, $"'{bare}' is not a property, parameter, or enum member");
             return;
         }
-        if (inferred.Category is TypeCategory.Unknown || targetCategory is TypeCategory.Unknown)
+        if (IsLenient(inferred) || IsLenient(target))
             return;
         // enum member validity for the RHS
-        if (targetCategory is TypeCategory.Enum && value is Literal { Value: string s })
+        if (Family(target) is TypeFamily.Enum && value is Literal { Value: string s })
             CheckEnumMember(context, value, targetTypeName, s, enumTypes);
-        if (!Compatible(context, inferred, new TypeInfo(targetCategory, targetTypeName), assigning: true))
+        if (!Compatible(inferred, target, assigning: true))
             Report(context, value,
                 $"type mismatch in {what}: cannot assign '{Describe(inferred)}' to '{targetTypeName}'");
     }
@@ -613,12 +615,12 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                     null, enumTypes, propTypeName)))
             return;
 
-        var targetCategory = CategoryOf(context, propTypeName, enumTypes);
-        if (targetCategory is TypeCategory.Unknown)
+        var target = ResolveName(context, propTypeName, enumTypes);
+        if (IsLenient(target))
             return;
 
         switch (expr) {
-            case Literal { Value: string s } when targetCategory is TypeCategory.Enum:
+            case Literal { Value: string s } when Family(target) is TypeFamily.Enum:
                 CheckEnumMember(context, expr, propTypeName, s, enumTypes);
                 return;
             case Literal { Value: decimal } fractional when IsIntegralTypeName(propTypeName):
@@ -626,19 +628,19 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                 return;
             case Literal lit:
                 var inferred = InferType(context, expr, null, null, enumTypes);
-                if (!Compatible(context, inferred, new TypeInfo(targetCategory, propTypeName), assigning: true))
+                if (!Compatible(inferred, target, assigning: true))
                     Report(context, expr,
                         $"default value of type '{Describe(inferred)}' is not compatible with property type '{propTypeName}'");
                 return;
             case PropertyAccess pa:
                 if (pa.Name is "Guid") {
-                    if (targetCategory is not TypeCategory.Guid
-                        && targetCategory is not TypeCategory.Text)
+                    if (Family(target) is not TypeFamily.Guid
+                        && Family(target) is not TypeFamily.Text)
                         Report(context, expr,
                             $"default(Guid) is not compatible with property type '{propTypeName}' (use a Uuid/Guid or Text property)");
                     return;
                 }
-                if (targetCategory is TypeCategory.Enum) {
+                if (Family(target) is TypeFamily.Enum) {
                     // C4e (b): Level: Sev default(Nope) — bare identifier must be a member of the enum.
                     CheckEnumMember(context, expr, propTypeName, pa.Name, enumTypes);
                     return;
@@ -662,10 +664,4 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
             return;
         Report(context, where, $"'{member}' is not a member of enum '{enumTypeName}'");
     }
-
-    // ── Type inference ──────────────────────────────────────────
-
-    internal enum TypeCategory { Text, Number, Boolean, Date, Time, Duration, Enum, Guid, Null, Unknown }
-
-    private readonly record struct TypeInfo(TypeCategory Category, string? TypeName = null);
 }

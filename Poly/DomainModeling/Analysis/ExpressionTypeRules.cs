@@ -1,3 +1,4 @@
+using Poly.DomainModeling.Meaning;
 using Poly.DomainModeling.Ontology;
 
 using Add = Poly.DomainModeling.Ontology.Add;
@@ -6,28 +7,60 @@ using Divide = Poly.DomainModeling.Ontology.Divide;
 using Multiply = Poly.DomainModeling.Ontology.Multiply;
 using Not = Poly.DomainModeling.Ontology.Not;
 using Or = Poly.DomainModeling.Ontology.Or;
+using Prim = Poly.Introspection.PrimitiveType;
 using Subtract = Poly.DomainModeling.Ontology.Subtract;
+using TypeKind = Poly.Introspection.TypeKind;
 
 namespace Poly.DomainModeling.Analysis;
 
-// Type rules: how two types relate and how a type is described. Moved out of the core file unchanged.
+// Type rules: how two types relate and how a type is described, over ExprType.
 
 internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
-    private static bool IsNumeric(TypeCategory c) => c is TypeCategory.Number;
+    /// <summary>
+    /// The one family key: a pure function of an <see cref="ExprType"/>'s definition (never stored), serving
+    /// <see cref="Compatible"/>, <c>Unifies</c> and the arithmetic arms. Numeric family = Int32, Int64, Float64
+    /// and Decimal; date family = DateOnly and DateTime. <see cref="Unknown"/> is every type the rules do not
+    /// check: unresolved, named-unresolved, entity, value type and Binary. T-05 shrinks it.
+    /// </summary>
+    private enum TypeFamily { Unknown, Null, Text, Number, Boolean, Date, Time, Duration, Enum, Guid }
 
-    private static bool IsDate(TypeCategory c) => c is TypeCategory.Date;
+    private static TypeFamily Family(ExprType type) {
+        if (type.IsNullLiteral) return TypeFamily.Null;
+        if (type.Definition is not { } definition) return TypeFamily.Unknown;
+        if (definition.Kind is TypeKind.Enum) return TypeFamily.Enum;
+        return definition.PrimitiveType switch {
+            Prim.String => TypeFamily.Text,
+            Prim.Int32 or Prim.Int64 or Prim.Float64 or Prim.Decimal => TypeFamily.Number,
+            Prim.Boolean => TypeFamily.Boolean,
+            Prim.DateOnly or Prim.DateTime => TypeFamily.Date,
+            Prim.TimeOnly => TypeFamily.Time,
+            Prim.TimeSpan => TypeFamily.Duration,
+            Prim.Guid => TypeFamily.Guid,
+            _ => TypeFamily.Unknown,
+        };
+    }
 
-    private static string Describe(TypeInfo t) => t.Category switch {
-        TypeCategory.Text => "Text",
-        TypeCategory.Number => "Number",
-        TypeCategory.Boolean => "Boolean",
-        TypeCategory.Date => $"Date ({t.TypeName ?? "date"})",
-        TypeCategory.Time => $"Time ({t.TypeName ?? "time"})",
-        TypeCategory.Duration => "duration",
-        TypeCategory.Enum => $"enum {t.TypeName ?? "?"}",
-        TypeCategory.Guid => "Guid",
-        TypeCategory.Null => "null",
-        TypeCategory.Unknown => "unknown",
+    /// <summary>True for every type the rules skip (the old Unknown category).</summary>
+    private static bool IsLenient(ExprType type) => Family(type) is TypeFamily.Unknown;
+
+    private static bool IsNumeric(ExprType type) => Family(type) is TypeFamily.Number;
+
+    private static bool IsDate(ExprType type) => Family(type) is TypeFamily.Date;
+
+    private static bool IsDateOnly(ExprType type) => type.Definition?.PrimitiveType is Prim.DateOnly;
+
+    private static bool IsDateTime(ExprType type) => type.Definition?.PrimitiveType is Prim.DateTime;
+
+    private static string Describe(ExprType t) => Family(t) switch {
+        TypeFamily.Text => "Text",
+        TypeFamily.Number => "Number",
+        TypeFamily.Boolean => "Boolean",
+        TypeFamily.Date => $"Date ({t.DomainName ?? "date"})",
+        TypeFamily.Time => $"Time ({t.DomainName ?? "time"})",
+        TypeFamily.Duration => "duration",
+        TypeFamily.Enum => $"enum {t.DomainName ?? "?"}",
+        TypeFamily.Guid => "Guid",
+        TypeFamily.Null => "null",
         _ => "unknown",
     };
 
@@ -35,39 +68,39 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
     /// When true, <paramref name="left"/> is the source and <paramref name="right"/> is the
     /// target. Catalog semantics: Date onto DateTime is a widen; DateTime onto Date is not.
     /// </param>
-    private static bool Compatible(AnalysisContext context, TypeInfo left, TypeInfo right, bool assigning = false) {
-        if (left.Category is TypeCategory.Unknown || right.Category is TypeCategory.Unknown)
+    private static bool Compatible(ExprType left, ExprType right, bool assigning = false) {
+        var leftFamily = Family(left);
+        var rightFamily = Family(right);
+        if (leftFamily is TypeFamily.Unknown || rightFamily is TypeFamily.Unknown)
             return true;
-        if (left.Category is TypeCategory.Null)
-            return right.Category is TypeCategory.Text or TypeCategory.Guid;
-        if (right.Category is TypeCategory.Null)
-            return left.Category is TypeCategory.Text or TypeCategory.Guid;
-        if (left.Category is TypeCategory.Enum && right.Category is TypeCategory.Enum)
-            return string.Equals(left.TypeName, right.TypeName, StringComparison.Ordinal);
-        if (left.Category is TypeCategory.Enum && right.Category is TypeCategory.Text)
+        if (leftFamily is TypeFamily.Null)
+            return rightFamily is TypeFamily.Text or TypeFamily.Guid;
+        if (rightFamily is TypeFamily.Null)
+            return leftFamily is TypeFamily.Text or TypeFamily.Guid;
+        if (leftFamily is TypeFamily.Enum && rightFamily is TypeFamily.Enum)
+            return string.Equals(left.DomainName, right.DomainName, StringComparison.Ordinal);
+        if (leftFamily is TypeFamily.Enum && rightFamily is TypeFamily.Text)
             return true;
-        if (right.Category is TypeCategory.Enum && left.Category is TypeCategory.Text)
+        if (rightFamily is TypeFamily.Enum && leftFamily is TypeFamily.Text)
             return true;
 
         if (assigning) {
-            var leftSemantics = SemanticsOf(context, left.TypeName);
-            var rightSemantics = SemanticsOf(context, right.TypeName);
-            if (leftSemantics is PrimitiveSemantics.Date && rightSemantics is PrimitiveSemantics.DateTime)
+            if (IsDateOnly(left) && IsDateTime(right))
                 return true;
-            if (leftSemantics is PrimitiveSemantics.DateTime && rightSemantics is PrimitiveSemantics.Date)
+            if (IsDateTime(left) && IsDateOnly(right))
                 return false;
-            if (left.Category != right.Category)
+            if (leftFamily != rightFamily)
                 return false;
             // Number, Int, and Int64 widen onto Decimal at the assign site only.
-            if (right.TypeName is "Decimal" && IsIntegralTypeName(left.TypeName))
+            if (right.DomainName is "Decimal" && IsIntegralTypeName(left.DomainName))
                 return true;
-            if (left.TypeName is { } ln && right.TypeName is { } rn)
+            if (left.DomainName is { } ln && right.DomainName is { } rn)
                 return string.Equals(CanonicalName(ln), CanonicalName(rn), StringComparison.Ordinal);
             return true;
         }
 
-        return left.Category == right.Category
-            || string.Equals(CanonicalName(left.TypeName), CanonicalName(right.TypeName), StringComparison.Ordinal);
+        return leftFamily == rightFamily
+            || string.Equals(CanonicalName(left.DomainName), CanonicalName(right.DomainName), StringComparison.Ordinal);
     }
 
     /// <summary>
@@ -76,14 +109,14 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
     /// </summary>
     private bool ReportFractionalLiteral(
         AnalysisContext context,
-        DomainExpression left, TypeInfo leftType,
-        DomainExpression right, TypeInfo rightType) {
-        if (left is Literal { Value: decimal } leftLit && IsIntegralTypeName(rightType.TypeName)) {
-            Report(context, leftLit, FractionalLiteralMessage(leftLit, rightType.TypeName!));
+        DomainExpression left, ExprType leftType,
+        DomainExpression right, ExprType rightType) {
+        if (left is Literal { Value: decimal } leftLit && IsIntegralTypeName(rightType.DomainName)) {
+            Report(context, leftLit, FractionalLiteralMessage(leftLit, rightType.DomainName!));
             return true;
         }
-        if (right is Literal { Value: decimal } rightLit && IsIntegralTypeName(leftType.TypeName)) {
-            Report(context, rightLit, FractionalLiteralMessage(rightLit, leftType.TypeName!));
+        if (right is Literal { Value: decimal } rightLit && IsIntegralTypeName(leftType.DomainName)) {
+            Report(context, rightLit, FractionalLiteralMessage(rightLit, leftType.DomainName!));
             return true;
         }
         return false;
@@ -107,20 +140,8 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
         _ => typeName
     };
 
-    private static PrimitiveSemantics? SemanticsOf(AnalysisContext context, string? typeName) {
-        if (typeName is null) return null;
-        var lookup = context.GetTypeLookup();
-        var primitive = lookup?.Domain.Types.OfType<Ontology.PrimitiveType>().FirstOrDefault(p =>
-            string.Equals(p.Name, typeName, StringComparison.Ordinal));
-        return primitive?.Semantics;
-    }
-
-    private static bool MixedDateGranularity(AnalysisContext context, TypeInfo left, TypeInfo right) {
-        var leftSemantics = SemanticsOf(context, left.TypeName);
-        var rightSemantics = SemanticsOf(context, right.TypeName);
-        return leftSemantics is PrimitiveSemantics.Date && rightSemantics is PrimitiveSemantics.DateTime
-            || leftSemantics is PrimitiveSemantics.DateTime && rightSemantics is PrimitiveSemantics.Date;
-    }
+    private static bool MixedDateGranularity(ExprType left, ExprType right) =>
+        IsDateOnly(left) && IsDateTime(right) || IsDateTime(left) && IsDateOnly(right);
 
     private static void Report(AnalysisContext context, Node where, string message) =>
         context.ReportError(where, message, DomainModelDiagnosticCodes.SemanticTypeCompatibility);

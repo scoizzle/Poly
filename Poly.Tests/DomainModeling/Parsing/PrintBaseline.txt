@@ -2392,7 +2392,7 @@ domain smoke
 Placeholder: entity {
   Name: Text
 }
-##### pack/Inventory588	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Product	uses=[sqlite,http]+implicit	printed	FD06F9B1
+##### pack/Inventory588	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Product; authoring=true (as PolyCompiler)	uses=[sqlite,http]+implicit	printed	FD06F9B1
 domain Inventory
 uses sqlite
 uses http
@@ -2424,7 +2424,7 @@ Order: entity {
   Placed: stage {
   }
 }
-##### pack/Logistics559	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Product	uses=[sqlite]+implicit	printed	CCD8AD05
+##### pack/Logistics559	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Product; authoring=true (as PolyCompiler)	uses=[sqlite]+implicit	printed	CCD8AD05
 domain Logistics
 uses sqlite
 
@@ -2433,8 +2433,21 @@ Shipment: entity {
   WeightKg: Number range(1, 40000)
   Declared: Decimal range(0, 1000000)
 }
-##### pack/Warehouse620	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=none	uses=[http,sqlite]+implicit	Core:session-failed:InvalidOperationException | Product:failed:GrammarException	E3B0C442
-##### pack/Inventory626	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Product	uses=[sqlite,http]+implicit	printed	EBB27BF6
+##### pack/Warehouse620	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Product; authoring=true (as PolyCompiler)	uses=[http,sqlite]+implicit	printed	EB8F17BA
+domain Logistics
+uses http
+uses sqlite
+
+Warehouse: entity table("WAREHOUSES") {
+  Code: Text unique length(3, 8) column("WH_CODE", "VARCHAR(8)")
+  Capacity: Number range(0, 100000)
+  Used: Number range(0, 100000) default(0)
+  Bad: action (units: Number) {
+    assign Capacity to (Capacity + 1)
+    assign Used to units
+  }
+}
+##### pack/Inventory626	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Product; authoring=true (as PolyCompiler)	uses=[sqlite,http]+implicit	printed	EBB27BF6
 domain Inventory
 uses sqlite
 uses http
@@ -2455,7 +2468,7 @@ Order: entity {
   Shipped: stage {
   }
 }
-##### pack/Desk658	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Product	uses=[http,sqlite]+implicit	printed	E465D39B
+##### pack/Desk658	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Product; authoring=true (as PolyCompiler)	uses=[http,sqlite]+implicit	printed	E465D39B
 domain Desk
 uses http
 uses sqlite
@@ -2484,7 +2497,7 @@ Task: entity {
   Done: stage {
   }
 }
-##### pack/Tally653	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Product	uses=[http,sqlite]+implicit	printed	521192C2
+##### pack/Tally653	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Product; authoring=true (as PolyCompiler)	uses=[http,sqlite]+implicit	printed	521192C2
 domain Counter
 uses http
 uses sqlite
@@ -2496,7 +2509,7 @@ Tally: entity {
     assign N to (N + 1)
   }
 }
-##### pack/Fulfillment675	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Product	uses=[sqlite,http]+implicit	printed	60A8D9B6
+##### pack/Fulfillment675	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Product; authoring=true (as PolyCompiler)	uses=[sqlite,http]+implicit	printed	60A8D9B6
 domain Fulfillment
 uses sqlite
 uses http

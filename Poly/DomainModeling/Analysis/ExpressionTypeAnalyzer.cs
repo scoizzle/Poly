@@ -141,8 +141,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
 
     private void AnalyzeEntity(AnalysisContext context, Entity entity) {
         var enumTypes = ResolveEnums(context);
-        var props = entity.Properties
-            .ToDictionary(p => p.Name, p => p.Type.TypeName, StringComparer.Ordinal);
+        var props = new EntityScope(entity);
 
         // default(...) on properties
         foreach (var prop in entity.Properties) {
@@ -179,11 +178,17 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
             CheckEffectTree(context, stage.OnEntryEffects, entity.Name, props, null, enumTypes);
             CheckEffectTree(context, stage.OnExitEffects, entity.Name, props, null, enumTypes);
             foreach (var sub in stage.Subscriptions)
-                CheckEffectTree(context, sub.Effects, entity.Name, props, null, enumTypes);
+                CheckEffectTree(context, sub.Effects, entity.Name, PeerScope(context, entity.Name, props, sub), null, enumTypes);
         }
         foreach (var sub in entity.Subscriptions)
-            CheckEffectTree(context, sub.Effects, entity.Name, props, null, enumTypes);
+            CheckEffectTree(context, sub.Effects, entity.Name, PeerScope(context, entity.Name, props, sub), null, enumTypes);
     }
+
+    /// <summary>A subscription's effects read its peer binder (<c>when Rel Stage as o</c>) as the relationship's target.</summary>
+    private static Dictionary<string, string> PeerScope(
+        AnalysisContext context, string entityName, Dictionary<string, string> props, StageSubscription subscription) =>
+        WithBinder(props, subscription.PeerBinding,
+            subscription.PeerBinding is null ? null : ResolveRelationshipTargetTypeName(context, entityName, subscription.RelationshipName));
 
     private static Dictionary<string, string>? ParamsOf(Action action) =>
         action.Parameters.Count > 0
@@ -306,18 +311,18 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                 // The body is checked in the caller's scope. The `where` clause is
                 // binder-typed against the iterated relationship's target entity (#455 F4):
                 // a non-Boolean `where` lowers but cannot compile.
+                var iterated = ResolveRelationshipTargetTypeName(context, callerEntityName, fe.RelationshipName);
+                var loopScope = WithBinder(props, fe.BinderName, iterated);
                 if (fe.Where is { } where) {
-                    var iteratedTypeName = ResolveRelationshipTargetTypeName(
-                        context, callerEntityName, fe.RelationshipName);
-                    WalkExpression(context, where, props, parameters, enumTypes);
+                    WalkExpression(context, where, loopScope, parameters, enumTypes);
                     var whereType = BindsToBinder(where, fe.BinderName)
-                        ? InferBinderExpressionType(context, iteratedTypeName, fe.BinderName, where, enumTypes)
-                        : InferType(context, where, props, parameters, enumTypes);
+                        ? InferBinderExpressionType(context, iterated, fe.BinderName, where, enumTypes)
+                        : InferType(context, where, loopScope, parameters, enumTypes);
                     if (Family(whereType) is not (TypeFamily.Boolean or TypeFamily.Unknown))
                         Report(context, where,
                             $"'for' where condition must be Boolean (got '{Describe(whereType)}')");
                 }
-                CheckEffectTree(context, fe.Body, callerEntityName, props, parameters, enumTypes);
+                CheckEffectTree(context, fe.Body, callerEntityName, loopScope, parameters, enumTypes);
                 break;
             case ForEachInvokeEffect efe:
                 CheckInvokeArgumentTypes(context, callerEntityName, efe.RelationshipName,
@@ -490,12 +495,27 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                     var leftType = InferType(context, sub.Left, props, parameters, enumTypes);
                     var rightType = InferType(context, sub.Right, props, parameters, enumTypes);
                     // Same-family date minus date is a difference, not arithmetic; mixed families stay errors.
+                    // The exemption is the two-property shape lowering rewrites to `left.Subtract(right)`
+                    // (TemporalLowering.DateAddDaysLowering); any other date difference lowers to a raw subtraction
+                    // the VM refuses, so a typed date operand of another shape meets the arithmetic rule (T-05a
+                    // review F1, GateParity). Removing row: T-10 decides a date difference on the operands' types in
+                    // analysis and lowering together.
                     if (IsDate(leftType) && IsDate(rightType)
                         && !MixedDateGranularity(leftType, rightType)) {
                         WalkExpression(context, sub.Left, props, parameters, enumTypes, walked);
                         WalkExpression(context, sub.Right, props, parameters, enumTypes, walked);
                         return;
                     }
+                }
+                // Any other same-granularity date difference: say what is supported, naming what was written (T-10).
+                var subtrahendLeft = InferType(context, sub.Left, props, parameters, enumTypes);
+                var subtrahendRight = InferType(context, sub.Right, props, parameters, enumTypes);
+                if (IsDate(subtrahendLeft) && IsDate(subtrahendRight) && !MixedDateGranularity(subtrahendLeft, subtrahendRight)) {
+                    Report(context, sub, "a date difference is supported only between two properties of the same entity " +
+                        $"(got '{PrintedText(context, sub.Left)}' - '{PrintedText(context, sub.Right)}')");
+                    WalkExpression(context, sub.Left, props, parameters, enumTypes, walked);
+                    WalkExpression(context, sub.Right, props, parameters, enumTypes, walked);
+                    return;
                 }
                 StampBinary(context, sub, OperatorKind.Subtract, sub.Left, sub.Right, props, parameters, enumTypes);
                 CheckArithmetic(context, sub.Left, sub.Right, props, parameters, enumTypes);
@@ -539,6 +559,14 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                     new ExpressionTypeCheckScope(props, parameters, enumTypes));
                 return;
         }
+    }
+
+    /// <summary>An expression as the DSL spells it, for a message that names what the user wrote.</summary>
+    private static string PrintedText(AnalysisContext context, DomainExpression expr) {
+        var printer = context.GetTypeLookup()?.Domain is { } domain
+            ? new Language.DomainDslPrinter(RuntimeAnalysisCache.Session(domain))
+            : new Language.DomainDslPrinter();
+        return printer.PrintExpressionText(expr);
     }
 
     private void CheckBooleanOperands(

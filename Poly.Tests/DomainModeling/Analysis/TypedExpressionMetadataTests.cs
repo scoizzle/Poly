@@ -2,6 +2,7 @@ using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Meaning;
 using Poly.DomainModeling.Ontology;
+using Poly.DomainModeling.Ontology.Effects;
 using Poly.Introspection;
 
 using DmPrimitive = Poly.DomainModeling.Ontology.PrimitiveType;
@@ -102,23 +103,41 @@ public class TypedExpressionMetadataTests {
 
     [Test]
     public async Task ArithmeticStamp_IsNotReadBackByInferType() {
-        // CheckMatch walks the arms (stamping `N + M`) before it infers their types, so the stamp exists when
-        // InferType reads the node. Had it been read back as a typed Number, the Number arm and the Text `else`
-        // would not unify (DMMAT002); on master the arithmetic arm is Unknown and the match is accepted.
-        var add = DomainExpression.Add(P("N"), P("M"));
-        var match = DomainExpression.Match([new MatchArm(DomainExpression.Literal(true), add)], DomainExpression.Literal("x"));
+        // One `require` policy tree walked under two parameter scopes (#483): A1 binds Amt to Number, A2 to Decimal.
+        // The stamp is first-writer-wins, so `Amt + 1` still carries A1's Int64 stamp when A2's walk infers it. Since
+        // T-05a InferType types arithmetic itself; were the stamp read back, A2's comparison would name A1's
+        // 'Number'. It names its own 'Decimal' (Decimal + Int64), so the type comes from inference, not the stamp.
+        var add = DomainExpression.Add(DomainExpression.Property("Amt"), DomainExpression.Literal(1L));
+        var check = new Policy("Check", DomainExpression.Equal(add, DomainExpression.Property("Name")));
         var host = new Entity("H",
-            [new Property("N", new DomainTypeReference("Number"), []), new Property("M", new DomainTypeReference("Number"), [])],
+            [new Property("Name", new DomainTypeReference("Text"), [])],
+            [
+                new Poly.DomainModeling.Ontology.Action("A1", InvocationResult.Void,
+                    [new Property("Amt", new DomainTypeReference("Number"), [])], [], [check]),
+                new Poly.DomainModeling.Ontology.Action("A2", InvocationResult.Void,
+                    [new Property("Amt", new DomainTypeReference("Decimal"), [])], [], [check]),
+            ],
             [],
-            [new Policy("Check", match)],
             []);
-        var domain = new Domain("T", [new DmPrimitive("Number", PrimitiveSemantics.Number, []), host]);
+        var domain = new Domain("T", [
+            new DmPrimitive("Number", PrimitiveSemantics.Number, []),
+            new DmPrimitive("Decimal", PrimitiveSemantics.Decimal, []),
+            new DmPrimitive("Text", PrimitiveSemantics.Text, []),
+            host]);
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
         var stamp = analysis.GetMetadata<TypedExpressionMetadata>(add);
         await Assert.That(stamp?.Binary).IsNotNull();
         await Assert.That(stamp!.Type.DomainName).IsNull();
         await Assert.That(stamp.Binary!.Result.DomainName).IsNull();
-        await Assert.That(AnalyzerBehaviourPinTests.Verdict(analysis)).IsEqualTo("ok");
+        // The stamp is A1's: the walk under A2 found it already there.
+        await Assert.That(stamp.Binary.Kind).IsEqualTo(NumericKind.Integer64);
+        var messages = analysis.Diagnostics
+            .Where(d => d.Severity == DiagnosticSeverity.Error && d.Code == DomainModelDiagnosticCodes.SemanticTypeCompatibility)
+            .Select(d => d.Message)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        await Assert.That(string.Join(" | ", messages)).IsEqualTo(
+            "comparison between incompatible types 'Decimal' and 'Text' | comparison between incompatible types 'Number' and 'Text'");
     }
 }

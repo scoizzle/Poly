@@ -307,7 +307,7 @@ public static partial class AbiEmitter {
             if (body.Type == typeof(void))
                 throw new InvalidOperationException(
                     $"VM compile rejected: lambda body is a statement; delegate '{delegateType.Name}' returns '{returnType.Name}'.");
-            body = CoercePure(body, returnType, "lambda return");
+            body = CoercePure(body, returnType, "lambda return", pure);
         }
 
         var lambdaExpression = Lambda(delegateType, body, pure.ParameterExpressions);
@@ -465,27 +465,27 @@ public static partial class AbiEmitter {
             Variable variable => PureVariable(variable, ctx),
             Member member => CompilePureMember(member, ctx),
             Invoke invoke => CompilePureInvoke(invoke, ctx),
-            Add add => PureAdd(add.LeftHandValue, add.RightHandValue, ctx),
-            Subtract sub => PureArithmetic(sub.LeftHandValue, sub.RightHandValue, Subtract, ctx),
-            Multiply mul => PureArithmetic(mul.LeftHandValue, mul.RightHandValue, Multiply, ctx),
-            Divide div => PureArithmetic(div.LeftHandValue, div.RightHandValue, Divide, ctx),
-            Modulo mod => PureArithmetic(mod.LeftHandValue, mod.RightHandValue, Modulo, ctx),
-            BitwiseAnd bitAnd => PureBitwise(bitAnd.LeftHandValue, bitAnd.RightHandValue, And, ctx),
-            BitwiseOr bitOr => PureBitwise(bitOr.LeftHandValue, bitOr.RightHandValue, Or, ctx),
-            BitwiseXor bitXor => PureBitwise(bitXor.LeftHandValue, bitXor.RightHandValue, ExclusiveOr, ctx),
-            ShiftLeft left => PureShift(left.LeftHandValue, left.RightHandValue, LeftShift, ctx),
-            ShiftRight right => PureShift(right.LeftHandValue, right.RightHandValue, RightShift, ctx),
-            Equal equal => PureComparison(equal.LeftHandValue, equal.RightHandValue, Equal, ctx),
-            NotEqual notEqual => PureComparison(notEqual.LeftHandValue, notEqual.RightHandValue, NotEqual, ctx),
-            LessThan less => PureComparison(less.LeftHandValue, less.RightHandValue, LessThan, ctx),
-            LessThanOrEqual lessEq => PureComparison(lessEq.LeftHandValue, lessEq.RightHandValue, LessThanOrEqual, ctx),
-            GreaterThan greater => PureComparison(greater.LeftHandValue, greater.RightHandValue, GreaterThan, ctx),
-            GreaterThanOrEqual greaterEq => PureComparison(greaterEq.LeftHandValue, greaterEq.RightHandValue, GreaterThanOrEqual, ctx),
+            Add add => PureAdd(add, ctx),
+            Subtract sub => PureBinary(OperatorKind.Subtract, sub, sub.LeftHandValue, sub.RightHandValue, Subtract, ctx),
+            Multiply mul => PureBinary(OperatorKind.Multiply, mul, mul.LeftHandValue, mul.RightHandValue, Multiply, ctx),
+            Divide div => PureBinary(OperatorKind.Divide, div, div.LeftHandValue, div.RightHandValue, Divide, ctx),
+            Modulo mod => PureBinary(OperatorKind.Modulo, mod, mod.LeftHandValue, mod.RightHandValue, Modulo, ctx),
+            BitwiseAnd bitAnd => PureBinary(OperatorKind.BitwiseAnd, bitAnd, bitAnd.LeftHandValue, bitAnd.RightHandValue, And, ctx),
+            BitwiseOr bitOr => PureBinary(OperatorKind.BitwiseOr, bitOr, bitOr.LeftHandValue, bitOr.RightHandValue, Or, ctx),
+            BitwiseXor bitXor => PureBinary(OperatorKind.BitwiseXor, bitXor, bitXor.LeftHandValue, bitXor.RightHandValue, ExclusiveOr, ctx),
+            ShiftLeft left => PureBinary(OperatorKind.ShiftLeft, left, left.LeftHandValue, left.RightHandValue, LeftShift, ctx),
+            ShiftRight right => PureBinary(OperatorKind.ShiftRight, right, right.LeftHandValue, right.RightHandValue, RightShift, ctx),
+            Equal equal => PureBinary(OperatorKind.Equal, equal, equal.LeftHandValue, equal.RightHandValue, Equal, ctx),
+            NotEqual notEqual => PureBinary(OperatorKind.NotEqual, notEqual, notEqual.LeftHandValue, notEqual.RightHandValue, NotEqual, ctx),
+            LessThan less => PureBinary(OperatorKind.LessThan, less, less.LeftHandValue, less.RightHandValue, LessThan, ctx),
+            LessThanOrEqual lessEq => PureBinary(OperatorKind.LessThanOrEqual, lessEq, lessEq.LeftHandValue, lessEq.RightHandValue, LessThanOrEqual, ctx),
+            GreaterThan greater => PureBinary(OperatorKind.GreaterThan, greater, greater.LeftHandValue, greater.RightHandValue, GreaterThan, ctx),
+            GreaterThanOrEqual greaterEq => PureBinary(OperatorKind.GreaterThanOrEqual, greaterEq, greaterEq.LeftHandValue, greaterEq.RightHandValue, GreaterThanOrEqual, ctx),
             And and => AndAlso(CompilePureCondition(and.LeftHandValue, ctx), CompilePureCondition(and.RightHandValue, ctx)),
             Or or => OrElse(CompilePureCondition(or.LeftHandValue, ctx), CompilePureCondition(or.RightHandValue, ctx)),
             Not not => Not(CompilePureCondition(not.Value, ctx)),
-            UnaryMinus minus => Negate(CompilePureNode(minus.Operand, ctx)),
-            BitwiseNot bitNot => Not(CompilePureNode(bitNot.Operand, ctx)),
+            UnaryMinus minus => PureUnary(OperatorKind.UnaryMinus, minus, minus.Operand, Negate, ctx),
+            BitwiseNot bitNot => PureUnary(OperatorKind.BitwiseNot, bitNot, bitNot.Operand, Not, ctx),
             Conditional conditional => CompilePureConditional(conditional, ctx),
             Coalesce coalesce => CompilePureCoalesce(coalesce, ctx),
             TypeCast cast => Convert(CompilePureNode(cast.Operand, ctx), TargetClrType(cast.TargetTypeReference, cast, ctx)),
@@ -599,56 +599,137 @@ public static partial class AbiEmitter {
             arguments[i] = CoercePure(
                 CompilePureNode(invoke.Arguments[i], ctx),
                 parameters[i].ParameterType,
-                $"argument '{parameters[i].Name}' of '{method.Name}'");
+                $"argument '{parameters[i].Name}' of '{method.Name}'",
+                ctx);
         }
         return Call(method.IsStatic ? null : instance, method, arguments);
     }
 
-    private static Expression PureArithmetic(
-        Node leftNode, Node rightNode,
+    /// <summary>
+    /// A binary operator. Over a governed operand (<see cref="IsGoverned"/>) the type provider decides it
+    /// (<see cref="OperandsFor"/>); otherwise the Expression API's own rules apply (identity, a typed null, reference
+    /// widening, a user-defined operator).
+    /// </summary>
+    private static Expression PureBinary(
+        OperatorKind kind, Node node, Node leftNode, Node rightNode,
+        Func<Expression, Expression, BinaryExpression> factory,
+        PureLambdaContext ctx) =>
+        PureBinary(kind, node, leftNode, rightNode, CompilePureNode(leftNode, ctx), CompilePureNode(rightNode, ctx), factory, ctx);
+
+    private static Expression PureBinary(
+        OperatorKind kind, Node node, Node leftNode, Node rightNode, Expression left, Expression right,
         Func<Expression, Expression, BinaryExpression> factory,
         PureLambdaContext ctx) {
-        var (left, right) = Promote(CompilePureNode(leftNode, ctx), CompilePureNode(rightNode, ctx));
-        return factory(left, right);
+        if (IsGovernedPair(left, right)) {
+            var operands = OperandsFor(kind, node, leftNode, rightNode, left, right, ctx);
+            var result = Combine(node, () => factory(operands.Left, operands.Right));
+            if (result.Type != operands.Result)
+                throw RejectOperator(node, $"the {kind} operator over '{TypeName(operands.Left.Type)}' and '{TypeName(operands.Right.Type)}' is '{TypeName(result.Type)}' in the expression tree, but the type provider states '{TypeName(operands.Result)}'");
+            return result;
+        }
+        var (promotedLeft, promotedRight) = Promote(left, right);
+        return Combine(node, () => factory(promotedLeft, promotedRight));
     }
 
-    private static Expression PureAdd(Node leftNode, Node rightNode, PureLambdaContext ctx) {
-        var left = CompilePureNode(leftNode, ctx);
-        var right = CompilePureNode(rightNode, ctx);
+    private static Expression PureAdd(Add add, PureLambdaContext ctx) {
+        var left = CompilePureNode(add.LeftHandValue, ctx);
+        var right = CompilePureNode(add.RightHandValue, ctx);
         if (left.Type == typeof(string) && right.Type == typeof(string))
             return Call(null, StringConcatInfo, left, right);
-        var (promotedLeft, promotedRight) = Promote(left, right);
-        return Add(promotedLeft, promotedRight);
+        return PureBinary(OperatorKind.Add, add, add.LeftHandValue, add.RightHandValue, left, right, Add, ctx);
     }
 
-    private static Expression PureBitwise(
-        Node leftNode, Node rightNode,
-        Func<Expression, Expression, BinaryExpression> factory,
+    /// <summary>A unary operator over a governed operand: the type provider's operator, as for a binary one.</summary>
+    private static Expression PureUnary(
+        OperatorKind kind, Node node, Node operandNode,
+        Func<Expression, UnaryExpression> factory,
         PureLambdaContext ctx) {
-        var (left, right) = Promote(CompilePureNode(leftNode, ctx), CompilePureNode(rightNode, ctx));
-        return factory(left, right);
+        var operand = CompilePureNode(operandNode, ctx);
+        if (!IsGoverned(operand.Type))
+            return Combine(node, () => factory(operand));
+        var definition = OperandDefinition(operand.Type, node, ctx);
+        if (definition.GetOperator(kind, null) is not { } resolution)
+            throw RejectOperator(node, $"the type provider defines no {kind} operator for '{TypeName(operand.Type)}'");
+        var lifted = Nullable.GetUnderlyingType(operand.Type) is not null;
+        var parameter = Lift(RuntimeTypeOf(resolution.Signature.Parameters.Single().ParameterTypeDefinition, node), lifted);
+        var expected = Lift(RuntimeTypeOf(resolution.Result, node), lifted);
+        var result = Combine(node, () => factory(Convert(operand, parameter)));
+        if (result.Type != expected)
+            throw RejectOperator(node, $"the {kind} operator over '{TypeName(parameter)}' is '{TypeName(result.Type)}' in the expression tree, but the type provider states '{TypeName(expected)}'");
+        return result;
     }
 
-    private static Expression PureShift(
-        Node leftNode, Node rightNode,
-        Func<Expression, Expression, BinaryExpression> factory,
-        PureLambdaContext ctx) {
-        var left = CompilePureNode(leftNode, ctx);
-        var shift = CompilePureNode(rightNode, ctx);
-        return factory(PromoteShiftLeft(left), Convert(shift, typeof(int)));
+    /// <summary>
+    /// The operands of a governed binary operator converted to the parameter types of the operator the type provider
+    /// states, and the result it states. A nullable operand is lifted: the provider is asked about the underlying types and
+    /// both parameters become <c>Nullable&lt;P&gt;</c>; a lifted comparison stays <c>bool</c>, the rest are
+    /// <c>Nullable&lt;R&gt;</c> (C# 12.4.8). Before the provider, T-18's shared <see cref="ConstantOperandRule"/> judges a
+    /// non-negative signed constant beside a <c>ulong</c> as UInt64 (owner ruling #679 6842272727; removed by T-26); the
+    /// bridge only converts the operands. Undefined: a positioned refusal.
+    /// </summary>
+    private static (Expression Left, Expression Right, Type Result) OperandsFor(
+        OperatorKind kind, Node node, Node leftNode, Node rightNode, Expression left, Expression right, PureLambdaContext ctx) {
+        var analysis = ctx.Abi.Analysis
+            ?? throw RejectOperator(node, "the lambda bridge has no analysis, so no type provider to state the operator");
+        var lifted = Nullable.GetUnderlyingType(left.Type) is not null || Nullable.GetUnderlyingType(right.Type) is not null;
+        var comparison = kind is OperatorKind.Equal or OperatorKind.NotEqual or OperatorKind.LessThan
+            or OperatorKind.LessThanOrEqual or OperatorKind.GreaterThan or OperatorKind.GreaterThanOrEqual;
+        if (ConstantOperandRule.Applies(kind, analysis.GetEffectiveNode(leftNode), left.Type, analysis.GetEffectiveNode(rightNode), right.Type)) {
+            var uint64 = Lift(typeof(ulong), lifted);
+            return (Convert(left, uint64), Convert(right, uint64), comparison ? typeof(bool) : uint64);
+        }
+        var leftDefinition = OperandDefinition(left.Type, node, ctx);
+        var rightDefinition = OperandDefinition(right.Type, node, ctx);
+        if (leftDefinition.GetOperator(kind, rightDefinition) is not { } resolution)
+            throw RejectOperator(node, $"the type provider defines no {kind} operator for '{TypeName(left.Type)}' and '{TypeName(right.Type)}'");
+        var parameters = resolution.Signature.Parameters
+            .Select(parameter => Lift(RuntimeTypeOf(parameter.ParameterTypeDefinition, node), lifted)).ToArray();
+        var result = RuntimeTypeOf(resolution.Result, node);
+        return (Convert(left, parameters[0]), Convert(right, parameters[1]), comparison ? result : Lift(result, lifted));
     }
 
-    private static Expression PromoteShiftLeft(Expression value) =>
-        value.Type == typeof(int) || value.Type == typeof(long) || value.Type == typeof(uint) || value.Type == typeof(ulong)
-            ? value
-            : Convert(value, typeof(int));
+    /// <summary>The type provider's definition of an operand's type, its nullable unwrapped; a missing definition is a refusal.</summary>
+    private static ITypeDefinition OperandDefinition(Type type, Node node, PureLambdaContext ctx) {
+        var analysis = ctx.Abi.Analysis
+            ?? throw RejectOperator(node, "the lambda bridge has no analysis, so no type provider to state the operator");
+        var underlying = Nullable.GetUnderlyingType(type) ?? type;
+        return analysis.TypeDefinitions.GetTypeDefinition(underlying)
+            ?? throw RejectOperator(node, $"the type provider has no definition for '{underlying.Name}'");
+    }
 
-    private static Expression PureComparison(
-        Node leftNode, Node rightNode,
-        Func<Expression, Expression, BinaryExpression> factory,
-        PureLambdaContext ctx) {
-        var (left, right) = Promote(CompilePureNode(leftNode, ctx), CompilePureNode(rightNode, ctx));
-        return factory(left, right);
+    private static Type RuntimeTypeOf(ITypeDefinition definition, Node node) =>
+        definition.TryGetRuntimeType(out var type)
+            ? type
+            : throw RejectOperator(node, $"the type provider's '{definition.Name}' has no CLR type");
+
+    private static Type Lift(Type type, bool lifted) =>
+        lifted && type.IsValueType && Nullable.GetUnderlyingType(type) is null ? typeof(Nullable<>).MakeGenericType(type) : type;
+
+    /// <summary>
+    /// Governed: a CLR primitive (numeric, <c>char</c>, <c>bool</c>, the native integers) or <c>decimal</c>, or
+    /// <c>Nullable&lt;&gt;</c> of one. The type provider decides every operator and conversion over a governed operand;
+    /// other types keep the Expression API's rules (enum: T-25; temporal, Guid, string, reference and null: T-23).
+    /// </summary>
+    private static bool IsGoverned(Type type) =>
+        (Nullable.GetUnderlyingType(type) ?? type) is var underlying && (underlying.IsPrimitive || underlying == typeof(decimal));
+
+    /// <summary>A governed operand beside anything but a null literal; a null literal keeps the Expression API's typing.</summary>
+    private static bool IsGovernedPair(Expression left, Expression right) =>
+        (IsGoverned(left.Type) || IsGoverned(right.Type)) && !IsNullLiteral(left) && !IsNullLiteral(right);
+
+    private static bool IsNullLiteral(Expression expression) => expression is ConstantExpression { Value: null };
+
+    private static string TypeName(Type type) =>
+        Nullable.GetUnderlyingType(type) is { } underlying ? underlying.Name + "?" : type.Name;
+
+    /// <summary>Builds a node with the Expression API, turning its own refusal into the bridge's positioned one.</summary>
+    private static Expression Combine(Node node, Func<Expression> build) {
+        try {
+            return build();
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException) {
+            throw RejectOperator(node, ex.Message);
+        }
     }
 
     private static Expression CompilePureCondition(Node node, PureLambdaContext ctx) {
@@ -664,8 +745,34 @@ public static partial class AbiEmitter {
         var whenFalse = CompilePureNode(conditional.IfFalse, ctx);
         if (whenTrue.Type == typeof(void) || whenFalse.Type == typeof(void))
             throw RejectPure(conditional, "a conditional arm produces no value");
+        if (IsGovernedPair(whenTrue, whenFalse)) {
+            var common = ConditionalType(conditional, whenTrue.Type, whenFalse.Type, ctx);
+            return Condition(condition, Convert(whenTrue, common), Convert(whenFalse, common));
+        }
         var (promotedTrue, promotedFalse) = Promote(whenTrue, whenFalse);
-        return Condition(condition, promotedTrue, promotedFalse);
+        return Combine(conditional, () => Condition(condition, promotedTrue, promotedFalse));
+    }
+
+    /// <summary>
+    /// The type of a conditional over governed arms (C# 12.18): the arm type the other arm converts to implicitly, from the
+    /// type provider's <c>GetCommonType</c> over the underlying types. Two nullable arms lift the common type; a nullable
+    /// arm beside a non-nullable one is the nullable arm's type when its underlying type is the common type (the other arm
+    /// converts to it, lifted), and no type otherwise.
+    /// </summary>
+    private static Type ConditionalType(Conditional conditional, Type whenTrue, Type whenFalse, PureLambdaContext ctx) {
+        if (whenTrue == whenFalse)
+            return whenTrue;
+        var (trueDefinition, falseDefinition) = (OperandDefinition(whenTrue, conditional, ctx), OperandDefinition(whenFalse, conditional, ctx));
+        var common = new[] { trueDefinition, falseDefinition }.GetCommonType() is { } found
+            ? RuntimeTypeOf(found, conditional)
+            : throw RejectOperator(conditional, $"the type provider states no common type for the arms '{TypeName(whenTrue)}' and '{TypeName(whenFalse)}'");
+        var (trueNullable, falseNullable) = (Nullable.GetUnderlyingType(whenTrue) is not null, Nullable.GetUnderlyingType(whenFalse) is not null);
+        if (trueNullable == falseNullable)
+            return Lift(common, trueNullable);
+        var nullableArm = trueNullable ? whenTrue : whenFalse;
+        return Nullable.GetUnderlyingType(nullableArm) == common
+            ? nullableArm
+            : throw RejectOperator(conditional, $"the arms '{TypeName(whenTrue)}' and '{TypeName(whenFalse)}' have no common type: neither converts implicitly to the other");
     }
 
     private static Expression CompilePureCoalesce(Coalesce coalesce, PureLambdaContext ctx) {
@@ -673,7 +780,7 @@ public static partial class AbiEmitter {
         var right = CompilePureNode(coalesce.RightHandValue, ctx);
         if (left.Type.IsValueType && Nullable.GetUnderlyingType(left.Type) is null)
             throw RejectPure(coalesce, "the left operand is a non-nullable value type");
-        var rightCoerced = CoercePure(right, left.Type, "the coalesce right operand");
+        var rightCoerced = CoercePure(right, left.Type, "the coalesce right operand", ctx);
         return Coalesce(left, rightCoerced);
     }
 
@@ -683,9 +790,9 @@ public static partial class AbiEmitter {
         ?? throw RejectPure(owner, "its target type is unresolved");
 
     /// <summary>
-    /// C# numeric promotion and reference widening for a binary operation. Fails
-    /// closed rather than asking <see cref="Expression"/> to invent a conversion the
-    /// language does not have.
+    /// The Expression API's typing for an operation over non-governed operands: identity, a null literal typed as the
+    /// reference operand, and reference widening. Fails closed rather than asking <see cref="Expression"/> to invent a
+    /// conversion the language does not have.
     /// </summary>
     private static (Expression Left, Expression Right) Promote(Expression left, Expression right) {
         if (left.Type == right.Type)
@@ -694,10 +801,6 @@ public static partial class AbiEmitter {
             return (Constant(null, right.Type), right);
         if (right is ConstantExpression { Value: null } && !left.Type.IsValueType)
             return (left, Constant(null, left.Type));
-
-        var promoted = PromoteNumeric(left.Type, right.Type);
-        if (promoted is not null)
-            return (Convert(left, promoted), Convert(right, promoted));
 
         if (left.Type.IsAssignableFrom(right.Type))
             return (left, Convert(right, left.Type));
@@ -708,37 +811,48 @@ public static partial class AbiEmitter {
             $"VM compile rejected: lambda bridge cannot combine '{left.Type.Name}' and '{right.Type.Name}'.");
     }
 
-    private static Type? PromoteNumeric(Type left, Type right) {
-        if (left == typeof(decimal) || right == typeof(decimal)) return typeof(decimal);
-        if (left == typeof(double) || right == typeof(double)) return typeof(double);
-        if (left == typeof(float) || right == typeof(float)) return typeof(float);
-        if (left == typeof(ulong) || right == typeof(ulong)) return typeof(ulong);
-        if (left == typeof(long) || right == typeof(long)) return typeof(long);
-        if (left == typeof(uint) || right == typeof(uint)) return typeof(uint);
-        if (IsSmallInteger(left) || IsSmallInteger(right)) return typeof(int);
-        return null;
-    }
-
-    private static bool IsSmallInteger(Type type) =>
-        type == typeof(char) || type == typeof(short) || type == typeof(byte)
-        || type == typeof(sbyte) || type == typeof(ushort) || type == typeof(int);
-
-    private static Expression CoercePure(Expression value, Type target, string context) {
+    /// <summary>
+    /// The conversion of a value to a CLR target (an argument, the lambda's return, the coalesce right operand). Between
+    /// governed types it is the type provider's implicit <c>ResolveConversionFrom</c> over the underlying types, lifted to a
+    /// nullable target (C# 10.6.1); a nullable value never converts implicitly to a non-nullable target. Otherwise:
+    /// identity, a typed null, assignability.
+    /// </summary>
+    private static Expression CoercePure(Expression value, Type target, string context, PureLambdaContext ctx) {
         if (value.Type == target)
             return value;
         if (value is ConstantExpression { Value: null } && !target.IsValueType)
             return Constant(null, target);
+        if (IsGoverned(value.Type) && IsGoverned(target) && !IsNullLiteral(value)) {
+            if (ImplicitlyConverts(value.Type, target, ctx))
+                return Convert(value, target);
+            throw new InvalidOperationException(
+                $"VM compile rejected: lambda bridge cannot convert '{TypeName(value.Type)}' to '{TypeName(target)}' for {context}: the type provider states no implicit conversion.");
+        }
         if (target.IsAssignableFrom(value.Type))
             return Convert(value, target);
         var underlying = Nullable.GetUnderlyingType(target);
         if (underlying is not null && (underlying == value.Type || underlying.IsAssignableFrom(value.Type)))
             return Convert(value, target);
-        var promoted = PromoteNumeric(value.Type, target);
-        if (promoted == target)
-            return Convert(value, target);
         throw new InvalidOperationException(
             $"VM compile rejected: lambda bridge cannot convert '{value.Type.Name}' to '{target.Name}' for {context}.");
     }
+
+    private static bool ImplicitlyConverts(Type source, Type target, PureLambdaContext ctx) {
+        var (sourceUnderlying, targetUnderlying) = (Nullable.GetUnderlyingType(source), Nullable.GetUnderlyingType(target));
+        if (sourceUnderlying is not null && targetUnderlying is null)
+            return false;
+        var (from, to) = (sourceUnderlying ?? source, targetUnderlying ?? target);
+        if (from == to)
+            return true;
+        var definitions = (ctx.Abi.Analysis ?? throw new InvalidOperationException(
+            "VM compile rejected: lambda bridge has no analysis, so no type provider to state the conversion.")).TypeDefinitions;
+        return definitions.GetTypeDefinition(to) is { } toDefinition
+            && definitions.GetTypeDefinition(from) is { } fromDefinition
+            && toDefinition.ResolveConversionFrom(fromDefinition) is { Kind: ConversionOperatorKind.Implicit };
+    }
+
+    private static InvalidOperationException RejectOperator(Node node, string reason) =>
+        new($"VM compile rejected: lambda bridge cannot state body node '{node.GetType().Name}': {reason}.");
 
     private static InvalidOperationException RejectPure(Node node, string reason) =>
         new($"VM compile rejected: lambda bridge body node '{node.GetType().Name}' is not a pure CLR expression: {reason}.");

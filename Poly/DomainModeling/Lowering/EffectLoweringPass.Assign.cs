@@ -337,7 +337,7 @@ public sealed partial class EffectLoweringPass {
         foreach (var check in BuiltinConstraintCompiler.Checks(
                      _entity, prop, _domain, _analysis,
                      ConstraintCheckWriter.ConstraintCheckStyle.Assign,
-                     valueRef, nullableValue: false, valueHasDefault: false, includeRequired: true)) {
+                     valueRef, nullableValue: !EntityStructureAnalyzer.IsRequired(prop), valueHasDefault: false, includeRequired: true)) {
             if (check.Kind is ConstraintCheckWriter.Kind.LengthMinimum
                 or ConstraintCheckWriter.Kind.LengthMaximum) {
                 lengthChecks.Add(check);

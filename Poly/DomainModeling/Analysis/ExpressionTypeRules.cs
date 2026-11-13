@@ -89,13 +89,11 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
         // The null rule (T-06): `null` assigns only into an optional target (#606). It compares with an optional
         // operand, or with a Text, Guid, entity, value-type or Binary operand, as C# compares them; a required
         // Number, Boolean, Date, Time, Duration or enum operand is never null, so the comparison is refused.
-        // Interim: an optional enum still takes no `null`, because the assign-time member guard reads an absent value
-        // as a non-member on both hosts (ConstraintCheckWriter's assign style has no presence check for it).
         if (leftFamily is TypeFamily.Null || rightFamily is TypeFamily.Null) {
             if (leftFamily == rightFamily)
                 return false;
             if (assigning)
-                return leftFamily is TypeFamily.Null && right.Optional && rightFamily is not TypeFamily.Enum;
+                return leftFamily is TypeFamily.Null && right.Optional;
             var (other, otherFamily) = leftFamily is TypeFamily.Null ? (right, rightFamily) : (left, leftFamily);
             return other.Optional
                 || otherFamily is TypeFamily.Text or TypeFamily.Guid or TypeFamily.Entity or TypeFamily.Value or TypeFamily.Binary;

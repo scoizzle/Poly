@@ -25,10 +25,10 @@ public sealed partial class DomainExpressionLoweringPass {
             .Select(a => (Condition: RouteCondition(a.Condition), Value: Arm(a.Value, target)))
             .ToList();
         var otherwise = Arm(m.Else, target);
-        // A `null` arm fills an optional slot (analysis refuses it into a required one, #606). In a value-type slot
-        // its absent value is `(T?)null`, which a conditional cannot share one word with a present arm: the arms
-        // fill a local of the slot's optional type instead, so both hosts store absent or the arm's value.
-        if (target is not null && HasNullArm(m) && TargetTypeAdapter.OptionalValueSlot(target, _context) is { } slot) {
+        // A `null` arm fills an optional slot (analysis refuses it into a required one, #606). Its absent value is
+        // `(T?)null`, which a conditional cannot share one word with a present arm: the arms fill a local of the
+        // slot's optional type instead, so both hosts store absent or the arm's value.
+        if (target is not null && HasNullArm(m) && TargetTypeAdapter.OptionalSlot(target, _context) is { } slot) {
             var result = _names.Next("match");
             Node chain = new Assignment(result, otherwise.Value);
             for (var i = arms.Count - 1; i >= 0; i--)

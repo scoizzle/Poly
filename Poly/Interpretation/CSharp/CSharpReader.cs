@@ -299,8 +299,20 @@ public static class CSharpReader {
         /// <summary>An enum member's value: the number literal, negated when a minus precedes it. A negated
         /// value that fits <c>int</c> is an <c>int</c> (<c>-2147483648</c> folds as the long 2147483648).</summary>
         private static object FoldEnumValue(MatchResult<CSharpToken, CSharpTokenKind> member) {
-            var value = FoldNumber(Capture(member, "value"));
-            if (!member.Tokens.Any(token => token.Kind == CSharpTokenKind.Minus))
+            var token = CapturedToken(member, "value");
+            var negative = member.Tokens.Any(t => t.Kind == CSharpTokenKind.Minus);
+            object value;
+            try {
+                value = FoldNumber(token.Text);
+            }
+            catch (OverflowException) {
+                throw GrammarError.Error($"Enum value '{token.Text}' is outside the range of long", token.Line, token.Col);
+            }
+            if (value is float or double or decimal)
+                throw GrammarError.Error($"Enum value '{token.Text}' is not an integer", token.Line, token.Col);
+            if (value is ulong big && big > long.MaxValue)
+                throw GrammarError.Error($"Enum value '{token.Text}' is outside the range of long", token.Line, token.Col);
+            if (!negative)
                 return value;
             var negated = -Convert.ToInt64(value, CultureInfo.InvariantCulture);
             return negated >= int.MinValue ? (object)(int)negated : negated;

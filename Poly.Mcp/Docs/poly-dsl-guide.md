@@ -1255,11 +1255,12 @@ Status is "active"
 ```
 
 Ordering (`<`, `>`, `<=`, `>=`) is defined for `Number`, `Decimal`, `Date`, `Time`, `DateTime`, `Duration` and `Uuid`
-(an optional operand and a `match` result of those types included). Ordering `Text`, `Boolean`, an enum, an entity,
+(an optional operand and a `match` result of those types included; an absent optional operand orders false). Ordering `Text`, `Boolean`, an enum, an entity,
 a value type or `Binary` is DMSEM003 (`ordering is not defined for 'Text'`); compare with `==` or `!=` instead.
 A value type has value equality, so `==` and `!=` are allowed on it. Known wrong (row X-06): the generated C# compares
 two value types by value, but the simulator compares the JSON text of an argument payload, so two equal values written
-with their fields in another order, or `2` against `2.0` for a `Decimal` field, compare unequal there.
+with their fields in another order, or `2` against `2.0` for a `Decimal` field, compare unequal there; so do equal
+values a .NET caller passes as dictionaries to `ModuleInstanceExecutor.Invoke`.
 
 Integer division truncates: `7 / 2` is 3. Storing an integral division into a `Decimal` (`assign Total to 7 / 2`,
 `assign Total to N / 2 + 1`) is the warning DMNUM001, because the quotient is cut before it widens. A literal with a

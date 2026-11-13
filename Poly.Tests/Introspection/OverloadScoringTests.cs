@@ -429,25 +429,72 @@ public class OverloadScoringTests {
         decimal <- double (explicit) = Invoke(op_Explicit)
         """;
 
-    [Test]
-    public async Task Acceptance_EveryPrimitivePair_IsAsMasterAnswers() =>
-        await Assert.That(Trim(PrimitiveMatrix())).IsEqualTo(MasterPrimitiveMatrix);
+    private static readonly string[] EnumNames = ["Color", "Shape", "Low", "Big"];
+
+    /// <summary>
+    /// The closed delta, applied to a matrix captured from master: the 21 widenings the rank table invented are gone
+    /// (<see cref="TypeRulesTests.RemovedWidenings"/>), and an enum accepts only itself among enums and numbers.
+    /// Everything else stays, cell for cell.
+    /// </summary>
+    internal static string AfterT16(string masterMatrix) {
+        var removed = TypeRulesTests.RemovedWidenings.Select(static pair => (From: pair.From.ToString(), To: pair.To.ToString())).ToHashSet();
+        var arguments = Array.Empty<string>();
+        var output = new List<string>();
+        foreach (var line in masterMatrix.Split('\n')) {
+            if (line.StartsWith("args:", StringComparison.Ordinal)) {
+                arguments = line["args:".Length..].Split(',');
+                output.Add(line);
+                continue;
+            }
+            var space = line.IndexOf(' ');
+            var parameter = line[..space];
+            var cells = line[(space + 1)..].ToCharArray();
+            for (var i = 0; i < cells.Length; i++) {
+                var enumPair = (EnumNames.Contains(parameter) || EnumNames.Contains(arguments[i])) && parameter != arguments[i];
+                if (enumPair || removed.Contains((arguments[i], parameter)))
+                    cells[i] = '.';
+            }
+            output.Add($"{parameter} {new string(cells)}");
+        }
+        return string.Join('\n', output);
+    }
 
     [Test]
-    public async Task Acceptance_EnumAndNumericPairs_AreAsMasterAnswers() =>
-        await Assert.That(Trim(EnumMatrix())).IsEqualTo(MasterEnumMatrix);
+    public async Task Acceptance_EveryPrimitivePair_IsMasterMinusTheRemovedWidenings() =>
+        await Assert.That(Trim(PrimitiveMatrix())).IsEqualTo(AfterT16(MasterPrimitiveMatrix));
 
     [Test]
-    public async Task Acceptance_NullableLift_IsAsMasterAnswers() =>
-        await Assert.That(Trim(NullableMatrix())).IsEqualTo(MasterNullableMatrix);
+    public async Task Acceptance_EnumAndNumericPairs_AreMasterMinusEveryEnumConversion() =>
+        await Assert.That(Trim(EnumMatrix())).IsEqualTo(AfterT16(MasterEnumMatrix));
 
     [Test]
-    public async Task Winners_AreAsMasterBinds() =>
-        await Assert.That(Trim(WinnerTable())).IsEqualTo(MasterWinners);
+    public async Task Acceptance_NullableLift_IsUnchanged() =>
+        await Assert.That(Trim(NullableMatrix())).IsEqualTo(AfterT16(MasterNullableMatrix));
 
     [Test]
-    public async Task AnalyzerArgumentMatches_AgreesWithTheScorer_OnEveryPair() =>
-        await Assert.That(Trim(AnalyzerMatrix())).IsEqualTo(MasterAnalyzerMatrix);
+    public async Task Delta_IsExactly_TheRemovedWideningsAndTheEnumPairs() {
+        var changed = 0;
+        foreach (var (before, after) in new[] { MasterPrimitiveMatrix, MasterEnumMatrix, MasterNullableMatrix }.Zip(
+                     new[] { AfterT16(MasterPrimitiveMatrix), AfterT16(MasterEnumMatrix), AfterT16(MasterNullableMatrix) }))
+            changed += before.Zip(after).Count(static pair => pair.First != pair.Second);
+        // 21 removed widenings in the primitive matrix; in the enum matrices the numeric block loses its 21 pairs too
+        // (counted below) plus every enum <-> different enum or number cell.
+        await Assert.That(TypeRulesTests.RemovedWidenings.Length).IsEqualTo(21);
+        await Assert.That(changed).IsGreaterThan(21);
+    }
+
+    [Test]
+    public async Task Winners_AreAsMasterBinds_ExceptTheOneTier2TieThatLostACandidate() =>
+        await Assert.That(Trim(WinnerTable())).IsEqualTo(MasterWinners.Replace(
+            "Math.Max(Int64,UInt64) = Math.Max(Decimal,Decimal) | Math.Max(Int64,Int64) | Math.Max(UInt64,UInt64)",
+            "Math.Max(Int64,UInt64) = Math.Max(Decimal,Decimal)"));
+
+    [Test]
+    public async Task AnalyzerArgumentMatches_AgreesWithTheScorer_OnEveryPair() {
+        await Assert.That(Trim(AnalyzerMatrix())).IsEqualTo(AfterT16(MasterAnalyzerMatrix));
+        await Assert.That(Trim(AnalyzerMatrix())).IsEqualTo(
+            AfterT16(MasterPrimitiveMatrix) + "\n" + AfterT16(MasterEnumMatrix) + "\n" + AfterT16(MasterNullableMatrix));
+    }
 
     [Test]
     public async Task TryConversionInvoke_Guard_IsAsMasterAnswers() =>
@@ -471,10 +518,13 @@ public class OverloadScoringTests {
     }
 
     [Test]
-    public async Task Winner_MathMaxInt64UInt64_IsATie_DiffersFromCSharp_DeliberateUntilABetterConversionRowExists() {
-        // C# 12.6.4 reports CS0121. Poly keeps every candidate of the lowest score and the resolution pass takes the first.
+    public async Task Winner_MathMaxInt64UInt64_IsDecimal_DiffersFromCSharp_DeliberateUntilABetterConversionRowExists() {
+        // C# 12.6.4 reports CS0121 (decimal, double and float are all applicable and none is better). Poly keeps every
+        // candidate of the lowest score and the resolution pass takes the first. On master three candidates tied at 2
+        // because the rank table called long -> ulong and ulong -> long widening; the provider says neither converts, so
+        // decimal (two declared operators, 1 + 1) is the only candidate left at 2. API-only: the DSL has no such call.
         await Assert.That(Winners(typeof(Math), "Max", typeof(long), typeof(ulong)))
-            .IsEqualTo("Math.Max(Int64,UInt64) = Math.Max(Decimal,Decimal) | Math.Max(Int64,Int64) | Math.Max(UInt64,UInt64)");
+            .IsEqualTo("Math.Max(Int64,UInt64) = Math.Max(Decimal,Decimal)");
     }
 
     [Test]
@@ -558,5 +608,66 @@ public class OverloadScoringTests {
         await Assert.That(Accepts("Metres", typeof(int))).IsEqualTo(".");
         await Assert.That(Accepts("Decimal", typeof(Meters))).IsEqualTo(".");
         await Assert.That(Accepts("Float64", typeof(Meters))).IsEqualTo(".");
+    }
+
+    // ---- fail closed: a lone candidate that needed a removed widening or an enum conversion now has no overload ----
+
+    public sealed class Receiver {
+        public string TakesSByte(sbyte x) => "sbyte";
+        public string TakesByte(byte x) => "byte";
+        public string TakesChar(char x) => "char";
+        public string TakesDecimal(decimal x) => "decimal";
+        public string TakesDouble(double x) => "double";
+        public string TakesInt(int x) => "int";
+        public string TakesColor(ColorEnum x) => "color";
+    }
+
+    private static string NoMember(string method) => $"no matching member '{method}' on 'Receiver' for invoke with 1 argument(s)";
+
+    private static string[] ErrorsOf(string method, object argument) {
+        var invoke = new Invoke(new Member(Wrap(new Receiver()), method), Wrap(argument));
+        return [.. Interpreter.Analyze(invoke).Diagnostics.Where(static d => d.Severity == DiagnosticSeverity.Error).Select(static d => d.Message)];
+    }
+
+    [Test]
+    [Arguments("TakesByte", (sbyte)-1, "signed to its unsigned sibling")]
+    [Arguments("TakesSByte", (byte)1, "unsigned to its signed sibling")]
+    [Arguments("TakesChar", (short)1, "a number into Char")]
+    [Arguments("TakesDecimal", 1.5, "Float64 into Decimal (explicit)")]
+    [Arguments("TakesInt", ColorEnum.Red, "an enum into a number (explicit)")]
+    [Arguments("TakesColor", 0, "a number into an enum (explicit)")]
+    public async Task LoneCandidate_NeedingARemovedConversion_HasNoOverload(string method, object argument, string why) {
+        await Assert.That(ErrorsOf(method, argument)).IsEquivalentTo([NoMember(method)]).Because(why);
+    }
+
+    [Test]
+    [Arguments("TakesByte", (byte)1)]
+    [Arguments("TakesSByte", (sbyte)1)]
+    [Arguments("TakesChar", 'c')]
+    [Arguments("TakesDecimal", 12L)]
+    [Arguments("TakesDouble", 1.5)]
+    [Arguments("TakesInt", 12)]
+    [Arguments("TakesColor", ColorEnum.Red)]
+    public async Task LoneCandidate_ThatTheSpecificationAccepts_StillBinds(string method, object argument) =>
+        await Assert.That(ErrorsOf(method, argument)).IsEmpty();
+
+    // ---- row (a): a fresh synthetic collection is the same type, so it scores 0, not 1 ----
+
+    [Test]
+    public async Task SyntheticCollectionParameter_ScoresAsTheSameType_AndBeatsADeclaredConversionTie() {
+        var set = new ModeledTypeSet();
+        var list = new CollectionTypeReference(new NamedTypeReference("Bag"), CollectionKind.List);
+        set.Add("Bag", new MethodDefinitionNode("op_Implicit", new NamedTypeReference("Bag"), [new Parameter("a", list)], IsStatic: true));
+        var host = (ITypeDefinition)set.Add("Host",
+            new MethodDefinitionNode("Take", new NamedTypeReference("Bag"), [new Parameter("a", list)]),
+            new MethodDefinitionNode("Take", new NamedTypeReference("Bag"), [new Parameter("a", new NamedTypeReference("Bag"))]));
+        ITypeDefinition fresh = new AstCollectionTypeDefinition((ITypeDefinition)set.GetTypeDefinition("Bag")!, CollectionKind.List);
+        var winners = host.FindMatchingMethodOverloads("Take", [fresh]).ToArray();
+        await Assert.That(winners.Length).IsEqualTo(1);
+        await Assert.That(winners[0].Parameters.Single().ParameterTypeDefinition).IsTypeOf<AstCollectionTypeDefinition>();
+        // The sibling: the single-element parameter alone still binds through the declared conversion.
+        var bagOnly = (ITypeDefinition)set.Add("BagHost",
+            new MethodDefinitionNode("Take", new NamedTypeReference("Bag"), [new Parameter("a", new NamedTypeReference("Bag"))]));
+        await Assert.That(bagOnly.FindMatchingMethodOverloads("Take", [fresh]).Count()).IsEqualTo(1);
     }
 }

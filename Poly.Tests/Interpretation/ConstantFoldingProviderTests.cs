@@ -231,10 +231,9 @@ internal static class ConstantFoldGrid {
     }
 
     private static readonly Lazy<IReadOnlyDictionary<FoldGridRow, ParityRow>> ParityByRow = new(() =>
-        Folded().Where(static f => !IsLogical(f.Row.Op))
-            .ToDictionary(static f => f.Row, static f => AstParity.Compare(f.Row.Key, ConstantTree(f.Row))));
+        Folded().ToDictionary(static f => f.Row, static f => AstParity.Compare(f.Row.Key, ConstantTree(f.Row))));
 
-    /// <summary>The printed-C# row for a folded, non-logical row: Roslyn compiles the authored constant tree.</summary>
+    /// <summary>The printed-C# row for a folded row: Roslyn compiles the authored constant tree.</summary>
     public static ParityRow Parity(FoldGridRow row) => ParityByRow.Value[row];
 
     /// <summary>
@@ -274,7 +273,7 @@ public class ConstantFoldingProviderTests {
     [Test]
     public async Task MasterFoldList_IsTheKeptFoldsPlusTheDeltaRows() {
         static int Count(string pin) => int.Parse(pin[..pin.IndexOf(' ')], CultureInfo.InvariantCulture);
-        await Assert.That(Count(KeptFolds) + Count(MasterUndefinedFolds)).IsEqualTo(Count(MasterFolds));
+        await Assert.That(Count(KeptFolds) + Count(MasterUndefinedFolds) + 36).IsEqualTo(Count(MasterFolds));
     }
 
     /// <summary>
@@ -293,12 +292,14 @@ public class ConstantFoldingProviderTests {
         await Assert.That(folding).IsEmpty();
     }
 
-    /// <summary>The master folds T-20 keeps: every fold outside the delta rows and outside the named new folds, to the same value and type.</summary>
+    /// <summary>
+    /// The master folds T-20 keeps: every fold of a provider-defined cell outside the named new folds, to the same
+    /// value and type. The delta rows are the provider-undefined folds, including the 36 short-circuit rows below.
+    /// </summary>
     [Test]
     public async Task KeptFolds_FoldToTheMasterValueAndType() {
         var lines = ConstantFoldGrid.Folded()
-            .Where(static f => (ConstantFoldGrid.IsLogical(f.Row.Op) || ConstantFoldGrid.Resolution(f.Row) is not null)
-                && !ConstantFoldGrid.IsNamedNewFold(f.Row))
+            .Where(static f => ConstantFoldGrid.Resolution(f.Row) is not null && !ConstantFoldGrid.IsNamedNewFold(f.Row))
             .Select(static f => $"{f.Row.Key} = {f.Fold}").ToArray();
         await Assert.That(ConstantFoldGrid.Pin(lines)).IsEqualTo(KeptFolds);
     }
@@ -321,7 +322,6 @@ public class ConstantFoldingProviderTests {
     [Test]
     public async Task EveryFold_IsTheBinderValueAndType() {
         var wrong = ConstantFoldGrid.Folded()
-            .Where(static f => !ConstantFoldGrid.IsLogical(f.Row.Op))
             .Where(static f => f.Fold != ConstantFoldGrid.Binder(f.Row))
             .Select(static f => $"{f.Row.Key}: fold {f.Fold}, binder {ConstantFoldGrid.Binder(f.Row)}").ToArray();
         await Assert.That(wrong).IsEmpty();
@@ -335,7 +335,7 @@ public class ConstantFoldingProviderTests {
     /// </summary>
     [Test]
     public async Task EveryFold_AgreesWithRoslyn_AndNoCellRoslynRejectsFolds() {
-        var defined = ConstantFoldGrid.Folded().Where(static f => !ConstantFoldGrid.IsLogical(f.Row.Op)).ToArray();
+        var defined = ConstantFoldGrid.Folded();
         var disagree = new List<string>();
         var rejected = new List<string>();
         var checkedConstant = new List<string>();
@@ -381,7 +381,7 @@ public class ConstantFoldingProviderTests {
     [Test]
     public async Task EveryFold_IsTheUnfoldedVmValue_OutsideTheLedgerValueWrongCells() {
         var wrong = ConstantFoldGrid.Folded()
-            .Where(static f => !ConstantFoldGrid.IsLogical(f.Row.Op) && !ConstantFoldGrid.LedgerValueWrongCells.Contains(f.Row.Cell))
+            .Where(static f => !ConstantFoldGrid.LedgerValueWrongCells.Contains(f.Row.Cell))
             .Select(static f => (f.Row, f.Fold, Vm: ConstantFoldGrid.UnfoldedVm(f.Row)))
             .Where(static f => !ConstantFoldGrid.SameValue(f.Fold, f.Vm))
             .Select(static f => $"{f.Row.Key}: fold {f.Fold}, unfolded VM {f.Vm}").ToArray();
@@ -407,18 +407,69 @@ public class ConstantFoldingProviderTests {
     }
 
     /// <summary>
-    /// Found, not fixed (outside T-20, which leaves <c>FoldAnd</c> and <c>FoldOr</c> alone): <c>false and X</c> and
-    /// <c>true or X</c> fold whatever X is, so a non-Boolean right operand that C# rejects (CS0019) and the unfolded VM
-    /// throws on still folds. Pinned as it is today.
+    /// The logical folds: And, Or and Not fold only over Boolean operands. On master <c>false and X</c> and
+    /// <c>true or X</c> folded whatever X was (36 grid rows), although C# rejects them (CS0019) and the unfolded VM
+    /// throws; the owner's ruling of 2026-11-13 (#677) fixes that here instead of pinning it.
     /// </summary>
     [Test]
-    public async Task LogicalFolds_AreUntouched_IncludingANonBooleanRightOperand() {
+    public async Task LogicalFolds_AreBooleanOnly() {
         var lines = ConstantFoldGrid.Folded().Where(static f => ConstantFoldGrid.IsLogical(f.Row.Op))
             .Select(static f => $"{f.Row.Key} = {f.Fold}").ToArray();
         await Assert.That(ConstantFoldGrid.Pin(lines)).IsEqualTo(LogicalFolds);
-        var nonBoolean = ConstantFoldGrid.Folded()
-            .Where(static f => f.Row.Op is OperatorKind.And or OperatorKind.Or && f.Row.Right!.Name != "Boolean").ToArray();
-        await Assert.That(nonBoolean.Length).IsEqualTo(36);
+    }
+
+    /// <summary>
+    /// The 36 rows master folded: a short-circuiting Boolean left operand (<c>false and</c>, <c>true or</c>) beside a
+    /// non-Boolean right operand. None folds, and the constant tree is rejected at compile, as C# rejects it.
+    /// </summary>
+    [Test]
+    public async Task ShortCircuitRowsOverANonBooleanRight_DoNotFold_AndCompileRejects() {
+        var rows = ConstantFoldGrid.Rows.Where(static row => row.Op is OperatorKind.And or OperatorKind.Or
+            && row.Left.Name == "Boolean" && row.Right!.Name != "Boolean"
+            && row.LeftValue is bool left && left == (row.Op is OperatorKind.Or)).ToArray();
+        await Assert.That(ConstantFoldGrid.Pin([.. rows.Select(static row => row.Key)])).IsEqualTo("36 c3b0062e01363e1c");
+        var folding = rows.Where(static row => ConstantFoldGrid.FoldOf(row) is not null).Select(static row => row.Key).ToArray();
+        await Assert.That(folding).IsEmpty();
+        var accepted = new List<string>();
+        foreach (var row in rows) {
+            try {
+                Interpreter.Compile(ConstantFoldGrid.ConstantTree(row));
+                accepted.Add(row.Key);
+            }
+            catch (InvalidOperationException ex) when (ex.Message.Contains("'and'/'or' requires Boolean operands", StringComparison.Ordinal)) {
+            }
+        }
+        await Assert.That(accepted).IsEmpty();
+    }
+
+    /// <summary>
+    /// <c>false and 5</c> and <c>true or "x"</c> report <c>VmTypeCompatibility</c> and do not compile; so does a
+    /// short-circuit beside a non-Boolean parameter, which the simplifier must not reduce. The Boolean twins fold.
+    /// </summary>
+    [Test]
+    public async Task ShortCircuitOverANonBooleanRightOperand_IsRejectedLikeCSharp_AndBooleanTwinsFold() {
+        Node[] rejected = [
+            new And(new Constant(false), new Constant(5)),
+            new Or(new Constant(true), new Constant("x")),
+            new And(new Constant(true), new Parameter("n", TypeReference.To<long>())),
+            new Or(new Constant(false), new Parameter("s", TypeReference.To<string>())),
+            new And(new Constant(false), new Parameter("m", TypeReference.To<long>()))
+        ];
+        foreach (var node in rejected) {
+            var analysis = Interpreter.Analyze(node);
+            await Assert.That(analysis.IsConstant(node)).IsFalse();
+            await Assert.That(analysis.Diagnostics.Any(static d => d.Severity == DiagnosticSeverity.Error
+                && d.Code == SyntaxTypeCompatibilityAnalyzer.DiagnosticCode)).IsTrue();
+            await Assert.That(() => Interpreter.Compile(node)).Throws<InvalidOperationException>()
+                .WithMessageContaining("'and'/'or' requires Boolean operands");
+        }
+        await AssertFolds(new And(new Constant(false), new Constant(true)), false);
+        await AssertFolds(new Or(new Constant(true), new Constant(false)), true);
+        await AssertFolds(new And(new Constant(false), new Parameter("p", TypeReference.To<bool>())), false);
+        await AssertFolds(new Or(new Constant(true), new Parameter("q", TypeReference.To<bool>())), true);
+        var flag = new Parameter("r", TypeReference.To<bool>());
+        var andTrue = new And(new Constant(true), flag);
+        await Assert.That(ReferenceEquals(Interpreter.Analyze(andTrue).GetNodeReplacement(andTrue), flag)).IsTrue();
     }
 
     // ---- (c) keep-folding pins ----
@@ -707,9 +758,9 @@ public class ConstantFoldingProviderTests {
     // The persisted counts and checksums.
     private const string MasterFolds = "2640 68cba717a778d527";
     private const string MasterUndefinedFolds = "828 0d020bf27c2afbb7";
-    private const string KeptFolds = "1812 2520a051640c393f";
+    private const string KeptFolds = "1776 06fba54a76763aeb";
     private const string UnprintableDefinedFolds = "48 ace2db05f3c87b7b";
     private const string AllowedDisagree = "4 97551d7e2ef40a1f";
-    private const string LogicalFolds = "42 ea3948634df0953b";
+    private const string LogicalFolds = "6 d49ba859ff062537";
     private const string UndefinedCells = "7800 1786e1cb3f6eaa59";
 }

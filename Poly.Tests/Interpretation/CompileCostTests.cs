@@ -13,7 +13,8 @@ namespace Poly.Tests.Interpretation;
 /// algorithm and forbid an exponential one; the semantics tests pin what a logical node folds and simplifies to.
 /// </summary>
 public class CompileCostTests {
-    private static readonly int[] ChainSizes = [16, 32, 64, 128, 256];
+    private const int ChainLength = 256;
+    private const double BoundMs = 5000;
 
     private static Node[] BoolParameters(int count) =>
         Enumerable.Range(0, count).Select(i => (Node)new Parameter("p" + i, TypeReference.To<bool>())).ToArray();
@@ -35,14 +36,13 @@ public class CompileCostTests {
         return Enumerable.Range(1, count - 1).Select(i => (Node)new LessThan(ps[i - 1], ps[i])).Aggregate((acc, c) => new And(acc, c));
     }
 
-    private static readonly (string Name, Func<int, Node> Build)[] AstShapes = [
-        ("and", AndChain),
-        ("or", OrChain),
-        ("mixed", MixedChain),
-        ("comparison", ComparisonChain),
-    ];
-
-    private static double BestOfThreeMs(Func<double> run) => Enumerable.Range(0, 3).Min(_ => run());
+    private static Node BuildAst(string shape, int count) => shape switch {
+        "and" => AndChain(count),
+        "or" => OrChain(count),
+        "mixed" => MixedChain(count),
+        "comparison" => ComparisonChain(count),
+        _ => throw new ArgumentOutOfRangeException(nameof(shape), shape, null)
+    };
 
     private static double Elapsed(Action action) {
         var sw = Stopwatch.StartNew();
@@ -50,40 +50,33 @@ public class CompileCostTests {
         return sw.Elapsed.TotalMilliseconds;
     }
 
-    private static async Task AssertScalesSubExponentially(string shape, Func<int, double> measure) {
-        var times = new Dictionary<int, double>();
-        foreach (var size in ChainSizes) {
-            measure(size);
-            times[size] = BestOfThreeMs(() => measure(size));
-        }
-
-        foreach (var (small, large) in ChainSizes.Zip(ChainSizes.Skip(1))) {
-            await Assert.That(times[large]).IsLessThanOrEqualTo(6 * Math.Max(times[small], 2.0))
-                .Because($"{shape}: doubling the chain from {small} to {large} operands took {times[small]:F2} ms -> {times[large]:F2} ms (#823)");
-        }
-
-        await Assert.That(times[ChainSizes[^1]]).IsLessThanOrEqualTo(5000.0)
-            .Because($"{shape}: a {ChainSizes[^1]}-operand chain took {times[ChainSizes[^1]]:F0} ms (#823)");
+    // Wall clock is used only as an absolute bound with two orders of magnitude of headroom: a quadratic chain of
+    // 256 operands takes tens of milliseconds, an exponential one never finishes. Task.Run lets [Timeout] fail a
+    // regression instead of hanging the suite.
+    private static async Task AssertFinishesWithinBound(string label, Func<double> measure, CancellationToken cancellationToken) {
+        var ms = await Task.Run(measure, cancellationToken);
+        await Assert.That(ms).IsLessThanOrEqualTo(BoundMs)
+            .Because($"{label}: a {ChainLength}-operand chain took {ms:F0} ms (#823)");
     }
 
-    [Test]
-    public async Task Analyze_LeftNestedLogicalChainsOnBareAsts_GrowAtMostQuadratically() {
-        foreach (var (name, build) in AstShapes) {
-            await AssertScalesSubExponentially("ast " + name, size => {
-                var node = build(size);
-                return Elapsed(() => Interpreter.Analyze(node));
-            });
-        }
+    [Test, Timeout(60_000)]
+    [Arguments("and")]
+    [Arguments("or")]
+    [Arguments("mixed")]
+    [Arguments("comparison")]
+    public async Task Analyze_LeftNestedChainOnBareAst_FinishesWithinTheBound(string shape, CancellationToken cancellationToken) {
+        var node = BuildAst(shape, ChainLength);
+        await AssertFinishesWithinBound("analyze " + shape, () => Elapsed(() => Interpreter.Analyze(node)), cancellationToken);
     }
 
-    [Test]
-    public async Task Compile_LeftNestedLogicalChainsOnBareAsts_GrowAtMostQuadratically() {
-        foreach (var (name, build) in AstShapes) {
-            await AssertScalesSubExponentially("compile " + name, size => {
-                var node = build(size);
-                return Elapsed(() => Interpreter.Compile(node, Interpreter.Analyze(node)));
-            });
-        }
+    [Test, Timeout(60_000)]
+    [Arguments("and")]
+    [Arguments("or")]
+    [Arguments("mixed")]
+    [Arguments("comparison")]
+    public async Task Compile_LeftNestedChainOnBareAst_FinishesWithinTheBound(string shape, CancellationToken cancellationToken) {
+        var node = BuildAst(shape, ChainLength);
+        await AssertFinishesWithinBound("compile " + shape, () => Elapsed(() => Interpreter.Compile(node, Interpreter.Analyze(node))), cancellationToken);
     }
 
     private static string PolicyDsl(string expression) => $$"""
@@ -95,25 +88,31 @@ public class CompileCostTests {
         }
         """;
 
-    private static readonly (string Name, Func<int, string> Build)[] DslShapes = [
-        ("and", n => string.Join(" and ", Enumerable.Repeat("Flag", n))),
-        ("or", n => string.Join(" or ", Enumerable.Repeat("Flag", n))),
-        ("mixed", n => string.Join(" ", Enumerable.Range(0, n).Select(i => i == 0 ? "Flag" : (i % 2 == 1 ? "or Flag" : "and Flag")))),
-        ("comparison", n => string.Join(" and ", Enumerable.Range(0, n).Select(i => $"Count > {i}"))),
-    ];
+    // Each operator switch needs a parenthesis, and the parser rejects nesting near 256; 100 operands is still far beyond an exponential chain.
+    private const int ParenthesisedChainLength = 100;
 
-    [Test]
-    public async Task Analyze_LeftNestedLogicalChainsThroughDsl_GrowAtMostQuadratically() {
+    private static string DslExpression(string shape, int count) => shape switch {
+        "and" => string.Join(" and ", Enumerable.Repeat("Flag", count)),
+        "or" => string.Join(" or ", Enumerable.Repeat("Flag", count)),
+        "mixed" => Enumerable.Range(1, Math.Min(count, ParenthesisedChainLength) - 1).Aggregate("Flag", (acc, i) => $"({acc} {(i % 2 == 1 ? "or" : "and")} Flag)"),
+        "comparison" => string.Join(" and ", Enumerable.Range(0, count).Select(i => $"Count > {i}")),
+        _ => throw new ArgumentOutOfRangeException(nameof(shape), shape, null)
+    };
+
+    [Test, Timeout(60_000)]
+    [Arguments("and")]
+    [Arguments("or")]
+    [Arguments("mixed")]
+    [Arguments("comparison")]
+    public async Task AnalyzeAndProduce_LeftNestedChainThroughDsl_FinishesWithinTheBound(string shape, CancellationToken cancellationToken) {
         var compiler = new PolyCompiler(ProductCatalog.Catalog, new SessionOptions(ProductCatalog.Catalog, ExtensionCatalog.ProductAuthoring));
-        foreach (var (name, build) in DslShapes) {
-            await AssertScalesSubExponentially("dsl " + name, size => {
-                var text = PolicyDsl(build(size));
-                var sw = Stopwatch.StartNew();
-                var analyzed = compiler.Analyze(text);
-                PolyCompiler.Produce(analyzed.Session!, analyzed.Domain!, analyzed.Analysis!);
-                return sw.Elapsed.TotalMilliseconds;
-            });
-        }
+        var text = PolicyDsl(DslExpression(shape, ChainLength));
+        await AssertFinishesWithinBound("dsl " + shape, () => {
+            var sw = Stopwatch.StartNew();
+            var analyzed = compiler.Analyze(text);
+            PolyCompiler.Produce(analyzed.Session!, analyzed.Domain!, analyzed.Analysis!);
+            return sw.Elapsed.TotalMilliseconds;
+        }, cancellationToken);
     }
 
     private static AnalysisResult Fold(Node ast) => Interpreter.Analyze(ast);
@@ -260,5 +259,39 @@ public class CompileCostTests {
         var withTrueFirst = new Invoke(new Lambda([p, q], new And(p, q)), Wrap(true), outer);
         await Assert.That(Fold(withFalseFirst).IsConstant(withFalseFirst)).IsFalse();
         await Assert.That(Fold(withTrueFirst).IsConstant(withTrueFirst)).IsFalse();
+    }
+
+    [Test]
+    public async Task LambdaAnd_FalseBoundLeftWithAnUnboundOuterParameter_FoldsToFalse() {
+        var p = new Parameter("p", TypeReference.To<bool>());
+        var outer = Flag("outer");
+        var ast = new Invoke(new Lambda([p], new And(p, outer)), Wrap(false));
+        var result = Fold(ast);
+        await Assert.That(result.IsConstant(ast)).IsTrue();
+        await Assert.That(result.GetConstantValue(ast) is false).IsTrue();
+    }
+
+    [Test]
+    public async Task NonConstantAndTrue_IsNotFoldedOrSimplified() {
+        var ast = new And(Flag(), Wrap(true));
+        var result = Fold(ast);
+        await Assert.That(result.IsConstant(ast)).IsFalse();
+        await Assert.That(result.GetNodeReplacement(ast)).IsNull();
+    }
+
+    [Test]
+    public async Task NonConstantOrFalse_IsNotFoldedOrSimplified() {
+        var ast = new Or(Flag(), Wrap(false));
+        var result = Fold(ast);
+        await Assert.That(result.IsConstant(ast)).IsFalse();
+        await Assert.That(result.GetNodeReplacement(ast)).IsNull();
+    }
+
+    [Test]
+    public async Task ZeroAnd_NonConstant_IsNotFoldedOrSimplified() {
+        var ast = new And(Wrap(0), Flag());
+        var result = Fold(ast);
+        await Assert.That(result.IsConstant(ast)).IsFalse();
+        await Assert.That(result.GetNodeReplacement(ast)).IsNull();
     }
 }

@@ -1,7 +1,6 @@
 using System.Collections;
 using System.Reflection;
 using System.Text.RegularExpressions;
-using Poly.Tests.TestHelpers;
 
 using Poly.DomainModeling;
 using Poly.DomainModeling.Compile;
@@ -10,6 +9,7 @@ using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Lowering;
 using Poly.DslCompiler;
 using Poly.Interpretation.CSharp;
+using Poly.Tests.TestHelpers;
 
 using CompileMode = Poly.DslCompiler.CompileMode;
 using Compiler = Poly.DslCompiler.DslCompiler;

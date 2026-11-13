@@ -579,14 +579,15 @@ public class ConstantFoldingTests {
         await Assert.That(Fold(ast).GetConstantValue(ast) is true).IsTrue();
     }
 
-    /// <summary>T-20: C# defines no <c>int == ulong</c>, so the pass declines; it folded to false before. Declining
-    /// is value-neutral: the VM still answers false at run time.</summary>
+    /// <summary>T-20: C# defines no <c>int == ulong</c>, so the pass declines; it folded to false before. T-18: -1 is
+    /// not in range for <c>ulong</c> (no constant conversion, spec 10.2.11), so compile rejects the tree, as C# does.</summary>
     [Test]
-    public async Task SignedMinusOne_Equal_ULongMax_DeclinesAsProviderUndefined_AndTheVmAnswersFalse() {
+    public async Task SignedMinusOne_Equal_ULongMax_DeclinesToFold_AndCompileIsRejected() {
         var ast = new Equal(Wrap(-1), Wrap(ulong.MaxValue));
         await Assert.That(Fold(ast).IsConstant(ast)).IsFalse();
-        using var exec = Interpreter.Execute(Interpreter.Compile(ast));
-        await Assert.That(exec.GetValue<bool>()).IsFalse();
+        await Assert.That(() => Interpreter.Compile(ast))
+            .Throws<InvalidOperationException>()
+            .WithMessage("VM compile rejected: comparison between incompatible types 'Int32' and 'UInt64': no Equal operator for these types");
     }
 
     [Test]

@@ -17,7 +17,7 @@ Policyholder: entity {
   Name: Text
   Email: Text unique pattern("^[^@]+@[^@]+$")
   SettledCount: Number default(0)
-  claims: many Claim
+  claims: many Claim via holder
   Active: stage {
     File: action (number: Text, amount: Number) -> Claim {
       create in claims {
@@ -55,7 +55,7 @@ Claim: entity {
   holder: Policyholder
   cover: Policy
   adjuster: Adjuster
-  documents: many Document
+  documents: many Document via claim
   WithinCoverage: policy { Amount <= cover Coverage }
   HasDocuments: policy { count documents > 0 }
   Filed: stage {

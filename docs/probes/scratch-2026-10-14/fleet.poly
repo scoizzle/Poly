@@ -30,7 +30,7 @@ WorkOrder: entity {
   AnyCount: Number default(0)
   AllCount: Number default(0)
   vehicle: Vehicle
-  jobs: many Job
+  jobs: many Job via workOrder
   Open: stage {
     entry { assign DoneCount to 0 }
     AddJob: action (label: Text) -> Job {

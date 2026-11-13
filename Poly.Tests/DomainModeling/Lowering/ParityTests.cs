@@ -690,6 +690,7 @@ public class ParityTests {
         domain Watch
         Loan: entity {
           Code: Text
+          patron: Patron via loans
           Draft: stage {
             Overdue: action { transition to Overdue }
           }
@@ -708,6 +709,7 @@ public class ParityTests {
         domain Watch
         WorkItem: entity {
           Code: Text
+          board: Board via items
           Draft: stage {
             Prep: action { transition to Ready }
             Finish: action { transition to Done }
@@ -730,6 +732,7 @@ public class ParityTests {
         domain Watch
         Paper: entity {
           Title: Text
+          trs: many Tr via Tracks
           A: stage {
             Advance: action { transition to B }
           }
@@ -750,6 +753,7 @@ public class ParityTests {
         domain Watch
         Paper: entity {
           Title: Text
+          trs: many Tr via Tracks
           A: stage {
             Advance: action { transition to B }
           }
@@ -1126,7 +1130,10 @@ public class ParityTests {
               R: stage { }
             }
             """;
-        var outcomes = await ParityScenario.FromDsl(TrackingDsl + cascade, "ParityCascade")
+        var outcomes = await ParityScenario.FromDsl(
+                // S-13a: Tr states the explicit inverse of W.Tracks; TrackingDsl itself stays as the other rows use it.
+                TrackingDsl.Replace("  Tracks: Paper\n", "  Tracks: Paper\n  ws: many W via Tracks\n") + cascade,
+                "ParityCascade")
             .AssertAgree(side => {
                 var paper = side.Create("Paper", ("Title", "p"));
                 var tr = side.Create("Tr", ("Tracks", paper));
@@ -1156,6 +1163,7 @@ public class ParityTests {
             }
             Loan: entity {
               Amount: Number range(0, 500) default(1)
+              patron: Patron via loans
               Active: stage {
                 MarkOverdue: action { transition to Overdue }
               }
@@ -1197,6 +1205,7 @@ public class ParityTests {
             }
             Loan: entity {
               Amount: Number range(0, 500) default(1)
+              patron: Patron via loans
               Active: stage {
                 Go: action { invoke MarkOverdue }
                 MarkOverdue: action { transition to Overdue }

@@ -67,6 +67,7 @@ public class InfrastructureAnalyzerTests {
             }
             Job: entity {
               Title: Text
+              user: User via jobs
               Open: stage { }
             }
             """;
@@ -391,7 +392,7 @@ public class InfrastructureAnalyzerTests {
             Patron: entity {
               Name: Text
               Email: Text unique
-              loans: many Loan
+              loans: many Loan via borrower
 
               Checkout(book: Book): action {
                 create in loans {

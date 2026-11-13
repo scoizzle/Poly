@@ -15,8 +15,17 @@ sealed class SimulateSide(Domain domain, IReadOnlySet<string>? recordedException
     public override string Name => "simulate";
 
     protected override StepResult CreateCore(Entity model, (string Name, object? Value)[] values) {
-        var properties = values.Where(v => LinksOf(v.Value) is null)
-            .ToDictionary(v => v.Name, v => v.Value, StringComparer.Ordinal);
+        // A singular navigation is a Create parameter, as on the printed side (Tr.Create(tracks: paper)),
+        // so the lowered body attaches to the parent's inverse collection; collections and other links
+        // are linked after the create.
+        bool IsSingularNavigation(string name) => model.Navigations.Any(n =>
+            string.Equals(n.Name, name, StringComparison.Ordinal)
+            && n.Cardinality is RelationshipCardinality.OneToOne or RelationshipCardinality.ManyToOne);
+        var passedAsParameter = values
+            .Where(v => v.Value is ModuleInstance && IsSingularNavigation(v.Name))
+            .Select(v => v.Name).ToHashSet(StringComparer.Ordinal);
+        var properties = values.Where(v => LinksOf(v.Value) is null || passedAsParameter.Contains(v.Name))
+            .ToDictionary(v => v.Name, v => v.Value is ModuleInstance linked ? linked.Id : v.Value, StringComparer.Ordinal);
         ModuleOutcome outcome;
         try {
             outcome = _exec.Create(model.Name, properties);
@@ -43,7 +52,7 @@ sealed class SimulateSide(Domain domain, IReadOnlySet<string>? recordedException
         var instance = outcome.Instance;
         foreach (var (name, value) in values) {
             var links = LinksOf(value);
-            if (links is null)
+            if (links is null || passedAsParameter.Contains(name))
                 continue;
             foreach (var target in links)
                 _exec.Link(name, instance, target);

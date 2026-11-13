@@ -37,6 +37,7 @@ public class ActionScopeNestedFailureTests {
           when items Done { assign Flag to "second" }
         }
         Item: entity {
+          owner: Owner via items
           Open: stage { Finish: action { transition to Done } }
           Done: stage { }
         }
@@ -157,6 +158,7 @@ public class ActionScopeNestedFailureTests {
           when items Open { invoke Y }
         }
         Item: entity {
+          owner: Owner via items
           Open: stage { }
         }
         """;
@@ -233,10 +235,12 @@ public class ActionScopeNestedFailureTests {
               when kids Open { invoke Y }
             }
             Job: entity {
+              s: S via jobs
               Open: stage { Finish: action { transition to Done } }
               Done: stage { }
             }
             Kid: entity {
+              s: S via kids
               Open: stage { }
             }
             """;
@@ -264,11 +268,13 @@ public class ActionScopeNestedFailureTests {
         }
         Owner: entity {
           items: many Item
+          boss: Boss via owners
           Idle: stage { }
           Busy: stage { }
           when items Done { transition to Busy }
         }
         Item: entity {
+          owner: Owner via items
           Open: stage { Finish: action { transition to Done } }
           Done: stage { }
         }
@@ -311,6 +317,7 @@ public class ActionScopeNestedFailureTests {
             }
             Item: entity {
               Notify: Text
+              owner: Owner via items
               Open: stage { }
             }
             """;
@@ -335,10 +342,12 @@ public class ActionScopeNestedFailureTests {
               when kids Open { invoke Y }
             }
             Job: entity {
+              s: S via jobs
               Open: stage { Finish: action { transition to Done } }
               Done: stage { }
             }
             Kid: entity {
+              s: S via kids
               Open: stage { }
             }
             """;
@@ -379,6 +388,7 @@ public class ActionScopeNestedFailureTests {
           Busy: stage { }
         }
         Item: entity {
+          owner: Owner via items
           Open: stage { Finish: action { transition to Done } }
           Done: stage { Reset: action { transition to Open } }
         }

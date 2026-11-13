@@ -26,6 +26,7 @@ Book: entity {
 
 Loan: entity {
   book: Book
+  patron: Patron via loans
   Amount: Number range(0, 500) default(0)
   Active: stage {
     MarkOverdue: action { transition to Overdue }

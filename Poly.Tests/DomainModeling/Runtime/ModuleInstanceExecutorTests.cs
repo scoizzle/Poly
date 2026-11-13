@@ -447,6 +447,7 @@ public sealed class ModuleInstanceExecutorTests {
         domain Watch
         Item: entity {
           Code: Text
+          watcher: Watcher via items
           Draft: stage {
             Activate: action { transition to Active }
           }
@@ -887,7 +888,7 @@ public sealed class ModuleInstanceExecutorTests {
               Draft: stage { }
               Active: stage { }
               Go: action { transition to Active }
-              seesB: one B
+              seesB: one B via seesA
               when seesB Active { transition to Active }
             }
             B: entity {
@@ -954,6 +955,7 @@ public sealed class ModuleInstanceExecutorTests {
             Widget: entity {
               Score: Number range(1, 10) default(5)
               Bump: Number default(100)
+              watcher: Watcher via widgets
               Draft: stage {
                 Go: action { transition to Active }
               }

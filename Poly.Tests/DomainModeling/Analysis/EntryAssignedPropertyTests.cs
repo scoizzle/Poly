@@ -372,6 +372,7 @@ public sealed class EntryAssignedPropertyTests {
         var errors = Errors("""
             domain D14
             Item: entity {
+              token: Token via Items
               S1: stage { Next: action { transition to S2 } }
               S2: stage { }
             }

@@ -24,6 +24,7 @@ public class CreateInWatchedStageTests {
         }
         Job: entity {
           Title: Text
+          user: User via jobs
           Open: stage { }
         }
         """;
@@ -38,6 +39,7 @@ public class CreateInWatchedStageTests {
         }
         Job: entity {
           Title: Text
+          user: User via jobs
           New: stage { }
           Open: stage { }
         }

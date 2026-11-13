@@ -31,6 +31,7 @@ Device: entity {
   Power: Number range(0, 3000)
   MaxLevel: Number range(0, 100) default(100)
   Draw: Number
+  scenes: many Scene via devices
   Off: stage {
     entry { assign Draw to 0 }
     TurnOn: action {

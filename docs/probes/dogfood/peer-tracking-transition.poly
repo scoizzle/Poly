@@ -4,6 +4,7 @@ domain Watch
 // Expect: the printed C# compiles and behaves like simulate.
 Paper: entity {
   Title: Text
+  trackers: many Tr via Tracks
   A: stage {
     Advance: action { transition to B }
   }

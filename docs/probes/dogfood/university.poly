@@ -28,7 +28,7 @@ Student: entity {
   Holds: Number default(0)
   Completions: Number default(0)
   LastGrade: Number default(0)
-  enrollments: many Enrollment
+  enrollments: many Enrollment via student
   AtLimit: policy { OpenCredits >= MaxCredits }
   HasLoad: policy { count enrollments > 0 }
   Active: stage {
@@ -74,8 +74,8 @@ Section: entity {
   OfferingTerm: Term
   course: Course
   instructor: Instructor
-  enrollments: many Enrollment
-  waitlist: many WaitOffer
+  enrollments: many Enrollment via section
+  waitlist: many WaitOffer via section
   OfferedSeats: Number default(0)
   WaitCleared: Number default(0)
   AtCap: policy { SeatsTaken >= Cap }

@@ -52,7 +52,7 @@ public static class DslExpressionFragment {
     public static DomainExpression Resolve(DomainExpression parsed, DomainSession session) {
         ArgumentNullException.ThrowIfNull(parsed);
         ArgumentNullException.ThrowIfNull(session);
-        return new Resolver(session.ExpressionForms).Route(parsed);
+        return new Resolver(session.ExpressionForms, DslOperatorTable.Core(session.ExpressionForms)).Route(parsed);
     }
 
     /// <summary>
@@ -63,31 +63,24 @@ public static class DslExpressionFragment {
 
     private sealed class Resolver : DomainExpressionRewriteBase {
         private readonly ExpressionFormRegistry _forms;
+        private readonly DslOperatorTable _operators;
 
-        public Resolver(ExpressionFormRegistry forms) => _forms = forms;
+        public Resolver(ExpressionFormRegistry forms, DslOperatorTable operators) {
+            _forms = forms;
+            _operators = operators;
+        }
 
         protected override DomainExpression PropertyAccess(PropertyAccess e) =>
             _forms.TryRewriteIdent(e.Name, out var claimed) ? claimed : e;
 
         protected override DomainExpression Add(Add e) =>
-            Fold(e.Left, e.Right, isPlus: true, (left, right) => e with { Left = left, Right = right });
+            _operators.Fold(DslTokenKind.Plus, Route(e.Left), Route(e.Right));
 
         protected override DomainExpression Subtract(Subtract e) =>
-            Fold(e.Left, e.Right, isPlus: false, (left, right) => e with { Left = left, Right = right });
+            _operators.Fold(DslTokenKind.Minus, Route(e.Left), Route(e.Right));
 
         protected override DomainExpression Library(DomainExpression expr) =>
             expr is UnresolvedDuration duration ? Claim(duration) : base.Library(expr);
-
-        private DomainExpression Fold(
-            DomainExpression left,
-            DomainExpression right,
-            bool isPlus,
-            Func<DomainExpression, DomainExpression, DomainExpression> keep) {
-            var resolvedLeft = Route(left);
-            var resolvedRight = Route(right);
-            return _forms.TryFoldBinary(resolvedLeft, resolvedRight, isPlus)
-                ?? keep(resolvedLeft, resolvedRight);
-        }
 
         private DomainExpression Claim(UnresolvedDuration duration) {
             if (_forms.TryClaimDuration(duration.Amount, duration.Unit, out var claimed))

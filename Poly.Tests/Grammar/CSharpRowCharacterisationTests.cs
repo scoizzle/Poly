@@ -25,21 +25,21 @@ public class CSharpRowCharacterisationTests {
         CSharpLanguage.Read($"class C {{ void M() {{ {body} }} }}");
 
     [Test]
-    public async Task NestedUndeclaredAssignment_PrintsAVarInsideAnExpression() {
+    public async Task NestedUndeclaredAssignment_PrintsAPlainAssignmentInsideTheExpression() {
         var x = new Variable("x");
         var y = new Variable("y");
         var text = UnitBody(Unit(new Assignment(x, new Assignment(y, new Constant(1L)))));
-        await Assert.That(text).IsEqualTo("var x = var y = 1L;");
-        await Assert.That(() => CSharpLanguage.Read(text)).Throws<FormatException>();
+        await Assert.That(text).IsEqualTo("var x = y = 1L;");
+        await Assert.That(CSharpLanguage.Read(text).TopLevelStatements).IsNotNull();
     }
 
     [Test]
-    public async Task TopLevelUndeclaredForInitializer_PrintsAFusedVar() {
+    public async Task TopLevelUndeclaredForInitializer_PrintsAnAssignment() {
         var x = new Variable("x");
         var loop = new ForLoop(new Assignment(x, new Constant(0L)), new LessThan(x, new Constant(10L)),
             new Assignment(x, new Add(x, new Constant(1L))), new Block(new Constant(0L)));
         await Assert.That(UnitBody(Unit(loop)))
-            .IsEqualTo("for (var x = 0L; x < 10L; x = x + 1L)\n{\n    _ = 0L;\n}");
+            .IsEqualTo("for (x = 0L; x < 10L; x = x + 1L)\n{\n    _ = 0L;\n}");
     }
 
     [Test]

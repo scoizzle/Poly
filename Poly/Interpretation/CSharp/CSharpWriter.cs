@@ -349,7 +349,7 @@ public sealed class CSharpWriter {
                 return;
             case Assignment assign:
                 sb.Append(Pad(indent));
-                sb.AppendLine(Render("statement", "expr-stmt", Expr(assign)));
+                sb.AppendLine(AssignmentStatementText(assign));
                 return;
             case Block block:
                 sb.AppendLine(BlockText(block, indent));
@@ -693,23 +693,13 @@ public sealed class CSharpWriter {
     }
 
     /// <summary>Prints a <c>for</c> header expression. The condition and increment slots hold
-    /// expressions, so the statement-level rule that fuses an undeclared name into a <c>var</c>
-    /// declaration is off there — a declaration does not parse inside the header — and a
-    /// statement-shaped node, which has no expression form, rejects. The body prints under the
-    /// enclosing rule, unchanged.</summary>
+    /// expressions, so a statement-shaped node, which has no expression form, rejects.</summary>
     private string? ForHeaderExpression(Node? node) {
         if (node is null)
             return null;
         if (node is Statement or Block)
             return Unprintable(node, "a for header slot holds one expression, and a statement or block has no expression form");
-        var fuseUndeclaredName = _fuseUndeclaredName;
-        _fuseUndeclaredName = false;
-        try {
-            return Expr(node);
-        }
-        finally {
-            _fuseUndeclaredName = fuseUndeclaredName;
-        }
+        return Expr(node);
     }
 
     private string ForEachText(ForEachLoop forEach, int indent) {
@@ -1229,13 +1219,18 @@ public sealed class CSharpWriter {
     private static string IdentText(string name) =>
         RenderFills("expr-primary", "ident", Names(("name", EscapeIdent(name))));
 
-    private string AssignmentText(Assignment assign) {
+    /// <summary>An assignment in statement position. At the top level an undeclared name's first
+    /// assignment is its declaration (<c>var x = v;</c>); anywhere else it is the assignment it is.</summary>
+    private string AssignmentStatementText(Assignment assign) {
         if (assign.Destination is Variable dest && _fuseUndeclaredName && !DeclaredHere(dest.Name)) {
             MarkDeclared(dest.Name);
-            return "var " + EscapeIdent(dest.Name) + " = " + Expr(assign.Value);
+            return RenderFills("statement", "var-decl", Names(("name", EscapeIdent(dest.Name))), Expr(assign.Value));
         }
-        return Render("expr-assignment", "assign", Expr(assign.Destination), " = " + Expr(assign.Value));
+        return Render("statement", "expr-stmt", Expr(assign));
     }
+
+    private string AssignmentText(Assignment assign) =>
+        Render("expr-assignment", "assign", Expr(assign.Destination), " = " + Expr(assign.Value));
 
     private string MemberAccessText(Member member) {
         if (member.Value is ParameterReference)

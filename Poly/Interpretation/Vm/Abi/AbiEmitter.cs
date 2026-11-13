@@ -143,6 +143,8 @@ public static partial class AbiEmitter {
         ctx.CapturedBindings = capturedBindings;
         var inlineInvoked = new HashSet<Lambda>(ReferenceEqualityComparer.Instance);
         CollectInlineInvokedLambdas(root, inlineInvoked);
+        var quoteOnly = CollectQuoteOnlyLambdas(root, analysis);
+        ctx.QuoteOnlyLambdas = quoteOnly;
         var functionTable = new Action<VmState>[lambdas.Count];
         ctx.FunctionTableExpr = Constant(functionTable);
         for (int i = 0; i < lambdas.Count; i++) {
@@ -152,9 +154,15 @@ public static partial class AbiEmitter {
                     "VM: a lambda invoked inline is emitted in the caller's frame and cannot be reached through the function table.");
                 continue;
             }
+            // The bridge decides a quoted lambda's body; the main emitter's rules would refuse it first.
+            if (quoteOnly.Contains(lam)) {
+                functionTable[i] = _ => throw new InvalidOperationException(
+                    "VM: a lambda quoted for an Expression<> parameter is an expression tree and cannot be reached through the function table.");
+                continue;
+            }
             functionTable[i] = CompileFunctionBody(
                 lam.Body, lam.Parameters, FindBodyCaptures(lam, analysis), functionTable, mode, analysis,
-                capturedBindings);
+                capturedBindings, quoteOnlyLambdas: quoteOnly);
         }
 
         body.Add(Label(ctx.EntryLabel));
@@ -533,7 +541,7 @@ public static partial class AbiEmitter {
         var definition = astCtor.Definition;
         var parameters = definition.Parameters ?? [];
         var seq = new List<Expression>();
-        var args = EmitAstArguments(n.Arguments, parameters, astCtor.Parameters.ToArray(),
+        var args = EmitAstArguments(n, n.Arguments, parameters, astCtor.Parameters.ToArray(),
             "constructor", seq, ctx);
 
         int slot = ctx.AllocSlot();

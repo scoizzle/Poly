@@ -20,7 +20,7 @@ public sealed partial class DomainToCSharpExporter {
     ///
     /// For DSL <c>create in loans { book: book }</c>, this produces:
     /// <code>
-    /// public DomainResult&lt;Loan&gt; CreateLoans(Book book, string status, ...)
+    /// internal DomainResult&lt;Loan&gt; CreateLoans(Book book, string status, ...)
     /// {
     ///     var loanResult = Loan.Create(book: book, borrower: this, status: status, ...);
     ///     // Loan.Create Attaches via borrower:this (Add + Register*) — no duplicate here.
@@ -274,9 +274,7 @@ public sealed partial class DomainToCSharpExporter {
             new NamedTypeReference("DomainResult", TypeArguments: [targetType]),
             methodParams,
             new Block(bodyNodes, notifyResult is null ? [localResult, local] : [localResult, local, notifyResult]),
-            DomainAccess.Demote(
-                AccessModifier.Public, domain,
-                [.. methodParams.Select(p => p.TypeReference), targetType]));
+            AccessModifier.Internal);
     }
 
     /// <summary>

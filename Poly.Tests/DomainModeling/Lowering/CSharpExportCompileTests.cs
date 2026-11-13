@@ -200,6 +200,37 @@ public sealed class CSharpExportCompileTests {
         await Assert.That(e.Diagnostics).IsEmpty();
     }
 
+    // L-16a: Create{Nav} is internal on every entity, public ones included. Read from the compiled compilation's
+    // symbols (the wrapper and its private body), never from printed text.
+    [Test]
+    public async Task CreateNav_OnPublicEntity_IsInternal() {
+        var e = Export("""
+            domain Shop
+
+            public entity Line {
+              Qty: Number default(1)
+            }
+
+            public entity Order {
+              Total: Number default(0)
+              lines: many Line
+              AddLine: action (qty: Number) {
+                create in lines { Qty: qty }
+              }
+            }
+            """);
+
+        var order = e.Type("Order");
+        await Assert.That(order.DeclaredAccessibility).IsEqualTo(Accessibility.Public);
+        var createNav = e.Methods("Order", "CreateLines").ToArray();
+        await Assert.That(createNav.Length).IsEqualTo(1);
+        await Assert.That(createNav[0].DeclaredAccessibility).IsEqualTo(Accessibility.Internal);
+        await Assert.That(order.GetMembers().OfType<IMethodSymbol>()
+            .Where(m => m.Name.Contains("CreateLines", StringComparison.Ordinal))
+            .All(m => m.DeclaredAccessibility is Accessibility.Internal or Accessibility.Private)).IsTrue();
+        await Assert.That(e.Diagnostics).IsEmpty();
+    }
+
     private static string DbContextText(Exported e) =>
         e.Files.Single(f => f.FileName.EndsWith("DbContext.cs", StringComparison.Ordinal)).Source;
 

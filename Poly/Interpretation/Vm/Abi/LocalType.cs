@@ -52,6 +52,19 @@ internal abstract record LocalType(Type Clr) {
     public static long Write(object? value, VmManagedObjectHeap heap) =>
         value is null ? 0L : Of(value.GetType()).ToRing(value, heap);
 
+    /// <summary>The frame word for a runtime value stored where <paramref name="declared"/> is the static type. A
+    /// handle-typed declaration (a reference, a nullable, a heap struct) gets a handle to the value whatever the
+    /// value's own type is: a boxed <c>int</c> for an <c>object</c> is not the word 7. Null is the absent sentinel.</summary>
+    public static long Write(object? value, Type declared, VmManagedObjectHeap heap) {
+        if (declared.IsByRef)
+            throw new InvalidOperationException($"VM rejected: by-ref type '{declared}' has no frame word.");
+        if (value is null)
+            return 0L;
+        return Of(declared).Kind == ValueRepresentationKind.HeapRef
+            ? heap.Allocate(value)
+            : Of(value.GetType()).ToRing(value, heap);
+    }
+
     /// <summary>The local type of a node, after analysis replacement. A statement is
     /// none. A constant uses <see cref="Of(Type)"/> on the value's type.</summary>
     public static (LocalType? Form, Type? Clr) Of(INodeMetadataProvider? provider, Node? node) {

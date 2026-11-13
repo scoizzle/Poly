@@ -701,8 +701,22 @@ public static partial class AbiEmitter {
             return Assign(ctx.HoldRing(targetType), Default(targetType));
         var ring = ctx.OpenRing();
         var slot = ring.AddValue(CompileNode(t.Operand, ctx));
-        if (sourceType is null || sourceType == targetType || targetType.IsAssignableFrom(sourceType))
+        if (sourceType is null || sourceType == targetType)
             return Block(ring.Steps);
+        var targetIsHandle = LocalType.Of(targetType).Kind == ValueRepresentationKind.HeapRef;
+        var sourceIsWord = LocalType.Of(sourceType).Kind == ValueRepresentationKind.StackScalar;
+        if (targetType.IsAssignableFrom(sourceType)) {
+            // Boxing: a scalar word written where the type is a handle becomes a handle to the value. A nullable
+            // target keeps the typed Nullable<T> ring local every nullable value uses.
+            if (sourceIsWord && targetIsHandle) {
+                var value = LocalType.Decode(slot.Read, sourceType, sourceType, ctx.HeapLocal);
+                if (Nullable.GetUnderlyingType(targetType) is not null)
+                    return ring.Then(Assign(ctx.HoldRing(targetType), Convert(value, targetType)));
+                return ring.Then(Assign(slot.Read,
+                    LocalType.Encode(Convert(value, typeof(object)), targetType, ctx.HeapLocal)));
+            }
+            return Block(ring.Steps);
+        }
         // A reference-typed operand (object, a call result) cast to T? may hold null at run time.
         // The heap helper would throw for a value-type target, so a null handle is read here as the
         // nullable's own absent value, in a Nullable<T> ring local, never as the word 0.
@@ -727,10 +741,12 @@ public static partial class AbiEmitter {
                 slot.Read,
                 LocalType.Encode(converted, targetType, ctx.HeapLocal)));
         }
-        return ring.Then(
-            Assign(slot.Read,
-                Call(null, CastAbiInfo, ctx.HeapLocal, slot.Read,
-                    Constant(targetType, typeof(Type)))));
+        var checkedHandle = Call(null, CastAbiInfo, ctx.HeapLocal, slot.Read, Constant(targetType, typeof(Type)));
+        // Unboxing: a handle cast to a scalar type is the value it holds, written as that type's word.
+        if (!sourceType.IsValueType && !targetIsHandle)
+            return ring.Then(Assign(slot.Read, LocalType.Encode(
+                Convert(RingCodec.DerefObject(ctx.HeapLocal, checkedHandle), targetType), targetType, ctx.HeapLocal)));
+        return ring.Then(Assign(slot.Read, checkedHandle));
     }
 
     /// <summary>An integer width or an enum. The unchecked cast between two of

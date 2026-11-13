@@ -98,11 +98,8 @@ public sealed class VmState : IDisposable {
         var slots = Stack.RawSlots;
         var types = Program.RootParameterClrTypes;
         foreach (var (i, arg) in args.Index()) {
-            if (types is not null && i < types.Count && types[i] is Type pt
-                && Nullable.GetUnderlyingType(pt) is not null)
-                slots[i] = arg is null ? 0L : Heap.Allocate(arg);
-            else
-                slots[i] = ToRing(arg);
+            var declared = types is not null && i < types.Count ? types[i] : null;
+            slots[i] = LocalType.Write(arg, declared ?? arg?.GetType() ?? typeof(object), Heap);
         }
     }
 

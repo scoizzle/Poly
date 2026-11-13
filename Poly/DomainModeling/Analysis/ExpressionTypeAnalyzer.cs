@@ -314,9 +314,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                 var loopScope = WithBinder(props, fe.BinderName, iterated);
                 if (fe.Where is { } where) {
                     WalkExpression(context, where, loopScope, parameters, enumTypes);
-                    var whereType = BindsToBinder(where, fe.BinderName)
-                        ? InferBinderExpressionType(context, iterated, fe.BinderName, where, enumTypes)
-                        : InferType(context, where, loopScope, parameters, enumTypes);
+                    var whereType = InferType(context, where, loopScope, parameters, enumTypes);
                     if (Family(whereType) is not (TypeFamily.Boolean or TypeFamily.Unknown))
                         Report(context, where,
                             $"'for' where condition must be Boolean (got '{Describe(whereType)}')");
@@ -349,15 +347,14 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
         if (bindings.Count == 0) return;
         var calleeParams = ResolveActionParameterTypes(context, callerEntityName, relationshipName, actionName);
         if (calleeParams is null) return; // unresolvable callee — other passes report shape errors
-        var targetEntityName = ResolveCalleeEntityName(context, callerEntityName, relationshipName);
+        // A binder-rooted argument (for lines as line invoke line.Mark(amount: line Qty + 1)) reads the binder as
+        // the iterated relationship's target entity.
+        var scope = binderName is null
+            ? callerProps
+            : WithBinder(callerProps, binderName, ResolveRelationshipTargetTypeName(context, callerEntityName, relationshipName!));
         foreach (var binding in bindings) {
             if (calleeParams.TryGetValue(binding.PropertyName, out var paramType)) {
-                // A binder-rooted arg (for lines as line invoke line.Mark(amount: line Status),
-                // or arithmetic over it: line Qty + 1) resolves its type against the target
-                // entity's property.
-                var inferred = binderName is not null && BindsToBinder(binding.Expression, binderName)
-                    ? InferBinderExpressionType(context, targetEntityName, binderName, binding.Expression, enumTypes)
-                    : InferLiteralAware(context, binding.Expression, paramType, enumTypes, callerProps, parameters);
+                var inferred = InferLiteralAware(context, binding.Expression, paramType, enumTypes, scope, parameters);
                 var target = ResolveName(context, paramType, enumTypes);
                 if (!IsLenient(inferred)
                     && !IsLenient(target)
@@ -378,18 +375,8 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                         $"cannot assign '{argTypeName}' to '{paramType}'");
                 }
             }
-            WalkExpression(context, binding.Expression, callerProps, parameters, enumTypes);
+            WalkExpression(context, binding.Expression, scope, parameters, enumTypes);
         }
-    }
-
-    /// <summary>True when an expression is a binder-root navigation or arithmetic over one
-    /// (e.g. <c>line Qty</c> or <c>line Qty + 1</c>).</summary>
-    private static bool BindsToBinder(DomainExpression expr, string binderName) {
-        if (expr is RelationshipNavigation { RelationshipName: var rel })
-            return string.Equals(rel, binderName, StringComparison.Ordinal);
-        if (expr is Add or Subtract or Multiply or Divide)
-            return expr.Children.OfType<DomainExpression>().Any(c => BindsToBinder(c, binderName));
-        return false;
     }
 
     private static string? ResolveCalleeEntityName(
@@ -604,8 +591,11 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                     props ?? new Dictionary<string, string>(StringComparer.Ordinal),
                     parameters, enumTypes, targetTypeName)))
             return;
-        if (value is PropertyAccess { Name: "Guid" } kw)
+        // A5: the Guid keyword is typed Guid; the default check owns which targets take it (Guid and Text).
+        if (value is PropertyAccess { Name: "Guid" } kw && ResolvePropertyType("Guid", props, parameters) is null) {
             CheckDefault(context, kw, targetTypeName, enumTypes);
+            return;
+        }
 
         if (value is Literal { Value: decimal } fractional && IsIntegralTypeName(targetTypeName)) {
             Report(context, value, FractionalLiteralMessage(fractional, targetTypeName));

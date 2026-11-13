@@ -18,6 +18,9 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
         Dictionary<string, EnumType> enumTypes) {
         var left = InferType(context, cmp.Left, props, parameters, enumTypes);
         var right = InferType(context, cmp.Right, props, parameters, enumTypes);
+        // A6: a bare name against an enum operand is a member of that enum (`Level is High`).
+        left = AsEnumMember(cmp.Left, left, right, props, parameters, enumTypes);
+        right = AsEnumMember(cmp.Right, right, left, props, parameters, enumTypes);
 
         // enum member literal validity: Enum prop compared to a string must be a member
         if (Family(left) is TypeFamily.Enum && cmp.Right is Literal { Value: string s })
@@ -46,6 +49,17 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
         WalkExpression(context, cmp.Left, props, parameters, enumTypes);
         WalkExpression(context, cmp.Right, props, parameters, enumTypes);
     }
+
+    /// <summary>A bare name that is no property or parameter, against an enum that declares it, is that enum's member.</summary>
+    private static ExprType AsEnumMember(
+        DomainExpression expr, ExprType type, ExprType other,
+        Dictionary<string, string> props, Dictionary<string, string>? parameters, Dictionary<string, EnumType> enumTypes) =>
+        !type.IsResolved && expr is PropertyAccess { Name: var name }
+        && ResolvePropertyType(name, props, parameters) is null
+        && Family(other) is TypeFamily.Enum && other.DomainName is { } enumName
+        && enumTypes.TryGetValue(enumName, out var declared) && declared.MemberNames.Contains(name, StringComparer.Ordinal)
+            ? other
+            : type;
 
     /// <summary>
     /// Seam N2 (T-05a review F2 and closing round; removing row T-06): <c>null</c> compared with an expression whose

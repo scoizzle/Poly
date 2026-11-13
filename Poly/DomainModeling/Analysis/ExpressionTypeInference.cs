@@ -60,56 +60,20 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
         return operands.All(IsNumeric) ? NumberFamily : ExprType.Unresolved;
     }
 
-    /// <summary>Infers the type of a binder-rooted argument expression: a binder-root property
-    /// access, or arithmetic (numeric/numeric, date/number) over it. Non-scalar binder roots
-    /// (nested path-prefix) resolve to Unknown.</summary>
-    private static ExprType InferBinderExpressionType(
-        AnalysisContext context, string? targetEntityName, string binderName,
-        DomainExpression expr, Dictionary<string, EnumType> enumTypes) {
-        switch (expr) {
-            case RelationshipNavigation rn when string.Equals(rn.RelationshipName, binderName, StringComparison.Ordinal):
-                if (rn.TargetProperty is not PropertyAccess pa) return ExprType.Unresolved;
-                var propType = ResolveTargetPropType(context, targetEntityName, pa.Name);
-                return propType is null ? ExprType.Unresolved : ResolveName(context, propType, enumTypes);
-            case Add or Subtract or Multiply or Divide:
-                var operandTypes = expr.Children.OfType<DomainExpression>()
-                    .Select(c => InferBinderExpressionType(context, targetEntityName, binderName, c, enumTypes))
-                    .ToList();
-                if (operandTypes.Any(t => Family(t) is TypeFamily.Unknown)) return ExprType.Unresolved;
-                if (operandTypes.All(IsNumeric)) return NumberFamily;
-                if (operandTypes.Count == 2 && IsDate(operandTypes[0]) && IsNumeric(operandTypes[1]))
-                    return operandTypes[0];
-                // Mixed non-numeric binder prop + number (line Status + 1): surface the
-                // non-numeric type so the param-type mismatch fires instead of passing.
-                return operandTypes.First(t => !IsNumeric(t));
-            case Literal { Value: long or int or double or float or decimal or short or byte }:
-                return NumberFamily;
-            case Literal { Value: string }:
-                return TextFamily;
-            default:
-                return ExprType.Unresolved;
-        }
-    }
-
-    private static string? ResolveTargetPropType(AnalysisContext context, string? targetEntityName, string propName) {
-        if (targetEntityName is null) return null;
-        var lookup = context.GetTypeLookup();
-        var entity = lookup?.Domain?.Types.OfType<Entity>()
-            .FirstOrDefault(e => string.Equals(e.Name, targetEntityName, StringComparison.Ordinal));
-        return entity?.Properties.FirstOrDefault(p => string.Equals(p.Name, propName, StringComparison.Ordinal))?.Type.TypeName;
-    }
-
     private ExprType InferLiteralAware(
         AnalysisContext context,
         DomainExpression expr, string targetTypeName, Dictionary<string, EnumType> enumTypes,
         Dictionary<string, string>? props = null, Dictionary<string, string>? parameters = null) {
         // For the assign RHS / default check, a bare enum-member identifier (PropertyAccess)
         // is valid when the target is enum-typed and the name is a member.
-        if (expr is PropertyAccess pa && Family(ResolveName(context, targetTypeName, enumTypes)) is TypeFamily.Enum) {
-            if (enumTypes.TryGetValue(targetTypeName, out var enumType)
-                && enumType.MemberNames.Contains(pa.Name, StringComparer.Ordinal))
-                return ResolveName(context, targetTypeName, enumTypes);
-        }
+        var target = ResolveName(context, targetTypeName, enumTypes);
+        if (expr is PropertyAccess pa && Family(target) is TypeFamily.Enum
+            && ResolvePropertyType(pa.Name, props, parameters) is null
+            && enumTypes.TryGetValue(targetTypeName, out var enumType)
+            && enumType.MemberNames.Contains(pa.Name, StringComparer.Ordinal))
+            return target;
+        if (expr is MatchExpr match)
+            return InferMatch(context, match, props, parameters, enumTypes, target);
         return InferType(context, expr, props, parameters, enumTypes);
     }
 
@@ -145,6 +109,8 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
         return expr switch {
             PropertyAccess pa => ResolvePropertyType(pa.Name, props, parameters) is { } pt
                 ? ResolveName(context, pt, enumTypes)
+                : pa.Name is "Guid" ? ResolveName(context, "Guid", enumTypes)
+                : ReferencedEntity(context, pa.Name, props) is { } entityName ? ResolveName(context, entityName, enumTypes)
                 : ExprType.Unresolved,
             ParameterAccess pa => parameters?.TryGetValue(pa.Name, out var pt) == true
                 ? ResolveName(context, pt, enumTypes)
@@ -157,9 +123,9 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
             Exists or NotExists or AnyExpr or AllExpr or NoneExpr or Comparison or And or Or or Not => BooleanFamily,
             CountExpr => NumberFamily,
             SumExpr sum => InferSum(context, sum, props),
-            RelationshipNavigation navigation => InferNavigation(context, navigation, props, enumTypes),
+            RelationshipNavigation navigation => InferNavigation(context, navigation, props, parameters, enumTypes),
             OwnedAccess owned => InferOwned(context, owned, props, enumTypes),
-            MatchExpr match => InferMatch(context, match, props, parameters, enumTypes),
+            MatchExpr match => InferMatch(context, match, props, parameters, enumTypes, hint: null),
             FunctionCall call => FunctionAnalysis.Find(context, call.Name) is { } function
                 ? ResolveName(context, function.ReturnType.TypeName, enumTypes)
                 : ExprType.Unresolved,
@@ -209,7 +175,8 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
 
     /// <summary>
     /// Numeric arithmetic is the CLR operator's result (the lookup the stamp makes; InferType never reads the stamp
-    /// back). Date plus or minus a number keeps the date's type, as the arithmetic arm accepts it. Anything else,
+    /// back). Date plus or minus a number keeps the date's type, as the arithmetic arm accepts it; a date minus a
+    /// date of one granularity is a duration. Anything else,
     /// and numeric operands with no operator (Float with Decimal), stays Unresolved: the arithmetic arm reports a
     /// non-numeric operand.
     /// </summary>
@@ -233,6 +200,9 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
         }
         if (expr is Add or Subtract && IsDate(left) && IsNumeric(right))
             return left with { DomainName = null, Optional = false };
+        // A date difference of one granularity is a duration (the shape rule stays in WalkExpression: T-10).
+        if (expr is Subtract && IsDate(left) && IsDate(right) && !MixedDateGranularity(left, right))
+            return Typeless(typeof(TimeSpan));
         return ExprType.Unresolved;
     }
 
@@ -259,17 +229,16 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
             : ExprType.Unresolved;
 
     /// <summary>
-    /// A path-prefix read (<c>part Qty</c>, to-one hops <c>loan book Title</c>) or a binder read (<c>line Qty</c>,
-    /// a peer's <c>o Code</c>): the final property's type. A many hop, an unknown hop or property, or a scope with no
-    /// entity stays Unresolved; the policy, effect and subscription passes report those shapes.
+    /// A path-prefix read (<c>part Qty</c>, to-one hops <c>loan book Title</c>), a binder read (<c>line Qty</c>, a peer's
+    /// <c>o Code</c>) or a read rooted at an entity-typed parameter (<c>lead Name</c>): the final property's type. A hop
+    /// whose target is an expression (<c>line Qty &gt; 1</c>, <c>advisor where Age &lt; mentor Age</c>) is that
+    /// expression's type in the target entity's scope. A many hop, an unknown hop or property, or a scope with no entity
+    /// stays Unresolved; the policy, effect and subscription passes report those shapes.
     /// </summary>
-    private static ExprType InferNavigation(
+    private ExprType InferNavigation(
         AnalysisContext context, RelationshipNavigation navigation,
-        Dictionary<string, string>? props, Dictionary<string, EnumType> enumTypes) {
-        if (props is not EntityScope scope) return ExprType.Unresolved;
-        var target = scope.Binders.TryGetValue(navigation.RelationshipName, out var bound)
-            ? bound
-            : EntityNamed(context, scope.EntityName) is { } entity ? ToOneTarget(entity, navigation.RelationshipName) : null;
+        Dictionary<string, string>? props, Dictionary<string, string>? parameters, Dictionary<string, EnumType> enumTypes) {
+        var target = NavigationRoot(context, navigation.RelationshipName, props, parameters);
         var hop = navigation.TargetProperty;
         while (EntityNamed(context, target) is { } current) {
             switch (hop) {
@@ -280,10 +249,36 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                     hop = next.TargetProperty;
                     continue;
                 default:
-                    return ExprType.Unresolved;
+                    return WithoutPrimitiveName(InferType(context, hop, new EntityScope(current), null, enumTypes));
             }
         }
         return ExprType.Unresolved;
+    }
+
+    /// <summary>
+    /// A bare name that is a binder in scope or the scope entity's to-one navigation, read as a value (an invoke
+    /// argument <c>item: widget</c>): the entity it refers to. Null otherwise.
+    /// </summary>
+    private static string? ReferencedEntity(AnalysisContext context, string name, Dictionary<string, string>? props) =>
+        props is not EntityScope scope
+            ? null
+            : scope.Binders.TryGetValue(name, out var bound)
+                ? bound
+                : EntityNamed(context, scope.EntityName) is { } entity ? ToOneTarget(entity, name) : null;
+
+    /// <summary>
+    /// The entity a navigation's first hop reaches: a binder in scope, the scope entity's to-one navigation, or an action
+    /// parameter whose type is an entity. Null when none applies.
+    /// </summary>
+    private static string? NavigationRoot(
+        AnalysisContext context, string name, Dictionary<string, string>? props, Dictionary<string, string>? parameters) {
+        if (props is EntityScope scope) {
+            if (scope.Binders.TryGetValue(name, out var bound)) return bound;
+            if (EntityNamed(context, scope.EntityName) is { } entity && ToOneTarget(entity, name) is { } toOne) return toOne;
+        }
+        return parameters?.TryGetValue(name, out var parameterType) == true && EntityNamed(context, parameterType) is not null
+            ? parameterType
+            : null;
     }
 
     /// <summary>

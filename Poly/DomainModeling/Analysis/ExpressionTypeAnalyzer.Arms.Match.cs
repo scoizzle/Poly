@@ -39,7 +39,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
 
         ExprType? reference = null;
         foreach (var value in match.Arms.Select(a => a.Value).Append(match.Else)) {
-            var type = InferType(context, value, props, parameters, enumTypes);
+            var type = ArmType(context, value, props, parameters, enumTypes, hint: null);
             if (Family(type) is TypeFamily.Unknown or TypeFamily.Null) continue;
             if (reference is null) { reference = type; continue; }
             if (!Unifies(reference.Value, type))
@@ -126,16 +126,43 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
         }
     }
 
-    /// <summary>The unified value type of a <c>match</c>: the first arm type that is known and not null.</summary>
+    /// <summary>
+    /// The unified value type of a <c>match</c>: the first arm type that is known and not null; Unresolved when an arm
+    /// has no type. <paramref name="hint"/> is the target's type, which a bare enum member arm takes first (A6).
+    /// </summary>
     private ExprType InferMatch(
         AnalysisContext context, MatchExpr match,
         Dictionary<string, string>? props, Dictionary<string, string>? parameters,
-        Dictionary<string, EnumType> enumTypes) {
+        Dictionary<string, EnumType> enumTypes, ExprType? hint) {
         var types = match.Arms.Select(a => a.Value).Append(match.Else)
-            .Select(v => InferType(context, v, props, parameters, enumTypes)).ToList();
+            .Select(v => ArmType(context, v, props, parameters, enumTypes, hint)).ToList();
         if (types.Any(IsLenient))
             return ExprType.Unresolved;
         // A match whose every arm is `null` is typed Text, as it was before the move (an unreachable Null arm).
         return types.Cast<ExprType?>().FirstOrDefault(t => Family(t!.Value) is not TypeFamily.Null) ?? TextFamily;
     }
+
+    /// <summary>
+    /// A match arm value's type. A bare name that is no property or parameter is an enum member (A6): of the hint's enum
+    /// when it declares the member, else of the one enum that declares it; two or more such enums leave it Unresolved.
+    /// </summary>
+    private ExprType ArmType(
+        AnalysisContext context, DomainExpression value,
+        Dictionary<string, string>? props, Dictionary<string, string>? parameters,
+        Dictionary<string, EnumType> enumTypes, ExprType? hint) {
+        var type = InferType(context, value, props, parameters, enumTypes);
+        if (type.IsResolved || value is not PropertyAccess { Name: var name }
+            || ResolvePropertyType(name, props, parameters) is not null
+            || RewriteLibraryIdent(value) is not PropertyAccess)
+            return type;
+        if (hint is { } target && Family(target) is TypeFamily.Enum && target.DomainName is { } hinted
+            && enumTypes.TryGetValue(hinted, out var hintEnum) && hintEnum.MemberNames.Contains(name, StringComparer.Ordinal))
+            return target;
+        var declaring = EnumsDeclaring(enumTypes, name);
+        return declaring.Count == 1 ? ResolveName(context, declaring[0], enumTypes) : type;
+    }
+
+    private static List<string> EnumsDeclaring(Dictionary<string, EnumType> enumTypes, string member) =>
+        [.. enumTypes.Values.Where(e => e.MemberNames.Contains(member, StringComparer.Ordinal)).Select(e => e.Name)
+            .Order(StringComparer.Ordinal)];
 }

@@ -19,10 +19,108 @@ internal sealed class OwnershipAggregatePass : INodeAnalyzer {
 
         var topology = context.GetMetadata<EffectTopologyMetadata>(domain)?.Topology;
         var aggregate = BuildAggregate(domain, context, topology);
-        var edges = OwnedEdges(domain)
+        var owned = OwnedEdges(domain);
+        var edges = owned
             .Select(static e => new OwnedEdge(e.Source.Name, e.Nav.Name, e.Nav.Target.TypeName, e.Nav.Cardinality))
             .ToList();
         context.SetMetadata(domain, new OwnershipAggregateMetadata(aggregate, edges));
+        ReportOwnershipCycles(context, domain, owned);
+    }
+
+    /// <summary>
+    /// V-14 (#586, OQ-14): a cycle of <c>owned</c> navigations through more than one entity
+    /// type has no root, so it is an error: one per cycle the walk closes. A self-owning navigation is a
+    /// tree and is not an edge here, also when its entity sits in a real cycle. The graph is
+    /// <see cref="OwnedEdges"/>, the same definition of ownership DMSTR010 uses. The walk
+    /// visits entities and their owned navigations in declaration order; each back edge is a
+    /// cycle the walk closes, so a cycle that is only reachable through an already-finished
+    /// entity is silent until the first is fixed (fixing the named navigation may reveal
+    /// another; the document is rejected either way). A cycle is named from its earliest-declared entity (so <c>A -&gt; B -&gt; A</c> and
+    /// <c>B -&gt; A -&gt; B</c> are one cycle, reported once) and positioned on the owned
+    /// navigation that returns to that entity.
+    /// </summary>
+    private static void ReportOwnershipCycles(
+        AnalysisContext context, Domain domain, IReadOnlyList<(Entity Source, Relationship Nav)> owned) {
+        var order = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (var entity in domain.Types.OfType<Entity>())
+            order.TryAdd(entity.Name, order.Count);
+
+        var outgoing = new Dictionary<string, List<(Entity Source, Relationship Nav)>>(StringComparer.Ordinal);
+        foreach (var edge in owned) {
+            if (string.Equals(edge.Source.Name, edge.Nav.Target.TypeName, StringComparison.Ordinal))
+                continue;
+            if (!outgoing.TryGetValue(edge.Source.Name, out var list))
+                outgoing[edge.Source.Name] = list = new();
+            list.Add(edge);
+        }
+
+        // 1 = on the walk's stack, 2 = finished.
+        var state = new Dictionary<string, int>(StringComparer.Ordinal);
+        var reported = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var root in order.Keys.OrderBy(k => order[k])) {
+            if (state.ContainsKey(root))
+                continue;
+            var path = new List<string> { root };
+            var viaEdges = new List<(Entity Source, Relationship Nav)>();
+            var next = new List<int> { 0 };
+            state[root] = 1;
+            while (path.Count > 0) {
+                var top = path.Count - 1;
+                var edges = outgoing.GetValueOrDefault(path[top]);
+                if (edges is null || next[top] >= edges.Count) {
+                    state[path[top]] = 2;
+                    path.RemoveAt(top);
+                    next.RemoveAt(top);
+                    if (viaEdges.Count > 0)
+                        viaEdges.RemoveAt(viaEdges.Count - 1);
+                    continue;
+                }
+                var edge = edges[next[top]++];
+                var target = edge.Nav.Target.TypeName;
+                switch (state.GetValueOrDefault(target)) {
+                    case 0:
+                        state[target] = 1;
+                        path.Add(target);
+                        viaEdges.Add(edge);
+                        next.Add(0);
+                        break;
+                    case 1:
+                        var start = path.IndexOf(target);
+                        ReportCycle(context, order, path.Skip(start).ToList(), [.. viaEdges.Skip(start), edge], reported);
+                        break;
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Reports one cycle: <paramref name="members"/> in walk order, <paramref name="cycleEdges"/>
+    /// the owned navigation leaving each member for the next (the last returns to the first).
+    /// </summary>
+    private static void ReportCycle(
+        AnalysisContext context,
+        Dictionary<string, int> order,
+        List<string> members,
+        List<(Entity Source, Relationship Nav)> cycleEdges,
+        HashSet<string> reported) {
+        var first = 0;
+        for (var i = 1; i < members.Count; i++)
+            if (order[members[i]] < order[members[first]])
+                first = i;
+        var names = Enumerable.Range(0, members.Count).Select(i => members[(first + i) % members.Count]).ToList();
+        var navs = Enumerable.Range(0, members.Count).Select(i => cycleEdges[(first + i) % members.Count]).ToList();
+        var path = string.Join(" -> ", names.Append(names[0]));
+        if (!reported.Add(path))
+            return;
+        var closing = navs[^1];
+        context.ReportError(
+            closing.Nav,
+            $"Ownership cycle {path}: each entity owns the next through an 'owned' navigation " +
+            $"({string.Join(", ", navs.Select(static n => $"'{n.Source.Name}.{n.Nav.Name}'"))}), so none of them is a root. " +
+            "Make one of these navigations a plain reference; an entity owning only itself is allowed. " +
+            $"Reported on '{closing.Source.Name}.{closing.Nav.Name}', the owned navigation that returns to '{names[0]}', " +
+            "the earliest-declared entity of the cycle.",
+            DomainModelDiagnosticCodes.OwnershipCycle);
     }
 
     /// <summary>
@@ -86,7 +184,8 @@ internal sealed class OwnershipAggregatePass : INodeAnalyzer {
         // immediately so a parentless owner (Member, which only references Plan) is
         // visible as a root to the children that name it — otherwise they skip it and end
         // up parentless too. Plain singulars never create parents here, so the only shapes
-        // that can still cycle are mutual collections, which DMDEP001 reports.
+        // that can still cycle are mutual collections; owned ones are DMDEP002 (V-14), and
+        // the ResolvesTo guard keeps this loop finite for the rest.
         for (var pass = 0; pass < drafts.Count; pass++) {
             var changed = false;
             foreach (var (name, isRoot) in drafts) {

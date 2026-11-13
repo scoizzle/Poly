@@ -126,7 +126,10 @@ public sealed class InverseDeclarationTests {
 
         var errors = Errors(analysis, DomainModelDiagnosticCodes.InverseContradictory);
         await Assert.That(errors.Count).IsEqualTo(1);
-        await Assert.That(AllErrors(analysis).Count).IsEqualTo(1);
+        // V-14 flip: AllErrors was 1. Both ends owned is also a Line <-> Order ownership
+        // ring, so it is also one DMDEP002 — 1 DMREL004 + 1 DMDEP002.
+        await Assert.That(Errors(analysis, DomainModelDiagnosticCodes.OwnershipCycle).Count).IsEqualTo(1);
+        await Assert.That(AllErrors(analysis).Count).IsEqualTo(2);
         await Assert.That(errors[0].Message).Contains("owned");
         var nav = (Poly.DomainModeling.Ontology.Relationship)errors[0].Node;
         await Assert.That(nav.Name).IsEqualTo("order");
@@ -257,7 +260,10 @@ public sealed class InverseDeclarationTests {
         // S-12 flip: AllErrors was 2. Order and Line each now have two owner navigations,
         // so each is also DMSTR010 — 2 DMREL004 + 2 DMSTR010.
         await Assert.That(Errors(analysis, DomainModelDiagnosticCodes.OwnedTargetMultipleOwners).Count).IsEqualTo(2);
-        await Assert.That(AllErrors(analysis).Count).IsEqualTo(4);
+        // V-14 flip: AllErrors was 4. The Line <-> Order ring is one cycle however many
+        // navigations close it: + 1 DMDEP002.
+        await Assert.That(Errors(analysis, DomainModelDiagnosticCodes.OwnershipCycle).Count).IsEqualTo(1);
+        await Assert.That(AllErrors(analysis).Count).IsEqualTo(5);
         var names = errors
             .Select(d => ((Poly.DomainModeling.Ontology.Relationship)d.Node).Name)
             .OrderBy(static n => n, StringComparer.Ordinal)
@@ -268,7 +274,8 @@ public sealed class InverseDeclarationTests {
     [Test]
     public async Task BothOwned_OneSidedVia_ReportsOnce() {
         // Guard row (rule 6b): only one end names the pairing; the pair is still both-owned
-        // and reports once, from the side that declares `via`.
+        // and DMREL004 reports it once, from the side that declares `via`; DMDEP002 adds the
+        // ring (V-14) as a separate error.
         var analysis = Analyze("""
             domain OneSidedBothOwned
             Line: entity {
@@ -282,7 +289,9 @@ public sealed class InverseDeclarationTests {
 
         var errors = Errors(analysis, DomainModelDiagnosticCodes.InverseContradictory);
         await Assert.That(errors.Count).IsEqualTo(1);
-        await Assert.That(AllErrors(analysis).Count).IsEqualTo(1);
+        // V-14 flip: AllErrors was 1; the both-owned pair is also one DMDEP002.
+        await Assert.That(Errors(analysis, DomainModelDiagnosticCodes.OwnershipCycle).Count).IsEqualTo(1);
+        await Assert.That(AllErrors(analysis).Count).IsEqualTo(2);
         await Assert.That(((Poly.DomainModeling.Ontology.Relationship)errors[0].Node).Name).IsEqualTo("lines");
     }
 
@@ -305,7 +314,9 @@ public sealed class InverseDeclarationTests {
 
         await Assert.That(Errors(analysis, DomainModelDiagnosticCodes.InverseContradictory).Count).IsEqualTo(3);
         await Assert.That(Errors(analysis, DomainModelDiagnosticCodes.OwnedTargetMultipleOwners).Count).IsEqualTo(1);
-        await Assert.That(AllErrors(analysis).Count).IsEqualTo(4);
+        // V-14 flip: AllErrors was 4; the Line <-> Order ring is one more, DMDEP002.
+        await Assert.That(Errors(analysis, DomainModelDiagnosticCodes.OwnershipCycle).Count).IsEqualTo(1);
+        await Assert.That(AllErrors(analysis).Count).IsEqualTo(5);
     }
 
     [Test]

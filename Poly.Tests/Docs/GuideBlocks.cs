@@ -182,7 +182,7 @@ internal static class GuideBlocks {
     public const string MarkerOpener = "<!-- poly-verify:";
 
     /// <summary>How many <c>```poly</c> fences the guide carries. Pinned so a moved fence reds (R1).</summary>
-    public const int PolyFences = 45;
+    public const int PolyFences = 46;
 
     /// <summary>The wrapper count. Every one must be used by a block (A4).</summary>
     public const int WrapperCount = 13;

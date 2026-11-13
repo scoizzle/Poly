@@ -87,6 +87,7 @@ internal static class PrintBaselineBuiltCases {
         ("Entities.cs: ArgumentOutOfRangeException for an unknown member kind", "EntityMemberKind is closed; defensive"),
         ("Expressions.cs:45-46: ExpressionPrinter arms for PropertyAccess and ParameterAccess", "bound by CoreExpressionPrintBinders before the dispatch runs; dead fallbacks"),
         ("DomainDslPrinter.cs: FillPrimaryText default throw", "reached only for a binder with neither fill; no registered binder is one"),
+        ("Stages.cs:95", "the closing brace of the `Not` check in StageRequire: the negated-lookup case reaches the lines either side; the brace is a coverage artefact"),
         ("DomainDslPrinter.cs: PrintComparisonKind `?`", "the comparison arm is bound by the table before dispatch; an out-of-range kind is not constructible by a parsed or analysed domain"),
     ];
 

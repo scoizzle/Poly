@@ -7,6 +7,7 @@ using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Libraries.Temporal;
 using Poly.DomainModeling.Meaning;
 using Poly.DomainModeling.Ontology;
+using Poly.Grammar;
 
 namespace Poly.Tests.DomainModeling.Parsing;
 
@@ -62,7 +63,7 @@ public sealed class RoundTripMatrixTests {
     internal const int MaxSkips = 11;
 
     /// <summary>Ratchet on the expected-failure cells. It can only go down; G-36 deletes the table and asserts it empty.</summary>
-    internal const int MaxExpectedFailureCells = 116;
+    internal const int MaxExpectedFailureCells = 119;
 
     // ── running one cell ─────────────────────────────────────────────────────────────
 
@@ -146,6 +147,12 @@ public sealed class RoundTripMatrixTests {
         ("a Duration expression has no print binder, so `default(12 Days)` cannot be printed (proposed owner: G-34, expression printing; no row names it)",
             id => id.StartsWith("duration/", StringComparison.Ordinal),
             "G-34", "none", "print", nameof(InvalidOperationException)),
+        ("an owned access (`Addr City`) reads back as a different model",
+            id => id == "expression/Owned", "G-34", "none", "compare", null),
+        ("a date offset (`Due > Now + 14 Days`) reads back as a different model (class recorded; the cell shape was not dissected)",
+            id => id == "expression/DateOperation", "G-34", "none", "compare", null),
+        ("`not bs Name exists` is printed but the reader refuses it",
+            id => id == "expression/NotExists", "G-34", "none", "parse", nameof(GrammarException)),
     ];
 
     /// <summary>Whether a <c>keyword-target/&lt;name&gt;/&lt;cardinality&gt;</c> cell has that cardinality and (when asked) the target is, or is not, an unsupported keyword.</summary>
@@ -187,14 +194,14 @@ public sealed class RoundTripMatrixTests {
         ["ConstraintMergeKind.Net"] = SkipReason.AnalysisOnly,
         ["ConstraintMergeKind.Unmergeable"] = SkipReason.AnalysisOnly,
         ["ConstraintMergeKind.Empty"] = SkipReason.AnalysisOnly,
-        ["RelationalOrdering.None"] = SkipReason.NotPrinted,
-        ["RelationalOrdering.Less"] = SkipReason.NotPrinted,
-        ["RelationalOrdering.Equal"] = SkipReason.NotPrinted,
-        ["RelationalOrdering.Greater"] = SkipReason.NotPrinted,
-        ["RelationalOrdering.All"] = SkipReason.NotPrinted,
+        ["RelationalOrdering.None"] = SkipReason.AnalysisOnly,
+        ["RelationalOrdering.Less"] = SkipReason.AnalysisOnly,
+        ["RelationalOrdering.Equal"] = SkipReason.AnalysisOnly,
+        ["RelationalOrdering.Greater"] = SkipReason.AnalysisOnly,
+        ["RelationalOrdering.All"] = SkipReason.AnalysisOnly,
         ["Effect.CompositeEffect"] = SkipReason.Flattened,
-        ["Constraint.RequiredConstraint"] = SkipReason.NotPrinted,
-        ["Constraint.RelationalConstraint"] = SkipReason.NotPrinted,
+        ["Constraint.RequiredConstraint"] = SkipReason.AnalysisOnly,
+        ["Constraint.RelationalConstraint"] = SkipReason.AnalysisOnly,
     };
 
     /// <summary>Every member the DSL can have a cell for: enum members, effect kinds, constraint kinds and annotation keywords.</summary>
@@ -211,8 +218,13 @@ public sealed class RoundTripMatrixTests {
             universe.Add("Constraint." + kind.Type.Name);
         foreach (var keyword in AnnotationKeywords())
             universe.Add("Annotation." + keyword);
+        foreach (var kind in ExpressionKindsInScope)
+            universe.Add("Expression." + kind);
         return universe;
     }
+
+    /// <summary>The expression kinds the matrix covers (the ones <c>built/expression-kinds</c> prints): not every expression type, so no skip list for the rest.</summary>
+    internal static readonly string[] ExpressionKindsInScope = ["OwnedAccess", "Not", "Divide", "NotExists", "MatchExpr", "DateOperation"];
 
     /// <summary>The annotation keywords: the term keywords and every keyword an <see cref="IAnnotationSyntax"/> with a parameterless constructor declares.</summary>
     internal static IReadOnlyList<string> AnnotationKeywords() {
@@ -272,7 +284,29 @@ public sealed class RoundTripMatrixTests {
     [Test]
     public async Task Matrix_IsLarge_AndEveryDimensionHasCells() {
         var cells = RoundTripMatrixCells.All;
-        await Assert.That(cells.Count).IsGreaterThan(300);
+        await Assert.That(cells.Count).IsEqualTo(330);
+        var expected = new Dictionary<string, int> {
+            ["nav"] = 16,
+            ["keyword-target"] = 200,
+            ["visibility"] = 6,
+            ["require"] = 5,
+            ["comparison"] = 6,
+            ["quantifier"] = 6,
+            ["subscription"] = 5,
+            ["effect"] = 17,
+            ["constraint"] = 10,
+            ["annotation"] = 10,
+            ["optionality"] = 3,
+            ["designation"] = 4,
+            ["stage"] = 5,
+            ["entity"] = 1,
+            ["primitive"] = 10,
+            ["declaration"] = 4,
+            ["contract"] = 7,
+            ["expression"] = 7,
+            ["duration"] = 8,
+        };
+        await Assert.That(cells.GroupBy(c => c.Dimension).ToDictionary(g => g.Key, g => g.Count())).IsEquivalentTo(expected);
         await Assert.That(cells.Select(c => c.Id).Distinct().Count()).IsEqualTo(cells.Count);
         foreach (var dimension in new[] { "nav", "keyword-target", "visibility", "require", "quantifier", "subscription", "effect", "constraint", "annotation", "optionality", "designation", "stage", "comparison", "contract", "duration", "primitive", "declaration", "entity" })
             await Assert.That(cells.Count(c => c.Dimension == dimension)).IsGreaterThan(0).Because(dimension);

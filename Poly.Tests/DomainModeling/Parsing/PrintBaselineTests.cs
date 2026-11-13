@@ -392,6 +392,45 @@ public sealed class PrintBaselineTests {
             await Assert.That(frozen["poly/" + path].Text.Split('\n').Any(l => l.TrimStart().StartsWith("//", StringComparison.Ordinal))).IsFalse().Because(path);
     }
 
+    private static IReadOnlyList<Effect> GoEffects(string key) {
+        var text = Frozen().Single(e => e.Key == key).Text;
+        var session = DomainSession.ForExtensions([]);
+        var applied = new DomainEvolution(new Domain("_", [])).Apply(new PolyDslParser(text, session).Parse(), session: session);
+        return applied.Root.Types.OfType<Entity>().Single(e => e.Name == "A").Actions.Single(a => a.Name == "Go").Effects;
+    }
+
+    private static bool IsAssign(Effect effect, string value) =>
+        effect is AssignEffect { Target: PropertyAccess { Name: "Name" }, Value: Literal { Value: string v } } && v == value;
+
+    /// <summary>The frozen composite-effect layout (later parts lose the indent) still re-reads: `Go` holds the two assignments, in order.</summary>
+    [Test]
+    public async Task CompositeEffectLayout_ReReadsAsTheTwoAssignmentsInOrder() {
+        var effects = GoEffects("built/composite-effect");
+
+        await Assert.That(effects.Count).IsEqualTo(2);
+        await Assert.That(IsAssign(effects[0], "x")).IsTrue();
+        await Assert.That(IsAssign(effects[1], "y")).IsTrue();
+    }
+
+    /// <summary>The frozen for-each layout (closing brace two spaces short) still re-reads as the two loops with their bodies.</summary>
+    [Test]
+    public async Task ForEachLayout_ReReadsAsTheTwoLoops() {
+        var effects = GoEffects("built/for-each");
+
+        await Assert.That(effects.Count).IsEqualTo(2);
+        var first = (ForEachEffect)effects[0];
+        await Assert.That(first.BinderName).IsEqualTo("b");
+        await Assert.That(first.RelationshipName).IsEqualTo("bs");
+        await Assert.That(first.Where).IsNull();
+        await Assert.That(first.Body.Count).IsEqualTo(1);
+        await Assert.That(IsAssign(first.Body[0], "y")).IsTrue();
+        var second = (ForEachEffect)effects[1];
+        await Assert.That(second.BinderName).IsEqualTo("c");
+        await Assert.That(second.Where is Comparison { Kind: ComparisonKind.Equal, Left: PropertyAccess { Name: "Name" }, Right: Literal { Value: "x" } }).IsTrue();
+        await Assert.That(second.Body.Count).IsEqualTo(1);
+        await Assert.That(IsAssign(second.Body[0], "z")).IsTrue();
+    }
+
     [Test]
     public async Task PrintedText_NeverStartsALineWithTheHeaderPrefix() {
         foreach (var entry in Frozen())

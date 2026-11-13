@@ -206,6 +206,17 @@ internal static class RoundTripMatrixCells {
             ContractBindings = [new ContractBinding("Bn", "Pay", "Charge", "Go", "m", [])],
         });
 
+        // expression kinds the print baseline's built/expression-kinds case prints, as an entity policy (G-34 rewrites their printing)
+        void Expression(string id, string kind, DomainExpression expression, CellSession session = CellSession.Bare) =>
+            Add("expression", id, () => Dom(Ent("B", [Prop("Name")]), WithNavs(Ent("A", [Prop("Total", "Number"), Prop("Due", "Date")], policies: [Pol("P", expression)]), Nav("A", "bs", "B", RelationshipCardinality.OneToMany))), session, "Expression." + kind);
+        Expression("Owned", "OwnedAccess", DomainExpression.Owned("Addr", Prp("City")));
+        Expression("Not/comparison", "Not", DomainExpression.Not(DomainExpression.GreaterThan(Prp("Total"), Num(1))));
+        Expression("Not/property", "Not", DomainExpression.Not(Prp("Flag")));
+        Expression("Divide", "Divide", DomainExpression.GreaterThan(DomainExpression.Divide(Prp("Total"), Num(2)), Num(1)));
+        Expression("NotExists", "NotExists", DomainExpression.NotExists(DomainExpression.RelationshipNav("bs", Prp("Name"))));
+        Expression("Match", "MatchExpr", DomainExpression.GreaterThan(DomainExpression.Match([new MatchArm(DomainExpression.GreaterThan(Prp("Total"), Num(1)), Num(1))], Num(0)), Num(0)));
+        Expression("DateOperation", "DateOperation", DomainExpression.GreaterThan(Prp("Due"), new DateOperation(new Now(), DomainExpression.Literal(14L), DateOperationKind.AddDays)), CellSession.Temporal);
+
         // durations, one per unit (the temporal extension)
         foreach (var unit in Enum.GetValues<DurationUnit>())
             Add("duration", unit.ToString(), () => DomainWithExtensions([ExtensionCatalog.TemporalId], Ent("A", [Prop("Wait", "Duration", new DefaultValueConstraint(new Duration(12, unit)))])), CellSession.Temporal, Cov(unit));

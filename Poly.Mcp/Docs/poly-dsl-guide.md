@@ -771,6 +771,16 @@ Parameters (optional) appear **after** `: action`, keeping the uniform `Name: ki
 
 Same action name may appear on multiple stages; each stage's body and `require` gates are independent (effects are not copied onto earlier stages).
 
+**An action is all or nothing, on both hosts.** When an action fails (a returned failure or a thrown one), every entity
+it changed is restored: its own assigns, stage and the children it added to its collections; what an `invoke`d action
+changed on another entity; what a `when` handler it fired changed on the subscriber; and a child it left in an existing
+entity's collection or subscriber registry. The simulator and the generated C# restore the same state. Two things are
+not yet covered. The storage port of the generated C# is not part of the rollback yet: a `unique` key the failed action
+assigned stays reserved (a retry with the same key reports it taken), and the key it replaced stays released although
+the entity holds it again. And a generated
+`Create`, `Create{Nav}` or `Attach{Nav}` called directly by host code, with no action running, is not rolled back as a
+whole.
+
 <!-- poly-verify: fragment:entity wrapper:entity-bodies -->
 ```poly
 Tag: action (value: Text) {
@@ -935,8 +945,8 @@ once per record whose `where` holds.
 - **Zero records is a no-op:** an empty relationship, or a `where` that matches none,
   runs nothing and the action still succeeds.
 - **Fail-fast:** the first failing body effect (for example an `invoke name.Action` that
-  fails) fails the whole `for` and no later record is visited. The simulator rolls back
-  the failed action; generated C# keeps what earlier records already did.
+  fails) fails the whole `for` and no later record is visited. Both hosts roll the failed
+  action back, so nothing earlier records did survives it.
 - **Legal body effects:** an `assign` to the owning entity's own state, `invoke name.Action`
   on the loop record. An `assign` through the binder or a relationship is another
   entity's state and is rejected with `DMEFF012`; mutate that entity with `invoke name.Action`.
@@ -1131,10 +1141,9 @@ unchanged, and its path is the call chain (the handler adds no segment of its
 own). The notification stops at the first failing handler, in registration
 order, so no later handler runs. The action that caused the transition, or the
 `create in` that landed the child in a watched stage, returns that failure to
-its caller; it never reports success and never throws. The stage change that
-fired the subscription is undone by the simulator (it restores the failed
-action's changes) but stays assigned in the generated C# until action rollback
-lands there, so the two hosts differ on that state until then.
+its caller; it never reports success and never throws. The failed action is
+rolled back on both hosts, so the stage change that fired the subscription, and
+anything an earlier handler wrote, is undone.
 For a failed `invoke` in the handler of `Run` that finishes an `Item`, the path
 reads `Owner.Run.Item.Finish.Owner.Y`.
 

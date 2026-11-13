@@ -666,8 +666,10 @@ public class AtomicityParityTests {
         }
         """;
 
-    // PINNED, removed by X-04 (the storage journal hook, `ActionScope.Begin(db)`): the wrapper opens its scope with no
-    // journal, so a rolled-back action restores the entity's Code but not the storage port. The new key stays reserved.
+    // PINNED, removed by X-04 (the storage journal hook, `ActionScope.Begin(db)` and the port rolled back to its mark):
+    // the wrapper opens its scope with no journal, so a rolled-back action restores the entity's Code but not the
+    // storage port. The unique assign recorded the new key and released the old one before the later assign failed,
+    // so after the rollback the new key stays reserved and the old one, which the entity holds again, is free.
     [Test]
     public async Task Unique_WhenTheActionRollsBack_LeavesTheNewKeyReserved_UntilX04() {
         var (_, assembly) = Print(UniqueDsl, "AtomicityUnique");
@@ -675,6 +677,7 @@ public class AtomicityParityTests {
         var type = assembly.GetType("Tag")!;
         var tag = Unwrap(ExportedCSharp.InvokeCreate(type, ("code", "old"), ("db", port)));
         var rename = type.GetMethods(PrintedMembers.Any).Single(m => m.Name == "Rename");
+        await Assert.That(port.Exists("Tag", "Code", "old")).IsTrue();
 
         var result = rename.Invoke(tag, [.. rename.GetParameters()
             .Select(p => p.ParameterType == typeof(IStoragePort) ? port : p.ParameterType == typeof(long) ? 1L : (object)"new")])!;
@@ -682,6 +685,7 @@ public class AtomicityParityTests {
         await Assert.That((bool)result.GetType().GetProperty("IsSuccess")!.GetValue(result)!).IsFalse();
         await Assert.That(type.GetProperty("Code", PrintedMembers.Any)!.GetValue(tag)).IsEqualTo("old");
         await Assert.That(port.Exists("Tag", "Code", "new")).IsTrue().Because("X-04 releases it");
+        await Assert.That(port.Exists("Tag", "Code", "old")).IsFalse().Because("X-04 records it again");
     }
 
     private static object Unwrap(object result) =>

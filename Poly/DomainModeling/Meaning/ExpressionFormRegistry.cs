@@ -10,7 +10,7 @@ namespace Poly.DomainModeling.Meaning;
 public sealed class ExpressionFormRegistry {
     private readonly List<System.Action<GrammarBuilder<DslToken, DslTokenKind>>> _grammarContributors = [];
     private readonly List<IExpressionPrintMapping> _printMappings = [];
-    private readonly List<IBinaryExpressionFold> _binaryFolds = [];
+    private readonly List<(DslTokenKind Op, Func<DomainExpression, DomainExpression, DomainExpression?> Claim)> _binaryClaims = [];
     private readonly List<(string? Rule, string Pattern, Func<MatchResult<DslToken, DslTokenKind>, DomainExpression> Fold)> _folds = [];
     private readonly Dictionary<string, Func<DomainExpression>> _idents = new(StringComparer.Ordinal);
     private Func<long, string, DomainExpression>? _durationClaim;
@@ -22,7 +22,7 @@ public sealed class ExpressionFormRegistry {
         ArgumentNullException.ThrowIfNull(source);
         _grammarContributors.AddRange(source._grammarContributors);
         _printMappings.AddRange(source._printMappings);
-        _binaryFolds.AddRange(source._binaryFolds);
+        _binaryClaims.AddRange(source._binaryClaims);
         _folds.AddRange(source._folds);
         foreach (var (name, fold) in source._idents)
             _idents[name] = fold;
@@ -102,16 +102,33 @@ public sealed class ExpressionFormRegistry {
     }
 
     /// <summary>
-    /// Registers a binary fold: given a parsed <c>left</c> and <c>right</c> operand and
-    /// whether the operator was <c>+</c> (vs <c>-</c>), returns a replacement expression
-    /// or null to keep the plain arithmetic node. Pack-owned binary specializations
-    /// (e.g. temporal <c>Now - 12 days</c> → <c>DateOperation</c>) register here so the
-    /// core parser never names pack IR.
+    /// Registers a library claim on a binary operator's row of the operator table: given the parsed operands it returns the
+    /// replacement expression, or null to keep the row's plain node. Claims run in registration order and the first
+    /// non-null result wins. A pack-owned specialization (temporal <c>Now - 12 days</c> → <c>DateOperation</c>) registers here
+    /// so the core parser never names pack IR. Throws when <paramref name="op"/> has no binary row.
     /// </summary>
-    public void RegisterBinaryFold(IBinaryExpressionFold fold) {
-        ArgumentNullException.ThrowIfNull(fold);
-        _binaryFolds.Add(fold);
+    public void RegisterBinaryClaim(DslTokenKind op, Func<DomainExpression, DomainExpression, DomainExpression?> claim) {
+        ArgumentNullException.ThrowIfNull(claim);
+        DslOperatorTable.RequireCoreBinaryRow(op);
+        _binaryClaims.Add((op, claim));
     }
+
+    /// <summary>One combined claim per operator, in registration order, for <see cref="DslOperatorTable.Core"/>.</summary>
+    internal IReadOnlyDictionary<DslTokenKind, Func<DomainExpression, DomainExpression, DomainExpression?>> BinaryClaims() =>
+        _binaryClaims
+            .GroupBy(c => c.Op)
+            .ToDictionary(
+                g => g.Key,
+                g => {
+                    var claims = g.Select(c => c.Claim).ToArray();
+                    return new Func<DomainExpression, DomainExpression, DomainExpression?>((l, r) => {
+                        foreach (var claim in claims) {
+                            if (claim(l, r) is { } result)
+                                return result;
+                        }
+                        return null;
+                    });
+                });
 
     internal bool HasGrammarContributors => _grammarContributors.Count > 0;
 
@@ -127,29 +144,4 @@ public sealed class ExpressionFormRegistry {
         foreach (var mapping in _printMappings)
             registry.Register(mapping);
     }
-
-    /// <summary>
-    /// Applies registered binary folds in order; the first non-null result wins. Returns
-    /// null when no fold claims the pair (caller keeps the plain arithmetic node).
-    /// </summary>
-    public DomainExpression? TryFoldBinary(DomainExpression left, DomainExpression right, bool isPlus) {
-        ArgumentNullException.ThrowIfNull(left);
-        ArgumentNullException.ThrowIfNull(right);
-        foreach (var fold in _binaryFolds) {
-            var result = fold.TryFold(left, right, isPlus);
-            if (result is not null)
-                return result;
-        }
-        return null;
-    }
-
-}
-
-/// <summary>
-/// Pack-owned binary expression fold (parse time). Given a parsed left/right operand and
-/// whether the operator is <c>+</c>, returns a replacement expression or null to keep the
-/// plain arithmetic node. Registered via <see cref="ExpressionFormRegistry.RegisterBinaryFold"/>.
-/// </summary>
-public interface IBinaryExpressionFold {
-    DomainExpression? TryFold(DomainExpression left, DomainExpression right, bool isPlus);
 }

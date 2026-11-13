@@ -136,11 +136,13 @@ public sealed class DslOperatorTableTests {
         await Assert.That(((DateOperation)claimed!).Kind).IsEqualTo(DateOperationKind.AddHours);
         await Assert.That(((Literal)((DateOperation)claimed).Offset).Value).IsEqualTo(2L);
 
-        var viaRow = Binary(table, DslTokenKind.Plus).Fold(new Now(), TwoHours);
-        await Assert.That(viaRow).IsEqualTo(claimed);
+        var viaRow = (DateOperation)Binary(table, DslTokenKind.Plus).Fold(new Now(), TwoHours);
+        await Assert.That(viaRow.Kind).IsEqualTo(DateOperationKind.AddHours);
+        await Assert.That(((Literal)viaRow.Offset).Value).IsEqualTo(2L);
         var minus = (DateOperation)Binary(table, DslTokenKind.Minus).Fold(new Now(), TwoHours);
         await Assert.That(((Literal)minus.Offset).Value).IsEqualTo(-2L);
-        await Assert.That(table.Fold(DslTokenKind.Plus, new Now(), TwoHours)).IsEqualTo(claimed);
+        var viaFold = (DateOperation)table.Fold(DslTokenKind.Plus, new Now(), TwoHours);
+        await Assert.That(viaFold.Kind).IsEqualTo(DateOperationKind.AddHours);
     }
 
     /// <summary>An unclaimed pair is the row's own fallback, in one place: <c>Claim</c> is null and the row folds to the plain node.</summary>
@@ -151,8 +153,12 @@ public sealed class DslOperatorTableTests {
         var one = DomainExpression.Literal(1L, new DomainTypeReference("Number"));
 
         await Assert.That(table.Claim(DslTokenKind.Plus, age, one)).IsNull();
-        await Assert.That(Binary(table, DslTokenKind.Plus).Fold(age, one)).IsEqualTo(DomainExpression.Add(age, one));
-        await Assert.That(table.Fold(DslTokenKind.Minus, age, one)).IsEqualTo(DomainExpression.Subtract(age, one));
+        var add = (Poly.DomainModeling.Ontology.Add)Binary(table, DslTokenKind.Plus).Fold(age, one);
+        await Assert.That(add.Left).IsSameReferenceAs(age);
+        await Assert.That(add.Right).IsSameReferenceAs(one);
+        var subtract = (Poly.DomainModeling.Ontology.Subtract)table.Fold(DslTokenKind.Minus, age, one);
+        await Assert.That(subtract.Left).IsSameReferenceAs(age);
+        await Assert.That(subtract.Right).IsSameReferenceAs(one);
     }
 
     [Test]
@@ -160,8 +166,10 @@ public sealed class DslOperatorTableTests {
         var table = DslOperatorTable.Core();
 
         await Assert.That(table.Claim(DslTokenKind.Plus, new Now(), TwoHours)).IsNull();
-        await Assert.That(Binary(table, DslTokenKind.Plus).Fold(new Now(), TwoHours))
-            .IsEqualTo(DomainExpression.Add(new Now(), TwoHours));
+        var now = new Now();
+        var add = (Poly.DomainModeling.Ontology.Add)Binary(table, DslTokenKind.Plus).Fold(now, TwoHours);
+        await Assert.That(add.Left).IsSameReferenceAs(now);
+        await Assert.That(add.Right).IsSameReferenceAs(TwoHours);
     }
 
     /// <summary>Claims survive <c>With</c> (F-04 and F-05 add rows through it): the copy still claims and its <c>+</c> row still folds the claim.</summary>

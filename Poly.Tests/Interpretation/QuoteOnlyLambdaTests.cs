@@ -155,15 +155,15 @@ public class QuoteOnlyLambdaTests {
 
     /// <summary>
     /// A quote-only lambda inside a delegate lambda: the outer body is a function-table entry, and the quote inside it is
-    /// the bridge's. On master the inner lambda's own table entry refuses the body after the bridge quoted it.
+    /// the bridge's. On master the inner lambda's own table entry refused the body after the bridge quoted it; it has no
+    /// entry now, so the bridge's answer (C#'s: the conditional is Decimal) runs.
     /// </summary>
     [Test]
     public async Task QuoteOnlyLambda_InsideADelegateLambda_IsQuotedByTheBridge() {
         var (_, _, inner) = Binary(typeof(decimal), typeof(int), static (x, y) => new Conditional(new Equal(x, x), x, y));
         var outer = new Lambda([], new Invoke(Quote(typeof(decimal), typeof(int)), inner, new Constant(0.1m), new Constant(7)));
         var stage = Run(new Invoke(Static(typeof(ActionRunner), nameof(ActionRunner.Run)), outer), []);
-        await Assert.That(stage).StartsWith("main-rejected: ");
-        await Assert.That(stage).Contains("conditional arms differ in representation");
+        await Assert.That(stage).IsEqualTo("ran; Decimal; 0.1");
     }
 
     private static ITypeDefinitionProvider Provider(TypeDefinitionNode typeNode) {
@@ -195,15 +195,15 @@ public class QuoteOnlyLambdaTests {
         var a = new Parameter("a", new ClrTypeReference(typeof(ulong?)));
         var call = new Invoke(new Member(new TypeReference("Sample.QuoteDoor"), "Apply"),
             new Lambda([x], new Add(x, new Constant(1))), a);
-        var stage = Run(call, [7UL], Provider(typeNode));
-        await Assert.That(stage).StartsWith("main-rejected: ");
-        await Assert.That(stage).Contains("no operator for 'UInt64' and 'Int32'");
+        // C#: x + 1 over ulong? is ulong? (the constant converts), 7 + 1 = 8.
+        await Assert.That(Run(call, [7UL], Provider(typeNode))).IsEqualTo("ran; UInt64?; 8");
     }
 
     /// <summary>
     /// The one shape where the call site can disagree with the boundary decision: a module method the analysis resolves,
     /// whose body the VM cannot compile (a lambda inside it), called on a variable, so the call falls through to name
-    /// dispatch and compiles the lambda argument as a closure value.
+    /// dispatch and compiles the lambda argument as a closure value. The boundary decided the lambda is quoted, so it has
+    /// no function-table entry: the emitter's guard refuses the closure at compile time, where master failed at run time.
     /// </summary>
     [Test]
     public async Task ModuleMethodWithoutACompilableBody_LiteralLambdaArgument() {
@@ -224,9 +224,24 @@ public class QuoteOnlyLambdaTests {
             new Assignment(host, new New(new TypeReference("Sample.QuoteDoorHost"))),
             new Invoke(new Member(new Variable("host"), "Take"), new Lambda([x], new Equal(x, x)))
         ], [host]);
-        // Master compiles the lambda into the function table and passes the closure by name; the dispatch fails at run time.
-        await Assert.That(Run(node, [], Provider(typeNode)))
-            .StartsWith("run-throws: InvalidOperationException: Type 'Dictionary`2' does not define method 'Take'");
+        var stage = Run(node, [], Provider(typeNode));
+        await Assert.That(stage).StartsWith("main-rejected: InvalidOperationException: VM compile rejected: ");
+        await Assert.That(stage).Contains("has no function-table entry");
+    }
+
+    /// <summary>
+    /// Lock amendment 9: the bridge's shape checks before the quote (<c>CheckDelegateShape</c>: arity and declared parameter
+    /// types; the open-generic refusal) carry the bridge's mark and message. No program reaches them through the analysis:
+    /// overload resolution refuses a lambda whose arity or declared parameter type does not match, and resolves no open
+    /// generic method. This pins that, so the marks are a net and a shape that reaches them shows up here first.
+    /// </summary>
+    [Test]
+    public async Task QuotedLambda_ShapeMismatch_IsRefusedByTheAnalysisFirst() {
+        var (a, _, lambda) = Binary(typeof(int), typeof(int), static (x, y) => new Add(x, y));
+        var probe = Static(typeof(BridgeProbe<,>).MakeGenericType(typeof(int), typeof(object)), "Apply");
+        await Assert.That(Run(new Invoke(probe, lambda, a), [7])).StartsWith("analysis-rejected: no matching member 'Apply'");
+        var wide = new Parameter("x", new ClrTypeReference(typeof(long)));
+        await Assert.That(Run(new Invoke(probe, new Lambda([wide], wide), a), [7])).StartsWith("analysis-rejected: no matching member 'Apply'");
     }
 
     /// <summary>
@@ -267,8 +282,9 @@ public class QuoteOnlyLambdaTests {
 
     // ---- outside the fence: the families the bridge leaves to the Expression API, judged against compiled C# ----
 
+    /// <summary>A cell of the fence probe; <see cref="CSharp"/> null: C# refuses the body (a compile error).</summary>
     private sealed record FenceCell(string Name, Type Left, Type? Right, Func<Parameter, Parameter?, Node> Body,
-        System.Linq.Expressions.LambdaExpression CSharp, (object? Left, object? Right)[] Sets);
+        System.Linq.Expressions.LambdaExpression? CSharp, (object? Left, object? Right)[] Sets);
 
     private static object Op(string name) => OperatorOracle.Operands.Single(o => o.Name == name).Stress!;
 
@@ -281,6 +297,17 @@ public class QuoteOnlyLambdaTests {
     private static FenceCell Cell<TA>(string name, Func<Parameter, Parameter?, Node> body,
         System.Linq.Expressions.Expression<Func<TA, object?>> csharp, params object?[] sets) =>
         new(name, typeof(TA), null, body, csharp, [.. sets.Select(static s => (s, (object?)null))]);
+
+    private static FenceCell Refused<TA>(string name, Func<Parameter, Parameter?, Node> body, params object?[] sets) =>
+        new(name, typeof(TA), null, body, null, [.. sets.Select(static s => (s, (object?)null))]);
+
+    private static FenceCell Refused<TA, TB>(string name, Func<Parameter, Parameter?, Node> body, params (object? Left, object? Right)[] sets) =>
+        new(name, typeof(TA), typeof(TB), body, null, sets);
+
+    /// <summary>The VM's body is <c>x == x ? x : y</c>; C#'s condition only has to be true (for a null <c>x</c> too).</summary>
+    private static Node Pick(Parameter x, Node other) => new Conditional(new Equal(x, x), x, other);
+
+    public static bool Always(object? _) => true;
 
     private static FenceCell[] FenceCells() {
         var (dt1, dt2) = (Op("DateTime"), Plain("DateTime"));
@@ -314,12 +341,27 @@ public class QuoteOnlyLambdaTests {
             Cell<DayOfWeek>("(Int32)DayOfWeek", static (x, _) => new TypeCast(x, new ClrTypeReference(typeof(int))), static x => (int)x, DayOfWeek.Friday),
             Cell<object>("Object as Text", static (x, _) => new TypeAs(x, new ClrTypeReference(typeof(string))), static x => x as string, s1, 7),
             Cell<object>("Object is Text", static (x, _) => new TypeIs(x, new ClrTypeReference(typeof(string))), static x => x is string, s1, 7),
-            Cell<object>("(Duration)Object", static (x, _) => new TypeCast(x, new ClrTypeReference(typeof(TimeSpan))), static x => (TimeSpan)x, ts1)
+            Cell<object>("(Duration)Object", static (x, _) => new TypeCast(x, new ClrTypeReference(typeof(TimeSpan))), static x => (TimeSpan)x, ts1),
+            // C# CS0077: 'as' needs a reference or nullable type.
+            Refused<object>("Object as Int32", static (x, _) => new TypeAs(x, new ClrTypeReference(typeof(int))), s1),
+            // Coalesce and conditional outside the fence: the function-table compile refused some of these on master.
+            Cell<DayOfWeek?>("DayOfWeek? ?? DayOfWeek", static (x, _) => new Coalesce(x, new Constant(DayOfWeek.Monday)), static x => x ?? DayOfWeek.Monday, DayOfWeek.Friday, null),
+            Refused<DayOfWeek?, int>("DayOfWeek? ?? Int32", static (x, y) => new Coalesce(x, y!), (DayOfWeek.Friday, 1)),
+            Refused<string>("Text ?? Int32(1)", static (x, _) => new Coalesce(x, new Constant(1)), s1),
+            Cell<DateTime?, DateTime>("DateTime? ?? DateTime", static (x, y) => new Coalesce(x, y!), static (x, y) => x ?? y, (dt1, dt2), (null, dt2)),
+            Cell<Guid?, Guid>("Uuid? ?? Uuid", static (x, y) => new Coalesce(x, y!), static (x, y) => x ?? y, (g1, g2), (null, g2)),
+            Refused<string>("x ? Text : DateTime", static (x, _) => Pick(x, new Constant(new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc))), s1),
+            Cell<DateTime?, DateTime>("x ? DateTime? : DateTime", static (x, y) => Pick(x, y!), static (x, y) => Always(x) ? x : y, (dt1, dt2), (null, dt2)),
+            Cell<TimeSpan, TimeSpan?>("x ? Duration : Duration?", static (x, y) => Pick(x, y!), static (x, y) => Always(x) ? x : y, (ts1, ts2), (ts1, null)),
+            Refused<DayOfWeek, int>("x ? DayOfWeek : Int32", static (x, y) => Pick(x, y!), (DayOfWeek.Friday, 1)),
+            Cell<object, int>("x ? Object : Int32", static (x, y) => Pick(x, y!), static (x, y) => Always(x) ? x : y, (s1, 7))
         ];
     }
 
     /// <summary>What compiled C# says for a cell: the body's type and the value per set.</summary>
     private static string CSharpAnswer(FenceCell cell) {
+        if (cell.CSharp is null)
+            return "refused";
         var culture = CultureInfo.CurrentCulture;
         CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
         try {
@@ -375,18 +417,20 @@ public class QuoteOnlyLambdaTests {
         await Assert.That(wrong).IsEmpty();
         var raw = answers.Where(static a => !a.Vm.StartsWith("ran", StringComparison.Ordinal)
                 && !a.Vm.StartsWith("analysis-rejected", StringComparison.Ordinal)
-                && !a.Vm.StartsWith("bridge-rejected", StringComparison.Ordinal)
-                && !a.Vm.StartsWith("main-rejected", StringComparison.Ordinal))
+                && !a.Vm.StartsWith("bridge-rejected", StringComparison.Ordinal))
             .Select(static a => $"{a.Cell.Name}: {a.Vm}").ToArray();
         await Assert.That(raw).IsEmpty();
+        var refused = answers.Where(static a => a.CSharp == "refused" && !a.Vm.StartsWith("analysis-rejected", StringComparison.Ordinal)
+                && !a.Vm.StartsWith("bridge-rejected", StringComparison.Ordinal))
+            .Select(static a => $"{a.Cell.Name}: {a.Vm}").ToArray();
+        await Assert.That(refused).IsEmpty();
         var stages = answers.Select(static a => $"{a.Cell.Name} = {a.Vm.Split(':', ';')[0]}");
         await Assert.That(string.Join("\n", stages)).IsEqualTo(string.Join("\n", FenceStages));
     }
 
     /// <summary>
-    /// The stage per cell on master. None is refused by the function-table compile, so T-19b moves none of them. The
-    /// analysis refuses temporal arithmetic and nullable temporal equality (T-23) and enum arithmetic (T-25); the bridge
-    /// refuses enum ordering, which the Expression API does not define (T-25).
+    /// The stage per cell. The analysis refuses temporal arithmetic and nullable temporal equality (T-23) and enum
+    /// arithmetic (T-25); the bridge refuses enum ordering, which the Expression API does not define (T-25).
     /// </summary>
     private static readonly string[] FenceStages = [
         "DateTime - DateTime = analysis-rejected",
@@ -413,6 +457,19 @@ public class QuoteOnlyLambdaTests {
         "(Int32)DayOfWeek = ran",
         "Object as Text = ran",
         "Object is Text = ran",
-        "(Duration)Object = ran"
+        "(Duration)Object = ran",
+        "Object as Int32 = analysis-rejected",
+        // Refused by the function-table compile on master (main-rejected); the bridge decides them now: C# defines the
+        // first, fifth, sixth and the last, so they run; it refuses the other three, which are the bridge's refusal.
+        "DayOfWeek? ?? DayOfWeek = ran",
+        "DayOfWeek? ?? Int32 = bridge-rejected",
+        "Text ?? Int32(1) = bridge-rejected",
+        "DateTime? ?? DateTime = ran",
+        "Uuid? ?? Uuid = ran",
+        "x ? Text : DateTime = bridge-rejected",
+        "x ? DateTime? : DateTime = ran",
+        "x ? Duration : Duration? = ran",
+        "x ? DayOfWeek : Int32 = bridge-rejected",
+        "x ? Object : Int32 = ran"
     ];
 }

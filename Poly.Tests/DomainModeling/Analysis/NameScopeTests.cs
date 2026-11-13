@@ -110,7 +110,7 @@ public sealed class NameScopeTests {
     }
 
     [Test]
-    public async Task EmitterParity_ActionScopeSurface_IsClosedOverTheTwoSnapshotMembers() {
+    public async Task EmitterParity_ActionScopeSurface_IsClosedOverSnapshotRestoreAndActionBodies() {
         // Every emitted member beginning `__` is one of the two IActionScoped members; a new
         // `__` name must be added here deliberately, with the prefix rule already covering it.
         var evolved = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(
@@ -142,9 +142,18 @@ public sealed class NameScopeTests {
             emitted.AddRange(typeDef.Methods?.Select(m => m.Name) ?? []);
             emitted.AddRange(typeDef.Fields?.Select(f => f.Name) ?? []);
             var scopeNames = emitted.Where(ReservedNames.IsActionScopeName).Order(StringComparer.Ordinal);
-            await Assert.That(string.Join(",", scopeNames)).IsEqualTo("__Restore,__Snapshot");
+            var entity = domain.Types.OfType<Entity>().First(e => e.Name == typeDef.Name);
+            var bodies = entity.Actions.Concat(entity.Stages.SelectMany(s => s.Actions))
+                .Select(a => Poly.DomainModeling.Lowering.DomainToCSharpExporter.ActionBodyPrefix + a.Name).Distinct(StringComparer.Ordinal);
+            var expected = bodies.Concat(["__Restore", "__Snapshot"]).Order(StringComparer.Ordinal);
+            await Assert.That(string.Join(",", scopeNames)).IsEqualTo(string.Join(",", expected));
         }
     }
+
+    /// <summary>The private body method an action wrapper calls: <c>__BodyOf</c> plus an authored ACTION name (not any member).</summary>
+    private static bool IsBodyOfAuthoredAction(string name, IReadOnlySet<string> authored) =>
+        name.StartsWith(Poly.DomainModeling.Lowering.DomainToCSharpExporter.ActionBodyPrefix, StringComparison.Ordinal)
+        && authored.Contains(name[Poly.DomainModeling.Lowering.DomainToCSharpExporter.ActionBodyPrefix.Length..]);
 
     [Test]
     public async Task MemberNamedCreate_IsError() {
@@ -404,8 +413,10 @@ public sealed class NameScopeTests {
         var authored = new HashSet<string>(StringComparer.Ordinal) { "Group" };
         authored.UnionWith(group.Properties.Select(p => p.Name));
         authored.UnionWith(group.Navigations.Select(n => n.Name));
-        authored.UnionWith(group.Actions.Select(a => a.Name));
-        authored.UnionWith(group.Stages.SelectMany(s => s.Actions).Select(a => a.Name));
+        var actionNames = group.Actions.Select(a => a.Name)
+            .Concat(group.Stages.SelectMany(s => s.Actions).Select(a => a.Name))
+            .ToHashSet(StringComparer.Ordinal);
+        authored.UnionWith(actionNames);
         authored.UnionWith(group.Policies.Select(p => p.Name));
 
         // Named gap (S-05/L-14): subscription-derived names S-01 cannot compute.
@@ -425,7 +436,8 @@ public sealed class NameScopeTests {
         emitted.AddRange(typeDef.Fields?.Select(f => f.Name) ?? Enumerable.Empty<string>());
 
         var unexplained = emitted
-            .Where(name => !authored.Contains(name) && !reserved.Contains(name) && !subscriptionGap.Contains(name))
+            .Where(name => !authored.Contains(name) && !reserved.Contains(name) && !subscriptionGap.Contains(name)
+                && !IsBodyOfAuthoredAction(name, actionNames))
             .ToList();
         await Assert.That(string.Join(",", unexplained)).IsEqualTo("");
 

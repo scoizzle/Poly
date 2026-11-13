@@ -20,6 +20,29 @@ internal class Doctor : Poly.Runtime.IActionScoped
     public Schedule? Schedule { get; private set; }
     internal DomainResult StartShift()
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfStartShift();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfStartShift()
+    {
         if (this.Schedule == null)
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Required("'StartShift' requires a linked 'schedule' on entity 'Doctor'.", "Doctor.schedule"));

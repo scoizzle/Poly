@@ -30,6 +30,29 @@ internal class Ticket : Poly.Runtime.IActionScoped
     public TicketStage CurrentStage { get; private set; }
     internal DomainResult Work()
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfWork();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfWork()
+    {
         if (this.CurrentStage != TicketStage.New)
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Work' requires stage 'New' on entity 'Ticket'.", "Ticket.Work", "New"));
@@ -38,6 +61,29 @@ internal class Ticket : Poly.Runtime.IActionScoped
         return DomainResult.Success();
     }
     internal DomainResult Close()
+    {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfClose();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfClose()
     {
         if (this.CurrentStage == TicketStage.New || this.CurrentStage == TicketStage.Working)
         {

@@ -416,4 +416,62 @@ public class ActionScopeNestedFailureTests {
         await Assert.That(cs).Contains("private void EnterNotifyCascade(");
         await Assert.That(cs).Contains("throw new System.InvalidOperationException(");
     }
+
+    // L-03b on top of L-03h (#818): the wrapper opens a nested scope for the failing callee. The failure is returned up
+    // through the handler and the firing effect, so no commit ever follows a rolled-back frame.
+    [Test]
+    public async Task Wrapper_AHandlersFailedInvoke_IsReturned_LeavesNoScope_AndTheNextActionCommits() {
+        var (domain, _) = EvolvedDomain.FromDsl(Dsl);
+        var exec = ModuleExec.For(domain);
+        var owner = exec.Create("Owner", new Dictionary<string, object?>()).Instance!;
+        await Assert.That(exec.Invoke(owner, "Add").Succeeded).IsTrue();
+
+        var run = exec.Invoke(owner, "Run");
+
+        await Assert.That(run.Succeeded).IsFalse();
+        await Assert.That(run.Failure!.Guard).IsEqualTo("Never");
+        await Assert.That(ActionScope.HasOpenScope).IsFalse();
+        // No frame was left rolled back or open: the next action on the same instance commits without throwing.
+        var next = exec.Invoke(owner, "Add");
+        await Assert.That(next.Succeeded).IsTrue();
+        await Assert.That(ModuleReads.Related(exec, "items", owner).Count).IsEqualTo(2);
+        await Assert.That(ActionScope.HasOpenScope).IsFalse();
+
+        var (_, assembly) = Print(Dsl, "NestedFailureWrapperPrinted");
+        var printed = ExportedCSharp.CreateEntity(assembly, "Owner");
+        await Assert.That(IsSuccess(Call(printed, "Add"))).IsTrue();
+        await Assert.That(IsSuccess(Call(printed, "Run"))).IsFalse();
+        await Assert.That(ActionScope.HasOpenScope).IsFalse();
+        await Assert.That(IsSuccess(Call(printed, "Add"))).IsTrue();
+        await Assert.That(ActionScope.HasOpenScope).IsFalse();
+    }
+
+    // STEP 2: on this head the wrapper emits no Touch, so nothing is snapshotted and _notifyDepth cannot be restored
+    // under the unwinding finally. Pinned at 0 on the watched child (the entity that carries the guard). L-03c adds Touch: the generated snapshot
+    // captures _notifyDepth, and a rollback (restores 0) followed by the cascade's exit decrement would leave -1 on the
+    // generated C#; this test is L-03c's red-in-waiting if it goes negative.
+    [Test]
+    public async Task Wrapper_NotifyDepth_StaysZeroAfterTheFailedRepro_UntilL03cAddsTouch() {
+        var (_, assembly) = Print(Dsl, "NestedFailureWrapperDepth");
+        var owner = ExportedCSharp.CreateEntity(assembly, "Owner");
+        Call(owner, "Add");
+        var child = ((IEnumerable)Read(owner, "Items")!).Cast<object>().Single();
+
+        await Assert.That(IsSuccess(Call(owner, "Run"))).IsFalse();
+
+        await Assert.That(NotifyDepth(child)).IsEqualTo(0);
+    }
+
+    // STEP 4: on top of the wrapper the generated C# still leaves the failed create-in child in the owner's collection
+    // (the wrapper snapshots nothing yet). L-03c's Touch changes this: the owner's collection is then restored.
+    [Test]
+    public async Task Wrapper_FailedCreateIn_LeavesTheChildInTheGeneratedOwner_UntilL03c() {
+        var (_, assembly) = Print(CreateInDsl, "NestedFailureWrapperCreateIn");
+        var owner = ExportedCSharp.CreateEntity(assembly, "Owner");
+
+        await Assert.That(IsSuccess(Call(owner, "Add"))).IsFalse();
+
+        await Assert.That(((ICollection)Read(owner, "Items")!).Count).IsEqualTo(1);
+        await Assert.That(ActionScope.HasOpenScope).IsFalse();
+    }
 }

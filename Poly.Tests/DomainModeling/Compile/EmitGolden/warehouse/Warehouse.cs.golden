@@ -47,6 +47,29 @@ internal class Warehouse : Poly.Runtime.IActionScoped
     }
     internal DomainResult AdjustCapacity(long delta)
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfAdjustCapacity(delta);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfAdjustCapacity(long delta)
+    {
         var assignValue0 = this.Capacity + delta;
         if (assignValue0 < 1L)
         {
@@ -61,6 +84,29 @@ internal class Warehouse : Poly.Runtime.IActionScoped
     }
     internal DomainResult SetStatus(TruckStatus status)
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfSetStatus(status);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfSetStatus(TruckStatus status)
+    {
         var assignValue0 = status;
         if (assignValue0 != TruckStatus.Idle && assignValue0 != TruckStatus.EnRoute && assignValue0 != TruckStatus.Maintenance && assignValue0 != TruckStatus.OutOfService)
         {
@@ -70,6 +116,29 @@ internal class Warehouse : Poly.Runtime.IActionScoped
         return DomainResult.Success();
     }
     internal DomainResult<Truck> RegisterTruck(string vin, long maxLoad, Poly.Runtime.IStoragePort db)
+    {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfRegisterTruck(vin, maxLoad, db);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult<Truck> __BodyOfRegisterTruck(string vin, long maxLoad, Poly.Runtime.IStoragePort db)
     {
         var create0 = this.CreateTrucks(vin, maxLoad, db, 0L, TruckStatus.Idle);
         if (!create0.IsSuccess)

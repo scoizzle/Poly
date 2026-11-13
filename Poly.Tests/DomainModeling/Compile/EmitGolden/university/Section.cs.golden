@@ -72,6 +72,29 @@ internal class Section : Poly.Runtime.IActionScoped
     }
     internal DomainResult Close()
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfClose();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfClose()
+    {
         if (this.CurrentStage != SectionStage.Open)
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Close' requires stage 'Open' on entity 'Section'.", "Section.Close", "Open"));
@@ -84,6 +107,29 @@ internal class Section : Poly.Runtime.IActionScoped
         return DomainResult.Success();
     }
     internal DomainResult<WaitOffer> Queue(Student who)
+    {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfQueue(who);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult<WaitOffer> __BodyOfQueue(Student who)
     {
         if (this.CurrentStage != SectionStage.Open)
         {
@@ -98,6 +144,29 @@ internal class Section : Poly.Runtime.IActionScoped
         return DomainResult<WaitOffer>.Success(created1);
     }
     internal DomainResult StaffLeave()
+    {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfStaffLeave();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfStaffLeave()
     {
         if (this.CurrentStage != SectionStage.Open)
         {
@@ -119,6 +188,29 @@ internal class Section : Poly.Runtime.IActionScoped
         return DomainResult.Success();
     }
     internal DomainResult Reopen()
+    {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfReopen();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfReopen()
     {
         if (this.CurrentStage != SectionStage.Closed)
         {

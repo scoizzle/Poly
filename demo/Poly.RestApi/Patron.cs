@@ -74,6 +74,29 @@ internal class Patron : Poly.Runtime.IActionScoped
     }
     internal DomainResult<Loan> CheckOut(Book book)
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfCheckOut(book);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult<Loan> __BodyOfCheckOut(Book book)
+    {
         if (this.CurrentStage != PatronStage.Active)
         {
             return DomainResult<Loan>.Failure(Poly.Runtime.DomainFailure.Stage("'CheckOut' requires stage 'Active' on entity 'Patron'.", "Patron.CheckOut", "Active"));
@@ -101,6 +124,29 @@ internal class Patron : Poly.Runtime.IActionScoped
     }
     internal DomainResult Suspend()
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfSuspend();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfSuspend()
+    {
         if (this.CurrentStage != PatronStage.Active)
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Suspend' requires stage 'Active' on entity 'Patron'.", "Patron.Suspend", "Active"));
@@ -114,6 +160,29 @@ internal class Patron : Poly.Runtime.IActionScoped
     }
     internal DomainResult CloseAccount()
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfCloseAccount();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfCloseAccount()
+    {
         if (this.CurrentStage != PatronStage.Active)
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'CloseAccount' requires stage 'Active' on entity 'Patron'.", "Patron.CloseAccount", "Active"));
@@ -123,6 +192,29 @@ internal class Patron : Poly.Runtime.IActionScoped
         return DomainResult.Success();
     }
     internal DomainResult Reinstate()
+    {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfReinstate();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfReinstate()
     {
         if (this.CurrentStage != PatronStage.Suspended)
         {

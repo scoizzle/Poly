@@ -201,7 +201,7 @@ public class ConstraintAssignLoweringTests {
             }
             """);
         session.Lower(domain, analysis);
-        await Assert.That(RuntimeAnalysisCache.TryGetModuleMethod(
+        await Assert.That(ActionBodies.TryGetModuleBody(
             domain, "Widget", "SetScore", out var method)).IsTrue();
         await Assert.That(method?.Body).IsNotNull();
         var moduleCs = new CSharpGenerator().Generate(method!.Body!);
@@ -426,7 +426,7 @@ public class ConstraintAssignLoweringTests {
             }
             """);
         session.Lower(domain, analysis);
-        await Assert.That(RuntimeAnalysisCache.TryGetModuleMethod(
+        await Assert.That(ActionBodies.TryGetModuleBody(
             domain, "Widget", "SetStatus", out var method)).IsTrue();
         await Assert.That(method?.Body).IsNotNull();
         var moduleCs = new CSharpGenerator().Generate(method!.Body!);

@@ -145,5 +145,42 @@ public class CalleeFrameIsolationTests {
             message = ex.Message;
         }
         await Assert.That(message).Contains("VM compile rejected: conditional arms differ in representation");
+        await Assert.That(message).DoesNotContain("__BodyOf");
+    }
+
+    /// <summary>Behaviour change (L-03b): <c>Maybe</c> invokes <c>Price</c> only when <c>Qty is 5</c>. On master the
+    /// untaken branch let <c>Maybe</c> succeed even though <c>Price</c>'s body cannot compile. A caller of an action whose
+    /// body cannot compile now fails to compile (strictly more fail-closed), with the body's own reason and never the
+    /// private body method's name. T-09 makes <c>Price</c> compile and flips this test. An unrelated action still runs.</summary>
+    [Test]
+    public async Task CallerOfAnUncompilableAction_FailsToCompile_WithTheBodysOwnReason() {
+        var (domain, _) = EvolvedDomain.FromDsl("""
+            domain P
+
+            Inv: entity {
+              Qty: Number default(0)
+              Dec: Decimal default(0)
+              Price: action { assign Dec to match { Qty > 1 -> 1.5, else -> Qty } }
+              Maybe: action { if (Qty is 5) { invoke Price } }
+              Bump: action { assign Qty to Qty + 1 }
+            }
+            """);
+        var exec = ModuleExec.For(domain);
+        var created = exec.Create("Inv", new Dictionary<string, object?>());
+        await Assert.That(created.Succeeded).IsTrue();
+
+        string message;
+        try {
+            var invoked = exec.Invoke(created.Instance!, "Maybe");
+            message = invoked.Succeeded ? "(succeeded)" : invoked.Error ?? "";
+        }
+        catch (InvalidOperationException ex) {
+            message = ex.Message;
+        }
+        await Assert.That(message).Contains("VM compile rejected: conditional arms differ in representation");
+        await Assert.That(message).DoesNotContain("__BodyOf");
+
+        await Assert.That(exec.Invoke(created.Instance!, "Bump").Succeeded).IsTrue();
+        await Assert.That(created.Instance!.Bag["Qty"]).IsEqualTo(1L);
     }
 }

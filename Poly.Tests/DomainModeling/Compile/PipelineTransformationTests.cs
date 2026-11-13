@@ -249,7 +249,7 @@ public class PipelineTransformationTests {
 
         var module = session.Lower(domain, analysis);
         var itemType = module.First(t => t.Name == "Item");
-        var maybe = itemType.Methods?.FirstOrDefault(m => m.Name == "Maybe");
+        var maybe = itemType.Methods.BodyMethod("Maybe");
         await Assert.That(maybe?.Body).IsNotNull();
         var bodyCs = new CSharpGenerator().Generate(maybe!.Body!);
         await Assert.That(bodyCs).Contains("Inc()");

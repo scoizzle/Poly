@@ -72,7 +72,7 @@ public class Item4FailBeforeMutateTests {
             """);
         var exec = ModuleExec.For(domain);
         session.Lower(domain, analysis);
-        await Assert.That(RuntimeAnalysisCache.TryGetModuleMethod(
+        await Assert.That(ActionBodies.TryGetModuleBody(
             domain, "Guest", "Book", out var book)).IsTrue();
         await Assert.That(book?.Body).IsNotNull();
         var flat = Flatten(book!.Body!).ToList();

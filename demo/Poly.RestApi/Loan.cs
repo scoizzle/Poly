@@ -42,6 +42,29 @@ internal class Loan : Poly.Runtime.IActionScoped
     public LoanStage CurrentStage { get; private set; }
     internal DomainResult Renew()
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfRenew();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfRenew()
+    {
         if (this.CurrentStage != LoanStage.Active)
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Stage("'Renew' requires stage 'Active' on entity 'Loan'.", "Loan.Renew", "Active"));
@@ -51,6 +74,29 @@ internal class Loan : Poly.Runtime.IActionScoped
         return DomainResult.Success();
     }
     internal DomainResult Return()
+    {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = this.__BodyOfReturn();
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult __BodyOfReturn()
     {
         if (this.CurrentStage != LoanStage.Active)
         {

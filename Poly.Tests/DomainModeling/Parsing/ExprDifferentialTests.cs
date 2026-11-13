@@ -560,7 +560,17 @@ public sealed class ExprDifferentialTests {
     /// and why. Empty since G-12 re-based the baseline to the parser as merged with G-10, so any
     /// moved result fails until a reviewed entry lists it here.
     /// </summary>
-    private static readonly (string Key, string Result, string Reason)[] AcceptedDeltas = [];
+    private static readonly (string Key, string Result, string Reason)[] AcceptedDeltas = [
+        ("0.00000000000000000000000000005",
+            "ERR Number '0.00000000000000000000000000005' has 29 digits after the point; the maximum is 28. @1:1",
+            "T-15: master rounded the literal to the integer 0; a literal is held exactly or is a positioned error."),
+        ("79228162514264337593543950336",
+            "ERR Number '79228162514264337593543950336' is larger than the maximum 79228162514264337593543950335. @1:1",
+            "T-15: master folded a number beyond the maximum to a string literal."),
+        ("9.9999999999999999999999999999",
+            "ERR Number '9.9999999999999999999999999999' is larger than the maximum 7.9228162514264337593543950335 for 28 digits after the point. @1:1",
+            "T-15: master rounded the literal to the integer 10."),
+    ];
 
     [Test]
     public async Task Baseline_IsLargeAndCoversEveryCorpusKind() {

@@ -15,6 +15,7 @@ namespace Poly.DomainModeling.Analysis;
 internal readonly struct ExactNumber : IEquatable<ExactNumber> {
     private static readonly BigInteger DecimalMaxMantissa = (BigInteger.One << 96) - 1;
     private const int DecimalMaxScale = 28;
+    private const int DecimalMaxIntegerDigits = 29;
     private const double ExactDoubleLimit = 9007199254740992d; // 2^53
 
     private ExactNumber(decimal value) => Value = value;
@@ -66,6 +67,13 @@ internal readonly struct ExactNumber : IEquatable<ExactNumber> {
         digits = digits.TrimStart('0');
         if (digits.Length == 0)
             return new ExactNumber(new decimal(0, 0, 0, false, (byte)(scale <= DecimalMaxScale ? scale : 0)));
+        // Refuse by digit count before any BigInteger: a text this long cannot fit, however many digits it has.
+        var integerDigits = digits.Length - scale;
+        var fractionDigits = scale;
+        for (var end = digits.Length; fractionDigits > 0 && end > 0 && digits[end - 1] == '0'; end--)
+            fractionDigits--;
+        if (integerDigits > DecimalMaxIntegerDigits || fractionDigits > DecimalMaxScale)
+            return null;
         var mantissa = BigInteger.Parse(digits, CultureInfo.InvariantCulture);
         // Keep the declared scale whenever decimal can hold it; trim trailing zeros only to fit.
         // (The arithmetic path still normalises in FromMantissaScale; a parsed bound keeps its text.)

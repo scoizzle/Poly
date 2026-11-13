@@ -57,9 +57,7 @@ internal static class ResolverErrorBaseline {
         // T-15: number and duration text surfaces as a raw .NET exception message.
         ("S:Constraints.length.min/overflow", "T-15", "OverflowException: Value was either too large or too small for an Int32."),
         ("S:Constraints.length.min/fraction", "T-15", "ERR FormatException: The input string '1.5' was not in a correct format."),
-        ("S:Constraints.length.min/arabic-indic", "T-15", "ERR FormatException: The input string '٣' was not in a correct format."),
         ("S:Constraints.length.max/overflow", "T-15", "OverflowException: Value was either too large or too small for an Int32."),
-        ("S:Entities.annotation.number/arabic-indic", "T-15", "ERR FormatException: The input string '٣' was not in a correct format."),
         ("S:Temporal.amount.message/fraction", "T-15", "InvalidOperationException: Duration amount '1.5' is not an integer."),
         ("S:Temporal.amount.message/overflow", "T-15", "InvalidOperationException: Duration amount '99999999999999999999' is not an integer."),
         // G-29: unsupported-keyword errors with no position, and the unknown `uses` id with no position.

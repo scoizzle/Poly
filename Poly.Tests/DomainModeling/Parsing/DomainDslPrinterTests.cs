@@ -324,7 +324,7 @@ public sealed class DomainDslPrinterTests {
             .IsEqualTo(string.Join(",", EntityDeclarationOrder.Members(bare).Select(m => m.Kind.ToString())));
     }
 
-    private static string PrintWithImplicitSet(string poly) {
+    internal static string PrintWithImplicitSet(string poly) {
         var session = DomainSession.Create(DslSyntaxTree.Parse(poly).Uses, new SessionOptions(ProductCatalog.Model, ProductCatalog.ImplicitIds));
         var result = new DomainEvolution(DomainTestFactory.Create("_", [], []))
             .ApplyAndAnalyze(
@@ -397,5 +397,98 @@ public sealed class DomainDslPrinterTests {
         var before = DomainSession.Create(tree.Uses, new SessionOptions(ProductCatalog.Model, ProductCatalog.ImplicitIds));
         var after = DomainSession.Create(DslSyntaxTree.Parse(text).Uses, new SessionOptions(ProductCatalog.Model, ProductCatalog.ImplicitIds));
         await Assert.That(string.Join(",", after.Extensions)).IsEqualTo(string.Join(",", before.Extensions));
+    }
+}
+
+/// <summary>
+/// G-03 characterisation: what the printer writes today for a number, per site. <see cref="Stable"/> rows must NOT move when
+/// <c>DslNumberText</c> lands; <see cref="Moving"/> rows record today's text for the inputs this slice changes.
+/// </summary>
+public sealed class DslNumberPrintPinTests {
+    private static readonly DomainDslPrinter Printer = new();
+
+    private static string Literal(object value) => Printer.PrintTestExpression(DomainExpression.Literal(value));
+
+    private static string Bound(object value) => Printer.PrintConstraintText(new RangeConstraint(value, value));
+
+    private static string Equality(object value) => Printer.PrintConstraintText(new EqualityConstraint(value));
+
+    /// <summary>(label, value, literal text, range text, equals text) that stay as they are.</summary>
+    internal static IEnumerable<(string, object, string, string, string)> Stable() {
+        yield return ("long 3", 3L, "3", "range(3, 3)", "equals(3)");
+        yield return ("int 3", 3, "3", "range(3, 3)", "equals(3)");
+        yield return ("long.MinValue", long.MinValue, "-9223372036854775808", "range(-9223372036854775808, -9223372036854775808)", "equals(-9223372036854775808)");
+        yield return ("decimal 1.5", 1.5m, "1.5", "range(1.5, 1.5)", "equals(1.5)");
+        yield return ("decimal 1.50", 1.50m, "1.50", "range(1.50, 1.50)", "equals(1.50)");
+        yield return ("decimal 1.0", 1.0m, "1.0", "range(1.0, 1.0)", "equals(1.0)");
+        yield return ("decimal 1e15", 1e15m, "1000000000000000", "range(1000000000000000, 1000000000000000)", "equals(1000000000000000)");
+        yield return ("decimal 1e-7", 0.0000001m, "0.0000001", "range(0.0000001, 0.0000001)", "equals(0.0000001)");
+        yield return ("decimal.MaxValue", decimal.MaxValue, "79228162514264337593543950335", "range(79228162514264337593543950335, 79228162514264337593543950335)", "equals(79228162514264337593543950335)");
+        yield return ("decimal.MinValue", decimal.MinValue, "-79228162514264337593543950335", "range(-79228162514264337593543950335, -79228162514264337593543950335)", "equals(-79228162514264337593543950335)");
+        yield return ("double 2.5", 2.5d, "2.5", "range(2.5, 2.5)", "equals(2.5)");
+        yield return ("double 3 (integral)", 3d, "3.0", "range(3, 3)", "equals(3.0)");
+        yield return ("double 0.1", 0.1d, "0.1", "range(0.1, 0.1)", "equals(0.1)");
+        yield return ("double 1e-7", 1e-7d, "0.0000001", "range(1E-07, 1E-07)", "equals(0.0000001)");
+        yield return ("double 1e15", 1e15d, "1000000000000000.0", "range(1000000000000000, 1000000000000000)", "equals(1000000000000000.0)");
+        yield return ("double 1e21", 1e21d, "1000000000000000000000.0", "range(1E+21, 1E+21)", "equals(1000000000000000000000.0)");
+    }
+
+    /// <summary>Inputs this slice moves, with today's text. <c>null</c> in a column means that site is not pinned for the input.</summary>
+    internal static IEnumerable<(string, object, string, string, string)> Moving() {
+        yield return ("double 5e-324", 5e-324d, "0.0", "range(5E-324, 5E-324)", "equals(0.0)");
+        yield return ("double -0.0", -0.0d, "-0.0", "range(-0, -0)", "equals(-0.0)");
+        yield return ("double 0.1+0.2", 0.1d + 0.2d, "0.3", "range(0.30000000000000004, 0.30000000000000004)", "equals(0.3)");
+        yield return ("double 123456789.123456789", 123456789.123456789d, "123456789.123457", "range(123456789.12345679, 123456789.12345679)", "equals(123456789.123457)");
+        yield return ("float 1e15", 1e15f, "1E+15", "range(1E+15, 1E+15)", "equals(1E+15)");
+        yield return ("double NaN", double.NaN, "NaN", "range(NaN, NaN)", "equals(NaN)");
+        yield return ("double +Infinity", double.PositiveInfinity, "Infinity", "range(Infinity, Infinity)", "equals(Infinity)");
+        yield return ("double -Infinity", double.NegativeInfinity, "-Infinity", "range(-Infinity, -Infinity)", "equals(-Infinity)");
+    }
+
+    [Test]
+    public async Task StableRows_PrintTheSameAsToday() {
+        var seen = 0;
+        foreach (var (label, value, literal, bound, equality) in Stable()) {
+            await Assert.That($"{label}: {Literal(value)}").IsEqualTo($"{label}: {literal}");
+            await Assert.That($"{label}: {Bound(value)}").IsEqualTo($"{label}: {bound}");
+            await Assert.That($"{label}: {Equality(value)}").IsEqualTo($"{label}: {equality}");
+            seen++;
+        }
+        await Assert.That(seen).IsEqualTo(16);
+    }
+
+    [Test]
+    public async Task MovingRows_TodayText() {
+        var seen = 0;
+        foreach (var (label, value, literal, bound, equality) in Moving()) {
+            await Assert.That($"{label}: {Literal(value)}").IsEqualTo($"{label}: {literal}");
+            await Assert.That($"{label}: {Bound(value)}").IsEqualTo($"{label}: {bound}");
+            await Assert.That($"{label}: {Equality(value)}").IsEqualTo($"{label}: {equality}");
+            seen++;
+        }
+        await Assert.That(seen).IsEqualTo(8);
+    }
+
+    [Test]
+    public async Task Double_MaxValue_TodayPrintsApproximateDigits() {
+        // Today: 15 significant digits then zeros (the value is lost), and the reader cannot hold 309 digits.
+        var text = Literal(double.MaxValue);
+        await Assert.That(text.StartsWith("17976931348623", StringComparison.Ordinal) && text.EndsWith(".0", StringComparison.Ordinal)).IsTrue();
+        await Assert.That(Bound(double.MaxValue)).IsEqualTo("range(1.7976931348623157E+308, 1.7976931348623157E+308)");
+    }
+
+    [Test]
+    public async Task NonNumericSites_PrintTheSameAsToday() {
+        await Assert.That(Printer.PrintConstraintText(new LengthConstraint(1, 5))).IsEqualTo("length(1, 5)");
+        await Assert.That(Printer.PrintConstraintText(new LengthConstraint(3, 3))).IsEqualTo("length(3)");
+        // A missing bound prints empty (`range(0, )`): kept as it is.
+        await Assert.That(Printer.PrintConstraintText(new RangeConstraint(0L, null))).IsEqualTo("range(0, )");
+    }
+
+    [Test]
+    public async Task ParsedExponentRepro_PrintsPlainDigitsToday() {
+        // #531's literal repro no longer yields an exponent on master: the reader stores a Number bound as long.
+        var text = DomainDslPrinterTests.PrintWithImplicitSet("domain T\nA: entity {\n  N: Number range(0, 1000000000000000)\n}\n");
+        await Assert.That(text).Contains("range(0, 1000000000000000)");
     }
 }

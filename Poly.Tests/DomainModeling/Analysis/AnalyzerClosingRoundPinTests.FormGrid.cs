@@ -2428,34 +2428,34 @@ part Owner | require form == Text = ok
 part Owner | stage require form == Text = ok
 part Owner | onEntry assign Number = ok
 part Owner | onEntry assign Text = ok
-part Cash | assign Number = ok
-part Cash | assign Decimal = ok
-part Cash | assign Text = ok
-part Cash | assign Boolean = ok
-part Cash | assign Date = ok
-part Cash | assign Color = ok
-part Cash | assign Widget = ok
-part Cash | create Number = ok
-part Cash | create Decimal = ok
-part Cash | create Text = ok
-part Cash | create Boolean = ok
-part Cash | create Date = ok
-part Cash | create Color = ok
-part Cash | create Widget = ok
-part Cash | invoke Number = ok
-part Cash | invoke Decimal = ok
-part Cash | invoke Text = ok
-part Cash | invoke Boolean = ok
-part Cash | invoke Date = ok
-part Cash | invoke Color = ok
-part Cash | invoke Widget = ok
-part Cash | call Number = ok
-part Cash | call Decimal = ok
-part Cash | call Text = ok
-part Cash | call Boolean = ok
-part Cash | call Date = ok
-part Cash | call Color = ok
-part Cash | call Widget = ok
+part Cash | assign Number = DMSTR006
+part Cash | assign Decimal = DMSTR006
+part Cash | assign Text = DMSTR006
+part Cash | assign Boolean = DMSTR006
+part Cash | assign Date = DMSTR006
+part Cash | assign Color = DMSTR006
+part Cash | assign Widget = DMSTR006
+part Cash | create Number = DMSTR006
+part Cash | create Decimal = DMSTR006
+part Cash | create Text = DMSTR006
+part Cash | create Boolean = DMSTR006
+part Cash | create Date = DMSTR006
+part Cash | create Color = DMSTR006
+part Cash | create Widget = DMSTR006
+part Cash | invoke Number = DMSTR006
+part Cash | invoke Decimal = DMSTR006
+part Cash | invoke Text = DMSTR006
+part Cash | invoke Boolean = DMSTR006
+part Cash | invoke Date = DMSTR006
+part Cash | invoke Color = DMSTR006
+part Cash | invoke Widget = DMSTR006
+part Cash | call Number = DMSTR006
+part Cash | call Decimal = DMSTR006
+part Cash | call Text = DMSTR006
+part Cash | call Boolean = DMSTR006
+part Cash | call Date = DMSTR006
+part Cash | call Color = DMSTR006
+part Cash | call Widget = DMSTR006
 part Cash | return Number = n/a
 part Cash | return Decimal = n/a
 part Cash | return Text = n/a
@@ -2463,45 +2463,45 @@ part Cash | return Boolean = n/a
 part Cash | return Date = n/a
 part Cash | return Color = n/a
 part Cash | return Widget = n/a
-part Cash | default Number = ok
-part Cash | default Decimal = ok
-part Cash | default Text = ok
-part Cash | default Boolean = ok
-part Cash | default Date = ok
-part Cash | default Color = ok
-part Cash | default Widget = ok
-part Cash | form == Number = ok
-part Cash | form == Decimal = ok
-part Cash | form == Text = ok
-part Cash | form == Boolean = ok
-part Cash | form == Date = ok
-part Cash | form == Color = ok
-part Cash | form == Widget = ok
-part Cash | form == null = ok
-part Cash | Number == form = ok
-part Cash | Decimal == form = ok
-part Cash | Text == form = ok
-part Cash | Boolean == form = ok
-part Cash | Date == form = ok
-part Cash | Color == form = ok
-part Cash | Widget == form = ok
-part Cash | null == form = ok
-part Cash | if form = ok
-part Cash | for where form = ok
-part Cash | not form = ok
-part Cash | form and Flag = ok
-part Cash | match { form -> 1 } = ok
-part Cash | form * N = ok
-part Cash | N * form = ok
-part Cash | form * Name = ok
-part Cash | Name * form = ok
-part Cash | match arm into Number = ok
-part Cash | match arm into Decimal = ok
-part Cash | match arm into Text = ok
-part Cash | match arm into Boolean = ok
-part Cash | match arm into Date = ok
-part Cash | match arm into Color = ok
-part Cash | match arm into Widget = ok
+part Cash | default Number = DMSTR006
+part Cash | default Decimal = DMSTR006
+part Cash | default Text = DMSTR006
+part Cash | default Boolean = DMSTR006
+part Cash | default Date = DMSTR006
+part Cash | default Color = DMSTR006
+part Cash | default Widget = DMSTR006
+part Cash | form == Number = DMSTR006
+part Cash | form == Decimal = DMSTR006
+part Cash | form == Text = DMSTR006
+part Cash | form == Boolean = DMSTR006
+part Cash | form == Date = DMSTR006
+part Cash | form == Color = DMSTR006
+part Cash | form == Widget = DMSTR006
+part Cash | form == null = DMSTR006
+part Cash | Number == form = DMSTR006
+part Cash | Decimal == form = DMSTR006
+part Cash | Text == form = DMSTR006
+part Cash | Boolean == form = DMSTR006
+part Cash | Date == form = DMSTR006
+part Cash | Color == form = DMSTR006
+part Cash | Widget == form = DMSTR006
+part Cash | null == form = DMSTR006
+part Cash | if form = DMSTR006
+part Cash | for where form = DMSTR006
+part Cash | not form = DMSTR006
+part Cash | form and Flag = DMSTR006
+part Cash | match { form -> 1 } = DMSTR006
+part Cash | form * N = DMSTR006
+part Cash | N * form = DMSTR006
+part Cash | form * Name = DMSTR006
+part Cash | Name * form = DMSTR006
+part Cash | match arm into Number = DMSTR006
+part Cash | match arm into Decimal = DMSTR006
+part Cash | match arm into Text = DMSTR006
+part Cash | match arm into Boolean = DMSTR006
+part Cash | match arm into Date = DMSTR006
+part Cash | match arm into Color = DMSTR006
+part Cash | match arm into Widget = DMSTR006
 part Cash | policy form == Number = DMSTR006
 part Cash | policy form == Text = DMSTR006
 part Cash | policy form == null = DMSTR006

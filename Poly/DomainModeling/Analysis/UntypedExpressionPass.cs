@@ -6,9 +6,11 @@ namespace Poly.DomainModeling.Analysis;
 /// One place where a consumer met a value the expression analyzer could not type (T-05b, lock #679 6845700954, A1):
 /// <see cref="Expression"/> is the untyped value (null when the untyped thing is the consumer's declared target type),
 /// <see cref="Consumer"/> the node that needed its type, <see cref="TypeName"/> a declared type name the type model
-/// cannot resolve (A2), and <see cref="Reason"/> why the analyzer has no type.
+/// cannot resolve (A2), and <see cref="Reason"/> why the analyzer has no type. <see cref="UnknownName"/>: the value is a
+/// bare name that is no property, parameter or enum member, reported as the reference error DMSEM005 (one cause, one id),
+/// not DMSEM006, which is for an expression that is known but cannot be typed.
 /// </summary>
-internal sealed record UntypedSite(DomainExpression? Expression, Node Consumer, string? TypeName, string Reason);
+internal sealed record UntypedSite(DomainExpression? Expression, Node Consumer, string? TypeName, string Reason, bool UnknownName = false);
 
 /// <summary>The untyped sites <see cref="ExpressionTypeAnalyzer"/> stamped in this run, on the <see cref="Domain"/> node.</summary>
 internal sealed class UntypedSitesMetadata : IAnalysisMetadata {
@@ -53,7 +55,9 @@ internal sealed class UntypedExpressionPass : INodeAnalyzer {
                 continue;
             }
             Node at = site.Expression ?? site.Consumer;
-            context.ReportError(at, site.Reason, DomainModelDiagnosticCodes.SemanticUntypedExpression);
+            context.ReportError(at, site.Reason, site.UnknownName
+                ? DomainModelDiagnosticCodes.SemanticReferenceResolution
+                : DomainModelDiagnosticCodes.SemanticUntypedExpression);
             errorNodes.Add(at);
             reported.Add(at);
         }

@@ -158,7 +158,8 @@ public class UnknownNameAnalysisTests {
             }
             """));
 
-        await Assert.That(HasError(analysis, DomainModelDiagnosticCodes.SemanticTypeCompatibility)).IsTrue();
+        // T-05b closing round C3: one cause, one id: an unknown bare name is the reference error, DMSEM005, in every position.
+        await Assert.That(HasError(analysis, DomainModelDiagnosticCodes.SemanticReferenceResolution)).IsTrue();
         await Assert.That(analysis.Diagnostics.Any(d =>
             d.Severity == DiagnosticSeverity.Error
             && d.Message.Contains("'now'", StringComparison.Ordinal))).IsTrue();
@@ -174,7 +175,8 @@ public class UnknownNameAnalysisTests {
             }
             """));
 
-        await Assert.That(HasError(analysis, DomainModelDiagnosticCodes.SemanticTypeCompatibility)).IsTrue();
+        // T-05b closing round C3: one cause, one id: an unknown bare name is the reference error, DMSEM005, in every position.
+        await Assert.That(HasError(analysis, DomainModelDiagnosticCodes.SemanticReferenceResolution)).IsTrue();
         await Assert.That(analysis.Diagnostics.Any(d =>
             d.Severity == DiagnosticSeverity.Error
             && d.Message.Contains("'Bogus'", StringComparison.Ordinal))).IsTrue();

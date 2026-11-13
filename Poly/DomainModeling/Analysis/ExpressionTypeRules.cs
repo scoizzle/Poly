@@ -184,8 +184,14 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
         var reason = typeName is not null
             ? $"its type '{typeName}' {Unmodeled(domain, typeName)}"
             : UntypedReason(context, expr, props, parameters, enumTypes);
+        var unknownName = typeName is null && expr switch {
+            PropertyAccess { Name: var bare } => ResolvePropertyType(bare, props, parameters) is null
+                && EnumsDeclaring(enumTypes, bare).Count == 0,
+            ParameterAccess { Name: var parameter } => parameters?.ContainsKey(parameter) != true,
+            _ => false,
+        };
         context.GetOrAddMetadata(domain, () => new UntypedSitesMetadata()).Add(new UntypedSite(
-            expr, consumer, typeName, $"cannot determine the type of '{PrintedText(context, expr)}': {reason}"));
+            expr, consumer, typeName, $"cannot determine the type of '{PrintedText(context, expr)}': {reason}", unknownName));
     }
 
     /// <summary>Records that <paramref name="consumer"/>'s declared type <paramref name="typeName"/> has no definition.</summary>
@@ -215,9 +221,11 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
         switch (expr) {
             case PropertyAccess { Name: var name }:
                 var enums = EnumsDeclaring(enumTypes, name);
-                return enums.Count > 1
-                    ? $"'{name}' is a member of more than one enum ({string.Join(", ", enums)}); compare it with a property of one of them"
-                    : $"'{name}' is not a property, parameter or enum member here";
+                return enums.Count switch {
+                    0 => $"'{name}' is not a property, parameter or enum member here",
+                    1 => $"'{name}' is a member of enum '{enums[0]}', which this position does not take",
+                    _ => $"'{name}' is a member of more than one enum ({string.Join(", ", enums)}); compare it with a property of one of them",
+                };
             case ParameterAccess { Name: var name }:
                 return $"'{name}' is not a declared parameter";
             case RelationshipNavigation or OwnedAccess when noEntity:

@@ -1258,6 +1258,74 @@ public partial class AnalyzerClosingRoundPinTests {
     ];
 
     /// <summary>
+    /// The closing round's C3, one cause one id: a bare name that is no property, parameter or enum member (or an
+    /// undeclared parameter) is the reference error DMSEM005 wherever it is consumed. <c>C3-id</c>: the closing pass
+    /// reported it as DMSEM006 (a known expression with no type keeps DMSEM006); <c>C3-id-assign</c>: the assign and
+    /// create check reported it as DMSEM003 (one line). Only the id moves; no verdict changes from ok or to ok.
+    /// </summary>
+    internal static readonly (string Grid, string Cell, string Before, string After, string Rule)[] FlipsC3 = [
+        ("Dead", "Stamp - Stamp (DateTime) | default", "DMSEM006", "DMSEM005", "C3-id"),
+        ("Dead", "Day - Day (Date) | default", "DMSEM006", "DMSEM005", "C3-id"),
+        ("Dead", "Bogus (unknown name) | pruned assign", "DMSEM003", "DMSEM005", "C3-id-assign"),
+        ("Dead", "Bogus (unknown name) | pruned invoke", "DMSEM006", "DMSEM005", "C3-id"),
+        ("Dead", "Bogus (unknown name) | action never invoked", "DMSEM003", "DMSEM005", "C3-id-assign"),
+        ("FormGrid", "N + M | default Number", "DMSEM006", "DMSEM005", "C3-id"),
+        ("FormGrid", "N + M | default Decimal", "DMSEM006", "DMSEM005", "C3-id"),
+        ("FormGrid", "N + M | default Text", "DMSEM006", "DMSEM005", "C3-id"),
+        ("FormGrid", "N + M | default Boolean", "DMSEM006", "DMSEM005", "C3-id"),
+        ("FormGrid", "N + M | default Date", "DMSEM006", "DMSEM005", "C3-id"),
+        ("FormGrid", "N + M | default Color", "DMSEM006", "DMSEM005", "C3-id"),
+        ("FormGrid", "N + M | default Widget", "DMSEM006", "DMSEM005", "C3-id"),
+        ("FormGrid", "C + C | default Number", "DMSEM006", "DMSEM005", "C3-id"),
+        ("FormGrid", "C + C | default Decimal", "DMSEM006", "DMSEM005", "C3-id"),
+        ("FormGrid", "C + C | default Text", "DMSEM006", "DMSEM005", "C3-id"),
+        ("FormGrid", "C + C | default Boolean", "DMSEM006", "DMSEM005", "C3-id"),
+        ("FormGrid", "C + C | default Date", "DMSEM006", "DMSEM005", "C3-id"),
+        ("FormGrid", "C + C | default Color", "DMSEM006", "DMSEM005", "C3-id"),
+        ("FormGrid", "C + C | default Widget", "DMSEM006", "DMSEM005", "C3-id"),
+        ("FormGrid", "Due + N | default Number", "DMSEM006", "DMSEM005", "C3-id"),
+        ("FormGrid", "Due + N | default Decimal", "DMSEM006", "DMSEM005", "C3-id"),
+        ("FormGrid", "Due + N | default Text", "DMSEM006", "DMSEM005", "C3-id"),
+        ("FormGrid", "Due + N | default Boolean", "DMSEM006", "DMSEM005", "C3-id"),
+        ("FormGrid", "Due + N | default Date", "DMSEM006", "DMSEM005", "C3-id"),
+        ("FormGrid", "Due + N | default Color", "DMSEM006", "DMSEM005", "C3-id"),
+        ("FormGrid", "Due + N | default Widget", "DMSEM006", "DMSEM005", "C3-id"),
+        ("FormGrid", "match { Flag -> N + M, else -> N } | default Number", "DMMAT004+DMSEM006", "DMMAT004+DMSEM005", "C3-id"),
+        ("FormGrid", "match { Flag -> N + M, else -> N } | default Decimal", "DMMAT004+DMSEM006", "DMMAT004+DMSEM005", "C3-id"),
+        ("FormGrid", "match { Flag -> N + M, else -> N } | default Text", "DMMAT004+DMSEM006", "DMMAT004+DMSEM005", "C3-id"),
+        ("FormGrid", "match { Flag -> N + M, else -> N } | default Boolean", "DMMAT004+DMSEM006", "DMMAT004+DMSEM005", "C3-id"),
+        ("FormGrid", "match { Flag -> N + M, else -> N } | default Date", "DMMAT004+DMSEM006", "DMMAT004+DMSEM005", "C3-id"),
+        ("FormGrid", "match { Flag -> N + M, else -> N } | default Color", "DMMAT004+DMSEM006", "DMMAT004+DMSEM005", "C3-id"),
+        ("FormGrid", "match { Flag -> N + M, else -> N } | default Widget", "DMMAT004+DMSEM006", "DMMAT004+DMSEM005", "C3-id"),
+        ("FormGrid", "G(N) | default Number", "DMFUN008+DMSEM006", "DMFUN008+DMSEM005", "C3-id"),
+        ("FormGrid", "G(N) | default Decimal", "DMFUN008+DMSEM006", "DMFUN008+DMSEM005", "C3-id"),
+        ("FormGridF3", "match { Flag -> N, else -> N + M } | default Number", "DMMAT004+DMSEM006", "DMMAT004+DMSEM005", "C3-id"),
+        ("FormGridF3", "match { Flag -> N, else -> N + M } | default Decimal", "DMMAT004+DMSEM006", "DMMAT004+DMSEM005", "C3-id"),
+        ("FormGridF3", "match { Flag -> N, else -> N + M } | default Text", "DMMAT004+DMSEM006", "DMMAT004+DMSEM005", "C3-id"),
+        ("FormGridF3", "match { Flag -> N, else -> N + M } | default Boolean", "DMMAT004+DMSEM006", "DMMAT004+DMSEM005", "C3-id"),
+        ("FormGridF3", "match { Flag -> N, else -> N + M } | default Date", "DMMAT004+DMSEM006", "DMMAT004+DMSEM005", "C3-id"),
+        ("FormGridF3", "match { Flag -> N, else -> N + M } | default Color", "DMMAT004+DMSEM006", "DMMAT004+DMSEM005", "C3-id"),
+        ("FormGridF3", "match { Flag -> N, else -> N + M } | default Widget", "DMMAT004+DMSEM006", "DMMAT004+DMSEM005", "C3-id"),
+        ("FormGridF3", "match { Flag -> null, else -> N + M } | default Number", "DMMAT004+DMSEM006", "DMMAT004+DMSEM005", "C3-id"),
+        ("FormGridF3", "match { Flag -> null, else -> N + M } | default Decimal", "DMMAT004+DMSEM006", "DMMAT004+DMSEM005", "C3-id"),
+        ("FormGridF3", "match { Flag -> null, else -> N + M } | default Text", "DMMAT004+DMSEM006", "DMMAT004+DMSEM005", "C3-id"),
+        ("FormGridF3", "match { Flag -> null, else -> N + M } | default Boolean", "DMMAT004+DMSEM006", "DMMAT004+DMSEM005", "C3-id"),
+        ("FormGridF3", "match { Flag -> null, else -> N + M } | default Date", "DMMAT004+DMSEM006", "DMMAT004+DMSEM005", "C3-id"),
+        ("FormGridF3", "match { Flag -> null, else -> N + M } | default Color", "DMMAT004+DMSEM006", "DMMAT004+DMSEM005", "C3-id"),
+        ("FormGridF3", "match { Flag -> null, else -> N + M } | default Widget", "DMMAT004+DMSEM006", "DMMAT004+DMSEM005", "C3-id"),
+        ("Residual", "Bogus (unknown name) | assign", "DMSEM003", "DMSEM005", "C3-id-assign"),
+        ("Residual", "Bogus (unknown name) | create", "DMSEM003", "DMSEM005", "C3-id-assign"),
+        ("Residual", "Bogus (unknown name) | invoke", "DMSEM006", "DMSEM005", "C3-id"),
+        ("Residual", "Bogus (unknown name) | call", "DMSEM006", "DMSEM005", "C3-id"),
+        ("Residual", "Bogus (unknown name) | form ==", "DMSEM006", "DMSEM005", "C3-id"),
+        ("Residual", "Bogus (unknown name) | == form", "DMSEM006", "DMSEM005", "C3-id"),
+        ("Residual", "Bogus (unknown name) | entry", "DMSEM003", "DMSEM005", "C3-id-assign"),
+        ("Residual", "Bogus (unknown name) | exit", "DMSEM003", "DMSEM005", "C3-id-assign"),
+        ("Residual", "Bogus (unknown name) | subscription", "DMSEM003", "DMSEM005", "C3-id-assign"),
+        ("Residual", "Bogus (unknown name) | form + N", "DMSEM006", "DMSEM005", "C3-id")
+    ];
+
+    /// <summary>
     /// The closing round's C2: <c>default(...)</c> is a consumer like any other (walked, typed with no entity scope, checked
     /// against the property's type), so every non-constant default in the grids moves. Kept apart so the change can be
     /// read alone. On master the C# door refused every such default in the DSL (CS1737; <see cref="StrictGateCensusTests.DeadMasterDoors"/>).
@@ -1488,7 +1556,7 @@ public partial class AnalyzerClosingRoundPinTests {
         var index = new Dictionary<string, int>(StringComparer.Ordinal);
         for (var i = 1; i < lines.Length; i++)
             index.Add(CellOf(lines[i]), i);
-        foreach (var flip in FlipsA.Concat(FlipsB).Concat(FlipsA4).Concat(FlipsDead).Concat(FlipsDefault).Where(f => f.Grid == grid)) {
+        foreach (var flip in FlipsA.Concat(FlipsB).Concat(FlipsA4).Concat(FlipsDead).Concat(FlipsDefault).Concat(FlipsC3).Where(f => f.Grid == grid)) {
             if (!index.TryGetValue(flip.Cell, out var at))
                 throw new InvalidOperationException($"Flip row '{grid}/{flip.Cell}' names no cell of the grid.");
             var verdict = VerdictOf(lines[at]);

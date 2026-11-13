@@ -634,7 +634,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
             if (Family(target) is TypeFamily.Enum)
                 Report(context, value, $"'{bare}' is not a member of enum '{targetTypeName}'");
             else
-                Report(context, value, $"'{bare}' is not a property, parameter, or enum member");
+                context.ReportError(value, $"'{bare}' is not a property, parameter, or enum member", DomainModelDiagnosticCodes.SemanticReferenceResolution);
             return;
         }
         if (!IsTyped(target)) {

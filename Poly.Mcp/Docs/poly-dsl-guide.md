@@ -1350,6 +1350,9 @@ Replenished: policy { DueDate + 14 Days > ExpiryDate }
 | `N Seconds` / `Minutes` / `Hours` / `Days` / `Weeks` / `Months` / `Years` | Relative duration | Singular and plural accepted; exact PascalCase. Milliseconds also as `ms` |
 
 | `DateExpr ± N <unit>` | Offset a date/time by a duration | `Now`, `Today`, or a Date/DateTime/Time property on the left |
+| `DateProp ± count` | Offset a Date or DateTime by a whole day count (`Due + n`) | the left is a Date or DateTime property or action parameter; the count is a Number, never a Decimal |
+| `DateProp - DateProp` | The difference, a Duration (`Finished - Started`) | two Date or two DateTime properties or parameters; assign it to a Duration property or compare it with a Duration |
+| `assign Len to 30 Minutes`, `Len > 1 Hours` | A bare duration as a Duration value | assigned to a `Duration` property or compared with one, as a `default(...)` is; Months and Years have no fixed length and are rejected |
 
 Clock-resolution units (`Milliseconds`/`ms`, `Seconds`, `Minutes`, `Hours`) apply to `Now`, `DateTime`, and `Time`. Calendar units (`Days`, `Weeks`, `Months`, `Years`) apply to `Now`, `Today`, `Date`, and `DateTime`. `Date`/`Today` + hours (or finer) is rejected at analysis; `Time` + days (or coarser) is rejected.
 
@@ -1364,6 +1367,13 @@ temporal authoring (`Now - 12 Days`, `5 Days`) fails at parse, and `DateOperatio
 Product sessions load Temporal implicitly at Load. A raw `SessionBuilder` that never calls
 `LoadTemporal` does not get clock meaning or temporal primitives.
 
+**Refused at analysis, so no door runs a different answer:** a Decimal day count of any kind (`Due + 1.5`,
+`Due + Days` with a Decimal `Days`, on a Date or a DateTime): use a whole Number count or a unit literal such as
+`36 Hours`; a date plus or minus a Duration *value* (`Due + Len`: not supported yet, F-11, #550); a count offset whose left
+is not a date property or parameter (`Today + 1`, `(Due + 1) + n`, `part Due + n`: write the offset as `Today + 1 Days`);
+`default(Now + 7 Days)` (a date operation has no default lowering: use `default(Now)` or `default(Today)`); and a bare
+duration anywhere but an assign to a `Duration` property, a comparison with a `Duration`, or the `default(...)` of one.
+
 **Create-time defaults, assign-to-clock, and policy clock reads are shipped.** `default(Today)` /
 `default(Now)` and `assign Prop to Today` / `assign Prop to Now` evaluate at instance create /
 invoke (C# export emits a `??` coalesce). `Now` and `Today` share one UTC clock on every
@@ -1371,7 +1381,7 @@ path: `default(...)`, bare assign, offsets, and policy reads all lower to `DateT
 (`Now`, and `Today` on a DateTime/Timestamp property) or `DateOnly.FromDateTime(DateTime.UtcNow)`
 (`Today` on a Date property). They do not use the machine-local `DateTime.Today`.
 Offsets (`Now - 12 Days`) author, lower, and execute as `Add*` on that clock value.
-Adding a duration to a Date or DateTime that was never set fails with `'PropertyName' is not set` and does not change the instance.
+Adding a duration to a *required* Date or DateTime that was never set fails with `'PropertyName' is not set` and does not change the instance. An offset or a difference on an `optional` date or date-time is rejected at analysis (#648): the property may be unset, and no door computes with an absent date.
 Compare a `Date` with `Today` and a `DateTime` with `Now`. A mixed comparison (`Date < Now`,
 `DateTime < Today`) is rejected at analysis.
 

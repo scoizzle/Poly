@@ -87,23 +87,6 @@ public partial class V1ToolIndependenceTests {
         new("Mcp/UniqueSurvivesRejectedEvolveTests.cs", "McpTestTools.Evolve", 4, "M-13"),
         new("Mcp/ValidateDslTests.cs", "McpTestTools.Query", 3, "M-13"),
         // Q-05 (a "Q-05x+M-nn" label: one entry per (file, key); the Q-05x PR lowers the count and rewrites the label to M-nn)
-        // Q-05d1
-        new("Mcp/CreateInstanceCoercionTests.cs", "DomainToolResponse", 2, "Q-05d1"),
-        new("Mcp/CreateInstanceCoercionTests.cs", "McpTestTools.Dsl", 4, "Q-05d1"),
-        new("Mcp/CreateInstanceCoercionTests.cs", "McpTestTools.Policy", 3, "Q-05d1"),
-        new("Mcp/CreateInstanceCoercionTests.cs", "McpTestTools.Runtime", 8, "Q-05d1"),
-        new("Mcp/InstanceRenderingTests.cs", "DomainToolResponse", 1, "Q-05d1"),
-        new("Mcp/InstanceRenderingTests.cs", "McpTestTools.Dsl", 2, "Q-05d1"),
-        new("Mcp/InstanceRenderingTests.cs", "McpTestTools.Runtime", 6, "Q-05d1"),
-        new("Mcp/RuntimeStageActionResolutionTests.cs", "DomainToolResponse", 2, "Q-05d1"),
-        new("Mcp/RuntimeStageActionResolutionTests.cs", "McpTestTools.Dsl", 4, "Q-05d1"),
-        new("Mcp/RuntimeStageActionResolutionTests.cs", "McpTestTools.Runtime", 9, "Q-05d1"),
-        new("Mcp/SimulateCreateDogfoodTests.cs", "DomainToolResponse", 1, "Q-05d1"),
-        new("Mcp/SimulateCreateDogfoodTests.cs", "McpTestTools.Dsl", 7, "Q-05d1"),
-        new("Mcp/SimulateCreateDogfoodTests.cs", "McpTestTools.Policy", 3, "Q-05d1"),
-        new("Mcp/SimulateCreateDogfoodTests.cs", "McpTestTools.Runtime", 9, "Q-05d1"),
-        new("Mcp/SubscriptionSingleFireTests.cs", "McpTestTools.Dsl", 2, "Q-05d1"),
-        new("Mcp/SubscriptionSingleFireTests.cs", "McpTestTools.Runtime", 2, "Q-05d1"),
         // Q-05d2
         new("Mcp/CacheSessionOwnershipTests.cs", "McpTestTools.Dsl", 4, "Q-05d2"),
         new("Mcp/CacheSessionOwnershipTests.cs", "McpTestTools.Oracle", 1, "Q-05d2"),

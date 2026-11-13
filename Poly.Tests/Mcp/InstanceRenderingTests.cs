@@ -1,6 +1,5 @@
-using System.Text.Json;
+using System.Text.Json.Nodes;
 
-using Poly.Mcp.Tools;
 using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.Mcp;
@@ -38,79 +37,65 @@ public class InstanceRenderingTests {
         }
         """;
 
-    private static JsonElement SnapshotOf(DomainToolResponse response) {
-        using var doc = JsonDocument.Parse(JsonSerializer.Serialize(response.Data));
-        return doc.RootElement.GetProperty("instance").Clone();
-    }
-
-    private static string? PropertyValue(JsonElement snapshot, string name) {
-        foreach (var property in snapshot.GetProperty("properties").EnumerateArray()) {
-            if (property.GetProperty("name").GetString() == name)
-                return property.GetProperty("value").GetString();
-        }
-        return null;
-    }
+    private static JsonNode SnapshotOf(HarnessStep step) =>
+        step.Data?["instance"] ?? throw new InvalidOperationException($"Step {step.Index} ({step.Op}) has no instance: {step.Summary}");
 
     private static string CreateAndId(string sessionId, string entity, string properties) {
-        var create = McpTestTools.Runtime.CreateInstance(sessionId, entity, properties);
-        if (!create.Success)
-            throw new InvalidOperationException($"create_instance {entity}: {create.Message}");
-        return SnapshotOf(create).GetProperty("instanceId").GetString()
-            ?? throw new InvalidOperationException("missing instanceId");
+        var create = McpTestTools.Surface.Create(sessionId, entity, properties);
+        if (!create.Ok)
+            throw new InvalidOperationException($"create_instance {entity}: {create.Summary}");
+        return create.InstanceId;
     }
 
     [Test]
     public async Task GetInstance_NavigationProperty_RendersLinkedInstanceId() {
-        var (sessionId, _) = McpTestTools.Store.Create("InstanceNavRender");
-        await Assert.That(McpTestTools.Dsl.ApplyDsl(sessionId, NavDomain).Success).IsTrue();
+        var sessionId = McpTestTools.Surface.Open("InstanceNavRender");
+        await Assert.That(McpTestTools.Surface.Define(sessionId, NavDomain).Success).IsTrue();
 
         var guestId = CreateAndId(sessionId, "Guest", """{"Name":"Ada"}""");
         var tableId = CreateAndId(sessionId, "DiningTable", """{"Code":"T1","Seats":4}""");
 
         // Book binds the DiningTable action arg by instance id, links the table,
         // and back-references the Guest — both to-one navs land in the bag.
-        var book = McpTestTools.Runtime.InvokeAction(sessionId, guestId, "Book",
+        var book = McpTestTools.Surface.Invoke(sessionId, guestId, "Book",
             $$"""{"table":"{{tableId}}","size":2}""");
-        await Assert.That(book.Success).IsTrue();
-        using var bookDoc = JsonDocument.Parse(JsonSerializer.Serialize(book.Data));
-        var id = bookDoc.RootElement.GetProperty("invokeActionResult")
-            .GetProperty("returnInstanceId").GetString();
+        await Assert.That(book.Ok).IsTrue();
+        var id = book.Result.ReturnInstanceId;
         await Assert.That(id).IsNotNull();
 
-        var get = McpTestTools.Runtime.GetInstance(sessionId, id!);
-        await Assert.That(get.Success).IsTrue();
+        var get = McpTestTools.Surface.Get(sessionId, id!);
+        await Assert.That(get.Ok).IsTrue();
         var snapshot = SnapshotOf(get);
 
-        await Assert.That(PropertyValue(snapshot, "Guest")).IsEqualTo($"#{guestId}");
-        await Assert.That(PropertyValue(snapshot, "Table")).IsEqualTo($"#{tableId}");
+        await Assert.That(get.Property("Guest")).IsEqualTo($"#{guestId}");
+        await Assert.That(get.Property("Table")).IsEqualTo($"#{tableId}");
         // Scalars and stage keep rendering as before.
-        await Assert.That(PropertyValue(snapshot, "PartySize")).IsEqualTo("2");
-        await Assert.That(snapshot.GetProperty("currentStage").GetString()).IsEqualTo("Booked");
-        await Assert.That(JsonSerializer.Serialize(get.Data)).DoesNotContain("DomainEntityInstance");
+        await Assert.That(get.Property("PartySize")).IsEqualTo("2");
+        await Assert.That(snapshot["currentStage"]!.GetValue<string>()).IsEqualTo("Booked");
+        await Assert.That(get.Data!.ToJsonString()).DoesNotContain("DomainEntityInstance");
     }
 
     [Test]
     public async Task StageLessEntity_CreateGetList_ReportsNoneStage() {
-        var (sessionId, _) = McpTestTools.Store.Create("InstanceStageLess");
-        await Assert.That(McpTestTools.Dsl.ApplyDsl(sessionId,
+        var sessionId = McpTestTools.Surface.Open("InstanceStageLess");
+        await Assert.That(McpTestTools.Surface.Define(sessionId,
             "domain InstanceStageLess Note: entity { Body: Text }").Success).IsTrue();
 
-        var create = McpTestTools.Runtime.CreateInstance(sessionId, "Note", """{"Body":"hi"}""");
-        await Assert.That(create.Success).IsTrue();
-        await Assert.That(create.Message).Contains("Stage: '(none)'");
+        var create = McpTestTools.Surface.Create(sessionId, "Note", """{"Body":"hi"}""");
+        await Assert.That(create.Ok).IsTrue();
+        await Assert.That(create.Summary).Contains("Stage: '(none)'");
         var createSnapshot = SnapshotOf(create);
-        await Assert.That(createSnapshot.GetProperty("currentStage").GetString()).IsEqualTo("(none)");
+        await Assert.That(createSnapshot["currentStage"]!.GetValue<string>()).IsEqualTo("(none)");
 
-        var instanceId = createSnapshot.GetProperty("instanceId").GetString();
-        var get = McpTestTools.Runtime.GetInstance(sessionId, instanceId!);
-        await Assert.That(get.Success).IsTrue();
-        await Assert.That(get.Message).Contains("stage: '(none)'");
-        await Assert.That(SnapshotOf(get).GetProperty("currentStage").GetString()).IsEqualTo("(none)");
+        var instanceId = createSnapshot["instanceId"]!.GetValue<string>();
+        var get = McpTestTools.Surface.Get(sessionId, instanceId);
+        await Assert.That(get.Ok).IsTrue();
+        await Assert.That(get.Summary).Contains("stage: '(none)'");
+        await Assert.That(SnapshotOf(get)["currentStage"]!.GetValue<string>()).IsEqualTo("(none)");
 
-        var list = McpTestTools.Runtime.ListInstances(sessionId);
-        await Assert.That(list.Success).IsTrue();
-        using var listDoc = JsonDocument.Parse(JsonSerializer.Serialize(list.Data));
-        var summary = listDoc.RootElement.GetProperty("instances").EnumerateArray().Single();
-        await Assert.That(summary.GetProperty("currentStage").GetString()).IsEqualTo("(none)");
+        var list = McpTestTools.Surface.List(sessionId);
+        await Assert.That(list.Ok).IsTrue();
+        var summary = ((JsonArray)list.Data!["instances"]!).Single()!;
+        await Assert.That(summary["currentStage"]!.GetValue<string>()).IsEqualTo("(none)");
     }
 }

@@ -392,7 +392,8 @@ public class ExpressionTypeAnalysisTests {
     [Test]
     public async Task ForEachInvoke_ArithmeticOverBinderRoot_Rejected() {
         // Round-5 F3: arithmetic over a binder-root property must be type-checked —
-        // a Text binder prop + 1 bound to a Number param is rejected at analysis.
+        // a Text binder prop + 1 bound to a Number param is rejected at analysis. T-05b: the binder
+        // read is typed in the binder's scope, so the arithmetic rule names the Text operand.
         var result = Parse("""
             domain Test
             Line: entity {
@@ -408,7 +409,7 @@ public class ExpressionTypeAnalysisTests {
             }
             """);
         await Assert.That(result.Succeeded).IsFalse();
-        await Assert.That(HasError(result, "cannot assign 'Text' to 'Number'")).IsTrue();
+        await Assert.That(HasError(result, "arithmetic operand is not numeric (got 'Text' and 'Number')")).IsTrue();
     }
 
     [Test]

@@ -1,3 +1,4 @@
+using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Ontology;
 
@@ -243,8 +244,13 @@ public class PolicyConstraintAnalysisTests {
                         DomainExpression.Property("Name"),
                         DomainExpression.Parameter("inputValue"))))]);
 
-        // Should succeed — ParameterAccess("inputValue") is not a property reference
-        await Assert.That(result.Succeeded).IsTrue();
+        // ParameterAccess("inputValue") is not a property reference: the policy pass does not report it as one. T-05b:
+        // an entity policy has no parameter of that name (the generated C# refused it on master, CS0103), so the one
+        // error is the reference error for an undeclared parameter (DMSEM005, closing round C3), not a missing property.
+        var errors = result.Analysis.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+        await Assert.That(errors.Any(d => d.Message.Contains("Policy references property", StringComparison.Ordinal))).IsFalse();
+        await Assert.That(errors.Single().Code).IsEqualTo(DomainModelDiagnosticCodes.SemanticReferenceResolution);
+        await Assert.That(errors.Single().Message).Contains("'inputValue' is not a declared parameter");
     }
 
     [Test]

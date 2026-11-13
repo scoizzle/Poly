@@ -110,7 +110,7 @@ public partial class AnalyzerClosingRoundPinTests {
     }
 
     internal static string AllNullMatchRows() {
-        DomainExpression Match(DomainExpression a, DomainExpression b) =>
+        static DomainExpression Match(DomainExpression a, DomainExpression b) =>
             DomainExpression.Match([new MatchArm(DomainExpression.Literal(true), a)], b);
         var nul = DomainExpression.Literal(null);
         (string Label, string Target, Func<DomainExpression> Build)[] cases = [
@@ -153,7 +153,9 @@ public partial class AnalyzerClosingRoundPinTests {
 
     [Test]
     public async Task TypelessComparisonsOfDifferentFamilies_AreFrozen() =>
-        await Assert.That(TypelessComparisonRows()).IsEqualTo(Expected.TypelessComparisons);
+        // T-05b: master plus the FlipsB rows of grid "TypelessComparisons" (A4: B-pair).
+        await Assert.That(GridDifferences(TypelessComparisonRows(), MasterPlusFlips("TypelessComparisons", Expected.TypelessComparisons)))
+            .IsEqualTo("");
 
     [Test]
     public async Task AllNullAndPartlyNullMatch_AreFrozen() =>

@@ -470,9 +470,9 @@ public class OperatorOracleTests {
     private const string AllButOrder = "Number,Int32,Decimal,Float,Text,Boolean,Date,Time,DateTime,Duration,Uuid,Status,Money";
 
     private static readonly LedgerRule[] AnalyzerRules = [
-        // The domain analyzer types an entity operand as Unknown and so accepts everything beside it.
-        new(OracleKind.AnalyzerDisagrees, "Order", "*", "*", "analyzer accepts", "T-06 (Unknown operands: R1)", 107, "7284367a02f5ff13"),
-        new(OracleKind.AnalyzerDisagrees, AllButOrder, "*", "Order", "analyzer accepts", "T-06 (Unknown operands: R1)", 96, "e18f5f561a8a8e60"),
+        // T-05b: an entity is a family compared by name, so the 203 cells the analyzer accepted beside an entity (T-05's,
+        // mislabelled T-06) close; entity ordering stays accepted, an interim rule T-07 removes.
+        new(OracleKind.AnalyzerDisagrees, "Order", Ordering, "Order", "analyzer accepts", "T-07 (ordering legality: entities)", 4, "6e8a8b7f1e28e52c"),
         // Enum member literals compared as Text, and enum ordering.
         new(OracleKind.AnalyzerDisagrees, "Status", Comparisons, "Text", "analyzer accepts", "T-07 (enum member literals)", 6, "82d668327422d63d"),
         new(OracleKind.AnalyzerDisagrees, "Text", Comparisons, "Status", "analyzer accepts", "T-07 (enum member literals)", 6, "79e5d5c94c300ad5"),
@@ -523,7 +523,7 @@ public class OperatorOracleTests {
 
     [Test]
     public async Task AnalyzerDisagrees_EveryDivergenceIsOwned_AndNoEntryIsStale() =>
-        await AssertOwned(OracleKind.AnalyzerDisagrees, AnalyzerRules, 261);
+        await AssertOwned(OracleKind.AnalyzerDisagrees, AnalyzerRules, 62);
 
     [Test]
     public async Task LoweredAnalysisDisagrees_EveryDivergenceIsOwned_AndNoEntryIsStale() =>

@@ -18,6 +18,9 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
         Dictionary<string, EnumType> enumTypes) {
         var left = InferType(context, cmp.Left, props, parameters, enumTypes);
         var right = InferType(context, cmp.Right, props, parameters, enumTypes);
+        // A6: a bare name against an enum operand is a member of that enum (`Level is High`).
+        left = AsEnumMember(cmp.Left, left, right, props, parameters, enumTypes);
+        right = AsEnumMember(cmp.Right, right, left, props, parameters, enumTypes);
 
         // enum member literal validity: Enum prop compared to a string must be a member
         if (Family(left) is TypeFamily.Enum && cmp.Right is Literal { Value: string s })
@@ -39,13 +42,30 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
         // A fractional literal against Number / Int / Int64 is rejected here. Both
         // sides are category Number, so Compatible would allow the pair.
         ReportFractionalLiteral(context, cmp.Left, left, cmp.Right, right);
-        if (MixedDateGranularity(left, right) || (!NullAgainstRead(context, cmp, props) && !Compatible(left, right)))
+        var nullAgainstRead = NullAgainstRead(context, cmp, props);
+        if (!nullAgainstRead) {
+            if (!IsTyped(left)) RequireTyped(context, cmp.Left, left, cmp, props, parameters, enumTypes);
+            if (!IsTyped(right)) RequireTyped(context, cmp.Right, right, cmp, props, parameters, enumTypes);
+        }
+        if (MixedDateGranularity(left, right)
+            || (!nullAgainstRead && IsTyped(left) && IsTyped(right) && !Compatible(left, right)))
             Report(context, cmp,
                 $"comparison between incompatible types '{Describe(left)}' and '{Describe(right)}'");
 
         WalkExpression(context, cmp.Left, props, parameters, enumTypes);
         WalkExpression(context, cmp.Right, props, parameters, enumTypes);
     }
+
+    /// <summary>A bare name that is no property or parameter, against an enum that declares it, is that enum's member.</summary>
+    private static ExprType AsEnumMember(
+        DomainExpression expr, ExprType type, ExprType other,
+        Dictionary<string, string> props, Dictionary<string, string>? parameters, Dictionary<string, EnumType> enumTypes) =>
+        !type.IsResolved && expr is PropertyAccess { Name: var name }
+        && ResolvePropertyType(name, props, parameters) is null
+        && Family(other) is TypeFamily.Enum && other.DomainName is { } enumName
+        && enumTypes.TryGetValue(enumName, out var declared) && declared.MemberNames.Contains(name, StringComparer.Ordinal)
+            ? other
+            : type;
 
     /// <summary>
     /// Seam N2 (T-05a review F2 and closing round; removing row T-06): <c>null</c> compared with an expression whose

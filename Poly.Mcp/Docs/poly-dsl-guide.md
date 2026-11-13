@@ -1392,7 +1392,8 @@ diverging:
   nothing), and `not` negates (`not (X >= 10)` is `X < 10`). On a `Number` a strict bound
   is exact (`N < 100` gives N ≤ 99, `X > 0` gives X ≥ 1) and `X != 10` drops 10 when it
   is the range's end; on a `Decimal` a strict bound keeps its endpoint (`D < 5.5` gives
-  D ≤ 5.5) and `!=` narrows nothing. A guard no value can satisfy (`X > 10` on
+  D ≤ 5.5) and `!=` narrows nothing, except that a point range minus its value is empty
+  (`D == 5.5 and D != 5.5` is `DMCS001`). A guard no value can satisfy (`X > 10` on
   `X: Number range(0, 10)`) makes the action's preconditions unsatisfiable (`DMCS001`).
   An optional property's range describes its present values: a guard that also holds when
   it is null (`not (W >= 10)`, `W != 5`) narrows those values but never rejects the guard.

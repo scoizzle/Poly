@@ -36,19 +36,24 @@ public class GuardNarrowingTests {
         return (applied.Root, DomainModelAnalyzer.Analyze(applied.Root));
     }
 
-    private static string PolicyDomain(string guard, string body) => $$"""
+    private const string NegativeProps = """
+          X: Number range(-5, 5)
+          Y: Number
+        """;
+
+    private static string PolicyDomain(string guard, string body, string props = Props) => $$"""
         domain G
         E: entity {
-        {{Props}}
+        {{props}}
           P: policy { {{guard}} }
           Go: action require P { {{body}} }
         }
         """;
 
-    private static string ActionDomain(string body) => $$"""
+    private static string ActionDomain(string body, string props = Props) => $$"""
         domain G
         E: entity {
-        {{Props}}
+        {{props}}
           Go: action { {{body}} }
         }
         """;
@@ -236,6 +241,18 @@ public class GuardNarrowingTests {
         await Assert.That(Codes(analysis)).IsEqualTo("DMEFF008?");
     }
 
+    /// <summary>PROBE 1 (V-02 closing round, finding 2): <c>if (X &gt; 10)</c> on <c>range(0, 10)</c> is now provably
+    /// dead. Master analysed its then-branch with X = [10,10] and reported DMEFF008 (error) on the
+    /// assignment <c>X + 1</c> (value range [11, 11], entirely outside the range); on this head the branch environment
+    /// is unsatisfiable, so <c>Narrow</c> keeps the old constraint list and <c>X + 1</c> evaluates to roughly [1, 11]: the verdict
+    /// becomes DMEFF008 as a warning ("can fall outside"). An assignment in a branch that cannot run is reported
+    /// as a warning, not an error. A dead branch still publishes its postconditions (V-03's row).</summary>
+    [Test]
+    public async Task Pin_DeadBranchAssignment_Verdict() {
+        var (_, analysis) = Analyze(ActionDomain("if (X > 10) { assign X to X + 1 }"));
+        await Assert.That(Codes(analysis)).IsEqualTo("DMEFF008?");
+    }
+
     /// <summary>F4: an optional property's range describes its present values, as the else-branch already
     /// does; <c>not (W &gt;= 10)</c> is also true for a null <c>W</c>.</summary>
     [Test]
@@ -305,8 +322,8 @@ public class GuardNarrowingTests {
 
     // ── What each guard form narrows to ──
 
-    private static string NarrowedBy(string guard, string probe, string body = "assign Y to 0") {
-        var (domain, analysis) = Analyze(PolicyDomain(guard, body));
+    private static string NarrowedBy(string guard, string probe, string props = Props, string body = "assign Y to 0") {
+        var (domain, analysis) = Analyze(PolicyDomain(guard, body, props));
         return Narrowed(Context(domain, analysis), probe);
     }
 
@@ -696,21 +713,21 @@ public class GuardNarrowingTests {
         && (value.NumericRange is not { } r || ((r.Min is null || r.Min <= v) && (r.Max is null || v <= r.Max)));
 
     /// <summary>The then-arm and else-arm values of <c>if (guard) { assign copy to probe } else { … }</c>.</summary>
-    private static (AbstractValue Then, AbstractValue Else) Arms(string guard, string probe, string copy) {
+    private static (AbstractValue Then, AbstractValue Else) Arms(string guard, string probe, string copy, string props) {
         var (domain, analysis) = Analyze(ActionDomain(
-            $"if ({guard}) {{ assign {copy} to {probe} }} else {{ assign {copy} to {probe} }}"));
+            $"if ({guard}) {{ assign {copy} to {probe} }} else {{ assign {copy} to {probe} }}", props));
         var posts = Context(domain, analysis).Postconditions.Where(p => p.TargetProperty == copy).ToList();
         if (posts.Count != 2) throw new InvalidOperationException($"expected two '{copy}' postconditions for '{guard}', got {posts.Count}");
         return (posts[0].Value, posts[1].Value);
     }
 
     private static List<string> OracleMisses(string[] guards, string probe, string copy, IEnumerable<decimal> samples,
-        Truth admitted, bool negatedArm) {
+        Truth admitted, bool negatedArm, string props = Props) {
         var misses = new List<string>();
         foreach (var guard in guards) {
-            var arms = Arms(guard, probe, copy);
+            var arms = Arms(guard, probe, copy, props);
             var arm = negatedArm ? arms.Else : arms.Then;
-            var (policyDomain, policyAnalysis) = Analyze(PolicyDomain(guard, "assign Y to 0"));
+            var (policyDomain, policyAnalysis) = Analyze(PolicyDomain(guard, "assign Y to 0", props));
             var policyExpr = EntityNamed(policyDomain, "E").Policies.Single(p => p.Name == "P").Expression;
             foreach (var v in samples) {
                 var point = new Dictionary<string, AbstractValue>(StringComparer.Ordinal) {
@@ -742,6 +759,102 @@ public class GuardNarrowingTests {
         var misses = OracleMisses(IntegralGuards, "X", "Y", IntegralSamples(), Truth.False, negatedArm: true);
         misses.AddRange(OracleMisses(DecimalGuards, "D", "Z", DecimalSamples(), Truth.False, negatedArm: true));
         await Assert.That(misses).IsEmpty();
+    }
+
+    private static readonly string[] NegativeGuards = [
+        "X < 0", "X > 0", "X <= 0", "X >= 0", "X < 0.5", "X > 0.5", "X < 4.5", "X > 4.5", "X != 5", "X == 0",
+        "X > 0 and X < 3", "X < 0 or X > 3", "not (X > 0)", "not (X < 0)", "not (X != 5)", "not (X <= 0 or X >= 3)",
+        "0 < X", "0.5 > X", "X < 5", "X > 5", "X <= 0 and X != 0", "X >= 0 and X != 0",
+    ];
+
+    /// <summary>PROBE 3 (V-02 closing round): the integral steps stay sound on a range with negative bounds. The
+    /// sample range runs from -5 to 5. The oracle's guards come from the DSL, which has no negative literal
+    /// (<c>X &gt; -0.5</c> does not parse), so negative literals are pinned by
+    /// <see cref="StrictBoundWithNegativeFractionalLiteral_RoundsTowardTheAdmittedSide"/> through the API. The
+    /// oracle has no optional properties: <see cref="AbstractValue"/> cannot carry a null, so the null rule is
+    /// covered by <c>OptionalNumberNullCompareParityTests</c> and the hand tests above.</summary>
+    [Test]
+    public async Task PointOracle_NegativeIntegralRange_NeverExcludesAValue() {
+        var samples = Enumerable.Range(-5, 11).Select(i => (decimal)i).ToList();
+        var misses = OracleMisses(NegativeGuards, "X", "Y", samples, Truth.True, negatedArm: false, NegativeProps);
+        misses.AddRange(OracleMisses(NegativeGuards, "X", "Y", samples, Truth.False, negatedArm: true, NegativeProps));
+        await Assert.That(misses).IsEmpty();
+    }
+
+    private static string NegativeLiteralNarrowing(DomainExpression guard) {
+        var policy = new Policy("P", guard);
+        var item = new Entity("Item",
+            [new Property("X", new DomainTypeReference("Number"), [new RangeConstraint(-5L, 5L)]),
+             new Property("Y", new DomainTypeReference("Number"), [])],
+            [new Poly.DomainModeling.Ontology.Action("Go", InvocationResult.Void, [],
+                [new Poly.DomainModeling.Ontology.Effects.AssignEffect(DomainExpression.Property("Y"), DomainExpression.Literal(0L))], [policy])],
+            [policy], []);
+        var domain = new Domain("G", [item]);
+        return Narrowed(Context(domain, DomainModelAnalyzer.Analyze(domain), "Item"), "X");
+    }
+
+    /// <summary>PROBE 3: a literal below zero rounds toward the admitted side: <c>X &gt; -0.5</c> admits the integers
+    /// from 0, <c>X &lt; -0.5</c> those up to -1. Built through the API: the DSL has no negative literal.</summary>
+    [Test]
+    public async Task StrictBoundWithNegativeFractionalLiteral_RoundsTowardTheAdmittedSide() {
+        static DomainExpression X() => DomainExpression.Property("X");
+        await Assert.That(NegativeLiteralNarrowing(DomainExpression.GreaterThan(X(), DomainExpression.Literal(-0.5m)))).IsEqualTo("[0,5]");
+        await Assert.That(NegativeLiteralNarrowing(DomainExpression.LessThan(X(), DomainExpression.Literal(-0.5m)))).IsEqualTo("[-5,-1]");
+        await Assert.That(NegativeLiteralNarrowing(DomainExpression.GreaterThan(X(), DomainExpression.Literal(-2L)))).IsEqualTo("[-1,5]");
+        await Assert.That(NegativeLiteralNarrowing(DomainExpression.LessThan(X(), DomainExpression.Literal(-2L)))).IsEqualTo("[-5,-3]");
+        await Assert.That(NegativeLiteralNarrowing(DomainExpression.Not(DomainExpression.GreaterThanOrEqual(X(), DomainExpression.Literal(-0.5m))))).IsEqualTo("[-5,-1]");
+    }
+
+    /// <summary>F1: an integral property whose guards leave no integer between strict bounds is unsatisfiable
+    /// (<c>X &gt; 5 and X &lt; 6</c> is X &gt;= 6 and X &lt;= 5). Master kept [5,10] and [0,6] and accepted it.</summary>
+    [Test]
+    public async Task IntegralGuards_WithNoIntegerBetweenStrictBounds_AreUnsatisfiable() {
+        await Assert.That(HasCode(AnalysisOf(PolicyDomain("X > 5 and X < 6", "assign Y to 0")),
+            DomainModelDiagnosticCodes.ConstraintSatisfiability)).IsTrue();
+        await Assert.That(HasCode(AnalysisOf(PolicyDomain("X > 5 and X < 7", "assign Y to 0")),
+            DomainModelDiagnosticCodes.ConstraintSatisfiability)).IsFalse();
+    }
+
+    /// <summary>F1: an equality combined with a strict comparison at the same value is unsatisfiable.</summary>
+    [Test]
+    public async Task EqualityWithStrictComparisonAtTheSameValue_IsUnsatisfiable() {
+        await Assert.That(HasCode(AnalysisOf(PolicyDomain("X == 5 and X > 5", "assign Y to 0")),
+            DomainModelDiagnosticCodes.ConstraintSatisfiability)).IsTrue();
+        await Assert.That(HasCode(AnalysisOf(PolicyDomain("X == 5 and X < 5", "assign Y to 0")),
+            DomainModelDiagnosticCodes.ConstraintSatisfiability)).IsTrue();
+        await Assert.That(HasCode(AnalysisOf(PolicyDomain("X == 5 and X >= 5", "assign Y to 0")),
+            DomainModelDiagnosticCodes.ConstraintSatisfiability)).IsFalse();
+    }
+
+    /// <summary>F1: a negated <c>!=</c> is an equality; outside the declared range it is unsatisfiable.</summary>
+    [Test]
+    public async Task NegatedNotEqual_OutsideTheRange_IsUnsatisfiable() {
+        const string Narrow = "  X: Number range(0, 4)\n  Y: Number";
+        await Assert.That(HasCode(AnalysisOf(PolicyDomain("not (X != 5)", "assign Y to 0", Narrow)),
+            DomainModelDiagnosticCodes.ConstraintSatisfiability)).IsTrue();
+        await Assert.That(HasCode(AnalysisOf(PolicyDomain("not (X != 3)", "assign Y to 0", Narrow)),
+            DomainModelDiagnosticCodes.ConstraintSatisfiability)).IsFalse();
+    }
+
+    /// <summary>F3: a property whose type does not resolve is NON-integral to the narrowing, so a strict bound keeps
+    /// its inclusive endpoint. That is conservative: it can keep a warning and never drops one. T-05b changes the
+    /// provider's name resolution (lowercase spellings such as <c>long</c>); a name that starts to resolve to an
+    /// integral type becomes integral here, so a pin on such a name is then edited on purpose (<c>[0,9]</c>).
+    /// <c>Mystery</c> resolves to nothing and must stay non-integral.</summary>
+    [Test]
+    public async Task UnresolvedPropertyType_IsTreatedAsNonIntegral() {
+        var guard = new Policy("P", DomainExpression.LessThan(DomainExpression.Property("L"), DomainExpression.Literal(10L)));
+        var item = new Entity("Item",
+            [new Property("L", new DomainTypeReference("Mystery"), [new RangeConstraint(0L, 10L)]),
+             new Property("N", new DomainTypeReference("Number"), [new RangeConstraint(0L, 10L)]),
+             new Property("Y", new DomainTypeReference("Number"), [])],
+            [new Poly.DomainModeling.Ontology.Action("Go", InvocationResult.Void, [],
+                [new Poly.DomainModeling.Ontology.Effects.AssignEffect(DomainExpression.Property("Y"), DomainExpression.Literal(0L))], [guard])],
+            [guard], []);
+        var domain = new Domain("G", [item]);
+        var analysis = DomainModelAnalyzer.Analyze(domain);
+        await Assert.That(Kinds(domain, analysis, "Item")).IsEqualTo("L:None,N:Integer64,Y:Integer64");
+        await Assert.That(Narrowed(Context(domain, analysis, "Item"), "L")).IsEqualTo("[0,10]");
     }
 
     private static string Kinds(Domain domain, AnalysisResult analysis, string entity) {

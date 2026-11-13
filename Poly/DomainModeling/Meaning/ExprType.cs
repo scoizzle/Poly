@@ -14,4 +14,12 @@ internal readonly record struct ExprType(ITypeDefinition? Definition, bool Optio
     public static ExprType Unresolved => default;
 
     public bool IsResolved => Definition is not null;
+
+    /// <summary>
+    /// The type of the literal <c>null</c>: no definition, optional. Compatible with Text and Guid only
+    /// (the analyzer's rule today); T-06 replaces it with the real null rule.
+    /// </summary>
+    public static ExprType NullLiteral => new(null, Optional: true, null);
+
+    public bool IsNullLiteral => Definition is null && Optional;
 }

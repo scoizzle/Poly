@@ -18,7 +18,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
             if (context.GetTypeLookup()?.Domain is { } domain
                 && ContractCallResolver.IsExported(domain, call.Name)) {
                 var argumentType = call.Arguments.Count == 1
-                    ? InferValueType(context, call.Arguments[0], props, parameters, enumTypes).TypeName
+                    ? InferValueType(context, call.Arguments[0], props, parameters, enumTypes).DomainName
                     : null;
                 ContractCallResolver.Resolve(context, domain, call, argumentType);
                 ContractCallResolver.RejectUnlowerable(context, call);
@@ -29,11 +29,11 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
             return;
         for (var i = 0; i < call.Arguments.Count; i++) {
             var parameterType = function.Parameters[i].Type.TypeName;
-            var target = new TypeInfo(CategoryOf(context, parameterType, enumTypes), parameterType);
+            var target = ResolveName(context, parameterType, enumTypes);
             var argument = InferValueType(context, call.Arguments[i], props, parameters, enumTypes);
-            if (argument.Category is not TypeCategory.Unknown
-                && target.Category is not TypeCategory.Unknown
-                && !Compatible(context, argument, target, assigning: true)) {
+            if (!IsLenient(argument)
+                && !IsLenient(target)
+                && !Compatible(argument, target, assigning: true)) {
                 var where = call.Line > 0 ? $" (line {call.Line}, col {call.Col})" : "";
                 context.ReportError(call,
                     $"Argument '{function.Parameters[i].Name}' of '{call.Name}' expects '{parameterType}', " +

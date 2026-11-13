@@ -133,6 +133,89 @@ public class AnalysisGateParityTests {
         await Assert.That(result.PolycCheck is true).IsTrue().Because($"{shape}: {result}");
     }
 
+    private const string OrderingDomain = """
+        domain T
+        uses temporal
+        Level: enum { Low, High }
+        Money: value {
+          Amount: Number
+        }
+        Other: entity {
+          X: Number
+        }
+        Item: entity {
+          A: Number
+          B: Number
+          S: Text
+          U: Text
+          F: Boolean
+          G: Boolean
+          L: Level
+          M: Level
+          Due: Date
+          Gap: Duration optional
+          peer: Other
+          MEMBERS
+        }
+        """;
+
+    /// <summary>
+    /// T-07a (#631): ordering is defined for numbers, dates and durations, and for nothing else the provider declares
+    /// no ordering for. A document that orders Text, Boolean, an enum, an entity or a value type is refused with
+    /// DMSEM003, where it used to pass analysis and fail the generated C# (CS0019).
+    /// </summary>
+    [Test]
+    [Arguments("Text", "P: policy { S < U }", "Text")]
+    [Arguments("Boolean", "P: policy { F >= G }", "Boolean")]
+    [Arguments("enum", "P: policy { L > M }", "Level")]
+    [Arguments("entity", "P: policy { peer <= peer }", "Other")]
+    [Arguments("value type", "Cmp: action (a: Money, b: Money) { if (a < b) { assign A to 1 } }", "Money")]
+    public async Task Ordering_OfAFamilyWithNoOrdering_IsDmsem003(string shape, string members, string described) {
+        var result = GateParity.Check(OrderingDomain.Replace("MEMBERS", members, StringComparison.Ordinal));
+
+        await Assert.That(result.Analysis).IsFalse().Because($"{shape}: {result}");
+        await Assert.That(result.AnalysisSummary).Contains($"ordering is not defined for '{described}'").Because($"{shape}: {result}");
+        await Assert.That(result.AnalysisSummary).Contains("DMSEM003").Because($"{shape}: {result}");
+    }
+
+    /// <summary>Ordering numbers, dates and durations stays accepted by every door (the regression guard of the rule).</summary>
+    [Test]
+    [Arguments("Number", "P: policy { A < B and A >= B }")]
+    [Arguments("Date", "P: policy { Due > Due }")]
+    [Arguments("Duration", "P: policy { Gap <= Gap }")]
+    public async Task Ordering_NumbersDatesDurations_StaysAcceptedByEveryDoor(string shape, string members) {
+        var result = GateParity.Check(OrderingDomain.Replace("MEMBERS", members, StringComparison.Ordinal),
+            SimStep.Create("Item", """{"A":1,"B":2,"S":"a","U":"b","F":true,"G":false,"L":"Low","M":"High","Due":"2026-01-01"}""", "i"));
+
+        await Assert.That(result.Analysis).IsTrue().Because($"{shape}: {result}");
+        await Assert.That(result.Holds).IsTrue().Because($"{shape}: {result}");
+    }
+
+    /// <summary>
+    /// T-07a: a value type has value equality (the provider declares <c>==</c> and <c>!=</c> for it), and the
+    /// generated C# value type, a record, compiles it.
+    /// </summary>
+    [Test]
+    [Arguments("==")]
+    [Arguments("!=")]
+    public async Task ValueType_Equality_IsAcceptedByEveryDoor(string op) {
+        var result = GateParity.Check($$"""
+            domain T
+            Money: value {
+              Amount: Number
+            }
+            Acct: entity {
+              N: Number
+              Set: action (a: Money, b: Money) { if (a {{op}} b) { assign N to 1 } }
+            }
+            """,
+            SimStep.Create("Acct", """{"N":0}""", "a"),
+            SimStep.Invoke("a", "Set", """{"a":{"Amount":2},"b":{"Amount":2}}"""));
+
+        await Assert.That(result.Analysis).IsTrue().Because(result.ToString());
+        await Assert.That(result.Holds).IsTrue().Because(result.ToString());
+    }
+
     private static string DateDocument(string members) => $$"""
         domain T
         uses temporal

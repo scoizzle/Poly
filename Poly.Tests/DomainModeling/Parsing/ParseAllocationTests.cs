@@ -20,7 +20,9 @@ public sealed class ParseAllocationTests {
     /// two runs. At G-13a's head (<c>9c3cf7a3</c> plus this test) the same body measures 2,345,208. G-28 lowered
     /// the ceiling: the matcher indexes a row's elements instead of boxing an enumerator per row it tries, and the top
     /// level no longer matches the visibility rule for every declaration. Measured 2,155,896 bytes on 2026-11-13 at
-    /// <c>54067e82</c>; the ceiling is that plus 1,024 bytes of run-to-run noise headroom (G-13a saw 56), not a budget.
+    /// <c>54067e82</c>, and again at <c>716214f8</c> run alone and in the Parsing filter; the full suite measures 2,154,808
+    /// there (1,088 bytes less). The ceiling is the higher, filtered, measure plus 1,024 bytes of run-to-run noise headroom
+    /// (G-13a saw 56), not a budget.
     /// </summary>
     private const long HotelParseBytesCeiling = 2_156_920;
 

@@ -274,9 +274,7 @@ public sealed partial class DomainToCSharpExporter {
             new NamedTypeReference("DomainResult", TypeArguments: [targetType]),
             methodParams,
             new Block(bodyNodes, notifyResult is null ? [localResult, local] : [localResult, local, notifyResult]),
-            DomainAccess.Demote(
-                AccessModifier.Public, domain,
-                [.. methodParams.Select(p => p.TypeReference), targetType]));
+            AccessModifier.Internal);
     }
 
     /// <summary>

@@ -42,7 +42,60 @@ public sealed class GrammarBuilder<TToken, TTokenKind>
         var frozen = new Dictionary<string, List<Pattern<TToken, TTokenKind>>>(StringComparer.Ordinal);
         foreach (var (rule, patterns) in _rules)
             frozen[rule] = [.. patterns];
+        EnsureEnclosingCaptures(frozen);
         return new Grammar<TToken, TTokenKind>(frozen);
+    }
+
+    /// <summary>
+    /// A template placeholder that is not the row's own capture names an enclosing row's: every row that reaches the rule
+    /// (a top-level or optional Ref, Repeat or LeftAssoc operand) must capture it with a required element before that
+    /// reference, or be reached only by rows that do. A rule nothing reaches has no enclosing row, so the name fails.
+    /// </summary>
+    private static void EnsureEnclosingCaptures(Dictionary<string, List<Pattern<TToken, TTokenKind>>> rules) {
+        foreach (var (rule, patterns) in rules) {
+            foreach (var pattern in patterns) {
+                var own = CaptureNames(pattern.Elements).ToHashSet(StringComparer.Ordinal);
+                foreach (var element in pattern.Elements) {
+                    var template = element switch {
+                        Refuse<TToken, TTokenKind> refuse => refuse.Message,
+                        IExpectedElement { ExpectTemplate: { } t } => t,
+                        Optional<TToken, TTokenKind> { Inner: IExpectedElement { ExpectTemplate: { } t } } => t,
+                        _ => null,
+                    };
+                    foreach (var name in template is null ? [] : MatchFailure<TToken, TTokenKind>.PlaceholdersOf(template)) {
+                        if (name is not ("expected" or "got" or "token") && !own.Contains(name) && !Enclosed(rules, rule, name, [rule]))
+                            throw new InvalidOperationException(
+                                $"The template of '{rule}/{pattern.Name}' names '{{{name}}}', which neither the row nor every row that reaches '{rule}' captures before it.");
+                    }
+                }
+            }
+        }
+    }
+
+    private static bool Enclosed(Dictionary<string, List<Pattern<TToken, TTokenKind>>> rules, string rule, string name, HashSet<string> visited) {
+        var reached = false;
+        foreach (var (outer, patterns) in rules) {
+            foreach (var pattern in patterns) {
+                var before = new HashSet<string>(StringComparer.Ordinal);
+                foreach (var element in pattern.Elements) {
+                    var target = element switch {
+                        Ref<TToken, TTokenKind> r => r.RuleName,
+                        Repeat<TToken, TTokenKind> r => r.RuleName,
+                        LeftAssoc<TToken, TTokenKind> l => l.OperandRule,
+                        Optional<TToken, TTokenKind> { Inner: Ref<TToken, TTokenKind> r } => r.RuleName,
+                        _ => null,
+                    };
+                    if (target == rule) {
+                        reached = true;
+                        if (!before.Contains(name) && (visited.Contains(outer) || !Enclosed(rules, outer, name, [.. visited, outer])))
+                            return false;
+                    }
+                    if (element is not (Optional<TToken, TTokenKind> or NotFollowedBy<TToken, TTokenKind>))
+                        before.UnionWith(CaptureNames([element]));
+                }
+            }
+        }
+        return reached;
     }
 
     /// <summary>
@@ -133,10 +186,12 @@ public sealed class GrammarBuilder<TToken, TTokenKind>
                 _ => null,
             };
             if (template is not null) {
+                // A name the row does not capture at all may be an enclosing row's: Build checks that (EnsureEnclosingCaptures).
+                var own = CaptureNames(elements).ToHashSet(StringComparer.Ordinal);
                 foreach (var name in MatchFailure<TToken, TTokenKind>.PlaceholdersOf(template)) {
-                    if (name is not ("expected" or "got") && !captured.Contains(name))
+                    if (name is not ("expected" or "got" or "token") && !captured.Contains(name) && own.Contains(name))
                         throw new InvalidOperationException(
-                            $"The template of {Where(i)} names '{{{name}}}', which is not {{expected}}, {{got}} or the capture of a required element before it.");
+                            $"The template of {Where(i)} names '{{{name}}}', which the row captures only after it or optionally.");
                 }
             }
             if (elements[i] is not (Optional<TToken, TTokenKind> or NotFollowedBy<TToken, TTokenKind>

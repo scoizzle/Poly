@@ -111,8 +111,10 @@ public sealed partial class MatchFailure<TToken, TTokenKind>
 
     /// <summary>
     /// Fills <see cref="Template"/>: <c>{expected}</c> with <paramref name="expected"/> (the host's join of
-    /// <see cref="Expected"/>), <c>{got}</c> with <paramref name="shown"/> of <see cref="Token"/>, and a capture name
-    /// with its tokens shown and joined by a space. Throws when there is no template.
+    /// <see cref="Expected"/>), <c>{got}</c> (or <c>{token}</c>) with <paramref name="shown"/> of <see cref="Token"/>, and a
+    /// capture name with its tokens shown and joined by a space: the reporting row's own capture first, then the rows
+    /// enclosing it on the match stack, innermost first, as they stood when the failure was recorded. Throws when there
+    /// is no template.
     /// </summary>
     public string Expand(string expected, Func<TToken, string> shown) {
         ArgumentNullException.ThrowIfNull(expected);
@@ -121,7 +123,7 @@ public sealed partial class MatchFailure<TToken, TTokenKind>
             throw new InvalidOperationException("This failure carries no row template; the host words the message.");
         return Placeholder().Replace(Template, m => m.Groups[1].Value switch {
             "expected" => expected,
-            "got" => shown(Token),
+            "got" or "token" => shown(Token),
             var name when Captures.TryGetValue(name, out var tokens) => string.Join(' ', tokens.Select(shown)),
             var name => throw new InvalidOperationException(
                 $"Template placeholder '{{{name}}}' of {Rule}/{Pattern} names no capture of the row at this failure."),

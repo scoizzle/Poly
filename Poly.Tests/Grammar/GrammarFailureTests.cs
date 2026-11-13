@@ -432,11 +432,12 @@ public sealed class GrammarFailureTests {
 
     [Test]
     public async Task Template_APlaceholderThatNamesNoEarlierRequiredCapture_IsRejected() {
-        await Assert.That(() => Table().Define("r").Pattern("p").Kind(TestKind.Entity).Kind(TestKind.Colon).Expect("x", "{nope}").Commit())
+        // A name the row does not capture is an enclosing row's; with no row reaching `r` there is none (rejected at Build).
+        await Assert.That(() => Table().Define("r").Pattern("p").Kind(TestKind.Entity).Kind(TestKind.Colon).Expect("x", "{nope}").Commit().Build())
             .Throws<InvalidOperationException>();
         await Assert.That(() => Table().Define("r").Pattern("p").Kind(TestKind.Entity).Optional(new Value<TestToken, TestKind>(TestKind.Identifier, "name"))
             .Kind(TestKind.Colon).Expect("x", "{name}").Commit()).Throws<InvalidOperationException>();
-        await Assert.That(() => Table().Define("r").Pattern("p").Kind(TestKind.Entity).Refuse("'{later}'").Commit())
+        await Assert.That(() => Table().Define("r").Pattern("p").Kind(TestKind.Entity).Refuse("'{later}'").Commit().Build())
             .Throws<InvalidOperationException>();
     }
 
@@ -591,5 +592,29 @@ public sealed class GrammarFailureTests {
         await Assert.That(() => Table().Define("r").Pattern("p").Kind(TestKind.Entity).Refuse("no", at: "nothing").Commit()).Throws<InvalidOperationException>();
         await Assert.That(() => Table().Define("r").Pattern("p").Kind(TestKind.Entity)
             .Optional(new Value<TestToken, TestKind>(TestKind.Identifier, "name")).Refuse("no", at: "name").Commit()).Throws<InvalidOperationException>();
+    }
+
+    [Test]
+    public async Task Template_NamesACaptureOfAnEnclosingRow_InnermostFirst_AndTokenIsTheFailingToken() {
+        var grammar = Table()
+            .Define("param").Pattern("p").Value(TestKind.Identifier, "param").Kind(TestKind.Colon).Cut()
+                .Value(TestKind.Identifier, "type").Expect("parameter type", "Expected a type for '{param}' in function '{name}', got '{token}'").Commit()
+            .Define("function").Pattern("p").Kind(TestKind.Action).Value(TestKind.Identifier, "name").Kind(TestKind.LBrace).Cut()
+                .Repeat("param").Kind(TestKind.RBrace).Commit()
+            .Build();
+
+        var outcome = Match(grammar, "function", "action Go { a : 5 }");
+
+        await Assert.That(outcome.Failure).IsNotNull();
+        await Assert.That(outcome.Failure!.Expand("parameter type", t => t.Text)).IsEqualTo("Expected a type for 'a' in function 'Go', got '5'");
+    }
+
+    [Test]
+    public async Task Template_ACaptureNoRowProvides_IsRejectedAtBuild() {
+        // `{name}` is not param's own capture, and the one row that references `param` does not capture it before the reference.
+        await Assert.That(() => Table()
+            .Define("param").Pattern("p").Value(TestKind.Identifier, "param").Kind(TestKind.Colon).Expect("':'", "in '{name}'").Commit()
+            .Define("function").Pattern("p").Kind(TestKind.Action).Kind(TestKind.LBrace).Repeat("param").Value(TestKind.Identifier, "name").Commit()
+            .Build()).Throws<InvalidOperationException>();
     }
 }

@@ -124,6 +124,7 @@ public sealed class Matcher<TToken, TTokenKind>
         tracker.Reset();
         _memo = new Dictionary<(string Rule, int Offset), MatchResult<TToken, TTokenKind>?>();
         _tracker = tracker;
+        var scopeDepth = (_scopes ??= []).Count;
         MatchFailure<TToken, TTokenKind> failure;
         try {
             if (TryMatchRuleAt(ruleName, offset: 0) is { } result)
@@ -136,6 +137,8 @@ public sealed class Matcher<TToken, TTokenKind>
         finally {
             _memo = previous;
             _tracker = previousTracker;
+            // An abort leaves the rows it escaped on the stack.
+            _scopes.RemoveRange(scopeDepth, _scopes.Count - scopeDepth);
         }
         MatchTrace.Record(new MatchObservation(ruleName, failure));
         return new(null, failure);
@@ -147,6 +150,9 @@ public sealed class Matcher<TToken, TTokenKind>
     private FailureTracker? _tracker;
     private FailureTracker? _spareTracker;
     private Frame _frame;
+
+    // The captures of the rows being matched, outermost first (Match only): what a template's enclosing names read.
+    private List<Dictionary<string, IReadOnlyList<TToken>>>? _scopes;
 
     private void EnsureKnownRule(string ruleName) {
         if (!_grammar.HasRule(ruleName))
@@ -189,14 +195,17 @@ public sealed class Matcher<TToken, TTokenKind>
         var pos = offset;
         var cut = false;
         var elements = pattern.Elements;
+        var tracking = _tracker is not null;
         // A refusal that names its position stands on that element's first token (Match only: a Refuse is never under TryMatch).
-        var anchor = _tracker is not null && elements[^1] is Refuse<TToken, TTokenKind> { At: { } at } ? Refuse<TToken, TTokenKind>.AnchorOf(elements, at) : -1;
+        var anchor = tracking && elements[^1] is Refuse<TToken, TTokenKind> { At: { } at } ? Refuse<TToken, TTokenKind>.AnchorOf(elements, at) : -1;
         var anchorPos = -1;
+        if (tracking)
+            _scopes!.Add(captures);
         for (var index = 0; index < elements.Count; index++) {
             var element = elements[index];
             if (index == anchor)
                 anchorPos = pos;
-            if (_tracker is not null)
+            if (tracking)
                 _frame = new Frame(ruleName, pattern, index, captures);
             switch (element) {
                 case Cut<TToken, TTokenKind>:
@@ -205,13 +214,17 @@ public sealed class Matcher<TToken, TTokenKind>
                 case Refuse<TToken, TTokenKind>:
                     // The row matched every token up to here and refuses at the last one; a Refuse-only row (a catch-all)
                     // matched none, so it stands on the head token and any sibling that matches a token rescues it.
-                    Commit.Add(ref committed, new Commit(pattern, pos, [new Entry(ruleName, pattern, index, element, anchorPos >= 0 ? anchorPos : pos > offset ? pos - 1 : pos, null, captures)]));
+                    Commit.Add(ref committed, new Commit(pattern, pos,
+                        [new Entry(ruleName, pattern, index, element, anchorPos >= 0 ? anchorPos : pos > offset ? pos - 1 : pos, null, Scope())]));
+                    _scopes!.RemoveAt(_scopes.Count - 1);
                     match = null!;
                     return false;
             }
             if (!TryMatchElement(element, pos, captures, tokens, out var piece)) {
                 if (cut)
                     Commit.Add(ref committed, CommitAt(new Frame(ruleName, pattern, index, captures), element, pos, tokens));
+                if (tracking)
+                    _scopes!.RemoveAt(_scopes.Count - 1);
                 match = null!;
                 return false;
             }
@@ -220,6 +233,8 @@ public sealed class Matcher<TToken, TTokenKind>
             operators.AddRange(piece.Operators);
             pos += piece.Tokens.Count;
         }
+        if (tracking)
+            _scopes!.RemoveAt(_scopes.Count - 1);
         match = new MatchResult<TToken, TTokenKind>(
             pattern.Name, tokens, captures, ruleName, children, operators, pattern);
         return true;
@@ -479,7 +494,21 @@ public sealed class Matcher<TToken, TTokenKind>
     /// <summary>Records a failing token element at <paramref name="offset"/> (no-op outside <see cref="Match"/>).</summary>
     private void Fail(IPatternElement<TToken, TTokenKind> element, int offset, TTokenKind? kind) {
         if (_tracker is { } tracker)
-            tracker.Record(new Entry(_frame.Rule, _frame.Pattern, _frame.Index, element, offset, kind, _frame.Captures));
+            tracker.Record(new Entry(_frame.Rule, _frame.Pattern, _frame.Index, element, offset, kind,
+                element is IExpectedElement { ExpectTemplate: not null } ? Scope() : _frame.Captures));
+    }
+
+    /// <summary>
+    /// The captures a template reads, as they stand now: every row on the match stack merged outermost first, so the
+    /// innermost (the reporting row's own) wins a name. A snapshot, because the enclosing rows go on matching.
+    /// </summary>
+    private Dictionary<string, IReadOnlyList<TToken>> Scope() {
+        var merged = new Dictionary<string, IReadOnlyList<TToken>>(StringComparer.Ordinal);
+        foreach (var scope in _scopes!) {
+            foreach (var (name, tokens) in scope)
+                merged[name] = tokens;
+        }
+        return merged;
     }
 
     /// <summary>

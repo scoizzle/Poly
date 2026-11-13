@@ -276,30 +276,111 @@ public class FailureTypingTests {
             && d.Message.Contains($"Parameter '{name}' of action 'Set' would shadow the generated C# type '{name}'"))).IsTrue();
     }
 
+    private static string PeerBoundDsl(string binder) => $$"""
+        domain Lab
+        Tracker: entity {
+          Score: Number range(1, 10) default(5)
+          Tracks: Order
+          Pending: stage {
+            when Tracks Active as {{binder}} {
+              assign Score to {{binder}} Qty
+            }
+          }
+        }
+        Order: entity {
+          Qty: Number default(1)
+          trackers: many Tracker via Tracks
+          Draft: stage { }
+          Active: stage { }
+        }
+        """;
+
+    private static IReadOnlyList<Poly.Analysis.Diagnostic> Errors(string dsl) {
+        var changes = new PolyDslParser(dsl, ParitySessions.Create()).Parse();
+        var evolved = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes, session: ParitySessions.Create());
+        return [.. evolved.Analysis.Diagnostics.Where(d => d.Severity == Poly.Analysis.DiagnosticSeverity.Error)];
+    }
+
+    // L-03c (orchestrator ruling): a subscription peer binder prints as the handler's parameter, and the handler body
+    // calls Poly.Runtime.ActionScope.Touch(this), System.* and DomainResult.Success() from expression position, so a
+    // binder of a generated reference's name shadows it. One rule with the action parameters: the same ReservedNames
+    // rows, the same DMSTR009 family, reported on the subscription.
     [Test]
-    public async Task PeerBinderNamedPoly_WithAnAssignConstraint_PrintsCompilableCSharp() {
-        var cs = Print("""
-            domain Lab
-            Tracker: entity {
-              Score: Number range(1, 10) default(5)
-              Tracks: Order
-              Pending: stage {
-                when Tracks Active as Poly {
-                  assign Score to Poly Qty
-                }
-              }
-            }
-            Order: entity {
-              Qty: Number default(1)
-              trackers: many Tracker via Tracks
-              Draft: stage { }
-              Active: stage { }
-            }
-            """);
+    [Arguments("Poly")]
+    [Arguments("System")]
+    [Arguments("DomainResult")]
+    public async Task PeerBinderNamedAGeneratedReference_IsAReservedNameError(string name) {
+        var errors = Errors(PeerBoundDsl(name));
+
+        var reserved = errors.Where(d => d.Code == DomainModelDiagnosticCodes.ReservedMemberName).ToList();
+        await Assert.That(reserved.Count).IsEqualTo(1);
+        await Assert.That(reserved[0].Message).IsEqualTo(
+            $"Peer binder '{name}' of the 'when Tracks Active' handler on entity 'Tracker' would shadow the generated " +
+            $"C# type '{name}' that Emit calls from the generated handler body; rename it.");
+        await Assert.That(reserved[0].Node).IsTypeOf<StageSubscription>();
+    }
+
+    // The `__` prefix is reserved for the generated surface, for binders as for members and parameters.
+    [Test]
+    public async Task PeerBinderWithTheActionScopePrefix_IsAReservedNameError() {
+        var errors = Errors(PeerBoundDsl("__peer"));
+
+        var reserved = errors.Where(d => d.Code == DomainModelDiagnosticCodes.ReservedMemberName).ToList();
+        await Assert.That(reserved.Count).IsEqualTo(1);
+        await Assert.That(reserved[0].Message).StartsWith("Peer binder '__peer' of the 'when Tracks Active' handler on entity 'Tracker': ");
+    }
+
+    // Used to assert that this document printed compilable C#. L-03c's handler Touch prints Poly.Runtime.ActionScope in
+    // every handler body, which the binder shadows (CS1061), so by the orchestrator's ruling the document is rejected.
+    [Test]
+    public async Task PeerBinderNamedPoly_WithAnAssignConstraint_IsAReservedNameError() {
+        var errors = Errors(PeerBoundDsl("Poly"));
+
+        await Assert.That(errors.Select(d => d.Code)).Contains(DomainModelDiagnosticCodes.ReservedMemberName);
+    }
+
+    // The ordinary case still prints, compiles and touches the subscriber.
+    [Test]
+    public async Task PeerBoundHandler_WithAnOrdinaryBinder_PrintsCompilableCSharpWithTouch() {
+        var cs = Print(PeerBoundDsl("order"));
 
         var asm = ExportedCSharp.CompileAndLoad(cs);
 
         await Assert.That(asm.GetType("Tracker")).IsNotNull();
+        await Assert.That(ExportedCSharp.ExtractMethod(cs, "DomainResult WhenEachOrderActive(Order order)"))
+            .Contains("Poly.Runtime.ActionScope.Touch(this);");
+    }
+
+    // Exempt binder kinds: a fan-out `for Rel as x` and a general `for x in Rel` binder lower to a generated
+    // `target{N}` local, never to the authored name, so `Poly` and `System` cannot shadow anything; inside a handler,
+    // where the Touch prints, and inside an action, they compile.
+    [Test]
+    [Arguments("Poly")]
+    [Arguments("System")]
+    public async Task ForBinders_NamedAGeneratedReference_PrintCompilableCSharp(string name) {
+        var cs = Print($$"""
+            domain Lab
+            Order: entity {
+              Hits: Number default(0)
+              lines: many OrderLine
+              Mark: action { for lines as {{name}} invoke {{name}}.Mark(amount: 5) }
+              Sweep: action { for {{name}} in lines { invoke {{name}}.Mark(amount: 2) } }
+              when lines Done { for lines as {{name}} invoke {{name}}.Mark(amount: 3) }
+              when lines Done { for {{name}} in lines { invoke {{name}}.Mark(amount: 4) } }
+            }
+            OrderLine: entity {
+              Qty: Number range(1, 10) default(5)
+              Mark: action (amount: Number) { assign Qty to amount }
+              Open: stage { Finish: action { transition to Done } }
+              Done: stage { }
+            }
+            """);
+
+        await Assert.That(string.Join("\n", ExportedCSharp
+            .CompileWithWarningsAsErrors("ForBinderNamed" + name, [("Lab.cs", cs)])
+            .Select(d => d.ToString()))).IsEqualTo("");
+        await Assert.That(cs).Contains("Poly.Runtime.ActionScope.Touch(this);");
+        await Assert.That(cs).DoesNotContain($"var {name} ");
     }
 
     [Test]

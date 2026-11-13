@@ -3676,6 +3676,9 @@ public class DomainToCSharpExporterTests {
         ctor = ctor[..ctor.IndexOf("public ", StringComparison.Ordinal)];
         await Assert.That(ctor).Contains("this.CurrentStage = TruckStage.Idle");
         await Assert.That(ctor).DoesNotContain("this.Status = TruckStatus.EnRoute");
+        // Paired with its positive (the absence above would also hold if the entry were lost): a non-initial stage's
+        // entry has no entry method, and Create calls none.
+        await Assert.That(cs).DoesNotContain("__EnterInitialStage");
 
         var dispatch = ExportedCSharp.ExtractMethod(cs, "DomainResult Dispatch(");
         await Assert.That(dispatch).Contains("this.CurrentStage = TruckStage.EnRoute");
@@ -4008,9 +4011,16 @@ public class DomainToCSharpExporterTests {
         var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var cs = new CSharpGenerator().Generate(types);
 
+        // L-04a: the constructor is assignments only; the initial entry is the same body, in __EnterInitialStage,
+        // which Create calls and whose failure it returns.
         var ctor = cs[cs.IndexOf("private Parent(", StringComparison.Ordinal)..];
         ctor = ctor[..ctor.IndexOf("public ", StringComparison.Ordinal)];
-        await Assert.That(ctor).Contains("this.CreateChildren(\"x\")");
+        await Assert.That(ctor).DoesNotContain("CreateChildren");
+        var entry = ExportedCSharp.ExtractMethod(cs, "private DomainResult __EnterInitialStage(");
+        await Assert.That(entry).Contains("this.CreateChildren(\"x\")");
+        var create = ExportedCSharp.ExtractMethod(cs, "static DomainResult<Parent> Create(");
+        await Assert.That(create).Contains("created.__EnterInitialStage()");
+        await Assert.That(create).Contains("DomainResult<Parent>.Failure(__entry.Error!)");
         var back = ExportedCSharp.ExtractMethod(cs, "DomainResult Back(");
         await Assert.That(back).Contains("this.CreateChildren(\"x\")");
     }

@@ -46,9 +46,10 @@ public sealed class DomainResultValueTests {
     }
 
     [Test]
-    public async Task ConstraintFailure_ThrownByPrintedCode_IsTheRuntimeType() {
-        // A void OnEntry body cannot return a failure, so it throws. The throw must be
-        // the runtime type the executor catches, not a printed twin.
+    public async Task EntryConstraintFailure_InPrintedCode_IsAReturnedFailureNotAThrow() {
+        // L-04a: the initial entry runs in Create, which returns its failure, so printed code throws nothing for a
+        // domain failure and defines no exception type of its own. (It once threw the runtime ConstraintFailureException
+        // out of a void constructor; that type now only comes from the VM's 'X is not set' throw, R-07.)
         var (domain, analysis, session) = SliceCProducerLoopCatalogTests.Evolve("""
             domain Lab
             Widget: entity {
@@ -62,25 +63,13 @@ public sealed class DomainResultValueTests {
         var files = session.Emit(domain, analysis);
         var asm = ExportedCSharp.CompileAndLoad(files, "ConstraintFailure");
         var widget = asm.GetType("Lab.Widget")!;
-        var ctor = widget
-            .GetConstructors(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
-            .OrderByDescending(c => c.GetParameters().Length)
-            .First();
-        var args = ctor.GetParameters()
-            .Select(p => p.Name switch {
-                "score" => (object?)50L,
-                "bump" => 100L,
-                _ => p.ParameterType.IsValueType ? Activator.CreateInstance(p.ParameterType) : null,
-            })
-            .ToArray();
 
-        var thrown = await Assert.That(() => ctor.Invoke(args)).Throws<TargetInvocationException>();
+        var failed = ExportedCSharp.InvokeCreate(widget, ("bump", 100L));
 
-        await Assert.That(ReferenceEquals(
-                thrown!.InnerException!.GetType(),
-                typeof(Poly.DomainModeling.Runtime.ConstraintFailureException)))
-            .IsTrue()
-            .Because(thrown.InnerException.GetType().FullName ?? thrown.InnerException.GetType().Name);
+        await Assert.That(IsSuccess(failed)).IsFalse();
+        await Assert.That(failed.GetType().GetProperty("ErrorMessage", PrintedMembers.Any)!.GetValue(failed) as string)
+            .IsEqualTo("'Score' must be <= 10.");
+        await Assert.That(asm.GetTypes().Any(t => t.Name == "ConstraintFailureException")).IsFalse();
     }
 
     static bool IsSuccess(object result) =>

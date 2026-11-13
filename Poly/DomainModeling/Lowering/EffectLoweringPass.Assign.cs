@@ -129,12 +129,13 @@ public sealed partial class EffectLoweringPass {
     /// (<see cref="SourceConstraintsImplyTarget"/>). The checks that remain are Source's own guards on each write
     /// to Source (Create factory, in-range literal default/assign), which guard-closed guarantees exist, so a
     /// violating value is still rejected where it enters Source. Anything not proven keeps the guard.
-    /// Restricted to a result-returning action body: not in ctor / stage-entry (void) contexts, where Source
-    /// may still hold its CLR default before it is written.
+    /// Restricted to an action body (it has an <see cref="LoweringContext.ActionName"/>): not in the initial entry or a
+    /// subscription handler, where Source may still hold its CLR default before it is written. Both return a
+    /// <c>DomainResult</c> since L-04a, so a result type no longer tells an action from them.
     /// </summary>
     private bool CopiesStrongerGuardClosedProperty(Property target, AssignEffect a, LoweredExpression value) {
         if (a.Value is not PropertyAccess sourceAccess
-            || _context.ActionResultType is null
+            || _context.ActionName is null
             || _entriesInlining.Count > 0
             || _exitsInlining.Count > 0
             || value.Statements.Count > 0

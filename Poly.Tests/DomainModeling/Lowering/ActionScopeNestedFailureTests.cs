@@ -214,9 +214,9 @@ public class ActionScopeNestedFailureTests {
     private static int NotifyDepth(object instance) =>
         (int)instance.GetType().GetField("_notifyDepth", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)!.GetValue(instance)!;
 
-    // F2: the cascade depth is balanced after a failure return and after a handler that throws.
+    // F2: the cascade depth is balanced after a failure return and after a handler whose create-in returns a failure.
     [Test]
-    public async Task Printed_NotifyDepth_IsZeroAfterAFailingHandlerAndAfterAThrowingHandler() {
+    public async Task Printed_NotifyDepth_IsZeroAfterAFailingHandlerAndAfterAFailingHandlerCreate() {
         var (_, assembly) = Print(Dsl, "NestedFailureDepth");
         var owner = ExportedCSharp.CreateEntity(assembly, "Owner");
         Call(owner, "Add");
@@ -249,10 +249,9 @@ public class ActionScopeNestedFailureTests {
         var job = Poly.Tests.DomainModeling.Compile.WhenAnySimulatePrintAgreeTests.CreateEntity(throwingAssembly, "Job");
         var holder = Poly.Tests.DomainModeling.Compile.WhenAnySimulatePrintAgreeTests.CreateEntity(throwingAssembly, "S");
         Poly.Tests.DomainModeling.Compile.WhenAnySimulatePrintAgreeTests.Attach(holder, "Jobs", job);
-        var threw = false;
-        try { Call(job, "Finish"); }
-        catch (TargetInvocationException e) when (e.InnerException?.GetType().Name == "ConstraintFailureException") { threw = true; }
-        await Assert.That(threw).IsTrue();
+        // L-04a: the handler's create-in returns the child's handler failure (it threw ConstraintFailureException before),
+        // so the unwinding is a return, and the depth is balanced the same way.
+        await Assert.That(IsSuccess(Call(job, "Finish"))).IsFalse();
         await Assert.That(NotifyDepth(job)).IsEqualTo(0);
     }
 

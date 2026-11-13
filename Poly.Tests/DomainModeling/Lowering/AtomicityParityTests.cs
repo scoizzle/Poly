@@ -797,25 +797,25 @@ public class AtomicityParityTests {
         }
         """;
 
-    // PINNED, removed by X-04 (the storage journal; the owner's ruling 6843258728 names the release): the unique guard
-    // reserves the key BEFORE `new`, so a create whose entry then fails leaves the key reserved. The failure is returned
-    // (or, on master, thrown); either way the key is held.
+    // The storage library records a unique key as the LAST step before `Success` (`db.Record`), after the initial entry.
+    // The lock expected the unique guard to hold the key across a failed entry; it does not: the guard only checks that
+    // the key is free, and the failing entry returns before the key is recorded, on master (where the constructor threw)
+    // and now. So a create whose entry fails reserves nothing. What X-04 still owns is the key a create reserved when a
+    // LATER step of its action fails (`Unique_WhenTheActionRollsBack_LeavesTheNewKeyReserved_UntilX04`). The control
+    // keeps this from passing because the key is never recorded at all.
     [Test]
-    public async Task Create_WhenTheEntryFailsAfterTheUniqueGuard_LeavesTheKeyReserved_UntilX04() {
+    public async Task Create_WhenTheEntryFails_ReservesNoUniqueKey() {
         var (_, assembly) = Print(EntryUniqueDsl, "AtomicityEntryUnique");
         var port = new RecordingStoragePort();
         var type = assembly.GetType("Kid")!;
-        object? result = null;
-        try {
-            result = ExportedCSharp.InvokeCreate(type, ("code", "k"), ("db", port));
-        }
-        catch (TargetInvocationException) {
-            // master: the entry threw out of the constructor
-        }
 
-        if (result is not null)
-            await Assert.That((bool)result.GetType().GetProperty("IsSuccess")!.GetValue(result)!).IsFalse();
-        await Assert.That(port.Exists("Kid", "Code", "k")).IsTrue().Because("X-04 releases a key a failed create reserved");
+        var failed = ExportedCSharp.InvokeCreate(type, ("code", "k"), ("db", port));
+        var succeeded = ExportedCSharp.InvokeCreate(type, ("code", "ok"), ("cap", 5L), ("db", port));
+
+        await Assert.That((bool)failed.GetType().GetProperty("IsSuccess")!.GetValue(failed)!).IsFalse();
+        await Assert.That(port.Exists("Kid", "Code", "k")).IsFalse();
+        await Assert.That((bool)succeeded.GetType().GetProperty("IsSuccess")!.GetValue(succeeded)!).IsTrue();
+        await Assert.That(port.Exists("Kid", "Code", "ok")).IsTrue().Because("a successful create records its key");
     }
 
     // ── the factory records what it created (F3, amendment 8) ─────────

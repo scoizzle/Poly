@@ -392,8 +392,9 @@ public class AtomicityParityTests {
             fail("Run", []);
         });
 
-        await Assert.That(printed[^1].GraphAfter!).Contains("_notifyDepth=0");
-        await Assert.That(printed[^1].GraphAfter!).DoesNotContain("_notifyDepth=-1");
+        // A depth at its default (0) is not rendered; the -1 a relative exit leaves would be.
+        await Assert.That(printed[^1].GraphBefore!).DoesNotContain("_notifyDepth");
+        await Assert.That(printed[^1].GraphAfter!).DoesNotContain("_notifyDepth");
     }
 
     // A thrown failure: the subscription cascade overflows its depth guard and throws on both hosts. The throw unwinds

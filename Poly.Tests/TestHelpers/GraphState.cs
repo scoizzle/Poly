@@ -94,11 +94,12 @@ public static class GraphState {
     }
 
     /// <summary>
-    /// The graph against <paramref name="table"/>, one line per entity. <paramref name="parity"/> drops members that
-    /// are null, an empty collection or a number or flag at its default, so a member the simulator bag never wrote
-    /// (it reads as the default) and a printed field holding the default read the same, as do a registry the module
-    /// never allocated and one it allocated empty; the absolute comparison on one host keeps them. An enum renders as
-    /// its quoted member name on both hosts (the simulator stores the name).
+    /// The graph against <paramref name="table"/>, one line per entity. A number or flag at its default is left out
+    /// in both forms: a simulator bag key the module never wrote reads as that default, so an absent key and a written
+    /// default are one state (the notify cascade's exit writes the entry depth back after a nested rollback, where the
+    /// bag had none). <paramref name="parity"/> also drops null and empty collections, so a registry the module never
+    /// allocated and one it allocated empty read the same on both hosts; the absolute comparison on one host keeps
+    /// them. An enum renders as its quoted member name on both hosts (the simulator stores the name).
     /// </summary>
     public static string Render(Reader reader, IReadOnlyList<object> table, bool parity = false) {
         var index = new Dictionary<object, int>(ReferenceEqualityComparer.Instance);
@@ -109,7 +110,7 @@ public static class GraphState {
             text.Append('#').Append(i).Append(" {");
             var first = true;
             foreach (var (name, value) in Ordered(reader, table[i])) {
-                if (parity && IsDefault(value))
+                if (IsDefaultValue(value) || (parity && IsEmpty(value)))
                     continue;
                 if (!first)
                     text.Append("; ");
@@ -125,9 +126,9 @@ public static class GraphState {
     public static string Of(Reader reader, IEnumerable<object> roots, bool parity = false) =>
         Render(reader, Table(reader, roots), parity);
 
-    static bool IsDefault(object? value) => value switch {
-        null => true,
-        ICollection { Count: 0 } => true,
+    static bool IsEmpty(object? value) => value is null or ICollection { Count: 0 };
+
+    static bool IsDefaultValue(object? value) => value switch {
         bool b => !b,
         int or long or short or byte or decimal or double or float =>
             Convert.ToDecimal(value, CultureInfo.InvariantCulture) == 0m,

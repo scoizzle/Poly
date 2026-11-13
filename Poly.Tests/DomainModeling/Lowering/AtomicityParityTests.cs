@@ -739,6 +739,41 @@ public class AtomicityParityTests {
         }
     }
 
+    // ── a bare Create{Nav} (L-03c nit 1) ──────────────────────────────
+
+    private const string BareCreateNavDsl = """
+        domain Bare
+        Owner: entity {
+          Count: Number default(0)
+          items: many Item
+          Never: policy { Count > 100 }
+          Y: action require Never { assign Count to Count + 1 }
+          Add: action { create in items { } }
+          when items Open { invoke Y }
+        }
+        Item: entity {
+          owner: Owner via items
+          Open: stage { }
+        }
+        """;
+
+    // PINNED, removed by L-04b (every public generated mutator opens a root scope when none is active): host code calling
+    // `Owner.CreateItems()` with no action running gets the failed result of the child's initial-stage handler, but the
+    // child was added to the owner's collection first and nothing rolls it back, so it stays.
+    [Test]
+    public async Task BareCreateNav_WhenTheChildsHandlerFails_LeavesTheChildInTheCollection_UntilL04b() {
+        var (_, assembly) = Print(BareCreateNavDsl, "AtomicityBareCreateNav");
+        var owner = ExportedCSharp.CreateEntity(assembly, "Owner");
+        var create = owner.GetType().GetMethods(PrintedMembers.Any).SingleOrDefault(m => m.Name == "CreateItems")
+            ?? throw new InvalidOperationException(string.Join(",", owner.GetType().GetMethods(PrintedMembers.Any).Select(m => m.Name)));
+
+        var result = create.Invoke(owner, [])!;
+
+        await Assert.That((bool)result.GetType().GetProperty("IsSuccess")!.GetValue(result)!).IsFalse();
+        var items = (IList)owner.GetType().GetProperty("Items", PrintedMembers.Any)!.GetValue(owner)!;
+        await Assert.That(items.Count).IsEqualTo(1).Because("L-04b: a bare Create{Nav} rolls the child back");
+    }
+
     // ── the creation order the scope records (lock amendment 5) ───────
 
     private const string OrderDsl = """

@@ -52,6 +52,27 @@ public sealed class DslPrecedenceSourceTests {
         }
     }
 
+    /// <summary>
+    /// The pattern grammar defines no operator precedence: its one expression rule is the flat atom
+    /// <c>expr-primary</c>, and the table decides how atoms nest.
+    /// </summary>
+    [Test]
+    public async Task GrammarDefinesOneExpressionRule_ExprPrimaryOnly() {
+        var grammar = DslGrammar.Core;
+        await Assert.That(grammar.KnownRules.Contains("expr-primary")).IsTrue();
+        await Assert.That(grammar.GetPatterns("expr-primary").Any(p => p.Name == "ident")).IsTrue();
+
+        var names = grammar.KnownRules
+            .Where(n => n == "expr" || n.StartsWith("expr-", StringComparison.Ordinal))
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
+        var extras = names.Where(n => n != "expr-primary").ToArray();
+
+        await Assert.That(extras.Length).IsEqualTo(0).Because($"extra expression rules: {string.Join(", ", extras)}");
+        await Assert.That(names).IsEquivalentTo(["expr-primary"]);
+    }
+
     private static DomainExpression ParseWith(string text, DslOperatorTable table) {
         var reader = new DslTokenReader(text);
         var cursor = new DslCursor(reader, new Matcher<DslToken, DslTokenKind>(DslGrammar.Core, reader));

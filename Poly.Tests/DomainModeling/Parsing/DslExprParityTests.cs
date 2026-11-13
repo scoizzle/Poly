@@ -1,5 +1,4 @@
 using Poly.DomainModeling.Ontology;
-using Poly.Grammar;
 // Disambiguate from Poly.Ast.Nodes records imported via global usings.
 using Add = Poly.DomainModeling.Ontology.Add;
 using And = Poly.DomainModeling.Ontology.And;
@@ -13,7 +12,7 @@ namespace Poly.Tests.DomainModeling.Parsing;
 
 // ─── Expression regression corpus ───
 // Same frozen canonical IR oracles:
-// DslExpressionFragment (standalone expr) + DslGrammar span checks.
+// DslExpressionFragment (standalone expr, the table-driven driver) + the product parse.
 // Never delete cases; every case parses to the exact frozen IR or rejects loud.
 
 public sealed class DslExprParityTests {
@@ -55,18 +54,15 @@ public sealed class DslExprParityTests {
             $"Unmapped DomainExpression subtype '{e.GetType().Name}' in canonical oracle"),
     };
 
-    // Span side: TryMatch("expr") accepts only when the whole stream is consumed.
-    private static (bool Accepts, int Consumed) GrammarMatch(string expr) {
-        var reader = new DslTokenReader(expr);
-        var matcher = new Matcher<DslToken, DslTokenKind>(DslGrammar.Build(), reader);
-        var result = matcher.TryMatch("expr");
-        if (result is null) return (false, 0);
-        var total = 0;
-        while (true) {
-            total++;
-            if (reader.Peek(total - 1).Kind == DslTokenKind.EndOfFile) break;
+    // Driver side: the whole input is one expression or the parse throws.
+    private static bool DriverAccepts(string expr) {
+        try {
+            V2Parse(expr);
+            return true;
         }
-        return (result.Consumed == total - 1, result.Consumed);
+        catch (FormatException) {
+            return false;
+        }
     }
 
     // Product side: full .poly parse whose policy body is the expression.
@@ -84,75 +80,61 @@ public sealed class DslExprParityTests {
     [Test]
     public async Task Parity_AddMul_Precedence_AcceptBoth() {
         await Assert.That(ProductAccepts("1 + 2 * 3")).IsTrue();
-        var g = GrammarMatch("1 + 2 * 3");
-        await Assert.That(g.Accepts).IsTrue();
-        await Assert.That(g.Consumed).IsEqualTo(5);
+        await Assert.That(DriverAccepts("1 + 2 * 3")).IsTrue();
     }
 
     [Test]
     public async Task Parity_AndOr_Consumes_AcceptBoth() {
         await Assert.That(ProductAccepts("a and b or c")).IsTrue();
-        var g = GrammarMatch("a and b or c");
-        await Assert.That(g.Accepts).IsTrue();
-        await Assert.That(g.Consumed).IsEqualTo(5);
+        await Assert.That(DriverAccepts("a and b or c")).IsTrue();
     }
 
     [Test]
     public async Task Parity_Compare_AcceptBoth() {
         await Assert.That(ProductAccepts("Age >= 18")).IsTrue();
-        var g = GrammarMatch("Age >= 18");
-        await Assert.That(g.Accepts).IsTrue();
-        await Assert.That(g.Consumed).IsEqualTo(3);
+        await Assert.That(DriverAccepts("Age >= 18")).IsTrue();
     }
 
     [Test]
     public async Task Parity_Not_AcceptBoth() {
         await Assert.That(ProductAccepts("not x")).IsTrue();
-        var g = GrammarMatch("not x");
-        await Assert.That(g.Accepts).IsTrue();
-        await Assert.That(g.Consumed).IsEqualTo(2);
+        await Assert.That(DriverAccepts("not x")).IsTrue();
     }
 
     [Test]
     public async Task Parity_NotOverCompare_RejectsBoth() {
         await Assert.That(ProductAccepts("not a > b")).IsFalse();
-        await Assert.That(GrammarMatch("not a > b").Accepts).IsFalse();
+        await Assert.That(DriverAccepts("not a > b")).IsFalse();
     }
 
     [Test]
     public async Task Parity_TrailingOp_RejectsBoth() {
         await Assert.That(ProductAccepts("1 +")).IsFalse();
-        await Assert.That(GrammarMatch("1 +").Accepts).IsFalse();
+        await Assert.That(DriverAccepts("1 +")).IsFalse();
     }
 
     [Test]
     public async Task Parity_Group_AcceptBoth() {
         await Assert.That(ProductAccepts("(1 + 2)")).IsTrue();
-        var g = GrammarMatch("(1 + 2)");
-        await Assert.That(g.Accepts).IsTrue();
-        await Assert.That(g.Consumed).IsEqualTo(5);
+        await Assert.That(DriverAccepts("(1 + 2)")).IsTrue();
     }
 
     [Test]
     public async Task Parity_NestedGroup_InComparison_AcceptBoth() {
         await Assert.That(ProductAccepts("(Age + 1) >= 18")).IsTrue();
-        var g = GrammarMatch("(Age + 1) >= 18");
-        await Assert.That(g.Accepts).IsTrue();
-        await Assert.That(g.Consumed).IsEqualTo(7);
+        await Assert.That(DriverAccepts("(Age + 1) >= 18")).IsTrue();
     }
 
     [Test]
     public async Task Parity_NotNot_AcceptBoth() {
         await Assert.That(ProductAccepts("not not x")).IsTrue();
-        var g = GrammarMatch("not not x");
-        await Assert.That(g.Accepts).IsTrue();
-        await Assert.That(g.Consumed).IsEqualTo(3);
+        await Assert.That(DriverAccepts("not not x")).IsTrue();
     }
 
     [Test]
     public async Task Parity_UnclosedGroup_RejectsBoth() {
         await Assert.That(ProductAccepts("(1 + 2")).IsFalse();
-        await Assert.That(GrammarMatch("(1 + 2").Accepts).IsFalse();
+        await Assert.That(DriverAccepts("(1 + 2")).IsFalse();
     }
 
     // ─── Frozen-IR regression corpus ─────────────────────────────
@@ -167,9 +149,7 @@ public sealed class DslExprParityTests {
     }
 
     [Test]
-    public async Task SpanVsFold_NotInChain_TableRejectsFoldAccepts() {
-        await Assert.That(GrammarMatch("a + not b").Accepts).IsFalse();
-        await Assert.That(GrammarMatch("a + not b > c").Accepts).IsFalse();
+    public async Task Fold_NotRightOfAdd_Accepts() {
         await AssertCanonical("a + not b", "Add(Prop(a),Not(Prop(b)))");
         await AssertCanonical("a + not b > c", "Cmp(Add(Prop(a),Not(Prop(b))),GreaterThan,Prop(c))");
     }

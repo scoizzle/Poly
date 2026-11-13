@@ -219,9 +219,13 @@ public class DslExpressionE1Tests {
             await Assert.That(durationPrimary!.Consumed).IsEqualTo(2);
         }
 
-        var full = new Matcher<DslToken, DslTokenKind>(g, new DslTokenReader("MAGIC == 42"));
-        var expr = full.TryMatch("expr");
-        await Assert.That(expr).IsNotNull();
-        await Assert.That(expr!.Consumed).IsEqualTo(3);
+        // The whole expression goes through the product parser with the same pack: one comparison, pack node on the left.
+        var changes = new PolyDslParser(
+            "domain D\nE: entity {\n  P: policy { MAGIC == 42 }\n}",
+            BuildMagicPackInputs()).Parse();
+        var cmp = (Comparison)changes.OfType<AddPolicyToEntityChange>().Single().Policy.Expression;
+        await Assert.That(cmp.Left).IsTypeOf<MagicLiteral>();
+        await Assert.That(((MagicLiteral)cmp.Left).Value).IsEqualTo(42L);
+        await Assert.That(cmp.Right).IsTypeOf<Literal>();
     }
 }

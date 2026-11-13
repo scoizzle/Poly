@@ -770,7 +770,7 @@ public class DomainToCSharpExporterTests {
     }
 
     [Test]
-    public async Task Export_CreateNavIsPublic_AttachNavIsInternal() {
+    public async Task Export_CreateNavIsInternal_AttachNavIsInternal() {
         const string dsl = """
             domain Test
             Child: entity {

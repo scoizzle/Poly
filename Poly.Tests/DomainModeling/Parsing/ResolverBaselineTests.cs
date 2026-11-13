@@ -219,7 +219,7 @@ public sealed class ResolverBaselineTests {
         ["TopLevel.rejection.inheritance-define"] = ("mis-number", "or 'bind' definition, got 'X'"),
         ["TopLevel.named.kind"] = ("str", "or 'bind' definition, got 'V'"),
         ["TopLevel.enum.member"] = ("mis-number", "Expected RBrace, got '5' (Number)"),
-        ["TopLevel.enum.member-annotation"] = ("str", "Enum member 'label' is a reserved keyword"),
+        ["TopLevel.enum.member-annotation"] = ("str", "Expected RBrace, got 'label' (StringLiteral)"),
         ["TopLevel.function.start"] = ("str", "Expected EndOfFile, got 'function' (StringLiteral)"),
         ["TopLevel.function.name"] = ("mis-keyword", "Expected function name after 'function', got 'Text'"),
         ["TopLevel.value.primitive"] = ("str", "Expected type name, got 'Text'"),

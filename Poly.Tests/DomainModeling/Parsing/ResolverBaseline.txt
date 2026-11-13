@@ -178,8 +178,8 @@ S	Entities.fallback.name	when	R	domain A\nX: entity {\n  Kids: many Kid\n  Go: w
 S	Entities.fallback.name	require	R	domain A\nX: entity {\n  P: policy { true }\n  Go: require P { }\n}\n	OK SetDomainNameChange(Name="A") ; AddEntityChange(InitialProperties=[],Name="X",Visibility=Visibility.Internal) ; AddPolicyToEntityChange(EntityName="X",Policy=Policy(Children=[Literal(Children=[],Col=Int32:0,Line=Int32:0,TypeHint=null,Value=true)],Expression=Literal(Children=[],Col=Int32:0,Line=Int32:0,TypeHint=null,Value=true),Name="P")) ; AddActionChange(EntityName="X",Name="Go",Visibility=Visibility.Internal) ; SetEntityMemberOrderChange(EntityName="X",MemberOrder=[EntityMemberRef(Kind=EntityMemberKind.Policy,Name="P"),EntityMemberRef(Kind=EntityMemberKind.Action,Name="Go")]) ; AddPolicyToActionChange(ActionName="Go",EntityName="X",Policy=Policy(Children=[Literal(Children=[],Col=Int32:0,Line=Int32:0,TypeHint=null,Value=true)],Expression=Literal(Children=[],Col=Int32:0,Line=Int32:0,TypeHint=null,Value=true),Name="P"),StageName=null)
 S	Entities.fallback.name	unicode	R	domain A\nX: entity {\n  \u540D\u524D: { }\n}\n	OK SetDomainNameChange(Name="A") ; AddEntityChange(InitialProperties=[],Name="X",Visibility=Visibility.Internal) ; AddActionChange(EntityName="X",Name="\\u540D\\u524D",Visibility=Visibility.Internal) ; SetEntityMemberOrderChange(EntityName="X",MemberOrder=[EntityMemberRef(Kind=EntityMemberKind.Action,Name="\\u540D\\u524D")])
 S	Entities.fallback.name	str	R	domain A\nX: entity {\n  "Go": { }\n}\n	ERR Expected property, stage, action, or policy, got 'Go' @3:3
-S	Entities.fallback.unsupported	str	R	domain A\nX: entity {\n  Go: "actor"\n}\n	ERR FormatException: 'actor' is not supported in Phase 1a (used as type for 'Go')
-S	Entities.fallback.unsupported	str-case	R	domain A\nX: entity {\n  Go: "FUNCTION"\n}\n	ERR FormatException: 'FUNCTION' is not supported in Phase 1a (used as type for 'Go')
+S	Entities.fallback.unsupported	str	R	domain A\nX: entity {\n  Go: "actor"\n}\n	ERR Expected type, stage, action, policy, or navigation property after 'Go:' @3:7
+S	Entities.fallback.unsupported	str-case	R	domain A\nX: entity {\n  Go: "FUNCTION"\n}\n	ERR Expected type, stage, action, policy, or navigation property after 'Go:' @3:7
 S	Entities.fallback.unsupported	str-other	R	domain A\nX: entity {\n  Go: "Text"\n}\n	ERR Expected type, stage, action, policy, or navigation property after 'Go:' @3:7
 S	Entities.fallback.unsupported	mis-number	R	domain A\nX: entity {\n  Go: 5\n}\n	ERR Expected type, stage, action, policy, or navigation property after 'Go:' @3:7
 S	Entities.fallback.unsupported	mis-punct	R	domain A\nX: entity {\n  Go: ->\n}\n	ERR Expected type, stage, action, policy, or navigation property after 'Go:' @3:7
@@ -288,16 +288,16 @@ S	TopLevel.named.kind	str	R	domain A\nV: "value" { A: Text }\n	ERR Expected 'ent
 S	TopLevel.enum.member	ok	R	domain A\nS: enum { A, B, C }\n	OK SetDomainNameChange(Name="A") ; AddEnumTypeChange(Facets=null,MemberFacets=null,MemberNames=["A","B","C"],Name="S")
 S	TopLevel.enum.member	unicode	R	domain A\nS: enum { Gr\u00F6\u00DFe, \u540D\u524D }\n	OK SetDomainNameChange(Name="A") ; AddEnumTypeChange(Facets=null,MemberFacets=null,MemberNames=["Gr\\u00F6\\u00DFe","\\u540D\\u524D"],Name="S")
 S	TopLevel.enum.member	words	R	domain A\nS: enum { where, any, via, initial, key, value }\n	OK SetDomainNameChange(Name="A") ; AddEnumTypeChange(Facets=null,MemberFacets=null,MemberNames=["where","any","via","initial","key","value"],Name="S")
-S	TopLevel.enum.member	str	R	domain A\nS: enum { "A" }\n	ERR Enum member 'A' is a reserved keyword and cannot be used as an enum member. Rename it (e.g. 'Number' \u2192 'Numeric'). @2:11
+S	TopLevel.enum.member	str	R	domain A\nS: enum { "A" }\n	ERR Expected RBrace, got 'A' (StringLiteral) @2:11
 S	TopLevel.enum.member	mis-number	R	domain A\nS: enum { 5 }\n	ERR Expected RBrace, got '5' (Number) @2:11
 S	TopLevel.enum.member-annotation	ok	R	domain A\nS: enum {\n  A iri("http://example.org/a") term("a") label("Ay"),\n  B\n}\n	OK SetDomainNameChange(Name="A") ; AddEnumTypeChange(Facets=null,MemberFacets={"A"=[Annotation(Arguments={"0"=AnnotationString(Value="http://example.org/a")},Children=[],Name="iri"),Annotation(Arguments={"0"=AnnotationString(Value="a")},Children=[],Name="term"),Annotation(Arguments={"0"=AnnotationString(Value="Ay")},Children=[],Name="label")]},MemberNames=["A","B"],Name="S")
 S	TopLevel.enum.member-annotation	unknown	R	domain A\nS: enum { A frob("x") }\n	ERR Unknown or unregistered annotation 'frob' on enum member 'A'. Enum members accept only iri, term, label, or description. @2:13
 S	TopLevel.enum.member-annotation	storage	R	domain A\nS: enum { A column("x") }\n	ERR Only term annotations (iri, term, label, description) are allowed on enum member 'A'. @2:25
 S	TopLevel.enum.member-annotation	header	R	domain A\nS: enum label("Status") { A }\n	OK SetDomainNameChange(Name="A") ; AddEnumTypeChange(Facets=[Annotation(Arguments={"0"=AnnotationString(Value="Status")},Children=[],Name="label")],MemberFacets=null,MemberNames=["A"],Name="S")
-S	TopLevel.enum.member-annotation	str	R	domain A\nS: enum { A "label"("x") }\n	ERR Enum member 'label' is a reserved keyword and cannot be used as an enum member. Rename it (e.g. 'Number' \u2192 'Numeric'). @2:13
+S	TopLevel.enum.member-annotation	str	R	domain A\nS: enum { A "label"("x") }\n	ERR Expected RBrace, got 'label' (StringLiteral) @2:13
 S	TopLevel.enum.reserved.word	keyword	R	domain A\nS: enum { A, Number }\n	ERR Enum member 'Number' is a reserved keyword and cannot be used as an enum member. Rename it (e.g. 'Number' \u2192 'Numeric'). @2:14
 S	TopLevel.enum.reserved.word	keyword-first	R	domain A\nS: enum { entity }\n	ERR Enum member 'entity' is a reserved keyword and cannot be used as an enum member. Rename it (e.g. 'Number' \u2192 'Numeric'). @2:11
-S	TopLevel.enum.reserved.word	str	R	domain A\nS: enum { Red "abc" }\n	ERR Enum member 'abc' is a reserved keyword and cannot be used as an enum member. Rename it (e.g. 'Number' \u2192 'Numeric'). @2:15
+S	TopLevel.enum.reserved.word	str	R	domain A\nS: enum { Red "abc" }\n	ERR Expected RBrace, got 'abc' (StringLiteral) @2:15
 S	TopLevel.enum.reserved.length	str-empty	R	domain A\nS: enum { Red "" }\n	ERR Expected RBrace, got '' (StringLiteral) @2:15
 S	TopLevel.enum.reserved.letter	str-digit	R	domain A\nS: enum { Red "5x" }\n	ERR Expected RBrace, got '5x' (StringLiteral) @2:15
 S	TopLevel.enum.reserved.letter	mis-number	R	domain A\nS: enum { A 5 }\n	ERR Expected RBrace, got '5' (Number) @2:13
@@ -408,12 +408,12 @@ S	Temporal.unit.lookup	unknown	R	domain A\nuses temporal\nX: entity {\n  Due: Da
 S	Temporal.unit.lookup	str	R	domain A\nuses temporal\nX: entity {\n  Due: Date\n  Late: policy { Now - 5 "Days" > Due }\n}\n	ERR Expected RBrace, got 'Days' (StringLiteral) @5:26
 S	Temporal.unit.message	attempt	R	domain A\nuses temporal\nX: entity {\n  Due: Date\n  Late: policy { Now - 5 days > Due }\n}\n	ERR Unknown duration unit 'days'. Legal units: Milliseconds, Seconds, Minutes, Hours, Days, Weeks, Months, Years (milliseconds also as 'ms'; singular and plural accepted, exact PascalCase). @5:26
 S	Outline.domain	ok	O	domain A\nX: entity { N: Text }\n	OK <domain:"A" path="$domain" off=0-8 lines=1-1 indent="" braces=-1,-1 shared=0><entity:"X" path="X" off=9-30 lines=2-2 indent="" addr braces=19,29 shared=0<property:"N" path="X.N" off=21-28 lines=2-2 indent="" addr braces=-1,-1 shared=0>>
-S	Outline.domain	str	O	domain "A\\"b"\nX: entity { }\n	OK <domain:"A\\"b" path="$domain" off=0-13 lines=1-1 indent="" braces=-1,-1 shared=0><entity:"X" path="X" off=14-27 lines=2-2 indent="" addr braces=24,26 shared=0>
+S	Outline.domain	str	O	domain "A\\"b"\nX: entity { }\n	OK <domain:"\\"A\\\\\\"b\\"" path="$domain" off=0-13 lines=1-1 indent="" braces=-1,-1 shared=0><entity:"X" path="X" off=14-27 lines=2-2 indent="" addr braces=24,26 shared=0>
 S	Outline.domain	mis-number	O	domain 5\n	OK <domain:"5" path="$domain" off=0-8 lines=1-1 indent="" braces=-1,-1 shared=0>
 S	Outline.domain	mis-eof	O	domain	OK 
 S	Outline.public-value	ok	O	domain A\npublic value V { A: Text }\n	OK <domain:"A" path="$domain" off=0-8 lines=1-1 indent="" braces=-1,-1 shared=0><value:"V" path="V" off=9-35 lines=2-2 indent="" addr braces=24,34 shared=0>
 S	Outline.public-value	entity	O	domain A\npublic entity E { A: Text }\n	OK <domain:"A" path="$domain" off=0-8 lines=1-1 indent="" braces=-1,-1 shared=0><entity:"E" path="E" off=9-36 lines=2-2 indent="" addr braces=25,35 shared=0<property:"A" path="E.A" off=27-34 lines=2-2 indent="" addr braces=-1,-1 shared=0>>
-S	Outline.public-value	str	O	domain A\npublic "value" V { A: Text }\n	OK <domain:"A" path="$domain" off=0-8 lines=1-1 indent="" braces=-1,-1 shared=0><value:"V" path="V" off=9-37 lines=2-2 indent="" addr braces=26,36 shared=0>
+S	Outline.public-value	str	O	domain A\npublic "value" V { A: Text }\n	OK <domain:"A" path="$domain" off=0-8 lines=1-1 indent="" braces=-1,-1 shared=0><unknown:"A" path="A" off=28-37 lines=2-2 indent="" addr braces=-1,-1 shared=0>
 S	Outline.public-value	case	O	domain A\npublic Value V { A: Text }\n	OK <domain:"A" path="$domain" off=0-8 lines=1-1 indent="" braces=-1,-1 shared=0><unknown:"A" path="A" off=26-35 lines=2-2 indent="" addr braces=-1,-1 shared=0>
 S	Outline.public-value	mis-eof	O	domain A\npublic value	OK <domain:"A" path="$domain" off=0-8 lines=1-1 indent="" braces=-1,-1 shared=0>
 S	Outline.function	ok	O	domain A\nfunction F(a: Number): Number = a\nX: entity { }\n	OK <domain:"A" path="$domain" off=0-8 lines=1-1 indent="" braces=-1,-1 shared=0><unknown:"a" path="a" off=20-56 lines=2-3 indent="" addr braces=-1,-1 shared=0>
@@ -423,20 +423,20 @@ S	Outline.function	str	O	domain A\n"function" F(): Number = 1\n	OK <domain:"A" p
 S	Outline.top.name	ok	O	domain A\nX: entity { N: Text }\nS: enum { A }\nV: value { }\nC: contract external s v { }\nB: bind C E to Go p\n	OK <domain:"A" path="$domain" off=0-8 lines=1-1 indent="" braces=-1,-1 shared=0><entity:"X" path="X" off=9-30 lines=2-2 indent="" addr braces=19,29 shared=0<property:"N" path="X.N" off=21-28 lines=2-2 indent="" addr braces=-1,-1 shared=0>><enum:"S" path="S" off=31-44 lines=3-3 indent="" addr braces=39,43 shared=0><value:"V" path="V" off=45-57 lines=4-4 indent="" addr braces=54,56 shared=0><contract:"C" path="C" off=58-86 lines=5-5 indent="" addr braces=83,85 shared=0><bind:"B" path="B" off=87-106 lines=6-6 indent="" addr braces=-1,-1 shared=0>
 S	Outline.top.name	unicode	O	domain A\nGr\u00F6\u00DFe: entity { }\n	OK <domain:"A" path="$domain" off=0-8 lines=1-1 indent="" braces=-1,-1 shared=0><entity:"Gr\\u00F6\\u00DFe" path="Gr\\u00F6\\u00DFe" off=9-26 lines=2-2 indent="" addr braces=23,25 shared=0>
 S	Outline.top.name	str	O	domain A\n"X": entity { N: Text }\n	OK <domain:"A" path="$domain" off=0-8 lines=1-1 indent="" braces=-1,-1 shared=0><unknown:"N" path="N" off=23-32 lines=2-2 indent="" addr braces=-1,-1 shared=0>
-S	Outline.top.kind	str	O	domain A\nX: "enum" { A }\n	OK <domain:"A" path="$domain" off=0-8 lines=1-1 indent="" braces=-1,-1 shared=0><enum:"X" path="X" off=9-24 lines=2-2 indent="" addr braces=19,23 shared=0>
-S	Outline.top.kind	str-entity	O	domain A\nX: "entity" { N: Text }\n	OK <domain:"A" path="$domain" off=0-8 lines=1-1 indent="" braces=-1,-1 shared=0><entity:"X" path="X" off=9-32 lines=2-2 indent="" addr braces=21,31 shared=0<property:"N" path="X.N" off=23-30 lines=2-2 indent="" addr braces=-1,-1 shared=0>>
+S	Outline.top.kind	str	O	domain A\nX: "enum" { A }\n	OK <domain:"A" path="$domain" off=0-8 lines=1-1 indent="" braces=-1,-1 shared=0><unknown:"X" path="X" off=9-24 lines=2-2 indent="" addr braces=19,23 shared=0>
+S	Outline.top.kind	str-entity	O	domain A\nX: "entity" { N: Text }\n	OK <domain:"A" path="$domain" off=0-8 lines=1-1 indent="" braces=-1,-1 shared=0><unknown:"X" path="X" off=9-32 lines=2-2 indent="" addr braces=21,31 shared=0>
 S	Outline.top.kind	mis-number	O	domain A\nX: 5\n	OK <domain:"A" path="$domain" off=0-8 lines=1-1 indent="" braces=-1,-1 shared=0><unknown:"X" path="X" off=9-13 lines=2-2 indent="" addr braces=-1,-1 shared=0>
 S	Outline.top.kind	mis-eof	O	domain A\nX:	OK <domain:"A" path="$domain" off=0-8 lines=1-1 indent="" braces=-1,-1 shared=0><unknown:"X" path="X" off=9-11 lines=2-2 indent="" addr braces=-1,-1 shared=0>
 S	Outline.top.kind	case	O	domain A\nX: Enum { A }\n	OK <domain:"A" path="$domain" off=0-8 lines=1-1 indent="" braces=-1,-1 shared=0><unknown:"X" path="X" off=9-22 lines=2-2 indent="" addr braces=17,21 shared=0>
 S	Outline.marked.kind	ok	O	domain A\npublic entity E { N: Text }\n	OK <domain:"A" path="$domain" off=0-8 lines=1-1 indent="" braces=-1,-1 shared=0><entity:"E" path="E" off=9-36 lines=2-2 indent="" addr braces=25,35 shared=0<property:"N" path="E.N" off=27-34 lines=2-2 indent="" addr braces=-1,-1 shared=0>>
 S	Outline.marked.kind	value	O	domain A\npublic value V { N: Text }\n	OK <domain:"A" path="$domain" off=0-8 lines=1-1 indent="" braces=-1,-1 shared=0><value:"V" path="V" off=9-35 lines=2-2 indent="" addr braces=24,34 shared=0>
-S	Outline.marked.name	str	O	domain A\npublic "value" "V" { N: Text }\n	OK <domain:"A" path="$domain" off=0-8 lines=1-1 indent="" braces=-1,-1 shared=0><value:"V" path="V" off=9-39 lines=2-2 indent="" addr braces=28,38 shared=0>
+S	Outline.marked.name	str	O	domain A\npublic "value" "V" { N: Text }\n	OK <domain:"A" path="$domain" off=0-8 lines=1-1 indent="" braces=-1,-1 shared=0><unknown:"N" path="N" off=30-39 lines=2-2 indent="" addr braces=-1,-1 shared=0>
 S	Outline.marked.name	mis-number	O	domain A\npublic value 5 { }\n	OK <domain:"A" path="$domain" off=0-8 lines=1-1 indent="" braces=-1,-1 shared=0><value:"5" path="5" off=9-27 lines=2-2 indent="" addr braces=24,26 shared=0>
 S	Outline.marked.name	mis-punct	O	domain A\npublic entity -> { }\n	OK <domain:"A" path="$domain" off=0-8 lines=1-1 indent="" braces=-1,-1 shared=0><entity:"->" path="->" off=9-29 lines=2-2 indent="" addr braces=26,28 shared=0>
 S	Outline.member.unnamed	ok	O	domain A\nX: entity {\n  Kids: many Kid\n  when Kids Done { }\n  Done: stage {\n    entry { }\n    exit { }\n  }\n  Go: action require P { }\n}\n	OK <domain:"A" path="$domain" off=0-8 lines=1-1 indent="" braces=-1,-1 shared=0><entity:"X" path="X" off=9-134 lines=2-10 indent="" addr braces=19,133 shared=0<navigation:"Kids" path="X.Kids" off=23-37 lines=3-3 indent="  " addr braces=-1,-1 shared=0><unnamed:"when" path="X.when" off=40-58 lines=4-4 indent="  " braces=55,57 shared=0><stage:"Done" path="X.Done" off=61-105 lines=5-8 indent="  " addr braces=73,104 shared=0<unnamed:"entry" path="X.Done.entry" off=79-88 lines=6-6 indent="    " braces=85,87 shared=0><unnamed:"exit" path="X.Done.exit" off=93-101 lines=7-7 indent="    " braces=98,100 shared=0>><action:"Go" path="X.Go" off=108-132 lines=9-9 indent="  " addr braces=129,131 shared=0>>
 S	Outline.member.unnamed	str	O	domain A\nX: entity {\n  "when" Kids Done { }\n}\n	OK <domain:"A" path="$domain" off=0-8 lines=1-1 indent="" braces=-1,-1 shared=0><entity:"X" path="X" off=9-45 lines=2-4 indent="" addr braces=19,44 shared=0>
 S	Outline.member.public-action	ok	O	domain A\nX: entity {\n  public action Go { }\n}\n	OK <domain:"A" path="$domain" off=0-8 lines=1-1 indent="" braces=-1,-1 shared=0><entity:"X" path="X" off=9-45 lines=2-4 indent="" addr braces=19,44 shared=0<action:"Go" path="X.Go" off=23-43 lines=3-3 indent="  " addr braces=40,42 shared=0>>
-S	Outline.member.public-action	str	O	domain A\nX: entity {\n  public action "Go" { }\n}\n	OK <domain:"A" path="$domain" off=0-8 lines=1-1 indent="" braces=-1,-1 shared=0><entity:"X" path="X" off=9-47 lines=2-4 indent="" addr braces=19,46 shared=0<action:"Go" path="X.Go" off=23-45 lines=3-3 indent="  " addr braces=42,44 shared=0>>
+S	Outline.member.public-action	str	O	domain A\nX: entity {\n  public action "Go" { }\n}\n	OK <domain:"A" path="$domain" off=0-8 lines=1-1 indent="" braces=-1,-1 shared=0><entity:"X" path="X" off=9-47 lines=2-4 indent="" addr braces=19,46 shared=0<action:"\\"Go\\"" path="X.\\"Go\\"" off=23-45 lines=3-3 indent="  " addr braces=42,44 shared=0>>
 S	Outline.member.public-action	mis-number	O	domain A\nX: entity {\n  public action 5 { }\n}\n	OK <domain:"A" path="$domain" off=0-8 lines=1-1 indent="" braces=-1,-1 shared=0><entity:"X" path="X" off=9-44 lines=2-4 indent="" addr braces=19,43 shared=0<action:"5" path="X.5" off=23-42 lines=3-3 indent="  " addr braces=39,41 shared=0>>
 S	Outline.member.public-action	mis-eof	O	domain A\nX: entity {\n  public action	OK <domain:"A" path="$domain" off=0-8 lines=1-1 indent="" braces=-1,-1 shared=0><entity:"X" path="X" off=9-36 lines=2-3 indent="" addr braces=19,30 shared=0>
 S	Outline.member.name	ok	O	domain A\nX: entity {\n  N: Text\n  Number: Text\n  S: stage { }\n  P: policy { true }\n  K: many Kid\n  Go: action { }\n}\n	OK <domain:"A" path="$domain" off=0-8 lines=1-1 indent="" braces=-1,-1 shared=0><entity:"X" path="X" off=9-114 lines=2-9 indent="" addr braces=19,113 shared=0<property:"N" path="X.N" off=23-30 lines=3-3 indent="  " addr braces=-1,-1 shared=0><property:"Number" path="X.Number" off=33-45 lines=4-4 indent="  " addr braces=-1,-1 shared=0><stage:"S" path="X.S" off=48-60 lines=5-5 indent="  " addr braces=57,59 shared=0><policy:"P" path="X.P" off=63-81 lines=6-6 indent="  " addr braces=73,80 shared=0><navigation:"K" path="X.K" off=84-95 lines=7-7 indent="  " addr braces=-1,-1 shared=0><action:"Go" path="X.Go" off=98-112 lines=8-8 indent="  " addr braces=109,111 shared=0>>
@@ -458,7 +458,7 @@ S	Edit.name	duplicate	E	domain A\nX: entity {\n  N: Text\n}\nS: enum { A, B }\n\
 S	Edit.name	replace	E	domain A\nX: entity {\n  N: Text\n}\nS: enum { A, B }\n\u0001[{"op":"replace","path":"X","dsl":"X: entity { M: Text }"}]	OK EditOutcome(Applied=[AppliedEdit(Index=Int32:0,Line=Int32:2,Op="replace",Path="X")],Error=null,ErrorCode=null,Ok=true,Regions=[EditRegion(EndLine=Int32:2,Index=Int32:0,StartLine=Int32:2)],Text="domain A\\u000AX: entity { M: Text }\\u000AS: enum { A, B }\\u000A")
 S	Edit.name	mis-string	E	domain A\nX: entity {\n  N: Text\n}\nS: enum { A, B }\n\u0001[{"op":"add","parent":"","dsl":"\\u0022Y\\u0022: entity { }"}]	OK EditOutcome(Applied=[],Error="Edit 0 (add): the dsl does not declare anything, e.g. \\"Amount: Decimal\\".",ErrorCode="EDIT_BAD_SNIPPET",Ok=false,Regions=[],Text=null)
 S	Edit.top-kind	enum	E	domain A\nX: entity {\n  N: Text\n}\nS: enum { A, B }\n\u0001[{"op":"add","parent":"","dsl":"T: enum { A }"}]	OK EditOutcome(Applied=[AppliedEdit(Index=Int32:0,Line=Int32:3,Op="add",Path="T")],Error=null,ErrorCode=null,Ok=true,Regions=[EditRegion(EndLine=Int32:3,Index=Int32:0,StartLine=Int32:3)],Text="domain A\\u000A\\u000AT: enum { A }\\u000AX: entity {\\u000A  N: Text\\u000A}\\u000AS: enum { A, B }\\u000A")
-S	Edit.top-kind	str	E	domain A\nX: entity {\n  N: Text\n}\nS: enum { A, B }\n\u0001[{"op":"add","parent":"","dsl":"T: \\u0022enum\\u0022 { A }"}]	OK EditOutcome(Applied=[AppliedEdit(Index=Int32:0,Line=Int32:3,Op="add",Path="T")],Error=null,ErrorCode=null,Ok=true,Regions=[EditRegion(EndLine=Int32:3,Index=Int32:0,StartLine=Int32:3)],Text="domain A\\u000A\\u000AT: \\"enum\\" { A }\\u000AX: entity {\\u000A  N: Text\\u000A}\\u000AS: enum { A, B }\\u000A")
+S	Edit.top-kind	str	E	domain A\nX: entity {\n  N: Text\n}\nS: enum { A, B }\n\u0001[{"op":"add","parent":"","dsl":"T: \\u0022enum\\u0022 { A }"}]	OK EditOutcome(Applied=[AppliedEdit(Index=Int32:0,Line=Int32:6,Op="add",Path="T")],Error=null,ErrorCode=null,Ok=true,Regions=[EditRegion(EndLine=Int32:6,Index=Int32:0,StartLine=Int32:6)],Text="domain A\\u000AX: entity {\\u000A  N: Text\\u000A}\\u000A\\u000AT: \\"enum\\" { A }\\u000AS: enum { A, B }\\u000A")
 S	Edit.top-kind	value	E	domain A\nX: entity {\n  N: Text\n}\nS: enum { A, B }\n\u0001[{"op":"add","parent":"","dsl":"T: value { A: Text }"}]	OK EditOutcome(Applied=[AppliedEdit(Index=Int32:0,Line=Int32:3,Op="add",Path="T")],Error=null,ErrorCode=null,Ok=true,Regions=[EditRegion(EndLine=Int32:3,Index=Int32:0,StartLine=Int32:3)],Text="domain A\\u000A\\u000AT: value { A: Text }\\u000AX: entity {\\u000A  N: Text\\u000A}\\u000AS: enum { A, B }\\u000A")
 S	Edit.top-kind	contract	E	domain A\nX: entity {\n  N: Text\n}\nS: enum { A, B }\n\u0001[{"op":"add","parent":"","dsl":"T: contract external s v { }"}]	OK EditOutcome(Applied=[AppliedEdit(Index=Int32:0,Line=Int32:3,Op="add",Path="T")],Error=null,ErrorCode=null,Ok=true,Regions=[EditRegion(EndLine=Int32:3,Index=Int32:0,StartLine=Int32:3)],Text="domain A\\u000A\\u000AT: contract external s v { }\\u000AX: entity {\\u000A  N: Text\\u000A}\\u000AS: enum { A, B }\\u000A")
 S	Edit.top-kind	bind	E	domain A\nX: entity {\n  N: Text\n}\nS: enum { A, B }\n\u0001[{"op":"add","parent":"","dsl":"T: bind C E to Go p"}]	OK EditOutcome(Applied=[AppliedEdit(Index=Int32:0,Line=Int32:7,Op="add",Path="T")],Error=null,ErrorCode=null,Ok=true,Regions=[EditRegion(EndLine=Int32:7,Index=Int32:0,StartLine=Int32:7)],Text="domain A\\u000AX: entity {\\u000A  N: Text\\u000A}\\u000AS: enum { A, B }\\u000A\\u000AT: bind C E to Go p\\u000A")
@@ -2313,21 +2313,21 @@ O	sweep:effects	domain A\nX: entity {\n  N: Number\n  Kids: many Y\n  Go: action
 O	sweep:toplevel	domain A\nfunction Twice(a: Number): Number = a * 2\nV: value { A: Text B: Number }\npublic value W { C: Boolean }\nC: contract external "src" v1 {\n  P: value { A: Text }\n  E: inbound operation P\n  F: outbound event Text\n}\npublic entity X {\n  Go: action (p: P) { }\n  public action Run { }\n}\nB: bind C E to Go p\n	OK <domain:"A" path="$domain" off=0-8 lines=1-1 indent="" braces=-1,-1 shared=0><unknown:"a" path="a" off=24-251 lines=2-11 indent="" addr braces=-1,-1 shared=11><unknown:"p" path="p" off=251-306 lines=11-14 indent="  " addr braces=-1,-1 shared=11>
 O	sweep:expressions	domain A\nuses temporal\nX: entity {\n  Due: Date\n  Kids: many Y\n  Late: policy { Now - 3 Days > Due and count Kids > 2 }\n  Big: policy { sum Kids Q >= 10 or any Kids where Q > 1 }\n  M: policy { match { Kids exists -> true, else -> false } }\n}\nY: entity {\n  Q: Number\n}\n	len=872 sha=C73D7A33B02484D3
 N	entities	0	Domain	0357E850A5EA8B8B
-N	entities	1	Identifier	DECBD0DCA1E647CD
+N	entities	1	Identifier	1A23A5CD501A1033
 N	entities	2	Uses	E909FADAEC79E87C
 N	entities	3	Identifier	59274CEB2D03E02D
 N	entities	4	Identifier	6AD0CB64E1C526E9
 N	entities	5	Colon	B99C61C781EAA1A0
 N	entities	6	Enum	57AA37EF59B794A0
 N	entities	7	LBrace	A4320D0A65883F50
-N	entities	8	Identifier	02F307EDCB2D4FAA
-N	entities	9	Identifier	C6C4C3A354D7C7A7
-N	entities	10	LParen	3419ECDD13AF1512
+N	entities	8	Identifier	CB2B57A0CD10CF80
+N	entities	9	Identifier	0C2EB5CF3220ADE5
+N	entities	10	LParen	42FB8B088B09020F
 N	entities	11	StringLiteral	83BFFF826EC6CF3A
 N	entities	12	RParen	B848E951D44144EC
-N	entities	13	Comma	C2671F0E603F19F2
-N	entities	14	Identifier	5F8E2BACC5F6292F
-N	entities	15	RBrace	F95A92D79E8860B5
+N	entities	13	Comma	BA0D4A57B6844F7C
+N	entities	14	Identifier	1EE7E50091FFB4EF
+N	entities	15	RBrace	95FA7D3CD7390095
 N	entities	16	Identifier	097923D7900FBE97
 N	entities	17	Colon	AAC54B4BABB7B95F
 N	entities	18	Entity	88578E3FEE196AFC
@@ -2397,7 +2397,7 @@ N	entities	81	Colon	AEF02E6E0CDDBC5A
 N	entities	82	Identifier	E84179299520DC84
 N	entities	83	RBrace	03D0E1463CDBDF77
 N	stages	0	Domain	9ED9964EF5931BAB
-N	stages	1	Identifier	A8001F047D933EB2
+N	stages	1	Identifier	C6BDAB623C52324A
 N	stages	2	Identifier	9CED41142EF84ACA
 N	stages	3	Colon	9F6B0D93B5BB505D
 N	stages	4	Entity	ACE3D43702084F07
@@ -2469,7 +2469,7 @@ N	stages	69	LBrace	5AAE32D209001F82
 N	stages	70	RBrace	60D18EEE6C9ED7A6
 N	stages	71	RBrace	C4F213F9D5B8579F
 N	effects	0	Domain	954EFECAFBB64028
-N	effects	1	Identifier	C13AD7F093B5DCD7
+N	effects	1	Identifier	C2B40F0D0B5CD499
 N	effects	2	Identifier	925819BABB905533
 N	effects	3	Colon	DC7B215B0A584CD7
 N	effects	4	Entity	F851D52FCEFCB9A2
@@ -2586,7 +2586,7 @@ N	effects	114	LBrace	B95AA8123B0EE83D
 N	effects	115	RBrace	EE0EC869AD6132A3
 N	effects	116	RBrace	4E2A5B0D2AF54CC9
 N	toplevel	0	Domain	31E3D5BC5D8E2889
-N	toplevel	1	Identifier	F6BACBA7709280AD
+N	toplevel	1	Identifier	B765AB472B235108
 N	toplevel	2	Identifier	46578F126335B34C
 N	toplevel	3	Identifier	D13F5EE5F0D31629
 N	toplevel	4	LParen	7A4CD01A60BFB662
@@ -2674,7 +2674,7 @@ N	toplevel	85	To	262694E0E18D7D06
 N	toplevel	86	Identifier	C94BF350669154EE
 N	toplevel	87	Identifier	2E07551798D7AA40
 N	expressions	0	Domain	B598B47E900749A2
-N	expressions	1	Identifier	AE94CB5E055C5406
+N	expressions	1	Identifier	606521F868715203
 N	expressions	2	Uses	AF6DE795F96665EE
 N	expressions	3	Identifier	9D4310919AD2A363
 N	expressions	4	Identifier	F4D73D594AB4BDA4

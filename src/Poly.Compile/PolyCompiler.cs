@@ -317,7 +317,7 @@ public sealed class PolyCompiler {
         DiagnosticBuilder build, DslSyntaxTree tree, string id, int occurrence, string severity, string code, string message) {
         var count = 0;
         for (var i = 0; i + 1 < tree.Tokens.Count; i++) {
-            if (tree.Tokens[i].Kind != DslTokenKind.Uses || DslTokenText.LegacyText(tree.Tokens[i + 1]) != id)
+            if (tree.Tokens[i].Kind != DslTokenKind.Uses || DslTokenText.Word(tree.Tokens[i + 1]) != id)
                 continue;
             if (++count == occurrence) {
                 var token = tree.Tokens[i + 1];

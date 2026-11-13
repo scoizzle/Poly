@@ -302,7 +302,8 @@ public sealed class CSharpWriter {
                 if (content[i] is { Length: > 0 } text)
                     ctx.Emit(text);
             },
-            fills);
+            fills,
+            suppliedContentCount: content.Length);
     }
 
     private static Dictionary<string, string> Names(params (string Name, string Value)[] entries) {
@@ -1296,9 +1297,9 @@ public sealed class CSharpWriter {
         var inner = BinaryOperand(LeftOperand(node), op, isRight: false)
             + op
             + BinaryOperand(RightOperand(node), op, isRight: true);
-        // Two slots: the shift pattern has an operand + a repeat tail, the
-        // LeftAssoc levels have a single chain slot; the spare is ignored.
-        return Render(rule, pattern, inner, null);
+        // The shift row has an operand slot and a repeat-tail slot (the whole chain prints into the
+        // operand); a LeftAssoc level has one chain slot.
+        return rule == "expr-shift" ? Render(rule, pattern, inner, null) : Render(rule, pattern, inner);
     }
 
     private static Node LeftOperand(Node node) => node switch {
@@ -1467,7 +1468,7 @@ public sealed class CSharpWriter {
         else if (NullableTypeName(RuntimeTypeOf(coalesce.LeftHandValue)) is { } nullable)
             left = $"({nullable}){left}";
         return Render("expr-coalesce", "coalesce",
-            left + " ?? " + BinaryOperand(coalesce.RightHandValue, " ?? ", isRight: true), null);
+            left + " ?? " + BinaryOperand(coalesce.RightHandValue, " ?? ", isRight: true));
     }
 
     /// <summary>A value-typed operand of <c>as</c> prints boxed: the VM's is a runtime try-cast,
@@ -1741,12 +1742,10 @@ public sealed class CSharpWriter {
     }
 
     private string AttributeText(AttributeNode attr, int indent) =>
-        Pad(indent) + RenderFills("attribute", attr.Arguments.Count > 0 ? "args" : "bare",
-            Names(("open", "["), ("close", "]")),
-            attr.Name,
-            attr.Arguments.Count > 0
-                ? Render("args", "list", string.Join(", ", attr.Arguments.Select(Expr)))
-                : null);
+        Pad(indent) + (attr.Arguments.Count > 0
+            ? RenderFills("attribute", "args", Names(("open", "["), ("close", "]")),
+                attr.Name, Render("args", "list", string.Join(", ", attr.Arguments.Select(Expr))))
+            : RenderFills("attribute", "bare", Names(("open", "["), ("close", "]")), attr.Name));
 
     private void WriteAttributes(StringBuilder sb, IReadOnlyList<AttributeNode> attributes, int indent) {
         foreach (var attr in attributes)

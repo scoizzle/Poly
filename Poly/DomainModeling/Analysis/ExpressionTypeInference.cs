@@ -18,6 +18,11 @@ namespace Poly.DomainModeling.Analysis;
 // Text + Text carry NO domain name (DomainName == null) with a family definition; a decimal literal carries
 // "Decimal"; a declared or allowlisted name carries that name. Compatible applies the name rule only when
 // both names are non-null, exactly as before the move.
+//
+// T-05a types the forms master left Unresolved: arithmetic (the CLR operator's result), path-prefix and binder
+// reads (the final property's type), owned access (the owned type's member) and sum (DomainTypeModel.SumResult).
+// A newly typed primitive carries no domain name (lock #679 6841065713, D1), so it meets the family rules only and
+// no verdict flips in T-05a that T-05b flips back; an enum, entity or value type keeps its name.
 
 internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
     // ── typeless family types ───────────────────────────────────
@@ -45,16 +50,14 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
         AnalysisContext context, DomainExpression expr,
         Dictionary<string, string>? props, Dictionary<string, string>? parameters,
         Dictionary<string, EnumType> enumTypes) {
-        if (expr is Add or Subtract or Multiply or Divide) {
-            var operands = expr.Children.OfType<DomainExpression>()
-                .Select(c => InferValueType(context, c, props, parameters, enumTypes)).ToList();
-            if (operands.All(IsNumeric))
-                return NumberFamily;
-            if (expr is Add && operands.All(o => Family(o) is TypeFamily.Text))
-                return TextFamily;
-            return ExprType.Unresolved;
-        }
-        return InferType(context, expr, props, parameters, enumTypes);
+        var type = InferType(context, expr, props, parameters, enumTypes);
+        if (type.IsResolved || expr is not (Add or Subtract or Multiply or Divide))
+            return type;
+        // Numeric operands with no CLR operator (Float with Decimal) keep the Number family this path gave them
+        // before T-05a; T-07 makes the operator table the gate.
+        var operands = expr.Children.OfType<DomainExpression>()
+            .Select(c => InferValueType(context, c, props, parameters, enumTypes)).ToList();
+        return operands.All(IsNumeric) ? NumberFamily : ExprType.Unresolved;
     }
 
     /// <summary>Infers the type of a binder-rooted argument expression: a binder-root property
@@ -131,11 +134,13 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
             return inferred;
         }
 
-        // Text + Text is concatenation and yields Text; every other arithmetic result stays Unknown here.
+        // Text + Text is concatenation and yields Text.
         if (expr is Add add
             && Family(InferType(context, add.Left, props, parameters, enumTypes)) is TypeFamily.Text
             && Family(InferType(context, add.Right, props, parameters, enumTypes)) is TypeFamily.Text)
             return TextFamily;
+        if (expr is Add or Subtract or Multiply or Divide)
+            return InferArithmetic(context, expr, props, parameters, enumTypes);
 
         return expr switch {
             PropertyAccess pa => ResolvePropertyType(pa.Name, props, parameters) is { } pt
@@ -151,13 +156,178 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
             Literal { Value: long or int or double or float or short or byte } => NumberFamily,
             Exists or NotExists or AnyExpr or AllExpr or NoneExpr or Comparison or And or Or or Not => BooleanFamily,
             CountExpr => NumberFamily,
-            SumExpr => NumberFamily,
+            SumExpr sum => InferSum(context, sum, props),
+            RelationshipNavigation navigation => InferNavigation(context, navigation, props, enumTypes),
+            OwnedAccess owned => InferOwned(context, owned, props, enumTypes),
             MatchExpr match => InferMatch(context, match, props, parameters, enumTypes),
             FunctionCall call => FunctionAnalysis.Find(context, call.Name) is { } function
                 ? ResolveName(context, function.ReturnType.TypeName, enumTypes)
                 : ExprType.Unresolved,
             _ => ExprType.Unresolved,
         };
+    }
+
+    // ── the forms T-05a types ───────────────────────────────────
+
+    /// <summary>
+    /// The property map an expression on an entity reads, plus that entity's name and the binders in scope (a
+    /// <c>for</c> binder or a subscription's peer binder, each to its entity type), so a path-prefix or binder read
+    /// can be typed. Every other caller passes a plain map, and those forms stay Unresolved there.
+    /// </summary>
+    private sealed class EntityScope : Dictionary<string, string> {
+        public EntityScope(Entity entity)
+            : base(entity.Properties.ToDictionary(p => p.Name, p => p.Type.TypeName, StringComparer.Ordinal), StringComparer.Ordinal) {
+            EntityName = entity.Name;
+            Binders = new Dictionary<string, string>(StringComparer.Ordinal);
+        }
+
+        private EntityScope(EntityScope outer, string binder, string entityTypeName) : base(outer, StringComparer.Ordinal) {
+            EntityName = outer.EntityName;
+            Binders = new Dictionary<string, string>(outer.Binders, StringComparer.Ordinal) { [binder] = entityTypeName };
+        }
+
+        public string EntityName { get; }
+
+        public IReadOnlyDictionary<string, string> Binders { get; }
+
+        public EntityScope WithBinder(string binder, string entityTypeName) => new(this, binder, entityTypeName);
+    }
+
+    /// <summary>The scope with <paramref name="binder"/> bound to <paramref name="entityTypeName"/>, when both are known.</summary>
+    private static Dictionary<string, string> WithBinder(
+        Dictionary<string, string> props, string? binder, string? entityTypeName) =>
+        props is EntityScope scope && binder is not null && entityTypeName is not null
+            ? scope.WithBinder(binder, entityTypeName)
+            : props;
+
+    /// <summary>A primitive type with its domain name dropped (D1); an enum, entity, value type or unresolved name keeps it.</summary>
+    private static ExprType WithoutPrimitiveName(ExprType type) =>
+        Family(type) is TypeFamily.Text or TypeFamily.Number or TypeFamily.Boolean or TypeFamily.Date
+            or TypeFamily.Time or TypeFamily.Duration or TypeFamily.Guid
+            ? type with { DomainName = null }
+            : type;
+
+    /// <summary>
+    /// Numeric arithmetic is the CLR operator's result (the lookup the stamp makes; InferType never reads the stamp
+    /// back). Date plus or minus a number keeps the date's type, as the arithmetic arm accepts it. Anything else,
+    /// and numeric operands with no operator (Float with Decimal), stays Unresolved: the arithmetic arm reports a
+    /// non-numeric operand.
+    /// </summary>
+    private ExprType InferArithmetic(
+        AnalysisContext context, DomainExpression expr,
+        Dictionary<string, string>? props, Dictionary<string, string>? parameters,
+        Dictionary<string, EnumType> enumTypes) {
+        var operands = expr.Children.OfType<DomainExpression>().ToList();
+        var left = InferType(context, operands[0], props, parameters, enumTypes);
+        var right = InferType(context, operands[1], props, parameters, enumTypes);
+        if (IsNumeric(left) && IsNumeric(right)) {
+            var kind = expr switch {
+                Add => Introspection.OperatorKind.Add,
+                Subtract => Introspection.OperatorKind.Subtract,
+                Multiply => Introspection.OperatorKind.Multiply,
+                _ => Introspection.OperatorKind.Divide,
+            };
+            return left.Definition!.GetOperator(kind, right.Definition) is { } resolution
+                ? new ExprType(resolution.Result, Optional: false, DomainName: null)
+                : ExprType.Unresolved;
+        }
+        if (expr is Add or Subtract && IsDate(left) && IsNumeric(right))
+            return left with { DomainName = null, Optional = false };
+        return ExprType.Unresolved;
+    }
+
+    /// <summary>The entity declared under <paramref name="name"/>, first declaration first (the provider's order).</summary>
+    private static Entity? EntityNamed(AnalysisContext context, string? name) =>
+        name is null
+            ? null
+            : context.GetTypeLookup()?.Domain.Types.OfType<Entity>()
+                .FirstOrDefault(e => string.Equals(e.Name, name, StringComparison.Ordinal));
+
+    /// <summary>The target of <paramref name="entity"/>'s to-one navigation <paramref name="name"/>; null for a many or unknown one.</summary>
+    private static string? ToOneTarget(Entity entity, string name) {
+        var navigation = entity.Navigations.FirstOrDefault(n => string.Equals(n.Name, name, StringComparison.Ordinal));
+        return navigation?.Cardinality is RelationshipCardinality.OneToOne or RelationshipCardinality.ManyToOne
+            ? navigation.Target.TypeName
+            : null;
+    }
+
+    /// <summary>The type of <paramref name="entity"/>'s property <paramref name="name"/>, with D1's naming.</summary>
+    private static ExprType MemberType(
+        AnalysisContext context, IEnumerable<Property> properties, string name, Dictionary<string, EnumType> enumTypes) =>
+        properties.FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.Ordinal)) is { } property
+            ? WithoutPrimitiveName(ResolveName(context, property.Type.TypeName, enumTypes))
+            : ExprType.Unresolved;
+
+    /// <summary>
+    /// A path-prefix read (<c>part Qty</c>, to-one hops <c>loan book Title</c>) or a binder read (<c>line Qty</c>,
+    /// a peer's <c>o Code</c>): the final property's type. A many hop, an unknown hop or property, or a scope with no
+    /// entity stays Unresolved; the policy, effect and subscription passes report those shapes.
+    /// </summary>
+    private static ExprType InferNavigation(
+        AnalysisContext context, RelationshipNavigation navigation,
+        Dictionary<string, string>? props, Dictionary<string, EnumType> enumTypes) {
+        if (props is not EntityScope scope) return ExprType.Unresolved;
+        var target = scope.Binders.TryGetValue(navigation.RelationshipName, out var bound)
+            ? bound
+            : EntityNamed(context, scope.EntityName) is { } entity ? ToOneTarget(entity, navigation.RelationshipName) : null;
+        var hop = navigation.TargetProperty;
+        while (EntityNamed(context, target) is { } current) {
+            switch (hop) {
+                case PropertyAccess property:
+                    return MemberType(context, current.Properties, property.Name, enumTypes);
+                case RelationshipNavigation next:
+                    target = ToOneTarget(current, next.RelationshipName);
+                    hop = next.TargetProperty;
+                    continue;
+                default:
+                    return ExprType.Unresolved;
+            }
+        }
+        return ExprType.Unresolved;
+    }
+
+    /// <summary>
+    /// An owned access <c>Owned Member</c> (IR only; lowered as <c>this.Owned.Member</c>): the member's type on the
+    /// value type of the entity's <c>Owned</c> property, or on the target of its to-one navigation <c>Owned</c>.
+    /// The value type is the first declared under that name, as the provider resolves it. Anything else stays
+    /// Unresolved; <c>PolicyConstraintAnalyzer</c> reports an unknown owned name.
+    /// </summary>
+    private static ExprType InferOwned(
+        AnalysisContext context, OwnedAccess owned,
+        Dictionary<string, string>? props, Dictionary<string, EnumType> enumTypes) {
+        if (props is not EntityScope scope
+            || EntityNamed(context, scope.EntityName) is not { } entity
+            || owned.Inner is not PropertyAccess member)
+            return ExprType.Unresolved;
+        if (entity.Properties.FirstOrDefault(p => string.Equals(p.Name, owned.OwnedName, StringComparison.Ordinal)) is { } property) {
+            return context.GetTypeLookup()?.Domain.Types.OfType<Ontology.ValueType>()
+                .FirstOrDefault(v => string.Equals(v.Name, property.Type.TypeName, StringComparison.Ordinal)) is { } valueType
+                ? MemberType(context, valueType.Properties, member.Name, enumTypes)
+                : ExprType.Unresolved;
+        }
+        return EntityNamed(context, ToOneTarget(entity, owned.OwnedName)) is { } target
+            ? MemberType(context, target.Properties, member.Name, enumTypes)
+            : ExprType.Unresolved;
+    }
+
+    /// <summary>
+    /// <c>sum Rel P</c>: <see cref="DomainTypeModel.SumResult"/> of <c>P</c> on the relationship's target, stated on
+    /// the node so lowering's typed seed can be checked against it. A sum this cannot type (no entity scope, an
+    /// unknown relationship or property, a non-numeric property) is the Number family it was before T-05a;
+    /// <c>PolicyConstraintAnalyzer</c> reports the bad shapes.
+    /// </summary>
+    private static ExprType InferSum(AnalysisContext context, SumExpr sum, Dictionary<string, string>? props) {
+        if (props is EntityScope scope
+            && EntityNamed(context, scope.EntityName) is { } entity
+            && EntityNamed(context, entity.Navigations
+                .FirstOrDefault(n => string.Equals(n.Name, sum.RelationshipName, StringComparison.Ordinal))?.Target.TypeName) is { } target
+            && target.Properties.FirstOrDefault(p => string.Equals(p.Name, sum.PropertyName, StringComparison.Ordinal)) is { } property
+            && ModelOf(context) is { } model
+            && model.SumResult(model.OfProperty(property)) is { IsResolved: true } result) {
+            context.SetMetadata(sum, new TypedExpressionMetadata(result));
+            return result;
+        }
+        return NumberFamily;
     }
 
     private static string? ResolvePropertyType(string name, Dictionary<string, string>? props, Dictionary<string, string>? parameters) {
@@ -173,13 +343,8 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
     /// resolved lazily from the type lookup's domain for a walk that did not start at the Domain root, so
     /// there is one resolver. Null when there is no domain at all.
     /// </summary>
-    private static DomainTypeModel? ModelOf(AnalysisContext context) {
-        if (context.GetTypeLookup()?.Domain is not { } domain) return null;
-        if (context.GetMetadata<DomainTypeModelMetadata>(domain) is { } stamped) return stamped.Model;
-        var model = new DomainTypeModel(domain, RuntimeAnalysisCache.Session(domain).TypeMaps);
-        context.SetMetadata(domain, new DomainTypeModelMetadata(model));
-        return model;
-    }
+    private static DomainTypeModel? ModelOf(AnalysisContext context) =>
+        context.GetTypeLookup()?.Domain is { } domain ? DomainTypeModel.Of(context, domain) : null;
 
     /// <summary>
     /// Resolves a domain type name. Order is the order the category rules had: a declared enum, a declared

@@ -1,3 +1,4 @@
+using Poly.DomainModeling.Meaning;
 using Poly.DomainModeling.Ontology;
 
 using ValueType = Poly.DomainModeling.Ontology.ValueType;
@@ -179,16 +180,15 @@ internal sealed class PolicyConstraintAnalyzer : INodeAnalyzer {
             return;
         }
 
-        if (!IsNumericTypeName(property.Type.TypeName)) {
+        // Numeric by kind, through the type model (fork A: a declared alias of a numeric primitive is numeric).
+        var model = DomainTypeModel.Of(context, lookup!.Domain);
+        if (!model.SumResult(model.OfProperty(property)).IsResolved) {
             context.ReportError(sum,
                 $"Sum property '{sum.PropertyName}' on entity '{targetEntity.Name}' has type " +
                 $"'{property.Type.TypeName}', which is not numeric.",
                 DomainModelDiagnosticCodes.SemanticReferenceResolution);
         }
     }
-
-    private static bool IsNumericTypeName(string typeName) =>
-        typeName is "Number" or "Int" or "Int64" or "Int32" or "Decimal" or "Float" or "Double";
 
     /// <summary>
     /// Validates that a quantifier relationship exists, is OneToMany from the source,

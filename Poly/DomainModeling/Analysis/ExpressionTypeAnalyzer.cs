@@ -141,8 +141,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
 
     private void AnalyzeEntity(AnalysisContext context, Entity entity) {
         var enumTypes = ResolveEnums(context);
-        var props = entity.Properties
-            .ToDictionary(p => p.Name, p => p.Type.TypeName, StringComparer.Ordinal);
+        var props = new EntityScope(entity);
 
         // default(...) on properties
         foreach (var prop in entity.Properties) {
@@ -179,11 +178,17 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
             CheckEffectTree(context, stage.OnEntryEffects, entity.Name, props, null, enumTypes);
             CheckEffectTree(context, stage.OnExitEffects, entity.Name, props, null, enumTypes);
             foreach (var sub in stage.Subscriptions)
-                CheckEffectTree(context, sub.Effects, entity.Name, props, null, enumTypes);
+                CheckEffectTree(context, sub.Effects, entity.Name, PeerScope(context, entity.Name, props, sub), null, enumTypes);
         }
         foreach (var sub in entity.Subscriptions)
-            CheckEffectTree(context, sub.Effects, entity.Name, props, null, enumTypes);
+            CheckEffectTree(context, sub.Effects, entity.Name, PeerScope(context, entity.Name, props, sub), null, enumTypes);
     }
+
+    /// <summary>A subscription's effects read its peer binder (<c>when Rel Stage as o</c>) as the relationship's target.</summary>
+    private static Dictionary<string, string> PeerScope(
+        AnalysisContext context, string entityName, Dictionary<string, string> props, StageSubscription subscription) =>
+        WithBinder(props, subscription.PeerBinding,
+            subscription.PeerBinding is null ? null : ResolveRelationshipTargetTypeName(context, entityName, subscription.RelationshipName));
 
     private static Dictionary<string, string>? ParamsOf(Action action) =>
         action.Parameters.Count > 0
@@ -306,18 +311,18 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                 // The body is checked in the caller's scope. The `where` clause is
                 // binder-typed against the iterated relationship's target entity (#455 F4):
                 // a non-Boolean `where` lowers but cannot compile.
+                var iterated = ResolveRelationshipTargetTypeName(context, callerEntityName, fe.RelationshipName);
+                var loopScope = WithBinder(props, fe.BinderName, iterated);
                 if (fe.Where is { } where) {
-                    var iteratedTypeName = ResolveRelationshipTargetTypeName(
-                        context, callerEntityName, fe.RelationshipName);
-                    WalkExpression(context, where, props, parameters, enumTypes);
+                    WalkExpression(context, where, loopScope, parameters, enumTypes);
                     var whereType = BindsToBinder(where, fe.BinderName)
-                        ? InferBinderExpressionType(context, iteratedTypeName, fe.BinderName, where, enumTypes)
-                        : InferType(context, where, props, parameters, enumTypes);
+                        ? InferBinderExpressionType(context, iterated, fe.BinderName, where, enumTypes)
+                        : InferType(context, where, loopScope, parameters, enumTypes);
                     if (Family(whereType) is not (TypeFamily.Boolean or TypeFamily.Unknown))
                         Report(context, where,
                             $"'for' where condition must be Boolean (got '{Describe(whereType)}')");
                 }
-                CheckEffectTree(context, fe.Body, callerEntityName, props, parameters, enumTypes);
+                CheckEffectTree(context, fe.Body, callerEntityName, loopScope, parameters, enumTypes);
                 break;
             case ForEachInvokeEffect efe:
                 CheckInvokeArgumentTypes(context, callerEntityName, efe.RelationshipName,

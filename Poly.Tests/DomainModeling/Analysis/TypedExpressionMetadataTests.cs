@@ -119,6 +119,10 @@ public class TypedExpressionMetadataTests {
         await Assert.That(stamp?.Binary).IsNotNull();
         await Assert.That(stamp!.Type.DomainName).IsNull();
         await Assert.That(stamp.Binary!.Result.DomainName).IsNull();
-        await Assert.That(AnalyzerBehaviourPinTests.Verdict(analysis)).IsEqualTo("ok");
+        // T-05a (#679 lock 6841065713, flips rule A-match-arm): InferType types `N + M` itself, through the operator
+        // lookup the stamp also makes, so the Number arm and the Text `else` no longer unify. Master accepted the
+        // match ("ok") only because the arm was Unknown. The stamp and InferType now agree by construction, so this
+        // verdict no longer distinguishes a read-back; the stamp's shape above is what still pins it.
+        await Assert.That(AnalyzerBehaviourPinTests.Verdict(analysis)).IsEqualTo("DMMAT002");
     }
 }

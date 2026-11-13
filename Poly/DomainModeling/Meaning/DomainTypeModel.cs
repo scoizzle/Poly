@@ -1,3 +1,4 @@
+using Poly.Analysis;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Ontology;
 using Poly.Introspection;
@@ -49,6 +50,47 @@ internal sealed class DomainTypeModel {
                 : Assignability.RoundingNarrowing;
         }
         return Assignability.None;
+    }
+
+    /// <summary>
+    /// Fork A (lock #679 6841065713), structural: two types are the same type when they share a definition, so a
+    /// declared alias (<c>Cents: decimal</c>) is the same type as <c>Decimal</c>. A nominal ruling changes this
+    /// predicate only.
+    /// </summary>
+    public static bool SameType(ExprType a, ExprType b) =>
+        a.Definition is { } definition && ReferenceEquals(definition, b.Definition);
+
+    /// <summary>
+    /// The numeric primitives <c>sum</c> accumulates, each with the primitive its accumulator is: an Int32 property
+    /// sums into Number, as the lowered seed <c>0L</c> does.
+    /// </summary>
+    private static readonly (string Property, string Result)[] SumPrimitives = [
+        ("Number", "Number"), ("Int32", "Number"), ("Float", "Float"), ("Decimal", "Decimal"),
+    ];
+
+    /// <summary>
+    /// The type of <c>sum Rel P</c> for a property of type <paramref name="property"/>: the numeric primitive the
+    /// property is the same type as (<see cref="SameType"/>), with no domain name; <see cref="ExprType.Unresolved"/>
+    /// when the property is not numeric. Analysis and lowering's typed seed both read it, through this model's
+    /// type maps, so a pack override applies to both (fork B).
+    /// </summary>
+    public ExprType SumResult(ExprType property) {
+        foreach (var (name, result) in SumPrimitives) {
+            if (SameType(property, Resolve(name)))
+                return Resolve(result) with { DomainName = null };
+        }
+        return ExprType.Unresolved;
+    }
+
+    /// <summary>
+    /// The model of this analysis run: the one stamped on <paramref name="domain"/>, or a new one over the
+    /// session's type maps, stamped so every pass in the run reads the same model.
+    /// </summary>
+    internal static DomainTypeModel Of(AnalysisContext context, Domain domain) {
+        if (context.GetMetadata<DomainTypeModelMetadata>(domain) is { } stamped) return stamped.Model;
+        var model = new DomainTypeModel(domain, RuntimeAnalysisCache.Session(domain).TypeMaps);
+        context.SetMetadata(domain, new DomainTypeModelMetadata(model));
+        return model;
     }
 
     public NumericKind KindOf(ExprType type) => type.Definition?.PrimitiveType switch {

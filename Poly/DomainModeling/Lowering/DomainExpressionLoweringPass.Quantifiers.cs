@@ -1,4 +1,6 @@
 using Poly.Ast.Nodes;
+using Poly.DomainModeling.Analysis;
+using Poly.DomainModeling.Meaning;
 using Poly.DomainModeling.Ontology;
 
 using SN = Poly.Ast.Nodes;
@@ -36,7 +38,7 @@ public sealed partial class DomainExpressionLoweringPass {
         var result = _names.Next("result");
         return new LoweredExpression(
             [
-                new Assignment(result, new Constant(0L)),
+                new Assignment(result, new Constant(SumSeed(s))),
                 new ForEachLoop(item, collection,
                     new Block([
                         new Assignment(result, new SN.Add(result, new Member(item, s.PropertyName))),
@@ -44,6 +46,25 @@ public sealed partial class DomainExpressionLoweringPass {
             ],
             [result],
             result);
+    }
+
+    /// <summary>
+    /// The accumulator's zero in the sum's own type (#510): <see cref="DomainTypeModel.SumResult"/> over the
+    /// session's type maps, the type analysis gives the sum. A property the model cannot type keeps <c>0L</c>;
+    /// analysis reports a non-numeric sum.
+    /// </summary>
+    private object SumSeed(SumExpr sum) {
+        var target = ResolveRelationshipTarget(sum.RelationshipName);
+        var property = _domain.Types.OfType<Entity>()
+            .FirstOrDefault(e => string.Equals(e.Name, target, StringComparison.Ordinal))?
+            .Properties.FirstOrDefault(p => string.Equals(p.Name, sum.PropertyName, StringComparison.Ordinal));
+        if (property is null) return 0L;
+        var model = new DomainTypeModel(_domain, RuntimeAnalysisCache.Session(_domain).TypeMaps);
+        return model.KindOf(model.SumResult(model.OfProperty(property))) switch {
+            NumericKind.Decimal => 0m,
+            NumericKind.Float64 => 0.0,
+            _ => 0L,
+        };
     }
 
     private enum QuantifierKind { Any, All, None, Count }

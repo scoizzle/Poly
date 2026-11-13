@@ -58,13 +58,27 @@ internal sealed class DomainTypeDefinitionProvider : ITypeDefinitionProvider {
         ?? throw new InvalidOperationException($"No CLR definition for '{type}'.");
 
     private AstTypeDefinition Synthesize(string name, DomainType declared) {
-        var kind = declared switch {
-            EnumType => TypeKind.Enum,
-            Ontology.ValueType => TypeKind.Struct,
-            _ => TypeKind.Class
+        var (kind, declaresEquality) = declared switch {
+            EnumType => (TypeKind.Enum, true),
+            Ontology.ValueType => (TypeKind.Struct, false),
+            Entity => (TypeKind.Class, true),
+            _ => throw new InvalidOperationException($"Domain type '{name}' is a '{declared.GetType().Name}', which has no definition shape.")
         };
-        return new AstTypeDefinition(new TypeDefinitionNode(name, Kind: kind), this);
+        MethodDefinitionNode[]? methods = declaresEquality
+            ? [Equality("op_Equality", name), Equality("op_Inequality", name)]
+            : null;
+        return new AstTypeDefinition(new TypeDefinitionNode(name, Kind: kind, Methods: methods), this);
     }
+
+    /// <summary>
+    /// The one operator an enum or entity declares: <c>static Boolean op(T, T)</c>. Declared members are
+    /// how a modeled definition answers <c>GetOperators</c>; ordering and arithmetic stay undeclared.
+    /// </summary>
+    private static MethodDefinitionNode Equality(string operatorName, string typeName) =>
+        new(operatorName,
+            new PrimitiveTypeReference(Introspection.PrimitiveType.Boolean),
+            [new Parameter("left", new NamedTypeReference(typeName)), new Parameter("right", new NamedTypeReference(typeName))],
+            IsStatic: true);
 
     private static string CanonicalName(PrimitiveSemantics semantics) => semantics switch {
         PrimitiveSemantics.Boolean => "Boolean",

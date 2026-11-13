@@ -301,9 +301,12 @@ public static class CSharpReader {
         private static object FoldEnumValue(MatchResult<CSharpToken, CSharpTokenKind> member) {
             var token = CapturedToken(member, "value");
             var negative = member.Tokens.Any(t => t.Kind == CSharpTokenKind.Minus);
+            // A plain decimal literal folds signed, so the range check sees the negated value
+            // (-9223372036854775808 is a long; its digits alone overflow).
+            var signed = negative && token.Text.All(c => char.IsAsciiDigit(c) || c == '_');
             object value;
             try {
-                value = FoldNumber(token.Text);
+                value = FoldNumber(signed ? "-" + token.Text : token.Text);
             }
             catch (OverflowException) {
                 throw GrammarError.Error($"Enum value '{token.Text}' is outside the range of long", token.Line, token.Col);
@@ -312,7 +315,7 @@ public static class CSharpReader {
                 throw GrammarError.Error($"Enum value '{token.Text}' is not an integer", token.Line, token.Col);
             if (value is ulong big && big > long.MaxValue)
                 throw GrammarError.Error($"Enum value '{token.Text}' is outside the range of long", token.Line, token.Col);
-            if (!negative)
+            if (!negative || signed)
                 return value;
             var negated = -Convert.ToInt64(value, CultureInfo.InvariantCulture);
             return negated >= int.MinValue ? (object)(int)negated : negated;

@@ -175,8 +175,14 @@ public sealed class Matcher<TToken, TTokenKind>
                 piece = Piece.TokensOnly(predTokens);
                 return true;
 
-            case Word<TToken, TTokenKind>:
-                throw new NotImplementedException("G-27: Word is not matched yet.");
+            case Word<TToken, TTokenKind> w:
+                var wt = _reader.Peek(offset);
+                if (_reader.EndOfStream(wt.Kind) || !w.Matches(wt)) {
+                    piece = default;
+                    return false;
+                }
+                piece = Piece.TokensOnly([wt]);
+                return true;
 
             case Optional<TToken, TTokenKind> o:
                 if (TryMatchElement(o.Inner, offset, captures, out piece))

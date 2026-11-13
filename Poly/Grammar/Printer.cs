@@ -187,8 +187,9 @@ public sealed class Printer<TToken, TTokenKind>
                 ctx.EmitFill(name);
                 return;
 
-            case Word<TToken, TTokenKind>:
-                throw new NotImplementedException("G-27: Word is not printed yet.");
+            case Word<TToken, TTokenKind> w:
+                ctx.Emit(w.Kind, w.Text);
+                return;
 
             case MatchPredicate<TToken, TTokenKind> { Label: { Length: > 0 } label } when ctx.HasFill(label):
                 ctx.EmitFill(label);
@@ -249,6 +250,9 @@ public sealed class PrintContext<TToken, TTokenKind>
 
     /// <summary>Emits raw text (e.g. a runtime value at a Value position).</summary>
     public void Emit(string text) => _writer.Write(default(TTokenKind), text);
+
+    /// <summary>Emits <paramref name="text"/> as a token of <paramref name="kind"/> (a row's own spelling, such as a Word).</summary>
+    internal void Emit(TTokenKind kind, string text) => _writer.Write(kind, text);
 
     /// <summary>True when a named fill was supplied for this print.</summary>
     public bool HasFill(string name) =>

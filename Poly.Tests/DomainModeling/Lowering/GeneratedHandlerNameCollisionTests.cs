@@ -9,9 +9,10 @@ namespace Poly.Tests.DomainModeling.Lowering;
 
 /// <summary>
 /// L-04a (from L-03c's review, nit 3): a peer binder or an action parameter named after a name the generated handler or
-/// action body declares or uses must not break the generated C#. The handler declares <c>linkedTarget</c> and
-/// <c>linkedMatched</c> (the <c>when any</c> / <c>when all</c> gates), takes a <c>previousStage</c> parameter, and reads
-/// the stage enums <c>{Entity}Stage</c> from expression position. Either the analysis refuses the name through the
+/// action body declares or uses must not break the generated C#. The handler declares <c>__linkedTarget</c> and
+/// <c>__linkedMatched</c> (the <c>when any</c> / <c>when all</c> gates) and takes a <c>__previousStage</c> parameter: the
+/// <c>__</c> prefix is reserved, so no user name collides with them. It reads the stage enums <c>{Entity}Stage</c> from
+/// expression position, so exactly those names are reserved. Either the analysis refuses the name through the
 /// reserved-name rule (DMSTR009), or the printed C# compiles with warnings as errors; nothing in between (CS0136,
 /// CS0100, a shadowed stage enum).
 /// </summary>
@@ -189,5 +190,29 @@ public class GeneratedHandlerNameCollisionTests {
 
         await Assert.That(string.Join("\n", errors.Select(e => e.Code + " " + e.Message))).IsEqualTo("");
         await Assert.That(compile).IsEqualTo("");
+    }
+
+    // Closing-round probe (b): an action parameter named like a numbered generated local. `result0` holds (refused or
+    // compiles; it compiles) for a fan-out `for … invoke`, on master and here. The other numbered locals (assignValue0,
+    // create0, invoke0, target0) and a member named like the bare Create's `created` or another entity's stage enum
+    // are accepted by analysis and do not compile, on master too: reported, not asserted.
+    [Test]
+    public async Task ActionParameter_NamedResult0_BesideAFanOutForInvoke_IsRefusedOrCompiles() {
+        const string dsl = """
+            domain P
+            Holder: entity {
+              kids: many Kid
+              Run: action (result0: Number) { for kids as k invoke k.Go }
+            }
+            Kid: entity {
+              N: Number default(0)
+              holder: Holder via kids
+              Go: action { assign N to 1 }
+            }
+            """;
+
+        var (errors, compile) = Verdict(dsl, "Result0");
+
+        await Assert.That(errors.Count == 0 ? compile : "").IsEqualTo("");
     }
 }

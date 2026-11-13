@@ -221,16 +221,21 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
     }
 
     /// <summary>
-    /// True when the entity has exactly one stage that is not observable: no
-    /// entry/exit effects, no stage policies, and no effect transitions into it.
-    /// Such a stage is constant, so the printer omits the stage enum and
-    /// <c>CurrentStage</c>; stage-scoped actions become entity-level.
+    /// The generated stage enum's type name for <paramref name="entity"/> (<c>{Entity}Stage</c>, or a declared enum of
+    /// that name), or null when the entity has no generated enum (no stages, or only an implicit stage). The one function
+    /// the emitter and the reserved-name rule both use.
     /// </summary>
     internal static string? StageEnumTypeNameFor(Entity entity, Domain domain) =>
         entity.Stages.Count > 0 && !IsImplicitStage(entity, domain)
             ? domain.Types.OfType<EnumType>().FirstOrDefault(e => e.Name == $"{entity.Name}Stage")?.Name ?? $"{entity.Name}Stage"
             : null;
 
+    /// <summary>
+    /// True when the entity has exactly one stage that is not observable: no
+    /// entry/exit effects, no stage policies, and no effect transitions into it.
+    /// Such a stage is constant, so the printer omits the stage enum and
+    /// <c>CurrentStage</c>; stage-scoped actions become entity-level.
+    /// </summary>
     internal static bool IsImplicitStage(Entity entity, Domain? domain = null) {
         if (entity.Stages.Count != 1)
             return false;

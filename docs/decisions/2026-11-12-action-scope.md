@@ -127,8 +127,8 @@ Recorded here and in `docs/CORE.md`; each consumer's plan lock must confirm them
   form would need an explicit-interface qualifier on `MethodDefinitionNode` printed with no access
   modifier, and neither exists today (`MethodDefinitionNode.cs:12-21`, `AccessModifier.cs:6-24`);
   adding it, with its reader/writer grammar-table row, is deferred. The two names therefore sit in
-  the declaration space, so the DSL reserves the `__` prefix for member and action-parameter names
-  (`ReservedNames.IsActionScopeName`) and `ReservedNames` carries fixed rows for `__Snapshot` and
+  the declaration space, so the DSL reserves the `__` prefix for member, action-parameter and peer-binder names
+  (`ReservedNames.IsActionScopeName`; the generated handler locals `__linkedTarget`, `__linkedMatched` and `__previousStage`, and `__EnterInitialStage`, live under it) and `ReservedNames` carries fixed rows for `__Snapshot` and
   `__Restore`. `__Snapshot` and `__Restore` must not call the storage port.
 - **Nested failures (B6).** Lowered code returns immediately on any failed nested `DomainResult`,
   before another `Touch` or `Create`; a throw after a whole-frame rollback is a host bug.

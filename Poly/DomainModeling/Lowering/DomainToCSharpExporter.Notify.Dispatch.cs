@@ -193,7 +193,7 @@ public sealed partial class DomainToCSharpExporter {
                 // "transitioned from" and a fresh entry must not match.
                 var needsPrevious = stageGroup.Any(infos => infos.Any(NeedsAllPreviousStage));
                 var notifyPrevious = new Parameter(
-                    "previousStage",
+                    "__previousStage",
                     new OptionalTypeReference(new NamedTypeReference(stageEnumTypeName!)));
                 var notifyNodes = new List<Node>();
                 var names = new LocalNames();
@@ -250,7 +250,7 @@ public sealed partial class DomainToCSharpExporter {
 
     /// <summary>
     /// <c>InitializeSubscriptions</c> — for post-load subscription wiring. Called as
-    /// the last constructor step so all state is set before registration runs.
+    /// by <c>Create</c> after the initial entry, so all state is set and a failed entry registers nothing.
     /// </summary>
     private static void AddSubscriptionInitializer(
         List<SubscriptionInfo>? subscriberSubs, List<MethodDefinitionNode> methods) {

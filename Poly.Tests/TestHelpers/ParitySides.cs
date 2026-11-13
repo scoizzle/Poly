@@ -37,7 +37,8 @@ sealed class SimulateSide(Domain domain, IReadOnlySet<string>? recordedException
         }
         catch (ConstraintFailureException ex) {
             // Printed CreateCore records the same throw as a failed step, not an
-            // exception type. Void entry effects throw on both sides.
+            // exception type. Lowered code throws no domain failure since L-04a; the VM's own
+            // 'X is not set' throw (R-07) is what is left to catch here.
             return (false, ex.Message, null);
         }
         // The factory only takes parameters it declares. A scenario may still pass a

@@ -33,7 +33,6 @@ internal class Account : Poly.Runtime.IActionScoped
         this._opportunities = new List<Opportunity>(opportunities ?? new List<Opportunity>());
         this._tickets = new List<Ticket>(tickets ?? new List<Ticket>());
         this.CurrentStage = AccountStage.Open;
-        this.InitializeSubscriptions();
     }
     public string Name { get; private set; } = default!;
     public Industry Industry { get; private set; }
@@ -423,6 +422,7 @@ internal class Account : Poly.Runtime.IActionScoped
         }
         var created = new Account(name, industry, parent, hq, contacts, opportunities, tickets, wonCount, openPipeline, closedTickets);
         Poly.Runtime.ActionScope.Create(created, "Account");
+        created.InitializeSubscriptions();
         return DomainResult<Account>.Success(created);
     }
     private void InitializeSubscriptions()

@@ -425,7 +425,7 @@ public class AbsenceParityTests {
             Tier: enum { Gold, Std }
             Order: entity { Tier: Tier default(Std) }
             """);
-        var context = new LoweringContext(new SN.ThisReference(), analysis, domain);
+        var context = new LoweringContext(new SN.ThisReference(), analysis, domain, ActionResultType: new NamedTypeReference("DomainResult"));
         var target = domain.Types.OfType<Entity>().Single(e => e.Name == "Order")
             .Properties.Single(p => p.Name == "Tier").Type;
 
@@ -443,7 +443,7 @@ public class AbsenceParityTests {
             domain Pay
             Employee: entity { Salary: Decimal range(0, 1000000) }
             """);
-        var context = new LoweringContext(new SN.ThisReference(), analysis, domain);
+        var context = new LoweringContext(new SN.ThisReference(), analysis, domain, ActionResultType: new NamedTypeReference("DomainResult"));
         var target = domain.Types.OfType<Entity>().Single(e => e.Name == "Employee")
             .Properties.Single(p => p.Name == "Salary").Type;
 

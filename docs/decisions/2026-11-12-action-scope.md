@@ -127,8 +127,8 @@ Recorded here and in `docs/CORE.md`; each consumer's plan lock must confirm them
   form would need an explicit-interface qualifier on `MethodDefinitionNode` printed with no access
   modifier, and neither exists today (`MethodDefinitionNode.cs:12-21`, `AccessModifier.cs:6-24`);
   adding it, with its reader/writer grammar-table row, is deferred. The two names therefore sit in
-  the declaration space, so the DSL reserves the `__` prefix for member and action-parameter names
-  (`ReservedNames.IsActionScopeName`) and `ReservedNames` carries fixed rows for `__Snapshot` and
+  the declaration space, so the DSL reserves the `__` prefix for member, action-parameter and peer-binder names
+  (`ReservedNames.IsActionScopeName`; the generated handler locals `__linkedTarget`, `__linkedMatched` and `__previousStage`, and `__EnterInitialStage`, live under it) and `ReservedNames` carries fixed rows for `__Snapshot` and
   `__Restore`. `__Snapshot` and `__Restore` must not call the storage port.
 - **Nested failures (B6).** Lowered code returns immediately on any failed nested `DomainResult`,
   before another `Touch` or `Create`; a throw after a whole-frame rollback is a host bug.
@@ -177,3 +177,14 @@ Recorded here and in `docs/CORE.md`; each consumer's plan lock must confirm them
 - Tests: `Poly.Tests/Runtime/ActionScopeTests.cs` (31 tests, T1–T31).
 
 Part of #677, theme R (#682). No closing keyword: the row carries `closes —`.
+## Cost of `Touch` at scale (L-04a)
+
+`Touch` snapshots the entity it touches, and the snapshot copies the entity's collections and registries, once per entity per action. So the cost of an action on an owner grows with the size of the owner's collections. `ActionScopeTouchScaleBenchmark` (one cached successful assign action on an owner with N children; simulator, `--job short`, one machine, Release; BenchmarkDotNet 0.15.8):
+
+| Children | Mean | Allocated |
+|---|---|---|
+| 1 | 1,256 ns | 4,096 B |
+| 100 | 6,830 ns | 33,400 B |
+| 10,000 | 890,813 ns | 2,963,800 B |
+
+About 300 B and 90 ns per child per invoke. The simulator's number includes the executor's own capture until X-04 removes it; the generated C# copies the same lists in `__Snapshot`. `--job short` `Mean` is noisy: read `Allocated` as the stable column. This is a record, not a gate.

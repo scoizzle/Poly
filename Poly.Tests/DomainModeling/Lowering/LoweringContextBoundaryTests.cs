@@ -31,6 +31,31 @@ public class LoweringContextBoundaryTests {
             .Throws<ArgumentNullException>();
     }
 
+    // L-04a: every body an effect pass lowers into returns a DomainResult, so a context without one is refused at
+    // construction (a void body cannot carry a failure: CS0127, #825). The refusal names the entity.
+    [Test]
+    public async Task EffectLoweringPass_NoActionResultType_ThrowsPositioned() {
+        var entity = Widget();
+        var (domain, analysis) = LoweringFixtures.Analyze(entity);
+
+        var thrown = await Assert.That(() => new EffectLoweringPass(entity, new LoweringContext(new ThisReference(), analysis, domain)))
+            .Throws<InvalidOperationException>();
+
+        await Assert.That(thrown!.Message).Contains("ActionResultType");
+        await Assert.That(thrown.Message).Contains("Widget");
+    }
+
+    [Test]
+    public async Task EffectLoweringPass_WithActionResultType_Constructs() {
+        var entity = Widget();
+        var (domain, analysis) = LoweringFixtures.Analyze(entity);
+
+        var pass = new EffectLoweringPass(entity, new LoweringContext(
+            new ThisReference(), analysis, domain, ActionResultType: new NamedTypeReference("DomainResult")));
+
+        await Assert.That(pass).IsNotNull();
+    }
+
     [Test]
     public async Task DomainExpressionLoweringPass_NullAnalysis_ThrowsArgumentNull() {
         var (domain, _) = LoweringFixtures.Analyze(Widget());
@@ -70,7 +95,7 @@ public class LoweringContextBoundaryTests {
     public async Task Lowering_WhenStructureBagMissing_FailsClosedInsteadOfRecomputing() {
         var entity = RequiredNameWidget();
         var (domain, analysis) = LoweringFixtures.Analyze(entity);
-        var context = new LoweringContext(new ThisReference(), analysis, domain)
+        var context = new LoweringContext(new ThisReference(), analysis, domain, ActionResultType: new NamedTypeReference("DomainResult"))
             with { Analysis = new BagOmittedProvider(analysis, typeof(EntityStructureMetadata)) };
         var pass = new EffectLoweringPass(entity, context);
 
@@ -176,7 +201,7 @@ public class LoweringContextBoundaryTests {
             Properties: [new Property("Plate", new DomainTypeReference("Text"), [new UniqueConstraint()])],
             Actions: [], Policies: [], Stages: []);
         var (domain, analysis) = LoweringFixtures.Analyze(permit);
-        var context = new LoweringContext(new Parameter("entity", new TypeReference("Permit")), analysis, domain)
+        var context = new LoweringContext(new Parameter("entity", new TypeReference("Permit")), analysis, domain, ActionResultType: new NamedTypeReference("DomainResult"))
             with { Analysis = new BagOmittedProvider(analysis, typeof(StorageMappingMetadata)) };
         var pass = new EffectLoweringPass(permit, context);
 

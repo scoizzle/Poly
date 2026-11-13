@@ -39,7 +39,7 @@ public class Item4FailBeforeMutateTests {
             new Parameter("entity", new TypeReference(guest.Name)),
             Analysis: analysis,
             Domain: domain,
-            ActionParameterNames: ["nights"]));
+            ActionParameterNames: ["nights"], ActionResultType: new NamedTypeReference("DomainResult")));
         var lowered = pass.LowerActionBody(action.Effects);
         await Assert.That(lowered).IsNotNull();
         var flat = Flatten(lowered!).ToList();
@@ -147,7 +147,7 @@ public class Item4FailBeforeMutateTests {
             new Parameter("entity", new TypeReference(guest.Name)),
             Analysis: analysis,
             Domain: domain,
-            ActionParameterNames: ["nights", "confirm"]));
+            ActionParameterNames: ["nights", "confirm"], ActionResultType: new NamedTypeReference("DomainResult")));
         var lowered = pass.LowerActionBody(action.Effects);
         await Assert.That(lowered).IsNotNull();
         var flat = Flatten(lowered!).ToList();
@@ -187,7 +187,7 @@ public class Item4FailBeforeMutateTests {
         var pass = new EffectLoweringPass(bin, new LoweringContext(
             new Parameter("entity", new TypeReference(bin.Name)),
             Analysis: analysis,
-            Domain: domain));
+            Domain: domain, ActionResultType: new NamedTypeReference("DomainResult")));
         var lowered = pass.LowerActionBody(action.Effects);
         await Assert.That(lowered).IsNotNull();
         var flat = Flatten(lowered!).ToList();

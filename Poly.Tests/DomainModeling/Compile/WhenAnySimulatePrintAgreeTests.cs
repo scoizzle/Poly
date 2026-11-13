@@ -1,6 +1,5 @@
 using System.Reflection;
 using System.Runtime.Loader;
-using Poly.Tests.TestHelpers;
 
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -15,6 +14,7 @@ using Poly.DomainModeling.Language;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Runtime;
 using Poly.Interpretation.CSharp;
+using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.DomainModeling.Compile;
 
@@ -61,12 +61,12 @@ public class WhenAnySimulatePrintAgreeTests {
         await Assert.That(ReferenceEquals(handler.Body, cached)).IsTrue();
 
         var printed = new CSharpGenerator().Generate(handler.Body!);
-        await Assert.That(printed.Contains("linkedMatched", StringComparison.Ordinal)).IsTrue();
+        await Assert.That(printed.Contains("__linkedMatched", StringComparison.Ordinal)).IsTrue();
         var files = session.Emit(domain, analysis);
         var patronCs = files.First(f => f.FileName == "Patron.cs").Source;
         await Assert.That(patronCs.Contains("WhenAnyLoanOverdue", StringComparison.Ordinal)).IsTrue();
-        await Assert.That(patronCs.Contains("if (!linkedMatched)", StringComparison.Ordinal)).IsTrue();
-        await Assert.That(patronCs.Contains("linkedMatched != 1", StringComparison.Ordinal)).IsFalse();
+        await Assert.That(patronCs.Contains("if (!__linkedMatched)", StringComparison.Ordinal)).IsTrue();
+        await Assert.That(patronCs.Contains("__linkedMatched != 1", StringComparison.Ordinal)).IsFalse();
 
         var loanE = domain.Types.OfType<Entity>().First(e => e.Name == "Loan");
         var patronE = domain.Types.OfType<Entity>().First(e => e.Name == "Patron");

@@ -422,9 +422,15 @@ public sealed partial class DomainToCSharpExporter {
     }
 
     /// <summary>
-    /// Emits the private constructor (initial stage + entry effects + subscription
-    /// wiring) and the public static <c>Create</c> factory with its constraint guard
-    /// clauses and unique-inverse attach calls. Returns the constructors to publish.
+    /// The private result-returning method <c>Create</c> calls after <c>new</c> to run the initial stage's entry
+    /// effects. <c>__</c> is a reserved prefix, so no member can collide with it.
+    /// </summary>
+    internal const string EnterInitialStageMethodName = "__EnterInitialStage";
+
+    /// <summary>
+    /// Emits the private constructor (assignments and the initial stage only) and the public static <c>Create</c>
+    /// factory: constraint guards, <c>new</c>, the initial entry (<see cref="EnterInitialStageMethodName"/>),
+    /// subscription registration and the unique-inverse attach calls. Returns the constructors to publish.
     /// </summary>
     private static List<ConstructorDefinitionNode>? AddCreateFactory(
         Entity entity, Domain domain, INodeMetadataProvider metadata,
@@ -439,9 +445,12 @@ public sealed partial class DomainToCSharpExporter {
         // a type-name call resolves. No slots and no stages still emit a
         // single private parameterless constructor (CS0111).
         List<ConstructorDefinitionNode>? ctors = null;
+        // The constructor is pure assignment: the parameters and the initial stage. The initial stage's entry effects
+        // can fail, so they run in the result-returning __EnterInitialStage, which Create calls (L-04a, #825).
         var bodyNodes = new List<Node>();
         bodyNodes.AddRange(ctorAssignments);
 
+        MethodDefinitionNode? entryMethod = null;
         if (esm.HasStages) {
             var initialStage = entity.InitialStage()!;
             bodyNodes.Add(new Assignment(
@@ -450,10 +459,8 @@ public sealed partial class DomainToCSharpExporter {
                     new NamedTypeReference(stageEnumTypeName!),
                     initialStage.Name)));
 
-            // Apply the initial stage's entry effects in the constructor.
-            // This ensures properties set by entry effects (e.g. "entry { assign
-            // CheckedOutAt to now }" on Loan.Active) are initialized during
-            // construction, not just during explicit stage transitions.
+            // Entry effects (e.g. "entry { assign CheckedOutAt to now }" on Loan.Active) initialize the new
+            // instance, so they run after `new` and before the instance is attached anywhere.
             if (initialStage.OnEntryEffects.Count > 0) {
                 var entryCtx = new LoweringContext(
                     new ThisReference(),
@@ -465,18 +472,20 @@ public sealed partial class DomainToCSharpExporter {
                     LifecycleEnumTypeName: esm.LifecycleEnumTypeName,
                     PostTransitionNotifyStages: postTransitionNotifyStages,
                     PreviousStageNotifyStages: previousStageNotifyStages,
-                    SourceStageName: initialStage.Name);
+                    SourceStageName: initialStage.Name,
+                    ActionResultType: new NamedTypeReference("DomainResult"));
                 var entryPass = new EffectLoweringPass(entity, entryCtx);
-                entryPass.AppendInlinedStageEffects(initialStage.OnEntryEffects, bodyNodes);
+                var entryNodes = new List<Node>();
+                entryPass.AppendInlinedStageEffects(initialStage.OnEntryEffects, entryNodes);
+                if (entryNodes.Count > 0) {
+                    entryMethod = new MethodDefinitionNode(
+                        EnterInitialStageMethodName,
+                        new NamedTypeReference("DomainResult"),
+                        Body: WithSuccessTail(new Block([TouchThis(), .. entryNodes])),
+                        AccessModifier: AccessModifier.Private);
+                    methods.Add(entryMethod);
+                }
             }
-        }
-
-        // InitializeSubscriptions is called as the last step so that all
-        // state (including collections passed from data-store materialization)
-        // is set before subscription wiring runs.
-        if (subscriberSubs is { Count: > 0 }) {
-            bodyNodes.Add(new Invoke(
-                new Member(new ThisReference(), "InitializeSubscriptions")));
         }
 
         // Private parameterless constructor only when a persistence pack is
@@ -527,6 +536,25 @@ public sealed partial class DomainToCSharpExporter {
         // The open action scope records what it created, after `new` and before any peer attach (L-03c F3; L-04's
         // initial-stage entry follows this line). A no-op with no scope open.
         createSuccessNodes.Add(ActionScopeCall("Create", createdLocal, new Constant(entity.Name)));
+
+        // The initial entry runs before the instance is attached or registered anywhere, and its failure is returned
+        // as-is: a failed create leaves the instance in no collection and no registry. `__entry` cannot collide with a
+        // parameter (a property named Entry prints as `entry`; `__` is a reserved prefix).
+        if (entryMethod is not null) {
+            var entryResult = new Variable("__entry");
+            createLocals.Add(entryResult);
+            createSuccessNodes.Add(new Assignment(entryResult, new Invoke(new Member(createdLocal, EnterInitialStageMethodName))));
+            createSuccessNodes.Add(new IfStatement(
+                new Syntactic.Not(new Member(entryResult, "IsSuccess")),
+                new Block([FailureLowering.Propagate(createResultType, entryResult)])));
+        }
+
+        // InitializeSubscriptions registers the new instance in its peers' registries, so it runs after the entry
+        // (a failed entry must leave no registry entry in a peer) and after all state, including collections passed
+        // from data-store materialization, is set.
+        if (subscriberSubs is { Count: > 0 }) {
+            createSuccessNodes.Add(new Invoke(new Member(createdLocal, "InitializeSubscriptions")));
+        }
         var lookup = metadata.GetTypeLookup(domain);
         foreach (var navParam in esm.ConstructorParameters
             .Where(p => p.IsNavigation && !p.IsCollection)) {

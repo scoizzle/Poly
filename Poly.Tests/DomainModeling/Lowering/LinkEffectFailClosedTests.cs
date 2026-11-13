@@ -30,7 +30,7 @@ public sealed class LinkEffectFailClosedTests {
         var (domain, analysis) = EvolvedDomain.FromDsl(Dsl);
         var board = domain.Types.OfType<Entity>().Single(e => e.Name == "Board");
         return (new EffectLoweringPass(board, new LoweringContext(
-            new Parameter("entity", new TypeReference(board.Name)), analysis, domain) { ActionName = "Move" }), board);
+            new Parameter("entity", new TypeReference(board.Name)), analysis, domain, ActionResultType: new NamedTypeReference("DomainResult")) { ActionName = "Move" }), board);
     }
 
     private static readonly LinkEffect LinkActive = new("Active", DomainExpression.Property("t"));

@@ -82,7 +82,6 @@ public sealed partial class EffectLoweringPass {
 
         var methodName = $"Create{DomainToCSharpExporter.ToPascalCase(relationshipName)}";
         var resultVar = _names.Next("create");
-        var resultType = _context.ActionResultType ?? new NamedTypeReference("DomainResult");
         var locals = new List<Node> { resultVar };
         var nodes = new List<Node> {
             new Assignment(resultVar, new Invoke(new Member(Subject, methodName), [.. args])),
@@ -113,7 +112,7 @@ public sealed partial class EffectLoweringPass {
         var args = BuildFullCreateArgs(targetEntity, initializers, loweredInitializers);
 
         var resultVar = _names.Next("create");
-        var resultType = _context.ActionResultType ?? new NamedTypeReference("DomainResult");
+        var resultType = CallerResultType;
         var locals = new List<Node> { resultVar };
         var nodes = new List<Node> {
             new Assignment(resultVar, new Invoke(
@@ -138,13 +137,11 @@ public sealed partial class EffectLoweringPass {
     }
 
     /// <summary>
-    /// A failed create returns the caller's <c>DomainResult</c>. A context with
-    /// no result type (a direct lowering test, a constructor) throws.
+    /// A failed create returns the caller's <c>DomainResult</c>, with the caller's path prefix when the body is
+    /// an action and none when it is a handler or the initial entry.
     /// </summary>
     private Node FailCreate(Node resultVar) =>
-        _context.ActionResultType is null
-            ? FailureLowering.ThrowFrom(resultVar)
-            : FailureLowering.Propagate(_context.ActionResultType, resultVar, CallerPath);
+        FailureLowering.Propagate(CallerResultType, resultVar, CallerPath);
 
     /// <summary>
     /// Positional arguments for the printed <c>Type.Create</c> factory: constructor

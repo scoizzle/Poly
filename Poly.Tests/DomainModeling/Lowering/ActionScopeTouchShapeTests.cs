@@ -179,11 +179,30 @@ public class ActionScopeTouchShapeTests {
             "the cascade depth; the exit assigns the entry depth back (F2), so a rollback never needs it"),
         (name => name is "NoteAutomaticStage" or "ClearAutomaticStageChain",
             "the automatic-stage chain; every trigger clears it first, so it is not observable after an action (G8)"),
-        (name => name.StartsWith("Create", StringComparison.Ordinal),
-            "Create{Nav}: lowered create-in calls it from an action body or a handler, which touched `this` first"),
     ];
 
-    private static IEnumerable<TypeDefinitionNode> Lower(string poly) {
+    /// <summary>
+    /// <c>Create{Nav}</c> (the allow-list entry used to be any name starting with <c>Create</c>): an instance method
+    /// returning <c>DomainResult&lt;T&gt;</c> that calls <c>T.Create(…)</c>. Lowered create-in calls it from an action
+    /// body or a handler, which touched <c>this</c> first.
+    /// </summary>
+    internal static bool IsCreateNav(MethodDefinitionNode method) =>
+        method.Name.StartsWith("Create", StringComparison.Ordinal)
+        && method.ReturnType is NamedTypeReference { TypeName: "DomainResult", TypeArguments.Count: 1 }
+        && method.Body is not null
+        && PreOrder(method.Body).Any(n => n is Invoke { Delegate: Member { MemberName: "Create", Value: NamedTypeReference } });
+
+    private static bool IsReceiverVariable(Node? node) => node is Variable or Parameter;
+
+    /// <summary>A write through a receiver that is not <c>this</c>: a peer (`peer.X = …`) or an alias (`var a = this; a.X = …`).</summary>
+    private static bool IsWriteThroughOther(Node node) => node switch {
+        Assignment { Destination: Member { Value: var receiver } } => IsReceiverVariable(receiver),
+        Invoke { Delegate: Member { MemberName: "Add" or "Clear" or "Remove" or "Insert" or "RemoveAt", Value: Member { Value: var receiver } } } =>
+            IsReceiverVariable(receiver),
+        _ => false,
+    };
+
+    internal static IEnumerable<TypeDefinitionNode> Lower(string poly) {
         var session = DomainSession.ForSource(poly, ProbeSeed, ProbeCatalog);
         var changes = DomainCompilation.WithSeed(new PolyDslParser(poly, session).Parse(), ProbeSeed);
         var outcome = new DomainEvolution(new Domain("_", [])).ApplyAndAnalyze(changes, session: session);
@@ -197,7 +216,7 @@ public class ActionScopeTouchShapeTests {
             .SelectMany(a => (IEnumerable<TypeDefinitionNode>)a.Payload!);
     }
 
-    private static IEnumerable<Node> PreOrder(Node node) {
+    internal static IEnumerable<Node> PreOrder(Node node) {
         yield return node;
         foreach (var child in node.Children) {
             if (child is null)
@@ -240,6 +259,10 @@ public class ActionScopeTouchShapeTests {
             foreach (var method in methods) {
                 if (method.Body is null || method.IsStatic)
                     continue;
+                if (PreOrder(method.Body).Any(IsWriteThroughOther)) {
+                    violations.Add($"{type.Name}.{method.Name}");
+                    continue;
+                }
                 if (!PreOrder(method.Body).Any(IsWriteToThis))
                     continue;
                 if (TouchesBeforeWriting(method, requireWrite: true))
@@ -251,7 +274,7 @@ public class ActionScopeTouchShapeTests {
                         && PreOrder(wrapper.Body!).Any(IsTouchOfThis))
                         continue;
                 }
-                if (AllowList.Any(entry => entry.Matches(method.Name)))
+                if (AllowList.Any(entry => entry.Matches(method.Name)) || IsCreateNav(method))
                     continue;
                 violations.Add($"{type.Name}.{method.Name}");
             }
@@ -287,6 +310,44 @@ public class ActionScopeTouchShapeTests {
             var named = methodName == "Bump" ? "Owner.__BodyOfBump" : $"{typeName}.{methodName}";
             await Assert.That(Violations(stripped)).Contains(named);
         }
+    }
+
+    // L-04a (L-03c nit 2): a Register*Subscriber with its Touch stripped is named, and a write through a peer or an alias
+    // is a violation by construction.
+    [Test]
+    public async Task Tripwire_WhenARegisterTouchIsStripped_NamesIt() {
+        var types = Lower(Dsl).ToList();
+        var (typeName, register) = types.SelectMany(t => (t.Methods ?? []).Select(m => (Type: t.Name, Method: m.Name)))
+            .First(x => x.Method.StartsWith("Register", StringComparison.Ordinal));
+        var stripped = types.Select(t => t.Name != typeName ? t : t with {
+            Methods = [.. t.Methods!.Select(m => m.Name != register ? m : m with { Body = Strip(m.Body!) })]
+        }).ToList();
+
+        await Assert.That(Violations(types)).DoesNotContain($"{typeName}.{register}");
+        await Assert.That(Violations(stripped)).Contains($"{typeName}.{register}");
+    }
+
+    [Test]
+    public async Task Tripwire_WhenAMethodWritesAPeerOrThroughAnAlias_NamesIt() {
+        static MethodDefinitionNode Method(string name, Node body) => new(name, new TypeReference("void"), Body: new Block([new Invoke(new Member(new ClrTypeReference(typeof(ActionScope)), "Touch"), new ThisReference()), body]));
+        var peer = Method("PeerWrite", new Assignment(new Member(new Parameter("peer"), "X"), new Constant(1)));
+        var alias = Method("AliasWrite", new Block([
+            new Assignment(new Variable("self"), new ThisReference()),
+            new Assignment(new Member(new Variable("self"), "X"), new Constant(1)),
+        ]));
+        var ok = Method("ThisWrite", new Assignment(new Member(new ThisReference(), "X"), new Constant(1)));
+        var type = new TypeDefinitionNode("T", Methods: [peer, alias, ok]);
+
+        await Assert.That(string.Join(", ", Violations([type]))).IsEqualTo("T.PeerWrite, T.AliasWrite");
+    }
+
+    // A non-Create{Nav} method named Create* gets no free pass any more.
+    [Test]
+    public async Task Tripwire_WhenAMethodIsNamedCreateButIsNotACreateNav_ItIsStillChecked() {
+        var method = new MethodDefinitionNode("CreateOops", new TypeReference("void"),
+            Body: new Block([new Assignment(new Member(new ThisReference(), "X"), new Constant(1))]));
+
+        await Assert.That(string.Join(", ", Violations([new TypeDefinitionNode("T", Methods: [method])]))).IsEqualTo("T.CreateOops");
     }
 
     // ── the golden delta, predicted (amendment 6) ─────────────────────

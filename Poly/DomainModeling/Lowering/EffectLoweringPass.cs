@@ -62,6 +62,12 @@ public sealed partial class EffectLoweringPass : EffectDispatch<Node?> {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(context.Analysis);
         ArgumentNullException.ThrowIfNull(context.Domain);
+        // Every body an effect lowers into returns a DomainResult (an action, a handler, the initial entry), so a
+        // failure is always a returned value. A void body has no failure channel: an `invoke` there is CS0127 (#825).
+        if (context.ActionResultType is null)
+            throw new InvalidOperationException(
+                $"Cannot lower effects for entity '{entity.Name}': LoweringContext.ActionResultType is required; "
+                + "every lowered body returns a DomainResult, a void body has no failure channel.");
         _entity = entity;
         _context = (context.Names is null ? context with { Names = new LocalNames() } : context)
             with { SourceEntityName = entity.Name };
@@ -170,10 +176,10 @@ public sealed partial class EffectLoweringPass : EffectDispatch<Node?> {
 
     // Fail closed until L-13 lowers link/unlink: Default() is null, and a null here would be dropped silently.
     protected override Node? Link(LinkEffect e) =>
-        throw new InvalidOperationException($"Cannot lower effect '{CallerPath}: {DescribeEffect(e)}': link is not lowerable yet (L-13).");
+        throw new InvalidOperationException($"Cannot lower effect '{CallerPath ?? _entity.Name}: {DescribeEffect(e)}': link is not lowerable yet (L-13).");
 
     protected override Node? Unlink(UnlinkEffect e) =>
-        throw new InvalidOperationException($"Cannot lower effect '{CallerPath}: {DescribeEffect(e)}': unlink is not lowerable yet (L-13).");
+        throw new InvalidOperationException($"Cannot lower effect '{CallerPath ?? _entity.Name}: {DescribeEffect(e)}': unlink is not lowerable yet (L-13).");
 
     /// <summary>
     /// The action body. Create-in is <c>this.Create{Nav}</c>. Constraint probes
@@ -221,46 +227,30 @@ public sealed partial class EffectLoweringPass : EffectDispatch<Node?> {
     };
 
     /// <summary>
-    /// Failure for assign guards: <c>return DomainResult.Failure(DomainFailure.&lt;Kind&gt;(…))</c> when the
-    /// caller has a result type; <c>throw ConstraintFailureException</c> in void
-    /// export contexts (ctor / stage entry) — same split as create-in fail-closed.
+    /// Failure for assign guards: <c>return DomainResult.Failure(DomainFailure.&lt;Kind&gt;(…))</c>. Every lowered
+    /// body returns a result, so the failure is always returned.
     /// </summary>
     private Node AssignConstraintFailure(FailureLowering.Spec spec) =>
-        _context.ActionResultType is null
-            ? FailureLowering.Throw(spec)
-            : FailureLowering.Return(CallerResultType, spec);
+        FailureLowering.Return(CallerResultType, spec);
 
     /// <summary>
-    /// Rewrap nested Failure as the caller action's <c>DomainResult</c> /
+    /// Rewrap nested Failure as the caller's <c>DomainResult</c> /
     /// <c>DomainResult&lt;T&gt;</c> — same shape as create-in. Returning the callee
     /// result object is CS0029 when the caller is a different DomainResult arity.
-    /// Runtime omits <see cref="LoweringContext.ActionResultType"/> and falls back
-    /// to untyped <c>DomainResult.Failure</c>, which <c>ExecuteEffect</c> already
-    /// fail-fasts on.
     /// </summary>
-    private Node CallerResultType =>
-        _context.ActionResultType ?? new TypeReference("DomainResult");
+    private Node CallerResultType => _context.ActionResultType!;
 
     /// <summary>
-    /// The path a callee's failure gains at this caller: <c>Entity.Action</c>, or the entity alone
-    /// for a body with no action (constructor, OnEntry, handler).
+    /// The path a callee's failure gains at this caller: <c>Entity.Action</c> for an action, and null for a body
+    /// that is not an action (a subscription handler, the initial entry), which is fan-out, not a caller of its own:
+    /// it passes the failure through, like the notify dispatcher.
     /// </summary>
-    private string CallerPath =>
-        _context.ActionName is { } action ? $"{_entity.Name}.{action}" : _entity.Name;
+    private string? CallerPath =>
+        _context.ActionName is { } action ? $"{_entity.Name}.{action}" : null;
 
-    /// <summary>
-    /// A callee's failure rewrapped as the caller's, prefixed with <see cref="CallerPath"/>. A subscription
-    /// handler is fan-out, not a caller of its own: it passes the failure through, like the notify dispatcher.
-    /// </summary>
+    /// <summary>A callee's failure rewrapped as the caller's, prefixed with <see cref="CallerPath"/> when there is one.</summary>
     private Return ReturnCallerFailureFrom(Node resultVar) =>
-        FailureLowering.Propagate(CallerResultType, resultVar, _context.ReturnsDomainResult ? null : CallerPath);
-
-    /// <summary>
-    /// Whether this body has a result channel for a nested failure. Read only at the notify site: the assign
-    /// and create guards key on <see cref="LoweringContext.ActionResultType"/> and a handler still throws there (L-04).
-    /// </summary>
-    private bool CanReturnFailure =>
-        _context.ActionResultType is not null || _context.ReturnsDomainResult;
+        FailureLowering.Propagate(CallerResultType, resultVar, CallerPath);
 
     /// <summary>
     /// The entity's own guard method (<c>EnsureUnique</c>) is not a callee: its failure already

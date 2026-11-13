@@ -50,7 +50,57 @@ public class OverloadSweepTests {
          "  errors: 2\n",
          "C# reader corpus, not the DSL: PopCount(1) bound PopCount(uint) through the removed Int32 -> UInt32 widening; "
          + "C# 10.2.11 allows it for a constant, Poly does not model constant-expression conversions, so no overload is left"),
+        ("poly file demo/Poly.RestApi/library.poly",
+         "  Poly.Runtime.DomainResult.get_IsSuccess()\n  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_ErrorMessage()\n  Poly.DomainModeling.Runtime.ConstraintFailureException.ctor(System.String)\n",
+         "  Poly.Runtime.DomainResult.get_IsSuccess()\n",
+         L04aWhy),
+        ("poly file docs/missions/evolve-2026-10-13/saas.poly",
+         "  Poly.Runtime.DomainResult.Success()\n",
+         "  Poly.Runtime.DomainResult.Success()\n  Poly.Runtime.DomainResult.get_Error()\n",
+         L04aWhy),
+        ("poly file docs/missions/evolve-2026-10-14/jobqueue.poly",
+         "  System.String.IsNullOrEmpty(System.String)\n  Poly.DomainModeling.Runtime.ConstraintFailureException.ctor(System.String)\n",
+         "  System.String.IsNullOrEmpty(System.String)\n",
+         L04aWhy),
+        ("poly file docs/missions/evolve-2026-10-14/notifications.poly",
+         "  System.String.IsNullOrEmpty(System.String)\n  Poly.DomainModeling.Runtime.ConstraintFailureException.ctor(System.String)\n",
+         "  System.String.IsNullOrEmpty(System.String)\n",
+         L04aWhy),
+        ("poly file docs/probes/dogfood/entry-transition-in-first-stage.poly",
+         "  errors: 0\n  System.String.IsNullOrEmpty(System.String)\n  Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)\n  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)\n",
+         "  errors: 0\n  Poly.Runtime.DomainResult.Success()\n  System.String.IsNullOrEmpty(System.String)\n  Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)\n  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)\n  Poly.Runtime.DomainResult.get_IsSuccess()\n  Poly.Runtime.DomainResult.get_Error()\n",
+         L04aWhy),
+        ("poly file docs/probes/fleet-eval/12-mcp/mcp-library.poly",
+         "  Poly.Runtime.DomainFailure.At(System.String)\n  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_ErrorMessage()\n  Poly.DomainModeling.Runtime.ConstraintFailureException.ctor(System.String)\n  Poly.Runtime.DomainResult.Success()\n  System.String.IsNullOrEmpty(System.String)\n  Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)\n  System.Collections.IList.Clear()\n  Poly.Runtime.DomainFailure.Range(System.String,System.String,System.String)\n  Poly.Runtime.DomainFailure.Unique(System.String,System.String,System.String)\n  Poly.Runtime.IStoragePort.Record(System.String,System.String,System.String)\n  System.Object.Equals(System.Object,System.Object)\n  Poly.Runtime.DomainFailure.Constraint(System.String,System.String,System.String)\n  Poly.Runtime.DomainResult.Failure(Poly.Runtime.DomainFailure)\n",
+         "  Poly.Runtime.DomainFailure.At(System.String)\n  Poly.Runtime.DomainResult.Failure(Poly.Runtime.DomainFailure)\n  Poly.Runtime.DomainResult.Success()\n  System.String.IsNullOrEmpty(System.String)\n  Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)\n  System.Collections.IList.Clear()\n  Poly.Runtime.DomainFailure.Range(System.String,System.String,System.String)\n  Poly.Runtime.DomainFailure.Unique(System.String,System.String,System.String)\n  Poly.Runtime.IStoragePort.Record(System.String,System.String,System.String)\n  System.Object.Equals(System.Object,System.Object)\n  Poly.Runtime.DomainFailure.Constraint(System.String,System.String,System.String)\n",
+         L04aWhy),
+        ("poly file docs/probes/grep-2026-10-17/grep.poly",
+         "  System.Object.ReferenceEquals(System.Object,System.Object)\n  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].get_ErrorMessage()\n  Poly.DomainModeling.Runtime.ConstraintFailureException.ctor(System.String)\n",
+         "  System.Object.ReferenceEquals(System.Object,System.Object)\n",
+         L04aWhy),
+        ("poly file docs/probes/scratch-2026-10-14/payroll.poly",
+         "  System.DateOnly.AddDays(System.Int32)\n  Poly.DomainModeling.Runtime.ConstraintFailureException.ctor(System.String)\n",
+         "  System.DateOnly.AddDays(System.Int32)\n",
+         L04aWhy),
+        ("poly file docs/probes/scratch-2026-10-14/roastery.poly",
+         "  Poly.Runtime.DomainResult.Success()\n  Poly.DomainModeling.Runtime.ConstraintFailureException.ctor(System.String)\n  System.String.IsNullOrEmpty(System.String)\n  Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)\n  System.String.get_Length()\n  Poly.Runtime.DomainFailure.Length(System.String,System.String,System.String)\n  System.String.Concat(System.Object,System.Object,System.Object)\n  Poly.Runtime.DomainFailure.Enum(System.String,System.String,System.String)\n  Poly.Runtime.DomainFailure.Range(System.String,System.String,System.String)\n",
+         "  Poly.Runtime.DomainResult.Success()\n  Poly.Runtime.DomainFailure.Range(System.String,System.String,System.String)\n  System.String.IsNullOrEmpty(System.String)\n  Poly.Runtime.DomainFailure.Required(System.String,System.String,System.String)\n  System.String.get_Length()\n  Poly.Runtime.DomainFailure.Length(System.String,System.String,System.String)\n  System.String.Concat(System.Object,System.Object,System.Object)\n  Poly.Runtime.DomainFailure.Enum(System.String,System.String,System.String)\n",
+         L04aWhy),
+        ("poly guide domain Orders #0",
+         "  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)\n",
+         "  Poly.Runtime.DomainResult`1[[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]].Failure(Poly.Runtime.DomainFailure)\n  Poly.Runtime.DomainResult.get_Error()\n",
+         L04aWhy),
     ];
+
+    /// <summary>
+    /// L-04a: the initial stage's entry and every subscription handler RETURN a failure where they threw one. The
+    /// <c>ConstraintFailureException</c> constructor and <c>ErrorMessage</c> sites leave these units; <c>Failure</c>, <c>Error</c>,
+    /// <c>IsSuccess</c> and <c>Success</c> sites arrive (the entry now returns a result and Create propagates it), and a
+    /// first occurrence can move. Each affected unit's identity set changes by exactly those lines; no call site rebinds
+    /// to another overload of the same method.
+    /// </summary>
+    private const string L04aWhy = "L-04a: a failure that was thrown is returned (ConstraintFailureException.ctor and ErrorMessage out; "
+        + "DomainResult.Failure, Error, IsSuccess and Success in), no overload winner changes";
 
     /// <summary>
     /// Identities a slice adds at new call sites, where nothing rebinds: each method has exactly one overload, so the

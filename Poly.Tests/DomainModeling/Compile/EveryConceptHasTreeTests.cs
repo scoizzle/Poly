@@ -310,11 +310,14 @@ public sealed class EveryConceptHasTreeTests {
             .ToList();
         if (parameters.Count > 0)
             return parameters.Any(p => p.DefaultValue is not null);
-        // Entry-assigned defaults skip the ctor param; first-stage entry is inlined in the ctor.
-        foreach (var ctor in type.Constructors ?? []) {
-            if (ctor.Body is null)
+        // Entry-assigned defaults skip the ctor param; the first stage's entry runs in __EnterInitialStage (L-04a;
+        // it was inlined in the ctor).
+        var bodies = (type.Constructors ?? []).Select(c => c.Body)
+            .Concat((type.Methods ?? []).Where(m => m.Name == Poly.DomainModeling.Lowering.DomainToCSharpExporter.EnterInitialStageMethodName).Select(m => m.Body));
+        foreach (var body in bodies) {
+            if (body is null)
                 continue;
-            foreach (var node in FlattenSyntax(ctor.Body)) {
+            foreach (var node in FlattenSyntax(body)) {
                 if (node is Assignment { Destination: Member { MemberName: var name } }
                     && string.Equals(name, propName, StringComparison.Ordinal))
                     return true;

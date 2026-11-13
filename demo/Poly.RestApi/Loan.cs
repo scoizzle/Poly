@@ -30,7 +30,6 @@ internal class Loan : Poly.Runtime.IActionScoped
         this.Book = book;
         this.Borrower = borrower;
         this.CurrentStage = LoanStage.Active;
-        this.CheckedOutAt = DateTime.UtcNow;
     }
     public string? Status { get; private set; }
     public DateTime CheckedOutAt { get; private set; }
@@ -191,10 +190,21 @@ internal class Loan : Poly.Runtime.IActionScoped
         }
         return DomainResult.Success();
     }
+    private DomainResult __EnterInitialStage()
+    {
+        Poly.Runtime.ActionScope.Touch(this);
+        this.CheckedOutAt = DateTime.UtcNow;
+        return DomainResult.Success();
+    }
     internal static DomainResult<Loan> Create(Book? book = null, Patron? borrower = null, string? status = null, DateTime? dueDate = null, DateTime? returnedAt = null, long? timesRenewed = null)
     {
         var created = new Loan(book, borrower, status, dueDate, returnedAt, timesRenewed);
         Poly.Runtime.ActionScope.Create(created, "Loan");
+        var __entry = created.__EnterInitialStage();
+        if (!__entry.IsSuccess)
+        {
+            return DomainResult<Loan>.Failure(__entry.Error!);
+        }
         if (borrower != null)
         {
             borrower.AttachLoans(created);

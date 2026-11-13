@@ -30,7 +30,7 @@ public class CreateInProbeWithoutAnalysisTests {
         var pass = new EffectLoweringPass(parent, new LoweringContext(
             new Parameter("entity", new TypeReference(parent.Name)),
             analysis,
-            domain));
+            domain, ActionResultType: new NamedTypeReference("DomainResult")));
         pass.LowerActionBody(parent.Actions.Single(a => a.Name == "AddKid").Effects);
     }
 

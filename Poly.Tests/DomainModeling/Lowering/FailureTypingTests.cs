@@ -233,20 +233,23 @@ public class FailureTypingTests {
         await Assert.That(outcomes[1].Message).IsEqualTo("'Name' must be at least 3 characters.");
     }
 
+    // L-04a: every body an effect lowers into returns a DomainResult, so an assign guard is always a returned typed
+    // failure; a pass built without a result type is refused (LoweringContextBoundaryTests). It used to differ by site:
+    // an action returned and a void constructor / stage entry threw.
     [Test]
-    public async Task AssignConstraintFailure_TypedResultSite_NeverRoutesThroughThrow() {
+    public async Task AssignConstraintFailure_EveryBody_ReturnsATypedFailureAndNeverThrows() {
         var entity = new Entity("Widget",
             Properties: [new Property("Score", new DomainTypeReference("Number"), [new RangeConstraint(1.0, 10.0)])],
             Actions: [], Policies: [], Stages: []);
         var assign = new AssignEffect(DomainExpression.Property("Score"), DomainExpression.Property("n"));
 
-        var typed = new EffectLoweringPass(entity, LoweringFixtures.Context(new ThisReference(), entity)
-            with { ActionResultType = new NamedTypeReference("DomainResult") }).TryLowerVmNode(assign);
-        var voidBody = new EffectLoweringPass(entity, LoweringFixtures.Context(new ThisReference(), entity))
-            .TryLowerVmNode(assign);
+        foreach (var actionName in new string?[] { "Rate", null }) {
+            var lowered = new EffectLoweringPass(entity, LoweringFixtures.Context(new ThisReference(), entity)
+                with { ActionName = actionName }).TryLowerVmNode(assign);
 
-        await Assert.That(Walk(typed!).Any(n => n is ThrowStatement)).IsFalse();
-        await Assert.That(Walk(voidBody!).Any(n => n is ThrowStatement)).IsTrue();
+            await Assert.That(Walk(lowered!).Any(n => n is ThrowStatement)).IsFalse();
+            await Assert.That(Walk(lowered!).OfType<Return>().Any(r => r.Value is Invoke { Delegate: Member { MemberName: "Failure" } })).IsTrue();
+        }
     }
 
     private static IEnumerable<Node> Walk(Node root) {
@@ -638,6 +641,7 @@ public class FailureTypingTests {
 
     [Test]
     public async Task Corpus_EmitsNoStringOnlyFailureAndNoFlattenedPropagation() {
+        var propagations = 0;
         foreach (var domain in GoldenDomains.Compilable) {
             var (session, root, analysis) = Poly.Tests.DomainModeling.Compile.EmitGoldenTests.AnalyzeSampleFile(domain.Path);
             foreach (var (fileName, source) in session.Emit(root, analysis)) {
@@ -647,12 +651,18 @@ public class FailureTypingTests {
                         await Assert.That(text.Contains("Poly.Runtime.DomainFailure.", StringComparison.Ordinal)
                             || text.Contains(".Error!", StringComparison.Ordinal))
                             .IsTrue().Because($"{domain.Name}/{fileName}: {text}");
-                    if (text.Contains("ErrorMessage ?? \"\"", StringComparison.Ordinal))
-                        await Assert.That(text.StartsWith("throw new ConstraintFailureException(", StringComparison.Ordinal))
-                            .IsTrue().Because($"{domain.Name}/{fileName}: {text}");
+                    // L-04a: nothing is thrown or flattened to text any more.
+                    await Assert.That(text.Contains("ErrorMessage ?? \"\"", StringComparison.Ordinal)).IsFalse()
+                        .Because($"{domain.Name}/{fileName}: {text}");
+                    await Assert.That(text.Contains("ConstraintFailureException", StringComparison.Ordinal)).IsFalse()
+                        .Because($"{domain.Name}/{fileName}: {text}");
+                    if (text.Contains(".Error!", StringComparison.Ordinal))
+                        propagations++;
                 }
             }
         }
+        // The two absences above would also hold for an empty corpus.
+        await Assert.That(propagations).IsGreaterThan(0);
     }
 
     [Test]
@@ -750,9 +760,9 @@ public class FailureTypingTests {
         Kid: entity { Qty: Number range(1, 5) }
         """;
 
-    /// <summary>A void body (stage entry) throws the callee's text through ThrowFrom; the VM and the printed assembly agree.</summary>
+    /// <summary>The initial entry returns the callee's failure; the VM and the printed assembly agree on the text.</summary>
     [Test]
-    public async Task VoidEntryCreate_WhenTheCalleeFails_ThrowsTheCalleeTextOnBothSides() {
+    public async Task InitialEntryCreate_WhenTheCalleeFails_ReturnsTheCalleeFailureOnBothSides() {
         var (vm, printed) = ParityScenario.FromDsl(EntryCreateDsl, "FailureTypingThrowFrom")
             .Run(side => side.Create("Parent"));
 
@@ -760,14 +770,22 @@ public class FailureTypingTests {
         await Assert.That(vm[0].Message).IsEqualTo("'Qty' must be >= 1.");
         await Assert.That(printed[0].Success).IsFalse();
         await Assert.That(printed[0].Message).IsEqualTo("'Qty' must be >= 1.");
+        foreach (var outcome in new[] { vm[0], printed[0] }) {
+            await Assert.That(outcome.ExceptionType).IsNull();
+            await Assert.That(outcome.FailureKind).IsEqualTo("Range");
+            await Assert.That(outcome.FailurePath).IsEqualTo("Kid.Qty");
+        }
     }
 
     [Test]
-    public async Task VoidEntryCreate_PrintsThrowFromNotATypedFailure() {
+    public async Task InitialEntryCreate_PrintsAPassThroughOfTheTypedFailure() {
         var cs = Print(EntryCreateDsl);
 
-        await Assert.That(cs).Contains("throw new ConstraintFailureException(");
-        await Assert.That(cs).Contains("ErrorMessage ?? \"\"");
+        await Assert.That(cs).DoesNotContain("ConstraintFailureException");
+        await Assert.That(cs).DoesNotContain("ErrorMessage ?? \"\"");
+        var entry = ExportedCSharp.ExtractMethod(cs, "private DomainResult __EnterInitialStage(");
+        await Assert.That(entry).Contains("DomainResult.Failure(create0.Error!)");
+        await Assert.That(entry).DoesNotContain(".At(");
     }
 
     /// <summary>Literal per-kind rows for every propagation S3 touched, through the printed assembly and both hosts.</summary>

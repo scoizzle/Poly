@@ -51,7 +51,7 @@ public class WhenAllSimulatePrintAgreeTests {
         await Assert.That(ContainsNode<Parameter>(handler.Body!)).IsTrue();
 
         var printed = new CSharpGenerator().Generate(handler.Body!);
-        await Assert.That(printed.Contains("linkedMatched", StringComparison.Ordinal)).IsTrue();
+        await Assert.That(printed.Contains("__linkedMatched", StringComparison.Ordinal)).IsTrue();
         await Assert.That(printed.Contains("previousStage", StringComparison.Ordinal)).IsTrue();
         var files = session.Emit(domain, analysis);
         var boardCs = files.First(f => f.FileName == "Board.cs").Source;

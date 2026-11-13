@@ -85,8 +85,8 @@ public static class DomainParityExclusions {
         new(611, "L-11", "Both sides throw NullReferenceException on the unset optional unique Text, so the "
             + "module has no divergence to ratchet."),
         new(617, "L-05", "The sides agree and both roll the transition back since L-03c (AtomicityParityTests "
-            + "proves the absolute state); the handler's range failure still throws, which L-04 and L-05 turn into a "
-            + "returned failure."),
+            + "proves the absolute state); the handler returns its range failure since L-04a (it threw before), "
+            + "and L-05 owns the single Transition method."),
         new(621, "L-08", "The printed Create fills an omitted required parameter with its default, so a "
             + "module-level omission cannot be represented in this harness; Date/DateTime/Duration need "
             + "`uses temporal`, which this harness cannot parse on the simulate side."),

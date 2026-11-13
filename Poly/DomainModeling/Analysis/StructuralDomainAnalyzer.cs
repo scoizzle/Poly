@@ -44,6 +44,20 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
         // Type names remain domain-global (entities, enums, primitives).
         ReportDuplicateNames(context, domain.Types.Cast<DomainMember>(), "domain", domain.Name);
 
+        // A parameter named exactly like a generated stage enum type shadows it where the body reads the enum. The
+        // domain is in hand here, before the type lookup exists, so this is the one place the rule runs for parameters.
+        foreach (var entity in domain.Types.OfType<Entity>())
+            DomainAnalysis.ForEachAction(entity, action => {
+                foreach (var parameter in action.Parameters) {
+                    if (ReservedNames.TryReservedAsActionParameter(parameter.Name, action, domain, out var row)
+                        && ReservedNames.IsStageEnumRow(row))
+                        context.ReportError(
+                            parameter,
+                            $"Parameter '{parameter.Name}' of action '{action.Name}': {row.Reason}; rename it.",
+                            DomainModelDiagnosticCodes.ReservedMemberName);
+                }
+            });
+
         // Relationship names must not collide with type names (DSL/export ambiguity).
         var typeNames = domain.Types.Cast<DomainMember>()
             .GroupBy(static t => t.Name, StringComparer.Ordinal)
@@ -680,16 +694,16 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
                 ReservedNames.IsActionScopeName(entry.MemberIdentity)
                     ? $"Member '{entry.MemberIdentity}' on entity '{entity.Name}': {row.Reason}; rename it."
                     : row.Kind switch {
-                    ReservedKind.Language =>
-                        $"Member '{entry.MemberIdentity}' on entity '{entity.Name}' would take the enclosing " +
-                        "type's name (CS0542); rename it.",
-                    ReservedKind.GeneratedReference =>
-                        $"Member '{entry.MemberIdentity}' on entity '{entity.Name}' would shadow the generated " +
-                        $"C# type '{row.Name}' that Emit calls from a generated member body; rename it.",
-                    _ =>
-                        $"Member '{entry.MemberIdentity}' on entity '{entity.Name}' collides with the C# member " +
-                        $"'{row.Name}' that Emit generates; rename it.",
-                },
+                        ReservedKind.Language =>
+                            $"Member '{entry.MemberIdentity}' on entity '{entity.Name}' would take the enclosing " +
+                            "type's name (CS0542); rename it.",
+                        ReservedKind.GeneratedReference =>
+                            $"Member '{entry.MemberIdentity}' on entity '{entity.Name}' would shadow the generated " +
+                            $"C# type '{row.Name}' that Emit calls from a generated member body; rename it.",
+                        _ =>
+                            $"Member '{entry.MemberIdentity}' on entity '{entity.Name}' collides with the C# member " +
+                            $"'{row.Name}' that Emit generates; rename it.",
+                    },
                 DomainModelDiagnosticCodes.ReservedMemberName);
         }
     }
@@ -789,7 +803,7 @@ internal sealed class StructuralDomainAnalyzer : INodeAnalyzer {
     private static void AnalyzeAction(AnalysisContext context, Action action) {
         ReportDuplicateNames(context, action.Parameters, "action", action.Name);
         foreach (var parameter in action.Parameters) {
-            if (!ReservedNames.TryReservedAsActionParameter(parameter.Name, action, out var row))
+            if (!ReservedNames.TryReservedAsActionParameter(parameter.Name, action, null, out var row))
                 continue;
             context.ReportError(
                 parameter,

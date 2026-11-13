@@ -288,7 +288,7 @@ public class StageEntryFactsTests {
         await Assert.That(skipped.Count).IsLessThanOrEqualTo(20);
     }
 
-    // N3 (flipped by S-04b, Q12 option (b)): the constructor inlines the initial entry, so an
+    // N3 (flipped by S-04b, Q12 option (b)): Create inlines the initial entry (L-04a: in __EnterInitialStage, it was the constructor), so an
     // entry transition runs the departed stage's exit effects at create time, and the fact
     // follows Lower's source cursor to include them.
     [Test]

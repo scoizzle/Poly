@@ -64,10 +64,7 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
         string? stageEnumTypeName = null;
         IReadOnlyDictionary<string, Stage>? stageByName = null;
         if (hasStages) {
-            stageEnumTypeName = domain.Types
-                .OfType<EnumType>()
-                .FirstOrDefault(e => e.Name == $"{entity.Name}Stage")
-                ?.Name ?? $"{entity.Name}Stage";
+            stageEnumTypeName = StageEnumTypeNameFor(entity, domain);
             stageByName = entity.Stages.ToDictionary(s => s.Name, StringComparer.Ordinal);
         }
 
@@ -222,6 +219,16 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
         }
         return true;
     }
+
+    /// <summary>
+    /// The generated stage enum's type name for <paramref name="entity"/> (<c>{Entity}Stage</c>, or a declared enum of
+    /// that name), or null when the entity has no generated enum (no stages, or only an implicit stage). The one function
+    /// the emitter and the reserved-name rule both use.
+    /// </summary>
+    internal static string? StageEnumTypeNameFor(Entity entity, Domain domain) =>
+        entity.Stages.Count > 0 && !IsImplicitStage(entity, domain)
+            ? domain.Types.OfType<EnumType>().FirstOrDefault(e => e.Name == $"{entity.Name}Stage")?.Name ?? $"{entity.Name}Stage"
+            : null;
 
     /// <summary>
     /// True when the entity has exactly one stage that is not observable: no

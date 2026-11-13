@@ -79,6 +79,12 @@ public class StageEntryFactsParityTests {
             Collect(statement);
         }
 
+        // L-04a: the initial entry runs in __EnterInitialStage, which Create calls; it is not in the constructor.
+        foreach (var entry in methods[Poly.DomainModeling.Lowering.DomainToCSharpExporter.EnterInitialStageMethodName]) {
+            visited.Add(entry.Name);
+            Collect(entry.Body);
+        }
+
         assigned.Remove("CurrentStage");
         assigned.IntersectWith(propertyNames);
         return assigned;

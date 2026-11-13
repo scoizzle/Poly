@@ -12,9 +12,9 @@ using Poly.Interpretation.CSharp;
 namespace Poly.Tests.DomainModeling.Compile;
 
 /// <summary>
-/// C1b: void constraint / create-fail-closed trees throw
-/// <see cref="ConstraintFailureException"/>; host fail-loud stays
-/// <see cref="InvalidOperationException"/>.
+/// C1b: a constraint or create failure in a lowered body is a RETURNED <c>DomainFailure</c> (L-04a: the initial entry and
+/// every handler return a <c>DomainResult</c>, so nothing lowered throws <see cref="ConstraintFailureException"/>); host
+/// fail-loud stays <see cref="InvalidOperationException"/>.
 /// </summary>
 public class C1bConstraintFailureTests {
     [Test]
@@ -24,7 +24,7 @@ public class C1bConstraintFailureTests {
     }
 
     [Test]
-    public async Task VoidOnEntry_RangeAssign_BodyIsConstraintFailureThrow_NotDomainResultReturn() {
+    public async Task InitialEntry_RangeAssign_BodyReturnsADomainFailure_NoThrow() {
         var (domain, analysis, session) = Evolve("""
             domain Lab
             Widget: entity {
@@ -38,14 +38,20 @@ public class C1bConstraintFailureTests {
         var module = session.Lower(domain, analysis);
         var widget = module.First(t => t.Name == "Widget");
         var ctor = widget.Constructors!.First(c => c.Parameters is { Count: > 0 });
-        await Assert.That(HasConstraintFailureThrow(ctor.Body!)).IsTrue();
-        var printed = new CSharpGenerator().Generate(ctor.Body!);
-        await Assert.That(printed).Contains("throw new ConstraintFailureException");
-        await Assert.That(printed.Contains("throw new InvalidOperationException", StringComparison.Ordinal)).IsFalse();
+        var entry = widget.Methods!.Single(m => m.Name == DomainToCSharpExporter.EnterInitialStageMethodName);
+        // The constructor is assignments only; the entry method returns the typed failure.
+        await Assert.That(HasConstraintFailureThrow(ctor.Body!)).IsFalse();
+        await Assert.That(HasDomainResultFailureReturn(ctor.Body!)).IsFalse();
+        await Assert.That(entry.ReturnType is NamedTypeReference { TypeName: "DomainResult" }).IsTrue();
+        await Assert.That(HasConstraintFailureThrow(entry.Body!)).IsFalse();
+        await Assert.That(HasDomainResultFailureReturn(entry.Body!)).IsTrue();
+        var printed = new CSharpGenerator().Generate(entry.Body!);
+        await Assert.That(printed).Contains("DomainFailure.Range(");
+        await Assert.That(printed.Contains("throw new", StringComparison.Ordinal)).IsFalse();
     }
 
     [Test]
-    public async Task VoidCreateJob_FailClosed_BodyIsConstraintFailureThrow() {
+    public async Task HandlerCreate_WhenTheChildFails_ReturnsItsFailure_NoThrow() {
         var (domain, analysis, session) = Evolve("""
             domain Lib
             Loan: entity {
@@ -65,16 +71,17 @@ public class C1bConstraintFailureTests {
         var module = session.Lower(domain, analysis);
         var handler = module.First(t => t.Name == "Patron").Methods!
             .First(m => m.Name.StartsWith("WhenEach", StringComparison.Ordinal));
-        await Assert.That(HasConstraintFailureThrow(handler.Body!)).IsTrue();
+        await Assert.That(HasConstraintFailureThrow(handler.Body!)).IsFalse();
+        await Assert.That(HasDomainResultFailureReturn(handler.Body!)).IsTrue();
         await Assert.That(HasCreatedLocal(handler.Body!)).IsFalse();
         var printed = new CSharpGenerator().Generate(handler.Body!);
-        await Assert.That(printed).Contains("throw new ConstraintFailureException");
-        await Assert.That(printed.Contains("throw new InvalidOperationException", StringComparison.Ordinal)).IsFalse();
+        await Assert.That(printed).Contains(".Error!");
+        await Assert.That(printed.Contains("throw new", StringComparison.Ordinal)).IsFalse();
         await Assert.That(printed.Contains("created", StringComparison.Ordinal)).IsFalse();
     }
 
     [Test]
-    public async Task VoidCreateIn_FailClosed_ThrowsAndDropsCreatedLocal() {
+    public async Task HandlerCreateIn_WhenTheChildFails_ReturnsItsFailureAndDropsCreatedLocal() {
         var (domain, analysis, session) = Evolve("""
             domain Lib
             Loan: entity {
@@ -99,9 +106,9 @@ public class C1bConstraintFailureTests {
         var handler = module.First(t => t.Name == "Patron").Methods!
             .First(m => m.Name.StartsWith("WhenEach", StringComparison.Ordinal));
         await Assert.That(handler.ReturnType is NamedTypeReference { TypeName: "DomainResult" }).IsTrue();
-        await Assert.That(HasConstraintFailureThrow(handler.Body!)).IsTrue();
+        await Assert.That(HasConstraintFailureThrow(handler.Body!)).IsFalse();
         await Assert.That(HasCreatedLocal(handler.Body!)).IsFalse();
-        await Assert.That(HasDomainResultFailureReturn(handler.Body!)).IsFalse();
+        await Assert.That(HasDomainResultFailureReturn(handler.Body!)).IsTrue();
     }
 
     [Test]

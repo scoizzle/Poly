@@ -28,7 +28,7 @@ public class StoreBindCreateTests {
         var pass = new EffectLoweringPass(lot, new LoweringContext(
             new Parameter("entity", new TypeReference(lot.Name)),
             Analysis: analysis,
-            Domain: domain));
+            Domain: domain, ActionResultType: new NamedTypeReference("DomainResult")));
         var lowered = pass.LowerActionBody(action.Effects);
         await Assert.That(lowered).IsNotNull();
         var names = Flatten(lowered!).OfType<Invoke>()
@@ -55,7 +55,7 @@ public class StoreBindCreateTests {
         var pass = new EffectLoweringPass(order, new LoweringContext(
             new Parameter("entity", new TypeReference(order.Name)),
             Analysis: analysis,
-            Domain: domain));
+            Domain: domain, ActionResultType: new NamedTypeReference("DomainResult")));
         var lowered = pass.LowerActionBody(action.Effects);
         var names = Flatten(lowered!).OfType<Invoke>()
             .Select(i => (i.Delegate as Member)?.MemberName)
@@ -82,7 +82,7 @@ public class StoreBindCreateTests {
             new ThisReference(),
             Analysis: analysis,
             Domain: domain,
-            ActionParameterNames: ["plate"]));
+            ActionParameterNames: ["plate"], ActionResultType: new NamedTypeReference("DomainResult")));
         var lowered = pass.LowerActionBody(action.Effects);
         var cs = new CSharpGenerator().Generate(lowered!);
         await Assert.That(cs).Contains("CreatePermits(");
@@ -108,12 +108,12 @@ public class StoreBindCreateTests {
             new Parameter("entity", new TypeReference(lot.Name)),
             Analysis: analysis,
             Domain: domain,
-            ActionParameterNames: ["plate"]));
+            ActionParameterNames: ["plate"], ActionResultType: new NamedTypeReference("DomainResult")));
         var emit = new EffectLoweringPass(lot, new LoweringContext(
             new ThisReference(),
             Analysis: analysis,
             Domain: domain,
-            ActionParameterNames: ["plate"]));
+            ActionParameterNames: ["plate"], ActionResultType: new NamedTypeReference("DomainResult")));
         static Invoke Name(Node tree) => Flatten(tree).OfType<Invoke>()
             .First(i => i.Delegate is Member { MemberName: "CreatePermits" });
         var runtimeInvoke = Name(runtime.LowerActionBody(action.Effects)!);
@@ -293,7 +293,7 @@ public class StoreBindCreateTests {
         var pass = new EffectLoweringPass(lot, new LoweringContext(
             new Parameter("entity", new TypeReference(lot.Name)),
             Analysis: analysis,
-            Domain: domain));
+            Domain: domain, ActionResultType: new NamedTypeReference("DomainResult")));
         var lowered = pass.LowerActionBody(action.Effects);
         await Assert.That(Flatten(lowered!).Any(n => n is IfStatement)).IsTrue();
         await Assert.That(Flatten(lowered!).OfType<Invoke>().Any(i =>
@@ -317,7 +317,7 @@ public class StoreBindCreateTests {
             Analysis: analysis,
             Domain: domain,
             NavigationNameResolver: EffectLoweringPass.BuildNavigationNameResolver(customer, domain, analysis),
-            IsCollectionNavigation: EffectLoweringPass.BuildIsCollectionNavigation(customer, domain, analysis)));
+            IsCollectionNavigation: EffectLoweringPass.BuildIsCollectionNavigation(customer, domain, analysis), ActionResultType: new NamedTypeReference("DomainResult")));
         var lowered = pass.Lower(policy.Expression, new ThisReference());
         await Assert.That(lowered).IsTypeOf<NotEqual>();
         var neq = (NotEqual)lowered;
@@ -343,7 +343,7 @@ public class StoreBindCreateTests {
             new ThisReference(),
             Analysis: analysis,
             Domain: domain,
-            NavigationNameResolver: EffectLoweringPass.BuildNavigationNameResolver(customer, domain, analysis)));
+            NavigationNameResolver: EffectLoweringPass.BuildNavigationNameResolver(customer, domain, analysis), ActionResultType: new NamedTypeReference("DomainResult")));
         var lowered = pass.Lower(policy.Expression, new ThisReference());
         await Assert.That(Flatten(lowered).OfType<NullForgiving>().Any()).IsTrue();
         await Assert.That(Flatten(lowered).OfType<Member>().Any(m => m.MemberName == "Advisor")).IsTrue();
@@ -371,7 +371,7 @@ public class StoreBindCreateTests {
             new Parameter("entity", new TypeReference(patron.Name)),
             Analysis: analysis,
             Domain: domain,
-            ActionParameterNames: ["book"]));
+            ActionParameterNames: ["book"], ActionResultType: new NamedTypeReference("DomainResult")));
         var lowered = pass.LowerActionBody(action.Effects);
         var createIn = Flatten(lowered!).OfType<Invoke>()
             .First(i => i.Delegate is Member { MemberName: "CreateLoans" });
@@ -396,7 +396,7 @@ public class StoreBindCreateTests {
             new Parameter("entity", new TypeReference(lot.Name)),
             Analysis: analysis,
             Domain: domain,
-            ActionParameterNames: ["plate"]));
+            ActionParameterNames: ["plate"], ActionResultType: new NamedTypeReference("DomainResult")));
         var lowered = pass.LowerActionBody(action.Effects);
         var createIn = Flatten(lowered!).OfType<Invoke>()
             .First(i => i.Delegate is Member { MemberName: "CreatePermits" });

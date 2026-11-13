@@ -1,3 +1,4 @@
+using Poly.Ast.Nodes;
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Compile;
@@ -17,10 +18,13 @@ static class LoweringFixtures {
         return (domain, DomainModelAnalyzer.Analyze(domain));
     }
 
-    /// <summary>A context over the domain of <paramref name="entities"/>.</summary>
+    /// <summary>
+    /// A context over the domain of <paramref name="entities"/>. It carries a <c>DomainResult</c> result type, as every
+    /// body an effect pass lowers into does (L-04a): the pass refuses a context without one.
+    /// </summary>
     public static LoweringContext Context(Node subject, params Entity[] entities) {
         var (domain, analysis) = Analyze(entities);
-        return new LoweringContext(subject, analysis, domain);
+        return new LoweringContext(subject, analysis, domain, ActionResultType: new NamedTypeReference("DomainResult"));
     }
 
     /// <summary>
@@ -38,7 +42,7 @@ static class LoweringFixtures {
     public static LoweringContext MinimalContext(Node subject, DomainSession session) {
         var domain = ValidDomain.Create("Fixture", [Placeholder()]);
         var analysis = session.Analyze(domain);
-        return new LoweringContext(subject, analysis, domain);
+        return new LoweringContext(subject, analysis, domain, ActionResultType: new NamedTypeReference("DomainResult"));
     }
 
     static Entity Placeholder() => new("Placeholder", Properties: [], Actions: [], Policies: [], Stages: []);

@@ -43,18 +43,4 @@ internal static class FailureLowering {
             error = new Invoke(new Member(error, "At"), new Constant(callerPath));
         return new(new Invoke(new Member(resultType, "Failure"), error));
     }
-
-    /// <summary>
-    /// <c>throw new ConstraintFailureException(&lt;message&gt;)</c>, for void export bodies only
-    /// (constructor, OnEntry, handler). The exception carries text, so the kind is dropped
-    /// here; one call per site keeps the throw's removal a one-line diff.
-    /// </summary>
-    internal static Node Throw(Spec spec) => ThrowMessage(spec.Message);
-
-    /// <summary><c>throw new ConstraintFailureException(child.ErrorMessage ?? "")</c>: a callee's failure in a void body.</summary>
-    internal static Node ThrowFrom(Node resultVar) =>
-        ThrowMessage(new Coalesce(new Member(resultVar, "ErrorMessage"), new Constant("")));
-
-    private static ThrowStatement ThrowMessage(Node message) =>
-        new(new New(new NamedTypeReference("ConstraintFailureException"), message));
 }

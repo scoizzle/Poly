@@ -3,7 +3,6 @@
 #nullable enable
 
 using System.Collections.Generic;
-using Poly.DomainModeling.Runtime;
 using Poly.Runtime;
 
 namespace Library;
@@ -19,7 +18,6 @@ internal class Patron : Poly.Runtime.IActionScoped
         this.Status = status;
         this._loans = new List<Loan>(loans ?? new List<Loan>());
         this._fines = new List<Fine>(fines ?? new List<Fine>());
-        this.InitializeSubscriptions();
     }
     public string Name { get; private set; } = default!;
     public string Status { get; private set; } = default!;
@@ -108,7 +106,7 @@ internal class Patron : Poly.Runtime.IActionScoped
         var create0 = this.CreateFines("Overdue", loan.Amount);
         if (!create0.IsSuccess)
         {
-            throw new ConstraintFailureException(create0.ErrorMessage ?? "");
+            return DomainResult.Failure(create0.Error!);
         }
         return DomainResult.Success();
     }
@@ -120,6 +118,7 @@ internal class Patron : Poly.Runtime.IActionScoped
         }
         var created = new Patron(name, loans, fines, status);
         Poly.Runtime.ActionScope.Create(created, "Patron");
+        created.InitializeSubscriptions();
         return DomainResult<Patron>.Success(created);
     }
     private void InitializeSubscriptions()

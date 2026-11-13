@@ -30,7 +30,6 @@ internal class Section : Poly.Runtime.IActionScoped
         this._enrollments = new List<Enrollment>(enrollments ?? new List<Enrollment>());
         this._waitlist = new List<WaitOffer>(waitlist ?? new List<WaitOffer>());
         this.CurrentStage = SectionStage.Open;
-        this.InitializeSubscriptions();
     }
     public long Cap { get; private set; }
     public long SeatsTaken { get; private set; }
@@ -242,15 +241,15 @@ internal class Section : Poly.Runtime.IActionScoped
     }
     internal DomainResult WhenAnyWaitOfferOffered()
     {
-        var linkedMatched = false;
-        foreach (var linkedTarget in this.Waitlist)
+        var __linkedMatched = false;
+        foreach (var __linkedTarget in this.Waitlist)
         {
-            if (linkedTarget.CurrentStage == WaitOfferStage.Offered)
+            if (__linkedTarget.CurrentStage == WaitOfferStage.Offered)
             {
-                linkedMatched = true;
+                __linkedMatched = true;
             }
         }
-        if (!linkedMatched)
+        if (!__linkedMatched)
         {
             return DomainResult.Success();
         }
@@ -258,22 +257,22 @@ internal class Section : Poly.Runtime.IActionScoped
         this.OfferedSeats = this.OfferedSeats + 1L;
         return DomainResult.Success();
     }
-    internal DomainResult WhenAllWaitOfferCancelled(WaitOfferStage? previousStage)
+    internal DomainResult WhenAllWaitOfferCancelled(WaitOfferStage? __previousStage)
     {
-        var linkedMatched = false;
-        foreach (var linkedTarget in this.Waitlist)
+        var __linkedMatched = false;
+        foreach (var __linkedTarget in this.Waitlist)
         {
-            linkedMatched = true;
-            if (linkedTarget.CurrentStage != WaitOfferStage.Cancelled)
+            __linkedMatched = true;
+            if (__linkedTarget.CurrentStage != WaitOfferStage.Cancelled)
             {
                 return DomainResult.Success();
             }
         }
-        if (!linkedMatched)
+        if (!__linkedMatched)
         {
             return DomainResult.Success();
         }
-        if (previousStage == WaitOfferStage.Cancelled)
+        if (__previousStage == WaitOfferStage.Cancelled)
         {
             return DomainResult.Success();
         }
@@ -301,6 +300,7 @@ internal class Section : Poly.Runtime.IActionScoped
         }
         var created = new Section(cap, offeringTerm, course, instructor, enrollments, waitlist, seatsTaken, offeredSeats, waitCleared);
         Poly.Runtime.ActionScope.Create(created, "Section");
+        created.InitializeSubscriptions();
         return DomainResult<Section>.Success(created);
     }
     private void InitializeSubscriptions()

@@ -457,7 +457,7 @@ public class QuantifierLoopTests {
         var lowered = new EffectLoweringPass(E("Bin"), new LoweringContext(
             new ThisReference(),
             Analysis: analysis,
-            Domain: domain)).LowerActionBody(E("Bin").Actions.First(a => a.Name == "Guarded").Effects);
+            Domain: domain, ActionResultType: new NamedTypeReference("DomainResult"))).LowerActionBody(E("Bin").Actions.First(a => a.Name == "Guarded").Effects);
         var ifs = Flatten(lowered!).OfType<IfStatement>().First(s =>
             Flatten(s.ThenBranch).OfType<ForEachLoop>().Any());
         await Assert.That(Flatten(ifs.Condition).OfType<ForEachLoop>().Any()).IsFalse();

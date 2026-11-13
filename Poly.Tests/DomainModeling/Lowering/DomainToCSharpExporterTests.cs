@@ -275,7 +275,7 @@ public class DomainToCSharpExporterTests {
             """);
         var entity = domain.Types.OfType<Entity>().Single(e => e.Name == "Person");
         var effect = new CreateEntityInstance(new DomainTypeReference("Person"));
-        var context = new LoweringContext(new ThisReference(), analysis, domain);
+        var context = new LoweringContext(new ThisReference(), analysis, domain, ActionResultType: new NamedTypeReference("DomainResult"));
         var pass = new EffectLoweringPass(entity, context);
 
         var lowered = pass.TryLowerVmNode(effect);
@@ -301,7 +301,7 @@ public class DomainToCSharpExporterTests {
             """);
         var entity = domain.Types.OfType<Entity>().Single(e => e.Name == "Customer");
         var effect = new CreateEntityInRelationshipEffect("orders", []);
-        var context = new LoweringContext(new ThisReference(), analysis, domain);
+        var context = new LoweringContext(new ThisReference(), analysis, domain, ActionResultType: new NamedTypeReference("DomainResult"));
         var pass = new EffectLoweringPass(entity, context);
 
         var lowered = pass.TryLowerVmNode(effect);
@@ -322,7 +322,7 @@ public class DomainToCSharpExporterTests {
         var entity = domain.Types.OfType<Entity>().Single(e => e.Name == "Person");
         analysis = analysis.WithoutMetadata<EntityStructureMetadata>(entity);
         var effect = new CreateEntityInstance(new DomainTypeReference("Person"));
-        var context = new LoweringContext(new ThisReference(), analysis, domain);
+        var context = new LoweringContext(new ThisReference(), analysis, domain, ActionResultType: new NamedTypeReference("DomainResult"));
         var pass = new EffectLoweringPass(entity, context);
 
         await Assert.That(() => pass.TryLowerVmNode(effect))
@@ -353,7 +353,7 @@ public class DomainToCSharpExporterTests {
 
         // Analysis-present path: entry effects must come from the EntityStructure bag.
         var effect = new StageTransitionEffect(new StageReference("Suspended"));
-        var context = new LoweringContext(new ThisReference(), analysis, domain, SourceStageName: "Active");
+        var context = new LoweringContext(new ThisReference(), analysis, domain, SourceStageName: "Active", ActionResultType: new NamedTypeReference("DomainResult"));
         var pass = new EffectLoweringPass(entity, context);
 
         var lowered = pass.TryLowerVmNode(effect);
@@ -1325,7 +1325,7 @@ public class DomainToCSharpExporterTests {
     public async Task Export_WhenAllGate_UsesTargetStageEnumName() {
         // Round-5 F8: the `when all` gate must reference the TARGET's stage enum (via the
         // target's EntityStructureMetadata), not the subscriber's convention — the gate
-        // checks linkedTarget.CurrentStage != {Target}Stage.Done.
+        // checks __linkedTarget.CurrentStage != {Target}Stage.Done.
         var (domain, analysis) = ParseAndAnalyze("""
             domain Test
             Task: entity {
@@ -1342,7 +1342,7 @@ public class DomainToCSharpExporterTests {
         var unit = new CompilationUnitNode([], null, types, null);
         var cs = new CSharpGenerator().Generate(unit);
 
-        await Assert.That(cs).Contains("linkedTarget.CurrentStage != TaskStage.Done");
+        await Assert.That(cs).Contains("__linkedTarget.CurrentStage != TaskStage.Done");
     }
 
     private static IEnumerable<Invoke> FindAllInvokes(Node node) {
@@ -1612,8 +1612,8 @@ public class DomainToCSharpExporterTests {
 
         var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var csharp = new CSharpGenerator().Generate(types);
-        await Assert.That(csharp).Contains("linkedTarget.CurrentStage != WorkItemStage.Done");
-        await Assert.That(csharp).Contains("if (!linkedMatched)");
+        await Assert.That(csharp).Contains("__linkedTarget.CurrentStage != WorkItemStage.Done");
+        await Assert.That(csharp).Contains("if (!__linkedMatched)");
     }
 
     [Test]
@@ -3679,6 +3679,9 @@ public class DomainToCSharpExporterTests {
         ctor = ctor[..ctor.IndexOf("public ", StringComparison.Ordinal)];
         await Assert.That(ctor).Contains("this.CurrentStage = TruckStage.Idle");
         await Assert.That(ctor).DoesNotContain("this.Status = TruckStatus.EnRoute");
+        // Paired with its positive (the absence above would also hold if the entry were lost): a non-initial stage's
+        // entry has no entry method, and Create calls none.
+        await Assert.That(cs).DoesNotContain("__EnterInitialStage");
 
         var dispatch = ExportedCSharp.ExtractMethod(cs, "DomainResult Dispatch(");
         await Assert.That(dispatch).Contains("this.CurrentStage = TruckStage.EnRoute");
@@ -3853,7 +3856,7 @@ public class DomainToCSharpExporterTests {
         var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var cs = new CSharpGenerator().Generate(types);
 
-        await Assert.That(cs).Contains("DomainResult NotifyBSubscribers(ItemStage? previousStage)");
+        await Assert.That(cs).Contains("DomainResult NotifyBSubscribers(ItemStage? __previousStage)");
     }
 
     [Test]
@@ -4011,9 +4014,16 @@ public class DomainToCSharpExporterTests {
         var types = DomainProgramProjection.ToSyntax(domain, analysis);
         var cs = new CSharpGenerator().Generate(types);
 
+        // L-04a: the constructor is assignments only; the initial entry is the same body, in __EnterInitialStage,
+        // which Create calls and whose failure it returns.
         var ctor = cs[cs.IndexOf("private Parent(", StringComparison.Ordinal)..];
         ctor = ctor[..ctor.IndexOf("public ", StringComparison.Ordinal)];
-        await Assert.That(ctor).Contains("this.CreateChildren(\"x\")");
+        await Assert.That(ctor).DoesNotContain("CreateChildren");
+        var entry = ExportedCSharp.ExtractMethod(cs, "private DomainResult __EnterInitialStage(");
+        await Assert.That(entry).Contains("this.CreateChildren(\"x\")");
+        var create = ExportedCSharp.ExtractMethod(cs, "static DomainResult<Parent> Create(");
+        await Assert.That(create).Contains("created.__EnterInitialStage()");
+        await Assert.That(create).Contains("DomainResult<Parent>.Failure(__entry.Error!)");
         var back = ExportedCSharp.ExtractMethod(cs, "DomainResult Back(");
         await Assert.That(back).Contains("this.CreateChildren(\"x\")");
     }

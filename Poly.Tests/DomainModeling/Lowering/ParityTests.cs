@@ -1147,9 +1147,9 @@ public class ParityTests {
         await Assert.That(outcomes[6].State["Stage"]).IsEqualTo("R");
     }
 
-    // A failing create inside a when-handler throws (L-04 returns it instead). L-03c: the throw unwinds through the
-    // action wrapper, which rolls the frame back, so the transition that fired the handler is undone on both hosts: the
-    // loan is Active again. The scope-only run is X-04's evidence: the simulator's module restores it with no executor
+    // A failing create inside a when-handler returns its failure (L-04a; it threw before). L-03c: the failed result
+    // reaches the action wrapper, which rolls the frame back, so the transition that fired the handler is undone on both
+    // hosts: the loan is Active again. The scope-only run is X-04's evidence: the simulator's module restores it with no executor
     // transaction, so keepConstraintMutations decides nothing any more.
     [Test]
     public async Task Invoke_WhenSubscriptionCreateFails_Agrees() {
@@ -1188,7 +1188,9 @@ public class ParityTests {
             });
         await Assert.That(outcomes[3].Success).IsFalse();
         await Assert.That(outcomes[3].Message).IsEqualTo("'Amount' must be <= 10.");
-        await Assert.That(outcomes[3].ExceptionType).IsEqualTo("ConstraintFailureException");
+        // L-04a: the handler's failed create is returned, not thrown, so the step fails with a typed Range failure.
+        await Assert.That(outcomes[3].ExceptionType).IsNull();
+        await Assert.That(outcomes[3].FailureKind).IsEqualTo("Range");
         await Assert.That(outcomes[4].State["Stage"]).IsEqualTo("Active");
         await Assert.That(outcomes[4].State["Amount"]).IsEqualTo("50");
         await Assert.That(outcomes[5].State["fines"]).IsEqualTo("0");
@@ -1200,7 +1202,8 @@ public class ParityTests {
             side.InvokeScopeOnly("MarkOverdue");
             side.Use(loan);
         });
-        await Assert.That(scopeOnly[3].ExceptionType).IsEqualTo("ConstraintFailureException");
+        await Assert.That(scopeOnly[3].ExceptionType).IsNull();
+        await Assert.That(scopeOnly[3].FailureKind).IsEqualTo("Range");
         await Assert.That(scopeOnly[4].State["Stage"]).IsEqualTo("Active");
     }
 
@@ -1242,7 +1245,9 @@ public class ParityTests {
             });
         await Assert.That(outcomes[3].Success).IsFalse();
         await Assert.That(outcomes[3].Message).IsEqualTo("'Amount' must be <= 10.");
-        await Assert.That(outcomes[3].ExceptionType).IsEqualTo("ConstraintFailureException");
+        // L-04a: the handler's failed create is returned, not thrown, so the step fails with a typed Range failure.
+        await Assert.That(outcomes[3].ExceptionType).IsNull();
+        await Assert.That(outcomes[3].FailureKind).IsEqualTo("Range");
         // L-03c: the nested wrapper's finally rolls the shared frame back on the throw, as in the row above.
         await Assert.That(outcomes[4].State["Stage"]).IsEqualTo("Active");
         await Assert.That(outcomes[5].State["fines"]).IsEqualTo("0");

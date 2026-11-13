@@ -1180,9 +1180,20 @@ reads `Owner.Run.Item.Finish.Owner.Y`.
 
 A failed `create`, `create in` (including a `create in` inside a handler whose
 new child's own handler fails) or constraint-violating `assign` inside a handler
-still throws `ConstraintFailureException` for now, from the action that caused
-the transition; those become returned failures later. Interpreter and printed
-C# agree.
+is returned the same way: the handler stops, adds no path segment, and the action
+that caused the transition returns the failure and is rolled back. Nothing in
+lowered code throws a domain failure. Interpreter and printed C# agree.
+
+A failing `invoke`, `create`, `create in`, constraint-violating `assign` or `for ... invoke`
+in the initial stage's `entry` block fails the `Create` that ran it: `Create` returns
+that failure (kind, message and guard unchanged, no segment added by the entry) and
+the new instance is in no collection and no subscription registry. The path is the
+callee's own (`Kid.Fails` from a bare `Create`, `Holder.Make.Kid.Fails` from the
+holder's `create in`), and an action that ran the `create in` is rolled back.
+A bare generated `Create` (called with no action running) whose entry fails *after changing another
+entity* (a succeeded `invoke` of an action on a linked entity, a `create` attached to an existing
+peer) is not rolled back until L-04b: the generated C# keeps that change, while the interpreter
+restores it.
 
 ## 8. Policies
 

@@ -288,6 +288,158 @@ public class RecursivePassDepthTests {
         }
     }
 
+    // ── G-25b's bucket: stage chains, and the doors the hop does not cover ─────────────────────────────────────
+
+    /// <summary>
+    /// Lock amendment 2: <paramref name="stages"/> stages. <c>entrychain</c>: each stage's <c>entry</c> moves on to the
+    /// next by <c>transition to</c>, so lowering inlines every entry into the one before it. <c>exitchain</c>: every stage
+    /// has an <c>exit</c> block, and an entity-level action hops, which lowers to one nested arm per stage.
+    /// </summary>
+    internal static string StageChainDocument(string shape, int stages) {
+        var text = new System.Text.StringBuilder("domain D\nE: entity {\n  Note: Text\n");
+        switch (shape) {
+            case "entrychain":
+                for (var k = 0; k < stages; k++)
+                    text.Append("  S").Append(k).Append(": stage { entry { transition to S").Append(k + 1).Append(" } Go: action { assign Note to \"x\" } }\n");
+                text.Append("  S").Append(stages).Append(": stage { }\n");
+                break;
+            case "exitchain":
+                text.Append("  Hop: action { transition to S0 }\n");
+                for (var k = 0; k < stages; k++)
+                    text.Append("  S").Append(k).Append(": stage { exit { assign Note to \"x\" } }\n");
+                break;
+            default:
+                throw new InvalidOperationException(shape);
+        }
+        return text.Append("}\n").ToString();
+    }
+
+    private static PolyCompiler Compiler() =>
+        new(ProductCatalog.Catalog, new SessionOptions(ProductCatalog.Catalog, ProductCatalog.ImplicitIds));
+
+    /// <summary>One door of the G-25b bucket on the calling thread: "ok", the one error it reported, or the exception it threw.</summary>
+    private static string RunBucketDoor(string door, string document) {
+        try {
+            switch (door) {
+                case "analyze":
+                case "compile": {
+                        var result = door == "compile" ? Compiler().Compile(document) : Compiler().Analyze(document);
+                        return result.Succeeded ? "ok" : Outcome(result);
+                    }
+                default: {
+                        // Analyze goes through the hop as today; the door then runs on THIS thread, the caller's stack.
+                        var result = Compiler().Analyze(document);
+                        if (!result.Succeeded)
+                            return "analyze: " + Outcome(result);
+                        switch (door) {
+                            case "produce":
+                                var produced = PolyCompiler.Produce(result.Session!, result.Domain!, result.Analysis!);
+                                return produced.Succeeded ? "ok" : Outcome(produced);
+                            case "lower":
+                                _ = result.Session!.Lower(result.Domain!, result.Analysis!);
+                                return "ok";
+                            case "print":
+                                _ = new DomainDslPrinter(result.Session!).Print(result.Domain!);
+                                return "ok";
+                            default:
+                                throw new InvalidOperationException(door);
+                        }
+                    }
+            }
+        }
+        catch (Exception ex) {
+            return $"throw {ex.GetType().Name}: {ex.Message}";
+        }
+    }
+
+    /// <summary>Runs one bucket cell in the child on a fixed stack and writes its outcome to POLY_PROBE_OUT.</summary>
+    [Test]
+    public async Task ChildProbe_BucketCell_OnFixedStack() {
+        if (Environment.GetEnvironmentVariable("POLY_CHILD_PROBE") != "g25b-bucket")
+            return;
+
+        var stackKb = int.Parse(Environment.GetEnvironmentVariable("POLY_PROBE_STACK_KB")!, System.Globalization.CultureInfo.InvariantCulture);
+        var depth = int.Parse(Environment.GetEnvironmentVariable("POLY_PROBE_DEPTH")!, System.Globalization.CultureInfo.InvariantCulture);
+        var shape = Environment.GetEnvironmentVariable("POLY_PROBE_SHAPE")!;
+        var door = Environment.GetEnvironmentVariable("POLY_PROBE_DOOR")!;
+        var document = shape == "not" ? ExpressionDocument(shape, depth) : StageChainDocument(shape, depth);
+        var outcome = OnStack(stackKb * 1024, () => RunBucketDoor(door, document));
+        File.WriteAllText(Environment.GetEnvironmentVariable("POLY_PROBE_OUT")!, outcome);
+        await Assert.That(outcome).IsNotNull();
+    }
+
+    /// <summary>
+    /// One bucket cell in its own child (an abort takes only that child): "abort &lt;exit code&gt;" when the child died
+    /// of a stack overflow, else the outcome the child wrote. The child runs under the harness's 1 GB heap cap.
+    /// </summary>
+    private static async Task<string> BucketCell(string shape, int depth, string door, int stackKb) {
+        var output = Path.Combine(Path.GetTempPath(), $"poly-g25b-{Guid.NewGuid():N}.txt");
+        try {
+            var result = await PolycProcess.RunTestInChildAsync(
+                $"/*/*/{nameof(RecursivePassDepthTests)}/{nameof(ChildProbe_BucketCell_OnFixedStack)}",
+                new Dictionary<string, string?> {
+                    ["POLY_CHILD_PROBE"] = "g25b-bucket",
+                    ["POLY_PROBE_STACK_KB"] = stackKb.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    ["POLY_PROBE_DEPTH"] = depth.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    ["POLY_PROBE_SHAPE"] = shape,
+                    ["POLY_PROBE_DOOR"] = door,
+                    ["POLY_PROBE_OUT"] = output,
+                });
+            if (result.IsAborted)
+                return result.Stderr.Contains("Stack overflow", StringComparison.Ordinal)
+                    ? $"abort {result.ExitCode} (stack overflow)"
+                    : $"abort {result.ExitCode}";
+            return File.Exists(output) ? File.ReadAllText(output) : $"exit {result.ExitCode} with no outcome";
+        }
+        finally {
+            File.Delete(output);
+        }
+    }
+
+    /// <summary>
+    /// Lock amendment 2, green through the hop: 500 and 2,000 chained stages analyze and compile. With the hop deleted
+    /// (step 0, 512 KB) Compile of 500 aborts in both shapes; these cells catch a regression of today's behaviour.
+    /// </summary>
+    [Test]
+    [Arguments("entrychain", 500)]
+    [Arguments("entrychain", 2000)]
+    [Arguments("exitchain", 500)]
+    [Arguments("exitchain", 2000)]
+    public async Task StageChain_ThroughTheHop_AnalyzesAndCompiles(string shape, int stages) {
+        foreach (var door in new[] { "analyze", "compile" })
+            await Assert.That(await BucketCell(shape, stages, door, 512)).IsEqualTo("ok").Because($"{shape} {stages} {door}");
+    }
+
+    /// <summary>
+    /// RECORDED CURRENT RESULT, owner G-25b (not a pass): 10,000 entry-chained stages run the evolution out of the
+    /// child's 1 GB heap, reported as DSL0004. Kept out of the default run ([Explicit]): the cell spends the whole
+    /// 1 GB heap cap by construction. Run it by name.
+    /// </summary>
+    [Test]
+    [Explicit]
+    public async Task StageChain_10000EntryChained_RecordedCurrentResult_OwnedByG25b() =>
+        await Assert.That(await BucketCell("entrychain", 10_000, "analyze", 512)).IsEqualTo(RecordedStageChain10000);
+
+    private const string RecordedStageChain10000 = "DSL0004 1:1 Evolution failed: Exception of type 'System.OutOfMemoryException' was thrown.";
+
+    /// <summary>
+    /// RECORDED CURRENT RESULTS, owner G-25b (not passes): a policy of 256 nested <c>not</c>s (G-10's limit) analyzes
+    /// through the hop, then each door runs on the caller's own stack, which the hop does not cover:
+    /// <c>PolyCompiler.Produce</c> (what <c>OracleTool</c> calls), a direct <c>DomainSession.Lower</c>, and
+    /// <c>DomainDslPrinter.Print</c>. Each cell is its own child, so an abort is recorded as the child's exit code.
+    /// Recorded 2026-11-13: <c>Produce</c> on 512 KB aborts (stack overflow in <c>ConstantFoldingPass.FoldUnaryBoolean</c> /
+    /// <c>TryFold</c> / <c>GetConstantValue</c>, under <c>DomainSession.Emit</c> → <c>VmAnalysisOf</c>); every other cell completes.
+    /// </summary>
+    [Test]
+    [Arguments("produce", 512, "abort 134 (stack overflow)")]
+    [Arguments("produce", 1024, "ok")]
+    [Arguments("lower", 512, "ok")]
+    [Arguments("lower", 1024, "ok")]
+    [Arguments("print", 512, "ok")]
+    [Arguments("print", 1024, "ok")]
+    public async Task UncoveredDoor_256Nots_OnTheCallersStack_RecordedCurrentResult_OwnedByG25b(string door, int stackKb, string recorded) =>
+        await Assert.That(await BucketCell("not", Limit, door, stackKb)).IsEqualTo(recorded);
+
     /// <summary>
     /// The VM legs (<c>PolyCompiler.Produce</c> and policy evaluation) at the parser's longest legal <c>and</c> chain:
     /// 257 operands, 256 levels. #823 (row X-12) fixed the exponential <c>Interpreter.Compile</c> that held this pin

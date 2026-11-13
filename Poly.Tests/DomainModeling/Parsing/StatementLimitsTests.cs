@@ -138,6 +138,44 @@ public partial class StatementLimitsTests {
         await Assert.That(caught.Length).IsEqualTo(3);
     }
 
+    /// <summary>
+    /// The counter is restored when a statement ends and every effect block starts at 0: two sibling actions and a
+    /// stage's <c>entry</c> and <c>exit</c> blocks, each nested 64 deep, parse; a 65th <c>if</c> inside the
+    /// <c>exit</c> block is the one positioned error, on that <c>if</c>.
+    /// </summary>
+    internal static string SiblingBlocksDocument(int exitDepth) {
+        static string Nest(int n) => string.Concat(Enumerable.Repeat("if (Flag) { ", n)) + "assign Note to \"x\" " + string.Concat(Enumerable.Repeat("} ", n));
+        return "domain D\nE: entity {\n  Flag: Boolean\n  Note: Text\n"
+            + "  A: action {\n    " + Nest(Limit) + "\n  }\n"
+            + "  B: action {\n    " + Nest(Limit) + "\n  }\n"
+            + "  S: stage {\n    entry { " + Nest(Limit) + "}\n    exit { " + Nest(exitDepth) + "}\n  }\n}\n";
+    }
+
+    [Test]
+    public async Task SiblingBlocksAtTheLimit_Parse_AndA65thIfInTheExitBlock_IsTheOneError() {
+        var changes = new PolyDslParser(SiblingBlocksDocument(Limit)).Parse();
+        await Assert.That(changes.Count).IsGreaterThan(0);
+
+        var document = SiblingBlocksDocument(Limit + 1);
+        GrammarException? caught = null;
+        try {
+            new PolyDslParser(document).Parse();
+        }
+        catch (GrammarException ex) {
+            caught = ex;
+        }
+
+        await Assert.That(caught).IsNotNull();
+        await Assert.That(caught!.Detail).IsEqualTo(DslLimits.StatementDepthDetail);
+        // Three blocks of 64 heads come first; the exit block's 65th `if` is head 4 * 64 + 1.
+        var offset = HeadOffset(document, 4 * Limit + 1);
+        await Assert.That(caught.Offset).IsEqualTo(offset);
+        await Assert.That(caught.Offset).IsGreaterThan(document.IndexOf("exit {", StringComparison.Ordinal));
+        var (line, column) = Position(document, offset);
+        await Assert.That(caught.Line).IsEqualTo(line);
+        await Assert.That(caught.Column).IsEqualTo(column);
+    }
+
     /// <summary>The detail names the ruled value, in the same words as the expression limit's.</summary>
     [Test]
     public async Task StatementDepthDetail_NamesTheRuledLimit_InTheExpressionLimitsWords() {

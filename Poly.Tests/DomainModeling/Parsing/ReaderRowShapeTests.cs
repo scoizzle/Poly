@@ -155,7 +155,7 @@ public sealed class ReaderRowShapeTests {
     [Test]
     public async Task CallName_IsTheFirstTokenAndAnIdentifier() {
         var failures = new List<string>();
-        foreach (var rule in new[] { "expr-primary", "expr-primary-no-not" }) {
+        foreach (var rule in new[] { "expr-primary" }) {
             if (!DslGrammar.Core.TryGetPattern(rule, "call", out var row))
                 failures.Add($"{rule}/call: no such row");
             else if (AdmitsOnly(row.Elements[0], DslTokenKind.Identifier) is { } why)

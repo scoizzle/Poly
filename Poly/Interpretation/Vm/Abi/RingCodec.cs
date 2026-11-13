@@ -23,8 +23,8 @@ namespace Poly.Interpretation.Vm.Abi;
 internal static class RingCodec {
     private static readonly MethodInfo HeapUnsafeGet = Ref<VmManagedObjectHeap>.Method(h => h.UnsafeGet(0));
     private static readonly MethodInfo HeapAllocate = Ref<VmManagedObjectHeap>.Method(h => h.Allocate(default!));
-    private static readonly MethodInfo WriteDeclaredInfo =
-        Ref.Method((Expression<Func<object?, Type, VmManagedObjectHeap, long>>)((v, t, h) => LocalType.Write(v, t, h)));
+    private static readonly MethodInfo ArrayGetValue = Ref<Array>.Method(a => a.GetValue(0));
+    private static readonly MethodInfo ArraySetValue = Ref<Array>.Method(a => a.SetValue(null, 0));
     private static readonly MethodInfo BitConverterInt64BitsToDouble =
         Ref.Method((Expression<Func<long, double>>)(v => BitConverter.Int64BitsToDouble(v)));
     private static readonly MethodInfo BitConverterDoubleToInt64Bits =
@@ -222,11 +222,22 @@ internal static class RingCodec {
         return FromFrame(ringVal, sourceClr, targetType, heap);
     }
 
-    /// <summary>A CLR value crossing into the frame as a word of <paramref name="declared"/>: the run-time
-    /// <see cref="LocalType.Write(object?, Type, VmManagedObjectHeap)"/>, for a value only the run time holds
-    /// (an array element, an enumerator's current, a delegate's argument or result).</summary>
-    public static Expression WriteAs(Expression value, Type declared, Expression heap) =>
-        Call(WriteDeclaredInfo, Convert(value, typeof(object)), Constant(declared, typeof(Type)), heap);
+    /// <summary>A CLR value crossing into the frame as a word of <paramref name="declared"/> (an array element, an
+    /// enumerator's current, a delegate's argument), classified at compile time. A scalar is unboxed as the declared
+    /// type and encoded; a handle-typed value type is checked by its unbox, a reference is its own handle, and null is
+    /// the absent sentinel. A value of another value type is the CLR's <see cref="InvalidCastException"/>.</summary>
+    public static Expression WriteAs(Expression value, Type declared, Expression heap) {
+        if (LocalType.Of(declared).Kind != ValueRepresentationKind.HeapRef)
+            return LocalType.Encode(Convert(value, declared), declared, heap);
+        var boxed = Variable(typeof(object), "_written");
+        var target = Nullable.GetUnderlyingType(declared) ?? declared;
+        Expression handle = target.IsValueType
+            ? Block(Convert(boxed, target), Box(boxed, heap))
+            : Box(boxed, heap);
+        return Block([boxed],
+            Assign(boxed, Convert(value, typeof(object))),
+            Condition(Equal(boxed, Constant(null)), Constant(0L), handle));
+    }
 
     /// <summary>A frame word of <paramref name="source"/> as the CLR object an <c>object[]</c> element holds.
     /// A word whose type is unknown has no object form: it fails closed.</summary>
@@ -373,6 +384,9 @@ internal static class RingCodec {
     public static Expression ArrayElementRead(
         Expression heap, Expression handle, Expression index, Type? elementClr) {
         var idx = Convert(index, typeof(int));
+        // Only a host array has a nullable element (the VM creates none): it is read as the CLR array it is.
+        if (elementClr is not null && Nullable.GetUnderlyingType(elementClr) is not null)
+            return WriteAs(Call(Convert(DerefObject(heap, handle), typeof(Array)), ArrayGetValue, idx), elementClr, heap);
         if (elementClr is { IsValueType: true }) {
             var longArr = Variable(typeof(long[]), "_longArr");
             return Block([longArr],
@@ -407,6 +421,9 @@ internal static class RingCodec {
         Expression heap, Expression handle, Expression index, Expression value,
         Type? elementClr, Type? valueClr, bool valueIsIeee) {
         var idx = Convert(index, typeof(int));
+        if (elementClr is not null && Nullable.GetUnderlyingType(elementClr) is not null)
+            return Call(Convert(DerefObject(heap, handle), typeof(Array)), ArraySetValue,
+                AsElementObject(value, valueClr, heap), idx);
         if (elementClr is { IsValueType: true }) {
             var longArr = Variable(typeof(long[]), "_assignLongArr");
             return Block([longArr],

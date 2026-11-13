@@ -88,7 +88,97 @@ public class VmStateRingConversionTests {
         using var passed = Interpreter.Execute(Interpreter.Compile(Call(typeof(NullableIntProbe), nameof(NullableIntProbe.OrMinusOne), cast)), 7);
         await Assert.That(passed.GetValue<int>()).IsEqualTo(7);
     }
+
+    private static T Root<T>(object? argument) {
+        using var exec = Interpreter.Execute(Interpreter.Compile(new Parameter("p", new ClrTypeReference(typeof(T)))), argument);
+        return exec.GetValue<T>()!;
+    }
+
+    /// <summary>
+    /// The one rule at the door: a root argument whose runtime type is not the parameter's converts where C# converts it
+    /// implicitly at a call site (the platform's conversion answer, <c>ResolveConversionFrom</c>), and is refused
+    /// otherwise. Before T-21a's fix round an <c>int</c> for a <c>double</c> parameter was read as IEEE bits.
+    /// </summary>
+    [Test]
+    public async Task RootArgument_OfAnotherType_ConvertsWhereCSharpConvertsImplicitly() {
+        await Assert.That(Root<long>(7)).IsEqualTo((long)7);
+        await Assert.That(Root<double>(7)).IsEqualTo((double)7);
+        await Assert.That(Root<double>(1.5f)).IsEqualTo((double)1.5f);
+        await Assert.That(Root<decimal>(7)).IsEqualTo((decimal)7);
+        await Assert.That(Root<int?>(7)).IsEqualTo((int?)7);
+    }
+
+    [Test]
+    [Arguments(typeof(int), 7L)]
+    [Arguments(typeof(double), "1.5")]
+    [Arguments(typeof(bool), 7)]
+    [Arguments(typeof(decimal), 1.5)]
+    [Arguments(typeof(DayOfWeek), 1)]
+    public async Task RootArgument_WithNoImplicitConversion_IsRefusedNamingBothTypes(Type declared, object given) {
+        var program = Interpreter.Compile(new Parameter("p", new ClrTypeReference(declared)));
+        var ex = Assert.Throws<InvalidOperationException>(() => {
+            using var exec = Interpreter.Execute(program, given);
+        });
+        await Assert.That(ex!.Message).Contains($"'{given.GetType().Name}'");
+        await Assert.That(ex.Message).Contains($"'{declared.Name}'");
+    }
+
+    [Test]
+    public async Task RootArgument_NullForANonNullableValueType_IsRefused() {
+        var program = Interpreter.Compile(new Parameter("p", TypeReference.To<int>()));
+        var ex = Assert.Throws<InvalidOperationException>(() => {
+            using var exec = Interpreter.Execute(program, (object?)null);
+        });
+        await Assert.That(ex!.Message).Contains("null").And.Contains($"'{nameof(Int32)}'");
+    }
+
+    private static T? Coalesced<T>(T zero, T other) where T : struct => (T?)zero ?? other;
+
+    private static async Task PresentZero<T>(T zero, T other) where T : struct {
+        var cast = new TypeCast(new Parameter("x", new ClrTypeReference(typeof(T))), new ClrTypeReference(typeof(T?)));
+        var fallback = new TypeCast(new Constant(other), new ClrTypeReference(typeof(T?)));
+        using (var coalesce = Interpreter.Execute(Interpreter.Compile(new Coalesce(cast, fallback)), zero))
+            await Assert.That(coalesce.GetValue<T>()).IsEqualTo(Coalesced(zero, other)!.Value);
+        var isNull = new TypeCast(new Parameter("x", new ClrTypeReference(typeof(T))), new ClrTypeReference(typeof(T?)));
+        using var compared = Interpreter.Execute(Interpreter.Compile(new Equal(isNull, new Constant(null))), zero);
+        T? present = zero;
+        await Assert.That(compared.GetValue<bool>()).IsEqualTo(!present.HasValue);
+    }
+
+    /// <summary><c>(T?)x</c> of a zero is a present zero, not absent: <c>??</c> keeps it and <c>== null</c> is false.
+    /// The fallback is a <c>T?</c>: <c>bool? ?? bool</c> is refused by the emitter's coalesce today (row T-21b).</summary>
+    [Test]
+    public async Task CastToNullable_OfZero_IsPresent() {
+        await PresentZero(0, 1);
+        await PresentZero(0L, 1L);
+        await PresentZero(false, true);
+        await PresentZero(0m, 1m);
+    }
+
+    private static string Text(Node value, params object?[] args) {
+        using var exec = Interpreter.Execute(Interpreter.Compile(new Invoke(new Member(new ClrTypeReference(typeof(Convert)), nameof(Convert.ToString)), value)), args);
+        return exec.GetValue<string>()!;
+    }
+
+    private static string RoundTrip<T>(T value) {
+        var boxed = new TypeCast(new Parameter("x", new ClrTypeReference(typeof(T))), new ClrTypeReference(typeof(object)));
+        return Text(new TypeCast(new TypeCast(boxed, new ClrTypeReference(typeof(T))), new ClrTypeReference(typeof(object))), value);
+    }
+
+    /// <summary>Box and unbox for the representations the int rows do not cover: an IEEE word, a decimal handle, an
+    /// enum word, a struct handle and a temporal word. The expected text is the platform's own for the boxed value.</summary>
+    [Test]
+    public async Task CastToObjectAndBack_KeepsTheValue_ForEveryRepresentation() {
+        await Assert.That(RoundTrip(1.5)).IsEqualTo(Convert.ToString((object)1.5));
+        await Assert.That(RoundTrip(1.5m)).IsEqualTo(Convert.ToString((object)1.5m));
+        await Assert.That(RoundTrip(DayOfWeek.Tuesday)).IsEqualTo(Convert.ToString((object)DayOfWeek.Tuesday));
+        await Assert.That(RoundTrip(new CastPoint(3, 4))).IsEqualTo(Convert.ToString((object)new CastPoint(3, 4)));
+        var when = new DateTime(2024, 2, 28, 10, 30, 0, DateTimeKind.Utc);
+        await Assert.That(RoundTrip(when)).IsEqualTo(Convert.ToString((object)when));
+    }
 }
+
+public readonly record struct CastPoint(int X, int Y);
 
 public static class NullableIntProbe {
     public static int OrMinusOne(int? value) => value ?? -1;

@@ -99,9 +99,17 @@ public sealed class VmState : IDisposable {
         var types = Program.RootParameterClrTypes;
         foreach (var (i, arg) in args.Index()) {
             var declared = types is not null && i < types.Count ? types[i] : null;
-            slots[i] = LocalType.Write(arg, declared ?? arg?.GetType() ?? typeof(object), Heap);
+            // A slot with no recorded type is `object`: a module body's `this` (slot 0, always a reference) or a
+            // parameter with no type, which compiles as object. Nothing is encoded by the argument's runtime type.
+            try {
+                slots[i] = LocalType.Write(arg, declared ?? typeof(object), Heap);
+            }
+            catch (InvalidOperationException ex) {
+                throw new InvalidOperationException($"{ex.Message} (root argument {i})", ex);
+            }
         }
     }
+
 
     /// <summary>Resets the VM state to its initial condition, clearing the
     /// stack, heap, loop ticks, and current node tracking. Does not

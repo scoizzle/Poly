@@ -349,7 +349,8 @@ public class CompatibilityProviderTests {
     }
 
     /// <summary>The operand arrives as a parameter, a CLR property read and a call result; each operator in both operand
-    /// orders, and beside another <c>bool?</c>. The root is a bool, 0 or 1, and true only when the operand is stored true.</summary>
+    /// orders, and beside another <c>bool?</c>. The root is a bool, 0 or 1, and true only when the operand is stored true.
+    /// Accepting <c>and</c>/<c>or</c> over a <c>bool?</c> at all is interim: row T-28 rejects the pair as C# does.</summary>
     [Test]
     [Arguments(true)]
     [Arguments(false)]
@@ -382,9 +383,21 @@ public class CompatibilityProviderTests {
         using var pair = Interpreter.Execute(both, true, flag);
         await Assert.That(pair.RawValue).IsEqualTo(expected);
     }
+
+    /// <summary>Short-circuit over a <c>bool?</c> right operand: <c>false and X</c> and <c>true or X</c> never run X.</summary>
+    [Test]
+    public async Task AndOr_OverNullableBool_DoNotRunTheRightOperand_WhenTheLeftDecides() {
+        static Node Explode() => new Invoke(new Member(new ClrTypeReference(typeof(NullableFlagBox)), nameof(NullableFlagBox.Explode)));
+        using (var and = Interpreter.Execute(Interpreter.Compile(new And(new Constant(false), Explode()))))
+            await Assert.That(and.RawValue).IsEqualTo(0L);
+        using (var or = Interpreter.Execute(Interpreter.Compile(new Or(new Constant(true), Explode()))))
+            await Assert.That(or.RawValue).IsEqualTo(1L);
+    }
 }
 
 public sealed class NullableFlagBox {
+    public static bool? Explode() => throw new InvalidOperationException("the right operand ran");
+
     public bool? Flag { get; set; }
 
     public static int Code(bool? flag) => flag switch { true => 1, false => 2, null => 0 };

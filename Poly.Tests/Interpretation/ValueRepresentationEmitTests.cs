@@ -313,23 +313,86 @@ public class ValueRepresentationEmitTests {
             Answer(new BitwiseNot(P<Guid>("g")), Guid.Empty),
         };
         await Assert.That(answers).IsEquivalentTo(new[] {
-            "Decimal -0.1",
-            "Decimal -0.1",
-            "null",
-            $"TimeSpan {-TimeSpan.FromHours(1)}",
-            $"TimeSpan {-TimeSpan.FromHours(1)}",
-            "Int128 -5",
-            "Int128 -6",
-            $"UInt128 {~(UInt128)5}",
-            "BigInteger -5",
-            "Int32 -5",
-            "null",
-            "Int32 -6",
-            "Decimal -5",
+            Shown(-0.1m),
+            Shown(-(decimal?)0.1m),
+            Shown(null),
+            Shown(-TimeSpan.FromHours(1)),
+            Shown(-(TimeSpan?)TimeSpan.FromHours(1)),
+            Shown(-(Int128)5),
+            Shown(~(Int128)5),
+            Shown(~(UInt128)5),
+            Shown(-new System.Numerics.BigInteger(5)),
+            Shown(-NullableProbe.FiveOrNull(true)),
+            Shown(-NullableProbe.FiveOrNull(false)),
+            Shown(~NullableProbe.FiveOrNull(true)),
+            Shown(-NullableProbe.FiveDecimalOrNull(true)),
             "VM compile rejected: no unary '-' operator for 'Guid'.",
             "VM compile rejected: no unary '-' operator for 'DateTimeOffset'.",
             "VM compile rejected: no unary '~' operator for 'Guid'.",
         }, TUnit.Assertions.Enums.CollectionOrdering.Matching);
+    }
+
+    private static string Shown(object? value) => value is null ? "null" : $"{value.GetType().Name} {value}";
+
+    /// <summary>The edges of each operator are the platform's: <c>-TimeSpan.MinValue</c> overflows (the VM throws the
+    /// same <see cref="OverflowException"/>), <c>-decimal.MinValue</c> is exact, <c>-Int128.MinValue</c> wraps, and
+    /// <c>-0m</c> is the platform's negative zero.</summary>
+    [Test]
+    public async Task UnaryOnAHandleHeldValue_Edges_AreThePlatforms() {
+        var timeMin = TimeSpan.MinValue;
+        await Assert.That(() => _ = -timeMin).Throws<OverflowException>();
+        await Assert.That(() => Answer(new UnaryMinus(P<TimeSpan>("t")), TimeSpan.MinValue)).Throws<OverflowException>();
+        var decimalMin = decimal.MinValue;
+        await Assert.That(Answer(new UnaryMinus(P<decimal>("d")), decimalMin)).IsEqualTo(Shown(-decimalMin));
+        var int128Min = Int128.MinValue;
+        await Assert.That(Answer(new UnaryMinus(P<Int128>("i")), int128Min)).IsEqualTo(Shown(-int128Min));
+        var zero = 0m;
+        await Assert.That(Answer(new UnaryMinus(P<decimal>("d")), zero)).IsEqualTo(Shown(-zero));
+    }
+
+    private static readonly Analyzer AnalyzerWithoutOperandChecks = new AnalyzerBuilder()
+        .UseTypeDefinitionNodeAnalyzer()
+        .UseThisReferenceContext()
+        .UseVariableScopeValidator()
+        .UseTypeAndMemberResolver()
+        .UseSideEffectAnalysis()
+        .UseJumpTargetResolution()
+        .UseConstantFolding()
+        .UseControlFlowAnalysis()
+        .UseExceptionRegionAnalysis()
+        .UseLambdaReturnTypeResolution()
+        .UseCallSiteCatalog()
+        .UseDefiniteAssignmentAnalysis()
+        .Build();
+
+    /// <summary>The emitter's own refusal of a unary operator a struct does not define. Analysis refuses the operator
+    /// first (row T-22); a caller-built analysis without the operand checks reaches the emitter, which fails closed.</summary>
+    [Test]
+    public async Task UnaryOnAStructWithNoOperator_PastAnAnalysisWithoutOperandChecks_IsRefusedAtEmit() {
+        var node = new UnaryMinus(P<Guid>("g"));
+        await Assert.That(() => Interpreter.Compile(node, AnalyzerWithoutOperandChecks.Analyze(node)))
+            .Throws<InvalidOperationException>()
+            .WithMessageContaining("no unary '-' operator for 'Guid'");
+    }
+
+    private static string StoreNull<T>(T[] host) {
+        var node = new Block([
+            new Assignment(new IndexAccess(P<T[]>("arr"), new Constant(0)), new Constant(null)),
+            new Constant(0)
+        ]);
+        using var exec = Interpreter.Execute(Interpreter.Compile(node), (object)host);
+        return Shown(host[0]);
+    }
+
+    /// <summary><c>arr[0] = null</c> stores null into a host array of a reference or a nullable element (the base
+    /// stored a boxed <c>0L</c> or threw), and a nullable element reads back as its value.</summary>
+    [Test]
+    public async Task NullLiteral_StoredIntoAnArrayElement_IsNull_AndANullableElementReadsBack() {
+        await Assert.That(StoreNull(new string?[] { "x" })).IsEqualTo(Shown(null));
+        await Assert.That(StoreNull(new object?[] { 7 })).IsEqualTo(Shown(null));
+        await Assert.That(StoreNull(new long?[] { 5 })).IsEqualTo(Shown(null));
+        await Assert.That(Answer(new IndexAccess(P<long?[]>("arr"), new Constant(0)), (object)new long?[] { 5 }))
+            .IsEqualTo(Shown((long?)5));
     }
 
     /// <summary>

@@ -28,7 +28,8 @@ public static partial class AbiEmitter {
                 ? clrElem.RuntimeType
                 : null;
             bool valueIsIeee = RingCodec.IsIeee(a.Value, ctx.Analysis);
-            var valueClr = ctx.ClrTypeOf(a.Value);
+            // A null literal has no type of its own: it is the element type's null.
+            var valueClr = a.Value is Constant { Value: null } ? elemType ?? typeof(object) : ctx.ClrTypeOf(a.Value);
             Expression store;
             if (cachedStore)
                 store = RingCodec.CachedElementWrite(

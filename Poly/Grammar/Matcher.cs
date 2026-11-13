@@ -185,7 +185,9 @@ public sealed class Matcher<TToken, TTokenKind>
                 return true;
 
             case Slot<TToken, TTokenKind>:
-                throw new NotImplementedException("G-27: Slot is not matched yet.");
+                // Zero width: the row ends here and the host reads what follows.
+                piece = Piece.Empty;
+                return true;
 
             case Optional<TToken, TTokenKind> o:
                 if (TryMatchElement(o.Inner, offset, captures, out piece))

@@ -64,14 +64,35 @@ public sealed class GrammarBuilder<TToken, TTokenKind>
         if (list.Any(p => string.Equals(p.Name, pattern.Name, StringComparison.Ordinal)))
             throw new InvalidOperationException(
                 $"Pattern '{pattern.Name}' is already defined on rule '{ruleName}'.");
+        EnsurePlacement(ruleName, pattern);
         EnsureUniqueCaptureNames(ruleName, pattern);
         list.Add(pattern);
         SortPatterns(list);
     }
 
+    /// <summary>
+    /// Fails closed on an element where it cannot work: a <see cref="Slot{TToken,TTokenKind}"/> that is not
+    /// the row's last element, and a Slot inside an <see cref="Optional{TToken,TTokenKind}"/>.
+    /// </summary>
+    private static void EnsurePlacement(string ruleName, Pattern<TToken, TTokenKind> pattern) {
+        var elements = pattern.Elements;
+        for (var i = 0; i < elements.Count; i++) {
+            switch (elements[i]) {
+                case Slot<TToken, TTokenKind> slot when i != elements.Count - 1:
+                    throw new InvalidOperationException(
+                        $"Slot '{slot.Name}' on '{ruleName}/{pattern.Name}' is element {i + 1} of {elements.Count}; a Slot must be the last element.");
+                case Optional<TToken, TTokenKind> { Inner: Slot<TToken, TTokenKind> inner }:
+                    throw new InvalidOperationException(
+                        $"Slot '{inner.Name}' on '{ruleName}/{pattern.Name}' is inside an Optional; a Slot is never optional.");
+            }
+        }
+    }
+
     private static void EnsureUniqueCaptureNames(string ruleName, Pattern<TToken, TTokenKind> pattern) {
         var seen = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var name in CaptureNames(pattern.Elements)) {
+        // A Slot's name is a print fill key, so it shares the namespace of the captures.
+        var slots = pattern.Elements.OfType<Slot<TToken, TTokenKind>>().Select(slot => slot.Name);
+        foreach (var name in CaptureNames(pattern.Elements).Concat(slots)) {
             if (!seen.Add(name))
                 throw new InvalidOperationException(
                     $"Duplicate capture '{name}' on pattern '{pattern.Name}' in rule '{ruleName}'.");

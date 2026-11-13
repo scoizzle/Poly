@@ -3,21 +3,12 @@ using Poly.Tests.Docs;
 namespace Poly.Tests.DomainModeling.Parsing;
 
 /// <summary>
-/// After G-13a every consumer reads a DSL token through the span API (<c>Span</c>, <c>TextEquals</c>,
-/// <c>Name()</c>, <c>Unescape()</c>) or one of two helpers in <c>DslTokenText</c>: <c>Shown</c> for message
-/// text, and <c>LegacyText</c> for a DECISION on a token whose kind the code does not know, where a string
-/// literal still reads as its decoded value (<c>X: "enum"</c> classifies as an enum). The decision sites
-/// are pinned here, so a new one is a reviewed change and the quirk fix can find every one.
+/// Every consumer reads a DSL token through the span API (<c>Span</c>, <c>TextEquals</c>, <c>Name()</c>,
+/// <c>Unescape()</c>) or one of two helpers in <c>DslTokenText</c>: <c>Shown</c> for message text, and <c>Word</c>
+/// for a decision on a token of unknown kind, which reads only an identifier or a keyword. G-13c removed
+/// <c>LegacyText</c>, the by-name quirk that read a quoted string as a word, so no call may come back.
 /// </summary>
 public sealed class TokenTextReaderTests {
-    private static readonly Dictionary<string, int> LegacyTextCallSites = new(StringComparer.Ordinal) {
-        ["Poly/DomainModeling/Language/DomainResolver.Entities.cs"] = 1,
-        ["Poly/DomainModeling/Language/DomainResolver.TopLevel.cs"] = 1,
-        ["Poly/DomainModeling/Language/DslOutline.cs"] = 6,
-        ["Poly/DomainModeling/Language/PolyEdit.cs"] = 1,
-        ["src/Poly.Compile/PolyCompiler.cs"] = 1,
-    };
-
     private static IEnumerable<string> ProductionSources(string root) {
         foreach (var dir in new[] { "Poly", "Poly.Mcp", "src" }) {
             foreach (var file in Directory.EnumerateFiles(Path.Combine(root, dir), "*.cs", SearchOption.AllDirectories)) {
@@ -37,16 +28,14 @@ public sealed class TokenTextReaderTests {
     }
 
     [Test]
-    public async Task LegacyText_DecisionSites_ArePinned() {
+    public async Task LegacyText_NoProductionSourceReadsIt() {
         var root = GuideBlocks.RepoRoot();
-        var found = new Dictionary<string, int>(StringComparer.Ordinal);
+        var found = new List<string>();
         foreach (var rel in ProductionSources(root)) {
-            var count = Count(File.ReadAllText(Path.Combine(root, rel)), "DslTokenText.LegacyText(");
-            if (count > 0)
-                found[rel] = count;
+            if (Count(File.ReadAllText(Path.Combine(root, rel)), "LegacyText") > 0)
+                found.Add(rel);
         }
 
-        await Assert.That(found.OrderBy(p => p.Key, StringComparer.Ordinal).Select(p => $"{p.Key}={p.Value}"))
-            .IsEquivalentTo(LegacyTextCallSites.OrderBy(p => p.Key, StringComparer.Ordinal).Select(p => $"{p.Key}={p.Value}"));
+        await Assert.That(found).IsEmpty();
     }
 }

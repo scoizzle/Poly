@@ -231,4 +231,39 @@ public class ArithmeticResultTypingTests {
         using (var exec = Interpreter.Execute(Interpreter.Compile(byteAndShort, analysis)))
             await Assert.That(exec.GetValue<int>()).IsEqualTo(12);
     }
+
+    /// <summary>Lock amendment 10: an entity (a CLR class with no operator) beside a number has no stamp; master stamped the left operand's type.</summary>
+    [Test]
+    public async Task Add_EntityWithANumber_HasNoStamp() =>
+        await Assert.That(Stamp(OperatorKind.Add, Param("e", typeof(LoweredTreeOperandCoverageTests.Item)), Param("n", typeof(long)))).IsNull();
+
+    /// <summary>
+    /// The date-offset stamps: the offset is stamped with the date type the compatibility rewrite produces (one shared rule,
+    /// T-10), the nullable left keeps its lift, and a non-nullable left beside a decimal has no stamp (the provider defines
+    /// no operator and the analysis rejects it).
+    /// </summary>
+    [Test]
+    [Arguments(OperatorKind.Add, typeof(DateTime), typeof(int), typeof(DateTime))]
+    [Arguments(OperatorKind.Subtract, typeof(DateOnly), typeof(long), typeof(DateOnly))]
+    [Arguments(OperatorKind.Add, typeof(DateTime?), typeof(int), typeof(DateTime?))]
+    [Arguments(OperatorKind.Add, typeof(DateTime), typeof(decimal), null)]
+    [Arguments(OperatorKind.Subtract, typeof(DateOnly), typeof(decimal), null)]
+    [Arguments(OperatorKind.Add, typeof(DateTime?), typeof(decimal), typeof(DateTime?))]
+    public async Task DateOffset_IsStampedWithTheDateType(OperatorKind kind, Type left, Type right, Type? expected) =>
+        await Assert.That(Stamp(kind, Param("d", left), Param("n", right))).IsEqualTo(expected);
+
+    /// <summary>
+    /// What a user gets for <c>object + int</c> passed to a call. Master refused it at analysis (the object stamp matched no
+    /// overload); the provider defines no operator, so the sum has no type, the call accepts it and the VM adds the boxed
+    /// values. An accepted-undefined cell is T-22's (the scalar gate lets an <c>object</c> operand through); T-17 invents no
+    /// type to refuse it.
+    /// </summary>
+    [Test]
+    public async Task ObjectPlusInt_PassedToACall_IsAcceptedByTheAnalysis_T22() {
+        var node = new Invoke(new Member(new ClrTypeReference(typeof(DateOffsetNestingTests.Calls)), "TakesInt"), new Add(Param("o", typeof(object)), new Constant(1)));
+        var analysis = Interpreter.Analyze(node, ClrTypeDefinitionRegistry.Shared);
+        await Assert.That(analysis.Diagnostics.Where(static d => d.Severity == Poly.Analysis.DiagnosticSeverity.Error).Select(static d => d.Message).ToArray()).IsEmpty();
+        using var exec = Interpreter.Execute(Interpreter.Compile(node, analysis), 1);
+        await Assert.That(exec.GetValue<int>()).IsEqualTo(2);
+    }
 }

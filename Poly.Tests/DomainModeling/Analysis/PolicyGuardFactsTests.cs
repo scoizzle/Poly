@@ -549,6 +549,64 @@ public class PolicyGuardFactsTests {
             "DMEFF008? Assigned expression value range [0, 100] can fall outside constraint range(12, 100) on property 'Qty'.");
     }
 
+    /// <summary>(e) the stage-gate lift composed with the loop (master narrows by the suppressed stage gate).</summary>
+    private const string ProbeLoopUnderStageLift = """
+        domain S
+        Line: entity { N: Number optional }
+        Order: entity {
+          Qty: Number range(0, 100)
+          Seen: Number range(12, 100) optional
+          Lines: many Line
+          Small: policy { Qty <= 10 }
+          Open: stage require Small {
+            Go: action require not Small { for l in Lines { assign Qty to Qty + 5 }  assign Seen to Qty }
+          }
+        }
+        """;
+
+    /// <summary>(f) a self-invoked callee under <c>require not Small</c> with the loop in its body.</summary>
+    private const string ProbeLoopInSelfInvokedRequireNot = """
+        domain I
+        Line: entity { N: Number optional }
+        Order: entity {
+          Qty: Number range(0, 100)
+          Seen: Number range(12, 100) optional
+          Lines: many Line
+          Small: policy { Qty <= 10 }
+          Keep: action require not Small { for l in Lines { assign Qty to Qty + 5 }  assign Seen to Qty }
+          Go: action { invoke Keep }
+        }
+        """;
+
+    /// <summary>
+    /// An assign on a path the walk no longer models (after a loop, a transition, a cross-entity invoke, ...) is judged
+    /// against the environment of the guards master narrowed by (no <c>require not</c>, no stage-gate lift), so this
+    /// PR's narrowing never composes with the unsound loop and write-back environments (#863, V-15) into a new clean.
+    /// Each expected string is master 68816824's findings for the document, measured on master's tree; each document
+    /// fails on the simulator with the guard held (Qty 11, or 50 with Bump's write-back).
+    /// </summary>
+    [Test]
+    [Arguments("a", "DMEFF008? Assigned expression value range [5, 105] can fall outside constraint range(0, 100) on property 'Qty'. | " +
+                    "DMEFF008? Assigned expression value range [5, 100] can fall outside constraint range(12, 100) on property 'Seen'.")]
+    [Arguments("c", "DMEFF008? Assigned expression value range [0, 100] can fall outside constraint range(11, 100) on property 'Seen'.")]
+    [Arguments("e", "DMEFF008? Assigned expression value range [5, 15] can fall outside constraint range(12, 100) on property 'Seen'.")]
+    [Arguments("f", "DMEFF008? Assigned expression value range [5, 105] can fall outside constraint range(0, 100) on property 'Qty'. | " +
+                    "DMEFF008? Assigned expression value range [5, 100] can fall outside constraint range(12, 100) on property 'Seen'. | " +
+                    "DMEFF008? Call-chain postcondition (Go → Keep): assigned value range [5, 105] can fall outside constraint range(0, 100) on property 'Qty'. | " +
+                    "DMEFF008? Call-chain postcondition (Go → Keep): assigned value range [5, 100] can fall outside constraint range(12, 100) on property 'Seen'.")]
+    public async Task UntrustedWrite_UnderNewNarrowing_KeepsMastersVerdict(string cell, string master) {
+        var dsl = cell switch {
+            "a" => ProbeLoopUnderRequireNot,
+            "c" => ProbeWriteBackUnderRequireNot,
+            "e" => ProbeLoopUnderStageLift,
+            _ => ProbeLoopInSelfInvokedRequireNot,
+        };
+        await Assert.That(RangeFindings(Analyze(dsl).Analysis)).IsEqualTo(master);
+        var exec = Simulator(dsl, out _);
+        if (cell == "c") return; // its simulator run is in Probe_LoopAndWriteBack_Simulator_FailsWithGuardHeld
+        await Assert.That(exec.Invoke(Make(exec, "Order", ("Qty", 11L)), "Go").Succeeded).IsFalse();
+    }
+
     // ── Census (plan §4, lock amendment 8) ──────────────────────
 
     private static readonly string[] CensusCodes = [

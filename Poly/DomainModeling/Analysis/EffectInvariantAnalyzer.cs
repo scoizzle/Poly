@@ -133,13 +133,39 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
             var postconditions = new List<EffectPostcondition>();
             // Call-stack scoped: an action is in the set only while its walk is on the stack.
             var visited = new HashSet<Action>(ReferenceEqualityComparer.Instance) { action };
-            var flow = new InitializerFlow(action);
+            var flow = new WalkTrust(action, preconditionGuardsOnly: false);
             ApplyEffects(action.Effects, entity, action, env, paramEnv: null, visited, postconditions, flow, domain, stageName, axes);
+            if (flow.UntrustedWrites.Count > 0)
+                JudgeUntrustedWritesByPreconditions(action, entity, stage, stageName, domain, axes, postconditions, flow.UntrustedWrites);
             contexts.Add(new ActionStageInvariant(stageName, preconditions, narrowed, merged, postconditions) {
                 InitializerValues = flow.Values,
             });
         }
         context.SetMetadata(action, new ActionInvariantMetadata(contexts));
+    }
+
+    /// <summary>
+    /// An assign the walk records where it no longer models the instance (<see cref="WalkTrust.Trusted"/> false:
+    /// after a loop, a transition, a cross-entity invoke, ...) takes its value from a second walk over the guards
+    /// master narrowed by (<see cref="PolicyGuardFacts.PreconditionGuards"/>, callees included): there V-18's
+    /// <c>require not</c> and stage-gate narrowing could compose with the unsound loop and write-back environments
+    /// (#863, V-15) into a new clean. The walk's shape does not depend on the environment, so the two walks record the
+    /// same effects in the same order; a mismatch is a broken invariant and throws.
+    /// </summary>
+    private static void JudgeUntrustedWritesByPreconditions(
+        Action action, Entity entity, Stage? stage, string? stageName, Domain domain, DomainGuardAxes axes,
+        List<EffectPostcondition> postconditions, IReadOnlyList<int> untrusted) {
+        var shadow = new List<EffectPostcondition>();
+        ApplyEffects(action.Effects, entity, action,
+            BuildInitialEnv(entity, PolicyGuardFacts.PreconditionGuards(action, stage), axes.For(entity)), paramEnv: null,
+            new HashSet<Action>(ReferenceEqualityComparer.Instance) { action }, shadow,
+            new WalkTrust(action, preconditionGuardsOnly: true), domain, stageName, axes);
+        foreach (var i in untrusted) {
+            if (i >= shadow.Count || !ReferenceEquals(shadow[i].Effect, postconditions[i].Effect))
+                throw new InvalidOperationException(
+                    $"The {Id} pass walked action '{action.Name}' twice and the walks recorded different effects.");
+            postconditions[i] = postconditions[i] with { Value = shadow[i].Value };
+        }
     }
 
     /// <summary>The stages the action is valid in: its own stage if stage-scoped, else every
@@ -540,7 +566,7 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
         IReadOnlyList<Effect> effects, Entity entity, Action action,
         Dictionary<string, AbstractValue> env,
         IReadOnlyDictionary<string, AbstractValue>? paramEnv,
-        HashSet<Action> visited, List<EffectPostcondition> result, InitializerFlow flow, Domain domain,
+        HashSet<Action> visited, List<EffectPostcondition> result, WalkTrust flow, Domain domain,
         string? currentStage, DomainGuardAxes axes) {
         foreach (var effect in effects) {
             switch (effect) {
@@ -556,6 +582,7 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
                         foreach (var key in env.Keys.ToList())
                             if (!string.Equals(key, target.Name, StringComparison.Ordinal))
                                 env[key] = env[key].WithoutRelationsTo(target.Name);
+                        if (!flow.Trusted) flow.UntrustedWrites.Add(result.Count);
                         result.Add(new EffectPostcondition(
                             assign, prop.Name,
                             BuildPostconditionConstraints(prop, assign.Value, action, paramEnv),
@@ -631,13 +658,22 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
     /// exactly (an assign, an <c>if</c>, a composite, a self-invoke it entered): after anything else, in the
     /// branch it was in and every effect after it, nothing more is recorded, and those creates are judged against
     /// declared ranges as before (lock amendments 1 and 3). Each arm of an <c>if</c> is its own path; after the
-    /// <c>if</c> the flag is the conjunction of the arms, and it never turns true again further along a path.
+    /// <c>if</c> the flag is the conjunction of the arms, and it never turns true again further along a path. An assign
+    /// recorded while it is false is listed in <see cref="UntrustedWrites"/> (see
+    /// <see cref="JudgeUntrustedWritesByPreconditions"/>), whose second walk sets <see cref="PreconditionGuardsOnly"/>.
     /// </summary>
-    private sealed class InitializerFlow(Action root) {
+    private sealed class WalkTrust(Action root, bool preconditionGuardsOnly) {
         public Action Root { get; } = root;
         public List<InitializerValue> Values { get; } = [];
+        public List<int> UntrustedWrites { get; } = [];
+        public bool PreconditionGuardsOnly { get; } = preconditionGuardsOnly;
         public bool Trusted { get; set; } = true;
         public void Untrust() => Trusted = false;
+
+        /// <summary>The guards a callee's entry environment is narrowed by in this walk.</summary>
+        public IReadOnlyList<GuardedPolicy> CalleeGuards(Action callee) => PreconditionGuardsOnly
+            ? PolicyGuardFacts.PreconditionGuards(callee, stage: null)
+            : PolicyGuardFacts.Guards(callee, stage: null);
     }
 
     /// <summary>Records each initializer's value, evaluated in the creator's scope as
@@ -648,7 +684,7 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
     private static void RecordInitializers(
         IReadOnlyList<PropertyBinding> initializers, Entity entity, Action action,
         Dictionary<string, AbstractValue> env, IReadOnlyDictionary<string, AbstractValue>? paramEnv,
-        InitializerFlow flow) {
+        WalkTrust flow) {
         if (!flow.Trusted || !ReferenceEquals(action, flow.Root) || env.Values.Any(v => v.Unsatisfiable)) return;
         foreach (var initializer in initializers)
             flow.Values.Add(new InitializerValue(initializer, Eval(initializer.Expression, entity, action, env, paramEnv), action));
@@ -670,7 +706,7 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
         InvokeActionEffect invoke, Entity entity, Action action,
         Dictionary<string, AbstractValue> env,
         IReadOnlyDictionary<string, AbstractValue>? paramEnv,
-        HashSet<Action> visited, List<EffectPostcondition> result, InitializerFlow flow, Domain domain,
+        HashSet<Action> visited, List<EffectPostcondition> result, WalkTrust flow, Domain domain,
         string? currentStage, DomainGuardAxes axes) {
         if (invoke.TargetRelationship is not null) {
             ApplyCrossEntityInvoke(invoke, entity, action, env, paramEnv, visited, result, flow, domain, axes);
@@ -681,7 +717,7 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
         if (target is null || !visited.Add(target)) return false;
 
         var targetEnv = CloneEnv(env);
-        foreach (var guard in PolicyGuardFacts.Guards(target, stage: null))
+        foreach (var guard in flow.CalleeGuards(target))
             PolicyGuardFacts.Refine(targetEnv, guard, entity, args: null, instantiate: null, axes.For(entity));
 
         Dictionary<string, AbstractValue>? targetParams = null;
@@ -730,7 +766,7 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
         InvokeActionEffect invoke, Entity entity, Action action,
         Dictionary<string, AbstractValue> env,
         IReadOnlyDictionary<string, AbstractValue>? paramEnv,
-        HashSet<Action> visited, List<EffectPostcondition> result, InitializerFlow flow, Domain domain, DomainGuardAxes axes) {
+        HashSet<Action> visited, List<EffectPostcondition> result, WalkTrust flow, Domain domain, DomainGuardAxes axes) {
         var relationship = entity.Navigations.FirstOrDefault(r =>
             string.Equals(r.Name, invoke.TargetRelationship, StringComparison.Ordinal));
         if (relationship is null) return;
@@ -746,7 +782,7 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
         var targetEnv = new Dictionary<string, AbstractValue>(StringComparer.Ordinal);
         foreach (var prop in targetEntity.Properties)
             targetEnv[prop.Name] = AbstractValue.From(prop.Constraints);
-        foreach (var guard in PolicyGuardFacts.Guards(targetAction, stage: null))
+        foreach (var guard in flow.CalleeGuards(targetAction))
             PolicyGuardFacts.Refine(targetEnv, guard, targetEntity, args: null, instantiate: null, axes.For(targetEntity));
 
         Dictionary<string, AbstractValue>? targetParams = null;
@@ -771,7 +807,7 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
         ForEachInvokeEffect efe, Entity entity, Action action,
         Dictionary<string, AbstractValue> env,
         IReadOnlyDictionary<string, AbstractValue>? paramEnv,
-        HashSet<Action> visited, List<EffectPostcondition> result, InitializerFlow flow, Domain domain, DomainGuardAxes axes) {
+        HashSet<Action> visited, List<EffectPostcondition> result, WalkTrust flow, Domain domain, DomainGuardAxes axes) {
         var relationship = entity.Navigations.FirstOrDefault(r =>
             string.Equals(r.Name, efe.RelationshipName, StringComparison.Ordinal));
         if (relationship is null) return;
@@ -787,7 +823,7 @@ internal sealed class EffectInvariantAnalyzer : INodeAnalyzer {
         var targetEnv = new Dictionary<string, AbstractValue>(StringComparer.Ordinal);
         foreach (var prop in targetEntity.Properties)
             targetEnv[prop.Name] = AbstractValue.From(prop.Constraints);
-        foreach (var guard in PolicyGuardFacts.Guards(targetAction, stage: null))
+        foreach (var guard in flow.CalleeGuards(targetAction))
             PolicyGuardFacts.Refine(targetEnv, guard, targetEntity, args: null, instantiate: null, axes.For(targetEntity));
         if (efe.Predicate is ForEachNamedPolicy { PolicyName: var policyName }) {
             var predicatePolicy = targetEntity.Policies.FirstOrDefault(p =>

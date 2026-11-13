@@ -34,6 +34,16 @@ internal static class PolicyGuardFacts {
             .Select(p => new GuardedPolicy(p, p.Name.StartsWith(NegatedPrefix, StringComparison.Ordinal)))
             .ToList();
 
+    /// <summary>The guards analysis narrowed by before V-18, the public precondition set
+    /// (<c>EffectInvariantAnalyzer.CollectPreconditions</c>): the action's policies except its <c>require not</c>
+    /// markers, then every stage policy. Read only where the walk no longer models the instance.</summary>
+    public static IReadOnlyList<GuardedPolicy> PreconditionGuards(Action action, Stage? stage) =>
+        action.Policies
+            .Where(p => !p.Name.StartsWith(NegatedPrefix, StringComparison.Ordinal))
+            .Concat(stage?.Policies ?? [])
+            .Select(p => new GuardedPolicy(p, p.Name.StartsWith(NegatedPrefix, StringComparison.Ordinal)))
+            .ToList();
+
     /// <summary>
     /// Narrows <paramref name="env"/> by one guard, under <see cref="EffectInvariantAnalyzer.Refine"/>'s soundness
     /// contract. A negated guard narrows by the negation of <paramref name="owner"/>'s policy of that name, as the

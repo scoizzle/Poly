@@ -1426,6 +1426,9 @@ diverging:
   `require not P` narrows by the negation of the entity's policy `P` (`require not Small`
   with `Small: policy { Qty <= 10 }` gives Qty ≥ 11). An action's `require not P` lifts its
   stage's `require P` gate at runtime, so that stage policy does not narrow the action.
+  Neither applies to an assign that follows a `for`, a transition, a cross-entity or fan-out
+  `invoke`, a `create` or a `create in` on its path: that assign is judged by the action's
+  other `require` gates and every policy of its stage, as before `require not` narrowed.
 - **Silence means verified (Q4)** — with two exceptions: non-`range` kinds on `assign`
   and initializer writes (V-08). A write analysis cannot
   decide — a bare property or parameter with no bound, an operator the

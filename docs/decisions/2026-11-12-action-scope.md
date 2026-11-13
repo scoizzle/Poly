@@ -109,7 +109,8 @@ Recorded here and in `docs/CORE.md`; each consumer's plan lock must confirm them
   cannot write another entity's state) and `link`/`unlink` fail closed until L-13, which must touch
   both ends.
 - **Created instances.** `Poly.Runtime.ActionScope.Create(instance, "EntityName")`. L-03c emits it in
-  every factory after `new` and before any peer attach.
+  every factory after `new` and before any peer attach. L-04b makes the static `Create` and every
+  `Create{Nav}` a root-scope wrapper (the owner's ruling: any failure is a rollback), so this holds bare.
 - **Notify depth (L-03c, F2).** `EnterNotifyCascade` returns the depth it entered at and the exit
   assigns it back. A nested rollback mid-cascade restores the depth the action started with; a
   relative decrement in the unwinding `finally` would then leave it at -1. For an entity that existed

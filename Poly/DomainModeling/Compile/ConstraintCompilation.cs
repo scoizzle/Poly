@@ -194,7 +194,8 @@ internal static class ConstraintCompilation {
 
     /// <summary>
     /// The factory's body method when the factory is a scoped wrapper (L-04b), else the factory itself: the wrapper has
-    /// no top-level construction or return, and the library's guard and record belong around the construction.
+    /// no top-level construction or return, and the library's guard and record belong around the construction. A library
+    /// that names the method with <c>Named("Create")</c> gets the wrapper, outside the scope.
     /// </summary>
     private static IEnumerable<string> CreateAnchor(IReadOnlyList<MethodDefinitionNode> methods) {
         var body = DomainToCSharpExporter.ActionBodyPrefix + "Create";

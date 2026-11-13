@@ -115,7 +115,8 @@ public class OverloadSweepTests {
     ];
 
     /// <summary>
-    /// Identities of single-overload methods whose sites a slice adds or moves in documents the baseline already has them
+    /// Identities of single-overload methods whose sites a slice adds, removes or moves: the filter hides both the presence
+    /// and the absence of these members, not only a move, in documents the baseline already has them
     /// in (L-04b: every generated <c>Create</c> and <c>Create{Nav}</c> is a root-scope wrapper, so the
     /// <c>Commit</c>, <c>Rollback</c> and <c>IsSuccess</c> sites of an action wrapper now appear in every entity's factory and
     /// the first occurrence of those lines moves). Like <see cref="ExplainedAdditions"/> the lines are dropped before comparing,

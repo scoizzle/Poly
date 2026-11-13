@@ -77,7 +77,7 @@ internal sealed record PatternRowViolation(PatternRowCheck Check, string Rule, s
 internal static class PatternRowChecker {
     /// <summary>What a top-level pattern element is to the printer.</summary>
     internal enum ElementRole {
-        /// <summary>Emits fixed text (or nothing): <c>MatchKind</c>, <c>NotFollowedBy</c>.</summary>
+        /// <summary>Emits fixed text (or nothing): <c>MatchKind</c>, <c>NotFollowedBy</c>, <c>Word</c>.</summary>
         Fixed,
         /// <summary>A named value: always a hole.</summary>
         Hole,
@@ -99,6 +99,7 @@ internal static class PatternRowChecker {
         where TTokenKind : struct => element switch {
             MatchKind<TToken, TTokenKind> => ElementRole.Fixed,
             NotFollowedBy<TToken, TTokenKind> => ElementRole.Fixed,
+            Word<TToken, TTokenKind> => ElementRole.Fixed,
             Value<TToken, TTokenKind> { Name: { Length: > 0 } } => ElementRole.Hole,
             MatchPredicate<TToken, TTokenKind> { Label: { Length: > 0 } } => ElementRole.PredicateLabel,
             Value<TToken, TTokenKind> => ElementRole.Slot,

@@ -47,6 +47,7 @@ public static class TemporalExpressionPrintBinders {
         forms.RegisterPrintMapping(new NowBinder());
         forms.RegisterPrintMapping(new TodayBinder());
         forms.RegisterPrintMapping(new DateOperationBinder());
+        forms.RegisterPrintMapping(new DurationBinder());
     }
 
     /// <summary>Optional: bind duration fold onto the core duration pattern.</summary>
@@ -80,6 +81,26 @@ public static class TemporalExpressionPrintBinders {
                 return false;
             }
             binding = new PrintMapping("expr-primary", "ident", Fill: ctx => ctx.Emit("Today"));
+            return true;
+        }
+    }
+
+    /// <summary>Prints a bare <see cref="Duration"/> as its <c>&lt;n&gt; &lt;unit&gt;</c> primary, so an assign or a comparison round-trips.</summary>
+    private sealed class DurationBinder : IExpressionPrintMapping {
+        public Type ExpressionType => typeof(Duration);
+
+        public bool TryMap(DomainExpression expression, out PrintMapping binding) {
+            if (expression is not Duration duration) {
+                binding = default;
+                return false;
+            }
+            binding = new PrintMapping(
+                "expr-primary",
+                "duration",
+                NamedFills: new Dictionary<string, string>(StringComparer.Ordinal) {
+                    ["amount"] = DslNumberText.Format(duration.Amount),
+                    ["unit"] = DurationForm.Spell(DurationForm.ToKind(duration.Unit)),
+                });
             return true;
         }
     }

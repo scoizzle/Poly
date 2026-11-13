@@ -26,15 +26,27 @@ public interface IExpressionTypeCheck {
 }
 
 /// <summary>
+/// Where the analyzer reached a pack-owned expression, stamped on the node by the walk sites that know it (an assign
+/// value, a create initializer, a comparison operand). <see cref="Default"/> is every other position, and a
+/// <c>default(...)</c> (see <see cref="ExpressionTypeCheckScope.DefaultTargetTypeName"/>).
+/// </summary>
+public enum CheckSite { Default, Assign, Operand }
+
+/// <summary>
 /// Context bundle for a registered expression type check. Mirrors the surface the analyzer
 /// walks; <see cref="DefaultTargetTypeName"/> is non-null when the check is a
-/// <c>default(...)</c> compatibility validation against a target property.
+/// <c>default(...)</c> compatibility validation against a target property. A stamped
+/// <see cref="Site"/> names the position and <see cref="SiteTypeName"/> the type the value is assigned to or
+/// compared with. <see cref="IsOptional"/> answers whether a property name is declared optional.
 /// </summary>
 public readonly record struct ExpressionTypeCheckScope(
     IReadOnlyDictionary<string, string> Properties,
     IReadOnlyDictionary<string, string>? Parameters,
     IReadOnlyDictionary<string, EnumType> EnumTypes,
-    string? DefaultTargetTypeName = null);
+    string? DefaultTargetTypeName = null,
+    CheckSite Site = CheckSite.Default,
+    string? SiteTypeName = null,
+    Func<string, bool>? IsOptional = null);
 
 /// <summary>
 /// Session registry of pack-owned expression type checks.

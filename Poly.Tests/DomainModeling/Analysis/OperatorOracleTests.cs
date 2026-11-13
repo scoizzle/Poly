@@ -366,26 +366,26 @@ internal static class OperatorOracle {
 }
 
 /// <summary>
-/// An owner row for a divergence, matched by kind, operand names, operator and the reason: <see cref="ReasonContains"/>
+/// An owner row for a divergence, matched by kind, operand names, operator and the reason: <see cref="ReasonPattern"/>
 /// is a regular expression found in the reason (a plain fragment matches as text; <c>^</c> and <c>$</c> anchor it).
 /// <c>*</c> matches anything. <see cref="ExpectedCount"/> is the number of divergences the row owns: a fixing slice
 /// edits the number or deletes the row, and growth fails as surely as shrinkage.
 /// </summary>
-internal sealed record LedgerRule(OracleKind Kind, string Lefts, string Ops, string Rights, string ReasonContains, string Owner, int ExpectedCount, string Checksum = "") {
+internal sealed record LedgerRule(OracleKind Kind, string Lefts, string Ops, string Rights, string ReasonPattern, string Owner, int ExpectedCount, string Checksum = "") {
     private static readonly ConcurrentDictionary<string, Regex> Patterns = new(StringComparer.Ordinal);
 
     public bool Matches(OracleCell cell, OracleDivergence divergence) =>
         divergence.Kind == Kind
         && In(Lefts, cell.Left) && In(Ops, cell.Op.ToString()) && In(Rights, cell.Right ?? "-")
-        && Patterns.GetOrAdd(ReasonContains, static pattern => new Regex(pattern, RegexOptions.CultureInvariant)).IsMatch(divergence.Reason);
+        && Patterns.GetOrAdd(ReasonPattern, static pattern => new Regex(pattern, RegexOptions.CultureInvariant)).IsMatch(divergence.Reason);
 
     /// <summary>
     /// What the checksum hashes for one owned divergence: the cell and this rule's kind and fragment, never the reason
     /// text, so the values the VM computed (which may differ by architecture) stay out of the cell identity.
     /// </summary>
-    public string KeyOf(OracleCell cell) => $"{cell.Key}|{Kind}|{ReasonContains}";
+    public string KeyOf(OracleCell cell) => $"{cell.Key}|{Kind}|{ReasonPattern}";
 
-    public string Describe() => $"{Kind} [{Lefts}] [{Ops}] [{Rights}] \"{ReasonContains}\" -> {Owner}";
+    public string Describe() => $"{Kind} [{Lefts}] [{Ops}] [{Rights}] \"{ReasonPattern}\" -> {Owner}";
 
     private static bool In(string set, string value) => set == "*" || set.Split(',').Contains(value);
 }
@@ -463,7 +463,9 @@ public class OperatorOracleTests {
     // the analyzer column is n/a for those; the owners are the lowered analysis (T-10, T-17, T-18, T-22) and the ABI (T-21).
     private static readonly LedgerRule[] LoweredRules = [
         new(OracleKind.LoweredAnalysisDisagrees, "*", "*", "*", "analysis error on a defined cell", "T-18 (SyntaxTypeCompatibilityAnalyzer arithmetic rules; temporal operands with T-10)", 40, "8f48a0defcb327e9"),
-        new(OracleKind.LoweredAnalysisDisagrees, "*", "*", "*", "type: analysis", "T-17 (result typing: small integers, char and uint with a signed operand keep the operand type)", 371, "8c26ce5f451d4f11"),
+        new(OracleKind.LoweredAnalysisDisagrees, "*", Arithmetic, "*", "type: analysis", "T-17 (result typing: small integers, char and uint with a signed operand keep the operand type)", 150, "ff6f45d8a9c3a166"),
+        // The same wrong type on the node kinds the lowered analysis has no case for (issue 812): it passes the operand type through.
+        new(OracleKind.LoweredAnalysisDisagrees, "*", BitwiseShiftAndUnaryMinus, "*", "type: analysis", "T-22 (bitwise, shift and unary minus cases: the operand type passes through)", 221, "1a89fb5312f00f92"),
         new(OracleKind.LoweredAnalysisDisagrees, "*", Arithmetic, "*", "typed Decimal", "T-17 (PromoteNumeric / ResolveAddType)", 88, "b1f45630c1054ca7"),
         new(OracleKind.LoweredAnalysisDisagrees, "*", Arithmetic, "*", "typed UInt64", "T-17 (promotion: ulong with a signed operand)", 40, "718e56090af03352"),
         new(OracleKind.LoweredAnalysisDisagrees, "*", "Add,Subtract", "*", "typed DateOnly", "T-10 (RewriteDateOffset)", 20, "7ba4ce6c196e991e"),
@@ -559,6 +561,20 @@ public class OperatorOracleTests {
         await Assert.That(cell.Abi).StartsWith("Decimal;");
     }
 
+    /// <summary>
+    /// WRONG VALUES, pinned as they are today (issue 832, owner T-21). The VM returns -1 for unary minus on a Decimal
+    /// and on a Duration whatever the operand, and <c>UInt8 | UInt64</c> is not the bitwise or of its operands. These
+    /// are not the right answers; T-21's fix inverts them. The ledger's checksums are value-independent, so without
+    /// these a wrong value that moved to a different wrong value would be invisible. The operands are exactly
+    /// representable and the text is the oracle's invariant-culture rendering, so the pin is the same on arm64 and x64.
+    /// </summary>
+    [Test]
+    public async Task Probe_WrongVmValues_Issue832_PinnedAsTheyAreToday_T21InvertsThem() {
+        await Assert.That(Cell("Decimal", OperatorKind.UnaryMinus, null).Abi).IsEqualTo("Decimal; S1=-1; S2=-1");
+        await Assert.That(Cell("Duration", OperatorKind.UnaryMinus, null).Abi).IsEqualTo("TimeSpan; S1=-1; S2=-1");
+        await Assert.That(Cell("UInt8", OperatorKind.BitwiseOr, "UInt64").Abi).IsEqualTo("Byte; S1=255; S2=-1");
+    }
+
     [Test]
     public async Task AnalyzerColumn_NeverSwallowsAnException() {
         // An exception in the analyzer column is a finding, not a blank cell.
@@ -580,6 +596,28 @@ public class OperatorOracleTests {
 
     private static LedgerRule Pinned(LedgerRule rule, IEnumerable<(OracleCell Cell, OracleDivergence Divergence)> items) =>
         rule with { Checksum = LedgerCheck.Checksum(items.Where(i => rule.Matches(i.Cell, i.Divergence)).Select(i => rule.KeyOf(i.Cell))) };
+
+    [Test]
+    public async Task VmReasonRules_B3B4B5_ClaimEachReasonShapeExactlyOnce() {
+        // The three VM rules must partition the reasons RunVm writes: a type only, a type and a value, a value only, two values.
+        LedgerRule[] rules = [
+            new(OracleKind.AbiDivergesFromTree, "*", "*", "*", "^type: VM [^;]*$", "B3", 1),
+            new(OracleKind.AbiDivergesFromTree, "*", "*", "*", "^type: VM .*; value S", "B4", 1),
+            new(OracleKind.AbiDivergesFromTree, "*", "*", "*", "^value S", "B5", 1)
+        ];
+        var cell = SyntheticCell("A", OperatorKind.Add, "B");
+        var shapes = new Dictionary<string, string> {
+            ["type only"] = "type: VM Int32, tree Int64",
+            ["type and value"] = "type: VM Int32, tree Int64; value S1: VM -1, tree 5",
+            ["value only"] = "value S1: VM -1, tree 5",
+            ["two values"] = "value S1: VM -1, tree 5; value S2: VM -1, tree 6"
+        };
+        var expectedOwner = new Dictionary<string, string> { ["type only"] = "B3", ["type and value"] = "B4", ["value only"] = "B5", ["two values"] = "B5" };
+        foreach (var (shape, reason) in shapes) {
+            var owners = rules.Where(rule => rule.Matches(cell, new OracleDivergence(OracleKind.AbiDivergesFromTree, reason))).Select(static rule => rule.Owner).ToArray();
+            await Assert.That(owners).IsEquivalentTo([expectedOwner[shape]]);
+        }
+    }
 
     [Test]
     public async Task Ratchet_ExactCountsAndCells_HaveNoProblem() {

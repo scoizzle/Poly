@@ -485,6 +485,7 @@ public class OperatorLookupTests {
     public async Task GetOperator_AgreesWithTheCSharpBinder() {
         var mismatches = new List<string>();
         var defined = 0;
+        var undefined = 0;
         foreach (var kind in Enum.GetValues<OperatorKind>()) {
             var rights = UnaryKinds.Contains(kind) ? [null] : BinderOperands.Select(static t => (Type?)t).ToArray();
             foreach (var left in BinderOperands) {
@@ -494,6 +495,7 @@ public class OperatorLookupTests {
                     var operands = right is null ? new[] { OperatorOperands.Clr(left) } : [OperatorOperands.Clr(left), OperatorOperands.Clr(right)];
                     var resolution = operands[0].GetOperator(kind, right is null ? null : operands[1]);
                     if (expected is null) {
+                        undefined++;
                         if (resolution is { } extra)
                             mismatches.Add($"{cell}: C# none, provider {extra.Result.Name}");
                         continue;
@@ -518,7 +520,9 @@ public class OperatorLookupTests {
             }
         }
         await Assert.That(mismatches).IsEmpty();
-        await Assert.That(defined).IsGreaterThan(0);
+        // Both counts are pinned, so a family that answers none on both sides moves a number and fails here.
+        await Assert.That(defined).IsEqualTo(1848);
+        await Assert.That(undefined).IsEqualTo(1736);
     }
 
     private static OperatorResolution? ClrOp(Type left, OperatorKind kind, Type? right) =>

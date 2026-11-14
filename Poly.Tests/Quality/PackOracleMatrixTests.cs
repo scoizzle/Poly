@@ -204,6 +204,9 @@ public class PackOracleMatrixTests {
         await Assert.That(DomainParityLedgerTests.IsSliceId("P-1")).IsFalse();
         await Assert.That(DomainParityLedgerTests.IsSliceId("PPP-12")).IsFalse();
         await Assert.That(DomainParityLedgerTests.IsSliceId("P-12\n")).IsFalse();
+        await Assert.That(DomainParityLedgerTests.IsSliceId("T-09b")).IsTrue();
+        await Assert.That(DomainParityLedgerTests.IsSliceId("T-09B")).IsFalse();
+        await Assert.That(DomainParityLedgerTests.IsSliceId("T-09ab")).IsFalse();
     }
 
     [Test]

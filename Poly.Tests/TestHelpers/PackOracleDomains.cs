@@ -391,6 +391,180 @@ public static class PackOracleDomains {
         """,
         "/api/leads");
 
+    /// <summary>P-13b (ii) (#912): reads at depth. <c>Order</c> reaches <c>Customer.Region.Zone</c> through three links, a line's
+    /// product through a quantifier body and a fan-out, and <c>Both</c> takes two products. Each link is made over HTTP by the
+    /// module's own <c>create in</c> actions. It stays out of <see cref="All"/>.</summary>
+    public static PackOracleDomain ReadDepth912 { get; } = new(
+        "ReadDepth912",
+        """
+        domain Depth
+        uses http
+        uses sqlite
+
+        Zone: entity {
+          Code: Text unique length(1, 8)
+          Label: Text
+        }
+
+        Region: entity {
+          Code: Text unique length(1, 8)
+          Name: Text
+          zone: Zone
+          MakeZone: action -> Zone { create in zone { Code: "z1"  Label: "zl" } }
+        }
+
+        Product: entity {
+          Code: Text unique length(1, 8)
+          Name: Text
+        }
+
+        Customer: entity {
+          Code: Text unique length(1, 8)
+          region: Region
+          MakeRegion: action -> Region { create in region { Code: "r1"  Name: "n0" } }
+        }
+
+        Order: entity {
+          Code: Text unique length(1, 8)
+          Note: Text optional
+          Flag: Boolean default(false)
+          customer: Customer
+          lines: many Line via order
+          MakeCustomer: action -> Customer { create in customer { Code: "c1" } }
+          InRegion: policy { customer region Name is "n0" }
+          TwoHop: action require InRegion { assign Note to customer region Name }
+          ThreeHop: action { assign Note to customer region zone Label }
+          AddLine: action (p: Product) -> Line { create in lines { Code: "l1"  product: p } }
+          AnyNamed: action { assign Flag to any lines where product Name is "pn" }
+          FanOut: action { for lines as l invoke l.Look }
+        }
+
+        Line: entity {
+          Code: Text unique length(1, 8)
+          Seen: Text optional
+          order: Order
+          product: Product
+          Look: action { assign Seen to product Name }
+        }
+        """,
+        "/api/orders");
+
+    /// <summary>P-13b (ii) (#912): a <c>when</c> handler whose subscriber is registered in the same request. The new item starts in
+    /// <c>Open</c>, the watcher's handler runs <c>invoke region.Copy</c>, and that reads the region's zone. It stays out of
+    /// <see cref="All"/>.</summary>
+    public static PackOracleDomain Watch912 { get; } = new(
+        "Watch912",
+        """
+        domain Watch
+        uses http
+        uses sqlite
+
+        Zone: entity {
+          Code: Text unique length(1, 8)
+          Label: Text
+        }
+
+        Region: entity {
+          Code: Text unique length(1, 8)
+          Name: Text
+          zone: Zone
+          MakeZone: action -> Zone { create in zone { Code: "z1"  Label: "zl" } }
+          Copy: action { assign Name to zone Label }
+        }
+
+        Watcher: entity {
+          Code: Text unique length(1, 8)
+          region: Region
+          items: many Item
+          MakeRegion: action -> Region { create in region { Code: "r1"  Name: "n0" } }
+          when items Open { invoke region.Copy }
+          AddItem: action -> Item { create in items { Code: "i1" } }
+        }
+
+        Item: entity {
+          Code: Text unique length(1, 8)
+          watcher: Watcher via items
+          Open: stage { Finish: action { transition to Done } }
+          Done: stage { }
+        }
+        """,
+        "/api/watchers");
+
+    /// <summary>P-13b (ii) (#912): one row reached through two paths. <c>Go(p)</c> adds a line that watches <c>p</c> and closes the
+    /// order's own product; when <c>p</c> is that product the handler reads <c>p.Zone</c>. It stays out of <see cref="All"/>.</summary>
+    public static PackOracleDomain SameRow912 { get; } = new(
+        "SameRow912",
+        """
+        domain Alias
+        uses http
+        uses sqlite
+
+        Zone: entity {
+          Code: Text unique length(1, 8)
+          Label: Text
+        }
+
+        Product: entity {
+          Code: Text unique length(1, 8)
+          Name: Text
+          zone: Zone
+          MakeZone: action (code: Text) -> Zone { create in zone { Code: code  Label: code } }
+          Copy: action { assign Name to zone Label }
+          Open: stage { Close: action { transition to Closed } }
+          Closed: stage { }
+        }
+
+        Order: entity {
+          Code: Text unique length(1, 8)
+          product: Product
+          lines: many Line via order
+          MakeProduct: action -> Product { create in product { Code: "p1"  Name: "n0" } }
+          Go: action (p: Product) { create in lines { Code: "l1"  product: p }  invoke product.Close }
+        }
+
+        Line: entity {
+          Code: Text unique length(1, 8)
+          order: Order
+          product: Product
+          when product Closed { invoke product.Copy }
+        }
+        """,
+        "/api/orders");
+
+    /// <summary>P-13b (ii) (#912): two parameters of one entity type. <c>Both</c> adds a line for each product; a new line's
+    /// entry effect copies its own product's name, so a host that bound both parameters to one local answers the same name twice.
+    /// It stays out of <see cref="All"/>.</summary>
+    public static PackOracleDomain TwoParams912 { get; } = new(
+        "TwoParams912",
+        """
+        domain Pair
+        uses http
+        uses sqlite
+
+        Product: entity {
+          Code: Text unique length(1, 8)
+          Name: Text
+        }
+
+        Order: entity {
+          Code: Text unique length(1, 8)
+          lines: many Line via order
+          Both: action (a: Product, b: Product) {
+            create in lines { Code: "l1"  product: a }
+            create in lines { Code: "l2"  product: b }
+          }
+        }
+
+        Line: entity {
+          Code: Text unique length(1, 8)
+          Seen: Text optional
+          order: Order
+          product: Product
+          Fresh: stage { entry { assign Seen to product Name } }
+        }
+        """,
+        "/api/orders");
+
     /// <summary>L-08b half 2 (#683, #687): a root with one required value of each type a POST can omit. Its DSL carries no
     /// <c>uses</c> line of its own, so <see cref="RequiredOmittedSimulatorDsl"/> (the same entity without the host
     /// libraries) runs on the simulator unchanged. It stays out of <see cref="All"/>.</summary>

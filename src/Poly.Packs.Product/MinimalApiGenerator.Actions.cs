@@ -19,6 +19,13 @@ public sealed partial class MinimalApiGenerator {
             var keyType = store.KeyClrType;
             var pluralName = Pluralize(entity.Name);
             var parentCtx = GetStorageEntity(entity).IsRoot ? null : GetAggregateParent(entity);
+            // What the action can read, at any depth, from the lowered module. A refused action fails generation here, naming
+            // the action and the reason (ActionReadsRefusedException): the host never serves an action with less than it reads.
+            // With no lowered module (shape-only generation) there is nothing to read, so only the floor below loads.
+            var reads = _catalog is null ? null : ReadsOf(entity, ia);
+            var thisReads = reads?.Roots.FirstOrDefault(r => r.Name == "this")?.Children ?? [];
+            string? backReference = null;
+            IReadOnlySet<string> parentLoaded = new HashSet<string>();
 
             string actionRoute;
             List<Parameter> actionParams = [];
@@ -42,6 +49,9 @@ public sealed partial class MinimalApiGenerator {
                 if (ia.Parameters.Count > 0)
                     actionParams.Add(new Parameter("dto", new TypeReference(GetActionDtoName(entity, ia.Name))));
                 actionParams.Add(new Parameter("db", new TypeReference(dbContextName)));
+                backReference = ctx.BackRefName is null ? null : Pascalize(ctx.BackRefName);
+                parentLoaded = pStore.ReferenceNavigations.Select(n => n.PropertyName)
+                    .Concat(isCollection ? [pascalRel] : []).ToHashSet(StringComparer.Ordinal);
 
                 // Parent + entity lookup + membership check
                 preActionNodes.Add(Init("parentEntity",
@@ -88,29 +98,41 @@ public sealed partial class MinimalApiGenerator {
                     new Block(new Return(ProblemResponse(404, "Not Found", $"{entity.Name} not found")))));
             }
 
-            // Load collection navigations
-            foreach (var nav in store.CollectionNavigations) {
-                var en = new Invoke(new Member(new TypeReference("db"), "Entry"), new Variable("entity"));
-                var col = new Invoke(new Member(en, "Collection"), new Lambda([new Parameter("e")], new Member(new Variable("e"), nav.PropertyName)));
-                preActionNodes.Add(new Await(new Invoke(new Member(col, "LoadAsync"))));
-            }
+            // The one-hop floor: every collection and single link of the entity, loaded whether or not the action reads it. It is
+            // a safety net for the read tree's assumptions, not the plan: the tree below is the truth about what is read.
+            foreach (var nav in store.CollectionNavigations)
+                preActionNodes.Add(LoadCollection("entity", nav.PropertyName));
 
-            // Load reference navigations: the module sees a stored link only through the loaded navigation.
+            // The module sees a stored link only through the loaded navigation.
             foreach (var nav in store.ReferenceNavigations)
                 preActionNodes.Add(LoadReference("entity", nav.PropertyName));
+
+            // Everything the action reads beyond the floor, at any depth. The route parent is the entity's back-reference
+            // node, so what is read through it loads on the parent variable.
+            var entityLoaded = store.CollectionNavigations.Concat(store.ReferenceNavigations)
+                .Select(n => n.PropertyName).ToHashSet(StringComparer.Ordinal);
+            AppendReadLoads(preActionNodes, "entity", thisReads.Where(n => n.Navigation != backReference).ToList(), entityLoaded);
+            if (thisReads.FirstOrDefault(n => n.Navigation == backReference) is { } parentReads)
+                AppendReadLoads(preActionNodes, "parentEntity", parentReads.Children, parentLoaded);
 
             // ── Try body: entity-ref lookups + invoke + result switch ──
             var tryBody = new List<Node>();
             var invokeArgs = new List<Node>();
+            var locals = new HashSet<string>(StringComparer.Ordinal);
             foreach (var param in ia.Parameters) {
                 if (param.IsEntityRef) {
+                    // Two parameters of one entity type each get their own local: the first keeps the type's name.
                     var lv = ToCamelCase(param.DomainType);
+                    for (var n = 2; !locals.Add(lv); n++)
+                        lv = ToCamelCase(param.DomainType) + n;
                     tryBody.Add(Init(lv, LoadByRouteKey(
                         Pluralize(param.DomainType),
                         _storageLookup[param.DomainType],
                         new Member(new Variable("dto"), ActionDtoPropertyName(param)))));
                     tryBody.Add(new IfStatement(new Equal(new Variable(lv), new Constant(null!)),
                         new Block(new Return(ProblemResponse(404, "Not Found", $"{param.DomainType} not found")))));
+                    if (reads?.Roots.FirstOrDefault(r => r.Name == param.Name) is { } parameterReads)
+                        AppendReadLoads(tryBody, lv, parameterReads.Children, new HashSet<string>());
                     invokeArgs.Add(new Variable(lv));
                 }
                 else invokeArgs.Add(new Member(new Variable("dto"), ActionDtoPropertyName(param)));
@@ -154,6 +176,41 @@ public sealed partial class MinimalApiGenerator {
                 new Lambda([.. actionParams],
                     Stmts(bodyNodes))));
         }
+    }
+
+    /// <summary>
+    /// Loads what the action reads below <paramref name="variable"/>: for each node its navigation (unless
+    /// <paramref name="loaded"/> already has it), then, for what is read through it, the same for the loaded target. A single
+    /// link is read into a local and skipped when empty; a collection is walked item by item over a snapshot (the loads fill
+    /// other collections by fixup, never this one). Every statement is explicit: no reflection and no string path.
+    /// </summary>
+    private static void AppendReadLoads(List<Node> sink, string variable, IReadOnlyList<ReadNode> children, IReadOnlySet<string> loaded) {
+        foreach (var child in children) {
+            if (!loaded.Contains(child.Navigation))
+                sink.Add(child.IsCollection ? LoadCollection(variable, child.Navigation) : LoadReference(variable, child.Navigation));
+            if (child.Children.Count == 0)
+                continue;
+            var target = variable + child.Navigation;
+            var below = new List<Node>();
+            if (child.IsCollection) {
+                var item = target + "Item";
+                AppendReadLoads(below, item, child.Children, new HashSet<string>());
+                sink.Add(new ForEachLoop(new Variable(item),
+                    new Invoke(new Member(new Member(new Variable(variable), child.Navigation), "ToList")), Stmts(below)));
+            }
+            else {
+                AppendReadLoads(below, target, child.Children, new HashSet<string>());
+                sink.Add(Init(target, new Member(new Variable(variable), child.Navigation)));
+                sink.Add(new IfStatement(new NotEqual(new Variable(target), new Constant(null!)), Stmts(below)));
+            }
+        }
+    }
+
+    /// <summary><c>await db.Entry(x).Collection(e =&gt; e.Nav).LoadAsync();</c></summary>
+    private static Node LoadCollection(string entityVariable, string navigation) {
+        var entry = new Invoke(new Member(new TypeReference("db"), "Entry"), new Variable(entityVariable));
+        var collection = new Invoke(new Member(entry, "Collection"), new Lambda([new Parameter("e")], new Member(new Variable("e"), navigation)));
+        return new Await(new Invoke(new Member(collection, "LoadAsync")));
     }
 
     /// <summary><c>await db.Entry(x).Reference(e =&gt; e.Nav).LoadAsync();</c></summary>

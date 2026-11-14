@@ -12,12 +12,18 @@ namespace Poly.Packs.Product;
 public sealed partial class MinimalApiGenerator {
     /// <summary>
     /// The id of the schema this host's database must have, folded into a positive 31-bit integer (the range of
-    /// SQLite's <c>PRAGMA user_version</c>, with 0 left to mean "no id"). Its input is the storage pack's own printed
-    /// <c>OnModelCreating</c> (tables, columns, keys, indexes, relationships, check constraints), the column CLR type
-    /// and requiredness, and the navigations: the model, not the host. Routes, DTOs, action bodies, policies and the
-    /// EF version are not in it, so none of them can change it.
+    /// SQLite's <c>PRAGMA user_version</c>, with 0 left to mean "no id"). Its input is <see cref="SchemaIdInput"/>.
     /// </summary>
-    internal int SchemaId() {
+    internal int SchemaId() => FoldSchemaId(SchemaIdInput());
+
+    /// <summary>
+    /// What the schema id hashes: the storage pack's own printed <c>OnModelCreating</c> (tables, columns, keys, indexes,
+    /// relationships, check constraints), the column CLR type and requiredness, the stage column of an entity with
+    /// stages, and the navigations (EF derives a foreign key from its navigation): the model, not the host. Routes,
+    /// DTOs, action bodies, policies, comments and the EF version are not in it. Line endings are normalised to
+    /// <c>\n</c> (the writer uses <see cref="Environment.NewLine"/>) and nothing else is.
+    /// </summary>
+    internal string SchemaIdInput() {
         var context = new DbContextGenerator(_domain, _storageModel).GenerateCompilationUnit();
         var onModelCreating = context.Types.OfType<TypeDefinitionNode>().Single().Methods!
             .Single(m => string.Equals(m.Name, "OnModelCreating", StringComparison.Ordinal));
@@ -26,12 +32,22 @@ public sealed partial class MinimalApiGenerator {
         foreach (var store in _storageModel.Entities) {
             foreach (var column in store.Columns)
                 input.Append($"column {store.Name}.{column.ColumnName} {column.ClrTypeName} required={column.IsRequired}\n");
+            if (store.HasStages)
+                input.Append($"stage {store.Name}.{store.StagePropertyName} {store.StageEnumTypeName} stored=enum\n");
             foreach (var navigation in store.CollectionNavigations.Concat(store.ReferenceNavigations))
                 input.Append($"navigation {store.Name}.{navigation.PropertyName} -> {navigation.TargetEntityName} "
                     + $"collection={navigation.IsCollection} owns={navigation.SourceOwnsTarget} "
                     + $"cardinality={navigation.Source.Cardinality} inverse={navigation.InversePropertyName}\n");
         }
-        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(input.ToString()));
+        return NormalizeSchemaIdInput(input.ToString());
+    }
+
+    /// <summary>Line endings only: the writer joins lines with <see cref="Environment.NewLine"/>.</summary>
+    internal static string NormalizeSchemaIdInput(string raw) => raw.Replace("\r\n", "\n", StringComparison.Ordinal);
+
+    /// <summary>SHA-256 of the UTF-8 input; the first four bytes, big-endian, masked to 31 bits; 0 becomes 1.</summary>
+    internal static int FoldSchemaId(string input) {
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(input));
         var folded = BinaryPrimitives.ReadInt32BigEndian(hash) & int.MaxValue;
         return folded == 0 ? 1 : folded;
     }

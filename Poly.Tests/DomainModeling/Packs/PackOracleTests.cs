@@ -257,6 +257,16 @@ public class PackOracleTests {
         }
         """;
 
+    private const string StagedCounterTally = """
+        Tally: entity {
+          Name: Text unique length(1, 20)
+          N: Number default(0) range(0, 1000000)
+          Bump: action { assign N to N + 1 }
+          Open: stage { Close: action { transition to Done } }
+          Done: stage { }
+        }
+        """;
+
     private static PackOracleDomain Counter(string name, string body) =>
         new(name, "domain Counter\nuses http\nuses sqlite\n" + body, "/api/tallies");
 
@@ -308,6 +318,7 @@ public class PackOracleTests {
     [Arguments("required property added", "Tally: entity {\n  Name: Text unique length(1, 20)\n  N: Number default(0) range(0, 1000000)\n  Label: Text length(1, 10)\n  Bump: action { assign N to N + 1 }\n}")]
     [Arguments("property renamed", "Tally: entity {\n  Name: Text unique length(1, 20)\n  Count: Number default(0) range(0, 1000000)\n  Bump: action { assign Count to Count + 1 }\n}")]
     [Arguments("entity added", CounterTally + "\nOther: entity {\n  Code: Text length(1, 5)\n}")]
+    [Arguments("stage added", StagedCounterTally)]
     public async Task Boot_OldSchemaDatabase_ExitsWithClearMessage(string change, string changedBody, CancellationToken cancellationToken) {
         _ = cancellationToken;
         await WithRunDirectory(async directory => {
@@ -325,6 +336,23 @@ public class PackOracleTests {
             await Assert.That(before).IsNotEqualTo(0);
             await Assert.That(ReadUserVersion(database)).IsEqualTo(before);
             _ = change;
+        });
+    }
+
+    /// <summary>A stage is a column EF maps by convention (nothing prints it), so the id carries a line for it: without one,
+    /// the document with a stage boots on the old file and every request for the entity answers 500.</summary>
+    [Test]
+    [Timeout(300_000)]
+    public async Task Boot_StageAdded_ExitsWithClearMessage(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        const string plain = "Tally: entity {\n  Name: Text unique length(1, 20)\n  N: Number default(0) range(0, 1000000)\n}";
+        const string staged = "Tally: entity {\n  Name: Text unique length(1, 20)\n  N: Number default(0) range(0, 1000000)\n  Open: stage { Close: action { transition to Done } }\n  Done: stage { }\n}";
+        await WithRunDirectory(async directory => {
+            await using (var first = await PackOracle.BootAsync(
+                Counter("SchemaA", plain), options: new PackOracleBootOptions { RunDirectory = directory }))
+                await PostTally(first, """{"Name":"t1"}""");
+
+            await AssertRefusedAtStartup(directory, Counter("SchemaB", staged), "different version of the model", "counter.db");
         });
     }
 

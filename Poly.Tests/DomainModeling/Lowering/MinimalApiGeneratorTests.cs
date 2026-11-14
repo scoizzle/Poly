@@ -1045,12 +1045,52 @@ public partial class MinimalApiGeneratorTests {
     [Arguments("a unique index is dropped", "Tally: entity {\n  Name: Text length(1, 20)\n  N: Number default(0) range(0, 1000000)\n  Bump: action { assign N to N + 1 }\n}")]
     [Arguments("a length bound changes", "Tally: entity {\n  Name: Text unique length(1, 30)\n  N: Number default(0) range(0, 1000000)\n  Bump: action { assign N to N + 1 }\n}")]
     [Arguments("a link is added", CounterBody + "\nOwner: entity {\n  Code: Text length(1, 5)\n  tallies: many Tally\n}")]
+    [Arguments("a stage is added", "Tally: entity {\n  Name: Text unique length(1, 20)\n  N: Number default(0) range(0, 1000000)\n  Bump: action { assign N to N + 1 }\n  Open: stage { Close: action { transition to Done } }\n  Done: stage { }\n}")]
+    [Arguments("a column is removed", "Tally: entity {\n  Name: Text unique length(1, 20)\n}")]
+    [Arguments("a Number becomes a Decimal", "Tally: entity {\n  Name: Text unique length(1, 20)\n  N: Decimal default(0) range(0, 1000000)\n  Bump: action { assign N to N + 1 }\n}")]
+    [Arguments("an entity is renamed", "Count: entity {\n  Name: Text unique length(1, 20)\n  N: Number default(0) range(0, 1000000)\n  Bump: action { assign N to N + 1 }\n}")]
+    [Arguments("a table name is set", "Tally: entity table(\"TALLY_ROWS\") {\n  Name: Text unique length(1, 20)\n  N: Number default(0) range(0, 1000000)\n  Bump: action { assign N to N + 1 }\n}")]
     public async Task SchemaId_SchemaChange_Differs(string change, string body) {
         var baseline = SchemaIdOf(CounterHeader + CounterBody);
         var changed = SchemaIdOf(CounterHeader + body);
 
         await Assert.That(changed).IsNotNull().Because(change);
         await Assert.That(changed).IsNotEqualTo(baseline).Because(change);
+    }
+
+    private const string Tally1 = "Tally: entity {\n  Name: Text unique length(1, 20)\n";
+
+    [Test]
+    [Arguments("Date becomes DateTime", Tally1 + "  When: Date optional\n}", Tally1 + "  When: DateTime optional\n}")]
+    [Arguments("Text becomes an enum", Tally1 + "  Kind: Text optional\n}", "Level: enum { Low, High }\n" + Tally1 + "  Kind: Level optional\n}")]
+    // The CHECK constraint is emitted only for a range the analysis proves; an action that writes N from a free parameter
+    // removes the proof, so the CHECK goes: a real schema difference (the guide says so).
+    [Arguments("an action changes whether a range is proven", "Tally: entity {\n  Name: Text unique length(1, 20)\n  N: Number default(0) range(0, 10)\n}", "Tally: entity {\n  Name: Text unique length(1, 20)\n  N: Number default(0) range(0, 10)\n  Set: action (v: Number) { assign N to v }\n}")]
+    [Arguments("a stage is removed", Tally1 + "  Open: stage { Close: action { transition to Done } }\n  Done: stage { }\n}", Tally1 + "}")]
+    [Arguments("a navigation is removed", Tally1 + "}\nOwner: entity {\n  Code: Text unique\n  tallies: many Tally\n}", Tally1 + "}\nOwner: entity {\n  Code: Text unique\n}")]
+    [Arguments("a link becomes owned", Tally1 + "}\nOwner: entity {\n  Code: Text unique\n  tallies: many Tally\n}", Tally1 + "}\nOwner: entity {\n  Code: Text unique\n  tallies: many owned Tally\n}")]
+    [Arguments("an entity is removed", Tally1 + "}\nOther: entity {\n  Code: Text unique\n}", Tally1 + "}")]
+    public async Task SchemaId_BetweenTwoDocuments_Differs(string change, string a, string b) {
+        await Assert.That(SchemaIdOf(CounterHeader + b)).IsNotEqualTo(SchemaIdOf(CounterHeader + a)).Because(change);
+    }
+
+    /// <summary>A <c>key(...)</c> designation changes routes, not a table or an index (the key index is never printed).</summary>
+    [Test]
+    public async Task SchemaId_KeyDesignationChange_HasNoDatabaseEffect_SoTheIdStays() {
+        var a = CounterHeader + "Tally: entity key(Name) {\n  Name: Text unique length(1, 20)\n  Code: Text unique length(1, 20)\n}";
+        var b = CounterHeader + "Tally: entity key(Code) {\n  Name: Text unique length(1, 20)\n  Code: Text unique length(1, 20)\n}";
+
+        await Assert.That(SchemaIdOf(b)).IsEqualTo(SchemaIdOf(a));
+    }
+
+    [Test]
+    public async Task SchemaId_LineEndings_AreNormalisedBeforeHashing() {
+        var unix = "poly-schema-id/1\nb.Property<int>(\"Id\");\nb.HasKey(\"Id\");\n";
+        var windows = unix.Replace("\n", "\r\n", StringComparison.Ordinal);
+
+        await Assert.That(MinimalApiGenerator.FoldSchemaId(MinimalApiGenerator.NormalizeSchemaIdInput(windows)))
+            .IsEqualTo(MinimalApiGenerator.FoldSchemaId(MinimalApiGenerator.NormalizeSchemaIdInput(unix)));
+        await Assert.That(MinimalApiGenerator.NormalizeSchemaIdInput(windows)).IsEqualTo(unix);
     }
 
     [Test]
@@ -1084,5 +1124,102 @@ public partial class MinimalApiGeneratorTests {
 
         await Assert.That(program).DoesNotContain("user_version");
         await Assert.That(program).DoesNotContain("schemaId");
+    }
+
+    private static MinimalApiGenerator GeneratorFor(string poly) {
+        var result = new PolyCompiler(ProductCatalog.Catalog, new SessionOptions(ProductCatalog.Catalog, ExtensionCatalog.ProductAuthoring))
+            .Compile(poly, "Counter.poly", CancellationToken.None);
+        var domain = result.Domain!;
+        var analysis = result.Analysis!;
+        var storage = analysis.GetMetadata<StorageMappingMetadata>(domain)!.Storage;
+        var behavior = BehaviorMetadata.From(domain, analysis);
+        var aggregate = analysis.GetMetadata<OwnershipAggregateMetadata>(domain)!.Aggregate;
+        return new MinimalApiGenerator(domain, analysis, storage, behavior, aggregate);
+    }
+
+    private static string WithoutWhitespace(string text) => new(text.Where(c => !char.IsWhiteSpace(c)).ToArray());
+
+    /// <summary>The id is computed from a second <c>DbContextGenerator</c> run, so a drift from the artifact the app
+    /// actually compiles must fail here: the hashed body is the <c>OnModelCreating</c> text of the emitted file.</summary>
+    [Test]
+    public async Task SchemaId_HashedModelText_IsTheOnModelCreatingOfTheEmittedDbContext() {
+        var poly = CounterHeader + "Level: enum { Low, High }\n" + CounterBody.Replace("Bump:", "Kind: Level optional\n  Open: stage { Close: action { transition to Done } }\n  Done: stage { }\n  Bump:", StringComparison.Ordinal)
+            + "\nOwner: entity {\n  Code: Text unique\n  tallies: many Tally\n}";
+        var emitted = new PolyCompiler(ProductCatalog.Catalog, new SessionOptions(ProductCatalog.Catalog, ExtensionCatalog.ProductAuthoring))
+            .Compile(poly, "Counter.poly", CancellationToken.None).Files.Single(f => f.FileName == "CounterDbContext.cs").Source;
+        var input = GeneratorFor(poly).SchemaIdInput();
+        var body = input.Split('\n').Skip(1).TakeWhile(l => !l.StartsWith("column ", StringComparison.Ordinal)
+            && !l.StartsWith("stage ", StringComparison.Ordinal) && !l.StartsWith("navigation ", StringComparison.Ordinal));
+
+        await Assert.That(WithoutWhitespace(emitted)).Contains(WithoutWhitespace(string.Join("\n", body)));
+    }
+
+    /// <summary>EF's own model, read from the compiled generated context, against the hashed input: every column EF will
+    /// create, every foreign key and every index must be accounted for by a line of the input (a scalar by its
+    /// <c>column</c> or printed property line, a stage by its <c>stage</c> line, the key by its printed property, a foreign
+    /// key by a <c>navigation</c> line on either side, an index by its printed <c>HasIndex</c>).</summary>
+    [Test]
+    public async Task SchemaId_Input_AccountsForEveryColumnForeignKeyAndIndexOfEfsOwnModel() {
+        var poly = CounterHeader + """
+            Level: enum { Low, High }
+            Tally: entity {
+              Name: Text unique length(1, 20)
+              N: Number default(0) range(0, 1000000)
+              Price: Decimal optional
+              Born: DateTime optional
+              Kind: Level optional
+              Open: stage { Close: action { transition to Done } }
+              Done: stage { }
+            }
+            Owner: entity {
+              Code: Text unique
+              tallies: many Tally
+              spare: Spare optional
+            }
+            Spare: entity {
+              Label: Text unique
+            }
+            """;
+        var files = new PolyCompiler(ProductCatalog.Catalog, new SessionOptions(ProductCatalog.Catalog, ExtensionCatalog.ProductAuthoring))
+            .Compile(poly, "Counter.poly", CancellationToken.None).Files.Where(f => f.FileName != "Program.cs" && f.FileName.EndsWith(".cs", StringComparison.Ordinal)).ToList();
+        var assembly = ExportedCSharp.CompileAndLoad(files, "SchemaIdModel");
+        var contextType = assembly.GetTypes().Single(t => t.Name == "CounterDbContext");
+        var optionsBuilderType = typeof(Microsoft.EntityFrameworkCore.DbContextOptionsBuilder<>).MakeGenericType(contextType);
+        var builder = (Microsoft.EntityFrameworkCore.DbContextOptionsBuilder)Activator.CreateInstance(optionsBuilderType)!;
+        Microsoft.EntityFrameworkCore.SqliteDbContextOptionsBuilderExtensions.UseSqlite(builder, "Data Source=:memory:");
+        using var context = (Microsoft.EntityFrameworkCore.DbContext)Activator.CreateInstance(contextType, builder.Options)!;
+        var input = GeneratorFor(poly).SchemaIdInput();
+        var flat = WithoutWhitespace(input);
+        var unaccounted = new List<string>();
+
+        foreach (var entityType in context.Model.GetEntityTypes()) {
+            var table = Microsoft.EntityFrameworkCore.RelationalEntityTypeExtensions.GetTableName(entityType)!;
+            var store = Microsoft.EntityFrameworkCore.Metadata.StoreObjectIdentifier.Table(table, null);
+            var foreignKeyColumns = entityType.GetForeignKeys().SelectMany(k => k.Properties).Select(p => p.Name).ToHashSet();
+            foreach (var property in entityType.GetProperties()) {
+                var column = Microsoft.EntityFrameworkCore.RelationalPropertyExtensions.GetColumnName(property, store)!;
+                var accounted =
+                    input.Contains($"column {entityType.ClrType.Name}.{column} ", StringComparison.Ordinal)
+                    || (property.Name == "CurrentStage" && input.Contains($"stage {entityType.ClrType.Name}.CurrentStage ", StringComparison.Ordinal))
+                    || (property.IsPrimaryKey() && flat.Contains($"Property<int>(\"{property.Name}\")", StringComparison.Ordinal))
+                    || (foreignKeyColumns.Contains(property.Name) && entityType.GetForeignKeys().Where(k => k.Properties.Contains(property)).Any(k =>
+                        new[] { k.DependentToPrincipal?.Name, k.PrincipalToDependent?.Name }.Where(n => n is not null)
+                            .Any(n => input.Contains($"navigation {k.DeclaringEntityType.ClrType.Name}.{n} ", StringComparison.Ordinal)
+                                || input.Contains($"navigation {k.PrincipalEntityType.ClrType.Name}.{n} ", StringComparison.Ordinal))));
+                if (!accounted)
+                    unaccounted.Add($"{table}.{column}");
+            }
+            foreach (var index in entityType.GetIndexes()) {
+                // EF's convention indexes a foreign key column: it exists because of the navigation line, not a printed index.
+                if (!index.IsUnique && index.Properties.All(p => foreignKeyColumns.Contains(p.Name)))
+                    continue;
+                foreach (var property in index.Properties) {
+                    if (!flat.Contains($"HasIndex(x=>x.{property.Name})", StringComparison.Ordinal))
+                        unaccounted.Add($"{table} index on {property.Name}");
+                }
+            }
+        }
+
+        await Assert.That(unaccounted).IsEmpty();
     }
 }

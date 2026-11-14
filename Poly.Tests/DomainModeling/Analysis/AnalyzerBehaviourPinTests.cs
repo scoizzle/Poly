@@ -5,6 +5,7 @@ using Poly.DomainModeling.Evolution;
 using Poly.DomainModeling.Libraries.Temporal;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Ontology.Effects;
+using Poly.Tests.TestHelpers;
 
 using DmAction = Poly.DomainModeling.Ontology.Action;
 using DmPrimitive = Poly.DomainModeling.Ontology.PrimitiveType;
@@ -381,6 +382,75 @@ public class AnalyzerBehaviourPinTests {
     [Test]
     public async Task MatchArmUnification_IsFrozen() =>
         await Assert.That(MatchGrid()).IsEqualTo(Expected.Match);
+
+    private static string MatchDsl(string members, string body, string extra) => $$"""
+        domain Unif
+        uses temporal
+        UnifMood: enum { Happy, Sad }
+        UnifOther: enum { Calm, Angry }
+        UnifInv: entity {
+          Qty: Number default(3)
+          Dec: Decimal default(2.5)
+          Opt: Number optional
+          OptDec: Decimal optional
+          Tag: Text default("t")
+          Flag: Boolean default(true)
+          When: Date
+          Stamp: DateTime
+        {{members}}
+          Run: action { {{body}} }
+        }
+        {{extra}}
+        """;
+
+    /// <summary>
+    /// T-09a: a <c>match</c> has one type. Decimal with a Number arm or an integer literal unifies to Decimal in either
+    /// order (so a Decimal match into a Number is DMSEM003 at the value, whichever arm comes first); Date with DateTime,
+    /// an enum with a Text property or into a non-enum target, and an optional Number with a Decimal are DMMAT002;
+    /// arithmetic over a match that may be absent is DMSEM003.
+    /// </summary>
+    [Test]
+    [Arguments("Decimal then Number into Decimal", "T: Decimal default(0)", "assign T to match { Flag -> 1.5, else -> Qty }", "", "ok")]
+    [Arguments("Number then Decimal into Decimal", "T: Decimal default(0)", "assign T to match { Flag -> Qty, else -> 1.5 }", "", "ok")]
+    [Arguments("Number then Decimal into Number (#605)", "T: Number default(0)", "assign T to match { Flag -> Qty, else -> 1.5 }", "", "DMSEM003")]
+    [Arguments("Decimal then Number into Number", "T: Number default(0)", "assign T to match { Flag -> Dec, else -> Qty }", "", "DMSEM003")]
+    [Arguments("a nested Decimal, Number first, into Number", "T: Number default(0)",
+        "assign T to match { Flag -> Qty, else -> match { Qty > 1 -> 1.5, else -> 2 } }", "", "DMSEM003")]
+    [Arguments("a nested Decimal into Decimal", "T: Decimal default(0)",
+        "assign T to match { Flag -> match { Qty > 1 -> 1.5, else -> Qty }, else -> 2 }", "", "ok")]
+    [Arguments("a Decimal-typed argument", "T: Decimal default(0)", "assign T to UnifTwice(match { Flag -> Qty, else -> 1.5 })",
+        "function UnifTwice(v: Decimal): Decimal = v * 2", "ok")]
+    [Arguments("a Number-typed argument, Number first", "T: Number default(0)", "assign T to UnifId(match { Flag -> Qty, else -> 1.5 })",
+        "function UnifId(v: Number): Number = v", "DMFUN003")]
+    [Arguments("Date with DateTime into DateTime", "T: DateTime optional", "assign T to match { Flag -> When, else -> Stamp }", "", "DMMAT002")]
+    [Arguments("DateTime with Date into DateTime", "T: DateTime optional", "assign T to match { Flag -> Stamp, else -> When }", "", "DMMAT002")]
+    [Arguments("Date with DateTime into Date", "T: Date optional", "assign T to match { Flag -> When, else -> Stamp }", "", "DMMAT002")]
+    [Arguments("Date with DateTime, no target", "T: Number default(0)",
+        "if ((match { Flag -> When, else -> Stamp }) == When) { assign T to 1 }", "", "DMMAT002")]
+    [Arguments("Date with Date", "T: Date optional", "assign T to match { Flag -> When, else -> When }", "", "ok")]
+    [Arguments("an enum member with a Text literal into the enum", "T: UnifMood default(Happy)", "assign T to match { Flag -> Happy, else -> \"Sad\" }", "", "ok")]
+    [Arguments("an enum member with a Text property into the enum", "T: UnifMood default(Happy)", "assign T to match { Flag -> Happy, else -> Tag }", "", "DMMAT002")]
+    [Arguments("an enum member with a Text literal into Text", "T: Text default(\"\")", "assign T to match { Flag -> Happy, else -> \"x\" }", "", "DMMAT002")]
+    [Arguments("an enum member with a Text property into Text", "T: Text default(\"\")", "assign T to match { Flag -> Happy, else -> Tag }", "", "DMMAT002")]
+    [Arguments("an enum member with a Text literal, no target", "T: Number default(0)",
+        "if ((match { Flag -> Happy, else -> \"x\" }) == Tag) { assign T to 1 }", "", "DMMAT002")]
+    [Arguments("two enums", "T: UnifMood default(Happy)", "assign T to match { Flag -> Happy, else -> Calm }", "", "DMMAT002")]
+    [Arguments("an optional Number with a Decimal literal", "T: Decimal optional", "assign T to match { Flag -> Opt, else -> 1.5 }", "", "DMMAT002")]
+    [Arguments("an optional Decimal with a Number", "T: Decimal optional", "assign T to match { Flag -> OptDec, else -> Qty }", "", "DMMAT002")]
+    [Arguments("an optional Number with a Number", "T: Number optional", "assign T to match { Flag -> Opt, else -> Qty }", "", "ok")]
+    [Arguments("null, a Number and a Decimal into an optional Decimal", "T: Decimal optional",
+        "assign T to match { Qty > 9 -> null, Qty > 2 -> Qty, else -> 1.5 }", "", "ok")]
+    [Arguments("arithmetic over a match that may be absent, optional target", "T: Number optional",
+        "assign T to (match { Flag -> null, else -> 1 }) + 1", "", "DMSEM003")]
+    [Arguments("arithmetic over a match that may be absent, required target", "T: Number default(0)",
+        "assign T to (match { Flag -> null, else -> 1 }) + 1", "", "DMSEM003")]
+    [Arguments("arithmetic over a match with an optional arm", "T: Number optional",
+        "assign T to (match { Flag -> Opt, else -> 1 }) * 2", "", "DMSEM003")]
+    [Arguments("a comparison with a match that may be absent", "T: Number default(0)",
+        "if ((match { Flag -> null, else -> Qty }) > 1) { assign T to 1 }", "", "ok")]
+    public async Task MatchArmUnification_DslRows_AreTyped(
+        string label, string members, string body, string extra, string expected) =>
+        await Assert.That(StrictGateCensus.Verdict(MatchDsl("  " + members, body, extra))).IsEqualTo(expected).Because(label);
 
     [Test]
     public async Task TheDiscriminators_RejectDecimalIntoNumber_AcceptLiteralFiveIntoCents_RejectInt32IntoNumber() {

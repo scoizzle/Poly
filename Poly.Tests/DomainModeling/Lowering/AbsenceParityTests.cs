@@ -159,6 +159,47 @@ public class AbsenceParityTests {
         await Assert.That(outcomes[2].State["V"]).IsEqualTo("A");
     }
 
+    private static string ExpressionMatchDsl(string body) => $$"""
+        domain Shop
+        AbxInv: entity {
+          Qty: Number default(3)
+          Opt: Number optional
+          T: Number default(0)
+          TOpt: Number optional
+          Flag: Boolean default(true)
+          Run: action { {{body}} }
+        }
+        """;
+
+    /// <summary>
+    /// T-09a (left by T-06a): a <c>match</c> with a <c>null</c> or an optional arm used as an operand has no assignment
+    /// target, and means the same on the simulator and the generated C# as the optional it is: an absent value compares
+    /// and orders false, as an absent optional property does. Qty is 3; the observed member is read for Flag true, then false.
+    /// </summary>
+    [Test]
+    [Arguments("if ((match { Flag -> null, else -> Qty }) == 3) { assign T to 1 }", "T", "0", "1")]
+    [Arguments("if ((match { Flag -> null, else -> Qty }) != null) { assign T to 1 }", "T", "0", "1")]
+    [Arguments("if ((match { Flag -> null, else -> Qty }) == null) { assign T to 1 }", "T", "1", "0")]
+    [Arguments("if ((match { Flag -> null, else -> Qty }) < 5) { assign T to 1 }", "T", "0", "1")]
+    [Arguments("if ((match { Flag -> null, else -> Qty }) > 1) { assign T to 1 }", "T", "0", "1")]
+    [Arguments("if ((match { Flag -> Opt, else -> Qty }) > 1) { assign T to 1 }", "T", "0", "1")]
+    [Arguments("assign TOpt to match { Flag -> Opt, else -> Qty }", "TOpt", "", "3")]
+    [Arguments("assign TOpt to match { Flag -> Qty, else -> Opt }", "TOpt", "3", "")]
+    public async Task MatchWithAnAbsentArm_InAnExpressionPosition_MeansTheSameOnBothHosts(
+        string body, string observed, string whenTrue, string whenFalse) {
+        var outcomes = await ParityScenario.FromDsl(ExpressionMatchDsl(body), "AbsenceExprMatch" + Math.Abs(body.GetHashCode()))
+            .AssertAgree(side => {
+                side.Create("AbxInv", ("Flag", true));
+                side.Invoke("Run");
+                side.Create("AbxInv", ("Flag", false));
+                side.Invoke("Run");
+            });
+        await Assert.That(outcomes[1].Success).IsTrue().Because(outcomes[1].Message ?? "");
+        await Assert.That(outcomes[1].State[observed]).IsEqualTo(whenTrue);
+        await Assert.That(outcomes[3].Success).IsTrue().Because(outcomes[3].Message ?? "");
+        await Assert.That(outcomes[3].State[observed]).IsEqualTo(whenFalse);
+    }
+
     [Test]
     public async Task Assign_WhenBareEnumMemberMatchArm_Agrees() {
         var outcomes = await ParityScenario.FromDsl("""

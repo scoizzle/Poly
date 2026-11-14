@@ -806,7 +806,7 @@ public partial class MinimalApiGeneratorTests {
             Item: entity { Code: Number unique }
             """));
         await Assert.That(rendered).Contains(
-            "Uri.EscapeDataString(Convert.ToString(itemResult.Value.Code, System.Globalization.CultureInfo.InvariantCulture))");
+            "System.Uri.EscapeDataString(System.Convert.ToString(itemResult.Value.Code, System.Globalization.CultureInfo.InvariantCulture))");
     }
 
     private static int CountOf(string text, string value) {

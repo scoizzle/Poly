@@ -474,6 +474,26 @@ public static class PackOracleDomains {
         """,
         "/api/customers");
 
+    /// <summary>P-12a fix round: an OPTIONAL unique key is still the route key. <c>Day</c> (Date) is a <c>DateOnly?</c> key, so the
+    /// host must compile with it (a create of it answers 409 Unique, which this slice does not touch, so only the compile is tested). An optional unique Text key cannot be a fixture: the generated host dies at boot
+    /// (<c>NullReferenceException</c> in the module's <c>Create</c> from the seed), in the module and outside this slice.
+    /// Date, not DateTime or Time: a required DateTime/Time/Duration host member does not compile yet (#923).
+    /// It stays out of <see cref="All"/>.</summary>
+    public static PackOracleDomain OptionalKeys687 { get; } = new(
+        "OptionalKeys687",
+        """
+        domain Optional
+        uses http
+        uses sqlite
+        uses temporal
+
+        Slot: entity {
+          Name: Text
+          Day: Date unique optional
+        }
+        """,
+        "/api/slots");
+
     public static IReadOnlyList<PackOracleDomain> All { get; } =
         [Inventory588, Logistics559, Warehouse620, Inventory626, Desk658, Tally653, Fulfillment675];
 

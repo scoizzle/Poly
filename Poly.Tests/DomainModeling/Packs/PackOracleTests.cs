@@ -1096,6 +1096,21 @@ public class PackOracleTests {
         await Assert.That(row.RootElement.GetProperty("day").GetString()).IsEqualTo("2026-01-05");
     }
 
+    /// <summary>P-12a fix round: an optional unique Date key is a <c>DateOnly?</c>, and the generated host compiles with it
+    /// (it did not, CS1501, with the unguarded ISO format) and serves. The create path is not exercised: on this host every
+    /// create of such an entity answers 409 Unique (and an optional unique Text key kills the host at boot, a
+    /// <c>NullReferenceException</c> in the module's <c>Create</c> from the seed), in the module and outside this slice.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task OptionalUniqueDateKey_HostCompilesAndServes(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.OptionalKeys687);
+
+        using var list = await oracle.Client.GetAsync("/api/slots");
+        await Assert.That(list.StatusCode).IsEqualTo(HttpStatusCode.OK);
+    }
+
     /// <summary>P-12a: the GET body of a keyed entity carries every declared scalar and the stage, under the member
     /// names and JSON kinds the declaration implies. Names come from the parsed domain through the BCL's
     /// <see cref="JsonNamingPolicy.CamelCase"/>, not from the generator. A subset-and-required check, deliberately not a
@@ -1108,8 +1123,8 @@ public class PackOracleTests {
         _ = cancellationToken;
         // The same entities without the host libraries (persistence stands in for sqlite), so the plain parser reads them.
         var declaration = PackOracleDomains.RouteKeys687.Poly.Replace("uses http\n", "").Replace("uses sqlite", "uses persistence");
-        var profile = EvolvedDomain.FromDsl(declaration)
-            .Domain.Types.OfType<Poly.DomainModeling.Ontology.Entity>().Single(e => e.Name == "Profile");
+        var domain = EvolvedDomain.FromDsl(declaration).Domain;
+        var profile = domain.Types.OfType<Poly.DomainModeling.Ontology.Entity>().Single(e => e.Name == "Profile");
         var expected = profile.Properties.ToDictionary(
             p => JsonNamingPolicy.CamelCase.ConvertName(p.Name),
             p => p.Type.TypeName switch {
@@ -1117,7 +1132,11 @@ public class PackOracleTests {
                 "Boolean" => JsonValueKind.True,
                 _ => JsonValueKind.String,
             });
-        expected["currentStage"] = JsonValueKind.String;
+        var topology = Poly.DomainModeling.Analysis.EffectTopologyPass.Scan(domain);
+        var aggregate = Poly.DomainModeling.Analysis.OwnershipAggregatePass.BuildAggregate(domain, null, topology);
+        var stageName = new Poly.DomainModeling.Analysis.StorageAnalyzer(domain).Analyze(aggregate, topology)
+            .Entities.Single(e => e.Name == "Profile").StagePropertyName;
+        expected[JsonNamingPolicy.CamelCase.ConvertName(stageName!)] = JsonValueKind.String;
 
         await using var oracle = await PackOracle.BootAsync(PackOracleDomains.RouteKeys687);
         var post = new JsonObject {
@@ -1135,9 +1154,19 @@ public class PackOracleTests {
         using var read = await oracle.Client.GetAsync("/api/profiles/h1");
         await Assert.That(read.StatusCode).IsEqualTo(HttpStatusCode.OK);
         using var body = JsonDocument.Parse(await read.Content.ReadAsStringAsync());
+        using var listRead = await oracle.Client.GetAsync("/api/profiles");
+        await Assert.That(listRead.StatusCode).IsEqualTo(HttpStatusCode.OK);
+        using var list = JsonDocument.Parse(await listRead.Content.ReadAsStringAsync());
+        await Assert.That(list.RootElement.GetArrayLength()).IsGreaterThan(0);
+        // A Boolean is True or False by value, one JSON kind.
+        static JsonValueKind Kind(JsonElement e) => e.ValueKind == JsonValueKind.False ? JsonValueKind.True : e.ValueKind;
         foreach (var (name, kind) in expected) {
             await Assert.That(body.RootElement.TryGetProperty(name, out var member)).IsTrue().Because($"member {name}");
-            await Assert.That(member.ValueKind).IsEqualTo(kind).Because($"member {name}");
+            await Assert.That(Kind(member)).IsEqualTo(kind).Because($"member {name}");
+            foreach (var item in list.RootElement.EnumerateArray()) {
+                await Assert.That(item.TryGetProperty(name, out var listed)).IsTrue().Because($"list member {name}");
+                await Assert.That(Kind(listed)).IsEqualTo(kind).Because($"list member {name}");
+            }
         }
     }
 }

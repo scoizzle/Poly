@@ -96,20 +96,22 @@ public sealed class HttpFileGenerator {
             sb.AppendLine($"### Get {ToCamelCase(entity.Name)} by {(store.KeyProperty?.Name ?? "id")}");
             sb.AppendLine($"GET {_baseUrl}/api/{route}/{keyExample}");
             sb.AppendLine();
-            sb.AppendLine($"### Create a new {ToCamelCase(entity.Name)}");
-            sb.AppendLine($"POST {_baseUrl}/api/{route}");
-            sb.AppendLine("Content-Type: application/json");
-            sb.AppendLine();
-            sb.AppendLine("{");
-            var scalarProps = GetCreateScalarParams(entity)
-                .Select(p => entity.Properties.First(x => string.Equals(x.Name, p.Name, StringComparison.Ordinal)))
-                .ToList();
-            for (int i = 0; i < scalarProps.Count; i++) {
-                var comma = i < scalarProps.Count - 1 ? "," : "";
-                sb.AppendLine($"    \"{scalarProps[i].Name}\": {GetExampleJsonValue(scalarProps[i])}{comma}");
+            if (MinimalApiGenerator.CreatesDirectly(_entities, entity)) {
+                sb.AppendLine($"### Create a new {ToCamelCase(entity.Name)}");
+                sb.AppendLine($"POST {_baseUrl}/api/{route}");
+                sb.AppendLine("Content-Type: application/json");
+                sb.AppendLine();
+                sb.AppendLine("{");
+                var scalarProps = GetCreateScalarParams(entity)
+                    .Select(p => entity.Properties.First(x => string.Equals(x.Name, p.Name, StringComparison.Ordinal)))
+                    .ToList();
+                for (int i = 0; i < scalarProps.Count; i++) {
+                    var comma = i < scalarProps.Count - 1 ? "," : "";
+                    sb.AppendLine($"    \"{scalarProps[i].Name}\": {GetExampleJsonValue(scalarProps[i])}{comma}");
+                }
+                sb.AppendLine("}");
+                sb.AppendLine();
             }
-            sb.AppendLine("}");
-            sb.AppendLine();
         }
 
         if (!isRoot) {

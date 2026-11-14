@@ -26,7 +26,7 @@ public sealed partial class MinimalApiGenerator {
                             "ToListAsync"))))));
 
         // app.MapGet("/api/books/{key}", async (keyType key, dbContextName db) =>
-        //     await db.Books.FindAsync(key) is Book book ? Results.Ok(book) : Results.NotFound())
+        //     await db.Books.FindAsync(key) is Book book ? Results.Ok(book) : a 404 ProblemDetails)
         // A natural key compares the unique property; FindAsync is the shadow key.
         var keyParam = new Parameter(keyName, ClrTypeNode(keyType));
         var camelName = ToCamelCase(entity.Name);
@@ -42,32 +42,27 @@ public sealed partial class MinimalApiGenerator {
                     },
                     new Invoke(new Member(new TypeReference("Results"), "Ok"),
                         new Variable(camelName)),
-                    new Invoke(new Member(new TypeReference("Results"), "NotFound"))))));
+                    ProblemResponse(404, "Not Found")))));
 
         // POST endpoint for root entities (S3: proper Entity.Create + result handling)
-        if (store.IsRoot) {
+        if (store.IsRoot && CreatesDirectly(_entities, entity)) {
             var dtoParam = new Parameter("dto", new TypeReference($"{entity.Name}Dto"));
             AppendCreateCallStatements(statements, entity, dtoParam, dbParam, route, keyProp);
         }
     }
 
+    /// <summary>
+    /// False for an entity with an entity-typed property: such an entity has no POST route (and no sample
+    /// request), never a route that always answers 400. The DSL cannot declare that property; only an
+    /// API-built model reaches it.
+    /// </summary>
+    internal static bool CreatesDirectly(IEnumerable<Entity> entities, Entity entity) =>
+        !entity.Properties.Any(p => entities.Any(e => string.Equals(e.Name, p.Type.TypeName, StringComparison.Ordinal)));
+
     /// <summary>Appends Syntax IR for POST /api/entities endpoint — calls Entity.Create with result handling.</summary>
     private void AppendCreateCallStatements(List<Node> statements, Entity entity,
         Parameter dtoParam, Parameter dbParam,
         string route, Property? uniqueProp) {
-        // Check if entity references other entities (cannot create directly) — emit BadRequest endpoint
-        if (entity.Properties.Any(p => _entities.Any(e => string.Equals(e.Name, p.Type.TypeName, StringComparison.Ordinal)))) {
-            statements.Add(new Invoke(
-                new Member(new TypeReference(AppVar), "MapPost"),
-                new Constant(route),
-                new Lambda([dtoParam, dbParam],
-                    new Block(new Return(
-                        new Invoke(
-                            new Member(new TypeReference("Results"), "BadRequest"),
-                            new Constant($"{entity.Name} requires related entities and cannot be created directly.")))))));
-            return;
-        }
-
         var createArgs = BuildCreateCallArgs(entity,
             prop => new Member(new Variable("dto"), prop.Name));
 
@@ -78,10 +73,10 @@ public sealed partial class MinimalApiGenerator {
         bodyNodes.Add(Init(resultVarName,
             new Invoke(new Member(new TypeReference(VisibleType(entity.Name)), "Create"), [.. createArgs])));
 
-        // Constraint and stage failures are 400. Unique and link conflicts are 409.
+        // The failure's typed kind picks the status (DomainFailureStatus.Http).
         bodyNodes.Add(new IfStatement(
             new Ast.Nodes.Not(new Member(new Variable(resultVarName), "IsSuccess")),
-            new Block(DomainFailureReturn(new Member(new Variable(resultVarName), "ErrorMessage")))));
+            new Block(DomainFailureReturn(new Variable(resultVarName)))));
 
         // db.Set.Add(result.Value)
         bodyNodes.Add(new Invoke(
@@ -163,7 +158,7 @@ public sealed partial class MinimalApiGenerator {
                         LoadByRouteKey(pluralParent, parentStore, new Variable(parentKey))),
                     new IfStatement(new Equal(new Variable("parent"), new Constant(null!)),
                         new Block(new Return(
-                            new Invoke(new Member(new TypeReference("Results"), "NotFound"))))),
+                            ProblemResponse(404, "Not Found")))),
                     new Await(new Invoke(new Member(collCall, "LoadAsync"))),
                     new Return(new Invoke(new Member(new TypeReference("Results"), "Ok"),
                         new Member(new Variable("parent"), pascalRel)))
@@ -202,13 +197,13 @@ public sealed partial class MinimalApiGenerator {
                                 new Member(eParam2, childKeyPropName),
                                 new Variable(childKeyParam)))))));
             detailBody.Add(new IfStatement(new Equal(new Variable("child"), new Constant(null!)),
-                new Block(new Return(new Invoke(new Member(new TypeReference("Results"), "NotFound"))))));
+                new Block(new Return(ProblemResponse(404, "Not Found")))));
         }
         else {
             detailBody.Add(Init("parent",
                 LoadByRouteKey(pluralParent, parentStore, new Variable(parentKey))));
             detailBody.Add(new IfStatement(new Equal(new Variable("parent"), new Constant(null!)),
-                new Block(new Return(new Invoke(new Member(new TypeReference("Results"), "NotFound"))))));
+                new Block(new Return(ProblemResponse(404, "Not Found")))));
             var colParam = new Parameter("e");
             var detailCollCall = new Invoke(
                 new Member(
@@ -226,7 +221,7 @@ public sealed partial class MinimalApiGenerator {
                                 new Member(match, childKeyPropName),
                                 new Variable(childKeyParam))))));
                 detailBody.Add(new IfStatement(new Equal(new Variable("child"), new Constant(null!)),
-                    new Block(new Return(new Invoke(new Member(new TypeReference("Results"), "NotFound"))))));
+                    new Block(new Return(ProblemResponse(404, "Not Found")))));
             }
             else {
                 // Shadow key: no CLR property to compare. The route id is that key.
@@ -242,7 +237,7 @@ public sealed partial class MinimalApiGenerator {
                                 new Lambda([match],
                                     new Equal(new Variable("e"), new Variable("child")))))),
                     new Block(new Return(
-                        new Invoke(new Member(new TypeReference("Results"), "NotFound"))))));
+                        ProblemResponse(404, "Not Found")))));
             }
         }
         detailBody.Add(new Return(new Invoke(new Member(new TypeReference("Results"), "Ok"),

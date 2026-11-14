@@ -252,6 +252,10 @@ public class AbsenceParityTests {
         });
         var seen = outcomes.Where(o => o.Step.StartsWith("invoke", StringComparison.Ordinal))
             .Select(o => o.Success ? o.State[observed] ?? "-" : "FAIL " + o.Message);
+        // A date reads back through the helper's own ToString (the machine's culture), so the expectation is rendered the same way
+        // from the DateOnly values the scenario creates: {D1} is OptDate (2026-01-02), {D2} is OptDate2 (2026-01-03).
+        expected = expected.Replace("{D1}", new DateOnly(2026, 1, 2).ToString(), StringComparison.Ordinal)
+            .Replace("{D2}", new DateOnly(2026, 1, 3).ToString(), StringComparison.Ordinal);
         await Assert.That(string.Join("|", seen)).IsEqualTo(expected);
     }
 
@@ -324,7 +328,7 @@ public class AbsenceParityTests {
     [Arguments("I5", "T: Number default(0)", "if ((match { Flag -> OptTxt, else -> \"dflt\" }) == \"x\") { assign T to 1 }", "T", "0|1|0|0")]
     [Arguments("I6", "T: Boolean optional", "assign T to match { Flag -> OptBool, else -> false }", "T", "-|True|False|False")]
     [Arguments("I7", "T: Number default(0)", "if ((match { Flag -> OptBool, else -> false }) == true) { assign T to 1 }", "T", "0|1|0|0")]
-    [Arguments("I8", "T: Date optional", "assign T to match { Flag -> OptDate, else -> OptDate2 }", "T", "-|1/2/2026|-|1/3/2026")]
+    [Arguments("I8", "T: Date optional", "assign T to match { Flag -> OptDate, else -> OptDate2 }", "T", "-|{D1}|-|{D2}")]
     [Arguments("I9", "T: Number default(0)", "if ((match { Flag -> OptDate, else -> OptDate2 }) != null) { assign T to 1 }", "T", "0|1|0|1")]
     [Arguments("I10", "T: AbxMood optional", "assign T to match { Flag -> OptMood, else -> Happy }", "T", "-|Sad|Happy|Happy")]
     [Arguments("I11", "T: Number default(0)", "if ((match { Flag -> OptMood, else -> Mood }) != null) { assign T to 1 }", "T", "0|1|1|1")]

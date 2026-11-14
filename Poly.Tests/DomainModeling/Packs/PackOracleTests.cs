@@ -1156,30 +1156,112 @@ public class PackOracleTests {
             [new DepthRead("Order", "o1", "/api/orders/o1", "Note", null)]);
     }
 
+    private static DepthStep Product(string key, string name) =>
+        Make("Product", key, "/api/products", $",\"Name\":\"{name}\"");
+
+    private static DepthStep AddLine(string line, string product) =>
+        Act("Order", "o1", "AddLine", "/api/orders/o1/addline", makes: $"Line:{line}",
+            http: $$"""{"C":"{{line}}","PId":"@Product:{{product}}"}""", sim: $$"""{"c":"{{line}}","p":"@Product:{{product}}"}""");
+
+    /// <summary>Two items, the matching product on the SECOND: a loader that loads only the first item's link answers wrong (or 500).
+    /// <c>all</c> is the negative direction: the first item does not match, so it is false.</summary>
     [Test]
     [Category("OracleFull")]
     [Timeout(300_000)]
     public async Task Action_QuantifierBodyReadingEachItemsLink_AnswersAsTheSimulatorDoes_Issue912(CancellationToken cancellationToken) {
         _ = cancellationToken;
         await RunDepthRowAsync(PackOracleDomains.ReadDepth912,
-            [Make("Order", "o1", "/api/orders"),
-             Make("Product", "p1", "/api/products", ",\"Name\":\"pn\""),
-             Act("Order", "o1", "AddLine", "/api/orders/o1/addline", makes: "Line:l1", http: """{"PId":"@Product:p1"}""", sim: """{"p":"@Product:p1"}"""),
-             Act("Order", "o1", "AnyNamed", "/api/orders/o1/anynamed")],
-            [new DepthRead("Order", "o1", "/api/orders/o1", "Flag", "true")]);
+            [Make("Order", "o1", "/api/orders"), Product("p1", "pn"), Product("p2", "pm"),
+             AddLine("l1", "p2"), AddLine("l2", "p1"),
+             Act("Order", "o1", "AnyNamed", "/api/orders/o1/anynamed"),
+             Act("Order", "o1", "AllNamed", "/api/orders/o1/allnamed")],
+            [new DepthRead("Order", "o1", "/api/orders/o1", "Flag", "true"),
+             new DepthRead("Order", "o1", "/api/orders/o1", "Every", "false")]);
     }
 
+    /// <summary>Two items, each linked to its own product: each item's own value, not the first item's.</summary>
     [Test]
     [Category("OracleFull")]
     [Timeout(300_000)]
     public async Task Action_FanOutIntoItemsThatReadTheirOwnLink_AnswersAsTheSimulatorDoes_Issue912(CancellationToken cancellationToken) {
         _ = cancellationToken;
         await RunDepthRowAsync(PackOracleDomains.ReadDepth912,
-            [Make("Order", "o1", "/api/orders"),
-             Make("Product", "p1", "/api/products", ",\"Name\":\"pn\""),
-             Act("Order", "o1", "AddLine", "/api/orders/o1/addline", makes: "Line:l1", http: """{"PId":"@Product:p1"}""", sim: """{"p":"@Product:p1"}"""),
+            [Make("Order", "o1", "/api/orders"), Product("p1", "pn"), Product("p2", "pm"),
+             AddLine("l1", "p1"), AddLine("l2", "p2"),
              Act("Order", "o1", "FanOut", "/api/orders/o1/fanout")],
-            [new DepthRead("Line", "l1", "/api/orders/o1/lines/l1", "Seen", "pn")]);
+            [new DepthRead("Line", "l1", "/api/orders/o1/lines/l1", "Seen", "pn"),
+             new DepthRead("Line", "l2", "/api/orders/o1/lines/l2", "Seen", "pm")]);
+    }
+
+    /// <summary>A nested route (<c>/orders/{code}/lines/{lineCode}/showcustomer</c>) whose body reads through the PARENT:
+    /// <c>order customer region Name</c>. The subtree below the parent's own link loads on the route parent.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task Action_NestedRouteReadingThroughItsParentsLink_AnswersAsTheSimulatorDoes_Issue912(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await RunDepthRowAsync(PackOracleDomains.ReadDepth912,
+            [Make("Order", "o1", "/api/orders"), Product("p1", "pn"),
+             Act("Order", "o1", "MakeCustomer", "/api/orders/o1/makecustomer", makes: "Customer:c1"),
+             Act("Customer", "c1", "MakeRegion", "/api/orders/o1/customer/makeregion", makes: "Region:r1"),
+             AddLine("l1", "p1"),
+             Act("Line", "l1", "ShowCustomer", "/api/orders/o1/lines/l1/showcustomer")],
+            [new DepthRead("Line", "l1", "/api/orders/o1/lines/l1", "Seen", "n0")]);
+    }
+
+    /// <summary>A collection UNDER a to-one (<c>invoke customer.NoteNamed</c>, which iterates the customer's notes), the matching product on the second note.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task Action_CollectionUnderAToOne_AnswersAsTheSimulatorDoes_Issue912(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await RunDepthRowAsync(PackOracleDomains.ReadDepth912,
+            [Make("Order", "o1", "/api/orders"), Product("p1", "pn"), Product("p2", "pm"),
+             Act("Order", "o1", "MakeCustomer", "/api/orders/o1/makecustomer", makes: "Customer:c1"),
+             Act("Customer", "c1", "AddNote", "/api/orders/o1/customer/addnote", makes: "Note:n1",
+                 http: """{"C":"n1","PId":"@Product:p2"}""", sim: """{"c":"n1","p":"@Product:p2"}"""),
+             Act("Customer", "c1", "AddNote", "/api/orders/o1/customer/addnote", makes: "Note:n2",
+                 http: """{"C":"n2","PId":"@Product:p1"}""", sim: """{"c":"n2","p":"@Product:p1"}"""),
+             Act("Order", "o1", "NoteNamed", "/api/orders/o1/notenamed")],
+            [new DepthRead("Customer", "c1", "/api/orders/o1/customer", "Flag", "true")]);
+    }
+
+    /// <summary>Two different navigation paths whose concatenated local names are equal (<c>Customer</c> + <c>Region</c> and
+    /// <c>CustomerRegion</c>): the generated host must compile, and the action answers as the simulator does.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task Action_NavigationPathsWhoseLocalNamesCollide_CompileAndAnswerAsTheSimulatorDoes_Issue912(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await RunDepthRowAsync(PackOracleDomains.Names912,
+            [Make("Order", "o1", "/api/orders"),
+             Act("Order", "o1", "MakeCustomer", "/api/orders/o1/makecustomer", makes: "Customer:c1"),
+             Act("Customer", "c1", "MakeRegion", "/api/orders/o1/customer/makeregion", makes: "Region:r1"),
+             Act("Region", "r1", "MakeZone", "/api/customers/c1/region/makezone", makes: "Zone:z1"),
+             Act("Order", "o1", "MakeOther", "/api/orders/o1/makeother", makes: "Other:x1"),
+             Act("Other", "x1", "MakeZone", "/api/orders/o1/customerregion/makezone", makes: "Zone:z2"),
+             Act("Order", "o1", "Both", "/api/orders/o1/both")],
+            [new DepthRead("Order", "o1", "/api/orders/o1", "Note", "first"),
+             new DepthRead("Order", "o1", "/api/orders/o1", "Second", "second")]);
+    }
+
+    private static DepthStep AddTag(string line, string tag, string product) =>
+        Act("Line", line, "AddTag", $"/api/orders/o1/lines/{line}/addtag", makes: $"Tag:{tag}",
+            http: $$"""{"C":"{{tag}}","PId":"@Product:{{product}}"}""", sim: $$"""{"c":"{{tag}}","p":"@Product:{{product}}"}""");
+
+    /// <summary>A collection IN a collection: two lines, two tags each. Line 1 has a matching tag only second, line 2 has none.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task Action_CollectionInACollection_AnswersAsTheSimulatorDoes_Issue912(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await RunDepthRowAsync(PackOracleDomains.ReadDepth912,
+            [Make("Order", "o1", "/api/orders"), Product("p1", "pn"), Product("p2", "pm"),
+             AddLine("l1", "p1"), AddLine("l2", "p1"),
+             AddTag("l1", "t1", "p2"), AddTag("l1", "t2", "p1"), AddTag("l2", "t3", "p2"), AddTag("l2", "t4", "p2"),
+             Act("Order", "o1", "FanTags", "/api/orders/o1/fantags")],
+            [new DepthRead("Line", "l1", "/api/orders/o1/lines/l1", "Flag", "true"),
+             new DepthRead("Line", "l2", "/api/orders/o1/lines/l2", "Flag", "false")]);
     }
 
     /// <summary>The handler of a subscriber registered in the same request reads through a link: the add answered 500.</summary>

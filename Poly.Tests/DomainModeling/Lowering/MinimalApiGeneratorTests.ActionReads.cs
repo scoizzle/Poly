@@ -260,9 +260,15 @@ public partial class MinimalApiGeneratorTests {
                 "/api/orders/{code}/threehop",           // a path of links through the entity
                 "/api/orders/{code}/anynamed",           // a collection read through each item's link
                 "/api/customers/{code}/region/makezone", // a nested route
+                "/api/orders/{code}/lines/{lineCode}/showcustomer", // a nested route reading through its parent: the subtree loads on parentEntity
+                "/api/orders/{code}/notenamed",          // a collection under a to-one
+                "/api/orders/{code}/fantags",            // a collection in a collection
             ]),
             (Poly.Tests.TestHelpers.PackOracleDomains.SameRow912.Poly, "AliasDbContext", [
                 "/api/orders/{code}/go",                 // a parameter whose own link is read
+            ]),
+            (Poly.Tests.TestHelpers.PackOracleDomains.Names912.Poly, "NamesDbContext", [
+                "/api/orders/{code}/both",               // two paths whose concatenated local names are equal
             ]),
             (Poly.Tests.TestHelpers.PackOracleDomains.TwoParams912.Poly, "PairDbContext", [
                 "/api/orders/{code}/both",               // two parameters of one entity type
@@ -278,6 +284,50 @@ public partial class MinimalApiGeneratorTests {
             File.WriteAllText(GoldenPath("read_depth.preload.txt"), preload);
         }
         await Assert.That(preload).IsEqualTo(File.ReadAllText(GoldenPath("read_depth.preload.txt")));
+    }
+
+    /// <summary>Locals of the loads are unique by construction: one set, numeric suffix on a clash. Two paths whose concatenated
+    /// names are equal (<c>Customer</c> + <c>Region</c> and <c>CustomerRegion</c>) must not lean on the writer's own rename
+    /// (<c>name_2</c>), which only works where the declaration and every use sit in one scope.</summary>
+    [Test]
+    public async Task ActionReads_TreeLocalsThatCollide_GetNumericSuffixes_NotAWriterRename() {
+        var program = HostGenerator(CompileForHost(Poly.Tests.TestHelpers.PackOracleDomains.Names912.Poly)).Generate("NamesDbContext");
+        var preload = PreloadOf(program, "/api/orders/{code}/both");
+
+        await Assert.That(preload).Contains("var entityCustomerRegion = entityCustomer.Region;");
+        await Assert.That(preload).Contains("var entityCustomerRegion2 = entity.CustomerRegion;");
+        await Assert.That(System.Text.RegularExpressions.Regex.IsMatch(preload, @"\w_\d\b")).IsFalse();
+    }
+
+    /// <summary>A tree root with reads that no route parameter consumed would load nothing: generation fails instead, naming the
+    /// action and the root. A root that a parameter consumed, or one with no reads, is fine.</summary>
+    [Test]
+    public async Task ActionReads_RootWithReadsThatMatchesNoParameter_FailsGeneration() {
+        var reads = new ActionReads("Order", "Go", [
+            new ReadRoot("this", "Order", []),
+            new ReadRoot("q", "Product", [new ReadNode("Zone", false, "Zone", [], false)]),
+            new ReadRoot("idle", "Product", []),
+        ]);
+
+        var refusal = Assert.Throws<ActionReadsRefusedException>(() => MinimalApiGenerator.RequireEveryRootLoaded(reads, new HashSet<string> { "this" }));
+        MinimalApiGenerator.RequireEveryRootLoaded(reads, new HashSet<string> { "this", "q" });
+
+        await Assert.That(refusal.Message).Contains("Action 'Order.Go' cannot be served over HTTP");
+        await Assert.That(refusal.Message).Contains("'q'");
+    }
+
+    /// <summary>Without a catalog the generator loads only the one-hop floor; production never builds one without. The host
+    /// contributor (the path <c>polyc</c> and the facade take) passes the lowered catalog, so it loads what the tree says: this
+    /// fails if that argument is removed.</summary>
+    [Test]
+    public async Task ActionReads_HostContributorPath_PassesTheCatalog_SoTheTreeLoads() {
+        var result = new global::Poly.DslCompiler.DslCompiler()
+            .Load(new Poly.DomainModeling.Libraries.Http.HttpLibrary())
+            .Compile(Poly.Tests.TestHelpers.PackOracleDomains.ReadDepth912.Poly, global::Poly.DslCompiler.CompileMode.All, global::Poly.DslCompiler.DbmsPack.Sqlite);
+        await Assert.That(result.Success).IsTrue();
+        var program = result.Files!.Single(f => f.FileName == "Program.cs").Source;
+
+        await Assert.That(PreloadOf(program, "/api/orders/{code}/threehop")).Contains("db.Entry(entityCustomerRegion).Reference(e => e.Zone).LoadAsync()");
     }
 
     /// <summary>The one-hop floor: an action whose tree is empty still loads the entity's single links (P-13a's set). The floor is

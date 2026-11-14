@@ -1962,9 +1962,7 @@ and the loads may include more than the action reads (an over-load never changes
 Limits. A handler that watches a **stored** entity's later transition does not fire over HTTP (#560), though it does in the
 simulator: the host never wires an entity's subscribers after loading it, so an action's `when` effects on another entity
 run in a generated app only for subscribers registered in the same request. An action the generator cannot follow is
-**refused at generation** (`polyc` exits non-zero, naming the action and the reason), never served with less than it reads:
-an action that reaches itself again through related entities with a different receiver (a descending recursion), a handler
-chain that keeps registering subscribers, and a call it cannot read through. Create routes (the POST of a root) read no stored link.
+**refused when the app is generated** (`polyc` exits non-zero, naming the action), never served with less than it reads: an action the generator cannot follow, for example a `when` handler chain that keeps registering subscribers (a handler that creates a child which registers the same owner again). Create routes (the POST of a root) read no stored link.
 
 ## 12. Dual Authoring Path
 

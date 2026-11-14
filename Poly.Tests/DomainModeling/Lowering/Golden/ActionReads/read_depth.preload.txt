@@ -47,6 +47,70 @@
     await db.Entry(entity).Reference(e => e.Zone).LoadAsync();
     try
     {
+// /api/orders/{code}/lines/{lineCode}/showcustomer
+    var parentEntity = await db.Orders.FirstOrDefaultAsync(e => e.Code == code);
+    if (parentEntity == null)
+    {
+        return StatusProblem(404, "Not Found", "Order not found");
+    }
+    await db.Entry(parentEntity).Reference(e => e.Customer).LoadAsync();
+    var entity = await db.Lines.FirstOrDefaultAsync(e => e.Code == lineCode);
+    if (entity == null)
+    {
+        return StatusProblem(404, "Not Found", "Line not found");
+    }
+    await db.Entry(parentEntity).Collection(e => e.Lines).LoadAsync();
+    if (!parentEntity.Lines.Any(e => e == entity))
+    {
+        return StatusProblem(404, "Not Found", "Line not found for this Order");
+    }
+    await db.Entry(entity).Collection(e => e.Tags).LoadAsync();
+    await db.Entry(entity).Reference(e => e.Order).LoadAsync();
+    await db.Entry(entity).Reference(e => e.Product).LoadAsync();
+    var parentEntityCustomer = parentEntity.Customer;
+    if (parentEntityCustomer != null)
+    {
+        await db.Entry(parentEntityCustomer).Reference(e => e.Region).LoadAsync();
+    }
+    try
+    {
+// /api/orders/{code}/notenamed
+    var entity = await db.Orders.FirstOrDefaultAsync(e => e.Code == code);
+    if (entity == null)
+    {
+        return StatusProblem(404, "Not Found", "Order not found");
+    }
+    await db.Entry(entity).Collection(e => e.Lines).LoadAsync();
+    await db.Entry(entity).Reference(e => e.Customer).LoadAsync();
+    var entityCustomer = entity.Customer;
+    if (entityCustomer != null)
+    {
+        await db.Entry(entityCustomer).Collection(e => e.Notes).LoadAsync();
+        foreach (var entityCustomerNotesItem in entityCustomer.Notes.ToList())
+        {
+            await db.Entry(entityCustomerNotesItem).Reference(e => e.Product).LoadAsync();
+        }
+    }
+    try
+    {
+// /api/orders/{code}/fantags
+    var entity = await db.Orders.FirstOrDefaultAsync(e => e.Code == code);
+    if (entity == null)
+    {
+        return StatusProblem(404, "Not Found", "Order not found");
+    }
+    await db.Entry(entity).Collection(e => e.Lines).LoadAsync();
+    await db.Entry(entity).Reference(e => e.Customer).LoadAsync();
+    foreach (var entityLinesItem in entity.Lines.ToList())
+    {
+        await db.Entry(entityLinesItem).Collection(e => e.Tags).LoadAsync();
+        foreach (var entityLinesItemTagsItem in entityLinesItem.Tags.ToList())
+        {
+            await db.Entry(entityLinesItemTagsItem).Reference(e => e.Product).LoadAsync();
+        }
+    }
+    try
+    {
 // /api/orders/{code}/go
     var entity = await db.Orders.FirstOrDefaultAsync(e => e.Code == code);
     if (entity == null)
@@ -63,6 +127,31 @@
             return StatusProblem(404, "Not Found", "Product not found");
         }
         await db.Entry(product).Reference(e => e.Zone).LoadAsync();
+// /api/orders/{code}/both
+    var entity = await db.Orders.FirstOrDefaultAsync(e => e.Code == code);
+    if (entity == null)
+    {
+        return StatusProblem(404, "Not Found", "Order not found");
+    }
+    await db.Entry(entity).Reference(e => e.Customer).LoadAsync();
+    await db.Entry(entity).Reference(e => e.CustomerRegion).LoadAsync();
+    var entityCustomer = entity.Customer;
+    if (entityCustomer != null)
+    {
+        await db.Entry(entityCustomer).Reference(e => e.Region).LoadAsync();
+        var entityCustomerRegion = entityCustomer.Region;
+        if (entityCustomerRegion != null)
+        {
+            await db.Entry(entityCustomerRegion).Reference(e => e.Zone).LoadAsync();
+        }
+    }
+    var entityCustomerRegion2 = entity.CustomerRegion;
+    if (entityCustomerRegion2 != null)
+    {
+        await db.Entry(entityCustomerRegion2).Reference(e => e.Zone).LoadAsync();
+    }
+    try
+    {
 // /api/orders/{code}/both
     var entity = await db.Orders.FirstOrDefaultAsync(e => e.Code == code);
     if (entity == null)

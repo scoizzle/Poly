@@ -32,6 +32,11 @@ public sealed partial class MinimalApiGenerator {
     private readonly IStorageSyntaxEmitter? _emitter;
     private readonly string? _vendor;
 
+    /// <param name="catalog">
+    /// The lowered module the host reads. Without one (shape-only generation, a few tests) there is nothing to read, so an action
+    /// route preloads the one-hop floor only; production always passes one (<c>MinimalApiHostArtifactContributor</c>), and a test
+    /// pins that it does.
+    /// </param>
     public MinimalApiGenerator(Domain domain,
         AnalysisResult analysis,
         StorageModel storageModel,

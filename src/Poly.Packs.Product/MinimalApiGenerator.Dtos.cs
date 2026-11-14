@@ -18,7 +18,7 @@ public sealed partial class MinimalApiGenerator {
     private HashSet<string> ComputeActionDtoCollisions() {
         var reserved = new HashSet<string>(StringComparer.Ordinal);
         foreach (var entity in _entities) {
-            if (!GetStorageEntity(entity).IsRoot) continue;
+            if (!GetStorageEntity(entity).IsRoot || !CreatesDirectly(_entities, entity)) continue;
             if (GetConstructorOrder(entity).All(p => p.IsNavigation)) continue;
             reserved.Add($"{entity.Name}Dto");
         }
@@ -181,7 +181,7 @@ public sealed partial class MinimalApiGenerator {
             .ToList();
 
         if (scalarParams.Count == 0) return;
-        if (!GetStorageEntity(entity).IsRoot) return;
+        if (!GetStorageEntity(entity).IsRoot || !CreatesDirectly(_entities, entity)) return;
 
         // Emit as a record with get/init properties so transport validation attributes
         // attach to properties and are enforced by ASP.NET model binding, and the

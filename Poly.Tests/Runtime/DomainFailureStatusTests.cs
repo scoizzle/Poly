@@ -15,8 +15,8 @@ namespace Poly.Tests.Runtime;
 /// </summary>
 public class DomainFailureStatusTests {
     /// <summary>
-    /// The one table, #677 R-06 (orchestrator ruling O-4 for <c>Cascade</c>): Unique, Link
-    /// and Conflict are 409; Cascade is 500; the other ten are 400.
+    /// The one table, #677 R-06 (orchestrator ruling O-4 for <c>Cascade</c>): Unique, Link,
+    /// Conflict and Stage are 409; Policy is 422; Cascade is 500; the other eight are 400 (owner rulings, #677).
     /// </summary>
     static readonly Dictionary<DomainFailureKind, int> Expected = new() {
         [DomainFailureKind.Required] = 400,
@@ -25,8 +25,8 @@ public class DomainFailureStatusTests {
         [DomainFailureKind.Pattern] = 400,
         [DomainFailureKind.Enum] = 400,
         [DomainFailureKind.Unique] = 409,
-        [DomainFailureKind.Stage] = 400,
-        [DomainFailureKind.Policy] = 400,
+        [DomainFailureKind.Stage] = 409,
+        [DomainFailureKind.Policy] = 422,
         [DomainFailureKind.Link] = 409,
         [DomainFailureKind.Arithmetic] = 400,
         [DomainFailureKind.Argument] = 400,
@@ -36,7 +36,7 @@ public class DomainFailureStatusTests {
     };
 
     [Test]
-    public async Task EveryKind_HasStatus_AndTheSplitIsExactlyThreeTenOne() {
+    public async Task EveryKind_HasStatus_AndTheSplitIsExactlyFourEightOneOne() {
         var kinds = Enum.GetValues<DomainFailureKind>();
 
         // 14 is pinned: an appended kind has to force a decision at the table, not inherit one.
@@ -56,11 +56,13 @@ public class DomainFailureStatusTests {
             .ToDictionary(group => group.Key, group => group.OrderBy(kind => kind.ToString()).ToArray());
 
         await Assert.That(string.Join(",", byStatus[409].Select(kind => kind.ToString())))
-            .IsEqualTo("Conflict,Link,Unique");
-        await Assert.That(byStatus[400].Length).IsEqualTo(10);
+            .IsEqualTo("Conflict,Link,Stage,Unique");
+        await Assert.That(byStatus[400].Length).IsEqualTo(8);
+        await Assert.That(string.Join(",", byStatus[422].Select(kind => kind.ToString())))
+            .IsEqualTo("Policy");
         await Assert.That(string.Join(",", byStatus[500].Select(kind => kind.ToString())))
             .IsEqualTo("Cascade");
-        await Assert.That(byStatus.Count).IsEqualTo(3);
+        await Assert.That(byStatus.Count).IsEqualTo(4);
     }
 
     [Test]

@@ -2,6 +2,7 @@
 
 #nullable enable
 
+using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -27,13 +28,13 @@ using (var scope = app.Services.CreateScope())
 
 app.MapGet("/api/gauges", async (TDbCtx db) => await db.Gauges.ToListAsync());
 
-app.MapGet("/api/gauges/{id}", async (int id, TDbCtx db) => (await db.Gauges.FindAsync(id) is T.Gauge gauge ? Results.Ok(gauge) : Results.NotFound()));
+app.MapGet("/api/gauges/{id}", async (int id, TDbCtx db) => (await db.Gauges.FindAsync(id) is T.Gauge gauge ? Results.Ok(gauge) : StatusProblem(404, "Not Found")));
 
 app.MapPost("/api/gauges", async (GaugeDto dto, TDbCtx db) => {
     var gaugeResult = T.Gauge.Create(dto.Level, dto.Peak);
     if (!gaugeResult.IsSuccess)
     {
-        return FailureStatus(gaugeResult.ErrorMessage);
+        return Problem(gaugeResult.Error!);
     }
     db.Gauges.Add(gaugeResult.Value);
     await db.SaveChangesAsync();
@@ -44,7 +45,7 @@ app.MapPost("/api/gauges/{id}/setlevel", async (int id, SetLevelDto dto, TDbCtx 
     var entity = await db.Gauges.FindAsync(id);
     if (entity == null)
     {
-        return Results.NotFound("Gauge not found");
+        return StatusProblem(404, "Not Found", "Gauge not found");
     }
     try
     {
@@ -56,12 +57,13 @@ app.MapPost("/api/gauges/{id}/setlevel", async (int id, SetLevelDto dto, TDbCtx 
         }
         else
         {
-            return FailureStatus(result.ErrorMessage);
+            return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
-        return Results.StatusCode(500);
+        app.Logger.LogError(ex, "Action {Action} failed", "Gauge.SetLevel");
+        return StatusProblem(500, "Internal Server Error");
     }
 });
 
@@ -69,7 +71,7 @@ app.MapPost("/api/gauges/{id}/setpeak", async (int id, SetPeakDto dto, TDbCtx db
     var entity = await db.Gauges.FindAsync(id);
     if (entity == null)
     {
-        return Results.NotFound("Gauge not found");
+        return StatusProblem(404, "Not Found", "Gauge not found");
     }
     try
     {
@@ -81,12 +83,13 @@ app.MapPost("/api/gauges/{id}/setpeak", async (int id, SetPeakDto dto, TDbCtx db
         }
         else
         {
-            return FailureStatus(result.ErrorMessage);
+            return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
-        return Results.StatusCode(500);
+        app.Logger.LogError(ex, "Action {Action} failed", "Gauge.SetPeak");
+        return StatusProblem(500, "Internal Server Error");
     }
 });
 
@@ -94,7 +97,7 @@ app.MapPost("/api/gauges/{id}/surge", async (int id, TDbCtx db) => {
     var entity = await db.Gauges.FindAsync(id);
     if (entity == null)
     {
-        return Results.NotFound("Gauge not found");
+        return StatusProblem(404, "Not Found", "Gauge not found");
     }
     try
     {
@@ -106,18 +109,34 @@ app.MapPost("/api/gauges/{id}/surge", async (int id, TDbCtx db) => {
         }
         else
         {
-            return FailureStatus(result.ErrorMessage);
+            return Problem(result.Error!);
         }
     }
-    catch (Exception)
+    catch (Exception ex)
     {
-        return Results.StatusCode(500);
+        app.Logger.LogError(ex, "Action {Action} failed", "Gauge.Surge");
+        return StatusProblem(500, "Internal Server Error");
     }
 });
 
-static IResult FailureStatus(string? message)
+static IResult Problem(Poly.Runtime.DomainFailure failure)
 {
-    return (message != null && (message.Contains("Unique constraint") || message.Contains("already has a target")) ? Results.Conflict(message) : Results.BadRequest(message));
+    var extensions = new Dictionary<string, object?>();
+    if (failure.ElementPath != null)
+    {
+        extensions["elementPath"] = failure.ElementPath;
+    }
+    if (failure.Guard != null)
+    {
+        extensions["guard"] = failure.Guard;
+    }
+    return Results.Problem(failure.Message, null, Poly.Runtime.DomainFailureStatus.Http(failure.Kind), failure.Kind.ToString(), null, extensions);
+}
+
+
+static IResult StatusProblem(int status, string title, string? detail = null)
+{
+    return Results.Problem(detail, null, status, title);
 }
 
 

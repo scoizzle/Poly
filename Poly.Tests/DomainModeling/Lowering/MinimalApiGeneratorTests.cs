@@ -704,6 +704,54 @@ public class MinimalApiGeneratorTests {
         await Assert.That(CompileHost(http.Files!)).IsEmpty();
     }
 
+    /// <summary>P-13a: the host loads one hop of an entity's navigations before an action runs. A guard that reads a
+    /// to-one through a second hop would see an unloaded link as empty, so the generator refuses it with an error
+    /// that names the action and the path, not a route that answers wrongly.</summary>
+    [Test]
+    public async Task ActionGuard_ReadingAToOneThroughTwoHops_IsRefusedAtGeneration() {
+        const string poly = """
+            domain Shop
+            Region: entity { Name: Text }
+            Customer: entity { region: Region }
+            Order: entity {
+              customer: Customer
+              InRegion: policy { customer region Name is "north" }
+              Go: action require InRegion { }
+            }
+            """;
+
+        var http = CompilerWithHttpHost().Compile(poly, CompileMode.All, DbmsPack.Sqlite);
+
+        await Assert.That(http.Success).IsFalse();
+        var error = string.Join("; ", http.Errors ?? []);
+        await Assert.That(error).Contains("Order.Go");
+        await Assert.That(error).Contains("Customer.Region");
+    }
+
+    /// <summary>The refusal is for reads the host does not cover. One hop (the link itself, or a scalar of what it
+    /// links) is covered and still gets its route.</summary>
+    [Test]
+    public async Task ActionGuard_ReadingOneHop_StillGetsItsRoute() {
+        const string poly = """
+            domain Shop
+            Region: entity { Name: Text }
+            Customer: entity { region: Region Label: Text }
+            Order: entity {
+              customer: Customer
+              Linked: policy { customer exists }
+              Northern: policy { customer Label is "north" }
+              Go: action require Linked { }
+              Visit: action require Northern { }
+            }
+            """;
+
+        var http = CompilerWithHttpHost().Compile(poly, CompileMode.All, DbmsPack.Sqlite);
+
+        await Assert.That(http.Success).IsTrue().Because(string.Join("; ", http.Errors ?? []));
+        var host = http.Files!.Single(f => f.FileName == "Program.cs").Source;
+        await Assert.That(host).Contains("Reference(e => e.Customer).LoadAsync()");
+    }
+
     /// <summary>An entity whose create takes an entity-typed property gets no POST route and no DTO, not a route
     /// that always answers 400. The DSL cannot declare that property (a defaulted or optional one), so an
     /// API-built model is the only oracle there is; there is no running-app test for it.</summary>

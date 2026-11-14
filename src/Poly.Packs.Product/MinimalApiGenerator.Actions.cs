@@ -14,6 +14,7 @@ public sealed partial class MinimalApiGenerator {
             // already rejects the wrong stage.
             if (!emittedActions.Add(ia.Name))
                 continue;
+            RequireStoredReach(entity, ia);
             var store = GetStorageEntity(entity);
             var keyName = store.KeyName;
             var keyType = store.KeyClrType;

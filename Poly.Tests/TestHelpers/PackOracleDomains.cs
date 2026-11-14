@@ -247,7 +247,7 @@ public static class PackOracleDomains {
         "/api/orders");
 
     /// <summary>L-22b F4: a BIDIRECTIONAL owned one-to-one from a public entity to an internal one. It was an analysis
-    /// error before L-22b and is now the same boot failure as every all-public bidirectional one-to-one (#791).</summary>
+    /// error before L-22b and boots since L-15b declared the dependent side of a one-to-one pair (#791).</summary>
     public static PackOracleDomain PublicOrderInternalReceiptBidirectional604 { get; } = new(
         "PublicOrderInternalReceiptBidirectional604",
         """
@@ -266,11 +266,9 @@ public static class PackOracleDomains {
           public action Issue (note: Text) { create in receipt { Note: note } }
         }
         """,
-        "/api/orders",
-        Boots: false,
-        NotBootingReason: "#791: EF cannot determine the dependent side of a bidirectional one-to-one");
+        "/api/orders");
 
-    /// <summary>L-22b closing round: the same two-way one-to-one without `owned` also fails to boot (#791).</summary>
+    /// <summary>L-22b closing round: the same two-way one-to-one without `owned` boots too (#791, L-15b).</summary>
     public static PackOracleDomain PublicOrderInternalReceiptTwoWay604 { get; } = new(
         "PublicOrderInternalReceiptTwoWay604",
         """
@@ -289,9 +287,7 @@ public static class PackOracleDomains {
           public action Issue (note: Text) { create in receipt { Note: note } }
         }
         """,
-        "/api/orders",
-        Boots: false,
-        NotBootingReason: "#791: EF cannot determine the dependent side of a two-way one-to-one");
+        "/api/orders");
 
     /// <summary>L-22 (#604): the same domain with the target marked public. It boots and serves the list route.</summary>
     public static PackOracleDomain PublicOrderPublicLine604 { get; } = new(

@@ -165,42 +165,24 @@ public class PackOracleTests {
         await Assert.That(await QtysAsync("ORD2")).IsEquivalentTo(new[] { 7 });
     }
 
-    [Test]
-    public async Task PublicEntityWithBidirectionalInternalOneToOne_IsPinnedAsNotBooting_Issue791() {
-        var fixture = PackOracleDomains.PublicOrderInternalReceiptBidirectional604;
-
-        await Assert.That(fixture.Boots).IsFalse();
-        await Assert.That(fixture.NotBootingReason).Contains("#791");
-        await Assert.ThrowsAsync<Exception>(async () => {
-            await using var oracle = await PackOracle.BootAsync(fixture);
-        });
-    }
-
-    /// <summary>P-18 (#791) flips this to booting. The harness refuses any Boots:false fixture before compiling, so the real
-    /// boot is forced with Boots = true and the child must die: EF cannot determine the dependent side.</summary>
+    /// <summary>#791: EF could not determine the dependent side of a one-to-one pair and the host exited at boot. L-15b declares
+    /// it (the required side, else the part of an owned pair, else the first declared), so the pair boots.</summary>
     [Test]
     [Category("OracleFull")]
-    public async Task PublicEntityWithBidirectionalInternalOneToOne_BootFails_Issue791() {
-        var ex = await Assert.ThrowsAsync<PackOracleBootException>(async () => {
-            await using var oracle = await PackOracle.BootAsync(
-                PackOracleDomains.PublicOrderInternalReceiptBidirectional604 with { Boots = true });
-        });
+    public async Task PublicEntityWithBidirectionalInternalOneToOne_Boots_Issue791() {
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.PublicOrderInternalReceiptBidirectional604);
 
-        await Assert.That(ex!.Message).Contains("dependent side");
+        using var list = await oracle.Client.GetAsync("/api/orders");
+        await Assert.That(list.StatusCode).IsEqualTo(HttpStatusCode.OK);
     }
 
     [Test]
     [Category("OracleFull")]
-    public async Task PublicEntityWithTwoWayNonOwnedInternalOneToOne_BootFails_Issue791() {
-        await Assert.That(PackOracleDomains.PublicOrderInternalReceiptTwoWay604.Boots).IsFalse();
-        await Assert.That(PackOracleDomains.PublicOrderInternalReceiptTwoWay604.NotBootingReason).Contains("#791");
+    public async Task PublicEntityWithTwoWayNonOwnedInternalOneToOne_Boots_Issue791() {
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.PublicOrderInternalReceiptTwoWay604);
 
-        var ex = await Assert.ThrowsAsync<PackOracleBootException>(async () => {
-            await using var oracle = await PackOracle.BootAsync(
-                PackOracleDomains.PublicOrderInternalReceiptTwoWay604 with { Boots = true });
-        });
-
-        await Assert.That(ex!.Message).Contains("dependent side");
+        using var list = await oracle.Client.GetAsync("/api/orders");
+        await Assert.That(list.StatusCode).IsEqualTo(HttpStatusCode.OK);
     }
 
     [Test]

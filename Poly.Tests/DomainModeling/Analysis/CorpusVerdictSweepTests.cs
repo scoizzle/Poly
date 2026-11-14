@@ -178,6 +178,7 @@ guide fence Age >= 18 = skip (illustration)
 guide fence assignee Active = skip (illustration)
 guide fence HasPriorityOrder: policy { any orders where Priority > 5 } = ok
 guide fence Renew: action { = DMSEM003
+guide fence domain Tasks = ok
 guide fence domain Board = DMEFF020
 guide fence function Add(a: Number, b: Number): Number = a + b = ok
 guide fence Cart: entity { = ok

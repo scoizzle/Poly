@@ -3,7 +3,7 @@
 # every tracked *.poly, every non-illustration guide fence, the demo IDE samples and the poly_guide quickstart.
 # PolicyGuardFactsTests.Census_MatchesGolden compares the measured block; POLY_UPDATE_GOLDEN=1 rewrites it.
 # measured
-documents scanned = 83
+documents scanned = 84
 documents with require not (source text) = 7
 documents with a create under require (analysed domain) = 5
 documents with no analysed domain = 22

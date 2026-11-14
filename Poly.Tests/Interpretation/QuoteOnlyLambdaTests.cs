@@ -456,14 +456,15 @@ public class QuoteOnlyLambdaTests {
     }
 
     /// <summary>
-    /// The stage per cell. The analysis refuses temporal arithmetic and nullable temporal equality (T-23) and enum
+    /// The stage per cell. The analysis refuses temporal arithmetic (T-23; a nullable temporal beside the same required type is C#'s
+    /// lifted comparison and runs since T-21d) and enum
     /// arithmetic (T-25); the bridge refuses enum ordering, which the Expression API does not define (T-25).
     /// </summary>
     private static readonly string[] FenceStages = [
         "DateTime - DateTime = analysis-rejected",
         "DateTime + Duration = analysis-rejected",
         "DateTime < DateTime = ran",
-        "DateTime? == DateTime = analysis-rejected",
+        "DateTime? == DateTime = ran",
         "Duration + Duration = analysis-rejected",
         "Duration? + Duration = analysis-rejected",
         "-Duration = ran",

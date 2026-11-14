@@ -180,6 +180,7 @@ internal sealed class ActionReadsWalker {
     private readonly Dictionary<RegistryKey, List<PendingIteration>> _iterations = [];
     private readonly HashSet<(PendingIteration, Value)> _walkedSubscribers = [];
     private int _epoch;
+    private int _replayDepth;
     private string _action = "";
 
     internal ActionReadsWalker(CatalogIndex catalog, IReadOnlyDictionary<string, StorageEntity> storage, Domain domain,
@@ -232,10 +233,20 @@ internal sealed class ActionReadsWalker {
     private sealed record PortValue : Value { public static readonly PortValue Instance = new(); }
     private sealed record EntityValue(Instance Instance) : Value;
     private sealed record CollectionValue(Collection Collection) : Value;
-    private sealed record RegistryValue(RegistryKey Key) : Value;
+    private sealed record RegistryValue(RegistryKey Key, Instance Owner) : Value;
 
-    /// <summary>One subscriber registry: the instance that holds it and its field.</summary>
-    private sealed record RegistryKey(Instance Owner, string Field);
+    /// <summary>
+    /// One subscriber registry, by type: the entity that declares it and its field. Keyed by type, not by the instance a
+    /// tree path reached, because two paths can reach the same row (a parameter equal to a link of <c>this</c>): a
+    /// subscriber registered through one path is then notified through the other. Every registration on any instance of
+    /// the entity is visible to every iteration of its registry, which over-approximates.
+    /// </summary>
+    private sealed record RegistryKey(string Entity, string Field);
+
+    /// <summary>How deep replayed handlers may nest: a handler that registers another subscriber of a registry already
+    /// iterated replays that iteration again. A chain that keeps doing so is refused at this depth (no shipped action nests
+    /// more than one).</summary>
+    private const int ReplayDepthLimit = 8;
 
     /// <summary>An iteration over a registry, kept so a subscriber registered later in the walk is walked through it too.</summary>
     private sealed class PendingIteration(ForEachLoop loop, Value? self, Dictionary<string, Value> env, CallKey[] stack) {
@@ -366,7 +377,6 @@ internal sealed class ActionReadsWalker {
     private sealed record PortType : TypeClass { public static readonly PortType Instance = new(); }
     private sealed record EntityType(string Name) : TypeClass;
     private sealed record EntityCollectionType(string Element) : TypeClass;
-    private sealed record ResultType(TypeClass Inner) : TypeClass;
     private sealed record UnknownType : TypeClass { public static readonly UnknownType Instance = new(); }
 
     private TypeClass Classify(Node? type) => type switch {
@@ -413,7 +423,7 @@ internal sealed class ActionReadsWalker {
                 _ => UnknownType.Instance,
             };
         if (simple == "DomainResult" && classes.Count == 1)
-            return classes[0] is ScalarType ? ScalarType.Instance : new ResultType(classes[0]);
+            return classes[0] is ScalarType ? ScalarType.Instance : UnknownType.Instance;
         return classes.All(c => c is ScalarType) ? ScalarType.Instance : UnknownType.Instance;
     }
 
@@ -738,7 +748,7 @@ internal sealed class ActionReadsWalker {
             case RegistryValue registry: {
                     // #560: a registry holds only the subscribers registered during this request. Each one is walked
                     // through this loop (its `when` handler), now or when a later registration arrives.
-                    if (!ActionReads.SubscribersEmptyOverHttp && registry.Key.Owner is StoredInstance)
+                    if (!ActionReads.SubscribersEmptyOverHttp && registry.Owner is StoredInstance)
                         throw Refused(loop, "a stored entity's subscriber registry, which the walk does not follow");
                     var pending = new PendingIteration(loop, frame.Self, new Dictionary<string, Value>(frame.Env, StringComparer.Ordinal), [.. _stack]);
                     if (!_iterations.TryGetValue(registry.Key, out var iterations))
@@ -859,7 +869,7 @@ internal sealed class ActionReadsWalker {
                 }
                 return new CollectionValue(((StoredInstance)instance).Node.Child(member.Navigation!).AsCollection);
             case MemberKind.Registry:
-                return new RegistryValue(new RegistryKey(instance, member.Name));
+                return new RegistryValue(new RegistryKey(instance.Entity, member.Name), instance);
             case MemberKind.Scalar:
                 return ScalarValue.Instance;
             case MemberKind.Getter:
@@ -932,7 +942,7 @@ internal sealed class ActionReadsWalker {
             if (SimpleName(typeName) == nameof(DomainResult))
                 return entry is null
                     ? throw Refused(invoke, $"call '{typeName}.{name}', which the walk does not know on a result")
-                    : ResultOf(target.Value, name, staticArguments);
+                    : ResultOf(target.Value, name, staticArguments, invoke);
             if (entry is not null)
                 return ScalarValue.Instance;
             if (staticArguments.Any(IsEntityCapable))
@@ -982,9 +992,13 @@ internal sealed class ActionReadsWalker {
         _whitelist.FirstOrDefault(entry => entry.Instance && entry.Receiver == receiver && (entry.Method == "*" || entry.Method == method));
 
     /// <summary>A whitelisted <c>DomainResult</c> static: <c>Success(x)</c> carries <c>x</c>, <c>Failure</c> carries null.</summary>
-    private static Value ResultOf(Node receiver, string method, IReadOnlyList<Value> arguments) {
-        if (receiver is not NamedTypeReference { TypeArguments.Count: > 0 })
+    private Value ResultOf(Node receiver, string method, IReadOnlyList<Value> arguments, Node site) {
+        if (receiver is not NamedTypeReference { TypeArguments.Count: > 0 }) {
+            // A non-generic result carries no value: an entity passed to one cannot be read back, so it fails closed.
+            if (arguments.Any(IsEntityCapable))
+                throw Refused(site, $"a non-generic result built from an entity ('{method}')");
             return ScalarValue.Instance;
+        }
         return method == nameof(DomainResult.Success) && arguments.Count == 1 ? new ResultValue(arguments[0]) : new ResultValue(NullValue.Instance);
     }
 
@@ -1008,6 +1022,9 @@ internal sealed class ActionReadsWalker {
 
     /// <summary>Walks a registry loop met earlier for one subscriber registered after it, on the loop's own call stack.</summary>
     private void Replay(PendingIteration pending, Value subscriber) {
+        if (_replayDepth >= ReplayDepthLimit)
+            throw Refused(pending.Loop, "a handler chain that registers further subscribers without end");
+        _replayDepth++;
         var stack = _stack.ToList();
         _stack.Clear();
         _stack.AddRange(pending.Stack);
@@ -1027,6 +1044,7 @@ internal sealed class ActionReadsWalker {
         finally {
             _stack.Clear();
             _stack.AddRange(stack);
+            _replayDepth--;
         }
     }
 

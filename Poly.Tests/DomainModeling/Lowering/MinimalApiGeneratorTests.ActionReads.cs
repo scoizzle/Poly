@@ -344,6 +344,198 @@ public partial class MinimalApiGeneratorTests {
         await Assert.That(Reads(poly, "Watcher", "Add")).IsEqualTo("this{Items[loaded], Region{Zone}}");
     }
 
+    /// <summary>F-B: the same row reached through two paths. The new line registers on <c>p</c>'s registry; <c>Close</c>
+    /// notifies through <c>this.Product</c>. When the client passes the order's own product (the simulator runs this: the
+    /// handler fires and copies <c>p.Zone.Label</c>), the handler reads <c>p.Zone</c>. A registry keyed by type sees it.</summary>
+    [Test]
+    public async Task ActionReads_SubscriberRegisteredThroughAnotherPathToTheSameRow_IsWalked() {
+        const string poly = """
+            domain Alias
+            Zone: entity { Label: Text }
+            Product: entity {
+              Name: Text
+              zone: Zone
+              Copy: action { assign Name to zone Label }
+              Open: stage { Close: action { transition to Closed } }
+              Closed: stage { }
+            }
+            Line: entity {
+              product: Product
+              order: Order via lines
+              Seen: Text optional
+              when product Closed { invoke product.Copy }
+            }
+            Order: entity {
+              product: Product
+              lines: many Line via order
+              Go: action (p: Product) { create in lines { product: p }  invoke product.Close }
+            }
+            """;
+
+        await Assert.That(Reads(poly, "Order", "Go")).IsEqualTo("this{Lines[loaded], Product}; p{Zone}");
+    }
+
+    /// <summary>F-A: each new task's handler creates another task that registers on the project's registry, so the walk
+    /// would replay the project's notify without end (it overflowed the stack). At run time the action ends: the notify
+    /// ran before the first task registered, and the simulator creates one task. The walk cannot bound the chain soundly
+    /// (each task's bindings differ: its parent is the previous one), so it refuses by name.</summary>
+    [Test]
+    public async Task ActionReads_HandlerChainThatRegistersWithoutEnd_IsRefused() {
+        const string poly = """
+            domain Spawn
+            Project: entity {
+              tasks: many Task via project
+              Idle: stage { Start: action { transition to Running  create in tasks { } } }
+              Running: stage { }
+            }
+            Task: entity {
+              Tag: Text optional
+              project: Project via tasks
+              parent: Task
+              kids: many Task via parent
+              when project Running { create in kids { project: project } }
+            }
+            """;
+
+        var refusal = Assert.Throws<ActionReadsRefusedException>(() => Reads(poly, "Project", "Start"));
+
+        await Assert.That(refusal.Message).Contains("Action 'Project.Start' cannot be served over HTTP");
+        await Assert.That(refusal.Message).Contains("a handler chain that registers further subscribers without end");
+    }
+
+    private const string OrderingPoly = """
+        domain Proj
+        Zone: entity { Label: Text }
+        Region: entity { Name: Text  zone: Zone  Copy: action { assign Name to zone Label } }
+        Project: entity {
+          tasks: many Task via project
+          Idle: stage { Start: action (r: Region) { transition to Running  create in tasks { region: r } } }
+          Running: stage { }
+        }
+        Task: entity {
+          project: Project via tasks
+          region: Region
+          when project Running { invoke region.Copy }
+        }
+        """;
+
+    /// <summary>The notify runs before the task registers, so the walk replays the earlier iteration for it and the
+    /// handler's read of <c>r.Zone</c> is in the tree. The simulator does not fire the handler here (the task joined after
+    /// the notify ran; the region keeps its name): the walk over-reports, which is allowed.</summary>
+    [Test]
+    public async Task ActionReads_SubscriberRegisteredAfterTheNotify_IsReplayed() {
+        await Assert.That(Reads(OrderingPoly, "Project", "Start")).IsEqualTo("this{Tasks[loaded]}; r{Zone}");
+    }
+
+    [Test]
+    public async Task ActionReads_HandlerReadingOneHop_LandsTheLink() {
+        const string poly = """
+            domain Hop
+            Region: entity { Name: Text }
+            Watcher: entity {
+              region: Region
+              Seen: Text optional
+              items: many Item
+              when items Open { assign Seen to region Name }
+              Add: action -> Item { create in items { } }
+            }
+            Item: entity {
+              Tag: Text optional
+              watcher: Watcher via items
+              Open: stage { Finish: action { transition to Done } }
+              Done: stage { }
+            }
+            """;
+
+        await Assert.That(Reads(poly, "Watcher", "Add")).IsEqualTo("this{Items[loaded], Region}");
+    }
+
+    /// <summary>The DSL reads only a peer's scalars through a binder (`as pr`), so the handler's read of the publisher's
+    /// link is built: the handler gets the publisher (<c>this.Product</c>) as its argument and reads its zone.</summary>
+    [Test]
+    public async Task ActionReads_HandlerReadingThePublisherThroughItsBinding_LandsThePublishersLink() {
+        const string poly = """
+            domain Pub
+            Zone: entity { Label: Text }
+            Product: entity {
+              Name: Text
+              zone: Zone
+              Open: stage { Close: action { transition to Closed } }
+              Closed: stage { }
+            }
+            Line: entity {
+              product: Product
+              order: Order via lines
+              Seen: Text optional
+              when product Closed as pr { assign Seen to pr Name }
+            }
+            Order: entity {
+              product: Product
+              lines: many Line via order
+              Go: action { create in lines { product: product }  invoke product.Close }
+            }
+            """;
+        var compile = CompileForHost(poly);
+        var handler = ((IReadOnlyList<TypeDefinitionNode>)compile.Catalog.Artifacts
+                .Single(a => a.Descriptor.Id.Type == "entity" && a.Descriptor.Id.Segments[^1] == "Line").Payload!)
+            .Single(t => t.Name == "Line").Methods!.Single(m => m.Name.StartsWith("When", StringComparison.Ordinal));
+        var publisher = handler.Parameters!.Single();
+        var body = ReturnsSuccessAfter(new Assignment(new Variable("z"), new Member(new Parameter(publisher.Name), "Zone")));
+
+        var reads = WithBody(compile, "Line", handler.Name, body).ReadsOf("Order", "Go").Render();
+
+        await Assert.That(reads).IsEqualTo("this{Lines[loaded], Product{Zone}}");
+    }
+
+    /// <summary>Transitive: the watcher's handler moves the watcher to <c>Busy</c>, which the new item watches; the item's
+    /// handler reads its region's zone. Both handlers are walked.</summary>
+    [Test]
+    public async Task ActionReads_HandlerThatTransitionsIntoAWatchedStage_IsWalkedThrough() {
+        const string poly = """
+            domain Chain
+            Zone: entity { Label: Text }
+            Region: entity { Name: Text  zone: Zone  Copy: action { assign Name to zone Label } }
+            Watcher: entity {
+              items: many Item
+              Idle: stage {
+                Add: action (r: Region) -> Item { create in items { region: r } }
+                when items Open { transition to Busy }
+              }
+              Busy: stage { }
+            }
+            Item: entity {
+              watcher: Watcher via items
+              region: Region
+              when watcher Busy { invoke region.Copy }
+              Open: stage { }
+            }
+            """;
+
+        await Assert.That(Reads(poly, "Watcher", "Add")).IsEqualTo("this{Items[loaded]}; r{Zone}");
+    }
+
+    /// <summary>A replayed handler runs after its notify's frame moved on, so nothing entity-valued may flow back out of
+    /// it: a returned subscriber and a local the loop assigns a subscriber to each refuse.</summary>
+    [Test]
+    public async Task ActionReads_ReplayedHandlerLeakingAnEntity_IsRefused() {
+        var compile = CompileForHost(OrderingPoly);
+        var project = ((IReadOnlyList<TypeDefinitionNode>)compile.Catalog.Artifacts
+                .Single(a => a.Descriptor.Id.Type == "entity" && a.Descriptor.Id.Segments[^1] == "Project").Payload!)
+            .Single(t => t.Name == "Project");
+        var registry = new Member(new ThisReference(), project.Fields!.Single(f => f.Name.EndsWith("Subscribers", StringComparison.Ordinal)).Name);
+        var notify = project.Methods!.Single(m => m.Name == "NotifyRunningSubscribers").Name;
+        var sub = new Variable("sub");
+        var leak = new Variable("leak");
+        var returning = ReturnsSuccessAfter(new ForEachLoop(sub, registry, new Block(new Return(sub))));
+        var assigning = ReturnsSuccessAfter(new Assignment(leak, new Constant(null)), new ForEachLoop(sub, registry, new Assignment(leak, sub)));
+
+        var returned = Assert.Throws<ActionReadsRefusedException>(() => WithBody(compile, "Project", notify, returning).ReadsOf("Project", "Start"));
+        var assigned = Assert.Throws<ActionReadsRefusedException>(() => WithBody(compile, "Project", notify, assigning).ReadsOf("Project", "Start"));
+
+        await Assert.That(returned.Message).Contains("a handler result the walk cannot return into the notify that ran it");
+        await Assert.That(assigned.Message).Contains("a value of a replayed handler ('leak')");
+    }
+
     // ── Refusals ──────────────────────────────────────────────
 
     [Test]
@@ -531,9 +723,16 @@ public partial class MinimalApiGeneratorTests {
                     yield return (file, File.ReadAllText(Path.Combine(GuideBlocks.RepoRoot(), file)));
                 break;
             case "guide":
+                // Labelled as CorpusVerdictSweepTests labels them: the fence's first line, with its occurrence.
                 var guide = GuideBlocks.Load();
-                foreach (var block in guide.Blocks.Where(b => b.Marker is not { Kind: GuideMarkerKind.Skip, Code: null }))
-                    yield return ($"guide fence {block.FirstLine}", GuideBlocks.Compose(block, guide.Wrappers).Text);
+                var seen = new Dictionary<string, int>(StringComparer.Ordinal);
+                foreach (var block in guide.Blocks) {
+                    var occurrence = seen[block.FirstLine] = seen.GetValueOrDefault(block.FirstLine) + 1;
+                    if (block.Marker is { Kind: GuideMarkerKind.Skip, Code: null })
+                        continue;
+                    var label = occurrence == 1 ? $"guide fence {block.FirstLine}" : $"guide fence {block.FirstLine} ({occurrence})";
+                    yield return (label, GuideBlocks.Compose(block, guide.Wrappers).Text);
+                }
                 break;
             case "demo-samples":
                 foreach (var (name, text) in CorpusVerdictSweepTests.DemoSamples())
@@ -551,7 +750,7 @@ public partial class MinimalApiGeneratorTests {
         }
     }
 
-    internal sealed record CorpusSweep(int Documents, int Compiled, int Actions, IReadOnlyList<string> Refused);
+    internal sealed record CorpusSweep(int Documents, int Compiled, int Actions, IReadOnlyList<string> Refused, IReadOnlyList<string> Skipped);
 
     /// <summary>Walks every action of every document of <paramref name="corpus"/> that compiles for a host (sqlite,
     /// <c>http</c> loaded). A document that does not compile is skipped: its corpus pins that verdict elsewhere.</summary>
@@ -560,6 +759,7 @@ public partial class MinimalApiGeneratorTests {
         var compiled = 0;
         var actions = 0;
         var refused = new List<string>();
+        var skipped = new List<string>();
         foreach (var (label, poly) in CorpusDocuments(corpus)) {
             documents++;
             HostCompile compile;
@@ -567,6 +767,7 @@ public partial class MinimalApiGeneratorTests {
                 compile = CompileForHost(poly);
             }
             catch (InvalidOperationException) {
+                skipped.Add(label);
                 continue;
             }
             compiled++;
@@ -583,12 +784,44 @@ public partial class MinimalApiGeneratorTests {
                 }
             }
         }
-        return new CorpusSweep(documents, compiled, actions, refused);
+        return new CorpusSweep(documents, compiled, actions, refused, skipped);
     }
 
     /// <summary>No action of a shipped document is refused (the owner chose loading over refusing). A known refusal would
     /// be named here with its reason, so a new one fails the test; there is none.</summary>
     private static readonly IReadOnlyList<string> KnownRefusals = [];
+
+    /// <summary>The documents each corpus has that do not compile for a host (their verdicts are pinned by their own
+    /// corpus tests). Named, so a shipped document that stops or starts compiling fails this test by name.</summary>
+    private static readonly IReadOnlyDictionary<string, string[]> KnownSkips = new Dictionary<string, string[]> {
+        ["files"] = [
+            "docs/missions/evolve-2026-10-13/ambig-backref.poly",
+            "docs/missions/evolve-2026-10-13/billing.poly",
+            "docs/missions/evolve-2026-10-13/claims.poly",
+            "docs/missions/evolve-2026-10-13/disputes.poly",
+            "docs/missions/evolve-2026-10-13/library.poly",
+            "docs/missions/evolve-2026-10-13/university-http.poly",
+            "docs/missions/evolve-2026-10-13/university.poly",
+            "docs/probes/dogfood/nested-invoke-type-mismatch.poly",
+            "docs/probes/scratch-2026-10-14/restaurant.poly",
+        ],
+        ["guide"] = [
+            "guide fence Money: value {",
+            "guide fence Billing: contract internal billing v1 {",
+            "guide fence Orders: entity {",
+            "guide fence Customer: entity {",
+            "guide fence Cabin: entity {",
+            "guide fence domain Shipping",
+            "guide fence domain Tokens",
+            "guide fence // ✅ Correct — create is the final statement",
+            "guide fence invoke Validate                              # self-only",
+            "guide fence Renew: action {",
+            "guide fence domain Board",
+        ],
+        ["demo-samples"] = [],
+        ["quickstart"] = [],
+        ["pack-oracle"] = [],
+    };
 
     [Test]
     [MethodDataSource(nameof(ShippedCorpora))]
@@ -597,5 +830,6 @@ public partial class MinimalApiGeneratorTests {
 
         await Assert.That(sweep.Compiled).IsGreaterThan(0);
         await Assert.That(sweep.Refused).IsEquivalentTo(KnownRefusals);
+        await Assert.That(sweep.Skipped).IsEquivalentTo(KnownSkips[corpus]);
     }
 }

@@ -464,6 +464,7 @@ public class DomainExpressionLoweringPassTests {
           Flag: Boolean optional
           Out: Boolean optional
           lines: many T06Line
+          peer: T06Line
           Ok: policy { Flag }
           OkAnd: policy { Done and Flag is true }
           PAnd: action { assign Out to Done and Flag }
@@ -497,6 +498,8 @@ public class DomainExpressionLoweringPassTests {
           PAnyIsFalse: action { assign Out to any lines where Flag is false }
           PEqualsDone: action { assign Out to Flag == Done }
           PNotIsFalse: action { assign Out to not (Flag is false) }
+          PHopIf: action { if (peer Flag) { assign Out to true } else { assign Out to false } }
+          PHopWhereNot: action { assign Out to peer where not Flag }
           PEntryIf: action { transition to Entered }
           PToGated: action { transition to Gated }
           Idle: stage { }
@@ -520,7 +523,8 @@ public class DomainExpressionLoweringPassTests {
             var (simulate, printed) = OptionalBoolean.Value.Run(side => {
                 (string, object?)[] flagValue = flag is { } stored ? [("Flag", stored)] : [];
                 var line = side.Create("T06Line", flagValue);
-                side.Create("T06Item", [("Done", true), .. flagValue, ("lines", new List<object> { line! })]);
+                var peer = side.Create("T06Line", flagValue);
+                side.Create("T06Item", [("Done", true), .. flagValue, ("lines", new List<object> { line! }), ("peer", peer)]);
                 step(side);
             });
             var differences = ParityScenario.Differences(simulate, printed);
@@ -560,6 +564,8 @@ public class DomainExpressionLoweringPassTests {
     [Arguments("PAnyIsFalse", "False", "True", "False")]
     [Arguments("PEqualsDone", "True", "False", "False")]
     [Arguments("PNotIsFalse", "True", "False", "True")]
+    [Arguments("PHopIf", "True", "False", "False")]
+    [Arguments("PHopWhereNot", "False", "True", "True")]
     [Arguments("PEntryIf", "True", "False", "False")]
     [Arguments("PToGated+PRequireStage", "True", null, null)]
     public async Task OptionalBoolean_InEveryConditionPosition_MeansEqualsTrue_OnBothHosts(
@@ -667,7 +673,7 @@ public class DomainExpressionLoweringPassTests {
     /// <summary>
     /// `null` into an optional Date, DateTime, Duration, Decimal or Uuid stores absent on both hosts; the other arm of a
     /// `null`-arm `match` stores its value. (A domain value type is no property, DMSTR006, and an entity link is no
-    /// assign target, DMEFF001. Time is not run here: its generated C# does not compile with or without `null`.)
+    /// assign target, DMEFF001.)
     /// </summary>
     [Test]
     [Arguments("Date", "NullD", false, null)]
@@ -685,12 +691,16 @@ public class DomainExpressionLoweringPassTests {
     [Arguments("Uuid", "NullD", false, null)]
     [Arguments("Uuid", "ArmD", true, null)]
     [Arguments("Uuid", "ArmD", false, "present")]
+    [Arguments("Time", "NullD", false, null)]
+    [Arguments("Time", "ArmD", true, null)]
+    [Arguments("Time", "ArmD", false, "present")]
     public async Task NullIntoOptionalSlotOfEveryKind_StoresAbsent_OnBothHosts(string type, string action, bool big, string? stored) {
         object value = type switch {
             "Date" => new DateOnly(2026, 1, 2),
             "DateTime" => new DateTime(2026, 1, 2, 3, 4, 5, DateTimeKind.Utc),
             "Duration" => TimeSpan.FromHours(2),
             "Decimal" => 2.5m,
+            "Time" => new TimeOnly(10, 0),
             _ => Guid.Parse("00000000-0000-0000-0000-000000000007"),
         };
         IReadOnlyList<ParityOutcome> simulate;
@@ -782,5 +792,22 @@ public class DomainExpressionLoweringPassTests {
         await Assert.That(differences).IsEmpty();
         await Assert.That(simulate[^1].Success).IsEqualTo(success);
         await Assert.That(simulate[^1].State[member]).IsEqualTo(stored);
+    }
+
+    /// <summary>`null` into an optional property under a constraint is its absence: accepted, and absent on both hosts.</summary>
+    [Test]
+    public async Task NullIntoConstrainedOptional_StoresAbsent_OnBothHosts() {
+        var outcomes = await ParityScenario.FromDsl("""
+            domain T06aNullEq
+            T06EqHost: entity {
+              EqN: Number optional equals(5)
+              NullEqN: action { assign EqN to null }
+            }
+            """, "T06aNullEq").AssertAgree(side => {
+            side.Create("T06EqHost", ("EqN", 5L));
+            side.Invoke("NullEqN");
+        });
+        await Assert.That(outcomes[^1].Success).IsTrue();
+        await Assert.That(outcomes[^1].State["EqN"]).IsNull();
     }
 }

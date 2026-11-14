@@ -534,7 +534,12 @@ public class ExpressionTypeAnalysisTests {
           Qty: Number
           Flag: Boolean optional
         }
+        Adv: entity {
+          Age: Number
+          Ok: Boolean
+        }
         Item: entity {
+          advisor: Adv
           Done: Boolean
           Flag: Boolean optional
           Qty: Number
@@ -560,6 +565,7 @@ public class ExpressionTypeAnalysisTests {
     [Arguments("assign Done to null", "", "", "cannot assign 'null' to 'Boolean'")]
     [Arguments("create in lines { Qty: null }", "", "", "create initializer for property 'Qty': cannot assign 'null' to 'Number'")]
     [Arguments("invoke Take(n: null)", "", "", "argument 'n' of invoke 'Take': cannot assign 'null' to 'Number'")]
+    [Arguments("assign ReqEq to null", "ReqEq: Number equals(5)", "", "cannot assign 'null' to 'Number'")]
     [Arguments("assign Q to 1", "Z: Text default(null)", "",
         "default value of type 'null' is not compatible with property type 'Text'")]
     [Arguments("assign Name to Nothing()", "", "function Nothing(): Text = null",
@@ -603,6 +609,8 @@ public class ExpressionTypeAnalysisTests {
     [Arguments("create in lines { Qty: 1 Flag: null }", "")]
     [Arguments("assign Q to 1", "Z: Text optional default(null)")]
     [Arguments("assign Hue to null", "Hue: Kind optional")]
+    [Arguments("assign EqN to null", "EqN: Number optional equals(5)")]
+    [Arguments("assign Code2 to null", "Code2: Text optional length(2, 3) pattern(\"^a\")")]
     [Arguments("assign Hue to match { Done -> null, else -> B }", "Hue: Kind optional")]
     public async Task Assign_NullIntoOptionalTarget_IsAccepted(string body, string members) {
         var result = Parse(Optionals(body, members));
@@ -683,6 +691,7 @@ public class ExpressionTypeAnalysisTests {
     [Arguments("line Qty == null", null)]
     [Arguments("null == line Qty", null)]
     [Arguments("line Qty > 0", null)]
+    [Arguments("line Flag == null", null)]
     public async Task NavigationToCondition_IsTypedInTheTargetScope(string where, string? refused) {
         var result = Parse(Optionals($"for line in lines where {where} {{ assign Qty to 1 }}"));
         await Assert.That(result.Succeeded).IsEqualTo(refused is null);
@@ -700,5 +709,24 @@ public class ExpressionTypeAnalysisTests {
         await Assert.That(navigation.Analysis.Diagnostics.Any(d => d.Code == "DMFUN005")).IsTrue();
         var nullArm = Parse(Optionals("assign Q to 1", top: "function Maybe(b: Boolean): Boolean = match { b -> null, else -> true }"));
         await Assert.That(nullArm.Analysis.Diagnostics.Any(d => d.Code == "DMFUN006" && d.Node is Literal { Value: null })).IsTrue();
+    }
+
+    /// <summary>
+    /// Inside a hop's condition: the enclosing `for` binder and the action's parameters are visible, as lowering sees
+    /// them; any read there compares with `null` by `==`/`!=` (it runs on every host, answering by the stored value), a
+    /// required Boolean included; an ordering against `null` is still refused.
+    /// </summary>
+    [Test]
+    [Arguments("for line in lines { if (advisor where Age < line Qty) { assign Qty to 1 } }", "", null)]
+    [Arguments("assign Q to 1", "Near: action (max: Number) { if (advisor where Age < max) { assign Qty to 1 } }", null)]
+    [Arguments("if (advisor where Ok == null) { assign Qty to 1 }", "", null)]
+    [Arguments("if (advisor where Age != null) { assign Qty to 1 }", "", null)]
+    [Arguments("if (advisor where Age < null) { assign Qty to 1 }", "", "comparison between incompatible types")]
+    [Arguments("if (advisor where Ok == 1) { assign Qty to 1 }", "", "comparison between incompatible types")]
+    public async Task InsideAHop_BindersAndParametersAreVisible_AndNullEqualityIsKept(string body, string members, string? refused) {
+        var result = Parse(Optionals(body, members));
+        await Assert.That(result.Succeeded).IsEqualTo(refused is null);
+        if (refused is not null)
+            await Assert.That(HasError(result, refused)).IsTrue();
     }
 }

@@ -28,7 +28,7 @@ Lead: entity {
   Name: Text
   Email: Text unique pattern("^[^@]+@[^@]+$")
   Company: Text
-  account: Account
+  account: Account optional
   HasAccount: policy { account exists }
   New: stage {
     Convert: action
@@ -115,15 +115,10 @@ Opportunity: entity {
   activities: many Activity
   lines: many Line
   quotes: many Quote
-  HasAccount: policy { account exists }
   HasLines: policy { count lines > 0 }
   Qualify: stage {
     entry { assign Probability to 10 }
-    Propose: action
-      require HasAccount
-    {
-      transition to Propose
-    }
+    Propose: action { transition to Propose }
     Lose: action { transition to Lost }
     Log: action (subject: Text) -> Activity {
       create in activities { Subject: subject }

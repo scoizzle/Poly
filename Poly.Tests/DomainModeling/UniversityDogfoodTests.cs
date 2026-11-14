@@ -101,26 +101,22 @@ public class UniversityDogfoodTests {
             ["Code"] = "CS101",
             ["Title"] = "Intro"
         }).Instance!;
-        // L-15a: Section.course and Section.instructor are required to-ones. A section without an instructor
-        // is refused at create (before, it was created and Close was blocked by HasInstructor).
-        var unstaffed = exec.Create("Section", new Dictionary<string, object?> {
-            ["Cap"] = 1L,
-            ["OfferingTerm"] = "Fall",
-            ["course"] = course
-        });
-        await Assert.That(unstaffed.Succeeded).IsFalse();
-        await Assert.That(unstaffed.Failure!.Kind).IsEqualTo(Poly.Runtime.DomainFailureKind.Required);
-        await Assert.That(unstaffed.Failure.ElementPath).IsEqualTo("Section.instructor");
+        // L-15a: Section.course is a required to-one; Section.instructor is optional (a section is unstaffed
+        // until it is assigned), so Close is blocked by HasInstructor until the instructor is linked.
         var section = exec.Create("Section", new Dictionary<string, object?> {
             ["Cap"] = 1L,
             ["OfferingTerm"] = "Fall",
-            ["course"] = course,
-            ["instructor"] = instructor
+            ["course"] = course
         }).Instance!;
         var student = exec.Create("Student", new Dictionary<string, object?> {
             ["Name"] = "Alex",
             ["Email"] = "alex@uni.test"
         }).Instance!;
+
+        var closeUnlinked = exec.Invoke(section, "Close");
+        await Assert.That(closeUnlinked.Succeeded).IsFalse();
+        await Assert.That(closeUnlinked.Error).Contains("HasInstructor");
+        exec.Link("instructor", section, instructor);
 
         var noSeat = exec.Invoke(student, "Enroll");
         await Assert.That(noSeat.Succeeded).IsFalse();

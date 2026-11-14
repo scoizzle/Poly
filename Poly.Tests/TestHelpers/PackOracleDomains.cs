@@ -409,7 +409,7 @@ public static class PackOracleDomains {
         Region: entity {
           Code: Text unique length(1, 8)
           Name: Text
-          zone: Zone
+          zone: owned Zone optional
           MakeZone: action -> Zone { create in zone { Code: "z1"  Label: "zl" } }
         }
 
@@ -421,7 +421,7 @@ public static class PackOracleDomains {
         Customer: entity {
           Code: Text unique length(1, 8)
           Name: Text
-          region: Region
+          region: owned Region optional
           Flag: Boolean default(false)
           notes: many Note
           NoteNamed: action { assign Flag to any notes where product Name is "pn" }
@@ -439,7 +439,7 @@ public static class PackOracleDomains {
           Note: Text optional
           Flag: Boolean default(false)
           Every: Boolean default(false)
-          customer: Customer
+          customer: owned Customer optional
           lines: many Line via order
           MakeCustomer: action -> Customer { create in customer { Code: "c1"  Name: "cn" } }
           InRegion: policy { customer region Name is "n0" }
@@ -491,14 +491,14 @@ public static class PackOracleDomains {
         Region: entity {
           Code: Text unique length(1, 8)
           Name: Text
-          zone: Zone
+          zone: owned Zone optional
           MakeZone: action -> Zone { create in zone { Code: "z1"  Label: "zl" } }
           Copy: action { assign Name to zone Label }
         }
 
         Watcher: entity {
           Code: Text unique length(1, 8)
-          region: Region
+          region: owned Region optional
           items: many Item
           MakeRegion: action -> Region { create in region { Code: "r1"  Name: "n0" } }
           when items Open { invoke region.Copy }
@@ -531,7 +531,7 @@ public static class PackOracleDomains {
         Product: entity {
           Code: Text unique length(1, 8)
           Name: Text
-          zone: Zone
+          zone: owned Zone optional
           MakeZone: action (code: Text) -> Zone { create in zone { Code: code  Label: code } }
           Copy: action { assign Name to zone Label }
           Open: stage { Close: action { transition to Closed } }
@@ -540,7 +540,7 @@ public static class PackOracleDomains {
 
         Order: entity {
           Code: Text unique length(1, 8)
-          product: Product
+          product: owned Product optional
           lines: many Line via order
           MakeProduct: action -> Product { create in product { Code: "p1"  Name: "n0" } }
           Go: action (p: Product) { create in lines { Code: "l1"  product: p }  invoke product.Close }
@@ -589,7 +589,7 @@ public static class PackOracleDomains {
         """,
         "/api/orders");
 
-/// <summary>P-13b (ii) (#912): generated locals are unique by construction. <c>Customer</c> then its <c>Region</c> and the
+    /// <summary>P-13b (ii) (#912): generated locals are unique by construction. <c>Customer</c> then its <c>Region</c> and the
     /// navigation <c>CustomerRegion</c> would both name a local <c>entityCustomerRegion</c> if locals were just path
     /// concatenations; one action reads through both. It stays out of <see cref="All"/>.</summary>
     public static PackOracleDomain Names912 { get; } = new(
@@ -606,19 +606,19 @@ public static class PackOracleDomains {
 
         Region: entity {
           Code: Text unique length(1, 8)
-          zone: Zone
+          zone: owned Zone optional
           MakeZone: action -> Zone { create in zone { Code: "z1"  Label: "first" } }
         }
 
         Customer: entity {
           Code: Text unique length(1, 8)
-          region: Region
+          region: owned Region optional
           MakeRegion: action -> Region { create in region { Code: "r1" } }
         }
 
         Other: entity {
           Code: Text unique length(1, 8)
-          zone: Zone
+          zone: Zone optional
           MakeZone: action -> Zone { create in zone { Code: "z2"  Label: "second" } }
         }
 
@@ -626,8 +626,8 @@ public static class PackOracleDomains {
           Code: Text unique length(1, 8)
           Note: Text optional
           Second: Text optional
-          customer: Customer
-          customerRegion: Other
+          customer: owned Customer optional
+          customerRegion: owned Other optional
           MakeCustomer: action -> Customer { create in customer { Code: "c1" } }
           MakeOther: action -> Other { create in customerRegion { Code: "x1" } }
           Both: action {
@@ -638,7 +638,7 @@ public static class PackOracleDomains {
         """,
         "/api/orders");
 
-        /// <summary>L-08b half 2 (#683, #687): a root with one required value of each type a POST can omit. Its DSL carries no
+    /// <summary>L-08b half 2 (#683, #687): a root with one required value of each type a POST can omit. Its DSL carries no
     /// <c>uses</c> line of its own, so <see cref="RequiredOmittedSimulatorDsl"/> (the same entity without the host
     /// libraries) runs on the simulator unchanged. It stays out of <see cref="All"/>.</summary>
     public static PackOracleDomain RequiredOmitted683 { get; } = new(

@@ -1226,6 +1226,20 @@ public class PackOracleTests {
             [new DepthRead("Order", "o1", "/api/orders/o1", "Note", null)]);
     }
 
+    /// <summary>L-15a (#683): the customer is linked and its OPTIONAL region is not, so the three-link read stops at a non-leaf link
+    /// two hops before the leaf. The host answers by value as the simulator does; no exception escapes.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task Action_ReadThroughAnUnlinkedOptionalNonLeafLink_AnswersAsTheSimulatorDoes_Issue912(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await RunDepthRowAsync(PackOracleDomains.ReadDepth912,
+            [Make("Order", "o1", "/api/orders"),
+                Act("Order", "o1", "MakeCustomer", "/api/orders/o1/makecustomer", makes: "Customer:c1"),
+                Act("Order", "o1", "ThreeHop", "/api/orders/o1/threehop")],
+            [new DepthRead("Order", "o1", "/api/orders/o1", "Note", null)]);
+    }
+
     private static DepthStep Product(string key, string name) =>
         Make("Product", key, "/api/products", $",\"Name\":\"{name}\"");
 

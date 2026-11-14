@@ -517,7 +517,7 @@ public partial class MinimalApiGeneratorTests {
         Task: entity {
           Tag: Text optional
           project: Project via tasks
-          parent: Task
+          parent: Task optional
           kids: many Task via parent
           when project Running { create in kids { project: project } }
         }

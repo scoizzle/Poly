@@ -139,7 +139,7 @@ app.Run();
 internal record MeterDto
 {
     [Range(0, 100)]
-    public long Qty { get; init; }
+    public long? Qty { get; init; }
 }
 
 internal record BumpDto

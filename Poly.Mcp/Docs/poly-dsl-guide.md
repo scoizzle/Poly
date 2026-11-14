@@ -412,7 +412,11 @@ omitted required value fails `Required` on every host, a Number is never filled 
 fails `Length`). Every parameter of the generated `Create` is `T? x = default`, in
 member declaration order; the lowered body owns the `Required` failure and the defaults,
 so a host passes `null` for a value it does not have. An explicit `null` at the create
-door is the same as omitting the value.
+door is the same as omitting the value. Over HTTP a `POST` that omits a required member,
+or sends it as JSON `null`, answers `400` with a `Required` ProblemDetails (`elementPath`
+`Entity.Member`), exactly what the simulator answers; the DTO's members are nullable and
+an empty string for a required Text is a value, so the create succeeds (`201` for an entity
+with a unique key, otherwise `200`) unless `length` or `pattern` refuses it.
 
 `optional` is the explicit opt-out: the property prints as `T?` and stores `null` when
 omitted. `default(...)` supplies a value when the property is omitted (or passed `null`);
@@ -1879,8 +1883,8 @@ attributes below. What reaches the database:
 | no `optional` | `IsRequired()` for reference-typed columns. |
 
 Where the storage pack projects constraints into the DB (`CHECK` constraints), the
-Minimal API transport projects them onto DTO validation attributes, so the API boundary
-enforces the same envelopes the domain declares:
+Minimal API transport emits them as DTO validation attributes (metadata on the contract;
+the module enforces the same envelopes the domain declares):
 
 - `range(min, max)` on a `Number` property → `[Range(min, max)]` on the create DTO and on
   any **action DTO parameter** the value is directly assigned into
@@ -1891,7 +1895,8 @@ enforces the same envelopes the domain declares:
 - `pattern(regex)` → `[RegularExpression(regex)]`.
 - no `optional` → `[Required]` (reference-typed properties). Every
   string member of the create DTO is `[Required]`: each member is a required ctor
-  slot, and optional members are absent from that DTO.
+  slot, and optional members are absent from that DTO. The attribute is transport
+  metadata: every DTO member is nullable and presence is the module's `Required` (400).
 - Enum-typed properties and parameters (`Genre: Genre`) → `[EnumDataType(typeof(Genre))]`
   declares the member union on the contract (the CLR enum type already enforces
   membership at binding).

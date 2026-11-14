@@ -54,7 +54,7 @@ public class DslCompilerSqliteOracleTests {
 
         // Every create-DTO member is a required ctor slot; optional members are absent.
         var prog = result.Files!.Single(f => f.FileName == "Program.cs").Source;
-        await Assert.That(prog).Contains("[Required]\n    public string Name { get; init; }");
+        await Assert.That(prog).Contains("[Required]\n    public string? Name { get; init; }");
         await Assert.That(prog).DoesNotContain("string? Note");
         await Assert.That(prog).DoesNotContain("long? Qty");
     }
@@ -287,12 +287,12 @@ public class DslCompilerSqliteOracleTests {
         var prog = result.Files!.Single(f => f.FileName == "Program.cs").Source;
         // Enum type maps to its own CLR name (Genre) with the allowed-value union declared
         // via [EnumDataType] — not excluded by entity-ness.
-        await Assert.That(prog).Contains("public Demo.Genre Genre { get; init; }");
-        await Assert.That(prog).Contains("public string Title { get; init; } = default!;");
+        await Assert.That(prog).Contains("public Demo.Genre? Genre { get; init; }");
+        await Assert.That(prog).Contains("public string? Title { get; init; }");
         // L-07 (#558): the DTO and the POST endpoint read one fact, in DECLARATION
         // order — Title was declared before Genre. The expected order changed here
         // deliberately; ordinal order (Genre, Title) was the old, swap-prone shape.
-        var titleAt = prog.IndexOf("public string Title { get; init; }", StringComparison.Ordinal);
+        var titleAt = prog.IndexOf("public string? Title { get; init; }", StringComparison.Ordinal);
         var genreAt = prog.IndexOf("[EnumDataType(typeof(Demo.Genre))]", StringComparison.Ordinal);
         await Assert.That(titleAt).IsGreaterThanOrEqualTo(0);
         await Assert.That(genreAt).IsGreaterThanOrEqualTo(0);
@@ -369,9 +369,9 @@ public class DslCompilerSqliteOracleTests {
 
         var prog = result.Files!.Single(f => f.FileName == "Program.cs").Source;
         // Entity DTO: declared + length.
-        await Assert.That(prog).Contains("[Required]\n    [MinLength(2)]\n    [MaxLength(50)]\n    public string Title { get; init; }");
+        await Assert.That(prog).Contains("[Required]\n    [MinLength(2)]\n    [MaxLength(50)]\n    public string? Title { get; init; }");
         // Entity DTO: declared pattern.
-        await Assert.That(prog).Contains("[RegularExpression(\"^[A-Z]{2}-[0-9]{3}$\")]\n    public string Code { get; init; }");
+        await Assert.That(prog).Contains("[RegularExpression(\"^[A-Z]{2}-[0-9]{3}$\")]\n    public string? Code { get; init; }");
         // Action DTO: required + length inherited from `assign Title to value`.
         await Assert.That(prog).Contains("[Required]\n    [MinLength(2)]\n    [MaxLength(50)]\n    public string Value { get; init; }");
         // Action DTO: pattern inherited from `assign Code to value`.

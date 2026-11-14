@@ -139,7 +139,7 @@ app.Run();
 internal record NoteDto
 {
     [Required]
-    public string Body { get; init; } = default!;
+    public string? Body { get; init; }
 }
 
 internal record SetBodyDto

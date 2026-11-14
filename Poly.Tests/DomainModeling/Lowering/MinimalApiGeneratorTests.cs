@@ -333,7 +333,7 @@ public partial class MinimalApiGeneratorTests {
         var types = d.Types.Select(t => ReferenceEquals(t, d.Types.OfType<Entity>().First()) ? item : t).ToList();
         var rendered = Render(d with { Types = types });
 
-        await Assert.That(rendered).Contains("[AllowedValues(\"Active\")]\n    public string Status { get; init; }");
+        await Assert.That(rendered).Contains("[AllowedValues(\"Active\")]\n    public string? Status { get; init; }");
         await Assert.That(rendered).Contains("[AllowedValues(\"Active\")]\n    public string Value { get; init; }");
     }
 
@@ -702,6 +702,29 @@ public partial class MinimalApiGeneratorTests {
         await Assert.That(host).Contains("typeof(Roster.DayOfWeek)");
         await Assert.That(host).Contains("Roster.DayOfWeek.Mon");
         await Assert.That(CompileHost(http.Files!)).IsEmpty();
+    }
+
+    [Test]
+    public async Task EnumNamedLikeAKeyword_NullableDtoMemberKeepsItsEscapeAndCompiles() {
+        // L-08b half 2 fix round: the nullable DTO member must print Kw.@event?, not Kw.event?.
+        const string poly = """
+            domain Kw
+            event: enum { A, B }
+            Thing: entity {
+              Name: Text unique
+              Kind: event
+            }
+            """;
+
+        var http = CompilerWithHttpHost().Compile(poly, CompileMode.All, DbmsPack.Sqlite);
+
+        await Assert.That(http.Success).IsTrue();
+        var host = http.Files!.Single(f => f.FileName == "Program.cs").Source;
+        await Assert.That(host).Contains("Kw.@event? Kind");
+        // The rest of a keyword-named enum's host (the seed's `Kw.event.A`, the entity file) is unescaped on the base
+        // too, so the whole host does not compile yet; the DTO line must not be one of the errors.
+        var dtoLine = host.Split('\n').Select((text, index) => (text, line: index + 1)).Single(l => l.text.Contains("Kw.@event? Kind")).line;
+        await Assert.That(CompileHost(http.Files!).Where(e => e.StartsWith($"Program.cs: Program.cs({dtoLine},", StringComparison.Ordinal))).IsEmpty();
     }
 
     /// <summary>An entity whose create takes an entity-typed property gets no POST route and no DTO, not a route

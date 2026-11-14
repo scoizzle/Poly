@@ -181,21 +181,20 @@ public sealed partial class MinimalApiGenerator {
         if (!GetStorageEntity(entity).IsRoot || !CreatesDirectly(_entities, entity)) return;
 
         // Emit as a record with get/init properties so transport validation attributes
-        // attach to properties and are enforced by ASP.NET model binding, and the
-        // contract stays immutable. An init-only accessor is a property with no setter
-        // but an initializer present; non-nullable reference scalars get `= default!;`
-        // for CS8618 hygiene. Declared constraints map to validation attributes: range →
+        // attach to properties and the contract stays immutable. Every member is
+        // nullable: an absent member and a JSON null both bind to null, and the
+        // lowered Create answers Required (400) for it. The attributes below are
+        // transport metadata; presence is the module's to enforce, not the binder's.
+        // Declared constraints map to validation attributes: range →
         // [Range] (using the analysis-VERIFIED envelope when proven, else declared),
         // length → [MinLength]/[MaxLength], pattern → [RegularExpression], required → [Required].
         var props = scalarParams.Select(param => {
             var clrType = GetClrTypeName(param.Type.TypeName);
             var prop = new PropertyDefinitionNode(
                 param.Name,
-                ClrTypeNode(clrType),
+                NullableClrTypeNode(clrType),
                 Getter: new PropertyGetterDefinitionNode(),
-                Initializer: IsPrimitiveValueTypeClr(param.Type.TypeName, clrType)
-                    ? new PropertyInitializerDefinitionNode()
-                    : new PropertyInitializerDefinitionNode(new NullForgiving(new Default())));
+                Initializer: new PropertyInitializerDefinitionNode());
 
             var effective = new List<Constraint>();
             var range = GetPropertyRange(entity, param.Name);

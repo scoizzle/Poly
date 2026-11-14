@@ -132,12 +132,12 @@ public class ConstraintAssignLoweringTests {
         await Assert.That(cs.Contains("!= null") || cs.Contains("is not null")).IsTrue();
         await Assert.That(cs).Contains("IsMatch");
 
-        // The simulator turns a null Text action argument into "" (X-05's remainder), and since
-        // L-08b an empty string is a value, so the pattern refuses it. The prior value stays.
+        // A bare Text property is required, so null fails that check before
+        // the pattern guard. The prior value stays.
         var result = exec.Invoke(instance, "Relabel", new Dictionary<string, object?> { ["code"] = null });
 
         await Assert.That(result.Succeeded).IsFalse();
-        await Assert.That(result.Error).Contains("'Code' does not match the required pattern.");
+        await Assert.That(result.Error).Contains("'Code' is required.");
         await Assert.That((string)instance.Bag["Code"]!).IsEqualTo("OK");
     }
 

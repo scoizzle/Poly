@@ -654,4 +654,119 @@ public class AbsenceParityTests {
         await Assert.That(outcomes[1].FailureKind).IsEqualTo("Length")
             .Because("emptiness is a matter for length, not for required");
     }
+
+    // ── L-08b fix round: a null Text action argument is the absence of a value on both hosts ──
+
+    [Test]
+    public async Task Invoke_WhenNullTextArgumentAssignedToRequiredText_FailsRequiredOnBothHosts() {
+        var outcomes = await ParityScenario.FromDsl("""
+            domain Lab
+            Person: entity {
+              Name: Text
+              Rename: action (name: Text) { assign Name to name }
+            }
+            """, "ParityNullTextArgumentAssign")
+            .AssertAgree(side => {
+                side.Create("Person", ("Name", "Ada"));
+                side.Invoke("Rename", ("name", null));
+            });
+
+        await Assert.That(outcomes[1].Success).IsFalse()
+            .Because("null is the absence of a value; no host turns it into \"\"");
+        await Assert.That(outcomes[1].FailureKind).IsEqualTo("Required");
+        await Assert.That(outcomes[1].State["Name"]).IsEqualTo("Ada");
+    }
+
+    [Test]
+    public async Task CreateIn_WhenNullTextArgumentInitializesRequiredText_FailsRequiredOnBothHosts() {
+        var outcomes = await ParityScenario.FromDsl("""
+            domain Lab
+            Child: entity { Name: Text }
+            Parent: entity {
+              Label: Text
+              kids: many Child
+              Add: action (name: Text) { create in kids { Name: name } }
+            }
+            """, "ParityNullTextArgumentCreateIn")
+            .AssertAgree(side => {
+                side.Create("Parent", ("Label", "p"));
+                side.Invoke("Add", ("name", null));
+            });
+
+        await Assert.That(outcomes[1].Success).IsFalse()
+            .Because("null is the absence of a value; the child's Create refuses it");
+        await Assert.That(outcomes[1].FailureKind).IsEqualTo("Required");
+        await Assert.That(outcomes[1].State["kids"]).IsEqualTo("0");
+    }
+
+    // ── L-08b fix round: integral values written into a Decimal create slot (known red until T-21c) ──
+
+    private const string DecimalSlotPropertyDsl = """
+        domain D
+        Opp: entity { Amount: Decimal }
+        Line: entity { Qty: Number }
+        Acct: entity {
+          Qty: Number
+          line: Line
+          opps: many Opp
+          FromProperty: action { create in opps { Amount: Qty } }
+          FromArithmetic: action { create in opps { Amount: Qty * 2 } }
+          FromNavigation: action { create in opps { Amount: line Qty } }
+        }
+        """;
+
+    [Test]
+    [Arguments("FromProperty", "7")]
+    [Arguments("FromArithmetic", "14")]
+    [Arguments("FromNavigation", "3")]
+    public async Task CreateIn_WhenIntegralValueWrittenIntoDecimalSlot_AgreesAndStoresIt(string action, string expected) {
+        var outcomes = await ParityScenario.FromDsl(DecimalSlotPropertyDsl, "ParityDecimalSlot" + action)
+            .AssertAgree(side => {
+                var line = side.Create("Line", ("Qty", 3L));
+                side.Create("Acct", ("Qty", 7L), ("line", line));
+                side.Invoke(action);
+                if (side.Outcomes[^1].Success)
+                    side.UseLinked("opps");
+            });
+
+        await Assert.That(outcomes[2].Success).IsTrue()
+            .Because($"step failed: {outcomes[2].ExceptionType} {outcomes[2].Message}");
+        await Assert.That(outcomes[3].State["Amount"]).IsEqualTo(expected);
+    }
+
+    /// <summary>An optional action parameter has no DSL form, so the model is built through the API.</summary>
+    [Test]
+    public async Task CreateIn_WhenOptionalNumberParameterWrittenIntoDecimalSlot_AgreesAndStoresIt() {
+        var opp = new Entity("Opp",
+            Properties: [new Property("Amount", new DomainTypeReference("Decimal"), [])],
+            Actions: [], Policies: [], Stages: []);
+        var open = new Poly.DomainModeling.Ontology.Action("Open", InvocationResult.Void,
+            Parameters: [new Property("q", new DomainTypeReference("Number"),
+                [new Poly.DomainModeling.Ontology.Constraints.OptionalConstraint()])],
+            Effects: [
+                new Poly.DomainModeling.Ontology.Effects.CreateEntityInRelationshipEffect("opps", [
+                    new PropertyBinding("Amount", DomainExpression.Property("q")),
+                ])
+            ],
+            Policies: []);
+        var acct = new Entity("Acct",
+            Properties: [new Property("Name", new DomainTypeReference("Text"), [])],
+            Actions: [open], Policies: [], Stages: []);
+        var opps = new Relationship("opps",
+            new DomainTypeReference("Acct"), new DomainTypeReference("Opp"),
+            RelationshipCardinality.OneToMany, []);
+        var domain = ValidDomain.Create("D", [opp, acct], [opps]);
+
+        var outcomes = await ParityScenario.FromDomain(domain, "ParityDecimalSlotOptionalParameter")
+            .AssertAgree(side => {
+                side.Create("Acct", ("Name", "a"));
+                side.Invoke("Open", ("q", 5L));
+                if (side.Outcomes[^1].Success)
+                    side.UseLinked("opps");
+            });
+
+        await Assert.That(outcomes[1].Success).IsTrue()
+            .Because($"step failed: {outcomes[1].ExceptionType} {outcomes[1].Message}");
+        await Assert.That(outcomes[2].State["Amount"]).IsEqualTo("5");
+    }
 }

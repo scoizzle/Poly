@@ -1126,7 +1126,7 @@ public partial class MinimalApiGeneratorTests {
         await Assert.That(program).DoesNotContain("schemaId");
     }
 
-    private static MinimalApiGenerator GeneratorFor(string poly) {
+    internal static MinimalApiGenerator GeneratorFor(string poly) {
         var result = new PolyCompiler(ProductCatalog.Catalog, new SessionOptions(ProductCatalog.Catalog, ExtensionCatalog.ProductAuthoring))
             .Compile(poly, "Counter.poly", CancellationToken.None);
         var domain = result.Domain!;
@@ -1152,74 +1152,5 @@ public partial class MinimalApiGeneratorTests {
             && !l.StartsWith("stage ", StringComparison.Ordinal) && !l.StartsWith("navigation ", StringComparison.Ordinal));
 
         await Assert.That(WithoutWhitespace(emitted)).Contains(WithoutWhitespace(string.Join("\n", body)));
-    }
-
-    /// <summary>EF's own model, read from the compiled generated context, against the hashed input: every column EF will
-    /// create, every foreign key and every index must be accounted for by a line of the input (a scalar by its
-    /// <c>column</c> or printed property line, a stage by its <c>stage</c> line, the key by its printed property, a foreign
-    /// key by a <c>navigation</c> line on either side, an index by its printed <c>HasIndex</c>).</summary>
-    [Test]
-    public async Task SchemaId_Input_AccountsForEveryColumnForeignKeyAndIndexOfEfsOwnModel() {
-        var poly = CounterHeader + """
-            Level: enum { Low, High }
-            Tally: entity {
-              Name: Text unique length(1, 20)
-              N: Number default(0) range(0, 1000000)
-              Price: Decimal optional
-              Born: DateTime optional
-              Kind: Level optional
-              Open: stage { Close: action { transition to Done } }
-              Done: stage { }
-            }
-            Owner: entity {
-              Code: Text unique
-              tallies: many Tally
-              spare: Spare optional
-            }
-            Spare: entity {
-              Label: Text unique
-            }
-            """;
-        var files = new PolyCompiler(ProductCatalog.Catalog, new SessionOptions(ProductCatalog.Catalog, ExtensionCatalog.ProductAuthoring))
-            .Compile(poly, "Counter.poly", CancellationToken.None).Files.Where(f => f.FileName != "Program.cs" && f.FileName.EndsWith(".cs", StringComparison.Ordinal)).ToList();
-        var assembly = ExportedCSharp.CompileAndLoad(files, "SchemaIdModel");
-        var contextType = assembly.GetTypes().Single(t => t.Name == "CounterDbContext");
-        var optionsBuilderType = typeof(Microsoft.EntityFrameworkCore.DbContextOptionsBuilder<>).MakeGenericType(contextType);
-        var builder = (Microsoft.EntityFrameworkCore.DbContextOptionsBuilder)Activator.CreateInstance(optionsBuilderType)!;
-        Microsoft.EntityFrameworkCore.SqliteDbContextOptionsBuilderExtensions.UseSqlite(builder, "Data Source=:memory:");
-        using var context = (Microsoft.EntityFrameworkCore.DbContext)Activator.CreateInstance(contextType, builder.Options)!;
-        var input = GeneratorFor(poly).SchemaIdInput();
-        var flat = WithoutWhitespace(input);
-        var unaccounted = new List<string>();
-
-        foreach (var entityType in context.Model.GetEntityTypes()) {
-            var table = Microsoft.EntityFrameworkCore.RelationalEntityTypeExtensions.GetTableName(entityType)!;
-            var store = Microsoft.EntityFrameworkCore.Metadata.StoreObjectIdentifier.Table(table, null);
-            var foreignKeyColumns = entityType.GetForeignKeys().SelectMany(k => k.Properties).Select(p => p.Name).ToHashSet();
-            foreach (var property in entityType.GetProperties()) {
-                var column = Microsoft.EntityFrameworkCore.RelationalPropertyExtensions.GetColumnName(property, store)!;
-                var accounted =
-                    input.Contains($"column {entityType.ClrType.Name}.{column} ", StringComparison.Ordinal)
-                    || (property.Name == "CurrentStage" && input.Contains($"stage {entityType.ClrType.Name}.CurrentStage ", StringComparison.Ordinal))
-                    || (property.IsPrimaryKey() && flat.Contains($"Property<int>(\"{property.Name}\")", StringComparison.Ordinal))
-                    || (foreignKeyColumns.Contains(property.Name) && entityType.GetForeignKeys().Where(k => k.Properties.Contains(property)).Any(k =>
-                        new[] { k.DependentToPrincipal?.Name, k.PrincipalToDependent?.Name }.Where(n => n is not null)
-                            .Any(n => input.Contains($"navigation {k.DeclaringEntityType.ClrType.Name}.{n} ", StringComparison.Ordinal)
-                                || input.Contains($"navigation {k.PrincipalEntityType.ClrType.Name}.{n} ", StringComparison.Ordinal))));
-                if (!accounted)
-                    unaccounted.Add($"{table}.{column}");
-            }
-            foreach (var index in entityType.GetIndexes()) {
-                // EF's convention indexes a foreign key column: it exists because of the navigation line, not a printed index.
-                if (!index.IsUnique && index.Properties.All(p => foreignKeyColumns.Contains(p.Name)))
-                    continue;
-                foreach (var property in index.Properties) {
-                    if (!flat.Contains($"HasIndex(x=>x.{property.Name})", StringComparison.Ordinal))
-                        unaccounted.Add($"{table} index on {property.Name}");
-                }
-            }
-        }
-
-        await Assert.That(unaccounted).IsEmpty();
     }
 }

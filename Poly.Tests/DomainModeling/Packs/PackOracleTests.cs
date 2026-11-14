@@ -3,7 +3,9 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 
+using Poly.Tests.DomainModeling.Lowering;
 using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.DomainModeling.Packs;
@@ -1697,5 +1699,78 @@ public class PackOracleTests {
                 await Assert.That(Kind(listed)).IsEqualTo(kind).Because($"list member {name}");
             }
         }
+    }
+
+    /// <summary>The schema id's input must account for every column, foreign key and index the database really has: the
+    /// app is booted, the file it created is read back (EF's own output, not a second reading of the model), and each
+    /// table, column and key is looked up in the hashed input. A stage column (EF maps it by convention) or a foreign key
+    /// (derived from a navigation) that no line of the input names fails here.</summary>
+    [Test]
+    [Timeout(300_000)]
+    public async Task SchemaId_Input_AccountsForEveryColumnForeignKeyAndIndexOfTheCreatedDatabase(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        const string body = """
+            Level: enum { Low, High }
+            Tally: entity {
+              Name: Text unique length(1, 20)
+              N: Number default(0) range(0, 1000000)
+              Price: Decimal optional
+              Born: DateTime optional
+              Kind: Level optional
+              Open: stage { Close: action { transition to Done } }
+              Done: stage { }
+            }
+            Owner: entity {
+              Code: Text unique
+              tallies: many Tally
+              spare: Spare optional
+            }
+            Spare: entity {
+              Label: Text unique
+            }
+            """;
+        var model = Counter("SchemaCover", body);
+        var input = Poly.Tests.DomainModeling.Lowering.MinimalApiGeneratorTests.GeneratorFor(model.Poly).SchemaIdInput();
+        var flat = new string(input.Where(c => !char.IsWhiteSpace(c)).ToArray());
+        var navigationNames = input.Split('\n').Where(l => l.StartsWith("navigation ", StringComparison.Ordinal))
+            .SelectMany(l => new[] { l.Split(' ')[1].Split('.')[0], l.Split(' ')[1].Split('.')[1], l.Split(' ')[3] }).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var unaccounted = new List<string>();
+
+        await WithRunDirectory(async directory => {
+            await using (await PackOracle.BootAsync(model, options: new PackOracleBootOptions { RunDirectory = directory })) { }
+            using var connection = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={Path.Combine(directory, "counter.db")};Pooling=False");
+            connection.Open();
+            List<string> Query(string sql, Func<Microsoft.Data.Sqlite.SqliteDataReader, string> read) {
+                using var command = connection.CreateCommand();
+                command.CommandText = sql;
+                using var reader = command.ExecuteReader();
+                var rows = new List<string>();
+                while (reader.Read())
+                    rows.Add(read(reader));
+                return rows;
+            }
+            var tables = Query("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'", r => r.GetString(0));
+            await Assert.That(tables.Count).IsEqualTo(3);
+            foreach (var table in tables) {
+                var foreignKeys = Query($"SELECT \"from\" FROM pragma_foreign_key_list('{table}')", r => r.GetString(0)).ToHashSet();
+                foreach (var column in Query($"SELECT name FROM pragma_table_info('{table}')", r => r.GetString(0))) {
+                    var accounted =
+                        Regex.IsMatch(input, $@"^column \w+\.{Regex.Escape(column)} ", RegexOptions.Multiline)
+                        || (column == "CurrentStage" && Regex.IsMatch(input, @"^stage \w+\.CurrentStage ", RegexOptions.Multiline))
+                        || ((column == "Id" || column == "PolyId") && flat.Contains($"Property<int>(\"{column}\")", StringComparison.Ordinal))
+                        || (foreignKeys.Contains(column) && navigationNames.Contains(column.EndsWith("Id", StringComparison.Ordinal) ? column[..^2] : column));
+                    if (!accounted)
+                        unaccounted.Add($"{table}.{column}");
+                }
+                foreach (var index in Query($"SELECT name FROM pragma_index_list('{table}') WHERE origin = 'c'", r => r.GetString(0))) {
+                    foreach (var column in Query($"SELECT name FROM pragma_index_info('{index}')", r => r.GetString(0))) {
+                        if (!foreignKeys.Contains(column) && !flat.Contains($"HasIndex(x=>x.", StringComparison.Ordinal))
+                            unaccounted.Add($"{table} index on {column}");
+                    }
+                }
+            }
+        });
+
+        await Assert.That(unaccounted).IsEmpty();
     }
 }

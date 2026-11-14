@@ -885,6 +885,24 @@ public class OverloadScoringTests {
         }
     }
 
+    /// <summary>The one consumer that moves beside overload binding: <c>GetCommonType</c> asks <c>ResolveConversionFrom</c>, so
+    /// <c>{long?, int}</c> has a common type now (it had none). Each answer is C#'s type of <c>c ? a : b</c>.</summary>
+    [Test]
+    public async Task CommonType_OfALiftedPair_IsTheNullableType_AsCSharpTypesAConditional() {
+        foreach (var (left, right, csharp, expected) in new (Type, Type, string, Type?)[] {
+            (typeof(long?), typeof(int), "long?", typeof(long?)),
+            (typeof(decimal?), typeof(long), "decimal?", typeof(decimal?)),
+            (typeof(long?), typeof(int?), "long?", typeof(long?)),
+            (typeof(long?), typeof(double), "none", null),
+            (typeof(decimal?), typeof(double), "none", null),
+            (typeof(int?), typeof(long), "none", null),
+        }) {
+            var common = new[] { Clr(left), Clr(right) }.GetCommonType()?.GetRuntimeType();
+            await Assert.That(CSharpCallOracle.ConditionalType(left, right)).IsEqualTo(csharp).Because($"{left.Name} : {right.Name}");
+            await Assert.That(common).IsEqualTo(expected).Because($"{left.Name} : {right.Name}");
+        }
+    }
+
     // ---- an overload tie the lifted arm creates: C# picks the better conversion target, the scorer keeps both ----
 
     public static class NullableOverloads {
@@ -936,6 +954,18 @@ internal static class CSharpCallOracle {
     /// <summary>True when C# binds <c>Take(expression)</c>, a literal or constant, for a parameter of <paramref name="parameter"/>.</summary>
     public static bool BindsExpression(string expression, Type parameter) =>
         !HasErrors(Compile($"static void Take({Spell(parameter)} p) {{}}\nstatic void Call() => Take({expression});"));
+
+    /// <summary>C#'s type of <c>c ? a : b</c> for operands of the two types, or "none" when C# reports an error.</summary>
+    public static string ConditionalType(Type left, Type right) {
+        var compilation = Compile($"static void Call(bool c, {Spell(left)} a, {Spell(right)} b) {{ var r = c ? a : b; }}");
+        if (HasErrors(compilation))
+            return "none";
+        var tree = compilation.SyntaxTrees.Single();
+        var declarator = tree.GetRoot().DescendantNodes().OfType<Microsoft.CodeAnalysis.CSharp.Syntax.VariableDeclaratorSyntax>().Single();
+        return Microsoft.CodeAnalysis.CSharp.CSharpExtensions.GetDeclaredSymbol(compilation.GetSemanticModel(tree), declarator) is Microsoft.CodeAnalysis.ILocalSymbol local
+            ? local.Type.ToDisplayString()
+            : "none";
+    }
 
     /// <summary>The parameter type of the overload C# picks for <c>M(a)</c>, <c>a</c> of <paramref name="argument"/>.</summary>
     public static string Chosen(Type[] parameters, Type argument) {

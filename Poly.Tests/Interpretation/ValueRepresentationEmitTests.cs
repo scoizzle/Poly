@@ -642,6 +642,20 @@ public class ValueRepresentationEmitTests {
     [MethodDataSource(nameof(PinnedRowNames))]
     public async Task ModuleArgument_Pinned_StillArrivesAsCSharpPasses(string name) => await AssertArrivesAsCSharpPasses(PinnedRows[name]);
 
+    /// <summary>A module constructor's argument is the same site: a date into a <c>DateOnly?</c> parameter is the date.</summary>
+    [Test]
+    public async Task ModuleConstructorArgument_WordIntoOptionalParameter_ArrivesAsCSharpPasses() {
+        var date = new Parameter("d", new ClrTypeReference(typeof(DateOnly?)));
+        var typeDef = new TypeDefinitionNode(Name: "CtorBoundaryBox",
+            Constructors: [new ConstructorDefinitionNode([date], new Block([new Assignment(new Member(new ThisReference(), "Held"), date)]))],
+            Properties: [new PropertyDefinitionNode("Held", new ClrTypeReference(typeof(DateOnly?)))]);
+        var context = AnalysisContext.CreateDefault();
+        new TypeDefinitionNodeAnalyzer().Analyze(context, typeDef);
+        var root = new Member(new New(new TypeReference("CtorBoundaryBox"), new Parameter("v", new ClrTypeReference(typeof(DateOnly)))), "Held");
+        using var exec = Interpreter.Execute(Interpreter.Compile(root, context.TypeDefinitions), s => s.SetArgs(new object?[] { Day }));
+        await Assert.That(exec.Result.Value).IsEqualTo(Day);
+    }
+
     /// <summary>The pairs C# refuses stay analysis errors: no member binds, so the call does not compile.</summary>
     [Test]
     [Arguments(typeof(double), typeof(decimal?))]

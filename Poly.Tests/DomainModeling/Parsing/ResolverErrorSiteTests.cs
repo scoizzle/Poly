@@ -24,7 +24,7 @@ public sealed class ResolverErrorSiteTests {
         ("Core", 2, 3, 5),
         ("Effects", 18, 12, 12),
         ("Entities", 21, 12, 26),
-        ("Relationships", 0, 1, 8),
+        ("Relationships", 0, 1, 10),
         ("Stages", 13, 10, 6),
         ("TopLevel", 19, 15, 16),
         ("Types", 0, 1, 2),
@@ -203,7 +203,7 @@ public sealed class ResolverErrorSiteTests {
         // Pinned so a change in what the oracle reaches is a reviewed change, not a silent one. G-28 moved the `public entity|value`
         // head onto the marked-top row: its three sites went (reach moved to the row's 4 labels), TryTakeVisibility#1 became
         // VisibilityOf#1 and FoldMarkedTop#1 is new (both DefaultArm).
-        await Assert.That(all.Count).IsEqualTo(227);
+        await Assert.That(all.Count).IsEqualTo(229);
         await Assert.That(bySite.Count).IsEqualTo(72);
         await Assert.That(byN.Count).IsEqualTo(99);
         await Assert.That(existing.Count).IsEqualTo(124);

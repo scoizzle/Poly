@@ -205,7 +205,7 @@ Reservation: entity {
   MaxOccupancy: Number range(1, 8)
   CheckInDate: Date
   CheckOutDate: Date
-  folio: owned Folio
+  folio: owned Folio optional
   guest: Guest
   room: Room
   DatesValid: policy { CheckOutDate > CheckInDate }
@@ -289,7 +289,7 @@ EventHold: entity {
   EndDate: Date
   guest: Guest
   hall: Hall
-  section: Section
+  section: Section optional
   DatesValid: policy { EndDate > StartDate }
   PartyFits: policy { Headcount <= Capacity }
   HasHall: policy { hall exists }

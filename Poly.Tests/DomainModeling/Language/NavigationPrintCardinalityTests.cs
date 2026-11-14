@@ -76,7 +76,7 @@ public sealed class NavigationPrintCardinalityTests {
             domain OwnedNav
             Order: entity {
               Number: Text
-              profile: one owned Profile
+              profile: one owned Profile optional
             }
             Profile: entity {
               City: Text

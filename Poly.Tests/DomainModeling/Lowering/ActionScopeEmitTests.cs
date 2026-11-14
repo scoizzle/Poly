@@ -34,7 +34,7 @@ public class ActionScopeEmitTests {
           Score: Number range(0, 10) default(3)
           Tag: Text optional
           items: many Item
-          owner: Owner
+          owner: Owner optional
           Add: action (code: Text) {
             create in items { Code: code }
           }

@@ -43,10 +43,10 @@ public sealed class ExplicitInversePinsTests {
 
     [Test]
     public async Task ExplicitViaPair_ChangesNoLoweredOutputOrSimResult() {
-        var implicitPair = Pair("borrower: Patron", "loans: many Loan");
-        var viaOnPatron = Pair("borrower: Patron", "loans: many Loan via borrower");
-        var viaOnLoan = Pair("borrower: Patron via loans", "loans: many Loan");
-        var viaBoth = Pair("borrower: Patron via loans", "loans: many Loan via borrower");
+        var implicitPair = Pair("borrower: Patron optional", "loans: many Loan");
+        var viaOnPatron = Pair("borrower: Patron optional", "loans: many Loan via borrower");
+        var viaOnLoan = Pair("borrower: Patron via loans optional", "loans: many Loan");
+        var viaBoth = Pair("borrower: Patron via loans optional", "loans: many Loan via borrower");
 
         var baseline = PrintedAndSimulated(implicitPair);
         await Assert.That(baseline.Printed).IsNotEmpty();
@@ -64,8 +64,8 @@ public sealed class ExplicitInversePinsTests {
         // and after the back-navigation exists (both with and without via): the observed outcome is
         // the same, and nothing here enforces single ownership (L-13 / OQ-14).
         foreach (var dsl in new[] {
-            Pair("borrower: Patron", "loans: many Loan"),
-            Pair("borrower: Patron via loans", "loans: many Loan via borrower"),
+            Pair("borrower: Patron optional", "loans: many Loan"),
+            Pair("borrower: Patron via loans optional", "loans: many Loan via borrower"),
         }) {
             var (domain, _, _) = Evolve(dsl);
             var exec = ModuleExec.For(domain);
@@ -102,7 +102,7 @@ public sealed class ExplicitInversePinsTests {
             """;
         var withBack = Shipped
             .Replace("sources: many owned Source", "sources: many owned Source via query")
-            .Replace("Path: Text", "Path: Text\n  query: Query via sources");
+            .Replace("Path: Text", "Path: Text\n  query: Query via sources optional");
         var outcomes = new List<string>();
         foreach (var dsl in new[] { Shipped, withBack }) {
             var (domain, _, _) = Evolve(dsl);

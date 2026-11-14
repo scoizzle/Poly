@@ -68,7 +68,7 @@ public class InitialEntrySuccessPinTests {
           when jobs Done { create in kids { } }
         }
         Job: entity {
-          s: S via jobs
+          s: S via jobs optional
           Open: stage { Finish: action { transition to Done } }
           Done: stage { }
         }

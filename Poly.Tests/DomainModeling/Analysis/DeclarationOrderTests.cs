@@ -55,7 +55,7 @@ public sealed class DeclarationOrderTests {
           Owner: Customer
           Lines: many LineItem
           Main: one Customer
-          Parts: owned Part
+          Parts: owned Part optional
           Number: Text
           Text: Date
           Dup: Text

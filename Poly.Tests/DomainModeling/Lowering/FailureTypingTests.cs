@@ -450,7 +450,7 @@ public class FailureTypingTests {
         domain Lab
         Child: entity { Name: Text }
         Parent: entity {
-          kid: Child
+          kid: Child optional
           AddKid: action { create in kid { Name: "x" } }
         }
         """;
@@ -459,7 +459,7 @@ public class FailureTypingTests {
         domain Lab
         Child: entity { Poke: action { } }
         Parent: entity {
-          kid: Child
+          kid: Child optional
           Go: action { invoke kid.Poke }
         }
         """;
@@ -468,7 +468,7 @@ public class FailureTypingTests {
         domain Lab
         Room: entity { Occupied: Boolean }
         Reservation: entity {
-          room: Room
+          room: Room optional
           RoomFree: policy { room Occupied is false }
           Booked: stage {
             CheckIn: action require RoomFree { transition to InHouse }
@@ -537,7 +537,7 @@ public class FailureTypingTests {
           Poke: action require IsOk { }
         }
         Parent: entity {
-          kid: Child
+          kid: Child optional
           AddKid: action { create in kid { Ok: false } }
           Go: action { invoke kid.Poke }
         }

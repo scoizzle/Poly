@@ -25,10 +25,10 @@ internal static class InitialEntryDomains {
         }
         Leaf: entity {
           Amount: Number range(0, 10) default(1)
-          owner: Holder via leaves
+          owner: Holder via leaves optional
         }
         Kid: entity {
-          holder: Holder via kids
+          holder: Holder via kids optional
           Cap: Number default(100)
           Score: Number range(0, 10) default(0)
           Count: Number default(0)

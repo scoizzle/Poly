@@ -260,7 +260,7 @@ public sealed partial class LanguageSurfaceTests {
             }
             Order: entity {
               lines: many owned Line via order
-              header: owned Header via owner
+              header: owned Header via owner optional
             }
             """;
 

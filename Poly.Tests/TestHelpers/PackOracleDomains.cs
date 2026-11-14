@@ -218,7 +218,7 @@ public static class PackOracleDomains {
 
         public entity Order {
           Code: Text unique length(3, 8)
-          receipt: one Receipt
+          receipt: one Receipt optional
           public action Issue (note: Text) { create in receipt { Note: note } }
         }
         """,
@@ -262,7 +262,7 @@ public static class PackOracleDomains {
 
         public entity Order {
           Code: Text unique length(3, 8)
-          receipt: one owned Receipt
+          receipt: one owned Receipt optional
           public action Issue (note: Text) { create in receipt { Note: note } }
         }
         """,
@@ -285,7 +285,7 @@ public static class PackOracleDomains {
 
         public entity Order {
           Code: Text unique length(3, 8)
-          receipt: one Receipt
+          receipt: one Receipt optional
           public action Issue (note: Text) { create in receipt { Note: note } }
         }
         """,
@@ -330,7 +330,7 @@ public static class PackOracleDomains {
 
         Node: entity {
           Code: Text length(1, 8)
-          next: Node
+          next: Node optional
           Extend: action { create in next { Code: "A" } create in next { Code: "B" } }
         }
 
@@ -359,7 +359,7 @@ public static class PackOracleDomains {
 
         Node: entity {
           Code: Text length(1, 8)
-          next: Node
+          next: Node optional
           Extend: action { create in next { Code: "A" } }
         }
         """,
@@ -380,7 +380,7 @@ public static class PackOracleDomains {
 
         Lead: entity {
           Name: Text unique length(1, 20)
-          account: Account
+          account: Account optional
           HasAccount: policy { account exists }
           New: stage {
             Attach: action { create in account { Name: "Acme" } }

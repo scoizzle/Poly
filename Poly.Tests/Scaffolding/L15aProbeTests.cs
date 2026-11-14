@@ -42,6 +42,22 @@ public sealed class L15aProbeTests {
         await Assert.That(outcomes[4].State["fines"]).IsEqualTo("1");
     }
 
+    // P1: every shipped document's new errors (DMEFF011 on a navigation, DMREL006, an owned bare part,
+    // a navigation key), with the message, and the sweep rows that changed.
+    [Test]
+    public async Task P1_ShippedDocumentsUnderTheRules() {
+        var root = Poly.Tests.Docs.GuideBlocks.RepoRoot();
+        foreach (var file in Poly.Tests.DomainModeling.Analysis.CorpusVerdictSweepTests.PolyFiles()) {
+            var result = Poly.Tests.Docs.GuideBlocks.Analyze(File.ReadAllText(Path.Combine(root, file)));
+            foreach (var d in result.Diagnostics.Where(d => d.IsError))
+                if (d.Message.Contains("navigation", StringComparison.Ordinal) || d.Message.Contains("owned single part", StringComparison.Ordinal)
+                    || d.Code == "DMREL006")
+                    Console.WriteLine($"P1 {file} {d.Code} {d.Message}");
+        }
+        Console.WriteLine("P1SWEEP\n" + Poly.Tests.DomainModeling.Analysis.CorpusVerdictSweepTests.SweepRows());
+        await Assert.That(root).IsNotEmpty();
+    }
+
     // P4: can MCP create_instance pass a navigation's instance id?
     [Test]
     public async Task P4_McpCreateInstance_WithNavigationId() {

@@ -45,10 +45,10 @@ Lead: entity {
 Account: entity {
   Name: Text
   Industry: Industry
-  parent: Account
+  parent: Account optional
   WonCount: Number default(0)
   OpenPipeline: Decimal default(0)
-  hq: owned Site
+  hq: owned Site optional
   contacts: many Contact
   opportunities: many Opportunity via account
   tickets: many Ticket via account
@@ -111,7 +111,7 @@ Opportunity: entity {
   CloseBy: Date default(Today)
   Probability: Number range(0, 100) default(10)
   account: Account
-  contact: Contact
+  contact: Contact optional
   activities: many Activity
   lines: many Line
   quotes: many Quote

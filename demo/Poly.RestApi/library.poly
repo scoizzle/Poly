@@ -38,10 +38,7 @@ Patron: entity {
       require not HasFines
     {
       assign CurrentBorrowCount to CurrentBorrowCount + 1
-      // CreateIn initializers set scalar properties only — to-one navs
-      // (like Loan.book) cannot be bound here (analyzer rejects; runtime
-      // would throw). The Loan/Book link is left for a future link effect.
-      create in loans { }
+      create in loans { book: book }
     }
     Suspend: action {
       assign Status to "Suspended"
@@ -51,7 +48,7 @@ Patron: entity {
     CloseAccount: action { transition to Closed }
   }
   when loans Overdue {
-    create Fine { Amount: 5 Reason: "Overdue item" }
+    create in fines { Amount: 5 Reason: "Overdue item" }
     assign OutstandingFines to OutstandingFines + 5
   }
   when loans Returned {

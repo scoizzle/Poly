@@ -12,7 +12,7 @@ Account: entity {
   Currency: Text equals("USD")
   Balance: Number range(0, 100000000) default(0)
   Flags: Number default(0)
-  parent: Account
+  parent: Account optional
   txns: many Transaction via account
   HasFunds: policy { Balance > 0 }
   Open: stage {

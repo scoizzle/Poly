@@ -741,7 +741,7 @@ public class ActionEntityReturnTests {
             Student: entity {
               Name: Text
               Meetings: Number default(0)
-              advisor: Advisor
+              advisor: Advisor optional
               HasAdvisor: policy { advisor exists }
               Enrolled: stage {
                 Meet: action
@@ -775,7 +775,7 @@ public class ActionEntityReturnTests {
             }
             Invoice: entity {
               Total: Number default(0)
-              customer: Customer
+              customer: Customer optional
               lines: many Line
               HasCustomer: policy { customer exists }
               Open: stage {
@@ -813,7 +813,7 @@ public class ActionEntityReturnTests {
             }
             Ticket: entity {
               TableNo: Text
-              station: Station
+              station: Station optional
               Queued: stage {
                 Send: action {
                   invoke station.Fire
@@ -1413,7 +1413,7 @@ public class ActionEntityReturnTests {
             }
             Loan: entity {
               Code: Text
-              patron: Patron via loans
+              patron: Patron via loans optional
               Draft: stage {
                 Overdue: action { transition to Overdue }
               }

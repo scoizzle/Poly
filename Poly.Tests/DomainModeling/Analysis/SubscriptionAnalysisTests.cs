@@ -432,7 +432,7 @@ public class SubscriptionAnalysisTests {
         // S-13a: the subscription's relationship states its explicit inverse (via) on the other end.
         var tracked = new Relationship("TrackedBy",
             new DomainTypeReference("Order"), new DomainTypeReference("Tracker"),
-            RelationshipCardinality.OneToOne, []) { Inverse = "Tracks" };
+            RelationshipCardinality.OneToOne, []) { Inverse = "Tracks", IsOptional = true };
 
         var domain = ValidDomain.Create("Test", [tracker, order], [rel, tracked]);
         var exec = ModuleExec.For(domain);
@@ -487,7 +487,7 @@ public class SubscriptionAnalysisTests {
         // S-13a: the subscription's relationship states its explicit inverse (via) on the other end.
         var tracked = new Relationship("TrackedBy",
             new DomainTypeReference("Order"), new DomainTypeReference("Tracker"),
-            RelationshipCardinality.OneToOne, []) { Inverse = "Tracks" };
+            RelationshipCardinality.OneToOne, []) { Inverse = "Tracks", IsOptional = true };
 
         var domain = ValidDomain.Create("Test", [tracker, order], [rel, tracked]);
         var exec = ModuleExec.For(domain);

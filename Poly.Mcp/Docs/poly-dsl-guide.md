@@ -97,9 +97,8 @@ Patron: entity {
 **Note (back-reference materialization):** the runtime link is a store edge — it
 drives path-prefix reads, quantifiers, and subscriptions from the source. The
 **C# export auto-wires the child's back-reference**: the singular navigation the
-collection's `via` names, or the one whose `via` names the collection, or else the only
-singular navigation on the target pointing back to the source (e.g. `borrower`
-on `Loan` → `Patron`). The generated `Create{Nav}` factory passes `this` and the
+collection's `via` names (or whose `via` names it), else the only one on the target that
+points back (e.g. `borrower` on `Loan` → `Patron`). `Create{Nav}` passes `this` and the
 back-ref is not a constructor parameter. When the back-ref is a collection, it stays an
 unset constructor parameter. Two or more singular navigations back to the source with no
 `via` pairing is a **DMREL005** analysis error, so that shape never reaches export. To-one
@@ -108,15 +107,12 @@ navigation bindings in `create in` initializers are **legal**
 value bag / constructor parameter like a scalar initializer.
 
 **Required coverage (DMEFF011):** every property **without** `optional` on the
-created entity must be provided in the `create` / `create in` initializers,
-unless it has a `default` or the initial stage's `entry` effects assign it. A to-one
-navigation is required the same way (see §4): a create must bind it
-(`create in events { hall: hall }`), unless it is declared `optional` or it is the
-back-reference `create in` fills with the source. The message for a navigation is
-"navigation 'patron' is required: bind it, or declare it `optional`". `required` is not
-a constraint word. Analysis rejects a create that omits a required member, and the
-generated `Create` (simulated or printed) fails with a Required failure on a null one
-at run time, for example a binding whose value is null.
+created entity must be provided in the `create` / `create in` initializers, unless it has
+a `default` or the initial stage's `entry` effects assign it. A to-one navigation (§4) must
+be bound (`create in events { hall: hall }`) unless it is `optional` or the back-reference
+`create in` fills: "navigation 'patron' is required: bind it, or declare it `optional`".
+`required` is not a constraint word. A null one at run time (a binding whose value is
+null) fails Required in the generated `Create`, simulated or printed.
 
 <!-- poly-verify: fragment:top wrapper:top-default -->
 ```poly

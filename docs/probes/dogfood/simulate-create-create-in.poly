@@ -27,5 +27,5 @@ Patron: entity {
 Fine: entity {
   Amount: Number range(0, 500)
   Reason: Text
-  patron: Patron
+  patron: Patron optional
 }

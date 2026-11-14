@@ -327,7 +327,7 @@ public class AnalysisGateParityTests {
           Due: Date
           Stamp: DateTime
           Gap: Duration optional
-          part: Part
+          part: Part optional
           {{members}}
         }
         """;
@@ -400,7 +400,7 @@ public class AnalysisGateParityTests {
           OutD: Date optional
           OutT: DateTime optional
           Gap: Duration optional
-          part: Part
+          part: Part optional
           {{members}}
         }
         """;
@@ -771,7 +771,7 @@ public class AnalysisGateParityTests {
             Order: entity {
               N: Number default(0)
               books: many Book
-              book: Book
+              book: Book optional
               Go: action { assign N to READ }
             }
             """;

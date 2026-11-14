@@ -187,7 +187,7 @@ public class TypedExpressionMetadataTests {
 
     /// <summary>
     /// DMNUM001 also covers the other places a value is put into a Decimal: a default, a function's return, a function
-    /// argument and an invoke argument. A <c>match</c> arm is not covered (T-09a retypes <c>match</c>).
+    /// argument and an invoke argument. A <c>match</c> arm is covered too (T-09a): its value is converted to Decimal.
     /// </summary>
     [Test]
     [Arguments("default", "E: entity {\n  N: Number\n  D: Decimal default(7 / 2)\n}")]
@@ -199,6 +199,27 @@ public class TypedExpressionMetadataTests {
         await Assert.That(warnings.Length).IsEqualTo(1).Because(site);
         await Assert.That(warnings[0]).StartsWith("Warning: integer division").Because(site);
     }
+
+    /// <summary>
+    /// T-09a: a <c>match</c> has one type and every arm is converted to it, so an integral division in an arm of a match
+    /// stored into a Decimal truncates before it widens, like a bare division does. The warning names the division.
+    /// </summary>
+    [Test]
+    [Arguments("assign D to match { N > 1 -> 7 / 2, else -> 1.5 }", "(7 / 2)")]
+    [Arguments("assign D to match { N > 1 -> 1.5, else -> N / 2 }", "(N / 2)")]
+    [Arguments("assign D to match { N > 1 -> 7 / 2, else -> 3 }", "(7 / 2)")]
+    [Arguments("assign D to match { N > 1 -> match { N > 2 -> 7 / 2, else -> 1 }, else -> 1.5 }", "(7 / 2)")]
+    public async Task Assign_IntegralDivisionInAMatchArmToDecimal_WarnsDmnum001(string assignment, string division) =>
+        await Assert.That(string.Join(" | ", DecimalDivisionWarnings(assignment))).IsEqualTo(Dmnum001(division));
+
+    /// <summary>A match that is stored into a Number keeps integer division (the language's meaning), and a division in an
+    /// arm's condition is never stored: no warning.</summary>
+    [Test]
+    [Arguments("assign N to match { N > 1 -> 7 / 2, else -> 1 }")]
+    [Arguments("assign D to match { N / 2 > 1 -> 1.5, else -> 2.5 }")]
+    [Arguments("assign D to match { N > 1 -> 7.5 / 2, else -> 1.5 }")]
+    public async Task Assign_MatchWithoutAnIntegralDivisionIntoDecimal_IsClean(string assignment) =>
+        await Assert.That(DecimalDivisionWarnings(assignment)).IsEmpty();
 
     /// <summary>A warned document is accepted and runs: <c>assign D to 7 / 2</c> stores 3 on every door.</summary>
     [Test]

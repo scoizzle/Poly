@@ -28,15 +28,11 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
             StampOperand(context, cmp.Right, cmp.Left, props, parameters, enumTypes);
     }
 
-    /// <summary>An operand compared with an optional property is stamped <see cref="CheckSite.OptionalOperand"/> (#484: no door compares an optional).</summary>
+    /// <summary>A comparison operand is stamped with the other operand's type.</summary>
     private void StampOperand(
         AnalysisContext context, DomainExpression operand, DomainExpression other,
-        Dictionary<string, string> props, Dictionary<string, string>? parameters, Dictionary<string, EnumType> enumTypes) {
-        var otherType = InferType(context, other, props, parameters, enumTypes);
-        StampSite(context, operand,
-            OptionalOperand(context, other, otherType, props, parameters) ? CheckSite.OptionalOperand : CheckSite.Operand,
-            SiteTypeName(otherType));
-    }
+        Dictionary<string, string> props, Dictionary<string, string>? parameters, Dictionary<string, EnumType> enumTypes) =>
+        StampSite(context, operand, CheckSite.Operand, SiteTypeName(InferType(context, other, props, parameters, enumTypes)));
 
     /// <summary>
     /// The one optionality question of the temporal rules. A direct read is optional as its inferred type says

@@ -2926,6 +2926,20 @@ Cart: entity {
   TotalOrderCount: policy { count orders > 5 }
   OrderTotal: policy { sum lines Price is 150 }
 }
+##### guide/valid/domain Tasks	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[temporal]+implicit	printed	F802896A
+domain Tasks
+
+Task: entity {
+  Opened: Date
+  OptDue: Date optional
+  Done: Number optional
+  Accepting: policy { (OptDue is null or OptDue >= Opened) }
+  Demanding: policy { (OptDue is not null and OptDue >= Opened) }
+  Finish: action
+    require Accepting {
+    assign Done to 1
+  }
+}
 ##### guide/fragment/function Add(a: Number, b: Number): Number = a + b	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[]+implicit	printed	00812F95
 domain GuideTop
 

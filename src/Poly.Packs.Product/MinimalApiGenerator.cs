@@ -362,10 +362,7 @@ public sealed partial class MinimalApiGenerator {
     }
 
     /// <summary><see cref="ClrTypeNode"/> with the nullable annotation (<c>T?</c>).</summary>
-    private static Node NullableClrTypeNode(string clrType) =>
-        ClrTypeNode(clrType) is PrimitiveTypeReference primitive
-            ? primitive with { IsNullable = true }
-            : new TypeReference(clrType + "?");
+    private static Node NullableClrTypeNode(string clrType) => new OptionalTypeReference(ClrTypeNode(clrType));
 
     /// <summary>CLR keyword names stay <see cref="PrimitiveTypeReference"/> so a
     /// domain type of the same name can print with <c>@</c> in type position.</summary>

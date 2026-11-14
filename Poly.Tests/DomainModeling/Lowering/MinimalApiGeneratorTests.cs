@@ -704,6 +704,29 @@ public class MinimalApiGeneratorTests {
         await Assert.That(CompileHost(http.Files!)).IsEmpty();
     }
 
+    [Test]
+    public async Task EnumNamedLikeAKeyword_NullableDtoMemberKeepsItsEscapeAndCompiles() {
+        // L-08b half 2 fix round: the nullable DTO member must print Kw.@event?, not Kw.event?.
+        const string poly = """
+            domain Kw
+            event: enum { A, B }
+            Thing: entity {
+              Name: Text unique
+              Kind: event
+            }
+            """;
+
+        var http = CompilerWithHttpHost().Compile(poly, CompileMode.All, DbmsPack.Sqlite);
+
+        await Assert.That(http.Success).IsTrue();
+        var host = http.Files!.Single(f => f.FileName == "Program.cs").Source;
+        await Assert.That(host).Contains("Kw.@event? Kind");
+        // The rest of a keyword-named enum's host (the seed's `Kw.event.A`, the entity file) is unescaped on the base
+        // too, so the whole host does not compile yet; the DTO line must not be one of the errors.
+        var dtoLine = host.Split('\n').Select((text, index) => (text, line: index + 1)).Single(l => l.text.Contains("Kw.@event? Kind")).line;
+        await Assert.That(CompileHost(http.Files!).Where(e => e.StartsWith($"Program.cs: Program.cs({dtoLine},", StringComparison.Ordinal))).IsEmpty();
+    }
+
     /// <summary>An entity whose create takes an entity-typed property gets no POST route and no DTO, not a route
     /// that always answers 400. The DSL cannot declare that property (a defaulted or optional one), so an
     /// API-built model is the only oracle there is; there is no running-app test for it.</summary>

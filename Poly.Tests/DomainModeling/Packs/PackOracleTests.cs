@@ -980,6 +980,7 @@ public class PackOracleTests {
             ["Active"] = true,
             ["Born"] = "2026-01-01",
             ["Tier"] = "Low",
+            ["Price"] = 1.5,
         };
         var sim = new Dictionary<string, object?> {
             ["Label"] = "a",
@@ -987,6 +988,7 @@ public class PackOracleTests {
             ["Active"] = true,
             ["Born"] = new DateOnly(2026, 1, 1),
             ["Tier"] = "Low",
+            ["Price"] = 1.5m,
         };
 
         async Task CompareAsync(string name, Func<Dictionary<string, JsonNode?>, Dictionary<string, JsonNode?>> shapeJson,

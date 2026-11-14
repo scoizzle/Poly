@@ -410,6 +410,7 @@ public static class PackOracleDomains {
           Active: Boolean
           Born: Date
           Tier: Grade
+          Price: Decimal
         }
         """,
         "/api/gizmos");
@@ -427,6 +428,7 @@ public static class PackOracleDomains {
           Active: Boolean
           Born: Date
           Tier: Grade
+          Price: Decimal
         }
         """;
 

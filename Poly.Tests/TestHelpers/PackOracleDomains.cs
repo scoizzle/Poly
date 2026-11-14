@@ -453,6 +453,68 @@ public static class PackOracleDomains {
         }
         """;
 
+    /// <summary>P-12a (#687 row P-12): natural keys of each route-key type (Text, Number, Date), a shadow-key
+    /// entity, and a keyed entity with a scalar of several types plus a stage for the body-member contract.
+    /// It stays out of <see cref="All"/>.</summary>
+    public static PackOracleDomain RouteKeys687 { get; } = new(
+        "RouteKeys687",
+        """
+        domain Keys
+        uses http
+        uses sqlite
+        uses temporal
+
+        Grade: enum { Low, High }
+
+        Customer: entity {
+          Email: Text unique
+        }
+
+        Ticket: entity {
+          Seq: Number unique
+        }
+
+        Event: entity {
+          Day: Date unique
+        }
+
+        Note: entity {
+          Body: Text
+        }
+
+        Profile: entity {
+          Handle: Text unique
+          Age: Number
+          Active: Boolean
+          Born: Date
+          Tier: Grade
+          Price: Decimal
+          Draft: stage { Publish: action { transition to Live } }
+          Live: stage {}
+        }
+        """,
+        "/api/customers");
+
+    /// <summary>P-12a fix round: an OPTIONAL unique key is still the route key. <c>Day</c> (Date) is a <c>DateOnly?</c> key, so the
+    /// host must compile with it (a create of it answers 409 Unique, which this slice does not touch, so only the compile is tested). An optional unique Text key cannot be a fixture: the generated host dies at boot
+    /// (<c>NullReferenceException</c> in the module's <c>Create</c> from the seed), in the module and outside this slice.
+    /// Date, not DateTime or Time: a required DateTime/Time/Duration host member does not compile yet (#923).
+    /// It stays out of <see cref="All"/>.</summary>
+    public static PackOracleDomain OptionalKeys687 { get; } = new(
+        "OptionalKeys687",
+        """
+        domain Optional
+        uses http
+        uses sqlite
+        uses temporal
+
+        Slot: entity {
+          Name: Text
+          Day: Date unique optional
+        }
+        """,
+        "/api/slots");
+
     public static IReadOnlyList<PackOracleDomain> All { get; } =
         [Inventory588, Logistics559, Warehouse620, Inventory626, Desk658, Tally653, Fulfillment675];
 

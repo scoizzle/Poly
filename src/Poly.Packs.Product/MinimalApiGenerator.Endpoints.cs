@@ -10,9 +10,9 @@ public sealed partial class MinimalApiGenerator {
     private void AppendEndpointStatements(List<Node> statements, Entity entity, string dbContextName) {
         var store = GetStorageEntity(entity);
         var route = $"/api/{Pluralize(entity.Name).ToLowerInvariant()}";
-        var keyName = store.KeyName;
-        var keyType = store.KeyClrType;
-        var keyProp = store.KeyProperty;
+        var key = RouteKeyFor(store);
+        var keyName = key.Name;
+        var keyType = key.ClrType;
         var dbParam = new Parameter("db", new TypeReference(dbContextName));
 
         // app.MapGet("/api/books", async (dbContextName db) => await db.Books.ToListAsync())
@@ -48,7 +48,7 @@ public sealed partial class MinimalApiGenerator {
         // POST endpoint for root entities (S3: proper Entity.Create + result handling)
         if (store.IsRoot && CreatesDirectly(_entities, entity, GetCreateSlots(entity))) {
             var dtoParam = new Parameter("dto", new TypeReference($"{entity.Name}Dto"));
-            AppendCreateCallStatements(statements, entity, dtoParam, dbParam, route, keyProp);
+            AppendCreateCallStatements(statements, entity, dtoParam, dbParam, route, key);
         }
     }
 
@@ -66,7 +66,7 @@ public sealed partial class MinimalApiGenerator {
     /// <summary>Appends Syntax IR for POST /api/entities endpoint — calls Entity.Create with result handling.</summary>
     private void AppendCreateCallStatements(List<Node> statements, Entity entity,
         Parameter dtoParam, Parameter dbParam,
-        string route, Property? uniqueProp) {
+        string route, RouteKey key) {
         var createArgs = BuildCreateCallArgs(entity,
             prop => new Member(new Variable("dto"), prop.Name));
 
@@ -94,17 +94,13 @@ public sealed partial class MinimalApiGenerator {
             new Invoke(new Member(new TypeReference("db"), "SaveChangesAsync"))));
 
         // return Results.Ok(result.Value) or Results.Created(uri, result.Value)
-        if (uniqueProp is not null) {
-            // A string key is already a string. Other keys need ToString for the URI.
-            Node keyAccess = new Member(
-                new Member(new Variable(resultVarName), "Value"),
-                uniqueProp.Name);
-            if (!string.Equals(GetClrTypeName(uniqueProp.Type.TypeName), "string", StringComparison.Ordinal))
-                keyAccess = new Invoke(new Member(keyAccess, "ToString"));
+        if (key.Property is not null) {
             var uri = new Invoke(
                 new Member(new TypeReference("string"), "Concat"),
                 new Constant(route + "/"),
-                keyAccess);
+                RouteKeySegment(key, new Member(
+                    new Member(new Variable(resultVarName), "Value"),
+                    key.Property.Name)));
             bodyNodes.Add(new Return(
                 new Invoke(
                     new Member(new TypeReference("Results"), "Created"),
@@ -131,10 +127,12 @@ public sealed partial class MinimalApiGenerator {
         var childStore = GetStorageEntity(entity);
         var parentStore = GetStorageEntity(parentEntity);
         var relName = ToCamelCase(relNameRaw);
-        var parentKey = parentStore.KeyName;
-        var parentKeyType = parentStore.KeyClrType;
-        var childKey = childStore.KeyName;
-        var childKeyType = childStore.KeyClrType;
+        var parentRouteKey = RouteKeyFor(parentStore);
+        var childRouteKey = RouteKeyFor(childStore);
+        var parentKey = parentRouteKey.Name;
+        var parentKeyType = parentRouteKey.ClrType;
+        var childKey = childRouteKey.Name;
+        var childKeyType = childRouteKey.ClrType;
         var childKeyParam = DistinctChildKeyParam(parentKey, childKey, entity.Name);
         var pascalRel = Pascalize(relNameRaw);
         var isCollection = IsCollectionNavigation(parentStore, pascalRel);
@@ -174,8 +172,8 @@ public sealed partial class MinimalApiGenerator {
         // Detail: back-ref filtering matching string oracle
         var detailBody = new List<Node>();
         var backRefName = backRefRaw != null ? Pascalize(backRefRaw) : null;
-        var parentKeyPropName = parentStore.KeyProperty?.Name;
-        var childKeyPropName = childStore.KeyProperty?.Name;
+        var parentKeyPropName = parentRouteKey.Property?.Name;
+        var childKeyPropName = childRouteKey.Property?.Name;
 
         if (childKeyPropName != null && backRefName != null && parentKeyPropName != null) {
             var eParam2 = new Parameter("e");

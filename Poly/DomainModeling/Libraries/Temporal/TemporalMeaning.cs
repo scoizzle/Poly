@@ -94,20 +94,39 @@ public static class TemporalMeaning {
         public void Check(AnalysisContext context, DomainExpression expression, ExpressionTypeCheckScope scope) {
             if (expression is not Duration d)
                 return;
-            // A Duration property may default to a bare duration literal
-            // (`Budget: Duration default(30 Minutes)`); it has nowhere else to
-            // come from. Every other target (or no default scope) keeps failing
-            // closed: a bare duration needs a temporal left operand.
-            if (scope.DefaultTargetTypeName is "Duration") {
+            // A bare duration is a value only where a Duration takes it: the default of a Duration property
+            // (`Budget: Duration default(30 Minutes)`), an assign to one, or an operand compared with one.
+            // Every other position fails closed (a bare duration needs a temporal left operand) and names itself.
+            var (position, typeName) = scope switch {
+                { DefaultTargetTypeName: { } target } => ("default value", target),
+                { Site: CheckSite.Assign } => ("assign value", scope.SiteTypeName),
+                { Site: CheckSite.Operand } => ("comparison operand", scope.SiteTypeName),
+                { Site: CheckSite.OptionalOperand } => ("comparison operand", scope.SiteTypeName),
+                _ => ("operand", null),
+            };
+            if (scope.Site is CheckSite.OptionalOperand && string.Equals(typeName, "Duration", StringComparison.OrdinalIgnoreCase)) {
+                context.ReportError(expression,
+                    $"{position} '{d.Amount} {d.Unit}' cannot be compared with an optional Duration yet (#484): no door compares an optional value",
+                    DomainModelDiagnosticCodes.SemanticTypeCompatibility);
+                return;
+            }
+            if (string.Equals(typeName, "Duration", StringComparison.OrdinalIgnoreCase)) {
                 if (d.Unit is DurationUnit.Months or DurationUnit.Years)
                     context.ReportError(expression,
-                        $"default value '{d.Amount} {d.Unit}' has no fixed length " +
+                        $"{position} '{d.Amount} {d.Unit}' has no fixed length " +
                         "(months and years vary; use Days or a smaller unit)",
+                        DomainModelDiagnosticCodes.SemanticTypeCompatibility);
+                else if (!TemporalLowering.FitsATimeSpan(d))
+                    context.ReportError(expression,
+                        $"{position} '{d.Amount} {d.Unit}' is too long for a TimeSpan",
                         DomainModelDiagnosticCodes.SemanticTypeCompatibility);
                 return;
             }
             context.ReportError(expression,
-                $"default value '{d.Amount} {d.Unit}' is a bare duration with no temporal left operand",
+                $"{position} '{d.Amount} {d.Unit}' is a bare duration with no temporal left operand" +
+                (scope.Site is CheckSite.Default || typeName is null
+                    ? ""
+                    : $" (only a Duration takes it; got '{typeName}')"),
                 DomainModelDiagnosticCodes.SemanticTypeCompatibility);
         }
     }
@@ -117,6 +136,14 @@ public static class TemporalMeaning {
         public void Check(AnalysisContext context, DomainExpression expression, ExpressionTypeCheckScope scope) {
             if (expression is not DateOperation dateOp)
                 return;
+            // No default lowering exists for a date operation: the simulator ran `default(Now + 7 Days)` and the
+            // generated C# did not compile (CS1737). `default(Now)` and `default(Today)` are the clock defaults.
+            if (scope.DefaultTargetTypeName is not null) {
+                context.ReportError(dateOp,
+                    "a default of a date operation has no default lowering (use default(Now) or default(Today))",
+                    DomainModelDiagnosticCodes.SemanticTypeCompatibility);
+                return;
+            }
             var dateName = TypeNameOf(dateOp.Date, scope, context);
             var dateLike = dateOp.Date is Now or Today or DateOperation
                 || dateName is "Date" or "DateOnly" or "DateTime" or "Timestamp";
@@ -127,6 +154,15 @@ public static class TemporalMeaning {
                 context.ReportError(dateOp,
                     $"temporal offset requires a date left operand (got '{Describe(dateName)}'); " +
                     "a duration needs a date or clock node ('Now'/'Today') to offset",
+                    DomainModelDiagnosticCodes.SemanticTypeCompatibility);
+                return;
+            }
+
+            // #648: an offset on an optional date has nothing to offset when it is unset, and no door lowers it.
+            if (dateOp.Date is PropertyAccess { Name: var optionalName } && scope.IsOptional?.Invoke(optionalName) == true) {
+                context.ReportError(dateOp,
+                    $"an offset or difference on the optional date '{optionalName}' is not supported (#648): " +
+                    "the property may be unset and no door computes with an absent date",
                     DomainModelDiagnosticCodes.SemanticTypeCompatibility);
                 return;
             }

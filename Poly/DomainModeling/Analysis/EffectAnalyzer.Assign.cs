@@ -99,7 +99,10 @@ internal sealed partial class EffectAnalyzer {
         AnalysisContext context, Node errorNode, object? literalValue, Property targetProp, Domain domain) {
         var tally = new WriteTally();
         foreach (var constraint in targetProp.Constraints) {
-            var verdict = ConstraintValidation.Evaluate(constraint, literalValue);
+            // `null` into an optional property is its absence, which every constraint admits (T-06).
+            var verdict = literalValue is null && !EntityStructureAnalyzer.IsRequired(targetProp)
+                ? ConstraintVerdict.Satisfied
+                : ConstraintValidation.Evaluate(constraint, literalValue);
             if (verdict == ConstraintVerdict.Undecided) {
                 ConstraintValidation.ReportUndecided(
                     context, errorNode, constraint, $"on property '{targetProp.Name}'");

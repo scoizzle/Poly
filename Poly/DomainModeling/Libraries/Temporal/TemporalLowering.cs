@@ -16,6 +16,7 @@ internal static class TemporalLowering {
         meaning.Lowering.Register(new NowLowering());
         meaning.Lowering.Register(new TodayLowering());
         meaning.Lowering.Register(new DateOperationLowering());
+        meaning.Lowering.Register(new DurationLowering());
         meaning.Lowering.Register(new DateAddDaysLowering(typeof(Add), subtract: false));
         meaning.Lowering.Register(new DateAddDaysLowering(typeof(Subtract), subtract: true));
         meaning.Defaults.Register(new NowDefaultResolver());
@@ -93,6 +94,23 @@ internal static class TemporalLowering {
     }
 
     /// <summary>
+    /// A bare <c>Duration</c> at an assign or comparison site (analysis admits it nowhere else) lowers to its
+    /// <c>TimeSpan</c> construction. Months and years fail closed, as they do for a default.
+    /// </summary>
+    private sealed class DurationLowering : IExpressionLoweringHandler {
+        public Type ExpressionType => typeof(Duration);
+
+        public bool TryLower(
+            DomainExpression expression,
+            Func<DomainExpression, Node> route,
+            Func<string, string?>? propertyTypeResolver,
+            out Node result) {
+            result = ToTimeSpanNode((Duration)expression);
+            return true;
+        }
+    }
+
+    /// <summary>
     /// <c>DueDate + 14</c> / <c>DueDate - 7</c> → AddDays. Claims only date-typed
     /// property left operands; other Add/Subtract stay core arithmetic.
     /// </summary>
@@ -133,7 +151,14 @@ internal static class TemporalLowering {
                 && rightExpr is PropertyAccess rightPa
                 && propertyTypeResolver?.Invoke(rightPa.Name) is { } rightTypeName
                 && FamilyFromTypeName(rightTypeName) == family) {
-                result = new Invoke(new Member(route(leftExpr), "Subtract"), [route(rightExpr)]);
+                var minuend = route(leftExpr);
+                var subtrahend = route(rightExpr);
+                // DateOnly has no Subtract; the day count between two dates is their DayNumber difference.
+                result = family is DateClrFamily.DateOnly
+                    ? new Invoke(
+                        new Member(new NamedTypeReference("TimeSpan"), "FromDays"),
+                        new SN.Subtract(new Member(minuend, "DayNumber"), new Member(subtrahend, "DayNumber")))
+                    : new Invoke(new Member(minuend, "Subtract"), [subtrahend]);
                 return true;
             }
             var left = route(leftExpr);
@@ -203,6 +228,17 @@ internal static class TemporalLowering {
         }
     }
 
+    /// <summary>False for a fixed-length duration a <c>TimeSpan</c> cannot hold (a host throws on it at define or run time).</summary>
+    internal static bool FitsATimeSpan(Duration d) {
+        try {
+            _ = ToTimeSpan(d);
+            return true;
+        }
+        catch (Exception e) when (e is OverflowException or ArgumentOutOfRangeException or NotSupportedException) {
+            return false;
+        }
+    }
+
     private static TimeSpan ToTimeSpan(Duration d) => d.Unit switch {
         DurationUnit.Milliseconds => TimeSpan.FromMilliseconds(d.Amount),
         DurationUnit.Seconds => TimeSpan.FromSeconds(d.Amount),
@@ -238,8 +274,7 @@ internal static class TemporalLowering {
     }
 
     private static NotSupportedException UnsupportedDurationDefault(Duration d) =>
-        new($"default({d.Amount} {d.Unit}) cannot be lowered to a TimeSpan default: " +
-            "months and years have no fixed length.");
+        new($"{d.Amount} {d.Unit} cannot be lowered to a TimeSpan: months and years have no fixed length.");
 
     private enum DateClrFamily { Unknown, DateOnly, DateTime, TimeOnly }
 

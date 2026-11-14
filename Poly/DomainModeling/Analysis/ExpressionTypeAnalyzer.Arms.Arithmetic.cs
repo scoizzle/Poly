@@ -13,18 +13,15 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
         var leftType = InferType(context, left, props, parameters, enumTypes);
         var rightType = InferType(context, right, props, parameters, enumTypes);
         ReportFractionalLiteral(context, left, leftType, right, rightType);
-        // numeric + numeric, text + text (concatenation; `+` only), date + number (AddDays
-        // lowering), or date + duration
-        // (a parsed `N days` offset with a temporal left operand). An operand the analyzer cannot
-        // type is recorded for DMSEM006 (T-05b). A duration without a temporal left operand
-        // (Number + days, days + date) is an unresolved temporal specialization — reject,
-        // never a silent numeric constant.
+        // numeric + numeric, text + text (concatenation; `+` only), or a date offset by a number (the temporal
+        // arm owns that shape, accepted or refused). An operand the analyzer cannot type is recorded for DMSEM006
+        // (T-05b). A duration without a temporal left operand (Number + days, days + date) is an unresolved
+        // temporal specialization — reject, never a silent numeric constant.
         RequireTypedOperands(context, node, left, leftType, right, rightType, props, parameters, enumTypes);
         if (IsTyped(leftType) && IsTyped(rightType)
             && !(IsNumeric(leftType) && IsNumeric(rightType))
             && !(allowTextConcat && Family(leftType) is TypeFamily.Text && Family(rightType) is TypeFamily.Text)
-            && !(IsDate(leftType) && IsNumeric(rightType))
-            && !(IsDate(leftType) && Family(rightType) is TypeFamily.Duration))
+            && !CheckTemporalOffset(context, node, left, leftType, rightType, props, parameters))
             Report(context, left,
                 $"arithmetic operand is not numeric (got '{Describe(leftType)}' and '{Describe(rightType)}')");
         WalkExpression(context, left, props, parameters, enumTypes);

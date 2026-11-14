@@ -25,6 +25,12 @@ internal static class TargetTypeAdapter {
     /// here rescans the domain tree.
     /// </summary>
     internal static Node Adapt(Node value, DomainTypeReference target, LoweringContext ctx) {
+        // `null` reaches lowering only for an optional slot (analysis refuses it into a required one, #606). It is that
+        // slot's own absent value, `(T?)null`: a bare null constant is the word 0 (a present zero in a value-type slot)
+        // and has no type (a conditional over it is typed Object, which has no Length or IsMatch).
+        if (value is Constant { Value: null } && OptionalSlot(target, ctx) is { } slot)
+            return new TypeCast(value, slot);
+
         if (value is Constant { Value: string member } && member.Length > 0
             && DomainToCSharpExporter.TryResolveEnumType(ctx.Domain, ctx.Analysis, target.TypeName, out var enumType)
             && enumType is not null
@@ -41,6 +47,18 @@ internal static class TargetTypeAdapter {
         }
 
         return value;
+    }
+
+    /// <summary>
+    /// The optional type of an enum or primitive slot (<c>long?</c>, <c>bool?</c>, <c>string?</c>, an enum's <c>T?</c>);
+    /// null for any other slot.
+    /// </summary>
+    internal static OptionalTypeReference? OptionalSlot(DomainTypeReference target, LoweringContext ctx) {
+        var typed = DomainToCSharpExporter.TryResolveEnumType(ctx.Domain, ctx.Analysis, target.TypeName, out _)
+            || DomainTypeMapping.TryPrimitiveType(RuntimeAnalysisCache.ClrTypeName(ctx.Domain, target.TypeName), out _);
+        return typed
+            ? new OptionalTypeReference(DomainToCSharpExporter.MapDomainTypeRef(target, ctx.Domain, ctx.Analysis))
+            : null;
     }
 
     /// <summary>The mapped CLR type name of a DSL type is <c>decimal</c>.</summary>

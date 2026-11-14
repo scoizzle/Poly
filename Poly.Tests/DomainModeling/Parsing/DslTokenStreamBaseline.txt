@@ -135,11 +135,9 @@ H	1.x
 	Identifier	2	1	1	3	x
 	EndOfFile	3	0	1	4	
 H	\u0661\u0662\u0663
-	Number	0	3	1	1	\u0661\u0662\u0663
-	EndOfFile	3	0	1	4	
+	ERR	Numeric literal contains non-ASCII digit 'U+0661'; use 0-9.	1	1	-1	0
 H	\u0661.\u0662
-	Number	0	3	1	1	\u0661.\u0662
-	EndOfFile	3	0	1	4	
+	ERR	Numeric literal contains non-ASCII digit 'U+0661'; use 0-9.	1	1	-1	0
 H	3Days
 	Number	0	1	1	1	3
 	Identifier	1	4	1	2	Days

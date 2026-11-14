@@ -270,14 +270,14 @@ public class LoweredTreeOperandCoverageTests {
 
     static void DelegateTarget() { }
 
-    // Two distinct delegates with the same target and method. C# binds `Action == Delegate` to reference equality
-    // (the (object, object) operator), so these are C#'s own answers, bound by Roslyn here.
     // `DateTime? == DateTimeOffset` compiles in C# (the implicit DateTime to DateTimeOffset conversion lifts), so these are C#'s
     // own answers, bound by Roslyn here; the narrowed NullableDateRule refuses the pair (row T-21b: the VM converts in a nullable compare).
     static readonly DateTime? OptionalWhen = new DateTime(2026, 1, 3, 0, 0, 0, DateTimeKind.Utc);
     static readonly DateTimeOffset OffsetWhen = new(2026, 1, 3, 0, 0, 0, TimeSpan.Zero);
     static readonly bool OptionalWhenEqualsOffsetAsCSharp = OptionalWhen == OffsetWhen;
     static readonly bool OffsetEqualsOptionalWhenAsCSharp = OffsetWhen == OptionalWhen;
+    // Two distinct delegates with the same target and method. C# binds `Action == Delegate` to reference equality
+    // (the (object, object) operator), so these are C#'s own answers, bound by Roslyn here.
     static readonly Action DelegateLeft = DelegateTarget;
     static readonly Delegate DelegateRight = new Action(DelegateTarget);
 #pragma warning disable CS0252, CS0253

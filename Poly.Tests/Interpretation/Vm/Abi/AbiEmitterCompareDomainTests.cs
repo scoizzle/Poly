@@ -326,89 +326,105 @@ public class AbiEmitterCompareDomainTests {
         (">=", (l, r) => new GreaterThanOrEqual(l, r)), ("==", (l, r) => new Equal(l, r)), ("!=", (l, r) => new NotEqual(l, r)),
     ];
 
-    /// <summary>C#'s own operators of one type, as lambdas the C# compiler binds.</summary>
-    internal sealed record Cmp<T>(Func<T, T, bool> Lt, Func<T, T, bool> Le, Func<T, T, bool> Gt, Func<T, T, bool> Ge, Func<T, T, bool> Eq, Func<T, T, bool> Ne) where T : struct {
-        public Func<T, T, bool> Of(string op) => op switch { "<" => Lt, "<=" => Le, ">" => Gt, ">=" => Ge, "==" => Eq, _ => Ne };
+    /// <summary>
+    /// C#'s own operators over <c>T?</c> and <c>T</c>, in each operand order and for <c>T?</c> against <c>T?</c>: one lambda per
+    /// operator, bound by the C# compiler (never a truth table, and the absent rule is C#'s). Order: <, <=, >, >=, ==, !=.
+    /// </summary>
+    internal sealed record Cmp<T>(Func<T?, T, bool>[] OptReq, Func<T, T?, bool>[] ReqOpt, Func<T?, T?, bool>[] OptOpt) where T : struct {
+        private static readonly string[] Names = ["<", "<=", ">", ">=", "==", "!="];
 
-        /// <summary>The lifted operator over <c>T?</c> and <c>T</c>: an absent operand is false for every operator but <c>!=</c>.</summary>
-        public bool Lifted(string op, T? left, T right) => left is { } l ? Of(op)(l, right) : op == "!=";
+        public bool Lifted(string op, T? left, T right) => OptReq[Array.IndexOf(Names, op)](left, right);
 
-        public bool Lifted(string op, T left, T? right) => right is { } r ? Of(op)(left, r) : op == "!=";
+        public bool Lifted(string op, T left, T? right) => ReqOpt[Array.IndexOf(Names, op)](left, right);
+
+        public bool LiftedBoth(string op, T? left, T? right) => OptOpt[Array.IndexOf(Names, op)](left, right);
     }
 
-    internal static readonly Cmp<DateTime> DateTimeOps = new((a, b) => a < b, (a, b) => a <= b, (a, b) => a > b, (a, b) => a >= b, (a, b) => a == b, (a, b) => a != b);
-    internal static readonly Cmp<DateOnly> DateOnlyOps = new((a, b) => a < b, (a, b) => a <= b, (a, b) => a > b, (a, b) => a >= b, (a, b) => a == b, (a, b) => a != b);
-    internal static readonly Cmp<TimeOnly> TimeOnlyOps = new((a, b) => a < b, (a, b) => a <= b, (a, b) => a > b, (a, b) => a >= b, (a, b) => a == b, (a, b) => a != b);
-    internal static readonly Cmp<TimeSpan> TimeSpanOps = new((a, b) => a < b, (a, b) => a <= b, (a, b) => a > b, (a, b) => a >= b, (a, b) => a == b, (a, b) => a != b);
-    internal static readonly Cmp<DateTimeOffset> DateTimeOffsetOps = new((a, b) => a < b, (a, b) => a <= b, (a, b) => a > b, (a, b) => a >= b, (a, b) => a == b, (a, b) => a != b);
+    internal static readonly Cmp<DateTime> DateTimeOps = new(
+        [(a, b) => a < b, (a, b) => a <= b, (a, b) => a > b, (a, b) => a >= b, (a, b) => a == b, (a, b) => a != b],
+        [(a, b) => a < b, (a, b) => a <= b, (a, b) => a > b, (a, b) => a >= b, (a, b) => a == b, (a, b) => a != b],
+        [(a, b) => a < b, (a, b) => a <= b, (a, b) => a > b, (a, b) => a >= b, (a, b) => a == b, (a, b) => a != b]);
+    internal static readonly Cmp<DateOnly> DateOnlyOps = new(
+        [(a, b) => a < b, (a, b) => a <= b, (a, b) => a > b, (a, b) => a >= b, (a, b) => a == b, (a, b) => a != b],
+        [(a, b) => a < b, (a, b) => a <= b, (a, b) => a > b, (a, b) => a >= b, (a, b) => a == b, (a, b) => a != b],
+        [(a, b) => a < b, (a, b) => a <= b, (a, b) => a > b, (a, b) => a >= b, (a, b) => a == b, (a, b) => a != b]);
+    internal static readonly Cmp<TimeOnly> TimeOnlyOps = new(
+        [(a, b) => a < b, (a, b) => a <= b, (a, b) => a > b, (a, b) => a >= b, (a, b) => a == b, (a, b) => a != b],
+        [(a, b) => a < b, (a, b) => a <= b, (a, b) => a > b, (a, b) => a >= b, (a, b) => a == b, (a, b) => a != b],
+        [(a, b) => a < b, (a, b) => a <= b, (a, b) => a > b, (a, b) => a >= b, (a, b) => a == b, (a, b) => a != b]);
+    internal static readonly Cmp<TimeSpan> TimeSpanOps = new(
+        [(a, b) => a < b, (a, b) => a <= b, (a, b) => a > b, (a, b) => a >= b, (a, b) => a == b, (a, b) => a != b],
+        [(a, b) => a < b, (a, b) => a <= b, (a, b) => a > b, (a, b) => a >= b, (a, b) => a == b, (a, b) => a != b],
+        [(a, b) => a < b, (a, b) => a <= b, (a, b) => a > b, (a, b) => a >= b, (a, b) => a == b, (a, b) => a != b]);
+    internal static readonly Cmp<DateTimeOffset> DateTimeOffsetOps = new(
+        [(a, b) => a < b, (a, b) => a <= b, (a, b) => a > b, (a, b) => a >= b, (a, b) => a == b, (a, b) => a != b],
+        [(a, b) => a < b, (a, b) => a <= b, (a, b) => a > b, (a, b) => a >= b, (a, b) => a == b, (a, b) => a != b],
+        [(a, b) => a < b, (a, b) => a <= b, (a, b) => a > b, (a, b) => a >= b, (a, b) => a == b, (a, b) => a != b]);
 
-    private static async Task OptionalAgainstRequired<T>(Cmp<T> cmp, T present, T required, Func<Node> requiredNode, params object?[] extraArgs)
+    /// <summary>
+    /// The optional value takes every position against the required one: less, EQUAL and greater (so <c>&lt;=</c>, <c>&gt;=</c>
+    /// and <c>==</c> at equality, and <c>&gt;</c> and <c>&gt;=</c> above it, are run), and absent.
+    /// </summary>
+    private static async Task OptionalAgainstRequired<T>(Cmp<T> cmp, T less, T required, T greater, Func<Node> requiredNode, params object?[] extraArgs)
         where T : struct {
         foreach (var (op, make) in Operators)
             foreach (var optionalLeft in new[] { true, false })
-                foreach (var isPresent in new[] { true, false }) {
-                    T? value = isPresent ? present : null;
+                foreach (var value in new T?[] { less, required, greater, null }) {
                     Node body = optionalLeft ? make(Optional<T>("o"), requiredNode()) : make(requiredNode(), Optional<T>("o"));
                     object?[] args = optionalLeft ? [value, .. extraArgs] : [.. extraArgs, value];
                     var expected = optionalLeft ? cmp.Lifted(op, value, required) : cmp.Lifted(op, required, value);
                     await Assert.That(Run(body, args)).IsEqualTo(expected ? 1L : 0L)
-                        .Because($"{typeof(T).Name}? {(optionalLeft ? "opt " + op + " req" : "req " + op + " opt")} present={isPresent}");
+                        .Because($"{typeof(T).Name}? {(optionalLeft ? "opt " + op + " req" : "req " + op + " opt")} value={(value?.ToString() ?? "absent")}");
                 }
     }
 
     [Test]
     public async Task OptionalDateTime_AgainstRequired_IsCSharpsLiftedComparison() =>
-        await OptionalAgainstRequired(DateTimeOps, new DateTime(2026, 1, 3), new DateTime(2026, 1, 5), () => Param<DateTime>("r"), new DateTime(2026, 1, 5));
+        await OptionalAgainstRequired(DateTimeOps, new DateTime(2026, 1, 3), new DateTime(2026, 1, 5), new DateTime(2026, 1, 9), () => Param<DateTime>("r"), new DateTime(2026, 1, 5));
 
     [Test]
     public async Task OptionalDateOnly_AgainstRequired_IsCSharpsLiftedComparison() =>
-        await OptionalAgainstRequired(DateOnlyOps, new DateOnly(2026, 1, 3), new DateOnly(2026, 1, 5), () => Param<DateOnly>("r"), new DateOnly(2026, 1, 5));
+        await OptionalAgainstRequired(DateOnlyOps, new DateOnly(2026, 1, 3), new DateOnly(2026, 1, 5), new DateOnly(2026, 1, 9), () => Param<DateOnly>("r"), new DateOnly(2026, 1, 5));
 
     [Test]
     public async Task OptionalTimeOnly_AgainstRequired_IsCSharpsLiftedComparison() =>
-        await OptionalAgainstRequired(TimeOnlyOps, new TimeOnly(8, 0), new TimeOnly(9, 0), () => Param<TimeOnly>("r"), new TimeOnly(9, 0));
+        await OptionalAgainstRequired(TimeOnlyOps, new TimeOnly(8, 0), new TimeOnly(9, 0), new TimeOnly(10, 0), () => Param<TimeOnly>("r"), new TimeOnly(9, 0));
 
     [Test]
     public async Task OptionalTimeSpan_AgainstRequired_IsCSharpsLiftedComparison() =>
-        await OptionalAgainstRequired(TimeSpanOps, TimeSpan.FromMinutes(30), TimeSpan.FromHours(1), () => Param<TimeSpan>("r"), TimeSpan.FromHours(1));
+        await OptionalAgainstRequired(TimeSpanOps, TimeSpan.FromMinutes(30), TimeSpan.FromHours(1), TimeSpan.FromHours(2), () => Param<TimeSpan>("r"), TimeSpan.FromHours(1));
 
     [Test]
     public async Task OptionalDateTimeOffset_AgainstRequired_IsCSharpsLiftedComparison() {
         var required = new DateTimeOffset(2026, 1, 5, 0, 0, 0, TimeSpan.Zero);
-        await OptionalAgainstRequired(DateTimeOffsetOps, new DateTimeOffset(2026, 1, 3, 0, 0, 0, TimeSpan.Zero), required, () => Param<DateTimeOffset>("r"), required);
+        await OptionalAgainstRequired(DateTimeOffsetOps, required.AddDays(-2), required, required.AddDays(4), () => Param<DateTimeOffset>("r"), required);
     }
 
-    /// <summary>The required side as each shape the lowered tree can hold: a CLR member read, a static member, a call result, a constant.</summary>
+    /// <summary>The required side as each shape the lowered tree can hold: a CLR member read, a call result, a constant (a static clock read cannot be equal, so it has less and greater only).</summary>
     [Test]
     public async Task OptionalDateTime_AgainstEveryRequiredShape_IsCSharpsLiftedComparison() {
-        var present = new DateTime(2026, 1, 3);
         var day = new DateTime(2026, 1, 5, 13, 0, 0);
-        await OptionalAgainstRequired(DateTimeOps, present, day.Date, () => new Member(Param<DateTime>("r"), "Date"), day);
-        await OptionalAgainstRequired(DateTimeOps, present, day.AddDays(1), () => new Invoke(new Member(Param<DateTime>("r"), "AddDays"), new Constant(1.0)), day);
-        await OptionalAgainstRequired(DateTimeOps, present, new DateTime(2026, 1, 9), () => new Constant(new DateTime(2026, 1, 9)));
-        foreach (var isPresent in new[] { true, false }) {
-            DateTime? value = isPresent ? present : null;
+        await OptionalAgainstRequired(DateTimeOps, new DateTime(2026, 1, 3), day.Date, new DateTime(2026, 1, 9), () => new Member(Param<DateTime>("r"), "Date"), day);
+        await OptionalAgainstRequired(DateTimeOps, new DateTime(2026, 1, 3), day.AddDays(1), new DateTime(2026, 1, 9), () => new Invoke(new Member(Param<DateTime>("r"), "AddDays"), new Constant(1.0)), day);
+        await OptionalAgainstRequired(DateTimeOps, new DateTime(2026, 1, 3), new DateTime(2026, 1, 9), new DateTime(2026, 1, 12), () => new Constant(new DateTime(2026, 1, 9)));
+        var now = DateTime.UtcNow;
+        foreach (var value in new DateTime?[] { now.AddDays(-1), now.AddDays(1), null })
             await Assert.That(Run(new LessThan(Optional<DateTime>("o"), new Member(new NamedTypeReference("DateTime"), "UtcNow")), value))
-                .IsEqualTo(DateTimeOps.Lifted("<", value, DateTime.UtcNow) ? 1L : 0L);
-        }
+                .IsEqualTo(DateTimeOps.Lifted("<", value, now) ? 1L : 0L).Because($"UtcNow value={value}");
     }
 
     [Test]
     public async Task OptionalTimeSpan_AgainstAConstant_IsCSharpsLiftedComparison() =>
-        await OptionalAgainstRequired(TimeSpanOps, TimeSpan.FromHours(1), TimeSpan.FromHours(2), () => new Constant(TimeSpan.FromHours(2)));
+        await OptionalAgainstRequired(TimeSpanOps, TimeSpan.FromHours(1), TimeSpan.FromHours(2), TimeSpan.FromHours(3), () => new Constant(TimeSpan.FromHours(2)));
 
+    /// <summary>Optional against optional: the present pair takes less, equal and greater, and every absent combination.</summary>
     private static async Task BothOptional<T>(Cmp<T> cmp, T a, T b) where T : struct {
+        T?[][] pairs = [[a, b], [a, a], [b, a], [a, null], [null, b], [null, null]];
         foreach (var (op, make) in Operators)
-            foreach (var (leftPresent, rightPresent) in new[] { (true, true), (true, false), (false, true), (false, false) }) {
-                T? left = leftPresent ? a : null;
-                T? right = rightPresent ? b : null;
-                var expected = (left, right) switch {
-                    ( { } l, { } r) => cmp.Of(op)(l, r),
-                    ( { }, null) or (null, { }) => op == "!=",
-                    _ => op == "==",
-                };
-                await Assert.That(Run(make(Optional<T>("l"), Optional<T>("r")), left, right)).IsEqualTo(expected ? 1L : 0L)
-                    .Because($"{typeof(T).Name}? {op} {typeof(T).Name}? {leftPresent}/{rightPresent}");
+            foreach (var pair in pairs) {
+                var expected = cmp.LiftedBoth(op, pair[0], pair[1]);
+                await Assert.That(Run(make(Optional<T>("l"), Optional<T>("r")), pair[0], pair[1])).IsEqualTo(expected ? 1L : 0L)
+                    .Because($"{typeof(T).Name}? {op} {typeof(T).Name}? {pair[0]?.ToString() ?? "absent"}/{pair[1]?.ToString() ?? "absent"}");
             }
     }
 

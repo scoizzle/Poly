@@ -1488,36 +1488,36 @@ internal record ProductDto
     [Required]
     [MinLength(3)]
     [MaxLength(32)]
-    public string Sku { get; init; } = default!;
+    public string? Sku { get; init; }
     [Required]
-    public string Name { get; init; } = default!;
+    public string? Name { get; init; }
     [Range(typeof(decimal), "0", "100000000")]
-    public decimal ListPrice { get; init; }
+    public decimal? ListPrice { get; init; }
 }
 
 internal record LeadDto
 {
     [Required]
-    public string Name { get; init; } = default!;
+    public string? Name { get; init; }
     [Required]
     [RegularExpression("^[^@]+@[^@]+$")]
-    public string Email { get; init; } = default!;
+    public string? Email { get; init; }
     [Required]
-    public string Company { get; init; } = default!;
+    public string? Company { get; init; }
 }
 
 internal record AccountDto
 {
     [Required]
-    public string Name { get; init; } = default!;
+    public string? Name { get; init; }
     [EnumDataType(typeof(Crm.Industry))]
-    public Crm.Industry Industry { get; init; }
+    public Crm.Industry? Industry { get; init; }
 }
 
 internal record CampaignDto
 {
     [Required]
-    public string Name { get; init; } = default!;
+    public string? Name { get; init; }
 }
 
 internal record PlaceHqDto

@@ -41,7 +41,7 @@ app.MapPost("/api/books", async (BookDto dto, LibraryDbContext db) => {
     }
     db.Books.Add(bookResult.Value);
     await db.SaveChangesAsync();
-    return Results.Created(string.Concat("/api/books/", bookResult.Value.ISBN), bookResult.Value);
+    return Results.Created(string.Concat("/api/books/", Uri.EscapeDataString(bookResult.Value.ISBN)), bookResult.Value);
 });
 
 app.MapGet("/api/patrons", async (LibraryDbContext db) => await db.Patrons.ToListAsync());
@@ -56,7 +56,7 @@ app.MapPost("/api/patrons", async (PatronDto dto, LibraryDbContext db) => {
     }
     db.Patrons.Add(patronResult.Value);
     await db.SaveChangesAsync();
-    return Results.Created(string.Concat("/api/patrons/", patronResult.Value.Email), patronResult.Value);
+    return Results.Created(string.Concat("/api/patrons/", Uri.EscapeDataString(patronResult.Value.Email)), patronResult.Value);
 });
 
 app.MapGet("/api/premiumpatrons", async (LibraryDbContext db) => await db.PremiumPatrons.ToListAsync());
@@ -71,7 +71,7 @@ app.MapPost("/api/premiumpatrons", async (PremiumPatronDto dto, LibraryDbContext
     }
     db.PremiumPatrons.Add(premiumPatronResult.Value);
     await db.SaveChangesAsync();
-    return Results.Created(string.Concat("/api/premiumpatrons/", premiumPatronResult.Value.Email), premiumPatronResult.Value);
+    return Results.Created(string.Concat("/api/premiumpatrons/", Uri.EscapeDataString(premiumPatronResult.Value.Email)), premiumPatronResult.Value);
 });
 
 app.MapGet("/api/patrons/{email}/loans", async (string email, LibraryDbContext db) => {

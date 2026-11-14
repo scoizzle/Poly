@@ -432,6 +432,48 @@ public static class PackOracleDomains {
         }
         """;
 
+    /// <summary>P-12a (#687 row P-12): natural keys of each route-key type (Text, Number, Date), a shadow-key
+    /// entity, and a keyed entity with a scalar of several types plus a stage for the body-member contract.
+    /// It stays out of <see cref="All"/>.</summary>
+    public static PackOracleDomain RouteKeys687 { get; } = new(
+        "RouteKeys687",
+        """
+        domain Keys
+        uses http
+        uses sqlite
+        uses temporal
+
+        Grade: enum { Low, High }
+
+        Customer: entity {
+          Email: Text unique
+        }
+
+        Ticket: entity {
+          Seq: Number unique
+        }
+
+        Event: entity {
+          Day: Date unique
+        }
+
+        Note: entity {
+          Body: Text
+        }
+
+        Profile: entity {
+          Handle: Text unique
+          Age: Number
+          Active: Boolean
+          Born: Date
+          Tier: Grade
+          Price: Decimal
+          Draft: stage { Publish: action { transition to Live } }
+          Live: stage {}
+        }
+        """,
+        "/api/customers");
+
     public static IReadOnlyList<PackOracleDomain> All { get; } =
         [Inventory588, Logistics559, Warehouse620, Inventory626, Desk658, Tally653, Fulfillment675];
 

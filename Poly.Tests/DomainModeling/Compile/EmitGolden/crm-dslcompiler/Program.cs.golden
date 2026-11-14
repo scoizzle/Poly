@@ -41,7 +41,7 @@ app.MapPost("/api/products", async (ProductDto dto, CrmDbContext db) => {
     }
     db.Products.Add(productResult.Value);
     await db.SaveChangesAsync();
-    return Results.Created(string.Concat("/api/products/", productResult.Value.Sku), productResult.Value);
+    return Results.Created(string.Concat("/api/products/", Uri.EscapeDataString(productResult.Value.Sku)), productResult.Value);
 });
 
 app.MapGet("/api/leads", async (CrmDbContext db) => await db.Leads.ToListAsync());
@@ -56,7 +56,7 @@ app.MapPost("/api/leads", async (LeadDto dto, CrmDbContext db) => {
     }
     db.Leads.Add(leadResult.Value);
     await db.SaveChangesAsync();
-    return Results.Created(string.Concat("/api/leads/", leadResult.Value.Email), leadResult.Value);
+    return Results.Created(string.Concat("/api/leads/", Uri.EscapeDataString(leadResult.Value.Email)), leadResult.Value);
 });
 
 app.MapGet("/api/accounts", async (CrmDbContext db) => await db.Accounts.ToListAsync());

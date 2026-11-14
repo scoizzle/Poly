@@ -93,7 +93,7 @@ public sealed class HttpFileGenerator {
             sb.AppendLine($"### List all {Pluralize(ToCamelCase(entity.Name))}");
             sb.AppendLine($"GET {_baseUrl}/api/{route}");
             sb.AppendLine();
-            sb.AppendLine($"### Get {ToCamelCase(entity.Name)} by {(store.KeyProperty?.Name ?? "id")}");
+            sb.AppendLine($"### Get {ToCamelCase(entity.Name)} by {(MinimalApiGenerator.RouteKeyFor(store).Property?.Name ?? "id")}");
             sb.AppendLine($"GET {_baseUrl}/api/{route}/{keyExample}");
             sb.AppendLine();
             if (MinimalApiGenerator.CreatesDirectly(_entities, entity)) {
@@ -185,8 +185,9 @@ public sealed class HttpFileGenerator {
         param.IsEntityRef ? Pascalize(param.Name) + "Id" : Pascalize(param.Name);
 
     private static string GetKeyExample(StorageEntity store) {
-        if (store.KeyProperty is null) return "1";
-        return store.KeyClrType switch {
+        var key = MinimalApiGenerator.RouteKeyFor(store);
+        if (key.Property is null) return "1";
+        return key.ClrType switch {
             "string" => "example-value",
             "long" or "int" => "42",
             "Guid" => "550e8400-e29b-41d4-a716-446655440000",

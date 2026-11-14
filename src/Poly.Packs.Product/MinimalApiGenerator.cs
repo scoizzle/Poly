@@ -353,12 +353,12 @@ public sealed partial class MinimalApiGenerator {
     /// </summary>
     private static Node LoadByRouteKey(string setName, StorageEntity store, Node keyExpr) {
         var set = new Member(new TypeReference("db"), setName);
-        if (store.KeyProperty is null)
+        if (RouteKeyFor(store).Property is not { } keyProperty)
             return new Await(new Invoke(new Member(set, "FindAsync"), keyExpr));
         var row = new Parameter("e");
         return new Await(new Invoke(
             new Member(set, "FirstOrDefaultAsync"),
-            new Lambda([row], new Equal(new Member(row, store.KeyProperty.Name), keyExpr))));
+            new Lambda([row], new Equal(new Member(row, keyProperty.Name), keyExpr))));
     }
 
     /// <summary><see cref="ClrTypeNode"/> with the nullable annotation (<c>T?</c>).</summary>

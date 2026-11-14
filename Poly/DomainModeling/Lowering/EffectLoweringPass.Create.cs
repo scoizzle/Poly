@@ -179,12 +179,8 @@ public sealed partial class EffectLoweringPass {
         if (inits.TryGetValue(slot.Name, out var binding)) {
             var lowered = LowerInitializerValue(target, slot.Name, binding.Expression);
             loweredInitializers.Add(lowered);
-            // Interim (L-08b): the VM's call matcher takes a Number for a `decimal` parameter
-            // through the implicit conversion, but not for the `decimal?` a Create slot is, so
-            // a written Decimal argument is cast to decimal. Removed when the matcher lifts
-            // implicit numeric conversions to Nullable<T> (SyntaxTypeCompatibilityAnalyzer.NullableValueAccepts).
             var value = slot.Shape == CreateSlotShape.Scalar && TargetTypeAdapter.IsDecimal(_domain, slot.Type.TypeName)
-                ? new TypeCast(lowered.Value, DomainToCSharpExporter.MapDomainTypeRef(slot.Type, _domain, _analysis))
+                ? WidenIntegralToDecimal(lowered.Value)
                 : lowered.Value;
             return (value, false);
         }
@@ -194,6 +190,23 @@ public sealed partial class EffectLoweringPass {
             _ => (TypedNullOf(slot.Type), true),
         };
     }
+
+    /// <summary>
+    /// Interim rule (L-08b; removed by T-21, the VM slice that lifts an implicit numeric
+    /// conversion to <c>Nullable&lt;T&gt;</c> in the call matcher): the widening C# inserts for an
+    /// integral argument to a <c>decimal?</c> Create slot, made explicit, because the VM's call
+    /// matcher does not lift <c>long</c> to <c>decimal?</c>. Only a statically integral value is
+    /// widened: an integral constant becomes a Decimal constant, a non-optional integral parameter
+    /// is cast to <c>decimal</c>; every other value passes unchanged. Removing it turns
+    /// <c>AbsenceParityTests.CreateIn_WhenDecimalInitializerZero_Agrees</c> red on the simulator.
+    /// </summary>
+    private static Node WidenIntegralToDecimal(Node value) => value switch {
+        Constant { Value: long integral } => new Constant((decimal)integral),
+        Constant { Value: int narrow } => new Constant((decimal)narrow),
+        Parameter { TypeReference: PrimitiveTypeReference { PrimitiveId: Poly.Introspection.PrimitiveType.Int64 or Poly.Introspection.PrimitiveType.Int32 } }
+            => new TypeCast(value, new PrimitiveTypeReference(Poly.Introspection.PrimitiveType.Decimal)),
+        _ => value,
+    };
 
     /// <summary>
     /// The typed null an omitted scalar slot passes — the same shape the navigation

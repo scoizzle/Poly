@@ -39,7 +39,12 @@ public sealed class UniqueConstraintCompiler : IConstraintCompiler {
         var created = request.ParameterOn("Create");
         var parameter = created ?? new Parameter(parameterName, text);
         var value = created is null ? parameter : DomainToCSharpExporter.CreateValueOf(request.Property, created);
-        Node portValue = IsString(parameter) ? value : new Invoke(new Member(value, "ToString"));
+        // The effective-value local holds the slot's own type (`T`, not `T?`); an Optional slot's
+        // parameter keeps its declared `T?`, whose port value is `.ToString()` as before (#611).
+        var valueType = created is not null && value is not Parameter && parameter.TypeReference is OptionalTypeReference optional
+            ? optional.InnerType
+            : parameter.TypeReference;
+        Node portValue = IsString(valueType) ? value : new Invoke(new Member(value, "ToString"));
 
         var methodName = "ExistsWith" + propertyName;
         var existsDb = new Parameter("db", portType);
@@ -365,10 +370,7 @@ public sealed class UniqueConstraintCompiler : IConstraintCompiler {
     private readonly record struct AssignMatch(
         string Property, Node Value, Node Destination, Invoke Failure);
 
-    private static bool IsString(Parameter value) => IsString(value.TypeReference);
-
     private static bool IsString(Node? type) => type switch {
-        OptionalTypeReference optional => IsString(optional.InnerType),
         ClrTypeReference clr => clr.RuntimeType == typeof(string),
         PrimitiveTypeReference primitive => primitive.PrimitiveId.GetClrType() == typeof(string),
         NamedTypeReference named => string.Equals(named.TypeName, "Text", StringComparison.Ordinal),

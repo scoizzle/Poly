@@ -2,6 +2,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
+using Poly.Compile;
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Evolution;
@@ -977,5 +978,89 @@ public partial class MinimalApiGeneratorTests {
         foreach (var p in Directory.GetFiles(AppContext.BaseDirectory, "*.dll"))
             AddFrom(p);
         return byName.Values.ToList();
+    }
+
+    // ── S-decl: the schema id in the generated host ─────────────────
+
+    private const string CounterHeader = "domain Counter\nuses http\nuses sqlite\n";
+
+    private const string CounterBody = """
+        Tally: entity {
+          Name: Text unique length(1, 20)
+          N: Number default(0) range(0, 1000000)
+          Bump: action { assign N to N + 1 }
+        }
+        """;
+
+    private static string HostProgram(string poly) {
+        var result = new PolyCompiler(ProductCatalog.Catalog, new SessionOptions(ProductCatalog.Catalog, ExtensionCatalog.ProductAuthoring))
+            .Compile(poly, "Counter.poly", CancellationToken.None);
+        if (!result.Succeeded)
+            throw new InvalidOperationException(string.Join("; ", result.Diagnostics.Where(d => d.IsError).Select(d => d.Message)));
+        return result.Files.Single(f => f.FileName == "Program.cs").Source;
+    }
+
+    private static int? SchemaIdOf(string poly) {
+        var match = System.Text.RegularExpressions.Regex.Match(HostProgram(poly), @"var schemaId = (\d+);");
+        return match.Success ? int.Parse(match.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture) : null;
+    }
+
+    [Test]
+    public async Task SchemaId_TwoGenerations_AreIdentical_AndPositive() {
+        var first = SchemaIdOf(CounterHeader + CounterBody);
+        var second = SchemaIdOf(CounterHeader + CounterBody);
+
+        await Assert.That(first).IsNotNull();
+        await Assert.That(first).IsEqualTo(second);
+        await Assert.That(first!.Value).IsGreaterThan(0);
+    }
+
+    [Test]
+    [Arguments("a required property is added", "Tally: entity {\n  Name: Text unique length(1, 20)\n  N: Number default(0) range(0, 1000000)\n  Label: Text length(1, 10)\n  Bump: action { assign N to N + 1 }\n}")]
+    [Arguments("a property is renamed", "Tally: entity {\n  Name: Text unique length(1, 20)\n  Count: Number default(0) range(0, 1000000)\n  Bump: action { assign Count to Count + 1 }\n}")]
+    [Arguments("an entity is added", CounterBody + "\nOther: entity {\n  Code: Text length(1, 5)\n}")]
+    [Arguments("a Number becomes optional", "Tally: entity {\n  Name: Text unique length(1, 20)\n  N: Number optional range(0, 1000000)\n  Bump: action { assign N to N + 1 }\n}")]
+    [Arguments("a unique index is dropped", "Tally: entity {\n  Name: Text length(1, 20)\n  N: Number default(0) range(0, 1000000)\n  Bump: action { assign N to N + 1 }\n}")]
+    [Arguments("a length bound changes", "Tally: entity {\n  Name: Text unique length(1, 30)\n  N: Number default(0) range(0, 1000000)\n  Bump: action { assign N to N + 1 }\n}")]
+    [Arguments("a link is added", CounterBody + "\nOwner: entity {\n  Code: Text length(1, 5)\n  tallies: many Tally\n}")]
+    public async Task SchemaId_SchemaChange_Differs(string change, string body) {
+        var baseline = SchemaIdOf(CounterHeader + CounterBody);
+        var changed = SchemaIdOf(CounterHeader + body);
+
+        await Assert.That(changed).IsNotNull().Because(change);
+        await Assert.That(changed).IsNotEqualTo(baseline).Because(change);
+    }
+
+    [Test]
+    [Arguments("an action body", "Tally: entity {\n  Name: Text unique length(1, 20)\n  N: Number default(0) range(0, 1000000)\n  Bump: action { assign N to N + 2 }\n}")]
+    [Arguments("an action is added", "Tally: entity {\n  Name: Text unique length(1, 20)\n  N: Number default(0) range(0, 1000000)\n  Bump: action { assign N to N + 1 }\n  Reset: action { assign N to 0 }\n}")]
+    [Arguments("a policy is added", "Tally: entity {\n  Name: Text unique length(1, 20)\n  N: Number default(0) range(0, 1000000)\n  Positive: policy { N > 0 }\n  Bump: action { assign N to N + 1 }\n}")]
+    [Arguments("a comment", "// a note\nTally: entity {\n  // another\n  Name: Text unique length(1, 20)\n  N: Number default(0) range(0, 1000000)\n  Bump: action { assign N to N + 1 }\n}")]
+    public async Task SchemaId_NonSchemaChange_Unchanged(string change, string body) {
+        var baseline = SchemaIdOf(CounterHeader + CounterBody);
+        var changed = SchemaIdOf(CounterHeader + body);
+
+        await Assert.That(changed).IsEqualTo(baseline).Because(change);
+    }
+
+    [Test]
+    public async Task SchemaId_SqliteHost_CreatedSetsIt_ExistingIsCompared_AndNamesTheFile() {
+        var program = HostProgram(CounterHeader + CounterBody);
+
+        await Assert.That(program).Contains("var created = await db.Database.EnsureCreatedAsync();");
+        await Assert.That(program).Contains("PRAGMA user_version");
+        await Assert.That(program).Contains("different version of the model");
+        await Assert.That(program.IndexOf("different version of the model", StringComparison.Ordinal))
+            .IsLessThan(program.IndexOf("SeedAsync(db)", StringComparison.Ordinal));
+    }
+
+    [Test]
+    [Arguments("uses persistence")]
+    [Arguments("uses sqlserver")]
+    public async Task SchemaId_NonSqliteHost_HasNoCheck(string store) {
+        var program = HostProgram("domain Counter\nuses http\n" + store + "\n" + CounterBody);
+
+        await Assert.That(program).DoesNotContain("user_version");
+        await Assert.That(program).DoesNotContain("schemaId");
     }
 }

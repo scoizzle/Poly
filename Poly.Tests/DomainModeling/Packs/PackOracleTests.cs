@@ -249,6 +249,137 @@ public class PackOracleTests {
         await Assert.That(second.DatabasePath).IsNotEqualTo(firstDb);
     }
 
+    private const string CounterTally = """
+        Tally: entity {
+          Name: Text unique length(1, 20)
+          N: Number default(0) range(0, 1000000)
+          Bump: action { assign N to N + 1 }
+        }
+        """;
+
+    private static PackOracleDomain Counter(string name, string body) =>
+        new(name, "domain Counter\nuses http\nuses sqlite\n" + body, "/api/tallies");
+
+    private static async Task<string> WithRunDirectory(Func<string, Task> body) {
+        var directory = Path.Combine(Path.GetTempPath(), "poly-schema-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try {
+            await body(directory);
+        }
+        finally {
+            Directory.Delete(directory, recursive: true);
+        }
+        return directory;
+    }
+
+    private static int ReadUserVersion(string database) {
+        using var connection = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={database};Pooling=False");
+        connection.Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = "PRAGMA user_version";
+        return Convert.ToInt32(command.ExecuteScalar(), System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    private static async Task PostTally(PackOracle oracle, string json) {
+        using var post = await oracle.Client.PostAsync("/api/tallies", new StringContent(json, Encoding.UTF8, "application/json"));
+        await Assert.That((int)post.StatusCode).IsEqualTo(201);
+    }
+
+    private static async Task AssertRefusedAtStartup(string directory, PackOracleDomain model, params string[] expected) {
+        PackOracleBootException? failure = null;
+        try {
+            await using var unexpected = await PackOracle.BootAsync(model, options: new PackOracleBootOptions { RunDirectory = directory });
+        }
+        catch (PackOracleBootException refused) {
+            failure = refused;
+        }
+        await Assert.That(failure).IsNotNull().Because("the app must exit at startup, not listen");
+        await Assert.That(failure!.ExitCode).IsNotNull();
+        await Assert.That(failure.ExitCode).IsNotEqualTo(0);
+        foreach (var text in expected)
+            await Assert.That(failure.ErrorTail).Contains(text);
+        await Assert.That(failure.ErrorTail.Split('\n').Count(l => l.Contains("counter.db", StringComparison.Ordinal))).IsEqualTo(1);
+    }
+
+    /// <summary>S-decl: a database made by a different schema fails at startup, not on the first request.
+    /// Each change here makes the old file unusable (a column, a rename, a table).</summary>
+    [Test]
+    [Timeout(300_000)]
+    [Arguments("required property added", "Tally: entity {\n  Name: Text unique length(1, 20)\n  N: Number default(0) range(0, 1000000)\n  Label: Text length(1, 10)\n  Bump: action { assign N to N + 1 }\n}")]
+    [Arguments("property renamed", "Tally: entity {\n  Name: Text unique length(1, 20)\n  Count: Number default(0) range(0, 1000000)\n  Bump: action { assign Count to Count + 1 }\n}")]
+    [Arguments("entity added", CounterTally + "\nOther: entity {\n  Code: Text length(1, 5)\n}")]
+    public async Task Boot_OldSchemaDatabase_ExitsWithClearMessage(string change, string changedBody, CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await WithRunDirectory(async directory => {
+            await using (var first = await PackOracle.BootAsync(
+                Counter("SchemaA", CounterTally), options: new PackOracleBootOptions { RunDirectory = directory })) {
+                await PostTally(first, """{"Name":"t1"}""");
+            }
+            var database = Path.Combine(directory, "counter.db");
+            var before = ReadUserVersion(database);
+
+            await AssertRefusedAtStartup(
+                directory, Counter("SchemaB", changedBody),
+                "different version of the model", "counter.db");
+
+            await Assert.That(before).IsNotEqualTo(0);
+            await Assert.That(ReadUserVersion(database)).IsEqualTo(before);
+            _ = change;
+        });
+    }
+
+    [Test]
+    [Timeout(300_000)]
+    public async Task Boot_SameSchema_Twice_Serves(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await WithRunDirectory(async directory => {
+            var options = new PackOracleBootOptions { RunDirectory = directory };
+            await using (var first = await PackOracle.BootAsync(Counter("SchemaA", CounterTally), options: options))
+                await PostTally(first, """{"Name":"t1"}""");
+
+            await using var second = await PackOracle.BootAsync(Counter("SchemaA", CounterTally), options: options);
+            using var seen = JsonDocument.Parse(await second.Client.GetStringAsync("/api/tallies"));
+            await Assert.That(NamesOf(seen)).Contains("t1");
+            await PostTally(second, """{"Name":"t2"}""");
+        });
+    }
+
+    [Test]
+    [Timeout(300_000)]
+    public async Task Boot_ActionBodyChanged_SameSchema_Serves(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await WithRunDirectory(async directory => {
+            var options = new PackOracleBootOptions { RunDirectory = directory };
+            await using (var first = await PackOracle.BootAsync(Counter("SchemaA", CounterTally), options: options))
+                await PostTally(first, """{"Name":"t1"}""");
+
+            var edited = CounterTally.Replace("N + 1", "N + 2", StringComparison.Ordinal);
+            await using var second = await PackOracle.BootAsync(Counter("SchemaB", edited), options: options);
+            using var seen = JsonDocument.Parse(await second.Client.GetStringAsync("/api/tallies"));
+            await Assert.That(NamesOf(seen)).Contains("t1");
+            await PostTally(second, """{"Name":"t2"}""");
+        });
+    }
+
+    /// <summary>A file with tables and <c>user_version = 0</c> (made before this slice, or by another tool) cannot be
+    /// vouched for, so it is a different schema: fail closed.</summary>
+    [Test]
+    [Timeout(300_000)]
+    public async Task Boot_DatabaseWithTablesAndNoSchemaId_IsRefused(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await WithRunDirectory(async directory => {
+            var database = Path.Combine(directory, "counter.db");
+            using (var connection = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={database};Pooling=False")) {
+                connection.Open();
+                using var command = connection.CreateCommand();
+                command.CommandText = "CREATE TABLE Tallies (Id INTEGER PRIMARY KEY, name TEXT, n INTEGER)";
+                command.ExecuteNonQuery();
+            }
+
+            await AssertRefusedAtStartup(directory, Counter("SchemaA", CounterTally), "no schema id", "different version of the model", "counter.db");
+        });
+    }
+
     private static List<string> NamesOf(JsonDocument array) =>
         array.RootElement.EnumerateArray()
             .Select(e => e.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "")

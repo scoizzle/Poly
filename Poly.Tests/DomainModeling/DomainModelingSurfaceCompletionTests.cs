@@ -166,7 +166,7 @@ public class DomainModelingSurfaceCompletionTests {
             }
             Child: entity {
               Name: Text
-              parent: Parent
+              parent: Parent optional
               Draft: stage {
                 Activate: action { transition to Active }
               }
@@ -227,7 +227,7 @@ public class DomainModelingSurfaceCompletionTests {
               }
             }
             Item: entity {
-              board: Board via items
+              board: Board via items optional
               Draft: stage {
                 Prep: action { transition to Ready }
                 Finish: action { transition to Done }

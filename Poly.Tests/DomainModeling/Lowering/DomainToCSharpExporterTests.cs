@@ -3374,7 +3374,10 @@ public class DomainToCSharpExporterTests {
 
     [Test]
     public async Task Patron_HasOverdueLoans_SimulateAndGeneratedCSharp_Agree() {
-        var (domain, analysis) = ParseAndAnalyze(LibraryCheckoutDsl);
+        // Both hosts create the loans before their patron and link them through the collection, so the
+        // borrower is linked late (L-15a: `optional` in this variant). Every loan is created with a book.
+        var (domain, analysis) = ParseAndAnalyze(LibraryCheckoutDsl.Replace(
+            "  borrower: Patron\n", "  borrower: Patron optional\n", StringComparison.Ordinal));
         var exec = ModuleExec.For(domain);
         await Assert.That(analysis.HasErrors).IsFalse();
 
@@ -3389,9 +3392,17 @@ public class DomainToCSharpExporterTests {
             return p;
         }
 
+        var book = exec.Create("Book", new Dictionary<string, object?> {
+            ["Title"] = "T",
+            ["Author"] = "A",
+            ["ISBN"] = "1234567890",
+            ["Pages"] = 10L,
+            ["Genre"] = "Fiction"
+        }).Instance!;
         ModuleInstance NewLoan(string status) {
             var loan = exec.Create("Loan", new Dictionary<string, object?> {
-                ["Status"] = status
+                ["Status"] = status,
+                ["book"] = book
             }).Instance!;
             return loan;
         }
@@ -3414,8 +3425,11 @@ public class DomainToCSharpExporterTests {
         var patronType = asm.GetType("Patron")!;
         var loanType = asm.GetType("Loan")!;
 
+        var printedBook = ExportedCSharp.CreateEntity(asm.GetType("Book")!,
+            ("title", "T"), ("author", "A"), ("isbn", "1234567890"), ("pages", 10L),
+            ("genre", Enum.Parse(asm.GetType("Genre")!, "Fiction")));
         object MakeLoan(string status) =>
-            ExportedCSharp.CreateEntity(loanType, ("status", status));
+            ExportedCSharp.CreateEntity(loanType, ("status", status), ("book", printedBook));
 
         object LoanList(params object[] loans) {
             var arr = Array.CreateInstance(loanType, loans.Length);

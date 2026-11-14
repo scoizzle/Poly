@@ -236,7 +236,7 @@ public class OwnershipAggregateAnalysisTests {
             }
             B: entity {
               Name: Text
-              a: A
+              a: A optional
             }
             """);
 

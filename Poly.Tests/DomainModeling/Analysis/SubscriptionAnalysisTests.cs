@@ -186,7 +186,7 @@ public class SubscriptionAnalysisTests {
         // S-13a: the subscription's relationship states its explicit inverse (via) on the other end.
         var notified = new Relationship("NotifiedBy",
             new DomainTypeReference("Customer"), new DomainTypeReference("Order"),
-            RelationshipCardinality.OneToOne, []) { Inverse = "Notifies" };
+            RelationshipCardinality.OneToOne, []) { Inverse = "Notifies", IsOptional = true };
         var targetStage = new Stage("Active", [], [], [], []);
         var target = MakeEntity("Customer", targetStage);
         var stage = MakeStage("Pending");
@@ -428,7 +428,7 @@ public class SubscriptionAnalysisTests {
 
         var rel = new Relationship("Tracks",
             new DomainTypeReference("Tracker"), new DomainTypeReference("Order"),
-            RelationshipCardinality.OneToOne, []);
+            RelationshipCardinality.OneToOne, []) { IsOptional = true };
         // S-13a: the subscription's relationship states its explicit inverse (via) on the other end.
         var tracked = new Relationship("TrackedBy",
             new DomainTypeReference("Order"), new DomainTypeReference("Tracker"),
@@ -483,7 +483,7 @@ public class SubscriptionAnalysisTests {
 
         var rel = new Relationship("Tracks",
             new DomainTypeReference("Tracker"), new DomainTypeReference("Order"),
-            RelationshipCardinality.OneToOne, []);
+            RelationshipCardinality.OneToOne, []) { IsOptional = true };
         // S-13a: the subscription's relationship states its explicit inverse (via) on the other end.
         var tracked = new Relationship("TrackedBy",
             new DomainTypeReference("Order"), new DomainTypeReference("Tracker"),

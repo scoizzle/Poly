@@ -385,7 +385,7 @@ public class MinimalApiGeneratorTests {
             domain T
             Doctor: entity {
               Name: Text unique
-              schedule: one Schedule
+              schedule: one Schedule optional
             }
             Schedule: entity {
               Day: Text

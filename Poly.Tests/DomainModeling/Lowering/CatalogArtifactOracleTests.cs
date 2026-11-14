@@ -182,18 +182,22 @@ public class CatalogArtifactOracleTests {
             .Where(t => t.Name == entityName)
             .SelectMany(t => t.Methods ?? []);
 
-    // Creates one instance per entity (two passes, so entity-typed values find a target)
-    // and invokes every action on it. Failures are expected and ignored: the executor
-    // compiles the method before it runs it, and the compiled body is what is read.
+    // Creates one instance per entity (repeated passes, so entity-typed values and required
+    // to-one links find a target) and invokes every action on it. Failures are expected and
+    // ignored: the executor compiles the method before it runs it, and the compiled body is
+    // what is read.
     static void Exercise(ModuleInstanceExecutor executor, Domain domain) {
         var entities = domain.Types.OfType<Entity>().ToList();
         var made = new Dictionary<string, ModuleInstance>(StringComparer.Ordinal);
-        for (var pass = 0; pass < 2; pass++) {
+        for (var pass = 0; pass < Math.Max(2, entities.Count); pass++) {
             foreach (var entity in entities) {
                 if (made.ContainsKey(entity.Name))
                     continue;
                 var values = entity.Properties.ToDictionary(
                     p => p.Name, p => Synthesize(domain, made, p.Type.TypeName), StringComparer.OrdinalIgnoreCase);
+                // L-15a: a required to-one is passed, as an entity-typed property is.
+                foreach (var nav in entity.Navigations.Where(n => n.IsRequiredToOne()))
+                    values[nav.Name] = made.GetValueOrDefault(nav.Target.TypeName);
                 try {
                     if (executor.Create(entity.Name, values) is { Succeeded: true, Instance: { } instance })
                         made[entity.Name] = instance;

@@ -93,13 +93,15 @@ public class CrmDogfoodTests {
             ["Name"] = "Acme",
             ["Industry"] = "Technology"
         }).Instance!;
-        var proposeUnlinked = exec.Create("Opportunity", new Dictionary<string, object?> {
+        // L-15a: `account` is a required to-one, so an Opportunity without one is refused at create
+        // (before, it was created and Propose was blocked by HasAccount).
+        var orphan = exec.Create("Opportunity", new Dictionary<string, object?> {
             ["Title"] = "Orphan",
             ["Amount"] = 1000m,
-        }).Instance!;
-        var blocked = exec.Invoke(proposeUnlinked, "Propose");
-        await Assert.That(blocked.Succeeded).IsFalse();
-        await Assert.That(blocked.Error).Contains("HasAccount");
+        });
+        await Assert.That(orphan.Succeeded).IsFalse();
+        await Assert.That(orphan.Failure!.Kind).IsEqualTo(Poly.Runtime.DomainFailureKind.Required);
+        await Assert.That(orphan.Failure.ElementPath).IsEqualTo("Opportunity.account");
 
         var contact = exec.Invoke(account, "AddContact", new Dictionary<string, object?> {
             ["name"] = "Ada",

@@ -222,7 +222,7 @@ public class PipelineMergeMetadataTests {
             }
             C: entity {
               name: Text
-              a: A
+              a: A optional
             }
             """);
         var analysis = DomainModelAnalyzer.Analyze(domain);

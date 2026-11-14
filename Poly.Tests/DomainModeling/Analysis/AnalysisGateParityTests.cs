@@ -160,7 +160,7 @@ public class AnalysisGateParityTests {
           Opt: Number optional
           U1: Uuid
           U2: Uuid
-          peer: Other
+          peer: Other optional
           MEMBERS
         }
         """;
@@ -551,7 +551,7 @@ public class AnalysisGateParityTests {
               Gap: Duration optional
             }
             Job: entity {
-              advisor: Person
+              advisor: Person optional
               OutD: Date optional
               {{members}}
             }

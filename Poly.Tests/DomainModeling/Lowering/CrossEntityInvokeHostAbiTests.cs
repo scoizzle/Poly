@@ -22,7 +22,7 @@ public class CrossEntityInvokeHostAbiTests {
         ], [], []);
         var rel = new Relationship("ServiceCall",
             new DomainTypeReference("Orchestrator"), new DomainTypeReference("Service"),
-            RelationshipCardinality.OneToOne, []);
+            RelationshipCardinality.OneToOne, []) { IsOptional = true };
         var domain = ValidDomain.Create("Test", [orchestrator, service], [rel]);
         return (orchestrator, service, domain);
     }

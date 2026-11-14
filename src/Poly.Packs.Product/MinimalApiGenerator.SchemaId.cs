@@ -74,11 +74,11 @@ public sealed partial class MinimalApiGenerator {
 
         var noId = new InterpolatedString(
             ["The database '", "' has tables but no schema id (it was created before schema ids existed, or by another tool), "
-                + "so it is treated as a different version of the model; delete it or point the app at a new one."],
+                + "so it is treated as a different version of the model; delete it, or run the app from another directory."],
             [file]);
         var otherId = new InterpolatedString(
             ["The database '", "' was created by a different version of the model (it has schema id ", ", this build has ",
-                "); delete it or point the app at a new one."],
+                "); delete it, or run the app from another directory."],
             [file, found, current]);
 
         var stamp = new Await(new Invoke(new Member(database, "ExecuteSqlRawAsync"),

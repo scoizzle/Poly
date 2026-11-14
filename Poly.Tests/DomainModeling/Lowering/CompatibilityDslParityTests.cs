@@ -96,21 +96,18 @@ public class CompatibilityDslParityTests {
     /// Date ± Decimal passes the domain analyzer (its temporal offset permission, T-10), and the domain lowering emits
     /// <c>Start.AddDays((Int32)Days)</c>: no Date-with-Decimal operator node reaches the lowered compatibility analysis.
     /// Pinned as each host behaves today, so T-18 is shown not to change it. Subtraction lowers to
-    /// <c>AddDays((Int32)-Days)</c>: the interpreter throws on it while the printed C# runs. That is a known-wrong
-    /// result, pinned as it is and not as it should be: the VM's decimal negation (issue 832, row T-21) gives -1 for
-    /// <c>-2m</c> and throws on <c>(int)-2m</c>.
+    /// <c>AddDays((Int32)-Days)</c>; both hosts run it (until T-21a the VM negated the decimal's handle, not the decimal).
     /// </summary>
     [Test]
     [Arguments("Date", "+", "simulate: success=True; exception=none; message=; Due=03/01/2024 | printed: success=True; exception=none; message=; Due=03/01/2024")]
-    [Arguments("Date", "-", "simulate: success=False; exception=IndexOutOfRangeException; message=Index was outside the bounds of the array.; Due=<state not read> | printed: success=True; exception=none; message=; Due=02/26/2024")]
+    [Arguments("Date", "-", "simulate: success=True; exception=none; message=; Due=02/26/2024 | printed: success=True; exception=none; message=; Due=02/26/2024")]
     public async Task DateOffsetByDecimal_BothHosts_AsToday(string type, string op, string expected) {
         var culture = CultureInfo.CurrentCulture;
         CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
         try {
             object start = type == "Date" ? new DateOnly(2024, 2, 28) : new DateTime(2024, 2, 28, 10, 0, 0);
             object due = type == "Date" ? new DateOnly(2000, 1, 1) : new DateTime(2000, 1, 1);
-            var scenario = ParityScenario.FromDsl(DateOffset(type, op), $"T18Offset{type}{(op == "+" ? "Add" : "Sub")}",
-                recordedExceptions: ["IndexOutOfRangeException"]);
+            var scenario = ParityScenario.FromDsl(DateOffset(type, op), $"T18Offset{type}{(op == "+" ? "Add" : "Sub")}");
             var (simulate, printed) = scenario.Run(side => {
                 side.Create("Plan", ("Start", start), ("Days", 2m), ("Due", due));
                 side.Invoke("Shift");
@@ -224,6 +221,40 @@ public class CompatibilityDslParityTests {
         finally {
             CultureInfo.CurrentCulture = culture;
         }
+    }
+
+    const string OptionalFlag = """
+        domain Opt
+        Task: entity {
+          Done: Boolean
+          Flag: Boolean optional
+          Out: Boolean optional
+          Ok: policy { Done and Flag }
+          Copy: action { assign Out to Done and Flag }
+          Check: action require Ok { assign Out to true }
+        }
+        """;
+
+    /// <summary>
+    /// Issue 862: an optional Boolean beside <c>and</c> is read as <c>Flag == true</c> (the owner's ruling), so a stored false
+    /// blocks the guard and absent is not true. Before T-21a the interpreter read the optional's presence and a stored false
+    /// let <c>Check</c> through. The printed C# does not compile (<c>&amp;&amp;</c> on bool and bool?, CS0019) until row T-06
+    /// lowers the explicit <c>== true</c>, so this runs on the interpreter only.
+    /// </summary>
+    [Test]
+    [Arguments(true, "Copy: success=True; Out=True | Check: success=True; guard=")]
+    [Arguments(false, "Copy: success=True; Out=False | Check: success=False; guard=Ok")]
+    [Arguments(null, "Copy: success=True; Out=False | Check: success=False; guard=Ok")]
+    public async Task OptionalBooleanBesideAnd_IsReadAsEqualsTrue_Interpreter(bool? flag, string expected) {
+        var domain = EvolvedDomain.FromDsl(OptionalFlag).Domain;
+        RuntimeAnalysisCache.Bind(domain, ParitySessions.Create(domain.Extensions.Count > 0 ? domain.Extensions : ExtensionCatalog.ProductAuthoring));
+        var side = new SimulateSide(domain);
+        side.Create("Task", flag is null ? [("Done", true)] : [("Done", true), ("Flag", flag)]);
+        side.Invoke("Copy");
+        side.Invoke("Check");
+        var (copy, check) = (side.Outcomes[1], side.Outcomes[2]);
+        await Assert.That($"Copy: success={copy.Success}; Out={copy.State["Out"]} | Check: success={check.Success}; guard={check.FailureGuard}")
+            .IsEqualTo(expected);
     }
 
     /// <summary>A step that threw reports no state (the harness default), so its Due is named as not read.</summary>

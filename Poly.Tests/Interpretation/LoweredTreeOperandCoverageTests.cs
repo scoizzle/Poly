@@ -268,6 +268,17 @@ public class LoweredTreeOperandCoverageTests {
         public static List<long> Items { get; } = [];
     }
 
+    static void DelegateTarget() { }
+
+    // Two distinct delegates with the same target and method. C# binds `Action == Delegate` to reference equality
+    // (the (object, object) operator), so these are C#'s own answers, bound by Roslyn here.
+    static readonly Action DelegateLeft = DelegateTarget;
+    static readonly Delegate DelegateRight = new Action(DelegateTarget);
+#pragma warning disable CS0252, CS0253
+    static readonly bool DelegateEqualAsCSharp = DelegateLeft == DelegateRight;
+    static readonly bool DelegateNotEqualAsCSharp = DelegateLeft != DelegateRight;
+#pragma warning restore CS0252, CS0253
+
     /// <summary>
     /// The cells of the lowered analysis's interim rules (<see cref="KnownInterimRules"/>), each with C#'s expectation. They are
     /// not operand-agreement rows: the gap ledger does not see them, the interim list does.
@@ -288,6 +299,8 @@ public class LoweredTreeOperandCoverageTests {
         Row(typeof(Add), "NullWithNumber", Rejects, () => Wrap(new Add(new Constant(null), new Constant(1))), []),
         Row(typeof(UnaryMinus), "Null", Rejects, () => Wrap(new UnaryMinus(new Constant(null))), []),
         Row(typeof(Add), "TextWithUnresolved", Rejects, () => Wrap(new Add(new Constant("a"), new Default(null))), []),
+        Row(typeof(Equal), "DelegateBesideDelegateSameMethod", Accepts, () => Wrap(new Equal(P<Action>("a"), P<Delegate>("b"))), [DelegateLeft, DelegateRight], typeof(bool), DelegateEqualAsCSharp),
+        Row(typeof(NotEqual), "DelegateBesideDelegateSameMethod", Accepts, () => Wrap(new NotEqual(P<Action>("a"), P<Delegate>("b"))), [DelegateLeft, DelegateRight], typeof(bool), DelegateNotEqualAsCSharp),
         Row(typeof(BitwiseAnd), "UInt32WithIntConstant", Accepts, () => Wrap(new BitwiseAnd(P<uint>("a"), new Constant(1))), [uint.MaxValue], typeof(long), 1L),
     ];
 
@@ -544,6 +557,22 @@ public class LoweredTreeOperandCoverageTests {
         var keys = KnownInterimRules.All.Select(static c => (c.Kind, c.Case)).ToList();
         await Assert.That(keys.SequenceEqual(keys.OrderBy(static k => k.Kind, StringComparer.Ordinal).ThenBy(static k => k.Case, StringComparer.Ordinal))).IsTrue();
         await Assert.That(KnownInterimRules.All.All(static c => System.Text.RegularExpressions.Regex.IsMatch(c.Owner, "^T-[0-9]+[a-z]?$"))).IsTrue();
+    }
+
+    /// <summary>
+    /// The two delegate interim cells (owner T-21b) answer as measured: C# binds reference equality there (Roslyn's
+    /// answers, <see cref="DelegateEqualAsCSharp"/>: <c>==</c> False, <c>!=</c> True) and the VM answers the mirror, the
+    /// delegates' value equality (<c>==</c> True, <c>!=</c> False).
+    /// </summary>
+    [Test]
+    public async Task DelegateInterimCells_AnswerTheMirrorOfCSharp_AsMeasured() {
+        await Assert.That(DelegateEqualAsCSharp).IsFalse();
+        await Assert.That(DelegateNotEqualAsCSharp).IsTrue();
+        foreach (var (kind, csharp) in new[] { (typeof(Equal), DelegateEqualAsCSharp), (typeof(NotEqual), DelegateNotEqualAsCSharp) }) {
+            var row = InterimRows.Single(r => r.Kind == kind && r.Name == "DelegateBesideDelegateSameMethod");
+            using var exec = Interpreter.Execute(Interpreter.Compile(row.Build()), row.Args);
+            await Assert.That(exec.GetValue<bool>()).IsEqualTo(!csharp);
+        }
     }
 
     [Test]

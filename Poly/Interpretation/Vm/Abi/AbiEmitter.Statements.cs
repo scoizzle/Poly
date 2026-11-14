@@ -28,14 +28,16 @@ public static partial class AbiEmitter {
                 ? clrElem.RuntimeType
                 : null;
             bool valueIsIeee = RingCodec.IsIeee(a.Value, ctx.Analysis);
+            // A null literal has no type of its own: it is the element type's null.
+            var valueClr = a.Value is Constant { Value: null } ? elemType ?? typeof(object) : ctx.ClrTypeOf(a.Value);
             Expression store;
             if (cachedStore)
                 store = RingCodec.CachedElementWrite(
-                    cachedArray!, idxSlot.Read, valSlot.Read, elemType, valueIsIeee);
+                    cachedArray!, idxSlot.Read, valSlot.Read, elemType, valueClr, valueIsIeee, ctx.HeapLocal);
             else
                 store = RingCodec.ArrayElementWrite(
                     ctx.HeapLocal, arrSlot!.Value.Read, idxSlot.Read, valSlot.Read,
-                    elemType, valueIsIeee);
+                    elemType, valueClr, valueIsIeee);
 
             var storeSlot = cachedStore ? idxSlot : arrSlot!.Value;
             ctx.RingDepth = storeSlot.RingSlot + 1;
@@ -982,7 +984,7 @@ public static partial class AbiEmitter {
 
     /// <summary>
     /// ForEachLoop: walk a heap <see cref="System.Collections.IEnumerable"/>,
-    /// bind each Current onto the loop variable via <c>BoxToAbi</c>, run the body.
+    /// bind each Current onto the loop variable as a word of its element type, run the body.
     /// Null / non-enumerable fails loud. Enumerator is disposed when IDisposable.
     /// </summary>
     private static Expression EmitForEachLoop(ForEachLoop fel, Context ctx) {
@@ -1036,25 +1038,26 @@ public static partial class AbiEmitter {
     }
 
     /// <summary>The ring value stored into the loop variable each iteration. Without a declared
-    /// type the element keeps its own representation (<see cref="BoxToAbiInfo"/>); with one, the
+    /// type the element is a word of the collection's element type; with one, the
     /// element is unboxed to its element type, converted to the declared type, and encoded by that
     /// type's representation — a value widened into an IEEE slot would otherwise be mis-read, and a
     /// value stored where the declared type is a reference must become a heap handle.</summary>
     private static Expression ForEachElementValue(ForEachLoop fel, Expression enumerator, Context ctx) {
         var current = Property(enumerator, EnumeratorCurrent);
+        var elementClr = ctx.Analysis?.GetMetadata<ForEachElementTypeMetadata>(fel)?.ElementType?.GetRuntimeType();
+        // A collection with no generic element type enumerates objects, as C#'s foreach over IEnumerable does.
         if (fel.DeclaredType is null)
-            return Call(null, BoxToAbiInfo, ctx.HeapLocal, current);
+            return RingCodec.WriteAs(current, elementClr ?? typeof(object), ctx.HeapLocal);
 
         var declaredClr = ctx.Analysis?.GetResolvedType(fel.DeclaredType)?.GetRuntimeType();
         if (declaredClr is null)
             throw new InvalidOperationException(
                 $"VM compile rejected: cannot resolve the foreach declared type '{fel.DeclaredType}'.");
-        var elementClr = ctx.Analysis?.GetMetadata<ForEachElementTypeMetadata>(fel)?.ElementType?.GetRuntimeType();
         if (elementClr is null)
             throw new InvalidOperationException(
                 $"VM compile rejected: cannot resolve the element type of the foreach collection '{fel.Collection}'.");
 
-        var slot = Call(null, BoxToAbiInfo, ctx.HeapLocal, current);
+        var slot = RingCodec.WriteAs(current, elementClr, ctx.HeapLocal);
         if (!IsScalarSlot(elementClr) || !IsScalarSlot(declaredClr))
             throw new InvalidOperationException(
                 $"VM compile rejected: cannot convert each '{elementClr.Name}' element to the foreach loop type '{declaredClr.Name}'.");

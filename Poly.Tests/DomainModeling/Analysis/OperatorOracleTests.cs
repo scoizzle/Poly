@@ -552,10 +552,10 @@ public class OperatorOracleTests {
         new(OracleKind.AbiDivergesFromTree, "Text", Ordering, "Text", "executes an undefined cell", "T-07 (#631 ordering legality: TextAndBooleanOrderingRule)", 4, "04c3d80b8bd14c13"),
         // T-22a adds 50: the shift-count policy cells of a small integer or char left, whose left converts to Int32 as for an int count.
         new(OracleKind.AbiDivergesFromTree, "*", "*", "*", "unstated conversion", "T-21 (T-04 and Lower state the conversion node; the emitter stops converting); T-18b adds 520 native-integer cells (T-18b lock amendment 7: 'its unstated conversion is then T-21's ledger line'); T-22a adds the 50 shift-count policy cells of a small left", 2299, "0e5ea4c8443835bf"),
-        // Wrong values (issue 832; -Decimal and -Duration give -1). T-22a states the bitwise and shift type, so the 255 type-only and
+        // Wrong values (issue 832; T-21a fixed -Decimal and -Duration). T-22a states the bitwise and shift type, so the 255 type-only and
         // 8 type-and-value cells of the emitter's own promotion are gone: the 8 keep their value line, and 8 shift-count policy cells
         // of a uint or ulong left join it with the value master computed (the uint and ulong shift of an int count is on this line too).
-        new(OracleKind.AbiDivergesFromTree, "*", "*", "*", "^value S", "T-21 (issue 832: wrong values)", 131, "f28a43b234dbae1f")
+        new(OracleKind.AbiDivergesFromTree, "*", "*", "*", "^value S", "T-21 (issue 832: wrong values)", 129, "af9015153602991d")
     ];
 
     private static readonly LedgerRule[] RejectedDefinedRules = [];
@@ -588,7 +588,7 @@ public class OperatorOracleTests {
 
     [Test]
     public async Task AbiDivergesFromTree_EveryDivergenceIsOwned_AndNoEntryIsStale() =>
-        await AssertOwned(OracleKind.AbiDivergesFromTree, AbiRules, 2482);
+        await AssertOwned(OracleKind.AbiDivergesFromTree, AbiRules, 2480);
 
     [Test]
     public async Task AbiRejectsDefined_EveryDivergenceIsOwned_AndNoEntryIsStale() =>
@@ -608,7 +608,7 @@ public class OperatorOracleTests {
 
     /// <summary>T-22a moved these (its PR lists each cell): 1059 to 44 (40 date cells, T-10; 4 Text ordering cells, T-07), 1729 to 1759, and 115 to 129.</summary>
     private static readonly (int Count, string Checksum)[] MasterAbi = [
-        (40, "975825d5af45e060"), (4, "04c3d80b8bd14c13"), (1759, "c6974bac9345ce1e"), (129, "dc63aa48893c21ef")
+        (40, "975825d5af45e060"), (4, "04c3d80b8bd14c13"), (1759, "c6974bac9345ce1e"), (127, "726f5d3f4f352d12")
     ];
 
     private static bool IsNative(string? operand) => operand is "NInt" or "NUInt";
@@ -682,17 +682,14 @@ public class OperatorOracleTests {
     }
 
     /// <summary>
-    /// WRONG VALUES, pinned as they are today (issue 832, owner T-21). The VM returns -1 for unary minus on a Decimal
-    /// and on a Duration whatever the operand, and <c>UInt8 | UInt64</c> reads its UInt64 word as a signed one (T-22a
-    /// typed it UInt64, the provider's type; it was Byte). These
-    /// are not the right answers; T-21's fix inverts them. The ledger's checksums are value-independent, so without
-    /// these a wrong value that moved to a different wrong value would be invisible. The operands are exactly
+    /// A WRONG VALUE, pinned as it is today (issue 832, owner T-21b): <c>UInt8 | UInt64</c> reads its UInt64 word as a
+    /// signed one (T-22a typed it UInt64, the provider's type; it was Byte). It is not the right answer; T-21b's fix
+    /// inverts it (T-21a fixed unary minus on a Decimal and a Duration). The ledger's checksums are value-independent, so
+    /// without this a wrong value that moved to a different wrong value would be invisible. The operands are exactly
     /// representable and the text is the oracle's invariant-culture rendering, so the pin is the same on arm64 and x64.
     /// </summary>
     [Test]
     public async Task Probe_WrongVmValues_Issue832_PinnedAsTheyAreToday_T21InvertsThem() {
-        await Assert.That(Cell("Decimal", OperatorKind.UnaryMinus, null).Abi).IsEqualTo("Decimal; S1=-1; S2=-1");
-        await Assert.That(Cell("Duration", OperatorKind.UnaryMinus, null).Abi).IsEqualTo("TimeSpan; S1=-1; S2=-1");
         await Assert.That(Cell("UInt8", OperatorKind.BitwiseOr, "UInt64").Abi).IsEqualTo("UInt64; S1=255; S2=-1");
     }
 

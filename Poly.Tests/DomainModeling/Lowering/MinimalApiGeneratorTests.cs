@@ -333,7 +333,7 @@ public class MinimalApiGeneratorTests {
         var types = d.Types.Select(t => ReferenceEquals(t, d.Types.OfType<Entity>().First()) ? item : t).ToList();
         var rendered = Render(d with { Types = types });
 
-        await Assert.That(rendered).Contains("[AllowedValues(\"Active\")]\n    public string Status { get; init; }");
+        await Assert.That(rendered).Contains("[AllowedValues(\"Active\")]\n    public string? Status { get; init; }");
         await Assert.That(rendered).Contains("[AllowedValues(\"Active\")]\n    public string Value { get; init; }");
     }
 

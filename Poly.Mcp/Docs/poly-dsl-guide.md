@@ -258,7 +258,7 @@ A policy compares an enum property to a member name: `Outcome == Pending` and
 Named records without identity or lifecycle. A value type is a **contract payload or
 action parameter** — it has no storage representation and cannot be a stored entity
 property. Analysis fails closed on a property typed as one. `public` is optional and
-omitted by default (`public value Money { … }`). Generated C# honours it (see **Visibility in generated C#** under entities): an unmarked value type prints `internal`.
+omitted by default (`public value Money { … }`). Generated C# honours it (see **Visibility in generated C#** under entities): an unmarked value type prints `internal`. A generated value type is a C# record whose properties are `init`-only (`{ get; init; }`): a caller builds one with an object initializer or `with`, and assigning a property after construction does not compile, so a setter can be removed later without breaking a caller.
 
 <!-- poly-verify: invalid:DMSTR006 wrapper:top-default -->
 ```poly

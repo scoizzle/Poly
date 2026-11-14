@@ -849,6 +849,48 @@ public class PackOracleTests {
         await Assert.That(after.RootElement.GetProperty("used").GetInt64()).IsEqualTo(100000);
     }
 
+    /// <summary>L-24b: a value type's properties are init-only; an action's value-typed parameter still binds from the
+    /// JSON body over HTTP (System.Text.Json writes an init accessor), so the action sees a non-null value.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task ValueTypePayload_BindsOverHttp_WithInitOnlyProperties(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        var fixture = new PackOracleDomain(
+            "ValueBinding24b",
+            """
+            domain Billing24b
+            uses http
+            uses sqlite
+
+            Cost24b: value {
+              Amount: Number
+              Currency: Text
+            }
+
+            Invoice24b: entity {
+              Code: Text unique length(3, 8)
+              Hits: Number default(0)
+              Charge: action (cost: Cost24b) { if (cost != null) { assign Hits to 7 } }
+            }
+            """,
+            "/api/invoice24bs");
+        await using var oracle = await PackOracle.BootAsync(fixture);
+
+        using var created = await oracle.Client.PostAsync(
+            "/api/invoice24bs",
+            new StringContent("""{"Code":"INV1"}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)created.StatusCode).IsEqualTo(201);
+
+        using var charged = await oracle.Client.PostAsync(
+            "/api/invoice24bs/INV1/charge",
+            new StringContent("""{"Cost":{"Amount":5,"Currency":"USD"}}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)charged.StatusCode).IsEqualTo(200);
+
+        using var after = JsonDocument.Parse(await oracle.Client.GetStringAsync("/api/invoice24bs/INV1"));
+        await Assert.That(after.RootElement.GetProperty("hits").GetInt64()).IsEqualTo(7);
+    }
+
     /// <summary>#653 (slice P-03) success-path pin: the save must still run when the action succeeds.
     /// Green on master by construction — it fails only under the over-correction (a handler that never
     /// saves), which the row's red test cannot catch.</summary>

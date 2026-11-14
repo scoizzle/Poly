@@ -631,34 +631,39 @@ public class AnalysisGateParityTests {
             "Len" or "1 Hours" => TimeSpan.FromHours(1),
             _ => stamp2 - stamp,
         };
-        object presentValue = family switch {
-            "Date" => new DateOnly(2026, 1, 3),
-            "DateTime" => new DateTime(2026, 1, 3, 0, 0, 0, DateTimeKind.Utc),
-            "Time" => new TimeOnly(8, 0),
-            _ => TimeSpan.FromMinutes(30),
-        };
-
         var gate = GateParity.Check(dsl, SimStep.Create("Item", """{"Due":"2026-01-05","Stamp":"2026-01-05T00:00:00Z","Stamp2":"2026-01-06T00:00:00Z","Opens":"09:00:00","Len":"01:00:00"}""", "i"), SimStep.Evaluate("Item", "P0", "i"));
         await Assert.That(gate.Analysis).IsTrue().Because(gate.ToString());
         await Assert.That(gate.Holds).IsTrue().Because(gate.ToString());
 
-        foreach (var isPresent in new[] { true, false }) {
-            var outcomes = await ParityScenario.FromDsl(dsl, $"T21dGrid{family}{required.GetHashCode():X}{isPresent}").AssertAgree(side => {
+        // The optional value takes every position against the required one: less, EQUAL and greater, and absent. `Now` cannot be
+        // equal (the clock moves between the host's read and the test's), so it has less and greater only; the other
+        // required values are constants of the document or fixed offsets from them, and `Today` is equal within a UTC day.
+        object?[] presentValues = [Shift(requiredValue, -1), .. required == "Now" ? [] : new[] { requiredValue }, Shift(requiredValue, 1), null];
+        var scenario = ParityScenario.FromDsl(dsl, $"T21dGrid{family}{required.GetHashCode():X}");
+        foreach (var opt in presentValues) {
+            var outcomes = await scenario.AssertAgree(side => {
                 var props = new List<(string, object?)> { ("Due", due), ("Stamp", stamp), ("Stamp2", stamp2), ("Opens", new TimeOnly(9, 0)), ("Len", TimeSpan.FromHours(1)) };
-                if (isPresent) props.Add((optional, presentValue));
+                if (opt is not null) props.Add((optional, opt));
                 side.Create("Item", [.. props]);
                 for (var i = 0; i < ops.Length * 2; i++) side.EvaluatePolicy("P" + i);
             });
             for (var i = 0; i < ops.Length * 2; i++) {
                 var op = ops[i / 2];
                 var optionalLeft = i % 2 == 0;
-                object? opt = isPresent ? presentValue : null;
                 var expected = LiftedByCSharp(opt, requiredValue, op, optionalLeft);
                 await Assert.That(outcomes[i + 1].State["P" + i]).IsEqualTo(expected.ToString())
-                    .Because($"{(optionalLeft ? optional + " " + op + " " + required : required + " " + op + " " + optional)} present={isPresent}");
+                    .Because($"{(optionalLeft ? optional + " " + op + " " + required : required + " " + op + " " + optional)} value={opt ?? "absent"}");
             }
         }
     }
+
+    /// <summary>A value of the family one step below (-1) or above (+1) <paramref name="value"/>.</summary>
+    private static object Shift(object value, int direction) => value switch {
+        DateOnly d => d.AddDays(direction * 2),
+        DateTime t => t.AddDays(direction * 2),
+        TimeOnly t => t.AddHours(direction),
+        _ => (TimeSpan)value + TimeSpan.FromMinutes(direction * 10),
+    };
 
     /// <summary>C#'s lifted comparison of an optional with a required value, from the lambdas C# binds.</summary>
     private static bool LiftedByCSharp(object? optional, object required, string op, bool optionalLeft) {

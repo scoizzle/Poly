@@ -413,7 +413,7 @@ internal class Opportunity : Poly.Runtime.IActionScoped
         {
             return DomainResult<Quote>.Failure(Poly.Runtime.DomainFailure.Stage("'QuoteDeal' requires stage 'Qualify' on entity 'Opportunity'.", "Opportunity.QuoteDeal", "Qualify"));
         }
-        var create0 = this.CreateQuotes(this.Title, 0m);
+        var create0 = this.CreateQuotes(this.Title, 0L);
         if (!create0.IsSuccess)
         {
             return DomainResult<Quote>.Failure(create0.Error!.At("Opportunity.QuoteDeal"));

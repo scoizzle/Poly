@@ -358,7 +358,7 @@ internal class Account : Poly.Runtime.IActionScoped
         {
             return DomainResult<Opportunity>.Failure(Poly.Runtime.DomainFailure.Stage("'OpenDeal' requires stage 'Open' on entity 'Account'.", "Account.OpenDeal", "Open"));
         }
-        var create0 = this.CreateOpportunities(title, (decimal)amount);
+        var create0 = this.CreateOpportunities(title, amount);
         if (!create0.IsSuccess)
         {
             return DomainResult<Opportunity>.Failure(create0.Error!.At("Account.OpenDeal"));

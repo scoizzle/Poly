@@ -111,7 +111,7 @@ internal class Property : Poly.Runtime.IActionScoped
         {
             return DomainResult<Hall>.Failure(Poly.Runtime.DomainFailure.Stage("'AddHall' requires stage 'Open' on entity 'Property'.", "Property.AddHall", "Open"));
         }
-        var create0 = this.CreateHalls(name, seats, (decimal)rate);
+        var create0 = this.CreateHalls(name, seats, rate);
         if (!create0.IsSuccess)
         {
             return DomainResult<Hall>.Failure(create0.Error!.At("Property.AddHall"));

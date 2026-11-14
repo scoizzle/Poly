@@ -250,6 +250,11 @@ internal sealed class RuntimeTool(ISessionStore store, ILogger<RuntimeTool> logg
         foreach (var navigation in entity.Navigations) {
             if (propertyValues is null || !propertyValues.ContainsKey(navigation.Name))
                 continue;
+            // Null is the absence of a value (owner ruling 2026-11-13): the link is omitted, so the module answers.
+            if (parsed![navigation.Name].ValueKind == JsonValueKind.Null) {
+                propertyValues.Remove(navigation.Name);
+                continue;
+            }
             var path = $"{entity.Name}.{navigation.Name}";
             var targetName = navigation.Target.TypeName;
             if (!IsCreateLink(navigation))

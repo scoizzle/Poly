@@ -70,6 +70,23 @@ public class CreateWithLinkTests {
         }
         """;
 
+    private const string Library = """
+        domain LibraryLinks
+        Patron: entity {
+          Name: Text
+          Seen: Number default(0)
+          loans: many Loan via borrower
+          HasLoans: policy { count loans > 0 }
+          when loans Overdue { assign Seen to Seen + 1 }
+        }
+        Loan: entity {
+          Code: Text
+          borrower: Patron via loans
+          Active: stage { Lapse: action { transition to Overdue } }
+          Overdue: stage { }
+        }
+        """;
+
     private static (PolySurfaceHarness H, string Ws) Workspace(string dsl) {
         var h = PolySurfaceHarness.New();
         var ws = h.Open();
@@ -184,6 +201,42 @@ public class CreateWithLinkTests {
 
         await AssertFailure(lead, "Constraint", "Lead.account",
             "Navigation 'account' takes the id of an existing 'Account' instance; got 42.");
+    }
+
+    [Test]
+    public async Task Create_ARequiredLinkGivenNull_IsOmitted_AndFailsRequiredOnTheNavigation() {
+        // Null is the absence of a value at this door (owner ruling 2026-11-13), for a link as for a scalar.
+        var (h, ws) = Workspace(Crm);
+
+        var lead = h.Create(ws, "Lead", """{"Name":"G","account":null}""");
+
+        await AssertFailure(lead, "Required", "Lead.account", "'account' is required.");
+    }
+
+    [Test]
+    public async Task Create_AnOptionalLinkGivenNull_IsCreatedUnlinked() {
+        var (h, ws) = Workspace(Hotel);
+        var property = Id(h.Create(ws, "Property", """{"Name":"Harbor"}"""));
+
+        var room = h.Create(ws, "Room", $$"""{"Number":"103","property":"{{property}}","roomType":null}""");
+
+        await Assert.That(room.Ok).IsTrue().Because(room.Summary);
+        await Assert.That(h.Evaluate(ws, "Room", "HasType", room.InstanceId).Summary).Contains("false");
+    }
+
+    [Test]
+    public async Task Create_WithALink_WiresTheParentsCollectionAndItsSubscription() {
+        // The link goes through the lowered Create: the parent's collection holds the child, and the parent's
+        // `when` handler on the child's stage is registered at create, so it fires on the child's transition.
+        var (h, ws) = Workspace(Library);
+        var patron = Id(h.Create(ws, "Patron", """{"Name":"Ada"}"""));
+
+        var loan = Id(h.Create(ws, "Loan", $$"""{"Code":"L1","borrower":"{{patron}}"}"""));
+        var lapse = h.Invoke(ws, loan, "Lapse");
+
+        await Assert.That(h.Evaluate(ws, "Patron", "HasLoans", patron).Summary).Contains("true");
+        await Assert.That(lapse.Result.Succeeded).IsTrue().Because(lapse.Summary);
+        await Assert.That(h.Get(ws, patron).Property("Seen")).IsEqualTo("1");
     }
 
     [Test]

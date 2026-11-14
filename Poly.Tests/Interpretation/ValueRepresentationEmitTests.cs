@@ -6,6 +6,8 @@ using Poly.Interpretation.Vm;
 using Poly.Interpretation.Vm.Abi;
 using Poly.Introspection;
 
+using CSharpCallOracle = Poly.Tests.Introspection.CSharpCallOracle;
+
 namespace Poly.Tests.Interpretation;
 
 /// <summary>
@@ -14,6 +16,25 @@ namespace Poly.Tests.Interpretation;
 /// the standard pipeline WITHOUT a representation pass, so a green test proves emit
 /// derives the slot kind itself.
 /// </summary>
+public enum ByteMark : byte { None = 0, Low = 1, High = 200 }
+
+public enum ShortMark : short { None = 0, Low = 1, High = -300 }
+
+public enum IntMark : int { None = 0, Low = 1, High = -70000 }
+
+public enum LongMark : long { None = 0, Low = 1, Big = 5_000_000_000 }
+
+public enum UIntMark : uint { None = 0, Low = 1, High = 4_000_000_000 }
+
+public enum SByteMark : sbyte { None = 0, Low = 1, High = -100 }
+
+/// <summary>A declared implicit operator that is visible in its result, so a reinterpreted word cannot pass for it.</summary>
+public readonly record struct Metres(double Value) {
+    public static implicit operator Metres(double value) => new(value + 1000);
+}
+
+public enum ULongMark : ulong { None = 0, Low = 1, Big = ulong.MaxValue }
+
 public class ValueRepresentationEmitTests {
     private static readonly Analyzer AnalyzerWithoutRepresentationPass = new AnalyzerBuilder()
         .UseTypeDefinitionNodeAnalyzer()
@@ -494,6 +515,245 @@ public class ValueRepresentationEmitTests {
             "String 7", "String 7", "Int32:7", "String:s", "String 7", "String 7", "String 7",
             "Boolean:True", "Int32:7", "Double:1.5",
         }, TUnit.Assertions.Enums.CollectionOrdering.Matching);
+    }
+
+    // ---- T-21c: a value passed from one module method into another's parameter arrives as C# passes it ----
+
+    private enum Shape { Parameter, NullLiteral, ZeroLiteral, Property, TimesTwo }
+
+    private sealed record Row(Type Argument, Type Parameter, object? Value, object? Expected, Shape Shape = Shape.Parameter);
+
+    private static string Show(Type type) => Nullable.GetUnderlyingType(type) is { } underlying ? underlying.Name + "?" : type.Name;
+
+    private static string Named(Row row, string note) => $"{Show(row.Argument)} -> {Show(row.Parameter)}{note}";
+
+    private static Row R(Type argument, Type parameter, object? value, object? expected, Shape shape = Shape.Parameter) =>
+        new(argument, parameter, value, expected, shape);
+
+    private static readonly DateOnly Day = new(2024, 2, 28);
+    private static readonly DateTime Moment = new(2024, 2, 28, 1, 2, 3, DateTimeKind.Utc);
+    private static readonly TimeOnly Clock = new(13, 14, 15);
+
+    /// <summary>Rows that were red on the base: the argument is a frame word the callee read by the wrong type, or the
+    /// call did not bind. The expected value is what C# passes, from the platform.</summary>
+    private static readonly Dictionary<string, Row> RedRows = new[] {
+        R(typeof(DateOnly), typeof(DateOnly?), Day, Day),
+        R(typeof(DateTime), typeof(DateTime?), Moment, Moment),
+        R(typeof(TimeOnly), typeof(TimeOnly?), Clock, Clock),
+        R(typeof(ByteMark), typeof(ByteMark?), ByteMark.High, ByteMark.High),
+        R(typeof(ShortMark), typeof(ShortMark?), ShortMark.High, ShortMark.High),
+        R(typeof(IntMark), typeof(IntMark?), IntMark.High, IntMark.High),
+        R(typeof(LongMark), typeof(LongMark?), LongMark.Big, LongMark.Big),
+        R(typeof(ULongMark), typeof(ULongMark?), ULongMark.Big, ULongMark.Big),
+        R(typeof(ulong), typeof(ulong?), ulong.MaxValue, ulong.MaxValue),
+        R(typeof(double), typeof(double?), 1.5, 1.5),
+        R(typeof(float), typeof(float?), 1.5f, 1.5f),
+        R(typeof(DateOnly), typeof(object), Day, Day),
+        R(typeof(DateTime), typeof(object), Moment, Moment),
+        R(typeof(TimeOnly), typeof(object), Clock, Clock),
+        R(typeof(bool), typeof(object), true, true),
+        R(typeof(IntMark), typeof(object), IntMark.High, IntMark.High),
+        R(typeof(int), typeof(object), 7, 7),
+        R(typeof(double), typeof(object), 1.5, 1.5),
+        R(typeof(DateOnly), typeof(IComparable), Day, Day),
+        R(typeof(long), typeof(decimal?), 7L, 7m),
+        R(typeof(long), typeof(decimal?), 7L, 14m, Shape.TimesTwo),
+        R(typeof(long), typeof(decimal?), 7L, 7m, Shape.Property),
+        R(typeof(int), typeof(long?), 7, 7L),
+        R(typeof(int), typeof(decimal?), 7, 7m),
+        R(typeof(int), typeof(double?), 7, 7.0),
+        R(typeof(long?), typeof(decimal?), 7L, 7m),
+        R(typeof(long?), typeof(decimal?), null, null),
+        R(typeof(int?), typeof(long?), 7, 7L),
+        R(typeof(char?), typeof(double?), 'x', 120.0),
+        R(typeof(char?), typeof(double?), null, null),
+        R(typeof(char?), typeof(float?), 'x', 120f),
+        R(typeof(char?), typeof(float?), null, null),
+        R(typeof(char?), typeof(decimal?), 'x', 120m),
+        R(typeof(char?), typeof(decimal?), null, null),
+        R(typeof(long), typeof(double), 7L, 7.0),
+        R(typeof(int), typeof(double), 7, 7.0),
+        R(typeof(int), typeof(float), 7, 7f),
+    }.ToDictionary(static row => Named(row, row.Shape == Shape.Parameter ? (row.Value is null ? " (null)" : "") : $" ({row.Shape})"));
+
+    /// <summary>Rows that were green on the base (a handle value, an already-nullable argument, a word that
+    /// <c>Convert.ChangeType</c> happens to convert, the null literal): pinned so the new argument rule keeps them.</summary>
+    private static readonly Dictionary<string, Row> PinnedRows = new[] {
+        R(typeof(TimeSpan), typeof(TimeSpan?), TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(5)),
+        R(typeof(Guid), typeof(Guid?), Guid.Parse("0f8fad5b-d9cb-469f-a165-70867728950e"), Guid.Parse("0f8fad5b-d9cb-469f-a165-70867728950e")),
+        R(typeof(decimal), typeof(decimal?), 7m, 7m),
+        R(typeof(DateTimeOffset), typeof(DateTimeOffset?), DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch),
+        R(typeof(DateTimeOffset), typeof(DateTimeOffset?), DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch, Shape.Property),
+        R(typeof(long), typeof(long?), 7L, 7L),
+        R(typeof(int), typeof(int?), 7, 7),
+        R(typeof(bool), typeof(bool?), true, true),
+        R(typeof(uint), typeof(uint?), uint.MaxValue, uint.MaxValue),
+        R(typeof(char), typeof(char?), 'x', 'x'),
+        R(typeof(long), typeof(decimal), 7L, 7m),
+        R(typeof(int), typeof(long), 7, 7L),
+        R(typeof(double), typeof(Metres?), 1.5, new Metres(1001.5)),
+        R(typeof(char), typeof(object), 'x', 'x'),
+        R(typeof(char), typeof(int?), 'x', 120),
+        R(typeof(ulong), typeof(object), ulong.MaxValue, ulong.MaxValue),
+        R(typeof(ulong), typeof(decimal?), ulong.MaxValue, 18446744073709551615m),
+        R(typeof(float), typeof(double), 1.5f, 1.5),
+        R(typeof(float), typeof(double?), 1.5f, 1.5),
+        R(typeof(UIntMark), typeof(UIntMark?), UIntMark.High, UIntMark.High),
+        R(typeof(SByteMark), typeof(SByteMark?), SByteMark.High, SByteMark.High),
+        R(typeof(nint?), typeof(long?), (nint)7, 7L),
+        R(typeof(nuint?), typeof(decimal?), (nuint)7, 7m),
+        R(typeof(DateOnly?), typeof(DateOnly?), Day, Day),
+        R(typeof(DateOnly?), typeof(DateOnly?), null, null),
+        R(typeof(DateTimeOffset?), typeof(DateTimeOffset?), null, null),
+        R(typeof(object), typeof(DateOnly?), null, null, Shape.NullLiteral),
+        R(typeof(object), typeof(decimal?), null, null, Shape.NullLiteral),
+        R(typeof(object), typeof(ByteMark?), null, null, Shape.NullLiteral),
+        R(typeof(object), typeof(object), null, null, Shape.NullLiteral),
+    }.ToDictionary(static row => Named(row, row.Shape == Shape.Parameter ? (row.Value is null ? " (null)" : "") : $" ({row.Shape})"));
+
+    public static IEnumerable<string> RedRowNames() => RedRows.Keys;
+
+    public static IEnumerable<string> PinnedRowNames() => PinnedRows.Keys;
+
+    private static (AnalysisContext Context, Node Root) ModuleCallTree(Row row, Type? parameterOverride = null) {
+        var argument = new Parameter("v", new ClrTypeReference(row.Argument));
+        var taken = new Parameter("x", new ClrTypeReference(parameterOverride ?? row.Parameter));
+        var asObject = new ClrTypeReference(typeof(object));
+        var typeDef = new TypeDefinitionNode(Name: "ArgumentBoundaryBox",
+            Constructors: [new ConstructorDefinitionNode([], new Block([]))],
+            Properties: [new PropertyDefinitionNode("Held", new ClrTypeReference(row.Argument))],
+            Methods: [
+                new MethodDefinitionNode("Take", asObject, Parameters: [taken], Body: new Return(new TypeCast(taken, asObject))),
+                new MethodDefinitionNode("Run", asObject, Parameters: [argument], Body: new Block([
+                    new Assignment(new Member(new ThisReference(), "Held"), argument),
+                    new Return(new Invoke(new Member(new ThisReference(), "Take"), row.Shape switch {
+                        Shape.NullLiteral => new Constant(null),
+                        Shape.ZeroLiteral => new Constant(0),
+                        Shape.Property => new Member(new ThisReference(), "Held"),
+                        Shape.TimesTwo => new Multiply(argument, new Constant(2L)),
+                        _ => argument,
+                    })),
+                ])),
+            ]);
+        var context = AnalysisContext.CreateDefault();
+        new TypeDefinitionNodeAnalyzer().Analyze(context, typeDef);
+        var root = new Invoke(new Member(new New(new TypeReference("ArgumentBoundaryBox")), "Run"),
+            new Parameter("v", new ClrTypeReference(row.Argument)));
+        return (context, root);
+    }
+
+    private static object? ModuleCall(Row row) {
+        var (context, root) = ModuleCallTree(row);
+        using var exec = Interpreter.Execute(Interpreter.Compile(root, context.TypeDefinitions), s => s.SetArgs(new object?[] { row.Value }));
+        return exec.Result.Value;
+    }
+
+    private static async Task AssertArrivesAsCSharpPasses(Row row) {
+        var seen = ModuleCall(row);
+        await Assert.That(seen).IsEqualTo(row.Expected);
+        if (row.Expected is not null)
+            await Assert.That(seen!.GetType()).IsEqualTo(row.Expected.GetType());
+        // The oracle: C# binds this call. (The null literal and the arithmetic shape bind by the same parameter rule.)
+        var csharp = row.Shape == Shape.NullLiteral
+            ? CSharpCallOracle.BindsExpression("null", row.Parameter)
+            : CSharpCallOracle.Binds(row.Shape == Shape.TimesTwo ? typeof(long) : row.Argument, row.Parameter);
+        await Assert.That(csharp).IsTrue().Because($"C# binds {Named(row, "")}");
+    }
+
+    [Test]
+    [MethodDataSource(nameof(RedRowNames))]
+    public async Task ModuleArgument_Red_ArrivesAsCSharpPasses(string name) => await AssertArrivesAsCSharpPasses(RedRows[name]);
+
+    [Test]
+    [MethodDataSource(nameof(PinnedRowNames))]
+    public async Task ModuleArgument_Pinned_StillArrivesAsCSharpPasses(string name) => await AssertArrivesAsCSharpPasses(PinnedRows[name]);
+
+    /// <summary>A module constructor's argument is the same site: a date into a <c>DateOnly?</c> parameter is the date.</summary>
+    [Test]
+    public async Task ModuleConstructorArgument_WordIntoOptionalParameter_ArrivesAsCSharpPasses() {
+        var date = new Parameter("d", new ClrTypeReference(typeof(DateOnly?)));
+        var typeDef = new TypeDefinitionNode(Name: "CtorBoundaryBox",
+            Constructors: [new ConstructorDefinitionNode([date], new Block([new Assignment(new Member(new ThisReference(), "Held"), date)]))],
+            Properties: [new PropertyDefinitionNode("Held", new ClrTypeReference(typeof(DateOnly?)))]);
+        var context = AnalysisContext.CreateDefault();
+        new TypeDefinitionNodeAnalyzer().Analyze(context, typeDef);
+        var root = new Member(new New(new TypeReference("CtorBoundaryBox"), new Parameter("v", new ClrTypeReference(typeof(DateOnly)))), "Held");
+        using var exec = Interpreter.Execute(Interpreter.Compile(root, context.TypeDefinitions), s => s.SetArgs(new object?[] { Day }));
+        await Assert.That(exec.Result.Value).IsEqualTo(Day);
+    }
+
+    public static class ClrNullableProbe {
+        public static object TakeDecimal(decimal? x) => x!;
+
+        public static object TakeLong(long? x) => x!;
+    }
+
+    private static object? ClrCall(string method, Type argument, object value) {
+        var root = new Invoke(new Member(new ClrTypeReference(typeof(ClrNullableProbe)), method), new Parameter("v", new ClrTypeReference(argument)));
+        using var exec = Interpreter.Execute(Interpreter.Compile(root), s => s.SetArgs(new object?[] { value }));
+        return exec.Result.Value;
+    }
+
+    /// <summary>A CLR method call (not a module method) reaches the lifted conversion through <c>ToClr</c>: C# binds both calls.</summary>
+    [Test]
+    public async Task ClrMethodArgument_LongIntoDecimalOptional_AndIntIntoLongOptional_ArriveAsCSharpPasses() {
+        await Assert.That(CSharpCallOracle.Binds(typeof(long), typeof(decimal?))).IsTrue();
+        await Assert.That(CSharpCallOracle.Binds(typeof(int), typeof(long?))).IsTrue();
+        var decimalSeen = ClrCall(nameof(ClrNullableProbe.TakeDecimal), typeof(long), 7L);
+        var longSeen = ClrCall(nameof(ClrNullableProbe.TakeLong), typeof(int), 7);
+        await Assert.That(decimalSeen).IsEqualTo(7m);
+        await Assert.That(decimalSeen!.GetType()).IsEqualTo(typeof(decimal));
+        await Assert.That(longSeen).IsEqualTo(7L);
+        await Assert.That(longSeen!.GetType()).IsEqualTo(typeof(long));
+    }
+
+    /// <summary>The overload tie measured end to end: both candidates tie, and a <c>decimal?</c>-first declaration binds
+    /// <c>decimal?</c> by order. C# binds <c>long?</c>. Row #847 (overload tie-breaking) removes the deviation.</summary>
+    [Test]
+    public async Task OverloadTie_NullableDecimalDeclaredFirst_BindsByOrder_WhereCSharpBindsLong() {
+        var asObject = new ClrTypeReference(typeof(object));
+        var v = new Parameter("v", new ClrTypeReference(typeof(int)));
+        Node Take(Type parameter, string name) => new MethodDefinitionNode("Take", asObject,
+            Parameters: [new Parameter("x", new ClrTypeReference(parameter))], Body: new Return(new Constant(name)));
+        var typeDef = new TypeDefinitionNode(Name: "TieBox",
+            Constructors: [new ConstructorDefinitionNode([], new Block([]))],
+            Methods: [
+                (MethodDefinitionNode)Take(typeof(decimal?), "decimal?"),
+                (MethodDefinitionNode)Take(typeof(long?), "long?"),
+                new MethodDefinitionNode("Run", asObject, Parameters: [v],
+                    Body: new Return(new Invoke(new Member(new ThisReference(), "Take"), v))),
+            ]);
+        var context = AnalysisContext.CreateDefault();
+        new TypeDefinitionNodeAnalyzer().Analyze(context, typeDef);
+        var root = new Invoke(new Member(new New(new TypeReference("TieBox")), "Run"), new Parameter("v", new ClrTypeReference(typeof(int))));
+        using var exec = Interpreter.Execute(Interpreter.Compile(root, context.TypeDefinitions), s => s.SetArgs(new object?[] { 7 }));
+        await Assert.That(CSharpCallOracle.Chosen([typeof(decimal?), typeof(long?)], typeof(int))).IsEqualTo("long?");
+        await Assert.That(exec.Result.Value).IsEqualTo("decimal?");
+    }
+
+    /// <summary>The pairs C# refuses stay analysis errors: no member binds, so the call does not compile.</summary>
+    [Test]
+    [Arguments(typeof(double), typeof(decimal?))]
+    [Arguments(typeof(long), typeof(int?))]
+    [Arguments(typeof(ulong), typeof(long?))]
+    [Arguments(typeof(decimal?), typeof(decimal))]
+    [Arguments(typeof(int), typeof(DateOnly?))]
+    [Arguments(typeof(double?), typeof(decimal?))]
+    public async Task ModuleArgument_CSharpRefuses_StaysAnAnalysisError(Type argument, Type parameter) {
+        await Assert.That(CSharpCallOracle.Binds(argument, parameter)).IsFalse();
+        var (context, root) = ModuleCallTree(R(argument, parameter, null, null));
+        await Assert.That(() => Interpreter.Compile(root, context.TypeDefinitions))
+            .Throws<InvalidOperationException>().WithMessageContaining("no matching member 'Take'");
+    }
+
+    /// <summary>C# converts the constant 0 to any enum; Poly does not model constant-expression conversions, so a number
+    /// into an enum parameter is refused (<c>LoneCandidate_NeedingARemovedConversion_HasNoOverload</c> pins the same).</summary>
+    [Test]
+    public async Task ModuleArgument_ConstantZeroIntoAnEnum_IsRefused_WhereCSharpAcceptsTheConstant() {
+        await Assert.That(CSharpCallOracle.BindsExpression("0", typeof(IntMark))).IsTrue();
+        await Assert.That(CSharpCallOracle.BindsExpression("0", typeof(IntMark?))).IsTrue();
+        var (context, root) = ModuleCallTree(R(typeof(int), typeof(IntMark?), 0, null, Shape.ZeroLiteral));
+        await Assert.That(() => Interpreter.Compile(root, context.TypeDefinitions)).Throws<InvalidOperationException>();
     }
 }
 

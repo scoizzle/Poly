@@ -78,8 +78,14 @@ internal abstract record LocalType(Type Clr) {
         if (conversion is { Kind: ConversionOperatorKind.Implicit }) {
             if (conversion.Value.Method is ClrMethod declaredMethod)
                 return declaredMethod.MethodInfo.Invoke(null, [value])!;
-            if (value is IConvertible && typeof(IConvertible).IsAssignableFrom(target))
-                return System.Convert.ChangeType(value, target, System.Globalization.CultureInfo.InvariantCulture);
+            // A native integer and char to IEEE are not IConvertible pairs: go through the word C# widens them by.
+            object source = value switch { nint n => (long)n, nuint n => (ulong)n, char c => (int)c, _ => value };
+            if (target == typeof(nint))
+                return (nint)System.Convert.ToInt64(source, System.Globalization.CultureInfo.InvariantCulture);
+            if (target == typeof(nuint))
+                return (nuint)System.Convert.ToUInt64(source, System.Globalization.CultureInfo.InvariantCulture);
+            if (source is IConvertible && typeof(IConvertible).IsAssignableFrom(target))
+                return System.Convert.ChangeType(source, target, System.Globalization.CultureInfo.InvariantCulture);
         }
         throw new InvalidOperationException(
             $"VM rejected: a '{value.GetType().Name}' does not convert implicitly to '{target.Name}'.");

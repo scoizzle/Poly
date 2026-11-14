@@ -106,6 +106,38 @@ public class VmStateRingConversionTests {
         await Assert.That(Root<double>(1.5f)).IsEqualTo((double)1.5f);
         await Assert.That(Root<decimal>(7)).IsEqualTo((decimal)7);
         await Assert.That(Root<int?>(7)).IsEqualTo((int?)7);
+        // The pairs Convert.ChangeType cannot do but C# converts implicitly: char to IEEE, and to or from a native integer.
+        await Assert.That(Root<float>('a')).IsEqualTo((float)'a');
+        await Assert.That(Root<double>('a')).IsEqualTo((double)'a');
+        await Assert.That(Root<nint>(7)).IsEqualTo((nint)7);
+        await Assert.That(Root<long>((nint)7)).IsEqualTo((long)(nint)7);
+        await Assert.That(Root<double>((nint)7)).IsEqualTo((double)(nint)7);
+    }
+
+    public static string Shown(object? value) => value is null ? "null" : $"{value.GetType().Name}:{value}";
+
+    /// <summary>
+    /// An untyped parameter is <c>object</c> in the analysis as well as at the door: an operator on it gets C#'s verdict
+    /// for an <c>object</c> operand (<c>x == 42</c> is refused at the node), it returns and passes as the value it holds,
+    /// and two of them compare by reference. Before, the analysis left it unresolved and the emitter read its handle as
+    /// a number, so <c>x == 42</c> given 42 answered false.
+    /// </summary>
+    [Test]
+    public async Task UntypedParameter_IsObject_InTheAnalysisAsAtTheDoor() {
+        var refused = Interpreter.Analyze(new Equal(new Parameter("x"), new Constant(42)))
+            .Diagnostics.Where(static d => d.Severity == Poly.Analysis.DiagnosticSeverity.Error).Select(static d => d.Message).ToArray();
+        await Assert.That(refused.Length).IsEqualTo(1);
+        await Assert.That(refused[0]).Contains($"'{nameof(Object)}'").And.Contains($"'{nameof(Int32)}'");
+        foreach (var value in new object?[] { 42, "s", null }) {
+            using var root = Interpreter.Execute(Interpreter.Compile(new Parameter("x")), value);
+            await Assert.That(root.Result.Value).IsEqualTo(value);
+            using var passed = Interpreter.Execute(Interpreter.Compile(Call(typeof(VmStateRingConversionTests), nameof(Shown), new Parameter("x"))), value);
+            await Assert.That(passed.GetValue<string>()).IsEqualTo(Shown(value));
+        }
+        object same = "s";
+        object left = same, right = same;
+        using var equal = Interpreter.Execute(Interpreter.Compile(new Equal(new Parameter("x"), new Parameter("y"))), same, same);
+        await Assert.That(equal.GetValue<bool>()).IsEqualTo(left == right);
     }
 
     [Test]

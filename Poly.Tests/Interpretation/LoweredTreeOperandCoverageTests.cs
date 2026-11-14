@@ -559,6 +559,22 @@ public class LoweredTreeOperandCoverageTests {
         await Assert.That(KnownInterimRules.All.All(static c => System.Text.RegularExpressions.Regex.IsMatch(c.Owner, "^T-[0-9]+[a-z]?$"))).IsTrue();
     }
 
+    /// <summary>
+    /// The two delegate interim cells (owner T-21b) answer as measured: C# binds reference equality there (Roslyn's
+    /// answers, <see cref="DelegateEqualAsCSharp"/>: <c>==</c> False, <c>!=</c> True) and the VM answers the mirror, the
+    /// delegates' value equality (<c>==</c> True, <c>!=</c> False).
+    /// </summary>
+    [Test]
+    public async Task DelegateInterimCells_AnswerTheMirrorOfCSharp_AsMeasured() {
+        await Assert.That(DelegateEqualAsCSharp).IsFalse();
+        await Assert.That(DelegateNotEqualAsCSharp).IsTrue();
+        foreach (var (kind, csharp) in new[] { (typeof(Equal), DelegateEqualAsCSharp), (typeof(NotEqual), DelegateNotEqualAsCSharp) }) {
+            var row = InterimRows.Single(r => r.Kind == kind && r.Name == "DelegateBesideDelegateSameMethod");
+            using var exec = Interpreter.Execute(Interpreter.Compile(row.Build()), row.Args);
+            await Assert.That(exec.GetValue<bool>()).IsEqualTo(!csharp);
+        }
+    }
+
     [Test]
     public async Task GapLedger_RowsAreSortedAndUnique() {
         var keys = KnownOperandGaps.All.Select(gap => (gap.Kind, gap.Case)).ToList();

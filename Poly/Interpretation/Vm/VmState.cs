@@ -104,8 +104,9 @@ public sealed class VmState : IDisposable {
             try {
                 slots[i] = LocalType.Write(arg, declared ?? typeof(object), Heap);
             }
-            catch (InvalidOperationException ex) {
-                throw new InvalidOperationException($"{ex.Message} (root argument {i})", ex);
+            catch (Exception ex) when (ex is InvalidOperationException or InvalidCastException or OverflowException) {
+                throw new InvalidOperationException(
+                    $"{ex.Message} (root argument {i}: a '{arg?.GetType().Name ?? "null"}' for '{declared?.Name ?? nameof(Object)}')", ex);
             }
         }
     }

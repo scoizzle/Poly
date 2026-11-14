@@ -19,11 +19,10 @@ public sealed partial class DomainToCSharpExporter {
             props.Add(new PropertyDefinitionNode(
                 prop.Name, propRef,
                 Getter: new PropertyGetterDefinitionNode(),
-                Setter: new PropertySetterDefinitionNode(),
-                Initializer: IsNonNullableReferenceScalar(propRef)
-                    ? new Syntactic.PropertyInitializerDefinitionNode(
-                        new Syntactic.NullForgiving(new Syntactic.Default()))
-                    : null
+                Initializer: new Syntactic.PropertyInitializerDefinitionNode(
+                    IsNonNullableReferenceScalar(propRef)
+                        ? new Syntactic.NullForgiving(new Syntactic.Default())
+                        : null)
             ));
         }
         return new TypeDefinitionNode(

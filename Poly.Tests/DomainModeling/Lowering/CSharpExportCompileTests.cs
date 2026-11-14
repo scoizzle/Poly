@@ -604,4 +604,36 @@ public sealed class CSharpExportCompileTests {
         await Assert.That(text).Contains("internal class ShopDbContext");
         await Assert.That(text).Contains("public record OrderDto");
     }
+
+    /// <summary>L-24b: a generated value type's properties are init-only, so a setter can be removed later without breaking a caller.</summary>
+    [Test]
+    public async Task ValueType_PropertiesAreInitOnly() {
+        var e = Export("""
+            domain Vals
+
+            Cost: value {
+              Amount: Number
+              Currency: Text
+            }
+
+            public value PubCost {
+              Amount: Number
+            }
+
+            Holder: entity {
+              Count: Number default(0)
+            }
+            """);
+
+        foreach (var typeName in new[] { "Cost", "PubCost" }) {
+            var props = e.Type(typeName).GetMembers().OfType<IPropertySymbol>().Where(p => !p.IsImplicitlyDeclared).ToArray();
+            await Assert.That(props).IsNotEmpty();
+            foreach (var prop in props) {
+                await Assert.That(prop.GetMethod).IsNotNull();
+                await Assert.That(prop.SetMethod).IsNotNull().Because($"{typeName}.{prop.Name} has no init accessor");
+                await Assert.That(prop.SetMethod!.IsInitOnly).IsTrue().Because($"{typeName}.{prop.Name} is settable, not init-only");
+            }
+        }
+        await Assert.That(e.Diagnostics).IsEmpty();
+    }
 }

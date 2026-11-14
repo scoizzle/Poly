@@ -800,12 +800,13 @@ public partial class MinimalApiGeneratorTests {
     }
 
     [Test]
-    public async Task CreatedUri_KeepsToStringOnNonStringKey() {
+    public async Task CreatedUri_FormatsNonStringKeyInvariantlyAndEscaped() {
         var rendered = Render(ParseDomain("""
             domain T
             Item: entity { Code: Number unique }
             """));
-        await Assert.That(rendered).Contains("Code.ToString()");
+        await Assert.That(rendered).Contains(
+            "System.Uri.EscapeDataString(System.Convert.ToString(itemResult.Value.Code, System.Globalization.CultureInfo.InvariantCulture))");
     }
 
     private static int CountOf(string text, string value) {

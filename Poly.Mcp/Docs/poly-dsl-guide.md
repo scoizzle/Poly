@@ -1518,11 +1518,13 @@ diverging:
   (a write finding, or a `DMCS003` from `default()` beside a `range` or `length`), and its
   summary and `data.unverifiedFindings` say how many findings were counted; `proven` means
   every write was decided inside its constraint. To resolve an `unknown`, bound the source, widen the target
-  (drop or loosen the constraint), or guard a numeric write with a `require`/`if` that
-  narrows its range. A DSL action parameter cannot carry a `length` or `pattern`, so the common
-  case, an unbounded `Text` parameter written into a bounded property (`create Hall { Name: name }`
-  into `Name: Text length(1, 80)`), stays `unknown` until the source is a property with the same
-  bound or the target is widened; `poly_simulate` executes the write meanwhile. A
+  (drop or loosen the constraint), or, for a value that is a property or an expression, guard
+  the write with a `require`/`if` that narrows its range. A DSL action parameter cannot yet
+  carry a constraint (row F-08), and a bare parameter write ignores guards, so a `Text` or a
+  `Number` parameter written into a bounded property stays `unknown` even under
+  `if (v <= 10)` (`create Hall { Name: name }` into `Name: Text length(1, 80)` is the common
+  case) until the source is a property with the same bound or the target is widened;
+  `poly_simulate` executes the write meanwhile. A
   call-chain finding is attributed to the **callee** element that assigns (the chain is
   named in its message), so a summary scoped to the caller reads `proven` while the whole
   domain reads `violated`.

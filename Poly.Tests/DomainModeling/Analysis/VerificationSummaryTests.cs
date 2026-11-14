@@ -677,6 +677,30 @@ public class VerificationSummaryTests {
     }
 
     [Test]
+    [Arguments("pattern(\"^\\\\d{5}$\")", "pattern(\"^\\\\d+$\")")]
+    [Arguments("equals(\"x\")", "equals(\"y\")")]
+    public async Task ObservedFlow_DifferentPatternOrEquals_IsAWarningNeverAnError(string source, string target) {
+        // Different pattern text or a different expected value proves nothing about a value being
+        // outside: the pair is an unverified DMCS003 warning plus a fact, never a DMEFF008 error.
+        var (domain, analysis) = RunFlowed($$"""
+            domain Orders
+            Source: entity {
+              Code: Text {{source}}
+            }
+            Target: entity {
+              Code: Text {{target}}
+            }
+            """, [new ObservedFlow("Source.Code", "Target.Code")]);
+
+        await Assert.That(analysis.HasErrors).IsFalse();
+        var warning = WithCode(analysis, DomainModelDiagnosticCodes.ConstraintUndecided).Single();
+        await Assert.That(warning.Severity).IsEqualTo(DiagnosticSeverity.Warning);
+        await Assert.That(WithCode(analysis, DomainModelDiagnosticCodes.EffectConstraintViolation)).IsEmpty();
+        await Assert.That(analysis.GetMetadata<WriteVerificationFacts>(domain)!.Unverified.Count).IsEqualTo(1);
+        await Assert.That(analysis.GetVerification(domain).Verdict).IsEqualTo(CheckVerdict.Unknown);
+    }
+
+    [Test]
     public async Task DefaultVerdict_IsUnknown() {
         // E5e: the zero value fails closed, so a defaulted or partially initialised verdict is never
         // read as Proven.

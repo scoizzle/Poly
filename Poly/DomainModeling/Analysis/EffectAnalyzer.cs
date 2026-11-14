@@ -146,6 +146,22 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
                     continue;
                 }
 
+                // A pattern or equals that differs proves nothing about a value being outside: an
+                // unverified warning plus its fact, never an error (only Range and Length can err).
+                if (targetConstraint is PatternConstraint or EqualityConstraint) {
+                    context.ReportWarning(
+                        target.Value.Property,
+                        $"Observed flow '{flow.SourcePath}' -> '{flow.TargetPath}': " +
+                        $"{ConstraintValidation.Describe(sourceConstraint)} differs from " +
+                        $"{ConstraintValidation.Describe(targetConstraint)}, so the copy cannot be verified.",
+                        DomainModelDiagnosticCodes.ConstraintUndecided);
+                    WriteRecorder.Record(
+                        context, domain, target.Value.Property, target.Value.Property.Name, constraint,
+                        WriteVerdict.Unverified(
+                            UnverifiedReason.PossibleViolation, DomainModelDiagnosticCodes.ConstraintUndecided));
+                    continue;
+                }
+
                 // A4(iii): the finding is unchanged (an allowance may still downgrade it) and the
                 // recorder gets a PossibleViolation fact beside it, so the summary can never read
                 // proven while the flow is undecided.

@@ -1895,6 +1895,17 @@ A stage failure (an action the current stage does not offer) conflicts with the 
 policy failure (a `require` guard that does not hold) is `422`: the request is well-formed and a rule refused it. It
 is not authorisation, so it is not `403`.
 
+### HTTP actions: what the host loads (`uses http`)
+
+An action route answers from what the host loaded before the module runs. The host loads the entity's collections and
+its **single links** (the to-one navigations), and on a nested route the route parent's single links too; a link that
+is empty in the database is empty to the module. So an action that reads or fills a link (`create in next`, a policy
+`account exists`) sees the stored link and answers as the simulator does. An action that reads **further** is not loaded
+yet and keeps today's behaviour (the read sees an empty link): a link of a link (`customer region Name`), a link of a
+collection item, or a related entity's own links reached by `invoke`. Loading those is the next slice (P-13b). Separately,
+`when` handlers do not fire over HTTP yet (#560): the host never wires an entity's subscribers after loading it, so an
+action's `when` effects on another entity do not run in a generated app, though they do in the simulator.
+
 ## 12. Dual Authoring Path
 
 **Batch** (`apply_dsl`): Write the full domain in `.poly` and apply in one shot.

@@ -305,6 +305,7 @@ app.MapPost("/api/leads/{email}/convert", async (string email, CrmDbContext db) 
     {
         return StatusProblem(404, "Not Found", "Lead not found");
     }
+    await db.Entry(entity).Reference(e => e.Account).LoadAsync();
     try
     {
         var result = entity.Convert();
@@ -331,6 +332,7 @@ app.MapPost("/api/leads/{email}/disqualify", async (string email, CrmDbContext d
     {
         return StatusProblem(404, "Not Found", "Lead not found");
     }
+    await db.Entry(entity).Reference(e => e.Account).LoadAsync();
     try
     {
         var result = entity.Disqualify();
@@ -360,6 +362,8 @@ app.MapPost("/api/accounts/{id}/placehq", async (int id, PlaceHqDto dto, CrmDbCo
     await db.Entry(entity).Collection(e => e.Contacts).LoadAsync();
     await db.Entry(entity).Collection(e => e.Opportunities).LoadAsync();
     await db.Entry(entity).Collection(e => e.Tickets).LoadAsync();
+    await db.Entry(entity).Reference(e => e.Parent).LoadAsync();
+    await db.Entry(entity).Reference(e => e.Hq).LoadAsync();
     try
     {
         var result = entity.PlaceHq(dto.City, dto.Region);
@@ -389,6 +393,8 @@ app.MapPost("/api/accounts/{id}/addcontact", async (int id, AddContactDto dto, C
     await db.Entry(entity).Collection(e => e.Contacts).LoadAsync();
     await db.Entry(entity).Collection(e => e.Opportunities).LoadAsync();
     await db.Entry(entity).Collection(e => e.Tickets).LoadAsync();
+    await db.Entry(entity).Reference(e => e.Parent).LoadAsync();
+    await db.Entry(entity).Reference(e => e.Hq).LoadAsync();
     try
     {
         var result = entity.AddContact(dto.Name, dto.Email, db);
@@ -418,6 +424,8 @@ app.MapPost("/api/accounts/{id}/convertlead", async (int id, ConvertLeadDto dto,
     await db.Entry(entity).Collection(e => e.Contacts).LoadAsync();
     await db.Entry(entity).Collection(e => e.Opportunities).LoadAsync();
     await db.Entry(entity).Collection(e => e.Tickets).LoadAsync();
+    await db.Entry(entity).Reference(e => e.Parent).LoadAsync();
+    await db.Entry(entity).Reference(e => e.Hq).LoadAsync();
     try
     {
         var lead = await db.Leads.FirstOrDefaultAsync(e => e.Email == dto.LeadId);
@@ -452,6 +460,8 @@ app.MapPost("/api/accounts/{id}/opendeal", async (int id, OpenDealDto dto, CrmDb
     await db.Entry(entity).Collection(e => e.Contacts).LoadAsync();
     await db.Entry(entity).Collection(e => e.Opportunities).LoadAsync();
     await db.Entry(entity).Collection(e => e.Tickets).LoadAsync();
+    await db.Entry(entity).Reference(e => e.Parent).LoadAsync();
+    await db.Entry(entity).Reference(e => e.Hq).LoadAsync();
     try
     {
         var result = entity.OpenDeal(dto.Title, dto.Amount);
@@ -481,6 +491,8 @@ app.MapPost("/api/accounts/{id}/archive", async (int id, CrmDbContext db) => {
     await db.Entry(entity).Collection(e => e.Contacts).LoadAsync();
     await db.Entry(entity).Collection(e => e.Opportunities).LoadAsync();
     await db.Entry(entity).Collection(e => e.Tickets).LoadAsync();
+    await db.Entry(entity).Reference(e => e.Parent).LoadAsync();
+    await db.Entry(entity).Reference(e => e.Hq).LoadAsync();
     try
     {
         var result = entity.Archive();
@@ -510,6 +522,8 @@ app.MapPost("/api/accounts/{id}/openticket", async (int id, OpenTicketDto dto, C
     await db.Entry(entity).Collection(e => e.Contacts).LoadAsync();
     await db.Entry(entity).Collection(e => e.Opportunities).LoadAsync();
     await db.Entry(entity).Collection(e => e.Tickets).LoadAsync();
+    await db.Entry(entity).Reference(e => e.Parent).LoadAsync();
+    await db.Entry(entity).Reference(e => e.Hq).LoadAsync();
     try
     {
         var result = entity.OpenTicket(dto.Subject);
@@ -539,6 +553,8 @@ app.MapPost("/api/accounts/{id}/restore", async (int id, CrmDbContext db) => {
     await db.Entry(entity).Collection(e => e.Contacts).LoadAsync();
     await db.Entry(entity).Collection(e => e.Opportunities).LoadAsync();
     await db.Entry(entity).Collection(e => e.Tickets).LoadAsync();
+    await db.Entry(entity).Reference(e => e.Parent).LoadAsync();
+    await db.Entry(entity).Reference(e => e.Hq).LoadAsync();
     try
     {
         var result = entity.Restore();
@@ -565,6 +581,8 @@ app.MapPost("/api/accounts/{id}/contacts/{email}/retire", async (int id, string 
     {
         return StatusProblem(404, "Not Found", "Account not found");
     }
+    await db.Entry(parentEntity).Reference(e => e.Parent).LoadAsync();
+    await db.Entry(parentEntity).Reference(e => e.Hq).LoadAsync();
     var entity = await db.Contacts.FirstOrDefaultAsync(e => e.Email == email);
     if (entity == null)
     {
@@ -575,6 +593,7 @@ app.MapPost("/api/accounts/{id}/contacts/{email}/retire", async (int id, string 
     {
         return StatusProblem(404, "Not Found", "Contact not found for this Account");
     }
+    await db.Entry(entity).Reference(e => e.Account).LoadAsync();
     try
     {
         var result = entity.Retire();
@@ -601,6 +620,8 @@ app.MapPost("/api/accounts/{id}/contacts/{email}/reactivate", async (int id, str
     {
         return StatusProblem(404, "Not Found", "Account not found");
     }
+    await db.Entry(parentEntity).Reference(e => e.Parent).LoadAsync();
+    await db.Entry(parentEntity).Reference(e => e.Hq).LoadAsync();
     var entity = await db.Contacts.FirstOrDefaultAsync(e => e.Email == email);
     if (entity == null)
     {
@@ -611,6 +632,7 @@ app.MapPost("/api/accounts/{id}/contacts/{email}/reactivate", async (int id, str
     {
         return StatusProblem(404, "Not Found", "Contact not found for this Account");
     }
+    await db.Entry(entity).Reference(e => e.Account).LoadAsync();
     try
     {
         var result = entity.Reactivate();
@@ -637,6 +659,8 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/completeopenwork",
     {
         return StatusProblem(404, "Not Found", "Account not found");
     }
+    await db.Entry(parentEntity).Reference(e => e.Parent).LoadAsync();
+    await db.Entry(parentEntity).Reference(e => e.Hq).LoadAsync();
     var entity = await db.Opportunities.FindAsync(opportunityId);
     if (entity == null)
     {
@@ -650,6 +674,8 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/completeopenwork",
     await db.Entry(entity).Collection(e => e.Activities).LoadAsync();
     await db.Entry(entity).Collection(e => e.Lines).LoadAsync();
     await db.Entry(entity).Collection(e => e.Quotes).LoadAsync();
+    await db.Entry(entity).Reference(e => e.Account).LoadAsync();
+    await db.Entry(entity).Reference(e => e.Contact).LoadAsync();
     try
     {
         var result = entity.CompleteOpenWork();
@@ -676,6 +702,8 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/propose", async (i
     {
         return StatusProblem(404, "Not Found", "Account not found");
     }
+    await db.Entry(parentEntity).Reference(e => e.Parent).LoadAsync();
+    await db.Entry(parentEntity).Reference(e => e.Hq).LoadAsync();
     var entity = await db.Opportunities.FindAsync(opportunityId);
     if (entity == null)
     {
@@ -689,6 +717,8 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/propose", async (i
     await db.Entry(entity).Collection(e => e.Activities).LoadAsync();
     await db.Entry(entity).Collection(e => e.Lines).LoadAsync();
     await db.Entry(entity).Collection(e => e.Quotes).LoadAsync();
+    await db.Entry(entity).Reference(e => e.Account).LoadAsync();
+    await db.Entry(entity).Reference(e => e.Contact).LoadAsync();
     try
     {
         var result = entity.Propose();
@@ -715,6 +745,8 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/lose", async (int 
     {
         return StatusProblem(404, "Not Found", "Account not found");
     }
+    await db.Entry(parentEntity).Reference(e => e.Parent).LoadAsync();
+    await db.Entry(parentEntity).Reference(e => e.Hq).LoadAsync();
     var entity = await db.Opportunities.FindAsync(opportunityId);
     if (entity == null)
     {
@@ -728,6 +760,8 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/lose", async (int 
     await db.Entry(entity).Collection(e => e.Activities).LoadAsync();
     await db.Entry(entity).Collection(e => e.Lines).LoadAsync();
     await db.Entry(entity).Collection(e => e.Quotes).LoadAsync();
+    await db.Entry(entity).Reference(e => e.Account).LoadAsync();
+    await db.Entry(entity).Reference(e => e.Contact).LoadAsync();
     try
     {
         var result = entity.Lose();
@@ -754,6 +788,8 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/log", async (int i
     {
         return StatusProblem(404, "Not Found", "Account not found");
     }
+    await db.Entry(parentEntity).Reference(e => e.Parent).LoadAsync();
+    await db.Entry(parentEntity).Reference(e => e.Hq).LoadAsync();
     var entity = await db.Opportunities.FindAsync(opportunityId);
     if (entity == null)
     {
@@ -767,6 +803,8 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/log", async (int i
     await db.Entry(entity).Collection(e => e.Activities).LoadAsync();
     await db.Entry(entity).Collection(e => e.Lines).LoadAsync();
     await db.Entry(entity).Collection(e => e.Quotes).LoadAsync();
+    await db.Entry(entity).Reference(e => e.Account).LoadAsync();
+    await db.Entry(entity).Reference(e => e.Contact).LoadAsync();
     try
     {
         var result = entity.Log(dto.Subject);
@@ -793,6 +831,8 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/addline", async (i
     {
         return StatusProblem(404, "Not Found", "Account not found");
     }
+    await db.Entry(parentEntity).Reference(e => e.Parent).LoadAsync();
+    await db.Entry(parentEntity).Reference(e => e.Hq).LoadAsync();
     var entity = await db.Opportunities.FindAsync(opportunityId);
     if (entity == null)
     {
@@ -806,6 +846,8 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/addline", async (i
     await db.Entry(entity).Collection(e => e.Activities).LoadAsync();
     await db.Entry(entity).Collection(e => e.Lines).LoadAsync();
     await db.Entry(entity).Collection(e => e.Quotes).LoadAsync();
+    await db.Entry(entity).Reference(e => e.Account).LoadAsync();
+    await db.Entry(entity).Reference(e => e.Contact).LoadAsync();
     try
     {
         var product = await db.Products.FirstOrDefaultAsync(e => e.Sku == dto.SkuId);
@@ -837,6 +879,8 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/quotedeal", async 
     {
         return StatusProblem(404, "Not Found", "Account not found");
     }
+    await db.Entry(parentEntity).Reference(e => e.Parent).LoadAsync();
+    await db.Entry(parentEntity).Reference(e => e.Hq).LoadAsync();
     var entity = await db.Opportunities.FindAsync(opportunityId);
     if (entity == null)
     {
@@ -850,6 +894,8 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/quotedeal", async 
     await db.Entry(entity).Collection(e => e.Activities).LoadAsync();
     await db.Entry(entity).Collection(e => e.Lines).LoadAsync();
     await db.Entry(entity).Collection(e => e.Quotes).LoadAsync();
+    await db.Entry(entity).Reference(e => e.Account).LoadAsync();
+    await db.Entry(entity).Reference(e => e.Contact).LoadAsync();
     try
     {
         var result = entity.QuoteDeal();
@@ -876,6 +922,8 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/commit", async (in
     {
         return StatusProblem(404, "Not Found", "Account not found");
     }
+    await db.Entry(parentEntity).Reference(e => e.Parent).LoadAsync();
+    await db.Entry(parentEntity).Reference(e => e.Hq).LoadAsync();
     var entity = await db.Opportunities.FindAsync(opportunityId);
     if (entity == null)
     {
@@ -889,6 +937,8 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/commit", async (in
     await db.Entry(entity).Collection(e => e.Activities).LoadAsync();
     await db.Entry(entity).Collection(e => e.Lines).LoadAsync();
     await db.Entry(entity).Collection(e => e.Quotes).LoadAsync();
+    await db.Entry(entity).Reference(e => e.Account).LoadAsync();
+    await db.Entry(entity).Reference(e => e.Contact).LoadAsync();
     try
     {
         var result = entity.Commit();
@@ -915,6 +965,8 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/win", async (int i
     {
         return StatusProblem(404, "Not Found", "Account not found");
     }
+    await db.Entry(parentEntity).Reference(e => e.Parent).LoadAsync();
+    await db.Entry(parentEntity).Reference(e => e.Hq).LoadAsync();
     var entity = await db.Opportunities.FindAsync(opportunityId);
     if (entity == null)
     {
@@ -928,6 +980,8 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/win", async (int i
     await db.Entry(entity).Collection(e => e.Activities).LoadAsync();
     await db.Entry(entity).Collection(e => e.Lines).LoadAsync();
     await db.Entry(entity).Collection(e => e.Quotes).LoadAsync();
+    await db.Entry(entity).Reference(e => e.Account).LoadAsync();
+    await db.Entry(entity).Reference(e => e.Contact).LoadAsync();
     try
     {
         var result = entity.Win();
@@ -954,6 +1008,8 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/capture", async (i
     {
         return StatusProblem(404, "Not Found", "Account not found");
     }
+    await db.Entry(parentEntity).Reference(e => e.Parent).LoadAsync();
+    await db.Entry(parentEntity).Reference(e => e.Hq).LoadAsync();
     var entity = await db.Opportunities.FindAsync(opportunityId);
     if (entity == null)
     {
@@ -967,6 +1023,8 @@ app.MapPost("/api/accounts/{id}/opportunities/{opportunityId}/capture", async (i
     await db.Entry(entity).Collection(e => e.Activities).LoadAsync();
     await db.Entry(entity).Collection(e => e.Lines).LoadAsync();
     await db.Entry(entity).Collection(e => e.Quotes).LoadAsync();
+    await db.Entry(entity).Reference(e => e.Account).LoadAsync();
+    await db.Entry(entity).Reference(e => e.Contact).LoadAsync();
     try
     {
         var result = entity.Capture(dto.Request);
@@ -993,6 +1051,8 @@ app.MapPost("/api/opportunities/{id}/activities/{activityId}/snooze", async (int
     {
         return StatusProblem(404, "Not Found", "Opportunity not found");
     }
+    await db.Entry(parentEntity).Reference(e => e.Account).LoadAsync();
+    await db.Entry(parentEntity).Reference(e => e.Contact).LoadAsync();
     var entity = await db.Activities.FindAsync(activityId);
     if (entity == null)
     {
@@ -1003,6 +1063,7 @@ app.MapPost("/api/opportunities/{id}/activities/{activityId}/snooze", async (int
     {
         return StatusProblem(404, "Not Found", "Activity not found for this Opportunity");
     }
+    await db.Entry(entity).Reference(e => e.Opportunity).LoadAsync();
     try
     {
         var result = entity.Snooze();
@@ -1029,6 +1090,8 @@ app.MapPost("/api/opportunities/{id}/activities/{activityId}/complete", async (i
     {
         return StatusProblem(404, "Not Found", "Opportunity not found");
     }
+    await db.Entry(parentEntity).Reference(e => e.Account).LoadAsync();
+    await db.Entry(parentEntity).Reference(e => e.Contact).LoadAsync();
     var entity = await db.Activities.FindAsync(activityId);
     if (entity == null)
     {
@@ -1039,6 +1102,7 @@ app.MapPost("/api/opportunities/{id}/activities/{activityId}/complete", async (i
     {
         return StatusProblem(404, "Not Found", "Activity not found for this Opportunity");
     }
+    await db.Entry(entity).Reference(e => e.Opportunity).LoadAsync();
     try
     {
         var result = entity.Complete();
@@ -1065,6 +1129,8 @@ app.MapPost("/api/opportunities/{id}/quotes/{quoteId}/addline", async (int id, i
     {
         return StatusProblem(404, "Not Found", "Opportunity not found");
     }
+    await db.Entry(parentEntity).Reference(e => e.Account).LoadAsync();
+    await db.Entry(parentEntity).Reference(e => e.Contact).LoadAsync();
     var entity = await db.Quotes.FindAsync(quoteId);
     if (entity == null)
     {
@@ -1076,6 +1142,7 @@ app.MapPost("/api/opportunities/{id}/quotes/{quoteId}/addline", async (int id, i
         return StatusProblem(404, "Not Found", "Quote not found for this Opportunity");
     }
     await db.Entry(entity).Collection(e => e.Lines).LoadAsync();
+    await db.Entry(entity).Reference(e => e.Opportunity).LoadAsync();
     try
     {
         var product = await db.Products.FirstOrDefaultAsync(e => e.Sku == dto.SkuId);
@@ -1107,6 +1174,8 @@ app.MapPost("/api/opportunities/{id}/quotes/{quoteId}/present", async (int id, i
     {
         return StatusProblem(404, "Not Found", "Opportunity not found");
     }
+    await db.Entry(parentEntity).Reference(e => e.Account).LoadAsync();
+    await db.Entry(parentEntity).Reference(e => e.Contact).LoadAsync();
     var entity = await db.Quotes.FindAsync(quoteId);
     if (entity == null)
     {
@@ -1118,6 +1187,7 @@ app.MapPost("/api/opportunities/{id}/quotes/{quoteId}/present", async (int id, i
         return StatusProblem(404, "Not Found", "Quote not found for this Opportunity");
     }
     await db.Entry(entity).Collection(e => e.Lines).LoadAsync();
+    await db.Entry(entity).Reference(e => e.Opportunity).LoadAsync();
     try
     {
         var result = entity.Present();
@@ -1144,6 +1214,8 @@ app.MapPost("/api/opportunities/{id}/quotes/{quoteId}/accept", async (int id, in
     {
         return StatusProblem(404, "Not Found", "Opportunity not found");
     }
+    await db.Entry(parentEntity).Reference(e => e.Account).LoadAsync();
+    await db.Entry(parentEntity).Reference(e => e.Contact).LoadAsync();
     var entity = await db.Quotes.FindAsync(quoteId);
     if (entity == null)
     {
@@ -1155,6 +1227,7 @@ app.MapPost("/api/opportunities/{id}/quotes/{quoteId}/accept", async (int id, in
         return StatusProblem(404, "Not Found", "Quote not found for this Opportunity");
     }
     await db.Entry(entity).Collection(e => e.Lines).LoadAsync();
+    await db.Entry(entity).Reference(e => e.Opportunity).LoadAsync();
     try
     {
         var result = entity.Accept();
@@ -1181,6 +1254,8 @@ app.MapPost("/api/opportunities/{id}/quotes/{quoteId}/reject", async (int id, in
     {
         return StatusProblem(404, "Not Found", "Opportunity not found");
     }
+    await db.Entry(parentEntity).Reference(e => e.Account).LoadAsync();
+    await db.Entry(parentEntity).Reference(e => e.Contact).LoadAsync();
     var entity = await db.Quotes.FindAsync(quoteId);
     if (entity == null)
     {
@@ -1192,6 +1267,7 @@ app.MapPost("/api/opportunities/{id}/quotes/{quoteId}/reject", async (int id, in
         return StatusProblem(404, "Not Found", "Quote not found for this Opportunity");
     }
     await db.Entry(entity).Collection(e => e.Lines).LoadAsync();
+    await db.Entry(entity).Reference(e => e.Opportunity).LoadAsync();
     try
     {
         var result = entity.Reject();
@@ -1277,6 +1353,8 @@ app.MapPost("/api/accounts/{id}/tickets/{ticketId}/work", async (int id, int tic
     {
         return StatusProblem(404, "Not Found", "Account not found");
     }
+    await db.Entry(parentEntity).Reference(e => e.Parent).LoadAsync();
+    await db.Entry(parentEntity).Reference(e => e.Hq).LoadAsync();
     var entity = await db.Tickets.FindAsync(ticketId);
     if (entity == null)
     {
@@ -1287,6 +1365,7 @@ app.MapPost("/api/accounts/{id}/tickets/{ticketId}/work", async (int id, int tic
     {
         return StatusProblem(404, "Not Found", "Ticket not found for this Account");
     }
+    await db.Entry(entity).Reference(e => e.Account).LoadAsync();
     try
     {
         var result = entity.Work();
@@ -1313,6 +1392,8 @@ app.MapPost("/api/accounts/{id}/tickets/{ticketId}/close", async (int id, int ti
     {
         return StatusProblem(404, "Not Found", "Account not found");
     }
+    await db.Entry(parentEntity).Reference(e => e.Parent).LoadAsync();
+    await db.Entry(parentEntity).Reference(e => e.Hq).LoadAsync();
     var entity = await db.Tickets.FindAsync(ticketId);
     if (entity == null)
     {
@@ -1323,6 +1404,7 @@ app.MapPost("/api/accounts/{id}/tickets/{ticketId}/close", async (int id, int ti
     {
         return StatusProblem(404, "Not Found", "Ticket not found for this Account");
     }
+    await db.Entry(entity).Reference(e => e.Account).LoadAsync();
     try
     {
         var result = entity.Close();

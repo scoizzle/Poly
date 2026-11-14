@@ -48,6 +48,8 @@ public sealed partial class MinimalApiGenerator {
                     LoadByRouteKey(Pluralize(pEntity.Name), pStore, new Variable(pKeyName))));
                 preActionNodes.Add(new IfStatement(new Equal(new Variable("parentEntity"), new Constant(null!)),
                     new Block(new Return(ProblemResponse(404, "Not Found", $"{pEntity.Name} not found")))));
+                foreach (var nav in pStore.ReferenceNavigations.Where(n => n.PropertyName != pascalRel))
+                    preActionNodes.Add(LoadReference("parentEntity", nav.PropertyName));
                 if (isCollection) {
                     preActionNodes.Add(Init("entity",
                         LoadByRouteKey(pluralName, store, new Variable(childKeyParam))));
@@ -92,6 +94,10 @@ public sealed partial class MinimalApiGenerator {
                 var col = new Invoke(new Member(en, "Collection"), new Lambda([new Parameter("e")], new Member(new Variable("e"), nav.PropertyName)));
                 preActionNodes.Add(new Await(new Invoke(new Member(col, "LoadAsync"))));
             }
+
+            // Load reference navigations: the module sees a stored link only through the loaded navigation.
+            foreach (var nav in store.ReferenceNavigations)
+                preActionNodes.Add(LoadReference("entity", nav.PropertyName));
 
             // ── Try body: entity-ref lookups + invoke + result switch ──
             var tryBody = new List<Node>();
@@ -148,6 +154,13 @@ public sealed partial class MinimalApiGenerator {
                 new Lambda([.. actionParams],
                     Stmts(bodyNodes))));
         }
+    }
+
+    /// <summary><c>await db.Entry(x).Reference(e =&gt; e.Nav).LoadAsync();</c></summary>
+    private static Node LoadReference(string entityVariable, string navigation) {
+        var entry = new Invoke(new Member(new TypeReference("db"), "Entry"), new Variable(entityVariable));
+        var reference = new Invoke(new Member(entry, "Reference"), new Lambda([new Parameter("e")], new Member(new Variable("e"), navigation)));
+        return new Await(new Invoke(new Member(reference, "LoadAsync")));
     }
 
     /// <summary>

@@ -90,7 +90,7 @@ public class OptionalPropertyLoweringTests {
         await Assert.That((noteParam.DefaultValue as Constant)?.Value).IsNull();
 
         var csharp = new CSharpGenerator().Generate([token]);
-        await Assert.That(csharp).Contains("string? note = null");
+        await Assert.That(csharp).Contains("string? note = default");
     }
 
     [Test]
@@ -194,9 +194,11 @@ public class OptionalPropertyLoweringTests {
         var files = session.Emit(outcome.Root!, outcome.Analysis);
 
         var token = files.Single(f => f.FileName == "Token.cs").Source;
-        await Assert.That(token).Contains("string? note = null");
-        await Assert.That(token).Contains("string name");
-        await Assert.That(token).DoesNotContain("string name = null");
-        await Assert.That(token).DoesNotContain("string? name");
+        await Assert.That(token).Contains("string? note = default");
+        // L-08b: every Create parameter is `T? x = default`; requiredness is the member's
+        // type and the Create guard, not the parameter's.
+        await Assert.That(token).Contains("public string Name {");
+        await Assert.That(token).Contains("private Token(string name, string? note)");
+        await Assert.That(token).Contains("if (name == null)");
     }
 }

@@ -16,7 +16,7 @@ internal enum LeadStage
 internal class Lead : Poly.Runtime.IActionScoped
 {
     private Lead() { }
-    private Lead(string name, string email, string company, Account? account = null)
+    private Lead(string name, string email, string company, Account? account)
     {
         this.Name = name;
         this.Email = email;
@@ -100,7 +100,7 @@ internal class Lead : Poly.Runtime.IActionScoped
         return DomainResult.Success();
     }
     public bool HasAccount() => this.Account != null;
-    internal static DomainResult<Lead> Create(string name, string email, string company, Poly.Runtime.IStoragePort db, Account? account = null)
+    internal static DomainResult<Lead> Create(Poly.Runtime.IStoragePort db, string? name = default, string? email = default, string? company = default, Account? account = default)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
         var __done = false;
@@ -123,31 +123,34 @@ internal class Lead : Poly.Runtime.IActionScoped
             }
         }
     }
-    private static DomainResult<Lead> __BodyOfCreate(string name, string email, string company, Account? account, Poly.Runtime.IStoragePort db)
+    private static DomainResult<Lead> __BodyOfCreate(string? name, string? email, string? company, Account? account, Poly.Runtime.IStoragePort db)
     {
-        if (string.IsNullOrEmpty(name))
+        if (name == null)
         {
             return DomainResult<Lead>.Failure(Poly.Runtime.DomainFailure.Required("'Name' is required.", "Lead.Name"));
         }
-        if (string.IsNullOrEmpty(email))
+        var __name = name;
+        if (email == null)
         {
             return DomainResult<Lead>.Failure(Poly.Runtime.DomainFailure.Required("'Email' is required.", "Lead.Email"));
         }
-        if (!System.Text.RegularExpressions.Regex.IsMatch(email, "^[^@]+@[^@]+\\z"))
+        var __email = email;
+        if (!System.Text.RegularExpressions.Regex.IsMatch(__email, "^[^@]+@[^@]+\\z"))
         {
             return DomainResult<Lead>.Failure(Poly.Runtime.DomainFailure.Pattern("'Email' does not match the required pattern.", "Lead.Email"));
         }
-        if (string.IsNullOrEmpty(company))
+        if (company == null)
         {
             return DomainResult<Lead>.Failure(Poly.Runtime.DomainFailure.Required("'Company' is required.", "Lead.Company"));
         }
-        if (Lead.ExistsWithEmail(db, email))
+        var __company = company;
+        if (Lead.ExistsWithEmail(db, __email))
         {
             return DomainResult<Lead>.Failure(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'Email' value is already used on another 'Lead'.", "Lead.Email"));
         }
-        var created = new Lead(name, email, company, account);
+        var created = new Lead(__name, __email, __company, account);
         Poly.Runtime.ActionScope.Create(created, "Lead");
-        db.Record("Lead", "Email", email);
+        db.Record("Lead", "Email", __email);
         return DomainResult<Lead>.Success(created);
     }
     public DomainResult EnsureUnique(string propertyName, object value)

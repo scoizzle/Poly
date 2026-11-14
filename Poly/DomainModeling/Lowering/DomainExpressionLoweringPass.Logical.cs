@@ -1,4 +1,5 @@
 using Poly.Ast.Nodes;
+using Poly.DomainModeling.Analysis;
 using Poly.DomainModeling.Ontology;
 
 using And = Poly.DomainModeling.Ontology.And;
@@ -38,12 +39,14 @@ public sealed partial class DomainExpressionLoweringPass {
 
         // Simplify boolean comparisons: boolProp == true  → boolProp
         //                            boolProp == false → !boolProp
+        // An optional Boolean keeps the lifted comparison: `Flag is false` is false when Flag is absent.
         Node value;
-        if (c.Kind == ComparisonKind.Equal
+        var foldable = !IsOptionalBoolean(c.Left);
+        if (foldable && c.Kind == ComparisonKind.Equal
             && loweredRight is Constant { Value: bool b }) {
             value = b ? loweredLeft : new SN.Not(loweredLeft);
         }
-        else if (c.Kind == ComparisonKind.NotEqual
+        else if (foldable && c.Kind == ComparisonKind.NotEqual
             && loweredRight is Constant { Value: bool b2 }) {
             value = b2 ? new SN.Not(loweredLeft) : loweredLeft;
         }
@@ -77,25 +80,50 @@ public sealed partial class DomainExpressionLoweringPass {
     }
 
     protected override LoweredExpression And(And a) {
-        var left = Route(a.Left);
-        var right = Route(a.Right);
+        var left = RouteCondition(a.Left);
+        var right = RouteCondition(a.Right);
         if (right.Statements.Count == 0)
             return LoweredExpression.Combine([left, right], new SN.And(left.Value, right.Value));
         return ShortCircuit(left, right, whenTrue: true);
     }
 
     protected override LoweredExpression Or(Or o) {
-        var left = Route(o.Left);
-        var right = Route(o.Right);
+        var left = RouteCondition(o.Left);
+        var right = RouteCondition(o.Right);
         if (right.Statements.Count == 0)
             return LoweredExpression.Combine([left, right], new SN.Or(left.Value, right.Value));
         return ShortCircuit(left, right, whenTrue: false);
     }
 
     protected override LoweredExpression Not(Not n) {
-        var operand = Route(n.Operand);
+        var operand = RouteCondition(n.Operand);
         return operand with { Value = new SN.Not(operand.Value) };
     }
+
+    /// <summary>
+    /// Lowers a condition: an <c>if</c>, a <c>for … where</c>, a policy root, or (through <see cref="RouteCondition"/>)
+    /// an <c>and</c>/<c>or</c>/<c>not</c> operand, a <c>match</c> arm condition and a quantifier body.
+    /// </summary>
+    internal LoweredExpression LowerCondition(DomainExpression condition, Node subject) {
+        _currentSubject = subject;
+        return RouteCondition(condition);
+    }
+
+    /// <summary>
+    /// An optional Boolean in a condition position means <c>X == true</c> (T-06, #862): stored false and absent are
+    /// both false, on both hosts, as the lifted comparison. The analyzer stamps such an operand
+    /// (<c>ExpressionTypeAnalyzer.StampOptionalBoolean</c>, beside each of its Boolean-position checks), so the two
+    /// lists of positions are one list. An invoke or function argument is an assignment, not a condition: never here.
+    /// </summary>
+    private LoweredExpression RouteCondition(DomainExpression condition) {
+        var lowered = Route(condition);
+        return IsOptionalBoolean(condition)
+            ? lowered with { Value = new Equal(lowered.Value, new Constant(true)) }
+            : lowered;
+    }
+
+    private bool IsOptionalBoolean(DomainExpression expr) =>
+        _analysis.GetMetadata<TypedExpressionMetadata>(expr) is { Type: { Optional: true, Definition.PrimitiveType: Introspection.PrimitiveType.Boolean } };
 
     /// <summary>
     /// Preserves source-order short-circuit when the right operand has statements:

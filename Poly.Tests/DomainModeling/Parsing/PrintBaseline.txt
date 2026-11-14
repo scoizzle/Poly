@@ -3196,7 +3196,13 @@ domain Matrix
 A: entity {
   Name: Text
 }
-##### built/expression-duration-unbound	built: print(code-built Domain)	DomainSession.ForExtensions([])	failed:InvalidOperationException	E3B0C442
+##### built/expression-duration-unbound	built: print(code-built Domain)	DomainSession.ForExtensions([])	printed	3FFF6539
+domain Matrix
+
+A: entity {
+  Wait: Duration
+  Long: policy { Wait > 12 Days }
+}
 ##### built/expression-date-operation	built: print(code-built Domain)	DomainSession.ForExtensions([])	printed	406041EF
 domain Matrix
 

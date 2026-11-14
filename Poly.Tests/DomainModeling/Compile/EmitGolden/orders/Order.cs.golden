@@ -20,14 +20,14 @@ internal class Order : Poly.Runtime.IActionScoped
 {
     private List<OrderItem> _items = new List<OrderItem>();
     private Order() { }
-    private Order(decimal total, decimal discount, string cancelReason = "", Customer? customer = null, IEnumerable<OrderItem>? items = null, OrderState state = OrderState.Pending)
+    private Order(decimal total, decimal discount, OrderState state, Customer? customer, IEnumerable<OrderItem>? items, string cancelReason)
     {
         this.Total = total;
         this.Discount = discount;
-        this.CancelReason = cancelReason;
         this.State = state;
         this.Customer = customer;
         this._items = new List<OrderItem>(items ?? new List<OrderItem>());
+        this.CancelReason = cancelReason;
         this.CurrentStage = OrderStage.Pending;
     }
     public decimal Total { get; private set; }
@@ -72,7 +72,7 @@ internal class Order : Poly.Runtime.IActionScoped
     private DomainResult __BodyOfCancel(string reason)
     {
         var assignValue0 = reason;
-        if (System.String.IsNullOrEmpty(assignValue0))
+        if (assignValue0 == null)
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Required("'CancelReason' is required.", "Order.CancelReason"));
         }
@@ -192,13 +192,13 @@ internal class Order : Poly.Runtime.IActionScoped
         return DomainResult.Success();
     }
     public bool IsPaid() => this.State == OrderState.Paid;
-    internal static DomainResult<Order> Create(decimal total, decimal discount, string cancelReason = "", Customer? customer = null, IEnumerable<OrderItem>? items = null, OrderState state = OrderState.Pending)
+    internal static DomainResult<Order> Create(decimal? total = default, decimal? discount = default, OrderState? state = default, Customer? customer = default, IEnumerable<OrderItem>? items = default, string? cancelReason = default)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
         var __done = false;
         try
         {
-            var __result = Order.__BodyOfCreate(total, discount, cancelReason, customer, items, state);
+            var __result = Order.__BodyOfCreate(total, discount, state, customer, items, cancelReason);
             if (!__result.IsSuccess)
             {
                 return __result;
@@ -215,37 +215,49 @@ internal class Order : Poly.Runtime.IActionScoped
             }
         }
     }
-    private static DomainResult<Order> __BodyOfCreate(decimal total, decimal discount, string cancelReason, Customer? customer, IEnumerable<OrderItem>? items, OrderState state)
+    private static DomainResult<Order> __BodyOfCreate(decimal? total, decimal? discount, OrderState? state, Customer? customer, IEnumerable<OrderItem>? items, string? cancelReason)
     {
-        if (total < 0m)
+        if (total == null)
+        {
+            return DomainResult<Order>.Failure(Poly.Runtime.DomainFailure.Required("'Total' is required.", "Order.Total"));
+        }
+        var __total = (decimal)total;
+        if (__total < 0m)
         {
             return DomainResult<Order>.Failure(Poly.Runtime.DomainFailure.Range("'Total' must be >= 0.", "Order.Total"));
         }
-        if (total > 100000m)
+        if (__total > 100000m)
         {
             return DomainResult<Order>.Failure(Poly.Runtime.DomainFailure.Range("'Total' must be <= 100000.", "Order.Total"));
         }
-        if (discount < 0m)
+        if (discount == null)
+        {
+            return DomainResult<Order>.Failure(Poly.Runtime.DomainFailure.Required("'Discount' is required.", "Order.Discount"));
+        }
+        var __discount = (decimal)discount;
+        if (__discount < 0m)
         {
             return DomainResult<Order>.Failure(Poly.Runtime.DomainFailure.Range("'Discount' must be >= 0.", "Order.Discount"));
         }
-        if (discount > 100m)
+        if (__discount > 100m)
         {
             return DomainResult<Order>.Failure(Poly.Runtime.DomainFailure.Range("'Discount' must be <= 100.", "Order.Discount"));
         }
-        if (state != OrderState.Pending && state != OrderState.Paid && state != OrderState.Shipped && state != OrderState.Delivered && state != OrderState.Cancelled)
+        var __state = (state == null ? OrderState.Pending : (OrderState)state);
+        if (__state != OrderState.Pending && __state != OrderState.Paid && __state != OrderState.Shipped && __state != OrderState.Delivered && __state != OrderState.Cancelled)
         {
-            return DomainResult<Order>.Failure(Poly.Runtime.DomainFailure.Enum(string.Concat("'", state, "' is not a valid member of OrderState for property 'State'."), "Order.State"));
+            return DomainResult<Order>.Failure(Poly.Runtime.DomainFailure.Enum(string.Concat("'", __state, "' is not a valid member of OrderState for property 'State'."), "Order.State"));
         }
-        if (string.IsNullOrEmpty(cancelReason))
+        if (cancelReason == null)
         {
             return DomainResult<Order>.Failure(Poly.Runtime.DomainFailure.Required("'CancelReason' is required.", "Order.CancelReason"));
         }
-        if (cancelReason.Length > 200L)
+        var __cancelReason = cancelReason;
+        if (__cancelReason.Length > 200L)
         {
             return DomainResult<Order>.Failure(Poly.Runtime.DomainFailure.Length("'CancelReason' must be at most 200 characters.", "Order.CancelReason"));
         }
-        var created = new Order(total, discount, cancelReason, customer, items, state);
+        var created = new Order(__total, __discount, __state, customer, items, __cancelReason);
         Poly.Runtime.ActionScope.Create(created, "Order");
         if (customer != null)
         {

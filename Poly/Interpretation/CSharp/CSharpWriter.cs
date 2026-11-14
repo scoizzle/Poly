@@ -1750,6 +1750,7 @@ public sealed class CSharpWriter {
         || ContainsIdentifier(text, "DateTime")
         || ContainsIdentifier(text, "DateTimeOffset")
         || ContainsIdentifier(text, "TimeSpan")
+        || ContainsIdentifier(text, "TimeOnly")
         || ContainsIdentifier(text, "Guid");
 
     private static bool UsesCollections(string text) =>

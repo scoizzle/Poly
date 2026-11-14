@@ -9,14 +9,14 @@ namespace Crm;
 internal class CampaignMember : Poly.Runtime.IActionScoped
 {
     private CampaignMember() { }
-    private CampaignMember(Contact? contact = null, Campaign? campaign = null)
+    private CampaignMember(Contact? contact, Campaign? campaign)
     {
         this.Contact = contact;
         this.Campaign = campaign;
     }
     public Contact? Contact { get; private set; }
     public Campaign? Campaign { get; private set; }
-    internal static DomainResult<CampaignMember> Create(Contact? contact = null, Campaign? campaign = null)
+    internal static DomainResult<CampaignMember> Create(Contact? contact = default, Campaign? campaign = default)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
         var __done = false;

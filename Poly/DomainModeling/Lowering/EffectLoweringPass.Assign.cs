@@ -53,7 +53,8 @@ public sealed partial class EffectLoweringPass {
                 target.Value,
                 needsConstraintWrap ? assignProp : null,
                 value.Value,
-                uniqueName);
+                uniqueName,
+                _expressionPass.MayBeAbsent(a.Value, name => _binderEntities?.GetValueOrDefault(name)));
         return LoweredExpression.Before([target, value], assignment);
     }
     /// <summary>
@@ -102,10 +103,12 @@ public sealed partial class EffectLoweringPass {
             }
         }
         // Requiredness is a fact on this branch (a property is required unless it is
-        // marked 'optional'), not a constraint object, so it is decided here.
+        // marked 'optional'), not a constraint object, so it is decided here. Required
+        // means non-null, so any string constant, "" included, satisfies it; a length or
+        // pattern that refuses "" was checked in the loop above.
         if (NeedsRequiredValueCheck(prop)) {
             if (prop.Type.TypeName is "Text" or "String") {
-                if (value is not Constant { Value: string requiredText } || requiredText.Length == 0)
+                if (value is not Constant { Value: string })
                     return false;
             }
             else if (value is Constant { Value: null }) {
@@ -275,7 +278,8 @@ public sealed partial class EffectLoweringPass {
         Node destination,
         Property? property,
         Node value,
-        string? uniquePropertyName) {
+        string? uniquePropertyName,
+        bool valueMayBeAbsent) {
         var assignedVar = _names.Next("assignValue");
         var locals = new List<Node> { assignedVar };
         var nodes = new List<Node> {
@@ -283,7 +287,7 @@ public sealed partial class EffectLoweringPass {
         };
 
         if (property is not null)
-            AppendAssignConstraintChecks(nodes, property, assignedVar);
+            AppendAssignConstraintChecks(nodes, property, assignedVar, valueMayBeAbsent);
 
         if (uniquePropertyName is not null) {
             var checkVar = _names.Next("uniqueCheck");
@@ -310,7 +314,7 @@ public sealed partial class EffectLoweringPass {
     /// Void export contexts (ctor / OnEntry, no ActionResultType) throw like create-in.
     /// </summary>
     private void AppendAssignConstraintChecks(
-        List<Node> nodes, Property prop, Node valueRef) {
+        List<Node> nodes, Property prop, Node valueRef, bool valueMayBeAbsent) {
 
         Node Fail(ConstraintCheckWriter.Check check) =>
             AssignConstraintFailure(ConstraintCheckWriter.FailureSpec(check, _entity.Name, prop.Name));
@@ -337,7 +341,7 @@ public sealed partial class EffectLoweringPass {
         foreach (var check in BuiltinConstraintCompiler.Checks(
                      _entity, prop, _domain, _analysis,
                      ConstraintCheckWriter.ConstraintCheckStyle.Assign,
-                     valueRef, nullableValue: false, valueHasDefault: false, includeRequired: true)) {
+                     valueRef, nullableValue: valueMayBeAbsent && !EntityStructureAnalyzer.IsRequired(prop), includeRequired: true)) {
             if (check.Kind is ConstraintCheckWriter.Kind.LengthMinimum
                 or ConstraintCheckWriter.Kind.LengthMaximum) {
                 lengthChecks.Add(check);
@@ -351,8 +355,8 @@ public sealed partial class EffectLoweringPass {
     }
 
     /// <summary>
-    /// Requiredness is "no <c>optional</c>". Text rejects null or empty; other
-    /// reference-typed properties reject null. Value types have no null to reject.
+    /// Requiredness is "no <c>optional</c>": a reference-typed property, Text included,
+    /// rejects null. Value types have no null to reject.
     /// </summary>
     private bool NeedsRequiredValueCheck(Property prop) =>
         ConstraintCheckWriter.RequiredApplies(_entity, prop, _domain, _analysis);

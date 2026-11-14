@@ -27,11 +27,11 @@ internal class Opportunity : Poly.Runtime.IActionScoped
     private List<Account>? _accountOpportunitiesLostSubscribers;
     private int _notifyDepth;
     private Opportunity() { }
-    private Opportunity(string title, decimal amount, Account? account = null, Contact? contact = null, IEnumerable<Activity>? activities = null, IEnumerable<Line>? lines = null, IEnumerable<Quote>? quotes = null, DateOnly? closeBy = null)
+    private Opportunity(string title, decimal amount, DateOnly closeBy, Account? account, Contact? contact, IEnumerable<Activity>? activities, IEnumerable<Line>? lines, IEnumerable<Quote>? quotes)
     {
         this.Title = title;
         this.Amount = amount;
-        this.CloseBy = closeBy ?? DateOnly.FromDateTime(DateTime.UtcNow);
+        this.CloseBy = closeBy;
         this.Account = account;
         this.Contact = contact;
         this._activities = new List<Activity>(activities ?? new List<Activity>());
@@ -58,7 +58,7 @@ internal class Opportunity : Poly.Runtime.IActionScoped
         get => this._quotes;
     }
     public OpportunityStage CurrentStage { get; private set; }
-    internal DomainResult<Activity> CreateActivities(string subject, DateOnly? dueOn = null)
+    internal DomainResult<Activity> CreateActivities(string? subject = default, DateOnly? dueOn = default)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
         var __done = false;
@@ -82,9 +82,9 @@ internal class Opportunity : Poly.Runtime.IActionScoped
             }
         }
     }
-    private DomainResult<Activity> __BodyOfCreateActivities(string subject, DateOnly? dueOn)
+    private DomainResult<Activity> __BodyOfCreateActivities(string? subject, DateOnly? dueOn)
     {
-        var activityResult = Activity.Create(subject, this, dueOn);
+        var activityResult = Activity.Create(subject, dueOn, this);
         if (!activityResult.IsSuccess)
         {
             return DomainResult<Activity>.Failure(activityResult.Error!);
@@ -97,7 +97,7 @@ internal class Opportunity : Poly.Runtime.IActionScoped
         Poly.Runtime.ActionScope.Touch(this);
         this._activities.Add(child);
     }
-    internal DomainResult<Line> CreateLines(long qty, decimal unitPrice, Product? product = null)
+    internal DomainResult<Line> CreateLines(long? qty = default, decimal? unitPrice = default, Product? product = default)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
         var __done = false;
@@ -121,7 +121,7 @@ internal class Opportunity : Poly.Runtime.IActionScoped
             }
         }
     }
-    private DomainResult<Line> __BodyOfCreateLines(long qty, decimal unitPrice, Product? product)
+    private DomainResult<Line> __BodyOfCreateLines(long? qty, decimal? unitPrice, Product? product)
     {
         var lineResult = Line.Create(qty, unitPrice, product, this);
         if (!lineResult.IsSuccess)
@@ -136,7 +136,7 @@ internal class Opportunity : Poly.Runtime.IActionScoped
         Poly.Runtime.ActionScope.Touch(this);
         this._lines.Add(child);
     }
-    internal DomainResult<Quote> CreateQuotes(string title, decimal amount)
+    internal DomainResult<Quote> CreateQuotes(string? title = default, decimal? amount = default)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
         var __done = false;
@@ -160,7 +160,7 @@ internal class Opportunity : Poly.Runtime.IActionScoped
             }
         }
     }
-    private DomainResult<Quote> __BodyOfCreateQuotes(string title, decimal amount)
+    private DomainResult<Quote> __BodyOfCreateQuotes(string? title, decimal? amount)
     {
         var quoteResult = Quote.Create(title, amount, this, new List<QuoteLine>());
         if (!quoteResult.IsSuccess)
@@ -670,13 +670,13 @@ internal class Opportunity : Poly.Runtime.IActionScoped
         this.Probability = 10L;
         return DomainResult.Success();
     }
-    internal static DomainResult<Opportunity> Create(string title, decimal amount, Account? account = null, Contact? contact = null, IEnumerable<Activity>? activities = null, IEnumerable<Line>? lines = null, IEnumerable<Quote>? quotes = null, DateOnly? closeBy = null)
+    internal static DomainResult<Opportunity> Create(string? title = default, decimal? amount = default, DateOnly? closeBy = default, Account? account = default, Contact? contact = default, IEnumerable<Activity>? activities = default, IEnumerable<Line>? lines = default, IEnumerable<Quote>? quotes = default)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
         var __done = false;
         try
         {
-            var __result = Opportunity.__BodyOfCreate(title, amount, account, contact, activities, lines, quotes, closeBy);
+            var __result = Opportunity.__BodyOfCreate(title, amount, closeBy, account, contact, activities, lines, quotes);
             if (!__result.IsSuccess)
             {
                 return __result;
@@ -693,21 +693,28 @@ internal class Opportunity : Poly.Runtime.IActionScoped
             }
         }
     }
-    private static DomainResult<Opportunity> __BodyOfCreate(string title, decimal amount, Account? account, Contact? contact, IEnumerable<Activity>? activities, IEnumerable<Line>? lines, IEnumerable<Quote>? quotes, DateOnly? closeBy)
+    private static DomainResult<Opportunity> __BodyOfCreate(string? title, decimal? amount, DateOnly? closeBy, Account? account, Contact? contact, IEnumerable<Activity>? activities, IEnumerable<Line>? lines, IEnumerable<Quote>? quotes)
     {
-        if (string.IsNullOrEmpty(title))
+        if (title == null)
         {
             return DomainResult<Opportunity>.Failure(Poly.Runtime.DomainFailure.Required("'Title' is required.", "Opportunity.Title"));
         }
-        if (amount < 0m)
+        var __title = title;
+        if (amount == null)
+        {
+            return DomainResult<Opportunity>.Failure(Poly.Runtime.DomainFailure.Required("'Amount' is required.", "Opportunity.Amount"));
+        }
+        var __amount = (decimal)amount;
+        if (__amount < 0m)
         {
             return DomainResult<Opportunity>.Failure(Poly.Runtime.DomainFailure.Range("'Amount' must be >= 0.", "Opportunity.Amount"));
         }
-        if (amount > 100000000m)
+        if (__amount > 100000000m)
         {
             return DomainResult<Opportunity>.Failure(Poly.Runtime.DomainFailure.Range("'Amount' must be <= 100000000.", "Opportunity.Amount"));
         }
-        var created = new Opportunity(title, amount, account, contact, activities, lines, quotes, closeBy);
+        var __closeBy = (closeBy == null ? DateOnly.FromDateTime(DateTime.UtcNow) : (DateOnly)closeBy);
+        var created = new Opportunity(__title, __amount, __closeBy, account, contact, activities, lines, quotes);
         Poly.Runtime.ActionScope.Create(created, "Opportunity");
         var __entry = created.__EnterInitialStage();
         if (!__entry.IsSuccess)

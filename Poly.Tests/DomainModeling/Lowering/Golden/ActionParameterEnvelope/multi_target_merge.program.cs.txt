@@ -31,7 +31,7 @@ app.MapGet("/api/pairs", async (TDbCtx db) => await db.Pairs.ToListAsync());
 app.MapGet("/api/pairs/{id}", async (int id, TDbCtx db) => (await db.Pairs.FindAsync(id) is T.Pair pair ? Results.Ok(pair) : StatusProblem(404, "Not Found")));
 
 app.MapPost("/api/pairs", async (PairDto dto, TDbCtx db) => {
-    var pairResult = T.Pair.Create(dto.Hi, dto.Lo, dto.Code, dto.Tag);
+    var pairResult = T.Pair.Create(dto.Lo, dto.Hi, dto.Code, dto.Tag);
     if (!pairResult.IsSuccess)
     {
         return Problem(pairResult.Error!);
@@ -138,10 +138,10 @@ app.Run();
 
 internal record PairDto
 {
-    [Range(50, 200)]
-    public long Hi { get; init; }
     [Range(0, 100)]
     public long Lo { get; init; }
+    [Range(50, 200)]
+    public long Hi { get; init; }
     [Required]
     [RegularExpression("^[A-Z]+$")]
     public string Code { get; init; } = default!;

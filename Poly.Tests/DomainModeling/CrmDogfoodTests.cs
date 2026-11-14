@@ -59,11 +59,11 @@ public class CrmDogfoodTests {
         var cs = new CSharpGenerator().Generate(types);
 
         await Assert.That(cs).DoesNotContain("void Notify(string stageName)");
-        await Assert.That(cs).Contains("Site? hq = null");
-        await Assert.That(cs).Contains("IEnumerable<Opportunity>? opportunities = null");
+        await Assert.That(cs).Contains("Site? hq = default");
+        await Assert.That(cs).Contains("IEnumerable<Opportunity>? opportunities = default");
         await Assert.That(cs).Contains("this.Lines.Count");
         await Assert.That(cs).Contains("CreateHq");
-        await Assert.That(cs).Contains("Account? parent = null");
+        await Assert.That(cs).Contains("Account? parent = default");
         await Assert.That(cs.Contains("BillingAdapters", StringComparison.Ordinal)).IsFalse();
 
         var tree = CSharpSyntaxTree.ParseText("#nullable enable\n" + cs);

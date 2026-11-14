@@ -142,7 +142,7 @@ public class ConstraintAssignLoweringTests {
     }
 
     [Test]
-    public async Task Length_WithRequired_EmptyFails() {
+    public async Task Length_WithRequired_EmptyFailsLength() {
         var (domain, _) = Evolve("""
             domain Lab
             Label: entity {
@@ -158,13 +158,14 @@ public class ConstraintAssignLoweringTests {
 
         var result = exec.Invoke(instance, "Rename", new Dictionary<string, object?> { ["name"] = "" });
 
+        // L-08b: the empty string is a value; the length refuses it, not required.
         await Assert.That(result.Succeeded).IsFalse();
-        await Assert.That(result.Error).Contains("is required");
+        await Assert.That(result.Error).Contains("'Name' must be at least 7 characters.");
         await Assert.That((string)instance.Bag["Name"]!).IsEqualTo("abcdefg");
     }
 
     [Test]
-    public async Task Length_BareProperty_EmptyFails_TooShortFails() {
+    public async Task Length_BareProperty_EmptyFailsLength_TooShortFails() {
         var (domain, _) = Evolve("""
             domain Lab
             Note: entity {
@@ -179,7 +180,7 @@ public class ConstraintAssignLoweringTests {
         var emptyFail = exec.Create((entity).Name, new Dictionary<string, object?> { ["Body"] = "abcdefg" }).Instance!;
         var emptyResult = exec.Invoke(emptyFail, "Edit", new Dictionary<string, object?> { ["body"] = "" });
         await Assert.That(emptyResult.Succeeded).IsFalse();
-        await Assert.That(emptyResult.Error).Contains("is required");
+        await Assert.That(emptyResult.Error).Contains("'Body' must be at least 7 characters.");
         await Assert.That((string)emptyFail.Bag["Body"]!).IsEqualTo("abcdefg");
 
         var shortFail = exec.Create((entity).Name, new Dictionary<string, object?> { ["Body"] = "abcdefg" }).Instance!;
@@ -332,7 +333,7 @@ public class ConstraintAssignLoweringTests {
     }
 
     [Test]
-    public async Task RequiredTextAssign_Empty_IsFailure() {
+    public async Task RequiredTextAssign_Empty_IsAccepted() {
         var (domain, _) = Evolve("""
             domain Lab
             Person: entity {
@@ -346,14 +347,14 @@ public class ConstraintAssignLoweringTests {
         var entity = domain.Types.OfType<Entity>().First(e => e.Name == "Person");
         var instance = exec.Create((entity).Name, new Dictionary<string, object?> { ["Name"] = "Ada" }).Instance!;
 
+        // L-08b (owner ruling 2026-11-13): an empty string is a value, so a required Text accepts it.
         var result = exec.Invoke(instance, "Rename", new Dictionary<string, object?> { ["name"] = "" });
-        await Assert.That(result.Succeeded).IsFalse();
-        await Assert.That(result.Error).Contains("'Name' is required.");
-        await Assert.That((string)instance.Bag["Name"]!).IsEqualTo("Ada");
+        await Assert.That(result.Succeeded).IsTrue().Because(result.Error ?? "");
+        await Assert.That((string)instance.Bag["Name"]!).IsEqualTo("");
     }
 
     [Test]
-    public async Task BareTextAssign_Empty_IsFailure() {
+    public async Task BareTextAssign_Empty_IsAccepted() {
         var (domain, _) = Evolve("""
             domain Lab
             Person: entity {
@@ -367,14 +368,14 @@ public class ConstraintAssignLoweringTests {
         var entity = domain.Types.OfType<Entity>().First(e => e.Name == "Person");
         var instance = exec.Create((entity).Name, new Dictionary<string, object?> { ["Name"] = "Ada" }).Instance!;
 
+        // L-08b (owner ruling 2026-11-13): an empty string is a value, so a required Text accepts it.
         var result = exec.Invoke(instance, "Rename", new Dictionary<string, object?> { ["name"] = "" });
-        await Assert.That(result.Succeeded).IsFalse();
-        await Assert.That(result.Error).Contains("'Name' is required.");
-        await Assert.That((string)instance.Bag["Name"]!).IsEqualTo("Ada");
+        await Assert.That(result.Succeeded).IsTrue().Because(result.Error ?? "");
+        await Assert.That((string)instance.Bag["Name"]!).IsEqualTo("");
     }
 
     [Test]
-    public async Task Length_Optional_EmptySucceeds() {
+    public async Task Length_Optional_EmptyFailsLength() {
         var (domain, _) = Evolve("""
             domain Lab
             Note: entity {
@@ -387,9 +388,11 @@ public class ConstraintAssignLoweringTests {
         var exec = ModuleExec.For(domain);
         var entity = domain.Types.OfType<Entity>().First(e => e.Name == "Note");
         var instance = exec.Create((entity).Name, new Dictionary<string, object?>()).Instance!;
+        // L-08b: an empty string is a value, so an optional Text's length applies to it.
         var result = exec.Invoke(instance, "Edit", new Dictionary<string, object?> { ["body"] = "" });
-        await Assert.That(result.Succeeded).IsTrue();
-        await Assert.That((string)instance.Bag["Body"]!).IsEqualTo("");
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(result.Error).Contains("'Body' must be at least 7 characters.");
+        await Assert.That(instance.Bag["Body"]).IsNull();
     }
 
     [Test]
@@ -545,5 +548,59 @@ public class ConstraintAssignLoweringTests {
             foreach (var n in Flatten(child))
                 yield return n;
         }
+    }
+
+    /// <summary>
+    /// T-06a: the assign guard of an optional property tests presence only for a value that can be absent. A parameter,
+    /// a literal or a required read is never null, so no <c>!= null</c> is printed for it (CS0472, "always true");
+    /// a `null` arm and an optional read keep the guard. The generated C# compiles with warnings as errors.
+    /// </summary>
+    [Test]
+    public async Task OptionalAssignGuard_ForANonNullableValue_PrintsNoPresenceTest() {
+        var session = Poly.Tests.TestHelpers.ParitySessions.Create();
+        var changes = new PolyDslParser("""
+            domain T06aWarn
+            T06WLvl: enum { Low, High }
+            T06WLine: entity {
+              Qty: Number
+              Opt: Number optional
+            }
+            T06Warn: entity {
+              Big: Boolean
+              N: Number
+              EqN: Number optional equals(5)
+              RngN: Number optional range(0, 10)
+              Src: Number optional
+              Lvl: T06WLvl optional
+              SetEqN: action (v: Number) { assign EqN to v }
+              SetRngN: action (v: Number) { assign RngN to v }
+              CopyN: action { assign RngN to N }
+              SetLvl: action (v: T06WLvl) { assign Lvl to v }
+              CopyOpt: action { assign RngN to Src }
+              ArmRngN: action { assign RngN to match { Big -> null, else -> 4 } }
+              lines: many T06WLine
+              ForCopy: action { for line in lines { assign RngN to line Qty } }
+              ForCopyOpt: action { for line in lines { assign RngN to line Opt } }
+            }
+            """, session).Parse();
+        var evolved = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes, session: session);
+        await Assert.That(evolved.Succeeded).IsTrue();
+        var cs = new CSharpGenerator().Generate(session.Lower(evolved.Root!, evolved.Analysis));
+        var errors = Poly.Tests.TestHelpers.ExportedCSharp.CompileWithWarningsAsErrors("T06aWarn",
+            [("T06aWarn.cs", "#nullable enable\n" + Poly.Tests.TestHelpers.ExportedCSharp.MissingPolyRuntimeUsings(cs) + cs)]);
+        await Assert.That(string.Join("\n", errors.Select(e => e.ToString()))).IsEqualTo("");
+        await Assert.That(ExtractBody(cs, "__BodyOfCopyOpt")).Contains("!= null");
+        await Assert.That(ExtractBody(cs, "__BodyOfArmRngN")).Contains("!= null");
+        await Assert.That(ExtractBody(cs, "__BodyOfSetEqN")).DoesNotContain("!= null");
+        await Assert.That(ExtractBody(cs, "__BodyOfForCopy")).DoesNotContain("!= null");
+        await Assert.That(ExtractBody(cs, "__BodyOfForCopyOpt")).Contains("!= null");
+    }
+
+    private static string ExtractBody(string cs, string method) {
+        var start = cs.IndexOf("DomainResult " + method + "(", StringComparison.Ordinal);
+        if (start < 0)
+            throw new InvalidOperationException($"No '{method}' in the generated C#:\n{cs}");
+        var end = cs.IndexOf("return DomainResult.Success();", start, StringComparison.Ordinal);
+        return cs[start..end];
     }
 }

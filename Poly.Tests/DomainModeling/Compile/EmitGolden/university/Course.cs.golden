@@ -16,7 +16,7 @@ internal class Course : Poly.Runtime.IActionScoped
     }
     public string Code { get; private set; } = default!;
     public string Title { get; private set; } = default!;
-    internal static DomainResult<Course> Create(string code, string title, Poly.Runtime.IStoragePort db)
+    internal static DomainResult<Course> Create(Poly.Runtime.IStoragePort db, string? code = default, string? title = default)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
         var __done = false;
@@ -39,31 +39,33 @@ internal class Course : Poly.Runtime.IActionScoped
             }
         }
     }
-    private static DomainResult<Course> __BodyOfCreate(string code, string title, Poly.Runtime.IStoragePort db)
+    private static DomainResult<Course> __BodyOfCreate(string? code, string? title, Poly.Runtime.IStoragePort db)
     {
-        if (string.IsNullOrEmpty(code))
+        if (code == null)
         {
             return DomainResult<Course>.Failure(Poly.Runtime.DomainFailure.Required("'Code' is required.", "Course.Code"));
         }
-        if (code.Length < 3L)
+        var __code = code;
+        if (__code.Length < 3L)
         {
             return DomainResult<Course>.Failure(Poly.Runtime.DomainFailure.Length("'Code' must be at least 3 characters.", "Course.Code"));
         }
-        if (code.Length > 12L)
+        if (__code.Length > 12L)
         {
             return DomainResult<Course>.Failure(Poly.Runtime.DomainFailure.Length("'Code' must be at most 12 characters.", "Course.Code"));
         }
-        if (string.IsNullOrEmpty(title))
+        if (title == null)
         {
             return DomainResult<Course>.Failure(Poly.Runtime.DomainFailure.Required("'Title' is required.", "Course.Title"));
         }
-        if (Course.ExistsWithCode(db, code))
+        var __title = title;
+        if (Course.ExistsWithCode(db, __code))
         {
             return DomainResult<Course>.Failure(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'Code' value is already used on another 'Course'.", "Course.Code"));
         }
-        var created = new Course(code, title);
+        var created = new Course(__code, __title);
         Poly.Runtime.ActionScope.Create(created, "Course");
-        db.Record("Course", "Code", code);
+        db.Record("Course", "Code", __code);
         return DomainResult<Course>.Success(created);
     }
     public DomainResult EnsureUnique(string propertyName, object value)

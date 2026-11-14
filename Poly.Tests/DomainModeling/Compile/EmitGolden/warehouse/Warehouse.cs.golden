@@ -11,7 +11,7 @@ internal class Warehouse : Poly.Runtime.IActionScoped
 {
     private List<Truck> _trucks = new List<Truck>();
     private Warehouse() { }
-    private Warehouse(string code, string name, string zip, long capacity, IEnumerable<Truck>? trucks = null, long safetyStock = 100L, TruckStatus status = TruckStatus.Idle)
+    private Warehouse(string code, string name, string zip, long capacity, long safetyStock, TruckStatus status, IEnumerable<Truck>? trucks)
     {
         this.Code = code;
         this.Name = name;
@@ -31,7 +31,7 @@ internal class Warehouse : Poly.Runtime.IActionScoped
     {
         get => this._trucks;
     }
-    internal DomainResult<Truck> CreateTrucks(string vin, long maxLoad, Poly.Runtime.IStoragePort db, long currentLoad = 0L, TruckStatus status = TruckStatus.Idle)
+    internal DomainResult<Truck> CreateTrucks(Poly.Runtime.IStoragePort db, string? vin = default, long? maxLoad = default, long? currentLoad = default, TruckStatus? status = default)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
         var __done = false;
@@ -55,9 +55,9 @@ internal class Warehouse : Poly.Runtime.IActionScoped
             }
         }
     }
-    private DomainResult<Truck> __BodyOfCreateTrucks(string vin, long maxLoad, long currentLoad, TruckStatus status, Poly.Runtime.IStoragePort db)
+    private DomainResult<Truck> __BodyOfCreateTrucks(string? vin, long? maxLoad, long? currentLoad, TruckStatus? status, Poly.Runtime.IStoragePort db)
     {
-        var truckResult = Truck.Create(vin, maxLoad, db, this, new List<Delivery>(), currentLoad, status);
+        var truckResult = Truck.Create(db, vin, maxLoad, currentLoad, status, this, new List<Delivery>());
         if (!truckResult.IsSuccess)
         {
             return DomainResult<Truck>.Failure(truckResult.Error!);
@@ -168,7 +168,7 @@ internal class Warehouse : Poly.Runtime.IActionScoped
     }
     private DomainResult<Truck> __BodyOfRegisterTruck(string vin, long maxLoad, Poly.Runtime.IStoragePort db)
     {
-        var create0 = this.CreateTrucks(vin, maxLoad, db, 0L, TruckStatus.Idle);
+        var create0 = this.CreateTrucks(db, vin, maxLoad);
         if (!create0.IsSuccess)
         {
             return DomainResult<Truck>.Failure(create0.Error!.At("Warehouse.RegisterTruck"));
@@ -178,13 +178,13 @@ internal class Warehouse : Poly.Runtime.IActionScoped
     }
     public bool IsOperational() => this.Capacity > 0L;
     public bool HasCapacity() => this.Capacity > 0L;
-    internal static DomainResult<Warehouse> Create(string code, string name, string zip, long capacity, Poly.Runtime.IStoragePort db, IEnumerable<Truck>? trucks = null, long safetyStock = 100L, TruckStatus status = TruckStatus.Idle)
+    internal static DomainResult<Warehouse> Create(Poly.Runtime.IStoragePort db, string? code = default, string? name = default, string? zip = default, long? capacity = default, long? safetyStock = default, TruckStatus? status = default, IEnumerable<Truck>? trucks = default)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
         var __done = false;
         try
         {
-            var __result = Warehouse.__BodyOfCreate(code, name, zip, capacity, trucks, safetyStock, status, db);
+            var __result = Warehouse.__BodyOfCreate(code, name, zip, capacity, safetyStock, status, trucks, db);
             if (!__result.IsSuccess)
             {
                 return __result;
@@ -201,71 +201,81 @@ internal class Warehouse : Poly.Runtime.IActionScoped
             }
         }
     }
-    private static DomainResult<Warehouse> __BodyOfCreate(string code, string name, string zip, long capacity, IEnumerable<Truck>? trucks, long safetyStock, TruckStatus status, Poly.Runtime.IStoragePort db)
+    private static DomainResult<Warehouse> __BodyOfCreate(string? code, string? name, string? zip, long? capacity, long? safetyStock, TruckStatus? status, IEnumerable<Truck>? trucks, Poly.Runtime.IStoragePort db)
     {
-        if (string.IsNullOrEmpty(code))
+        if (code == null)
         {
             return DomainResult<Warehouse>.Failure(Poly.Runtime.DomainFailure.Required("'Code' is required.", "Warehouse.Code"));
         }
-        if (code.Length < 2L)
+        var __code = code;
+        if (__code.Length < 2L)
         {
             return DomainResult<Warehouse>.Failure(Poly.Runtime.DomainFailure.Length("'Code' must be at least 2 characters.", "Warehouse.Code"));
         }
-        if (code.Length > 10L)
+        if (__code.Length > 10L)
         {
             return DomainResult<Warehouse>.Failure(Poly.Runtime.DomainFailure.Length("'Code' must be at most 10 characters.", "Warehouse.Code"));
         }
-        if (!System.Text.RegularExpressions.Regex.IsMatch(code, "^WH-[0-9]{3}\\z"))
+        if (!System.Text.RegularExpressions.Regex.IsMatch(__code, "^WH-[0-9]{3}\\z"))
         {
             return DomainResult<Warehouse>.Failure(Poly.Runtime.DomainFailure.Pattern("'Code' does not match the required pattern.", "Warehouse.Code"));
         }
-        if (string.IsNullOrEmpty(name))
+        if (name == null)
         {
             return DomainResult<Warehouse>.Failure(Poly.Runtime.DomainFailure.Required("'Name' is required.", "Warehouse.Name"));
         }
-        if (name.Length < 3L)
+        var __name = name;
+        if (__name.Length < 3L)
         {
             return DomainResult<Warehouse>.Failure(Poly.Runtime.DomainFailure.Length("'Name' must be at least 3 characters.", "Warehouse.Name"));
         }
-        if (name.Length > 50L)
+        if (__name.Length > 50L)
         {
             return DomainResult<Warehouse>.Failure(Poly.Runtime.DomainFailure.Length("'Name' must be at most 50 characters.", "Warehouse.Name"));
         }
-        if (string.IsNullOrEmpty(zip))
+        if (zip == null)
         {
             return DomainResult<Warehouse>.Failure(Poly.Runtime.DomainFailure.Required("'Zip' is required.", "Warehouse.Zip"));
         }
-        if (!System.Text.RegularExpressions.Regex.IsMatch(zip, "^\\d{5}\\z"))
+        var __zip = zip;
+        if (!System.Text.RegularExpressions.Regex.IsMatch(__zip, "^\\d{5}\\z"))
         {
             return DomainResult<Warehouse>.Failure(Poly.Runtime.DomainFailure.Pattern("'Zip' does not match the required pattern.", "Warehouse.Zip"));
         }
-        if (capacity < 1L)
+        if (capacity == null)
+        {
+            return DomainResult<Warehouse>.Failure(Poly.Runtime.DomainFailure.Required("'Capacity' is required.", "Warehouse.Capacity"));
+        }
+        var __capacity = (long)capacity;
+        if (__capacity < 1L)
         {
             return DomainResult<Warehouse>.Failure(Poly.Runtime.DomainFailure.Range("'Capacity' must be >= 1.", "Warehouse.Capacity"));
         }
-        if (capacity > 10000L)
+        if (__capacity > 10000L)
         {
             return DomainResult<Warehouse>.Failure(Poly.Runtime.DomainFailure.Range("'Capacity' must be <= 10000.", "Warehouse.Capacity"));
         }
-        if (safetyStock < 0L)
+        var __safetyStock = (safetyStock == null ? 100L : (long)safetyStock);
+        if (__safetyStock < 0L)
         {
             return DomainResult<Warehouse>.Failure(Poly.Runtime.DomainFailure.Range("'SafetyStock' must be >= 0.", "Warehouse.SafetyStock"));
         }
-        if (safetyStock > 5000L)
+        if (__safetyStock > 5000L)
         {
             return DomainResult<Warehouse>.Failure(Poly.Runtime.DomainFailure.Range("'SafetyStock' must be <= 5000.", "Warehouse.SafetyStock"));
         }
-        if (status != TruckStatus.Idle && status != TruckStatus.EnRoute && status != TruckStatus.Maintenance && status != TruckStatus.OutOfService)
+        var __status = (status == null ? TruckStatus.Idle : (TruckStatus)status);
+        if (__status != TruckStatus.Idle && __status != TruckStatus.EnRoute && __status != TruckStatus.Maintenance && __status != TruckStatus.OutOfService)
         {
-            return DomainResult<Warehouse>.Failure(Poly.Runtime.DomainFailure.Enum(string.Concat("'", status, "' is not a valid member of TruckStatus for property 'Status'."), "Warehouse.Status"));
+            return DomainResult<Warehouse>.Failure(Poly.Runtime.DomainFailure.Enum(string.Concat("'", __status, "' is not a valid member of TruckStatus for property 'Status'."), "Warehouse.Status"));
         }
-        if (Warehouse.ExistsWithCode(db, code))
+        if (Warehouse.ExistsWithCode(db, __code))
         {
             return DomainResult<Warehouse>.Failure(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'Code' value is already used on another 'Warehouse'.", "Warehouse.Code"));
         }
-        var created = new Warehouse(code, name, zip, capacity, trucks, safetyStock, status);
+        var created = new Warehouse(__code, __name, __zip, __capacity, __safetyStock, __status, trucks);
         Poly.Runtime.ActionScope.Create(created, "Warehouse");
-        db.Record("Warehouse", "Code", code);
+        db.Record("Warehouse", "Code", __code);
         return DomainResult<Warehouse>.Success(created);
     }
     public DomainResult EnsureUnique(string propertyName, object value)

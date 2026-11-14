@@ -16,7 +16,7 @@ internal class Site : Poly.Runtime.IActionScoped
     }
     public string City { get; private set; } = default!;
     public string Region { get; private set; } = default!;
-    internal static DomainResult<Site> Create(string city, string region)
+    internal static DomainResult<Site> Create(string? city = default, string? region = default)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
         var __done = false;
@@ -39,17 +39,19 @@ internal class Site : Poly.Runtime.IActionScoped
             }
         }
     }
-    private static DomainResult<Site> __BodyOfCreate(string city, string region)
+    private static DomainResult<Site> __BodyOfCreate(string? city, string? region)
     {
-        if (string.IsNullOrEmpty(city))
+        if (city == null)
         {
             return DomainResult<Site>.Failure(Poly.Runtime.DomainFailure.Required("'City' is required.", "Site.City"));
         }
-        if (string.IsNullOrEmpty(region))
+        var __city = city;
+        if (region == null)
         {
             return DomainResult<Site>.Failure(Poly.Runtime.DomainFailure.Required("'Region' is required.", "Site.Region"));
         }
-        var created = new Site(city, region);
+        var __region = region;
+        var created = new Site(__city, __region);
         Poly.Runtime.ActionScope.Create(created, "Site");
         return DomainResult<Site>.Success(created);
     }

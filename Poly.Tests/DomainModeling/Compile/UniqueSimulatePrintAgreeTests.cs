@@ -1,5 +1,4 @@
 using System.Reflection;
-using Poly.Tests.TestHelpers;
 
 using Poly.DomainModeling;
 using Poly.DomainModeling.Analysis;
@@ -10,6 +9,7 @@ using Poly.DomainModeling.Libraries.Storage;
 using Poly.DomainModeling.Ontology;
 using Poly.DomainModeling.Runtime;
 using Poly.Interpretation.CSharp;
+using Poly.Tests.TestHelpers;
 
 namespace Poly.Tests.DomainModeling.Compile;
 
@@ -184,7 +184,7 @@ public class UniqueSimulatePrintAgreeTests {
             else if (parameters[i].HasDefaultValue)
                 args[i] = parameters[i].DefaultValue;
             else
-                args[i] = parameters[i].ParameterType == typeof(string) ? "" : null;
+                args[i] = null;
         }
         return method.Invoke(instance, args)!;
     }

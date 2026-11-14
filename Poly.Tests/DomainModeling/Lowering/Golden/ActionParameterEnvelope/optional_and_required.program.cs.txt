@@ -31,7 +31,7 @@ app.MapGet("/api/notes", async (TDbCtx db) => await db.Notes.ToListAsync());
 app.MapGet("/api/notes/{id}", async (int id, TDbCtx db) => (await db.Notes.FindAsync(id) is T.Note note ? Results.Ok(note) : StatusProblem(404, "Not Found")));
 
 app.MapPost("/api/notes", async (NoteDto dto, TDbCtx db) => {
-    var noteResult = T.Note.Create(dto.Body);
+    var noteResult = T.Note.Create(dto.Body, null);
     if (!noteResult.IsSuccess)
     {
         return Problem(noteResult.Error!);
@@ -124,7 +124,7 @@ static async System.Threading.Tasks.Task SeedAsync(TDbCtx db)
     {
         return;
     }
-    var noteResult = T.Note.Create("Sample");
+    var noteResult = T.Note.Create("Sample", null);
     if (noteResult.IsSuccess)
     {
         db.Add(noteResult.Value);

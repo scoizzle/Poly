@@ -9,7 +9,7 @@ namespace Logistics;
 internal class OrderItem : Poly.Runtime.IActionScoped
 {
     private OrderItem() { }
-    private OrderItem(string sku, long qty, Order? order = null)
+    private OrderItem(string sku, long qty, Order? order)
     {
         this.Sku = sku;
         this.Qty = qty;
@@ -18,7 +18,7 @@ internal class OrderItem : Poly.Runtime.IActionScoped
     public string Sku { get; private set; } = default!;
     public long Qty { get; private set; }
     public Order? Order { get; private set; }
-    internal static DomainResult<OrderItem> Create(string sku, long qty, Order? order = null)
+    internal static DomainResult<OrderItem> Create(string? sku = default, long? qty = default, Order? order = default)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
         var __done = false;
@@ -41,25 +41,31 @@ internal class OrderItem : Poly.Runtime.IActionScoped
             }
         }
     }
-    private static DomainResult<OrderItem> __BodyOfCreate(string sku, long qty, Order? order)
+    private static DomainResult<OrderItem> __BodyOfCreate(string? sku, long? qty, Order? order)
     {
-        if (string.IsNullOrEmpty(sku))
+        if (sku == null)
         {
             return DomainResult<OrderItem>.Failure(Poly.Runtime.DomainFailure.Required("'Sku' is required.", "OrderItem.Sku"));
         }
-        if (!System.Text.RegularExpressions.Regex.IsMatch(sku, "^[A-Z]{3}-[0-9]{4}\\z"))
+        var __sku = sku;
+        if (!System.Text.RegularExpressions.Regex.IsMatch(__sku, "^[A-Z]{3}-[0-9]{4}\\z"))
         {
             return DomainResult<OrderItem>.Failure(Poly.Runtime.DomainFailure.Pattern("'Sku' does not match the required pattern.", "OrderItem.Sku"));
         }
-        if (qty < 1L)
+        if (qty == null)
+        {
+            return DomainResult<OrderItem>.Failure(Poly.Runtime.DomainFailure.Required("'Qty' is required.", "OrderItem.Qty"));
+        }
+        var __qty = (long)qty;
+        if (__qty < 1L)
         {
             return DomainResult<OrderItem>.Failure(Poly.Runtime.DomainFailure.Range("'Qty' must be >= 1.", "OrderItem.Qty"));
         }
-        if (qty > 1000L)
+        if (__qty > 1000L)
         {
             return DomainResult<OrderItem>.Failure(Poly.Runtime.DomainFailure.Range("'Qty' must be <= 1000.", "OrderItem.Qty"));
         }
-        var created = new OrderItem(sku, qty, order);
+        var created = new OrderItem(__sku, __qty, order);
         Poly.Runtime.ActionScope.Create(created, "OrderItem");
         if (order != null)
         {

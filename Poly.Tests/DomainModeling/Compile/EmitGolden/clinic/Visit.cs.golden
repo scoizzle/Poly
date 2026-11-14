@@ -18,7 +18,7 @@ internal enum VisitStage
 internal class Visit : Poly.Runtime.IActionScoped
 {
     private Visit() { }
-    private Visit(string reason, Patient? patient = null, Doctor? primaryDoctor = null, VisitState state = VisitState.Scheduled)
+    private Visit(string reason, VisitState state, Patient? patient, Doctor? primaryDoctor)
     {
         this.Reason = reason;
         this.State = state;
@@ -94,13 +94,13 @@ internal class Visit : Poly.Runtime.IActionScoped
         this.State = VisitState.CheckedIn;
         return DomainResult.Success();
     }
-    internal static DomainResult<Visit> Create(string reason, Patient? patient = null, Doctor? primaryDoctor = null, VisitState state = VisitState.Scheduled)
+    internal static DomainResult<Visit> Create(string? reason = default, VisitState? state = default, Patient? patient = default, Doctor? primaryDoctor = default)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
         var __done = false;
         try
         {
-            var __result = Visit.__BodyOfCreate(reason, patient, primaryDoctor, state);
+            var __result = Visit.__BodyOfCreate(reason, state, patient, primaryDoctor);
             if (!__result.IsSuccess)
             {
                 return __result;
@@ -117,25 +117,27 @@ internal class Visit : Poly.Runtime.IActionScoped
             }
         }
     }
-    private static DomainResult<Visit> __BodyOfCreate(string reason, Patient? patient, Doctor? primaryDoctor, VisitState state)
+    private static DomainResult<Visit> __BodyOfCreate(string? reason, VisitState? state, Patient? patient, Doctor? primaryDoctor)
     {
-        if (string.IsNullOrEmpty(reason))
+        if (reason == null)
         {
             return DomainResult<Visit>.Failure(Poly.Runtime.DomainFailure.Required("'Reason' is required.", "Visit.Reason"));
         }
-        if (reason.Length < 2L)
+        var __reason = reason;
+        if (__reason.Length < 2L)
         {
             return DomainResult<Visit>.Failure(Poly.Runtime.DomainFailure.Length("'Reason' must be at least 2 characters.", "Visit.Reason"));
         }
-        if (reason.Length > 200L)
+        if (__reason.Length > 200L)
         {
             return DomainResult<Visit>.Failure(Poly.Runtime.DomainFailure.Length("'Reason' must be at most 200 characters.", "Visit.Reason"));
         }
-        if (state != VisitState.Scheduled && state != VisitState.CheckedIn && state != VisitState.InTreatment && state != VisitState.Completed && state != VisitState.NoShow)
+        var __state = (state == null ? VisitState.Scheduled : (VisitState)state);
+        if (__state != VisitState.Scheduled && __state != VisitState.CheckedIn && __state != VisitState.InTreatment && __state != VisitState.Completed && __state != VisitState.NoShow)
         {
-            return DomainResult<Visit>.Failure(Poly.Runtime.DomainFailure.Enum(string.Concat("'", state, "' is not a valid member of VisitState for property 'State'."), "Visit.State"));
+            return DomainResult<Visit>.Failure(Poly.Runtime.DomainFailure.Enum(string.Concat("'", __state, "' is not a valid member of VisitState for property 'State'."), "Visit.State"));
         }
-        var created = new Visit(reason, patient, primaryDoctor, state);
+        var created = new Visit(__reason, __state, patient, primaryDoctor);
         Poly.Runtime.ActionScope.Create(created, "Visit");
         if (patient != null)
         {

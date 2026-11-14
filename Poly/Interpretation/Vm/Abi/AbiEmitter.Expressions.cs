@@ -77,6 +77,8 @@ public static partial class AbiEmitter {
         // ulong.MaxValue as -1.
         var leftClr = UnderlyingOf(left, lv, ctx) ?? lv.Type;
         var rightClr = UnderlyingOf(right, rv, ctx) ?? rv.Type;
+        if (SameEnumUnderlying(leftClr, rightClr) is { } enumUnderlying)
+            leftClr = rightClr = enumUnderlying;
         if (leftClr == typeof(ulong) || rightClr == typeof(ulong)) {
             var target = IsUnsignedOrChar(leftClr) && IsUnsignedOrChar(rightClr)
                 ? typeof(ulong)
@@ -92,6 +94,11 @@ public static partial class AbiEmitter {
             : lv.Type;
         return cf(RingCodec.AsRepresentation(lv, width), RingCodec.AsRepresentation(rv, width));
     }
+
+    /// <summary>Two operands of the same enum type compare as C# compares them: at the underlying
+    /// integer type, with its width and signedness. Any other pair is not the enum rule.</summary>
+    private static Type? SameEnumUnderlying(Type? left, Type? right) =>
+        left is { IsEnum: true } && left == right ? Enum.GetUnderlyingType(left) : null;
 
     private static bool IsNullConstant(Node node) => node is Constant { Value: null };
 
@@ -112,6 +119,8 @@ public static partial class AbiEmitter {
         if (leftType is null || rightType is null)
             throw new InvalidOperationException(
                 "VM compile rejected: cannot resolve a nullable comparison.");
+        if (SameEnumUnderlying(leftType, rightType) is { } enumUnderlying)
+            leftType = rightType = enumUnderlying;
         Type promoted;
         if (leftType == typeof(bool) || rightType == typeof(bool)) {
             if (!eq || leftType != typeof(bool) || rightType != typeof(bool))
@@ -273,18 +282,16 @@ public static partial class AbiEmitter {
     /// operand's ring slot — an in-place shape, not a spill of a value form.</summary>
     private static Expression EmitLogicalAnd(And and, Context ctx) {
         var ring = ctx.OpenRing();
-        var left = ring.AddValue(CompileNode(and.LeftHandValue, ctx));
+        var left = ctx.RingVar(ring.AddValue(TruthWord(and.LeftHandValue, CompileNode(and.LeftHandValue, ctx), ctx)));
 
-        var right = CompileNode(and.RightHandValue, ctx);
+        var right = TruthWord(and.RightHandValue, CompileNode(and.RightHandValue, ctx), ctx);
 
         var result = Assign(ctx.RingVar(ring.Base),
             ring.Then(
                 Condition(
-                    Equal(left.Read, Constant(0L)),
+                    Equal(left, Constant(0L)),
                     Constant(0L),
-                    Block(
-                        right.Code,
-                        ctx.Word(right)))));
+                    right)));
         ctx.RingDepth = ring.Base + 1;
         return result;
     }
@@ -293,20 +300,31 @@ public static partial class AbiEmitter {
     /// operand's ring slot — an in-place shape, not a spill of a value form.</summary>
     private static Expression EmitLogicalOr(Or or, Context ctx) {
         var ring = ctx.OpenRing();
-        var left = ring.AddValue(CompileNode(or.LeftHandValue, ctx));
+        var left = ctx.RingVar(ring.AddValue(TruthWord(or.LeftHandValue, CompileNode(or.LeftHandValue, ctx), ctx)));
 
-        var right = CompileNode(or.RightHandValue, ctx);
+        var right = TruthWord(or.RightHandValue, CompileNode(or.RightHandValue, ctx), ctx);
 
         var result = Assign(ctx.RingVar(ring.Base),
             ring.Then(
                 Condition(
-                    NotEqual(left.Read, Constant(0L)),
+                    NotEqual(left, Constant(0L)),
                     Constant(1L),
-                    Block(
-                        right.Code,
-                        ctx.Word(right)))));
+                    right)));
         ctx.RingDepth = ring.Base + 1;
         return result;
+    }
+
+    /// <summary>A logical operand's code, then its truth as a 0/1 word. A <c>bool?</c> operand (its static type, however
+    /// it arrives: a typed nullable local or a handle word) is true only when it holds true: the owner's reading of an
+    /// optional Boolean condition, <c>X == true</c> (#862). Any other operand is its own word.</summary>
+    private static Expression TruthWord(Node operand, Value compiled, Context ctx) {
+        if (ctx.ClrTypeOf(operand) != typeof(bool?))
+            return Block(compiled.Code, ctx.Word(compiled));
+        Expression flag = compiled.Place?.Representation == typeof(bool?)
+            ? compiled.Read
+            : LocalType.Decode(ctx.Word(compiled), typeof(bool?), typeof(bool?), ctx.HeapLocal);
+        return Block(compiled.Code,
+            Condition(Equal(flag, Constant(true, typeof(bool?))), Constant(1L), Constant(0L)));
     }
 
     /// <summary>Logical NOT: 0→1, anything else→0, in the operand's own ring slot — an
@@ -327,6 +345,8 @@ public static partial class AbiEmitter {
         var compiled = CompileNode(unaryMinus.Operand, ctx);
         if (NullableValue(compiled, ctx) is { } nullable)
             return SpillToRing(Negate(LocalType.AsWordType(nullable)), ctx);
+        if (HeapUnary(unaryMinus.Operand, compiled, Negate, "-", ctx) is { } heap)
+            return heap;
         var slot = ring.AddValue(compiled);
         Expression result;
         if (RingCodec.IsIeee(unaryMinus.Operand, ctx.Analysis)) {
@@ -352,8 +372,30 @@ public static partial class AbiEmitter {
         var compiled = CompileNode(n.Operand, ctx);
         if (NullableValue(compiled, ctx) is { } nullable)
             return SpillToRing(Not(LocalType.AsWordType(nullable)), ctx);
+        if (HeapUnary(n.Operand, compiled, OnesComplement, "~", ctx) is { } heap)
+            return heap;
         var slot = ring.AddValue(compiled);
         return ring.Then(Assign(slot.Read, Not(slot.Read)));
+    }
+
+    /// <summary>A unary operator on a value-type operand held behind a handle: a struct wider than a word
+    /// (<c>decimal</c>, <c>TimeSpan</c>, <c>Int128</c>, <c>BigInteger</c>) or a nullable that arrives as a word (a call
+    /// or member result). The word is read as the operand's own type and that type's operator runs, so the handle is
+    /// never the operand. A type with no such operator fails closed. Null when the operand is a word.</summary>
+    private static Expression? HeapUnary(
+        Node operand, Value compiled, Func<Expression, UnaryExpression> op, string symbol, Context ctx) {
+        var clr = ctx.ClrTypeOf(operand);
+        if (clr is not { IsValueType: true } || LocalType.Of(clr).Kind != ValueRepresentationKind.HeapRef)
+            return null;
+        var value = LocalType.AsWordType(LocalType.Decode(ctx.Word(compiled), clr, clr, ctx.HeapLocal));
+        Expression result;
+        try {
+            result = op(value);
+        }
+        catch (InvalidOperationException) {
+            throw new InvalidOperationException($"VM compile rejected: no unary '{symbol}' operator for '{clr.Name}'.");
+        }
+        return SpillToRing(Block(compiled.Code, result), ctx);
     }
 
     /// <summary>The operand's <c>Nullable&lt;T&gt;</c> value, or null when the slot is a word.</summary>
@@ -690,10 +732,35 @@ public static partial class AbiEmitter {
         // underlying type is a present zero, so the cast writes the nullable's own absent value.
         if (t.Operand is Constant { Value: null } && Nullable.GetUnderlyingType(targetType) is not null)
             return Assign(ctx.HoldRing(targetType), Default(targetType));
+        // A lifted integer cast (`(int?)count` for a nullable count of Poly's shift-count policy): an absent operand stays
+        // absent, a present one converts at the word type, unchecked unless the cast is checked.
+        if (sourceType is not null && Nullable.GetUnderlyingType(sourceType) is { } sourceUnderlying
+            && Nullable.GetUnderlyingType(targetType) is { } targetUnderlying && sourceType != targetType
+            && !sourceUnderlying.IsEnum && !targetUnderlying.IsEnum
+            && IsIntegralCast(LocalType.WordTypeOf(sourceUnderlying)) && IsIntegralCast(LocalType.WordTypeOf(targetUnderlying))) {
+            var source = LocalType.AsWordType(ValueOf(t.Operand, ctx));
+            var wordTarget = typeof(Nullable<>).MakeGenericType(LocalType.WordTypeOf(targetUnderlying));
+            Expression lifted = t.IsChecked ? ConvertChecked(source, wordTarget) : Convert(source, wordTarget);
+            return Assign(ctx.HoldRing(targetType), wordTarget == targetType ? lifted : Convert(lifted, targetType));
+        }
         var ring = ctx.OpenRing();
         var slot = ring.AddValue(CompileNode(t.Operand, ctx));
-        if (sourceType is null || sourceType == targetType || targetType.IsAssignableFrom(sourceType))
+        if (sourceType is null || sourceType == targetType)
             return Block(ring.Steps);
+        var targetIsHandle = LocalType.Of(targetType).Kind == ValueRepresentationKind.HeapRef;
+        var sourceIsWord = LocalType.Of(sourceType).Kind == ValueRepresentationKind.StackScalar;
+        if (targetType.IsAssignableFrom(sourceType)) {
+            // Boxing: a scalar word written where the type is a handle becomes a handle to the value. A nullable
+            // target keeps the typed Nullable<T> ring local every nullable value uses.
+            if (sourceIsWord && targetIsHandle) {
+                var value = LocalType.Decode(slot.Read, sourceType, sourceType, ctx.HeapLocal);
+                if (Nullable.GetUnderlyingType(targetType) is not null)
+                    return ring.Then(Assign(ctx.HoldRing(targetType), Convert(value, targetType)));
+                return ring.Then(Assign(slot.Read,
+                    LocalType.Encode(Convert(value, typeof(object)), targetType, ctx.HeapLocal)));
+            }
+            return Block(ring.Steps);
+        }
         // A reference-typed operand (object, a call result) cast to T? may hold null at run time.
         // The heap helper would throw for a value-type target, so a null handle is read here as the
         // nullable's own absent value, in a Nullable<T> ring local, never as the word 0.
@@ -718,10 +785,12 @@ public static partial class AbiEmitter {
                 slot.Read,
                 LocalType.Encode(converted, targetType, ctx.HeapLocal)));
         }
-        return ring.Then(
-            Assign(slot.Read,
-                Call(null, CastAbiInfo, ctx.HeapLocal, slot.Read,
-                    Constant(targetType, typeof(Type)))));
+        var checkedHandle = Call(null, CastAbiInfo, ctx.HeapLocal, slot.Read, Constant(targetType, typeof(Type)));
+        // Unboxing: a handle cast to a scalar type is the value it holds, written as that type's word.
+        if (!sourceType.IsValueType && !targetIsHandle)
+            return ring.Then(Assign(slot.Read, LocalType.Encode(
+                Convert(RingCodec.DerefObject(ctx.HeapLocal, checkedHandle), targetType), targetType, ctx.HeapLocal)));
+        return ring.Then(Assign(slot.Read, checkedHandle));
     }
 
     /// <summary>An integer width or an enum. The unchecked cast between two of

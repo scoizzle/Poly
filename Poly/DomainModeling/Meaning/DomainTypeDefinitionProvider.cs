@@ -61,7 +61,7 @@ internal sealed class DomainTypeDefinitionProvider : ITypeDefinitionProvider {
     private AstTypeDefinition Synthesize(string name, DomainType declared) {
         var (kind, declaresEquality) = declared switch {
             EnumType => (TypeKind.Enum, true),
-            Ontology.ValueType => (TypeKind.Struct, false),
+            Ontology.ValueType => (TypeKind.Struct, true),
             Entity => (TypeKind.Class, true),
             _ => throw new InvalidOperationException($"Domain type '{name}' is a '{declared.GetType().Name}', which has no definition shape.")
         };

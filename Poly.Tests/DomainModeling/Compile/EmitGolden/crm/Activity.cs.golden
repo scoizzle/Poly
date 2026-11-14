@@ -16,10 +16,10 @@ internal enum ActivityStage
 internal class Activity : Poly.Runtime.IActionScoped
 {
     private Activity() { }
-    private Activity(string subject, Opportunity? opportunity = null, DateOnly? dueOn = null)
+    private Activity(string subject, DateOnly dueOn, Opportunity? opportunity)
     {
         this.Subject = subject;
-        this.DueOn = dueOn ?? DateOnly.FromDateTime(DateTime.UtcNow);
+        this.DueOn = dueOn;
         this.Opportunity = opportunity;
         this.CurrentStage = ActivityStage.Open;
     }
@@ -93,13 +93,13 @@ internal class Activity : Poly.Runtime.IActionScoped
         this.CurrentStage = ActivityStage.Done;
         return DomainResult.Success();
     }
-    internal static DomainResult<Activity> Create(string subject, Opportunity? opportunity = null, DateOnly? dueOn = null)
+    internal static DomainResult<Activity> Create(string? subject = default, DateOnly? dueOn = default, Opportunity? opportunity = default)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
         var __done = false;
         try
         {
-            var __result = Activity.__BodyOfCreate(subject, opportunity, dueOn);
+            var __result = Activity.__BodyOfCreate(subject, dueOn, opportunity);
             if (!__result.IsSuccess)
             {
                 return __result;
@@ -116,13 +116,15 @@ internal class Activity : Poly.Runtime.IActionScoped
             }
         }
     }
-    private static DomainResult<Activity> __BodyOfCreate(string subject, Opportunity? opportunity, DateOnly? dueOn)
+    private static DomainResult<Activity> __BodyOfCreate(string? subject, DateOnly? dueOn, Opportunity? opportunity)
     {
-        if (string.IsNullOrEmpty(subject))
+        if (subject == null)
         {
             return DomainResult<Activity>.Failure(Poly.Runtime.DomainFailure.Required("'Subject' is required.", "Activity.Subject"));
         }
-        var created = new Activity(subject, opportunity, dueOn);
+        var __subject = subject;
+        var __dueOn = (dueOn == null ? DateOnly.FromDateTime(DateTime.UtcNow) : (DateOnly)dueOn);
+        var created = new Activity(__subject, __dueOn, opportunity);
         Poly.Runtime.ActionScope.Create(created, "Activity");
         if (opportunity != null)
         {

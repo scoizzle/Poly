@@ -9,7 +9,7 @@ namespace Clinic;
 internal class Doctor : Poly.Runtime.IActionScoped
 {
     private Doctor() { }
-    private Doctor(string name, string licenseNo, Schedule? schedule = null)
+    private Doctor(string name, string licenseNo, Schedule? schedule)
     {
         this.Name = name;
         this.LicenseNo = licenseNo;
@@ -55,7 +55,7 @@ internal class Doctor : Poly.Runtime.IActionScoped
         }
         return DomainResult.Success();
     }
-    internal static DomainResult<Doctor> Create(string name, string licenseNo, Poly.Runtime.IStoragePort db, Schedule? schedule = null)
+    internal static DomainResult<Doctor> Create(Poly.Runtime.IStoragePort db, string? name = default, string? licenseNo = default, Schedule? schedule = default)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
         var __done = false;
@@ -78,35 +78,37 @@ internal class Doctor : Poly.Runtime.IActionScoped
             }
         }
     }
-    private static DomainResult<Doctor> __BodyOfCreate(string name, string licenseNo, Schedule? schedule, Poly.Runtime.IStoragePort db)
+    private static DomainResult<Doctor> __BodyOfCreate(string? name, string? licenseNo, Schedule? schedule, Poly.Runtime.IStoragePort db)
     {
-        if (string.IsNullOrEmpty(name))
+        if (name == null)
         {
             return DomainResult<Doctor>.Failure(Poly.Runtime.DomainFailure.Required("'Name' is required.", "Doctor.Name"));
         }
-        if (name.Length < 3L)
+        var __name = name;
+        if (__name.Length < 3L)
         {
             return DomainResult<Doctor>.Failure(Poly.Runtime.DomainFailure.Length("'Name' must be at least 3 characters.", "Doctor.Name"));
         }
-        if (name.Length > 60L)
+        if (__name.Length > 60L)
         {
             return DomainResult<Doctor>.Failure(Poly.Runtime.DomainFailure.Length("'Name' must be at most 60 characters.", "Doctor.Name"));
         }
-        if (string.IsNullOrEmpty(licenseNo))
+        if (licenseNo == null)
         {
             return DomainResult<Doctor>.Failure(Poly.Runtime.DomainFailure.Required("'LicenseNo' is required.", "Doctor.LicenseNo"));
         }
-        if (!System.Text.RegularExpressions.Regex.IsMatch(licenseNo, "^MD-[0-9]{6}\\z"))
+        var __licenseNo = licenseNo;
+        if (!System.Text.RegularExpressions.Regex.IsMatch(__licenseNo, "^MD-[0-9]{6}\\z"))
         {
             return DomainResult<Doctor>.Failure(Poly.Runtime.DomainFailure.Pattern("'LicenseNo' does not match the required pattern.", "Doctor.LicenseNo"));
         }
-        if (Doctor.ExistsWithLicenseNo(db, licenseNo))
+        if (Doctor.ExistsWithLicenseNo(db, __licenseNo))
         {
             return DomainResult<Doctor>.Failure(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'LicenseNo' value is already used on another 'Doctor'.", "Doctor.LicenseNo"));
         }
-        var created = new Doctor(name, licenseNo, schedule);
+        var created = new Doctor(__name, __licenseNo, schedule);
         Poly.Runtime.ActionScope.Create(created, "Doctor");
-        db.Record("Doctor", "LicenseNo", licenseNo);
+        db.Record("Doctor", "LicenseNo", __licenseNo);
         return DomainResult<Doctor>.Success(created);
     }
     public DomainResult EnsureUnique(string propertyName, object value)

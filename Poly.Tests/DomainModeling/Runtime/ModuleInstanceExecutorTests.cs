@@ -1002,6 +1002,23 @@ public sealed class ModuleInstanceExecutorTests {
         await Assert.That(missing.Error).Contains("not found");
     }
 
+    /// <summary>L-08b: on the create door an explicit null is the absence of a value, so a defaulted property takes its default.</summary>
+    [Test]
+    public async Task Create_ExplicitNullForDefaultedNumber_GetsDefault() {
+        var executor = ExecutorFor("""
+            domain Shop
+            Item: entity {
+              Name: Text
+              Qty: Number default(5)
+            }
+            """);
+
+        var outcome = executor.Create("Item", Values(("Name", "a"), ("Qty", null)));
+
+        await Assert.That(outcome.Succeeded).IsTrue().Because(outcome.Error ?? "");
+        await Assert.That(outcome.Instance!.Bag["Qty"]).IsEqualTo(5L);
+    }
+
     private static ModuleInstanceExecutor ExecutorFor(string poly) =>
         new(Lower(poly));
 

@@ -278,7 +278,7 @@ public class GuardClosedPropertyTests {
             ConstraintCheckWriter.ChecksFor(
                     entity, property, domain, analysis,
                     ConstraintCheckWriter.ConstraintCheckStyle.Create,
-                    new Variable("value"), nullableValue: false, valueHasDefault: false, includeRequired: true)
+                    new Variable("value"), nullableValue: false, includeRequired: true)
                 .Select(check => check.Kind).ToList();
 
         var textKinds = KindsOf(accepted);

@@ -307,15 +307,22 @@ public class ConstantFoldingProviderTests {
         && row.Left.Name is not ("Decimal" or "Float" or "Float32") && row.Right.Name is not ("Decimal" or "Float" or "Float32");
 
     private static bool IsMasterUndefinedFold(FoldGridRow row) {
+        var (l, r) = (row.Left.Name, row.Right?.Name);
+        // Int64 shifted by Int64 is defined since T-22a (the shift-count policy) and still declines to fold (the fold cell
+        // table has no such shift), so master's fold of it is still a delta row.
+        if (row.Op is OperatorKind.ShiftLeft or OperatorKind.ShiftRight && (l, r) is ("Number", "Number"))
+            return true;
         if (ConstantFoldGrid.IsLogical(row.Op) || ConstantFoldGrid.Resolution(row) is not null)
             return false;
-        var (l, r) = (row.Left.Name, row.Right?.Name);
         return (IsComparison(row.Op) && ((l, r) is ("Decimal", "Float" or "Float32") or ("Float" or "Float32", "Decimal")
                 || (l, r) is ("Int8" or "Int16" or "Int32" or "Number", "UInt64") or ("UInt64", "Int8" or "Int16" or "Int32" or "Number")
                 || (row.Op is not (OperatorKind.Equal or OperatorKind.NotEqual) && (l, r) is ("Text", "Text"))))
-            || (row.Op is OperatorKind.ShiftLeft or OperatorKind.ShiftRight && (l, r) is ("Number", "Number"))
             || IsMismatchedEquality(row);
     }
+
+    private static bool IsPolicyShift(FoldGridRow row) =>
+        row.Op is OperatorKind.ShiftLeft or OperatorKind.ShiftRight
+        && row.Right?.Clr?.GetPrimitiveType() is { } count && ClrBuiltInRules.IsPolicyShiftCount(count);
 
     private static string[] MasterUndefinedRowsAsOnMaster() =>
         [.. ConstantFoldGrid.Rows.Where(IsMasterUndefinedFold).Select(static row => IsMismatchedEquality(row)
@@ -390,12 +397,13 @@ public class ConstantFoldingProviderTests {
     /// The delta rows: no fold where the provider states no operator (outside And, Or and Not). On master 828 of these
     /// rows folded (Decimal against Float comparison and equality, signed integers against UInt64, Int64 shifted by
     /// Int64, Text ordering, and <c>==</c> across mismatched non-numeric types). The undefined cells are pinned
-    /// independently of folding, so a provider change cannot hide here.
+    /// independently of folding, so a provider change cannot hide here. Since T-22a the shift-count policy cells (a count
+    /// of a wider integer type) are defined, and they stay in this set: none folds.
     /// </summary>
     [Test]
     public async Task ProviderUndefinedCells_DoNotFold() {
         var undefined = ConstantFoldGrid.Rows
-            .Where(static row => !ConstantFoldGrid.IsLogical(row.Op) && ConstantFoldGrid.Resolution(row) is null).ToArray();
+            .Where(static row => !ConstantFoldGrid.IsLogical(row.Op) && (ConstantFoldGrid.Resolution(row) is null || IsPolicyShift(row))).ToArray();
         await Assert.That(ConstantFoldGrid.Pin([.. undefined.Select(static row => row.Key)])).IsEqualTo(UndefinedCells);
         var folding = undefined.Where(static row => ConstantFoldGrid.FoldOf(row) is not null)
             .Select(static row => $"{row.Key} = {ConstantFoldGrid.FoldOf(row)}").ToArray();
@@ -509,8 +517,6 @@ public class ConstantFoldingProviderTests {
             .Select(static f => $"{f.Row.Key}: fold {f.Fold}, VM {ConstantFoldGrid.UnfoldedVm(f.Row)}")
             .Order(StringComparer.Ordinal).ToArray();
         await Assert.That(lines).IsEquivalentTo([
-            "Decimal UnaryMinus - S1: fold Decimal:-0.1, VM Int64:-1",
-            "Decimal UnaryMinus - S2: fold Decimal:-0.2, VM Int64:-1",
             "Float32 Divide Float32 S1: fold Single:11184811, VM Double:11184811",
             "Float32 Divide Float32 S2: fold Single:8.940697E-08, VM Double:8.940696716308594E-08"
         ]);
@@ -780,8 +786,9 @@ public class ConstantFoldingProviderTests {
     }
 
     [Test]
-    public async Task Int64ShiftedByInt64_Declines_ProviderUndefined_AndInt32ShiftFolds() {
-        await Assert.That(Operator<long, long>(OperatorKind.ShiftLeft)).IsNull();
+    public async Task Int64ShiftedByInt64_Declines_PolicyDefined_AndInt32ShiftFolds() {
+        // T-22a: the provider defines it by Poly's shift-count policy; the fold cell table still has no Int64 count.
+        await Assert.That(Operator<long, long>(OperatorKind.ShiftLeft)?.Result.GetRuntimeType()).IsEqualTo(typeof(long));
         await AssertDoesNotFold(new ShiftLeft(new Constant(1L), new Constant(3L)));
         await AssertDoesNotFold(new ShiftRight(new Constant(16L), new Constant(2L)));
         await AssertFolds(new ShiftLeft(new Constant(1), new Constant(3)), 8);
@@ -881,7 +888,7 @@ public class ConstantFoldingProviderTests {
     private const string MasterUndefinedFolds = "828 0d020bf27c2afbb7";
     private const string KeptFolds = "1776 06fba54a76763aeb";
     private const string UnprintableDefinedFolds = "48 ace2db05f3c87b7b";
-    private const string AllowedDisagree = "4 97551d7e2ef40a1f";
+    private const string AllowedDisagree = "2 5e0895ede8f270db";
     private const string LogicalFolds = "6 d49ba859ff062537";
     private const string UndefinedCells = "7800 1786e1cb3f6eaa59";
     private const string RejectedMismatchedEqualities = "672 88f2cc26c94956cb";

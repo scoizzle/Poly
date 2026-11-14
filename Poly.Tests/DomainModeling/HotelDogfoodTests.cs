@@ -59,8 +59,8 @@ public class HotelDogfoodTests {
         var cs = new CSharpGenerator().Generate(types);
 
         await Assert.That(cs).DoesNotContain("void Notify(string stageName)");
-        await Assert.That(cs).Contains("IEnumerable<Reservation>? reservations = null");
-        await Assert.That(cs).Contains("IEnumerable<Section>? sections = null");
+        await Assert.That(cs).Contains("IEnumerable<Reservation>? reservations = default");
+        await Assert.That(cs).Contains("IEnumerable<Section>? sections = default");
         await Assert.That(cs).Contains("WhenEachReservationDeparted");
         await Assert.That(cs).Contains("WhenEachEventHoldReleased");
 

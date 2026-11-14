@@ -19,11 +19,11 @@ internal class Fine : Poly.Runtime.IActionScoped
     private List<Patron>? _patronFinesResolvedSubscribers;
     private int _notifyDepth;
     private Fine() { }
-    private Fine(string reason, long amount = 0L, Patron? patron = null, DateTime? dateIssued = null, bool? paid = null)
+    private Fine(long amount, string reason, DateTime dateIssued, bool? paid, Patron? patron)
     {
-        this.Reason = reason;
         this.Amount = amount;
-        this.DateIssued = dateIssued ?? DateTime.UtcNow;
+        this.Reason = reason;
+        this.DateIssued = dateIssued;
         this.Paid = paid;
         this.Patron = patron;
         this.CurrentStage = FineStage.Unpaid;
@@ -161,13 +161,13 @@ internal class Fine : Poly.Runtime.IActionScoped
         }
         return DomainResult.Success();
     }
-    internal static DomainResult<Fine> Create(string reason, long amount = 0L, Patron? patron = null, DateTime? dateIssued = null, bool? paid = null)
+    internal static DomainResult<Fine> Create(long? amount = default, string? reason = default, DateTime? dateIssued = default, bool? paid = default, Patron? patron = default)
     {
         var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
         var __done = false;
         try
         {
-            var __result = Fine.__BodyOfCreate(reason, amount, patron, dateIssued, paid);
+            var __result = Fine.__BodyOfCreate(amount, reason, dateIssued, paid, patron);
             if (!__result.IsSuccess)
             {
                 return __result;
@@ -184,13 +184,20 @@ internal class Fine : Poly.Runtime.IActionScoped
             }
         }
     }
-    private static DomainResult<Fine> __BodyOfCreate(string reason, long amount, Patron? patron, DateTime? dateIssued, bool? paid)
+    private static DomainResult<Fine> __BodyOfCreate(long? amount, string? reason, DateTime? dateIssued, bool? paid, Patron? patron)
     {
-        if (string.IsNullOrEmpty(reason))
+        if (amount == null)
+        {
+            return DomainResult<Fine>.Failure(Poly.Runtime.DomainFailure.Required("'Amount' is required.", "Fine.Amount"));
+        }
+        var __amount = (long)amount;
+        if (reason == null)
         {
             return DomainResult<Fine>.Failure(Poly.Runtime.DomainFailure.Required("'Reason' is required.", "Fine.Reason"));
         }
-        var created = new Fine(reason, amount, patron, dateIssued, paid);
+        var __reason = reason;
+        var __dateIssued = (dateIssued == null ? DateTime.UtcNow : (DateTime)dateIssued);
+        var created = new Fine(__amount, __reason, __dateIssued, paid, patron);
         Poly.Runtime.ActionScope.Create(created, "Fine");
         if (patron != null)
         {

@@ -63,7 +63,7 @@ public sealed partial class MinimalApiGenerator {
     private void AppendCreateCallStatements(List<Node> statements, Entity entity,
         Parameter dtoParam, Parameter dbParam,
         string route, Property? uniqueProp) {
-        var createArgs = BuildCreateCallArgs(entity, GetConstructorOrder(entity),
+        var createArgs = BuildCreateCallArgs(entity,
             prop => new Member(new Variable("dto"), prop.Name));
 
         var resultVarName = $"{ToCamelCase(entity.Name)}Result";

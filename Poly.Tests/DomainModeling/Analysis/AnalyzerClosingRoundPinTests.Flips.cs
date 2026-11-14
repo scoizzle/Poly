@@ -29,7 +29,7 @@ namespace Poly.Tests.DomainModeling.Analysis;
 /// <c>null</c> arm, or with arithmetic over an optional property keeps master's answer, accepted (since T-06 because
 /// those types carry optionality; <see cref="FlipsT06"/>). The two <c>A-sum</c> loosenings are API-only (a DSL
 /// document cannot declare an alias) and are not run through GateParity. Nor is a date minus a date of two properties:
-/// master's exemption for that one shape, the shape lowering rewrites to <c>Subtract</c>, stays (removing row T-10),
+/// master's exemption for that one shape, the shape lowering rewrites to <c>Subtract</c>, stays (removing row T-10b),
 /// so a typed date operand of any other shape meets the arithmetic rule (<c>A-arithmetic</c>; review F1, where
 /// GateParity shows the VM refuses those shapes). The rows are derived by the script quoted
 /// in PR #845's body from the master dumps; the hand rows at its end are the cells outside the form grids.
@@ -1547,6 +1547,22 @@ public partial class AnalyzerClosingRoundPinTests {
     ];
 
     /// <summary>
+    /// T-10a: the temporal offset rules refuse a date offset by a count whose left is a parameter read (a function body's
+    /// <c>d + a</c>; the generated C# did not compile it, <c>CS0019</c>) and a date offset by a Decimal count. Applied after
+    /// the earlier tables, so a row's <c>Before</c> is the verdict they left.
+    /// </summary>
+    internal static readonly (string Grid, string Cell, string Before, string After, string Rule)[] FlipsT10a = [
+        ("FormGrid", "Due + N | return Number", "DMFUN006", "DMFUN006+DMSEM003", "T-10a"),
+        ("FormGrid", "Due + N | return Decimal", "DMFUN006", "DMFUN006+DMSEM003", "T-10a"),
+        ("FormGrid", "Due + N | return Text", "DMFUN006", "DMFUN006+DMSEM003", "T-10a"),
+        ("FormGrid", "Due + N | return Boolean", "DMFUN006", "DMFUN006+DMSEM003", "T-10a"),
+        ("FormGrid", "Due + N | return Date", "ok", "DMSEM003", "T-10a"),
+        ("FormGrid", "Due + N | return Color", "DMFUN006", "DMFUN006+DMSEM003", "T-10a"),
+        ("FormGrid", "Due + N | return Widget", "DMFUN006", "DMFUN006+DMSEM003", "T-10a"),
+        ("ArithmeticDateOperand", "Due + (C + C) policy", "ok", "DMSEM003", "T-10a"),
+    ];
+
+    /// <summary>
     /// T-06 (#606, the null rule): <c>T06-null-arm</c>, a <c>match</c> with a <c>null</c> arm into a required target is
     /// refused at that arm at every assignment site (class c2); <c>T06-null-into-required</c>, <c>null</c> assigned to a
     /// required Text, Uuid, entity or Binary property (class c); <c>T06-null-id</c>, a <c>null</c> cell already refused
@@ -1648,7 +1664,7 @@ public partial class AnalyzerClosingRoundPinTests {
         var index = new Dictionary<string, int>(StringComparer.Ordinal);
         for (var i = 1; i < lines.Length; i++)
             index.Add(CellOf(lines[i]), i);
-        foreach (var flip in FlipsA.Concat(FlipsB).Concat(FlipsA4).Concat(FlipsDead).Concat(FlipsDefault).Concat(FlipsC3).Concat(FlipsT06).Concat(FlipsT09a).Where(f => f.Grid == grid)) {
+        foreach (var flip in FlipsA.Concat(FlipsB).Concat(FlipsA4).Concat(FlipsDead).Concat(FlipsDefault).Concat(FlipsC3).Concat(FlipsT06).Concat(FlipsT10a).Concat(FlipsT09a).Where(f => f.Grid == grid)) {
             if (!index.TryGetValue(flip.Cell, out var at))
                 throw new InvalidOperationException($"Flip row '{grid}/{flip.Cell}' names no cell of the grid.");
             var verdict = VerdictOf(lines[at]);

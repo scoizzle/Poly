@@ -212,7 +212,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
         }
         if (expr is Add or Subtract && IsDate(left) && IsNumeric(right))
             return left with { DomainName = null, Optional = absent };
-        // A date difference of one granularity is a duration (the shape rule stays in WalkExpression: T-10).
+        // A date difference of one granularity is a duration (the shape rule stays in WalkExpression: T-10b).
         if (expr is Subtract && IsDate(left) && IsDate(right) && !MixedDateGranularity(left, right))
             return Typeless(typeof(TimeSpan)).AsOptional(absent);
         return ExprType.Unresolved;

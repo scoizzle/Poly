@@ -308,8 +308,9 @@ public class ConstraintMergeTests {
             .IsTypeOf<Today>();
     }
 
+    /// <summary>T-10a: a date operation has no default lowering (the generated C# did not compile it), so the merge never sees one.</summary>
     [Test]
-    public async Task Dsl_DuplicateDateOperationDefault_AnalyzesCleanAndKeepsOne() {
+    public async Task Dsl_DuplicateDateOperationDefault_IsRefusedAtAnalysis() {
         var result = ParseTemporal("""
             domain Test
             uses temporal
@@ -318,11 +319,9 @@ public class ConstraintMergeTests {
             }
             """);
 
-        await Assert.That(result.Succeeded).IsTrue();
+        await Assert.That(result.Succeeded).IsFalse();
+        await Assert.That(Errors(result).Any(m => m.Contains("no default lowering"))).IsTrue();
         await Assert.That(Errors(result).Any(m => m.Contains("contradictory"))).IsFalse();
-        var constraints = result.Root!.Types.OfType<Entity>().Single()
-            .Properties.Single().Constraints;
-        await Assert.That(constraints.Count(c => c is DefaultValueConstraint)).IsEqualTo(1);
     }
 
     [Test]

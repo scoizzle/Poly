@@ -528,8 +528,9 @@ public class OperatorOracleTests {
         new(OracleKind.AnalyzerDisagrees, "Status", Comparisons, "Text", "analyzer accepts", "T-07 (enum member literals)", 2, "0c366c038c3e6e39"),
         new(OracleKind.AnalyzerDisagrees, "Text", Comparisons, "Status", "analyzer accepts", "T-07 (enum member literals)", 2, "a3b0e50adb3c6b77"),
         // Temporal cells: the analyzer's offset permission and its rejection of CLR-defined duration arithmetic.
-        new(OracleKind.AnalyzerDisagrees, "Date,DateTime", "Add,Subtract", "Date,DateTime,Decimal,Number,Duration", "analyzer accepts", "T-10 (temporal offset permission)", 11, "edbb26e174a06a9f"),
-        new(OracleKind.AnalyzerDisagrees, "Duration,Time,Number", "*", "Duration,Time,Number", "analyzer rejects", "T-10 (temporal operands the CLR defines)", 7, "0409473254198adb"),
+        new(OracleKind.AnalyzerDisagrees, "Date,DateTime", "Add,Subtract", "Date,DateTime,Decimal,Number,Duration", "analyzer accepts", "T-10b (the temporal offset permission: Date and DateTime ± Number, and Date - Date)", 5, "c35db5c816281edf"),
+        new(OracleKind.AnalyzerDisagrees, "DateTime", "Add,Subtract", "Duration", "analyzer rejects", "F-11 (#550: DateTime ± a Duration value is refused as not supported yet)", 2, "81c2b5da5da106de"),
+        new(OracleKind.AnalyzerDisagrees, "Duration,Time,Number", "*", "Duration,Time,Number", "analyzer rejects", "T-10b (temporal operands the CLR defines)", 7, "0409473254198adb"),
         // Permanent: C# defines string + object, and Poly allows only Text + Text. A named language policy, not a gap.
         new(OracleKind.AnalyzerDisagrees, "*", "Add", "*", "analyzer rejects, tree String", "T-07 (language policy: only Text + Text concatenates)", 16, "a66331455543d1e9")
     ];
@@ -539,8 +540,8 @@ public class OperatorOracleTests {
     // column is n/a for those; the remaining owners are the lowered analysis (T-07, T-10) and the ABI (T-21). T-22a judges bitwise, shift and unary minus through the provider: its 1,785 accepted undefined cells and 263 type cells are gone. T-17 typed every arithmetic node through the provider and deleted the arithmetic type rule (240 cells: the 150 of the 19 CLR operands and 90 native-integer pairs); the stated type now is C#'s.
     private static readonly LedgerRule[] LoweredRules = [
         new(OracleKind.LoweredAnalysisDisagrees, "*", "*", "*", "analysis error on a defined cell", "T-21 (the ABI cannot execute declared temporal and Duration-scalar arithmetic: VmExecutesDeclaredOperator); 7 temporal cells with T-10; T-18b adds 6, Duration with nint or nuint (T-21: 'the rule analysis error on a defined cell is about 46 (Duration × native integers)')", 46, "ec7a9e70d97b4629"),
-        new(OracleKind.LoweredAnalysisDisagrees, "*", "Add,Subtract", "*", "typed DateOnly", "T-10 (RewriteDateOffset); T-18b adds Date ± nint or nuint, 4 (T-10: 'T-18b adds 8 Date/DateTime ± nint/nuint cells to the date fence's accepted-undefined line')", 24, "6782a41016a1baec"),
-        new(OracleKind.LoweredAnalysisDisagrees, "*", "Add,Subtract", "*", "typed DateTime", "T-10 (RewriteDateOffset); T-18b adds DateTime ± nint or nuint, 4 (T-10: 'T-18b adds 8 Date/DateTime ± nint/nuint cells to the date fence's accepted-undefined line')", 24, "1ba415e2415d00aa"),
+        new(OracleKind.LoweredAnalysisDisagrees, "*", "Add,Subtract", "*", "typed DateOnly", "T-10b (RewriteDateOffset); T-18b adds Date ± nint or nuint, 4 (T-10: 'T-18b adds 8 Date/DateTime ± nint/nuint cells to the date fence's accepted-undefined line')", 24, "6782a41016a1baec"),
+        new(OracleKind.LoweredAnalysisDisagrees, "*", "Add,Subtract", "*", "typed DateTime", "T-10b (RewriteDateOffset); T-18b adds DateTime ± nint or nuint, 4 (T-10: 'T-18b adds 8 Date/DateTime ± nint/nuint cells to the date fence's accepted-undefined line')", 24, "1ba415e2415d00aa"),
         // Text and Boolean ordering: the lowered analysis keeps accepting it (TextAndBooleanOrderingRule); the DSL and the interpreter order Text.
         new(OracleKind.LoweredAnalysisDisagrees, "Text,Boolean", Ordering, "Text,Boolean", "typed Boolean", "T-07 (#631 ordering legality)", 8, "a2d892f80f998382")
     ];
@@ -548,7 +549,7 @@ public class OperatorOracleTests {
     private static readonly LedgerRule[] AbiRules = [
         // T-22a rejects the undefined bitwise, shift and unary-minus cells: what still executes is the Date and DateTime
         // offset cells the analysis's date fence accepts (T-10) and Text ordering (T-07); Boolean ordering the emitter refuses.
-        new(OracleKind.AbiDivergesFromTree, "Date,DateTime", "Add,Subtract", "*", "executes an undefined cell", "T-10 (the date fence accepts Date and DateTime plus or minus a number the provider defines no operator for)", 48, "10a8b9989a446795"),
+        new(OracleKind.AbiDivergesFromTree, "Date,DateTime", "Add,Subtract", "*", "executes an undefined cell", "T-10b (the date fence accepts Date and DateTime plus or minus a number the provider defines no operator for)", 48, "10a8b9989a446795"),
         new(OracleKind.AbiDivergesFromTree, "Text", Ordering, "Text", "executes an undefined cell", "T-07 (#631 ordering legality: TextAndBooleanOrderingRule)", 4, "04c3d80b8bd14c13"),
         // T-22a adds 50: the shift-count policy cells of a small integer or char left, whose left converts to Int32 as for an int count.
         new(OracleKind.AbiDivergesFromTree, "*", "*", "*", "unstated conversion", "T-21 (T-04 and Lower state the conversion node; the emitter stops converting); T-18b adds 520 native-integer cells (T-18b lock amendment 7: 'its unstated conversion is then T-21's ledger line'); T-22a adds the 50 shift-count policy cells of a small left", 2299, "0e5ea4c8443835bf"),
@@ -580,7 +581,7 @@ public class OperatorOracleTests {
 
     [Test]
     public async Task AnalyzerDisagrees_EveryDivergenceIsOwned_AndNoEntryIsStale() =>
-        await AssertOwned(OracleKind.AnalyzerDisagrees, AnalyzerRules, 38);
+        await AssertOwned(OracleKind.AnalyzerDisagrees, AnalyzerRules, 34);
 
     [Test]
     public async Task LoweredAnalysisDisagrees_EveryDivergenceIsOwned_AndNoEntryIsStale() =>

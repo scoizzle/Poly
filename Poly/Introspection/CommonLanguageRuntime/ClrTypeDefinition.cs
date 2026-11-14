@@ -102,7 +102,27 @@ internal sealed class ClrTypeDefinition : IClrTypeDefinition {
             return new TypeConversion(ConversionOperatorKind.Implicit, declaredImplicit);
         if (FindConversionFrom(clrSource, ConversionOperatorKind.Explicit) is { } declaredExplicit)
             return new TypeConversion(ConversionOperatorKind.Explicit, declaredExplicit);
-        return builtIn;
+        return builtIn ?? ResolveLiftedImplicitFrom(clrSource);
+    }
+
+    /// <summary>
+    /// C# 10.6.1's implicit nullable conversion: into <c>U?</c> from <c>S</c> or <c>S?</c> where <c>S</c> converts to
+    /// <c>U</c> implicitly (<c>long</c> to <c>decimal?</c>, <c>int?</c> to <c>long?</c>). It names no method, whatever the
+    /// underlying conversion declares, so it is never assignability; the emitter applies it from the bound parameter type.
+    /// Only for a nullable target. <c>S</c> to <c>S?</c> is the lift assignability states.
+    /// </summary>
+    private TypeConversion? ResolveLiftedImplicitFrom(ClrTypeDefinition source) {
+        var underlying = Nullable.GetUnderlyingType(RuntimeType);
+        if (underlying is null)
+            return null;
+        var sourceUnderlying = Nullable.GetUnderlyingType(source.RuntimeType) ?? source.RuntimeType;
+        if (sourceUnderlying == underlying)
+            return null;
+        var underlyingConversion = ((ITypeDefinition)_provider.GetTypeDefinition(underlying))
+            .ResolveConversionFrom(_provider.GetTypeDefinition(sourceUnderlying));
+        return underlyingConversion is { Kind: ConversionOperatorKind.Implicit }
+            ? new TypeConversion(ConversionOperatorKind.Implicit, null)
+            : null;
     }
 
     /// <summary>

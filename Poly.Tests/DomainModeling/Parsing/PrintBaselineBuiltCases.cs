@@ -54,7 +54,7 @@ internal static class PrintBaselineBuiltCases {
         ("literals", "DomainDslPrinter.cs: PrintLiteral for decimal, double and other values"),
         ("equality-literals", "DomainDslPrinter.cs: PrintLiteralValue for null, true, false, string, double and other values (`equals(…)`)"),
         ("required-constraint-omitted", "DomainDslPrinter.cs: a constraint with no DSL form is not printed"),
-        ("expression-duration-unbound", "Expressions.cs: no print binder for a Duration expression: the printer throws (a known gap, see KnownGaps)"),
+        ("expression-duration-unbound", "Expressions.cs: a Duration expression through its binder (T-10a)"),
         ("expression-date-operation", "Expressions.cs: DateOperation through its binder"),
         ("expression-kinds", "Expressions.cs: owned access, not, divide, not-exists, match"),
         ("entry/PrintConstraintText", "Constraints.cs: the public constraint text entry point"),
@@ -68,7 +68,6 @@ internal static class PrintBaselineBuiltCases {
     /// that key in its own commit and deletes the entry (the test checks each key exists and still shows its oddity).
     /// </summary>
     internal static readonly (string Key, string Owner, string Oddity, string Fragment)[] KnownGaps = [
-        ("built/expression-duration-unbound", "G-34", "a Duration expression has no print binder, so a parsed `default(12 Days)` cannot be printed (proposed owner: expression printing; no row names it)", "failed:InvalidOperationException"),
         ("built/composite-effect", "G-33", "a composite effect's second and later parts lose the action indent (hand layout in the effect printer)", "\nassign Name to \"y\""),
         ("built/for-each", "G-33", "the closing brace of a `for` body sits two spaces short of its `for` line (hand layout in the effect printer)", "      assign Name to \"y\"\n  }\n"),
     ];

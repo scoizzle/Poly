@@ -292,9 +292,11 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
             case AssignEffect assign:
                 if (assign.Target is PropertyAccess target) {
                     var targetType = ResolvePropertyType(target.Name, props, parameters);
-                    if (targetType is not null)
+                    if (targetType is not null) {
+                        StampSite(context, assign.Value, CheckSite.Assign, targetType);
                         CheckCompatible(context, assign.Value, targetType, IsOptionalProperty(target.Name, props), enumTypes,
                             $"assign to property '{target.Name}'", props, parameters, consumer: assign);
+                    }
                 }
                 WalkExpression(context, assign.Value, props, parameters, enumTypes);
                 _meaning.TryAdviseAssignConversion(context, assign,
@@ -453,6 +455,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
         foreach (var init in initializers) {
             if (targetProps is not null
                 && targetProps.TryGetValue(init.PropertyName, out var targetType)) {
+                StampSite(context, init.Expression, CheckSite.Assign, targetType);
                 CheckCompatible(context, init.Expression, targetType, IsOptionalProperty(init.PropertyName, targetProps), enumTypes,
                     $"create initializer for property '{init.PropertyName}'", callerProps, parameters, consumer: init);
             }
@@ -489,6 +492,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
         if (walked is not null && !walked.TryEnter(expr, parameters, props)) return;
         switch (expr) {
             case Comparison cmp:
+                StampComparisonSites(context, cmp, props, parameters, enumTypes);
                 CheckComparison(context, cmp, props, parameters, enumTypes);
                 return; // operands already checked
             case Add add:
@@ -503,16 +507,17 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                     // The exemption is the two-property shape lowering rewrites to `left.Subtract(right)`
                     // (TemporalLowering.DateAddDaysLowering); any other date difference lowers to a raw subtraction
                     // the VM refuses, so a typed date operand of another shape meets the arithmetic rule (T-05a
-                    // review F1, GateParity). Removing row: T-10 decides a date difference on the operands' types in
+                    // review F1, GateParity). Removing row: T-10b decides a date difference on the operands' types in
                     // analysis and lowering together.
                     if (IsDate(leftType) && IsDate(rightType)
                         && !MixedDateGranularity(leftType, rightType)) {
+                        CheckDateDifferenceOperands(context, sub, leftType, rightType, props, parameters);
                         WalkExpression(context, sub.Left, props, parameters, enumTypes, walked);
                         WalkExpression(context, sub.Right, props, parameters, enumTypes, walked);
                         return;
                     }
                 }
-                // Any other same-granularity date difference: say what is supported, naming what was written (T-10).
+                // Any other same-granularity date difference: say what is supported, naming what was written (T-10b).
                 var subtrahendLeft = InferType(context, sub.Left, props, parameters, enumTypes);
                 var subtrahendRight = InferType(context, sub.Right, props, parameters, enumTypes);
                 if (IsDate(subtrahendLeft) && IsDate(subtrahendRight) && !MixedDateGranularity(subtrahendLeft, subtrahendRight)) {
@@ -575,8 +580,7 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
             default:
                 foreach (var child in expr.Children.OfType<DomainExpression>())
                     WalkExpression(context, child, props, parameters, enumTypes, walked);
-                _meaning.Checks.TryCheck(context, expr,
-                    new ExpressionTypeCheckScope(props, parameters, enumTypes));
+                _meaning.Checks.TryCheck(context, expr, CheckScope(context, expr, props, parameters, enumTypes));
                 return;
         }
     }

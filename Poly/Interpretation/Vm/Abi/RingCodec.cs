@@ -302,6 +302,9 @@ internal static class RingCodec {
         if (underlying.IsInstanceOfType(obj))
             return obj;
         // IntPtr and UIntPtr are not IConvertible: a native integer goes through its word (LocalType.WordTypeOf).
+        // A char is not IConvertible to IEEE or decimal: C# widens it by its code point.
+        if (obj is char code)
+            obj = (int)code;
         if (obj is nint or nuint)
             obj = obj is nint signed ? (long)signed : (ulong)(nuint)obj;
         if (underlying == typeof(nint) || underlying == typeof(nuint)) {

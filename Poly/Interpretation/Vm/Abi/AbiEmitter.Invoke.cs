@@ -899,9 +899,8 @@ public static partial class AbiEmitter {
     /// <summary>
     /// Compiles the arguments of an AST constructor or method call (appended to
     /// <paramref name="seq"/>) and returns one callee frame value per parameter.
-    /// A missing argument takes the parameter default. A stack scalar passed to a
-    /// parameter that does not read a raw slot is heap-allocated, because the
-    /// callee reads that slot as a heap handle. The storage convention is the
+    /// A missing argument takes the parameter default. A stack scalar of another type
+    /// than the parameter's is converted as C# passes it (<see cref="ArgumentFrameWord"/>). The storage convention is the
     /// definition's (<paramref name="declaredParameters"/>); the value comes from
     /// the caller's analysis of the argument node.
     /// </summary>
@@ -931,16 +930,33 @@ public static partial class AbiEmitter {
                 continue;
             }
             int got = ring.Add(CompileNode(arguments[i], ctx));
-            values.Add(RingCodec.IsStackScalar(arguments[i], ctx.Analysis) && !ParameterReadsRawSlot(declaredParameters[i])
-                ? Convert(
-                    Call(ctx.HeapLocal, HeapAllocate, Convert(ctx.RingVar(got), typeof(object))),
-                    typeof(long))
-                : ctx.RingVar(got));
+            values.Add(ArgumentFrameWord(arguments[i], ctx.RingVar(got), declaredParameters[i], callee, ctx));
         }
         for (int i = arguments.Count; i < parameters.Count; i++)
             values.Add(DefaultArgument(parameters[i], declaredParameters[i], ctx));
         seq.AddRange(ring.Steps);
         return values;
+    }
+
+    /// <summary>
+    /// The callee frame word of one argument. A handle argument travels as its handle. A word argument is read by its
+    /// own type and written by the parameter's declared type, so it arrives as C# passes it: a <c>DateOnly</c> into
+    /// <c>DateOnly?</c> or <c>object</c> is the date, a <c>long</c> into <c>decimal?</c> or <c>double</c> is that number.
+    /// Only a word of the parameter's own type is the raw slot.
+    /// </summary>
+    private static Expression ArgumentFrameWord(
+        Node argument, Expression ringVar, IParameter declared, string callee, Context ctx) {
+        if (!RingCodec.IsStackScalar(argument, ctx.Analysis))
+            return ringVar;
+        var parameterClr = declared.ParameterTypeDefinition.GetRuntimeType();
+        if (parameterClr is null)
+            return Convert(Call(ctx.HeapLocal, HeapAllocate, Convert(ringVar, typeof(object))), typeof(long));
+        var argumentClr = ctx.ClrTypeOf(argument)
+            ?? throw new InvalidOperationException(
+                $"VM compile rejected: cannot resolve the type of the argument for parameter '{declared.Name}' of {callee}.");
+        return argumentClr == parameterClr
+            ? ringVar
+            : RingCodec.ToFrame(RingCodec.FromFrame(ringVar, argumentClr, parameterClr, ctx.HeapLocal), parameterClr, ctx.HeapLocal);
     }
 
     /// <summary>A callee parameter's storage convention, from its declaration.

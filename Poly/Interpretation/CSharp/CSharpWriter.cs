@@ -1064,7 +1064,7 @@ public sealed class CSharpWriter {
             case PrimitiveTypeReference prim:
                 return prim.PrimitiveId.GetCSharpKeyword() + (prim.IsNullable ? "?" : "");
             case NamedTypeReference named:
-                return named.FullName + (named.TypeArguments is { Count: > 0 }
+                return EscapeTypeName(named.FullName) + (named.TypeArguments is { Count: > 0 }
                     ? "<" + string.Join(", ", named.TypeArguments.Select(TypeText)) + ">"
                     : "");
             case OptionalTypeReference opt:

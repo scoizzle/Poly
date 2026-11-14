@@ -12,6 +12,8 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
         Dictionary<string, string> props,
         Dictionary<string, string>? parameters,
         Dictionary<string, EnumType> enumTypes) {
+        StampComparedMatch(context, cmp.Left, cmp.Right, props, parameters, enumTypes);
+        StampComparedMatch(context, cmp.Right, cmp.Left, props, parameters, enumTypes);
         var left = InferType(context, cmp.Left, props, parameters, enumTypes);
         var right = InferType(context, cmp.Right, props, parameters, enumTypes);
         // A6: a bare name against an enum operand is a member of that enum (`Level is High`).
@@ -56,6 +58,22 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
 
         WalkExpression(context, cmp.Left, props, parameters, enumTypes);
         WalkExpression(context, cmp.Right, props, parameters, enumTypes);
+    }
+
+    /// <summary>
+    /// A <c>match</c> against an enum property takes that enum as its slot, as lowering has it (<c>Comparison</c> adapts the
+    /// operand to <c>EnumTargetOf</c> of the other side, which is an enum property of the entity and nothing else): an enum member
+    /// and a Text string literal in its arms then unify (T-09a fix round, F1).
+    /// </summary>
+    private void StampComparedMatch(
+        AnalysisContext context, DomainExpression operand, DomainExpression other,
+        Dictionary<string, string> props, Dictionary<string, string>? parameters, Dictionary<string, EnumType> enumTypes) {
+        if (RewriteLibraryIdent(operand) is not MatchExpr match
+            || other is not PropertyAccess { Name: var name } || parameters?.ContainsKey(name) == true || !props.ContainsKey(name))
+            return;
+        var slot = InferType(context, other, props, parameters, enumTypes);
+        if (Family(slot) is TypeFamily.Enum)
+            StampMatchTarget(context, match, slot.AsOptional(false));
     }
 
     /// <summary>

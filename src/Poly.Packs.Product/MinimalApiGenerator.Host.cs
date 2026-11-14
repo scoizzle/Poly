@@ -165,6 +165,8 @@ public sealed partial class MinimalApiGenerator {
             "DateOnly" => new Invoke(
                 new Member(new TypeReference("DateOnly"), "FromDateTime"),
                 new Member(new TypeReference("DateTime"), "UtcNow")),
+            "TimeOnly" => new Member(new TypeReference("TimeOnly"), "MinValue"),
+            "TimeSpan" => new Member(new TypeReference("TimeSpan"), "Zero"),
             "decimal" => new Constant(1m),
             "double" or "float" => new Constant(1.0),
             "Guid" => new Invoke(new Member(new TypeReference("Guid"), "NewGuid")),

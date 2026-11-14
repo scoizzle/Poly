@@ -1278,9 +1278,9 @@ Integer division truncates: `7 / 2` is 3. Storing an integral division into a `D
 `assign Total to N / 2 + 1`) is the warning DMNUM001, because the quotient is cut before it widens. A literal with a
 zero fraction is a whole number, so `7.0 / 2` is also 3; divide by a `Decimal` property or a literal with a fraction
 (`7.5 / 2`, `Total / 2`) to divide exactly. The warning covers an `assign`, a `create` initializer, a `default(...)`, a
-function's return, a function argument and an invoke or fan-out argument, along the `+ - * /` spine of the value. It
-does not cover a division inside a `match` arm (row T-09a) and, like every analysis warning, it is not yet suppressible
-by an allowance (row T-08).
+function's return, a function argument and an invoke or fan-out argument, along the `+ - * /` spine of the value and
+into the arm values of a `match` (each arm is converted to the match's type, so `match { c -> 7 / 2, else -> 1.5 }`
+stores 3 for that arm). Like every analysis warning, it is not yet suppressible by an allowance (row T-08).
 
 #### Subject-First Related Reads (Q1′)
 
@@ -1412,7 +1412,23 @@ Product sessions load Temporal implicitly at Load. A raw `SessionBuilder` that n
 `36 Hours`; a date plus or minus a Duration *value* (`Due + Len`: not supported yet, F-11, #550); a count offset whose left
 is not a date property or parameter (`Today + 1`, `(Due + 1) + n`, `part Due + n`: write the offset as `Today + 1 Days`);
 `default(Now + 7 Days)` (a date operation has no default lowering: use `default(Now)` or `default(Today)`); and a bare
-duration anywhere but an assign to a `Duration` property, a comparison with a `Duration`, or the `default(...)` of one. A bare duration compared with an `optional` Duration property is rejected (#484), and so is one too long for a `TimeSpan`.
+duration anywhere but an assign to a `Duration` property, a comparison with a `Duration`, or the `default(...)` of one. A bare duration one too long for a `TimeSpan` is rejected. An `optional` Date, DateTime, Time or Duration compared with a required value of the same type (`OptDue < Today`, `OptLen > 1 Hours`) is C#'s lifted comparison on every door: an absent operand makes `<`, `<=`, `>`, `>=` and `==` false and `!=` true.
+
+So a policy such as `OptDue >= Opened` used as an action's `require` is false while `OptDue` is absent, and the action is refused; `not (OptDue < Today)` is true while it is absent; and two optional values that are both absent are `==` but neither `<=` nor `>=`. To accept an absent value write `OptDue is null or OptDue >= Opened`; to demand a present one write `OptDue is not null and OptDue >= Opened`. (There is no entity-level constraint expression: a policy is the form that carries one, and a stage `require` is not checked when an instance is created, #576.)
+
+<!-- poly-verify: valid -->
+```poly
+domain Tasks
+uses temporal
+Task: entity {
+  Opened: Date
+  OptDue: Date optional
+  Done: Number optional
+  Accepting: policy { OptDue is null or OptDue >= Opened }
+  Demanding: policy { OptDue is not null and OptDue >= Opened }
+  Finish: action require Accepting { assign Done to 1 }
+}
+```
 
 **Create-time defaults, assign-to-clock, and policy clock reads are shipped.** `default(Today)` /
 `default(Now)` and `assign Prop to Today` / `assign Prop to Now` evaluate at instance create /
@@ -1652,7 +1668,16 @@ assign Tier to match { Qty > 100 -> "big", Qty > 10 -> "mid", else -> "small" }
 - Arms are **expressions**, never effects. It works wherever an expression does (assign RHS, `if`
   conditions, policy bodies, `create` initializers, nested inside another `match`, or as a function-call argument such as `Add(match { Qty > 3 -> 10, else -> 1 }, 1)`).
 - Conditions must be Boolean (**DMMAT001**). The arm values and the `else` must unify to one type
-  (**DMMAT002**; `Text` and an enum unify, `Text` and `Number` do not). Two arms with the same
+  (**DMMAT002**): the same type, or a `Decimal` with a `Number` (every `Number` arm is converted to
+  `Decimal`, so `match { Qty > 1 -> 1.5, else -> Qty }` is a `Decimal` whichever arm comes first, and
+  assigning it into a `Number` is DMSEM003). `Text` and `Number` do not unify; neither do a `Date` and a
+  `DateTime`, or an enum and a `Text` that is not a string literal (a string literal unifies with an enum arm
+  only where the enum is the slot: assigned to that enum, `assign Tier to match { c -> Gold, else -> "Std" }`,
+  compared with an enum property of the entity, or nested in such a match; a literal that names no member of
+  the enum is DMSEM003, as in `Tier == "Nope"`). An arm that
+  is `null` or optional makes the match optional: it compares and orders false when absent, arithmetic over it
+  is absent when the match is (into an optional property), and storing that arithmetic in a required property is DMSEM003. A
+  `match` in `default(...)` is a positioned error (the generated C# cannot print it). Two arms with the same
   condition are an error, the later arm is unreachable (**DMMAT003**); only identical conditions
   are seen, overlapping ranges are the author's problem. A bare name that is no property, parameter or
   enum member is an error (**DMMAT004**).

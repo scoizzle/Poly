@@ -19,8 +19,6 @@
 > Each result's text block is a prose summary (outcome, `workspace:` handle, findings, `next:`
 > calls, flattened data); the full envelope is in `structuredContent`.
 
-> **Stability:** what is stable, what is not, and the known-wrong behaviour of this release are in section 14.
-
 ---
 
 ## 0. Modeling Principles (Read This First)

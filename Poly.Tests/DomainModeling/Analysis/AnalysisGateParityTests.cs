@@ -532,16 +532,16 @@ public class AnalysisGateParityTests {
     }
 
     /// <summary>
-    /// T-06a's <c>ExprType.Optional</c> closes the path-read gap: a bare duration compared with an optional Duration reached
-    /// through a to-one link is refused (#484), while the same read of a REQUIRED member runs on every door and stays accepted
-    /// (a to-one read is "optional" in analysis only so that <c>== null</c> is accepted; it cannot be absent at run time).
+    /// A read through a to-one link: an optional member compared with a bare duration is C#'s lifted comparison on every door
+    /// (<c>advisor Gap</c> is 2 hours here: both orders are true), and a required member runs as before. An offset read
+    /// through a link is still refused (the left of an offset must be a property).
     /// </summary>
     [Test]
-    [Arguments("a required Duration through a to-one link", "Go: policy { advisor Len > 1 Hours }", "")]
-    [Arguments("an optional Duration through a to-one link", "Go: policy { advisor Gap > 1 Hours }", "#484")]
-    [Arguments("the duration on the left", "Go: policy { 1 Hours < advisor Gap }", "#484")]
-    [Arguments("a Date offset read through a link", "Go: action { assign OutD to advisor Due + 3 Days }", "F-11")]
-    public async Task OptionalDurationThroughALink_IsRefused_RequiredOneRuns(string row, string members, string refusal) {
+    [Arguments("a required Duration through a to-one link", "Go: policy { advisor Len > 1 Hours }", "", false)]
+    [Arguments("an optional Duration through a to-one link", "Go: policy { advisor Gap > 1 Hours }", "", true)]
+    [Arguments("the duration on the left", "Go: policy { 1 Hours < advisor Gap }", "", true)]
+    [Arguments("a Date offset read through a link", "Go: action { assign OutD to advisor Due + 3 Days }", "F-11", false)]
+    public async Task OptionalDurationThroughALink_RunsLifted_OffsetStaysRefused(string row, string members, string refusal, bool expected) {
         var dsl = $$"""
             domain T
             uses temporal
@@ -566,10 +566,130 @@ public class AnalysisGateParityTests {
         if (refusal.Length == 0) {
             await Assert.That(result.Analysis).IsTrue().Because($"{row}: {result}");
             await Assert.That(result.Holds).IsTrue().Because($"{row}: {result}");
+            // advisor Len is exactly 1 hour, so only the optional rows are strictly greater than it
+            var surface = PolySurfaceHarness.New();
+            var workspace = surface.Open("Link");
+            await Assert.That(surface.Define(workspace, dsl).Success).IsTrue();
+            var run = surface.Simulate(workspace, steps);
+            await Assert.That(Evaluated(run.Step(3))).IsEqualTo(expected).Because(row);
             return;
         }
         await Assert.That(result.Analysis).IsFalse().Because($"{row}: {result}");
         await Assert.That(result.AnalysisSummary).Contains(refusal).Because($"{row}: {result}");
+    }
+
+    /// <summary>
+    /// T-21d (#484): an optional Date, DateTime, Time or Duration beside a REQUIRED value of the same type is C#'s lifted
+    /// comparison on every door: an absent operand makes <c>&lt;</c>, <c>&lt;=</c>, <c>&gt;</c>, <c>&gt;=</c> and <c>==</c>
+    /// false and <c>!=</c> true. Each row is one document of twelve policies (six operators, the optional on either side) run
+    /// with the optional present and absent; the simulator and the printed C# must agree (<c>AssertAgree</c>) AND equal the
+    /// answer C#'s own lambdas give (<c>Cmp</c>), and <c>polyc check</c> accepts the document.
+    /// </summary>
+    [Test]
+    [Arguments("Date", "OptDue", "Due")]
+    [Arguments("Date", "OptDue", "Today")]
+    [Arguments("Date", "OptDue", "(Due + 3 Days)")]
+    [Arguments("DateTime", "OptStamp", "Stamp")]
+    [Arguments("DateTime", "OptStamp", "Now")]
+    [Arguments("DateTime", "OptStamp", "(Stamp + 3 Hours)")]
+    [Arguments("Time", "OptOpens", "Opens")]
+    [Arguments("Time", "OptOpens", "(Opens + 2 Hours)")]
+    [Arguments("Duration", "OptLen", "Len")]
+    [Arguments("Duration", "OptLen", "1 Hours")]
+    [Arguments("Duration", "OptLen", "(Stamp2 - Stamp)")]
+    public async Task OptionalTemporal_AgainstARequiredValue_BothHostsAnswerCSharpsLiftedComparison(string family, string optional, string required) {
+        string[] ops = ["<", "<=", ">", ">=", "==", "!="];
+        var policies = ops.SelectMany((op, i) => new[] { $"P{i * 2}: policy {{ {optional} {op} {required} }}", $"P{i * 2 + 1}: policy {{ {required} {op} {optional} }}" });
+        var dsl = $$"""
+            domain T
+            uses temporal
+            Item: entity {
+              Due: Date
+              OptDue: Date optional
+              Stamp: DateTime
+              Stamp2: DateTime
+              OptStamp: DateTime optional
+              Opens: Time
+              OptOpens: Time optional
+              Len: Duration
+              OptLen: Duration optional
+              {{string.Join("\n  ", policies)}}
+            }
+            """;
+        var due = new DateOnly(2026, 1, 5);
+        var stamp = new DateTime(2026, 1, 5, 0, 0, 0, DateTimeKind.Utc);
+        var stamp2 = new DateTime(2026, 1, 6, 0, 0, 0, DateTimeKind.Utc);
+        object requiredValue = required switch {
+            "Due" => due, "Today" => DateOnly.FromDateTime(DateTime.UtcNow), "(Due + 3 Days)" => due.AddDays(3),
+            "Stamp" => stamp, "Now" => DateTime.UtcNow, "(Stamp + 3 Hours)" => stamp.AddHours(3),
+            "Opens" => new TimeOnly(9, 0), "(Opens + 2 Hours)" => new TimeOnly(11, 0),
+            "Len" or "1 Hours" => TimeSpan.FromHours(1), _ => stamp2 - stamp,
+        };
+        object presentValue = family switch {
+            "Date" => new DateOnly(2026, 1, 3), "DateTime" => new DateTime(2026, 1, 3, 0, 0, 0, DateTimeKind.Utc),
+            "Time" => new TimeOnly(8, 0), _ => TimeSpan.FromMinutes(30),
+        };
+
+        var gate = GateParity.Check(dsl, SimStep.Create("Item", """{"Due":"2026-01-05","Stamp":"2026-01-05T00:00:00Z","Stamp2":"2026-01-06T00:00:00Z","Opens":"09:00:00","Len":"01:00:00"}""", "i"), SimStep.Evaluate("Item", "P0", "i"));
+        await Assert.That(gate.Analysis).IsTrue().Because(gate.ToString());
+        await Assert.That(gate.Holds).IsTrue().Because(gate.ToString());
+
+        foreach (var isPresent in new[] { true, false }) {
+            var outcomes = await ParityScenario.FromDsl(dsl, $"T21dGrid{family}{required.GetHashCode():X}{isPresent}").AssertAgree(side => {
+                var props = new List<(string, object?)> { ("Due", due), ("Stamp", stamp), ("Stamp2", stamp2), ("Opens", new TimeOnly(9, 0)), ("Len", TimeSpan.FromHours(1)) };
+                if (isPresent) props.Add((optional, presentValue));
+                side.Create("Item", [.. props]);
+                for (var i = 0; i < ops.Length * 2; i++) side.EvaluatePolicy("P" + i);
+            });
+            for (var i = 0; i < ops.Length * 2; i++) {
+                var op = ops[i / 2];
+                var optionalLeft = i % 2 == 0;
+                object? opt = isPresent ? presentValue : null;
+                var expected = LiftedByCSharp(opt, requiredValue, op, optionalLeft);
+                await Assert.That(outcomes[i + 1].State["P" + i]).IsEqualTo(expected.ToString())
+                    .Because($"{(optionalLeft ? optional + " " + op + " " + required : required + " " + op + " " + optional)} present={isPresent}");
+            }
+        }
+    }
+
+    /// <summary>C#'s lifted comparison of an optional with a required value, from the lambdas C# binds.</summary>
+    private static bool LiftedByCSharp(object? optional, object required, string op, bool optionalLeft) {
+        static bool Of<T>(Poly.Tests.Interpretation.Vm.Abi.AbiEmitterCompareDomainTests.Cmp<T> cmp, object? o, object r, string op, bool optionalLeft) where T : struct {
+            T? opt = (T?)o;
+            return optionalLeft ? cmp.Lifted(op, opt, (T)r) : cmp.Lifted(op, (T)r, opt);
+        }
+        return required switch {
+            DateOnly => Of(Poly.Tests.Interpretation.Vm.Abi.AbiEmitterCompareDomainTests.DateOnlyOps, optional, required, op, optionalLeft),
+            DateTime => Of(Poly.Tests.Interpretation.Vm.Abi.AbiEmitterCompareDomainTests.DateTimeOps, optional, required, op, optionalLeft),
+            TimeOnly => Of(Poly.Tests.Interpretation.Vm.Abi.AbiEmitterCompareDomainTests.TimeOnlyOps, optional, required, op, optionalLeft),
+            _ => Of(Poly.Tests.Interpretation.Vm.Abi.AbiEmitterCompareDomainTests.TimeSpanOps, optional, required, op, optionalLeft),
+        };
+    }
+
+    /// <summary>The guarded forms agree with C#: the guard changes nothing (an absent optional is false).</summary>
+    [Test]
+    [Arguments("OptDue is not null and OptDue > Due", true, true)]
+    [Arguments("OptDue is not null and OptDue > Due", false, false)]
+    [Arguments("OptDue != null and OptDue < Today", true, true)]
+    [Arguments("OptDue != null and OptDue < Today", false, false)]
+    public async Task OptionalDate_GuardedComparison_BothHostsAgree(string condition, bool present, bool expected) {
+        var dsl = $$"""
+            domain T
+            uses temporal
+            Item: entity {
+              Due: Date
+              OptDue: Date optional
+              P: policy { {{condition}} }
+            }
+            """;
+        var outcomes = await ParityScenario.FromDsl(dsl, "T21dGuard" + condition.GetHashCode().ToString("X") + present).AssertAgree(side => {
+            var props = new List<(string, object?)> { ("Due", new DateOnly(2026, 1, 5)) };
+            if (present) props.Add(("OptDue", condition.Contains("Today", StringComparison.Ordinal) ? new DateOnly(2000, 1, 1) : new DateOnly(2026, 1, 9)));
+            side.Create("Item", [.. props]);
+            side.EvaluatePolicy("P");
+        });
+
+        await Assert.That(outcomes[1].State["P"]).IsEqualTo(expected.ToString());
     }
 
     /// <summary>R6: the earlier date on the left is a negative difference, the same on both hosts.</summary>

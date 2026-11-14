@@ -272,6 +272,12 @@ public class LoweredTreeOperandCoverageTests {
 
     // Two distinct delegates with the same target and method. C# binds `Action == Delegate` to reference equality
     // (the (object, object) operator), so these are C#'s own answers, bound by Roslyn here.
+    // `DateTime? == DateTimeOffset` compiles in C# (the implicit DateTime to DateTimeOffset conversion lifts), so these are C#'s
+    // own answers, bound by Roslyn here; the narrowed NullableDateRule refuses the pair (row T-21b: the VM converts in a nullable compare).
+    static readonly DateTime? OptionalWhen = new DateTime(2026, 1, 3, 0, 0, 0, DateTimeKind.Utc);
+    static readonly DateTimeOffset OffsetWhen = new(2026, 1, 3, 0, 0, 0, TimeSpan.Zero);
+    static readonly bool OptionalWhenEqualsOffsetAsCSharp = OptionalWhen == OffsetWhen;
+    static readonly bool OffsetEqualsOptionalWhenAsCSharp = OffsetWhen == OptionalWhen;
     static readonly Action DelegateLeft = DelegateTarget;
     static readonly Delegate DelegateRight = new Action(DelegateTarget);
 #pragma warning disable CS0252, CS0253
@@ -299,6 +305,8 @@ public class LoweredTreeOperandCoverageTests {
         Row(typeof(Add), "NullWithNumber", Rejects, () => Wrap(new Add(new Constant(null), new Constant(1))), []),
         Row(typeof(UnaryMinus), "Null", Rejects, () => Wrap(new UnaryMinus(new Constant(null))), []),
         Row(typeof(Add), "TextWithUnresolved", Rejects, () => Wrap(new Add(new Constant("a"), new Default(null))), []),
+        Row(typeof(Equal), "OptionalDateTimeBesideDateTimeOffset", Accepts, () => Wrap(new Equal(P<DateTime?>("a"), P<DateTimeOffset>("b"))), [OptionalWhen, OffsetWhen], typeof(bool), OptionalWhenEqualsOffsetAsCSharp),
+        Row(typeof(Equal), "DateTimeOffsetBesideOptionalDateTime", Accepts, () => Wrap(new Equal(P<DateTimeOffset>("a"), P<DateTime?>("b"))), [OffsetWhen, OptionalWhen], typeof(bool), OffsetEqualsOptionalWhenAsCSharp),
         Row(typeof(Equal), "DelegateBesideDelegateSameMethod", Accepts, () => Wrap(new Equal(P<Action>("a"), P<Delegate>("b"))), [DelegateLeft, DelegateRight], typeof(bool), DelegateEqualAsCSharp),
         Row(typeof(NotEqual), "DelegateBesideDelegateSameMethod", Accepts, () => Wrap(new NotEqual(P<Action>("a"), P<Delegate>("b"))), [DelegateLeft, DelegateRight], typeof(bool), DelegateNotEqualAsCSharp),
         Row(typeof(BitwiseAnd), "UInt32WithIntConstant", Accepts, () => Wrap(new BitwiseAnd(P<uint>("a"), new Constant(1))), [uint.MaxValue], typeof(long), 1L),

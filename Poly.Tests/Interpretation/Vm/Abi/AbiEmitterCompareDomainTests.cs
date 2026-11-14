@@ -316,12 +316,167 @@ public class AbiEmitterCompareDomainTests {
         await Assert.That(Run(new Equal(Optional<int>("count"), new Constant(4L)), 4)).IsEqualTo(1L);
     }
 
+    /// <summary>
+    /// T-21d (#484): an optional temporal beside a required one of the same type is C#'s lifted comparison: an absent operand
+    /// makes <c>&lt;</c>, <c>&lt;=</c>, <c>&gt;</c>, <c>&gt;=</c> and <c>==</c> false and <c>!=</c> true. The expected value is
+    /// computed here by C# lambdas (never a table); <c>Run</c> is the VM.
+    /// </summary>
+    private static readonly (string Name, Func<Node, Node, Node> Make)[] Operators = [
+        ("<", (l, r) => new LessThan(l, r)), ("<=", (l, r) => new LessThanOrEqual(l, r)), (">", (l, r) => new GreaterThan(l, r)),
+        (">=", (l, r) => new GreaterThanOrEqual(l, r)), ("==", (l, r) => new Equal(l, r)), ("!=", (l, r) => new NotEqual(l, r)),
+    ];
+
+    /// <summary>C#'s own operators of one type, as lambdas the C# compiler binds.</summary>
+    internal sealed record Cmp<T>(Func<T, T, bool> Lt, Func<T, T, bool> Le, Func<T, T, bool> Gt, Func<T, T, bool> Ge, Func<T, T, bool> Eq, Func<T, T, bool> Ne) where T : struct {
+        public Func<T, T, bool> Of(string op) => op switch { "<" => Lt, "<=" => Le, ">" => Gt, ">=" => Ge, "==" => Eq, _ => Ne };
+
+        /// <summary>The lifted operator over <c>T?</c> and <c>T</c>: an absent operand is false for every operator but <c>!=</c>.</summary>
+        public bool Lifted(string op, T? left, T right) => left is { } l ? Of(op)(l, right) : op == "!=";
+
+        public bool Lifted(string op, T left, T? right) => right is { } r ? Of(op)(left, r) : op == "!=";
+    }
+
+    internal static readonly Cmp<DateTime> DateTimeOps = new((a, b) => a < b, (a, b) => a <= b, (a, b) => a > b, (a, b) => a >= b, (a, b) => a == b, (a, b) => a != b);
+    internal static readonly Cmp<DateOnly> DateOnlyOps = new((a, b) => a < b, (a, b) => a <= b, (a, b) => a > b, (a, b) => a >= b, (a, b) => a == b, (a, b) => a != b);
+    internal static readonly Cmp<TimeOnly> TimeOnlyOps = new((a, b) => a < b, (a, b) => a <= b, (a, b) => a > b, (a, b) => a >= b, (a, b) => a == b, (a, b) => a != b);
+    internal static readonly Cmp<TimeSpan> TimeSpanOps = new((a, b) => a < b, (a, b) => a <= b, (a, b) => a > b, (a, b) => a >= b, (a, b) => a == b, (a, b) => a != b);
+    internal static readonly Cmp<DateTimeOffset> DateTimeOffsetOps = new((a, b) => a < b, (a, b) => a <= b, (a, b) => a > b, (a, b) => a >= b, (a, b) => a == b, (a, b) => a != b);
+
+    private static async Task OptionalAgainstRequired<T>(Cmp<T> cmp, T present, T required, Func<Node> requiredNode, params object?[] extraArgs)
+        where T : struct {
+        foreach (var (op, make) in Operators)
+            foreach (var optionalLeft in new[] { true, false })
+                foreach (var isPresent in new[] { true, false }) {
+                    T? value = isPresent ? present : null;
+                    Node body = optionalLeft ? make(Optional<T>("o"), requiredNode()) : make(requiredNode(), Optional<T>("o"));
+                    object?[] args = optionalLeft ? [value, .. extraArgs] : [.. extraArgs, value];
+                    var expected = optionalLeft ? cmp.Lifted(op, value, required) : cmp.Lifted(op, required, value);
+                    await Assert.That(Run(body, args)).IsEqualTo(expected ? 1L : 0L)
+                        .Because($"{typeof(T).Name}? {(optionalLeft ? "opt " + op + " req" : "req " + op + " opt")} present={isPresent}");
+                }
+    }
+
     [Test]
-    public async Task DateTimeOptional_Equal_RequiredDateTime_IsRejected() {
-        await Assert.That(() => Interpreter.Compile(
-                new Equal(Optional<DateTime>("when"), Param<DateTime>("required"))))
-            .Throws<InvalidOperationException>()
-            .WithMessage("VM compile rejected: comparison between incompatible types 'Nullable`1' and 'DateTime'");
+    public async Task OptionalDateTime_AgainstRequired_IsCSharpsLiftedComparison() =>
+        await OptionalAgainstRequired(DateTimeOps, new DateTime(2026, 1, 3), new DateTime(2026, 1, 5), () => Param<DateTime>("r"), new DateTime(2026, 1, 5));
+
+    [Test]
+    public async Task OptionalDateOnly_AgainstRequired_IsCSharpsLiftedComparison() =>
+        await OptionalAgainstRequired(DateOnlyOps, new DateOnly(2026, 1, 3), new DateOnly(2026, 1, 5), () => Param<DateOnly>("r"), new DateOnly(2026, 1, 5));
+
+    [Test]
+    public async Task OptionalTimeOnly_AgainstRequired_IsCSharpsLiftedComparison() =>
+        await OptionalAgainstRequired(TimeOnlyOps, new TimeOnly(8, 0), new TimeOnly(9, 0), () => Param<TimeOnly>("r"), new TimeOnly(9, 0));
+
+    [Test]
+    public async Task OptionalTimeSpan_AgainstRequired_IsCSharpsLiftedComparison() =>
+        await OptionalAgainstRequired(TimeSpanOps, TimeSpan.FromMinutes(30), TimeSpan.FromHours(1), () => Param<TimeSpan>("r"), TimeSpan.FromHours(1));
+
+    [Test]
+    public async Task OptionalDateTimeOffset_AgainstRequired_IsCSharpsLiftedComparison() {
+        var required = new DateTimeOffset(2026, 1, 5, 0, 0, 0, TimeSpan.Zero);
+        await OptionalAgainstRequired(DateTimeOffsetOps, new DateTimeOffset(2026, 1, 3, 0, 0, 0, TimeSpan.Zero), required, () => Param<DateTimeOffset>("r"), required);
+    }
+
+    /// <summary>The required side as each shape the lowered tree can hold: a CLR member read, a static member, a call result, a constant.</summary>
+    [Test]
+    public async Task OptionalDateTime_AgainstEveryRequiredShape_IsCSharpsLiftedComparison() {
+        var present = new DateTime(2026, 1, 3);
+        var day = new DateTime(2026, 1, 5, 13, 0, 0);
+        await OptionalAgainstRequired(DateTimeOps, present, day.Date, () => new Member(Param<DateTime>("r"), "Date"), day);
+        await OptionalAgainstRequired(DateTimeOps, present, day.AddDays(1), () => new Invoke(new Member(Param<DateTime>("r"), "AddDays"), new Constant(1.0)), day);
+        await OptionalAgainstRequired(DateTimeOps, present, new DateTime(2026, 1, 9), () => new Constant(new DateTime(2026, 1, 9)));
+        foreach (var isPresent in new[] { true, false }) {
+            DateTime? value = isPresent ? present : null;
+            await Assert.That(Run(new LessThan(Optional<DateTime>("o"), new Member(new NamedTypeReference("DateTime"), "UtcNow")), value))
+                .IsEqualTo(DateTimeOps.Lifted("<", value, DateTime.UtcNow) ? 1L : 0L);
+        }
+    }
+
+    [Test]
+    public async Task OptionalTimeSpan_AgainstAConstant_IsCSharpsLiftedComparison() =>
+        await OptionalAgainstRequired(TimeSpanOps, TimeSpan.FromHours(1), TimeSpan.FromHours(2), () => new Constant(TimeSpan.FromHours(2)));
+
+    private static async Task BothOptional<T>(Cmp<T> cmp, T a, T b) where T : struct {
+        foreach (var (op, make) in Operators)
+            foreach (var (leftPresent, rightPresent) in new[] { (true, true), (true, false), (false, true), (false, false) }) {
+                T? left = leftPresent ? a : null;
+                T? right = rightPresent ? b : null;
+                var expected = (left, right) switch {
+                    ({ } l, { } r) => cmp.Of(op)(l, r),
+                    ({ }, null) or (null, { }) => op == "!=",
+                    _ => op == "==",
+                };
+                await Assert.That(Run(make(Optional<T>("l"), Optional<T>("r")), left, right)).IsEqualTo(expected ? 1L : 0L)
+                    .Because($"{typeof(T).Name}? {op} {typeof(T).Name}? {leftPresent}/{rightPresent}");
+            }
+    }
+
+    [Test]
+    public async Task OptionalAgainstOptional_EveryTemporalFamily_IsCSharpsLiftedComparison() {
+        await BothOptional(DateTimeOps, new DateTime(2026, 1, 3), new DateTime(2026, 1, 5));
+        await BothOptional(DateOnlyOps, new DateOnly(2026, 1, 3), new DateOnly(2026, 1, 5));
+        await BothOptional(TimeOnlyOps, new TimeOnly(8, 0), new TimeOnly(9, 0));
+        await BothOptional(TimeSpanOps, TimeSpan.FromMinutes(30), TimeSpan.FromHours(1));
+        await BothOptional(DateTimeOffsetOps, new DateTimeOffset(2026, 1, 3, 0, 0, 0, TimeSpan.Zero), new DateTimeOffset(2026, 1, 5, 0, 0, 0, TimeSpan.Zero));
+    }
+
+    private static string Refusal(Node body) {
+        try {
+            Interpreter.Compile(body);
+        }
+        catch (InvalidOperationException e) {
+            return e.Message;
+        }
+        return "(accepted)";
+    }
+
+    /// <summary>
+    /// A nullable temporal beside a different type is refused with a positioned message: the pair has no operator, and the
+    /// two optional/DateTimeOffset pairs are the narrowed interim rule's (C# compiles them; the VM does not convert in a
+    /// nullable compare yet, row T-21b).
+    /// </summary>
+    [Test]
+    [Arguments("DateOnly?", "DateTime")]
+    [Arguments("DateTime?", "DateOnly")]
+    [Arguments("DateTime?", "TimeSpan")]
+    [Arguments("TimeOnly?", "DateOnly")]
+    [Arguments("TimeSpan?", "DateTime")]
+    [Arguments("DateTime?", "DateTimeOffset")]
+    [Arguments("DateTimeOffset?", "DateTime")]
+    [Arguments("DateOnly?", "Int32")]
+    [Arguments("DateOnly?", "Int64")]
+    [Arguments("DateOnly?", "Decimal")]
+    [Arguments("DateOnly?", "String")]
+    [Arguments("DateOnly?", "Boolean")]
+    [Arguments("DateOnly?", "Object")]
+    public async Task OptionalTemporal_BesideADifferentType_IsRefusedWithAPositionedMessage(string optional, string required) {
+        static Node Opt(string type) => type switch {
+            "DateOnly?" => Optional<DateOnly>("o"), "DateTime?" => Optional<DateTime>("o"), "TimeOnly?" => Optional<TimeOnly>("o"),
+            "TimeSpan?" => Optional<TimeSpan>("o"), _ => Optional<DateTimeOffset>("o"),
+        };
+        static Node Req(string type) => type switch {
+            "DateTime" => Param<DateTime>("r"), "DateOnly" => Param<DateOnly>("r"), "TimeSpan" => Param<TimeSpan>("r"), "DateTimeOffset" => Param<DateTimeOffset>("r"),
+            "Int32" => Param<int>("r"), "Int64" => Param<long>("r"), "Decimal" => Param<decimal>("r"), "String" => Param<string>("r"),
+            "Boolean" => Param<bool>("r"), _ => Param<object>("r"),
+        };
+        foreach (var (op, make) in Operators.Where(static o => o.Name is "==" or "<"))
+            foreach (var optionalLeft in new[] { true, false }) {
+                var message = Refusal(optionalLeft ? make(Opt(optional), Req(required)) : make(Req(required), Opt(optional)));
+                await Assert.That(message).StartsWith("VM compile rejected: comparison between incompatible types")
+                    .Because($"{optional} {op} {required} optionalLeft={optionalLeft}");
+            }
+    }
+
+    /// <summary>Optional-date arithmetic stays refused in the lowered analysis.</summary>
+    [Test]
+    public async Task OptionalTemporalArithmetic_StaysRefused() {
+        await Assert.That(Refusal(new Add(Optional<DateTime>("o"), Param<TimeSpan>("r"))))
+            .IsEqualTo("VM compile rejected: arithmetic operand is not numeric (got 'Nullable`1' and 'TimeSpan')");
+        await Assert.That(Refusal(new Subtract(Optional<DateTime>("o"), Param<DateTime>("r"))))
+            .IsEqualTo("VM compile rejected: arithmetic operand is not numeric (got 'Nullable`1' and 'DateTime')");
+        await Assert.That(Refusal(new Add(Optional<DateOnly>("o"), Param<int>("r"))))
+            .IsEqualTo("VM compile rejected: temporal offset requires a date type with AddDays (got 'Nullable`1')");
     }
 
     [Test]

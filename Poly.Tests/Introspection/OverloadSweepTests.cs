@@ -130,6 +130,7 @@ public class OverloadSweepTests {
             ? string.Concat(body.Split('\n').Where(static l => l.Length > 0 && !l.StartsWith("  errors:", StringComparison.Ordinal)).Select(static l => l + "\n"))
             : body;
 
+    /// <summary>
     /// Identities of single-overload methods whose sites a slice adds, removes or moves: the filter hides both the presence
     /// and the absence of these members, not only a move, in documents the baseline already has them
     /// in (L-04b: every generated <c>Create</c> and <c>Create{Nav}</c> is a root-scope wrapper, so the

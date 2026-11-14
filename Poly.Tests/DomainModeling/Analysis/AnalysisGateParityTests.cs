@@ -817,10 +817,16 @@ public class AnalysisGateParityTests {
             }
             """;
         object a = left switch {
-            "OptDue" => new DateOnly(2026, 1, 3), "OptStamp" => new DateTime(2026, 1, 3), "OptOpens" => new TimeOnly(8, 0), _ => TimeSpan.FromHours(2),
+            "OptDue" => new DateOnly(2026, 1, 3),
+            "OptStamp" => new DateTime(2026, 1, 3),
+            "OptOpens" => new TimeOnly(8, 0),
+            _ => TimeSpan.FromHours(2),
         };
         object b = left switch {
-            "OptDue" => new DateOnly(2026, 1, 4), "OptStamp" => new DateTime(2026, 1, 4), "OptOpens" => new TimeOnly(7, 0), _ => TimeSpan.FromHours(3),
+            "OptDue" => new DateOnly(2026, 1, 4),
+            "OptStamp" => new DateTime(2026, 1, 4),
+            "OptOpens" => new TimeOnly(7, 0),
+            _ => TimeSpan.FromHours(3),
         };
         foreach (var (l, r) in new[] { (false, false), (true, false), (false, true), (true, true) }) {
             var outcomes = await ParityScenario.FromDsl(dsl, $"T10cOpt{left}{op.Length}{(op == "==" ? "E" : op == "!=" ? "N" : op == "<" || op == "<=" ? "L" : "G")}{l}{r}").AssertAgree(side => {

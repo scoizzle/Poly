@@ -179,53 +179,13 @@ public sealed partial class EffectLoweringPass {
         if (inits.TryGetValue(slot.Name, out var binding)) {
             var lowered = LowerInitializerValue(target, slot.Name, binding.Expression);
             loweredInitializers.Add(lowered);
-            var value = slot.Shape == CreateSlotShape.Scalar && TargetTypeAdapter.IsDecimal(_domain, slot.Type.TypeName)
-                ? WidenIntegralToDecimal(lowered.Value, binding.Expression)
-                : lowered.Value;
-            return (value, false);
+            return (lowered.Value, false);
         }
         return slot.Shape switch {
             CreateSlotShape.Collection => (DomainToCSharpExporter.NullCollectionNode(slot.Type.TypeName), true),
             CreateSlotShape.Reference => (DomainToCSharpExporter.TypedNull(slot.Type.TypeName), true),
             _ => (TypedNullOf(slot.Type), true),
         };
-    }
-
-    /// <summary>
-    /// Interim rule (L-08b; removed by T-21, the VM slice that lifts an implicit numeric
-    /// conversion to <c>Nullable&lt;T&gt;</c> in the call matcher): the widening C# inserts for an
-    /// integral argument to a <c>decimal?</c> Create slot, made explicit, because the VM's call
-    /// matcher does not lift <c>long</c> to <c>decimal?</c>. Only a statically integral value is
-    /// widened: an integral constant becomes a Decimal constant, and a reference to a non-optional
-    /// Number parameter of the action being lowered is cast to <c>decimal</c>. Every other value
-    /// passes unchanged, so a Decimal or nullable value is never cast. Removing it turns
-    /// <c>AbsenceParityTests.CreateIn_WhenDecimalInitializerZero_Agrees</c> and the crm and hotel
-    /// <c>EmitGoldenTests</c> red (<c>no matching member 'CreateOpportunities'</c>).
-    /// </summary>
-    private Node WidenIntegralToDecimal(Node value, DomainExpression source) => value switch {
-        Constant { Value: long integral } => new Constant((decimal)integral),
-        Constant { Value: int narrow } => new Constant((decimal)narrow),
-        Parameter when IsIntegralActionParameter(source)
-            => new TypeCast(value, new PrimitiveTypeReference(Poly.Introspection.PrimitiveType.Decimal)),
-        _ => value,
-    };
-
-    private bool IsIntegralActionParameter(DomainExpression source) {
-        var name = source switch {
-            ParameterAccess parameter => parameter.Name,
-            PropertyAccess property when _context.ActionParameterNames?.Contains(property.Name) == true => property.Name,
-            _ => null,
-        };
-        if (name is null || _context.ActionName is null)
-            return false;
-        var declared = _entity.Actions.Concat(_entity.Stages.SelectMany(stage => stage.Actions))
-            .Where(action => string.Equals(action.Name, _context.ActionName, StringComparison.Ordinal))
-            .SelectMany(action => action.Parameters)
-            .Where(parameter => string.Equals(parameter.Name, name, StringComparison.Ordinal))
-            .ToList();
-        return declared.Count > 0 && declared.All(parameter =>
-            parameter.Type.TypeName is "Number" or "Int"
-            && EntityStructureAnalyzer.IsRequired(parameter));
     }
 
     /// <summary>

@@ -49,7 +49,7 @@ app.MapGet("/api/patrons", async (LibraryDbContext db) => await db.Patrons.ToLis
 app.MapGet("/api/patrons/{email}", async (string email, LibraryDbContext db) => (await db.Patrons.FirstOrDefaultAsync(e => e.Email == email) is Library.Patron patron ? Results.Ok(patron) : StatusProblem(404, "Not Found")));
 
 app.MapPost("/api/patrons", async (PatronDto dto, LibraryDbContext db) => {
-    var patronResult = Library.Patron.Create(db, dto.Name, dto.Email, null, null, null, null, null, null, null);
+    var patronResult = Library.Patron.Create(db, dto.Name, dto.Email, null, null, dto.MaxItems, null, null, null, null);
     if (!patronResult.IsSuccess)
     {
         return Problem(patronResult.Error!);
@@ -421,7 +421,7 @@ static async System.Threading.Tasks.Task SeedAsync(LibraryDbContext db)
     {
         db.Add(bookResult.Value);
     }
-    var patronResult = Library.Patron.Create(db, "Sample", "user@test.com", null, null, null, null, null, null, null);
+    var patronResult = Library.Patron.Create(db, "Sample", "user@test.com", null, null, 10, null, null, null, null);
     if (patronResult.IsSuccess)
     {
         db.Add(patronResult.Value);
@@ -461,6 +461,8 @@ internal record PatronDto
     [Required]
     [RegularExpression("^[^@]+@[^@]+$")]
     public string Email { get; init; } = default!;
+    [Range(0, 20)]
+    public long MaxItems { get; init; }
 }
 
 internal record PremiumPatronDto

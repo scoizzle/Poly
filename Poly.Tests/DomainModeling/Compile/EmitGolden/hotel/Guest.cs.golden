@@ -156,7 +156,7 @@ internal class Guest : Poly.Runtime.IActionScoped
         {
             return DomainResult<Reservation>.Failure(Poly.Runtime.DomainFailure.Stage("'BookStay' requires stage 'Active' on entity 'Guest'.", "Guest.BookStay", "Active"));
         }
-        var create0 = this.CreateReservations(party, nights, (decimal)room.NightlyRate, room.MaxOccupancy, arrive, depart, (Folio?)null, room);
+        var create0 = this.CreateReservations(party, nights, room.NightlyRate, room.MaxOccupancy, arrive, depart, (Folio?)null, room);
         if (!create0.IsSuccess)
         {
             return DomainResult<Reservation>.Failure(create0.Error!.At("Guest.BookStay"));
@@ -194,7 +194,7 @@ internal class Guest : Poly.Runtime.IActionScoped
         {
             return DomainResult<EventHold>.Failure(Poly.Runtime.DomainFailure.Stage("'BookHall' requires stage 'Active' on entity 'Guest'.", "Guest.BookHall", "Active"));
         }
-        var create0 = this.CreateEvents(party, hall.Capacity, (decimal)hall.DayRate, arrive, depart, hall);
+        var create0 = this.CreateEvents(party, hall.Capacity, hall.DayRate, arrive, depart, hall);
         if (!create0.IsSuccess)
         {
             return DomainResult<EventHold>.Failure(create0.Error!.At("Guest.BookHall"));
@@ -232,7 +232,7 @@ internal class Guest : Poly.Runtime.IActionScoped
         {
             return DomainResult<EventHold>.Failure(Poly.Runtime.DomainFailure.Stage("'BookSection' requires stage 'Active' on entity 'Guest'.", "Guest.BookSection", "Active"));
         }
-        var create0 = this.CreateEvents(party, section.Capacity, (decimal)section.DayRate, arrive, depart, hall, section);
+        var create0 = this.CreateEvents(party, section.Capacity, section.DayRate, arrive, depart, hall, section);
         if (!create0.IsSuccess)
         {
             return DomainResult<EventHold>.Failure(create0.Error!.At("Guest.BookSection"));

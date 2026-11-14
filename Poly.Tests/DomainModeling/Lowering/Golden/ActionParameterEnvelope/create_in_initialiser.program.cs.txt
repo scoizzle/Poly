@@ -31,7 +31,7 @@ app.MapGet("/api/orders", async (TDbCtx db) => await db.Orders.ToListAsync());
 app.MapGet("/api/orders/{id}", async (int id, TDbCtx db) => (await db.Orders.FindAsync(id) is T.Order order ? Results.Ok(order) : StatusProblem(404, "Not Found")));
 
 app.MapPost("/api/orders", async (OrderDto dto, TDbCtx db) => {
-    var orderResult = T.Order.Create(Enumerable.Empty<T.OrderLine>());
+    var orderResult = T.Order.Create(null);
     if (!orderResult.IsSuccess)
     {
         return Problem(orderResult.Error!);
@@ -124,7 +124,7 @@ static async System.Threading.Tasks.Task SeedAsync(TDbCtx db)
     {
         return;
     }
-    var orderResult = T.Order.Create(Enumerable.Empty<T.OrderLine>());
+    var orderResult = T.Order.Create(null);
     if (orderResult.IsSuccess)
     {
         db.Add(orderResult.Value);

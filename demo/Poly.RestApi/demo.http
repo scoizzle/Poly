@@ -41,7 +41,8 @@ Content-Type: application/json
 
 {
     "Name": "sample",
-    "Email": "example-email"
+    "Email": "example-email",
+    "MaxItems": 0
 }
 
 ### Action: CheckOut

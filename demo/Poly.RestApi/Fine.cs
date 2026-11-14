@@ -186,7 +186,11 @@ internal class Fine : Poly.Runtime.IActionScoped
     }
     private static DomainResult<Fine> __BodyOfCreate(long? amount, string? reason, DateTime? dateIssued, bool? paid, Patron? patron)
     {
-        var __amount = (amount == null ? 0L : (long)amount);
+        if (amount == null)
+        {
+            return DomainResult<Fine>.Failure(Poly.Runtime.DomainFailure.Required("'Amount' is required.", "Fine.Amount"));
+        }
+        var __amount = (long)amount;
         if (reason == null)
         {
             return DomainResult<Fine>.Failure(Poly.Runtime.DomainFailure.Required("'Reason' is required.", "Fine.Reason"));

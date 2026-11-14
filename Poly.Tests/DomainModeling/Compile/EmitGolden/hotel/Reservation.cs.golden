@@ -214,7 +214,7 @@ internal class Reservation : Poly.Runtime.IActionScoped
         {
             return DomainResult.Failure(Poly.Runtime.DomainFailure.Link("Cannot add a second link on 'folio': the source already has a target.", "Reservation.folio"));
         }
-        var create0 = this.CreateFolio((decimal)0L);
+        var create0 = this.CreateFolio(0m);
         if (!create0.IsSuccess)
         {
             return DomainResult.Failure(create0.Error!.At("Reservation.CheckIn"));

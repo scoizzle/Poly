@@ -343,7 +343,11 @@ internal class Patron : Poly.Runtime.IActionScoped
         {
             return DomainResult<Patron>.Failure(Poly.Runtime.DomainFailure.Enum(string.Concat("'", __status, "' is not a valid member of PatronStatus for property 'Status'."), "Patron.Status"));
         }
-        var __maxItems = (maxItems == null ? 0L : (long)maxItems);
+        if (maxItems == null)
+        {
+            return DomainResult<Patron>.Failure(Poly.Runtime.DomainFailure.Required("'MaxItems' is required.", "Patron.MaxItems"));
+        }
+        var __maxItems = (long)maxItems;
         if (__maxItems < 0L)
         {
             return DomainResult<Patron>.Failure(Poly.Runtime.DomainFailure.Range("'MaxItems' must be >= 0.", "Patron.MaxItems"));

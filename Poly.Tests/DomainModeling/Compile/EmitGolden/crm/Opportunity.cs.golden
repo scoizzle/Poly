@@ -373,7 +373,7 @@ internal class Opportunity : Poly.Runtime.IActionScoped
                 return DomainResult<Line>.Failure(Poly.Runtime.DomainFailure.Range("'Amount' must be <= 100000000.", "Opportunity.Amount"));
             }
             this.Amount = assignValue0;
-            var create1 = this.CreateLines(qty, (decimal)sku.ListPrice, sku);
+            var create1 = this.CreateLines(qty, sku.ListPrice, sku);
             if (!create1.IsSuccess)
             {
                 return DomainResult<Line>.Failure(create1.Error!.At("Opportunity.AddLine"));
@@ -413,7 +413,7 @@ internal class Opportunity : Poly.Runtime.IActionScoped
         {
             return DomainResult<Quote>.Failure(Poly.Runtime.DomainFailure.Stage("'QuoteDeal' requires stage 'Qualify' on entity 'Opportunity'.", "Opportunity.QuoteDeal", "Qualify"));
         }
-        var create0 = this.CreateQuotes(this.Title, (decimal)0L);
+        var create0 = this.CreateQuotes(this.Title, 0m);
         if (!create0.IsSuccess)
         {
             return DomainResult<Quote>.Failure(create0.Error!.At("Opportunity.QuoteDeal"));

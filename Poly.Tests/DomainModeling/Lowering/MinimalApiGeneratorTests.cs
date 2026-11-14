@@ -17,7 +17,7 @@ using DbmsPack = Poly.DslCompiler.DbmsPack;
 
 namespace Poly.Tests.DomainModeling.Lowering;
 
-public class MinimalApiGeneratorTests {
+public partial class MinimalApiGeneratorTests {
     private static string WithPersistence(string poly) {
         if (poly.Contains("uses persistence", StringComparison.Ordinal))
             return poly;

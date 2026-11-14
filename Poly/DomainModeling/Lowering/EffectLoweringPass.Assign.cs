@@ -53,7 +53,8 @@ public sealed partial class EffectLoweringPass {
                 target.Value,
                 needsConstraintWrap ? assignProp : null,
                 value.Value,
-                uniqueName);
+                uniqueName,
+                _expressionPass.MayBeAbsent(a.Value, name => _binderEntities?.GetValueOrDefault(name)));
         return LoweredExpression.Before([target, value], assignment);
     }
     /// <summary>
@@ -275,7 +276,8 @@ public sealed partial class EffectLoweringPass {
         Node destination,
         Property? property,
         Node value,
-        string? uniquePropertyName) {
+        string? uniquePropertyName,
+        bool valueMayBeAbsent) {
         var assignedVar = _names.Next("assignValue");
         var locals = new List<Node> { assignedVar };
         var nodes = new List<Node> {
@@ -283,7 +285,7 @@ public sealed partial class EffectLoweringPass {
         };
 
         if (property is not null)
-            AppendAssignConstraintChecks(nodes, property, assignedVar);
+            AppendAssignConstraintChecks(nodes, property, assignedVar, valueMayBeAbsent);
 
         if (uniquePropertyName is not null) {
             var checkVar = _names.Next("uniqueCheck");
@@ -310,7 +312,7 @@ public sealed partial class EffectLoweringPass {
     /// Void export contexts (ctor / OnEntry, no ActionResultType) throw like create-in.
     /// </summary>
     private void AppendAssignConstraintChecks(
-        List<Node> nodes, Property prop, Node valueRef) {
+        List<Node> nodes, Property prop, Node valueRef, bool valueMayBeAbsent) {
 
         Node Fail(ConstraintCheckWriter.Check check) =>
             AssignConstraintFailure(ConstraintCheckWriter.FailureSpec(check, _entity.Name, prop.Name));
@@ -337,7 +339,7 @@ public sealed partial class EffectLoweringPass {
         foreach (var check in BuiltinConstraintCompiler.Checks(
                      _entity, prop, _domain, _analysis,
                      ConstraintCheckWriter.ConstraintCheckStyle.Assign,
-                     valueRef, nullableValue: false, valueHasDefault: false, includeRequired: true)) {
+                     valueRef, nullableValue: valueMayBeAbsent && !EntityStructureAnalyzer.IsRequired(prop), valueHasDefault: false, includeRequired: true)) {
             if (check.Kind is ConstraintCheckWriter.Kind.LengthMinimum
                 or ConstraintCheckWriter.Kind.LengthMaximum) {
                 lengthChecks.Add(check);

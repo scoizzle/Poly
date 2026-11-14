@@ -208,6 +208,32 @@ public class AnalysisGateParityTests {
         await Assert.That(result.Holds).IsTrue().Because($"{shape}: {result}");
     }
 
+    /// <summary>
+    /// The optional-operand row above, evaluated (T-06a): <c>Opt &gt; A</c> is the lifted comparison, false when Opt is
+    /// absent and the ordering's answer when it is present, on the simulator and on the generated C#.
+    /// </summary>
+    [Test]
+    [Arguments(null, "False")]
+    [Arguments(5L, "True")]
+    [Arguments(0L, "False")]
+    public async Task Ordering_OfAnOptionalOperand_IsFalseWhenAbsent_OnBothHosts(long? opt, string answer) {
+        var outcomes = await ParityScenario.FromDsl("""
+            domain T
+            OptOrderItem: entity {
+              A: Number
+              Opt: Number optional
+              P: policy { Opt > A }
+            }
+            """, "OrderingOptionalOperand").AssertAgree(side => {
+            if (opt is { } present)
+                side.Create("OptOrderItem", ("A", 1L), ("Opt", present));
+            else
+                side.Create("OptOrderItem", ("A", 1L));
+            side.EvaluatePolicy("P");
+        });
+        await Assert.That(outcomes[^1].State["P"]).IsEqualTo(answer);
+    }
+
     private const string ValueEqualityDomain = """
         domain T
         Money: value {
@@ -273,6 +299,8 @@ public class AnalysisGateParityTests {
     /// <c>ModuleInstanceExecutor.Coercion</c>) and compares it with <c>object.Equals</c> (<c>AbiEmitter.Expressions</c>), so
     /// two equal values written with the fields in another order, or <c>2</c> against <c>2.0</c> for a Decimal field, are
     /// unequal there and equal on the generated C#. Whitespace is not a difference (the surface re-serialises compactly).
+    /// A .NET caller that passes equal values as dictionaries to <c>ModuleInstanceExecutor.Invoke</c> gets them unequal on
+    /// the simulator too.
     /// </summary>
     [Test]
     [Arguments("EqP", """{"a":{"X":1,"Y":2},"b":{"X":1,"Y":2}}""", """{"a":{"X":1,"Y":2},"b":{"Y":2,"X":1}}""")]

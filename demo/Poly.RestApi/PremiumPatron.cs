@@ -27,6 +27,29 @@ internal class PremiumPatron : Poly.Runtime.IActionScoped
     public bool UnlimitedItems() => this.Tier == PremiumTier.Platinum || this.PriorityAccess;
     internal static DomainResult<PremiumPatron> Create(string name, string email, long rewardPoints, bool priorityAccess, Poly.Runtime.IStoragePort db, PremiumTier tier = PremiumTier.Silver)
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = PremiumPatron.__BodyOfCreate(name, email, rewardPoints, priorityAccess, tier, db);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private static DomainResult<PremiumPatron> __BodyOfCreate(string name, string email, long rewardPoints, bool priorityAccess, PremiumTier tier, Poly.Runtime.IStoragePort db)
+    {
         if (string.IsNullOrEmpty(name))
         {
             return DomainResult<PremiumPatron>.Failure(Poly.Runtime.DomainFailure.Required("'Name' is required.", "PremiumPatron.Name"));

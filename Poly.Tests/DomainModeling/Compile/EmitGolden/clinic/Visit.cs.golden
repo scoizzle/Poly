@@ -96,6 +96,29 @@ internal class Visit : Poly.Runtime.IActionScoped
     }
     internal static DomainResult<Visit> Create(string reason, Patient? patient = null, Doctor? primaryDoctor = null, VisitState state = VisitState.Scheduled)
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = Visit.__BodyOfCreate(reason, patient, primaryDoctor, state);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private static DomainResult<Visit> __BodyOfCreate(string reason, Patient? patient, Doctor? primaryDoctor, VisitState state)
+    {
         if (string.IsNullOrEmpty(reason))
         {
             return DomainResult<Visit>.Failure(Poly.Runtime.DomainFailure.Required("'Reason' is required.", "Visit.Reason"));

@@ -369,6 +369,29 @@ internal class EventHold : Poly.Runtime.IActionScoped
     }
     internal static DomainResult<EventHold> Create(long headcount, long capacity, decimal dayRate, DateOnly startDate, DateOnly endDate, Guest? guest = null, Hall? hall = null, Section? section = null)
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = EventHold.__BodyOfCreate(headcount, capacity, dayRate, startDate, endDate, guest, hall, section);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private static DomainResult<EventHold> __BodyOfCreate(long headcount, long capacity, decimal dayRate, DateOnly startDate, DateOnly endDate, Guest? guest, Hall? hall, Section? section)
+    {
         if (headcount < 1L)
         {
             return DomainResult<EventHold>.Failure(Poly.Runtime.DomainFailure.Range("'Headcount' must be >= 1.", "EventHold.Headcount"));

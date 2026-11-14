@@ -18,6 +18,29 @@ internal class CampaignMember : Poly.Runtime.IActionScoped
     public Campaign? Campaign { get; private set; }
     internal static DomainResult<CampaignMember> Create(Contact? contact = null, Campaign? campaign = null)
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = CampaignMember.__BodyOfCreate(contact, campaign);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private static DomainResult<CampaignMember> __BodyOfCreate(Contact? contact, Campaign? campaign)
+    {
         var created = new CampaignMember(contact, campaign);
         Poly.Runtime.ActionScope.Create(created, "CampaignMember");
         if (campaign != null)

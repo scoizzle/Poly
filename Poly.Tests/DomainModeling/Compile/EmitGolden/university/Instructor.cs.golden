@@ -92,6 +92,29 @@ internal class Instructor : Poly.Runtime.IActionScoped
     }
     internal static DomainResult<Instructor> Create(string name, string email, Poly.Runtime.IStoragePort db)
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = Instructor.__BodyOfCreate(name, email, db);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private static DomainResult<Instructor> __BodyOfCreate(string name, string email, Poly.Runtime.IStoragePort db)
+    {
         if (string.IsNullOrEmpty(name))
         {
             return DomainResult<Instructor>.Failure(Poly.Runtime.DomainFailure.Required("'Name' is required.", "Instructor.Name"));

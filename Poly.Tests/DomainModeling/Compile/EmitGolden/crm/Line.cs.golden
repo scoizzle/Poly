@@ -22,6 +22,29 @@ internal class Line : Poly.Runtime.IActionScoped
     public Opportunity? Opportunity { get; private set; }
     internal static DomainResult<Line> Create(long qty, decimal unitPrice, Product? product = null, Opportunity? opportunity = null)
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = Line.__BodyOfCreate(qty, unitPrice, product, opportunity);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private static DomainResult<Line> __BodyOfCreate(long qty, decimal unitPrice, Product? product, Opportunity? opportunity)
+    {
         if (qty < 1L)
         {
             return DomainResult<Line>.Failure(Poly.Runtime.DomainFailure.Range("'Qty' must be >= 1.", "Line.Qty"));

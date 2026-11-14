@@ -576,7 +576,8 @@ public class DomainToCSharpExporterTests {
         await Assert.That(createOrders!.Parameters?.Select(p => p.Name)).IsEquivalentTo(["title"]);
 
         // The factory body wires `Order.Create(..., this, ...)` for the back-ref.
-        var factoryCall = FindFirstInvoke(createOrders.Body);
+        var createOrdersBody = customer.Methods!.First(m => m.Name == "__BodyOfCreateOrders");
+        var factoryCall = FindFirstInvoke(createOrdersBody.Body);
         await Assert.That(factoryCall).IsNotNull();
         await Assert.That(factoryCall!.Arguments.Any(a => a is ThisReference)).IsTrue();
 

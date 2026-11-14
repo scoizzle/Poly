@@ -757,21 +757,29 @@ public class AtomicityParityTests {
         }
         """;
 
-    // PINNED, removed by L-04b (every public generated mutator opens a root scope when none is active): host code calling
-    // `Owner.CreateItems()` with no action running gets the failed result of the child's initial-stage handler, but the
-    // child was added to the owner's collection first and nothing rolls it back, so it stays.
+    // Host code calling `Owner.CreateItems()` with no action running opens a root scope: the child's initial-stage handler
+    // fails after the child was added to the owner's collection, and the scope takes it out again. The simulator has no
+    // bare `Create{Nav}` door, so its half is the same document's `Add` action (a `create in items`), which the executor's
+    // transaction and the generated action scope both roll back.
     [Test]
-    public async Task BareCreateNav_WhenTheChildsHandlerFails_LeavesTheChildInTheCollection_UntilL04b() {
+    public async Task BareCreateNav_WhenTheChildsHandlerFails_TakesTheChildOutOfTheCollection() {
         var (_, assembly) = Print(BareCreateNavDsl, "AtomicityBareCreateNav");
         var owner = ExportedCSharp.CreateEntity(assembly, "Owner");
-        var create = owner.GetType().GetMethods(PrintedMembers.Any).SingleOrDefault(m => m.Name == "CreateItems")
-            ?? throw new InvalidOperationException(string.Join(",", owner.GetType().GetMethods(PrintedMembers.Any).Select(m => m.Name)));
+        var create = owner.GetType().GetMethods(PrintedMembers.Any).Single(m => m.Name == "CreateItems");
 
         var result = create.Invoke(owner, [])!;
 
         await Assert.That((bool)result.GetType().GetProperty("IsSuccess")!.GetValue(result)!).IsFalse();
         var items = (IList)owner.GetType().GetProperty("Items", PrintedMembers.Any)!.GetValue(owner)!;
-        await Assert.That(items.Count).IsEqualTo(1).Because("L-04b: a bare Create{Nav} rolls the child back");
+        await Assert.That(items.Count).IsEqualTo(0);
+        await Assert.That(ActionScope.HasOpenScope).IsFalse();
+
+        var (simulate, printed) = await AssertRollsBack(BareCreateNavDsl, "AtomicityBareCreateNavAdd", (side, fail) => {
+            side.Create("Owner");
+            fail("Add", []);
+        });
+        await Assert.That(simulate[^1].State["items"]).IsEqualTo("0");
+        await Assert.That(printed[^1].State["items"]).IsEqualTo("0");
     }
 
     // ── F3 probe (X-04's territory): an entry that ASSIGNS a unique property, then fails ──────────
@@ -844,6 +852,47 @@ public class AtomicityParityTests {
 
         await Assert.That(string.Join(",", printed)).IsEqualTo("Kid,Leaf");
         await Assert.That(string.Join(",", simulated)).IsEqualTo("Kid,Leaf");
+    }
+
+    // A bare `Create{Nav}` that succeeds commits its root scope: the child is still in the collection afterwards. A wrapper
+    // that skipped `Commit` would roll back in its `finally` (the child's `Attach` touched the owner) and take it out.
+    // (The test above pins the other half: inside an open scope `Create` joins it and leaves the commit to the root.)
+    [Test]
+    public async Task BareCreateNav_WhenTheChildSucceeds_CommitsItsRootScope() {
+        var (_, assembly) = Print(BareCreateNavDsl.Replace("Never: policy { Count > 100 }", "Never: policy { Count >= 0 }"), "AtomicityBareCreateNavCommit");
+        var owner = ExportedCSharp.CreateEntity(assembly, "Owner");
+        var create = owner.GetType().GetMethods(PrintedMembers.Any).Single(m => m.Name == "CreateItems");
+
+        var result = create.Invoke(owner, [])!;
+
+        await Assert.That((bool)result.GetType().GetProperty("IsSuccess")!.GetValue(result)!).IsTrue();
+        var items = (IList)owner.GetType().GetProperty("Items", PrintedMembers.Any)!.GetValue(owner)!;
+        await Assert.That(items.Count).IsEqualTo(1).Because("a committed root scope keeps the child");
+        await Assert.That(ActionScope.HasOpenScope).IsFalse();
+    }
+
+    private sealed class ThrowingPort : IStoragePort {
+        public bool Exists(string entity, string property, string value) => throw new InvalidOperationException("port down");
+        public bool TryReserve(string entity, string property, string value) => throw new InvalidOperationException("port down");
+        public void Release(string entity, string property, string value) { }
+        public void Record(string entity, string property, string value) { }
+    }
+
+    // A bare `Create` whose body throws leaves no scope open (the wrapper's `finally` rolls back), and the next bare
+    // `Create` with a good port succeeds and commits.
+    [Test]
+    public async Task Create_WhenTheBodyThrows_LeavesNoScopeOpenAndTheNextCreateCommits() {
+        var (_, assembly) = Print(EntryUniqueDsl, "AtomicityCreateThrows");
+        var type = assembly.GetType("Kid")!;
+
+        Assert.Throws<TargetInvocationException>(() => ExportedCSharp.InvokeCreate(type, ("code", "k"), ("db", new ThrowingPort())));
+        await Assert.That(ActionScope.HasOpenScope).IsFalse();
+
+        var port = new RecordingStoragePort();
+        var next = ExportedCSharp.InvokeCreate(type, ("code", "ok"), ("cap", 5L), ("db", port));
+        await Assert.That((bool)next.GetType().GetProperty("IsSuccess")!.GetValue(next)!).IsTrue();
+        await Assert.That(port.Exists("Kid", "Code", "ok")).IsTrue();
+        await Assert.That(ActionScope.HasOpenScope).IsFalse();
     }
 
     // ── a unique key a failed create reserved (X-04) ──────────────────

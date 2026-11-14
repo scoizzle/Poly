@@ -31,6 +31,30 @@ internal class Patron : Poly.Runtime.IActionScoped
     }
     internal DomainResult<Loan> CreateLoans(Book? book = null, long amount = 0L)
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            Poly.Runtime.ActionScope.Touch(this);
+            var __result = this.__BodyOfCreateLoans(book, amount);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult<Loan> __BodyOfCreateLoans(Book? book, long amount)
+    {
         var loanResult = Loan.Create(book, this, amount);
         if (!loanResult.IsSuccess)
         {
@@ -46,6 +70,30 @@ internal class Patron : Poly.Runtime.IActionScoped
         child.RegisterPatronLoansOverdueSubscriber(this);
     }
     internal DomainResult<Fine> CreateFines(string reason, long amount = 0L)
+    {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            Poly.Runtime.ActionScope.Touch(this);
+            var __result = this.__BodyOfCreateFines(reason, amount);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult<Fine> __BodyOfCreateFines(string reason, long amount)
     {
         var fineResult = Fine.Create(reason, amount);
         if (!fineResult.IsSuccess)
@@ -111,6 +159,29 @@ internal class Patron : Poly.Runtime.IActionScoped
         return DomainResult.Success();
     }
     internal static DomainResult<Patron> Create(string name, IEnumerable<Loan>? loans = null, IEnumerable<Fine>? fines = null, string status = "Active")
+    {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = Patron.__BodyOfCreate(name, loans, fines, status);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private static DomainResult<Patron> __BodyOfCreate(string name, IEnumerable<Loan>? loans, IEnumerable<Fine>? fines, string status)
     {
         if (string.IsNullOrEmpty(name))
         {

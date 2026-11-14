@@ -210,11 +210,11 @@ Name == 5 = DMSEM003
 assign P := match | target = verdict
 match { null, null } | Uuid = DMSEM003
 match { null, null } | Guid = DMSEM003+DMSEM005
-match { null, null } | Text = ok
+match { null, null } | Text = DMSEM003
 match { null, null } | Number = DMSEM003
-match { null, "x" } | Text = ok
+match { null, "x" } | Text = DMSEM003
 match { null, "x" } | Uuid = DMSEM003
-match { null, 5 } | Number = ok
+match { null, 5 } | Number = DMSEM003
 match { null, 5 } | Text = DMSEM003
 """;
 

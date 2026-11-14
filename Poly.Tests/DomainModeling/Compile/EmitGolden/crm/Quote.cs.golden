@@ -37,6 +37,30 @@ internal class Quote : Poly.Runtime.IActionScoped
     public QuoteStage CurrentStage { get; private set; }
     internal DomainResult<QuoteLine> CreateLines(long qty, decimal unitPrice, Product? product = null)
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            Poly.Runtime.ActionScope.Touch(this);
+            var __result = this.__BodyOfCreateLines(qty, unitPrice, product);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult<QuoteLine> __BodyOfCreateLines(long qty, decimal unitPrice, Product? product)
+    {
         var quoteLineResult = QuoteLine.Create(qty, unitPrice, product, this);
         if (!quoteLineResult.IsSuccess)
         {
@@ -198,6 +222,29 @@ internal class Quote : Poly.Runtime.IActionScoped
         return DomainResult.Success();
     }
     internal static DomainResult<Quote> Create(string title, decimal amount, Opportunity? opportunity = null, IEnumerable<QuoteLine>? lines = null)
+    {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = Quote.__BodyOfCreate(title, amount, opportunity, lines);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private static DomainResult<Quote> __BodyOfCreate(string title, decimal amount, Opportunity? opportunity, IEnumerable<QuoteLine>? lines)
     {
         if (string.IsNullOrEmpty(title))
         {

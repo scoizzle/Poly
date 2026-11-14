@@ -96,9 +96,9 @@ Patron: entity {
 
 **Note (back-reference materialization):** the runtime link is a store edge — it
 drives path-prefix reads, quantifiers, and subscriptions from the source. The
-**C# export auto-wires the child's back-reference** when the target entity has
-exactly one singular navigation pointing back to the source (e.g. `borrower`
-on `Loan` → `Patron`): the generated `Create{Nav}` factory passes `this` and the
+**C# export auto-wires the child's back-reference**: the singular navigation the
+collection's `via` names (or whose `via` names it), else the only one on the target that
+points back (e.g. `borrower` on `Loan` → `Patron`). `Create{Nav}` passes `this` and the
 back-ref is not a constructor parameter. When the back-ref is a collection, it stays an
 unset constructor parameter. Two or more singular navigations back to the source with no
 `via` pairing is a **DMREL005** analysis error, so that shape never reaches export. To-one
@@ -107,13 +107,12 @@ navigation bindings in `create in` initializers are **legal**
 value bag / constructor parameter like a scalar initializer.
 
 **Required coverage (DMEFF011):** every property **without** `optional` on the
-created entity must be provided in the `create` / `create in` initializers,
-unless it has a `default` or the initial stage's `entry` effects assign it. Only
-scalar/enum-typed properties carry constraints — navigation properties cannot be
-marked `optional` (`nav: Type optional` is a parse error), and `required` is not
-a constraint word, so the back-reference exemption simply means the auto-wired nav needs no
-initializer value. Analysis rejects a create that omits a required property — the
-generated `Create` factory would otherwise throw at runtime.
+created entity must be provided in the `create` / `create in` initializers, unless it has
+a `default` or the initial stage's `entry` effects assign it. A to-one navigation (§4) must
+be bound (`create in events { hall: hall }`) unless it is `optional` or the back-reference
+`create in` fills: "navigation 'patron' is required: bind it, or declare it `optional`".
+`required` is not a constraint word. A null one at run time (a binding whose value is
+null) fails Required in the generated `Create`, simulated or printed.
 
 <!-- poly-verify: fragment:top wrapper:top-default -->
 ```poly
@@ -351,7 +350,7 @@ key-clause = "key" "(" member ("," member)* ")"
 
 **Initial stage.** `initial(Active)` designates which stage a new instance starts in. It is a header clause that sits **before** `key(...)` and the opening `{`, after any annotations: `Order: entity initial(Active) key(Code) {`. It is not a body member and adds nothing to the entity: the name must be one of the entity's own stages. With no designation the first declared stage is initial, which is the old rule. The designation is honoured on create by the simulator and by the generated C# `Create` and its constructor, so the designated stage's `entry` effects run on creation. The generated test suite treats that stage as the covered one: its create test asserts the designated stage, and it refuses actions that exist only on other stages. An empty clause, a non-identifier, a second `initial(...)` clause, or a clause placed after `key(...)` is a positioned parse error; a name that matches no stage (or an entity with no stages) is **`DMINI001`**, and the create path falls back to the first declared stage meanwhile. The printer writes the clause in the same position.
 
-**Key (identity).** `key(a, b)` designates existing members as the entity's identity. It is a header clause that sits **immediately before the opening `{`**, after any annotations: `Order: entity table("ORDERS") key(Code, Region) {` or `public entity Order key(Code) {`. It is not a body member and adds nothing to the entity; each name is one of the entity's own properties or singular navigations, and names are scoped to the entity. Analysis rejects an unknown member, a blank one, an `optional` or action-assigned key property, a collection navigation, or a navigation to an unkeyed entity (`DMSTR007`), a repeated member (`DMSTR001`), and a key cycle (`DMSTR002`). An empty `key()`, a doubled or trailing comma, an unclosed list, or a second `key(...)` clause is a positioned parse error. The printer writes the clause in the same position. Scoped **value** uniqueness (`unique_by` / `unique(scope, value)`) is **not implemented**, and nothing enforces a key at runtime yet.
+**Key (identity).** `key(a, b)` designates existing members as the entity's identity. It is a header clause that sits **immediately before the opening `{`**, after any annotations: `Order: entity table("ORDERS") key(Code, Region) {` or `public entity Order key(Code) {`. It is not a body member and adds nothing to the entity; each name is one of the entity's own properties, and names are scoped to the entity. Analysis rejects an unknown member, a blank one, an `optional` or action-assigned key property, or a navigation (`DMSTR007`: a key over a navigation is not supported yet, since its foreign-key shape is not decided), a repeated member (`DMSTR001`), and a key that cycles through navigations (`DMSTR002`). An empty `key()`, a doubled or trailing comma, an unclosed list, or a second `key(...)` clause is a positioned parse error. The printer writes the clause in the same position. Scoped **value** uniqueness (`unique_by` / `unique(scope, value)`) is **not implemented**, and nothing enforces a key at runtime yet.
 
 `public` is an optional leading modifier before the kind keyword (`public entity Order { … }`). Omitting it is `Visibility.Internal` and keeps `Order: entity`. `public` is a keyword, so it is not a property name. The mark may appear anywhere among the header annotations; the printer writes it first.
 
@@ -547,12 +546,44 @@ Orders: entity {
 Customer: entity {
   orders: many Order            //one-to-many
   profile: one Profile          //explicit one-to-one
-  passport: owned Passport      //source owns target
+  passport: owned Passport optional //source owns target
   lineItems: many owned LineItem // many + owned
 }
 ```
 
 Cardinality: `one` (default, can be omitted), `many`.
+
+**A to-one navigation is required** unless it is declared `optional`, as a property is:
+`parent: Account optional`. `optional` closes the line, after any `via`
+(`holder: Holder via tickets optional`). A required to-one must be bound when the entity is
+created (DMEFF011 above), and creating it with a null navigation fails with a Required
+failure on every host. A collection is never required, so `optional` on `many` is a
+positioned parse error. An **owned single part must be written `optional`**
+(`hq: owned Address optional`): it is filled by `create in` after its owner exists, so it can
+never be required at create; a bare `hq: owned Address` is a positioned parse error. Use a
+policy (`policy { hq exists }`) to require it at a later stage. A bare navigation to the
+entity itself, or a cycle of required to-ones across entities (`a: B` with `b: A`), is
+**DMREL006**: no instance could ever be created first. Mark one side `optional`; an `owned`
+navigation breaks a cycle. An entity whose to-one navigations are all `optional` is a root
+structurally; storage and HTTP take root-ness from the aggregate, where an entity nothing
+owns is a root too. **Over HTTP, an entity with a required link has no `POST` route and no
+seed row**: a POST body carries scalars only. Declaring the link `optional` keeps the route. A
+parent action that uses `create in` creates one only when the parent has a collection of it
+(`CheckOut: action { create in loans { book: book } }` serves `POST
+/api/patrons/{email}/checkout`). An MCP create takes the link. A `create in` into a required
+to-one of the source is **DMEFF001**: the link is already set when the action runs; declare
+it `optional` to fill it there.
+
+**A required link is permanent in this release.** The host refuses to unlink a required
+to-one ("Cannot unlink '<rel>': the navigation is required; delete the instance and create a
+new one to move it."), and a set to-one cannot be re-pointed, so move it by deleting and
+creating. The generated C# has no unlink operation. An MCP create (`poly_simulate`'s
+`create` step) takes a singular navigation as well as properties: its value is the id of an
+existing instance of the target, or an earlier step's alias
+(`{"Name":"Grace","account":"acme"}`). A required to-one must be given there; an optional one
+may be. An unknown id, an instance of another entity, a collection navigation or a value that
+is not an id fails on the navigation (`Lead.account`). JSON Schema, SHACL and MCP describe do
+not show requiredness of a navigation yet.
 Ownership: `owned` marks `SourceOwnsTarget = true`. Export writes `one ` explicitly for a one-to-one navigation (`invoice: Invoice` prints as `invoice: one Invoice`), because a bare `x: T` also reads back as one-to-one but fails closed when `T` is a Phase 1a keyword (`actor`, `schedule`, `parallel`, `for`, `function`; matched case-insensitively); `one T` is unambiguous.
 
 **Which entity is the root.** A collection nav (`children: many Child`) means the
@@ -581,12 +612,12 @@ entities or on one, and the message names every owner:
 ```poly
 Customer: entity {
   Name: Text
-  profile: owned Profile
+  profile: owned Profile optional
 }
 
 Supplier: entity {
   Name: Text
-  profile: owned Profile   // error: Profile already has an owner, Customer.profile
+  profile: owned Profile optional   // error: Profile already has an owner, Customer.profile
 }
 
 Profile: entity {
@@ -616,12 +647,12 @@ owner is not ownership:
 ```poly
 Cabin: entity {
   Name: Text
-  deck: owned Deck
+  deck: owned Deck optional
 }
 
 Deck: entity {
   Name: Text
-  cabin: owned Cabin   // error: Cabin -> Deck -> Cabin, nothing is the root
+  cabin: owned Cabin optional   // error: Cabin -> Deck -> Cabin, nothing is the root
 }
 ```
 
@@ -664,8 +695,8 @@ Employee: entity {
 two sides contradict (the named navigation points elsewhere, declares a different
 inverse, is the navigation itself, both ends are owned, an owned navigation is paired with a
 collection inverse, or two navigations on one entity claim the same undeclared inverse), and `DMREL005` when two or more navigations of one
-cardinality class pair with a side that declares none. Lowering does not dispatch from
-the declared inverse yet — that is a later slice. `via <name>` is legal on an owned
+cardinality class pair with a side that declares none. `create in` reads the declared
+inverse to pick the back-reference it fills; nothing else dispatches from it yet. `via <name>` is legal on an owned
 navigation too — that is how the back-reference names its owner, and only one side of a
 pair may own it. A member may still be named `via` (`via: Text`, `via(x: Text): action { }`): the
 clause starts whenever `via` is followed by anything other than `:` or `(`, so `via 123`

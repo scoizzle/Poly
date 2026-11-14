@@ -385,7 +385,7 @@ public partial class MinimalApiGeneratorTests {
             domain T
             Doctor: entity {
               Name: Text unique
-              schedule: one Schedule
+              schedule: one Schedule optional
             }
             Schedule: entity {
               Day: Text
@@ -848,6 +848,28 @@ public partial class MinimalApiGeneratorTests {
         await Assert.That(rendered).Contains("MapGet(\"/api/items\"");
         await Assert.That(rendered).DoesNotContain("MapPost(\"/api/items\"");
         await Assert.That(rendered).DoesNotContain("ItemDto");
+    }
+
+    /// <summary>L-15a (#683): an entity with a required link and no parent is an aggregate root, but its
+    /// <c>Create</c> answers Required whenever the link is absent, and a POST body cannot carry one. So it gets
+    /// no POST route, no create DTO and no seed row; the entity next to it keeps all three.</summary>
+    [Test]
+    public async Task EntityWithRequiredLink_HasNoPostRouteAndNoSeedRow() {
+        var rendered = Render(ParseDomain("""
+            domain Shop
+            Customer: entity { Name: Text }
+            Order: entity {
+              Number: Text
+              customer: Customer
+            }
+            """));
+
+        await Assert.That(rendered).Contains("MapPost(\"/api/customers\"");
+        await Assert.That(rendered).Contains("MapGet(\"/api/orders\"");
+        await Assert.That(rendered).DoesNotContain("MapPost(\"/api/orders\"");
+        await Assert.That(rendered).DoesNotContain("OrderDto");
+        await Assert.That(rendered).Contains("Shop.Customer.Create(\"Sample\")");
+        await Assert.That(rendered).DoesNotContain("Shop.Order.Create(");
     }
 
     [Test]

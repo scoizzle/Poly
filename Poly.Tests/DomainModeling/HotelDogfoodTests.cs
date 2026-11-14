@@ -92,18 +92,24 @@ public class HotelDogfoodTests {
             ["NightlyRate"] = 220m,
             ["MaxOccupancy"] = 3L
         }).Instance!;
+        // L-15a: Room.property and Room.roomType are required to-ones, so the room is created with both.
+        var inn = exec.Create("Property", new Dictionary<string, object?> {
+            ["Name"] = "Harbor Inn",
+            ["City"] = "Seattle"
+        }).Instance!;
         var room = exec.Create("Room", new Dictionary<string, object?> {
             ["Number"] = "101",
             ["Floor"] = 1L,
             ["NightlyRate"] = 220m,
-            ["MaxOccupancy"] = 3L
+            ["MaxOccupancy"] = 3L,
+            ["property"] = inn,
+            ["roomType"] = roomType
         }).Instance!;
         var guest = exec.Create("Guest", new Dictionary<string, object?> {
             ["Name"] = "Alice Chen",
             ["Email"] = "alice@example.com",
             ["Phone"] = "55501001234"
         }).Instance!;
-        exec.Link("roomType", room, roomType);
 
         var blockedBook = exec.Invoke(guest, "BookStay");
         await Assert.That(blockedBook.Succeeded).IsFalse();
@@ -195,23 +201,23 @@ public class HotelDogfoodTests {
             ["Name"] = "Salon A",
             ["Capacity"] = 100L,
             ["DayRate"] = 1500m,
+            ["hall"] = hall,
         }).Instance!;
         var salonB = exec.Create("Section", new Dictionary<string, object?> {
             ["Name"] = "Salon B",
             ["Capacity"] = 100L,
             ["DayRate"] = 1500m,
+            ["hall"] = hall,
         }).Instance!;
         var salonC = exec.Create("Section", new Dictionary<string, object?> {
             ["Name"] = "Salon C",
             ["Capacity"] = 100L,
             ["DayRate"] = 1500m,
+            ["hall"] = hall,
         }).Instance!;
         exec.Link("sections", hall, salonA);
-        exec.Link("hall", salonA, hall);
         exec.Link("sections", hall, salonB);
-        exec.Link("hall", salonB, hall);
         exec.Link("sections", hall, salonC);
-        exec.Link("hall", salonC, hall);
 
         var sectionHold = exec.Invoke(guest, "BookSection", new Dictionary<string, object?> {
             ["section"] = salonA,

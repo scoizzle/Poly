@@ -58,10 +58,7 @@ public class DomainToCSharpExporterTests {
               require not HasFines
             {
               assign CurrentBorrowCount to CurrentBorrowCount + 1
-              // CreateIn initializers set scalar properties only — to-one navs
-              // (like Loan.book) cannot be bound here (analyzer rejects; runtime
-              // would throw). The Loan/Book link is left for a future link effect.
-              create in loans { }
+              create in loans { book: book }
             }
             Suspend: action {
               assign Status to "Suspended"
@@ -71,7 +68,7 @@ public class DomainToCSharpExporterTests {
             CloseAccount: action { transition to Closed }
           }
           when loans Overdue {
-            create Fine { Amount: 5 Reason: "Overdue item" }
+            create in fines { Amount: 5 Reason: "Overdue item" }
             assign OutstandingFines to OutstandingFines + 5
           }
           when loans Returned {
@@ -190,8 +187,16 @@ public class DomainToCSharpExporterTests {
     /// this pairing an error (Q10, #659) — the pre-S-11 expectation was that analysis
     /// accepted it and lowering only skipped the attach.
     /// </summary>
+    private static Task AssertAmbiguousInverseIsAnalysisError(
+        string poly, string reportedNav, params string[] candidates) =>
+        AssertAmbiguousInverseIsAnalysisError(poly, reportedNav, candidates, unboundRequired: []);
+
+    /// <summary>
+    /// As above, for a fixture whose create also leaves required to-ones unbound (L-15a): each of
+    /// <paramref name="unboundRequired"/> is one DMEFF011, and there is no other error.
+    /// </summary>
     private static async Task AssertAmbiguousInverseIsAnalysisError(
-        string poly, string reportedNav, params string[] candidates) {
+        string poly, string reportedNav, string[] candidates, string[] unboundRequired) {
         var domain = ApplyWithoutAnalysis(poly);
         var analysis = DomainModelAnalyzer.Analyze(domain);
         var errors = analysis.Diagnostics
@@ -202,7 +207,10 @@ public class DomainToCSharpExporterTests {
         var allErrors = analysis.Diagnostics
             .Where(d => d.Severity == Poly.Analysis.DiagnosticSeverity.Error)
             .ToList();
-        await Assert.That(allErrors.Count).IsEqualTo(1);
+        await Assert.That(allErrors.Count).IsEqualTo(1 + unboundRequired.Length);
+        foreach (var unbound in unboundRequired)
+            await Assert.That(allErrors.Count(d => d.Code == DomainModelDiagnosticCodes.CreateMissingRequiredProperty
+                && d.Message.Contains($"navigation '{unbound}' is required", StringComparison.Ordinal))).IsEqualTo(1);
         var nav = (Relationship)errors[0].Node;
         await Assert.That(nav.Name).IsEqualTo(reportedNav);
         foreach (var candidate in candidates)
@@ -486,12 +494,11 @@ public class DomainToCSharpExporterTests {
         await Assert.That(createLoans).IsNotNull();
 
         var createParams = createLoans!.Parameters?.Select(p => p.Name).ToArray() ?? [];
-        var autoWireBackRef = DomainToCSharpExporter.FindAutoWireBackReference(loan, "Patron");
+        var filled = CreateInWiring.FilledNavigationName(analysis, "Patron", "loans");
         var expected = esm.CreateSlots
             .Where(s => !(s.IsSelfNavigation && s.Shape != CreateSlotShape.Scalar))
             .Where(s => s.Shape != CreateSlotShape.Collection)
-            .Where(s => autoWireBackRef is null
-                || !string.Equals(s.Name, autoWireBackRef.Name, StringComparison.Ordinal))
+            .Where(s => !string.Equals(s.Name, filled, StringComparison.Ordinal))
             .Select(s => DomainToCSharpExporter.ToCamelCase(s.Name))
             .ToArray();
         await Assert.That(createParams).IsEquivalentTo(expected, TUnit.Assertions.Enums.CollectionOrdering.Matching);
@@ -608,7 +615,8 @@ public class DomainToCSharpExporterTests {
             }
             """;
 
-        await AssertAmbiguousInverseIsAnalysisError(dsl, "orders", "customer", "primaryContact");
+        // L-15a: neither back-reference is filled (the pairing is ambiguous), so both are unbound.
+        await AssertAmbiguousInverseIsAnalysisError(dsl, "orders", ["customer", "primaryContact"], ["customer", "primaryContact"]);
     }
 
     [Test]
@@ -618,7 +626,7 @@ public class DomainToCSharpExporterTests {
             domain Test
             Account: entity {
               Name: Text
-              parent: Account
+              parent: Account optional
               Active: stage {
                 AddParent: action { create in parent { Name: "x" } }
               }
@@ -643,7 +651,7 @@ public class DomainToCSharpExporterTests {
             domain Test
             Account: entity {
               Name: Text
-              parent: Account
+              parent: Account optional
               children: many Account
               Active: stage {
                 AddParent: action { create in parent { Name: "x" } }
@@ -670,7 +678,7 @@ public class DomainToCSharpExporterTests {
             domain Test
             Account: entity {
               Name: Text
-              parent: Account
+              parent: Account optional
               children: many Account
               Active: stage {
                 AddChild: action { create in children { Name: "x" } }
@@ -701,7 +709,7 @@ public class DomainToCSharpExporterTests {
             }
             Item: entity {
               Name: Text
-              order: Order
+              order: Order optional
               Active: stage {
                 Add: action { create in order { Code: "x" } }
               }
@@ -756,8 +764,8 @@ public class DomainToCSharpExporterTests {
             domain Test
             Account: entity {
               Name: Text
-              primary: Account
-              secondary: Account
+              primary: Account optional
+              secondary: Account optional
               children: many Account
               Active: stage {
                 Add: action { create in children { Name: "x" } }
@@ -843,7 +851,7 @@ public class DomainToCSharpExporterTests {
             // S-13a: the subscription's relationship states its explicit inverse (via) on the other end.
             new Relationship("TrackedBy",
                 new DomainTypeReference("Order"), new DomainTypeReference("Tracker"),
-                RelationshipCardinality.OneToOne, []) { Inverse = "Tracks" }
+                RelationshipCardinality.OneToOne, []) { Inverse = "Tracks", IsOptional = true }
         ]);
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -903,7 +911,7 @@ public class DomainToCSharpExporterTests {
             // S-13a: the subscription's relationship states its explicit inverse (via) on the other end.
             new Relationship("TrackedBy",
                 new DomainTypeReference("Order"), new DomainTypeReference("Tracker"),
-                RelationshipCardinality.OneToOne, []) { Inverse = "Tracks" }
+                RelationshipCardinality.OneToOne, []) { Inverse = "Tracks", IsOptional = true }
         ]);
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -1027,7 +1035,7 @@ public class DomainToCSharpExporterTests {
             // S-13a: the subscription's relationship states its explicit inverse (via) on the other end.
             new Relationship("TrackedBy",
                 new DomainTypeReference("Order"), new DomainTypeReference("Tracker"),
-                RelationshipCardinality.OneToOne, []) { Inverse = "Tracks" }
+                RelationshipCardinality.OneToOne, []) { Inverse = "Tracks", IsOptional = true }
         ]);
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -1068,7 +1076,7 @@ public class DomainToCSharpExporterTests {
             // S-13a: the subscription's relationship states its explicit inverse (via) on the other end.
             new Relationship("TrackedBy",
                 new DomainTypeReference("Order"), new DomainTypeReference("Tracker"),
-                RelationshipCardinality.OneToOne, []) { Inverse = "Tracks" }
+                RelationshipCardinality.OneToOne, []) { Inverse = "Tracks", IsOptional = true }
         ]);
         var analysis = DomainModelAnalyzer.Analyze(domain);
 
@@ -2414,7 +2422,7 @@ public class DomainToCSharpExporterTests {
             Fine: entity {
               Amount: Number
               Reason: Text
-              patron: Patron
+              patron: Patron optional
             }
             """);
         var types = DomainProgramProjection.ToSyntax(domain, analysis);
@@ -3007,11 +3015,11 @@ public class DomainToCSharpExporterTests {
             domain CrmTiny
             Account: entity {
               Name: Text
-              parent: Account
+              parent: Account optional
             }
             Contact: entity {
               Name: Text
-              account: owned Account
+              account: owned Account optional
               OpenAccount: action (name: Text) {
                 create in account { Name: name }
               }
@@ -3366,7 +3374,10 @@ public class DomainToCSharpExporterTests {
 
     [Test]
     public async Task Patron_HasOverdueLoans_SimulateAndGeneratedCSharp_Agree() {
-        var (domain, analysis) = ParseAndAnalyze(LibraryCheckoutDsl);
+        // Both hosts create the loans before their patron and link them through the collection, so the
+        // borrower is linked late (L-15a: `optional` in this variant). Every loan is created with a book.
+        var (domain, analysis) = ParseAndAnalyze(LibraryCheckoutDsl.Replace(
+            "  borrower: Patron\n", "  borrower: Patron optional\n", StringComparison.Ordinal));
         var exec = ModuleExec.For(domain);
         await Assert.That(analysis.HasErrors).IsFalse();
 
@@ -3381,9 +3392,17 @@ public class DomainToCSharpExporterTests {
             return p;
         }
 
+        var book = exec.Create("Book", new Dictionary<string, object?> {
+            ["Title"] = "T",
+            ["Author"] = "A",
+            ["ISBN"] = "1234567890",
+            ["Pages"] = 10L,
+            ["Genre"] = "Fiction"
+        }).Instance!;
         ModuleInstance NewLoan(string status) {
             var loan = exec.Create("Loan", new Dictionary<string, object?> {
-                ["Status"] = status
+                ["Status"] = status,
+                ["book"] = book
             }).Instance!;
             return loan;
         }
@@ -3406,8 +3425,11 @@ public class DomainToCSharpExporterTests {
         var patronType = asm.GetType("Patron")!;
         var loanType = asm.GetType("Loan")!;
 
+        var printedBook = ExportedCSharp.CreateEntity(asm.GetType("Book")!,
+            ("title", "T"), ("author", "A"), ("isbn", "1234567890"), ("pages", 10L),
+            ("genre", Enum.Parse(asm.GetType("Genre")!, "Fiction")));
         object MakeLoan(string status) =>
-            ExportedCSharp.CreateEntity(loanType, ("status", status));
+            ExportedCSharp.CreateEntity(loanType, ("status", status), ("book", printedBook));
 
         object LoanList(params object[] loans) {
             var arr = Array.CreateInstance(loanType, loans.Length);
@@ -3446,7 +3468,7 @@ public class DomainToCSharpExporterTests {
           B: stage { }
         }
         Tr: entity {
-          Tracks: Paper
+          Tracks: Paper optional
           P: stage {
             when Tracks B {
               transition to Q
@@ -3498,7 +3520,7 @@ public class DomainToCSharpExporterTests {
               B: stage { }
             }
             Tr: entity {
-              Tracks: Paper
+              Tracks: Paper optional
               P: stage {
                 Adopt: action { create in Tracks { Title: "x" } }
                 when Tracks B { transition to Q }
@@ -3902,7 +3924,7 @@ public class DomainToCSharpExporterTests {
               children: many Child
               Flag: Text
               P: stage {
-                Add: action { create in children { Name: "n" } }
+                Add: action (b: Board) { create in children { Name: "n" board: b } }
                 when children A { assign Flag to "y" }
               }
             }

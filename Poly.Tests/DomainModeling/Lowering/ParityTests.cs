@@ -120,7 +120,7 @@ public class ParityTests {
         }
         Parent: entity {
           Name: Text
-          kid: Child
+          kid: Child optional
           AddKid: action { create in kid { Name: "x" } }
         }
         """;
@@ -137,7 +137,7 @@ public class ParityTests {
         Fine: entity {
           Amount: Number
           Reason: Text
-          patron: Patron
+          patron: Patron optional
         }
         """;
 
@@ -557,7 +557,7 @@ public class ParityTests {
             domain SelfRel
             Account: entity {
               Name: Text
-              parent: Account
+              parent: Account optional
               children: many Account
               Active: stage {
                 AddChild: action { create in children { Name: "x" } }
@@ -582,7 +582,7 @@ public class ParityTests {
             domain SelfRel
             Account: entity {
               Name: Text
-              parent: Account
+              parent: Account optional
               children: many Account
               Active: stage {
                 AddParent: action { create in parent { Name: "x" } }
@@ -650,7 +650,7 @@ public class ParityTests {
             }
             Item: entity {
               Name: Text
-              order: Order
+              order: Order optional
               Active: stage {
                 Add: action { create in order { Code: "x" } }
               }
@@ -690,7 +690,7 @@ public class ParityTests {
         domain Watch
         Loan: entity {
           Code: Text
-          patron: Patron via loans
+          patron: Patron via loans optional
           Draft: stage {
             Overdue: action { transition to Overdue }
           }
@@ -709,7 +709,7 @@ public class ParityTests {
         domain Watch
         WorkItem: entity {
           Code: Text
-          board: Board via items
+          board: Board via items optional
           Draft: stage {
             Prep: action { transition to Ready }
             Finish: action { transition to Done }
@@ -1165,7 +1165,7 @@ public class ParityTests {
             }
             Loan: entity {
               Amount: Number range(0, 500) default(1)
-              patron: Patron via loans
+              patron: Patron via loans optional
               Active: stage {
                 MarkOverdue: action { transition to Overdue }
               }
@@ -1221,7 +1221,7 @@ public class ParityTests {
             }
             Loan: entity {
               Amount: Number range(0, 500) default(1)
-              patron: Patron via loans
+              patron: Patron via loans optional
               Active: stage {
                 Go: action { invoke MarkOverdue }
                 MarkOverdue: action { transition to Overdue }

@@ -105,6 +105,11 @@ public sealed partial class DomainDslPrinter {
             _sb.Append(" via ");
             _sb.Append(inverse);
         }
+        // An owned single part must be written `optional` (#677 ruling A); a code-built one that
+        // does not carry the fact still prints the only spelling that reads back.
+        if (!isMany && (rel.IsOptional || rel.SourceOwnsTarget)) {
+            _sb.Append(" optional");
+        }
         _sb.AppendLine();
     }
 }

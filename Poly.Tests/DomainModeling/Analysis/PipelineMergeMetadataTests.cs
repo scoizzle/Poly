@@ -222,7 +222,7 @@ public class PipelineMergeMetadataTests {
             }
             C: entity {
               name: Text
-              a: A
+              a: A optional
             }
             """);
         var analysis = DomainModelAnalyzer.Analyze(domain);
@@ -366,7 +366,7 @@ public class PipelineMergeMetadataTests {
               Name: Text
               Email: Text unique
               Status: Text default("Active")
-              profile: owned Profile
+              profile: owned Profile optional
               GoodStanding: policy { Status is "Active" }
               Active: stage {
                 Submit: action { transition to Done }

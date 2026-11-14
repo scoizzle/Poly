@@ -209,7 +209,7 @@ public static class DomainParityScenarios {
 
             Emp: entity {
               Name: Text length(1, 20)
-              dept: Dept via emps
+              dept: Dept via emps optional
               Live: stage {
                 Leave: action { transition to Gone }
               }
@@ -226,7 +226,7 @@ public static class DomainParityScenarios {
 
             Emp: entity {
               Name: Text length(1, 20)
-              dept: Dept via emps
+              dept: Dept via emps optional
               Live: stage {
                 Leave: action { transition to Gone }
               }

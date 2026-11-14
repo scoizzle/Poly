@@ -131,11 +131,16 @@ internal class Contact : Poly.Runtime.IActionScoped
         {
             return DomainResult<Contact>.Failure(Poly.Runtime.DomainFailure.Pattern("'Email' does not match the required pattern.", "Contact.Email"));
         }
+        if (account == null)
+        {
+            return DomainResult<Contact>.Failure(Poly.Runtime.DomainFailure.Required("'account' is required.", "Contact.account"));
+        }
+        var __account = account;
         if (Contact.ExistsWithEmail(db, __email))
         {
             return DomainResult<Contact>.Failure(Poly.Runtime.DomainFailure.Unique("Unique constraint violated: 'Email' value is already used on another 'Contact'.", "Contact.Email"));
         }
-        var created = new Contact(__name, __email, account);
+        var created = new Contact(__name, __email, __account);
         Poly.Runtime.ActionScope.Create(created, "Contact");
         if (account != null)
         {

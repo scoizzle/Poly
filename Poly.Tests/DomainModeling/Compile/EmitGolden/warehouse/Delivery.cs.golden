@@ -105,12 +105,17 @@ internal class Delivery : Poly.Runtime.IActionScoped
         {
             return DomainResult<Delivery>.Failure(Poly.Runtime.DomainFailure.Range("'Weight' must be <= 40000.", "Delivery.Weight"));
         }
+        if (truck == null)
+        {
+            return DomainResult<Delivery>.Failure(Poly.Runtime.DomainFailure.Required("'truck' is required.", "Delivery.truck"));
+        }
+        var __truck = truck;
         if (notes == null)
         {
             return DomainResult<Delivery>.Failure(Poly.Runtime.DomainFailure.Required("'Notes' is required.", "Delivery.Notes"));
         }
         var __notes = notes;
-        var created = new Delivery(__reference, __weight, truck, __notes);
+        var created = new Delivery(__reference, __weight, __truck, __notes);
         Poly.Runtime.ActionScope.Create(created, "Delivery");
         if (truck != null)
         {

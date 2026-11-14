@@ -190,7 +190,7 @@ public class OracleToolTests {
             Profile: entity { City: Text }
             Customer: entity {
               Name: Text
-              profile: owned Profile
+              profile: owned Profile optional
             }
             """);
 

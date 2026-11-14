@@ -197,7 +197,12 @@ internal class Fine : Poly.Runtime.IActionScoped
         }
         var __reason = reason;
         var __dateIssued = (dateIssued == null ? DateTime.UtcNow : (DateTime)dateIssued);
-        var created = new Fine(__amount, __reason, __dateIssued, paid, patron);
+        if (patron == null)
+        {
+            return DomainResult<Fine>.Failure(Poly.Runtime.DomainFailure.Required("'patron' is required.", "Fine.patron"));
+        }
+        var __patron = patron;
+        var created = new Fine(__amount, __reason, __dateIssued, paid, __patron);
         Poly.Runtime.ActionScope.Create(created, "Fine");
         if (patron != null)
         {

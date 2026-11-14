@@ -455,9 +455,10 @@ public sealed class StorageAnalyzer {
             && !p.Constraints.Any(c => c is DefaultValueConstraint)
             && _entityLookup.ContainsKey(p.Type.TypeName)))
             return true;
+        // The same fact EntityStructureAnalyzer reads (L-15a): only a required to-one names an owner.
         if (_relationships.Any(r =>
             string.Equals(r.Source.TypeName, entity.Name, StringComparison.Ordinal) &&
-            r.Cardinality is not (RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany) &&
+            r.IsRequiredToOne() &&
             !string.Equals(r.Target.TypeName, entity.Name, StringComparison.Ordinal)))
             return true;
         return false;

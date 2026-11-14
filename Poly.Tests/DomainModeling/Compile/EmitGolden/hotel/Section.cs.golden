@@ -183,7 +183,12 @@ internal class Section : Poly.Runtime.IActionScoped
             return DomainResult<Section>.Failure(Poly.Runtime.DomainFailure.Range("'DayRate' must be <= 100000.", "Section.DayRate"));
         }
         var __occupied = (occupied == null ? false : (bool)occupied);
-        var created = new Section(__name, __capacity, __dayRate, __occupied, hall);
+        if (hall == null)
+        {
+            return DomainResult<Section>.Failure(Poly.Runtime.DomainFailure.Required("'hall' is required.", "Section.hall"));
+        }
+        var __hall = hall;
+        var created = new Section(__name, __capacity, __dayRate, __occupied, __hall);
         Poly.Runtime.ActionScope.Create(created, "Section");
         if (hall != null)
         {

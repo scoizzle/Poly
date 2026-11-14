@@ -316,13 +316,13 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
         : CreateSlotKind.Optional;
 
     /// <summary>
-    /// A navigation's create slot kind: the one place it is decided. Every navigation is
-    /// Optional today; L-15a makes a bare to-one navigation Required here, and the create
-    /// guard (<c>ConstraintCheckWriter.RequiredSlotCheck</c>) already takes any shape.
+    /// A navigation's create slot kind: the one place it is decided. A required to-one
+    /// (<see cref="Relationship.IsRequiredToOne"/>) is Required; every other navigation is
+    /// Optional. The create guard (<c>ConstraintCheckWriter.RequiredSlotCheck</c>) takes any shape.
     /// </summary>
     internal static CreateSlotKind SlotKindFor(Relationship navigation) {
         ArgumentNullException.ThrowIfNull(navigation);
-        return CreateSlotKind.Optional;
+        return navigation.IsRequiredToOne() ? CreateSlotKind.Required : CreateSlotKind.Optional;
     }
 
     /// <summary>
@@ -337,16 +337,13 @@ internal sealed class EntityStructureAnalyzer : INodeAnalyzer {
             lookup.Types.TryGetValue(p.Type.TypeName, out var type) && type is Entity))
             return true;
 
+        // A required to-one names an owner of this entity. An `owned` nav declares this entity
+        // the owner of the target, and an `optional` one may stay unset, so neither does. A bare
+        // self-navigation is refused (DMREL006), so it does not decide root-ness either.
         foreach (var rel in entity.Navigations) {
-            if (rel.Cardinality is RelationshipCardinality.OneToMany or RelationshipCardinality.ManyToMany)
-                continue;
-            // An `owned` nav declares this entity as the owner of the target, so it is
-            // not a reference to an owner of this entity.
-            if (rel.SourceOwnsTarget)
-                continue;
-            if (string.Equals(rel.Target.TypeName, entity.Name, StringComparison.Ordinal))
-                continue;
-            return true;
+            if (rel.IsRequiredToOne()
+                && !string.Equals(rel.Target.TypeName, entity.Name, StringComparison.Ordinal))
+                return true;
         }
 
         return false;

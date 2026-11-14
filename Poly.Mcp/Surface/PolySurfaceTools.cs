@@ -441,7 +441,9 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
     [McpServerTool(Name = "poly_simulate", Title = "Run a scenario", ReadOnly = false, Destructive = true, Idempotent = false, OpenWorld = false, UseStructuredContent = true, OutputSchemaType = typeof(PolyOutputSchema)), Description("Runs an ordered scenario against the model and returns one trace entry per step. Steps are a JSON array of {op: create|link|unlink|invoke|evaluate|get|list, ...}. A guard-blocked step is a failed step, not a failed call; earlier steps stay committed. reset=true starts from a clean instance state.")]
     public PolyResponse Simulate(
         [Description("Workspace handle from poly_workspace.")] string workspace,
-        [Description("JSON array of steps, e.g. [{\"op\":\"create\",\"entity\":\"Product\",\"properties\":{\"Total\":42}}]")] string steps,
+        [Description("JSON array of steps, e.g. [{\"op\":\"create\",\"entity\":\"Product\",\"properties\":{\"Total\":42},\"as\":\"p\"}]. " +
+            "A create's properties may name a singular navigation whose value is an instance id or an earlier step's alias, " +
+            "e.g. {\"Name\":\"Grace\",\"account\":\"acme\"}; a required navigation must be given at create.")] string steps,
         [Description("Clear existing instances before running (default false).")] bool reset = false,
         [Description("Stop at the first failed step (default true).")] bool stopOnError = true) {
         if (!TryWorkspace(workspace, out var state))
@@ -480,7 +482,8 @@ internal sealed class PolySurfaceTools(ISessionStore store, ILogger<PolySurfaceT
                     "create" => _runtime.CreateInstance(
                         workspace,
                         Required(step, "entity"),
-                        OptionalJson(step, "properties")),
+                        OptionalJson(step, "properties"),
+                        aliases),
                     "link" => _runtime.LinkInstances(
                         workspace,
                         Resolve(Required(step, "sourceInstanceId"), aliases),

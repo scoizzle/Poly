@@ -1580,7 +1580,7 @@ public class McpSmokeTests {
               Posted: stage { }
             }
             Invoice: entity {
-              customer: Customer
+              customer: Customer optional
               lines: many Line
               HasCustomer: policy { customer exists }
               Open: stage {
@@ -3049,7 +3049,7 @@ E: entity {{
               }
             }
             Orchestrator: entity {
-              service: Service
+              service: Service optional
               Run: action {
                 invoke service.Process
               }
@@ -3494,7 +3494,7 @@ E: entity {{
             }
             Order: entity {
               Total: Number
-              customer: Customer
+              customer: Customer optional
             }
             """);
         await Assert.That(dsl.Success).IsTrue();
@@ -3555,7 +3555,7 @@ E: entity {{
             domain OwnedPolicyGolden
             Customer: entity {
               Name: Text
-              profile: owned Profile
+              profile: owned Profile optional
               IsUrban: policy { profile City is "Metropolis" }
             }
             Profile: entity {
@@ -3611,7 +3611,7 @@ E: entity {{
         var dsl = McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain Test
             A: entity { b: many B }
-            B: entity { a: A }
+            B: entity { a: A optional }
             """);
         await Assert.That(dsl.Success).IsTrue();
 
@@ -3661,7 +3661,7 @@ E: entity {{
         var dsl = McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain Test
             Customer: entity { orders: many Order }
-            Order: entity { customer: Customer }
+            Order: entity { customer: Customer optional }
             """);
         await Assert.That(dsl.Success).IsTrue();
 
@@ -3683,7 +3683,7 @@ E: entity {{
     [Test]
     public async Task LinkInstances_MissingSource_Fails() {
         var (sessionId, _) = McpTestTools.Store.Create("Test");
-        McpTestTools.Dsl.ApplyDsl(sessionId, "domain T A: entity { bs: many B } B: entity { a: A }");
+        McpTestTools.Dsl.ApplyDsl(sessionId, "domain T A: entity { bs: many B } B: entity { a: A optional }");
         var bResult = McpTestTools.Runtime.CreateInstance(sessionId, "B", "{}");
         await Assert.That(bResult.Success).IsTrue();
 
@@ -3700,7 +3700,7 @@ E: entity {{
     [Test]
     public async Task UnlinkInstances_LinkThenUnlink_Succeeds() {
         var (sessionId, _) = McpTestTools.Store.Create("Test");
-        McpTestTools.Dsl.ApplyDsl(sessionId, "domain T A: entity { bs: many B } B: entity { a: A }");
+        McpTestTools.Dsl.ApplyDsl(sessionId, "domain T A: entity { bs: many B } B: entity { a: A optional }");
 
         var aResult = McpTestTools.Runtime.CreateInstance(sessionId, "A", "{}");
         await Assert.That(aResult.Success).IsTrue();
@@ -3729,7 +3729,7 @@ E: entity {{
         var (sessionId, _) = McpTestTools.Store.Create("Test");
         McpTestTools.Dsl.ApplyDsl(sessionId, """
             domain T
-            Parent: entity { kid: owned Child }
+            Parent: entity { kid: owned Child optional }
             Child: entity { }
             """);
 
@@ -3754,7 +3754,7 @@ E: entity {{
     [Test]
     public async Task UnlinkInstances_NoExistingLink_Fails() {
         var (sessionId, _) = McpTestTools.Store.Create("Test");
-        McpTestTools.Dsl.ApplyDsl(sessionId, "domain T A: entity { bs: many B } B: entity { a: A }");
+        McpTestTools.Dsl.ApplyDsl(sessionId, "domain T A: entity { bs: many B } B: entity { a: A optional }");
 
         var aResult = McpTestTools.Runtime.CreateInstance(sessionId, "A", "{}");
         await Assert.That(aResult.Success).IsTrue();
@@ -3792,7 +3792,7 @@ E: entity {{
     [Test]
     public async Task UnlinkInstances_MissingSource_Fails() {
         var (sessionId, _) = McpTestTools.Store.Create("Test");
-        McpTestTools.Dsl.ApplyDsl(sessionId, "domain T A: entity { bs: many B } B: entity { a: A }");
+        McpTestTools.Dsl.ApplyDsl(sessionId, "domain T A: entity { bs: many B } B: entity { a: A optional }");
         var bResult = McpTestTools.Runtime.CreateInstance(sessionId, "B", "{}");
         await Assert.That(bResult.Success).IsTrue();
 
@@ -3906,7 +3906,7 @@ E: entity {{
             }
             Loan: entity {
               Amount: Number
-              borrower: Patron
+              borrower: Patron optional
             }
             """);
         await Assert.That(dsl.Success).IsTrue();

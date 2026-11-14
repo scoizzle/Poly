@@ -60,7 +60,7 @@ public class P4SubscriptionQuantifierDslTests {
             }
             Loan: entity {
               Code: Text
-              patron: Patron via loans
+              patron: Patron via loans optional
               Draft: stage {
                 Overdue: action { transition to Overdue }
               }
@@ -95,7 +95,7 @@ public class P4SubscriptionQuantifierDslTests {
             }
             Loan: entity {
               Code: Text
-              patron: Patron via loans
+              patron: Patron via loans optional
               Draft: stage {
                 Overdue: action { transition to Overdue }
               }
@@ -128,7 +128,7 @@ public class P4SubscriptionQuantifierDslTests {
             }
             Loan: entity {
               Code: Text
-              patron: Patron via loans
+              patron: Patron via loans optional
               Draft: stage {
                 Overdue: action { transition to Overdue }
               }

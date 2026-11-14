@@ -116,7 +116,7 @@ public class N1NavigationTests {
 
             Person: entity {
               Name: Text
-              passport: owned Passport
+              passport: owned Passport optional
             }
             """;
 
@@ -145,7 +145,7 @@ public class N1NavigationTests {
 
             User: entity {
               Name: Text
-              profile: one owned Profile
+              profile: one owned Profile optional
             }
             """;
 
@@ -696,5 +696,101 @@ public class N1NavigationTests {
         await Assert.That(analysis.HasErrors).IsFalse();
         await Assert.That(analysis.Diagnostics.Any(d =>
             d.Code == DomainModelDiagnosticCodes.SubscriptionContractMismatch)).IsFalse();
+    }
+
+    /// <summary>Parses <paramref name="poly"/>; a parse failure is returned, not thrown, so a red run fails by assertion.</summary>
+    private static (IReadOnlyList<DomainChange>? Changes, FormatException? Error) TryParse(string poly) {
+        try {
+            return (new PolyDslParser(poly).Parse(), null);
+        }
+        catch (FormatException ex) {
+            return (null, ex);
+        }
+    }
+
+    [Test]
+    public async Task OptionalToOne_SetsFactAndRoundTrips() {
+        const string Poly = """
+            domain OptNavFact
+            OptNavHolder: entity {
+              Name: Text
+              tickets: many OptNavTicket
+            }
+            OptNavTicket: entity {
+              Code: Text
+              holder: OptNavHolder via tickets optional
+            }
+            """;
+        var (changes, error) = TryParse(Poly);
+        await Assert.That(error?.Message).IsNull();
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes!);
+        await Assert.That(result.Succeeded).IsTrue();
+        var holder = result.Relationships().Single(r => r.Name == "holder");
+        await Assert.That(holder.IsOptional).IsTrue();
+        await Assert.That(result.Relationships().Single(r => r.Name == "tickets").IsOptional).IsFalse();
+
+        var printed = new DomainDslPrinter().Print(result.Root);
+        await Assert.That(printed).Contains("holder: one OptNavHolder via tickets optional");
+        var (again, againError) = TryParse(printed);
+        await Assert.That(againError?.Message).IsNull();
+        var reparsed = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(again!);
+        await Assert.That(reparsed.Relationships().Single(r => r.Name == "holder").IsOptional).IsTrue();
+        await Assert.That(new DomainDslPrinter().Print(reparsed.Root)).IsEqualTo(printed);
+    }
+
+    [Test]
+    public async Task OptionalOnMany_IsPositionedError() {
+        var (_, error) = TryParse("""
+            domain OptNavMany
+            OptManyHolder: entity {
+              Name: Text
+              tickets: many OptManyTicket optional
+            }
+            OptManyTicket: entity { Code: Text }
+            """);
+        await Assert.That(error).IsTypeOf<Poly.Grammar.GrammarException>();
+        var grammar = (Poly.Grammar.GrammarException)error!;
+        await Assert.That(grammar.Detail).Contains("'tickets'");
+        await Assert.That(grammar.Detail).Contains("'optional'");
+        await Assert.That(grammar.Line).IsEqualTo(4);
+    }
+
+    [Test]
+    public async Task OwnedSinglePartWithoutOptional_IsPositionedError() {
+        // Owner ruling A (#677): an owned single part is filled after its owner exists, so it is
+        // never required at create, and it must be written `optional`.
+        var (_, error) = TryParse("""
+            domain OwnedBare
+            OwnedBareAccount: entity {
+              Name: Text
+              hq: owned OwnedBareAddress
+            }
+            OwnedBareAddress: entity { Street: Text }
+            """);
+        await Assert.That(error).IsTypeOf<Poly.Grammar.GrammarException>();
+        var grammar = (Poly.Grammar.GrammarException)error!;
+        await Assert.That(grammar.Detail).Contains("'hq'");
+        await Assert.That(grammar.Detail).Contains("hq: owned OwnedBareAddress optional");
+        await Assert.That(grammar.Line).IsEqualTo(4);
+    }
+
+    [Test]
+    public async Task OwnedSinglePartWithOptional_ParsesAndRoundTrips() {
+        const string Poly = """
+            domain OwnedOpt
+            OwnedOptAccount: entity {
+              Name: Text
+              hq: one owned OwnedOptAddress optional
+            }
+            OwnedOptAddress: entity { Street: Text }
+            """;
+        var (changes, error) = TryParse(Poly);
+        await Assert.That(error?.Message).IsNull();
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(changes!);
+        await Assert.That(result.Succeeded).IsTrue();
+        var hq = result.Relationships().Single(r => r.Name == "hq");
+        await Assert.That(hq.SourceOwnsTarget).IsTrue();
+        await Assert.That(hq.IsOptional).IsTrue();
+        await Assert.That(new DomainDslPrinter().Print(result.Root)).Contains("hq: one owned OwnedOptAddress optional");
     }
 }

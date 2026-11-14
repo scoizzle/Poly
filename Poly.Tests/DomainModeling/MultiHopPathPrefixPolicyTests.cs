@@ -28,13 +28,13 @@ public class MultiHopPathPrefixPolicyTests {
         domain MultiHop
         Patron: entity {
           Name: Text
-          loan: Loan
+          loan: Loan optional
           HasClassic: policy { loan book Title is "Classic" }
           Active: stage {}
         }
         Loan: entity {
           Code: Text
-          book: Book
+          book: Book optional
           Open: stage {}
         }
         Book: entity {
@@ -73,7 +73,7 @@ public class MultiHopPathPrefixPolicyTests {
               Open: stage {}
             }
             Enrollment: entity {
-              section: Section
+              section: Section optional
               SectionFull: policy { section SeatsTaken >= 1 }
               Pending: stage {
                 Confirm: action require not SectionFull { transition to Registered }

@@ -97,8 +97,28 @@ public sealed partial class DomainResolver {
                 throw Error($"'via' is declared more than once on navigation property '{name}'");
         }
 
+        // `optional` closes the line: a to-one navigation is required at create unless it says so.
+        // A collection is never required, and an owned single part is filled after its owner
+        // exists, so it can never be required at create and must say `optional` (#677 ruling A).
+        var isOptional = false;
+        if (Current.Kind == TokenKind.Optional) {
+            if (cardinality == RelationshipCardinality.OneToMany)
+                throw GrammarError.Error(
+                    $"Navigation '{name}' is a collection; 'optional' applies only to a to-one navigation. "
+                    + "A collection is never required at create.",
+                    Current.Line, Current.Col);
+            isOptional = true;
+            Advance();
+        }
+        else if (owned && cardinality == RelationshipCardinality.OneToOne) {
+            throw GrammarError.Error(
+                $"Navigation '{name}' is an owned single part: it is filled after its owner exists, so it can "
+                + $"never be required at create. Declare it optional: '{name}: owned {targetType} optional'.",
+                targetToken.Line, targetToken.Col);
+        }
+
         RejectRetiredRequiredWord();
-        var pending = new PendingNav(_currentEntityName, name, targetType, cardinality, owned, targetToken);
+        var pending = new PendingNav(_currentEntityName, name, targetType, cardinality, owned, targetToken, isOptional);
         _pendingNavs.Add(pending);
         if (inverseName is not null)
             _inverseByNav[pending] = inverseName;
@@ -164,7 +184,7 @@ public sealed partial class DomainResolver {
                 nav.PropertyName,
                 new DomainTypeReference(nav.SourceEntityName),
                 new DomainTypeReference(nav.TargetTypeName),
-                nav.Cardinality, [], nav.SourceOwnsTarget, inverse));
+                nav.Cardinality, [], nav.SourceOwnsTarget, inverse, nav.IsOptional));
         }
         _pendingNavs.Clear();
         _inverseByNav.Clear();

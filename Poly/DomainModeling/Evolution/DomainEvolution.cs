@@ -398,14 +398,16 @@ public sealed class EvolutionBuilder {
         string sourceEntityName,
         string targetEntityName,
         RelationshipCardinality cardinality,
-        bool sourceOwnsTarget = false) =>
+        bool sourceOwnsTarget = false,
+        bool isOptional = false) =>
         Apply(new AddRelationshipChange(
             name,
             new DomainTypeReference(sourceEntityName),
             new DomainTypeReference(targetEntityName),
             cardinality,
             [],
-            sourceOwnsTarget));
+            sourceOwnsTarget,
+            IsOptional: isOptional));
 
     public EvolutionBuilder RemoveRelationship(string sourceEntityName, string name) =>
         Apply(new RemoveRelationshipChange(sourceEntityName, name));

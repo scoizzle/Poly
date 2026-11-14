@@ -715,6 +715,104 @@ public class PackOracleTests {
         await ExpectProblem(missing, 404, "Not Found", null, null, null);
     }
 
+    /// <summary>P-13a (#912): the host hands the module the stored link. The first create into an empty <c>next</c>
+    /// lands; every later one is the module's own 409 Link and creates no second row. <c>/api/nodes/1</c> is the
+    /// seed row (#595, #589), so the count is measured against the count before the first call.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task Action_CreateIntoOccupiedToOne_IsLinkConflict_AndCreatesNoSecondRow_Issue912(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.NodeLink912);
+
+        async Task<int> CountAsync() {
+            using var list = JsonDocument.Parse(await oracle.Client.GetStringAsync("/api/nodes"));
+            return list.RootElement.GetArrayLength();
+        }
+
+        async Task<HttpResponseMessage> ExtendAsync() =>
+            await oracle.Client.PostAsync("/api/nodes/1/extend", new StringContent("{}", Encoding.UTF8, "application/json"));
+
+        var seed = await CountAsync();
+
+        using var first = await ExtendAsync();
+        await Assert.That((int)first.StatusCode).IsEqualTo(200);
+        await Assert.That(await CountAsync()).IsEqualTo(seed + 1);
+
+        foreach (var attempt in new[] { "second", "third" }) {
+            using var again = await ExtendAsync();
+            await Assert.That((int)again.StatusCode).IsEqualTo(409).Because(attempt);
+            await Assert.That(again.Content.Headers.ContentType?.MediaType).IsEqualTo("application/problem+json");
+            using var problem = JsonDocument.Parse(await again.Content.ReadAsStringAsync());
+            await Assert.That(problem.RootElement.GetProperty("title").GetString()).IsEqualTo("Link");
+            await Assert.That(await CountAsync()).IsEqualTo(seed + 1).Because(attempt);
+        }
+    }
+
+    /// <summary>P-13a (#658, action half): <c>Triage</c> requires <c>Assigned</c> (<c>assignee exists</c>). The task is
+    /// filed in one request and triaged in the next, so the assignee is only known from the stored link.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task Action_GuardOverStoredToOne_SeesTheAssignee_Issue658(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.Desk658);
+
+        static StringContent Json(string body) => new(body, Encoding.UTF8, "application/json");
+
+        using var user = await oracle.Client.PostAsync("/api/users", Json("""{"Email":"a@x.io"}"""));
+        await Assert.That((int)user.StatusCode).IsEqualTo(201);
+        using var project = await oracle.Client.PostAsync("/api/projects", Json("""{"Key":"P1"}"""));
+        await Assert.That((int)project.StatusCode).IsEqualTo(201);
+
+        using var filed = await oracle.Client.PostAsync("/api/projects/P1/filetask", Json("""{"WhoId":"a@x.io"}"""));
+        await Assert.That((int)filed.StatusCode).IsEqualTo(200);
+
+        using var triaged = await oracle.Client.PostAsync("/api/projects/P1/tasks/1/triage", Json("{}"));
+        await Assert.That((int)triaged.StatusCode).IsEqualTo(200).Because(await triaged.Content.ReadAsStringAsync());
+
+        using var tasks = JsonDocument.Parse(await oracle.Client.GetStringAsync("/api/projects/P1/tasks"));
+        await Assert.That(tasks.RootElement.GetArrayLength()).IsEqualTo(1);
+        await Assert.That(tasks.RootElement[0].GetProperty("currentStage").GetString()).IsEqualTo("Done");
+    }
+
+    /// <summary>P-13a (#658): a guard through a to-one of a ROOT entity (the shape of crm's Lead.Convert; the guard
+    /// reads <c>account</c>, which is not the route parent) answers as the simulator does for the same document
+    /// and steps: the status says what the simulator's <c>Invoke</c> outcome says, and a refusal names the same
+    /// guard as <c>PolySurfaceHarness.Invoke(...).Result.FailedGuards</c>.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task Action_GuardThroughToOneOfRoot_AnswersAsTheSimulatorDoes_Issue658(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        var fixture = PackOracleDomains.LeadConvert658;
+
+        var harness = PolySurfaceHarness.New();
+        var workspace = harness.Open("leads");
+        await Assert.That(harness.Define(workspace, fixture.Poly).Success).IsTrue();
+        var lead = harness.Create(workspace, "Lead", """{"Name":"L1"}""").InstanceId;
+        var steps = new[] { "Convert", "Attach", "Convert" };
+        var simulated = steps.Select(action => harness.Invoke(workspace, lead, action).Result).ToArray();
+        await Assert.That(simulated.Select(r => r.Succeeded).ToArray()).IsEquivalentTo(new[] { false, true, true });
+        await Assert.That(simulated[0].FailedGuards.Single()).IsEqualTo("HasAccount");
+
+        await using var oracle = await PackOracle.BootAsync(fixture);
+        using var created = await oracle.Client.PostAsync(
+            "/api/leads", new StringContent("""{"Name":"L1"}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)created.StatusCode).IsEqualTo(201);
+
+        for (var i = 0; i < steps.Length; i++) {
+            using var response = await oracle.Client.PostAsync(
+                $"/api/leads/L1/{steps[i].ToLowerInvariant()}", new StringContent("{}", Encoding.UTF8, "application/json"));
+            var body = await response.Content.ReadAsStringAsync();
+            await Assert.That(response.IsSuccessStatusCode).IsEqualTo(simulated[i].Succeeded).Because($"step {i} {steps[i]}: {body}");
+            if (!simulated[i].Succeeded) {
+                using var problem = JsonDocument.Parse(body);
+                await Assert.That(problem.RootElement.GetProperty("guard").GetString()).IsEqualTo(simulated[i].FailedGuards.Single());
+            }
+        }
+    }
+
     /// <summary>#620 (slice P-03): an action that applies an effect and then fails must persist nothing.
     /// The rejected request has already bumped Capacity in memory; a save on the failure branch commits it.
     /// The second call is A3's pin on D2: a failed request must leave no pending change for the next

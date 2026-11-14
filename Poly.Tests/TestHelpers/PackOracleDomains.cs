@@ -348,6 +348,49 @@ public static class PackOracleDomains {
         """,
         "/api/children");
 
+    /// <summary>P-13a (#912). A single-create action into a to-one: the module's own 409 Link only fires when the host
+    /// has loaded the stored link, so the second request is the oracle. It stays out of <see cref="All"/>.</summary>
+    public static PackOracleDomain NodeLink912 { get; } = new(
+        "NodeLink912",
+        """
+        domain Links
+        uses http
+        uses sqlite
+
+        Node: entity {
+          Code: Text length(1, 8)
+          next: Node
+          Extend: action { create in next { Code: "A" } }
+        }
+        """,
+        "/api/nodes");
+
+    /// <summary>P-13a (#658). A guard through a to-one on a root entity (the shape of crm's Lead.Convert): the guard reads
+    /// <c>account</c>, which is not a route parent. It stays out of <see cref="All"/>.</summary>
+    public static PackOracleDomain LeadConvert658 { get; } = new(
+        "LeadConvert658",
+        """
+        domain Leads
+        uses http
+        uses sqlite
+
+        Account: entity {
+          Name: Text unique length(1, 20)
+        }
+
+        Lead: entity {
+          Name: Text unique length(1, 20)
+          account: Account
+          HasAccount: policy { account exists }
+          New: stage {
+            Attach: action { create in account { Name: "Acme" } }
+            Convert: action require HasAccount { transition to Converted }
+          }
+          Converted: stage { }
+        }
+        """,
+        "/api/leads");
+
     public static IReadOnlyList<PackOracleDomain> All { get; } =
         [Inventory588, Logistics559, Warehouse620, Inventory626, Desk658, Tally653, Fulfillment675];
 

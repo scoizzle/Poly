@@ -27,7 +27,6 @@ Member: entity {
   Tier: Tier
   plan: Plan
   bookings: many Booking via member
-  HasPlan: policy { plan exists }
   IsElite: policy { Tier is Elite }
   Active: stage {
     Enroll: action (plan: Plan) {

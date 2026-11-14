@@ -787,7 +787,7 @@ Z: entity {
   B: stage {
   }
 }
-##### poly/docs/probes/dogfood/hotel.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[temporal,persistence]+implicit	printed	0F3F63A3
+##### poly/docs/probes/dogfood/hotel.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Core	uses=[temporal,persistence]+implicit	printed	545AEAA1
 domain Hotel
 uses persistence
 
@@ -1056,10 +1056,9 @@ EventHold: entity {
   DatesValid: policy { EndDate > StartDate }
   PartyFits: policy { Headcount <= Capacity }
   HasSection: policy { section exists }
-  HasSpace: policy { (hall exists or section exists) }
   Requested: stage {
     Confirm: action
-      require DatesValid, PartyFits, HasSpace {
+      require DatesValid, PartyFits {
       transition to Confirmed
     }
     Cancel: action {
@@ -1876,7 +1875,7 @@ Job: entity {
   Skipped: stage {
   }
 }
-##### poly/docs/probes/scratch-2026-10-14/gym.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Product	uses=[temporal,http,persistence]+implicit	printed	7DE68934
+##### poly/docs/probes/scratch-2026-10-14/gym.poly	document: parse > ApplyAndAnalyze > print(DomainSession.Create(uses, Core+ImplicitIds)); catalog=Product	uses=[temporal,http,persistence]+implicit	printed	0B98C2A4
 domain Gym
 uses http
 uses persistence
@@ -1910,7 +1909,6 @@ Member: entity {
   Tier: Tier
   plan: one Plan
   bookings: many Booking via member
-  HasPlan: policy { plan exists }
   IsElite: policy { Tier is Elite }
   Active: stage {
     Enroll: action (plan: Plan) {

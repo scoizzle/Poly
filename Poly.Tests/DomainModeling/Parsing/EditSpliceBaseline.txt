@@ -395,26 +395,26 @@ P	docs/probes/dogfood/entry-transition-in-first-stage.poly|property|Z.Tag|add	er
 P	docs/probes/dogfood/entry-transition-in-first-stage.poly|stage|Z.A|replace	ok identical=Y delta=0 sha=7351AB8A70AB
 P	docs/probes/dogfood/entry-transition-in-first-stage.poly|stage|Z.A|remove	ok identical=- delta=-47 sha=7A4B3522EC68
 P	docs/probes/dogfood/entry-transition-in-first-stage.poly|stage|Z.A|add	err EDIT_NAME_COLLISION
-P	docs/probes/dogfood/hotel.poly|uses|uses:temporal|replace	ok identical=Y delta=0 sha=FB984EC247F3
-P	docs/probes/dogfood/hotel.poly|uses|uses:temporal|remove	ok identical=- delta=-14 sha=0FBBD407F853
+P	docs/probes/dogfood/hotel.poly|uses|uses:temporal|replace	ok identical=Y delta=0 sha=9E4FC2F0923B
+P	docs/probes/dogfood/hotel.poly|uses|uses:temporal|remove	ok identical=- delta=-14 sha=4E045E498E56
 P	docs/probes/dogfood/hotel.poly|uses|uses:temporal|add	err EDIT_NAME_COLLISION
-P	docs/probes/dogfood/hotel.poly|entity|RoomType|replace	ok identical=Y delta=0 sha=FB984EC247F3
-P	docs/probes/dogfood/hotel.poly|entity|RoomType|remove	ok identical=- delta=-123 sha=9DB0C8CC143A
+P	docs/probes/dogfood/hotel.poly|entity|RoomType|replace	ok identical=Y delta=0 sha=9E4FC2F0923B
+P	docs/probes/dogfood/hotel.poly|entity|RoomType|remove	ok identical=- delta=-123 sha=A7943B413739
 P	docs/probes/dogfood/hotel.poly|entity|RoomType|add	err EDIT_NAME_COLLISION
-P	docs/probes/dogfood/hotel.poly|property|RoomType.Name|replace	ok identical=Y delta=0 sha=FB984EC247F3
-P	docs/probes/dogfood/hotel.poly|property|RoomType.Name|remove	ok identical=- delta=-27 sha=440B99570A3B
+P	docs/probes/dogfood/hotel.poly|property|RoomType.Name|replace	ok identical=Y delta=0 sha=9E4FC2F0923B
+P	docs/probes/dogfood/hotel.poly|property|RoomType.Name|remove	ok identical=- delta=-27 sha=A3D9B0B70219
 P	docs/probes/dogfood/hotel.poly|property|RoomType.Name|add	err EDIT_NAME_COLLISION
-P	docs/probes/dogfood/hotel.poly|navigation|Property.halls|replace	ok identical=Y delta=0 sha=FB984EC247F3
-P	docs/probes/dogfood/hotel.poly|navigation|Property.halls|remove	ok identical=- delta=-19 sha=0E993D27EAC1
+P	docs/probes/dogfood/hotel.poly|navigation|Property.halls|replace	ok identical=Y delta=0 sha=9E4FC2F0923B
+P	docs/probes/dogfood/hotel.poly|navigation|Property.halls|remove	ok identical=- delta=-19 sha=8F7C09413288
 P	docs/probes/dogfood/hotel.poly|navigation|Property.halls|add	err EDIT_NAME_COLLISION
-P	docs/probes/dogfood/hotel.poly|policy|Property.HasHalls|replace	ok identical=Y delta=0 sha=FB984EC247F3
-P	docs/probes/dogfood/hotel.poly|policy|Property.HasHalls|remove	ok identical=- delta=-39 sha=B1F4BC5D5110
+P	docs/probes/dogfood/hotel.poly|policy|Property.HasHalls|replace	ok identical=Y delta=0 sha=9E4FC2F0923B
+P	docs/probes/dogfood/hotel.poly|policy|Property.HasHalls|remove	ok identical=- delta=-39 sha=973AB9078BCA
 P	docs/probes/dogfood/hotel.poly|policy|Property.HasHalls|add	err EDIT_NAME_COLLISION
-P	docs/probes/dogfood/hotel.poly|stage|Property.Open|replace	ok identical=Y delta=0 sha=FB984EC247F3
-P	docs/probes/dogfood/hotel.poly|stage|Property.Open|remove	ok identical=- delta=-208 sha=8C287410B572
+P	docs/probes/dogfood/hotel.poly|stage|Property.Open|replace	ok identical=Y delta=0 sha=9E4FC2F0923B
+P	docs/probes/dogfood/hotel.poly|stage|Property.Open|remove	ok identical=- delta=-208 sha=A51E37BE9D25
 P	docs/probes/dogfood/hotel.poly|stage|Property.Open|add	err EDIT_NAME_COLLISION
-P	docs/probes/dogfood/hotel.poly|action|Property.Open.AddHall|replace	ok identical=Y delta=0 sha=FB984EC247F3
-P	docs/probes/dogfood/hotel.poly|action|Property.Open.AddHall|remove	ok identical=- delta=-145 sha=FDD68434A714
+P	docs/probes/dogfood/hotel.poly|action|Property.Open.AddHall|replace	ok identical=Y delta=0 sha=9E4FC2F0923B
+P	docs/probes/dogfood/hotel.poly|action|Property.Open.AddHall|remove	ok identical=- delta=-145 sha=8510EE191A48
 P	docs/probes/dogfood/hotel.poly|action|Property.Open.AddHall|add	err EDIT_NAME_COLLISION
 P	docs/probes/dogfood/nested-invoke-type-mismatch.poly|uses|uses:temporal|replace	ok identical=Y delta=0 sha=B79B643862AB
 P	docs/probes/dogfood/nested-invoke-type-mismatch.poly|uses|uses:temporal|remove	ok identical=- delta=-14 sha=52E6D11064C3
@@ -680,29 +680,29 @@ P	docs/probes/scratch-2026-10-14/fleet.poly|stage|Vehicle.Active|add	err EDIT_NA
 P	docs/probes/scratch-2026-10-14/fleet.poly|action|Vehicle.Active.Open|replace	ok identical=Y delta=0 sha=B21030C925A3
 P	docs/probes/scratch-2026-10-14/fleet.poly|action|Vehicle.Active.Open|remove	ok identical=- delta=-93 sha=6CAB4CC379F4
 P	docs/probes/scratch-2026-10-14/fleet.poly|action|Vehicle.Active.Open|add	err EDIT_NAME_COLLISION
-P	docs/probes/scratch-2026-10-14/gym.poly|uses|uses:temporal|replace	ok identical=Y delta=0 sha=CAB0420E4459
-P	docs/probes/scratch-2026-10-14/gym.poly|uses|uses:temporal|remove	ok identical=- delta=-14 sha=9B25E1308817
+P	docs/probes/scratch-2026-10-14/gym.poly|uses|uses:temporal|replace	ok identical=Y delta=0 sha=8322D82A92C9
+P	docs/probes/scratch-2026-10-14/gym.poly|uses|uses:temporal|remove	ok identical=- delta=-14 sha=9F5B382F23B5
 P	docs/probes/scratch-2026-10-14/gym.poly|uses|uses:temporal|add	err EDIT_NAME_COLLISION
-P	docs/probes/scratch-2026-10-14/gym.poly|enum|Tier|replace	ok identical=Y delta=0 sha=CAB0420E4459
-P	docs/probes/scratch-2026-10-14/gym.poly|enum|Tier|remove	ok identical=- delta=-35 sha=6804CAAFAD33
+P	docs/probes/scratch-2026-10-14/gym.poly|enum|Tier|replace	ok identical=Y delta=0 sha=8322D82A92C9
+P	docs/probes/scratch-2026-10-14/gym.poly|enum|Tier|remove	ok identical=- delta=-35 sha=8680FA572934
 P	docs/probes/scratch-2026-10-14/gym.poly|enum|Tier|add	err EDIT_NAME_COLLISION
-P	docs/probes/scratch-2026-10-14/gym.poly|entity|Plan|replace	ok identical=Y delta=0 sha=CAB0420E4459
-P	docs/probes/scratch-2026-10-14/gym.poly|entity|Plan|remove	ok identical=- delta=-109 sha=AA8B794C7BAD
+P	docs/probes/scratch-2026-10-14/gym.poly|entity|Plan|replace	ok identical=Y delta=0 sha=8322D82A92C9
+P	docs/probes/scratch-2026-10-14/gym.poly|entity|Plan|remove	ok identical=- delta=-109 sha=6735B2302BED
 P	docs/probes/scratch-2026-10-14/gym.poly|entity|Plan|add	err EDIT_NAME_COLLISION
-P	docs/probes/scratch-2026-10-14/gym.poly|property|Plan.Code|replace	ok identical=Y delta=0 sha=CAB0420E4459
-P	docs/probes/scratch-2026-10-14/gym.poly|property|Plan.Code|remove	ok identical=- delta=-34 sha=33539CC55A75
+P	docs/probes/scratch-2026-10-14/gym.poly|property|Plan.Code|replace	ok identical=Y delta=0 sha=8322D82A92C9
+P	docs/probes/scratch-2026-10-14/gym.poly|property|Plan.Code|remove	ok identical=- delta=-34 sha=305896ADA9A1
 P	docs/probes/scratch-2026-10-14/gym.poly|property|Plan.Code|add	err EDIT_NAME_COLLISION
-P	docs/probes/scratch-2026-10-14/gym.poly|navigation|Trainer.sessions|replace	ok identical=Y delta=0 sha=CAB0420E4459
-P	docs/probes/scratch-2026-10-14/gym.poly|navigation|Trainer.sessions|remove	ok identical=- delta=-30 sha=48FDC32A9D81
+P	docs/probes/scratch-2026-10-14/gym.poly|navigation|Trainer.sessions|replace	ok identical=Y delta=0 sha=8322D82A92C9
+P	docs/probes/scratch-2026-10-14/gym.poly|navigation|Trainer.sessions|remove	ok identical=- delta=-30 sha=F9616E2B102E
 P	docs/probes/scratch-2026-10-14/gym.poly|navigation|Trainer.sessions|add	err EDIT_NAME_COLLISION
-P	docs/probes/scratch-2026-10-14/gym.poly|policy|Member.HasPlan|replace	ok identical=Y delta=0 sha=CAB0420E4459
-P	docs/probes/scratch-2026-10-14/gym.poly|policy|Member.HasPlan|remove	ok identical=- delta=-34 sha=8322D82A92C9
-P	docs/probes/scratch-2026-10-14/gym.poly|policy|Member.HasPlan|add	err EDIT_NAME_COLLISION
-P	docs/probes/scratch-2026-10-14/gym.poly|stage|Member.Active|replace	ok identical=Y delta=0 sha=CAB0420E4459
-P	docs/probes/scratch-2026-10-14/gym.poly|stage|Member.Active|remove	ok identical=- delta=-353 sha=599CBC4CC637
+P	docs/probes/scratch-2026-10-14/gym.poly|policy|Member.IsElite|replace	ok identical=Y delta=0 sha=8322D82A92C9
+P	docs/probes/scratch-2026-10-14/gym.poly|policy|Member.IsElite|remove	ok identical=- delta=-36 sha=52027A67E48D
+P	docs/probes/scratch-2026-10-14/gym.poly|policy|Member.IsElite|add	err EDIT_NAME_COLLISION
+P	docs/probes/scratch-2026-10-14/gym.poly|stage|Member.Active|replace	ok identical=Y delta=0 sha=8322D82A92C9
+P	docs/probes/scratch-2026-10-14/gym.poly|stage|Member.Active|remove	ok identical=- delta=-353 sha=5BF5DF2DCCC3
 P	docs/probes/scratch-2026-10-14/gym.poly|stage|Member.Active|add	err EDIT_NAME_COLLISION
-P	docs/probes/scratch-2026-10-14/gym.poly|action|Member.Active.Enroll|replace	ok identical=Y delta=0 sha=CAB0420E4459
-P	docs/probes/scratch-2026-10-14/gym.poly|action|Member.Active.Enroll|remove	ok identical=- delta=-71 sha=B94F2D298DA3
+P	docs/probes/scratch-2026-10-14/gym.poly|action|Member.Active.Enroll|replace	ok identical=Y delta=0 sha=8322D82A92C9
+P	docs/probes/scratch-2026-10-14/gym.poly|action|Member.Active.Enroll|remove	ok identical=- delta=-71 sha=5B0F9B493B5B
 P	docs/probes/scratch-2026-10-14/gym.poly|action|Member.Active.Enroll|add	err EDIT_NAME_COLLISION
 P	docs/probes/scratch-2026-10-14/insurance.poly|uses|uses:temporal|replace	ok identical=Y delta=0 sha=84DB5349D848
 P	docs/probes/scratch-2026-10-14/insurance.poly|uses|uses:temporal|remove	ok identical=- delta=-14 sha=054066901764

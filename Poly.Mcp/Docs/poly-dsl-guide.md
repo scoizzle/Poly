@@ -567,13 +567,12 @@ entity itself, or a cycle of required to-ones across entities (`a: B` with `b: A
 navigation breaks a cycle. An entity whose to-one navigations are all `optional` is a root
 structurally; storage and HTTP take root-ness from the aggregate, where an entity nothing
 owns is a root too. **Over HTTP, an entity with a required link has no `POST` route and no
-seed row**: a POST body carries scalars only, and its `Create` answers Required without the
-link. Create it through an action on its parent that uses `create in` (the parent's action
-route, e.g. `POST /api/patrons/{email}/checkout` for `CheckOut: action { create in loans {
-book: book } }`), or seed it in the app. An entity with a required link that no action
-creates is creatable only through an MCP create that passes the link, or in code. A `create
-in` into a required to-one of the source is **DMEFF001**: the link is already set when the
-action runs; declare it `optional` to fill it there.
+seed row**: a POST body carries scalars only. Declaring the link `optional` keeps the route. A
+parent action that uses `create in` creates one only when the parent has a collection of it
+(`CheckOut: action { create in loans { book: book } }` serves `POST
+/api/patrons/{email}/checkout`). An MCP create takes the link. A `create in` into a required
+to-one of the source is **DMEFF001**: the link is already set when the action runs; declare
+it `optional` to fill it there.
 
 **A required link is permanent in this release.** The host refuses to unlink a required
 to-one ("Cannot unlink '<rel>': the navigation is required; delete the instance and create a

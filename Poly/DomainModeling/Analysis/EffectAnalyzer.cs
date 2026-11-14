@@ -822,7 +822,7 @@ internal sealed partial class EffectAnalyzer : INodeAnalyzer {
                 createIn,
                 $"CreateIn into '{createIn.RelationshipName}' can never succeed: '{createIn.RelationshipName}' is a required to-one of " +
                 $"'{entity.Name}', so it is already set when the action runs. Declare it optional " +
-                $"('{createIn.RelationshipName}: {relationship.Target.TypeName} optional') to fill it here.",
+                $"('{createIn.RelationshipName}: {relationship.Target.TypeName}{(relationship.Inverse is { } via ? $" via {via}" : "")} optional') to fill it here.",
                 DomainModelDiagnosticCodes.EffectBinding);
             return;
         }

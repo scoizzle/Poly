@@ -345,6 +345,47 @@ public class OptionalRequirednessTests {
     }
 
     [Test]
+    public async Task CreateIn_IntoARequiredToOne_InTheInitialStagesEntry_IsRefused() {
+        // The entry of the first stage runs inside Create, after the required link is set: it can never succeed.
+        var errors = Diagnose("""
+            domain ReqNavCreateInEntry
+            EntryKid: entity {
+              Name: Text
+            }
+            EntryParent: entity {
+              Name: Text
+              kid: EntryKid
+              Open: stage {
+                entry { create in kid { Name: "x" } }
+              }
+            }
+            """);
+        var refused = errors.Where(d => d.Code == DomainModelDiagnosticCodes.EffectBinding).ToList();
+        await Assert.That(refused.Count).IsEqualTo(1);
+        await Assert.That(refused[0].Node).IsTypeOf<CreateEntityInRelationshipEffect>();
+        await Assert.That(refused[0].Message).Contains("'kid' is a required to-one of 'EntryParent'");
+    }
+
+    [Test]
+    public async Task CreateIn_IntoARequiredToOneDeclaredWithVia_IsRefused_AndTheSuggestionKeepsTheVia() {
+        var errors = Diagnose("""
+            domain ReqNavCreateInVia
+            ViaKid: entity {
+              Name: Text
+              owner: ViaParent via kid optional
+            }
+            ViaParent: entity {
+              Name: Text
+              kid: ViaKid via owner
+              AddKid: action { create in kid { Name: "x" } }
+            }
+            """);
+        var refused = errors.Where(d => d.Code == DomainModelDiagnosticCodes.EffectBinding).ToList();
+        await Assert.That(refused.Count).IsEqualTo(1);
+        await Assert.That(refused[0].Message).Contains("'kid: ViaKid via owner optional'");
+    }
+
+    [Test]
     public async Task CreateIn_IntoAnOptionalToOneOfTheSource_IsLegal() {
         var (_, analysis) = Evolve("""
             domain ReqNavCreateInOk

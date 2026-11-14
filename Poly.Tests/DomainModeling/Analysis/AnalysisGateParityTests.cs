@@ -784,4 +784,63 @@ public class AnalysisGateParityTests {
         await Assert.That(typed.Analysis).IsTrue().Because(typed.ToString());
         await Assert.That(typed.Holds).IsTrue().Because(typed.ToString());
     }
+
+    /// <summary>
+    /// T-10c: two optional dates, times or durations compare on every door, lifted: an absent operand makes every ordering
+    /// false, <c>==</c> is true only when both are absent, and <c>!=</c> is true otherwise. The simulator and the printed C#
+    /// answer the same for all four presence combinations.
+    /// </summary>
+    [Test]
+    [Arguments("OptDue", "OptDue2", "<")]
+    [Arguments("OptDue", "OptDue2", "==")]
+    [Arguments("OptDue", "OptDue2", "!=")]
+    [Arguments("OptStamp", "OptStamp2", ">=")]
+    [Arguments("OptStamp", "OptStamp2", "==")]
+    [Arguments("OptOpens", "OptOpens2", ">")]
+    [Arguments("OptOpens", "OptOpens2", "!=")]
+    [Arguments("OptLen", "OptLen2", "<=")]
+    [Arguments("OptLen", "OptLen2", "==")]
+    public async Task OptionalTemporal_AgainstAnotherOptional_BothHostsAgreeForEveryPresence(string left, string right, string op) {
+        var dsl = $$"""
+            domain T
+            uses temporal
+            Item: entity {
+              OptDue: Date optional
+              OptDue2: Date optional
+              OptStamp: DateTime optional
+              OptStamp2: DateTime optional
+              OptOpens: Time optional
+              OptOpens2: Time optional
+              OptLen: Duration optional
+              OptLen2: Duration optional
+              P: policy { {{left}} {{op}} {{right}} }
+            }
+            """;
+        object a = left switch {
+            "OptDue" => new DateOnly(2026, 1, 3), "OptStamp" => new DateTime(2026, 1, 3), "OptOpens" => new TimeOnly(8, 0), _ => TimeSpan.FromHours(2),
+        };
+        object b = left switch {
+            "OptDue" => new DateOnly(2026, 1, 4), "OptStamp" => new DateTime(2026, 1, 4), "OptOpens" => new TimeOnly(7, 0), _ => TimeSpan.FromHours(3),
+        };
+        foreach (var (l, r) in new[] { (false, false), (true, false), (false, true), (true, true) }) {
+            var outcomes = await ParityScenario.FromDsl(dsl, $"T10cOpt{left}{op.Length}{(op == "==" ? "E" : op == "!=" ? "N" : op == "<" || op == "<=" ? "L" : "G")}{l}{r}").AssertAgree(side => {
+                var props = new List<(string, object?)>();
+                if (l) props.Add((left, a));
+                if (r) props.Add((right, b));
+                side.Create("Item", [.. props]);
+                side.EvaluatePolicy("P");
+            });
+            var expected = (l, r) switch {
+                (false, false) => op == "==",
+                (true, true) => Compare(a, b, op),
+                _ => op == "!=",
+            };
+            await Assert.That(outcomes[1].State["P"]).IsEqualTo(expected.ToString()).Because($"{left} {op} {right} l={l} r={r}");
+        }
+    }
+
+    private static bool Compare(object a, object b, string op) {
+        var c = ((IComparable)a).CompareTo(b);
+        return op switch { "<" => c < 0, "<=" => c <= 0, ">" => c > 0, ">=" => c >= 0, "==" => c == 0, _ => c != 0 };
+    }
 }

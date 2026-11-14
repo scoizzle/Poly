@@ -507,4 +507,62 @@ public class TemporalFailClosedAnalysisTests {
             .Single().Expression;
         await Assert.That(expr).IsTypeOf<Today>();
     }
+
+    private static string OptionalTemporalDocument(string members) => $$"""
+        domain T
+        uses temporal
+        Item: entity {
+          Due: Date
+          OptDue: Date optional
+          OptDue2: Date optional
+          Stamp: DateTime
+          OptStamp: DateTime optional
+          Opens: Time
+          OptOpens: Time optional
+          Len: Duration
+          OptLen: Duration optional
+          N: Number
+          OptN: Number optional
+          {{members}}
+        }
+        """;
+
+    /// <summary>
+    /// T-10c (#484): an optional Date, DateTime, Time or Duration compared with a REQUIRED value passes analysis and the
+    /// simulator and <c>polyc</c> refuse it (the generated C# compiles); a guard (<c>X is not null and ...</c>) does not help.
+    /// </summary>
+    [Test]
+    [Arguments("OptDue > Due")]
+    [Arguments("Due <= OptDue")]
+    [Arguments("OptDue == Due")]
+    [Arguments("OptDue != Due")]
+    [Arguments("OptDue < Today")]
+    [Arguments("OptDue >= Due + 3 Days")]
+    [Arguments("OptStamp > Now")]
+    [Arguments("Stamp < OptStamp")]
+    [Arguments("OptOpens != Opens")]
+    [Arguments("OptOpens > Opens + 2 Hours")]
+    [Arguments("OptLen < Len")]
+    [Arguments("Len == OptLen")]
+    [Arguments("OptDue is not null and OptDue > Due")]
+    public async Task OptionalTemporal_ComparedWithARequiredValue_IsRefusedAtAnalysis(string condition) {
+        var result = Evolve(OptionalTemporalDocument($"P: policy {{ {condition} }}"), ExtensionCatalog.Core.Language);
+
+        await Assert.That(result.Succeeded).IsFalse().Because(condition);
+        await Assert.That(Errors(result).Any(e => e.Contains("#484", StringComparison.Ordinal) && e.Contains("optional", StringComparison.Ordinal)))
+            .IsTrue().Because(string.Join(" | ", Errors(result)));
+    }
+
+    /// <summary>The shapes that agree on every door stay accepted: against another optional, against null, and a Number.</summary>
+    [Test]
+    [Arguments("OptDue < OptDue2")]
+    [Arguments("OptDue == OptDue2")]
+    [Arguments("OptDue == null")]
+    [Arguments("OptStamp != null")]
+    [Arguments("OptN > N")]
+    public async Task OptionalTemporal_ComparedWithAnotherOptionalNullOrANumber_StaysAccepted(string condition) {
+        var result = Evolve(OptionalTemporalDocument($"P: policy {{ {condition} }}"), ExtensionCatalog.Core.Language);
+
+        await Assert.That(Errors(result)).IsEmpty().Because(condition);
+    }
 }

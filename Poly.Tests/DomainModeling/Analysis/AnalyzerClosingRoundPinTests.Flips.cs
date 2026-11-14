@@ -1608,6 +1608,23 @@ public partial class AnalyzerClosingRoundPinTests {
     ];
 
     /// <summary>
+    /// T-10c (#484): a required date difference (a Duration) compared with the census's OPTIONAL <c>T_Duration</c> target is
+    /// refused: the simulator and <c>polyc</c> refuse an optional beside a required value. Applied last.
+    /// </summary>
+    internal static readonly (string Grid, string Cell, string Before, string After, string Rule)[] FlipsT10c = [
+        ("Dead", "Stamp - Stamp (DateTime) | unused policy", "ok", "DMSEM003", "T-10c"),
+        ("Dead", "Stamp - Stamp (DateTime) | action require", "ok", "DMSEM003", "T-10c"),
+        ("Dead", "Stamp - Stamp (DateTime) | stage require", "ok", "DMSEM003", "T-10c"),
+        ("Residual", "Stamp - Stamp (DateTime) | form ==", "ok", "DMSEM003", "T-10c"),
+        ("Residual", "Stamp - Stamp (DateTime) | == form", "ok", "DMSEM003", "T-10c"),
+        ("Dead", "Day - Day (Date) | unused policy", "ok", "DMSEM003", "T-10c"),
+        ("Dead", "Day - Day (Date) | action require", "ok", "DMSEM003", "T-10c"),
+        ("Dead", "Day - Day (Date) | stage require", "ok", "DMSEM003", "T-10c"),
+        ("Residual", "Day - Day (Date) | form ==", "ok", "DMSEM003", "T-10c"),
+        ("Residual", "Day - Day (Date) | == form", "ok", "DMSEM003", "T-10c")
+    ];
+
+    /// <summary>
     /// <paramref name="master"/> with every <see cref="FlipsA"/> row, then every <see cref="FlipsB"/> row, of <paramref name="grid"/> applied. A row whose
     /// cell is missing, or whose <c>Before</c> is not the master verdict, throws: the table must describe master.
     /// A line is <c>cell = verdict</c>; the verdict follows the last <c> = </c>.
@@ -1617,7 +1634,7 @@ public partial class AnalyzerClosingRoundPinTests {
         var index = new Dictionary<string, int>(StringComparer.Ordinal);
         for (var i = 1; i < lines.Length; i++)
             index.Add(CellOf(lines[i]), i);
-        foreach (var flip in FlipsA.Concat(FlipsB).Concat(FlipsA4).Concat(FlipsDead).Concat(FlipsDefault).Concat(FlipsC3).Concat(FlipsT06).Concat(FlipsT10a).Where(f => f.Grid == grid)) {
+        foreach (var flip in FlipsA.Concat(FlipsB).Concat(FlipsA4).Concat(FlipsDead).Concat(FlipsDefault).Concat(FlipsC3).Concat(FlipsT06).Concat(FlipsT10a).Concat(FlipsT10c).Where(f => f.Grid == grid)) {
             if (!index.TryGetValue(flip.Cell, out var at))
                 throw new InvalidOperationException($"Flip row '{grid}/{flip.Cell}' names no cell of the grid.");
             var verdict = VerdictOf(lines[at]);

@@ -22,10 +22,38 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
     private void StampComparisonSites(
         AnalysisContext context, Comparison cmp,
         Dictionary<string, string> props, Dictionary<string, string>? parameters, Dictionary<string, EnumType> enumTypes) {
+        CheckOptionalTemporalComparison(context, cmp, props, parameters, enumTypes);
         if (IsLeaf(cmp.Left))
             StampOperand(context, cmp.Left, cmp.Right, props, parameters, enumTypes);
         if (IsLeaf(cmp.Right))
             StampOperand(context, cmp.Right, cmp.Left, props, parameters, enumTypes);
+    }
+
+    /// <summary>
+    /// T-10c (#484): an optional Date, DateTime, Time or Duration compared with a REQUIRED operand passes the type rules and
+    /// the simulator and <c>polyc</c> refuse it, so analysis does (probed on every operator, with the optional absent and
+    /// present, and inside an <c>is not null</c> guard, which does not help). Two optionals compare on every door and stay;
+    /// <c>== null</c> is not a temporal family pair. A bare duration literal beside an optional Duration is the pack's own
+    /// refusal (<see cref="CheckSite.OptionalOperand"/>).
+    /// </summary>
+    private void CheckOptionalTemporalComparison(
+        AnalysisContext context, Comparison cmp,
+        Dictionary<string, string> props, Dictionary<string, string>? parameters, Dictionary<string, EnumType> enumTypes) {
+        var left = InferType(context, cmp.Left, props, parameters, enumTypes);
+        var right = InferType(context, cmp.Right, props, parameters, enumTypes);
+        if (Family(left) is not (TypeFamily.Date or TypeFamily.Time or TypeFamily.Duration) || Family(left) != Family(right))
+            return;
+        var leftOptional = OptionalOperand(context, cmp.Left, left, props, parameters);
+        var rightOptional = OptionalOperand(context, cmp.Right, right, props, parameters);
+        if (leftOptional == rightOptional)
+            return;
+        var (optional, other) = leftOptional ? (cmp.Left, cmp.Right) : (cmp.Right, cmp.Left);
+        // A leaf that is not a read is a duration literal: the pack reports that one.
+        if (Family(left) is TypeFamily.Duration && IsLeaf(other) && other is not PropertyAccess)
+            return;
+        Report(context, cmp,
+            $"the optional {Describe(leftOptional ? left : right)} '{PrintedText(context, optional)}' cannot be compared with a required value yet (#484): " +
+            "the simulator and polyc refuse it, and a guard does not help; compare it with another optional, or with null");
     }
 
     /// <summary>An operand compared with an optional property is stamped <see cref="CheckSite.OptionalOperand"/> (#484: no door compares an optional).</summary>

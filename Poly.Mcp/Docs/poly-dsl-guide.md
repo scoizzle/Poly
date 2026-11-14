@@ -1399,7 +1399,7 @@ Product sessions load Temporal implicitly at Load. A raw `SessionBuilder` that n
 `36 Hours`; a date plus or minus a Duration *value* (`Due + Len`: not supported yet, F-11, #550); a count offset whose left
 is not a date property or parameter (`Today + 1`, `(Due + 1) + n`, `part Due + n`: write the offset as `Today + 1 Days`);
 `default(Now + 7 Days)` (a date operation has no default lowering: use `default(Now)` or `default(Today)`); and a bare
-duration anywhere but an assign to a `Duration` property, a comparison with a `Duration`, or the `default(...)` of one. A bare duration compared with an `optional` Duration property is rejected (#484), and so is one too long for a `TimeSpan`.
+duration anywhere but an assign to a `Duration` property, a comparison with a `Duration`, or the `default(...)` of one. A bare duration compared with an `optional` Duration property is rejected (#484), and so is one too long for a `TimeSpan`. An `optional` Date, DateTime, Time or Duration compared with a required value (`OptDue > Due`, `OptStamp > Now`, `OptDue < Today`) is rejected (#484), guarded or not; compare it with another optional, or with `null`.
 
 **Create-time defaults, assign-to-clock, and policy clock reads are shipped.** `default(Today)` /
 `default(Now)` and `assign Prop to Today` / `assign Prop to Now` evaluate at instance create /

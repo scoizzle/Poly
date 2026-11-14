@@ -33,7 +33,7 @@ public sealed class TokenLifetimeTests {
         public entity Order key(Code) {
           Code: Text pattern("^[A-Z]{3}$") label("code")
           Total: Number range(-5, 100) default(1)
-          Due: Date optional
+          Due: Date
           State: Status
           Lines: many Line via order
           Late: policy { Today - 3 Days > Due and count Lines > 1 }

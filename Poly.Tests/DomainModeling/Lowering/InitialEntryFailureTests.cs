@@ -16,13 +16,10 @@ namespace Poly.Tests.DomainModeling.Lowering;
 /// <c>Create</c> of the <c>Kid</c> and the holder's <c>Make</c> action (a <c>create in</c>).
 /// </summary>
 /// <remarks>
-/// Owner ruling 2026-11-13, "any failure is a rollback": a failed create leaves nothing behind. Inside an action the
-/// action scope restores everything on the generated C#, so those rows are plain <see cref="AtomicityParityTests"/>
-/// rows. A bare generated <c>Create</c> opens no scope yet, so a failing entry that already changed ANOTHER entity
-/// (a callee's write, a child attached to an existing peer) leaves that change on the generated C# while the
-/// simulator's executor transaction restores it. Those rows are marked "UntilL04b": the marker is the explicit
-/// divergence the lock allows, tied to L-04b (a bare <c>Create</c> opens a root scope), which turns them into plain
-/// parity rows and deletes the marker.
+/// Owner ruling 2026-11-13, "any failure is a rollback": a failed create leaves nothing behind, whichever door it was
+/// called through. Inside an action the action scope restores everything; a bare generated <c>Create</c> opens a root
+/// scope itself (L-04b), so a failing entry that already changed ANOTHER entity is undone on the generated C# exactly
+/// as the simulator's executor transaction undoes it, and every row here is a plain parity row.
 /// </remarks>
 public class InitialEntryFailureTests {
     private static async Task AssertFailedWithNothingLeft(IReadOnlyList<ParityOutcome> simulate, IReadOnlyList<ParityOutcome> printed) {
@@ -95,29 +92,19 @@ public class InitialEntryFailureTests {
         }
     }
 
-    // PINNED, removed by L-04b (a bare generated `Create` opens a root action scope): the callee's wrapper opened and
-    // committed its own scope, and the bare factory has none to roll back, so after the failed create the holder keeps
-    // Total = 1 on the generated C#. The simulator's executor transaction restores it. This is the one divergence the
-    // owner's ruling allows L-04a, and the graph is the only thing that differs.
+    // The callee's wrapper commits only its own nested scope; the bare factory's root scope restores the holder.
     [Test]
-    public async Task BareCreate_WhenTheEntryChangesTheHolderThenFails_LeavesTheHolderChangedOnPrintedUntilL04b() {
+    public async Task BareCreate_WhenTheEntryChangesTheHolderThenFails_RestoresTheHolderOnBothHosts() {
         var (simulate, printed) = RunBare(D.Dsl(InvokeOther), "InitialEntryInvokeOtherBare", side => {
             var holder = side.Create("Holder");
             side.Create("Kid", ("holder", holder));
         });
 
-        var differences = ParityScenario.DifferenceSet(simulate, printed);
-        await Assert.That(differences.Select(d => (d.Index, d.Field)).ToArray())
-            .IsEquivalentTo(new[] { (1, "graph") }).Because("only the graph differs, and only at the failing create");
+        await AssertFailedWithNothingLeft(simulate, printed);
         foreach (var outcome in new[] { simulate[^1], printed[^1] }) {
-            await Assert.That(outcome.Success).IsFalse();
-            await Assert.That(outcome.ExceptionType).IsNull();
             await Assert.That(outcome.FailureKind).IsEqualTo("Range");
+            await Assert.That(outcome.GraphAfter!).DoesNotContain("Total=");
         }
-        await Assert.That(simulate[^1].GraphAfter == simulate[^1].GraphBefore).IsTrue().Because("the simulator's transaction restored the holder");
-        await Assert.That(printed[^1].GraphAfter == printed[^1].GraphBefore).IsFalse()
-            .Because("L-04b: the generated C# keeps the callee's write until a bare Create opens a root scope");
-        await Assert.That(printed[^1].GraphAfter!).Contains("Total=1");
     }
 
     // ── create a child ────────────────────────────────────────────────
@@ -141,24 +128,15 @@ public class InitialEntryFailureTests {
         }
     }
 
-    // PINNED, removed by L-04b: the leaf stays attached to the holder on the generated C#.
     [Test]
-    public async Task BareCreate_WhenTheEntryCreatesAChildOfThePeerThenFails_LeavesTheChildInThePeerOnPrintedUntilL04b() {
+    public async Task BareCreate_WhenTheEntryCreatesAChildOfThePeerThenFails_TakesTheChildOutOfThePeerOnBothHosts() {
         var (simulate, printed) = RunBare(D.Dsl(CreateChild), "InitialEntryCreateChildBare", side => {
             var holder = side.Create("Holder");
             side.Create("Kid", ("holder", holder));
         });
 
-        var differences = ParityScenario.DifferenceSet(simulate, printed);
-        await Assert.That(differences.Select(d => (d.Index, d.Field)).ToArray())
-            .IsEquivalentTo(new[] { (1, "graph") });
-        foreach (var outcome in new[] { simulate[^1], printed[^1] }) {
-            await Assert.That(outcome.Success).IsFalse();
-            await Assert.That(outcome.ExceptionType).IsNull();
-        }
-        await Assert.That(simulate[^1].GraphAfter == simulate[^1].GraphBefore).IsTrue();
-        await Assert.That(printed[^1].GraphAfter!).Contains(GraphState.Orphan)
-            .Because("L-04b: the leaf the failed create attached to the holder is an orphan until a bare Create opens a root scope");
+        await AssertFailedWithNothingLeft(simulate, printed);
+        await Assert.That(printed[^1].GraphAfter!).DoesNotContain(GraphState.Orphan);
     }
 
     // A failing child create inside the entry is returned too (a child's own constraint, not the Kid's).

@@ -143,6 +143,29 @@ internal class Loan : Poly.Runtime.IActionScoped
     }
     internal static DomainResult<Loan> Create(Book? book = null, Patron? patron = null, long amount = 0L)
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = Loan.__BodyOfCreate(book, patron, amount);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private static DomainResult<Loan> __BodyOfCreate(Book? book, Patron? patron, long amount)
+    {
         if (amount < 0L)
         {
             return DomainResult<Loan>.Failure(Poly.Runtime.DomainFailure.Range("'Amount' must be >= 0.", "Loan.Amount"));

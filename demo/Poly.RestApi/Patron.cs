@@ -51,6 +51,30 @@ internal class Patron : Poly.Runtime.IActionScoped
     public PatronStage CurrentStage { get; private set; }
     internal DomainResult<Loan> CreateLoans(Book? book = null, string? status = null, DateTime? dueDate = null, DateTime? returnedAt = null, long? timesRenewed = null)
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            Poly.Runtime.ActionScope.Touch(this);
+            var __result = this.__BodyOfCreateLoans(book, status, dueDate, returnedAt, timesRenewed);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult<Loan> __BodyOfCreateLoans(Book? book, string? status, DateTime? dueDate, DateTime? returnedAt, long? timesRenewed)
+    {
         var loanResult = Loan.Create(book, this, status, dueDate, returnedAt, timesRenewed);
         if (!loanResult.IsSuccess)
         {
@@ -275,6 +299,29 @@ internal class Patron : Poly.Runtime.IActionScoped
         return DomainResult.Success();
     }
     internal static DomainResult<Patron> Create(string name, string email, Poly.Runtime.IStoragePort db, long maxItems = 0L, IEnumerable<Loan>? loans = null, IEnumerable<Fine>? fines = null, DateOnly? memberSince = null, PatronStatus status = PatronStatus.Active, long currentBorrowCount = 0L, long outstandingFines = 0L)
+    {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = Patron.__BodyOfCreate(name, email, maxItems, loans, fines, memberSince, status, currentBorrowCount, outstandingFines, db);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private static DomainResult<Patron> __BodyOfCreate(string name, string email, long maxItems, IEnumerable<Loan>? loans, IEnumerable<Fine>? fines, DateOnly? memberSince, PatronStatus status, long currentBorrowCount, long outstandingFines, Poly.Runtime.IStoragePort db)
     {
         if (string.IsNullOrEmpty(name))
         {

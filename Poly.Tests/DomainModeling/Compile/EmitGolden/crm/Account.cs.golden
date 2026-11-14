@@ -56,6 +56,30 @@ internal class Account : Poly.Runtime.IActionScoped
     public AccountStage CurrentStage { get; private set; }
     internal DomainResult<Site> CreateHq(string city, string region)
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            Poly.Runtime.ActionScope.Touch(this);
+            var __result = this.__BodyOfCreateHq(city, region);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult<Site> __BodyOfCreateHq(string city, string region)
+    {
         var siteResult = Site.Create(city, region);
         if (!siteResult.IsSuccess)
         {
@@ -66,6 +90,30 @@ internal class Account : Poly.Runtime.IActionScoped
         return DomainResult<Site>.Success(site);
     }
     internal DomainResult<Contact> CreateContacts(string name, string email, Poly.Runtime.IStoragePort db)
+    {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            Poly.Runtime.ActionScope.Touch(this);
+            var __result = this.__BodyOfCreateContacts(name, email, db);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult<Contact> __BodyOfCreateContacts(string name, string email, Poly.Runtime.IStoragePort db)
     {
         var contactResult = Contact.Create(name, email, db, this);
         if (!contactResult.IsSuccess)
@@ -81,6 +129,30 @@ internal class Account : Poly.Runtime.IActionScoped
         this._contacts.Add(child);
     }
     internal DomainResult<Opportunity> CreateOpportunities(string title, decimal amount, Contact? contact = null, DateOnly? closeBy = null)
+    {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            Poly.Runtime.ActionScope.Touch(this);
+            var __result = this.__BodyOfCreateOpportunities(title, amount, contact, closeBy);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult<Opportunity> __BodyOfCreateOpportunities(string title, decimal amount, Contact? contact, DateOnly? closeBy)
     {
         var opportunityResult = Opportunity.Create(title, amount, this, contact, new List<Activity>(), new List<Line>(), new List<Quote>(), closeBy);
         if (!opportunityResult.IsSuccess)
@@ -99,6 +171,30 @@ internal class Account : Poly.Runtime.IActionScoped
         child.RegisterAccountOpportunitiesLostSubscriber(this);
     }
     internal DomainResult<Ticket> CreateTickets(string subject)
+    {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            Poly.Runtime.ActionScope.Touch(this);
+            var __result = this.__BodyOfCreateTickets(subject);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult<Ticket> __BodyOfCreateTickets(string subject)
     {
         var ticketResult = Ticket.Create(subject, this);
         if (!ticketResult.IsSuccess)
@@ -407,6 +503,29 @@ internal class Account : Poly.Runtime.IActionScoped
         return DomainResult.Success();
     }
     internal static DomainResult<Account> Create(string name, Industry industry, Account? parent = null, Site? hq = null, IEnumerable<Contact>? contacts = null, IEnumerable<Opportunity>? opportunities = null, IEnumerable<Ticket>? tickets = null, long wonCount = 0L, decimal openPipeline = 0m, long closedTickets = 0L)
+    {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = Account.__BodyOfCreate(name, industry, parent, hq, contacts, opportunities, tickets, wonCount, openPipeline, closedTickets);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private static DomainResult<Account> __BodyOfCreate(string name, Industry industry, Account? parent, Site? hq, IEnumerable<Contact>? contacts, IEnumerable<Opportunity>? opportunities, IEnumerable<Ticket>? tickets, long wonCount, decimal openPipeline, long closedTickets)
     {
         if (string.IsNullOrEmpty(name))
         {

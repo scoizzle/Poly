@@ -57,6 +57,29 @@ internal class Doctor : Poly.Runtime.IActionScoped
     }
     internal static DomainResult<Doctor> Create(string name, string licenseNo, Poly.Runtime.IStoragePort db, Schedule? schedule = null)
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = Doctor.__BodyOfCreate(name, licenseNo, schedule, db);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private static DomainResult<Doctor> __BodyOfCreate(string name, string licenseNo, Schedule? schedule, Poly.Runtime.IStoragePort db)
+    {
         if (string.IsNullOrEmpty(name))
         {
             return DomainResult<Doctor>.Failure(Poly.Runtime.DomainFailure.Required("'Name' is required.", "Doctor.Name"));

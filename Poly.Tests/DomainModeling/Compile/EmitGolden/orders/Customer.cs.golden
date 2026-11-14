@@ -112,6 +112,29 @@ internal class Customer : Poly.Runtime.IActionScoped
     }
     internal static DomainResult<Customer> Create(string email, string name, Poly.Runtime.IStoragePort db, IEnumerable<Order>? orders = null, string tier = "standard")
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = Customer.__BodyOfCreate(email, name, orders, tier, db);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private static DomainResult<Customer> __BodyOfCreate(string email, string name, IEnumerable<Order>? orders, string tier, Poly.Runtime.IStoragePort db)
+    {
         if (string.IsNullOrEmpty(email))
         {
             return DomainResult<Customer>.Failure(Poly.Runtime.DomainFailure.Required("'Email' is required.", "Customer.Email"));

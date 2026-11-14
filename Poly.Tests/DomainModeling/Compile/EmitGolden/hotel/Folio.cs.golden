@@ -187,6 +187,29 @@ internal class Folio : Poly.Runtime.IActionScoped
     public bool IsSettled() => this.Balance == 0L;
     internal static DomainResult<Folio> Create(Reservation? reservation = null, decimal balance = 0m)
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = Folio.__BodyOfCreate(reservation, balance);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private static DomainResult<Folio> __BodyOfCreate(Reservation? reservation, decimal balance)
+    {
         if (balance < 0m)
         {
             return DomainResult<Folio>.Failure(Poly.Runtime.DomainFailure.Range("'Balance' must be >= 0.", "Folio.Balance"));

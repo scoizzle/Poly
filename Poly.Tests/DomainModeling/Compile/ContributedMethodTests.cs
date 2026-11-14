@@ -291,7 +291,7 @@ public class ContributedMethodTests {
         var (domain, analysis, session) = Compile(PolyWithDefaults, new ProbeLibrary());
         var module = session.Lower(domain, analysis);
 
-        var create = Method(module, "Widget", "Create");
+        var create = Wrapper(module, "Widget", "Create");
         var parameters = (create.Parameters ?? []).ToList();
         var dbIndex = parameters.FindIndex(p => p.Name == "db");
         var firstOptional = parameters.FindIndex(p => p.DefaultValue is not null);
@@ -299,8 +299,9 @@ public class ContributedMethodTests {
         await Assert.That(firstOptional).IsGreaterThan(dbIndex);
         await Assert.That(parameters[dbIndex].DefaultValue).IsNull();
 
-        var newAt = TopIndex(create, n => n is New);
-        var recordAt = TopIndex(create, n => n is Invoke i && i.Delegate is Member { MemberName: "Record" });
+        var body = Method(module, "Widget", "Create");
+        var newAt = TopIndex(body, n => n is New);
+        var recordAt = TopIndex(body, n => n is Invoke i && i.Delegate is Member { MemberName: "Record" });
         await Assert.That(recordAt).IsGreaterThan(newAt);
 
         var createWidgets = Method(module, "Lot", "CreateWidgets");
@@ -417,7 +418,20 @@ public class ContributedMethodTests {
                 + "\n" + source);
     }
 
+    /// <summary>
+    /// A method by name. The real exporter prints <c>Create</c> and <c>Create{Nav}</c> as root-scope wrappers around a private
+    /// <c>__BodyOf…</c> partner (L-04b), and the library's guard and record sit in that body: asking for one of them reads it.
+    /// <see cref="Wrapper"/> reads the public signature.
+    /// </summary>
     private static MethodDefinitionNode Method(
+        IReadOnlyList<TypeDefinitionNode> module, string type, string name) {
+        var methods = module.First(t => t.Name == type).Methods!;
+        return (name.StartsWith("Create", StringComparison.Ordinal)
+                ? methods.FirstOrDefault(m => m.Name == "__BodyOf" + name) : null)
+            ?? methods.First(m => m.Name == name);
+    }
+
+    private static MethodDefinitionNode Wrapper(
         IReadOnlyList<TypeDefinitionNode> module, string type, string name) =>
         module.First(t => t.Name == type).Methods!.First(m => m.Name == name);
 
@@ -604,7 +618,7 @@ public class ContributedMethodTests {
         public string Id => "probe-named-create";
 
         public void Register(SessionBuilder builder) =>
-            builder.AddConstraintCompiler(new UniqueCompiler(Id, new ConstraintAnchor.Named("Create"), requireStorage: false));
+            builder.AddConstraintCompiler(new UniqueCompiler(Id, new ConstraintAnchor.Named("__BodyOfCreate"), requireStorage: false));
     }
 
     private sealed class StorageRequiringLibrary : IDomainLibrary {

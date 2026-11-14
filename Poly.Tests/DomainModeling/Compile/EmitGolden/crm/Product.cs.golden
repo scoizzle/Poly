@@ -20,6 +20,29 @@ internal class Product : Poly.Runtime.IActionScoped
     public decimal ListPrice { get; private set; }
     internal static DomainResult<Product> Create(string sku, string name, decimal listPrice, Poly.Runtime.IStoragePort db)
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = Product.__BodyOfCreate(sku, name, listPrice, db);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private static DomainResult<Product> __BodyOfCreate(string sku, string name, decimal listPrice, Poly.Runtime.IStoragePort db)
+    {
         if (string.IsNullOrEmpty(sku))
         {
             return DomainResult<Product>.Failure(Poly.Runtime.DomainFailure.Required("'Sku' is required.", "Product.Sku"));

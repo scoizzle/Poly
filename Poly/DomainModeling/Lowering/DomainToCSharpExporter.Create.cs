@@ -268,15 +268,15 @@ public sealed partial class DomainToCSharpExporter {
                     "Success"),
                 local)));
 
-        methods.Add(new MethodDefinitionNode(
-            methodName,
+        // Scoped like an action (L-04b): a bare call whose child handler fails after the child joined this collection
+        // rolls the child back out.
+        AddScopedActionMethods(methods, methodName,
             new NamedTypeReference("DomainResult", TypeArguments: [targetType]),
-            Parameters: methodParams.Count > 0 ? methodParams : null,
-            Body: new Block(bodyNodes, notifyResult is null ? [localResult, local] : [localResult, local, notifyResult]),
-            AccessModifier: DomainAccess.Demote(
+            methodParams,
+            new Block(bodyNodes, notifyResult is null ? [localResult, local] : [localResult, local, notifyResult]),
+            DomainAccess.Demote(
                 AccessModifier.Public, domain,
-                [.. methodParams.Select(p => p.TypeReference), targetType])
-        ));
+                [.. methodParams.Select(p => p.TypeReference), targetType]));
     }
 
     /// <summary>
@@ -600,16 +600,14 @@ public sealed partial class DomainToCSharpExporter {
                 new Member(createResultType, "Success"),
                 [createdLocal])));
 
-        methods.Add(new MethodDefinitionNode(
-            "Create",
-            createResultType,
-            Parameters: ctorParams,
-            Body: new Block(createSuccessNodes, createLocals),
-            IsStatic: true,
-            AccessModifier: DomainAccess.Demote(
+        // A bare `Create` (no action running) opens a root scope, so a failure after another entity changed rolls
+        // everything back (L-04b); inside an action it joins that action's scope.
+        AddScopedActionMethods(methods, "Create", createResultType, ctorParams,
+            new Block(createSuccessNodes, createLocals),
+            DomainAccess.Demote(
                 AccessModifier.Public, domain,
-                [.. ctorParams.Select(p => p.TypeReference), createResultType])
-        ));
+                [.. ctorParams.Select(p => p.TypeReference), createResultType]),
+            staticReceiver: new NamedTypeReference(entity.Name));
 
         return ctors;
     }

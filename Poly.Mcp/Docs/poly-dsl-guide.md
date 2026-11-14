@@ -421,6 +421,18 @@ Token: entity {
 }
 ```
 
+**`null` and optional values.** `null` is written only into an `optional` property: `assign Note to null`, a
+`create` initializer, `default(null)`, or a `match` arm (`assign Q to match { Big -> null, else -> 7 }` stores
+absent or 7). Into a required property, an action or function parameter, or a function's return it is refused at
+the `null` (`DMSEM003`; `DMFUN003` for a call argument, `DMFUN006` for a return). An `optional` property's constraints
+(an enum's members, `equals`, `range`, `length`, `pattern`) apply to a present value only. `==` and `!=` (`is`, `is not`) compare `null` with an optional property, a related
+read (`part Qty`, `line Qty`), arithmetic over an optional property, a `match` with a `null` arm, or a Text, Uuid,
+entity or Binary value; a required Number, Boolean, Date, Time, Duration or enum property is never null, so
+`Qty == null` is `DMSEM003`, and an ordering against `null` (`Q < null`) is always `DMSEM003`. An optional Boolean
+in a condition (`if`, an `and`/`or`/`not` operand, a `for … where`, a `match` arm condition, an
+`any`/`all`/`none`/`count … where` body, a policy) means `X is true`: absent is false. So `not Flag` and
+`Flag != true` are true when Flag is absent, and `Flag is false` is false when it is absent.
+
 A property without `optional` rejects a missing or empty Text value when it is written.
 The word `required` is not a constraint. Writing it is a positioned parse error:
 a property is required unless it is marked `optional`.
@@ -1192,10 +1204,9 @@ that failure (kind, message and guard unchanged, no segment added by the entry) 
 the new instance is in no collection and no subscription registry. The path is the
 callee's own (`Kid.Fails` from a bare `Create`, `Holder.Make.Kid.Fails` from the
 holder's `create in`), and an action that ran the `create in` is rolled back.
-A bare generated `Create` (called with no action running) whose entry fails *after changing another
-entity* (a succeeded `invoke` of an action on a linked entity, a `create` attached to an existing
-peer) is not rolled back until L-04b: the generated C# keeps that change, while the interpreter
-restores it.
+A bare generated `Create` (called with no action running) whose entry fails after changing another
+entity (a succeeded `invoke` of an action on a linked entity, a `create` attached to an existing
+peer) rolls that change back too, as the interpreter does.
 
 ## 8. Policies
 
@@ -1243,11 +1254,12 @@ Status is "active"
 ```
 
 Ordering (`<`, `>`, `<=`, `>=`) is defined for `Number`, `Decimal`, `Date`, `Time`, `DateTime`, `Duration` and `Uuid`
-(an optional operand and a `match` result of those types included). Ordering `Text`, `Boolean`, an enum, an entity,
+(an optional operand and a `match` result of those types included; an absent optional operand orders false). Ordering `Text`, `Boolean`, an enum, an entity,
 a value type or `Binary` is DMSEM003 (`ordering is not defined for 'Text'`); compare with `==` or `!=` instead.
 A value type has value equality, so `==` and `!=` are allowed on it. Known wrong (row X-06): the generated C# compares
 two value types by value, but the simulator compares the JSON text of an argument payload, so two equal values written
-with their fields in another order, or `2` against `2.0` for a `Decimal` field, compare unequal there.
+with their fields in another order, or `2` against `2.0` for a `Decimal` field, compare unequal there; so do equal
+values a .NET caller passes as dictionaries to `ModuleInstanceExecutor.Invoke`.
 
 Integer division truncates: `7 / 2` is 3. Storing an integral division into a `Decimal` (`assign Total to 7 / 2`,
 `assign Total to N / 2 + 1`) is the warning DMNUM001, because the quotient is cut before it widens. A literal with a

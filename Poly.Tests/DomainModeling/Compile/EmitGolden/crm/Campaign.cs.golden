@@ -31,6 +31,30 @@ internal class Campaign : Poly.Runtime.IActionScoped
     public CampaignStage CurrentStage { get; private set; }
     internal DomainResult<CampaignMember> CreateMembers(Contact? contact = null)
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            Poly.Runtime.ActionScope.Touch(this);
+            var __result = this.__BodyOfCreateMembers(contact);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult<CampaignMember> __BodyOfCreateMembers(Contact? contact)
+    {
         var campaignMemberResult = CampaignMember.Create(contact, this);
         if (!campaignMemberResult.IsSuccess)
         {
@@ -116,6 +140,29 @@ internal class Campaign : Poly.Runtime.IActionScoped
         return DomainResult.Success();
     }
     internal static DomainResult<Campaign> Create(string name, IEnumerable<CampaignMember>? members = null)
+    {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = Campaign.__BodyOfCreate(name, members);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private static DomainResult<Campaign> __BodyOfCreate(string name, IEnumerable<CampaignMember>? members)
     {
         if (string.IsNullOrEmpty(name))
         {

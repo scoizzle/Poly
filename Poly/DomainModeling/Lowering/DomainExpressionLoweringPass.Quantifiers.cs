@@ -138,5 +138,5 @@ public sealed partial class DomainExpressionLoweringPass {
     /// </summary>
     private LoweredExpression LowerQuantifierBody(
         string relationshipName, DomainExpression body, Variable item) =>
-        LowerAgainstEntity(ResolveRelationshipTarget(relationshipName), body, item);
+        LowerAgainstEntity(ResolveRelationshipTarget(relationshipName), body, item, condition: true);
 }

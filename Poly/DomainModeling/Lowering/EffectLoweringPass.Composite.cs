@@ -30,7 +30,7 @@ public sealed partial class EffectLoweringPass {
         return new Block(nodes, variables);
     }
     protected override Node? Conditional(ConditionalEffect c) {
-        var condition = _expressionPass.LowerExpression(c.Condition, Subject);
+        var condition = _expressionPass.LowerCondition(c.Condition, Subject);
         var canTransition = CanChangeStage(c.ThenEffects)
             || (c.ElseEffects is { Count: > 0 } && CanChangeStage(c.ElseEffects));
         var entryStage = _sourceStageName;

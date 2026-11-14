@@ -73,7 +73,7 @@ public class LoweredModuleShapeTests {
     public async Task LoweredModule_CorpusHoldsTheEntryMethodItsCallAndThePropagation() {
         var types = Corpus().SelectMany(c => c.Types).ToList();
         var entryMethods = types.SelectMany(t => t.Methods ?? []).Where(m => m.Name == "__EnterInitialStage").ToList();
-        var creates = types.SelectMany(t => t.Methods ?? []).Where(m => m.Name == "Create" && m.IsStatic && m.Body is not null).ToList();
+        var creates = types.SelectMany(t => t.Methods ?? []).Where(m => m.Name == "__BodyOfCreate" && m.IsStatic && m.Body is not null).ToList();
         var callsEntry = creates.Count(m => ActionScopeTouchShapeTests.PreOrder(m.Body!).Any(n =>
             n is Invoke { Delegate: Member { MemberName: "__EnterInitialStage" } }));
         var propagates = creates.Count(m => ActionScopeTouchShapeTests.PreOrder(m.Body!).Any(n =>

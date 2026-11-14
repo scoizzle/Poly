@@ -39,6 +39,30 @@ internal class Property : Poly.Runtime.IActionScoped
     public PropertyStage CurrentStage { get; private set; }
     internal DomainResult<Hall> CreateHalls(string name, long capacity, decimal dayRate, bool occupied = false, bool offline = false, long busySections = 0L)
     {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            Poly.Runtime.ActionScope.Touch(this);
+            var __result = this.__BodyOfCreateHalls(name, capacity, dayRate, occupied, offline, busySections);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private DomainResult<Hall> __BodyOfCreateHalls(string name, long capacity, decimal dayRate, bool occupied, bool offline, long busySections)
+    {
         var hallResult = Hall.Create(name, capacity, dayRate, this, new List<Section>(), occupied, offline, busySections);
         if (!hallResult.IsSuccess)
         {
@@ -163,6 +187,29 @@ internal class Property : Poly.Runtime.IActionScoped
     }
     public bool HasHalls() => this.Halls.Count > 0;
     internal static DomainResult<Property> Create(string name, string city, IEnumerable<Hall>? halls = null, IEnumerable<Room>? rooms = null)
+    {
+        var __scope = (Poly.Runtime.ActionScopeToken)Poly.Runtime.ActionScope.Begin(null);
+        var __done = false;
+        try
+        {
+            var __result = Property.__BodyOfCreate(name, city, halls, rooms);
+            if (!__result.IsSuccess)
+            {
+                return __result;
+            }
+            Poly.Runtime.ActionScope.Commit(__scope);
+            __done = true;
+            return __result;
+        }
+        finally
+        {
+            if (!__done)
+            {
+                Poly.Runtime.ActionScope.Rollback(__scope);
+            }
+        }
+    }
+    private static DomainResult<Property> __BodyOfCreate(string name, string city, IEnumerable<Hall>? halls, IEnumerable<Room>? rooms)
     {
         if (string.IsNullOrEmpty(name))
         {

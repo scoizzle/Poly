@@ -136,7 +136,7 @@ public class CalleeFrameIsolationTests {
     [Arguments("match { Qty > 1 -> 1.5, else -> 2 } * 2", 0L, "4")]
     public async Task DecimalMatch_NonLiteralOrTargetlessArm_AgreesOnBothHosts(string rhs, long qty, string expected) {
         var outcomes = await ParityScenario
-            .FromDsl(Stage(rhs), "DecimalMatchConverted" + Math.Abs(rhs.GetHashCode()) + qty)
+            .FromDsl(Stage(rhs), "DecimalMatchConverted" + rhs.Aggregate(17, (h, c) => unchecked(h * 31 + c)).ToString("x") + "_" + qty)
             .AssertAgree(side => {
                 side.Create("Inv", ("Qty", qty));
                 side.Invoke("Price");
@@ -186,8 +186,8 @@ public class CalleeFrameIsolationTests {
         yield return new("function argument", "", $"assign Dec to MxTwice({ArmsMixed})",
             "function MxTwice(v: Decimal): Decimal = v * 2", "Dec", "3.0", "6");
         yield return new("invoke argument", "", $"invoke Take(x: {ArmsMixed})", "", "Dec", "1.5", "3");
-        yield return new("create initializer", "", $"create MxBox {{ W: {ArmsMixed} }}",
-            "MxBox: entity {\n  W: Decimal default(0)\n}", "Dec", "0", "0");
+        yield return new("create initializer", "boxes: many MxBox", $"create in boxes {{ W: {ArmsMixed} }}\n  assign Dec to sum boxes W",
+            "MxBox: entity {\n  W: Decimal default(0)\n}", "Dec", "1.5", "3");
         yield return new("policy body", $"Ok: policy {{ ({ArmsMixed}) > 2 }}", "assign Dec to 0", "", "Ok", "False", "True");
         yield return new("quantifier body", $"AnyBig: policy {{ any lines where ({ArmsMixed}) > 2 }}", "assign Dec to 0", "",
             "AnyBig", "False", "True");
@@ -267,10 +267,10 @@ public class CalleeFrameIsolationTests {
         await Assert.That(gate.AnalysisSummary).Contains("a 'match' is not supported in default(...)");
     }
 
-    /// <summary>A function body may not hold a <c>match</c>: the position is a positioned analysis error on every host, so a
-    /// Decimal and Number match as a function's return is never reached by Lower.</summary>
+    /// <summary>A function body may not hold a <c>match</c> (<c>FunctionImpureBody</c>, already so on the base; this slice adds no
+    /// refusal here): a Decimal and Number match as a function's return is never reached by Lower.</summary>
     [Test]
-    public async Task DecimalNumberMatch_AsAFunctionReturn_IsAPositionedAnalysisError() {
+    public async Task DecimalNumberMatch_AsAFunctionReturn_IsRefusedAsItWasOnTheBase() {
         var gate = GateParity.Check("""
             domain P
             function MxPick(f: Boolean, q: Number): Decimal = match { f -> 1.5, else -> q }

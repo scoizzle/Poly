@@ -24,6 +24,11 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
         Dictionary<string, string> props, Dictionary<string, string>? parameters,
         Dictionary<string, EnumType> enumTypes) {
         var where = match.Line > 0 ? $" (line {match.Line}, col {match.Col})" : "";
+        // Lowering passes a match's slot to every arm value, a nested match included (`Arm` to `AdaptTo` to `LowerMatch`), so a
+        // child match takes its parent's slot before it is walked.
+        if (context.GetMetadata<MatchTargetMetadata>(match) is { } slot)
+            foreach (var value in match.Arms.Select(a => a.Value).Append(match.Else))
+                StampMatchTarget(context, value, slot.Target);
         foreach (var arm in match.Arms) {
             var condition = InferType(context, arm.Condition, props, parameters, enumTypes);
             if (!IsTyped(condition))
@@ -77,9 +82,9 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
     /// <summary>
     /// Every known arm type is merged into one: the same family (an enum, an entity or a value type: the same name), the
     /// same primitive, or a Decimal with an integer arm (<c>long</c> to <c>decimal</c> is exact, and lowering casts the
-    /// integer arm). A Decimal with a Float, Date with DateTime, an optional arm in a match that needs that conversion
-    /// (the lifted cast <c>long?</c> to <c>decimal?</c> is T-06a's and no host has proven it), and an enum with a Text that is not a
-    /// string literal into an enum slot do not unify (DMMAT002).
+    /// integer arm). A Decimal with a Float, Date with DateTime, and an enum with a Text that is not a string literal into an
+    /// enum slot do not unify (DMMAT002). An optional arm is no obstacle: lowering fills an optional local, and a <c>long?</c>
+    /// arm assigned into it converts as a plain assignment does, on every host.
     /// </summary>
     private MatchUnification UnifyMatch(
         AnalysisContext context, MatchExpr match,
@@ -105,11 +110,12 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
                      && string.Equals(slot.DomainName, element.DomainName, StringComparison.Ordinal)
                      && values.Zip(types).All(pair => Family(pair.Second) is not TypeFamily.Text || pair.First is Literal { Value: string })))
                 mismatches.Add((element, TextFamily));
-            else if (element.Definition?.PrimitiveType is Prim.Decimal && types.Any(IsIntegerClass)
-                     && types.FirstOrDefault(t => t.Optional) is { Definition: not null } optionalArm)
-                mismatches.Add((optionalArm, element));
         }
 
+        // A Decimal that came from unnamed arithmetic (`Dec * 2`) takes the Decimal name, so the name rule of `Compatible` keeps it
+        // out of a Number slot whichever arm comes first (the arithmetic itself is T-07's and keeps its null name).
+        if (unified is { Definition.PrimitiveType: Prim.Decimal, DomainName: null } unnamed)
+            unified = unnamed with { DomainName = "Decimal" };
         // A match whose every arm is `null` is typed Text, as it was before the move (an unreachable Null arm).
         var result = mismatches.Count > 0 ? firstKnown!.Value.AsOptional(false) : unified ?? TextFamily;
         return new MatchUnification(result.AsOptional(optional), types, mismatches, AllTyped: true);

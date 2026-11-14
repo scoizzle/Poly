@@ -187,7 +187,7 @@ public class AbsenceParityTests {
     [Arguments("assign TOpt to match { Flag -> Qty, else -> Opt }", "TOpt", "3", "(absent)")]
     public async Task MatchWithAnAbsentArm_InAnExpressionPosition_MeansTheSameOnBothHosts(
         string body, string observed, string whenTrue, string whenFalse) {
-        var outcomes = await ParityScenario.FromDsl(ExpressionMatchDsl(body), "AbsenceExprMatch" + Math.Abs(body.GetHashCode()))
+        var outcomes = await ParityScenario.FromDsl(ExpressionMatchDsl(body), "AbsenceExprMatch" + body.Aggregate(17, (h, c) => unchecked(h * 31 + c)).ToString("x"))
             .AssertAgree(side => {
                 side.Create("AbxInv", ("Flag", true));
                 side.Invoke("Run");
@@ -199,6 +199,102 @@ public class AbsenceParityTests {
         await Assert.That(outcomes[3].Success).IsTrue().Because(outcomes[3].Message ?? "");
         await Assert.That(outcomes[3].State[observed]).IsEqualTo(whenFalse == "(absent)" ? null : whenFalse);
     }
+
+    private static string ScenarioDsl(string members, string body, string extra = "") => $$"""
+        domain Shop
+        AbxMood: enum { Happy, Sad }
+        AbxBox: entity {
+          W: Decimal default(0)
+        }
+        AbxScn: entity {
+          Qty: Number default(3)
+          Dec: Decimal default(2.5)
+          Opt: Number optional
+          Opt2: Number optional
+          OptDec: Decimal optional
+          Flag: Boolean default(true)
+          Mood: AbxMood default(Happy)
+          boxes: many AbxBox
+        {{members}}
+          Run: action { {{body}} }
+        }
+        {{extra}}
+        """;
+
+    private static readonly (bool Flag, bool Present)[] Scenarios = [(true, false), (true, true), (false, false), (false, true)];
+
+    /// <summary>One row, four scenarios in order: (Flag true, Opt absent), (true, present), (false, absent), (false, present).
+    /// Present means Opt is 4 and Opt2 is 5. The observed member of each is joined with <c>|</c>, <c>-</c> for absent. Both hosts
+    /// must agree, <c>polyc check</c> must accept, and the values are the ones written in the row, worked out by hand.</summary>
+    private static async Task AssertScenarios(string id, string dsl, string observed, string expected) {
+        var gate = GateParity.Check(dsl, SimStep.Create("AbxScn", """{"Flag":false,"Opt":4,"Opt2":5}""", "o"), SimStep.Invoke("o", "Run"));
+        await Assert.That(gate.Analysis).IsTrue().Because(gate.ToString());
+        await Assert.That(gate.Holds).IsTrue().Because(gate.ToString());
+        var outcomes = await ParityScenario.FromDsl(dsl, "AbsenceScn_" + id).AssertAgree(side => {
+            foreach (var (flag, present) in Scenarios) {
+                if (present) side.Create("AbxScn", ("Flag", flag), ("Opt", 4L), ("Opt2", 5L));
+                else side.Create("AbxScn", ("Flag", flag));
+                side.Invoke("Run");
+            }
+        });
+        var seen = outcomes.Where(o => o.Step.StartsWith("invoke", StringComparison.Ordinal))
+            .Select(o => o.Success ? o.State[observed] ?? "-" : "FAIL " + o.Message);
+        await Assert.That(string.Join("|", seen)).IsEqualTo(expected);
+    }
+
+    /// <summary>
+    /// T-09a fix round (F1): an enum member beside a Text string literal unifies where the slot is the enum: a comparison operand
+    /// against an enum property (either side, <c>==</c> and <c>!=</c>) and a match nested in a match assigned to the enum. The base
+    /// lowered both with the enum as target and ran them on the simulator, the generated C# and <c>polyc</c>.
+    /// </summary>
+    [Test]
+    [Arguments("F1a", "T: Number default(0)", "if (Mood == (match { Flag -> Happy, else -> \"Sad\" })) { assign T to 1 }", "T", "1|1|0|0")]
+    [Arguments("F1b", "T: Number default(0)", "if ((match { Flag -> Happy, else -> \"Sad\" }) == Mood) { assign T to 1 }", "T", "1|1|0|0")]
+    [Arguments("F1c", "T: Number default(0)", "if (Mood != (match { Flag -> Happy, else -> \"Sad\" })) { assign T to 1 }", "T", "0|0|1|1")]
+    [Arguments("F1d", "T: Number default(0)", "if (Mood == (match { Flag -> \"Happy\", else -> Sad })) { assign T to 1 }", "T", "1|1|0|0")]
+    [Arguments("F1e", "T: Number default(0)",
+        "assign Mood to match { Flag -> match { Flag -> Happy, else -> \"Sad\" }, else -> Happy }", "Mood", "Happy|Happy|Happy|Happy")]
+    [Arguments("F1f", "T: Number default(0)",
+        "assign Mood to match { Qty > 9 -> Happy, else -> match { Flag -> Happy, else -> \"Sad\" } }", "Mood", "Happy|Happy|Sad|Sad")]
+    public async Task EnumAndTextLiteralMatch_AsAComparisonOperandOrNested_MeansTheSameOnEveryHost(
+        string id, string members, string body, string observed, string expected) =>
+        await AssertScenarios(id, ScenarioDsl("  " + members, body), observed, expected);
+
+    /// <summary>
+    /// T-09a fix round (F2, F3): a match with an optional or <c>null</c> arm that needs a number converted to Decimal, or that is an
+    /// operand of arithmetic, is typed and lowered through an optional local; the base ran the shapes with a <c>null</c> arm or
+    /// with every arm optional, failed the others on the VM, and the head runs all of them on every host.
+    /// </summary>
+    [Test]
+    [Arguments("F2a", "T: Decimal optional", "assign T to match { Qty > 9 -> null, Qty > 2 -> Opt, else -> 1.5 }", "-|4|-|4")]
+    [Arguments("F2b", "T: Decimal optional", "assign T to match { Flag -> Opt, else -> Qty }", "-|4|3|3")]
+    [Arguments("F2c", "T: Decimal optional", "assign T to match { Flag -> Opt, else -> 1.5 }", "-|4|1.5|1.5")]
+    [Arguments("F2d", "T: Decimal optional", "assign T to match { Flag -> Opt, else -> Dec }", "-|4|2.5|2.5")]
+    [Arguments("F2e", "T: Decimal optional", "assign T to match { Flag -> OptDec, else -> Qty }", "-|-|3|3")]
+    [Arguments("F2f", "T: Decimal optional", "assign T to match { Flag -> Qty, else -> Opt }", "3|3|-|4")]
+    [Arguments("F3a", "T: Number optional", "assign T to (match { Flag -> Opt, else -> Opt2 }) + 1", "-|5|-|6")]
+    [Arguments("F3b", "T: Number optional", "assign T to (match { Flag -> null, else -> Opt }) + 1", "-|-|-|5")]
+    [Arguments("F3c", "T: Number optional", "assign T to Qty + (match { Flag -> Opt, else -> Qty })", "-|7|6|6")]
+    [Arguments("F3d", "T: Number optional", "assign T to (match { Flag -> Opt, else -> 1 }) + 1", "-|5|2|2")]
+    [Arguments("F3e", "T: Number optional", "assign T to (match { Flag -> Opt, else -> Opt2 }) * 2", "-|8|-|10")]
+    public async Task MatchWithAnOptionalArm_ConvertedOrUnderArithmetic_MeansTheSameOnEveryHost(
+        string id, string members, string body, string expected) =>
+        await AssertScenarios(id, ScenarioDsl("  " + members, body), "T", expected);
+
+    /// <summary>
+    /// T-09a fix round (F5): a match whose arms are all Number into a Decimal slot is no longer adapted arm by arm (the deleted
+    /// <c>Adapt</c>); the slot converts the value, at an assign, an invoke argument, a function argument and a <c>create in</c>
+    /// initializer (read back through <c>sum</c>, so the stored value is observed).
+    /// </summary>
+    [Test]
+    [Arguments("F5a", "T: Decimal default(0)", "assign T to match { Flag -> Qty, else -> 2 }", "", "3|3|2|2")]
+    [Arguments("F5b", "T: Decimal default(0)\n  Take: action (x: Decimal) { assign T to x }", "invoke Take(x: match { Flag -> Qty, else -> 2 })", "", "3|3|2|2")]
+    [Arguments("F5c", "T: Decimal default(0)", "assign T to AbxId(match { Flag -> Qty, else -> 2 })", "function AbxId(v: Decimal): Decimal = v", "3|3|2|2")]
+    [Arguments("F5d", "T: Decimal default(0)", "create in boxes { W: match { Flag -> Qty, else -> 2 } }\n  assign T to sum boxes W", "", "3|3|2|2")]
+    [Arguments("F5e", "T: Decimal default(0)", "assign T to match { Flag -> 2, else -> 3 }", "", "2|2|3|3")]
+    public async Task NumberOnlyMatch_IntoADecimalSlot_StoresTheSameValueOnEveryHost(
+        string id, string members, string body, string extra, string expected) =>
+        await AssertScenarios(id, ScenarioDsl("  " + members, body, extra), "T", expected);
 
     [Test]
     public async Task Assign_WhenBareEnumMemberMatchArm_Agrees() {

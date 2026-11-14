@@ -1628,10 +1628,11 @@ assign Tier to match { Qty > 100 -> "big", Qty > 10 -> "mid", else -> "small" }
   (**DMMAT002**): the same type, or a `Decimal` with a `Number` (every `Number` arm is converted to
   `Decimal`, so `match { Qty > 1 -> 1.5, else -> Qty }` is a `Decimal` whichever arm comes first, and
   assigning it into a `Number` is DMSEM003). `Text` and `Number` do not unify; neither do a `Date` and a
-  `DateTime`, a `Decimal` and an optional `Number`, or an enum and a `Text` that is not a string literal
-  (a string literal naming an enum member unifies with an enum arm only when the match is assigned to
-  that enum: `assign Tier to match { c -> Gold, else -> "Std" }`). An arm that is `null` or optional makes
-  the match optional: it compares and orders false when absent, and arithmetic over it is DMSEM003. A
+  `DateTime`, or an enum and a `Text` that is not a string literal (a string literal naming an enum member
+  unifies with an enum arm only where the enum is the slot: assigned to that enum, `assign Tier to match { c ->
+  Gold, else -> "Std" }`, compared with an enum property of the entity, or nested in such a match). An arm that
+  is `null` or optional makes the match optional: it compares and orders false when absent, arithmetic over it
+  is absent when the match is (into an optional property), and storing that arithmetic in a required property is DMSEM003. A
   `match` in `default(...)` is a positioned error (the generated C# cannot print it). Two arms with the same
   condition are an error, the later arm is unreachable (**DMMAT003**); only identical conditions
   are seen, overlapping ranges are the author's problem. A bare name that is no property, parameter or

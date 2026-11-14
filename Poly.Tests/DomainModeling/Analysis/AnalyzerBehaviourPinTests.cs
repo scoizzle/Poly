@@ -395,6 +395,8 @@ public class AnalyzerBehaviourPinTests {
           OptDec: Decimal optional
           Tag: Text default("t")
           Flag: Boolean default(true)
+          Opt2: Number optional
+          Mood: UnifMood default(Happy)
           When: Date
           Stamp: DateTime
         {{members}}
@@ -405,9 +407,9 @@ public class AnalyzerBehaviourPinTests {
 
     /// <summary>
     /// T-09a: a <c>match</c> has one type. Decimal with a Number arm or an integer literal unifies to Decimal in either
-    /// order (so a Decimal match into a Number is DMSEM003 at the value, whichever arm comes first); Date with DateTime,
-    /// an enum with a Text property or into a non-enum target, and an optional Number with a Decimal are DMMAT002;
-    /// arithmetic over a match that may be absent is DMSEM003.
+    /// order (so a Decimal match into a Number is DMSEM003 at the value, whichever arm comes first, an unnamed Decimal arm
+    /// included); Date with DateTime, and an enum with a Text property or into a non-enum target, are DMMAT002; an optional
+    /// arm is no obstacle; arithmetic over a match that may be absent is DMSEM003 only into a required target.
     /// </summary>
     [Test]
     [Arguments("Decimal then Number into Decimal", "T: Decimal default(0)", "assign T to match { Flag -> 1.5, else -> Qty }", "", "ok")]
@@ -435,22 +437,65 @@ public class AnalyzerBehaviourPinTests {
     [Arguments("an enum member with a Text literal, no target", "T: Number default(0)",
         "if ((match { Flag -> Happy, else -> \"x\" }) == Tag) { assign T to 1 }", "", "DMMAT002")]
     [Arguments("two enums", "T: UnifMood default(Happy)", "assign T to match { Flag -> Happy, else -> Calm }", "", "DMMAT002")]
-    [Arguments("an optional Number with a Decimal literal", "T: Decimal optional", "assign T to match { Flag -> Opt, else -> 1.5 }", "", "DMMAT002")]
-    [Arguments("an optional Decimal with a Number", "T: Decimal optional", "assign T to match { Flag -> OptDec, else -> Qty }", "", "DMMAT002")]
+    [Arguments("an optional Number with a Decimal literal", "T: Decimal optional", "assign T to match { Flag -> Opt, else -> 1.5 }", "", "ok")]
+    [Arguments("an optional Decimal with a Number", "T: Decimal optional", "assign T to match { Flag -> OptDec, else -> Qty }", "", "ok")]
+    [Arguments("a null arm first, an optional Number, a Decimal", "T: Decimal optional",
+        "assign T to match { Qty > 9 -> null, Qty > 2 -> Opt, else -> 1.5 }", "", "ok")]
+    [Arguments("an optional Number and a Number into an optional Decimal", "T: Decimal optional",
+        "assign T to match { Flag -> Opt, else -> Qty }", "", "ok")]
     [Arguments("an optional Number with a Number", "T: Number optional", "assign T to match { Flag -> Opt, else -> Qty }", "", "ok")]
     [Arguments("null, a Number and a Decimal into an optional Decimal", "T: Decimal optional",
         "assign T to match { Qty > 9 -> null, Qty > 2 -> Qty, else -> 1.5 }", "", "ok")]
     [Arguments("arithmetic over a match that may be absent, optional target", "T: Number optional",
-        "assign T to (match { Flag -> null, else -> 1 }) + 1", "", "DMSEM003")]
+        "assign T to (match { Flag -> null, else -> 1 }) + 1", "", "ok")]
     [Arguments("arithmetic over a match that may be absent, required target", "T: Number default(0)",
         "assign T to (match { Flag -> null, else -> 1 }) + 1", "", "DMSEM003")]
-    [Arguments("arithmetic over a match with an optional arm", "T: Number optional",
+    [Arguments("arithmetic over a match with an optional arm, required target", "T: Number default(0)",
         "assign T to (match { Flag -> Opt, else -> 1 }) * 2", "", "DMSEM003")]
+    [Arguments("arithmetic over a match with an optional arm, optional target", "T: Number optional",
+        "assign T to (match { Flag -> Opt, else -> 1 }) * 2", "", "ok")]
+    [Arguments("arithmetic over a match whose arms are all optional", "T: Number optional",
+        "assign T to (match { Flag -> Opt, else -> Opt2 }) + 1", "", "ok")]
+    [Arguments("an unnamed Decimal arm and a Number into a Number", "T: Number default(0)",
+        "assign T to match { Flag -> Qty, else -> Dec * 2 }", "", "DMSEM003")]
+    [Arguments("an unnamed Decimal arm first and a Number into a Number", "T: Number default(0)",
+        "assign T to match { Flag -> Dec * 2, else -> Qty }", "", "DMSEM003")]
+    [Arguments("an unnamed Decimal arm and a Number into a Decimal", "T: Decimal default(0)",
+        "assign T to match { Flag -> Qty, else -> Dec * 2 }", "", "ok")]
+    [Arguments("an enum member with a Text literal against an enum property", "T: Number default(0)",
+        "if (Mood == (match { Flag -> Happy, else -> \"Sad\" })) { assign T to 1 }", "", "ok")]
+    [Arguments("an enum member with a Text literal, the match first", "T: Number default(0)",
+        "if ((match { Flag -> Happy, else -> \"Sad\" }) != Mood) { assign T to 1 }", "", "ok")]
+    [Arguments("an enum member with a Text property against an enum property", "T: Number default(0)",
+        "if (Mood == (match { Flag -> Happy, else -> Tag })) { assign T to 1 }", "", "DMMAT002")]
+    [Arguments("a nested match with an enum member and a Text literal into the enum", "T: UnifMood default(Happy)",
+        "assign T to match { Flag -> match { Flag -> Happy, else -> \"Sad\" }, else -> Happy }", "", "ok")]
+    [Arguments("an enum member with a Text literal as an invoke argument", "T: UnifMood default(Happy)\n  Set: action (m: UnifMood) { assign T to m }",
+        "invoke Set(m: match { Flag -> Happy, else -> \"Sad\" })", "", "DMMAT002")]
     [Arguments("a comparison with a match that may be absent", "T: Number default(0)",
         "if ((match { Flag -> null, else -> Qty }) > 1) { assign T to 1 }", "", "ok")]
     public async Task MatchArmUnification_DslRows_AreTyped(
         string label, string members, string body, string extra, string expected) =>
         await Assert.That(StrictGateCensus.Verdict(MatchDsl("  " + members, body, extra))).IsEqualTo(expected).Because(label);
+
+    /// <summary>
+    /// T-09a: each refusal this slice adds is positioned at the <c>match</c> keyword: the diagnostic's node is the match and its
+    /// line and column are where the keyword is written (worked out from the document text, not from the analyzer).
+    /// </summary>
+    [Test]
+    [Arguments("DMMAT002", "T: DateTime optional", "assign T to match { Flag -> When, else -> Stamp }")]
+    [Arguments("DMSEM003", "T: Number default(0)", "assign T to match { Flag -> Qty, else -> 1.5 }")]
+    [Arguments("DMSEM003", "T: Number default(0)", "assign T to (match { Flag -> null, else -> 1 }) + 1")]
+    [Arguments("DMSEM003", "T: Number default(0)\n  D2: Number default(match { true -> 1, else -> 2 })", "assign T to 1")]
+    public async Task NewMatchRefusals_AreAtTheMatchKeyword(string code, string members, string body) {
+        var dsl = MatchDsl("  " + members, body, "");
+        var keyword = dsl.IndexOf("match", StringComparison.Ordinal);
+        var line = dsl[..keyword].Count(c => c == '\n') + 1;
+        var column = keyword - dsl[..keyword].LastIndexOf('\n');
+        var result = new DomainEvolution(DomainTestFactory.Create("_", [], [])).ApplyAndAnalyze(new PolyDslParser(dsl).Parse());
+        var found = result.Analysis.Diagnostics.Where(d => d.Code == code && d.Node is MatchExpr).Select(d => (MatchExpr)d.Node).ToList();
+        await Assert.That(found.Select(m => (m.Line, m.Col)).Distinct()).IsEquivalentTo([(line, column)]);
+    }
 
     [Test]
     public async Task TheDiscriminators_RejectDecimalIntoNumber_AcceptLiteralFiveIntoCents_RejectInt32IntoNumber() {

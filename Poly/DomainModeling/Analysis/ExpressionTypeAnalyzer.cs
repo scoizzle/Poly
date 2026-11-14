@@ -697,8 +697,31 @@ internal sealed partial class ExpressionTypeAnalyzer : INodeAnalyzer {
         if (AssignMismatch(value, inferred, target) is { } mismatch)
             Report(context, mismatch.Where,
                 $"type mismatch in {what}: cannot assign '{Describe(mismatch.Source)}' to '{targetTypeName}'");
+        else if (!target.Optional
+                 && AbsentMatchOperand(context, value, props ?? new Dictionary<string, string>(StringComparer.Ordinal), parameters, enumTypes) is { } absent)
+            Report(context, absent,
+                $"arithmetic over a 'match' that may be absent (an arm is null or optional) cannot be stored in a required target ({what})"
+                + (absent.Line > 0 ? $" (line {absent.Line}, col {absent.Col})" : ""));
         else
             WarnIntegerDivisionIntoDecimal(context, value, target, props ?? new Dictionary<string, string>(StringComparer.Ordinal), parameters, enumTypes);
+    }
+
+    /// <summary>
+    /// The first operand, down the <c>+ - * /</c> spine of <paramref name="value"/>, that is a <c>match</c> that may be absent
+    /// (T-09a). Over an optional target the sum is absent when it is, on every host; into a required target the C# compiler
+    /// rejects a <c>long?</c> (CS0266) and the VM and <c>polyc</c> refuse it, so analysis refuses it at the match.
+    /// </summary>
+    private MatchExpr? AbsentMatchOperand(
+        AnalysisContext context, DomainExpression value,
+        Dictionary<string, string> props, Dictionary<string, string>? parameters, Dictionary<string, EnumType> enumTypes) {
+        if (value is not (Add or Subtract or Multiply or Divide)) return null;
+        foreach (var operand in value.Children.OfType<DomainExpression>()) {
+            if (RewriteLibraryIdent(operand) is MatchExpr match && InferType(context, match, props, parameters, enumTypes).Optional)
+                return match;
+            if (AbsentMatchOperand(context, operand, props, parameters, enumTypes) is { } inner)
+                return inner;
+        }
+        return null;
     }
 
     /// <summary>

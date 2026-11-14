@@ -391,6 +391,47 @@ public static class PackOracleDomains {
         """,
         "/api/leads");
 
+    /// <summary>L-08b half 2 (#683, #687): a root with one required value of each type a POST can omit. Its DSL carries no
+    /// <c>uses</c> line of its own, so <see cref="RequiredOmittedSimulatorDsl"/> (the same entity without the host
+    /// libraries) runs on the simulator unchanged. It stays out of <see cref="All"/>.</summary>
+    public static PackOracleDomain RequiredOmitted683 { get; } = new(
+        "RequiredOmitted683",
+        """
+        domain Required
+        uses http
+        uses sqlite
+        uses temporal
+
+        Grade: enum { Low, High }
+
+        Gizmo: entity {
+          Label: Text
+          Qty: Number
+          Active: Boolean
+          Born: Date
+          Tier: Grade
+          Price: Decimal
+        }
+        """,
+        "/api/gizmos");
+
+    /// <summary>The simulator's side of <see cref="RequiredOmitted683"/>: the same entity, no host libraries.</summary>
+    public const string RequiredOmittedSimulatorDsl = """
+        domain Required
+        uses temporal
+
+        Grade: enum { Low, High }
+
+        Gizmo: entity {
+          Label: Text
+          Qty: Number
+          Active: Boolean
+          Born: Date
+          Tier: Grade
+          Price: Decimal
+        }
+        """;
+
     public static IReadOnlyList<PackOracleDomain> All { get; } =
         [Inventory588, Logistics559, Warehouse620, Inventory626, Desk658, Tally653, Fulfillment675];
 

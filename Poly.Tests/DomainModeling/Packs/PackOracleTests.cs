@@ -849,6 +849,48 @@ public class PackOracleTests {
         await Assert.That(after.RootElement.GetProperty("used").GetInt64()).IsEqualTo(100000);
     }
 
+    /// <summary>L-24b: a value type's properties are init-only; an action's value-typed parameter still binds from the
+    /// JSON body over HTTP (System.Text.Json writes an init accessor), so the action sees a non-null value.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task ValueTypePayload_BindsOverHttp_WithInitOnlyProperties(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        var fixture = new PackOracleDomain(
+            "ValueBinding24b",
+            """
+            domain Billing24b
+            uses http
+            uses sqlite
+
+            Cost24b: value {
+              Amount: Number
+              Currency: Text
+            }
+
+            Invoice24b: entity {
+              Code: Text unique length(3, 8)
+              Hits: Number default(0)
+              Charge: action (cost: Cost24b) { if (cost != null) { assign Hits to 7 } }
+            }
+            """,
+            "/api/invoice24bs");
+        await using var oracle = await PackOracle.BootAsync(fixture);
+
+        using var created = await oracle.Client.PostAsync(
+            "/api/invoice24bs",
+            new StringContent("""{"Code":"INV1"}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)created.StatusCode).IsEqualTo(201);
+
+        using var charged = await oracle.Client.PostAsync(
+            "/api/invoice24bs/INV1/charge",
+            new StringContent("""{"Cost":{"Amount":5,"Currency":"USD"}}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)charged.StatusCode).IsEqualTo(200);
+
+        using var after = JsonDocument.Parse(await oracle.Client.GetStringAsync("/api/invoice24bs/INV1"));
+        await Assert.That(after.RootElement.GetProperty("hits").GetInt64()).IsEqualTo(7);
+    }
+
     /// <summary>#653 (slice P-03) success-path pin: the save must still run when the action succeeds.
     /// Green on master by construction — it fails only under the over-correction (a handler that never
     /// saves), which the row's red test cannot catch.</summary>
@@ -893,5 +935,91 @@ public class PackOracleTests {
         await Assert.That(read.StatusCode).IsEqualTo(HttpStatusCode.OK);
         using var row = JsonDocument.Parse(await read.Content.ReadAsStringAsync());
         await Assert.That(row.RootElement.GetProperty("currentStage").GetString()).IsEqualTo("Open");
+    }
+
+    /// <summary>L-08b half 2 (#683 row L-08): an omitted required value over HTTP is the module's own 400 Required, not
+    /// an invented zero. The row's own name: Product.Price is a required Number.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task PostProduct_OmittedRequiredPrice_Returns400Required(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.Inventory588);
+
+        using var omitted = await oracle.Client.PostAsync(
+            "/api/products", new StringContent("""{"Sku":"AB1","Name":"Hammer"}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)omitted.StatusCode).IsEqualTo(400);
+        await Assert.That(omitted.Content.Headers.ContentType?.MediaType).IsEqualTo("application/problem+json");
+        using var problem = JsonDocument.Parse(await omitted.Content.ReadAsStringAsync());
+        await Assert.That(problem.RootElement.GetProperty("title").GetString()).IsEqualTo("Required");
+        await Assert.That(problem.RootElement.GetProperty("elementPath").GetString()).IsEqualTo("Product.Price");
+
+        using var absentTwin = await oracle.Client.PostAsync(
+            "/api/products", new StringContent("""{"Sku":"AB1","Name":"Hammer","Price":null}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)absentTwin.StatusCode).IsEqualTo(400);
+
+        using var supplied = await oracle.Client.PostAsync(
+            "/api/products", new StringContent("""{"Sku":"AB1","Name":"Hammer","Price":0}""", Encoding.UTF8, "application/json"));
+        await Assert.That((int)supplied.StatusCode).IsEqualTo(201);
+    }
+
+    /// <summary>L-08b half 2: for a required Number, Text, Boolean, Date and enum, an absent member and a JSON
+    /// <c>null</c> answer exactly what the simulator answers for the same create (Required, the same path and
+    /// message); an empty string for the Text is a value on both.</summary>
+    [Test]
+    [Category("OracleFull")]
+    [Timeout(300_000)]
+    public async Task PostGizmo_OmittedOrNullRequiredValue_AnswersWhatTheSimulatorAnswers(CancellationToken cancellationToken) {
+        _ = cancellationToken;
+        await using var oracle = await PackOracle.BootAsync(PackOracleDomains.RequiredOmitted683);
+        var scenario = ParityScenario.FromDsl(PackOracleDomains.RequiredOmittedSimulatorDsl, "PostGizmoSimulatorSide");
+
+        var json = new Dictionary<string, JsonNode?> {
+            ["Label"] = "a",
+            ["Qty"] = 5,
+            ["Active"] = true,
+            ["Born"] = "2026-01-01",
+            ["Tier"] = "Low",
+            ["Price"] = 1.5,
+        };
+        var sim = new Dictionary<string, object?> {
+            ["Label"] = "a",
+            ["Qty"] = 5L,
+            ["Active"] = true,
+            ["Born"] = new DateOnly(2026, 1, 1),
+            ["Tier"] = "Low",
+            ["Price"] = 1.5m,
+        };
+
+        async Task CompareAsync(string name, Func<Dictionary<string, JsonNode?>, Dictionary<string, JsonNode?>> shapeJson,
+            Func<Dictionary<string, object?>, Dictionary<string, object?>> shapeSim, bool succeeds) {
+            var body = new JsonObject(shapeJson(new(json)).Select(kv => KeyValuePair.Create(kv.Key, kv.Value?.DeepClone())));
+            using var response = await oracle.Client.PostAsync(
+                "/api/gizmos", new StringContent(body.ToJsonString(), Encoding.UTF8, "application/json"));
+            var (simulated, _) = scenario.Run(side => side.Create("Gizmo", [.. shapeSim(new(sim)).Select(kv => (kv.Key, kv.Value))]));
+            var expected = simulated[0];
+
+            await Assert.That(expected.Success).IsEqualTo(succeeds).Because($"{name}: the simulator's answer");
+            if (succeeds) {
+                await Assert.That(response.IsSuccessStatusCode).IsTrue().Because($"{name}: {response.StatusCode}");
+                return;
+            }
+            await Assert.That((int)response.StatusCode).IsEqualTo(400).Because(name);
+            await Assert.That(response.Content.Headers.ContentType?.MediaType).IsEqualTo("application/problem+json").Because(name);
+            using var problem = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            await Assert.That(problem.RootElement.GetProperty("title").GetString()).IsEqualTo(expected.FailureKind).Because(name);
+            await Assert.That(problem.RootElement.GetProperty("elementPath").GetString()).IsEqualTo(expected.FailurePath).Because(name);
+            await Assert.That(problem.RootElement.GetProperty("detail").GetString()).IsEqualTo(expected.Message).Because(name);
+        }
+
+        foreach (var member in json.Keys) {
+            await CompareAsync($"{member} absent",
+                j => { j.Remove(member); return j; }, s => { s.Remove(member); return s; }, succeeds: false);
+            await CompareAsync($"{member} null",
+                j => { j[member] = null; return j; }, s => { s[member] = null; return s; }, succeeds: false);
+        }
+
+        await CompareAsync("Label empty",
+            j => { j["Label"] = ""; return j; }, s => { s["Label"] = ""; return s; }, succeeds: true);
     }
 }

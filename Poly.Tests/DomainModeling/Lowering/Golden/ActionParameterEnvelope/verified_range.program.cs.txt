@@ -165,9 +165,9 @@ app.Run();
 internal record GaugeDto
 {
     [Range(0, 100)]
-    public long Level { get; init; }
+    public long? Level { get; init; }
     [Range(0, 100)]
-    public long Peak { get; init; }
+    public long? Peak { get; init; }
 }
 
 internal record SetLevelDto

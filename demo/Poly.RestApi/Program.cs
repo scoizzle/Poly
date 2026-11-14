@@ -447,39 +447,39 @@ app.Run();
 internal record BookDto
 {
     [Required]
-    public string Title { get; init; } = default!;
+    public string? Title { get; init; }
     [Required]
-    public string Author { get; init; } = default!;
+    public string? Author { get; init; }
     [Required]
     [MinLength(10)]
     [MaxLength(17)]
-    public string ISBN { get; init; } = default!;
+    public string? ISBN { get; init; }
     [Range(1, 10000)]
-    public long Pages { get; init; }
+    public long? Pages { get; init; }
     [EnumDataType(typeof(Library.Genre))]
-    public Library.Genre Genre { get; init; }
+    public Library.Genre? Genre { get; init; }
 }
 
 internal record PatronDto
 {
     [Required]
-    public string Name { get; init; } = default!;
+    public string? Name { get; init; }
     [Required]
     [RegularExpression("^[^@]+@[^@]+$")]
-    public string Email { get; init; } = default!;
+    public string? Email { get; init; }
     [Range(0, 20)]
-    public long MaxItems { get; init; }
+    public long? MaxItems { get; init; }
 }
 
 internal record PremiumPatronDto
 {
     [Required]
-    public string Name { get; init; } = default!;
+    public string? Name { get; init; }
     [Required]
     [RegularExpression("^[^@]+@[^@]+$")]
-    public string Email { get; init; } = default!;
-    public long RewardPoints { get; init; }
-    public bool PriorityAccess { get; init; }
+    public string? Email { get; init; }
+    public long? RewardPoints { get; init; }
+    public bool? PriorityAccess { get; init; }
 }
 
 internal record CheckOutDto

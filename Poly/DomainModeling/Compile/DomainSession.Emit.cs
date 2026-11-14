@@ -144,10 +144,13 @@ public sealed partial class DomainSession {
 
     /// <summary>A host file (global scope, <c>using &lt;ns&gt;;</c>) sees the global <c>Program</c>, the domain's
     /// own root namespace and every type its other usings import (an entity named <c>Task</c> is ambiguous with
-    /// <c>System.Threading.Tasks.Task</c>) ahead of or beside a using-imported domain type, so a domain type is
-    /// spelled <c>&lt;ns&gt;.&lt;name&gt;</c> there. Any other name (a CLR primitive, a generated name) stays bare.</summary>
+    /// <c>System.Threading.Tasks.Task</c>) ahead of or beside a using-imported domain type, so a generated domain type is
+    /// spelled <c>&lt;ns&gt;.&lt;name&gt;</c> there, with a keyword name escaped (<c>&lt;ns&gt;.@event</c>). Any other
+    /// name stays bare: a CLR type, and a library primitive such as the temporal <c>DateTime</c>, which is no generated type.</summary>
     internal static string QualifyForHost(Domain domain, string typeName) =>
-        domain.Types.Any(t => t.Name == typeName) ? CSharpNamespace(domain) + "." + typeName : typeName;
+        domain.Types.Any(t => t is not Ontology.PrimitiveType && t.Name == typeName)
+            ? CSharpNamespace(domain) + "." + (CSharpWriter.IsKeyword(typeName) ? "@" + typeName : typeName)
+            : typeName;
 
     private static CompilationUnitNode Unit(string ns, IReadOnlyList<TypeDefinitionNode> types) =>
         new([], ns, types, null);

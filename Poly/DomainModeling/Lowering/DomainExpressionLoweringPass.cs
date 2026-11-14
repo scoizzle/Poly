@@ -116,6 +116,46 @@ public sealed partial class DomainExpressionLoweringPass : DomainExpressionDispa
 
     private static bool IsPathPrefixPredicate(DomainExpression expr) => ExpressionTypeAnalyzer.IsCondition(expr);
 
+    /// <summary>
+    /// True when the value lowered for <paramref name="value"/> can be absent at run time: <c>null</c>, a read of an optional
+    /// property (on this entity, or the final member of a to-one or binder hop), a <c>match</c> with such an arm, or arithmetic
+    /// over such an operand. A parameter, a literal, a required read or a condition is never absent; an assign guard tests
+    /// presence only for a value that can be absent (<c>!= null</c> over a non-nullable value is CS0472, always true).
+    /// <paramref name="binderEntity"/> names the entity a <c>for</c> binder iterates; an unknown one counts as absent.
+    /// </summary>
+    internal bool MayBeAbsent(DomainExpression value, Func<string, string?>? binderEntity = null) => value switch {
+        Literal { Value: null } => true,
+        PropertyAccess property => !_parameters.ContainsKey(property.Name)
+            && _actionParameterNames?.Contains(property.Name) != true
+            && IsOptionalMember(_context.SourceEntityName, property.Name),
+        RelationshipNavigation navigation => !IsPathPrefixPredicate(navigation.TargetProperty)
+            && NavigationReadMayBeAbsent(navigation, binderEntity),
+        MatchExpr match => match.Arms.Select(a => a.Value).Append(match.Else).Any(arm => MayBeAbsent(arm, binderEntity)),
+        Ontology.Add or Ontology.Subtract or Ontology.Multiply or Ontology.Divide =>
+            value.Children.OfType<DomainExpression>().Any(operand => MayBeAbsent(operand, binderEntity)),
+        _ => false,
+    };
+
+    private bool NavigationReadMayBeAbsent(RelationshipNavigation navigation, Func<string, string?>? binderEntity) {
+        var entityName = _parameters.ContainsKey(navigation.RelationshipName)
+            ? binderEntity?.Invoke(navigation.RelationshipName)
+            : ResolveRelationshipTarget(navigation.RelationshipName);
+        var hop = navigation.TargetProperty;
+        while (hop is RelationshipNavigation next && EntityOf(entityName) is { } current) {
+            entityName = current.Navigations.FirstOrDefault(n =>
+                string.Equals(n.Name, next.RelationshipName, StringComparison.Ordinal))?.Target.TypeName;
+            hop = next.TargetProperty;
+        }
+        return hop is not PropertyAccess leaf || EntityOf(entityName) is null || IsOptionalMember(entityName, leaf.Name);
+    }
+
+    private Entity? EntityOf(string? name) =>
+        name is null ? null : _domain.Types.OfType<Entity>().FirstOrDefault(e => string.Equals(e.Name, name, StringComparison.Ordinal));
+
+    private bool IsOptionalMember(string? entityName, string member) =>
+        EntityOf(entityName)?.Properties.FirstOrDefault(p => string.Equals(p.Name, member, StringComparison.Ordinal))
+            is { } property && !EntityStructureAnalyzer.IsRequired(property);
+
     private LoweredExpression Route(DomainExpression expr, Node subject) {
         var saved = _currentSubject;
         _currentSubject = subject;

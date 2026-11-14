@@ -11,6 +11,9 @@ namespace Poly.DomainModeling.Lowering;
 
 // ForEachEffect.
 public sealed partial class EffectLoweringPass {
+    /// <summary>The entity each enclosing <c>for</c> binder iterates, by binder name (read by <c>MayBeAbsent</c>).</summary>
+    private IReadOnlyDictionary<string, string>? _binderEntities;
+
     /// <summary>
     /// Lowers the general <c>for x in Rel [where cond] { effects }</c> (#409) to a fail-fast
     /// <c>foreach</c> over the source's collection navigation, the same loop as the fan-out.
@@ -40,6 +43,12 @@ public sealed partial class EffectLoweringPass {
         // a for inside an exit block does not re-inline that exit without end.
         var bodyPass = new EffectLoweringPass(_entity, bodyContext) {
             _loopBinders = binders,
+            _binderEntities = _entity.Navigations.FirstOrDefault(n =>
+                    string.Equals(n.Name, e.RelationshipName, StringComparison.Ordinal))?.Target.TypeName is { } iterated
+                ? new Dictionary<string, string>(_binderEntities ?? new Dictionary<string, string>(), StringComparer.Ordinal) {
+                    [e.BinderName] = iterated
+                }
+                : _binderEntities,
             _inSourceExitInline = _inSourceExitInline,
             _enclosingHopTarget = _enclosingHopTarget
         };
